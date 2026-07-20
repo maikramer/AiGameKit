@@ -15,7 +15,15 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
+from gamedev_shared.cli_helpers import (
+    add_ums_options,
+    legacy_server_allowed,
+    needed_mib_for_backend,
+    prepare_gpu_exclusive,
+    try_ums_delegation,
+    with_ums_load_opts,
+    with_ums_peak_opts,
+)
 from gamedev_shared.gpu import get_system_info
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
@@ -122,7 +130,6 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Logs detalhados",
 )
 @click.option("--cpu", is_flag=True, help="Forçar CPU")
-@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
 @click.option(
     "--gpu-ids",
     "gpu_ids_str",
@@ -216,7 +223,6 @@ def generate_cmd(
     transparent: bool,
     verbose_flag: bool,
     cpu: bool,
-    low_vram: bool,
     gpu_ids_str: str | None,
     quant_preset: str,
     transformer_quant_preset: str,
@@ -264,10 +270,11 @@ def generate_cmd(
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     hwp = None
+    cpu_offload = False
     if hw_auto and hw_auto_enabled() and not cpu:
         hwp = detect_hardware_profile()
-        if not low_vram and hwp.low_vram and hwp.device == "cuda":
-            low_vram = True
+        if hwp.cpu_offload and hwp.device == "cuda":
+            cpu_offload = True
         # Clamp resolution only if user didn't set it explicitly.
         if not _user_set_width and hwp.max_width is not None:
             width = min(width, hwp.max_width)
@@ -299,24 +306,32 @@ def generate_cmd(
     t_start = time.time()
 
     # Unified Model Server (fila + VRAM). Flags: --ums-priority / --no-ums / --ums-stream.
+    _icon_mem_eff = bool(cpu_offload) or (transformer_quant_preset not in (None, "", "none", "auto"))
     if (
         not cpu
         and output is not None
         and try_ums_delegation(
             "text2icon",
-            with_ums_load_opts(
-                {
-                    "prompt": prompt,
-                    "output": str(Path(output).resolve()),
-                    "width": width,
-                    "height": height,
-                    "steps": steps,
-                    "guidance": guidance_scale,
-                    "seed": seed,
-                    "transparent": transparent,
-                    "negative_prompt": negative_prompt,
-                },
-                gpu_ids=gpu_ids,
+            with_ums_peak_opts(
+                with_ums_load_opts(
+                    {
+                        "prompt": prompt,
+                        "output": str(Path(output).resolve()),
+                        "width": width,
+                        "height": height,
+                        "steps": steps,
+                        "guidance": guidance_scale,
+                        "seed": seed,
+                        "transparent": transparent,
+                        "negative_prompt": negative_prompt,
+                        "transformer_quant_preset": transformer_quant_preset,
+                        "model_id": resolved_model,
+                    },
+                    gpu_ids=gpu_ids,
+                ),
+                backend="text2icon",
+                memory_efficient=_icon_mem_eff,
+                quant_preset=transformer_quant_preset if transformer_quant_preset not in (None, "", "auto") else None,
             ),
             t_start=t_start,
             noun="Ícone",
@@ -328,12 +343,12 @@ def generate_cmd(
     ):
         return
 
-    # Fallback: per-tool legacy server (se ainda ativo; deprecated).
-    if not cpu and output is not None:
+    # Fallback: per-tool legacy server — só com GAMEDEV_ALLOW_LEGACY_SERVER=1.
+    if not cpu and output is not None and legacy_server_allowed():
         from . import client
 
         if client.is_available():
-            console.print("[dim]A delegar ao model server ativo...[/dim]")
+            console.print("[dim]A delegar ao model server legacy (opt-in)...[/dim]")
             result = client.send_generate_request(
                 prompt=prompt,
                 output=output,
@@ -358,14 +373,29 @@ def generate_cmd(
                 console.print(f"[dim]Seed: {result.get('seed', '?')}[/dim]")
                 console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
                 return
-            elif result and result.get("status") == "error":
-                console.print(f"[yellow]Server erro: {result.get('error', '?')} — fallback in-process[/yellow]")
-            # Se None (server não respondeu), continua para fallback in-process
+
+    if not cpu:
+        prepare_gpu_exclusive(
+            needed_mib=needed_mib_for_backend(
+                "text2icon",
+                quant_mode=transformer_quant_preset
+                if transformer_quant_preset not in (None, "", "auto", "none")
+                else None,
+                memory_efficient=_icon_mem_eff,
+            ),
+            allow_shared=True,
+            kill_others=False,
+            backend="text2icon",
+            quant_mode=transformer_quant_preset
+            if transformer_quant_preset not in (None, "", "auto", "none")
+            else ("sdnq-uint8" if _icon_mem_eff else "none"),
+            console=console,
+        )
 
     try:
         gen = SanaIconGenerator(
             device=device,
-            low_vram=low_vram or cpu,
+            low_vram=cpu_offload or cpu,
             verbose=verbose,
             model_id=model_id,
             gpu_ids=gpu_ids,
@@ -454,7 +484,6 @@ def generate_cmd(
     show_default=True,
     help="Remover fundo (RGBA via rembg/U2Net).",
 )
-@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
 @click.option(
     "--gpu-ids",
     "gpu_ids_str",
@@ -513,6 +542,7 @@ def generate_cmd(
     show_default=True,
     help="channels_last NHWC (default ON em batch — ~-13% hot).",
 )
+@add_ums_options
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -524,7 +554,6 @@ def batch_cmd(
     guidance_scale: float,
     model_id: str | None,
     transparent: bool,
-    low_vram: bool,
     gpu_ids_str: str | None,
     transformer_quant_preset: str,
     quality: str,
@@ -533,6 +562,9 @@ def batch_cmd(
     torch_compile_mode: str,
     step_cache: str,
     channels_last: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Gera ícones em batch a partir de um ficheiro de prompts (um por linha)."""
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
@@ -561,10 +593,11 @@ def batch_cmd(
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     hwp = None
+    cpu_offload = False
     if hw_auto and hw_auto_enabled():
         hwp = detect_hardware_profile()
-        if not low_vram and hwp.low_vram and hwp.device == "cuda":
-            low_vram = True
+        if hwp.cpu_offload and hwp.device == "cuda":
+            cpu_offload = True
         if not _user_set_width and hwp.max_width is not None:
             width = min(width, hwp.max_width)
         if not _user_set_height and hwp.max_height is not None:
@@ -579,6 +612,8 @@ def batch_cmd(
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
     if gpu_ids is None and hwp is not None and hwp.gpu_ids:
         gpu_ids = hwp.gpu_ids
+    resolved_model = model_id or default_model_id()
+    _icon_mem_eff = bool(cpu_offload) or (transformer_quant_preset not in (None, "", "none", "auto"))
 
     prompts = [
         line.strip()
@@ -594,56 +629,108 @@ def batch_cmd(
     out = output_dir or DEFAULT_ICON_DIR
     out.mkdir(parents=True, exist_ok=True)
 
-    gen = SanaIconGenerator(
-        low_vram=low_vram,
-        verbose=bool(ctx.obj.get("VERBOSE")),
-        model_id=model_id,
-        gpu_ids=gpu_ids,
-        transformer_quant_preset=transformer_quant_preset,
-        torch_compile=torch_compile,
-        torch_compile_mode=torch_compile_mode,
-        step_cache=step_cache,
-        channels_last=channels_last,
-    )
-    base_params = {
-        "guidance_scale": guidance_scale,
-        "num_inference_steps": steps,
-        "width": width,
-        "height": height,
-        "remove_background": transparent,
-    }
-
     from .generator import DEFAULT_PARAMS
     from .image_processor import save_image
 
+    err_console = Console(stderr=True)
+    pending: list[tuple[int, str, Path]] = []
     total = len(prompts)
     ok_count = 0
-    for idx, prompt in enumerate(prompts):
-        merged = {**DEFAULT_PARAMS, **base_params}
-        merged.pop("seed", None)
-        merged.pop("prompt", None)
-        try:
-            image, metadata = gen.generate(prompt=prompt, **merged)
-        except Exception as exc:
-            console.print(f"  [red]\u2717[/red] {idx + 1}/{total}: {exc}")
-            continue
 
+    for idx, prompt in enumerate(prompts):
         ts = int(time.time())
-        safe = safe_filename(prompts[idx])
-        fname = f"{safe}_{ts}.png"
-        saved = save_image(
-            image,
-            prompt=metadata.get("prompt_final", prompts[idx]),
-            params=metadata,
-            output_dir=out,
-            filename=fname,
+        safe = safe_filename(prompt)
+        out_path = (out / f"{safe}_{ts}.png").resolve()
+        t0 = time.time()
+        if try_ums_delegation(
+            "text2icon",
+            with_ums_peak_opts(
+                with_ums_load_opts(
+                    {
+                        "prompt": prompt,
+                        "output": str(out_path),
+                        "width": width,
+                        "height": height,
+                        "steps": steps,
+                        "guidance": guidance_scale,
+                        "transparent": transparent,
+                        "transformer_quant_preset": transformer_quant_preset,
+                        "model_id": resolved_model,
+                    },
+                    gpu_ids=gpu_ids,
+                ),
+                backend="text2icon",
+                memory_efficient=_icon_mem_eff,
+                quant_preset=transformer_quant_preset if transformer_quant_preset not in (None, "", "auto") else None,
+            ),
+            t_start=t0,
+            noun="Ícone",
+            console=err_console,
+            enabled=not no_ums,
+            priority=ums_priority or "batch",
+            stream=ums_stream,
+        ):
+            ok_count += 1
+            console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{out_path.name}[/cyan] [dim](UMS)[/dim]")
+            continue
+        pending.append((idx, prompt, out_path))
+
+    if pending:
+        prepare_gpu_exclusive(
+            needed_mib=needed_mib_for_backend(
+                "text2icon",
+                quant_mode=transformer_quant_preset
+                if transformer_quant_preset not in (None, "", "auto", "none")
+                else None,
+                memory_efficient=_icon_mem_eff,
+            ),
+            allow_shared=True,
+            kill_others=False,
+            backend="text2icon",
+            quant_mode=transformer_quant_preset
+            if transformer_quant_preset not in (None, "", "auto", "none")
+            else ("sdnq-uint8" if _icon_mem_eff else "none"),
+            console=err_console,
         )
-        ok_count += 1
-        console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{saved.name}[/cyan]")
+        gen = SanaIconGenerator(
+            low_vram=cpu_offload,
+            verbose=bool(ctx.obj.get("VERBOSE")),
+            model_id=model_id,
+            gpu_ids=gpu_ids,
+            transformer_quant_preset=transformer_quant_preset,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            step_cache=step_cache,
+            channels_last=channels_last,
+        )
+        base_params = {
+            "guidance_scale": guidance_scale,
+            "num_inference_steps": steps,
+            "width": width,
+            "height": height,
+            "remove_background": transparent,
+        }
+        for idx, prompt, out_path in pending:
+            merged = {**DEFAULT_PARAMS, **base_params}
+            merged.pop("seed", None)
+            merged.pop("prompt", None)
+            try:
+                image, metadata = gen.generate(prompt=prompt, **merged)
+                saved = save_image(
+                    image,
+                    prompt=metadata.get("prompt_final", prompt),
+                    params=metadata,
+                    output_dir=out_path.parent,
+                    filename=out_path.name,
+                )
+                ok_count += 1
+                console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{saved.name}[/cyan]")
+            except Exception as exc:
+                console.print(f"  [red]\u2717[/red] {idx + 1}/{total}: {exc}")
 
     console.print(
         Panel(
-            f"[bold]{ok_count}/{len(prompts)}[/bold] ícones gerados em [cyan]{out.resolve()}[/cyan]",
+            f"[bold]{ok_count}/{total}[/bold] ícones gerados em [cyan]{out.resolve()}[/cyan]",
             title="[bold green]Batch concluído",
             border_style="green",
         )

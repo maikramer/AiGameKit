@@ -35,27 +35,29 @@ def test_torch_dtype_cuda_unavailable_uses_float32(monkeypatch: pytest.MonkeyPat
 
 
 def test_maybe_apply_quantized_matmul_no_triton() -> None:
-    from text2d.generator import _maybe_apply_quantized_matmul
+    from gamedev_shared.sdnq import apply_quantized_matmul
 
     pipe = MagicMock()
-    _maybe_apply_quantized_matmul(pipe, False)
+    apply_quantized_matmul(pipe, enabled=False)
 
 
 def test_maybe_apply_quantized_matmul_no_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
     import torch
 
-    from text2d.generator import _maybe_apply_quantized_matmul
+    from gamedev_shared.sdnq import apply_quantized_matmul
 
-    monkeypatch.setattr(torch, "cuda", MagicMock(is_available=lambda: False))
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    if getattr(torch, "xpu", None) is not None:
+        monkeypatch.setattr(torch.xpu, "is_available", lambda: False)
     pipe = MagicMock()
-    _maybe_apply_quantized_matmul(pipe, True)
+    apply_quantized_matmul(pipe, enabled=True)
 
 
 def test_maybe_apply_quantized_matmul_applies_to_modules(monkeypatch: pytest.MonkeyPatch) -> None:
     import sdnq.loader
     import torch
 
-    from text2d.generator import _maybe_apply_quantized_matmul
+    from gamedev_shared.sdnq import apply_quantized_matmul
 
     monkeypatch.setattr(torch, "cuda", MagicMock(is_available=lambda: True))
     apply_loader = MagicMock(side_effect=lambda m, **kw: m)
@@ -66,7 +68,7 @@ def test_maybe_apply_quantized_matmul_applies_to_modules(monkeypatch: pytest.Mon
     pipe.transformer = tr
     pipe.text_encoder = te
     pipe.text_encoder_2 = None
-    _maybe_apply_quantized_matmul(pipe, True)
+    apply_quantized_matmul(pipe, enabled=True)
     assert apply_loader.call_count >= 2
 
 

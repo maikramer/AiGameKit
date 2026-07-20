@@ -275,7 +275,7 @@ def stop_server(socket_path: Path | str | None = None) -> bool:
 UMS_DO_NOT_KILL_TIP = (
     "VRAM ocupada? Usa `gamedev-model-server status` / `queue` — espera ou "
     "`gamedev-model-server cancel <job_id>`. NÃO mates processos GPU "
-    "(kill/nvidia-smi) enquanto o UMS tiver jobs; isso corre contra a fila."
+    "(kill GPU) enquanto o UMS tiver jobs; isso corre contra a fila."
 )
 
 
@@ -325,6 +325,20 @@ def format_ums_holding_summary(snapshot: dict[str, Any]) -> str:
     return f"HOLDING: {hold} | QUEUE: {depth} waiting / {inflight} inflight"
 
 
+def _discover_modelserver_python() -> Path | None:
+    """Procura ``ModelServer/.venv/bin/python`` relativo ao monorepo / Shared."""
+    here = Path(__file__).resolve()
+    # Shared/src/gamedev_shared/model_server.py → monorepo root = parents[3]
+    candidates: list[Path] = []
+    for parent in here.parents:
+        candidates.append(parent / "ModelServer" / ".venv" / "bin" / "python")
+        candidates.append(parent / "ModelServer" / ".venv" / "Scripts" / "python.exe")
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
 def ensure_ums_running(*, timeout_sec: float = 30.0, auto_start: bool = True) -> bool:
     """Garante que o UMS está ativo. Arranca-o automaticamente se necessário.
 
@@ -356,15 +370,30 @@ def ensure_ums_running(*, timeout_sec: float = 30.0, auto_start: bool = True) ->
     import subprocess
     import sys
 
-    # Resolver o binário: env var MODELSERVER_BIN → PATH → python -m modelserver.
+    # Resolver o binário: MODELSERVER_BIN → PATH → python -m modelserver
+    # (venv actual) → sibling ModelServer/.venv no monorepo.
     bin_path = os.environ.get("MODELSERVER_BIN", "").strip()
     if bin_path and Path(bin_path).exists():
         cmd = [bin_path, "start"]
     elif shutil.which("gamedev-model-server"):
         cmd = ["gamedev-model-server", "start"]
+    elif shutil.which("ums"):
+        cmd = ["ums", "start"]
     else:
-        # Fallback: python -m modelserver (requer modelserver instalado no venv).
-        cmd = [sys.executable, "-m", "modelserver", "start"]
+        try:
+            import modelserver  # noqa: F401
+
+            cmd = [sys.executable, "-m", "modelserver", "start"]
+        except ImportError:
+            sibling = _discover_modelserver_python()
+            if sibling is not None:
+                cmd = [str(sibling), "-m", "modelserver", "start"]
+            else:
+                _logger.warn(
+                    "[UMS] Auto-start: modelserver não instalado neste venv. "
+                    "Instala ModelServer (pip install -e ../ModelServer) ou define MODELSERVER_BIN."
+                )
+                return False
 
     _logger.info(f"[UMS] Auto-start: {' '.join(cmd)}")
     log_path = Path(
@@ -464,7 +493,23 @@ def delegate_to_ums(
     pri = resolve_ums_priority(priority if priority is not None else request.get("priority"))
     req = {"cmd": "generate", "backend": backend, **request}
     req["priority"] = pri
-    return send_to_ums(req, timeout_sec=timeout_sec)
+    # send_request directo (não send_to_ums): o ensure acima já garantiu o UMS —
+    # evita repetir o probe pid-file + os.kill + connect a cada delegação.
+    resp = send_request(req, UMS_SOCKET, timeout_sec=timeout_sec)
+    if resp is None and is_ums_running():
+        # Socket morreu/timeout mas o supervisor está vivo — o job pode estar a
+        # meio do generate na GPU. NÃO devolver None: o caller faria fallback
+        # in-process e ficariam 2 jobs a competir pela mesma VRAM.
+        return {
+            "status": "error",
+            "error": "UMS sem resposta (timeout/socket) com supervisor ainda ativo",
+            "error_code": "UMS_NO_RESPONSE",
+            "hint": (
+                "Inspecciona `ums queue` / `ums stats` antes de repetir; "
+                "sem fallback in-process enquanto o UMS puder estar a gerar."
+            ),
+        }
+    return resp
 
 
 def submit_to_ums(
@@ -480,7 +525,8 @@ def submit_to_ums(
     pri = resolve_ums_priority(priority if priority is not None else request.get("priority"))
     req = {"cmd": "submit", "backend": backend, "priority": pri, **request}
     req["priority"] = pri
-    return send_to_ums(req, timeout_sec=timeout_sec)
+    # send_request directo: ensure já feito acima (ver delegate_to_ums).
+    return send_request(req, UMS_SOCKET, timeout_sec=timeout_sec)
 
 
 def poll_ums_job(job_id: str, *, timeout_sec: float = 5.0) -> dict[str, Any] | None:
@@ -496,18 +542,33 @@ def wait_ums_job(
 ) -> dict[str, Any] | None:
     """Espera um job UMS terminar. Com ``stream=True`` devolve só o resultado final.
 
-    ``timeout_sec`` é enviado ao UMS (campo ``timeout_sec``) e também usado no
-    socket do cliente.
+    ``timeout_sec`` é enviado ao UMS (campo ``timeout_sec``); o socket do cliente
+    recebe uma margem extra — se o job terminar mesmo no limite, a resposta do
+    servidor ainda chega antes do deadline local (senão reportávamos "UMS down"
+    para um job que completou).
     """
     req: dict[str, Any] = {"cmd": "wait", "job_id": job_id, "timeout_sec": timeout_sec}
     if stream:
         req["stream"] = True
-    return send_to_ums(req, timeout_sec=timeout_sec, auto_start=False)
+    return send_to_ums(req, timeout_sec=timeout_sec + 30.0, auto_start=False)
 
 
 def cancel_ums_job(job_id: str, *, timeout_sec: float = 10.0) -> dict[str, Any] | None:
     """Pede cancelamento de um job UMS (queued imediato; running best-effort)."""
     return send_to_ums({"cmd": "cancel", "job_id": job_id}, timeout_sec=timeout_sec, auto_start=False)
+
+
+def cancel_ums_all(
+    *,
+    queued_only: bool = False,
+    timeout_sec: float = 30.0,
+) -> dict[str, Any] | None:
+    """Cancela todos os jobs UMS (``flush`` / ``cancel --all``)."""
+    return send_to_ums(
+        {"cmd": "flush", "queued_only": queued_only},
+        timeout_sec=timeout_sec,
+        auto_start=False,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -598,7 +659,7 @@ def ensure_vram_available(
             with contextlib.suppress(Exception):
                 request_release(sock)
     elif free is None:
-        return True  # não dá para verificar (sem nvidia-smi); deixar tentar
+        return True  # não dá para verificar (NVML/smi indisponível); deixar tentar
 
     # Esperar que libertem
     deadline = time.monotonic() + timeout_sec

@@ -155,14 +155,3 @@ class BackendAdapter(ABC):
             )
             cls.report_progress(request, progress_pct, f"vram_budget {summary}" if summary else "vram_budget")
         return budget if isinstance(budget, dict) else None
-
-    @staticmethod
-    def should_use_low_vram_mode(threshold_mib: int = 7000) -> bool:
-        """Deteta se a GPU tem pouca VRAM e deve ativar offload/sequential."""
-        try:
-            from gamedev_shared.gpu import gpu_total_mib
-
-            total = gpu_total_mib()
-            return total is not None and total < threshold_mib
-        except Exception:
-            return False

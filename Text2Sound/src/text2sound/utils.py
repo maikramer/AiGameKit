@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from gamedev_shared.gpu import format_bytes  # noqa: F401
-from gamedev_shared.path_utils import generate_output_path as _generate_output_path  # noqa: F401
+from gamedev_shared.path_utils import generate_output_path as _generate_output_path
+from gamedev_shared.path_utils import safe_filename  # noqa: F401
 from gamedev_shared.seed_utils import resolve_effective_seed  # noqa: F401
 
 

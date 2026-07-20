@@ -38,6 +38,7 @@ from gamedev_shared.skill_install import install_my_skill
 from . import defaults as _defaults
 from .cli_rich import click
 from .generator import HunyuanTextTo3DGenerator
+from .omni_presets import list_pose_presets as _list_pose_presets
 from .utils.env import ensure_pytorch_cuda_alloc_conf
 from .utils.memory import (
     format_bytes,
@@ -244,6 +245,13 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 )
 @click.option("--seed", type=int, default=None, help="Seed para Text2D e Hunyuan (mesmo valor)")
 @click.option(
+    "--seed-fingerprint",
+    type=int,
+    default=None,
+    hidden=True,
+    help="Seed de re-roll explícito (GameAssets manifest seed:) — entra no sidecar Omni, distinto de --seed (RNG).",
+)
+@click.option(
     "--steps",
     "-s",
     default=_defaults.DEFAULT_HY_STEPS,
@@ -347,12 +355,29 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     ),
 )
 @click.option(
+    "--height-m",
+    "height_m",
+    type=float,
+    default=None,
+    help=(
+        "Altura alvo em metros (authoring). Expande para --size-m; com --footprint-m "
+        "em modo bbox vira molde Omni (o modelo enche o aspect) — não é só escala."
+    ),
+)
+@click.option(
+    "--footprint-m",
+    "footprint_m",
+    type=float,
+    default=None,
+    help="Footprint L=W em metros com --height-m (coluna/prop). Molde bbox em modo bbox.",
+)
+@click.option(
     "--bbox-preset",
     "bbox_preset",
     default=None,
     help=(
         "Preset de aspect Omni: cube|humanoid|humanoid-child|quadruped|sword|shield|"
-        "crate|door|barrel|tree|chest|furniture|building|chapel."
+        "crate|door|barrel|tree|column|cactus|chest|furniture|building|chapel."
     ),
 )
 @click.option(
@@ -366,8 +391,8 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--pose-preset",
     "pose_preset",
     default=None,
-    type=click.Choice(["quaternius-tpose"]),
-    help="Pose embutida (Quaternius T-pose). Implica --control-type=pose.",
+    type=click.Choice(_list_pose_presets()),
+    help="Pose embutida (adulto, anão/chibi ou A-pose). Implica --control-type=pose.",
 )
 @click.option(
     "--point-cloud",
@@ -601,6 +626,7 @@ def generate(
     text2d_model_id,
     t2d_full_gpu,
     seed,
+    seed_fingerprint,
     steps,
     guidance,
     octree_resolution,
@@ -627,6 +653,8 @@ def generate(
     bbox_str,
     size_str,
     size_m_str,
+    height_m,
+    footprint_m,
     bbox_preset,
     pose_file,
     pose_preset,
@@ -684,9 +712,15 @@ def generate(
 
     if preset is not None:
         pv = _defaults.PRESET_HUNYUAN[preset]
-        steps = pv["steps"]
-        octree_resolution = pv["octree"]
-        num_chunks = pv["chunks"]
+        # Preset (explícito ou soft-fill do quality tier) é base — flags CLI
+        # explícitas de steps/octree/chunks ganham sempre (antes o preset
+        # soft-filled por --quality atropelava flags do utilizador).
+        if not _user_set_steps:
+            steps = pv["steps"]
+        if not _user_set_octree:
+            octree_resolution = pv["octree"]
+        if not _user_set_chunks:
+            num_chunks = pv["chunks"]
 
     # Hardware auto-detection: soft resolution — explicit flags, --quality e
     # --preset ganham sempre; preenche só o que veio dos defaults do click.
@@ -754,6 +788,8 @@ def generate(
             bbox_preset=bbox_preset,
             size=size_vals,
             size_m=size_m_vals,
+            height_m=height_m,
+            footprint_m=footprint_m,
             pose_file=pose_file,
             pose_preset=pose_preset,
             point_cloud=point_cloud,
@@ -762,6 +798,8 @@ def generate(
         )
     except (KeyError, FileNotFoundError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
+    if size_m_vals is None and _omni.get("size_m") is not None:
+        size_m_vals = list(_omni["size_m"])
 
     control_type = _omni["control_type"]
     bbox_vals = _omni["bbox"]
@@ -1018,7 +1056,6 @@ def generate(
                             "channels_last": channels_last,
                             "memory_efficient": bool(offload or allow_group_offload),
                         },
-                        low_vram=False,
                     )
                     if cpu:
                         _load_kw["device"] = "cpu"
@@ -1138,6 +1175,7 @@ def generate(
                             "bounds_mode": bounds_mode,
                             "mc_level": mc_level,
                             "size_m": size_m_vals,
+                            "seed": seed_fingerprint,
                         },
                     )
                 except OSError:
@@ -1378,7 +1416,7 @@ def convert(input_file, output, rotate):
     "--target-faces",
     type=int,
     required=True,
-    help="Número alvo de faces após decimação (use categoria do asset).",
+    help=("Faces alvo após decimação (categoria). Use 0 para LOD0 = painted (sem decimar — pipeline master)."),
 )
 @click.option(
     "--high-poly",
@@ -1506,8 +1544,18 @@ def bake_master_cmd(
     default=None,
     help=(
         "Fecho morfológico volumétrico (metros): dilate→erode via voxel remesh. "
-        "Funde double shells finas. Omitido=auto leve (~1/8 voxel MC via "
-        "--size-m/--category). 0=desliga. Valores altos derretem detalhe."
+        "Funde double shells finas. Omitido=auto (N×voxel MC via "
+        "--morph-close-voxels/--category). 0=desliga. Valores altos derretem detalhe."
+    ),
+)
+@click.option(
+    "--morph-close-voxels",
+    "morph_close_voxels",
+    type=float,
+    default=None,
+    help=(
+        "N de «voxel merge» no auto morph-close (default 0.125; terrain/rock=0.375). "
+        "Ignorado se --morph-close (metros) for explícito."
     ),
 )
 @click.option(
@@ -1548,44 +1596,65 @@ def bake_master_cmd(
     default=None,
     help="Rotação X em graus aplicada antes do reposicionamento (raro; default 0).",
 )
+@click.option(
+    "--remove-internal-shells/--keep-internal-shells",
+    default=None,
+    help="Strip cascas internas. Omitido: auto ON para building/chapel.",
+)
 def topology_fix_cmd(
     input_mesh: Path,
     output: Path | None,
     fill_holes_sides: int | None,
     watertight: bool | None,
     morph_close: float | None,
+    morph_close_voxels: float | None,
     size_m_str: str | None,
     category: str | None,
     bbox_preset: str | None,
     octree_for_morph: int | None,
     export_origin: str | None,
     export_rotation_x_deg: float | None,
+    remove_internal_shells: bool | None,
 ) -> None:
     """Repara topologia de um GLB cru (Stage 2 da pipeline).
 
     Operações: reweld → weld → dissolve/loose → long edges → slivers → debris →
-    fill_holes → watertight seletivo (sem flap_erode / force-base / cascas
-    internas / flare / Taubin) → normais → shade-smooth.
+    fill_holes → watertight seletivo → (building) strip cascas → normais →
+    shade-smooth.
 
     Substitui a etapa que estava embebida em ``text3d generate``.
     Recomendado correr em ``id_shape.glb`` para produzir ``id_clean.glb``.
     """
     from text3d.bbox_tune import resolve_morph_close, size_m_from_mapping
-    from text3d.utils.mesh_lod import prepare_mesh_topology
+    from text3d.utils.mesh_lod import _is_hollow_shell_category, prepare_mesh_topology
 
     out_path = Path(output) if output else input_mesh
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     size_m_vals = size_m_from_mapping(size_m_str) if size_m_str else None
+    # Hint de categoria também via bbox_preset Omni (chapel → building).
+    cat_eff = category
+    if cat_eff is None and bbox_preset:
+        from text3d.bbox_tune import _PRESET_APPROACH_KEY
+
+        cat_eff = _PRESET_APPROACH_KEY.get(str(bbox_preset).strip().lower())
+    hollow = _is_hollow_shell_category(cat_eff)
+    if remove_internal_shells is None and hollow:
+        remove_internal_shells = True
+
     morph_eff = resolve_morph_close(
         explicit=morph_close,
         size_m=size_m_vals,
         category=category,
         bbox_preset=bbox_preset,
         octree=octree_for_morph,
+        morph_close_voxels=morph_close_voxels,
     )
     if morph_eff is not None and morph_close is None:
-        console.print(f"[dim]auto morph-close={morph_eff:.4f}m (escala física)[/dim]")
+        from text3d.bbox_tune import morph_close_voxels_for
+
+        n_vox = morph_close_voxels_for(category, explicit=morph_close_voxels)
+        console.print(f"[dim]auto morph-close={morph_eff:.4f}m (voxel-merge N={n_vox:g}, escala física)[/dim]")
 
     if export_rotation_x_deg is not None:
         _defaults.set_export_rotation_x_rad_override(math.radians(float(export_rotation_x_deg)))
@@ -1597,6 +1666,8 @@ def topology_fix_cmd(
             watertight=watertight,
             morph_close=morph_eff,
             size_m=size_m_vals,
+            remove_internal_shells=remove_internal_shells,
+            category=cat_eff or category,
         )
         if export_origin is not None and export_origin != "none":
             from .utils.export import convert_mesh
@@ -1623,46 +1694,58 @@ def topology_fix_cmd(
 
 @cli.command("gpu-processes")
 def gpu_processes_cmd() -> None:
-    """Lista processos na GPU (via nvidia-smi) — útil quando a verificação de VRAM exclusiva falha."""
-    import shutil
-    import subprocess
+    """Lista GPUs e processos compute (NVML → nvidia-smi) — útil quando VRAM exclusiva falha."""
+    from gamedev_shared.gpu import list_gpu_snapshots, list_nvidia_compute_apps, nvml_available
 
-    if not shutil.which("nvidia-smi"):
-        console.print(
-            "[yellow]Comando [bold]nvidia-smi[/bold] não encontrado no PATH. "
-            "Com driver NVIDIA instalado, costuma estar em /usr/bin.[/yellow]"
-        )
+    snaps = list_gpu_snapshots()
+    apps = list_nvidia_compute_apps()
+    if not snaps and not apps and not nvml_available():
+        console.print("[yellow]NVML/nvidia-smi indisponível — sem driver NVIDIA ou libs em falta.[/yellow]")
         sys.exit(1)
-    try:
-        r = subprocess.run(
-            ["nvidia-smi"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
-    except OSError as e:
-        raise click.ClickException(f"Falha ao executar nvidia-smi: {e}") from e
-    except subprocess.TimeoutExpired:
-        raise click.ClickException("nvidia-smi excedeu o tempo limite.") from None
 
     console.print(
         Panel.fit(
-            "[bold]Uso da GPU[/bold] — procura a secção [bold]Processes[/bold] (PID, nome, memória)",
+            "[bold]Uso da GPU[/bold] — snapshots + processos compute (via Shared NVML)",
             border_style="cyan",
         )
     )
-    console.print(r.stdout, end="")
-    if r.stderr:
-        console.print(f"[dim]{r.stderr}[/dim]")
-    if r.returncode != 0:
-        console.print(f"[yellow]nvidia-smi saiu com código {r.returncode}[/yellow]")
+    if snaps:
+        gtab = Table(title="GPUs", box=box.ROUNDED)
+        gtab.add_column("ID", style="cyan")
+        gtab.add_column("Nome")
+        gtab.add_column("Livre MiB", justify="right")
+        gtab.add_column("Usado MiB", justify="right")
+        gtab.add_column("Total MiB", justify="right")
+        gtab.add_column("Fonte", style="dim")
+        for s in snaps:
+            gtab.add_row(
+                str(s.index),
+                s.name,
+                str(s.free_mib),
+                str(s.used_mib),
+                str(s.total_mib),
+                s.source,
+            )
+        console.print(gtab)
+    else:
+        console.print("[dim]Nenhuma GPU listada.[/dim]")
+
+    ptab = Table(title="Processos compute", box=box.ROUNDED)
+    ptab.add_column("PID", style="cyan")
+    ptab.add_column("Nome")
+    ptab.add_column("VRAM MiB", justify="right")
+    if apps:
+        for pid, name, mib in apps:
+            ptab.add_row(str(pid), name, "?" if mib is None else str(mib))
+    else:
+        ptab.add_row("—", "(nenhum)", "—")
+    console.print(ptab)
 
     console.print()
     console.print(
         Panel(
             "[bold]Parar um processo[/bold]\n"
-            "• Na tabela [bold]Processes[/bold], anota o [bold]PID[/bold] da linha que consome VRAM.\n"
+            "• Na tabela [bold]Processos compute[/bold], anota o [bold]PID[/bold] da linha que consome VRAM.\n"
             "• [bold]kill PID[/bold] — pedido amigável; [bold]kill -9 PID[/bold] — forçar se não sair.\n"
             "• Sessões antigas de Python/Text2D/Text3D: [bold]pgrep -af 'text2d|text3d'[/bold] "
             "e [bold]pgrep -af python[/bold] (cuidado a não matar o que precisas).\n"
@@ -1768,6 +1851,21 @@ def gpu_processes_cmd() -> None:
     "fica quantizado (SHORT) — incompatível com colliders trimesh reutilizados "
     "do mesh visual; gerar colliders dedicados (text3d collision) nesses casos.",
 )
+@click.option(
+    "--skin-source",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "GLB rigged (weights+skeleton). Após LOD texturizado, rebind via "
+        "gamedev_shared.skin_transfer (KDTree + armature + anims)."
+    ),
+)
+@click.option(
+    "--animation-source",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help=("GLB com clips de animação quando --skin-source não tem actions (ex.: rigged_hi + id_animated.glb)."),
+)
 def lod_cmd(
     input_mesh: Path,
     output_dir: Path,
@@ -1782,6 +1880,8 @@ def lod_cmd(
     finish: bool,
     finish_lod0: bool,
     meshopt: bool,
+    skin_source: Path | None,
+    animation_source: Path | None,
 ) -> None:
     """Gera três GLB com níveis de detalhe (LOD0=cheio, LOD1/LOD2 decimados).
 
@@ -1807,6 +1907,8 @@ def lod_cmd(
                 apply_finish=finish,
                 finish_lod0=finish_lod0,
                 apply_meshopt=meshopt,
+                skin_source=skin_source,
+                animation_source=animation_source,
             )
         else:
             paths = generate_lod_glb_triplet(
@@ -2379,7 +2481,6 @@ def generate_batch(
                     "channels_last": channels_last,
                     "memory_efficient": batch_offload,
                 },
-                low_vram=False,
             )
             _batch_generator = HunyuanTextTo3DGenerator(**_batch_kw)
 
@@ -2405,6 +2506,7 @@ def generate_batch(
                 item_octree = item.get("octree_resolution", item.get("octree", base_octree))
                 item_chunks = item.get("num_chunks", item.get("chunks", base_chunks))
                 item_seed = item.get("seed", None)
+                item_mc_level = item.get("mc_level", mc_level)
 
                 from .bbox_tune import apply_bbox_tune, size_m_from_mapping
                 from .omni_presets import merge_omni_controls, write_omni_fingerprint
@@ -2464,64 +2566,51 @@ def generate_batch(
                 _ctrl = {k: v for k, v in _ctrl.items() if v is not None}
 
                 t0 = time.time()
-                _ums_item: dict[str, Any] = {
-                    "from_image": str(img_path),
-                    "output": str(out_path),
-                    "steps": item_steps,
-                    "guidance": guidance,
-                    "octree_resolution": item_octree,
-                    "num_chunks": item_chunks,
-                    "seed": item_seed,
-                    "mc_level": mc_level,
-                    "bounds_mode": bounds_mode,
-                    "auto_num_chunks": False,
-                    "origin_mode": export_origin,
-                    "topology_fix": not no_topology_fix,
-                    "volume_decoder": volume_decoder,
-                    "mc_algo": mc_algo,
-                    "torch_compile": compile_models,
-                    "torch_compile_mode": compile_mode,
-                    "channels_last": channels_last,
-                    "allow_group_offload": allow_group_offload,
-                    "fp8_layerwise": fp8_layerwise,
-                    "sdnq_quantized_matmul": sdnq_matmul,
-                    "sage_attention": sage_attention,
-                    "offload": batch_offload,
-                    "verbose": batch_verbose,
-                    "category": item.get("category", category),
-                    "quality": item.get("quality", quality),
-                    "bbox_tune": False,  # já afinado acima
-                    "control_type": _omni.get("control_type"),
-                    "pose_preset": _omni.get("pose_preset"),
-                    "bbox_preset": _omni.get("bbox_preset"),
-                }
-                if _item_size_m is not None:
-                    _ums_item["size_m"] = _item_size_m
-                if _omni.get("bbox") is not None:
-                    _ums_item["bbox"] = _omni["bbox"]
-                if _omni.get("pose_file"):
-                    _ums_item["pose_file"] = str(_omni["pose_file"])
-                if _omni.get("point_cloud"):
-                    _ums_item["point_cloud"] = str(_omni["point_cloud"])
-                if _omni.get("voxel_mesh"):
-                    _ums_item["voxel_mesh"] = str(_omni["voxel_mesh"])
+                from .ums_payload import build_generate_request
+
+                _ums_item = build_generate_request(
+                    from_image=str(img_path),
+                    output=str(out_path),
+                    steps=item_steps,
+                    guidance=guidance,
+                    octree_resolution=item_octree,
+                    num_chunks=item_chunks,
+                    seed=item_seed,
+                    mc_level=item_mc_level,
+                    bounds_mode=bounds_mode,
+                    origin_mode=export_origin,
+                    topology_fix=not no_topology_fix,
+                    volume_decoder=volume_decoder,
+                    mc_algo=mc_algo,
+                    torch_compile=compile_models,
+                    torch_compile_mode=compile_mode,
+                    channels_last=channels_last,
+                    allow_group_offload=allow_group_offload,
+                    fp8_layerwise=fp8_layerwise,
+                    sdnq_quantized_matmul=sdnq_matmul,
+                    sage_attention=sage_attention,
+                    offload=batch_offload,
+                    verbose=batch_verbose,
+                    category=item.get("category", category),
+                    quality=item.get("quality", quality),
+                    bbox_tune=False,  # já afinado acima
+                    control_type=_omni.get("control_type"),
+                    pose_preset=_omni.get("pose_preset"),
+                    bbox_preset=_omni.get("bbox_preset"),
+                    size_m=_item_size_m,
+                    bbox=_omni.get("bbox"),
+                    pose_file=str(_omni["pose_file"]) if _omni.get("pose_file") else None,
+                    point_cloud=str(_omni["point_cloud"]) if _omni.get("point_cloud") else None,
+                    voxel_mesh=str(_omni["voxel_mesh"]) if _omni.get("voxel_mesh") else None,
+                    gpu_ids=parsed_gpu_ids,
+                    sdnq_preset=sdnq_preset,
+                    memory_efficient=bool(batch_offload or allow_group_offload)
+                    or (sdnq_preset not in (None, "none", "")),
+                )
 
                 if try_ums_delegation(
                     "text3d",
-                    with_ums_peak_opts(
-                        with_ums_load_opts(
-                            _ums_item,
-                            gpu_ids=parsed_gpu_ids,
-                            volume_decoder=volume_decoder,
-                            allow_group_offload=allow_group_offload,
-                            channels_last=channels_last,
-                            offload=batch_offload,
-                        ),
-                        backend="text3d",
-                        memory_efficient=bool(batch_offload or allow_group_offload)
-                        or (sdnq_preset not in (None, "none", "")),
-                        sdnq_preset=None if sdnq_preset in (None, "none", "") else sdnq_preset,
-                    ),
+                    _ums_item,
                     t_start=t0,
                     noun="Mesh",
                     console=_err,
@@ -2551,7 +2640,7 @@ def generate_batch(
                     octree_resolution=item_octree,
                     num_chunks=item_chunks,
                     hy_seed=item_seed,
-                    mc_level=mc_level,
+                    mc_level=item_mc_level,
                     bounds_mode=bounds_mode,
                     keep_loaded=True,
                     step_callback=_make_step_callback(item_id, item_steps),
@@ -2581,8 +2670,9 @@ def generate_batch(
                         {
                             **_omni,
                             "bounds_mode": bounds_mode,
-                            "mc_level": mc_level,
+                            "mc_level": item_mc_level,
                             "size_m": _item_size_m,
+                            "seed": item.get("seed_fingerprint"),
                         },
                     )
                 emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=100)

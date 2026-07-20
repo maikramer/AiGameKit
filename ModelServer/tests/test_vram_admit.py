@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 import pytest
+from modelserver import protocol as P
 from modelserver.backend_manager import BackendManager, InsufficientVramError
 from modelserver.registry import Registry
+
+
+@pytest.fixture(autouse=True)
+def _fast_admit_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refuse tests não devem esperar 8s de admit wait."""
+    monkeypatch.setattr(P, "VRAM_ADMIT_WAIT_SEC", 0.0)
+    monkeypatch.setattr(P, "VRAM_ADMIT_POLL_SEC", 0.05)
 
 
 class TestEnsureLoadedAdmitsPeak:
@@ -19,6 +27,35 @@ class TestEnsureLoadedAdmitsPeak:
         assert err.peak_mib > 5657
         assert err.activation_mib > 0
         assert err.quant_mode == "none"
+
+    def test_admit_waits_until_free_recovers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "384")
+        # Override autouse: aqui queremos espera activa.
+        monkeypatch.setattr(P, "VRAM_ADMIT_WAIT_SEC", 2.0)
+        monkeypatch.setattr(P, "VRAM_ADMIT_POLL_SEC", 0.05)
+        registry = Registry()
+        free = {"v": 4000}
+        ticks = {"n": 0}
+
+        def _free() -> int:
+            ticks["n"] += 1
+            # Após alguns polls, VRAM "liberta" (processo externo saiu).
+            if ticks["n"] >= 3:
+                free["v"] = 5657
+            return free["v"]
+
+        class _FakeAdapter:
+            def load(self, **kwargs):
+                return object()
+
+            def unload(self, model):
+                pass
+
+        mgr = BackendManager(registry, query_free_mib=_free, clear_vram=lambda: None)
+        monkeypatch.setattr(mgr._registry, "adapter", lambda name: _FakeAdapter())
+        model = mgr.ensure_loaded("text3d", sdnq_preset="sdnq-int4")
+        assert model is not None
+        assert ticks["n"] >= 3
 
     def test_int4_admitted_on_6gb(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "384")

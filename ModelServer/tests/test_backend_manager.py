@@ -176,3 +176,27 @@ class TestErrorRecovery:
         assert alpha_status["loaded"] is True
         beta_status = next(b for b in status["backends"] if b["name"] == "beta")
         assert beta_status["loaded"] is False
+
+
+class TestEnsureLoadedPin:
+    """Regressão: pin de ref_count atómico com ensure_loaded (sem janela de eviction)."""
+
+    def test_pin_blocks_eviction_until_unpinned(self) -> None:
+        registry = _make_registry()
+        mgr = BackendManager(registry, query_free_mib=lambda: 99999, clear_vram=lambda: None)
+        model = mgr.ensure_loaded("alpha", _pin=True)
+        assert model is not None
+        assert mgr._states["alpha"].ref_count == 1
+        # ref_count=1 logo ao sair do ensure — evict recusado, sem janela ref=0.
+        assert mgr.evict("alpha") is False
+        assert mgr.is_loaded("alpha")
+        with mgr._struct_lock:
+            mgr._states["alpha"].ref_count -= 1
+        assert mgr.evict("alpha") is True
+
+    def test_unpinned_ensure_stays_evictable(self) -> None:
+        registry = _make_registry()
+        mgr = BackendManager(registry, query_free_mib=lambda: 99999, clear_vram=lambda: None)
+        mgr.ensure_loaded("alpha")
+        assert mgr._states["alpha"].ref_count == 0
+        assert mgr.evict("alpha") is True

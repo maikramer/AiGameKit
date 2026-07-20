@@ -90,6 +90,10 @@ def _send_request_all_lines(socket_path: Path, request: dict, timeout: float = 1
 def _start_ums(tmp_path: Path, **kwargs: Any):
     socket_path = tmp_path / "test-ums.sock"
     registry = kwargs.pop("registry", None) or _make_registry()
+    # Hermético: nunca consultar a VRAM real da máquina (o admit usa o pico
+    # pesos+activação+safety; um GPU ocupado faria preload/generate falhar).
+    kwargs.setdefault("query_free_mib", lambda: 99999)
+    kwargs.setdefault("clear_vram", lambda: None)
     srv = UnifiedModelServer(registry=registry, socket_path=socket_path, verbose=False, **kwargs)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
@@ -211,7 +215,7 @@ class TestServerProtocol:
         _send_request(sock, {"cmd": P.CMD_PRELOAD, "backend": "alpha"})
 
         resp = _send_request(sock, {"cmd": P.CMD_ENSURE_VRAM, "needed_mib": 1000})
-        # Sem GPU real (nvidia-smi pode não estar disponível em CI), ensure_vram
+        # Sem GPU real (NVML/smi pode não estar disponível em CI), ensure_vram
         # retorna OK (não evicta cegamente se não consegue verificar VRAM).
         assert resp["status"] in (P.STATUS_OK, P.STATUS_ERROR)
         assert resp.get("needed_mib") == 1000
@@ -539,3 +543,55 @@ class TestQueueSchedulerIntegration:
             assert j_cold.affinity_cuts <= 1
         finally:
             srv.workers.stop()
+
+
+class TestDoubleStart:
+    """Regressão: um 2.º UMS no mesmo socket NÃO pode apagar socket/pid do 1.º."""
+
+    def test_second_start_preserves_running_server(self, tmp_path: Path) -> None:
+        srv1, sock, thread = _start_ums(tmp_path)
+        try:
+            ppid = sock.with_suffix(".pid")
+            assert ppid.exists()
+            first_pid = ppid.read_text().strip()
+
+            srv2 = UnifiedModelServer(
+                registry=_make_registry(),
+                socket_path=sock,
+                verbose=False,
+                query_free_mib=lambda: 99999,
+                clear_vram=lambda: None,
+            )
+            with pytest.raises(OSError):
+                srv2.serve_forever()
+
+            # Socket e pid file do 1.º servidor têm de estar intactos…
+            assert sock.exists()
+            assert ppid.read_text().strip() == first_pid
+            # …e o 1.º continua a responder (não ficou órfão/undiscoverable).
+            resp = _send_request(sock, {"cmd": P.CMD_STATUS})
+            assert resp["status"] == P.STATUS_STATUS
+            assert str(resp["pid"]) == first_pid
+        finally:
+            _stop_ums(srv1, sock, thread)
+
+
+class TestStreamWaitPrefix:
+    """Regressão: wait --stream aceita prefixo de job_id como o wait normal."""
+
+    def test_wait_stream_resolves_prefix(self, running_ums) -> None:
+        _, sock = running_ums
+        sub = _send_request(sock, {"cmd": P.CMD_SUBMIT, "backend": "alpha", "prompt": "x"})
+        job_id = sub["job_id"]
+        lines = _send_request_all_lines(sock, {"cmd": P.CMD_WAIT, "job_id": job_id[:8], "stream": True})
+        assert lines[-1]["status"] == P.STATUS_OK
+        assert lines[-1]["job_id"] == job_id
+
+    def test_streaming_detaches_listener(self, running_ums) -> None:
+        srv, sock = running_ums
+        sub = _send_request(sock, {"cmd": P.CMD_SUBMIT, "backend": "alpha", "prompt": "x"})
+        job = srv.queue.get(sub["job_id"])
+        assert job is not None
+        _send_request_all_lines(sock, {"cmd": P.CMD_WAIT, "job_id": sub["job_id"], "stream": True})
+        # Listener do cliente NDJSON não pode ficar preso ao job (leak).
+        assert job._listeners == []

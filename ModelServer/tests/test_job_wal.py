@@ -131,3 +131,15 @@ def test_take_and_finish_write_wal(wal_path: Path) -> None:
 
     ops = [json.loads(line)["op"] for line in wal_path.read_text(encoding="utf-8").strip().splitlines()]
     assert ops == ["enqueue", "started", "finished"]
+
+
+def test_replay_tolerates_incomplete_record(wal_path: Path) -> None:
+    """JSON válido mas sem ``backend`` não pode derrubar o startup (regressão)."""
+    lines = [
+        json.dumps({"op": "enqueue", "job_id": "bad-1", "priority": "batch"}),  # sem backend
+        json.dumps({"op": "enqueue", "job_id": "ok-1", "backend": "text2d", "request": {}}),
+    ]
+    wal_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    q = JobQueue(wal_path=wal_path)
+    assert q.replay_from_wal() == 1
+    assert q.depth == 1

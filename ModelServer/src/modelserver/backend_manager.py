@@ -23,6 +23,7 @@ from typing import Any
 
 from gamedev_shared.logging import Logger
 
+from . import protocol as P
 from .registry import Registry
 from .stats import StatsCollector
 from .vram_planner import (
@@ -69,6 +70,8 @@ _LOAD_KWARG_KEYS = frozenset(
         "model_id",
         "quant_preset",
         "step_cache",
+        # Override de pegada para o peak (4B vs 9B) — só matemática de admit.
+        "footprint_key",
     }
 )
 
@@ -193,6 +196,36 @@ class BackendManager:
 
         return query_gpu_free_mib()
 
+    def _wait_for_admit(self, peak_mib: int, free_mib: int | None) -> int | None:
+        """Poll VRAM livre até caber ``peak`` ou timeout (processo externo a sair).
+
+        Também tenta ``evict_all`` idle + clear cache a cada poll. Timeout via
+        ``GAMEDEV_UMS_VRAM_ADMIT_WAIT_SEC`` (0 = sem espera).
+        """
+        wait_budget = max(0.0, float(P.VRAM_ADMIT_WAIT_SEC))
+        if wait_budget <= 0:
+            return free_mib
+        poll = max(0.05, float(P.VRAM_ADMIT_POLL_SEC))
+        deadline = time.monotonic() + wait_budget
+        free = free_mib
+        while time.monotonic() < deadline:
+            with self._struct_lock:
+                # Evict tudo idle — se nada loaded, não há o que libertar no UMS.
+                for victim in list(self._states):
+                    snap = self._snapshot(victim)
+                    if snap is not None and snap.ref_count <= 0:
+                        self._evict_unlocked(victim)
+            self._clear_cache()
+            free = self._free_mib()
+            if can_admit(free, peak_mib):
+                _logger.info(f"[UMS] VRAM admit OK após espera (livre={free} peak={peak_mib}).")
+                return free
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(poll, remaining))
+        return free
+
     def _clear_cache(self) -> None:
         if self._clear_vram is not None:
             self._clear_vram()
@@ -294,8 +327,17 @@ class BackendManager:
 
     def resolve_peak_params(
         self, name: str, source: dict[str, Any] | None = None, **kwargs: Any
-    ) -> tuple[str, bool, bool]:
-        """``(quant_mode, memory_efficient, group_offload)`` para pico VRAM."""
+    ) -> tuple[str, bool, bool, bool]:
+        """``(quant_mode, memory_efficient, group_offload, streams_on_load)`` para pico VRAM.
+
+        ``streams_on_load``: True quando o LOAD já é streaming módulo-a-módulo
+        (diffusers model_cpu offload — o pico de warmup é largest-module +
+        activação, NÃO pesos completos). Default por backend: text2d com
+        memory_efficient (o seu load é diffusers offload — validado ~4.1 GiB).
+        text3d carrega pesos completos e só depois aplica leaf-offload → False
+        (admit exige pesos completos). Override explícito: ``streams_on_load``
+        no request.
+        """
         src = dict(source or {})
         src.update(kwargs)
         quant = self.resolve_quant_mode(src)
@@ -311,7 +353,10 @@ class BackendManager:
         if go is None:
             # text3d mem_eff ⇒ group+stream por defeito (ums_load / generator).
             go = name == "text3d" and mem
-        return quant, mem, bool(go)
+        streams = self._as_bool(src.get("streams_on_load"))
+        if streams is None:
+            streams = name == "text2d" and mem
+        return quant, mem, bool(go), bool(streams)
 
     @staticmethod
     def _normalize_shape_value(value: Any) -> Any:
@@ -342,16 +387,22 @@ class BackendManager:
         quant_mode: str = "none",
         memory_efficient: bool = False,
         group_offload: bool = False,
+        footprint_key: str | None = None,
     ) -> tuple[int, int]:
-        """(weights_mib, activation_mib) a partir do footprint ou YAML."""
+        """(weights_mib, activation_mib) a partir do footprint ou YAML.
+
+        ``footprint_key``: override por request (ex.: text2d 4B vs 9B — a chave
+        do descriptor é estática e não sabe qual modelo o hw_auto escolheu).
+        """
         desc = self._registry.descriptor(name)
+        fp_key = footprint_key or desc.footprint_key
         weights: int | None = None
         activation: int | None = None
-        if desc.footprint_key:
+        if fp_key:
             try:
                 from gamedev_shared.lowvram import get_footprint
 
-                fp = get_footprint(desc.footprint_key)
+                fp = get_footprint(fp_key)
                 if group_offload:
                     # group+stream: pico ≈ maior leaf/block onloaded + activação
                     # completa (chunks dinâmicos usam a VRAM livre pós-offload).
@@ -390,6 +441,7 @@ class BackendManager:
         quant_mode: str = "none",
         memory_efficient: bool = False,
         group_offload: bool = False,
+        footprint_key: str | None = None,
     ) -> int:
         """Pico = pesos(quant) + activação de inferência + safety."""
         weights, activation = self.footprint_parts_mib(
@@ -397,17 +449,38 @@ class BackendManager:
             quant_mode=quant_mode,
             memory_efficient=memory_efficient,
             group_offload=group_offload,
+            footprint_key=footprint_key,
         )
         return compute_peak_mib(weights, activation)
 
-    def activation_headroom_mib(self, name: str, *, memory_efficient: bool = False, group_offload: bool = False) -> int:
-        """Livre necessário se os pesos já estão em VRAM."""
+    def activation_headroom_mib(
+        self,
+        name: str,
+        *,
+        quant_mode: str = "none",
+        memory_efficient: bool = False,
+        group_offload: bool = False,
+        footprint_key: str | None = None,
+    ) -> int:
+        """Livre necessário se os pesos já estão em VRAM.
+
+        Com ``group_offload`` (text3d SDNQ) os pesos já ocupam o maior leaf;
+        a activação streama no free restante — exigir ``activation_gib`` completo
+        (~2 GiB) em cima de pesos hot faz o 2º job falhar em GPUs ~6 GB.
+        """
+        if group_offload:
+            # Stream/offload: basta margem para um bloco de activação, não o pico frio.
+            base = 768 if memory_efficient or str(quant_mode).startswith("sdnq") else 1024
+            return inference_headroom_mib(base)
         _weights, activation = self.footprint_parts_mib(
             name,
-            quant_mode="none",
+            quant_mode=quant_mode,
             memory_efficient=memory_efficient,
             group_offload=group_offload,
+            footprint_key=footprint_key,
         )
+        if memory_efficient:
+            activation = max(512, int(activation * _MEMORY_EFFICIENT_ACTIVATION_FACTOR))
         return inference_headroom_mib(activation)
 
     def _all_snapshots(self) -> list[LoadedBackend]:
@@ -422,11 +495,17 @@ class BackendManager:
     # Carga
     # ------------------------------------------------------------------
 
-    def ensure_loaded(self, name: str, **load_kwargs: Any) -> Any:
+    def ensure_loaded(self, name: str, _pin: bool = False, **load_kwargs: Any) -> Any:
         """Garante que ``name`` está carregado e devolve o model object.
 
         Se já carregado, atualiza ``last_used`` e devolve. Caso contrário, evicta
         backends (peso+LRU) se a VRAM não chegar, depois carrega via adapter.
+
+        Com ``_pin=True``, ``ref_count`` é incrementado **atomicamente** com a
+        verificação/carga (sob ``_struct_lock``) — sem janela em que outro actor
+        (ensure-vram, evict, preload concorrente) possa evictar o modelo entre
+        o return desta função e o pin do caller. O caller fica obrigado a
+        decrementar (ver ``generate``).
 
         Levanta ``InsufficientVramError`` se, após evicção, a VRAM livre ainda
         for inferior ao **pico** (pesos + activação + safety) — evita OOM a meio
@@ -437,12 +516,18 @@ class BackendManager:
         """
         desc = self._registry.descriptor(name)  # KeyError se desconhecido
         adapter = self._registry.adapter(name)
-        quant, mem_eff, group_off = self.resolve_peak_params(name, load_kwargs)
-        # Admit no load: sempre pesos completos. ``group_offload`` só reduz o
-        # residente *depois* do load (headroom); usar largest aqui subestima
-        # o pico de warmup e admite → OOM a meio do adapter.load.
+        quant, mem_eff, group_off, streams = self.resolve_peak_params(name, load_kwargs)
+        # Admit no load: pesos completos — EXCEPTO backends cujo load já é
+        # streaming (diffusers model_cpu offload, text2d): aí o pico de warmup é
+        # largest-module + activação. ``group_offload`` só reduz o residente
+        # *depois* do load (headroom) — usar largest no admit de um backend que
+        # carrega tudo subestima o warmup → OOM a meio do adapter.load.
         weights_mib, activation_mib = self.footprint_parts_mib(
-            name, quant_mode=quant, memory_efficient=mem_eff, group_offload=False
+            name,
+            quant_mode=quant,
+            memory_efficient=mem_eff,
+            group_offload=streams,
+            footprint_key=load_kwargs.get("footprint_key"),
         )
         peak = compute_peak_mib(weights_mib, activation_mib)
         new_shape = self._extract_load_shape(load_kwargs)
@@ -452,6 +537,8 @@ class BackendManager:
             if state is not None and state.model is not None:
                 if not self._shape_mismatch(state.load_shape, load_kwargs):
                     state.last_used = time.monotonic()
+                    if _pin:
+                        state.ref_count += 1
                     return state.model
                 # Shape diverge (ex. max_num_view 6→4 no load) — reload.
                 if state.ref_count > 0:
@@ -472,6 +559,14 @@ class BackendManager:
                 self._clear_cache()
                 free = self._free_mib()
 
+            if state is None:
+                state = _LoadedState()
+                self._states[name] = state
+
+        # Espera VRAM transitória FORA do struct_lock (não bloquear evict/status).
+        free = self._free_mib()
+        if not can_admit(free, peak):
+            free = self._wait_for_admit(peak, free)
             if not can_admit(free, peak):
                 raise InsufficientVramError(
                     name,
@@ -482,16 +577,15 @@ class BackendManager:
                     quant_mode=quant,
                 )
 
-            if state is None:
-                state = _LoadedState()
-                self._states[name] = state
-
         # Carga fora do struct_lock (demora segundos; outros backends podem
         # servir pedidos entretanto). Mas guardamos o gen_lock do backend.
         with state.gen_lock:
             # Re-verificar (outro thread pode ter carregado enquanto esperávamos).
             if state.model is not None and not self._shape_mismatch(state.load_shape, load_kwargs):
                 state.last_used = time.monotonic()
+                if _pin:
+                    with self._struct_lock:
+                        state.ref_count += 1
                 return state.model
             if state.model is not None and self._shape_mismatch(state.load_shape, load_kwargs):
                 if state.ref_count > 0:
@@ -504,6 +598,8 @@ class BackendManager:
                     self._evict_unlocked(name)
             # Re-check VRAM (outra carga pode ter corrido entretanto).
             free = self._free_mib()
+            if not can_admit(free, peak):
+                free = self._wait_for_admit(peak, free)
             if not can_admit(free, peak):
                 raise InsufficientVramError(
                     name,
@@ -518,12 +614,18 @@ class BackendManager:
                 f"(peak={peak} MiB = pesos={weights_mib}+act={activation_mib}+safety, "
                 f"quant={quant}, group_offload_after_load={group_off}, yaml={desc.vram_mib})..."
             )
+            # footprint_key é sinal de peak/admit — nunca chega ao ctor do adapter.
+            load_kwargs.pop("footprint_key", None)
             t0 = time.perf_counter()
             model = adapter.load(**load_kwargs)
             load_time = time.perf_counter() - t0
-            state.model = model
-            state.load_shape = new_shape
-            state.last_used = time.monotonic()
+            with self._struct_lock:
+                state.model = model
+                state.load_shape = new_shape
+                state.last_used = time.monotonic()
+                if _pin:
+                    # Pin atómico com a carga — sem janela ref=0 para eviction.
+                    state.ref_count += 1
             self.stats.record_load(name, load_time)
             _logger.info(f"[UMS] Backend {name!r} carregado em {load_time:.1f}s.")
             return model
@@ -546,7 +648,9 @@ class BackendManager:
         progress_cb = req.get("_progress")
         load_kwargs = {k: v for k, v in req.items() if k in _LOAD_KWARG_KEYS}
         try:
-            model = self.ensure_loaded(name, **load_kwargs)
+            # _pin=True: ref_count sobe atomicamente com o ensure — fecha a
+            # janela onde outro actor via ref=0 e evictava o model recém-obtido.
+            model = self.ensure_loaded(name, _pin=True, **load_kwargs)
         except InsufficientVramError as e:
             self.stats.record_error(name, str(e))
             return {
@@ -573,17 +677,23 @@ class BackendManager:
                 "hint": "Espera o job atual (`ums queue` / `ums wait`) antes de mudar shape.",
             }
         state = self._states[name]
-
-        # Pin logo após ensure_loaded — fecha a janela onde outro ensure com
-        # shape diferente via ref=0 e evictava o model que acabámos de obter.
-        with self._struct_lock:
-            state.ref_count += 1
         should_evict = False
         try:
             # Pesos já em VRAM: ainda precisamos de headroom livre para activações.
-            _quant, mem_eff, group_off = self.resolve_peak_params(name, req)
-            headroom = self.activation_headroom_mib(name, memory_efficient=mem_eff, group_offload=group_off)
+            _quant, mem_eff, group_off, streams = self.resolve_peak_params(name, req)
+            headroom = self.activation_headroom_mib(
+                name,
+                quant_mode=_quant,
+                memory_efficient=mem_eff,
+                group_offload=group_off or streams,
+                footprint_key=req.get("footprint_key"),
+            )
             free = self._free_mib()
+            if free is not None and free < headroom:
+                # Activação residual do job anterior costuma ficar em cache CUDA —
+                # limpar antes de falhar (senão 2º job em ~6 GB morre com pesos hot).
+                self._clear_cache()
+                free = self._free_mib()
             if free is not None and free < headroom:
                 # Tentar evictar idle irmãos para abrir activação.
                 with self._struct_lock:
@@ -596,7 +706,11 @@ class BackendManager:
                     free = self._free_mib()
                 if free is not None and free < headroom:
                     _w, act = self.footprint_parts_mib(
-                        name, quant_mode=_quant, memory_efficient=mem_eff, group_offload=group_off
+                        name,
+                        quant_mode=_quant,
+                        memory_efficient=mem_eff,
+                        group_offload=group_off or streams,
+                        footprint_key=req.get("footprint_key"),
                     )
                     err = InsufficientVramError(
                         name,
@@ -633,6 +747,8 @@ class BackendManager:
                 # visível em `ums stats` para diagnosticar OOM/eficiência.
                 if isinstance(response, dict):
                     self.stats.record_runtime_budget(name, response.get("runtime_budget"))
+                # Libertar activação residual para o próximo job hot no mesmo backend.
+                self._clear_cache()
                 return response
         except InsufficientVramError as e:
             self.stats.record_error(name, str(e))
@@ -712,14 +828,15 @@ class BackendManager:
                 }
                 if allow_group_offload is not None:
                     src["allow_group_offload"] = allow_group_offload
-                quant, mem_eff, _go = self.resolve_peak_params(backend, src)
+                quant, mem_eff, _go, streams = self.resolve_peak_params(backend, src)
                 target = max(
                     target,
                     self.peak_vram_mib(
                         backend,
                         quant_mode=quant,
                         memory_efficient=mem_eff,
-                        group_offload=False,
+                        group_offload=streams,
+                        footprint_key=src.get("footprint_key"),
                     ),
                 )
         names_to_evict: list[str] = []
@@ -728,7 +845,7 @@ class BackendManager:
             if free is not None and free >= target:
                 return True
             if free is None:
-                # Sem nvidia-smi — não dá para verificar; não evictar cegamente.
+                # Sem leitura NVML/smi — não dá para verificar; não evictar cegamente.
                 return True
             names_to_evict = plan_eviction(self._all_snapshots(), target, free)
             for victim in names_to_evict:

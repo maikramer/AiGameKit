@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -26,13 +25,13 @@ from .helpers import (
     _row_wants_animate,
     _row_wants_rig,
     _safe_row_dirname,
-    _seed_for_row,
+    _seed_for_manifest_row,
     _texture2d_material_maps_path_manifest,
     _texture2d_profile_effective,
     effective_face_ratio,
 )
-from .manifest import effective_image_source
-from .omni_ctrl import shape_omni_stale
+from .manifest import apply_row_text3d_overrides, effective_image_source, row_mc_level
+from .omni_ctrl import omni_to_batch_item, prepare_shape_for_generation, shape_omni_stale
 from .param_optimizer import optimize_text3d_for_target, should_optimize_text3d
 from .paths import (
     _ROW_DONE,
@@ -47,6 +46,7 @@ from .paths import (
     _painted_path,
     _paths_for_row_manifest,
     _rigging3d_output_path,
+    _shape_existing,
     _shape_path,
 )
 from .pipeline import (
@@ -61,6 +61,13 @@ from .pipeline import (
 from .profile import Paint3DProfile
 from .prompt_builder import build_prompt
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
+from .ums_batch import (
+    run_paint_wave_or_fallback,
+    run_shape_wave_or_fallback,
+    run_text2d_wave_or_fallback,
+    run_texture2d_wave_or_fallback,
+)
+from .ums_coord import MasterDeferQueue, apply_ums_child_env
 
 console = Console()
 
@@ -115,6 +122,18 @@ console = Console()
     is_flag=True,
     help="Usar barras de progresso simples em vez do dashboard TUI",
 )
+@click.option(
+    "--ums-stream",
+    is_flag=True,
+    default=False,
+    help="Propaga GAMEDEV_UMS_STREAM=1 aos subprocessos (eventos UMS; só com verbose/ruído OK).",
+)
+@click.option(
+    "--no-ums",
+    is_flag=True,
+    default=False,
+    help="Desliga UMS (auto-start off + waves GPU via subprocess CLI; tools recebem --no-ums).",
+)
 def resume_cmd(
     profile_path: Path,
     manifest_path: Path,
@@ -126,6 +145,8 @@ def resume_cmd(
     force: bool,
     gpu_ids_str: str | None,
     no_dashboard: bool,
+    ums_stream: bool,
+    no_ums: bool,
 ) -> None:
     """Batch inteligente: analisa o estado de cada asset e executa apenas as fases pendentes.
 
@@ -189,23 +210,14 @@ def resume_cmd(
     work_dir.mkdir(parents=True, exist_ok=True)
 
     child_env = dict(subprocess_gpu_env(gpu_ids=gpu_ids))
-    child_env.setdefault("GAMEDEV_UMS_PRIORITY", "batch")
-    for _ums_key in (
-        "GAMEDEV_UMS_PRIORITY",
-        "GAMEDEV_UMS_AUTO_START",
-        "GAMEDEV_UMS_DEBUG",
-        "GAMEDEV_UMS_STREAM",
-        "GAMEDEV_UMS_MAX_QUEUE_DEPTH",
-        "GAMEDEV_ALLOW_LEGACY_SERVER",
-    ):
-        if _ums_key in os.environ:
-            child_env.setdefault(_ums_key, os.environ[_ums_key])
-    try:
-        from gamedev_shared.model_server import ensure_ums_running
+    apply_ums_child_env(child_env, ums_stream=ums_stream, no_ums=no_ums)
+    if not no_ums:
+        try:
+            from gamedev_shared.model_server import ensure_ums_running
 
-        ensure_ums_running()
-    except Exception:
-        pass
+            ensure_ums_running()
+        except Exception:
+            pass
 
     log_file = None
     if log_path:
@@ -234,7 +246,6 @@ def resume_cmd(
         master_state: str | None = None
         # Master pipeline is the only path: usa classificador do DAG novo.
         _omni = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
-        from .paths import _shape_existing
 
         _shape_p = _shape_existing(mesh_final)
         _t3_r = profile.text3d
@@ -245,7 +256,8 @@ def resume_cmd(
                 _omni,
                 category=row.category or None,
                 bounds_mode=getattr(_t3_r, "bounds_mode", None) if _t3_r else None,
-                mc_level=getattr(_t3_r, "mc_level", None) if _t3_r else None,
+                mc_level=row_mc_level(row, getattr(_t3_r, "mc_level", None) if _t3_r else None),
+                seed=row.seed,
             )
         )
         master_state = _classify_row_state_master(
@@ -397,6 +409,72 @@ def resume_cmd(
 
     continue_on_error = not fail_fast
     failures = 0
+    master_q = MasterDeferQueue()
+    deferred_done: set[str] = set()
+    items_by_id = {it["row"].id: it for it in items}
+
+    def _next_state_after_paint(it: dict[str, Any], row: Any) -> str:
+        return _ROW_NEED_RIG if it["wants_rig"] else (_ROW_NEED_ANIMATE if it["wants_animate"] else _ROW_DONE)
+
+    def _after_paint_ok(it: dict[str, Any], row: Any, rec: dict[str, Any], painted_out: Path | None = None) -> None:
+        if painted_out is not None and painted_out.is_file():
+            _install_file(painted_out, it["mesh_final"])
+        it["state"] = _next_state_after_paint(it, row)
+        master_q.enqueue(rec, it["mesh_final"], row)
+
+    def _finalize_deferred(
+        rec: dict[str, Any],
+        mesh_f: Path,
+        row_m: Any,
+        *,
+        on_progress_line: Any = None,
+    ) -> None:
+        nonlocal failures
+        it = items_by_id.get(row_m.id)
+        if it is None:
+            return
+        wr = bool(it.get("wants_rig"))
+        wa = bool(it.get("wants_animate"))
+        if not wr and not wa and not getattr(profile, "master_pipeline", True):
+            deferred_done.add(row_m.id)
+            return
+        rec_m: dict[str, Any] = {"id": row_m.id}
+        failed = _post_text3d_mesh_extras(
+            profile,
+            row_m,
+            mesh_f,
+            rec_m,
+            manifest_dir,
+            child_env,
+            rigging3d_bin,
+            with_rig=wr,
+            with_animate=wa,
+            animator3d_bin=animator3d_bin,
+            has_rigging_profile=has_rigging_profile,
+            gpu_ids=gpu_ids,
+            with_lod=bool(row_m.generate_lod),
+            with_collision=bool(row_m.generate_collision),
+            on_progress_line=on_progress_line,
+        )
+        if failed:
+            failures += 1
+            append_log(rec_m)
+            if not continue_on_error:
+                raise click.Abort()
+        else:
+            if wr or wa:
+                it["state"] = _ROW_DONE
+            deferred_done.add(row_m.id)
+            append_log(rec_m)
+
+    def _drain_master_deferred(*, on_progress_line: Any = None) -> None:
+        if not master_q.items:
+            return
+
+        def _finalize(rec: dict[str, Any], mesh_f: Path, row_m: Any) -> None:
+            _finalize_deferred(rec, mesh_f, row_m, on_progress_line=on_progress_line)
+
+        master_q.drain(_finalize)
 
     if not no_dashboard:
         # === Dashboard TUI path ===
@@ -464,7 +542,133 @@ def resume_cmd(
                     )
                 )
                 dash.set_phase(img_phase, len(need_img))
+                t2d_need = [it for it in need_img if effective_image_source(profile, it["row"]) == "text2d"]
+                tex_need = [it for it in need_img if effective_image_source(profile, it["row"]) == "texture2d"]
+                ums_img_done: set[str] = set()
+
+                if t2d_need and text2d_bin:
+                    t2d_items_r = []
+                    for it in t2d_need:
+                        row = it["row"]
+                        prompt_2d = build_prompt(profile, preset, row, for_3d=False)
+                        item: dict[str, Any] = {
+                            "id": row.id,
+                            "prompt": prompt_2d,
+                            "output": str(it["img_final"]),
+                        }
+                        seed = _seed_for_manifest_row(profile, row)
+                        if seed is not None:
+                            item["seed"] = seed
+                        t2d_items_r.append(item)
+                    _t2 = profile.text2d
+                    _kw: dict[str, Any] = {
+                        "manifest_dir": manifest_dir,
+                        "no_ums": no_ums,
+                        "ums_stream": ums_stream,
+                        "gpu_ids": gpu_ids,
+                        "quality": profile.generation,
+                    }
+                    if _t2:
+                        if _t2.width is not None:
+                            _kw["width"] = _t2.width
+                        if _t2.height is not None:
+                            _kw["height"] = _t2.height
+                        if _t2.steps is not None:
+                            _kw["steps"] = _t2.steps
+                        if _t2.guidance_scale is not None:
+                            _kw["guidance"] = _t2.guidance_scale
+                    ums_t2d = run_text2d_wave_or_fallback(
+                        t2d_items_r,
+                        on_progress=lambda r: dash.feed_event(r.asset_id, "text2d", r.status, phase="generating"),
+                        **_kw,
+                    )
+                    if ums_t2d is not None:
+                        by_id = {str(x.get("id")): x for x in ums_t2d}
+                        for it in t2d_need:
+                            row = it["row"]
+                            ir = by_id.get(row.id, {})
+                            ums_img_done.add(row.id)
+                            if ir.get("status") in ("ok", "skipped") and it["img_final"].is_file():
+                                dash.feed_event(row.id, "text2d", "ok", phase="generating")
+                                it["state"] = _ROW_NEED_SHAPE
+                            else:
+                                failures += 1
+                                dash.feed_event(
+                                    row.id, "text2d", "error", error=ir.get("error") or "image generation failed"
+                                )
+                                if not continue_on_error:
+                                    raise click.Abort()
+                            dash.advance_phase()
+
+                if tex_need and texture2d_bin:
+                    tt_line = _texture2d_profile_effective(profile)
+                    tex_items_r = []
+                    for it in tex_need:
+                        row = it["row"]
+                        prompt_2d = build_prompt(profile, preset, row, for_3d=False)
+                        item = {"id": row.id, "prompt": prompt_2d, "output": str(it["img_final"])}
+                        seed = _seed_for_manifest_row(profile, row)
+                        if seed is not None:
+                            item["seed"] = seed
+                        tex_items_r.append(item)
+                    ums_tex = run_texture2d_wave_or_fallback(
+                        tex_items_r,
+                        manifest_dir=manifest_dir,
+                        no_ums=no_ums,
+                        ums_stream=ums_stream,
+                        gpu_ids=gpu_ids,
+                        width=int(tt_line.width or 512),
+                        height=int(tt_line.height or 512),
+                        steps=int(tt_line.steps or 20),
+                        guidance=float(tt_line.guidance_scale or 7.5),
+                        negative_prompt=tt_line.negative_prompt,
+                        preset=tt_line.preset,
+                        model_id=tt_line.model_id,
+                        on_progress=lambda r: dash.feed_event(r.asset_id, "texture2d", r.status, phase="generating"),
+                    )
+                    if ums_tex is not None:
+                        by_id = {str(x.get("id")): x for x in ums_tex}
+                        for it in tex_need:
+                            row = it["row"]
+                            ir = by_id.get(row.id, {})
+                            ums_img_done.add(row.id)
+                            if ir.get("status") in ("ok", "skipped") and it["img_final"].is_file():
+                                mat_ok = True
+                                if tt_line.materialize:
+                                    try:
+                                        mat_b = _resolve_materialize_bin_texture2d(tt_line)
+                                        maps_dst = _texture2d_material_maps_path_manifest(profile, manifest_dir, row)
+                                        maps_dst.mkdir(parents=True, exist_ok=True)
+                                        margv = _materialize_diffuse_argv(mat_b, tt_line, it["img_final"], maps_dst)
+                                        r_m = run_cmd(margv, extra_env=child_env, cwd=manifest_dir)
+                                        if r_m.returncode != 0:
+                                            failures += 1
+                                            mat_ok = False
+                                    except FileNotFoundError:
+                                        failures += 1
+                                        mat_ok = False
+                                if mat_ok:
+                                    dash.feed_event(row.id, "texture2d", "ok", phase="generating")
+                                    it["state"] = _ROW_NEED_SHAPE
+                                else:
+                                    dash.feed_event(row.id, "texture2d", "error", error="materialize failed")
+                                    if not continue_on_error:
+                                        raise click.Abort()
+                            else:
+                                failures += 1
+                                dash.feed_event(
+                                    row.id,
+                                    "texture2d",
+                                    "error",
+                                    error=ir.get("error") or "image generation failed",
+                                )
+                                if not continue_on_error:
+                                    raise click.Abort()
+                            dash.advance_phase()
+
                 for it in need_img:
+                    if it["row"].id in ums_img_done:
+                        continue
                     row = it["row"]
                     src = effective_image_source(profile, row)
                     tt_line = _texture2d_profile_effective(profile)
@@ -489,7 +693,9 @@ def resume_cmd(
                         _append_text2d_profile_args(profile, argv)
                         if gpu_ids:
                             argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
-                    seed = _seed_for_row(profile, row.id)
+                    if no_ums:
+                        argv.append("--no-ums")
+                    seed = _seed_for_manifest_row(profile, row)
                     if seed is not None:
                         argv.extend(["--seed", str(seed)])
                     tool_short = "texture2d" if src == "texture2d" else "text2d"
@@ -537,7 +743,21 @@ def resume_cmd(
                 shape_item_map: dict[str, int] = {}
                 for i, it in enumerate(need_shape):
                     row = it["row"]
-                    seed = _seed_for_row(profile, row.id)
+                    _omni_row = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+                    _shape_out = _shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"])
+                    # UMS wave / generate-batch saltam outputs existentes: apaga
+                    # shape stale (+ derivados) antes de enfileirar, senão o
+                    # resume avançava com a mesh antiga.
+                    prepare_shape_for_generation(
+                        _shape_out,
+                        _omni_row,
+                        force=force,
+                        category=row.category or None,
+                        bounds_mode=getattr(t3_opts, "bounds_mode", None) if t3_opts else None,
+                        mc_level=getattr(t3_opts, "mc_level", None) if t3_opts else None,
+                        seed=row.seed,
+                    )
+                    seed = _seed_for_manifest_row(profile, row)
                     item_d: dict[str, Any] = {
                         "id": row.id,
                         "image": str(it["img_final"]),
@@ -545,6 +765,13 @@ def resume_cmd(
                     }
                     if seed is not None:
                         item_d["seed"] = seed
+                    if row.seed is not None:
+                        item_d["seed_fingerprint"] = row.seed
+                    if row.category:
+                        item_d["category"] = row.category
+                    # Sem isto UMS cai em bbox default e humanoids "engordam".
+                    _omni_d = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+                    item_d.update(omni_to_batch_item(_omni_d))
                     if t3_opts and should_optimize_text3d(t3_opts) and row.category:
                         fr = effective_face_ratio(profile, row)
                         target = get_target_faces(row.category, face_ratio=fr)
@@ -552,58 +779,102 @@ def resume_cmd(
                         item_d["steps"] = opts.steps
                         item_d["octree_resolution"] = opts.octree_resolution
                         item_d["num_chunks"] = opts.num_chunks
+                    # Overrides text3d: do manifest ganham do optimize/hw-auto.
+                    apply_row_text3d_overrides(item_d, row)
                     shape_manifest_items.append(item_d)
                     shape_item_map[row.id] = i
 
                 if shape_manifest_items:
                     s_manifest_path = work_dir / "resume_shape_manifest.json"
                     s_manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
-                    batch_args = [text3d_bin, "generate-batch", str(s_manifest_path)]
-                    batch_args.extend(["--quality", profile.generation or "medium"])
-                    if force:
-                        batch_args.append("--force")
-                    if t3_opts:
-                        if not should_optimize_text3d(t3_opts):
-                            explicit_hunyuan = (
-                                t3_opts.steps is not None
-                                or t3_opts.octree_resolution is not None
-                                or t3_opts.num_chunks is not None
-                            )
-                            if t3_opts.preset and not explicit_hunyuan:
-                                batch_args.extend(["--preset", t3_opts.preset])
-                            if t3_opts.steps is not None:
-                                batch_args.extend(["--steps", str(t3_opts.steps)])
-                            if t3_opts.octree_resolution is not None:
-                                batch_args.extend(["--octree-resolution", str(t3_opts.octree_resolution)])
-                            if t3_opts.num_chunks is not None:
-                                batch_args.extend(["--num-chunks", str(t3_opts.num_chunks)])
-                        if t3_opts.model_subfolder:
-                            batch_args.extend(["--model-subfolder", t3_opts.model_subfolder])
-                        if t3_opts.mc_level is not None:
-                            batch_args.extend(["--mc-level", str(t3_opts.mc_level)])
-                        if getattr(t3_opts, "bounds_mode", None):
-                            batch_args.extend(["--bounds-mode", str(t3_opts.bounds_mode)])
-                        if t3_opts.allow_shared_gpu:
-                            batch_args.append("--allow-shared-gpu")
-                        if not t3_opts.gpu_kill_others:
-                            batch_args.append("--no-gpu-kill-others")
-                        batch_args.extend(["--export-origin", t3_opts.export_origin])
-                    if gpu_ids:
-                        batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+                    t3 = t3_opts
+                    _shape_kw: dict[str, Any] = {
+                        "manifest_dir": manifest_dir,
+                        "no_ums": no_ums,
+                        "ums_stream": ums_stream,
+                        "gpu_ids": gpu_ids,
+                        "quality": profile.generation,
+                        "export_origin": t3.export_origin if t3 else "feet",
+                    }
+                    if t3:
+                        if t3.steps is not None:
+                            _shape_kw["steps"] = t3.steps
+                        if t3.guidance is not None:
+                            _shape_kw["guidance"] = t3.guidance
+                        if t3.octree_resolution is not None:
+                            _shape_kw["octree_resolution"] = t3.octree_resolution
+                        if t3.num_chunks is not None:
+                            _shape_kw["num_chunks"] = t3.num_chunks
+                        if t3.mc_level is not None:
+                            _shape_kw["mc_level"] = t3.mc_level
+                        if getattr(t3, "bounds_mode", None):
+                            _shape_kw["bounds_mode"] = t3.bounds_mode
+                        if getattr(t3, "sdnq_preset", None):
+                            _shape_kw["sdnq_preset"] = t3.sdnq_preset
 
-                    r = run_cmd_streaming(
-                        batch_args,
-                        extra_env=child_env,
-                        cwd=manifest_dir,
-                        on_stdout_line=dash.feed_line,
+                    ums_shape_results = run_shape_wave_or_fallback(
+                        shape_manifest_items,
+                        on_progress=lambda r: dash.feed_event(r.asset_id, "text3d", r.status, phase="shape"),
+                        **_shape_kw,
                     )
-                    jsonl_output = r.stdout.strip() if r.stdout else ""
-                    for line in jsonl_output.split("\n"):
-                        if not line.strip():
-                            continue
-                        try:
-                            item_result = json.loads(line)
-                        except json.JSONDecodeError:
+
+                    r = None
+                    if ums_shape_results is None:
+                        batch_args = [text3d_bin, "generate-batch", str(s_manifest_path)]
+                        batch_args.extend(["--quality", profile.generation or "medium"])
+                        if force:
+                            batch_args.append("--force")
+                        if no_ums:
+                            batch_args.append("--no-ums")
+                        if t3:
+                            if not should_optimize_text3d(t3):
+                                explicit_hunyuan = (
+                                    t3.steps is not None
+                                    or t3.octree_resolution is not None
+                                    or t3.num_chunks is not None
+                                )
+                                if t3.preset and not explicit_hunyuan:
+                                    batch_args.extend(["--preset", t3.preset])
+                                if t3.steps is not None:
+                                    batch_args.extend(["--steps", str(t3.steps)])
+                                if t3.octree_resolution is not None:
+                                    batch_args.extend(["--octree-resolution", str(t3.octree_resolution)])
+                                if t3.num_chunks is not None:
+                                    batch_args.extend(["--num-chunks", str(t3.num_chunks)])
+                            if t3.model_subfolder:
+                                batch_args.extend(["--model-subfolder", t3.model_subfolder])
+                            if t3.mc_level is not None:
+                                batch_args.extend(["--mc-level", str(t3.mc_level)])
+                            if getattr(t3, "bounds_mode", None):
+                                batch_args.extend(["--bounds-mode", str(t3.bounds_mode)])
+                            if t3.allow_shared_gpu:
+                                batch_args.append("--allow-shared-gpu")
+                            if not t3.gpu_kill_others:
+                                batch_args.append("--no-gpu-kill-others")
+                            batch_args.extend(["--export-origin", t3.export_origin])
+                        if gpu_ids:
+                            batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+
+                        r = run_cmd_streaming(
+                            batch_args,
+                            extra_env=child_env,
+                            cwd=manifest_dir,
+                            on_stdout_line=dash.feed_line,
+                        )
+                        shape_item_results: list[dict[str, Any]] = []
+                        jsonl_output = r.stdout.strip() if r.stdout else ""
+                        for line in jsonl_output.split("\n"):
+                            if not line.strip():
+                                continue
+                            try:
+                                shape_item_results.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                continue
+                    else:
+                        shape_item_results = ums_shape_results
+
+                    for item_result in shape_item_results:
+                        if item_result.get("status") == "progress":
                             continue
                         item_id = item_result.get("id", "")
                         item_idx = shape_item_map.get(item_id)
@@ -629,7 +900,11 @@ def resume_cmd(
                                 raise click.Abort()
                         dash.advance_phase()
 
-                    if r.returncode != 0 and not any(it["state"] in (_ROW_NEED_PAINT, _ROW_DONE) for it in need_shape):
+                    if (
+                        r is not None
+                        and r.returncode != 0
+                        and not any(it["state"] in (_ROW_NEED_PAINT, _ROW_DONE) for it in need_shape)
+                    ):
                         pass  # batch-level failure already handled per-item
 
             # --- Fase 3: Paint ---
@@ -679,14 +954,10 @@ def resume_cmd(
                             on_stdout_line=dash.feed_line,
                         )
                         if r.returncode == 0 and painted_out.is_file():
-                            _install_file(painted_out, it["mesh_final"])
+                            rec_ok = {"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])}
+                            _after_paint_ok(it, row, rec_ok, painted_out)
                             dash.feed_event(row.id, "paint3d", "ok", phase="quick")
-                            it["state"] = (
-                                _ROW_NEED_RIG
-                                if it["wants_rig"]
-                                else (_ROW_NEED_ANIMATE if it["wants_animate"] else _ROW_DONE)
-                            )
-                            append_log({"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])})
+                            append_log(rec_ok)
                         else:
                             failures += 1
                             err = merge_subprocess_output(r, max_chars=200) or "paint falhou"
@@ -732,44 +1003,89 @@ def resume_cmd(
                     if paint_manifest_items:
                         paint_manifest_path = work_dir / "resume_paint_manifest.json"
                         paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
-                        batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
-                        if force:
-                            batch_args.append("--force")
-                        if t3_opts:
-                            if t3_opts.allow_shared_gpu:
-                                batch_args.append("--allow-shared-gpu")
-                            if not t3_opts.gpu_kill_others:
-                                batch_args.append("--no-gpu-kill-others")
+                        _paint_kw: dict[str, Any] = {
+                            "manifest_dir": manifest_dir,
+                            "no_ums": no_ums,
+                            "ums_stream": ums_stream,
+                            "gpu_ids": gpu_ids,
+                        }
                         if p3:
                             if p3.max_views is not None:
-                                batch_args.extend(["--max-views", str(p3.max_views)])
+                                _paint_kw["max_views"] = p3.max_views
                             if p3.view_resolution is not None:
-                                batch_args.extend(["--view-resolution", str(p3.view_resolution)])
+                                _paint_kw["view_resolution"] = p3.view_resolution
                             if p3.render_size is not None:
-                                batch_args.extend(["--render-size", str(p3.render_size)])
+                                _paint_kw["render_size"] = p3.render_size
                             if p3.texture_size is not None:
-                                batch_args.extend(["--texture-size", str(p3.texture_size)])
+                                _paint_kw["texture_size"] = p3.texture_size
                             if p3.bake_exp is not None:
-                                batch_args.extend(["--bake-exp", str(p3.bake_exp)])
-                            if not p3.preserve_origin:
-                                batch_args.append("--no-preserve-origin")
-                            else:
-                                batch_args.append("--preserve-origin")
-                        if gpu_ids:
-                            batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+                                _paint_kw["bake_exp"] = p3.bake_exp
+                            _paint_kw["preserve_origin"] = p3.preserve_origin
+                            _paint_kw["smooth"] = p3.smooth
+                            if p3.smooth_passes is not None:
+                                _paint_kw["smooth_passes"] = p3.smooth_passes
 
-                        r = run_cmd_streaming(
-                            batch_args,
-                            extra_env=child_env,
-                            cwd=manifest_dir,
-                            on_stdout_line=dash.feed_line,
+                        ums_paint_results = run_paint_wave_or_fallback(
+                            paint_manifest_items,
+                            on_progress=lambda r: dash.feed_event(r.asset_id, "paint3d", r.status, phase="texture"),
+                            **_paint_kw,
                         )
-                        for line in (r.stdout.strip() if r.stdout else "").split("\n"):
-                            if not line.strip():
-                                continue
-                            try:
-                                item_result = json.loads(line)
-                            except json.JSONDecodeError:
+
+                        r = None
+                        if ums_paint_results is None:
+                            batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
+                            if force:
+                                batch_args.append("--force")
+                            if no_ums:
+                                batch_args.append("--no-ums")
+                            if t3_opts:
+                                if t3_opts.allow_shared_gpu:
+                                    batch_args.append("--allow-shared-gpu")
+                                if not t3_opts.gpu_kill_others:
+                                    batch_args.append("--no-gpu-kill-others")
+                            if p3:
+                                if p3.max_views is not None:
+                                    batch_args.extend(["--max-views", str(p3.max_views)])
+                                if p3.view_resolution is not None:
+                                    batch_args.extend(["--view-resolution", str(p3.view_resolution)])
+                                if p3.render_size is not None:
+                                    batch_args.extend(["--render-size", str(p3.render_size)])
+                                if p3.texture_size is not None:
+                                    batch_args.extend(["--texture-size", str(p3.texture_size)])
+                                if p3.bake_exp is not None:
+                                    batch_args.extend(["--bake-exp", str(p3.bake_exp)])
+                                if not p3.preserve_origin:
+                                    batch_args.append("--no-preserve-origin")
+                                else:
+                                    batch_args.append("--preserve-origin")
+                                if p3.smooth:
+                                    batch_args.append("--smooth")
+                                else:
+                                    batch_args.append("--no-smooth")
+                                if p3.smooth_passes is not None:
+                                    batch_args.extend(["--smooth-passes", str(p3.smooth_passes)])
+                            if gpu_ids:
+                                batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+
+                            r = run_cmd_streaming(
+                                batch_args,
+                                extra_env=child_env,
+                                cwd=manifest_dir,
+                                on_stdout_line=dash.feed_line,
+                            )
+                            paint_item_results: list[dict[str, Any]] = []
+                            for line in (r.stdout.strip() if r.stdout else "").split("\n"):
+                                if not line.strip():
+                                    continue
+                                try:
+                                    paint_item_results.append(json.loads(line))
+                                except json.JSONDecodeError:
+                                    continue
+                        else:
+                            paint_item_results = ums_paint_results
+
+                        for item_result in paint_item_results:
+                            if item_result.get("status") == "progress":
                                 continue
                             item_id = item_result.get("id", "")
                             item_idx = paint_item_map.get(item_id)
@@ -779,14 +1095,9 @@ def resume_cmd(
                             row = it["row"]
                             if item_result.get("status") in ("ok", "skipped"):
                                 painted_out = _painted_path(it["mesh_final"])
-                                if painted_out.is_file():
-                                    _install_file(painted_out, it["mesh_final"])
-                                it["state"] = (
-                                    _ROW_NEED_RIG
-                                    if it["wants_rig"]
-                                    else (_ROW_NEED_ANIMATE if it["wants_animate"] else _ROW_DONE)
-                                )
-                                append_log({"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])})
+                                rec_ok = {"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])}
+                                _after_paint_ok(it, row, rec_ok, painted_out if painted_out.is_file() else None)
+                                append_log(rec_ok)
                             else:
                                 failures += 1
                                 err = item_result.get("error", "paint falhou")
@@ -795,8 +1106,10 @@ def resume_cmd(
                                     raise click.Abort()
                             dash.advance_phase()
 
-                        if r.returncode != 0:
+                        if r is not None and r.returncode != 0:
                             pass  # batch-level failure already handled per-item
+
+            _drain_master_deferred(on_progress_line=dash.feed_line)
 
             # --- Fase 3.5: Simplify (bpy decimate) após Paint, antes de Rigging ---
             simplify_items = [
@@ -830,7 +1143,10 @@ def resume_cmd(
                 master_done = [
                     it
                     for it in items
-                    if it["state"] == _ROW_DONE and it["mesh_final"].is_file() and not it.get("wants_rig")
+                    if it["state"] == _ROW_DONE
+                    and it["mesh_final"].is_file()
+                    and not it.get("wants_rig")
+                    and it["row"].id not in deferred_done
                 ]
                 if master_done:
                     dash.set_phase("Master", len(master_done))
@@ -871,6 +1187,9 @@ def resume_cmd(
             if need_rig and rigging3d_bin:
                 dash.set_phase("Rigging", len(need_rig))
                 for it in need_rig:
+                    if it["row"].id in deferred_done:
+                        dash.advance_phase()
+                        continue
                     row = it["row"]
                     rec: dict[str, Any] = {"id": row.id}
                     dash.feed_event(row.id, "rigging3d", "progress", phase="rigging", percent=0)
@@ -915,6 +1234,9 @@ def resume_cmd(
             if need_anim and animator3d_bin:
                 dash.set_phase("Animation", len(need_anim))
                 for it in need_anim:
+                    if it["row"].id in deferred_done:
+                        dash.advance_phase()
+                        continue
                     row = it["row"]
                     rec: dict[str, Any] = {"id": row.id}
                     dash.feed_event(row.id, "animator3d", "progress", phase="animation", percent=0)
@@ -979,6 +1301,97 @@ def resume_cmd(
         )
         if need_img:
             console.print(f"\n[bold cyan]Fase 1: {img_phase} ({len(need_img)} imagens)[/bold cyan]")
+            ums_img_done_p: set[str] = set()
+            t2d_need_p = [it for it in need_img if effective_image_source(profile, it["row"]) == "text2d"]
+            tex_need_p = [it for it in need_img if effective_image_source(profile, it["row"]) == "texture2d"]
+            if t2d_need_p and text2d_bin:
+                t2d_items_rp = [
+                    {
+                        "id": it["row"].id,
+                        "prompt": build_prompt(profile, preset, it["row"], for_3d=False),
+                        "output": str(it["img_final"]),
+                        **({"seed": s} if (s := _seed_for_manifest_row(profile, it["row"])) is not None else {}),
+                    }
+                    for it in t2d_need_p
+                ]
+                ums_t2d_rp = run_text2d_wave_or_fallback(
+                    t2d_items_rp,
+                    manifest_dir=manifest_dir,
+                    no_ums=no_ums,
+                    ums_stream=ums_stream,
+                    gpu_ids=gpu_ids,
+                    quality=profile.generation,
+                )
+                if ums_t2d_rp is not None:
+                    by_id = {str(x.get("id")): x for x in ums_t2d_rp}
+                    for it in t2d_need_p:
+                        ums_img_done_p.add(it["row"].id)
+                        ir = by_id.get(it["row"].id, {})
+                        if ir.get("status") in ("ok", "skipped") and it["img_final"].is_file():
+                            it["state"] = _ROW_NEED_SHAPE
+                            console.print(f"  [green]OK[/green] {it['row'].id} (text2d UMS)")
+                        else:
+                            failures += 1
+                            console.print(f"  [red]FAIL[/red] {it['row'].id}: {ir.get('error') or 'text2d falhou'}")
+                            if not continue_on_error:
+                                raise click.Abort()
+            if tex_need_p and texture2d_bin:
+                tt_line = _texture2d_profile_effective(profile)
+                tex_items_rp = [
+                    {
+                        "id": it["row"].id,
+                        "prompt": build_prompt(profile, preset, it["row"], for_3d=False),
+                        "output": str(it["img_final"]),
+                        **({"seed": s} if (s := _seed_for_manifest_row(profile, it["row"])) is not None else {}),
+                    }
+                    for it in tex_need_p
+                ]
+                ums_tex_rp = run_texture2d_wave_or_fallback(
+                    tex_items_rp,
+                    manifest_dir=manifest_dir,
+                    no_ums=no_ums,
+                    ums_stream=ums_stream,
+                    gpu_ids=gpu_ids,
+                    width=int(tt_line.width or 512),
+                    height=int(tt_line.height or 512),
+                    steps=int(tt_line.steps or 20),
+                    guidance=float(tt_line.guidance_scale or 7.5),
+                    negative_prompt=tt_line.negative_prompt,
+                    preset=tt_line.preset,
+                    model_id=tt_line.model_id,
+                )
+                if ums_tex_rp is not None:
+                    by_id = {str(x.get("id")): x for x in ums_tex_rp}
+                    for it in tex_need_p:
+                        ums_img_done_p.add(it["row"].id)
+                        ir = by_id.get(it["row"].id, {})
+                        if ir.get("status") in ("ok", "skipped") and it["img_final"].is_file():
+                            mat_ok = True
+                            if tt_line.materialize:
+                                try:
+                                    mat_b = _resolve_materialize_bin_texture2d(tt_line)
+                                    maps_dst = _texture2d_material_maps_path_manifest(profile, manifest_dir, it["row"])
+                                    maps_dst.mkdir(parents=True, exist_ok=True)
+                                    margv = _materialize_diffuse_argv(mat_b, tt_line, it["img_final"], maps_dst)
+                                    if run_cmd(margv, extra_env=child_env, cwd=manifest_dir).returncode != 0:
+                                        mat_ok = False
+                                        failures += 1
+                                except FileNotFoundError:
+                                    mat_ok = False
+                                    failures += 1
+                            if mat_ok:
+                                it["state"] = _ROW_NEED_SHAPE
+                                console.print(f"  [green]OK[/green] {it['row'].id} (texture2d UMS)")
+                            else:
+                                console.print(f"  [red]FAIL[/red] {it['row'].id} (materialize)")
+                                if not continue_on_error:
+                                    raise click.Abort()
+                        else:
+                            failures += 1
+                            console.print(f"  [red]FAIL[/red] {it['row'].id}: {ir.get('error') or 'texture2d falhou'}")
+                            if not continue_on_error:
+                                raise click.Abort()
+            remain_img = [it for it in need_img if it["row"].id not in ums_img_done_p]
             with Progress(
                 SpinnerColumn(),
                 TextColumn("{task.description}"),
@@ -987,8 +1400,10 @@ def resume_cmd(
                 TimeElapsedColumn(),
                 console=console,
             ) as progress:
-                task = progress.add_task(f"[cyan]{img_phase}[/cyan]", total=len(need_img))
-                for it in need_img:
+                task = progress.add_task(f"[cyan]{img_phase}[/cyan]", total=max(len(remain_img), 1))
+                if not remain_img:
+                    progress.update(task, completed=1)
+                for it in remain_img:
                     row = it["row"]
                     src = effective_image_source(profile, row)
                     tt_line = _texture2d_profile_effective(profile)
@@ -1017,7 +1432,9 @@ def resume_cmd(
                         _append_text2d_profile_args(profile, argv)
                         if gpu_ids:
                             argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
-                    seed = _seed_for_row(profile, row.id)
+                    if no_ums:
+                        argv.append("--no-ums")
+                    seed = _seed_for_manifest_row(profile, row)
                     if seed is not None:
                         argv.extend(["--seed", str(seed)])
                     r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
@@ -1070,7 +1487,18 @@ def resume_cmd(
                 shape_item_map: dict[str, int] = {}
                 for i, it in enumerate(need_shape):
                     row = it["row"]
-                    seed = _seed_for_row(profile, row.id)
+                    _omni_row = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+                    _shape_out = _shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"])
+                    prepare_shape_for_generation(
+                        _shape_out,
+                        _omni_row,
+                        force=force,
+                        category=row.category or None,
+                        bounds_mode=getattr(t3_opts, "bounds_mode", None) if t3_opts else None,
+                        mc_level=getattr(t3_opts, "mc_level", None) if t3_opts else None,
+                        seed=row.seed,
+                    )
+                    seed = _seed_for_manifest_row(profile, row)
                     item: dict[str, Any] = {
                         "id": row.id,
                         "image": str(it["img_final"]),
@@ -1078,6 +1506,13 @@ def resume_cmd(
                     }
                     if seed is not None:
                         item["seed"] = seed
+                    if row.seed is not None:
+                        item["seed_fingerprint"] = row.seed
+                    if row.category:
+                        item["category"] = row.category
+                    # Sem isto UMS cai em bbox default e humanoids "engordam".
+                    _omni_item = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+                    item.update(omni_to_batch_item(_omni_item))
                     if t3_opts and should_optimize_text3d(t3_opts) and row.category:
                         fr = effective_face_ratio(profile, row)
                         target = get_target_faces(row.category, face_ratio=fr)
@@ -1085,53 +1520,92 @@ def resume_cmd(
                         item["steps"] = opts.steps
                         item["octree_resolution"] = opts.octree_resolution
                         item["num_chunks"] = opts.num_chunks
+                    apply_row_text3d_overrides(item, row)
                     shape_manifest_items.append(item)
                     shape_item_map[row.id] = i
 
                 if shape_manifest_items:
                     manifest_path = work_dir / "resume_shape_manifest.json"
                     manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
-                    batch_args = [text3d_bin, "generate-batch", str(manifest_path)]
-                    batch_args.extend(["--quality", profile.generation or "medium"])
-                    if force:
-                        batch_args.append("--force")
-                    if t3_opts:
-                        if not should_optimize_text3d(t3_opts):
-                            explicit_hunyuan = (
-                                t3_opts.steps is not None
-                                or t3_opts.octree_resolution is not None
-                                or t3_opts.num_chunks is not None
-                            )
-                            if t3_opts.preset and not explicit_hunyuan:
-                                batch_args.extend(["--preset", t3_opts.preset])
-                            if t3_opts.steps is not None:
-                                batch_args.extend(["--steps", str(t3_opts.steps)])
-                            if t3_opts.octree_resolution is not None:
-                                batch_args.extend(["--octree-resolution", str(t3_opts.octree_resolution)])
-                            if t3_opts.num_chunks is not None:
-                                batch_args.extend(["--num-chunks", str(t3_opts.num_chunks)])
-                        if t3_opts.model_subfolder:
-                            batch_args.extend(["--model-subfolder", t3_opts.model_subfolder])
-                        if t3_opts.mc_level is not None:
-                            batch_args.extend(["--mc-level", str(t3_opts.mc_level)])
-                        if getattr(t3_opts, "bounds_mode", None):
-                            batch_args.extend(["--bounds-mode", str(t3_opts.bounds_mode)])
-                        if t3_opts.allow_shared_gpu:
-                            batch_args.append("--allow-shared-gpu")
-                        if not t3_opts.gpu_kill_others:
-                            batch_args.append("--no-gpu-kill-others")
-                        batch_args.extend(["--export-origin", t3_opts.export_origin])
-                    if gpu_ids:
-                        batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+                    t3 = t3_opts
+                    _shape_kw: dict[str, Any] = {
+                        "manifest_dir": manifest_dir,
+                        "no_ums": no_ums,
+                        "ums_stream": ums_stream,
+                        "gpu_ids": gpu_ids,
+                        "quality": profile.generation,
+                        "export_origin": t3.export_origin if t3 else "feet",
+                    }
+                    if t3:
+                        if t3.steps is not None:
+                            _shape_kw["steps"] = t3.steps
+                        if t3.guidance is not None:
+                            _shape_kw["guidance"] = t3.guidance
+                        if t3.octree_resolution is not None:
+                            _shape_kw["octree_resolution"] = t3.octree_resolution
+                        if t3.num_chunks is not None:
+                            _shape_kw["num_chunks"] = t3.num_chunks
+                        if t3.mc_level is not None:
+                            _shape_kw["mc_level"] = t3.mc_level
+                        if getattr(t3, "bounds_mode", None):
+                            _shape_kw["bounds_mode"] = t3.bounds_mode
+                        if getattr(t3, "sdnq_preset", None):
+                            _shape_kw["sdnq_preset"] = t3.sdnq_preset
 
-                    r = run_cmd(batch_args, extra_env=child_env, cwd=manifest_dir)
-                    jsonl_output = r.stdout.strip() if r.stdout else ""
-                    for line in jsonl_output.split("\n"):
-                        if not line.strip():
-                            continue
-                        try:
-                            item_result = json.loads(line)
-                        except json.JSONDecodeError:
+                    ums_shape_results = run_shape_wave_or_fallback(shape_manifest_items, **_shape_kw)
+
+                    r = None
+                    if ums_shape_results is None:
+                        batch_args = [text3d_bin, "generate-batch", str(manifest_path)]
+                        batch_args.extend(["--quality", profile.generation or "medium"])
+                        if force:
+                            batch_args.append("--force")
+                        if no_ums:
+                            batch_args.append("--no-ums")
+                        if t3:
+                            if not should_optimize_text3d(t3):
+                                explicit_hunyuan = (
+                                    t3.steps is not None
+                                    or t3.octree_resolution is not None
+                                    or t3.num_chunks is not None
+                                )
+                                if t3.preset and not explicit_hunyuan:
+                                    batch_args.extend(["--preset", t3.preset])
+                                if t3.steps is not None:
+                                    batch_args.extend(["--steps", str(t3.steps)])
+                                if t3.octree_resolution is not None:
+                                    batch_args.extend(["--octree-resolution", str(t3.octree_resolution)])
+                                if t3.num_chunks is not None:
+                                    batch_args.extend(["--num-chunks", str(t3.num_chunks)])
+                            if t3.model_subfolder:
+                                batch_args.extend(["--model-subfolder", t3.model_subfolder])
+                            if t3.mc_level is not None:
+                                batch_args.extend(["--mc-level", str(t3.mc_level)])
+                            if getattr(t3, "bounds_mode", None):
+                                batch_args.extend(["--bounds-mode", str(t3.bounds_mode)])
+                            if t3.allow_shared_gpu:
+                                batch_args.append("--allow-shared-gpu")
+                            if not t3.gpu_kill_others:
+                                batch_args.append("--no-gpu-kill-others")
+                            batch_args.extend(["--export-origin", t3.export_origin])
+                        if gpu_ids:
+                            batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+
+                        r = run_cmd(batch_args, extra_env=child_env, cwd=manifest_dir)
+                        shape_item_results: list[dict[str, Any]] = []
+                        jsonl_output = r.stdout.strip() if r.stdout else ""
+                        for line in jsonl_output.split("\n"):
+                            if not line.strip():
+                                continue
+                            try:
+                                shape_item_results.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                continue
+                    else:
+                        shape_item_results = ums_shape_results
+
+                    for item_result in shape_item_results:
+                        if item_result.get("status") == "progress":
                             continue
                         item_id = item_result.get("id", "")
                         item_idx = shape_item_map.get(item_id)
@@ -1159,7 +1633,11 @@ def resume_cmd(
                                 break
                         progress.advance(task)
 
-                    if r.returncode != 0 and not any(it["state"] in (_ROW_NEED_PAINT, _ROW_DONE) for it in need_shape):
+                    if (
+                        r is not None
+                        and r.returncode != 0
+                        and not any(it["state"] in (_ROW_NEED_PAINT, _ROW_DONE) for it in need_shape)
+                    ):
                         console.print(f"[red]text3d generate-batch falhou (código {r.returncode})[/red]")
                         if r.stderr:
                             console.print(f"[dim]{r.stderr[:2000]}[/dim]")
@@ -1220,13 +1698,9 @@ def resume_cmd(
                         )
                         r = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
                         if r.returncode == 0 and painted_out.is_file():
-                            _install_file(painted_out, it["mesh_final"])
-                            it["state"] = (
-                                _ROW_NEED_RIG
-                                if it["wants_rig"]
-                                else (_ROW_NEED_ANIMATE if it["wants_animate"] else _ROW_DONE)
-                            )
-                            append_log({"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])})
+                            rec_ok = {"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])}
+                            _after_paint_ok(it, row, rec_ok, painted_out)
+                            append_log(rec_ok)
                             console.print(f"  [green]OK[/green] {row.id}")
                         else:
                             failures += 1
@@ -1274,39 +1748,80 @@ def resume_cmd(
                     if paint_manifest_items:
                         paint_manifest_path = work_dir / "resume_paint_manifest.json"
                         paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
-                        batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
-                        if force:
-                            batch_args.append("--force")
-                        if t3_opts:
-                            if t3_opts.allow_shared_gpu:
-                                batch_args.append("--allow-shared-gpu")
-                            if not t3_opts.gpu_kill_others:
-                                batch_args.append("--no-gpu-kill-others")
+                        _paint_kw: dict[str, Any] = {
+                            "manifest_dir": manifest_dir,
+                            "no_ums": no_ums,
+                            "ums_stream": ums_stream,
+                            "gpu_ids": gpu_ids,
+                        }
                         if p3:
                             if p3.max_views is not None:
-                                batch_args.extend(["--max-views", str(p3.max_views)])
+                                _paint_kw["max_views"] = p3.max_views
                             if p3.view_resolution is not None:
-                                batch_args.extend(["--view-resolution", str(p3.view_resolution)])
+                                _paint_kw["view_resolution"] = p3.view_resolution
                             if p3.render_size is not None:
-                                batch_args.extend(["--render-size", str(p3.render_size)])
+                                _paint_kw["render_size"] = p3.render_size
                             if p3.texture_size is not None:
-                                batch_args.extend(["--texture-size", str(p3.texture_size)])
+                                _paint_kw["texture_size"] = p3.texture_size
                             if p3.bake_exp is not None:
-                                batch_args.extend(["--bake-exp", str(p3.bake_exp)])
-                            if not p3.preserve_origin:
-                                batch_args.append("--no-preserve-origin")
-                            else:
-                                batch_args.append("--preserve-origin")
-                        if gpu_ids:
-                            batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+                                _paint_kw["bake_exp"] = p3.bake_exp
+                            _paint_kw["preserve_origin"] = p3.preserve_origin
+                            _paint_kw["smooth"] = p3.smooth
+                            if p3.smooth_passes is not None:
+                                _paint_kw["smooth_passes"] = p3.smooth_passes
 
-                        r = run_cmd(batch_args, extra_env=child_env, cwd=manifest_dir)
-                        for line in (r.stdout.strip() if r.stdout else "").split("\n"):
-                            if not line.strip():
-                                continue
-                            try:
-                                item_result = json.loads(line)
-                            except json.JSONDecodeError:
+                        ums_paint_results = run_paint_wave_or_fallback(paint_manifest_items, **_paint_kw)
+
+                        r = None
+                        if ums_paint_results is None:
+                            batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
+                            if force:
+                                batch_args.append("--force")
+                            if no_ums:
+                                batch_args.append("--no-ums")
+                            if t3_opts:
+                                if t3_opts.allow_shared_gpu:
+                                    batch_args.append("--allow-shared-gpu")
+                                if not t3_opts.gpu_kill_others:
+                                    batch_args.append("--no-gpu-kill-others")
+                            if p3:
+                                if p3.max_views is not None:
+                                    batch_args.extend(["--max-views", str(p3.max_views)])
+                                if p3.view_resolution is not None:
+                                    batch_args.extend(["--view-resolution", str(p3.view_resolution)])
+                                if p3.render_size is not None:
+                                    batch_args.extend(["--render-size", str(p3.render_size)])
+                                if p3.texture_size is not None:
+                                    batch_args.extend(["--texture-size", str(p3.texture_size)])
+                                if p3.bake_exp is not None:
+                                    batch_args.extend(["--bake-exp", str(p3.bake_exp)])
+                                if not p3.preserve_origin:
+                                    batch_args.append("--no-preserve-origin")
+                                else:
+                                    batch_args.append("--preserve-origin")
+                                if p3.smooth:
+                                    batch_args.append("--smooth")
+                                else:
+                                    batch_args.append("--no-smooth")
+                                if p3.smooth_passes is not None:
+                                    batch_args.extend(["--smooth-passes", str(p3.smooth_passes)])
+                            if gpu_ids:
+                                batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+
+                            r = run_cmd(batch_args, extra_env=child_env, cwd=manifest_dir)
+                            paint_item_results: list[dict[str, Any]] = []
+                            for line in (r.stdout.strip() if r.stdout else "").split("\n"):
+                                if not line.strip():
+                                    continue
+                                try:
+                                    paint_item_results.append(json.loads(line))
+                                except json.JSONDecodeError:
+                                    continue
+                        else:
+                            paint_item_results = ums_paint_results
+
+                        for item_result in paint_item_results:
+                            if item_result.get("status") == "progress":
                                 continue
                             item_id = item_result.get("id", "")
                             item_idx = paint_item_map.get(item_id)
@@ -1316,14 +1831,9 @@ def resume_cmd(
                             row = it["row"]
                             if item_result.get("status") in ("ok", "skipped"):
                                 painted_out = _painted_path(it["mesh_final"])
-                                if painted_out.is_file():
-                                    _install_file(painted_out, it["mesh_final"])
-                                it["state"] = (
-                                    _ROW_NEED_RIG
-                                    if it["wants_rig"]
-                                    else (_ROW_NEED_ANIMATE if it["wants_animate"] else _ROW_DONE)
-                                )
-                                append_log({"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])})
+                                rec_ok = {"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])}
+                                _after_paint_ok(it, row, rec_ok, painted_out if painted_out.is_file() else None)
+                                append_log(rec_ok)
                                 console.print(f"  [green]OK[/green] {row.id}")
                             else:
                                 failures += 1
@@ -1334,9 +1844,11 @@ def resume_cmd(
                                     break
                             progress.advance(task)
 
-                        if r.returncode != 0:
+                        if r is not None and r.returncode != 0:
                             err_batch = merge_subprocess_output(r, max_chars=200) or "paint3d texture-batch falhou"
                             console.print(f"[red]paint3d texture-batch erro[/red]: {err_batch}")
+
+            _drain_master_deferred()
 
         # --- Fase 3.5: Simplify ---
         simplify_items = [
@@ -1379,7 +1891,9 @@ def resume_cmd(
             master_items = [
                 it
                 for it in items
-                if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE, _ROW_DONE) and it["mesh_final"].is_file()
+                if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE, _ROW_DONE)
+                and it["mesh_final"].is_file()
+                and it["row"].id not in deferred_done
             ]
             if master_items:
                 console.print(f"\n[bold cyan]Fase 3.6: Master pipeline ({len(master_items)})[/bold cyan]")
@@ -1426,6 +1940,9 @@ def resume_cmd(
             ) as progress:
                 task = progress.add_task("[cyan]Rigging[/cyan]", total=len(need_rig))
                 for it in need_rig:
+                    if it["row"].id in deferred_done:
+                        progress.advance(task)
+                        continue
                     row = it["row"]
                     progress.update(task, description=f"[cyan]{row.id}[/cyan] · rigging")
                     rec: dict[str, Any] = {"id": row.id}
@@ -1471,6 +1988,9 @@ def resume_cmd(
             ) as progress:
                 task = progress.add_task("[cyan]Animation[/cyan]", total=len(need_anim))
                 for it in need_anim:
+                    if it["row"].id in deferred_done:
+                        progress.advance(task)
+                        continue
                     row = it["row"]
                     progress.update(task, description=f"[cyan]{row.id}[/cyan] · animation")
                     rec: dict[str, Any] = {"id": row.id}

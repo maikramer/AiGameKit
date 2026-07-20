@@ -27,7 +27,7 @@ def _gib(n: float) -> int:
 def test_no_gpu_cpu_profile() -> None:
     p = profile_from_specs([])
     assert p.device == "cpu"
-    assert p.low_vram is True
+    assert p.cpu_offload is True
     assert p.max_width == 512
     assert p.max_height == 512
 
@@ -36,7 +36,7 @@ def test_10gb_full_gpu_no_offload() -> None:
     """Clark Air Sana ~6 GB fp16 cabe folgado em 10 GiB."""
     p = profile_from_specs([(0, _gib(10))])
     assert p.device == "cuda"
-    assert p.low_vram is False
+    assert p.cpu_offload is False
     assert p.max_width is None
     assert p.max_height is None
 
@@ -45,7 +45,7 @@ def test_8gb_full_gpu_no_offload() -> None:
     """8 GiB ainda cabe o pipeline completo (~6 GB) sem offload."""
     p = profile_from_specs([(0, _gib(8))])
     assert p.device == "cuda"
-    assert p.low_vram is False
+    assert p.cpu_offload is False
     assert p.max_width is None
     assert p.max_height is None
 
@@ -54,7 +54,7 @@ def test_6gb_offload_keep_resolution() -> None:
     """6 GiB: transformer+Gemma cabem mas VAE precisa de espaço → offload."""
     p = profile_from_specs([(0, _gib(6))])
     assert p.device == "cuda"
-    assert p.low_vram is True
+    assert p.cpu_offload is True
     assert p.max_width is None
     assert p.max_height is None
 
@@ -63,7 +63,7 @@ def test_4gb_offload_clamp_512() -> None:
     """4 GiB: offload + clamp à resolução nativa 512x512."""
     p = profile_from_specs([(0, _gib(4))])
     assert p.device == "cuda"
-    assert p.low_vram is True
+    assert p.cpu_offload is True
     assert p.max_width == 512
     assert p.max_height == 512
 
@@ -71,7 +71,7 @@ def test_4gb_offload_clamp_512() -> None:
 def test_2gb_offload_clamp_512() -> None:
     p = profile_from_specs([(0, _gib(2))])
     assert p.device == "cuda"
-    assert p.low_vram is True
+    assert p.cpu_offload is True
     assert p.max_width == 512
     assert p.max_height == 512
 
@@ -79,14 +79,14 @@ def test_2gb_offload_clamp_512() -> None:
 def test_dual_gpu_sets_gpu_ids() -> None:
     p = profile_from_specs([(0, _gib(8)), (1, _gib(8))])
     assert p.device == "cuda"
-    assert p.low_vram is False
+    assert p.cpu_offload is False
     assert p.gpu_ids == [0, 1]
     assert p.total_vram_gib == 16.0
 
 
 def test_dual_small_gpu_clamp_and_ids() -> None:
     p = profile_from_specs([(0, _gib(2)), (1, _gib(2))])
-    assert p.low_vram is True
+    assert p.cpu_offload is True
     assert p.max_width == 512
     assert p.max_height == 512
     assert p.gpu_ids == [0, 1]
@@ -130,14 +130,18 @@ def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPa
     fake_profile = Text2IconHardwareProfile(
         name="cuda-1x2g",
         device="cuda",
-        low_vram=True,
+        cpu_offload=True,
         max_width=512,
         max_height=512,
         gpu_ids=None,
         total_vram_gib=2.0,
+        transformer_id="dummy/transformer",
+        transformer_sdnq_preset="sdnq-int4",
     )
     monkeypatch.setattr("text2icon.hardware.detect_hardware_profile", lambda: fake_profile)
     monkeypatch.setattr("gamedev_shared.gpu.warn_if_vram_occupied", lambda: None)
+    monkeypatch.setattr("text2icon.cli.try_ums_delegation", lambda *a, **k: False)
+    monkeypatch.setattr("text2icon.cli.prepare_gpu_exclusive", lambda **k: None)
 
     mock_gen = MagicMock()
     mock_gen.generate.return_value = (MagicMock(), {"seed": 42, "prompt_final": "test"})
@@ -145,7 +149,7 @@ def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("text2icon.image_processor.save_image", lambda *a, **kw: Path("/tmp/fake.png"))
 
     runner = CliRunner()
-    r = runner.invoke(cli, ["generate", "test", "-W", "1024", "--hw-auto", "-o", "/tmp/out.png"])
+    r = runner.invoke(cli, ["generate", "test", "-W", "1024", "--hw-auto", "--no-ums", "-o", "/tmp/out.png"])
     assert r.exit_code == 0, r.output
     _, kwargs = mock_gen.generate.call_args
     assert kwargs.get("width") == 1024

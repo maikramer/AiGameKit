@@ -19,15 +19,27 @@ class Adapter(BackendAdapter):
         from text2icon.generator import SanaIconGenerator
 
         # UMS: channels_last on (bench 6GB: ~-13% hot). Compile piora hot — off.
+        # low_vram/cpu_offload: só se o request trouxer (CLI hw_auto) — sem re-decidir.
         load_kwargs: dict[str, Any] = {
             "verbose": kwargs.get("verbose", False),
             "channels_last": kwargs.get("channels_last", True),
             "torch_compile": kwargs.get("torch_compile", False),
         }
-        if self.should_use_low_vram_mode():
-            load_kwargs["low_vram"] = kwargs.get("low_vram", True)
-        skip = {"verbose", "low_vram", "channels_last", "torch_compile"}
+        # memory_efficient (peak) → ctor low_vram (cpu offload interno).
+        if "low_vram" not in kwargs and kwargs.get("memory_efficient") is not None:
+            load_kwargs["low_vram"] = bool(kwargs.get("memory_efficient"))
+        skip = {
+            "verbose",
+            "low_vram",
+            "memory_efficient",
+            "channels_last",
+            "torch_compile",
+            "sdnq_preset",
+            "quant_preset",
+        }
         load_kwargs.update({k: v for k, v in kwargs.items() if k not in skip})
+        if "low_vram" in kwargs:
+            load_kwargs["low_vram"] = bool(kwargs["low_vram"])
         gen = SanaIconGenerator(**load_kwargs)
         gen.warmup()
         return gen

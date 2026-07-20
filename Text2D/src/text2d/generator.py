@@ -44,6 +44,13 @@ def model_footprint(model_id: str) -> Any:
     return get_footprint("flux-klein-9b")
 
 
+def model_footprint_key(model_id: str) -> str:
+    """Chave de footprint (registry lowvram) do modelo BASE — para peak UMS."""
+    if model_id == LOW_VRAM_MODEL_ID:
+        return "flux-klein-4b"
+    return "flux-klein-9b"
+
+
 def _model_id(memory_efficient: bool = False) -> str:
     if os.environ.get("TEXT2D_MODEL_ID"):
         return os.environ["TEXT2D_MODEL_ID"]

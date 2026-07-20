@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import sys
+import time
+from pathlib import Path
 
 from rich import box
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, call_ums, raise_if_ums_queue_full, with_ums_load_opts
+from gamedev_shared.cli_helpers import (
+    add_ums_options,
+    needed_mib_for_backend,
+    prepare_gpu_exclusive,
+    try_ums_delegation,
+    with_ums_load_opts,
+    with_ums_peak_opts,
+)
 from gamedev_shared.quality import VALID_QUALITIES
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click before commands
@@ -215,12 +224,14 @@ def generate_cmd(
         elevation_contrast=elevation_contrast,
     )
 
-    if not no_ums:
-        ums_result = call_ums(
-            "terrain3d",
+    t_start = time.time()
+    out_resolved = str(Path(output).resolve())
+    if try_ums_delegation(
+        "terrain3d",
+        with_ums_peak_opts(
             with_ums_load_opts(
                 {
-                    "output": output,
+                    "output": out_resolved,
                     "metadata_path": metadata_path,
                     "seed": seed,
                     "size": size,
@@ -228,20 +239,32 @@ def generate_cmd(
                     "max_height": max_height,
                     "mode": mode,
                     "device": device,
+                    "prompt": prompt,
                 },
             ),
-            priority=ums_priority,
-            stream=ums_stream,
-            console=console if ums_stream else None,
-        )
-        raise_if_ums_queue_full(ums_result)
-        if ums_result and ums_result.get("status") == "ok":
-            print(ums_result["output"])
+            backend="terrain3d",
+        ),
+        t_start=t_start,
+        noun="Terreno",
+        console=console,
+        enabled=not no_ums,
+        priority=ums_priority,
+        stream=ums_stream,
+        timeout_sec=1800.0,
+    ):
+        if quiet:
+            print(out_resolved)
             if metadata_path:
                 print(metadata_path)
-            return
-        if ums_result and ums_result.get("status") == "error":
-            print(f"UMS erro: {ums_result.get('error', '?')} — fallback in-process", file=sys.stderr)
+        return
+
+    prepare_gpu_exclusive(
+        needed_mib=needed_mib_for_backend("terrain3d"),
+        allow_shared=True,
+        kill_others=False,
+        backend="terrain3d",
+        console=console,
+    )
 
     if quiet:
         result = generate_terrain(config)

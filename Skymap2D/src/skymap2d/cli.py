@@ -15,7 +15,14 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
+from gamedev_shared.cli_helpers import (
+    add_ums_options,
+    needed_mib_for_backend,
+    prepare_gpu_exclusive,
+    try_ums_delegation,
+    with_ums_load_opts,
+    with_ums_peak_opts,
+)
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
 from gamedev_shared.quality import VALID_QUALITIES
@@ -293,18 +300,6 @@ def generate_cmd(
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
     try:
-        gen = SkymapGenerator(
-            device=device,
-            memory_efficient=mem_eff,
-            verbose=verbose,
-            model_id=model_id,
-            gpu_ids=gpu_ids,
-            torch_compile=torch_compile,
-            torch_compile_mode=torch_compile_mode,
-            step_cache=step_cache,
-            channels_last=channels_last,
-        )
-
         fmt_opt = image_format.lower()
         if output is None:
             ensure_dirs()
@@ -325,24 +320,29 @@ def generate_cmd(
 
         start = time.time()
 
+        # UMS-first: não construir generator (nem tocar GPU) antes da delegação.
         if not cpu and try_ums_delegation(
             "skymap2d",
-            with_ums_load_opts(
-                {
-                    "prompt": prompt,
-                    "output": str(Path(output).resolve()),
-                    "width": width,
-                    "height": height,
-                    "steps": steps,
-                    "guidance": guidance_scale,
-                    "seed": seed,
-                    "negative_prompt": negative_prompt,
-                    "cfg_scale": cfg_scale,
-                    "lora_strength": lora_strength,
-                    "preset": preset,
-                    "exr_scale": exr_scale,
-                },
-                gpu_ids=gpu_ids,
+            with_ums_peak_opts(
+                with_ums_load_opts(
+                    {
+                        "prompt": prompt,
+                        "output": str(Path(output).resolve()),
+                        "width": width,
+                        "height": height,
+                        "steps": steps,
+                        "guidance": guidance_scale,
+                        "seed": seed,
+                        "negative_prompt": negative_prompt,
+                        "cfg_scale": cfg_scale,
+                        "lora_strength": lora_strength,
+                        "preset": preset,
+                        "exr_scale": exr_scale,
+                    },
+                    gpu_ids=gpu_ids,
+                ),
+                backend="skymap2d",
+                memory_efficient=mem_eff,
             ),
             t_start=start,
             noun="Skymap",
@@ -352,6 +352,28 @@ def generate_cmd(
             stream=ums_stream,
         ):
             return
+
+        if not cpu:
+            prepare_gpu_exclusive(
+                needed_mib=needed_mib_for_backend("skymap2d", memory_efficient=mem_eff),
+                allow_shared=True,
+                kill_others=False,
+                backend="skymap2d",
+                quant_mode="none",
+                console=console,
+            )
+
+        gen = SkymapGenerator(
+            device=device,
+            memory_efficient=mem_eff,
+            verbose=verbose,
+            model_id=model_id,
+            gpu_ids=gpu_ids,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            step_cache=step_cache,
+            channels_last=channels_last,
+        )
 
         with console.status(
             "[bold yellow]1/2 — Download HF + carregamento de pesos "
@@ -503,6 +525,7 @@ def presets_cmd() -> None:
     show_default=True,
     help="channels_last NHWC no VAE/transformer (bench ~0 ganho).",
 )
+@add_ums_options
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -524,10 +547,11 @@ def batch_cmd(
     torch_compile_mode: str,
     step_cache: str,
     channels_last: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Gera skymaps em batch a partir de um ficheiro de prompts (um por linha)."""
-    from gamedev_shared.gpu import warn_if_vram_occupied
-
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
     _user_set_width = ctx.get_parameter_source("width") not in (_src.DEFAULT,)
@@ -547,9 +571,6 @@ def batch_cmd(
         steps = _qresolved.params["steps"]
     if not _user_set_guidance and "guidance" in _qresolved.params:
         guidance_scale = _qresolved.params["guidance"]
-
-    if not cpu:
-        warn_if_vram_occupied()
 
     # Hardware auto-detection (soft): flags explícitas ganham sempre.
     from .hardware import detect_hardware_profile, hw_auto_enabled
@@ -587,48 +608,97 @@ def batch_cmd(
     if gpu_ids is None and hwp is not None and hwp.gpu_ids:
         gpu_ids = hwp.gpu_ids
 
-    gen = SkymapGenerator(
-        device=device,
-        memory_efficient=mem_eff,
-        model_id=model_id,
-        gpu_ids=gpu_ids,
-        torch_compile=torch_compile,
-        torch_compile_mode=torch_compile_mode,
-        step_cache=step_cache,
-        channels_last=channels_last,
-    )
-    base_params: dict[str, Any] = {
-        "guidance_scale": guidance_scale,
-        "num_inference_steps": steps,
-        "width": width,
-        "height": height,
-    }
-    if preset and preset != "None":
-        base_params["preset"] = preset
-
     from .image_processor import save_image
 
+    err_console = Console(stderr=True)
+    pending: list[tuple[int, str, Path]] = []
     ok_count = 0
-    for image, metadata, idx in gen.generate_batch(prompts, base_params):
-        if image is None:
-            console.print(f"  [red]\u2717[/red] {idx + 1}/{len(prompts)}: {metadata.get('error', '?')}")
-            continue
+    total = len(prompts)
+    ext = ".exr" if image_format.lower() == "exr" else ".png"
 
+    for idx, prompt_text in enumerate(prompts):
         ts = int(time.time())
-        safe = safe_filename(prompts[idx])
-        ext = ".exr" if image_format.lower() == "exr" else ".png"
-        fname = f"{safe}_{ts}{ext}"
-        saved = save_image(
-            image,
-            prompt=metadata.get("prompt_final", prompts[idx]),
-            params=metadata,
-            output_dir=out,
-            filename=fname,
-            image_format=image_format.lower(),
-            exr_scale=exr_scale,
+        safe = safe_filename(prompt_text)
+        out_path = (out / f"{safe}_{ts}{ext}").resolve()
+        t0 = time.time()
+        if not cpu and try_ums_delegation(
+            "skymap2d",
+            with_ums_peak_opts(
+                with_ums_load_opts(
+                    {
+                        "prompt": prompt_text,
+                        "output": str(out_path),
+                        "width": width,
+                        "height": height,
+                        "steps": steps,
+                        "guidance": guidance_scale,
+                        "preset": preset,
+                        "exr_scale": exr_scale,
+                    },
+                    gpu_ids=gpu_ids,
+                ),
+                backend="skymap2d",
+                memory_efficient=mem_eff,
+            ),
+            t_start=t0,
+            noun="Skymap",
+            console=err_console,
+            enabled=not no_ums,
+            priority=ums_priority or "batch",
+            stream=ums_stream,
+        ):
+            ok_count += 1
+            console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{out_path.name}[/cyan] [dim](UMS)[/dim]")
+            continue
+        pending.append((idx, prompt_text, out_path))
+
+    if pending:
+        if not cpu:
+            from gamedev_shared.gpu import warn_if_vram_occupied
+
+            warn_if_vram_occupied()
+            prepare_gpu_exclusive(
+                needed_mib=needed_mib_for_backend("skymap2d", memory_efficient=mem_eff),
+                allow_shared=True,
+                kill_others=False,
+                backend="skymap2d",
+                quant_mode="none",
+                console=err_console,
+            )
+        gen = SkymapGenerator(
+            device=device,
+            memory_efficient=mem_eff,
+            model_id=model_id,
+            gpu_ids=gpu_ids,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            step_cache=step_cache,
+            channels_last=channels_last,
         )
-        ok_count += 1
-        console.print(f"  [green]\u2713[/green] {idx + 1}/{len(prompts)}: [cyan]{saved.name}[/cyan]")
+        base_params: dict[str, Any] = {
+            "guidance_scale": guidance_scale,
+            "num_inference_steps": steps,
+            "width": width,
+            "height": height,
+        }
+        if preset and preset != "None":
+            base_params["preset"] = preset
+        for idx, prompt_text, out_path in pending:
+            try:
+                image, metadata = gen.generate(prompt=prompt_text, **base_params)
+                saved = save_image(
+                    image,
+                    prompt=metadata.get("prompt_final", prompt_text),
+                    params=metadata,
+                    output_dir=out_path.parent,
+                    filename=out_path.name,
+                    image_format=image_format.lower(),
+                    exr_scale=exr_scale,
+                )
+                ok_count += 1
+                console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{saved.name}[/cyan]")
+            except Exception as exc:
+                console.print(f"  [red]\u2717[/red] {idx + 1}/{total}: {exc}")
 
     console.print(
         Panel(

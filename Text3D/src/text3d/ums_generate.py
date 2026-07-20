@@ -57,6 +57,8 @@ def run_generate(
             bbox_preset=request.get("bbox_preset"),
             size=request.get("size"),
             size_m=request.get("size_m"),
+            height_m=request.get("height_m"),
+            footprint_m=request.get("footprint_m"),
             pose_file=request.get("pose_file"),
             pose_preset=request.get("pose_preset"),
             point_cloud=request.get("point_cloud"),
@@ -92,6 +94,8 @@ def run_generate(
         size_m_vals = size_m_from_mapping(request.get("size_m"))
     except ValueError:
         size_m_vals = None
+    if size_m_vals is None and _omni.get("size_m") is not None:
+        size_m_vals = list(_omni["size_m"])
     if request.get("bbox_tune", True) is not False:
         user_steps = "steps" in request or "num_inference_steps" in request
         user_octree = "octree_resolution" in request
@@ -215,6 +219,9 @@ def run_generate(
                 "bounds_mode": bounds_mode,
                 "mc_level": mc_level,
                 "size_m": size_m_vals,
+                # Só o override explícito (GameAssets manifest seed:) entra no
+                # fingerprint — o RNG seed resolvido fica de fora.
+                "seed": request.get("seed_fingerprint"),
             },
         )
 

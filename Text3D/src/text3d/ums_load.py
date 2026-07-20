@@ -16,12 +16,14 @@ _UMS_ONLY_LOAD_KEYS = frozenset(
 )
 
 
-def map_ums_load_kwargs(raw: dict[str, Any], *, low_vram: bool) -> dict[str, Any]:
+def map_ums_load_kwargs(raw: dict[str, Any]) -> dict[str, Any]:
     """Normaliza kwargs UMS → ``HunyuanTextTo3DGenerator``.
+
+    Offload/SDNQ defaults só quando o request traz sinais de peak (hw_auto /
+    ``with_ums_peak_opts``). Sem re-decidir VRAM no adapter.
 
     Args:
         raw: kwargs vindos do BackendManager / request UMS.
-        low_vram: True se GPU abaixo do limiar (activa offload/SDNQ/flashvdm).
 
     Returns:
         Dict pronto para ``HunyuanTextTo3DGenerator(**kwargs)``.
@@ -42,9 +44,7 @@ def map_ums_load_kwargs(raw: dict[str, Any], *, low_vram: bool) -> dict[str, Any
         kwargs["sdnq_preset"] = "" if str(qm).strip().lower() in ("none", "null", "") else qm
 
     mem_eff = kwargs.pop("memory_efficient", None)
-    if mem_eff is None:
-        mem_eff = low_vram
-    if mem_eff:
+    if mem_eff is True:
         kwargs.setdefault("offload", True)
         kwargs.setdefault("allow_group_offload", True)
         if not kwargs.get("sdnq_preset"):

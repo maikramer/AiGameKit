@@ -15,12 +15,14 @@ _UMS_ONLY_LOAD_KEYS = frozenset(
 )
 
 
-def map_ums_load_kwargs(raw: dict[str, Any], *, low_vram: bool) -> dict[str, Any]:
+def map_ums_load_kwargs(raw: dict[str, Any]) -> dict[str, Any]:
     """Normaliza kwargs UMS → ``KleinFluxGenerator``.
+
+    Peak/offload vêm do request (CLI hw_auto / peak opts) — sem re-decidir VRAM
+    localmente no adapter.
 
     Args:
         raw: kwargs vindos do BackendManager / request UMS.
-        low_vram: True se GPU abaixo do limiar (~7 GB) — activa mem_eff default.
 
     Returns:
         Dict pronto para ``KleinFluxGenerator(**kwargs)``.
@@ -37,12 +39,11 @@ def map_ums_load_kwargs(raw: dict[str, Any], *, low_vram: bool) -> dict[str, Any
             kwargs["quant_preset"] = None
 
     mem_eff = kwargs.get("memory_efficient")
-    if mem_eff is None:
-        mem_eff = low_vram
-    kwargs["memory_efficient"] = bool(mem_eff)
+    kwargs["memory_efficient"] = bool(mem_eff) if mem_eff is not None else False
 
-    # Defaults UMS hot-path (amortiza cold compile) — request explícito ganha.
-    kwargs.setdefault("torch_compile", True)
+    # torch.compile default OFF: compile frio (minutos) não compensa fora de
+    # batches longos — request explícito (batch/CLI) ganha sempre.
+    kwargs.setdefault("torch_compile", False)
     kwargs.setdefault("torch_compile_mode", "default")
     kwargs.setdefault("channels_last", True)
     kwargs.setdefault("verbose", False)

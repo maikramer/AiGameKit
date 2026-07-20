@@ -138,7 +138,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
             step_cache=step_cache,
             channels_last=channels_last,
         )
-        # Text2Icon usa ``low_vram`` (vs ``memory_efficient`` nas outras tools).
+        # Ctor ``low_vram`` = cpu-offload interno (só hw_auto; sem flag CLI).
         self.low_vram = low_vram
 
         # Two-model: o transformer é swappable; o pipeline (VAE + Gemma + scheduler)

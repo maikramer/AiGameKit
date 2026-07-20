@@ -58,9 +58,11 @@ class UnifiedModelServer:
         max_inflight: int = P.MAX_INFLIGHT,
         max_affinity_cuts: int = P.MAX_AFFINITY_CUTS,
         verbose: bool = False,
+        query_free_mib: Any = None,
+        clear_vram: Any = None,
     ) -> None:
         self.registry = registry if registry is not None else Registry()
-        self.manager = BackendManager(self.registry)
+        self.manager = BackendManager(self.registry, query_free_mib=query_free_mib, clear_vram=clear_vram)
         self.socket_path = Path(socket_path) if socket_path else P.DEFAULT_SOCKET_PATH
         self.ppid_path = _pid_path(self.socket_path)
         self.idle_timeout_sec = idle_timeout_min * 60
@@ -85,6 +87,7 @@ class UnifiedModelServer:
         self.idle_evictor = IdleEvictor(self.manager, idle_timeout_sec=idle_evict_sec)
 
         self._server_sock: socket.socket | None = None
+        self._bound = False  # True só após bind+listen OK (protege cleanup em double-start)
         self._running = False
         self._last_activity = time.monotonic()
         self._requests_served = 0
@@ -221,19 +224,22 @@ class UnifiedModelServer:
         }
 
     def _estimate_eta_sec(self) -> float | None:
-        """ETA aproximado: soma avg_generate dos jobs queued + remaining do running."""
-        snap = self.queue.snapshot()
+        """ETA aproximado: soma avg_generate dos jobs queued + remaining do running.
+
+        Itera os Jobs directamente (sem ``snapshot()`` — serializar cada job com
+        ``to_public_dict`` a cada status/queue/stats é desperdício).
+        """
         total = 0.0
         any_est = False
-        for j in snap.get("running") or []:
-            avg = self.manager.stats.avg_generate_sec(str(j.get("backend", "")))
+        for j in self.queue.running_jobs():
+            avg = self.manager.stats.avg_generate_sec(j.backend)
             if avg is None:
                 continue
             # Heurística: metade do avg ainda a correr.
             total += avg * 0.5
             any_est = True
-        for j in snap.get("queued") or []:
-            avg = self.manager.stats.avg_generate_sec(str(j.get("backend", "")))
+        for j in self.queue.queued_jobs():
+            avg = self.manager.stats.avg_generate_sec(j.backend)
             if avg is None:
                 avg = 30.0  # fallback conservador sem histórico
             total += avg
@@ -276,9 +282,13 @@ class UnifiedModelServer:
                     "Se OOM, evict outros backends ou usa --no-ums.",
                 )
 
-        if out.get("status") == P.STATUS_OK and not job.counted_served:
-            job.counted_served = True
-            self._requests_served += 1
+        if out.get("status") == P.STATUS_OK:
+            # Check-and-set sob o lock do job: um generate bloqueante + wait(s)
+            # concorrentes para o mesmo job não podem contar 2x.
+            with job._lock:
+                if not job.counted_served:
+                    job.counted_served = True
+                    self._requests_served += 1
         return out
 
     def _dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -355,6 +365,17 @@ class UnifiedModelServer:
             }
 
         if cmd == P.CMD_STATS:
+            # Reset in-process — NÃO para o UMS nem cancela jobs.
+            if request.get("reset"):
+                self.manager.stats.reset()
+                return {
+                    "status": P.STATUS_OK,
+                    "reset": True,
+                    "message": "stats reset (jobs/backends intactos)",
+                    "pid": self._pid,
+                    "queue_metrics": self.manager.stats.queue_dict(),
+                    "backends": {},
+                }
             stats = self.manager.stats.get_all()
             qsnap = self.queue.snapshot()
             qsnap["eta_sec"] = self._estimate_eta_sec()
@@ -368,7 +389,15 @@ class UnifiedModelServer:
                 "starvation_timeout_sec": self.scheduler.starvation_timeout_sec,
                 "queue": qsnap,
                 "queue_metrics": self.manager.stats.queue_dict(),
+                "affinity_hits": getattr(self.workers, "_affinity_hits", 0),
                 "backends": stats,
+                "debug": {
+                    "loaded_backends": self.manager.loaded_names(),
+                    "last_errors": {name: s["last_error"] for name, s in stats.items() if s.get("last_error")},
+                    "last_runtime_budgets": {
+                        name: s["last_runtime_budget"] for name, s in stats.items() if s.get("last_runtime_budget")
+                    },
+                },
             }
 
         if cmd == P.CMD_RELEASE:
@@ -398,7 +427,7 @@ class UnifiedModelServer:
 
                 load_kwargs = {k: v for k, v in request.items() if k in _LOAD_KWARG_KEYS}
                 self.manager.ensure_loaded(name, **load_kwargs)
-                quant, mem_eff, group_off = self.manager.resolve_peak_params(name, load_kwargs)
+                quant, mem_eff, group_off, streams = self.manager.resolve_peak_params(name, load_kwargs)
                 return {
                     "status": P.STATUS_OK,
                     "message": f"backend {name} pré-carregado",
@@ -406,7 +435,11 @@ class UnifiedModelServer:
                         "backend": name,
                         "loaded_backends": self.manager.loaded_names(),
                         "peak_mib": self.manager.peak_vram_mib(
-                            name, quant_mode=quant, memory_efficient=mem_eff, group_offload=group_off
+                            name,
+                            quant_mode=quant,
+                            memory_efficient=mem_eff,
+                            group_offload=group_off or streams,
+                            footprint_key=load_kwargs.get("footprint_key"),
                         ),
                         "quant_mode": quant,
                         "memory_efficient": mem_eff,
@@ -439,17 +472,24 @@ class UnifiedModelServer:
             group_off = False
             allow_go = self.manager._as_bool(request.get("allow_group_offload"))
             if backend and self.registry.has(bname):
-                quant, mem_eff, group_off = self.manager.resolve_peak_params(bname, request)
+                quant, mem_eff, group_off, streams = self.manager.resolve_peak_params(bname, request)
             else:
                 quant = self.manager.resolve_quant_mode(request)
                 mem_eff = self.manager._as_bool(request.get("memory_efficient")) is True
             before = self.manager.loaded_names()
-            # Admit/evict room = pesos completos (load frio). group_off só pós-load.
+            # Admit/evict room: pesos completos no load frio — EXCEPTO backends
+            # com load já streaming (diffusers offload → streams_on_load).
             target = int(needed)
             if backend and self.registry.has(bname):
                 target = max(
                     target,
-                    self.manager.peak_vram_mib(bname, quant_mode=quant, memory_efficient=mem_eff, group_offload=False),
+                    self.manager.peak_vram_mib(
+                        bname,
+                        quant_mode=quant,
+                        memory_efficient=mem_eff,
+                        group_offload=streams,
+                        footprint_key=request.get("footprint_key"),
+                    ),
                 )
             ok = self.manager.ensure_vram(
                 int(needed),
@@ -474,7 +514,11 @@ class UnifiedModelServer:
                     "group_offload": group_off,
                     "peak_mib": (
                         self.manager.peak_vram_mib(
-                            str(backend), quant_mode=quant, memory_efficient=mem_eff, group_offload=group_off
+                            str(backend),
+                            quant_mode=quant,
+                            memory_efficient=mem_eff,
+                            group_offload=group_off or streams,
+                            footprint_key=request.get("footprint_key"),
                         )
                         if backend and self.registry.has(str(backend))
                         else None
@@ -513,15 +557,32 @@ class UnifiedModelServer:
             return {"status": P.STATUS_OK, **payload}
 
         if cmd == P.CMD_CANCEL:
+            if request.get("all") or str(request.get("job_id") or "").lower() in ("all", "*"):
+                return self.queue.cancel_all(include_running=not bool(request.get("queued_only")))
             job_id = request.get("job_id")
             if not job_id:
-                return self._error("cancel requer 'job_id'", error_code=P.ERR_INVALID_REQUEST)
+                return self._error(
+                    "cancel requer 'job_id' ou all=true",
+                    error_code=P.ERR_INVALID_REQUEST,
+                    hint="ums cancel <job_id|prefixo> | ums cancel --all | ums flush",
+                )
             return self.queue.cancel(str(job_id))
+
+        if cmd == P.CMD_FLUSH:
+            return self.queue.cancel_all(include_running=not bool(request.get("queued_only")))
 
         if cmd == P.CMD_WAIT:
             job_id = request.get("job_id")
             if not job_id:
                 return self._error("wait requer 'job_id'", error_code=P.ERR_INVALID_REQUEST)
+            resolved, err = self.queue.resolve_job_id(str(job_id))
+            if resolved is None:
+                return self._error(
+                    err or f"job desconhecido: {job_id}",
+                    error_code=P.ERR_JOB_UNKNOWN,
+                    hint="Lista jobs com gamedev-model-server queue",
+                )
+            job_id = resolved
             timeout = self._request_timeout_sec(request)
             job = self.queue.wait(str(job_id), timeout_sec=timeout)
             if job is None:
@@ -587,68 +648,73 @@ class UnifiedModelServer:
             ready.set()
 
         job.add_listener(on_event)
-        pos0 = self.queue.queue_position(job.job_id) or max(1, self.queue.depth)
-        self._send_json(
-            conn,
-            {
-                "event": P.EVENT_QUEUED,
-                "job_id": job.job_id,
-                "backend": job.backend,
-                "priority": job.priority,
-                "state": job.state,
-                "queue_position": pos0,
-            },
-        )
-
-        deadline = time.monotonic() + timeout
-        sent = 0
-        last_pos: int | None = pos0
-        last_pos_emit = time.monotonic()
-        while time.monotonic() < deadline:
-            if job.done_event.is_set() and sent >= len(events):
-                break
-            ready.wait(timeout=0.25)
-            ready.clear()
-            while sent < len(events):
-                ev = events[sent]
-                sent += 1
-                if ev.get("event") in (P.EVENT_DONE, P.EVENT_ERROR, P.EVENT_CANCELLED):
-                    continue
-                with contextlib.suppress(OSError):
-                    self._send_json(conn, ev)
-
-            # Actualizar queue_position enquanto ainda queued.
-            if job.state == P.JOB_QUEUED and (time.monotonic() - last_pos_emit) >= 1.0:
-                pos = self.queue.queue_position(job.job_id)
-                if pos is not None and pos != last_pos:
-                    last_pos = pos
-                    with contextlib.suppress(OSError):
-                        self._send_json(
-                            conn,
-                            {
-                                "event": P.EVENT_QUEUED,
-                                "job_id": job.job_id,
-                                "backend": job.backend,
-                                "priority": job.priority,
-                                "state": job.state,
-                                "queue_position": pos,
-                            },
-                        )
-                last_pos_emit = time.monotonic()
-
-        if not job.done_event.is_set():
+        try:
+            pos0 = self.queue.queue_position(job.job_id) or max(1, self.queue.depth)
             self._send_json(
                 conn,
-                self._error(
-                    "timeout à espera do job",
-                    error_code=P.ERR_TIMEOUT,
-                    hint="Inspecciona gamedev-model-server queue / status",
-                    job_id=job.job_id,
-                    ums_debug=self._ums_debug_for_job(job),
-                ),
+                {
+                    "event": P.EVENT_QUEUED,
+                    "job_id": job.job_id,
+                    "backend": job.backend,
+                    "priority": job.priority,
+                    "state": job.state,
+                    "queue_position": pos0,
+                },
             )
-            return
-        self._send_json(conn, self._result_from_job(job))
+
+            deadline = time.monotonic() + timeout
+            sent = 0
+            last_pos: int | None = pos0
+            last_pos_emit = time.monotonic()
+            while time.monotonic() < deadline:
+                if job.done_event.is_set() and sent >= len(events):
+                    break
+                ready.wait(timeout=0.25)
+                ready.clear()
+                while sent < len(events):
+                    ev = events[sent]
+                    sent += 1
+                    if ev.get("event") in (P.EVENT_DONE, P.EVENT_ERROR, P.EVENT_CANCELLED):
+                        continue
+                    with contextlib.suppress(OSError):
+                        self._send_json(conn, ev)
+
+                # Actualizar queue_position enquanto ainda queued.
+                if job.state == P.JOB_QUEUED and (time.monotonic() - last_pos_emit) >= 1.0:
+                    pos = self.queue.queue_position(job.job_id)
+                    if pos is not None and pos != last_pos:
+                        last_pos = pos
+                        with contextlib.suppress(OSError):
+                            self._send_json(
+                                conn,
+                                {
+                                    "event": P.EVENT_QUEUED,
+                                    "job_id": job.job_id,
+                                    "backend": job.backend,
+                                    "priority": job.priority,
+                                    "state": job.state,
+                                    "queue_position": pos,
+                                },
+                            )
+                    last_pos_emit = time.monotonic()
+
+            if not job.done_event.is_set():
+                self._send_json(
+                    conn,
+                    self._error(
+                        "timeout à espera do job",
+                        error_code=P.ERR_TIMEOUT,
+                        hint="Inspecciona gamedev-model-server queue / status",
+                        job_id=job.job_id,
+                        ums_debug=self._ums_debug_for_job(job),
+                    ),
+                )
+                return
+            self._send_json(conn, self._result_from_job(job))
+        finally:
+            # Sem isto, o listener (e a lista ``events`` que retém) ficava preso
+            # ao job para sempre — incluindo em timeout / disconnect do cliente.
+            job.remove_listener(on_event)
 
     def _handle_client(self, conn: socket.socket) -> None:
         self._last_activity = time.monotonic()
@@ -660,6 +726,15 @@ class UnifiedModelServer:
                 if not chunk:
                     break
                 data += chunk
+                if len(data) > P.MAX_REQUEST_BYTES:
+                    self._send_json(
+                        conn,
+                        self._error(
+                            f"request excede {P.MAX_REQUEST_BYTES} bytes",
+                            error_code=P.ERR_INVALID_REQUEST,
+                        ),
+                    )
+                    return
 
             line = data.decode("utf-8", errors="replace").strip()
             if not line:
@@ -686,12 +761,13 @@ class UnifiedModelServer:
                         self._error("wait requer 'job_id'", error_code=P.ERR_INVALID_REQUEST),
                     )
                     return
-                job = self.queue.get(str(job_id))
+                resolved, err = self.queue.resolve_job_id(str(job_id))
+                job = self.queue.get(resolved) if resolved is not None else None
                 if job is None:
                     self._send_json(
                         conn,
                         self._error(
-                            f"job desconhecido: {job_id}",
+                            err or f"job desconhecido: {job_id}",
                             error_code=P.ERR_JOB_UNKNOWN,
                             hint="Lista jobs com gamedev-model-server queue",
                         ),
@@ -732,13 +808,18 @@ class UnifiedModelServer:
             self.idle_evictor.stop()
         with contextlib.suppress(Exception):
             self.manager.evict_all()
-        with contextlib.suppress(OSError):
-            self.socket_path.unlink(missing_ok=True)
-        with contextlib.suppress(OSError):
-            self.ppid_path.unlink(missing_ok=True)
+        if self._bound:
+            # Só remover socket/pid se fomos nós a criá-los (bind OK) — um
+            # double-start que falhou o bind não pode apagar os do UMS vivo.
+            with contextlib.suppress(OSError):
+                self.socket_path.unlink(missing_ok=True)
+            with contextlib.suppress(OSError):
+                self.ppid_path.unlink(missing_ok=True)
+            self._bound = False
         if self._server_sock is not None:
             with contextlib.suppress(OSError):
                 self._server_sock.close()
+            self._server_sock = None
 
     def _signal_handler(self, signum: int, frame: Any) -> None:
         self._log(f"Sinal {signum} recebido — a encerrar.")
@@ -753,17 +834,21 @@ class UnifiedModelServer:
                 self.socket_path.unlink(missing_ok=True)
                 self.ppid_path.unlink(missing_ok=True)
 
-        self.ppid_path.write_text(str(self._pid))
-
         self._server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._server_sock.settimeout(1.0)
         try:
             self._server_sock.bind(str(self.socket_path))
+            self._server_sock.listen(8)
         except OSError as e:
             _logger.error(f"Não foi possível bind ao socket {self.socket_path}: {e}")
-            self._cleanup()
+            # NÃO unlink socket/pid aqui — podem pertencer a um UMS vivo (double-start).
+            with contextlib.suppress(OSError):
+                self._server_sock.close()
+            self._server_sock = None
             raise
-        self._server_sock.listen(8)
+        self._bound = True
+        # PID file só depois do bind: um double-start não pode clobber o pid do UMS vivo.
+        self.ppid_path.write_text(str(self._pid))
 
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, self._signal_handler)

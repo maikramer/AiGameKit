@@ -19,6 +19,10 @@ model server num socket separado, peer-to-peer. Problemas:
 
 O UMS resolve isto com **1 socket, 1 processo, inventário global + scheduler**.
 
+**Descobertas ops (admit vs runtime, batch waves, anti-patterns):**  
+[`docs/MODEL_FINDINGS.md`](../docs/MODEL_FINDINGS.md) ·
+[`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
+
 ## Arquitetura
 
 ```
@@ -72,8 +76,14 @@ Todas as respostas relevantes trazem campos estáveis para diagnóstico:
 ```bash
 gamedev-model-server status --json   # inclui debug.last_errors
 gamedev-model-server queue --json
+gamedev-model-server debug           # HOLDING + fila + budgets (só leitura)
+gamedev-model-server stats           # backends + queue p50/p95 + last_runtime_budget
+gamedev-model-server bench           # RTT IPC; não submete GPU
 GAMEDEV_UMS_DEBUG=1 text2icon generate "x" -o out.png
 ```
+
+Descobertas multi-modelo (footprints, runtime budget, kernel opts, batch):  
+[`docs/MODEL_FINDINGS.md`](../docs/MODEL_FINDINGS.md).
 
 ## Backends suportados (9)
 
@@ -83,13 +93,14 @@ GAMEDEV_UMS_DEBUG=1 text2icon generate "x" -o out.png
 | texture2d | Texture2D | 2500 | 20 | `warmup()` |
 | text2d | Text2D | 4500 | 25 | `warmup()` |
 | skymap2d | Skymap2D | 7000 | 25 | `warmup()` |
-| text3d | Text3D | 8000 | 40 | `_load_hunyuan()` |
+| text3d | Text3D | ~10000 YAML / admit via `FOOTPRINTS` Omni ~10+2 GiB fp16 | 40 | `_load_hunyuan()` |
 | paint3d | Paint3D | 4000 | 40 | context-manager |
 | part3d | Part3D | 5200 | 35 | pipeline |
 | text2sound | Text2Sound | 5000 | 30 | `load()` |
 | terrain3d | Terrain3D | 6000 | 40 | procedural |
 
-**VRAM** = estimativa do footprint (afinar com profiling real).
+**VRAM** na tabela = hint YAML; **admit real** usa `gamedev_shared.lowvram.FOOTPRINTS` + quant
+(ver hub [`docs/MODEL_FINDINGS.md`](../docs/MODEL_FINDINGS.md)).
 **Evict priority** = maior = manter carregado; menor = evicted primeiro.
 
 ## Instalação
@@ -109,10 +120,13 @@ ums status          # backends + HOLDING/QUEUE + tip "não mates GPU"
 ums status --json   # dump completo
 ums queue           # jobs + timings/progress + tip
 ums queue --json
-ums wait <job_id>   # bloqueia até o job terminar
+ums wait <job_id>   # bloqueia até o job terminar (aceita prefixo)
 ums backends
 ums preload text2icon
-ums cancel <job_id>
+ums cancel <job_id> # UUID ou prefixo único
+ums cancel --all    # limpa fila (+ pede cancel aos running)
+ums flush           # alias de cancel --all
+ums flush --queued-only
 ums evict text2icon
 ums stats
 ums doctor
@@ -124,7 +138,9 @@ ums stop
 A fila UMS é a **autoridade** de quem usa a GPU. Se `nvidia-smi` mostra VRAM ocupada:
 
 1. Corre `ums status` / `ums queue` — lê a linha `HOLDING: … | QUEUE: …`.
-2. Espera (`ums wait <job_id>`, ou a tool com `--ums-stream`) **ou** `ums cancel <job_id>`.
+2. Espera (`ums wait <job_id>`, ou a tool com `--ums-stream`) **ou** `ums cancel <job_id>` /
+   `ums flush` (fila stale). Jobs com `vram_retries` / progress «VRAM insuficiente —
+   evict+espera» estão a **aguardar** VRAM transitória — não são falhas finais ainda.
 3. **Não** mates PIDs GPU (`kill`, scripts, `--gpu-kill-others`) enquanto houver
    jobs UMS — o kill agressivo **recusa** nesse caso e as tools imprimem o tip
    `UMS_DO_NOT_KILL_TIP`.
@@ -161,11 +177,16 @@ a CLI termina com erro; aumenta `GAMEDEV_UMS_MAX_QUEUE_DEPTH` ou espera.
 ### Coordenação de VRAM
 
 **Pico = pesos(quant) + activação de inferência + `GAMEDEV_UMS_VRAM_SAFETY_MIB`
-(default 384).** O UMS **recusa** load/generate se VRAM livre < pico (ex.: text3d
-fp16 full ~8 GiB numa 6 GB) — tip: `sdnq-int4` / `--quality fast` /
-`memory_efficient` (inferido como `sdnq-uint8` + activação reduzida; paint3d
-deve enviar `sdnq_preset` ou `memory_efficient=true`). `status` mostra colunas
-Peak / Act+.
+(default 384).** O UMS **recusa** load/generate se VRAM livre < pico *e* o pico
+nunca cabe na GPU (ex.: text3d fp16 full ~8 GiB numa 6 GB) — tip: `sdnq-int4` /
+`--quality fast`; pedidos UMS com `memory_efficient` / `sdnq_preset` reduzem o pico admitido).
+
+**VRAM transitória** (livre < pico mas pico ≤ VRAM total — processo externo,
+fragmentação CUDA): o worker faz `evict_all` + backoff exponencial + **requeue**
+até `GAMEDEV_UMS_MAX_VRAM_RETRIES` (default 8). `ensure_loaded` também espera
+até `GAMEDEV_UMS_VRAM_ADMIT_WAIT_SEC` (default 8s) a fazer poll. Assim um batch
+não morre 60/60 quando a GPU está momentaneamente ocupada. `status`/`queue`
+mostram `vram_retries`; `progress` reporta a espera.
 
 Ferramentas pesadas, **no path in-process**, chamam
 `ensure_vram_available(N, backend="text3d")`. Com UMS ativo → `ensure-vram` usa
@@ -185,6 +206,9 @@ Text3D aplica `auto_num_chunks` no momento do decode e reporta o efetivo.
 Desligar Paint: `PAINT3D_AUTO_VRAM_BUDGET=0`. Env
 `TEXT3D_DECODE_BYTES_PER_QUERY` calibra o custo por query do decode.
 
+Números calibrados (96 KiB/query, ~280 MiB/view, DINO 1.6 GiB, …) e checklist 6 GB:
+[`docs/MODEL_FINDINGS.md`](../docs/MODEL_FINDINGS.md) §3–5, §11.
+
 ## Protocolo
 
 JSON / NDJSON sobre Unix socket (`~/.cache/gamedev/model-server.sock`):
@@ -195,7 +219,8 @@ JSON / NDJSON sobre Unix socket (`~/.cache/gamedev/model-server.sock`):
 | `{"cmd":"submit","backend":"…",…}` | Enfileira; devolve `job_id` |
 | `{"cmd":"poll","job_id":"…"}` | Estado do job |
 | `{"cmd":"wait","job_id":"…"}` | Bloqueia até terminar |
-| `{"cmd":"cancel","job_id":"…"}` | Cancela queued; running best-effort |
+| `{"cmd":"cancel","job_id":"…"}` | Cancela queued; running best-effort (prefixo OK) |
+| `{"cmd":"cancel","all":true}` / `{"cmd":"flush"}` | Cancela todos (`queued_only` opcional) |
 | `{"cmd":"queue"}` | Snapshot da fila |
 | `{"cmd":"release"}` / `release`+`backend` | Evict |
 | `{"cmd":"status"}` / `stats` | Estado + fila |
@@ -207,7 +232,7 @@ Com `stream: true` em `generate`/`wait`: linhas NDJSON
 `queued` → `started` → `progress` → resultado final (`status` ok/error).
 
 Cliente Shared: `delegate_to_ums`, `submit_to_ums`, `poll_ums_job`, `wait_ums_job`,
-`cancel_ums_job`, `send_request_stream`.
+`cancel_ums_job`, `cancel_ums_all`, `send_request_stream`.
 
 ## Retrocompatibilidade
 

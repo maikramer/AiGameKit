@@ -33,7 +33,6 @@ from gamedev_shared.cli_helpers import (
     add_ums_options,
     prepare_gpu_exclusive,
     try_ums_delegation,
-    with_ums_peak_opts,
 )
 from gamedev_shared.gpu import (
     format_bytes,
@@ -415,31 +414,30 @@ def texture(
 
     t_start = time.time()
     # UMS primeiro — _prepare_gpu (ensure_vram/kill) só no fallback in-process.
+    from .ums_payload import build_texture_request
+
     if try_ums_delegation(
         "paint3d",
-        with_ums_peak_opts(
-            {
-                "mesh_path": str(mesh_path),
-                "image_path": str(image_file),
-                "output": str(output),
-                "max_num_view": max_views,
-                "view_resolution": view_resolution,
-                "render_size": render_size,
-                "texture_size": texture_size,
-                "bake_exp": bake_exp,
-                "verbose": verbose,
-                "preserve_origin": preserve_origin,
-                "smooth": smooth,
-                "smooth_passes": smooth_passes,
-                "upscale": upscale,
-                "upscale_factor": upscale_factor,
-                "gpu_ids": parsed_gpu_ids,
-                "torch_compile": torch_compile,
-                "torch_compile_mode": torch_compile_mode,
-                "channels_last": channels_last,
-                "allow_group_offload": allow_group_offload,
-            },
-            backend="paint3d",
+        build_texture_request(
+            mesh_path=str(mesh_path),
+            image_path=str(image_file),
+            output=str(output),
+            max_num_view=max_views,
+            view_resolution=view_resolution,
+            render_size=render_size,
+            texture_size=texture_size,
+            bake_exp=bake_exp,
+            verbose=verbose,
+            preserve_origin=preserve_origin,
+            smooth=smooth,
+            smooth_passes=smooth_passes,
+            upscale=upscale,
+            upscale_factor=upscale_factor,
+            gpu_ids=parsed_gpu_ids,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            channels_last=channels_last,
+            allow_group_offload=allow_group_offload,
             memory_efficient=mem_eff,
             sdnq_preset="sdnq-uint8" if mem_eff else "none",
         ),
@@ -764,29 +762,28 @@ def texture_batch(
                 output_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # UMS primeiro (admit + pico honestos). VRAM_INSUFFICIENT → ClickException.
+                from .ums_payload import build_texture_request
+
                 if try_ums_delegation(
                     "paint3d",
-                    with_ums_peak_opts(
-                        {
-                            "mesh_path": str(mesh_path),
-                            "image_path": str(image_path),
-                            "output": str(output_path),
-                            "max_num_view": max_views,
-                            "view_resolution": view_resolution,
-                            "render_size": render_size,
-                            "texture_size": texture_size,
-                            "bake_exp": bake_exp,
-                            "verbose": verbose,
-                            "preserve_origin": preserve_origin,
-                            "smooth": smooth,
-                            "smooth_passes": smooth_passes,
-                            "gpu_ids": parsed_gpu_ids,
-                            "torch_compile": torch_compile,
-                            "torch_compile_mode": torch_compile_mode,
-                            "channels_last": channels_last,
-                            "allow_group_offload": allow_group_offload,
-                        },
-                        backend="paint3d",
+                    build_texture_request(
+                        mesh_path=str(mesh_path),
+                        image_path=str(image_path),
+                        output=str(output_path),
+                        max_num_view=max_views,
+                        view_resolution=view_resolution,
+                        render_size=render_size,
+                        texture_size=texture_size,
+                        bake_exp=bake_exp,
+                        verbose=verbose,
+                        preserve_origin=preserve_origin,
+                        smooth=smooth,
+                        smooth_passes=smooth_passes,
+                        gpu_ids=parsed_gpu_ids,
+                        torch_compile=torch_compile,
+                        torch_compile_mode=torch_compile_mode,
+                        channels_last=channels_last,
+                        allow_group_offload=allow_group_offload,
                         memory_efficient=mem_eff,
                         sdnq_preset="sdnq-uint8" if mem_eff else "none",
                     ),

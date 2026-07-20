@@ -6,6 +6,7 @@ import threading
 import time
 from typing import Any
 
+import pytest
 from modelserver import protocol as P
 from modelserver.job_queue import JobQueue
 from modelserver.scheduler import AffinityScheduler
@@ -146,6 +147,86 @@ class TestWorkerPoolRun:
         finally:
             pool.stop()
 
+    def test_vram_insufficient_requeues_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(P, "MAX_VRAM_RETRIES", 4)
+        monkeypatch.setattr(P, "VRAM_RETRY_BASE_SEC", 0.05)
+        monkeypatch.setattr(P, "VRAM_RETRY_MAX_SEC", 0.1)
+
+        class _VramThenOk(_FakeManager):
+            def __init__(self) -> None:
+                super().__init__()
+                self.evict_calls = 0
+
+            def generate(self, name: str, request: dict[str, Any]) -> dict[str, Any]:
+                self.generate_calls.append((name, request))
+                if len(self.generate_calls) < 3:
+                    return {
+                        "status": P.STATUS_ERROR,
+                        "error": "VRAM insuficiente para 'alpha'",
+                        "error_code": P.ERR_VRAM_INSUFFICIENT,
+                        "peak_mib": 5000,
+                        "free_mib": 4000,
+                    }
+                return {"status": P.STATUS_OK, "output": f"/tmp/{name}.png"}
+
+            def evict_all(self) -> int:
+                self.evict_calls += 1
+                return 0
+
+            def _clear_cache(self) -> None:
+                return None
+
+        q = JobQueue(max_depth=8)
+        mgr = _VramThenOk()
+        # Free desconhecido (como CI sem NVML) → guarda de flat-retry conservadora.
+        pool = WorkerPool(q, mgr, max_inflight=1, query_free_mib=lambda: None)
+        # Pico cabe na GPU → retry allowed.
+        pool._total_mib = lambda: 6141  # type: ignore[method-assign]
+        pool.start()
+        try:
+            job = q.enqueue("alpha", {})
+            assert job.done_event.wait(timeout=5.0)
+            assert job.state == P.JOB_DONE
+            assert len(mgr.generate_calls) == 3
+            assert job.vram_retries == 2
+            assert mgr.evict_calls >= 2
+        finally:
+            pool.stop()
+
+    def test_vram_hard_refuse_no_retry_when_peak_exceeds_total(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(P, "MAX_VRAM_RETRIES", 4)
+        monkeypatch.setattr(P, "VRAM_RETRY_BASE_SEC", 0.05)
+
+        class _AlwaysVram(_FakeManager):
+            def generate(self, name: str, request: dict[str, Any]) -> dict[str, Any]:
+                self.generate_calls.append((name, request))
+                return {
+                    "status": P.STATUS_ERROR,
+                    "error": "VRAM insuficiente",
+                    "error_code": P.ERR_VRAM_INSUFFICIENT,
+                    "peak_mib": 9000,
+                    "free_mib": 5000,
+                }
+
+            def evict_all(self) -> int:
+                return 0
+
+        q = JobQueue(max_depth=8)
+        mgr = _AlwaysVram()
+        pool = WorkerPool(q, mgr, max_inflight=1)
+        pool._total_mib = lambda: 6141  # type: ignore[method-assign]
+        pool.start()
+        try:
+            job = q.enqueue("alpha", {})
+            assert job.done_event.wait(timeout=3.0)
+            assert job.state == P.JOB_FAILED
+            assert len(mgr.generate_calls) == 1  # sem requeue
+            assert job.vram_retries == 0
+            assert job.result is not None
+            assert job.result.get("error_code") == P.ERR_VRAM_INSUFFICIENT
+        finally:
+            pool.stop()
+
     def test_two_workers_claim_distinct_jobs(self) -> None:
         q = JobQueue(max_depth=8)
         barrier = threading.Barrier(2)
@@ -172,5 +253,183 @@ class TestWorkerPoolRun:
             assert set(concurrent) == {"alpha", "beta"}
             assert j1.state == P.JOB_DONE
             assert j2.state == P.JOB_DONE
+        finally:
+            pool.stop()
+
+
+class TestNoSpinAndAffinityHits:
+    """Regressão: claim falho não pode busy-spinnar; affinity_hits conta dispatches."""
+
+    def test_wait_for_slot_when_job_does_not_fit(self) -> None:
+        q = JobQueue(max_depth=8)
+        mgr = _FakeManager(delay=0.3)
+        mgr._loaded = {"alpha"}
+        j1_done = threading.Event()
+        calls = {"slot": 0}
+
+        def _free() -> int:
+            # Enquanto j1 corre: -1 (nada cabe); depois: 0 (peak fake = 0 cabe).
+            return 0 if j1_done.is_set() else -1
+
+        pool = WorkerPool(q, mgr, max_inflight=2, query_free_mib=_free)
+        orig_wait = q.wait_for_slot
+
+        def _spy(timeout: float = 0.5) -> None:
+            calls["slot"] += 1
+            orig_wait(timeout=0.01)  # acelerar o teste
+
+        q.wait_for_slot = _spy  # type: ignore[method-assign]
+        pool.start()
+        try:
+            j1 = q.enqueue("alpha", {})
+            j2 = q.enqueue("beta", {})  # cold; não cabe enquanto j1 corre
+            assert j1.done_event.wait(timeout=5.0)
+            j1_done.set()
+            q.notify()
+            assert j2.done_event.wait(timeout=5.0)
+            assert j2.state == P.JOB_DONE
+            # Esperou na condition em vez de spin a queimar CPU/NVML.
+            assert calls["slot"] >= 1
+        finally:
+            pool.stop()
+
+    def test_affinity_hits_counts_dispatch_not_evaluation(self) -> None:
+        q = JobQueue(max_depth=8)
+        mgr = _FakeManager()
+        mgr._loaded = {"alpha"}
+        pool = WorkerPool(q, mgr, max_inflight=1)
+
+        hot = q.enqueue("alpha", {})
+        assert pool._claim_next() is hot
+        assert pool._affinity_hits == 1  # dispatch real para backend quente
+        q.finish(hot, {"status": P.STATUS_OK})
+
+        cold = q.enqueue("beta", {})
+        assert pool._claim_next() is cold
+        assert pool._affinity_hits == 1  # cold: sem incremento
+        q.finish(cold, {"status": P.STATUS_OK})
+
+
+class TestVramFlatRetryGuard:
+    def test_flat_free_nothing_evictable_fails_fast(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Livre plana + 0 loaded N vezes → falha rápida (nunca mais o loop 8x30s)."""
+        monkeypatch.setattr(P, "MAX_VRAM_RETRIES", 8)
+        monkeypatch.setattr(P, "VRAM_RETRY_BASE_SEC", 0.02)
+        monkeypatch.setattr(P, "VRAM_RETRY_MAX_SEC", 0.05)
+        monkeypatch.setattr(P, "VRAM_FLAT_RETRY_MAX", 2)
+        monkeypatch.setattr(P, "VRAM_FLAT_SLACK_MIB", 32)
+
+        class _AlwaysVram(_FakeManager):
+            def generate(self, name: str, request: dict[str, Any]) -> dict[str, Any]:
+                self.generate_calls.append((name, request))
+                return {
+                    "status": P.STATUS_ERROR,
+                    "error": "VRAM insuficiente",
+                    "error_code": P.ERR_VRAM_INSUFFICIENT,
+                    "peak_mib": 5000,
+                    "free_mib": 4000,
+                }
+
+            def evict_all(self) -> int:
+                return 0
+
+            def _clear_cache(self) -> None:
+                return None
+
+        q = JobQueue(max_depth=8)
+        mgr = _AlwaysVram()  # loaded_names() → sempre vazio
+        pool = WorkerPool(q, mgr, max_inflight=1, query_free_mib=lambda: 4000)
+        pool._total_mib = lambda: 6141  # type: ignore[method-assign]
+        pool.start()
+        try:
+            job = q.enqueue("alpha", {})
+            assert job.done_event.wait(timeout=5.0)
+            assert job.state == P.JOB_FAILED
+            # 1ª tentativa + 1 requeue; no 2º flat consecutivo falha sem mais requeues.
+            assert len(mgr.generate_calls) == 2
+            assert job.result is not None
+            assert "presa pelo próprio UMS" in (job.result.get("hint") or "")
+        finally:
+            pool.stop()
+
+    def test_evictable_backends_reset_flat_counter(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Com backends evictáveis há progresso potencial → retry até MAX_VRAM_RETRIES."""
+        monkeypatch.setattr(P, "MAX_VRAM_RETRIES", 3)
+        monkeypatch.setattr(P, "VRAM_RETRY_BASE_SEC", 0.02)
+        monkeypatch.setattr(P, "VRAM_RETRY_MAX_SEC", 0.05)
+        monkeypatch.setattr(P, "VRAM_FLAT_RETRY_MAX", 2)
+        monkeypatch.setattr(P, "VRAM_FLAT_SLACK_MIB", 32)
+
+        class _VramWithLoaded(_FakeManager):
+            def generate(self, name: str, request: dict[str, Any]) -> dict[str, Any]:
+                self.generate_calls.append((name, request))
+                return {
+                    "status": P.STATUS_ERROR,
+                    "error": "VRAM insuficiente",
+                    "error_code": P.ERR_VRAM_INSUFFICIENT,
+                    "peak_mib": 5000,
+                    "free_mib": 4000,
+                }
+
+            def evict_all(self) -> int:
+                return 1
+
+            def _clear_cache(self) -> None:
+                return None
+
+        q = JobQueue(max_depth=8)
+        mgr = _VramWithLoaded()
+        mgr._loaded.add("beta")  # algo evictável → progresso potencial
+        pool = WorkerPool(q, mgr, max_inflight=1, query_free_mib=lambda: 4000)
+        pool._total_mib = lambda: 6141  # type: ignore[method-assign]
+        pool.start()
+        try:
+            job = q.enqueue("alpha", {})
+            assert job.done_event.wait(timeout=5.0)
+            assert job.state == P.JOB_FAILED
+            # Esgota os MAX_VRAM_RETRIES (não falha rápido — havia o que evictar).
+            assert len(mgr.generate_calls) == 1 + 3
+        finally:
+            pool.stop()
+
+    def test_free_moving_resets_flat_counter(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Free a oscilar (processo externo activo) → continua a tentar."""
+        monkeypatch.setattr(P, "MAX_VRAM_RETRIES", 4)
+        monkeypatch.setattr(P, "VRAM_RETRY_BASE_SEC", 0.02)
+        monkeypatch.setattr(P, "VRAM_RETRY_MAX_SEC", 0.05)
+        monkeypatch.setattr(P, "VRAM_FLAT_RETRY_MAX", 2)
+        monkeypatch.setattr(P, "VRAM_FLAT_SLACK_MIB", 32)
+
+        frees = iter([3900, 4000, 4000, 4000, 4000, 4000, 4000])
+
+        class _VramThenOk(_FakeManager):
+            def generate(self, name: str, request: dict[str, Any]) -> dict[str, Any]:
+                self.generate_calls.append((name, request))
+                if len(self.generate_calls) < 3:
+                    return {
+                        "status": P.STATUS_ERROR,
+                        "error": "VRAM insuficiente",
+                        "error_code": P.ERR_VRAM_INSUFFICIENT,
+                        "peak_mib": 5000,
+                        "free_mib": 4000,
+                    }
+                return {"status": P.STATUS_OK, "output": "/tmp/x.png"}
+
+            def evict_all(self) -> int:
+                return 0
+
+            def _clear_cache(self) -> None:
+                return None
+
+        q = JobQueue(max_depth=8)
+        mgr = _VramThenOk()
+        pool = WorkerPool(q, mgr, max_inflight=1, query_free_mib=lambda: next(frees, 4000))
+        pool._total_mib = lambda: 6141  # type: ignore[method-assign]
+        pool.start()
+        try:
+            job = q.enqueue("alpha", {})
+            assert job.done_event.wait(timeout=5.0)
+            assert job.state == P.JOB_DONE
+            assert len(mgr.generate_calls) == 3
         finally:
             pool.stop()

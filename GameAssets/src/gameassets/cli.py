@@ -17,7 +17,6 @@ from rich.table import Table
 from gamedev_shared.skill_install import install_my_skill
 
 from . import __version__
-from .batch_guard import query_gpu_free_mib
 from .categories import get_target_faces
 from .cli_rich import click
 from .helpers import (  # noqa: F401
@@ -193,7 +192,7 @@ def init_cmd(target_dir: Path, force: bool) -> None:
 
 @main.command("info")
 def info_cmd() -> None:
-    """Mostra versão, binários resolvidos no PATH / *_BIN e VRAM livre (se nvidia-smi)."""
+    """Mostra versão, binários resolvidos no PATH / *_BIN e VRAM livre (NVML)."""
     table = Table(title="[bold]gameassets info[/bold]", box=box.ROUNDED)
     table.add_column("Ferramenta", style="cyan", no_wrap=True)
     table.add_column("Binário", style="green")
@@ -218,18 +217,22 @@ def info_cmd() -> None:
     row("materialize", "MATERIALIZE_BIN", "materialize")
     console.print(table)
 
-    free_mib = query_gpu_free_mib()
-    if free_mib is not None:
+    from gamedev_shared.gpu import query_gpu_snapshot
+
+    snap = query_gpu_snapshot(0)
+    if snap is not None:
         console.print(
             Panel(
-                f"VRAM livre (nvidia-smi, GPU 0): [bold]{free_mib}[/bold] MiB",
+                f"VRAM GPU 0 ([bold]{snap.name}[/bold]): "
+                f"[bold]{snap.free_mib}[/bold] MiB livres / {snap.total_mib} MiB "
+                f"[dim]via {snap.source}[/dim]",
                 border_style="dim",
             )
         )
     else:
         console.print(
             Panel(
-                "[dim]VRAM: nvidia-smi não disponível ou sem dados.[/dim]",
+                "[dim]VRAM: NVML/nvidia-smi indisponível ou sem dados.[/dim]",
                 border_style="dim",
             )
         )

@@ -2,11 +2,16 @@
 
 Default ``MAX_INFLIGHT=1``: uma geração de cada vez na GPU. Com ``MAX_INFLIGHT>1``,
 só arranca jobs em paralelo se a VRAM livre couber o footprint do candidato.
+
+``VRAM_INSUFFICIENT`` transitória (livre < pico mas pico ≤ VRAM total): evict +
+backoff + requeue até ``MAX_VRAM_RETRIES``. Pico > total GPU → falha imediata.
 """
 
 from __future__ import annotations
 
+import contextlib
 import threading
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -19,6 +24,31 @@ from .job_queue import Job, JobQueue
 from .scheduler import AffinityScheduler
 
 _logger = Logger()
+
+
+def _is_vram_insufficient(result: dict[str, Any]) -> bool:
+    if result.get("error_code") == P.ERR_VRAM_INSUFFICIENT:
+        return True
+    err = str(result.get("error") or "").lower()
+    return "vram insuficiente" in err or "out of memory" in err
+
+
+def _vram_retry_worthwhile(result: dict[str, Any], total_mib: int | None) -> bool:
+    """False se o pico nunca cabe na GPU (sem retry)."""
+    peak = result.get("peak_mib")
+    if peak is None or total_mib is None:
+        return True
+    try:
+        return int(peak) <= int(total_mib)
+    except (TypeError, ValueError):
+        return True
+
+
+def _vram_backoff_sec(retries_done: int) -> float:
+    """Backoff exponencial após N retries já consumidos (0-based next attempt)."""
+    base = max(0.05, float(P.VRAM_RETRY_BASE_SEC))
+    cap = max(base, float(P.VRAM_RETRY_MAX_SEC))
+    return min(cap, base * (2 ** max(0, retries_done)))
 
 
 class WorkerPool:
@@ -59,6 +89,37 @@ class WorkerPool:
         except Exception:
             return None
 
+    def _total_mib(self) -> int | None:
+        try:
+            from gamedev_shared.gpu import query_gpu_snapshot
+
+            snap = query_gpu_snapshot()
+            if snap is None:
+                return None
+            total = getattr(snap, "total_mib", None)
+            if total is None:
+                total = getattr(snap, "memory_total_mib", None)
+            return int(total) if total is not None else None
+        except Exception:
+            return None
+
+    def _evict_and_clear(self) -> None:
+        with contextlib.suppress(Exception):
+            self.manager.evict_all()
+        clear = getattr(self.manager, "_clear_cache", None)
+        if callable(clear):
+            with contextlib.suppress(Exception):
+                clear()
+
+    def _sleep_interruptible(self, job: Job, seconds: float) -> bool:
+        """Sleep em fatias; ``False`` se cancel pedido."""
+        deadline = time.monotonic() + max(0.0, seconds)
+        while time.monotonic() < deadline:
+            if job.cancel_requested or self._stop.is_set():
+                return False
+            time.sleep(min(0.25, max(0.0, deadline - time.monotonic())))
+        return not job.cancel_requested
+
     def start(self) -> None:
         if self._running:
             return
@@ -84,15 +145,26 @@ class WorkerPool:
                 continue
             job = self._claim_next()
             if job is None:
+                # Há trabalho mas nada despachável (slot cheio ou VRAM não
+                # chega): esperar por mudança de estado em vez de spin — cada
+                # iteração de spin consultava NVML/nvidia-smi e inflacionava
+                # affinity_hits/affinity_cuts sem dispatch real.
+                self.queue.wait_for_slot(timeout=0.5)
                 continue
             self._run_job(job)
 
     def _backend_peak_mib(self, name: str, request: dict[str, Any] | None = None) -> int:
         """Pico pesos+activação+safety (não o YAML estático)."""
         try:
-            quant, mem_eff, group_off = self.manager.resolve_peak_params(name, request or {})
+            quant, mem_eff, group_off, streams = self.manager.resolve_peak_params(name, request or {})
             return int(
-                self.manager.peak_vram_mib(name, quant_mode=quant, memory_efficient=mem_eff, group_offload=group_off)
+                self.manager.peak_vram_mib(
+                    name,
+                    quant_mode=quant,
+                    memory_efficient=mem_eff,
+                    group_offload=group_off or streams,
+                    footprint_key=(request or {}).get("footprint_key"),
+                )
             )
         except Exception:
             try:
@@ -112,20 +184,23 @@ class WorkerPool:
 
         # Hot = backend carregado **e** load_shape compatível (senão = cold reload).
         if job.backend in loaded and self._job_is_hot(job):
-            self._affinity_hits += 1
             if free is None:
                 return True
             try:
-                _q, mem_eff, group_off = self.manager.resolve_peak_params(job.backend, job.request)
+                _q, mem_eff, group_off, streams = self.manager.resolve_peak_params(job.backend, job.request)
                 needed = self.manager.activation_headroom_mib(
-                    job.backend, memory_efficient=mem_eff, group_offload=group_off
+                    job.backend,
+                    quant_mode=_q,
+                    memory_efficient=mem_eff,
+                    group_offload=group_off or streams,
+                    footprint_key=job.request.get("footprint_key"),
                 )
             except Exception:
                 needed = 512
             return free >= needed
 
         if free is None:
-            # Sem nvidia-smi: não arriscar segundo cold load.
+            # Sem leitura VRAM (NVML/smi): não arriscar segundo cold load.
             return False
         return free >= self._backend_peak_mib(job.backend, job.request)
 
@@ -156,7 +231,11 @@ class WorkerPool:
                 f"(VRAM insuficiente ou free desconhecido; inflight={self.queue.inflight})"
             )
             return None
-        return self.queue.take(picked.job_id)
+        job = self.queue.take(picked.job_id)
+        if job is not None and self._job_is_hot(job):
+            # Métrica: dispatches reais para backend já quente (não avaliações).
+            self._affinity_hits += 1
+        return job
 
     def _run_job(self, job: Job) -> None:
         if job.cancel_requested:
@@ -215,6 +294,83 @@ class WorkerPool:
                 "error": str(e),
                 "error_code": P.ERR_GENERATE_FAILED,
             }
+
+        # VRAM transitória: evict + backoff + requeue (não matar o batch).
+        if (
+            result.get("status") != P.STATUS_OK
+            and _is_vram_insufficient(result)
+            and not job.cancel_requested
+            and _vram_retry_worthwhile(result, self._total_mib())
+            and job.vram_retries < P.MAX_VRAM_RETRIES
+            and job.vram_flat_retries < P.VRAM_FLAT_RETRY_MAX
+        ):
+            wait_sec = _vram_backoff_sec(job.vram_retries)
+            free = self._free_mib()
+            peak = result.get("peak_mib")
+            msg = (
+                f"VRAM insuficiente (livre={free} peak={peak}) — "
+                f"evict+espera {wait_sec:.1f}s "
+                f"(retry {job.vram_retries + 1}/{P.MAX_VRAM_RETRIES})"
+            )
+            _logger.warn(f"[UMS-worker] job {job.job_id[:8]} {msg}")
+            on_progress(None, msg)
+            # Progress-guard: retry só compensa se (a) havia backends evictáveis
+            # (libertámos pesos agora) ou (b) a VRAM livre se mexeu (processo
+            # externo activo — pode libertar). Livre plana + 0 loaded N vezes
+            # seguidas = loop improdutivo (ex.: memória presa pelo próprio
+            # servidor) → falhar rápido com hint em vez de 8x30s às cegas.
+            had_evictable = bool(self.manager.loaded_names())
+            self._evict_and_clear()
+            free_after = self._free_mib()
+            moved = free is not None and free_after is not None and abs(free_after - free) > P.VRAM_FLAT_SLACK_MIB
+            # Leitura de free desconhecida (sem NVML) → conservador: retry normal.
+            if had_evictable or moved or free is None or free_after is None:
+                job.vram_flat_retries = 0
+            else:
+                job.vram_flat_retries += 1
+                if job.vram_flat_retries >= P.VRAM_FLAT_RETRY_MAX:
+                    _logger.warn(
+                        f"[UMS-worker] job {job.job_id[:8]} VRAM plana "
+                        f"{job.vram_flat_retries}x seguidas sem nada evictável "
+                        f"(livre={free_after} peak={peak}) — falha rápida (loop improdutivo)."
+                    )
+                else:
+                    job.last_vram_free_mib = free_after
+            if (
+                job.vram_flat_retries < P.VRAM_FLAT_RETRY_MAX
+                and self._sleep_interruptible(job, wait_sec)
+                and self.queue.requeue_running(job, reason=f"livre={free} peak={peak}")
+            ):
+                return
+            if job.cancel_requested:
+                result = {
+                    "status": P.STATUS_ERROR,
+                    "error": "cancelled during vram wait",
+                    "error_code": P.ERR_CANCELLED,
+                }
+
+        if _is_vram_insufficient(result) and result.get("status") != P.STATUS_OK:
+            result.setdefault("error_code", P.ERR_VRAM_INSUFFICIENT)
+            if job.vram_flat_retries >= P.VRAM_FLAT_RETRY_MAX:
+                result.setdefault(
+                    "hint",
+                    (
+                        "VRAM livre não subiu após retries e não há backends evictáveis "
+                        "(memória pode estar presa pelo próprio UMS ou por processo externo). "
+                        "Verifica `nvidia-smi`/`ums status`; se o UMS retém VRAM sem backends "
+                        "loaded, reinicia-o (`ums stop && ums start`)."
+                    ),
+                )
+            else:
+                result.setdefault(
+                    "hint",
+                    (
+                        "VRAM livre < pico após retries. Espera `ums queue` libertar, "
+                        "fecha processos GPU externos, ou usa sdnq-int4 / quality fast. "
+                        "Não mates PIDs — vê Agents/anti-patterns no README UMS."
+                    ),
+                )
+            result["vram_retries"] = job.vram_retries
 
         self.queue.finish(job, result)
 

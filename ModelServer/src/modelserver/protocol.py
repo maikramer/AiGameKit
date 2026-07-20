@@ -48,6 +48,7 @@ CMD_SUBMIT = "submit"
 CMD_POLL = "poll"
 CMD_WAIT = "wait"
 CMD_CANCEL = "cancel"
+CMD_FLUSH = "flush"
 CMD_QUEUE = "queue"
 CMD_RELEASE = "release"
 CMD_STATUS = "status"
@@ -65,6 +66,7 @@ KNOWN_COMMANDS = frozenset(
         CMD_POLL,
         CMD_WAIT,
         CMD_CANCEL,
+        CMD_FLUSH,
         CMD_QUEUE,
         CMD_RELEASE,
         CMD_STATUS,
@@ -136,11 +138,40 @@ MAX_INFLIGHT = _env_int("GAMEDEV_UMS_MAX_INFLIGHT", 1)
 # 0 = desactivado. Se >0, job queued há mais de N segundos força pick (anti-starve).
 STARVATION_TIMEOUT_SEC = float(_env_int("GAMEDEV_UMS_STARVATION_TIMEOUT_SEC", 0))
 
+# VRAM transitória (processo externo / fragmentação CUDA): requeue em vez de
+# falhar o batch inteiro. Pico > VRAM total da GPU → sem retry (impossível).
+MAX_VRAM_RETRIES = _env_int("GAMEDEV_UMS_MAX_VRAM_RETRIES", 8)
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+VRAM_RETRY_BASE_SEC = _env_float("GAMEDEV_UMS_VRAM_RETRY_BASE_SEC", 2.0)
+VRAM_RETRY_MAX_SEC = _env_float("GAMEDEV_UMS_VRAM_RETRY_MAX_SEC", 30.0)
+# Retries consecutivos SEM progresso (VRAM livre plana ±slack e nada evictável)
+# antes de falhar rápido — evita o loop histórico de 8x30s sem saída possível.
+VRAM_FLAT_RETRY_MAX = _env_int("GAMEDEV_UMS_VRAM_FLAT_RETRY_MAX", 2)
+# Slack (MiB) para considerar a VRAM livre «plana» entre retries.
+VRAM_FLAT_SLACK_MIB = _env_int("GAMEDEV_UMS_VRAM_FLAT_SLACK_MIB", 32)
+# Espera curta dentro de ensure_loaded antes de recusar (evict+clear já feitos).
+VRAM_ADMIT_WAIT_SEC = _env_float("GAMEDEV_UMS_VRAM_ADMIT_WAIT_SEC", 8.0)
+VRAM_ADMIT_POLL_SEC = _env_float("GAMEDEV_UMS_VRAM_ADMIT_POLL_SEC", 0.5)
+
 # Default cmd quando ausente no request (retrocompat com per-tool: gerar).
 DEFAULT_CMD = CMD_GENERATE
 
 # Timeout default para pedidos de geração (segundos).
 DEFAULT_GENERATE_TIMEOUT_SEC = 600.0
+
+# Tamanho máximo de um request (1 linha JSON) — proteção contra reads sem newline.
+MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MiB
 
 # Minutos de idle antes de self-shutdown do UMS (0 = desativado; o IdleEvictor
 # trata de libertar VRAM de backends individuais sem matar o servidor).

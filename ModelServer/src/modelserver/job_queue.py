@@ -37,6 +37,11 @@ class Job:
     seq: int
     state: str = P.JOB_QUEUED
     affinity_cuts: int = 0
+    vram_retries: int = 0  # requeues por VRAM_INSUFFICIENT transitória
+    # Tracking de progresso do retry: falhar rápido quando a VRAM livre fica
+    # plana e não há nada evictável (loop improdutivo — nunca mais acontece).
+    vram_flat_retries: int = 0
+    last_vram_free_mib: int | None = None
     created_at: float = field(default_factory=time.monotonic)
     started_at: float | None = None
     finished_at: float | None = None
@@ -52,6 +57,10 @@ class Job:
     def add_listener(self, listener: ProgressListener) -> None:
         with self._lock:
             self._listeners.append(listener)
+
+    def remove_listener(self, listener: ProgressListener) -> None:
+        with self._lock, contextlib.suppress(ValueError):
+            self._listeners.remove(listener)
 
     def _emit(self, event: dict[str, Any]) -> None:
         with self._lock:
@@ -164,6 +173,7 @@ class Job:
             "priority": self.priority,
             "state": self.state,
             "affinity_cuts": self.affinity_cuts,
+            "vram_retries": self.vram_retries,
             "seq": self.seq,
             "queue_wait_sec": timing["queue_wait_sec"],
             "generate_sec": timing["generate_sec"],
@@ -180,6 +190,11 @@ _WAL_STATE_MAP = {
     P.JOB_FAILED: "failed",
     P.JOB_CANCELLED: "cancelled",
 }
+
+# Retenção de jobs terminais em memória (poll/wait pós-fim continuam a funcionar
+# dentro desta janela; depois são purgados para não crescer sem limite).
+_FINISHED_TTL_SEC = 600.0
+_MAX_FINISHED_JOBS = 256
 
 
 class JobQueue:
@@ -261,8 +276,11 @@ class JobQueue:
                 if not op or not job_id:
                     continue
                 if op == "enqueue":
+                    backend = rec.get("backend")
+                    if not backend:
+                        continue  # registo válido mas incompleto (WAL corrupto/editado)
                     job_meta[str(job_id)] = {
-                        "backend": rec["backend"],
+                        "backend": backend,
                         "priority": rec.get("priority", P.DEFAULT_PRIORITY),
                         "request": rec.get("request", {}),
                     }
@@ -360,10 +378,56 @@ class JobQueue:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def resolve_job_id(self, job_id_or_prefix: str) -> tuple[str | None, str | None]:
+        """Resolve UUID completo ou prefixo único.
+
+        Returns:
+            ``(job_id, None)`` se ok; ``(None, erro)`` se desconhecido/ambíguo.
+        """
+        key = (job_id_or_prefix or "").strip()
+        if not key:
+            return None, "job_id vazio"
+        with self._lock:
+            if key in self._jobs:
+                return key, None
+            matches = [jid for jid in self._jobs if jid.startswith(key)]
+            if not matches:
+                return None, f"job desconhecido: {key}"
+            active = [jid for jid in matches if self._jobs[jid].state in (P.JOB_QUEUED, P.JOB_RUNNING)]
+            pool = active or matches
+            if len(pool) == 1:
+                return pool[0], None
+            return None, f"prefixo ambíguo {key!r}: {len(pool)} jobs (usa mais caracteres)"
+
     def queued_jobs(self) -> list[Job]:
         """Jobs ainda em ``queued`` (ordem de chegada; o scheduler reordena)."""
         with self._lock:
             return [self._jobs[jid] for jid in self._queued if jid in self._jobs]
+
+    def running_jobs(self) -> list[Job]:
+        """Jobs actualmente running (para ETA/status sem serializar snapshot)."""
+        with self._lock:
+            return [self._jobs[jid] for jid in self._running_ids if jid in self._jobs]
+
+    def _purge_finished_jobs(self) -> None:
+        """Remove jobs terminais antigos/excedentes. Caller deve ter ``self._lock``.
+
+        Sem isto ``_jobs`` crescia sem limite (request+result+listeners de cada
+        job ficavam retidos para sempre num daemon long-lived).
+        """
+        now = time.monotonic()
+        terminal = [
+            j
+            for j in self._jobs.values()
+            if j.state in (P.JOB_DONE, P.JOB_FAILED, P.JOB_CANCELLED) and j.finished_at is not None
+        ]
+        victim_ids = {j.job_id for j in terminal if now - (j.finished_at or now) > _FINISHED_TTL_SEC}
+        excess = len(terminal) - _MAX_FINISHED_JOBS
+        if excess > 0:
+            terminal.sort(key=lambda j: j.finished_at or 0.0)
+            victim_ids.update(j.job_id for j in terminal[:excess])
+        for jid in victim_ids:
+            self._jobs.pop(jid, None)
 
     def take(self, job_id: str) -> Job | None:
         """Remove o job da fila queued e marca-o running (worker)."""
@@ -409,10 +473,64 @@ class JobQueue:
                     affinity_cuts=job.affinity_cuts,
                     cancelled=cancelled,
                 )
+            self._purge_finished_jobs()
             self._cond.notify_all()
 
+    def requeue_running(self, job: Job, *, reason: str = "vram wait") -> bool:
+        """Devolve job ``running`` → ``queued`` (VRAM transitória).
+
+        Decrementa inflight, NÃO termina o job (``done_event`` fica limpo).
+        Coloca à frente da fila para retentar cedo após backoff no worker.
+
+        Returns:
+            ``True`` se o job foi reenfileirado; ``False`` se já não estava running
+            / foi cancelado.
+        """
+        with self._cond:
+            if job.cancel_requested or job.state == P.JOB_CANCELLED:
+                return False
+            if job.job_id not in self._running_ids and job.state != P.JOB_RUNNING:
+                return False
+            if job.job_id in self._running_ids:
+                self._running_ids.remove(job.job_id)
+            self._inflight = max(0, self._inflight - 1)
+            job.state = P.JOB_QUEUED
+            job.started_at = None
+            job.vram_retries += 1
+            job.result = None
+            # Frente: retentar este job assim que o backoff no worker acabar.
+            if job.job_id in self._queued:
+                self._queued.remove(job.job_id)
+            self._queued.insert(0, job.job_id)
+            job.report_progress(
+                None,
+                f"vram retry {job.vram_retries}/{P.MAX_VRAM_RETRIES}: {reason}",
+            )
+            self._append_wal(
+                {
+                    "op": "requeue",
+                    "job_id": job.job_id,
+                    "reason": reason,
+                    "vram_retries": job.vram_retries,
+                }
+            )
+            self._cond.notify_all()
+            return True
+
     def cancel(self, job_id: str) -> dict[str, Any]:
-        """Cancela um job. Queued: remove já. Running: marca flag best-effort."""
+        """Cancela um job. Queued: remove já. Running: marca flag best-effort.
+
+        Aceita UUID completo ou prefixo único (como no CLI ``queue``).
+        """
+        resolved, err = self.resolve_job_id(job_id)
+        if resolved is None:
+            return {
+                "status": P.STATUS_ERROR,
+                "error": err or f"job desconhecido: {job_id}",
+                "error_code": P.ERR_JOB_UNKNOWN,
+                "hint": "Lista jobs com gamedev-model-server queue; cancel --all limpa a fila",
+            }
+        job_id = resolved
         with self._cond:
             job = self._jobs.get(job_id)
             if job is None:
@@ -454,6 +572,7 @@ class JobQueue:
                         affinity_cuts=job.affinity_cuts,
                         cancelled=True,
                     )
+                self._purge_finished_jobs()
                 self._cond.notify_all()
                 return {"status": P.STATUS_OK, "job_id": job_id, "state": P.JOB_CANCELLED}
             # running
@@ -464,6 +583,45 @@ class JobQueue:
                 "state": P.JOB_RUNNING,
                 "message": "cancel requested (best-effort; aguarda fim do generate)",
             }
+
+    def cancel_all(self, *, include_running: bool = True) -> dict[str, Any]:
+        """Cancela todos os queued; opcionalmente pede cancel aos running."""
+        cancelled_queued: list[str] = []
+        cancel_requested_running: list[str] = []
+        with self._cond:
+            for jid in list(self._queued):
+                job = self._jobs.get(jid)
+                if job is None:
+                    continue
+                self._queued.remove(jid)
+                job.mark_cancelled("cancelled by flush/cancel --all")
+                self._append_wal({"op": "finished", "job_id": jid, "state": "cancelled"})
+                if self.stats is not None:
+                    timing = job.timing_dict()
+                    self.stats.record_job_finished(
+                        wait_sec=timing.get("queue_wait_sec"),
+                        affinity_cuts=job.affinity_cuts,
+                        cancelled=True,
+                    )
+                cancelled_queued.append(jid)
+            if include_running:
+                for jid in list(self._running_ids):
+                    job = self._jobs.get(jid)
+                    if job is None or job.state != P.JOB_RUNNING:
+                        continue
+                    job.cancel_requested = True
+                    cancel_requested_running.append(jid)
+            self._purge_finished_jobs()
+            self._cond.notify_all()
+        return {
+            "status": P.STATUS_OK,
+            "cancelled_queued": cancelled_queued,
+            "cancel_requested_running": cancel_requested_running,
+            "count": len(cancelled_queued) + len(cancel_requested_running),
+            "message": (
+                f"{len(cancelled_queued)} queued cancelados; {len(cancel_requested_running)} running com cancel pedido"
+            ),
+        }
 
     def wait(self, job_id: str, *, timeout_sec: float | None = None) -> Job | None:
         job = self.get(job_id)
@@ -502,6 +660,17 @@ class JobQueue:
                 return True
             self._cond.wait(timeout=timeout)
             return bool(self._queued)
+
+    def wait_for_slot(self, timeout: float = 0.5) -> None:
+        """Bloqueia até notificação (enqueue/finish/cancel) ou timeout.
+
+        Usado pelo worker quando há trabalho na fila mas nada despachável
+        (slot cheio / VRAM não chega) — evita busy-spin a queimar CPU e a
+        consultar NVML/nvidia-smi em loop apertado. O timeout limita a latência
+        de re-poll de VRAM livre externa.
+        """
+        with self._cond:
+            self._cond.wait(timeout=timeout)
 
     def notify(self) -> None:
         with self._cond:

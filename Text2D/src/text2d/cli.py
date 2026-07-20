@@ -21,6 +21,7 @@ from rich.table import Table
 
 from gamedev_shared.cli_helpers import (
     add_ums_options,
+    needed_mib_for_backend,
     prepare_gpu_exclusive,
     try_ums_delegation,
     with_ums_load_opts,
@@ -32,7 +33,7 @@ from gamedev_shared.quality import VALID_QUALITIES
 from gamedev_shared.skill_install import install_my_skill
 
 from .cli_rich import click
-from .generator import KleinFluxGenerator, _model_id, default_model_id
+from .generator import KleinFluxGenerator, _model_id, default_model_id, model_footprint_key
 from .utils.memory import format_bytes, get_system_info
 
 console = Console()
@@ -108,7 +109,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "-m",
     "model_id",
     default=None,
-    help="ID Hugging Face (default: 9B SDNQ, 4B em modo memory-efficient (hw-auto), ou TEXT2D_MODEL_ID)",
+    help="ID Hugging Face (default: 9B SDNQ, 4B via hw-auto (GPU apertada), ou TEXT2D_MODEL_ID)",
 )
 @click.option(
     "--verbose",
@@ -305,6 +306,7 @@ def generate_cmd(
                 backend="text2d",
                 memory_efficient=mem_eff,
                 quant_preset=quant_preset,
+                footprint_key=model_footprint_key(resolved_model),
             ),
             t_start=t_start,
             noun="Imagem",
@@ -318,12 +320,13 @@ def generate_cmd(
 
     # Fallback in-process: coordenação VRAM (paridade Text3D/Paint3D).
     if not cpu:
+        _qmode = quant_preset if quant_preset not in (None, "none") else ("sdnq-uint8" if mem_eff else "none")
         prepare_gpu_exclusive(
-            needed_mib=4000,
+            needed_mib=needed_mib_for_backend("text2d", quant_mode=_qmode, memory_efficient=mem_eff),
             allow_shared=True,
             kill_others=False,
             backend="text2d",
-            quant_mode=quant_preset if quant_preset not in (None, "none") else ("sdnq-uint8" if mem_eff else "none"),
+            quant_mode=_qmode,
             console=console,
         )
 
@@ -659,6 +662,7 @@ def generate_batch_cmd(
                     backend="text2d",
                     memory_efficient=mem_eff,
                     quant_preset=quant_preset,
+                    footprint_key=model_footprint_key(resolved_model),
                 ),
                 t_start=t0,
                 noun="Imagem",
@@ -689,14 +693,13 @@ def generate_batch_cmd(
             return
 
         if not cpu:
+            _qmode = quant_preset if quant_preset not in (None, "none") else ("sdnq-uint8" if mem_eff else "none")
             prepare_gpu_exclusive(
-                needed_mib=4000,
+                needed_mib=needed_mib_for_backend("text2d", quant_mode=_qmode, memory_efficient=mem_eff),
                 allow_shared=True,
                 kill_others=False,
                 backend="text2d",
-                quant_mode=quant_preset
-                if quant_preset not in (None, "none")
-                else ("sdnq-uint8" if mem_eff else "none"),
+                quant_mode=_qmode,
                 console=err_console,
             )
 
@@ -847,7 +850,7 @@ def models_cmd() -> None:
     )
     t.add_row(
         "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic",
-        "Padrão memory-efficient (hw-auto): SDNQ 4-bit, 4B parâmetros",
+        "Padrão hw-auto (GPU apertada): SDNQ 4-bit, 4B parâmetros",
     )
     t.add_row(
         "black-forest-labs/FLUX.2-klein-4B",

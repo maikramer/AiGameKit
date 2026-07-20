@@ -19,8 +19,8 @@ class Adapter(BackendAdapter):
         from text2d.generator import KleinFluxGenerator
         from text2d.ums_load import map_ums_load_kwargs
 
-        low_vram = self.should_use_low_vram_mode(threshold_mib=7000)
-        load_kwargs = map_ums_load_kwargs(kwargs, low_vram=low_vram)
+        # Peak/offload: só do request (CLI hw_auto / with_ums_peak_opts).
+        load_kwargs = map_ums_load_kwargs(kwargs)
         gen = KleinFluxGenerator(**load_kwargs)
         gen.warmup()
         return gen

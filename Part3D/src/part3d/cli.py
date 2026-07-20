@@ -646,11 +646,16 @@ def decompose(
     if mc_algo is not None:
         _ums_request["mc_algo"] = mc_algo
 
-    from gamedev_shared.cli_helpers import with_ums_load_opts
+    from gamedev_shared.cli_helpers import needed_mib_for_backend, with_ums_load_opts, with_ums_peak_opts
 
     if try_ums_delegation(
         "part3d",
-        with_ums_load_opts(_ums_request, gpu_ids=parsed_gpu_ids),
+        with_ums_peak_opts(
+            with_ums_load_opts(_ums_request, gpu_ids=parsed_gpu_ids),
+            backend="part3d",
+            memory_efficient=mem_eff,
+            sdnq_preset=effective_preset,
+        ),
         t_start=t_start,
         noun="Partes",
         console=console,
@@ -662,11 +667,17 @@ def decompose(
 
     if torch.cuda.is_available():
         prepare_gpu_exclusive(
-            needed_mib=5000,
+            needed_mib=needed_mib_for_backend(
+                "part3d",
+                quant_mode=effective_preset,
+                memory_efficient=mem_eff,
+            ),
             allow_shared=allow_shared_gpu,
             kill_others=gpu_kill_others,
             allow_shared_env="PART3D_ALLOW_SHARED_GPU",
             kill_others_env="PART3D_GPU_KILL_OTHERS",
+            backend="part3d",
+            quant_mode=effective_preset if effective_preset else ("sdnq-uint8" if mem_eff else "none"),
             console=console,
         )
 

@@ -63,7 +63,7 @@ def test_format_duration_zero() -> None:
 
 
 def test_generate_output_path_suffix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("text2sound.utils.time.time", lambda: 1_700_000_000)
+    monkeypatch.setattr("gamedev_shared.path_utils.time.time", lambda: 1_700_000_000)
     p = generate_output_path("hello world", tmp_path, fmt="flac")
     assert p.suffix == ".flac"
     assert "hello" in p.name.lower() or "_" in p.name

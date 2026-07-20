@@ -25,8 +25,8 @@ class Adapter(BackendAdapter):
 
         ensure_hy3dshape_on_path(quiet=True)
 
-        low_vram = self.should_use_low_vram_mode(threshold_mib=7000)
-        load_kwargs = map_ums_load_kwargs(kwargs, low_vram=low_vram)
+        # Peak/offload: só do request (CLI hw_auto / with_ums_peak_opts).
+        load_kwargs = map_ums_load_kwargs(kwargs)
         gen = HunyuanTextTo3DGenerator(**load_kwargs)
         gen.warmup()
         return gen

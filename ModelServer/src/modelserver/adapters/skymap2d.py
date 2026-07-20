@@ -20,15 +20,16 @@ class Adapter(BackendAdapter):
 
         # UMS: compile on (bench 6GB: ~-19% hot; cold ~6 min amortizado).
         # channels_last ~0 no skymap - nao forcar.
+        # memory_efficient (cpu-offload): só do request (CLI hw_auto) — sem re-decidir.
         load_kwargs: dict[str, Any] = {
             "verbose": kwargs.get("verbose", False),
             "torch_compile": kwargs.get("torch_compile", True),
             "torch_compile_mode": kwargs.get("torch_compile_mode", "default"),
         }
-        if self.should_use_low_vram_mode():
-            load_kwargs["memory_efficient"] = kwargs.get("memory_efficient", True)
-        skip = {"verbose", "memory_efficient", "torch_compile", "torch_compile_mode"}
+        skip = {"verbose", "memory_efficient", "torch_compile", "torch_compile_mode", "sdnq_preset"}
         load_kwargs.update({k: v for k, v in kwargs.items() if k not in skip})
+        if "memory_efficient" in kwargs:
+            load_kwargs["memory_efficient"] = bool(kwargs["memory_efficient"])
         gen = SkymapGenerator(**load_kwargs)
         gen.warmup()
         return gen

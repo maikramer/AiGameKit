@@ -1,7 +1,7 @@
 """Detecção automática de hardware → perfil de inferência Sana (Text2Icon).
 
 Soft resolution no CLI: só preenche o que o utilizador não definiu (flags
-explícitas, ``--low-vram``/``--cpu``/``--model``/``--quant-transformer``
+explícitas, ``--cpu``/``--model``/``--quant-transformer``
 ganham). Desligível com ``--no-hw-auto`` ou ``TEXT2ICON_HW_AUTO=0``.
 
 Além de offload/clamp de resolução, o planner escolhe **transformer** e
@@ -40,7 +40,7 @@ def hw_auto_enabled() -> bool:
 class Text2IconHardwareProfile:
     name: str
     device: str  # "cuda" | "cpu"
-    low_vram: bool  # True = enable_model_cpu_offload
+    cpu_offload: bool  # True = enable_model_cpu_offload
     max_width: int | None  # None = sem clamp; int = clamp se utilizador não explicitou
     max_height: int | None
     gpu_ids: list[int] | None  # >1 GPU: split multi-GPU; senão None
@@ -50,7 +50,7 @@ class Text2IconHardwareProfile:
 
     def summary(self) -> str:
         parts = [self.name]
-        if self.low_vram:
+        if self.cpu_offload:
             parts.append("cpu-offload")
         if self.max_width is not None:
             parts.append(f"clamp={self.max_width}x{self.max_height}")
@@ -67,7 +67,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
         return Text2IconHardwareProfile(
             name="cpu",
             device="cpu",
-            low_vram=True,
+            cpu_offload=True,
             max_width=512,
             max_height=512,
             gpu_ids=None,
@@ -88,7 +88,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
         return Text2IconHardwareProfile(
             name=name,
             device="cuda",
-            low_vram=True,
+            cpu_offload=True,
             max_width=512,
             max_height=512,
             gpu_ids=gpu_ids,
@@ -102,7 +102,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
         return Text2IconHardwareProfile(
             name=name,
             device="cuda",
-            low_vram=False,
+            cpu_offload=False,
             max_width=None,
             max_height=None,
             gpu_ids=gpu_ids,
@@ -116,7 +116,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
         return Text2IconHardwareProfile(
             name=name,
             device="cuda",
-            low_vram=False,
+            cpu_offload=False,
             max_width=None,
             max_height=None,
             gpu_ids=gpu_ids,
@@ -130,7 +130,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
         return Text2IconHardwareProfile(
             name=name,
             device="cuda",
-            low_vram=True,
+            cpu_offload=True,
             max_width=None,
             max_height=None,
             gpu_ids=gpu_ids,
@@ -143,7 +143,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
     return Text2IconHardwareProfile(
         name=name,
         device="cuda",
-        low_vram=True,
+        cpu_offload=True,
         max_width=512,
         max_height=512,
         gpu_ids=gpu_ids,

@@ -232,9 +232,13 @@ class BatchDashboard(App):
             self._run_batch_worker()
 
     def _tick_ums(self) -> None:
-        """Actualiza depth/eta da fila UMS no StatsBar (best-effort)."""
+        """Actualiza depth/eta/HOLDING da fila UMS no StatsBar (best-effort)."""
         try:
-            from gamedev_shared.model_server import fetch_ums_queue_snapshot, is_ums_running
+            from gamedev_shared.model_server import (
+                fetch_ums_queue_snapshot,
+                format_ums_holding_summary,
+                is_ums_running,
+            )
 
             if not is_ums_running():
                 stats = self.query_one("#stats-row", StatsBar)
@@ -247,8 +251,11 @@ class BatchDashboard(App):
             inflight = snap.get("inflight", 0)
             eta = snap.get("eta_sec")
             eta_s = f" eta={eta:.0f}s" if isinstance(eta, (int, float)) else ""
+            hold = format_ums_holding_summary(snap)
+            # Compact: primeiro backend running + q/run/eta
+            hold_short = hold.split("|")[0].strip() if hold else ""
             stats = self.query_one("#stats-row", StatsBar)
-            stats.ums_line = f"UMS q={depth} run={inflight}{eta_s}"
+            stats.ums_line = f"UMS q={depth} run={inflight}{eta_s} {hold_short}".strip()
         except Exception:
             pass
 

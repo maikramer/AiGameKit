@@ -170,18 +170,22 @@ class TestGroupOffloadPeak:
     def test_resolve_peak_params_text3d_sdnq(self) -> None:
         registry = Registry()
         mgr = BackendManager(registry, query_free_mib=lambda: 99999, clear_vram=lambda: None)
-        quant, mem, go = mgr.resolve_peak_params("text3d", {"sdnq_preset": "sdnq-int4"})
+        quant, mem, go, streams = mgr.resolve_peak_params("text3d", {"sdnq_preset": "sdnq-int4"})
         assert quant == "sdnq-int4"
         assert mem is True
         assert go is True
+        # text3d carrega pesos completos e offloada depois → admit full-weights.
+        assert streams is False
 
     def test_resolve_peak_params_text2d_sdnq(self) -> None:
         registry = Registry()
         mgr = BackendManager(registry, query_free_mib=lambda: 99999, clear_vram=lambda: None)
-        quant, mem, go = mgr.resolve_peak_params("text2d", {"quant_preset": "sdnq-uint8"})
+        quant, mem, go, streams = mgr.resolve_peak_params("text2d", {"quant_preset": "sdnq-uint8"})
         assert quant == "sdnq-uint8"
         assert mem is True
         assert go is False
+        # text2d mem ⟺ diffusers model_cpu offload — o LOAD já é streaming.
+        assert streams is True
 
     def test_group_offload_peak_below_full_weights(self) -> None:
         registry = Registry()
@@ -196,7 +200,7 @@ class TestGroupOffloadPeak:
             "text3d", quant_mode="sdnq-int4", memory_efficient=False, group_offload=False
         )
         assert w_go < w_full  # só largest onloaded
-        assert a_go >= 2048  # activação completa (não ×0.65)
+        assert a_go >= 2048  # activação completa (não x0.65)
 
     def test_ensure_loaded_admits_full_weights_not_largest(self) -> None:
         """Load frio: admit usa pesos completos mesmo com allow_group_offload."""
@@ -231,3 +235,52 @@ class TestSuggestHelpers:
         out = suggest_paint_budget(requested_views=8, requested_resolution=512, free_bytes=1 * 1024**3)
         assert out["max_views"] < 8
         assert out["cfg_batch_chunking"] is True
+
+
+class TestStreamsOnLoadPeak:
+    """text2d com offload: peak de warmup = largest-module + act (não pesos completos)."""
+
+    def test_text2d_offload_peak_fits_6gb(self) -> None:
+        registry = Registry()
+        mgr = BackendManager(registry, query_free_mib=lambda: 4281, clear_vram=lambda: None)
+        quant, mem, _go, streams = mgr.resolve_peak_params(
+            "text2d", {"memory_efficient": True, "quant_preset": "sdnq-int4"}
+        )
+        assert streams is True
+        peak = mgr.peak_vram_mib("text2d", quant_mode=quant, memory_efficient=mem, group_offload=streams)
+        full = mgr.peak_vram_mib("text2d", quant_mode=quant, memory_efficient=mem, group_offload=False)
+        assert peak < full
+        # largest(int4) + act 1.5 GiB + safety ≪ full weights 8.5 GiB — cabe na 6 GB.
+        assert peak < 5000
+
+    def test_footprint_key_override_4b_vs_9b(self) -> None:
+        registry = Registry()
+        mgr = BackendManager(registry, query_free_mib=lambda: 99999, clear_vram=lambda: None)
+        peak_4b = mgr.peak_vram_mib(
+            "text2d",
+            quant_mode="sdnq-int4",
+            memory_efficient=True,
+            group_offload=True,
+            footprint_key="flux-klein-4b",
+        )
+        peak_9b = mgr.peak_vram_mib(
+            "text2d",
+            quant_mode="sdnq-int4",
+            memory_efficient=True,
+            group_offload=True,
+            footprint_key="flux-klein-9b",
+        )
+        assert peak_4b < peak_9b
+
+    def test_ensure_vram_target_uses_streams(self) -> None:
+        """ensure_vram(backend=text2d) com offload: alvo ≈ streamed, não full-weights."""
+        registry = Registry()
+        mgr = BackendManager(registry, query_free_mib=lambda: 99999, clear_vram=lambda: None)
+        ok = mgr.ensure_vram(100, backend="text2d", quant_mode="sdnq-int4", memory_efficient=True)
+        assert ok is True
+
+    def test_streams_explicit_override(self) -> None:
+        registry = Registry()
+        mgr = BackendManager(registry, query_free_mib=lambda: 99999, clear_vram=lambda: None)
+        _q, _m, _g, streams = mgr.resolve_peak_params("text3d", {"sdnq_preset": "sdnq-int4", "streams_on_load": True})
+        assert streams is True

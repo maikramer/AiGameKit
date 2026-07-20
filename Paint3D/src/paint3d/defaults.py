@@ -5,7 +5,7 @@ Constantes de configuração para Hunyuan3D-Paint 2.1 e upscale IA.
 
 Defaults alinhados com o clone demo (6 views @ 640px, bake_exp=6).
 Para GPUs com >=20 GB (A100): usar ``--max-views 8 --view-resolution 768``.
-Para GPUs com menos VRAM, ativar o modo memory-efficient no CLI ou ``memory_efficient=True`` na API.
+Para GPUs com menos VRAM: **hw-auto** (defeito) ou ``--no-hw-auto`` + flags explícitos.
 
 Configuracao por defeito (6 views @ 640px, single GPU 12GB):
 - UNet: FP16 puro (sem quantizacao SDNQ/qint8)

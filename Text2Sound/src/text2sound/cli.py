@@ -28,7 +28,14 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
+from gamedev_shared.cli_helpers import (
+    add_ums_options,
+    needed_mib_for_backend,
+    prepare_gpu_exclusive,
+    try_ums_delegation,
+    with_ums_load_opts,
+    with_ums_peak_opts,
+)
 from gamedev_shared.hf import get_hf_token, hf_home_display_rich
 from gamedev_shared.profiler.session import ProfilerSession, profile_span
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_TEXT2SOUND, emit_progress, emit_result
@@ -779,20 +786,25 @@ def generate_cmd(
 
     if output is not None and try_ums_delegation(
         "text2sound",
-        with_ums_load_opts(
-            {
-                "prompt": prompt,
-                "output": str(Path(output).resolve()),
-                "duration": duration,
-                "steps": steps,
-                "cfg_scale": cfg_scale,
-                "seed": effective_seed,
-                "sigma_min": sigma_min,
-                "sigma_max": sigma_max,
-                "sampler_type": sampler,
-                "negative_prompt": effective_negative,
-            },
-            gpu_ids=gpu_ids,
+        with_ums_peak_opts(
+            with_ums_load_opts(
+                {
+                    "prompt": prompt,
+                    "output": str(Path(output).resolve()),
+                    "duration": duration,
+                    "steps": steps,
+                    "cfg_scale": cfg_scale,
+                    "seed": effective_seed,
+                    "sigma_min": sigma_min,
+                    "sigma_max": sigma_max,
+                    "sampler_type": sampler,
+                    "negative_prompt": effective_negative,
+                    "half_precision": half_precision,
+                },
+                gpu_ids=gpu_ids,
+            ),
+            backend="text2sound",
+            memory_efficient=bool(half_precision),
         ),
         t_start=start,
         noun="Áudio",
@@ -802,6 +814,15 @@ def generate_cmd(
         stream=ums_stream,
     ):
         return
+
+    prepare_gpu_exclusive(
+        needed_mib=needed_mib_for_backend("text2sound", memory_efficient=bool(half_precision)),
+        allow_shared=True,
+        kill_others=False,
+        backend="text2sound",
+        quant_mode="none",
+        console=console,
+    )
 
     with ProfilerSession(
         "text2sound",
@@ -1038,6 +1059,7 @@ def generate_cmd(
     show_default=True,
     help="channels_last NHWC no VAE/pretransform.",
 )
+@add_ums_options
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -1062,17 +1084,25 @@ def batch_cmd(
     torch_compile: bool,
     torch_compile_mode: str,
     channels_last: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Gera áudios em batch a partir de um ficheiro de prompts (um por linha)."""
     verbose = bool(ctx.obj.get("VERBOSE"))
 
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
 
+    # Soft hw_auto: half_precision quando não explícito.
+    hw_profile = None
     try:
-        from gamedev_shared.gpu import warn_if_vram_occupied
+        from .hardware import detect_hardware_profile, hw_auto_enabled
 
-        warn_if_vram_occupied()
-    except ImportError:
+        if hw_auto_enabled():
+            hw_profile = detect_hardware_profile()
+            if half_precision is None and hw_profile.device == "cuda":
+                half_precision = hw_profile.half
+    except Exception:
         pass
 
     prompts = [
@@ -1084,6 +1114,7 @@ def batch_cmd(
     if not prompts:
         raise click.ClickException("Ficheiro sem prompts válidos.")
 
+    preset_data: dict[str, Any] | None = None
     if preset and preset != "None":
         try:
             preset_data = get_preset(preset)
@@ -1121,102 +1152,181 @@ def batch_cmd(
 
     console.print(f"[bold]Batch:[/bold] {len(prompts)} prompts de [cyan]{file}[/cyan]")
     console.print(f"[dim]Modelo: {resolved_model_id} · perfil: {profile}[/dim]")
+    if hw_profile is not None:
+        console.print(f"[dim]Hardware (auto): {hw_profile.summary()}[/dim]")
 
     out = output_dir or DEFAULT_AUDIO_DIR
     out.mkdir(parents=True, exist_ok=True)
 
-    gen = AudioGenerator.get_instance(
-        model_id=resolved_model_id,
-        half_precision=half_precision,
-        gpu_ids=gpu_ids,
-        torch_compile=torch_compile,
-        torch_compile_mode=torch_compile_mode,
-        channels_last=channels_last,
-    )
-    emit_progress("batch", TOOL_TEXT2SOUND, phase="loading_model", percent=0)
-    with _quiet_third_party_tqdm(verbose):
-        gen.load()
-
+    err_console = Console(stderr=True)
+    pending: list[dict[str, Any]] = []
     ok_count = 0
-    for idx, prompt_text in enumerate(prompts):
-        full_prompt = f"{prompt_text}, {preset_data['prompt']}" if preset and preset != "None" else prompt_text
+    total = len(prompts)
+    half_eff = bool(half_precision)
 
+    for idx, prompt_text in enumerate(prompts):
+        full_prompt = f"{prompt_text}, {preset_data['prompt']}" if preset_data is not None else prompt_text
         line_seed = int(seed) + idx if seed is not None else resolve_effective_seed(None)
-        item_id = generate_output_path(prompt_text, out, fmt).stem
+        out_path = generate_output_path(prompt_text, out, fmt)
+        item_id = out_path.stem
         item_start = time.time()
 
-        try:
-            emit_progress(item_id, TOOL_TEXT2SOUND, phase="diffusion", percent=0)
-            with _quiet_third_party_tqdm(verbose):
-                result = gen.generate(
-                    prompt=full_prompt,
-                    duration=duration,
-                    steps=steps,
-                    cfg_scale=cfg_scale,
-                    seed=line_seed,
-                    sigma_min=sigma_min,
-                    sigma_max=sigma_max,
-                    sampler_type=sampler,
-                )
-
-            emit_progress(item_id, TOOL_TEXT2SOUND, phase="diffusion", percent=100)
-
-            out_path = generate_output_path(prompt_text, out, fmt)
-            metadata = {
-                "prompt": full_prompt,
-                "profile": profile,
-                "model_id": resolved_model_id,
-                "duration": duration,
-                "steps": steps,
-                "cfg_scale": cfg_scale,
-                "seed": seed,
-                "seed_effective": line_seed,
-                "sampler": sampler,
-                "sigma_min": sigma_min,
-                "sigma_max": sigma_max,
-                "trim": trim,
-                "half_precision": half_precision,
-                "half_precision_effective": gen.half_precision,
-                "format": fmt,
-                "sample_rate": result.sample_rate,
-                "device": result.device,
-                "batch_index": idx,
-                "text2sound_version": _CLI_VERSION,
-            }
-            if preset and preset != "None":
-                metadata["preset"] = preset
-
-            emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=0)
-            saved = save_audio(
-                audio=result.audio,
-                sample_rate=result.sample_rate,
-                output_path=out_path,
-                fmt=fmt,
-                trim=trim,
-                metadata=metadata,
-                crop_seconds=duration if crop else None,
-                fade_out_seconds=fade_out,
-            )
-            emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=100)
-
+        if try_ums_delegation(
+            "text2sound",
+            with_ums_peak_opts(
+                with_ums_load_opts(
+                    {
+                        "prompt": full_prompt,
+                        "output": str(out_path.resolve()),
+                        "duration": duration,
+                        "steps": steps,
+                        "cfg_scale": cfg_scale,
+                        "seed": line_seed,
+                        "sigma_min": sigma_min,
+                        "sigma_max": sigma_max,
+                        "sampler_type": sampler,
+                        "half_precision": half_precision,
+                    },
+                    gpu_ids=gpu_ids,
+                ),
+                backend="text2sound",
+                memory_efficient=half_eff,
+            ),
+            t_start=item_start,
+            noun="Áudio",
+            console=err_console,
+            enabled=not no_ums,
+            priority=ums_priority or "batch",
+            stream=ums_stream,
+        ):
             ok_count += 1
             elapsed = time.time() - item_start
             emit_result(
                 item_id,
                 TOOL_TEXT2SOUND,
                 STATUS_OK,
-                output=str(saved.resolve()),
+                output=str(out_path.resolve()),
                 seconds=elapsed,
             )
-            console.print(f"  [green]\u2713[/green] {idx + 1}/{len(prompts)}: [cyan]{saved.name}[/cyan]")
-        except Exception as e:
-            elapsed = time.time() - item_start
-            emit_result(item_id, TOOL_TEXT2SOUND, STATUS_ERROR, error=str(e), seconds=elapsed)
-            console.print(f"  [red]\u2717[/red] {idx + 1}/{len(prompts)}: {e}")
+            console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{out_path.name}[/cyan] [dim](UMS)[/dim]")
+            continue
+
+        pending.append(
+            {
+                "idx": idx,
+                "prompt_text": prompt_text,
+                "full_prompt": full_prompt,
+                "line_seed": line_seed,
+                "out_path": out_path,
+                "item_id": item_id,
+            }
+        )
+
+    if pending:
+        try:
+            from gamedev_shared.gpu import warn_if_vram_occupied
+
+            warn_if_vram_occupied()
+        except ImportError:
+            pass
+        prepare_gpu_exclusive(
+            needed_mib=needed_mib_for_backend("text2sound", memory_efficient=half_eff),
+            allow_shared=True,
+            kill_others=False,
+            backend="text2sound",
+            quant_mode="none",
+            console=err_console,
+        )
+        gen = AudioGenerator.get_instance(
+            model_id=resolved_model_id,
+            half_precision=half_precision,
+            gpu_ids=gpu_ids,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            channels_last=channels_last,
+        )
+        emit_progress("batch", TOOL_TEXT2SOUND, phase="loading_model", percent=0)
+        with _quiet_third_party_tqdm(verbose):
+            gen.load()
+
+        for item in pending:
+            idx = item["idx"]
+            full_prompt = item["full_prompt"]
+            line_seed = item["line_seed"]
+            out_path = item["out_path"]
+            item_id = item["item_id"]
+            item_start = time.time()
+            try:
+                emit_progress(item_id, TOOL_TEXT2SOUND, phase="diffusion", percent=0)
+                with _quiet_third_party_tqdm(verbose):
+                    result = gen.generate(
+                        prompt=full_prompt,
+                        duration=duration,
+                        steps=steps,
+                        cfg_scale=cfg_scale,
+                        seed=line_seed,
+                        sigma_min=sigma_min,
+                        sigma_max=sigma_max,
+                        sampler_type=sampler,
+                    )
+
+                emit_progress(item_id, TOOL_TEXT2SOUND, phase="diffusion", percent=100)
+
+                metadata = {
+                    "prompt": full_prompt,
+                    "profile": profile,
+                    "model_id": resolved_model_id,
+                    "duration": duration,
+                    "steps": steps,
+                    "cfg_scale": cfg_scale,
+                    "seed": seed,
+                    "seed_effective": line_seed,
+                    "sampler": sampler,
+                    "sigma_min": sigma_min,
+                    "sigma_max": sigma_max,
+                    "trim": trim,
+                    "half_precision": half_precision,
+                    "half_precision_effective": gen.half_precision,
+                    "format": fmt,
+                    "sample_rate": result.sample_rate,
+                    "device": result.device,
+                    "batch_index": idx,
+                    "text2sound_version": _CLI_VERSION,
+                }
+                if preset and preset != "None":
+                    metadata["preset"] = preset
+
+                emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=0)
+                saved = save_audio(
+                    audio=result.audio,
+                    sample_rate=result.sample_rate,
+                    output_path=out_path,
+                    fmt=fmt,
+                    trim=trim,
+                    metadata=metadata,
+                    crop_seconds=duration if crop else None,
+                    fade_out_seconds=fade_out,
+                )
+                emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=100)
+
+                ok_count += 1
+                elapsed = time.time() - item_start
+                emit_result(
+                    item_id,
+                    TOOL_TEXT2SOUND,
+                    STATUS_OK,
+                    output=str(saved.resolve()),
+                    seconds=elapsed,
+                )
+                console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{saved.name}[/cyan]")
+            except Exception as e:
+                elapsed = time.time() - item_start
+                emit_result(item_id, TOOL_TEXT2SOUND, STATUS_ERROR, error=str(e), seconds=elapsed)
+                console.print(f"  [red]\u2717[/red] {idx + 1}/{total}: {e}")
 
     console.print(
         Panel(
-            f"[bold]{ok_count}/{len(prompts)}[/bold] áudios gerados em [cyan]{out.resolve()}[/cyan]",
+            f"[bold]{ok_count}/{total}[/bold] áudios gerados em [cyan]{out.resolve()}[/cyan]",
             title="[bold green]Batch concluído",
             border_style="green",
         )

@@ -203,7 +203,7 @@ class TestModelServer:
 
 
 # ---------------------------------------------------------------------------
-# ensure_vram_available (com nvidia-smi mockado)
+# ensure_vram_available (com query_gpu_free_mib mockado)
 # ---------------------------------------------------------------------------
 
 
@@ -215,6 +215,8 @@ class TestEnsureVram:
     def test_requests_release_when_low_vram(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         # Path legacy é opt-in (UMS é a autoridade por defeito).
         monkeypatch.setenv("GAMEDEV_ALLOW_LEGACY_SERVER", "1")
+        # Hermético: não falar com um UMS real a correr nesta máquina.
+        monkeypatch.setattr("gamedev_shared.model_server.is_ums_running", lambda: False)
         # Simular VRAM baixa
         call_count = {"release": 0}
 
@@ -238,5 +240,7 @@ class TestEnsureVram:
 
     def test_returns_true_when_cannot_check(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("gamedev_shared.gpu.query_gpu_free_mib", lambda: None)
+        # Hermético: sem UMS real nesta máquina (senão o ensure-vram ia ao daemon).
+        monkeypatch.setattr("gamedev_shared.model_server.is_ums_running", lambda: False)
         monkeypatch.setattr("gamedev_shared.model_server.discover_active_sockets", lambda: [])
         assert ensure_vram_available(5000) is True

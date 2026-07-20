@@ -15,7 +15,15 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
+from gamedev_shared.cli_helpers import (
+    add_ums_options,
+    legacy_server_allowed,
+    needed_mib_for_backend,
+    prepare_gpu_exclusive,
+    try_ums_delegation,
+    with_ums_load_opts,
+    with_ums_peak_opts,
+)
 from gamedev_shared.gpu import get_system_info
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
@@ -269,20 +277,24 @@ def generate_cmd(
         and output is not None
         and try_ums_delegation(
             "texture2d",
-            with_ums_load_opts(
-                {
-                    "prompt": prompt,
-                    "output": str(Path(output).resolve()),
-                    "width": width,
-                    "height": height,
-                    "steps": steps,
-                    "guidance": guidance_scale,
-                    "seed": seed,
-                    "negative_prompt": negative_prompt,
-                    "preset": preset,
-                    "ground": ground,
-                },
-                gpu_ids=gpu_ids,
+            with_ums_peak_opts(
+                with_ums_load_opts(
+                    {
+                        "prompt": prompt,
+                        "output": str(Path(output).resolve()),
+                        "width": width,
+                        "height": height,
+                        "steps": steps,
+                        "guidance": guidance_scale,
+                        "seed": seed,
+                        "negative_prompt": negative_prompt,
+                        "preset": preset,
+                        "ground": ground,
+                        "model_id": resolved_model,
+                    },
+                    gpu_ids=gpu_ids,
+                ),
+                backend="texture2d",
             ),
             t_start=t_start,
             noun="Textura",
@@ -294,12 +306,12 @@ def generate_cmd(
     ):
         return
 
-    # Fallback: per-tool legacy server (deprecated).
-    if not cpu and output is not None:
+    # Fallback: per-tool legacy server — só com GAMEDEV_ALLOW_LEGACY_SERVER=1.
+    if not cpu and output is not None and legacy_server_allowed():
         from . import client
 
         if client.is_available():
-            console.print("[dim]A delegar ao model server ativo...[/dim]")
+            console.print("[dim]A delegar ao model server legacy (opt-in)...[/dim]")
             result = client.send_generate_request(
                 prompt=prompt,
                 output=output,
@@ -328,6 +340,15 @@ def generate_cmd(
             elif result and result.get("status") == "error":
                 console.print(f"[yellow]Server erro: {result.get('error', '?')} — fallback in-process[/yellow]")
             # Se None (server não respondeu), continua para fallback in-process
+
+    if not cpu:
+        prepare_gpu_exclusive(
+            needed_mib=needed_mib_for_backend("texture2d"),
+            allow_shared=True,
+            kill_others=False,
+            backend="texture2d",
+            console=console,
+        )
 
     try:
         gen: Any = TextureGenerator(
@@ -480,6 +501,7 @@ def presets_cmd() -> None:
     show_default=True,
     help="channels_last NHWC no VAE/UNet.",
 )
+@add_ums_options
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -498,6 +520,9 @@ def batch_cmd(
     torch_compile: bool,
     torch_compile_mode: str,
     channels_last: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Gera texturas em batch a partir de um ficheiro de prompts (um por linha)."""
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
@@ -532,6 +557,7 @@ def batch_cmd(
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
     if gpu_ids is None and hwp is not None and hwp.gpu_ids:
         gpu_ids = hwp.gpu_ids
+    resolved_model = model_id or default_model_id()
 
     prompts = [
         line.strip()
@@ -547,48 +573,91 @@ def batch_cmd(
     out = output_dir or DEFAULT_TEXTURE_DIR
     out.mkdir(parents=True, exist_ok=True)
 
-    gen: Any = TextureGenerator(
-        verbose=bool(ctx.obj.get("VERBOSE")),
-        model_id=model_id,
-        gpu_ids=gpu_ids,
-        torch_compile=torch_compile,
-        torch_compile_mode=torch_compile_mode,
-        channels_last=channels_last,
-    )
-    base_params: dict[str, Any] = {
-        "guidance_scale": guidance_scale,
-        "num_inference_steps": steps,
-        "width": width,
-        "height": height,
-        "ground": ground,
-    }
-    if preset and preset != "None":
-        base_params["preset"] = preset
-
     from .image_processor import save_image
 
+    err_console = Console(stderr=True)
+    pending: list[tuple[int, str, Path]] = []
     ok_count = 0
-    for image, metadata, idx in gen.generate_batch(prompts, **base_params):
-        if image is None:
-            console.print(f"  [red]\u2717[/red] {idx + 1}/{len(prompts)}: {metadata.get('error', '?')}")
-            continue
+    total = len(prompts)
 
+    for idx, prompt_text in enumerate(prompts):
         ts = int(time.time())
-        safe = safe_filename(prompts[idx])
-        fname = f"{safe}_{ts}.png"
-        saved = save_image(
-            image,
-            prompt=metadata.get("prompt_final", prompts[idx]),
-            params=metadata,
-            output_dir=out,
-            filename=fname,
+        safe = safe_filename(prompt_text)
+        out_path = (out / f"{safe}_{ts}.png").resolve()
+        t0 = time.time()
+        if try_ums_delegation(
+            "texture2d",
+            with_ums_peak_opts(
+                with_ums_load_opts(
+                    {
+                        "prompt": prompt_text,
+                        "output": str(out_path),
+                        "width": width,
+                        "height": height,
+                        "steps": steps,
+                        "guidance": guidance_scale,
+                        "preset": preset,
+                        "ground": ground,
+                        "model_id": resolved_model,
+                    },
+                    gpu_ids=gpu_ids,
+                ),
+                backend="texture2d",
+            ),
+            t_start=t0,
+            noun="Textura",
+            console=err_console,
+            enabled=not no_ums,
+            priority=ums_priority or "batch",
+            stream=ums_stream,
+        ):
+            ok_count += 1
+            console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{out_path.name}[/cyan] [dim](UMS)[/dim]")
+            continue
+        pending.append((idx, prompt_text, out_path))
+
+    if pending:
+        prepare_gpu_exclusive(
+            needed_mib=needed_mib_for_backend("texture2d"),
+            allow_shared=True,
+            kill_others=False,
+            backend="texture2d",
+            console=err_console,
         )
-        ok_count += 1
-        console.print(f"  [green]\u2713[/green] {idx + 1}/{len(prompts)}: [cyan]{saved.name}[/cyan]")
+        gen: Any = TextureGenerator(
+            verbose=bool(ctx.obj.get("VERBOSE")),
+            model_id=model_id,
+            gpu_ids=gpu_ids,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            channels_last=channels_last,
+        )
+        for idx, prompt_text, out_path in pending:
+            try:
+                image, metadata = gen.generate(
+                    prompt=prompt_text,
+                    guidance_scale=guidance_scale,
+                    num_inference_steps=steps,
+                    width=width,
+                    height=height,
+                    preset=preset if preset and preset != "None" else None,
+                    ground=ground,
+                )
+                saved = save_image(
+                    image,
+                    prompt=metadata.get("prompt_final", prompt_text),
+                    params=metadata,
+                    output_dir=out_path.parent,
+                    filename=out_path.name,
+                )
+                ok_count += 1
+                console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{saved.name}[/cyan]")
+            except Exception as exc:
+                console.print(f"  [red]\u2717[/red] {idx + 1}/{total}: {exc}")
 
     console.print(
         Panel(
-            f"[bold]{ok_count}/{len(prompts)}[/bold] texturas geradas em [cyan]{out.resolve()}[/cyan]",
+            f"[bold]{ok_count}/{total}[/bold] texturas geradas em [cyan]{out.resolve()}[/cyan]",
             title="[bold green]Batch concluído",
             border_style="green",
         )

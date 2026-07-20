@@ -23,9 +23,11 @@ class Adapter(BackendAdapter):
     def load(self, **kwargs: Any) -> Any:
         from part3d.pipeline import Part3DPipeline
 
-        mem_eff = kwargs.pop("memory_efficient", None)
-        if mem_eff is None:
-            mem_eff = self.should_use_low_vram_mode(threshold_mib=8000)
+        # Peak: só request (CLI hw_auto / peak opts). Sem fallback GPU-size local.
+        mem_eff = bool(kwargs.pop("memory_efficient", False))
+        sdnq = kwargs.get("sdnq_preset")
+        if sdnq is None and mem_eff:
+            sdnq = "sdnq-uint8"
 
         pipe = Part3DPipeline(
             verbose=kwargs.get("verbose", False),
@@ -33,7 +35,7 @@ class Adapter(BackendAdapter):
             memory_efficient=mem_eff,
             quantization_mode=kwargs.get("quantization_mode", "auto"),
             quantize_dit=kwargs.get("quantize_dit", mem_eff),
-            sdnq_preset=kwargs.get("sdnq_preset", "sdnq-uint8" if mem_eff else None),
+            sdnq_preset=sdnq,
             gpu_ids=kwargs.get("gpu_ids"),
             volume_decoder=kwargs.get("volume_decoder", "auto"),
             mc_algo=kwargs.get("mc_algo", "mc"),
