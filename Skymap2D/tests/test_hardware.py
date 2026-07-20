@@ -142,6 +142,7 @@ def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPa
     )
     monkeypatch.setattr("skymap2d.hardware.detect_hardware_profile", lambda: fake_profile)
     monkeypatch.setattr("gamedev_shared.gpu.warn_if_vram_occupied", lambda: None)
+    monkeypatch.setattr("skymap2d.cli.prepare_gpu_exclusive", lambda *a, **kw: None)
 
     mock_gen = MagicMock()
     mock_gen.generate.return_value = (MagicMock(), {"seed": 42, "prompt_final": "test"})
@@ -149,7 +150,10 @@ def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("skymap2d.image_processor.save_image", lambda *a, **kw: Path("/tmp/fake.png"))
 
     runner = CliRunner()
-    r = runner.invoke(cli, ["generate", "test", "-W", "2048", "--hw-auto", "-o", "/tmp/out.png"])
+    r = runner.invoke(
+        cli,
+        ["generate", "test", "-W", "2048", "--hw-auto", "--no-ums", "-o", "/tmp/out.png"],
+    )
     assert r.exit_code == 0, r.output
     _, kwargs = mock_gen.generate.call_args
     assert kwargs.get("width") == 2048

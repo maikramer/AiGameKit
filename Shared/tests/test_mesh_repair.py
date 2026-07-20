@@ -633,14 +633,13 @@ class TestRepairWatertightRoundtrip:
 
 class TestClampBaseFlareAndTaubin:
     def test_topology_clean_no_destructive_steps(self) -> None:
-        """Sem shells/force_base/flare/Taubin (destruíam edifícios casca-plástico)."""
+        """Sem shells/flare/Taubin (destruíam edifícios casca-plástico)."""
         from gamedev_shared.mesh_repair import get_repair_profile
 
         p = get_repair_profile("topology_clean")
         assert p.fill_holes_sides == 96
         assert p.do_remove_internal_shells is False
         assert p.watertight is True
-        assert p.force_close_base is False
         assert p.do_clamp_base_flare is False
         assert p.do_taubin is False
 
@@ -706,115 +705,6 @@ class TestClampBaseFlareAndTaubin:
         assert n == 2
         clear_scene()
 
-
-class TestForceCloseBase:
-    """Laje forçada: shell oco (sem chão) vs caixa sólida."""
-
-    @staticmethod
-    def _open_bottom_box() -> tuple[np.ndarray, np.ndarray]:
-        """Caixa unitária Y-up sem face inferior (oco por baixo)."""
-        verts = np.array(
-            [
-                [-0.5, 0.0, -0.5],
-                [0.5, 0.0, -0.5],
-                [0.5, 0.0, 0.5],
-                [-0.5, 0.0, 0.5],
-                [-0.5, 1.0, -0.5],
-                [0.5, 1.0, -0.5],
-                [0.5, 1.0, 0.5],
-                [-0.5, 1.0, 0.5],
-            ],
-            dtype=np.float64,
-        )
-        # top + 4 walls (no bottom 0-1-2-3)
-        faces = np.array(
-            [
-                [4, 5, 6],
-                [4, 6, 7],
-                [0, 1, 5],
-                [0, 5, 4],
-                [1, 2, 6],
-                [1, 6, 5],
-                [2, 3, 7],
-                [2, 7, 6],
-                [3, 0, 4],
-                [3, 4, 7],
-            ],
-            dtype=np.int64,
-        )
-        return verts, faces
-
-    def test_force_close_base_seals_open_bottom(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import base_openness_stats, force_close_base
-
-        verts, faces = self._open_bottom_box()
-        clear_scene()
-        obj = create_mesh_from_arrays(verts, faces, name="open_box")
-        h_before = float(obj.dimensions.y)
-        before = base_openness_stats(obj, up_axis=1, grid=24)
-        assert before["recess_ratio"] >= 0.50
-        stats = force_close_base(obj, up_axis=1, grid=24, recess_trigger=0.50, min_cells=4, min_faces=1)
-        assert stats["base_forced_faces"] > 0
-        assert stats.get("base_rollback", 0) == 0
-        after = base_openness_stats(obj, up_axis=1, grid=24)
-        assert after["recess_ratio"] < before["recess_ratio"]
-        assert float(obj.dimensions.y) <= h_before * 1.02
-        clear_scene()
-
-    def test_force_close_base_skips_below_trigger(self, _bpy) -> None:
-        """Recess abaixo do limiar → no-op (torre sólida ~0.01 no eixo mundo)."""
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import force_close_base
-
-        verts, faces = self._open_bottom_box()
-        clear_scene()
-        obj = create_mesh_from_arrays(verts, faces, name="open")
-        # recess caixa aberta ≈1.0; trigger >1 → skip
-        stats = force_close_base(obj, up_axis=1, grid=24, recess_trigger=1.01, min_cells=4, min_faces=1)
-        assert stats["base_forced_faces"] == 0
-        clear_scene()
-
-    def test_force_close_base_skips_solid_box(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import force_close_base
-
-        # Caixa completa (com fundo)
-        verts = np.array(
-            [
-                [-0.5, 0.0, -0.5],
-                [0.5, 0.0, -0.5],
-                [0.5, 0.0, 0.5],
-                [-0.5, 0.0, 0.5],
-                [-0.5, 1.0, -0.5],
-                [0.5, 1.0, -0.5],
-                [0.5, 1.0, 0.5],
-                [-0.5, 1.0, 0.5],
-            ],
-            dtype=np.float64,
-        )
-        faces = np.array(
-            [
-                [0, 1, 2],
-                [0, 2, 3],
-                [4, 5, 6],
-                [4, 6, 7],
-                [0, 1, 5],
-                [0, 5, 4],
-                [1, 2, 6],
-                [1, 6, 5],
-                [2, 3, 7],
-                [2, 7, 6],
-                [3, 0, 4],
-                [3, 4, 7],
-            ],
-            dtype=np.int64,
-        )
-        clear_scene()
-        obj = create_mesh_from_arrays(verts, faces, name="solid")
-        stats = force_close_base(obj, up_axis=1, grid=24, recess_trigger=0.25, min_faces=1)
-        assert stats["base_forced_faces"] == 0
-        clear_scene()
 
 
 class TestRemoveInternalShellFaces:

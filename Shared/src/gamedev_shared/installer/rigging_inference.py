@@ -62,13 +62,15 @@ def ensure_cuda_torch(
         logger.info(f"PyTorch já com CUDA runtime: {cuda_ver}")
         return
 
-    has_nvidia_smi = shutil.which("nvidia-smi") is not None
+    from gamedev_shared.gpu import detect_gpu_ids, nvml_available
+
+    has_nvidia = bool(detect_gpu_ids()) or nvml_available() or shutil.which("nvidia-smi") is not None
     force = os.environ.get("RIGGING3D_FORCE_CUDA", "").strip() in ("1", "true", "yes")
     index = os.environ.get("RIGGING3D_PYTORCH_CUDA_INDEX", "").strip() or _DEFAULT_CUDA_INDEX
 
-    if not has_nvidia_smi and not force:
+    if not has_nvidia and not force:
         logger.warn(
-            "PyTorch sem CUDA e nenhuma GPU NVIDIA detectada (nvidia-smi). "
+            "PyTorch sem CUDA e nenhuma GPU NVIDIA detectada (NVML/nvidia-smi). "
             "Inferência UniRig precisa de GPU + torch CUDA. "
             "Define RIGGING3D_FORCE_CUDA=1 para forçar wheels CUDA."
         )

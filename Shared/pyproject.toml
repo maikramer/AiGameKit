@@ -21,6 +21,7 @@ dependencies = [
     "sdnq>=0.2.1",
     "xformers>=0.0.28; sys_platform != 'darwin'",
     "psutil>=5.9.0",
+    "nvidia-ml-py>=12.535.0",
     "bpy>=5.2.0",
     "transformers>=5.14.0",
     "hf-xet>=1.2.0,<2",

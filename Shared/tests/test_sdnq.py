@@ -326,3 +326,21 @@ class TestPreQuantizeModel:
             meta = json.loads((output / "quantization_meta.json").read_text())
             assert meta["quantization"] == "sdnq-uint8"
             assert meta["preset"] == "sdnq-uint8"
+
+
+class TestAutoQuantizedMatmulDefault:
+    def test_default_off_without_env(self, monkeypatch) -> None:
+        from gamedev_shared.sdnq import _auto_quantized_matmul_default
+
+        monkeypatch.delenv("GAMEDEV_SDNQ_AUTO_MATMUL", raising=False)
+        assert _auto_quantized_matmul_default() is False
+
+    def test_opt_in_via_env(self, monkeypatch) -> None:
+        from gamedev_shared.sdnq import _auto_quantized_matmul_default
+
+        monkeypatch.setenv("GAMEDEV_SDNQ_AUTO_MATMUL", "1")
+        assert _auto_quantized_matmul_default() is True
+        monkeypatch.setenv("GAMEDEV_SDNQ_AUTO_MATMUL", "true")
+        assert _auto_quantized_matmul_default() is True
+        monkeypatch.setenv("GAMEDEV_SDNQ_AUTO_MATMUL", "0")
+        assert _auto_quantized_matmul_default() is False

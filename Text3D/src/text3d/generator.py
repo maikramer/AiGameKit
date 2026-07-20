@@ -6,7 +6,7 @@ SDNQ quantization é opcional (activada via ``sdnq_preset`` ou hw-auto em GPUs p
 Pre-quantização (save/load) não funciona devido a tensores SVD não-contíguos do SDNQ int4.
 
 OmniEncoder exige um controlo geométrico (bbox/pose/point/voxel). Sem controlo
-explícito usa-se bbox neutro ``[1,1,1]`` (ver ``utils.omni_controls``).
+explícito usa-se bbox humanoid 2u (ver ``DEFAULT_OMNI_BBOX``).
 """
 
 from __future__ import annotations

@@ -1,98 +1,132 @@
-"""Testes para gamedev_shared.subprocess_utils."""
+"""Testes para gamedev_shared.subprocess_utils (resolve_binary + monorepo)."""
 
-import sys
+from __future__ import annotations
+
+import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from gamedev_shared.subprocess_utils import (
-    RunResult,
-    merge_subprocess_output,
-    resolve_binary,
-    run_cmd,
+from gamedev_shared.env import (
+    TOOL_BINS,
+    apply_monorepo_tool_bins,
+    discover_monorepo_tool_bin,
+    prefer_monorepo_tools,
 )
+from gamedev_shared.subprocess_utils import resolve_binary
 
 
-class TestRunResult:
-    def test_ok_true(self):
-        r = RunResult(returncode=0, stdout="ok", stderr="")
-        assert r.ok is True
-
-    def test_ok_false(self):
-        r = RunResult(returncode=1, stdout="", stderr="erro")
-        assert r.ok is False
-
-
-class TestMergeSubprocessOutput:
-    def test_only_stderr(self):
-        r = RunResult(returncode=1, stdout="", stderr="erro")
-        assert merge_subprocess_output(r) == "erro"
-
-    def test_only_stdout(self):
-        r = RunResult(returncode=0, stdout="saída", stderr="")
-        assert merge_subprocess_output(r) == "saída"
-
-    def test_both(self):
-        r = RunResult(returncode=1, stdout="saída", stderr="erro")
-        text = merge_subprocess_output(r)
-        assert "erro" in text
-        assert "saída" in text
-
-    def test_truncate(self):
-        r = RunResult(returncode=1, stdout="a" * 200, stderr="")
-        text = merge_subprocess_output(r, max_chars=50)
-        assert len(text) <= 200
-        assert "truncado" in text
-
-    def test_empty(self):
-        r = RunResult(returncode=0, stdout="", stderr="")
-        assert merge_subprocess_output(r) == ""
+def _make_tool_venv(root: Path, folder: str, cli: str) -> Path:
+    scripts = root / folder / ".venv" / "bin"
+    scripts.mkdir(parents=True)
+    bin_path = scripts / cli
+    bin_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    bin_path.chmod(0o755)
+    (root / "Shared").mkdir(exist_ok=True)
+    (root / ".git").mkdir(exist_ok=True)
+    return bin_path
 
 
-class TestResolveBinary:
-    def test_env_override(self):
-        with patch.dict("os.environ", {"MY_BIN": "/usr/bin/python3"}):
-            assert resolve_binary("MY_BIN", "naoexiste") == "/usr/bin/python3"
+class TestPreferMonorepoTools:
+    def test_default_on(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert prefer_monorepo_tools() is True
 
-    def test_which_fallback(self):
-        result = resolve_binary("NAOEXISTE_ENV_VAR", "python3" if sys.platform != "win32" else "python")
-        assert result
+    def test_off(self):
+        with patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True):
+            assert prefer_monorepo_tools() is False
 
-    def test_not_found(self):
+
+class TestDiscoverMonorepoToolBin:
+    def test_finds_venv_cli(self, tmp_path: Path):
+        expected = _make_tool_venv(tmp_path, "Text3D", "text3d")
+        found = discover_monorepo_tool_bin("text3d", monorepo=tmp_path)
+        assert found == str(expected.resolve())
+
+    def test_missing_venv(self, tmp_path: Path):
+        (tmp_path / "Shared").mkdir()
+        (tmp_path / ".git").mkdir()
+        assert discover_monorepo_tool_bin("text3d", monorepo=tmp_path) is None
+
+    def test_unknown_tool(self, tmp_path: Path):
+        assert discover_monorepo_tool_bin("naoexiste", monorepo=tmp_path) is None
+
+
+class TestApplyMonorepoToolBins:
+    def test_fills_missing(self, tmp_path: Path):
+        expected = _make_tool_venv(tmp_path, "Text3D", "text3d")
         with (
-            patch.dict("os.environ", {}, clear=False),
-            pytest.raises(FileNotFoundError, match="Comando não encontrado"),
+            patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "1"}, clear=True),
+            patch(
+                "gamedev_shared.monorepo.try_find_monorepo_root",
+                return_value=tmp_path,
+            ),
         ):
-            resolve_binary("NADA_ENV", "comando_inexistente_xyz_123")
+            env: dict[str, str] = {}
+            apply_monorepo_tool_bins(env)
+            assert env[TOOL_BINS["text3d"]] == str(expected.resolve())
+
+    def test_does_not_override(self, tmp_path: Path):
+        _make_tool_venv(tmp_path, "Text3D", "text3d")
+        with (
+            patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "1"}, clear=True),
+            patch(
+                "gamedev_shared.monorepo.try_find_monorepo_root",
+                return_value=tmp_path,
+            ),
+        ):
+            env = {TOOL_BINS["text3d"]: "/custom/text3d"}
+            apply_monorepo_tool_bins(env)
+            assert env[TOOL_BINS["text3d"]] == "/custom/text3d"
+
+    def test_disabled(self, tmp_path: Path):
+        _make_tool_venv(tmp_path, "Text3D", "text3d")
+        with patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True):
+            env: dict[str, str] = {}
+            apply_monorepo_tool_bins(env)
+            assert TOOL_BINS["text3d"] not in env
 
 
-class TestRunCmd:
-    def test_echo(self):
-        if sys.platform == "win32":
-            r = run_cmd(["python", "-c", "print('hello')"])
-        else:
-            r = run_cmd(["python3", "-c", "print('hello')"])
-        assert r.ok
-        assert "hello" in r.stdout
+class TestResolveBinaryMonorepo:
+    def test_env_wins(self, tmp_path: Path):
+        _make_tool_venv(tmp_path, "Text3D", "text3d")
+        with (
+            patch.dict(
+                os.environ,
+                {"TEXT3D_BIN": "/env/text3d", "GAMEDEV_PREFER_MONOREPO": "1"},
+                clear=True,
+            ),
+            patch(
+                "gamedev_shared.monorepo.try_find_monorepo_root",
+                return_value=tmp_path,
+            ),
+        ):
+            assert resolve_binary("TEXT3D_BIN", "text3d") == "/env/text3d"
 
-    def test_failure(self):
-        if sys.platform == "win32":
-            r = run_cmd(["python", "-c", "raise SystemExit(42)"])
-        else:
-            r = run_cmd(["python3", "-c", "raise SystemExit(42)"])
-        assert not r.ok
-        assert r.returncode == 42
+    def test_prefers_monorepo_over_path(self, tmp_path: Path):
+        expected = _make_tool_venv(tmp_path, "Text3D", "text3d")
+        with (
+            patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "1"}, clear=True),
+            patch(
+                "gamedev_shared.monorepo.try_find_monorepo_root",
+                return_value=tmp_path,
+            ),
+            patch("gamedev_shared.subprocess_utils.shutil.which", return_value="/usr/bin/text3d"),
+        ):
+            assert resolve_binary("TEXT3D_BIN", "text3d") == str(expected.resolve())
 
-    def test_extra_env(self):
-        if sys.platform == "win32":
-            r = run_cmd(
-                ["python", "-c", "import os; print(os.environ['TEST_XYZ'])"],
-                extra_env={"TEST_XYZ": "valor123"},
-            )
-        else:
-            r = run_cmd(
-                ["python3", "-c", "import os; print(os.environ['TEST_XYZ'])"],
-                extra_env={"TEST_XYZ": "valor123"},
-            )
-        assert r.ok
-        assert "valor123" in r.stdout
+    def test_falls_back_to_path_when_disabled(self):
+        with (
+            patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True),
+            patch("gamedev_shared.subprocess_utils.shutil.which", return_value="/usr/bin/text3d"),
+        ):
+            assert resolve_binary("TEXT3D_BIN", "text3d") == "/usr/bin/text3d"
+
+    def test_raises_when_missing(self):
+        with (
+            patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True),
+            patch("gamedev_shared.subprocess_utils.shutil.which", return_value=None),
+        ):
+            with pytest.raises(FileNotFoundError, match="text3d"):
+                resolve_binary("TEXT3D_BIN", "text3d")

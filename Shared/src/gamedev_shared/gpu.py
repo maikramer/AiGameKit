@@ -3,10 +3,15 @@
 Todas as funções que dependem de ``torch`` fazem import lazy para que o
 módulo possa ser importado sem torch instalado (falha apenas ao chamar
 funções GPU sem o extra ``[gpu]``).
+
+Consultas de VRAM / processos preferem **NVML** (``nvidia-ml-py`` / ``pynvml``)
+— sem spawn de ``nvidia-smi``. Fallback automático para ``nvidia-smi`` se NVML
+não inicializar (CI sem driver, libnvidia-ml ausente).
 """
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import gc
 import os
@@ -14,10 +19,15 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import types
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+# NVML marca memória desconhecida com este valor (uint64 max).
+_NVML_VALUE_NOT_AVAILABLE = 0xFFFFFFFFFFFFFFFF
 
 
 def _torch() -> types.ModuleType:
@@ -28,6 +38,205 @@ def _torch() -> types.ModuleType:
         return torch  # type: ignore[no-any-return]
     except ImportError:
         raise ImportError("torch não está instalado. Instale com: pip install gamedev-shared[gpu]") from None
+
+
+# ---------------------------------------------------------------------------
+# NVML (nvidia-ml-py) — preferido para free/used/processos
+# ---------------------------------------------------------------------------
+
+_nvml_lock = threading.Lock()
+_nvml_inited = False
+_nvml_ok = False
+
+
+def _nvml_shutdown() -> None:
+    """Shutdown NVML no exit (idempotente)."""
+    global _nvml_ok
+    if not _nvml_ok:
+        return
+    with contextlib.suppress(Exception):
+        import pynvml
+
+        pynvml.nvmlShutdown()
+    _nvml_ok = False
+
+
+def _nvml_init() -> bool:
+    """Inicializa NVML uma vez. ``True`` se utilizável."""
+    global _nvml_inited, _nvml_ok
+    with _nvml_lock:
+        if _nvml_inited:
+            return _nvml_ok
+        _nvml_inited = True
+        try:
+            import pynvml
+
+            pynvml.nvmlInit()
+            atexit.register(_nvml_shutdown)
+            _nvml_ok = True
+        except Exception:
+            _nvml_ok = False
+        return _nvml_ok
+
+
+def _nvml_reset_for_tests() -> None:
+    """Reset estado NVML (só testes). Não chamar em produção."""
+    global _nvml_inited, _nvml_ok
+    with _nvml_lock:
+        if _nvml_ok:
+            with contextlib.suppress(Exception):
+                import pynvml
+
+                pynvml.nvmlShutdown()
+        _nvml_inited = False
+        _nvml_ok = False
+
+
+def nvml_available() -> bool:
+    """``True`` se NVML iniciou com sucesso neste processo."""
+    return _nvml_init()
+
+
+def _nvml_bytes_to_mib(raw: int | None) -> int | None:
+    if raw is None:
+        return None
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if n < 0 or n >= _NVML_VALUE_NOT_AVAILABLE:
+        return None
+    return n // (1024 * 1024)
+
+
+def _process_basename(pid: int) -> str:
+    """Nome curto do processo (psutil → /proc → ``pid:N``)."""
+    with contextlib.suppress(Exception):
+        import psutil
+
+        return psutil.Process(pid).name() or f"pid:{pid}"
+    with contextlib.suppress(OSError, UnicodeError):
+        comm = Path(f"/proc/{pid}/comm").read_text().strip()
+        if comm:
+            return comm
+    return f"pid:{pid}"
+
+
+def _nvml_device_count() -> int | None:
+    if not _nvml_init():
+        return None
+    try:
+        import pynvml
+
+        return int(pynvml.nvmlDeviceGetCount())
+    except Exception:
+        return None
+
+
+def _nvml_handle(device: int) -> Any | None:
+    if not _nvml_init():
+        return None
+    try:
+        import pynvml
+
+        return pynvml.nvmlDeviceGetHandleByIndex(int(device))
+    except Exception:
+        return None
+
+
+def _nvml_memory_mib(device: int = 0) -> tuple[int, int, int] | None:
+    """``(free_mib, total_mib, used_mib)`` via NVML, ou ``None``."""
+    handle = _nvml_handle(device)
+    if handle is None:
+        return None
+    try:
+        import pynvml
+
+        info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        free_m = _nvml_bytes_to_mib(int(info.free))
+        total_m = _nvml_bytes_to_mib(int(info.total))
+        used_m = _nvml_bytes_to_mib(int(info.used))
+        if free_m is None or total_m is None or used_m is None:
+            return None
+        return free_m, total_m, used_m
+    except Exception:
+        return None
+
+
+def _nvml_device_name(device: int = 0) -> str | None:
+    handle = _nvml_handle(device)
+    if handle is None:
+        return None
+    try:
+        import pynvml
+
+        raw = pynvml.nvmlDeviceGetName(handle)
+        if isinstance(raw, bytes):
+            return raw.decode("utf-8", errors="replace")
+        return str(raw)
+    except Exception:
+        return None
+
+
+def _nvml_compute_apps_for_device(device: int) -> list[tuple[int, str, int | None]] | None:
+    """Processos compute numa GPU, ou ``None`` se NVML falhar."""
+    handle = _nvml_handle(device)
+    if handle is None:
+        return None
+    try:
+        import pynvml
+
+        getter = getattr(pynvml, "nvmlDeviceGetComputeRunningProcesses_v3", None)
+        if getter is None:
+            getter = getattr(pynvml, "nvmlDeviceGetComputeRunningProcesses", None)
+        if getter is None:
+            return None
+        procs = getter(handle) or []
+    except Exception:
+        return None
+
+    out: list[tuple[int, str, int | None]] = []
+    for proc in procs:
+        try:
+            pid = int(proc.pid)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        used_raw = getattr(proc, "usedGpuMemory", None)
+        out.append((pid, _process_basename(pid), _nvml_bytes_to_mib(used_raw)))
+    return out
+
+
+def _nvml_list_compute_apps() -> list[tuple[int, str, int | None]] | None:
+    """Todos os processos compute (todas as GPUs). ``None`` = NVML indisponível."""
+    n = _nvml_device_count()
+    if n is None:
+        return None
+    # Dedup por PID (mesmo processo em várias GPUs / MIG).
+    by_pid: dict[int, tuple[int, str, int | None]] = {}
+    for idx in range(n):
+        apps = _nvml_compute_apps_for_device(idx)
+        if apps is None:
+            return None
+        for pid, name, mib in apps:
+            prev = by_pid.get(pid)
+            if prev is None:
+                by_pid[pid] = (pid, name, mib)
+            elif mib is not None:
+                prev_mib = prev[2] or 0
+                by_pid[pid] = (pid, name, prev_mib + mib)
+    return list(by_pid.values())
+
+
+@dataclass(frozen=True)
+class GpuSnapshot:
+    """Estado resumido duma GPU (NVML ou nvidia-smi)."""
+
+    index: int
+    name: str
+    free_mib: int
+    total_mib: int
+    used_mib: int
+    source: Literal["nvml", "nvidia-smi"]
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +435,7 @@ def enforce_exclusive_gpu(
 
 
 # ---------------------------------------------------------------------------
-# nvidia-smi: listar e matar processos GPU
+# Processos GPU (NVML → nvidia-smi) e kill agressivo
 # ---------------------------------------------------------------------------
 
 _GPU_KILL_PROTECTED_NAMES = frozenset(
@@ -307,8 +516,8 @@ def _is_user_process(pid: int) -> bool:
     return uid == _current_uid()
 
 
-def list_nvidia_compute_apps() -> list[tuple[int, str, int | None]]:
-    """Lista processos compute (nvidia-smi): ``(pid, name, used_mib|None)``."""
+def _smi_list_compute_apps() -> list[tuple[int, str, int | None]]:
+    """Fallback ``nvidia-smi --query-compute-apps``."""
     if not shutil.which("nvidia-smi"):
         return []
     r = subprocess.run(
@@ -341,11 +550,22 @@ def list_nvidia_compute_apps() -> list[tuple[int, str, int | None]]:
     return out
 
 
+def list_nvidia_compute_apps() -> list[tuple[int, str, int | None]]:
+    """Lista processos compute: ``(pid, name, used_mib|None)``.
+
+    Preferência NVML; fallback ``nvidia-smi``. Lista vazia se ambos falharem.
+    """
+    nvml_apps = _nvml_list_compute_apps()
+    if nvml_apps is not None:
+        return nvml_apps
+    return _smi_list_compute_apps()
+
+
 def warn_if_vram_occupied(threshold_mib: int = 1024) -> list[str]:
     """Warn if significant GPU VRAM is in use by other processes.
 
-    Checks ``nvidia-smi`` for compute processes using more than
-    *threshold_mib* MiB.  Prints a yellow warning via :mod:`rich` if
+    Checks NVML (fallback ``nvidia-smi``) for compute processes using more
+    than *threshold_mib* MiB.  Prints a yellow warning via :mod:`rich` if
     any are found, but **never blocks or kills** — the caller should
     proceed regardless.
 
@@ -490,7 +710,7 @@ def kill_gpu_compute_processes_aggressive(
 
     if not targets:
         if not apps:
-            logs.append("nvidia-smi não listou compute apps.")
+            logs.append("NVML/nvidia-smi não listou compute apps.")
         else:
             logs.append("Sem alvos para terminar.")
         return logs
@@ -530,17 +750,11 @@ def kill_gpu_compute_processes_aggressive(
 
 
 # ---------------------------------------------------------------------------
-# nvidia-smi: VRAM livre e detecção de GPUs (sem torch)
+# VRAM livre / detecção de GPUs (NVML → nvidia-smi, sem torch)
 # ---------------------------------------------------------------------------
 
 
-def query_gpu_free_mib(device: int = 0) -> int | None:
-    """VRAM livre numa GPU (MiB), ou ``None`` se nvidia-smi não existir / falhar.
-
-    Args:
-        device: Índice da GPU (0 por omissão). Em rigs multi-GPU, especificar o
-            dispositivo alvo para que a coordenação de VRAM mire o correto.
-    """
+def _smi_query_free_mib(device: int = 0) -> int | None:
     if not shutil.which("nvidia-smi"):
         return None
     try:
@@ -563,8 +777,7 @@ def query_gpu_free_mib(device: int = 0) -> int | None:
         return None
 
 
-def detect_gpu_ids() -> list[int] | None:
-    """Detecta GPUs disponíveis via nvidia-smi. Retorna lista de IDs ou ``None``."""
+def _smi_detect_gpu_ids() -> list[int] | None:
     if not shutil.which("nvidia-smi"):
         return None
     try:
@@ -588,3 +801,92 @@ def detect_gpu_ids() -> list[int] | None:
         return ids if ids else None
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
+
+
+def _smi_gpu_snapshot(device: int = 0) -> GpuSnapshot | None:
+    if not shutil.which("nvidia-smi"):
+        return None
+    try:
+        r = subprocess.run(
+            [
+                "nvidia-smi",
+                f"--id={device}",
+                "--query-gpu=name,memory.total,memory.free,memory.used",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        if r.returncode != 0 or not (r.stdout or "").strip():
+            return None
+        # Nome pode conter vírgulas — partir só nas 3 últimas colunas numéricas.
+        line = (r.stdout or "").strip().splitlines()[0].strip()
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 4:
+            return None
+        used_m = int(float(parts[-1]))
+        free_m = int(float(parts[-2]))
+        total_m = int(float(parts[-3]))
+        name = ",".join(parts[:-3]).strip() or f"GPU {device}"
+        return GpuSnapshot(
+            index=int(device),
+            name=name,
+            free_mib=free_m,
+            total_mib=total_m,
+            used_mib=used_m,
+            source="nvidia-smi",
+        )
+    except (OSError, ValueError, subprocess.TimeoutExpired, IndexError):
+        return None
+
+
+def query_gpu_free_mib(device: int = 0) -> int | None:
+    """VRAM livre numa GPU (MiB), ou ``None`` se NVML e nvidia-smi falharem.
+
+    Args:
+        device: Índice da GPU (0 por omissão). Em rigs multi-GPU, especificar o
+            dispositivo alvo para que a coordenação de VRAM mire o correto.
+    """
+    mem = _nvml_memory_mib(device)
+    if mem is not None:
+        return mem[0]
+    return _smi_query_free_mib(device)
+
+
+def detect_gpu_ids() -> list[int] | None:
+    """Detecta GPUs disponíveis (NVML → nvidia-smi). Lista de IDs ou ``None``."""
+    n = _nvml_device_count()
+    if n is not None and n > 0:
+        return list(range(n))
+    return _smi_detect_gpu_ids()
+
+
+def query_gpu_snapshot(device: int = 0) -> GpuSnapshot | None:
+    """Nome + memória duma GPU. NVML primeiro, depois ``nvidia-smi``."""
+    mem = _nvml_memory_mib(device)
+    if mem is not None:
+        free_m, total_m, used_m = mem
+        name = _nvml_device_name(device) or f"GPU {device}"
+        return GpuSnapshot(
+            index=int(device),
+            name=name,
+            free_mib=free_m,
+            total_mib=total_m,
+            used_mib=used_m,
+            source="nvml",
+        )
+    return _smi_gpu_snapshot(device)
+
+
+def list_gpu_snapshots() -> list[GpuSnapshot]:
+    """Snapshots de todas as GPUs detectadas (lista vazia se nenhuma)."""
+    ids = detect_gpu_ids()
+    if not ids:
+        return []
+    out: list[GpuSnapshot] = []
+    for i in ids:
+        snap = query_gpu_snapshot(i)
+        if snap is not None:
+            out.append(snap)
+    return out

@@ -20,8 +20,6 @@ API principal (bpy-only):
   comparações e viram (0,0,0) no export glTF — leque de faces na origem).
 * ``cap_boundary_loops`` / ``make_watertight`` — fecho seletivo / total de
   boundary loops.
-* ``force_close_base`` — grelha planar flush na soleira se oco (shell sem chão)
-  (``recess_ratio`` alto); skip torres/props com base já ok.
 * ``clamp_base_flare`` — puxa “pés de elefante” MC (base mais larga que o
   corpo) para o raio de referência do meio do mesh.
 * ``taubin_smooth`` — suavização volume-preserving (reduz argila MC sem
@@ -1145,335 +1143,6 @@ def infer_up_axis(coords: np.ndarray) -> int:
     return int(np.argmax(ext))
 
 
-def infer_world_up_axis(obj: Any) -> int:
-    """Eixo vertical em espaço mundo (pós-glTF costuma ser Z, não Y local).
-
-    Preferência: soleira perto de 0 (``export-origin feet``) x extensão grande.
-    Evita usar profundidade (Y mundo após conversão glTF) como “altura”.
-    """
-    mw = np.array(obj.matrix_world, dtype=np.float64)
-    coords = np.array([mw @ np.array([*v.co, 1.0], dtype=np.float64) for v in obj.data.vertices], dtype=np.float64)[
-        :, :3
-    ]
-    if len(coords) == 0:
-        return 1
-    bb_min = coords.min(axis=0)
-    bb_max = coords.max(axis=0)
-    ext = bb_max - bb_min
-    best_ax, best_score = 1, -1.0
-    for ax in (0, 1, 2):
-        e = float(ext[ax])
-        if e < 1e-9:
-            continue
-        # Soleira perto de 0 → score alto; eixo “deitado” com min≪0 perde.
-        sole = abs(float(bb_min[ax]))
-        score = e / (sole + 0.05 * float(ext.max()) + 1e-9)
-        if score > best_score:
-            best_score = score
-            best_ax = ax
-    return int(best_ax)
-
-
-def base_openness_stats(
-    obj: Any,
-    *,
-    up_axis: int | None = None,
-    band: float = 0.10,
-    grid: int = 48,
-) -> dict[str, float]:
-    """Mede oco por baixo via raios no footprint (espaço mundo).
-
-    ``up_axis=None`` → :func:`infer_world_up_axis` (glTF Y-up → Z mundo).
-
-    Returns:
-        ``interior_cells``, ``recess_cells``, ``recess_ratio``, ``height``,
-        ``plane_y`` (cota sugerida para tampa flush nas soleiras), ``up_axis``.
-    """
-    import bmesh
-    from mathutils.bvhtree import BVHTree
-
-    empty = {
-        "interior_cells": 0.0,
-        "recess_cells": 0.0,
-        "recess_ratio": 0.0,
-        "height": 0.0,
-        "plane_y": 0.0,
-        "up_axis": 1.0,
-    }
-    if len(obj.data.polygons) == 0:
-        return empty
-    if up_axis is None:
-        up_axis = infer_world_up_axis(obj)
-    if up_axis not in (0, 1, 2):
-        return empty
-    empty["up_axis"] = float(up_axis)
-
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    bm.transform(obj.matrix_world)
-    bm.faces.ensure_lookup_table()
-    coords = np.array([v.co[:] for v in bm.verts], dtype=np.float64)
-    if len(coords) == 0:
-        bm.free()
-        return empty
-
-    bb_min, bb_max = coords.min(axis=0), coords.max(axis=0)
-    height = float(bb_max[up_axis] - bb_min[up_axis]) or 1.0
-    y0 = float(bb_min[up_axis])
-    h_axes = [i for i in (0, 1, 2) if i != up_axis]
-    ax, cx = h_axes[0], h_axes[1]
-    amin, amax = float(bb_min[ax]), float(bb_max[ax])
-    cmin, cmax = float(bb_min[cx]), float(bb_max[cx])
-    if amax - amin < 1e-9 or cmax - cmin < 1e-9:
-        bm.free()
-        return {**empty, "height": height, "plane_y": y0}
-
-    bvh = BVHTree.FromBMesh(bm)
-    n = max(8, int(grid))
-    interior = recess = 0
-    solid_ys: list[float] = []
-    direction = [0.0, 0.0, 0.0]
-    direction[up_axis] = 1.0
-    dir_t = tuple(direction)
-    for ix in range(n):
-        for iz in range(n):
-            origin = [0.0, 0.0, 0.0]
-            origin[ax] = amin + (ix + 0.5) / n * (amax - amin)
-            origin[cx] = cmin + (iz + 0.5) / n * (cmax - cmin)
-            origin[up_axis] = y0 - 0.02 * height
-            hit = bvh.ray_cast(tuple(origin), dir_t, height * 1.25)
-            if hit[0] is None:
-                continue
-            interior += 1
-            hy = float(hit[0][up_axis])
-            if hy > y0 + band * height:
-                recess += 1
-            else:
-                solid_ys.append(hy)
-    bm.free()
-    ratio = float(recess) / float(interior) if interior else 0.0
-    # Soleira: mediana dos hits “chão” (sólidos). Fallback: quase ymin.
-    if solid_ys:
-        plane_y = float(np.median(solid_ys))
-    else:
-        bot = coords[coords[:, up_axis] <= y0 + band * height, up_axis]
-        plane_y = float(np.percentile(bot, 85)) if len(bot) else y0
-    # Nunca acima da banda — evita cortar o corpo; nunca muito abaixo (pedestal).
-    plane_y = float(np.clip(plane_y, y0, y0 + band * height))
-    return {
-        "interior_cells": float(interior),
-        "recess_cells": float(recess),
-        "recess_ratio": ratio,
-        "height": height,
-        "plane_y": plane_y,
-        "up_axis": float(up_axis),
-    }
-
-
-def force_close_base(
-    obj: Any,
-    *,
-    up_axis: int | None = None,
-    band: float = 0.10,
-    recess_trigger: float = 0.50,
-    grid: int = 64,
-    min_cells: int = 8,
-    min_faces: int = 1000,
-) -> dict[str, int]:
-    """Fecha base oca com grelha planar flush — sem pedestal / volume.
-
-    Shells manifold sem chão (Hunyuan) não têm boundary loops: bisect+fill
-    só tapa o anel da parede e o oco continua. Esta rotina:
-
-      1. Mede oco por raios no eixo vertical mundo (glTF → Z).
-      2. Se ``recess_ratio`` ≥ trigger, gera chão planar flush no fundo real
-         **só nas células ocas** totalmente dentro do footprint.
-      3. Solda o rebordo do chão aos verts de parede próximos.
-
-    Alvo: meshes marching-cubes densas (o weld do rebordo precisa de verts de
-    parede próximos) — ``min_faces`` salta low-poly, onde o rebordo ficaria
-    solto e o ``make_watertight`` normal já resolve.
-    """
-    import bmesh
-    from mathutils.bvhtree import BVHTree
-
-    stats: dict[str, int] = {"base_forced_faces": 0, "base_forced_cells": 0}
-    if len(obj.data.polygons) < max(1, int(min_faces)):
-        return stats
-    if up_axis is None:
-        up_axis = infer_world_up_axis(obj)
-    if up_axis not in (0, 1, 2):
-        return stats
-
-    openness = base_openness_stats(obj, up_axis=up_axis, band=band, grid=grid)
-    stats["base_recess_pct"] = round(100.0 * float(openness["recess_ratio"]))
-    stats["base_up_axis"] = int(up_axis)
-    if float(openness["interior_cells"]) < min_cells:
-        return stats
-    if float(openness["recess_ratio"]) < recess_trigger:
-        return stats
-
-    height = float(openness["height"]) or 1.0
-
-    # Re-ray no footprint: só células recess recebem quads (chão).
-    bm_w = bmesh.new()
-    bm_w.from_mesh(obj.data)
-    bm_w.transform(obj.matrix_world)
-    bm_w.faces.ensure_lookup_table()
-    coords = np.array([v.co[:] for v in bm_w.verts], dtype=np.float64)
-    bb_min, bb_max = coords.min(axis=0), coords.max(axis=0)
-    y0 = float(bb_min[up_axis])
-    # Chão flush no fundo real do modelo — não na cota das soleiras (a meio
-    # das paredes o plano ficava visível acima do rebordo inferior).
-    plane_y_world = y0 + 0.002 * height
-    h_axes = [i for i in (0, 1, 2) if i != up_axis]
-    ax, cx = h_axes[0], h_axes[1]
-    amin, amax = float(bb_min[ax]), float(bb_max[ax])
-    cmin, cmax = float(bb_min[cx]), float(bb_max[cx])
-    bvh = BVHTree.FromBMesh(bm_w)
-    n = max(8, int(grid))
-    direction = [0.0, 0.0, 0.0]
-    direction[up_axis] = 1.0
-    dir_t = tuple(direction)
-
-    def _ray_hit_y(a: float, c: float) -> float | None:
-        origin = [0.0, 0.0, 0.0]
-        origin[ax] = a
-        origin[cx] = c
-        origin[up_axis] = y0 - 0.02 * height
-        hit = bvh.ray_cast(tuple(origin), dir_t, height * 1.25)
-        return float(hit[0][up_axis]) if hit[0] is not None else None
-
-    # Cantos partilhados: cache (n+1)² testes de interioridade do footprint.
-    corner_inside: dict[tuple[int, int], bool] = {}
-
-    def _corner_ok(ix: int, iz: int) -> bool:
-        key = (ix, iz)
-        if key not in corner_inside:
-            a = amin + ix / n * (amax - amin)
-            c = cmin + iz / n * (cmax - cmin)
-            corner_inside[key] = _ray_hit_y(a, c) is not None
-        return corner_inside[key]
-
-    recess_cells: list[tuple[int, int]] = []
-    for ix in range(n):
-        for iz in range(n):
-            hy = _ray_hit_y(
-                amin + (ix + 0.5) / n * (amax - amin),
-                cmin + (iz + 0.5) / n * (cmax - cmin),
-            )
-            if hy is None or hy <= y0 + band * height:
-                continue
-            # Só células totalmente dentro do footprint — cantos fora da
-            # parede criavam abas salientes para fora do modelo.
-            if all(_corner_ok(ix + dx, iz + dz) for dx in (0, 1) for dz in (0, 1)):
-                recess_cells.append((ix, iz))
-    bm_w.free()
-    if len(recess_cells) < min_cells:
-        return stats
-
-    mw = np.array(obj.matrix_world, dtype=np.float64)
-    try:
-        inv = np.linalg.inv(mw)
-    except np.linalg.LinAlgError:
-        log.warning("force_close_base: matrix_world não invertível")
-        return stats
-
-    def world_to_local(pw: np.ndarray) -> tuple[float, float, float]:
-        pl = (inv @ np.array([pw[0], pw[1], pw[2], 1.0], dtype=np.float64))[:3]
-        return float(pl[0]), float(pl[1]), float(pl[2])
-
-    da = (amax - amin) / n
-    dc = (cmax - cmin) / n
-    cell = max(da, dc)
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    new_verts: list[Any] = []
-    new_faces = 0
-    # Cantos partilhados entre células: um vert por canto (grelha soldada).
-    vert_cache: dict[tuple[int, int], Any] = {}
-
-    def _grid_vert(gx: int, gz: int) -> Any:
-        key = (gx, gz)
-        v = vert_cache.get(key)
-        if v is None:
-            pw = np.zeros(3, dtype=np.float64)
-            pw[ax] = amin + gx * da
-            pw[cx] = cmin + gz * dc
-            pw[up_axis] = plane_y_world
-            v = bm.verts.new(world_to_local(pw))
-            vert_cache[key] = v
-            new_verts.append(v)
-        return v
-
-    for ix, iz in recess_cells:
-        verts = [_grid_vert(ix, iz), _grid_vert(ix + 1, iz), _grid_vert(ix + 1, iz + 1), _grid_vert(ix, iz + 1)]
-        try:
-            bm.faces.new(verts)
-            new_faces += 1
-        except ValueError:
-            continue
-    if new_faces == 0:
-        bm.free()
-        return stats
-    # Soldar o rebordo do chão às paredes: snap de cada vert do perímetro ao
-    # vert de parede mais próximo. Sem remove_doubles em massa — colapsaria o
-    # detalhe denso da base das paredes.
-    try:
-        from mathutils.kdtree import KDTree
-
-        new_set = set(new_verts)
-        perimeter = [v for v in new_verts if any(len(e.link_faces) < 2 for e in v.link_edges)]
-        row = mw[up_axis, :]
-        old_verts = [v for v in bm.verts if v not in new_set]
-        if perimeter and old_verts:
-            heights = np.array(
-                [row[0] * v.co[0] + row[1] * v.co[1] + row[2] * v.co[2] + row[3] for v in old_verts],
-                dtype=np.float64,
-            )
-            near_idx = np.nonzero(np.abs(heights - plane_y_world) <= 3.0 * cell)[0]
-            wall_near = [old_verts[i] for i in near_idx]
-            if wall_near:
-                kd = KDTree(len(wall_near))
-                for i, v in enumerate(wall_near):
-                    kd.insert(v.co, i)
-                kd.balance()
-                weld: set[Any] = set()
-                for v in perimeter:
-                    co, idx, dist = kd.find(v.co)
-                    if idx is not None and dist <= 3.0 * cell:
-                        v.co = co
-                        weld.add(v)
-                        weld.add(wall_near[idx])
-                if weld:
-                    bmesh.ops.remove_doubles(bm, verts=list(weld), dist=1e-6)
-    except Exception as exc:
-        log.warning("force_close_base: weld chão↔parede falhou: %s", exc)
-    try:
-        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-        bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
-    except Exception as exc:
-        log.warning("force_close_base: triangulate/normals falhou: %s", exc)
-    bm.to_mesh(obj.data)
-    obj.data.update()
-    bm.free()
-
-    stats["base_forced_faces"] = int(new_faces)
-    stats["base_forced_cells"] = len(recess_cells)
-    try:
-        normals_consistent(obj)
-    except Exception as exc:
-        log.warning("normals pós-force_close_base falhou: %s", exc)
-    log.info(
-        "force_close_base: floor planar faces=%d cells=%d recess=%d%% plane=%.4f up=%d",
-        stats["base_forced_faces"],
-        stats["base_forced_cells"],
-        stats["base_recess_pct"],
-        plane_y_world,
-        up_axis,
-    )
-    return stats
-
 
 def clamp_base_flare(
     obj: Any,
@@ -1833,11 +1502,6 @@ class RepairProfile:
     # Fracção da diagonal AABB — loops ≥ isto não são tapados (portas/janelas).
     watertight_max_loop_diameter_ratio: float | None = None
     watertight_skip_flap_erode: bool = False
-    # Bisect+fill se oco (capela ~0.75 no eixo mundo certo). Torre sólida ~0.01.
-    force_close_base: bool = False
-    force_base_band: float = 0.10
-    force_base_recess_trigger: float = 0.50
-    force_base_grid: int = 64
     recalc_normals: bool = True
     # Pré-passo: colapsar normal-splits do glTF (topology-fix em GLB).
     do_reweld_coincident: bool = False
@@ -1893,10 +1557,10 @@ REPAIR_PROFILES: dict[str, RepairProfile] = {
         do_reweld_coincident=True,
         sliver_max_aspect=80.0,
         # Weld + debris/slivers + fill + watertight seletivo.
-        # Sem remove_internal_shells / force_base / flare / Taubin (destruíam
-        # edifícios casca-plástico). Flap-erode ligado: fecha rachas MC
-        # non-manifold (capela 638→0 boundary sem matar faces). Diâmetro de
-        # loop limita portas/janelas grandes.
+        # Sem remove_internal_shells / flare / Taubin (destruíam edifícios
+        # casca-plástico). Flap-erode ligado: fecha rachas MC non-manifold
+        # (capela 638→0 boundary sem matar faces). Diâmetro de loop limita
+        # portas/janelas grandes.
         do_remove_internal_shells=False,
         fill_holes_sides=96,
         watertight=True,
@@ -1905,7 +1569,6 @@ REPAIR_PROFILES: dict[str, RepairProfile] = {
         watertight_skip_flap_erode=False,
         watertight_max_loop_diameter_ratio=0.35,
         watertight_max_loop_edges=400,
-        force_close_base=False,
         do_clamp_base_flare=False,
         do_taubin=False,
     ),
@@ -2036,10 +1699,6 @@ def repair_mesh_object_with_profile(
         watertight_final_fill=prof.watertight_final_fill,
         watertight_max_loop_diameter_ratio=prof.watertight_max_loop_diameter_ratio,
         watertight_skip_flap_erode=prof.watertight_skip_flap_erode,
-        do_force_close_base=prof.force_close_base,
-        force_base_band=prof.force_base_band,
-        force_base_recess_trigger=prof.force_base_recess_trigger,
-        force_base_grid=prof.force_base_grid,
         recalc_normals=prof.recalc_normals,
         do_clamp_base_flare=prof.do_clamp_base_flare,
         flare_max_ratio=prof.flare_max_ratio,
@@ -2099,10 +1758,6 @@ def repair_mesh_object(
     watertight_final_fill: bool = True,
     watertight_max_loop_diameter_ratio: float | None = None,
     watertight_skip_flap_erode: bool = False,
-    do_force_close_base: bool = False,
-    force_base_band: float = 0.10,
-    force_base_recess_trigger: float = 0.50,
-    force_base_grid: int = 64,
     recalc_normals: bool = True,
     do_clamp_base_flare: bool = False,
     flare_max_ratio: float = 1.06,
@@ -2119,7 +1774,7 @@ def repair_mesh_object(
     Ordem: NaN guard → weld exacto → weld secundário (bbox / densidade /
     fixed) → degenerate → loose → long edges → slivers → debris →
     internal shells (opt) → fill holes → cap loops (opt) → ``make_watertight``
-    (opt) → ``force_close_base`` (opt) → clamp flare → Taubin → normais.
+    (opt) → clamp flare → Taubin → normais.
 
     Preferir :func:`repair_mesh_object_with_profile` com perfis
     ``topology_clean`` / ``pre_decimate_uv`` / ``part_decode``.
@@ -2243,20 +1898,6 @@ def repair_mesh_object(
         except Exception as exc:
             log.warning("taubin_smooth falhou: %s", exc)
             stats["taubin_iters"] = 0
-    # Chão planar DEPOIS do Taubin — senão o smooth empena a grelha e o oco volta.
-    # Param ``do_force_close_base`` (não ``force_close_base``) evita shadow da função.
-    if do_force_close_base:
-        try:
-            fb = force_close_base(
-                obj,
-                band=force_base_band,
-                recess_trigger=force_base_recess_trigger,
-                grid=force_base_grid,
-            )
-            stats.update({k: int(v) for k, v in fb.items()})
-        except Exception as exc:
-            log.warning("force_close_base falhou: %s", exc)
-            stats["base_forced_faces"] = 0
     if recalc_normals:
         try:
             normals_consistent(obj)

@@ -38,7 +38,14 @@ def merge_subprocess_output(
 
 
 def resolve_binary(env_name: str, default_name: str) -> str:
-    """Resolve executável: variável de ambiente → PATH → FileNotFoundError.
+    """Resolve executável: env → monorepo ``.venv`` (dev) → PATH → FileNotFoundError.
+
+    Ordem:
+      1. Variável de ambiente (``TEXT3D_BIN``, etc.) se definida.
+      2. CLI no checkout do monorepo (``Text3D/.venv/bin/text3d``) quando
+         ``GAMEDEV_PREFER_MONOREPO`` está activo (default) e o venv existe —
+         evita wrappers stale em ``~/.local/bin`` e apanha edições editáveis.
+      3. ``PATH`` (``shutil.which``).
 
     Args:
         env_name: Nome da variável de ambiente (ex: ``TEXT2D_BIN``).
@@ -53,6 +60,19 @@ def resolve_binary(env_name: str, default_name: str) -> str:
     override = os.environ.get(env_name, "").strip()
     if override:
         return override
+
+    try:
+        from .env import ENV_TO_TOOL, discover_monorepo_tool_bin, prefer_monorepo_tools
+
+        if prefer_monorepo_tools():
+            tool = ENV_TO_TOOL.get(env_name)
+            if tool:
+                local = discover_monorepo_tool_bin(tool)
+                if local:
+                    return local
+    except Exception:
+        pass  # monorepo helpers indisponíveis — cair para PATH
+
     found = shutil.which(default_name)
     if not found:
         raise FileNotFoundError(

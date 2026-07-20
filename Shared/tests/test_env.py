@@ -1,8 +1,7 @@
 """Testes para gamedev_shared.env."""
 
 import os
-import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from gamedev_shared.env import (
     TOOL_BINS,
@@ -32,19 +31,43 @@ class TestEnsurePytorchCudaAllocConf:
 
 class TestSubprocessGpuEnv:
     def test_includes_alloc_conf(self):
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True):
             env = subprocess_gpu_env()
             assert "PYTORCH_CUDA_ALLOC_CONF" in env
 
     def test_preserves_existing(self):
-        with patch.dict(os.environ, {"PYTORCH_CUDA_ALLOC_CONF": "custom"}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"PYTORCH_CUDA_ALLOC_CONF": "custom", "GAMEDEV_PREFER_MONOREPO": "0"},
+            clear=True,
+        ):
             env = subprocess_gpu_env()
             assert env["PYTORCH_CUDA_ALLOC_CONF"] == "custom"
 
     def test_extra_env(self):
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True):
             env = subprocess_gpu_env({"MY_VAR": "123"})
             assert env["MY_VAR"] == "123"
+
+    def test_injects_monorepo_bins(self, tmp_path, monkeypatch):
+        from pathlib import Path
+
+        scripts = tmp_path / "Text3D" / ".venv" / "bin"
+        scripts.mkdir(parents=True)
+        cli = scripts / "text3d"
+        cli.write_text("#!/bin/sh\n", encoding="utf-8")
+        cli.chmod(0o755)
+        (tmp_path / "Shared").mkdir()
+        (tmp_path / ".git").mkdir()
+
+        monkeypatch.setenv("GAMEDEV_PREFER_MONOREPO", "1")
+        monkeypatch.delenv("TEXT3D_BIN", raising=False)
+        monkeypatch.setattr(
+            "gamedev_shared.monorepo.try_find_monorepo_root",
+            lambda start=None: Path(tmp_path),
+        )
+        env = subprocess_gpu_env()
+        assert env["TEXT3D_BIN"] == str(cli.resolve())
 
 
 class TestGetToolBin:
@@ -80,36 +103,47 @@ class TestGetToolBin:
 
 
 class TestDetectLowVram:
-    def test_returns_false_when_no_nvidia_smi(self, monkeypatch):
-        monkeypatch.setattr(
-            subprocess,
-            "run",
-            MagicMock(side_effect=FileNotFoundError("nvidia-smi not found")),
-        )
+    def test_returns_false_when_no_snapshot(self, monkeypatch):
+        monkeypatch.setattr("gamedev_shared.gpu.query_gpu_snapshot", lambda device=0: None)
         assert detect_low_memory() is False
 
     def test_returns_true_below_threshold(self, monkeypatch):
+        from gamedev_shared.gpu import GpuSnapshot
+
         monkeypatch.setattr(
-            subprocess,
-            "run",
-            MagicMock(return_value=MagicMock(stdout="4096\n", stderr="")),
+            "gamedev_shared.gpu.query_gpu_snapshot",
+            lambda device=0: GpuSnapshot(
+                index=0,
+                name="t",
+                free_mib=1000,
+                total_mib=4096,
+                used_mib=3096,
+                source="nvml",
+            ),
         )
         assert detect_low_memory(threshold_mb=8192) is True
 
     def test_returns_false_above_threshold(self, monkeypatch):
+        from gamedev_shared.gpu import GpuSnapshot
+
         monkeypatch.setattr(
-            subprocess,
-            "run",
-            MagicMock(return_value=MagicMock(stdout="12288\n", stderr="")),
+            "gamedev_shared.gpu.query_gpu_snapshot",
+            lambda device=0: GpuSnapshot(
+                index=0,
+                name="t",
+                free_mib=4000,
+                total_mib=12288,
+                used_mib=8000,
+                source="nvml",
+            ),
         )
         assert detect_low_memory(threshold_mb=8192) is False
 
-    def test_returns_false_on_parse_error(self, monkeypatch):
-        monkeypatch.setattr(
-            subprocess,
-            "run",
-            MagicMock(return_value=MagicMock(stdout="not_a_number\n", stderr="")),
-        )
+    def test_returns_false_on_exception(self, monkeypatch):
+        def _boom(device: int = 0):
+            raise RuntimeError("nvml down")
+
+        monkeypatch.setattr("gamedev_shared.gpu.query_gpu_snapshot", _boom)
         assert detect_low_memory() is False
 
 

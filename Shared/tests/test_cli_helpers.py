@@ -10,6 +10,8 @@ import pytest
 from gamedev_shared.cli_helpers import (
     apply_quality_defaults,
     env_bool,
+    legacy_server_allowed,
+    needed_mib_for_backend,
     try_ums_delegation,
     with_ums_peak_opts,
 )
@@ -272,3 +274,50 @@ class TestWithUmsPeakOpts:
             sdnq_preset="none",
         )
         assert out["sdnq_preset"] == "none"
+
+    def test_skymap_mem_eff_forces_none_sdnq(self) -> None:
+        out = with_ums_peak_opts({}, backend="skymap2d", memory_efficient=True)
+        assert out["memory_efficient"] is True
+        assert out["sdnq_preset"] == "none"
+
+    def test_part3d_mem_eff_default_sdnq(self) -> None:
+        out = with_ums_peak_opts({}, backend="part3d", memory_efficient=True)
+        assert out["sdnq_preset"] == "sdnq-uint8"
+
+    def test_texture2d_passthrough_no_forced_sdnq(self) -> None:
+        out = with_ums_peak_opts({"prompt": "x"}, backend="texture2d")
+        assert out["prompt"] == "x"
+        assert "sdnq_preset" not in out
+
+    def test_terrain3d_passthrough(self) -> None:
+        out = with_ums_peak_opts({"size": 512}, backend="terrain3d")
+        assert out["size"] == 512
+
+
+class TestLegacyServerAllowed:
+    def test_default_off(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            assert legacy_server_allowed() is False
+
+    def test_opt_in(self) -> None:
+        with patch.dict("os.environ", {"GAMEDEV_ALLOW_LEGACY_SERVER": "1"}):
+            assert legacy_server_allowed() is True
+
+
+class TestNeededMibForBackend:
+    def test_text3d_int4_smaller_than_fp16(self) -> None:
+        fp16 = needed_mib_for_backend("text3d", quant_mode="none")
+        int4 = needed_mib_for_backend("text3d", quant_mode="sdnq-int4")
+        assert int4 < fp16
+        assert int4 >= 512
+
+    def test_texture2d_fallback(self) -> None:
+        assert needed_mib_for_backend("texture2d") == 2500
+
+    def test_terrain3d_fallback(self) -> None:
+        assert needed_mib_for_backend("terrain3d") == 6000
+
+    def test_mem_eff_infers_quant(self) -> None:
+        plain = needed_mib_for_backend("paint3d", memory_efficient=False)
+        mem = needed_mib_for_backend("paint3d", memory_efficient=True)
+        assert mem < plain

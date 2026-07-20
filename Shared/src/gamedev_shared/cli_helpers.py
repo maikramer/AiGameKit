@@ -85,6 +85,68 @@ def env_bool(env_var: str, cli_wants: bool) -> bool:
     return cli_wants
 
 
+# Backend UMS → chave em ``gamedev_shared.lowvram.FOOTPRINTS`` (ou None = YAML/heuristic).
+BACKEND_FOOTPRINT_KEYS: dict[str, str] = {
+    "text2d": "flux-klein-9b",
+    "text2icon": "sana-sprint-600m",
+    "skymap2d": "flux-dev-uint4",
+    "text3d": "hunyuan3d-omni",
+    "paint3d": "hunyuan-paint",
+    "part3d": "hunyuan3d-part",
+    "text2sound": "stable-audio-open",
+}
+
+# Fallbacks quando não há footprint (MiB) — alinhados a ``backends.yaml`` vram_mib.
+_BACKEND_NEEDED_FALLBACK_MIB: dict[str, int] = {
+    "texture2d": 2500,
+    "terrain3d": 6000,
+}
+
+
+def legacy_server_allowed() -> bool:
+    """``GAMEDEV_ALLOW_LEGACY_SERVER=1`` — opt-in servers per-tool / ensure_vram legacy."""
+    return os.environ.get("GAMEDEV_ALLOW_LEGACY_SERVER", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def needed_mib_for_backend(
+    backend: str,
+    *,
+    quant_mode: str | None = None,
+    memory_efficient: bool = False,
+) -> int:
+    """Estima MiB para ``ensure_vram`` / ``prepare_gpu_exclusive`` (fallback in-process).
+
+    Usa FOOTPRINTS (pesos+act). Admit UMS continua autoridade; isto só liberta
+    headroom antes do load local.
+    """
+    from .lowvram import get_footprint
+
+    key = BACKEND_FOOTPRINT_KEYS.get(backend)
+    if key is None:
+        return _BACKEND_NEEDED_FALLBACK_MIB.get(backend, 4000)
+
+    mode = (quant_mode or "").strip().lower()
+    if mode in ("", "none", "null"):
+        if memory_efficient:
+            if backend in ("paint3d", "text2d", "part3d", "text2icon"):
+                mode = "sdnq-uint8"
+            elif backend == "text3d":
+                mode = "sdnq-int4"
+            else:
+                # skymap2d / text2sound: mem_eff = offload; footprint já reflecte quant.
+                mode = "none"
+        else:
+            mode = "none"
+    fp = get_footprint(key)
+    peak_gib = fp.weights_gib(mode) + fp.activation_gib
+    return max(512, int(peak_gib * 1024))
+
+
 def prepare_gpu_exclusive(
     *,
     needed_mib: int = 4000,
@@ -373,6 +435,7 @@ def with_ums_peak_opts(
     memory_efficient: bool | None = None,
     sdnq_preset: str | None = None,
     quant_preset: str | None = None,
+    footprint_key: str | None = None,
 ) -> dict[str, Any]:
     """Injeta sinais de pico VRAM para admit UMS (evita assume-fp16).
 
@@ -386,8 +449,12 @@ def with_ums_peak_opts(
         memory_efficient: Flag CLI / hw-auto.
         sdnq_preset: Preset explícito (``none`` / ``sdnq-int4`` / …).
         quant_preset: Alias Text2D (copiado para ``quant_preset`` + ``sdnq_preset``).
+        footprint_key: Override da pegada do modelo BASE (ex: ``flux-klein-4b``
+            vs ``9b``) — o admit usa a chave do descriptor (estática) sem isto.
     """
     out = dict(payload)
+    if footprint_key is not None:
+        out["footprint_key"] = str(footprint_key)
     if memory_efficient is not None:
         out["memory_efficient"] = bool(memory_efficient)
 
@@ -409,10 +476,13 @@ def with_ums_peak_opts(
         out["sdnq_preset"] = preset
     elif out.get("memory_efficient") and "sdnq_preset" not in out:
         # Defaults honestos por backend quando mem_eff sem preset explícito.
-        if backend == "paint3d" or backend == "text2d":
+        if backend in ("paint3d", "text2d", "part3d", "text2icon"):
             out["sdnq_preset"] = "sdnq-uint8"
         elif backend == "text3d":
             out["sdnq_preset"] = "sdnq-int4"
+        elif backend == "skymap2d":
+            # Pesos já uint4 no footprint; mem_eff = cpu-offload, não SDNQ extra.
+            out["sdnq_preset"] = "none"
     return out
 
 

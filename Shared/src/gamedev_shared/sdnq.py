@@ -23,9 +23,22 @@ References:
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+def _auto_quantized_matmul_default() -> bool:
+    """Default de ``use_quantized_matmul`` quando o caller não especifica.
+
+    O default upstream (``sdnq.common.use_torch_compile``) liga torch.compile/
+    Triton na primeira matmul — compile frio de muitos minutos por processo,
+    o que não compensa fora de batches longos (e arde em GPUs ~6 GB partilhadas).
+    Opt-in explícito via env ``GAMEDEV_SDNQ_AUTO_MATMUL=1``.
+    """
+    return os.environ.get("GAMEDEV_SDNQ_AUTO_MATMUL", "0").strip().lower() in ("1", "true", "yes", "on")
+
 
 # ---------------------------------------------------------------------------
 # Presets — validated by benchmarks in GameDevLab
@@ -254,8 +267,9 @@ def create_config(
         quantization_device: Device for quantization (default: ``"cuda"`` if available,
             else ``"cpu"``). On CPU, quantization runs in PyTorch eager mode.
         return_device: Device after quantization (default: same as ``quantization_device``).
-        use_quantized_matmul: Enable Triton/CUDA quantized matmul (default: auto-detect
-            via ``use_torch_compile``). Disabled on CPU (no Triton).
+        use_quantized_matmul: Enable Triton/CUDA quantized matmul (default:
+            ``GAMEDEV_SDNQ_AUTO_MATMUL`` env, off por defeito — evita compile
+            frio torch.compile/Triton). Disabled on CPU (no Triton).
         modules_to_not_convert: Module names to skip during quantization.
         **overrides: Additional keyword args forwarded to ``SDNQConfig``.
             Notable SDNQ >=0.2.0 options:
@@ -279,13 +293,12 @@ def create_config(
         raise KeyError(f"Unknown SDNQ preset: {preset!r}. Available: {', '.join(PRESETS)}")
 
     from sdnq import SDNQConfig
-    from sdnq.common import use_torch_compile
 
     p = PRESETS[preset]
 
     device = quantization_device or ("cuda" if _check_cuda() else "cpu")
     ret_device = return_device or device
-    matmul = use_quantized_matmul if use_quantized_matmul is not None else bool(use_torch_compile)
+    matmul = use_quantized_matmul if use_quantized_matmul is not None else _auto_quantized_matmul_default()
 
     kwargs: dict[str, Any] = {
         "weights_dtype": p.weights_dtype,

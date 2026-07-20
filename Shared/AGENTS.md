@@ -9,7 +9,7 @@ Foundation library for ALL Python packages in the monorepo. 47 files, 7122 LOC +
 | Module | Lines | Imported By | Role |
 |--------|-------|-------------|------|
 | `bpy_mesh.py` | 270 | 36 files (Text3D, Rigging3D, GameAssets, Animator3D) | `load_glb`, `save_glb`, `load_any`, `create_mesh_from_arrays` |
-| `gpu.py` | 506 | 31 files | GPU detection, VRAM monitoring, exclusive GPU, nvidia-smi process mgmt |
+| `gpu.py` | ~900 | 31 files | GPU detection, VRAM (NVML→nvidia-smi), exclusive GPU, process mgmt |
 | `quality.py` | 233 | 22 files | QualityEngine: 5 tiers, 14 categories, soft parameter resolution |
 | `quantization.py` | 438 | 22 files | Multi-backend quant: bitsandbytes, torchao, quanto, FP8 |
 | `sdnq.py` | 407 | 16 files | SDNQ quantization: 4 presets, LoRA patch, VRAM estimation |
