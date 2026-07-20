@@ -34,16 +34,19 @@ from gamedev_shared.vram_budget import (
     TEXT3D_CHUNKS_LO as MIN_NUM_CHUNKS,
 )
 
-# Margem do cubo clássico do Omni (box_v upstream).
-DEFAULT_BOX_V = 1.01
+# Margem do cubo clássico do Omni (box_v upstream). Um pouco >1.0 para o
+# field não colar nos planos do MC quando a bbox Omni enche o volume.
+DEFAULT_BOX_V = 1.08
 
 # Folga sobre o aspecto da bbox: o modelo não respeita a bbox na perfeição;
-# cortar rente clipava o field e abria buracos na fronteira.
-BOUNDS_REL_MARGIN = 0.06
-BOUNDS_ABS_SLACK = 0.03
-# Piso por eixo (fracção do eixo maior): tolera leakage em eixos muito finos
-# (espada 0.06 → nunca amostrar abaixo de 0.20 do cubo).
-BOUNDS_MIN_AXIS_FRAC = 0.20
+# cortar rente clipava o field (árvores/cogumelos «cortados» a meio).
+BOUNDS_REL_MARGIN = 0.12
+BOUNDS_ABS_SLACK = 0.05
+# Folga no eixo longo: nunca encher ``box_v`` até ao plano MC (anti-clip).
+BOUNDS_EDGE_KEEP = 0.04
+# Piso por eixo (fracção do ``box_v``): tolera leakage em eixos finos sem
+# engordar armas. 0.20 fazia espada W=0.06 → bounds ~0.22 (lâmina tipo bastão).
+BOUNDS_MIN_AXIS_FRAC = 0.08
 
 # mc_level auto: -1 «logit» distribuído pelo octree (≈ upstream -1/512 em 512).
 AUTO_MC_LEVEL_SCALE = -1.0
@@ -88,11 +91,14 @@ def bounds_for_bbox(
         return None
     aspect = [v / m for v in vals]
 
+    # Eixo longo fica abaixo de ``box_v`` (EDGE_KEEP); eixos curtos ganham
+    # rel_margin. Antes: longo = box_v sem folga → clip nos planos MC.
+    cap = box_v * (1.0 - BOUNDS_EDGE_KEEP)
     extents = []
     for a in aspect:
-        e = a * (1.0 + rel_margin) + abs_slack
-        e = max(e, min_axis_frac)
-        extents.append(min(box_v, e))
+        e = a * box_v * (1.0 + rel_margin) + abs_slack
+        e = max(e, min_axis_frac * box_v)
+        extents.append(min(cap, e))
 
     # Aspecto ~cúbico → cubo clássico (evita churn de fingerprint sem ganho).
     if min(extents) >= 0.95 * box_v:

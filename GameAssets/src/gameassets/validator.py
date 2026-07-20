@@ -95,6 +95,15 @@ def validate_row(
     """
     result = ValidationResult(row_id=row.id)
 
+    # Authoring: bbox Omni que contrai eixos face a size_m (squash/clip provável).
+    if row.generate_3d:
+        from .omni_ctrl import OmniControls, merge_omni, omni_bbox_constraint_warnings
+
+        t3 = profile.text3d
+        base = t3.omni if t3 is not None and getattr(t3, "omni", None) is not None else OmniControls()
+        merged = merge_omni(base, row.omni) if getattr(row, "omni", None) is not None else base
+        result.warnings.extend(omni_bbox_constraint_warnings(merged, category=row.category or None))
+
     if row.generate_3d:
         mesh_path = _resolve_mesh_path(profile, manifest_dir, row)
         if not mesh_path.is_file():

@@ -85,6 +85,8 @@ text3d generate -i ref.png -o mesh.glb
 
 # Omni pose: Quaternius T-pose (packaged bone.txt — good for rig)
 text3d generate -i hero.png --pose-preset quaternius-tpose -o hero_shape.glb
+# Anão / chibi / cabeça grande (ombros mais baixos)
+text3d generate -i goblin.png --pose-preset quaternius-tpose-dwarf -o goblin_shape.glb
 
 # Omni bbox aspect (sword tall / thin)
 text3d generate -i sword.png --bbox-preset sword -o sword_shape.glb
@@ -113,14 +115,17 @@ text3d generate "scene" --gpu-ids 0,1 -o scene.glb
 
 Hunyuan3D-Omni accepts **one** control signal per generation. Packaged assets live under `text3d/data/omni/` (T-pose bones + reference GLB).
 
+Operational findings (bbox axis max=1 vs clip, presets, `size_m`, decode bounds, failure modes): [`docs/OMNI_SHAPE_FINDINGS.md`](../docs/OMNI_SHAPE_FINDINGS.md). Pose bench assets: [`docs/bench_omni/`](../docs/bench_omni/).
+
 | Control | CLI | Use |
 |---------|-----|-----|
 | Pose | `--pose-preset quaternius-tpose` | Humanoid T-pose for SkinTokens / animate |
+| Pose (short) | `--pose-preset quaternius-tpose-dwarf` | Dwarf/chibi T-pose (aliases: `dwarf-tpose`, `chibi-tpose`) |
 | BBox | `--bbox-preset sword\|humanoid\|door\|…` or `--bbox L,H,W` / `--size L,H,W` | Aspect / relative size |
 | Point | `--control-type point --point-cloud mesh.glb` | Shape lock / variant refresh |
 | Voxel | `--control-type voxel --voxel-mesh blockout.glb` | Blockout → styled mesh |
 
-`--category humanoid` soft-fills pose T-pose when no control is explicit. A sidecar `*.glb.omni.json` is written next to the shape for GameAssets resume invalidation.
+`--category humanoid` soft-fills pose A-pose (`quaternius-apose`) when no control is explicit. A sidecar `*.glb.omni.json` is written next to the shape for GameAssets resume invalidation.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
@@ -162,7 +167,7 @@ Hunyuan3D-Omni accepts **one** control signal per generation. Packaged assets li
 | `--sage-attn` | flag | false | SageAttention INT8 attention kernels (requires `sageattention`, Ampere+) |
 | `--sdnq-matmul` | flag | false | SDNQ quantized INT8 matmul (use together with `--sdnq-preset`) |
 | `--control-type` | str | `none` | Omni: `none`, `bbox`, `pose`, `point`, `voxel` |
-| `--pose-preset` | str | None | Packaged pose (`quaternius-tpose`); implies pose control |
+| `--pose-preset` | str | None | Packaged pose (`quaternius-tpose` / `quaternius-tpose-dwarf`); implies pose control |
 | `--pose-file` | path | None | Custom bone-points txt for pose |
 | `--bbox-preset` | str | None | Aspect preset (`sword`, `humanoid`, `door`, …) |
 | `--bbox` / `--size` | CSV | None | L,H,W (3) or AABB (6); `--size` is 3-float alias |
@@ -326,7 +331,7 @@ text3d convert mesh.obj -o mesh.glb --rotate
 
 ### `text3d gpu-processes`
 
-Show current GPU processes via `nvidia-smi`. Useful when exclusive-GPU checks fail or to identify processes consuming VRAM.
+Show current GPUs and compute processes via Shared NVML helpers (fallback `nvidia-smi`). Useful when exclusive-GPU checks fail or to identify processes consuming VRAM.
 
 ```bash
 text3d gpu-processes

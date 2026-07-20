@@ -534,3 +534,31 @@ def test_text3d_low_vram_is_noop_after_removal() -> None:
     )
     argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
     assert "--low-vram" not in argv
+
+
+def test_seed_for_manifest_row_override_wins() -> None:
+    from gameassets.helpers import _seed_for_manifest_row
+
+    p = GameProfile(title="T", genre="G", tone="t", style_preset="lowpoly", seed_base=1000)
+    row = ManifestRow(id="longhouse", idea="x", kind="environment", generate_3d=True, seed=90210)
+    assert _seed_for_manifest_row(p, row) == 90210
+
+
+def test_seed_for_manifest_row_fallback_deterministic() -> None:
+    from gameassets.helpers import _seed_for_manifest_row
+
+    p = GameProfile(title="T", genre="G", tone="t", style_preset="lowpoly", seed_base=1000)
+    row = ManifestRow(id="hero", idea="x", kind="character", generate_3d=True)
+    h = zlib.adler32(b"hero") & 0x7FFFFFFF
+    assert _seed_for_manifest_row(p, row) == 1000 + h
+
+
+def test_seed_for_manifest_row_none_without_base() -> None:
+    from gameassets.helpers import _seed_for_manifest_row
+
+    p = GameProfile(title="T", genre="G", tone="t", style_preset="lowpoly", seed_base=None)
+    row = ManifestRow(id="hero", idea="x", kind="character", generate_3d=True)
+    assert _seed_for_manifest_row(p, row) is None
+    # Override explícito funciona mesmo sem seed_base no perfil.
+    row2 = ManifestRow(id="hero", idea="x", kind="character", generate_3d=True, seed=7)
+    assert _seed_for_manifest_row(p, row2) == 7

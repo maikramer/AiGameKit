@@ -47,9 +47,12 @@ class Text3DProfile:
 
     preset: str | None = None  # fast | balanced | hq
     export_origin: str = "feet"
-    # Fecho morfológico (metros) no topology-fix. None/0 = desligado
-    # (topology_clean só); >0 = explícito. Auto-por-metros desligado - agressivo.
+    # Fecho morfológico no topology-fix.
+    # morph_close (metros): None = auto; 0 = off; >0 = absoluto.
+    # morph_close_voxels (N / «voxel_merge»): None = category/default (0.125;
+    # terrain/rock=0.375). Ignorado se morph_close (metros) for explícito.
     morph_close: float | None = None
+    morph_close_voxels: float | None = None
     steps: int | None = None
     octree_resolution: int | None = None
     num_chunks: int | None = None
@@ -63,6 +66,9 @@ class Text3DProfile:
     simplify_texture_size: int | None = None
     # Controlos Hunyuan3D-Omni (bbox / pose / point / voxel). Ver ``omni_ctrl.OmniControls``.
     omni: Any | None = None
+    # Peak VRAM UMS (shape wave). None → hw_auto / admit-safe no ums_batch.
+    # ``memory_efficient`` não é modo de perfil — só sdnq_preset explícito; resto hw_auto.
+    sdnq_preset: str | None = None
 
 
 @dataclass
@@ -534,20 +540,28 @@ class GameProfile:
             if eo not in valid_eo:
                 raise ValueError(f"text3d.export_origin deve ser um de: {', '.join(sorted(valid_eo))}")
             mc_raw = raw_t3.get("morph_close")
+            mcv_raw = raw_t3.get("morph_close_voxels", raw_t3.get("voxel_merge"))
             try:
                 morph_close_f = float(mc_raw) if mc_raw not in (None, "") else None
             except (TypeError, ValueError) as e:
                 raise ValueError("text3d.morph_close deve ser um número (metros)") from e
+            try:
+                morph_voxels_f = float(mcv_raw) if mcv_raw not in (None, "") else None
+            except (TypeError, ValueError) as e:
+                raise ValueError("text3d.morph_close_voxels/voxel_merge deve ser um número") from e
             from .omni_ctrl import omni_from_dict
 
             try:
                 t3_omni = omni_from_dict(raw_t3.get("omni"))
             except ValueError as e:
                 raise ValueError(f"text3d.omni: {e}") from e
+            sdnq_raw = raw_t3.get("sdnq_preset")
+            sdnq_s = str(sdnq_raw).strip() if sdnq_raw not in (None, "") else None
             t3 = Text3DProfile(
                 preset=pr,
                 export_origin=eo,
                 morph_close=morph_close_f,
+                morph_close_voxels=morph_voxels_f,
                 steps=st_i,
                 octree_resolution=oc_i,
                 num_chunks=nc_i,
@@ -560,6 +574,7 @@ class GameProfile:
                 guidance=hy_guid_f,
                 simplify_texture_size=sts_i,
                 omni=t3_omni,
+                sdnq_preset=sdnq_s,
             )
         p3d: Paint3DProfile | None = None
         raw_p3d = data.get("paint3d")
@@ -852,6 +867,7 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
         preset=t3.preset if t3.preset is not None else gp.text3d_preset,
         export_origin=t3.export_origin,
         morph_close=t3.morph_close,
+        morph_close_voxels=t3.morph_close_voxels,
         steps=t3.steps,
         octree_resolution=t3.octree_resolution,
         num_chunks=t3.num_chunks,
@@ -866,6 +882,7 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
             t3.simplify_texture_size if t3.simplify_texture_size is not None else gp.simplify_texture_size
         ),
         omni=t3.omni,
+        sdnq_preset=t3.sdnq_preset,
     )
 
     p3d = profile.paint3d or Paint3DProfile()

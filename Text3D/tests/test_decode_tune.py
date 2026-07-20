@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from text3d.decode_tune import (
+    BOUNDS_EDGE_KEEP,
     DEFAULT_BOX_V,
     MAX_NUM_CHUNKS,
     MIN_NUM_CHUNKS,
@@ -33,21 +34,24 @@ class TestBoundsForBbox:
         assert b is not None and len(b) == 6
         ex, ey, ez = b[3], b[4], b[5]
         assert b[0] == -ex and b[1] == -ey and b[2] == -ez
-        assert ey == DEFAULT_BOX_V  # eixo maior mantém margem clássica
+        long_cap = DEFAULT_BOX_V * (1.0 - BOUNDS_EDGE_KEEP)
+        assert ey == pytest.approx(long_cap)  # eixo maior com folga anti-clip
         assert ex < ey
         assert ez < ex
-        assert ez >= 0.20  # piso anti-leakage
+        assert ez >= 0.08 * DEFAULT_BOX_V  # piso anti-leakage (não 0.20 — engorda armas)
 
-    def test_sword_floor_applies(self):
-        # Espada 0.12,1.0,0.06 — eixos finos ficam no piso, nunca abaixo.
-        b = bounds_for_bbox([0.12, 1.0, 0.06])
+    def test_sword_keeps_thin_depth(self):
+        # Espada fina: W << L; piso 0.08 não engorda até cubo ~0.20.
+        b = bounds_for_bbox([0.12, 1.0, 0.04])
         assert b is not None
-        assert b[3] >= 0.20 and b[5] >= 0.20
+        assert b[5] < b[3]
+        assert b[5] < 0.16
+        assert b[5] >= 0.08 * DEFAULT_BOX_V
 
     def test_aabb_6float_input(self):
         b = bounds_for_bbox([-0.275, -0.5, -0.06, 0.275, 0.5, 0.06])
         assert b is not None
-        assert b[4] == DEFAULT_BOX_V
+        assert b[4] == pytest.approx(DEFAULT_BOX_V * (1.0 - BOUNDS_EDGE_KEEP))
 
     def test_invalid_inputs(self):
         assert bounds_for_bbox([0.0, 0.0, 0.0]) is None
@@ -57,7 +61,9 @@ class TestBoundsForBbox:
     def test_extents_never_exceed_box_v(self):
         b = bounds_for_bbox([1.0, 1.0, 0.1])
         assert b is not None
-        assert all(abs(v) <= DEFAULT_BOX_V + 1e-9 for v in b)
+        long_cap = DEFAULT_BOX_V * (1.0 - BOUNDS_EDGE_KEEP)
+        assert all(abs(v) <= long_cap + 1e-9 for v in b)
+        assert abs(b[3]) == pytest.approx(long_cap)  # eixo longo < box_v
 
 
 class TestAutoMcLevel:

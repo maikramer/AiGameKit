@@ -24,6 +24,9 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 | Background removal | `utils/bg_removal.py` (98 lines) | BiRefNet |
 | Collision mesh | `utils/collision.py` (82 lines) | Convex hull + quadric decimation |
 | Defaults | `defaults.py` (111 lines) | Constants, presets, export rotation/origin |
+| Omni controls / presets | `utils/omni_controls.py`, `omni_presets.py` | bbox max=1.0; pose Quaternius |
+| UMS payload builder | `ums_payload.py` | Shared with GameAssets batch waves |
+| Findings hub | `docs/MODEL_FINDINGS.md`, `docs/OMNI_SHAPE_FINDINGS.md` | VRAM / Omni / flashvdm |
 
 ## CLI COMMANDS
 
@@ -50,7 +53,9 @@ Stage 5 — `collision`: Convex hull + quadric decimation for physics mesh.
 
 **Export origin:** `--export-origin feet` is the default for game assets (y=0 at soles). `center` for pivots at mesh center. `none` leaves raw Hunyuan origin.
 
-**Topology fix pipeline** (`prepare_mesh_topology` → Shared profile `topology_clean`): reweld coincident → sanitize → exact + density weld → dissolve/loose → long edges → slivers → debris → fill holes (≤32) → `make_watertight` (skip flap-erode) → `clamp_base_flare` → Taubin (3) → shade-smooth. LOD/bake-master: `pre_decimate_uv` before Decimate, `post_decimate` after.
+**Topology fix pipeline** (`prepare_mesh_topology` → Shared profile `topology_clean`): reweld coincident → sanitize → exact + density weld → dissolve/loose → long edges → slivers → debris → fill holes (≤32) → `make_watertight` (skip flap-erode) → `force_close_base` (inferred up-axis) → `clamp_base_flare` (smoothstep) → Taubin (3) → shade-smooth. Do **not** force fill≥64. LOD/bake-master: `pre_decimate_uv` before Decimate, `post_decimate` after.
+
+**Hunyuan / Part3D lessons** (elephant feet, welded thins, faces vs X-Part, seed variance): [`docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md`](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md) · [PT](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 
 **LOD and rigged meshes:** `text3d lod` preserves armatures and animations. No separate LOD path exists for rigged assets. Weight transfer to LODs is handled by `rigging3d transfer-weights`.
 

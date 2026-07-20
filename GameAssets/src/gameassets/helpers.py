@@ -55,6 +55,22 @@ def _seed_for_row(profile: GameProfile, row_id: str) -> int | None:
     return profile.seed_base + h
 
 
+def _seed_for_manifest_row(profile: GameProfile, row: Any) -> int | None:
+    """Seed para text2d/text3d da row: ``seed:`` explícito no manifest ganha.
+
+    Override absoluto permite re-rolar UM asset (ex.: buraco de field no shape)
+    sem tocar nos restantes — o determinístico por id reproduziria a mesma falha.
+    Sem ``seed:`` na row cai no determinístico ``seed_base + adler32(id)``.
+    """
+    override = getattr(row, "seed", None)
+    if override is not None:
+        return int(override)
+    row_id = getattr(row, "id", None)
+    if not row_id:
+        return None
+    return _seed_for_row(profile, str(row_id))
+
+
 def _safe_row_dirname(row_id: str) -> str:
     """Parte do id do manifest segura para nome de pasta (ex.: Props/crate → Props__crate_01)."""
     return row_id.replace("/", "__").replace("\\", "_")

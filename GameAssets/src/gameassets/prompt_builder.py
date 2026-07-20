@@ -55,6 +55,25 @@ _MESH_HINT_NO_FAKE_GROUND = (
     "Watertight mesh only; no spurious ground disc, pedestal ring, or base slab from shadow-like shading"
 )
 
+# Variante A-pose do hint_rig: usada quando o asset tem pose_preset A-pose
+# (quaternius-apose). O hint_rig humanoid força «T-pose braços horizontais» —
+# em assets A-pose isso luta contra a idea e produz braços in-between/deformados.
+_HINT_RIG_APOSE = (
+    "standing upright in a relaxed A-pose with both arms angled down at about 45 degrees "
+    "away from the body, visible gap between arms and torso, open hands with spread fingers, "
+    "legs shoulder-width apart with feet pointing forward, "
+    "perfectly symmetrical left-right body, "
+    "straight erect spine and neck, head facing forward, "
+    "all limbs fully visible and clearly separated from torso, "
+    "no crossed limbs, no bent elbows or knees, no clenched fists, "
+    "no self-occlusion between arms and torso"
+)
+
+
+def _is_apose_preset(pose_preset: str | None) -> bool:
+    """True se o pose_preset é uma variante A-pose (quaternius-apose e aliases)."""
+    return bool(pose_preset) and "apose" in str(pose_preset).strip().lower().replace("-", "")
+
 # O título do jogo no prompt tende a aparecer como texto/logótipo na imagem; não incluir.
 # Restrições extra para 2D (referência) — modelos desenhadores de UI/caption.
 _UI_TEXT_NEGATIVES: tuple[str, ...] = (
@@ -89,6 +108,7 @@ def enhance_prompt_for_pipeline(
     generate_rig: bool = False,
     image_source: str = "text2d",
     for_3d: bool = False,
+    pose_preset: str | None = None,
 ) -> str:
     cat = get_category(category)
     if cat is None:
@@ -105,7 +125,9 @@ def enhance_prompt_for_pipeline(
     else:
         prompt = _append_if_new(prompt, cat.hint_2d)
     if generate_rig:
-        prompt = _append_if_new(prompt, cat.hint_rig)
+        # A-pose no esqueleto ⇒ hint A-pose na imagem (alinhamento imagem↔pose).
+        rig_hint = _HINT_RIG_APOSE if _is_apose_preset(pose_preset) else cat.hint_rig
+        prompt = _append_if_new(prompt, rig_hint)
     if cat.extra_negatives:
         lower_prompt = prompt.lower()
         new_negs = [n for n in cat.extra_negatives if n.lower() not in lower_prompt]
@@ -174,6 +196,7 @@ def build_prompt(
             generate_3d=row.generate_3d,
             generate_rig=row.generate_rig,
             for_3d=for_3d,
+            pose_preset=getattr(getattr(row, "omni", None), "pose_preset", None),
         )
 
     return main

@@ -136,3 +136,104 @@ def test_load_manifest_empty_raises() -> None:
             load_manifest(path)
     finally:
         path.unlink(missing_ok=True)
+
+
+def test_load_manifest_seed_override() -> None:
+    content = yaml.dump(
+        {
+            "assets": [
+                {"id": "a", "idea": "casa", "pipeline": ["3d"], "seed": 90210},
+                {"id": "b", "idea": "muro", "pipeline": ["3d"]},
+            ]
+        }
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        rows = load_manifest(path)
+        assert rows[0].seed == 90210
+        assert rows[1].seed is None
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_load_manifest_seed_invalid() -> None:
+    import pytest
+
+    content = yaml.dump({"assets": [{"id": "a", "idea": "casa", "pipeline": ["3d"], "seed": "abc"}]})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        with pytest.raises(ValueError, match="seed inválido"):
+            load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_load_manifest_text3d_block() -> None:
+    content = yaml.dump(
+        {
+            "assets": [
+                {
+                    "id": "hero",
+                    "idea": "herói",
+                    "pipeline": ["3d"],
+                    "text3d": {"steps": 40, "octree_resolution": 384, "mc_level": 0},
+                },
+                {"id": "prop", "idea": "prop", "pipeline": ["3d"]},
+            ]
+        }
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        rows = load_manifest(path)
+        assert rows[0].text3d is not None
+        assert rows[0].text3d.steps == 40
+        assert rows[0].text3d.octree_resolution == 384
+        assert rows[0].text3d.mc_level == 0.0
+        assert rows[1].text3d is None
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_load_manifest_text3d_unknown_key_fails() -> None:
+    import pytest
+
+    content = yaml.dump({"assets": [{"id": "a", "idea": "x", "pipeline": ["3d"], "text3d": {"octree": 384}}]})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        with pytest.raises(ValueError, match="chaves desconhecidas"):
+            load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_apply_row_text3d_overrides_and_mc_level() -> None:
+    from gameassets.manifest import RowText3D, apply_row_text3d_overrides, row_mc_level
+
+    row = ManifestRow(
+        id="hero",
+        idea="x",
+        kind="character",
+        generate_3d=True,
+        text3d=RowText3D(steps=40, octree_resolution=384, mc_level=0.0),
+    )
+    item: dict = {"steps": 20, "octree_resolution": 256, "num_chunks": 4096}
+    out = apply_row_text3d_overrides(item, row)
+    assert out["steps"] == 40
+    assert out["octree_resolution"] == 384
+    assert out["mc_level"] == 0.0
+    assert out["num_chunks"] == 4096  # não tocado
+    # row_mc_level: override ganha do profile
+    assert row_mc_level(row, "auto") == 0.0
+    row_plain = ManifestRow(id="p", idea="x", kind="prop", generate_3d=True)
+    assert row_mc_level(row_plain, "auto") == "auto"
+    # Sem override: item intacto
+    item2: dict = {"steps": 20}
+    assert apply_row_text3d_overrides(item2, row_plain) == {"steps": 20}

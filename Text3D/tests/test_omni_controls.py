@@ -15,7 +15,9 @@ from text3d.utils.omni_controls import (
 
 
 def test_default_bbox_tuple() -> None:
-    assert DEFAULT_OMNI_BBOX == (1.0, 1.0, 1.0)
+    # Aspect 0-1 humanoid (docs Omni); NÃO max=2 (enche MC e clipa).
+    assert DEFAULT_OMNI_BBOX == (0.45, 1.0, 0.35)
+    assert max(DEFAULT_OMNI_BBOX) == pytest.approx(1.0)
 
 
 def test_bbox_tensor_3() -> None:

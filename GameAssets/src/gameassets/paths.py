@@ -122,22 +122,48 @@ def _paths_for_row(profile: GameProfile, row: ManifestRow) -> tuple[Path, Path]:
     return img, mesh
 
 
+_STEM_SUFFIXES: tuple[str, ...] = (
+    # Compostos primeiro (mais longos).
+    "_rigged_animated",
+    "_lod0_animated",
+    "_lod1_animated",
+    "_lod2_animated",
+    "_lod0_painted",
+    "_lod1_painted",
+    "_lod2_painted",
+    "_lod0_rigged",
+    "_lod1_rigged",
+    "_lod2_rigged",
+    "_rigged_hi",
+    "_to_paint",
+    "_painted",
+    "_shape",
+    "_clean",
+    "_rigged",
+    "_segmented",
+    "_collision",
+    "_animated",
+    "_lod0",
+    "_lod1",
+    "_lod2",
+)
+
+
 def _base_stem(name: str) -> str:
-    """Strip known suffixes from a stem like 'wooden_crate_painted' -> 'wooden_crate'."""
-    for sfx in (
-        "_painted",
-        "_shape",
-        "_rigged_animated",
-        "_rigged",
-        "_segmented",
-        "_collision",
-        "_lod0",
-        "_lod1",
-        "_lod2",
-    ):
-        if name.endswith(sfx):
-            return name[: -len(sfx)]
-    return name
+    """Strip known suffixes from a stem like 'wooden_crate_painted' -> 'wooden_crate'.
+
+    Itera até estabilizar — ``foo_lod0_painted`` → ``foo`` (não ``foo_lod0``).
+    """
+    out = name
+    changed = True
+    while changed:
+        changed = False
+        for sfx in _STEM_SUFFIXES:
+            if out.endswith(sfx):
+                out = out[: -len(sfx)]
+                changed = True
+                break
+    return out
 
 
 def _rigging3d_output_path(mesh_final: Path, suffix: str) -> Path:
@@ -208,6 +234,22 @@ def archive_leftover_lod_rigged(mesh_final: Path) -> list[Path]:
     return moved
 
 
+def _canonical_mesh_final(mesh_path: Path) -> Path:
+    """Resolve qualquer path da pipeline para a mesh de produção ``meshes/{id}.glb``.
+
+    Aceita ``id.glb``, ``_intermediate/id_painted.glb``, ``id_lod0.glb``, etc.
+    e devolve sempre ``<meshes_dir>/{id}.glb`` (fora de ``_intermediate/``).
+    Sem isto, passar ``mesh_painted`` a ``run_master_pipeline`` fazia LOD0 /
+    collision nascerem em ``_intermediate/`` e nunca chegarem a ``meshes/``.
+    """
+    p = Path(mesh_path)
+    base = _base_stem(p.stem)
+    parent = p.parent
+    if parent.name == "_intermediate":
+        parent = parent.parent
+    return parent / f"{base}{p.suffix}"
+
+
 def _intermediate_dir(mesh_final: Path) -> Path:
     """Pasta para artefactos descartáveis da pipeline (shape, clean, painted, rigged_hi).
 
@@ -215,9 +257,8 @@ def _intermediate_dir(mesh_final: Path) -> Path:
     Idempotente: se ``mesh_final`` já estiver dentro de ``_intermediate/``,
     não aninha outro ``_intermediate`` (bug que criava ``_intermediate/_intermediate/``).
     """
-    parent = mesh_final.parent
-    if parent.name == "_intermediate":
-        return parent
+    # Sempre ancorar no meshes/ canónico — nunca aninhar sob painted/lod paths.
+    parent = _canonical_mesh_final(mesh_final).parent
     return parent / "_intermediate"
 
 
@@ -275,20 +316,30 @@ def _rigged_hi_path(mesh_final: Path) -> Path:
 
 def _lod_path(mesh_final: Path, level: int) -> Path:
     """``id_lod{level}.glb`` em ``meshes/`` (final, vai para o jogo)."""
+    mesh_final = _canonical_mesh_final(mesh_final)
     base = _base_stem(mesh_final.stem)
     return mesh_final.with_name(f"{base}_lod{level}{mesh_final.suffix}")
 
 
 def _lod_rigged_path(mesh_final: Path, level: int) -> Path:
-    """``id_lod{level}_rigged.glb`` em ``meshes/``."""
+    """``id_lod{level}_rigged.glb`` em ``meshes/`` (pré-promote; depois archive)."""
+    mesh_final = _canonical_mesh_final(mesh_final)
     base = _base_stem(mesh_final.stem)
     return mesh_final.with_name(f"{base}_lod{level}_rigged{mesh_final.suffix}")
 
 
 def _lod_animated_path(mesh_final: Path, level: int) -> Path:
     """``id_lod{level}_animated.glb`` em ``meshes/``."""
+    mesh_final = _canonical_mesh_final(mesh_final)
     base = _base_stem(mesh_final.stem)
     return mesh_final.with_name(f"{base}_lod{level}_animated{mesh_final.suffix}")
+
+
+def _collision_path(mesh_final: Path) -> Path:
+    """``id_collision.glb`` em ``meshes/`` (final)."""
+    mesh_final = _canonical_mesh_final(mesh_final)
+    base = _base_stem(mesh_final.stem)
+    return mesh_final.with_name(f"{base}_collision{mesh_final.suffix}")
 
 
 def move_to_intermediate(src: Path, mesh_final: Path) -> Path:
@@ -439,8 +490,9 @@ def _classify_row_state_master(
 
     if not _valid_file(img_final) and shape_any is None and clean_any is None:
         return _ROW_NEED_IMAGE
-    # Omni mudou -> regenerar shape. Shape ausente mas clean válido -> resume paint.
-    if omni_stale or (shape_any is None and clean_any is None):
+    # Omni mudou ou shape ausente → regenerar. Clean órfão (sem shape) NÃO
+    # salta Stage 1 — senão resume avança paint sobre mesh gorda/stale.
+    if omni_stale or shape_any is None:
         return _ROW_NEED_SHAPE
     if clean_any is None:
         return _ROW_NEED_TOPOLOGY_FIX

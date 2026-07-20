@@ -1,8 +1,9 @@
 """Helpers para controlos geométricos Hunyuan3D-Omni (bbox / pose / point / voxel).
 
-OmniEncoder exige exactamente um sinal de controlo por forward. Quando o CLI não
-passa controlo explícito, usamos um bbox neutro ``[1,1,1]`` (cubo unitário
-normalizado) para manter o fluxo image→mesh compatível com Text3D.
+OmniEncoder exige exactamente um sinal de controlo por forward.
+``bbox_to_corners``: ``half=bbox/2``, cantos ``±half``. Docs Omni: bbox em
+``[0,1]`` (eixo maior=1 → cantos ±0.5). O espaço mesh/MC é ``[-1,1]`` (2u) —
+há margem. Bbox com eixo maior=2 enche o cubo MC (±1) e **corta** a malha.
 """
 
 from __future__ import annotations
@@ -13,8 +14,11 @@ from typing import Any
 import numpy as np
 import torch
 
-# Bbox neutro [length, height, width] em [0, 1] — prior geométrico mínimo.
-DEFAULT_OMNI_BBOX: tuple[float, float, float] = (1.0, 1.0, 1.0)
+# Aspect Omni (docs 0-1). NÃO usar 2.0 — isso enche o grid MC e clipa.
+OMNI_BBOX_AXIS_MAX: float = 1.0
+
+# Fallback ``control_type=none``: aspect humanoid (não cubo — engorda bipedes).
+DEFAULT_OMNI_BBOX: tuple[float, float, float] = (0.45, 1.0, 0.35)
 
 CONTROL_TYPES = frozenset({"none", "bbox", "pose", "point", "voxel"})
 

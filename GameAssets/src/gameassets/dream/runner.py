@@ -194,7 +194,7 @@ def run_dream(
             except Exception as exc:
                 console.print(f"[dim]skymap2d profile args skipped: {exc}[/dim]")
             console.print(f"[dim]$ {' '.join(sky_argv)}[/dim]")
-            rc_sky = subprocess.call(sky_argv)
+            rc_sky = subprocess.call(sky_argv, env=dream_env)
             _step("skymap2d generate", ok=rc_sky == 0, detail=f"exit {rc_sky}")
         else:
             _step("skymap2d generate", ok=False, detail="skymap2d not found; sky skipped")
@@ -233,7 +233,7 @@ def run_dream(
                 if icon_eff is not None:
                     _append_text2icon_profile_args(icon_eff, _icon_argv, quality=_icon_quality)
                 console.print(f"[dim]$ {' '.join(_icon_argv)}[/dim]")
-                rc_icon = subprocess.call(_icon_argv)
+                rc_icon = subprocess.call(_icon_argv, env=dream_env)
                 if rc_icon == 0:
                     ok_icons += 1
             _step(

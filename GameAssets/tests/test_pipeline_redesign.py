@@ -69,6 +69,31 @@ def test_publish_rigged_animated_alias_and_archive(tmp_path: Path) -> None:
     assert _lod_animated_path(mesh_final, 0) == mesh_final.parent / "goblin_lod0_animated.glb"
 
 
+def test_canonical_mesh_final_from_painted_keeps_production_in_meshes(tmp_path: Path) -> None:
+    """Bug: passar ``_intermediate/id_painted.glb`` fazia LOD/collision nascerem lá."""
+    from gameassets.paths import (
+        _canonical_mesh_final,
+        _collision_path,
+        _intermediate_dir,
+        _lod_path,
+        _painted_path,
+    )
+
+    meshes = tmp_path / "meshes"
+    meshes.mkdir()
+    mesh_final = meshes / "witch_hut.glb"
+    painted = _painted_path(mesh_final)
+    assert painted == meshes / "_intermediate" / "witch_hut_painted.glb"
+
+    assert _canonical_mesh_final(painted) == mesh_final
+    assert _lod_path(painted, 0) == meshes / "witch_hut_lod0.glb"
+    assert _lod_path(painted, 1) == meshes / "witch_hut_lod1.glb"
+    assert _collision_path(painted) == meshes / "witch_hut_collision.glb"
+    assert _intermediate_dir(painted) == meshes / "_intermediate"
+    # stem composto
+    assert _canonical_mesh_final(meshes / "_intermediate" / "hero_lod0_painted.glb") == meshes / "hero.glb"
+
+
 def test_move_to_intermediate(tmp_path: Path) -> None:
     from gameassets.paths import _intermediate_dir, move_to_intermediate
 

@@ -11,6 +11,66 @@ from .profile import GameProfile
 
 
 @dataclass(frozen=True)
+class RowText3D:
+    """Overrides Text3D por asset (bloco ``text3d:`` do manifest).
+
+    Ganham do ``text3d:`` profile (game.yaml) e do optimize_for_target.
+    ``mc_level`` entra no fingerprint Omni (invalida o shape ao mudar);
+    ``steps``/``octree_resolution`` são knobs de qualidade/custo (não fingerprint).
+    Uso típico (hero lab): mãos com dedos separados = octree 384 + mc_level 0
+    (o auto negativo engorda ~1 voxel e funde os gaps).
+
+    ``morph_close_voxels`` / alias ``voxel_merge``: N do fecho morfológico
+    (default 0.125; terrain/rock=0.375). ``morph_close`` = metros absolutos.
+    """
+
+    steps: int | None = None
+    octree_resolution: int | None = None
+    mc_level: float | str | None = None
+    morph_close: float | None = None
+    morph_close_voxels: float | None = None
+
+
+_ROW_TEXT3D_KEYS = frozenset(
+    {"steps", "octree_resolution", "mc_level", "morph_close", "morph_close_voxels", "voxel_merge"}
+)
+
+
+def _row_text3d_from_dict(raw: Any, asset_id: str) -> RowText3D | None:
+    """Parse bloco ``text3d:`` por asset; ``None`` se ausente."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"asset {asset_id!r}: text3d deve ser um mapeamento")
+    unknown = set(raw) - _ROW_TEXT3D_KEYS
+    if unknown:
+        raise ValueError(
+            f"asset {asset_id!r} text3d: chaves desconhecidas {sorted(unknown)} (válidas: {sorted(_ROW_TEXT3D_KEYS)})"
+        )
+    steps = raw.get("steps")
+    octree = raw.get("octree_resolution")
+    mc = raw.get("mc_level")
+    mc_m = raw.get("morph_close")
+    # voxel_merge = alias authoring de morph_close_voxels
+    mcv = raw.get("morph_close_voxels", raw.get("voxel_merge"))
+    try:
+        steps_i = int(steps) if steps is not None else None
+        octree_i = int(octree) if octree is not None else None
+        mc_v: float | str | None = str(mc) if isinstance(mc, str) else (float(mc) if mc is not None else None)
+        morph_m = float(mc_m) if mc_m is not None else None
+        morph_n = float(mcv) if mcv is not None else None
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"asset {asset_id!r} text3d: valores inválidos ({e})") from None
+    return RowText3D(
+        steps=steps_i,
+        octree_resolution=octree_i,
+        mc_level=mc_v,
+        morph_close=morph_m,
+        morph_close_voxels=morph_n,
+    )
+
+
+@dataclass(frozen=True)
 class ManifestRow:
     id: str
     idea: str
@@ -47,6 +107,12 @@ class ManifestRow:
     animate_force_preset: bool | None = None
     # Controlos Omni por asset (override de ``text3d.omni`` no game.yaml).
     omni: Any | None = None
+    # Seed absoluto por asset (re-roll cirúrgico). Omitido → determinístico
+    # ``seed_base + adler32(id)``. Entra no fingerprint Omni do shape: mudar
+    # ``seed:`` invalida só esse ``*_shape.glb`` no resume.
+    seed: int | None = None
+    # Overrides Text3D por asset (bloco ``text3d:`` — ver RowText3D).
+    text3d: RowText3D | None = None
 
 
 def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
@@ -54,6 +120,33 @@ def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
     if row.image_source:
         return row.image_source
     return profile.image_source
+
+
+def apply_row_text3d_overrides(item: dict[str, Any], row: ManifestRow) -> dict[str, Any]:
+    """Aplica overrides ``text3d:`` do asset ao shape item (ganham sempre).
+
+    Corre DEPOIS do optimize_for_target/hw-auto: authoring explícito no manifest
+    tem prioridade. ``steps``/``octree_resolution``/``mc_level`` são consumidos
+    por ``ums_batch.shape_specs_from_items`` e ``text3d generate-batch``.
+    """
+    rt3 = row.text3d
+    if rt3 is None:
+        return item
+    if rt3.steps is not None:
+        item["steps"] = rt3.steps
+    if rt3.octree_resolution is not None:
+        item["octree_resolution"] = rt3.octree_resolution
+    if rt3.mc_level is not None:
+        item["mc_level"] = rt3.mc_level
+    return item
+
+
+def row_mc_level(row: ManifestRow, profile_mc_level: float | str | None) -> float | str | None:
+    """``mc_level`` efectivo do asset: override do manifest > profile game.yaml."""
+    rt3 = row.text3d
+    if rt3 is not None and rt3.mc_level is not None:
+        return rt3.mc_level
+    return profile_mc_level
 
 
 def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
@@ -82,6 +175,16 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
         except ValueError as e:
             raise ValueError(f"asset {entry.get('id')!r} omni: {e}") from e
 
+        raw_seed = entry.get("seed")
+        row_seed: int | None = None
+        if raw_seed is not None:
+            try:
+                row_seed = int(raw_seed)
+            except (TypeError, ValueError):
+                raise ValueError(f"asset {entry.get('id')!r}: seed inválido ({raw_seed!r}) — esperado int") from None
+
+        row_text3d = _row_text3d_from_dict(entry.get("text3d"), str(entry.get("id")))
+
         rows.append(
             ManifestRow(
                 id=entry["id"],
@@ -109,6 +212,8 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
                 animate_procedural=animate_cfg.get("procedural"),
                 animate_force_preset=animate_cfg.get("force_preset"),
                 omni=row_omni,
+                seed=row_seed,
+                text3d=row_text3d,
             )
         )
     if not rows:

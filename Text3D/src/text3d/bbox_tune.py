@@ -26,11 +26,12 @@ _TARGET_VOXEL_M = 0.025
 _MAX_SCALE = 3.0
 _MIN_SCALE = 1.0
 
-# Morph-close: refino leve ~1/8 voxel MC (1 vox derretia detalhe — capela).
-# Auto ON por defeito: valor minúsculo só funde double-shell sub-voxel;
-# o remesh interno usa grid ≥ octree (ver ``morphological_close``), pelo que
-# o detalhe MC sobrevive. Opt-out: ``--morph-close 0``.
-_MORPH_VOXELS = 0.125
+# Morph-close / «voxel merge»: N × voxel_m MC. Default ~1/8 voxel (1 vox
+# derretia detalhe — capela). Auto ON: funde double-shell sub-voxel; remesh
+# interno usa grid ≥ octree (ver ``morphological_close``). Opt-out:
+# ``--morph-close 0``. Override: ``--morph-close-voxels`` / category map.
+DEFAULT_MORPH_VOXELS = 0.125
+_MORPH_VOXELS = DEFAULT_MORPH_VOXELS  # alias interno
 _MORPH_FRAC_LO = 0.0002  # 0.02% char
 _MORPH_FRAC_HI = 0.004  # 0.4% char
 _MORPH_ABS_LO = 0.001  # metros
@@ -50,12 +51,20 @@ _CATEGORY_APPROACH_M: dict[str, float] = {
     "humanoid": 1.0,
     "creature": 1.2,
     "rock": 1.5,
+    "terrain": 2.0,  # cliffs / formações — vistas de longe
     "building": 1.5,  # aproximas-te da parede, não da fachada inteira
     "environment": 1.5,
     "vehicle": 1.5,
     "tree": 2.5,
 }
 _DEFAULT_APPROACH_M = 1.0
+
+# Voxel-merge (N × voxel_m) por categoria. Rochas/cliffs: 3× default — menos
+# detalhe geométrico, mais fecho de buracos MC / base aberta.
+_CATEGORY_MORPH_VOXELS: dict[str, float] = {
+    "terrain": 3.0 * DEFAULT_MORPH_VOXELS,  # 0.375
+    "rock": 3.0 * DEFAULT_MORPH_VOXELS,
+}
 
 # bbox_preset → chave de approach (presets sem categoria própria).
 _PRESET_APPROACH_KEY: dict[str, str] = {
@@ -227,23 +236,47 @@ def voxel_meters(char_m: float, octree: int) -> float:
     return float(char_m) / float(octree)
 
 
+def morph_close_voxels_for(
+    category: str | None = None,
+    *,
+    explicit: float | None = None,
+) -> float:
+    """N de «voxel merge» (morph-close): explícito > category > default ``0.125``.
+
+    ``terrain`` / ``rock`` → 3× default (cliffs/rochas: mais fecho, menos detalhe).
+    """
+    if explicit is not None:
+        v = float(explicit)
+        if v < 0:
+            raise ValueError(f"morph_close_voxels deve ser >= 0, recebeu {explicit!r}")
+        return v
+    key = (category or "").strip().lower()
+    if key in _CATEGORY_MORPH_VOXELS:
+        return float(_CATEGORY_MORPH_VOXELS[key])
+    return float(DEFAULT_MORPH_VOXELS)
+
+
 def morph_close_meters(
     char_m: float,
     octree: int | None = None,
     *,
-    voxels: float = _MORPH_VOXELS,
+    voxels: float | None = None,
+    category: str | None = None,
     target_voxel_m: float = _TARGET_VOXEL_M,
 ) -> float | None:
     """Distância de fecho morfológico (metros) escalada ao asset.
 
-    Fórmula genérica: ``~N x voxel_m``, com clamp absoluto e relativo a
-    ``char_m``. Sem ``octree``, assume ``target_voxel_m`` (mesmo alvo do
-    autotune). Devolve ``None`` se ``char_m`` inválido.
+    Fórmula: ``~N x voxel_m``, com clamp absoluto e relativo a ``char_m``.
+    ``N`` = ``voxels`` ou :func:`morph_close_voxels_for` (category/default).
+    Sem ``octree``, assume ``target_voxel_m``. Devolve ``None`` se ``char_m`` inválido.
     """
     if char_m is None or char_m <= 0:
         return None
+    n = float(voxels) if voxels is not None else morph_close_voxels_for(category)
+    if n <= 0:
+        return None
     voxel_m = voxel_meters(char_m, octree) if octree is not None and octree > 0 else float(target_voxel_m)
-    raw = float(voxels) * voxel_m
+    raw = n * voxel_m
     lo = max(_MORPH_ABS_LO, _MORPH_FRAC_LO * float(char_m))
     hi = min(_MORPH_ABS_HI, _MORPH_FRAC_HI * float(char_m))
     if hi < lo:
@@ -379,7 +412,7 @@ def tune_hunyuan_for_bbox(
     chunks = int(base_chunks)
 
     vox = voxel_meters(float(char_m), octree)
-    morph = morph_close_meters(float(char_m), octree, target_voxel_m=tv)
+    morph = morph_close_meters(float(char_m), octree, category=category, target_voxel_m=tv)
 
     changed = octree != int(base_octree) or steps != int(base_steps) or chunks != int(base_chunks)
     return BBoxTuneResult(
@@ -437,7 +470,7 @@ def apply_bbox_tune(
     if result.char_m > 0:
         tv_eff = target_voxel_m if target_voxel_m else target_voxel_for(category, bbox_preset, quality)
         vox = voxel_meters(result.char_m, out_octree)
-        morph = morph_close_meters(result.char_m, out_octree, target_voxel_m=tv_eff)
+        morph = morph_close_meters(result.char_m, out_octree, category=category, target_voxel_m=tv_eff)
         result = BBoxTuneResult(
             steps=out_steps,
             octree=out_octree,
@@ -460,13 +493,15 @@ def resolve_morph_close(
     bbox_preset: str | None = None,
     octree: int | None = None,
     auto: bool = True,
+    morph_close_voxels: float | None = None,
 ) -> float | None:
-    """Resolve morph-close soft: explícito > auto(size) > None.
+    """Resolve morph-close soft: metros explícitos > auto(N×voxel) > None.
 
-    - ``explicit > 0``: usar.
+    - ``explicit > 0``: metros absolutos.
     - ``explicit == 0``: desligado.
-    - ``explicit is None``: auto ~1/8 voxel MC a partir da escala física
-      (``auto=False`` desliga o auto). Valor minúsculo: refina sem derreter.
+    - ``explicit is None``: auto ``morph_close_voxels`` (ou category/default)
+      × voxel_m da escala física. ``terrain``/``rock`` = 3× default.
+      ``auto=False`` desliga.
     """
     if explicit is not None:
         if float(explicit) <= 0:
@@ -477,7 +512,8 @@ def resolve_morph_close(
     char_m, _src = characteristic_meters(size_m, category=category, bbox_preset=bbox_preset)
     if char_m is None:
         return None
-    return morph_close_meters(char_m, octree)
+    n = morph_close_voxels_for(category, explicit=morph_close_voxels)
+    return morph_close_meters(char_m, octree, voxels=n, category=category)
 
 
 def scale_factor_to_meters(

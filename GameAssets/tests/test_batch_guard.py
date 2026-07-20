@@ -22,7 +22,8 @@ def test_subprocess_gpu_env_sets_expandable_when_empty(monkeypatch: pytest.Monke
     assert "expandable_segments" in d.get("PYTORCH_CUDA_ALLOC_CONF", "")
 
 
-def test_query_gpu_free_mib_none_without_nvidia_smi(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_query_gpu_free_mib_none_without_nvml_or_smi(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("gamedev_shared.gpu._nvml_init", lambda: False)
     monkeypatch.setattr("gamedev_shared.gpu.shutil.which", lambda _x: None)
     assert query_gpu_free_mib() is None
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from text3d.bbox_tune import (
     apply_bbox_tune,
     characteristic_meters,
@@ -122,6 +124,21 @@ def test_resolve_morph_auto_light_default() -> None:
     assert resolve_morph_close(explicit=None, size_m=[6, 7, 4.5], octree=384, auto=False) is None
     # Sem pista de escala: sem morph
     assert resolve_morph_close(explicit=None) is None
+
+
+def test_terrain_voxel_merge_triple_vs_default() -> None:
+    """Cliffs/rochas: morph_close_voxels 3× default (mais fecho, menos detalhe)."""
+    from text3d.bbox_tune import DEFAULT_MORPH_VOXELS, morph_close_voxels_for
+
+    assert morph_close_voxels_for(None) == DEFAULT_MORPH_VOXELS
+    assert morph_close_voxels_for("terrain") == pytest.approx(3.0 * DEFAULT_MORPH_VOXELS)
+    assert morph_close_voxels_for("rock") == pytest.approx(3.0 * DEFAULT_MORPH_VOXELS)
+    assert morph_close_voxels_for("prop", explicit=0.5) == 0.5
+
+    prop = resolve_morph_close(explicit=None, size_m=[2.1, 3.0, 2.0], category="prop", octree=256)
+    cliff = resolve_morph_close(explicit=None, size_m=[2.1, 3.0, 2.0], category="terrain", octree=256)
+    assert prop is not None and cliff is not None
+    assert cliff == pytest.approx(3.0 * prop, rel=0.05)
 
 
 def test_small_prop_keeps_base() -> None:
