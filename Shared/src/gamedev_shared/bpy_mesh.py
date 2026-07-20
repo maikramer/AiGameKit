@@ -199,9 +199,18 @@ def save_glb(objects: Any, path: str | Path, **kwargs: Any) -> None:
     else:
         use_selection = False
 
+    # Detect armatures early — export_apply=True freezes the Armature modifier
+    # and the glTF exporter then omits skins[] / breaks LOD rebinding.
+    scene_objs = list(bpy.context.scene.objects)
+    sel_objs = list(objects) if objects is not None else scene_objs
+    has_armature = any(getattr(o, "type", None) == "ARMATURE" for o in sel_objs) or any(
+        getattr(o, "type", None) == "ARMATURE" for o in scene_objs
+    )
+
     export_kwargs: dict[str, Any] = {
         "filepath": str(path),
-        "export_apply": True,
+        # Default False when skinned; True only for static geometry (unless overridden).
+        "export_apply": not has_armature,
         "export_animations": True,
         "export_skins": True,
         "export_morph": True,
@@ -222,9 +231,13 @@ def save_glb(objects: Any, path: str | Path, **kwargs: Any) -> None:
 
     meshopt = bool(kwargs.pop("meshopt", False))
     meshopt_ext = str(kwargs.pop("meshopt_extension", "EXT_meshopt_compression"))
+    user_set_apply = "export_apply" in kwargs
     export_kwargs.update(kwargs)
     if meshopt:
         export_kwargs.update(gltf_meshopt_export_kwargs(enable=True, extension=meshopt_ext))
+    # Never silently apply armatures unless caller forced export_apply=True.
+    if has_armature and not user_set_apply:
+        export_kwargs["export_apply"] = False
 
     # Tangents are only needed to render a tangent-space *normal map*, and
     # exporting them splits vertices at UV seams. So enable them only when a

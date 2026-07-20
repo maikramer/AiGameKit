@@ -49,8 +49,10 @@ from .param_optimizer import (
     should_optimize_text3d,
 )
 from .paths import (
+    _canonical_mesh_final,
     _clean_existing,
     _clean_path,
+    _collision_path,
     _intermediate_dir,
     _lod_animated_path,
     _lod_path,
@@ -173,13 +175,8 @@ def _lod_output_paths(mesh_path: Path, basename: str, num_levels: int = 3) -> li
 
 
 def _collision_output_path(mesh_path: Path) -> Path:
-    """Espera-se: {mesh_dir}/{stem}_collision.glb."""
-    stem = mesh_path.stem
-    for sfx in ("_painted", "_shape", "_rigged_animated", "_rigged", "_segmented"):
-        if stem.endswith(sfx):
-            stem = stem[: -len(sfx)]
-            break
-    return mesh_path.parent / f"{stem}_collision{mesh_path.suffix}"
+    """Espera-se: {meshes_dir}/{id}_collision.glb (nunca em ``_intermediate/``)."""
+    return _collision_path(mesh_path)
 
 
 def _post_text3d_mesh_extras(
@@ -207,6 +204,7 @@ def _post_text3d_mesh_extras(
     caminho - o antigo fluxo linha-a-linha (text3d lod / rigging3d /
     animator3d) foi removido.
     """
+    mesh_final = _canonical_mesh_final(mesh_final)
     rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
 
     if with_validate is None:
@@ -571,8 +569,8 @@ def resolve_row_omni(
     *,
     manifest_dir: Path | None = None,
 ) -> Any:
-    """Merge ``text3d.omni`` (profile) + ``row.omni``; resolve ``point_from``."""
-    from .omni_ctrl import OmniControls, merge_omni, resolve_point_from
+    """Merge ``text3d.omni`` (profile) + ``row.omni``; soft-fill categoria; ``point_from``."""
+    from .omni_ctrl import OmniControls, merge_omni, resolve_point_from, softfill_omni_from_category
 
     base = OmniControls()
     t3 = profile.text3d
@@ -582,6 +580,10 @@ def resolve_row_omni(
     if row is not None and getattr(row, "omni", None) is not None:
         override = row.omni
     merged = merge_omni(base, override)
+    cat = None
+    if row is not None:
+        cat = getattr(row, "category", None) or getattr(row, "kind", None)
+    merged = softfill_omni_from_category(merged, cat)
     if merged.point_from and manifest_dir is not None:
         from .paths import _shape_existing, _shape_path
 
@@ -624,7 +626,16 @@ def _text3d_argv(
     if cat:
         args.extend(["--category", cat])
     t3 = profile.text3d
+    # Overrides ``text3d:`` por asset (manifest) — ganham do profile/optimize.
+    rt3 = row.text3d if row is not None else None
     if not t3:
+        if rt3 is not None:
+            if rt3.steps is not None:
+                args.extend(["--steps", str(rt3.steps)])
+            if rt3.octree_resolution is not None:
+                args.extend(["--octree-resolution", str(rt3.octree_resolution)])
+            if rt3.mc_level is not None:
+                args.extend(["--mc-level", str(rt3.mc_level)])
         omni = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
         args.extend(omni_to_cli_flags(omni))
         return args
@@ -648,8 +659,16 @@ def _text3d_argv(
             args.extend(["--num-chunks", str(t3.num_chunks)])
     if t3.model_subfolder:
         args.extend(["--model-subfolder", t3.model_subfolder])
-    if t3.mc_level is not None:
-        args.extend(["--mc-level", str(t3.mc_level)])
+    if rt3 is not None:
+        # Por asset (manifest) ganha do profile/optimize — flags repetidas:
+        # click fica com a última ocorrência.
+        if rt3.steps is not None:
+            args.extend(["--steps", str(rt3.steps)])
+        if rt3.octree_resolution is not None:
+            args.extend(["--octree-resolution", str(rt3.octree_resolution)])
+    _mc = rt3.mc_level if rt3 is not None and rt3.mc_level is not None else t3.mc_level
+    if _mc is not None:
+        args.extend(["--mc-level", str(_mc)])
     if getattr(t3, "bounds_mode", None):
         args.extend(["--bounds-mode", str(t3.bounds_mode)])
     if t3.guidance is not None:
@@ -775,19 +794,40 @@ def _topology_fix_extra_argv(
 ) -> list[str]:
     """Flags de escala para ``text3d topology-fix`` (genérico por metros).
 
-    ``morph_close`` explícito no profile -> ``--morph-close``; omitido ->
-    auto leve no Text3D (~1/8 voxel MC via size_m/category); ``0`` desliga.
+    ``morph_close`` (metros) row > profile → ``--morph-close``.
+    ``morph_close_voxels`` / voxel_merge row > profile → ``--morph-close-voxels``.
+    Omitido → auto Text3D (N por category: terrain/rock=3× default 0.125).
     ``--size-m`` também escala a mesh para metros reais no topology-fix.
     """
     args: list[str] = []
     t3 = profile.text3d
+    rt3 = row.text3d if row is not None else None
     if t3 is not None and t3.export_origin:
         args.extend(["--export-origin", t3.export_origin])
-    if t3 is not None and t3.morph_close is not None:
-        args.extend(["--morph-close", str(t3.morph_close)])
+    morph_m = None
+    if rt3 is not None and rt3.morph_close is not None:
+        morph_m = rt3.morph_close
+    elif t3 is not None and t3.morph_close is not None:
+        morph_m = t3.morph_close
+    if morph_m is not None:
+        args.extend(["--morph-close", str(morph_m)])
+    morph_n = None
+    if rt3 is not None and rt3.morph_close_voxels is not None:
+        morph_n = rt3.morph_close_voxels
+    elif t3 is not None and t3.morph_close_voxels is not None:
+        morph_n = t3.morph_close_voxels
+    if morph_n is not None:
+        args.extend(["--morph-close-voxels", str(morph_n)])
     omni = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
     if omni.size_m is not None:
         args.extend(["--size-m", ",".join(str(x) for x in omni.size_m)])
+    elif omni.height_m is not None:
+        # expand height→size_m for topology scale hints
+        from .omni_ctrl import expand_omni_world_size
+
+        exp = expand_omni_world_size(omni, category=row.category if row else None)
+        if exp.size_m is not None:
+            args.extend(["--size-m", ",".join(str(x) for x in exp.size_m)])
     if omni.bbox_preset:
         args.extend(["--bbox-preset", omni.bbox_preset])
     cat = (row.category if row is not None else None) or None
@@ -1149,6 +1189,21 @@ def _glb_has_materials(path: Path) -> bool:
         return False
 
 
+def _glb_has_animations(path: Path) -> bool:
+    """True se o GLB declara pelo menos uma animation."""
+    try:
+        with open(path, "rb") as f:
+            if f.read(4) != b"glTF":
+                return False
+            f.read(8)
+            json_len = struct.unpack("<I", f.read(4))[0]
+            f.read(4)
+            j = json.loads(f.read(json_len))
+        return bool(j.get("animations"))
+    except Exception:
+        return False
+
+
 def run_master_pipeline(
     profile: GameProfile,
     row: ManifestRow,
@@ -1179,6 +1234,8 @@ def run_master_pipeline(
       ``with_animate``.
     - Intermediários em ``_intermediate/``.
     """
+    # Aceita painted/shape/lod paths — ancora sempre em meshes/{id}.glb.
+    mesh_final = _canonical_mesh_final(mesh_final)
     res = MasterPipelineResult(asset_id=row.id, ok=True)
     res.intermediates_dir = _intermediate_dir(mesh_final)
 
@@ -1272,6 +1329,7 @@ def run_master_pipeline(
         return res
 
     fr = effective_face_ratio(profile, row)
+    # target_faces = orçamento para LOD1/2 (mínimos), NÃO para esmagar LOD0.
     target_faces = get_target_faces(row.category or "", face_ratio=fr) if row.category else 0
     if target_faces <= 0:
         target_faces = 8000
@@ -1282,85 +1340,115 @@ def run_master_pipeline(
     # gltf_transform_finish na promoção (Stage 9.5) sobre o output final.
     needs_bpy_downstream = (with_rig and rigging3d_bin is not None) or (with_animate and animator3d_bin is not None)
 
-    # Resume: lod0 com paint (ou cópia do bake arquivado) -> skip bake caro.
-    # lod0 animado branco (sem baseColorTexture) NÃO conta - precisa restore/bake.
+    # LOD0 DEVE ser o painted (mesma topologia). Skip só se faces ≈ painted.
+    # Bug antigo: skip com "lod0 com material" aceitava lod0 derretido (~10%).
     from .paths import _base_stem as _bs_bake
     from .paths import _intermediate_dir as _inter_bake_dir
 
     _bake_base = _bs_bake(mesh_final.stem)
     _painted_lod0_arch = _inter_bake_dir(mesh_final) / f"{_bake_base}_lod0_painted{mesh_final.suffix}"
-    if lod0_p.is_file() and _glb_has_materials(lod0_p):
-        res.stages.append(StageResult("bake-master", True, 0.0, "skipped (lod0 com material)", lod0_p))
-    elif _painted_lod0_arch.is_file() and _glb_has_materials(_painted_lod0_arch):
-        import shutil as _sh_bake
+    painted_faces = _count_faces_glb(painted_p)
+    lod0_faces = _count_faces_glb(lod0_p) if lod0_p.is_file() else -1
+    lod0_matches_painted = (
+        lod0_p.is_file()
+        and _glb_has_materials(lod0_p)
+        and painted_faces > 0
+        and lod0_faces >= int(painted_faces * 0.99)
+    )
 
-        _sh_bake.copy2(_painted_lod0_arch, lod0_p)
-        res.stages.append(StageResult("bake-master", True, 0.0, f"restored from {_painted_lod0_arch.name}", lod0_p))
+    import shutil as _sh_bake
+
+    if lod0_matches_painted:
+        res.stages.append(StageResult("bake-master", True, 0.0, f"skipped (lod0=painted faces={lod0_faces})", lod0_p))
     else:
-        bake_argv = [
-            text3d_bin,
-            "bake-master",
-            str(painted_p),
-            "-o",
-            str(lod0_p),
-            "--target-faces",
-            str(target_faces),
-            "--high-poly",
-            str(clean_p),
-        ]
+        # Cópia directa painted → lod0 (identidade). Sem bake-master remesh.
+        # bake-normals high→low só faz sentido com decimação; com lod0=painted
+        # o normal map seria redudante — saltamos.
+        _sh_bake.copy2(painted_p, lod0_p)
+        lod0_faces = painted_faces
+        lod0_matches_painted = True
+        msg = f"lod0=painted copy faces={painted_faces}"
         if bake_normals:
-            bake_argv.append("--bake-normals")
-        if needs_bpy_downstream:
-            bake_argv.extend(["--no-meshopt", "--no-ktx2"])
-        s = _run("bake-master", bake_argv, lod0_p)
-        res.stages.append(s)
-        if not s.ok:
-            res.ok = False
-            return res
+            msg += " (bake-normals skipped: lod0=painted)"
+        res.stages.append(StageResult("bake-master", True, 0.0, msg, lod0_p))
+        # Arquiva referência debug se existia lod0 crush antigo no archive path
+        if _painted_lod0_arch.is_file() and not _glb_has_materials(_painted_lod0_arch):
+            with contextlib.suppress(OSError):
+                _painted_lod0_arch.unlink()
     res.lod0_path = lod0_p
 
-    # Stage 5 - LOD1/LOD2 a partir do LOD0
+    # Stage 5 - LOD1/LOD2 a partir do PAINTED (não do lod0 crushado).
+    # Sem --target-faces → text3d lod copia painted→lod0 e decima lod1/2 por ratio.
     lod1_p = _lod_path(mesh_final, 1)
     lod2_p = _lod_path(mesh_final, 2)
     if with_lod:
-        if lod1_p.is_file() and lod2_p.is_file() and _glb_has_materials(lod1_p) and _glb_has_materials(lod2_p):
-            res.stages.append(StageResult("lod", True, 0.0, "skipped (lod1/lod2 com material)", lod1_p))
+        lod1_faces = _count_faces_glb(lod1_p) if lod1_p.is_file() else -1
+        lod2_faces = _count_faces_glb(lod2_p) if lod2_p.is_file() else -1
+        # Skip só se lod0=painted E lod1/2 têm densidade saudável (~ratio 0.40/0.15).
+        # lod1~10% painted = ladder antiga esmagada — forçar regen.
+        lod_ladder_ok = (
+            lod0_matches_painted
+            and lod1_p.is_file()
+            and lod2_p.is_file()
+            and _glb_has_materials(lod1_p)
+            and _glb_has_materials(lod2_p)
+            and painted_faces > 0
+            and lod1_faces >= int(painted_faces * 0.25)
+            and lod2_faces >= int(painted_faces * 0.08)
+            and lod2_faces < lod1_faces
+        )
+        if lod_ladder_ok:
+            res.stages.append(StageResult("lod", True, 0.0, "skipped (lod1/lod2 ok)", lod1_p))
         else:
-            # text3d lod com painted-mesh=lod0 dá-nos rácio half/quarter
-            lod_target_lod1 = max(target_faces // 2, 100)
-            lod_target_lod2 = max(target_faces // 4, 50)
+            lod_min1 = max(target_faces // 2, 500)
+            lod_min2 = max(target_faces // 4, 150)
             lod_argv = [
                 text3d_bin,
                 "lod",
-                str(lod0_p),
+                str(painted_p),
                 "-o",
                 str(mesh_final.parent),
                 "--basename",
-                mesh_final.stem.replace("_lod0", "").replace("_painted", "").replace("_shape", ""),
+                mesh_final.stem,
                 "--painted-mesh",
-                str(lod0_p),
-                "--target-faces",
-                str(target_faces),
+                str(painted_p),
+                "--lod1-ratio",
+                "0.40",
+                "--lod2-ratio",
+                "0.15",
                 "--min-faces-lod1",
-                str(lod_target_lod1),
+                str(lod_min1),
                 "--min-faces-lod2",
-                str(lod_target_lod2),
+                str(lod_min2),
+                "--no-meshopt",
             ]
+            # Resume: se já há rigged_hi (+ clips), LOD rebinda skin/skel/anims
+            # via gamedev_shared.skin_transfer (evita game-pack de novo).
+            _skin_hi = _rigged_hi_existing(mesh_final)
+            if _skin_hi is not None and _skin_hi.is_file():
+                lod_argv.extend(["--skin-source", str(_skin_hi)])
+                _anim_src: Path | None = None
+                if lod0_p.is_file() and _glb_has_animations(lod0_p):
+                    _anim_src = lod0_p
+                else:
+                    _alias = mesh_final.parent / f"{_bake_base}_rigged_animated{mesh_final.suffix}"
+                    if _alias.is_file() and _glb_has_animations(_alias):
+                        _anim_src = _alias
+                if _anim_src is not None:
+                    lod_argv.extend(["--animation-source", str(_anim_src)])
             # Igual a bake-master: salta finish quando bpy precisa importar
             # depois (rigging/animação por LOD). Re-comprimimos na promoção.
             if needs_bpy_downstream:
                 lod_argv.append("--no-finish")
             s = _run("lod", lod_argv)
             res.stages.append(s)
+            # Após regen, lod0 deve match painted
+            lod0_faces = _count_faces_glb(lod0_p) if lod0_p.is_file() else -1
+            lod0_matches_painted = lod0_p.is_file() and painted_faces > 0 and lod0_faces >= int(painted_faces * 0.99)
 
     # Stage 6 - collision a partir do LOD0
     if with_collision:
-        # Usa o stem-base (strip _shape/_painted/_lod0) para evitar nomes
-        # como ``goblin_painted_collision.glb`` quando mesh_final aponta
-        # para ``goblin_painted.glb``.
-        from .paths import _base_stem as _bs
-
-        coll_p = mesh_final.with_name(f"{_bs(mesh_final.stem)}_collision{mesh_final.suffix}")
+        coll_p = _collision_path(mesh_final)
         if coll_p.is_file():
             res.stages.append(StageResult("collision", True, 0.0, "skipped (collision existente)", coll_p))
         else:
@@ -1462,6 +1550,17 @@ def run_master_pipeline(
                 "--output",
                 str(out),
             ]
+            # Preferir clips já existentes (lod0 animado / alias) — Shared
+            # skin_transfer copia NLA/actions para o novo topology.
+            _anim_for_xfer: Path | None = None
+            if lod0_p.is_file() and _glb_has_animations(lod0_p):
+                _anim_for_xfer = lod0_p
+            else:
+                _alias_xfer = mesh_final.parent / f"{_base_restore}_rigged_animated{mesh_final.suffix}"
+                if _alias_xfer.is_file() and _glb_has_animations(_alias_xfer):
+                    _anim_for_xfer = _alias_xfer
+            if _anim_for_xfer is not None:
+                merge_argv.extend(["--animation-source", str(_anim_for_xfer)])
             s = _run(f"rigging3d-merge-lod{i}", merge_argv, out)
             res.stages.append(s)
             if s.ok and out.is_file():

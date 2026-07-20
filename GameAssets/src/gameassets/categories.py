@@ -169,11 +169,23 @@ CATEGORIES: dict[str, AssetCategory] = {
     "furniture": AssetCategory(
         name="furniture",
         default_kind="prop",
-        target_faces=8000,
+        # 8k melt planks/bevels on painted props (holes + slivers). Keep near painted density.
+        target_faces=48000,
         hint_2d="game furniture piece, front view, clean proportions on white background",
         hint_3d="isolated furniture item, no room or floor, clean geometry with visible part lines",
         hint_rig="",
         hint_texture="smlstxtr, wood furniture surface grain, seamless texture",
+    ),
+    # Explicit "prop" — many manifests use category: prop; without this entry
+    # get_target_faces falls back to 3000 and bake-master shreds the mesh.
+    "prop": AssetCategory(
+        name="prop",
+        default_kind="prop",
+        target_faces=24000,
+        hint_2d="game prop, front view, clean silhouette on white background",
+        hint_3d="isolated game prop, no hands or characters, clean readable geometry",
+        hint_rig="",
+        hint_texture="smlstxtr, game prop surface detail, seamless texture",
     ),
     "vegetation": AssetCategory(
         name="vegetation",

@@ -17,13 +17,34 @@ faz tudo numa sessão e delega a finalização à lib comum.
 
 from __future__ import annotations
 
+import json
 import logging
-import shutil
+import struct
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+
+def _count_faces_glb(path: Path) -> int:
+    """Triangle count from GLB JSON chunk (no bpy)."""
+    try:
+        data = Path(path).read_bytes()
+        if len(data) < 20 or data[:4] != b"glTF":
+            return -1
+        json_len = struct.unpack_from("<I", data, 12)[0]
+        chunk = json.loads(data[20 : 20 + json_len])
+        accessors = chunk.get("accessors", [])
+        faces = 0
+        for m in chunk.get("meshes", []) or []:
+            for p in m.get("primitives", []) or []:
+                idx = p.get("indices")
+                if idx is not None and idx < len(accessors):
+                    faces += accessors[idx].get("count", 0) // 3
+        return faces
+    except Exception:
+        return -1
 
 
 @dataclass
@@ -231,13 +252,29 @@ def bake_master(
         decimated = tmp / "decimated.glb"
         with_tangents = tmp / "with_tangents.glb"
 
-        log.info("bake-master: decimando %s para ~%d faces", painted_glb.name, target_faces)
-        remesh_textured_glb(
-            painted_glb,
-            decimated,
-            target_faces=target_faces,
-            texture_size=texture_size,
-        )
+        # target_faces <= 0 → LOD0 = painted (sem decimar). Também se o
+        # painted já está no orçamento. Pipeline master passa 0: lod0=painted.
+        import shutil as _shutil
+
+        n_src = _count_faces_glb(painted_glb)
+        keep_painted = target_faces <= 0 or (n_src > 0 and n_src <= target_faces)
+
+        if keep_painted:
+            log.info(
+                "bake-master: LOD0 = painted (sem decimar) %s faces=%s target=%s",
+                painted_glb.name,
+                n_src,
+                target_faces,
+            )
+            _shutil.copy2(painted_glb, decimated)
+        else:
+            log.info("bake-master: decimando %s para ~%d faces", painted_glb.name, target_faces)
+            remesh_textured_glb(
+                painted_glb,
+                decimated,
+                target_faces=target_faces,
+                texture_size=texture_size,
+            )
 
         tangents_ok, nm_path = _bake_master_bpy_session(
             decimated,

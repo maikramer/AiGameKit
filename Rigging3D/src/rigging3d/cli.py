@@ -862,6 +862,15 @@ def pipeline_cmd(
     show_default=True,
     help="Round 2: aplica gltf_transform_finish (dedup+prune+uastc+meshopt+tangents) aos outputs.",
 )
+@click.option(
+    "--animation-source",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "GLB com clips (NLA/actions) quando --source não tem animações "
+        "(ex.: rigged_hi + id_lod0.glb já animado). Usa gamedev_shared.skin_transfer."
+    ),
+)
 def transfer_weights_cmd(
     source_glb: Path,
     targets: tuple[Path, ...],
@@ -869,13 +878,13 @@ def transfer_weights_cmd(
     output_dir: Path | None,
     output_suffix: str,
     finish: bool,
+    animation_source: Path | None,
 ) -> None:
-    """Stage 8 — transfere skin weights do source rigged para LOD0/1/2.
+    """Stage 8 — transfere weights + skeleton + animações para LOD0/1/2.
 
-    Usa ``bpy.ops.object.data_transfer`` (POLYINTERP_NEAREST) e ata cada
-    target ao mesmo armature do source. Ideal para reaproveitar um rig
-    high-fidelity (gerado em ``id_clean.glb`` via ``rigging3d pipeline``)
-    em meshes decimadas (LOD0/1/2). Independente de backend de geração.
+    Implementação: ``gamedev_shared.skin_transfer`` (KDTree weights, bind
+    armature, copia actions/NLA). Ideal para reaproveitar ``rigged_hi`` em
+    meshes decimadas sem re-correr o modelo de skinning.
     """
     from .transfer_weights import transfer_weights
 
@@ -891,6 +900,7 @@ def transfer_weights_cmd(
             output_suffix=output_suffix,
             targets_out=out_list,
             apply_finish=finish,
+            animation_source=animation_source,
         )
     except Exception as exc:
         raise click.ClickException(str(exc)) from exc
@@ -901,10 +911,11 @@ def transfer_weights_cmd(
             sz_str = f"{sz / 1024:.0f} KB" if sz < 1024 * 1024 else f"{sz / (1024 * 1024):.2f} MB"
         except OSError:
             sz_str = "?"
+        anims = getattr(r, "animations", 0)
         console.print(
             f"[bold green]✓[/bold green] transfer-weights → "
             f"[cyan]{r.target_out}[/cyan] [dim]({sz_str}, "
-            f"{r.bones} bones, {r.vertex_groups} vgroups)[/dim]"
+            f"{r.bones} bones, {r.vertex_groups} vgroups, {anims} anims)[/dim]"
         )
 
 

@@ -107,7 +107,8 @@ def _export_textured_glb(
         filepath=str(output_path),
         export_format="GLB",
         use_selection=True,
-        export_apply=True,
+        # apply=True freezes Armature modifier → skins[] omitted / anims die.
+        export_apply=not has_armature,
         export_animations=has_armature,
         export_skins=has_armature,
         export_all_influences=False,
@@ -127,6 +128,23 @@ _export_glb = _export_textured_glb
 # Primitivas de reparação unificadas em gamedev_shared.mesh_repair.
 from gamedev_shared.mesh_repair import fill_holes as _fill_holes_bpy  # noqa: E402
 
+# Categorias shell/oca: strip cascas internas por defeito (sem fecho de chão).
+_HOLLOW_SHELL_CATEGORIES = frozenset(
+    {
+        "building",
+        "chapel",
+        "house",
+        "tower",
+        "environment",
+    }
+)
+
+
+def _is_hollow_shell_category(category: str | None) -> bool:
+    if not category:
+        return False
+    return str(category).strip().lower() in _HOLLOW_SHELL_CATEGORIES
+
 
 def _prepare_topology_bpy(
     mesh_obj,
@@ -134,6 +152,8 @@ def _prepare_topology_bpy(
     *,
     watertight: bool | None = None,
     morph_close: float | None = None,
+    remove_internal_shells: bool | None = None,
+    category: str | None = None,
 ) -> None:
     """Pipeline de preparação de topologia — perfil Shared ``topology_clean``.
 
@@ -142,6 +162,8 @@ def _prepare_topology_bpy(
     ``morph_close`` (metros) ativa fecho morfológico volumétrico antes do
     perfil: funde double shells finas e rachas MC que "dobram para dentro"
     (boundary=0 mas visualmente abertas). Destrói UVs — só pré-paint.
+
+    Edifícios (``building``/``chapel``…): strip de cascas internas por defeito.
     """
     log = logging.getLogger(__name__)
 
@@ -149,6 +171,10 @@ def _prepare_topology_bpy(
     n_verts_before = len(mesh_obj.data.vertices)
 
     from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+
+    hollow = _is_hollow_shell_category(category)
+    if remove_internal_shells is None:
+        remove_internal_shells = hollow
 
     if morph_close is not None and morph_close > 0:
         from gamedev_shared.mesh_repair import morphological_close
@@ -166,8 +192,8 @@ def _prepare_topology_bpy(
         overrides["fill_holes_sides"] = int(fill_holes_sides)
     if watertight is not None:
         overrides["watertight"] = bool(watertight)
-    # force_close_base NÃO ligar com morph: em edifícios ocos derrete/achata
-    # a base e a morfologia fina. Buraco residual → morph leve + watertight.
+    if remove_internal_shells:
+        overrides["do_remove_internal_shells"] = True
 
     stats = repair_mesh_object_with_profile(mesh_obj, "topology_clean", **overrides)
     if stats.get("boundary_before") is not None or stats.get("boundary_after") is not None:
@@ -177,6 +203,8 @@ def _prepare_topology_bpy(
             stats.get("boundary_after"),
             stats.get("loops_capped"),
         )
+    if stats.get("internal_shell_faces"):
+        log.info("remove_internal_shells: %s faces", stats.get("internal_shell_faces"))
 
     if stats.get("nonfinite_verts"):
         log.warning("Guard anti-NaN: %d vértices não-finitos removidos", stats["nonfinite_verts"])
@@ -267,6 +295,8 @@ def prepare_mesh_topology(
     watertight: bool | None = None,
     morph_close: float | None = None,
     size_m: list[float] | tuple[float, ...] | None = None,
+    remove_internal_shells: bool | None = None,
+    category: str | None = None,
     **_legacy: object,
 ) -> Path:
     """Prepara topologia de um GLB: weld, fill holes, watertight seletivo.
@@ -288,6 +318,8 @@ def prepare_mesh_topology(
         size_m: ``[L,H,W]`` metros reais — escala a mesh (unidades Omni ~2u →
             metros) antes do reparo, para que distâncias métricas (morph,
             weld) façam sentido físico. No-op se já em escala.
+        remove_internal_shells: Strip cascas internas. ``None`` → auto building.
+        category: Categoria do asset (hints de fecho de shell).
         **_legacy: Aceita kwargs mortos (``skip_remesh``, ``force_close_base``)
             por compat — ignorados.
 
@@ -295,9 +327,8 @@ def prepare_mesh_topology(
         Path para o GLB preparado (ou trimesh.Trimesh se input for trimesh).
     """
     log = logging.getLogger(__name__)
-    for dead in ("skip_remesh", "force_close_base"):
-        if dead in _legacy:
-            log.warning("prepare_mesh_topology: kwarg %r obsoleto — ignorado", dead)
+    if "skip_remesh" in _legacy:
+        log.warning("prepare_mesh_topology: kwarg 'skip_remesh' obsoleto — ignorado")
     _was_trimesh = hasattr(input_path, "export")
     try:
         return _prepare_mesh_topology_impl(
@@ -308,6 +339,8 @@ def prepare_mesh_topology(
             watertight=watertight,
             morph_close=morph_close,
             size_m=size_m,
+            remove_internal_shells=remove_internal_shells,
+            category=category,
         )
     except ImportError:
         log.warning("bpy indisponível — prepare_mesh_topology ignorado (mesh NÃO foi reparada)")
@@ -325,6 +358,8 @@ def _prepare_mesh_topology_impl(
     watertight: bool | None = None,
     morph_close: float | None = None,
     size_m: list[float] | tuple[float, ...] | None = None,
+    remove_internal_shells: bool | None = None,
+    category: str | None = None,
 ):
     if _was_trimesh:
         import tempfile
@@ -346,6 +381,8 @@ def _prepare_mesh_topology_impl(
         fill_holes_sides=fill_holes_sides,
         watertight=watertight,
         morph_close=morph_close,
+        remove_internal_shells=remove_internal_shells,
+        category=category,
     )
     # Sem normal-split no export: reabre boundary no reimport (paint/LOD).
     # Shade-smooth já aplicado; importer/jogo recalcula normais se preciso.
@@ -479,6 +516,8 @@ def generate_lod_textured_glb_triplet(
     apply_finish: bool = True,
     finish_lod0: bool = False,
     apply_meshopt: bool = False,
+    skin_source: Path | None = None,
+    animation_source: Path | None = None,
 ) -> list[Path]:
     """Gera três GLB texturizados por decimação com preservação de UV.
 
@@ -487,6 +526,11 @@ def generate_lod_textured_glb_triplet(
 
     ``apply_meshopt`` controla EXT_meshopt_compression (desactivado por defeito;
     a quantização pode deslocar origem e inverter orientação nalguns viewers).
+
+    ``skin_source``: GLB rigged (weights + skeleton). Após cada LOD, rebind via
+    ``gamedev_shared.skin_transfer`` (KDTree weights + armature + anims).
+    ``animation_source``: GLB com clips quando ``skin_source`` não tem animações
+    (ex.: ``rigged_hi`` + ``*_animated.glb``).
     """
     from text3d.utils.mesh_remesh_textured import _clamp_decimate_target, remesh_textured_glb
 
@@ -565,6 +609,38 @@ def generate_lod_textured_glb_triplet(
                     res.meshopt_applied,
                     res.skipped_reason,
                 )
+
+    # Rebind skin/skeleton/animations onto painted/decimated topology.
+    if skin_source is not None and Path(skin_source).is_file():
+        from gamedev_shared.skin_transfer import transfer_skin_to_mesh
+
+        skin_src = Path(skin_source)
+        anim_src = Path(animation_source) if animation_source else None
+        for p in out_paths:
+            if not p.is_file():
+                continue
+            tmp = p.with_suffix(".skin_tmp.glb")
+            try:
+                result = transfer_skin_to_mesh(
+                    skin_src,
+                    p,
+                    tmp,
+                    animation_source=anim_src,
+                )
+                tmp.replace(p)
+                log.info(
+                    "LOD skin_transfer %s: bones=%d vgroups=%d anims=%d weights=%d",
+                    p.name,
+                    result.bones,
+                    result.vertex_groups,
+                    result.animations,
+                    result.weights_assigned,
+                )
+            except Exception as exc:
+                log.error("LOD skin_transfer falhou em %s: %s", p.name, exc)
+                with contextlib.suppress(OSError):
+                    tmp.unlink(missing_ok=True)
+                raise
 
     if out_paths and out_paths[0].is_file():
         lod0_size = out_paths[0].stat().st_size

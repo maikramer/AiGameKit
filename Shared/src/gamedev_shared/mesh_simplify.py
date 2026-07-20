@@ -225,7 +225,13 @@ def simplify_glb(
     log.info("simplify_glb: %d faces → ~%d", n, target_faces)
 
     stats = simplify_mesh_object(obj, target_faces, repair=repair)
-    save_glb(obj, path_out)
+
+    # Include armatures so skins + animations survive LOD simplify.
+    import bpy
+
+    arms = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
+    export_objs: list[Any] = [obj, *arms] if arms else [obj]
+    save_glb(export_objs, path_out, export_apply=False if arms else True)
     clear_scene()
     log.info("Resultado: %s (%d faces)", path_out, stats["faces_after"])
     return path_out
