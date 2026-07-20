@@ -22,7 +22,7 @@ import { heroStats, RING_SPEED_MULT } from '../game/skills';
 const TURN_SPEED = 6;
 const TERRAIN_LAYER = 0x0001;
 const HUT_FLOOR_TOP = 0.2;
-const MODEL_URL = '/assets/meshes/npc_merchant_rigged_animated.glb';
+const MODEL_URL = '/assets/meshes/npc_merchant_lod0.glb';
 const IDLE_CLIP = 'idle';
 
 // Compared squared against dx*dx + dz*dz to avoid sqrt per frame.
@@ -132,8 +132,6 @@ export function start(ctx: MonoBehaviourContext): void {
     }).then((result) => {
       group = result.group;
       animator = result.animator;
-      // NPC ships 2 units tall (pipeline normalization); human ≈ 1.75 m.
-      group.scale.setScalar(0.88);
       group.updateWorldMatrix(true, true);
       _box.setFromObject(group);
       footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;

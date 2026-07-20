@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { AnimationClip, LoopRepeat, Scene } from 'three';
 import { GltfAnimator, type LocomotionSet } from 'vibegame';
+import { matchClipKeyword } from '../../../src/extras/gltf-animator';
 
 function makeGltf(clipNames: string[]) {
   return {
@@ -278,5 +279,14 @@ describe('GltfAnimator locomotion', () => {
     expect(walk).not.toBeNull();
     expect(walk!.loop).toBe(LoopRepeat);
     expect(walk!.clampWhenFinished).toBe(false);
+  });
+
+  it('matchClipKeyword prefers exact idle over axeidle/swordidle', () => {
+    const names = ['axeidle', 'chopidle', 'idle', 'swordidle'];
+    expect(matchClipKeyword(names, 'idle')).toBe('idle');
+    expect(matchClipKeyword(names, 'swordidle')).toBe('swordidle');
+    expect(matchClipKeyword(['walk', 'run', 'idle'], 'walk')).toBe('walk');
+    const anim = makeAnimator(names);
+    expect(anim.resolveClipName('idle')).toBe('idle');
   });
 });

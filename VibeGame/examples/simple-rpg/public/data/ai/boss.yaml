@@ -26,7 +26,7 @@ melee-ai:
     # Gameplay extensions (not read by the FSM; consumed by spawn/loot wiring)
     hp: 300
     assets:
-      modelUrl: /assets/meshes/boss_ogre_rigged_animated.glb
+      modelUrl: /assets/meshes/boss_ogre_lod0.glb
       clips:
         idle: Animator3D_BreatheIdle
         walk: Animator3D_Walk

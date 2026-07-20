@@ -76,7 +76,6 @@ import {
   getBodyForEntity,
   getBvhSurfaceHeight,
   getTerrainHeightAt,
-  isTerrainColliderAt,
   getBodyYForFeetAt,
   getRapierWorld,
   terrainReady,
@@ -144,6 +143,28 @@ let heroSpawnY: number | null = null;
 // How far below the terrain surface the hero must drop before we treat it as a
 // fall-through and re-seat. Generous enough to ignore slopes/steps/CCT skin.
 const VOID_FALL_MARGIN = 8;
+// BVH can hit roofs/props above the walkable floor; only trust it when it sits
+// near the heightmap sample (cobble/road mesh slightly above dirt).
+const BVH_TERRAIN_AGREE_M = 2.5;
+
+function heroWalkableSurfaceY(
+  state: State,
+  x: number,
+  z: number
+): number | null {
+  const terrainH = getTerrainHeightAt(state, x, z);
+  const bvh = getBvhSurfaceHeight(state, x, 500, z);
+  if (Number.isFinite(terrainH)) {
+    if (
+      Number.isFinite(bvh) &&
+      Math.abs((bvh as number) - terrainH) <= BVH_TERRAIN_AGREE_M
+    ) {
+      return Math.max(bvh as number, terrainH);
+    }
+    return terrainH;
+  }
+  return Number.isFinite(bvh) ? (bvh as number) : null;
+}
 
 const HeroGroundSnapSystem: System = {
   group: 'fixed',
@@ -152,22 +173,17 @@ const HeroGroundSnapSystem: System = {
     const heroEid = state.getEntityByName('hero');
     if (heroEid === null || !state.hasComponent(heroEid, Transform)) return;
 
-    // Void-recovery failsafe: even once "snapped", the kinematic CCT can walk
-    // into the void if the snap was released (via the isTerrainColliderAt
-    // branch below) before the chunk's Rapier collider actually existed, or if
-    // a respawn landed over not-yet-built ground. If the hero has fallen well
-    // below the terrain surface, re-arm the snap so it re-seats the hero
-    // instead of falling forever (seen as the world greying out to a void).
+    // Void-recovery failsafe: kinematic CCT can fall through if snap was
+    // released before a real Rapier hit existed underfoot, or if a respawn
+    // landed over not-yet-built ground. Re-arm instead of looping the void.
     if (heroGroundSnapped) {
       if (!terrainReady(state)) return;
       const gx = Transform.posX[heroEid];
       const gz = Transform.posZ[heroEid];
-      const surfaceY =
-        getBvhSurfaceHeight(state, gx, 500, gz) ??
-        getTerrainHeightAt(state, gx, gz);
+      const surfaceY = heroWalkableSurfaceY(state, gx, gz);
       if (
         Number.isFinite(surfaceY) &&
-        Transform.posY[heroEid] < surfaceY - VOID_FALL_MARGIN
+        Transform.posY[heroEid] < (surfaceY as number) - VOID_FALL_MARGIN
       ) {
         heroGroundSnapped = false;
       } else {
@@ -195,12 +211,12 @@ const HeroGroundSnapSystem: System = {
       return;
     }
 
-    const groundY =
-      getBvhSurfaceHeight(state, x, 500, z) ?? getTerrainHeightAt(state, x, z);
+    const groundY = heroWalkableSurfaceY(state, x, z);
+    if (!Number.isFinite(groundY)) return;
     const snapY = getBodyYForFeetAt(
       state,
       heroEid,
-      groundY + GROUND_CONTACT_SKIN
+      (groundY as number) + GROUND_CONTACT_SKIN
     );
 
     Transform.posX[heroEid] = x;
@@ -221,14 +237,16 @@ const HeroGroundSnapSystem: System = {
 
     const CM = state.getComponent('character-movement');
     if (CM && state.hasComponent(heroEid, CM)) {
+      // Hold vertical only — keep horizontal input so the hero isn't frozen
+      // while Rapier heightfields finish streaming in.
       CM.velocityY[heroEid] = 0;
-      CM.desiredVelX[heroEid] = 0;
-      CM.desiredVelZ[heroEid] = 0;
     }
 
+    // Release ONLY on a real shape cast under the capsule. AABB coverage
+    // (isTerrainColliderAt) was too early: snap released → gravity → void →
+    // re-snap → visible "falling from the sky" loop when the heightfield
+    // wasn't under the feet yet.
     if (physicsGroundBelow(state, body, x, snapY, z)) {
-      heroGroundSnapped = true;
-    } else if (Number.isFinite(snapY) && isTerrainColliderAt(state, x, z)) {
       heroGroundSnapped = true;
     }
   },
@@ -388,14 +406,12 @@ const RespawnSystem: System = {
       // fall-through into the void whenever that chunk's collider wasn't ready).
       let respawnY = CHECKPOINT_Y;
       if (terrainReady(state)) {
-        const groundY =
-          getBvhSurfaceHeight(state, respawnX, 500, respawnZ) ??
-          getTerrainHeightAt(state, respawnX, respawnZ);
+        const groundY = heroWalkableSurfaceY(state, respawnX, respawnZ);
         if (Number.isFinite(groundY)) {
           respawnY = getBodyYForFeetAt(
             state,
             hero,
-            groundY + GROUND_CONTACT_SKIN
+            (groundY as number) + GROUND_CONTACT_SKIN
           );
         }
       }
@@ -652,10 +668,10 @@ const AttackContextSystem: System = {
           : 'mine'
         : WEAPON_CLIPS[weaponIdx];
     setPlayerAttackClip(clip);
-    // Combat-guard idle: when a weapon/tool is equipped, use the matching guard
-    // stance (swordidle/axeidle/…) instead of the default relaxed idle. Reverts
-    // to the default idle when no weapon is equipped (e.g. bomb-only).
-    setPlayerIdleClip(clip ? `${clip}idle` : null);
+    // Relaxed idle while exploring — weapon *idle clips (swordidle/axeidle/…)
+    // plant a combat crouch with knee sway that reads as floating/dancing feet
+    // on cobble. Guard stance only when a creature is aggro'd.
+    setPlayerIdleClip(anyCreatureAggro(state) && clip ? `${clip}idle` : null);
     // Show the matching model in hand (unless the bomb-aim owns the hand).
     if (!bombAiming) {
       const url = HELD_MODEL[clip] ?? null;
@@ -1260,7 +1276,7 @@ async function bootstrap(): Promise<void> {
     const z = Transform.posZ[heroEid];
     const bvh = getBvhSurfaceHeight(state, x, 500, z);
     const tH = getTerrainHeightAt(state, x, z);
-    const groundY = bvh ?? tH;
+    const groundY = heroWalkableSurfaceY(state, x, z);
     const snapY = getBodyYForFeetAt(
       state,
       heroEid,

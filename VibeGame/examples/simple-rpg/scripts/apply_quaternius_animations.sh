@@ -2,7 +2,7 @@
 # Aplica animações CC0 do Quaternius (via retarget) aos modelos humanoides do simple-rpg.
 #
 # Humanoides (retarget Quaternius): recebem os 12 clips do perfil quaternius.
-# Não-humanoides (scorpion, mosquito): mantêm animação procedural, só renomeiam tracks.
+# Não-humanoides (scorpion): mantêm animação procedural, só renomeiam tracks.
 #
 # Uso:  bash VibeGame/examples/simple-rpg/scripts/apply_quaternius_animations.sh
 # Pré:  animator3d no PATH (ou Animator3D/.venv/bin/animator3d), pack Quaternius em cache
@@ -28,14 +28,14 @@ CLIPS="idle,walk,run,sprint,jump,attack,punch,hit,death,roar,roll,interact"
 # Humanoides (retarget completo).
 HUMANOIDS=(
   hero npc_merchant goblin slime wolf bandit shade
-  witch_boss sand_wyrm_boss bogling bog_warden_boss boss_ogre
+  witch_boss sand_worm bogling bog_warden_boss boss_ogre
 )
 
 # Não-humanoides (só rename de tracks existentes para nomes limpos).
-NON_HUMANOIDS=(scorpion mosquito)
+NON_HUMANOIDS=(scorpion)
 
 # Mapeamento de rename para os não-humanoides (clips procedurais Animator3D_* -> limpos).
-# Scorpion/mosquito têm Walk/Run/Jump/Attack/Roar (+ BreatheIdle); NÃO têm Fall.
+# Scorpion tem Walk/Run/Jump/Attack/Roar (+ BreatheIdle); NÃO tem Fall.
 RENAME_MAP="Animator3D_BreatheIdle:idle,Animator3D_Walk:walk,Animator3D_Run:run,Animator3D_Jump:jump,Animator3D_Attack:attack,Animator3D_Roar:roar"
 
 echo "════════════════════════════════════════════════════════════"

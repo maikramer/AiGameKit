@@ -23,7 +23,6 @@ negative_keywords:
   - dark gritty
   - scary
 text2d:
-  low_vram: true
   width: 768
   height: 768
 text3d:
@@ -31,10 +30,11 @@ text3d:
   # Decode Omni: bounds anisotrópicos + mc_level ∝ 1/octree (pinholes).
   bounds_mode: auto
   mc_level: auto
-  # Omni defaults globais (override por asset no manifest).
-  # humanoid → pose T-pose via --category soft-fill; explícito aqui para documentação.
-  omni:
-    control_type: none
+  # Peak VRAM UMS (shape wave) — ~6 GB: uint8 recusa (~7.3 GiB); int4 cabe.
+  sdnq_preset: sdnq-int4
+  memory_efficient: true
+  # Omni por asset no manifest.yaml (bbox todos; tpose nos bipedais animados).
+  # Soft-fill por categoria em Text3D/GameAssets se omni omitido.
 paint3d:
   preserve_origin: true
   texture_size: 2048
@@ -96,7 +96,7 @@ biome_audio:
     sfx_extra: [sfx_scorpion_hiss, sfx_sand_drift]
   swamp:
     bgm_preset: murky_swamp
-    sfx_extra: [sfx_bogling_jump, sfx_mosquito_buzz]
+    sfx_extra: [sfx_bogling_jump]
 
 # Portraits NPC (Text2D 2D, gerado separadamente do batch 3D).
 # Correr com: text2d generate "<prompt>" -o ../public/assets/ui/<id>.png

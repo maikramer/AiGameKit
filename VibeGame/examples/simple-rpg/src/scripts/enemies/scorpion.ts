@@ -3,8 +3,7 @@ import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/scorpion_rigged_animated.glb',
-  modelScale: 0.6,
+  modelUrl: '/assets/meshes/scorpion_lod0.glb',
   clips: {
     idle: 'idle',
     walk: 'walk',

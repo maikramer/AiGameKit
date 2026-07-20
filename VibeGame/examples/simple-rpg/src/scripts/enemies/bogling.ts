@@ -3,8 +3,7 @@ import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/bogling_rigged_animated.glb',
-  modelScale: 0.55,
+  modelUrl: '/assets/meshes/bogling_lod0.glb',
   clips: {
     idle: 'idle',
     walk: 'walk',

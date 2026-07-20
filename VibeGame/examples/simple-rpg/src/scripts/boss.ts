@@ -7,8 +7,7 @@ import { addGold } from '../game/economy';
 import { everSpawned, aliveInBiome } from './enemy-registry';
 
 const behaviours = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/boss_ogre_rigged_animated.glb',
-  modelScale: 1.7,
+  modelUrl: '/assets/meshes/boss_ogre_lod0.glb',
   clips: {
     idle: 'idle',
     walk: 'walk',

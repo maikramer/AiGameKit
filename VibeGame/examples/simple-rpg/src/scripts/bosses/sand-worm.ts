@@ -1,10 +1,10 @@
-// Desert elite boss — Verme das Areias. Always-active elite at the far east
+// Desert elite boss — Sand Worm / Verme das Areias. Always-active elite at the far east
 // of the desert biome.
 import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/sand_wyrm_boss_rigged_animated.glb',
+  modelUrl: '/assets/meshes/sand_worm_rigged_animated.glb',
   modelScale: 1.6,
   clips: {
     idle: 'idle',
@@ -29,8 +29,8 @@ const behaviours = createCreatureBehaviours({
   runTimeScale: 1.5,
   lootGoldMin: 90,
   lootGoldMax: 130,
-  defeatedText: 'VERME DAS AREIAS DERROTADO!',
-  enemyType: 'boss_sandwyrm',
+  defeatedText: 'SAND WORM DERROTADO!',
+  enemyType: 'boss_sandworm',
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });
 

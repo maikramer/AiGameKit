@@ -69,7 +69,7 @@ const HEAL_AMOUNT = 35;
 const DASH_DISTANCE = 4.2;
 const POWER_RADIUS = 4.8;
 const POWER_DAMAGE = 60;
-const POWER_VERTICAL = 3.0; // don't nuke high-flying mosquitoes from the ground
+const POWER_VERTICAL = 3.0; // don't nuke high-flying enemies from the ground
 const TERRAIN_LAYER = 0x0001;
 
 const cd: Record<string, number> = { dash: 0, heal: 0, power: 0 };

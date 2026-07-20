@@ -114,7 +114,7 @@ export interface CreatureConfig {
   /**
    * Uniform visual scale applied to the loaded model (default 1).
    * The asset pipeline (Hunyuan) normalizes every GLB to a ~2-unit bounding
-   * box — a mosquito ships as tall as the hero and the ogre *shorter* — so
+   * box — small pests ship as tall as the hero and the ogre *shorter* — so
    * each creature declares its real in-world size here. footOffset and the
    * health bar are children of the scaled group, so they follow for free.
    */

@@ -81,9 +81,6 @@ export function start(ctx: MonoBehaviourContext): void {
   loadStarted = true;
   void loadGltfToSceneWithAnimator(ctx.state, MODEL_URL).then((result) => {
     group = result.group;
-    // Pipeline GLB is ~1.7 m tall (Hunyuan 2-unit normalization) — a chest
-    // taller than the hero's waist-height. Real prop: ~0.85 m.
-    group.scale.setScalar(0.5);
     group.updateWorldMatrix(true, true);
     _box.setFromObject(group);
     footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;

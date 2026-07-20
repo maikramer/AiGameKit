@@ -40,6 +40,38 @@ export interface LocomotionSet {
   turnRight?: string;
 }
 
+export function matchClipKeyword(clipNames: string[], keyword: string): string {
+  if (!keyword || clipNames.length === 0) return '';
+  const want = keyword.toLowerCase();
+  const lower = clipNames.map((n) => n.toLowerCase());
+
+  const exactIdx = lower.findIndex((n) => n === want);
+  if (exactIdx >= 0) return clipNames[exactIdx]!;
+
+  const suffixes = [`_${want}`, `-${want}`, `.${want}`];
+  for (let i = 0; i < lower.length; i++) {
+    const n = lower[i]!;
+    if (suffixes.some((s) => n.endsWith(s))) return clipNames[i]!;
+  }
+
+  const prefixes = [`${want}_`, `${want}-`, `${want}.`];
+  for (let i = 0; i < lower.length; i++) {
+    const n = lower[i]!;
+    if (prefixes.some((p) => n.startsWith(p))) return clipNames[i]!;
+  }
+
+  let bestIdx = -1;
+  let bestLen = Infinity;
+  for (let i = 0; i < lower.length; i++) {
+    const n = lower[i]!;
+    if (n.includes(want) && n.length < bestLen) {
+      bestLen = n.length;
+      bestIdx = i;
+    }
+  }
+  return bestIdx >= 0 ? clipNames[bestIdx]! : '';
+}
+
 export class GltfAnimator {
   readonly mixer: AnimationMixer;
   readonly clips: Map<string, AnimationClip> = new Map();
@@ -179,15 +211,16 @@ export class GltfAnimator {
 
   /**
    * Resolve a logical clip name (`idle`/`walk`/…) to an actual GLB clip.
-   * Exact match first, then substring (handles `Animator3D_Walk`, etc.).
+   * Exact / separator / shortest-substring first, then locomotion aliases.
    */
   resolveClipName(requested: string): string {
     if (this.clips.has(requested)) return requested;
+    const matched = matchClipKeyword(this.clipNames, requested);
+    if (matched) return matched;
+
     const want = requested.toLowerCase();
     const names = this.clipNames;
     const lower = this.clipNamesLower;
-    const direct = lower.findIndex((n) => n.includes(want));
-    if (direct >= 0) return names[direct]!;
 
     const aliases: Record<string, string[]> = {
       idle: ['breathe', 'breath', 'stand', 'rest', 'pose', 'wait', 'hover'],

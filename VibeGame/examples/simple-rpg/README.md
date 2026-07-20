@@ -41,10 +41,10 @@ upload a new release, and update `assets.lock.json` (`version` + `url` + `sha256
 | Interactables (rune pillar, shrine, chest) | Entity scripts + trimesh colliders     | `<GameObject script="…">` (press **F** to interact)                                                                        |
 | Ground carpet (grass / flowers)            | Smart `<Vegetation>` + bpy GLBs        | Roles grass→flower share cluster hubs; `meshes/vegetation/*.glb`; `npm run generate-vegetation`                            |
 | Static resources (trees, rocks, cacti)     | `<StaticSpawner>` + `<ResourceNode>`   | Per-biome: oak, pine_dark, dead_willow, cactus, ruin_pillar, etc. (chop/mine with **J**)                                   |
-| Biome enemies (animated)                   | `<DynamicSpawner>` + entity scripts    | wolf, shade, scorpion, bandit, bogling, mosquito, goblin, slime                                                            |
+| Biome enemies (animated)                   | `<DynamicSpawner>` + entity scripts    | wolf, shade, scorpion, bandit, bogling, goblin, slime                                                                      |
 | Biome regions (fog/ambient/BGM)            | `biomes` plugin                        | `<BiomeRegion polygon="[x,z;…]">` x4 (dark forest, desert, swamp, frozen peaks)                                            |
 | Quest NPCs + dialogue (12)                 | `quests` plugin                        | `<DialogueNPC>` inside `<Composition>` + `<DialogueBalloon>`                                                               |
-| Bosses (4)                                 | Entity scripts                         | `<GameObject script="bosses/*.ts">` (witch, sand-wyrm, bog-warden) + `<GameObject script="boss.ts">` (ogre, final)         |
+| Bosses (4)                                 | Entity scripts                         | `<GameObject script="bosses/*.ts">` (witch, sand-worm, bog-warden) + `<GameObject script="boss.ts">` (ogre, final)         |
 | HUD widgets                                | `hud` plugin                           | `<HealthBar>`, `<XpBar>`, `<ResourceChip>` (gold/wood/stone), `<Minimap>`, `<Compass>`, `<BossBar>`, `<InteractionPrompt>` |
 | Pause menu (tabbed modal)                  | `hud` plugin                           | `<TabbedModal key="q">` with Skills, Inventory, Options, Quests tabs                                                       |
 | Particles                                  | Engine particle system                 | Kenney sprites in `public/assets/particles/`; fire/smoke/sparks/leaves/etc. on camp + combat + destructibles               |
@@ -181,8 +181,8 @@ The world spans **four biome regions** radiating from the central walled city. E
 | Biome                   | Location | Atmosphere                 | Enemies                   | Boss         | Quest NPCs (dialogue-id)                       |
 | ----------------------- | -------- | -------------------------- | ------------------------- | ------------ | ---------------------------------------------- |
 | **Dark Forest** (north) | z > 28   | Green-dark fog, mysterious | wolf, shade               | Witch        | forest_wolves, forest_shades, forest_darkwood  |
-| **Desert** (east)       | x > 28   | Sandy fog, arid            | scorpion, bandit          | Sand Wyrm    | desert_scorpions, desert_bandits, desert_ruins |
-| **Swamp** (south)       | z < -28  | Murky fog, dense           | bogling, mosquito         | Bog Warden   | swamp_boglings, swamp_bogwarden, swamp_bogmoss |
+| **Desert** (east)       | x > 28   | Sandy fog, arid            | scorpion, bandit          | Sand Worm    | desert_scorpions, desert_bandits, desert_ruins |
+| **Swamp** (south)       | z < -28  | Murky fog, dense           | bogling                   | Bog Warden   | swamp_boglings, swamp_bogwarden, swamp_bogmoss |
 | **Frozen Peaks** (west) | x < -28  | Cold fog, icy              | goblin, slime, frost wolf | Ogre (final) | peaks_goblins, peaks_frost, peaks_ogre         |
 
 Each biome is declared via `<BiomeRegion polygon="[x,z;x,z;...]">` in `index.html`. The `biomes` plugin detects the player's position and crossfades fog color, density, ambient light, terrain texture, and the BGM layer when entering a new region.
@@ -191,12 +191,12 @@ Each biome is declared via `<BiomeRegion polygon="[x,z;x,z;...]">` in `index.htm
 
 ## Bosses
 
-Four bosses guard the far end of each biome. The first three (Witch, Sand Wyrm, Bog Warden) are placed via `<GameObject script="bosses/*.ts">` and spawn active. They share the same engine melee-AI FSM as regular creatures but with higher HP, wider detect range, strafing, and an enrage phase at low health.
+Four bosses guard the far end of each biome. The first three (Witch, Sand Worm, Bog Warden) are placed via `<GameObject script="bosses/*.ts">` and spawn active. They share the same engine melee-AI FSM as regular creatures but with higher HP, wider detect range, strafing, and an enrage phase at low health.
 
 | Boss       | Biome        | Script                 | Notes                                             |
 | ---------- | ------------ | ---------------------- | ------------------------------------------------- |
 | Witch      | Dark Forest  | `bosses/witch.ts`      | Elite, back of the forest                         |
-| Sand Wyrm  | Desert       | `bosses/sand-wyrm.ts`  | Elite, deep desert                                |
+| Sand Worm  | Desert       | `bosses/sand-worm.ts`  | Elite, deep desert                                |
 | Bog Warden | Swamp        | `bosses/bog-warden.ts` | Elite, far swamp                                  |
 | Ogre       | Frozen Peaks | `boss.ts`              | **Final boss**, gated until the peaks are cleared |
 

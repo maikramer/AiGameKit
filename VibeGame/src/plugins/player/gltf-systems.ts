@@ -1,12 +1,12 @@
 import { logger } from '../../core/utils/logger';
-import { Box3, LineSegments, Quaternion, Vector3 } from 'three';
+import { LineSegments, Quaternion, Vector3 } from 'three';
 import { dampQ } from 'maath/easing';
 import { defineQuery, type Adapter, type State, type System } from '../../core';
 import {
   loadGltfAnimated,
   loadGltfAnimatedForEntity,
 } from '../../extras/gltf-bridge';
-import { GltfAnimator } from '../../extras/gltf-animator';
+import { GltfAnimator, matchClipKeyword } from '../../extras/gltf-animator';
 import {
   animatorRegistry,
   registerAnimator,
@@ -19,9 +19,15 @@ import {
   CharacterController,
   CharacterMovement,
   Collider,
+  getBodyForEntity,
+  getBodyYForFeetAt,
+  getCharacterFeetY,
   invalidateCollider,
+  markRigidbodyPoseDirty,
+  Rigidbody,
 } from '../physics';
 import { applyPlayerColliderFromAabb } from './player-collider-fit';
+import { computePlayerFootAnchor } from './player-foot-anchor';
 import { Transform, WorldTransform } from '../transforms';
 import { PlayerController, PlayerGltfConfig } from './components';
 import { PLAYER_COLLIDER_DEFAULTS } from './constants';
@@ -215,13 +221,11 @@ const _visualQuat = new Quaternion();
 const _fwd = new Vector3();
 const _q = new Quaternion();
 
-/** First clip whose name contains any of the keywords (case-insensitive). */
+/** Best clip match for any keyword (exact / separator / shortest substring). */
 function findClip(animator: GltfAnimator, ...keywords: string[]): string {
-  const names = animator.clipNames;
-  const lower = animator.clipNamesLower;
   for (const k of keywords) {
-    const idx = lower.findIndex((n) => n.includes(k));
-    if (idx >= 0) return names[idx];
+    const hit = matchClipKeyword(animator.clipNames, k);
+    if (hit) return hit;
   }
   return '';
 }
@@ -421,8 +425,14 @@ export const PlayerGltfSetupSystem: System = {
           // an orphan animator into the registry.
           if (!state.exists(eid)) return;
 
-          const box = new Box3().setFromObject(gltf.scene);
-          const yOffset = Number.isFinite(box.min.y) ? -box.min.y : 0;
+          // Anchor on soles (ball/toe bones), not pelvis — skinned avatars often
+          // keep the armature root at the waist; raw Box3 alone can plant the hip.
+          const prevFeetY = state.hasComponent(eid, Collider)
+            ? getCharacterFeetY(state, eid, Transform.posY[eid])
+            : Transform.posY[eid];
+
+          const anchor = computePlayerFootAnchor(gltf.scene);
+          const { box, yOffset } = anchor;
           setYOffset(state, eid, yOffset);
 
           if (state.hasComponent(eid, Collider)) {
@@ -436,7 +446,7 @@ export const PlayerGltfSetupSystem: System = {
               ? Math.max(Math.abs(Transform.scaleZ[eid]), 1e-6)
               : 1;
             const fit = applyPlayerColliderFromAabb({
-              box: { min: box.min, max: box.max },
+              box,
               yOffset,
               margin: 0.02,
               scaleX: tsx,
@@ -453,6 +463,21 @@ export const PlayerGltfSetupSystem: System = {
             Collider.posOffsetY[eid] = fit.posOffsetY;
             Collider.posOffsetZ[eid] = fit.posOffsetZ;
             invalidateCollider(state, eid);
+
+            // Keep soles on the same world Y after the capsule refit (defaults
+            // used offsetY=0.75 before the GLB AABB was known).
+            const newBodyY = getBodyYForFeetAt(state, eid, prevFeetY);
+            Transform.posY[eid] = newBodyY;
+            Transform.dirty[eid] = 1;
+            if (state.hasComponent(eid, Rigidbody)) {
+              Rigidbody.posY[eid] = newBodyY;
+              markRigidbodyPoseDirty(state, eid);
+              const body = getBodyForEntity(state, eid);
+              if (body) {
+                const t = body.translation();
+                body.setTranslation({ x: t.x, y: newBodyY, z: t.z }, true);
+              }
+            }
           }
 
           const animator = new GltfAnimator(gltf, { crossfadeDuration: 0.25 });

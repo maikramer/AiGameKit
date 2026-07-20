@@ -2688,13 +2688,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_30_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_30_lod0.glb"
-              lod1-url="/assets/meshes/form_outcrop_30_lod1.glb"
-              lod2-url="/assets/meshes/form_outcrop_30_lod2.glb"
+              url="/assets/meshes/form_outcrop_2_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_2_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
             
               lod-threshold-near="45"
               lod-threshold-mid="110"></GLTFLoader>
@@ -2702,13 +2702,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_31_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_31_lod0.glb"
-              lod1-url="/assets/meshes/form_outcrop_31_lod1.glb"
-              lod2-url="/assets/meshes/form_outcrop_31_lod2.glb"
+              url="/assets/meshes/form_outcrop_8_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_8_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
             
               lod-threshold-near="45"
               lod-threshold-mid="110"></GLTFLoader>
@@ -2934,9 +2934,9 @@
           <GameObject role="static">
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_31_lod0.glb"
-              lod1-url="/assets/meshes/form_outcrop_31_lod1.glb"
-              lod2-url="/assets/meshes/form_outcrop_31_lod2.glb"
+              url="/assets/meshes/form_outcrop_8_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_8_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject role="static">
@@ -3211,13 +3211,13 @@
           transform="rotation: 0 18 0; scale: 1.5"
           place="at: 150 55; align-to-terrain: 0; base-y-offset: -1.2; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_4_collision.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1_collision.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_cliff_4_lod0.glb"
-            lod1-url="/assets/meshes/form_cliff_4_lod1.glb"
-            lod2-url="/assets/meshes/form_cliff_4_lod2.glb"
+            url="/assets/meshes/form_cliff_1_lod0.glb"
+            lod1-url="/assets/meshes/form_cliff_1_lod1.glb"
+            lod2-url="/assets/meshes/form_cliff_1_lod2.glb"
           ></GLTFLoader>
         </GameObject>
         <GameObject
@@ -3318,25 +3318,25 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_30_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_30_lod0.glb"
-              lod1-url="/assets/meshes/form_outcrop_30_lod1.glb"
-              lod2-url="/assets/meshes/form_outcrop_30_lod2.glb"
+              url="/assets/meshes/form_outcrop_2_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_2_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_31_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_31_lod0.glb"
-              lod1-url="/assets/meshes/form_outcrop_31_lod1.glb"
-              lod2-url="/assets/meshes/form_outcrop_31_lod2.glb"
+              url="/assets/meshes/form_outcrop_8_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_8_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
             ></GLTFLoader>
           </GameObject>
         </StaticSpawner>
@@ -3543,11 +3543,11 @@
           max-distance="140">
           <GameObject role="enemy" script="enemies/bandit.ts"></GameObject>
         </DynamicSpawner>
-        <!-- Chefe: Verme das Areias (elite, fundo leste). -->
+        <!-- Chefe: Sand Worm / Verme das Areias (elite, fundo leste). -->
         <GameObject
-          name="boss-sandwyrm"
+          name="boss-sandworm"
           place="at: 145 -6; align-to-terrain: false"
-          script="bosses/sand-wyrm.ts"
+          script="bosses/sand-worm.ts"
         ></GameObject>
       </Group>
       <!-- FIM biome.desert -->
@@ -3558,7 +3558,7 @@
         <!-- ============================================================
            §8 SUL — PÂNTANO  (z ∈ [-160,-40])
            Salgueiros mortos, nenúfares, fogos-fátuos, passadiço podre
-           até a choça, boglings + mosquitos, chefe Bog Warden.
+           até a choça, boglings, chefe Bog Warden.
            ============================================================ -->
         <!-- §8.1 Smart carpet (leafy grass → bog flowers) -->
         <Vegetation
@@ -3705,13 +3705,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_30_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_30_lod0.glb"
-              lod1-url="/assets/meshes/form_outcrop_30_lod1.glb"
-              lod2-url="/assets/meshes/form_outcrop_30_lod2.glb"
+              url="/assets/meshes/form_outcrop_2_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_2_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
@@ -3866,20 +3866,6 @@
           max-distance="140">
           <GameObject role="enemy" script="enemies/bogling.ts"></GameObject>
         </DynamicSpawner>
-        <DynamicSpawner
-          avoid-water="1"
-          count="4"
-          seed="606"
-          region-min="-75 0 -150"
-          region-max="75 0 -58"
-          align-to-terrain="false"
-          random-yaw="true"
-          avoid-overlaps="false"
-          max-slope-deg="40"
-        
-          max-distance="140">
-          <GameObject role="enemy" script="enemies/mosquito.ts"></GameObject>
-        </DynamicSpawner>
         <!-- Chefe: Bog Warden (elite, fundo sul). -->
         <GameObject
           name="boss-bogwarden"
@@ -3978,44 +3964,44 @@
           transform="rotation: 0 20 0"
           place="at: -68 26; align-to-terrain: 0; base-y-offset: -1.2; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_22.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1_lod0.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_cliff_22.glb"
+            url="/assets/meshes/form_cliff_1_lod0.glb"
           ></GLTFLoader>
         </GameObject>
         <GameObject
           transform="rotation: 0 -15 0"
           place="at: -90 34; align-to-terrain: 0; base-y-offset: -1.4; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_20.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_20_lod0.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_cliff_20.glb"
+            url="/assets/meshes/form_cliff_20_lod0.glb"
           ></GLTFLoader>
         </GameObject>
         <GameObject
           transform="rotation: 0 12 0"
           place="at: -113 30; align-to-terrain: 0; base-y-offset: -1.4; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_21.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_20_lod0.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_cliff_21.glb"
+            url="/assets/meshes/form_cliff_20_lod0.glb"
           ></GLTFLoader>
         </GameObject>
         <GameObject
           transform="rotation: 0 -28 0"
           place="at: -136 40; align-to-terrain: 0; base-y-offset: -1.2; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1_lod0.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_cliff_1.glb"
+            url="/assets/meshes/form_cliff_1_lod0.glb"
           ></GLTFLoader>
         </GameObject>
         <!-- Contrafortes na frente da crista norte -->
@@ -4023,11 +4009,11 @@
           transform="rotation: 0 40 0; scale: 1.4"
           place="at: -58 18; align-to-terrain: 0; base-y-offset: -1.0; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_31.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_lod0.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_outcrop_31.glb"
+            url="/assets/meshes/form_outcrop_8_lod0.glb"
           ></GLTFLoader>
         </GameObject>
         <GameObject
@@ -4046,11 +4032,11 @@
           transform="rotation: 0 160 0"
           place="at: -70 -26; align-to-terrain: 0; base-y-offset: -1.2; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_4.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1_lod0.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_cliff_4.glb"
+            url="/assets/meshes/form_cliff_1_lod0.glb"
           ></GLTFLoader>
         </GameObject>
         <GameObject
@@ -4079,11 +4065,11 @@
           transform="rotation: 0 90 0; scale: 1.7"
           place="at: -134 -40; align-to-terrain: 0; base-y-offset: -1.4; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_30.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_lod0.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_outcrop_30.glb"
+            url="/assets/meshes/form_outcrop_2_lod0.glb"
           ></GLTFLoader>
         </GameObject>
         <GameObject
