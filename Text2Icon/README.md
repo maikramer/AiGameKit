@@ -50,7 +50,7 @@ text2icon generate "shield emblem" --quant-transformer sdnq-fp8
 | `--quant-encoder` | `auto` | SDNQ do Gemma text encoder (auto/sdnq-int4/sdnq-int8/none) |
 | `--quant-transformer` | `auto` | SDNQ do transformer principal (auto/sdnq-int4/sdnq-uint4/sdnq-int8/sdnq-uint8/sdnq-fp8/none) |
 | `--cpu` | off | Forçar CPU |
-| `--low-vram` | auto | CPU offload |
+| (hw-auto) | auto | CPU offload / quant por VRAM |
 | `--gpu-ids` | auto | Split multi-GPU (ex: `0,1`) |
 | `--quality` | `medium` | Tier de qualidade (fast/low/medium/high/highest) |
 | `--hw-auto/--no-hw-auto` | on | Auto-detecção de hardware (transformer + SDNQ + offload + clamp) |

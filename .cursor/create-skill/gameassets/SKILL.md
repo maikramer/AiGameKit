@@ -66,14 +66,14 @@ Sem `--presets-local`, o comando falha com **preset desconhecido**.
 
 - **`style_preset`**, **`output_dir`**, **`path_layout`**: `split` (pastas `images/` e `meshes/`) ou **`flat`** (PNG e GLB na mesma árvore; usa `id` com barra, ex. `Props/caixa_01`).
 - **`image_source`**: `text2d` (defeito), `texture2d` ou `skymap2d` — pode ser sobreposto **por linha** no CSV (coluna `image_source`).
-- **`text2d`**: `low_vram`, `cpu`, `width`, `height` (resolução 2D).
+- **`text2d`**: `cpu`, `width`, `height` (resolução 2D).
 - **`texture2d`**: opções do CLI seamless + **`materialize`** para PBR a partir da difusa (mapas em `materialize_maps_subdir`).
 - **`text2sound`** (opcional): `duration`, `steps`, `cfg_scale`, `audio_format`, etc. — ver Text2Sound; `audio_subdir` no perfil para destino relativo a `output_dir`.
-- **`text3d`**: `preset` (`fast` \| `balanced` \| `hq`), `low_vram`, `texture` (omitido = **`true`**), ou **Hunyuan explícito** (`steps`, `octree_resolution`, `num_chunks` — nesse caso não se passa `--preset` ao CLI), `no_mesh_repair`, `mesh_smooth`, `mc_level`, `phased_batch`, GPU (`allow_shared_gpu`, `full_gpu`, …). PBR no GLB: **Paint 2.1** — ver `Text3D/docs/PBR_MATERIALIZE.md`.
+- **`text3d`**: `preset` (`fast` \| `balanced` \| `hq`), `texture` (omitido = **`true`**), ou **Hunyuan explícito** (`steps`, `octree_resolution`, `num_chunks` — nesse caso não se passa `--preset` ao CLI), `no_mesh_repair`, `mesh_smooth`, `mc_level`, `phased_batch`, GPU (`allow_shared_gpu`, `full_gpu`, …). PBR no GLB: **Paint 2.1** — ver `Text3D/docs/PBR_MATERIALIZE.md`.
   - **Paint3D tuning:** `paint_max_views`, `paint_view_resolution`, `paint_render_size`, `paint_texture_size`, `paint_bake_exp` (default 6 — costuras mais nítidas).
 - **`rigging3d`** (opcional): `output_suffix`, `root`, `python` — usado com `batch --with-rig` e `generate_rig` no CSV.
 
-**Atenção:** `text3d.low_vram: true` em GPU faz o Hunyuan “shape” cair para CPU e **costuma degradar a forma**; preferir reduzir resolução 2D ou fechar outras apps que consumam VRAM.
+**VRAM:** sub-tools delegam ao **UMS**; **hw-auto** (defeito) ajusta SDNQ/offload em GPUs pequenas — sem flags manuais de low-vram no `game.yaml`.
 
 ## Manifest (`manifest.csv`)
 

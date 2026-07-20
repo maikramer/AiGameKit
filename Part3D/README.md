@@ -126,7 +126,7 @@ Anti-aggregation knobs:
 | `--min-predicted-iou` | 0.75 | Confidence override that preserves singleton/duo clusters |
 | `--prompt-batch-size` | 4 | P3-SAM prompt micro-batch size |
 | `--detail-levels` | 0 | Hierarchical local passes over large under-segmented regions |
-| `--cap-part-holes/--no-cap-part-holes` | on | Close boundary loops of extracted face-parts (bpy `fill_holes`) so removing a part leaves closed geometry |
+| `--cap-part-holes/--no-cap-part-holes` | off | Optional close of face-part boundary loops (can seal legitimate recesses) |
 
 Segmentation also writes `<name>_segmented_face_ids.npy` (per-face part label)
 next to the segmented GLB for downstream part selection.
@@ -147,6 +147,17 @@ within 5%.
 Prefer `text3d remesh` for this analysis proxy. A decimated LOD is suitable
 only when it remains topologically connected; an LOD that inherits thousands
 of marching-cubes cracks makes P3-SAM post-processing worse.
+
+### Lessons (Hunyuan + faces vs X-Part)
+
+From thin-feature props (watchtower, etc.):
+
+- **Default export is `faces`** — X-Part melts ladders/flags and worsens elephant feet.
+- **`p3sam` vs `--fine-parts` (hybrid):** one nearly peels the ladder; the other peels the flag. Fuse same-topology peels with `label_fuse.fuse_protrusion_labels`.
+- Text3D seed dominates how welded thins are; Part3D cannot invent gaps that are not in the mesh.
+- Use a 50–120k proxy above ~200k faces; on ~6 GB VRAM run one heavy GPU job at a time.
+
+Full write-up: [`docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md`](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md) · [PT](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 
 ## Quantization
 

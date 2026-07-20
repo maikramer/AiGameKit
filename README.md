@@ -127,6 +127,10 @@ Full guide (tool table, minimum Python per CLI, **repo root vs `Project/scripts/
 
 **Game pipeline (GameAssets → Vite / VibeGame, folder layout, GLB handoff):** [docs/MONOREPO_GAME_PIPELINE.md](docs/MONOREPO_GAME_PIPELINE.md).
 
+**Hunyuan shape / repair / Part3D lessons** (faces vs X-Part, elephant feet, welded thins): [docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md](docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md) · [Português](docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
+
+**Model findings hub** (VRAM, SDNQ, kernels, Omni, UMS, paint/sky/mesh): [docs/MODEL_FINDINGS.md](docs/MODEL_FINDINGS.md) · [docs/findings/](docs/findings/) · Omni [docs/OMNI_SHAPE_FINDINGS.md](docs/OMNI_SHAPE_FINDINGS.md) · benches [docs/KERNEL_OPTS_BENCH.md](docs/KERNEL_OPTS_BENCH.md).
+
 **Zero-to-game with AI (generative tools + orchestration + agents):** [docs/ZERO_TO_GAME_AI.md](docs/ZERO_TO_GAME_AI.md) · [Português](docs/ZERO_TO_GAME_AI_PT.md).
 
 ### Installation options

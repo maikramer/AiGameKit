@@ -268,8 +268,8 @@ GameDev/
 ### CUDA Out of Memory
 
 If you get CUDA out of memory errors:
-1. Reduce batch size
-2. Use `--low-vram` flag (where available)
+1. Reduce batch size or use `--quality fast` where available
+2. Leave **hw-auto** on (default) so tools pick SDNQ/offload on small GPUs; use **UMS** (`gamedev-model-server`) for coordinated VRAM
 3. Close other GPU applications
 
 ### Model Download Fails

@@ -1,0 +1,88 @@
+# Premise 2 — Automate to the edge
+
+> Stages chain without babysitting: shape → clean → paint → bake → LOD → rig → animate → validate → handoff. Resume, profile autodetection, and orchestration exist so neither humans nor agents re-learn the DAG each run.
+
+## Intent
+
+A game asset is not “a mesh file.” It is the **terminal deliverable** of a directed pipeline: the thing you ship to the engine (typically LOD0, with rig/animation when the asset needs them). Automation means the operator starts the job and the DAG walks itself to that terminal — including retries/resume when something stops midway.
+
+“To the edge” means we automate until the artifact is **engine-ready**, not until the first GPU call returns.
+
+## Canonical stage story (master pipeline)
+
+Conceptual order (see `GameAssets` `run_master_pipeline` for the real DAG):
+
+1. **Shape** — `text3d generate` (raw)
+2. **Clean** — `text3d topology-fix` (origin, holes, repair)
+3. **Paint** — `paint3d` (textures)
+4. **Bake master** — `text3d bake-master` → LOD0 (+ optional KTX2/meshopt)
+5. **LOD1 / LOD2 / collision** — derived meshes
+6. **Rig transfer** — when humanoid/rigged profile applies
+7. **Animate** — when animation is in scope
+8. **Validate** — `gamedev-lab check glb`
+9. **Handoff** — into `public/` / VibeGame consumption
+
+Opt-out flags (`--no-rig`, `--no-animate`, `--legacy-pipeline`, etc.) exist for control. The **default** is the full path implied by manifest + `game.yaml`.
+
+## LOD0 as the edge
+
+Autodetection of the terminal stage:
+
+| Asset reality | LOD0 should be |
+|---------------|----------------|
+| Has animation | Animated GLB |
+| Rigged, no animation | Rigged GLB |
+| Paint only | Painted / baked master |
+
+Shipping an unrigged painted mesh as LOD0 when the profile asked for rig/animation is a **pipeline bug**, not a style choice.
+
+## Resume and intermediates
+
+Long pipelines die. Automation without resume is cruelty.
+
+- Intermediates (`shape`, `painted`, `clean`, …) belong under `_intermediate/` (or equivalent), not as the public runtime path.
+- Resume must **find** archived intermediates — regenerating from zero because files moved is a failure of orchestration.
+- Progress UIs / dashboards must show **all** stages (LOD, rig, animate, validate), not stop visually at paint.
+
+## Autodetection over checklists
+
+Stage enablement should come from:
+
+- manifest columns / asset kind;
+- `game.yaml` profile blocks;
+- quality / category;
+
+…not from the operator re-deriving “do I need bake-master?” every time. Explicit opt-outs are fine; mandatory opt-ins for the common case are not.
+
+## Ownership boundaries (automation ≠ spaghetti)
+
+Automation is orchestration, not “put mesh math everywhere”:
+
+- **Text3D** owns mesh ops (LOD, collision, simplify, topology-fix, bake-master).
+- **GameAssets** owns the DAG and subprocess wiring — not `bpy`/`trimesh` mesh surgery.
+- **Rigging3D / Animator3D** own rig and clips.
+- **UMS** owns GPU scheduling across tools.
+
+Crossing these boundaries “to go faster” usually breaks resume, testing, and agent comprehension.
+
+## Anti-patterns
+
+- Stopping the mental model at “paint done.”
+- Requiring a human to run each stage CLI in order for the default profile.
+- Resume that ignores `_intermediate/` and regenerates expensive GPU work.
+- Dashboards that imply the job is finished mid-DAG.
+- Duplicating mesh repair in GameAssets “just this once.”
+
+## Acceptance questions (for PRs)
+
+- Does the default path reach the true terminal asset for this profile?
+- Can resume continue after a kill mid-stage without folklore?
+- Are new stages plugged into the DAG + progress reporting?
+- Did we violate package ownership to “automate”?
+
+## Pointers in this repo
+
+- Master pipeline: `GameAssets/src/gameassets/pipeline.py`
+- Paths / intermediates: `GameAssets/src/gameassets/paths.py`
+- Layout: [`docs/MONOREPO_GAME_PIPELINE.md`](../MONOREPO_GAME_PIPELINE.md)
+- Dream runner: `GameAssets/src/gameassets/dream/`

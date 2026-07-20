@@ -66,6 +66,10 @@ Guia completo em português: **[docs/INSTALLING_PT.md](docs/INSTALLING_PT.md)**.
 
 **Pipeline jogo (GameAssets → Vite / VibeGame, pastas, handoff GLB):** [docs/MONOREPO_GAME_PIPELINE.md](docs/MONOREPO_GAME_PIPELINE.md) (documento em inglês).
 
+**Lições Hunyuan shape / repair / Part3D (faces vs X-Part, pés de elefante, finos soldados):** [docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md](docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
+
+**Hub de descobertas dos modelos** (VRAM, SDNQ, kernels, Omni, UMS, paint/sky/mesh): [docs/MODEL_FINDINGS.md](docs/MODEL_FINDINGS.md) · [docs/findings/](docs/findings/) · Omni [docs/OMNI_SHAPE_FINDINGS.md](docs/OMNI_SHAPE_FINDINGS.md) · benches [docs/KERNEL_OPTS_BENCH.md](docs/KERNEL_OPTS_BENCH.md).
+
 **Do zero ao jogo com IA (modelos + orquestração + agentes):** [docs/ZERO_TO_GAME_AI_PT.md](docs/ZERO_TO_GAME_AI_PT.md) · [English](docs/ZERO_TO_GAME_AI.md).
 
 ### Formas de instalação

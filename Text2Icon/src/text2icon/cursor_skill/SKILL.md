@@ -34,7 +34,7 @@ text2icon batch icons.txt -d icons/ --transparent --quality medium
 | `--transparent/--no-transparent` | off | Remove background (rembg/U2Net) |
 | `-m/--model` | Sana_Sprint_0.6B | HF model ID override |
 | `--cpu` | off | Force CPU |
-| `--low-vram` | auto | CPU offload |
+| (hw-auto) | auto | CPU offload / quant por VRAM |
 | `--gpu-ids` | auto | Multi-GPU split (e.g. `0,1`) |
 | `--quality` | `medium` | Quality tier (fast/low/medium/high/highest) |
 | `--hw-auto/--no-hw-auto` | on | Hardware auto-detect (env `TEXT2ICON_HW_AUTO=0`) |

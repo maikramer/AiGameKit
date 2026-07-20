@@ -8,6 +8,8 @@ Batch asset orchestrator for the GameDev pipeline. 28 Python files, ~12K LOC. Ca
 |------|---------|-------|
 | Master pipeline DAG | `pipeline.py` (1798 lines) | 10 stages: generate, topology-fix, bake-master, LOD, collision, rig, animate, validate |
 | Batch execution | `batch_cmd.py` (2951 lines) | Largest file. Per-row 2D/3D/audio orchestration |
+| UMS batch waves | `ums_coord.py`, `ums_batch.py` | preload + submit×N + wait; defer master |
+| Model findings | `docs/MODEL_FINDINGS.md` | VRAM / kernels / Omni / UMS co-op |
 | Smart resume | `resume_cmd.py` (1324 lines) | Checkpoint-based, looks in `_intermediate/` |
 | Game profiles | `profile.py` (875 lines) | 12 sub-profile dataclasses + 600-line `from_dict` parser |
 | Dream (idea to game) | `dream/` (5 files, 1295 lines) | `planner.py` (LLM), `emitter.py` (file gen), `runner.py` (orchestration) |

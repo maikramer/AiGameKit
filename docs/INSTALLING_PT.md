@@ -110,6 +110,24 @@ Para pipelines ou debugging, podes criar `venv` e `pip install -e` em cada pasta
 
 ---
 
+## Edições locais sem loops de reinstall
+
+`./install.sh <tool>` já instala em modo **editável** (`pip install -e` + `.pth` → `src/`). Processos CLI novos lêem o código do checkout.
+
+GameAssets / `resolve_binary` preferem `<Tool>/.venv/bin/<cli>` a wrappers stale em `~/.local/bin` quando o monorepo é detetado (default). Opt-out: `GAMEDEV_PREFER_MONOREPO=0`.
+
+**Só precisas de refrescar quando:**
+
+| Mudança | O que correr |
+|---------|----------------|
+| Nova dep / entry point / metadata no `pyproject.toml` | `./install.sh <tool>` ou `clified update <tool>` |
+| Código usado por um worker **UMS** já a correr | `gamedev-model-server stop` (o próximo job auto-arranca) |
+| Clone movido (wrappers com paths partidos) | `./install.sh <tool>` uma vez para reescrever `~/.local/bin` |
+
+Edições Python normais em `*/src/` → guardar → re-correr o CLI / batch. Sem reinstall.
+
+---
+
 ## Documentação por ferramenta
 
 - **[Adicionar uma nova ferramenta ao monorepo](NEW_TOOLS_PT.md)** — registry, instalador unificado, Shared, GameAssets, CI, checklist.

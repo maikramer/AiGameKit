@@ -2,6 +2,8 @@
 
 Medição cold vs hot (mesmo processo: load 1×, generate 2×).
 
+**Hub consolidado (VRAM admit, footprints, Omni, UMS):** [`MODEL_FINDINGS.md`](MODEL_FINDINGS.md).
+
 ## Hardware
 
 | Campo | Valor |

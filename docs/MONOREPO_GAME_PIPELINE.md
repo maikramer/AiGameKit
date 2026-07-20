@@ -2,6 +2,8 @@
 
 This document defines a **reference layout** and **handoff contract** between the asset-generation tools (centered on [GameAssets](../GameAssets/)) and a **browser runtime** ([VibeGame](../VibeGame/)). It complements [INSTALLING.md](INSTALLING.md).
 
+**Runtime findings (models, VRAM, Omni, mesh):** [MODEL_FINDINGS.md](MODEL_FINDINGS.md).
+
 ## 1. Roles
 
 | Layer | Tools | Output |

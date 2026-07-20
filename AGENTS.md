@@ -2,6 +2,45 @@
 
 Guide for agentic coding agents working in this repository.
 
+## Mission
+
+**Make game-asset generation effortless.** A person (or an AI) states intent; the stack produces playable game content. Pipeline complexity, model weights, and GPU memory stay inside the tools — not on the operator's plate.
+
+Deep dives (one doc per block): [`docs/mission/`](docs/mission/README.md).
+
+### North star
+
+Anyone who opens this repository — human or cold AI agent — can get the **same class of results on the first serious attempt**. Following this file plus the CLIs is enough. Tribal knowledge, secret flags, and "works on my machine" GPU rituals are regressions.
+
+→ [`docs/mission/01-north-star.md`](docs/mission/01-north-star.md)
+
+### Premises
+
+1. **Ease over knobs.** Prefer one command that finishes (`gameassets batch`, `gameassets dream`, tool `generate`) over exposing every model flag. Quality presets and soft defaults beat expert tuning as the primary path.
+   → [`docs/mission/02-ease-over-knobs.md`](docs/mission/02-ease-over-knobs.md)
+
+2. **Automate to the edge.** Stages chain without babysitting: shape → clean → paint → bake → LOD → rig → animate → validate → handoff. Resume, profile autodetection, and orchestration exist so neither humans nor agents re-learn the DAG each run.
+   → [`docs/mission/03-automate-to-the-edge.md`](docs/mission/03-automate-to-the-edge.md)
+
+3. **Agent-first reproducibility.** Docs, CLIs, and env contracts must be sufficient for a fresh agent to succeed. Same inputs + same quality tier ⇒ same deliverable class. Ambiguity in the happy path is a bug in the product, not a training gap for the user.
+   → [`docs/mission/04-agent-first-reproducibility.md`](docs/mission/04-agent-first-reproducibility.md)
+
+4. **VRAM is infrastructure, not a user problem.** Nobody should plan peak memory, juggle which models fit, or keep GPU occupancy in their head — regardless of how large the models are or how many backends a tool owns. The Unified Model Server (UMS) owns admit, queue, eviction, and peak accounting so that:
+   - the GPU stays **busy** when there is work (high utilization);
+   - VRAM stays **inside a safe margin** at all times;
+   - model count and model size change **latency and queue order**, not the mental model (no new manual VRAM checklist).
+   → [`docs/mission/05-vram-as-infrastructure.md`](docs/mission/05-vram-as-infrastructure.md)
+
+### Implications for agents changing this repo
+
+- Optimize for "first command works" and "batch finishes alone."
+- Route GPU work through UMS; never teach kill/race/pkill as the normal path.
+- Hide VRAM math behind admit / peak / quant / soft-fill; surface progress and artifacts, not memory spreadsheets.
+- When adding models or stages, extend the coordinator and defaults — do not add operator burden.
+- Document the happy path so the next AI gets identical results without this conversation.
+
+→ [`docs/mission/06-implications-for-agents.md`](docs/mission/06-implications-for-agents.md)
+
 ## Repository Overview
 
 Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textures, skymaps, PBR map generation, rigging, animation, asset batching, and a browser 3D engine. Primarily Python with one Rust crate (Materialize) and one TypeScript package (VibeGame).
@@ -343,12 +382,13 @@ use `sdnq-int4`. Clients that run SDNQ (paint3d `memory_efficient`, etc.) must s
 `sdnq_preset` and/or `memory_efficient=true` — otherwise UMS assumes fp16 peak ~8 GiB
 and refuses. In-process: `ensure_vram_available(N, backend="text3d")` → UMS
 `max(N, peak)`. Kill refuses while UMS queue busy (`respect_ums_queue=True`).
+Calibrated numbers + kernel/Omni findings: [`docs/MODEL_FINDINGS.md`](docs/MODEL_FINDINGS.md).
 
 ### Agents — VRAM busy checklist (do NOT skip)
 
-1. `gamedev-model-server status` / `queue` — see **HOLDING** / who owns the GPU.
+1. `gamedev-model-server status` / `queue` / `debug` — see **HOLDING** / who owns the GPU.
 2. Wait (`ums wait <job_id>`, tool with `--ums-stream`) or `ums cancel <job_id>`.
-3. **Never** `kill` / `nvidia-smi` pkill / `--gpu-kill-others` while UMS has jobs —
+3. **Never** `kill` / GPU pkill / `--gpu-kill-others` while UMS has jobs —
    that races the queue and can murder the wrong workload (bench, sibling tool, batch).
 4. Only use `--no-ums` + in-process when you intentionally bypass the supervisor;
    then kill is still refused if UMS is busy.
@@ -356,7 +396,8 @@ and refuses. In-process: `ensure_vram_available(N, backend="text3d")` → UMS
 
 **Commands:**
 ```bash
-ums start|stop|status|queue|wait|cancel|backends|preload|evict|stats|doctor
+ums start|stop|status|queue|wait|cancel|flush|backends|preload|evict|stats|debug|bench|doctor
+# cancel <job_id|prefixo> | cancel --all | flush [--queued-only]
 # same as: gamedev-model-server …
 text2icon generate "icon" -o out.png   # Auto-delegates to UMS (~7s vs ~20s cold)
 text2icon generate "icon" -o out.png --ums-stream --ums-priority interactive
@@ -459,7 +500,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 
 - **Normais no export GLTF (Text3D)**: NÃO usar `normals_split_custom_set(loop_normals)` em `mesh_lod.py`/`mesh_remesh_textured.py` — o exporter GLTF fica com `V/Tri=3` (normais por loop, sem merge) e infla ficheiros (ex. goblin_shape 33 MB). Usar `shade_smooth` + `auto_smooth_angle` para obter normais por vértice. Em `weld_glb` (`Text3D/src/text3d/utils/export.py`) nunca engolir exceções silenciosamente — usar `try/except` com `log.warning` para ficar visível em pipelines.
 
-- Multi-GPU: a maioria dos pacotes com GPU agora aceitam `--gpu-ids 0,1` para dividir pesos entre GPUs via accelerate (`MultiGPUPlanner` em `gamedev_shared.multi_gpu`). GameAssets batch/`resume` propaga `--gpu-ids` e `CUDA_VISIBLE_DEVICES` a todos os sub-tools; deteta GPUs via `nvidia-smi` quando omitido. Pipeline stages (3D, rig, animate) são agora auto-detetados do manifest + `game.yaml` blocks; usar `--no-3d`, `--no-rig`, `--no-animate` para opt-out. O env var `PAINT3D_MULTI_GPU` está obsoleto — usar `--gpu-ids`. Resolução por defeito do Text2D passou de 2048 para 1024.
+- Multi-GPU: a maioria dos pacotes com GPU agora aceitam `--gpu-ids 0,1` para dividir pesos entre GPUs via accelerate (`MultiGPUPlanner` em `gamedev_shared.multi_gpu`). GameAssets batch/`resume` propaga `--gpu-ids` e `CUDA_VISIBLE_DEVICES` a todos os sub-tools; deteta GPUs via NVML (`gamedev_shared.gpu.detect_gpu_ids`) quando omitido. Pipeline stages (3D, rig, animate) são agora auto-detetados do manifest + `game.yaml` blocks; usar `--no-3d`, `--no-rig`, `--no-animate` para opt-out. O env var `PAINT3D_MULTI_GPU` está obsoleto — usar `--gpu-ids`. Resolução por defeito do Text2D passou de 2048 para 1024.
 
 ## graphify
 

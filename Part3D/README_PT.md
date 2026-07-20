@@ -71,4 +71,15 @@ Controles finos:
 
 Hw-auto (default): GPUs &lt;8 GiB → memory-efficient (SDNQ uint8 + CPU offload). Kill-switch: `PART3D_HW_AUTO=0`.
 
+### Lições (Hunyuan + faces vs X-Part)
+
+Experiências com props finos (watchtower, etc.):
+
+- **Default de export = `faces`** — X-Part derrete escadas/bandeiras e engorda bases.
+- **`p3sam` vs `--fine-parts` (hybrid):** um quase separa a escada; o outro a bandeira. Fundir peels no mesmo mesh: `label_fuse.fuse_protrusion_labels`.
+- Seed do Text3D muda “soldadura” dos finos — Part3D não corrige geometria fundida na origem.
+- Proxy 50–120k faces se o clean &gt;~200k; VRAM ~6 GB: um job GPU de cada vez.
+
+Detalhe: [`docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
+
 Documentação completa: [README.md](README.md).

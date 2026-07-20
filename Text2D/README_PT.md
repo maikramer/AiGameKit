@@ -10,7 +10,7 @@ CLI de **text-to-imagem** com [FLUX.2 Klein 4B](https://huggingface.co/black-for
 |---------|--------|--------|
 | Python  | 3.10+  | Testado em 3.10–3.13 |
 | GPU     | Opcional | NVIDIA + CUDA recomendado para inferência razoável |
-| VRAM    | ~6 GB+ com `--low-vram` e 512² | Depende do checkpoint; GPUs modestas: `--low-vram`. Multi-GPU com `--gpu-ids` divide o modelo entre dispositivos |
+| VRAM    | ~6 GB+ com hw-auto e 512² | GPUs modestas: hw-auto (defeito) escolhe 4B + CPU offload; multi-GPU com `--gpu-ids` |
 
 Auto-detecção de hardware (`--hw-auto`, ligada por defeito): GPUs <7.5 GB ganham CPU offload + modelo 4B automaticamente; rigs grandes mantêm 9B/full-GPU/multi-GPU. Flags explícitas ganham. Desligar: `--no-hw-auto` ou `TEXT2D_HW_AUTO=0`. Ver perfil: `text2d doctor`.
 | Disco   | ~8 GB  | Cache HF + pesos SDNQ (~2,5 GB em disco) |
@@ -84,7 +84,7 @@ text2d generate "um gato com um cartaz que diz olá mundo"
 
 text2d generate "paisagem ao pôr do sol" --width 768 --height 768 --steps 4 --guidance 1.0
 
-text2d generate "retrato" --low-vram -o minha.png --seed 42
+text2d generate "retrato" -o minha.png --seed 42   # hw-auto activo por defeito
 
 # Multi-GPU: dividir modelo entre GPUs 0 e 1
 text2d generate "retrato" --gpu-ids 0,1 -o minha.png

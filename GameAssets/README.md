@@ -169,7 +169,6 @@ Full pipeline execution. Generates 2D images, 3D meshes, textures, audio, riggin
 | `--no-collision` | Skip collision mesh generation even if enabled |
 | `--profile-tools` | Enable CPU/RAM/GPU profiling via `GAMEDEV_PROFILE` |
 | `--profile-log FILE.jsonl` | Profiler log output |
-| `--low-vram` | Deprecated no-op (sub-tools auto-detect VRAM via hw-auto) |
 | `--force` | Regenerate everything (ignore existing outputs) |
 | `--gpu-ids "0,1"` | Multi-GPU IDs (auto-detected via `nvidia-smi` if omitted) |
 | `--no-dashboard` | Simple progress bars instead of TUI dashboard |
@@ -178,6 +177,7 @@ Full pipeline execution. Generates 2D images, 3D meshes, textures, audio, riggin
 **Key behaviors:**
 
 - **Exclusive lock:** `.gameassets_batch.lock` (fcntl) prevents two batches in the same folder. `--skip-batch-lock` disables.
+- **VRAM:** GPU sub-tools delegate to **UMS** by default; each tool uses **hw-auto** (SDNQ/offload on small GPUs). No manual `--low-vram` flags.
 - **VRAM preflight:** warns if free VRAM < ~1.8 GiB. `--skip-gpu-preflight` disables.
 - **CUDA:** sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` if unset.
 - **Multi-GPU:** `--gpu-ids 0,1` propagates `CUDA_VISIBLE_DEVICES` and `--gpu-ids` to all sub-tools.
@@ -263,7 +263,6 @@ Idea-to-game: an LLM plans assets + scene from a natural language description, g
 | `--presets-local FILE` | Custom presets YAML |
 | `--dry-run` | Generate files without running batch/sky (no GPU) |
 | `--plan-json FILE.json` | Export dream plan as JSON |
-| `--low-vram` | Deprecated no-op (sub-tools auto-detect VRAM via hw-auto) |
 
 **LLM Providers:**
 
@@ -516,7 +515,6 @@ Options passed to the `text2d generate` CLI (FLUX Klein).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `low_vram` | `bool` | `false` | Deprecated no-op (hw-auto handles small GPUs) |
 | `cpu` | `bool` | `false` | CPU-only inference |
 | `width` | `int` | `None` | Image width (overridden by generation profile) |
 | `height` | `int` | `None` | Image height (overridden by generation profile) |
@@ -568,7 +566,6 @@ Options for Text3D (Hunyuan3D-2.1) shape generation.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `preset` | `str` | `None` | `fast` / `balanced` / `hq` |
-| `low_vram` | `bool` | `false` | Deprecated no-op (hw-auto handles small GPUs via SDNQ INT4) |
 | `export_origin` | `str` | `"feet"` | `feet` / `center` / `none` |
 | `steps` | `int` | `None` | Inference steps |
 | `octree_resolution` | `int` | `None` | Octree resolution |
@@ -581,7 +578,7 @@ Options for Text3D (Hunyuan3D-2.1) shape generation.
 | `guidance` | `float` | `None` | Hunyuan guidance value |
 | `simplify_texture_size` | `int` | `None` | Texture size for `remesh-textured` |
 
-> **Quality note:** `low_vram` is a deprecated no-op — hw-auto applies SDNQ INT4 automatically on small GPUs (~6 GB). For best results, use `preset: balanced` or `fast`.
+> **Quality note:** On small GPUs (~6 GB), hw-auto applies SDNQ INT4 automatically. For best results, use `preset: balanced` or `fast`.
 
 #### `paint3d` — Paint3DProfile
 
@@ -598,7 +595,6 @@ Options for Paint3D texturing (Hunyuan3D-Paint 2.1 AI or quick paint).
 | `bake_exp` | `int` | `None` | View blending sharpness (default: 6 from profile) |
 | `smooth` | `bool` | `true` | Bilateral smooth on painted mesh |
 | `smooth_passes` | `int` | `None` | Number of smooth passes |
-| `low_vram_mode` | `bool` | `false` | Deprecated no-op (hw-auto handles small GPUs) |
 | `solid_color` | `str` | `"#888888"` | Quick paint solid color |
 | `perlin_tint` | `str` | `"#7a7268"` | Quick paint Perlin tint |
 | `perlin_frequency` | `float` | `4.0` | Perlin noise frequency |
