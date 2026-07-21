@@ -339,6 +339,66 @@ def _discover_modelserver_python() -> Path | None:
     return None
 
 
+def _can_import_modelserver() -> bool:
+    """True se ``modelserver`` é importável no venv actual (fallback)."""
+    try:
+        import modelserver  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _resolve_ums_start_cmd(
+    *,
+    modelserver_bin: str | None = None,
+    canonical_python: Path | None = None,
+    path_lookup: Callable[[], str | None] | None = None,
+    import_probe: Callable[[], bool] | None = None,
+    sys_executable: str = "python",
+) -> tuple[list[str] | None, str]:
+    """Resolve o comando de arranque do UMS com precedência correcta.
+
+    Prioridade (supervisor nunca deve herdar o venv da tool que o chama):
+      1. ``MODELSERVER_BIN`` (override explícito do operador)
+      2. ``ModelServer/.venv`` canónico (criado por ``./install.sh modelserver``)
+      3. ``gamedev-model-server`` / ``ums`` no PATH (instalados pelo install.sh)
+      4. ``sys.executable`` actual (último recurso; warning visível)
+
+    Args:
+        modelserver_bin: Override do operador (``MODELSERVER_BIN``).
+        canonical_python: Path para o python do ModelServer/.venv (de
+            :func:`_discover_modelserver_python`).
+        path_lookup: ``shutil.which``-like (testável).
+        import_probe: ``lambda: can_import("modelserver")`` (testável).
+        sys_executable: ``sys.executable`` (testável).
+
+    Returns:
+        ``(cmd, warning)`` — ``cmd=None`` se nada serve (caller deve falhar
+        com mensagem útil); ``warning`` não-vazia quando o fallback é o venv
+        da tool actual (situação incorrecta mas recuperável).
+    """
+    if modelserver_bin and modelserver_bin.strip():
+        p = modelserver_bin.strip()
+        if Path(p).exists():
+            return [p, "start"], ""
+    if canonical_python is not None:
+        return [str(canonical_python), "-m", "modelserver", "start"], ""
+    lookup = path_lookup or (lambda: None)
+    on_path = lookup("gamedev-model-server") or lookup("ums")
+    if on_path:
+        return [on_path, "start"], ""
+    probe = import_probe or (lambda: False)
+    if probe():
+        return (
+            [sys_executable, "-m", "modelserver", "start"],
+            (
+                "ModelServer/.venv não encontrado; a usar o venv actual. Isto é INCORRECTO "
+                "para um supervisor multi-tool — corre `./install.sh modelserver`."
+            ),
+        )
+    return None, ""
+
+
 def ensure_ums_running(*, timeout_sec: float = 30.0, auto_start: bool = True) -> bool:
     """Garante que o UMS está ativo. Arranca-o automaticamente se necessário.
 
@@ -370,30 +430,26 @@ def ensure_ums_running(*, timeout_sec: float = 30.0, auto_start: bool = True) ->
     import subprocess
     import sys
 
-    # Resolver o binário: MODELSERVER_BIN → PATH → python -m modelserver
-    # (venv actual) → sibling ModelServer/.venv no monorepo.
-    bin_path = os.environ.get("MODELSERVER_BIN", "").strip()
-    if bin_path and Path(bin_path).exists():
-        cmd = [bin_path, "start"]
-    elif shutil.which("gamedev-model-server"):
-        cmd = ["gamedev-model-server", "start"]
-    elif shutil.which("ums"):
-        cmd = ["ums", "start"]
-    else:
-        try:
-            import modelserver  # noqa: F401
-
-            cmd = [sys.executable, "-m", "modelserver", "start"]
-        except ImportError:
-            sibling = _discover_modelserver_python()
-            if sibling is not None:
-                cmd = [str(sibling), "-m", "modelserver", "start"]
-            else:
-                _logger.warn(
-                    "[UMS] Auto-start: modelserver não instalado neste venv. "
-                    "Instala ModelServer (pip install -e ../ModelServer) ou define MODELSERVER_BIN."
-                )
-                return False
+    # Resolver o binário. Prioridade ao venv canónico do ModelServer
+    # (./install.sh modelserver): o supervisor deve arrancar NUNCA no venv da
+    # tool que o chama — senão herda só os pacotes dessa tool e falha ao
+    # importar outras (ex.: paint3d quando UMS arrancou em Text3D/.venv).
+    cmd, warning = _resolve_ums_start_cmd(
+        modelserver_bin=os.environ.get("MODELSERVER_BIN", "").strip() or None,
+        canonical_python=_discover_modelserver_python(),
+        path_lookup=shutil.which,
+        import_probe=_can_import_modelserver,
+        sys_executable=sys.executable,
+    )
+    if cmd is None:
+        _logger.warn(
+            "[UMS] Auto-start: modelserver não instalado. "
+            "Corre `./install.sh modelserver` (cria ModelServer/.venv canónico) "
+            "ou define MODELSERVER_BIN."
+        )
+        return False
+    if warning:
+        _logger.warn(f"[UMS] Auto-start: {warning}")
 
     _logger.info(f"[UMS] Auto-start: {' '.join(cmd)}")
     log_path = Path(

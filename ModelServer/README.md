@@ -105,11 +105,25 @@ Descobertas multi-modelo (footprints, runtime budget, kernel opts, batch):
 
 ## Instalação
 
+O ModelServer tem o seu **próprio venv canónico** (`ModelServer/.venv`) que serve
+de supervisor único para todas as tools GPU. Sem este venv, o UMS arranca no venv
+da primeira tool que o chama e falha ao importar outras tools (ex.: `paint3d`
+quando o UMS arranca em `Text3D/.venv`).
+
 ```bash
+# Recomendado: via clified (cria ModelServer/.venv com gamedev_shared + modelserver)
+./install.sh modelserver
+
+# Manual (equivalente)
 cd Shared && pip install -e .
 cd ../ModelServer && pip install -e .
-# Ou: ./install.sh modelserver
 ```
+
+O auto-start do UMS dá **precedência máxima** ao venv canónico: se
+`ModelServer/.venv/bin/python` existe, é sempre esse o interpretador usado
+(independentemente do venv da tool que chama `delegate_to_ums`). Sem venv
+canónico nem `MODELSERVER_BIN`, cai para o venv actual com warning visível no
+log (situação incorrecta — instalar via `./install.sh modelserver`).
 
 ## Uso
 

@@ -11,6 +11,7 @@ import pytest
 
 from gamedev_shared.model_server import (
     ModelServer,
+    _resolve_ums_start_cmd,
     discover_active_sockets,
     discover_server_pids,
     ensure_vram_available,
@@ -22,6 +23,79 @@ from gamedev_shared.model_server import (
     server_socket_path,
     stop_server,
 )
+
+# ---------------------------------------------------------------------------
+# UMS auto-start command resolution (precedência do venv canónico)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveUmsStartCmd:
+    """``_resolve_ums_start_cmd`` deve priorizar o venv canónico do ModelServer."""
+
+    def test_modelserver_bin_override_wins(self, tmp_path: Path) -> None:
+        bin_path = tmp_path / "ums-bin"
+        bin_path.write_text("#!/bin/sh\n")
+        cmd, warning = _resolve_ums_start_cmd(
+            modelserver_bin=str(bin_path),
+            canonical_python=Path("/fake/ModelServer/.venv/bin/python"),
+            path_lookup=lambda _: "/usr/bin/ums",
+            import_probe=lambda: True,
+            sys_executable="/wrong/venv/python",
+        )
+        assert cmd == [str(bin_path), "start"]
+        assert warning == ""
+
+    def test_canonical_venv_beats_path_and_sys_executable(self) -> None:
+        """ModelServer/.venv canónico tem prioridade sobre PATH e venv actual."""
+        cmd, warning = _resolve_ums_start_cmd(
+            canonical_python=Path("/repo/ModelServer/.venv/bin/python"),
+            path_lookup=lambda _: "/usr/bin/ums",
+            import_probe=lambda: True,
+            sys_executable="/some/tool/.venv/bin/python",
+        )
+        assert cmd == ["/repo/ModelServer/.venv/bin/python", "-m", "modelserver", "start"]
+        assert warning == ""
+
+    def test_path_lookup_used_when_no_canonical(self) -> None:
+        cmd, warning = _resolve_ums_start_cmd(
+            canonical_python=None,
+            path_lookup=lambda name: "/usr/local/bin/gamedev-model-server" if name == "gamedev-model-server" else None,
+            import_probe=lambda: True,
+            sys_executable="/wrong/python",
+        )
+        assert cmd == ["/usr/local/bin/gamedev-model-server", "start"]
+        assert warning == ""
+
+    def test_sys_executable_is_last_resort_with_warning(self) -> None:
+        cmd, warning = _resolve_ums_start_cmd(
+            canonical_python=None,
+            path_lookup=lambda _: None,
+            import_probe=lambda: True,
+            sys_executable="/tool-venv/bin/python",
+        )
+        assert cmd == ["/tool-venv/bin/python", "-m", "modelserver", "start"]
+        assert "INCORRECTO" in warning
+        assert "install.sh modelserver" in warning
+
+    def test_returns_none_when_nothing_available(self) -> None:
+        cmd, warning = _resolve_ums_start_cmd(
+            canonical_python=None,
+            path_lookup=lambda _: None,
+            import_probe=lambda: False,
+            sys_executable="/python",
+        )
+        assert cmd is None
+        assert warning == ""
+
+    def test_modelserver_bin_nonexistent_falls_through(self) -> None:
+        cmd, _ = _resolve_ums_start_cmd(
+            modelserver_bin="/nonexistent/ums",
+            canonical_python=Path("/repo/ModelServer/.venv/bin/python"),
+            path_lookup=lambda _: None,
+            import_probe=lambda: False,
+        )
+        assert cmd == ["/repo/ModelServer/.venv/bin/python", "-m", "modelserver", "start"]
+
 
 # ---------------------------------------------------------------------------
 # Socket path resolution
