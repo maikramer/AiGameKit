@@ -54,6 +54,11 @@ log = logging.getLogger(__name__)
 WeldMode = Literal["bbox", "vert_density", "fixed", "none"]
 RepairProfileName = Literal["topology_clean", "pre_decimate_uv", "part_decode", "post_voxel"]
 
+# Cap default da grelha do voxel remesh (por eixo) em ``morphological_close``.
+# A resolução auto de morph-close (Text3D/bbox_tune) usa-o para não propor
+# distâncias que a grelha não consegue resolver (fecho sub-voxel = no-op caro).
+MORPH_MAX_GRID_AXIS = 800
+
 
 # ---------------------------------------------------------------------------
 # Primitivas sobre bpy objects (in-place; preservam UV/materiais/weights)
@@ -774,6 +779,35 @@ def count_boundary_edges(obj: Any) -> int:
     return n
 
 
+def count_boundary_edges_fast(obj: Any) -> int:
+    """``count_boundary_edges`` via arrays (foreach_get + np.unique), sem bmesh.
+
+    ~2x mais rápido por chamada em meshes grandes — usado nos loops de
+    :func:`make_watertight`, que consultam a fronteira repetidamente.
+    """
+    me = obj.data
+    if len(me.polygons) == 0:
+        return 0
+    me.calc_loop_triangles()
+    m = len(me.loop_triangles)
+    if m == 0:
+        return 0
+    tris = np.empty(m * 3, dtype=np.int64)
+    me.loop_triangles.foreach_get("vertices", tris)
+    tris = tris.reshape(-1, 3)
+    e = np.empty((m * 3, 2), dtype=np.int64)
+    e[0::3, 0] = tris[:, 0]
+    e[0::3, 1] = tris[:, 1]
+    e[1::3, 0] = tris[:, 1]
+    e[1::3, 1] = tris[:, 2]
+    e[2::3, 0] = tris[:, 2]
+    e[2::3, 1] = tris[:, 0]
+    e.sort(axis=1)
+    keys = (e[:, 0] << 32) | e[:, 1]
+    _, counts = np.unique(keys, return_counts=True)
+    return int((counts == 1).sum())
+
+
 def _is_near_planar_sheet(obj: Any, *, flatness: float = 0.02) -> bool:
     """True se a bbox é essencialmente 2D (folha aberta — não dá para watertight)."""
     dims = obj.dimensions
@@ -811,7 +845,7 @@ def make_watertight(
     Returns:
         ``{"boundary_before", "loops_capped", "boundary_after"}``.
     """
-    stats: dict[str, int] = {"boundary_before": count_boundary_edges(obj)}
+    stats: dict[str, int] = {"boundary_before": count_boundary_edges_fast(obj)}
     if stats["boundary_before"] == 0:
         stats["loops_capped"] = 0
         stats["boundary_after"] = 0
@@ -833,13 +867,13 @@ def make_watertight(
     if not fill_sides and max_loop_edges > 0:
         fill_sides = (int(max_loop_edges),)
     for sides in fill_sides:
-        if count_boundary_edges(obj) == 0:
+        if count_boundary_edges_fast(obj) == 0:
             break
         with_suppress_fill(obj, sides)
 
-    if final_fill and not planar_sheet and count_boundary_edges(obj) > 0:
+    if final_fill and not planar_sheet and count_boundary_edges_fast(obj) > 0:
         with_suppress_fill(obj, 0)
-    if final_fill and not planar_sheet and count_boundary_edges(obj) > 0:
+    if final_fill and not planar_sheet and count_boundary_edges_fast(obj) > 0:
         # fill_holes global falha em loops que tocam vértices non-manifold;
         # holes_fill do bmesh loop-a-loop é mais robusto como último recurso.
         stats["loops_forced"] = _cap_all_remaining_loops(obj)
@@ -847,24 +881,24 @@ def make_watertight(
         # Micro-rachas restantes são cadeias não-fechadas presas em junções
         # non-manifold (holes_fill exige loops fechados). Pinch dirigido:
         # weld localizado só nos verts de cada racha, depois re-fill.
-        prev = count_boundary_edges(obj)
+        prev = count_boundary_edges_fast(obj)
         for _ in range(3):
             if prev == 0:
                 break
             stats["cracks_pinched"] = stats.get("cracks_pinched", 0) + _pinch_small_boundary_chains(obj)
             with_suppress_fill(obj, 0)
             _cap_all_remaining_loops(obj)
-            cur = count_boundary_edges(obj)
+            cur = count_boundary_edges_fast(obj)
             if cur >= prev:
                 break
             prev = cur
-        if count_boundary_edges(obj) > 0 and not skip_flap_erode:
+        if count_boundary_edges_fast(obj) > 0 and not skip_flap_erode:
             # Bordos de abas de parede interna (MC) não são weldáveis nem
             # tapáveis: erodir as abas até à junção manifold e re-tapar.
             stats["flap_faces_eroded"] = _erode_boundary_flaps(obj)
             with_suppress_fill(obj, 0)
             _cap_all_remaining_loops(obj)
-        elif count_boundary_edges(obj) > 0 and skip_flap_erode:
+        elif count_boundary_edges_fast(obj) > 0 and skip_flap_erode:
             stats["flap_erode_skipped"] = 1
     elif planar_sheet:
         stats["planar_sheet_skip_aggressive"] = 1
@@ -884,7 +918,7 @@ def make_watertight(
             normals_consistent(obj)
     except Exception as exc:
         log.warning("triangulate/normals pós-watertight falhou: %s", exc)
-    stats["boundary_after"] = count_boundary_edges(obj)
+    stats["boundary_after"] = count_boundary_edges_fast(obj)
     if stats["boundary_after"]:
         log.warning("make_watertight: %d arestas de fronteira restantes", stats["boundary_after"])
     return stats
@@ -964,6 +998,7 @@ def morphological_close(
     wall_thickness: float | None = None,
     gap_mask: bool = False,
     gap_open_dist: float | None = None,
+    max_grid_axis: int = 800,
 ) -> dict[str, int | float]:
     """Fecho morfológico volumétrico: solidify → voxel → dilate → voxel → erode → voxel.
 
@@ -1002,6 +1037,9 @@ def morphological_close(
         gap_mask: Ponderar o fecho pelo vão frontal (protege elementos abertos).
         gap_open_dist: Vão a partir do qual o peso é 0 (elemento "aberto").
             ``None`` → ``2.5 * distance``.
+        max_grid_axis: Cap de grelha do voxel remesh por eixo (default 800).
+            Assets grandes com ``distance`` milimétrica batem neste cap — o
+            fecho efetivo passa então a ser o da grelha (ver warning em log).
 
     Returns:
         Estatísticas: faces antes/depois, voxel_size usado.
@@ -1018,12 +1056,35 @@ def morphological_close(
     vox = voxel_size if voxel_size is not None else max(distance / 3.0, vox_floor)
     # Cap de grelha ~800 por eixo: assets em metros reais (edificio 7 m) com
     # distance milimetrico dariam voxel sub-mm (OOM/horas). O voxel nunca
-    # desce abaixo de max_dim/800.
+    # desce abaixo de max_dim/max_grid_axis.
     max_dim = float(max(obj.dimensions)) if max(obj.dimensions) > 0 else 0.0
     if max_dim > 0:
-        vox = max(vox, max_dim / 800.0)
-    # wall = distance (nao 2x): solidify extra era o que derretia com morph leve.
-    wall = float(wall_thickness) if wall_thickness is not None else max(distance, 0.001)
+        vox = max(vox, max_dim / float(max_grid_axis))
+    # Grelha mais grossa que a distância pedida (auto morph em assets grandes
+    # cai sempre aqui: 0.125xchar/octree ≪ char/800): com voxel > distance/2 o
+    # dilate/erode é sub-voxel (não fecha vão nenhum) e a parede solidificada
+    # (< 2 voxels) desaparece no remesh. Sobe o fecho para a escala do voxel e
+    # garante parede ≥ ~2.2 voxels para sobreviver à grelha.
+    dist_eff = float(distance)
+    grid_clamped = vox > float(distance) / 2.0
+    if grid_clamped:
+        dist_eff = max(float(distance), vox)
+        log.warning(
+            "morphological_close: voxel %.4f m > distance/2 (grelha %d, asset %.2f m) — "
+            "fecho efetivo %.4f m (vãos < %.4f m)",
+            vox,
+            max_grid_axis,
+            max_dim,
+            dist_eff,
+            2.0 * dist_eff,
+        )
+    if wall_thickness is not None:
+        wall = float(wall_thickness)
+    elif grid_clamped:
+        wall = max(2.2 * vox, 0.001)
+    else:
+        # wall = distance (nao 2x): solidify extra era o que derretia com morph leve.
+        wall = max(dist_eff, 0.001)
     bpy.context.view_layer.objects.active = obj
 
     def _apply(mod_name: str) -> None:
@@ -1054,6 +1115,33 @@ def morphological_close(
             mod.vertex_group = group
         _apply(mod.name)
 
+    def _decimate_back() -> None:
+        """Decima o remesh inflado de volta a ``faces_before``.
+
+        fast_simplification (quadric C++, ~10-15x) quando disponível; senão
+        TRIANGULATE + DECIMATE modifiers (fallback lento).
+        """
+        faces_remeshed = sum(len(p.vertices) - 2 for p in obj.data.polygons)
+        if faces_remeshed <= faces_before or faces_before <= 0:
+            return
+        from gamedev_shared.mesh_repair_arrays import (
+            extract_arrays,
+            replace_mesh_arrays,
+            simplify_faces_arrays,
+        )
+
+        co, tris = extract_arrays(obj)
+        out = simplify_faces_arrays(co, tris, faces_before)
+        if out is not None:
+            replace_mesh_arrays(obj, out[0], out[1])
+            return
+        mod = obj.modifiers.new("MorphTri", "TRIANGULATE")
+        _apply(mod.name)
+        mod = obj.modifiers.new("MorphDecimate", "DECIMATE")
+        mod.decimate_type = "COLLAPSE"
+        mod.ratio = faces_before / faces_remeshed
+        _apply(mod.name)
+
     if wall > 0:
         mod = obj.modifiers.new("MorphSolidify", "SOLIDIFY")
         mod.thickness = wall
@@ -1062,14 +1150,40 @@ def morphological_close(
         mod.use_quality_normals = True
         _apply(mod.name)
 
+    if grid_clamped:
+        # Fecho degradado à escala da grelha: com voxel > distance/2, o
+        # dilate/erode é sub-voxel (no-op geométrico que paga 2 remeshes
+        # extra). Uma única passagem de voxel remesh já funde shells/vãos
+        # (~1 voxel) e sela as rachas — o efeito de fecho disponível nesta
+        # escala — por ~1/3 do custo da cadeia completa.
+        _voxel()
+        faces_remeshed = sum(len(p.vertices) - 2 for p in obj.data.polygons)
+        _decimate_back()
+        faces_after = len(obj.data.polygons)
+        log.info(
+            "morphological_close (grid-clamped, remesh único): %d→%d faces (remesh=%d voxel=%.4f wall=%.4f)",
+            faces_before,
+            faces_after,
+            faces_remeshed,
+            vox,
+            wall,
+        )
+        return {
+            "faces_before": faces_before,
+            "faces_after": faces_after,
+            "voxel_size": vox,
+            "wall_thickness": wall,
+            "distance_eff": dist_eff,
+        }
+
     _voxel()  # normaliza normais antes do displace
 
     if gap_mask:
         # Dilatação ponderada pelo vão frontal: só rachas fecham a 100%.
-        open_d = gap_open_dist if gap_open_dist is not None else 2.5 * distance
-        ao_w = _vertex_gap_weights(obj, full_dist=distance, zero_dist=open_d)
+        open_d = gap_open_dist if gap_open_dist is not None else 2.5 * dist_eff
+        ao_w = _vertex_gap_weights(obj, full_dist=dist_eff, zero_dist=open_d)
         group = _set_group_weights("MorphCloseAO", ao_w)
-        _displace(distance, group)
+        _displace(dist_eff, group)
         # Posições pós-dilatação (antes do voxel destruir os vgroups) para
         # transferir os pesos por vizinho-mais-próximo à mesh fundida.
         me = obj.data
@@ -1093,13 +1207,13 @@ def morphological_close(
             if idx is not None:
                 post_w[i] = ao_w[idx]
         group = _set_group_weights("MorphCloseAO", post_w)
-        _displace(-distance, group)
+        _displace(-dist_eff, group)
         if "MorphCloseAO" in obj.vertex_groups:
             obj.vertex_groups.remove(obj.vertex_groups["MorphCloseAO"])
     else:
-        _displace(distance)
+        _displace(dist_eff)
         _voxel()  # dilatação funde as margens da racha
-        _displace(-distance)
+        _displace(-dist_eff)
 
     _voxel()  # erosão limpa auto-interseções e devolve a superfície
 
@@ -1108,13 +1222,7 @@ def morphological_close(
     # count original: mantém o fecho sem herdar a densidade da grelha
     # (capela: 1.7M → 7.5M tris sem isto).
     faces_remeshed = sum(len(p.vertices) - 2 for p in obj.data.polygons)
-    if faces_remeshed > faces_before > 0:
-        mod = obj.modifiers.new("MorphTri", "TRIANGULATE")
-        _apply(mod.name)
-        mod = obj.modifiers.new("MorphDecimate", "DECIMATE")
-        mod.decimate_type = "COLLAPSE"
-        mod.ratio = faces_before / faces_remeshed
-        _apply(mod.name)
+    _decimate_back()
 
     faces_after = len(obj.data.polygons)
     log.info(
@@ -1122,7 +1230,7 @@ def morphological_close(
         faces_before,
         faces_after,
         faces_remeshed,
-        distance,
+        dist_eff,
         vox,
         wall,
         gap_mask,
@@ -1132,6 +1240,7 @@ def morphological_close(
         "faces_after": faces_after,
         "voxel_size": vox,
         "wall_thickness": wall,
+        "distance_eff": dist_eff,
     }
 
 
@@ -1141,7 +1250,6 @@ def infer_up_axis(coords: np.ndarray) -> int:
         return 1
     ext = coords.max(axis=0) - coords.min(axis=0)
     return int(np.argmax(ext))
-
 
 
 def clamp_base_flare(
@@ -1881,7 +1989,7 @@ def repair_mesh_object(
                 stats["flap_erode_skipped"] = int(wt["flap_erode_skipped"])
         except Exception as exc:
             log.warning("make_watertight falhou: %s", exc)
-            stats["boundary_after"] = count_boundary_edges(obj)
+            stats["boundary_after"] = count_boundary_edges_fast(obj)
     if do_clamp_base_flare:
         try:
             stats["flare_verts_clamped"] = clamp_base_flare(

@@ -146,6 +146,47 @@ def _is_hollow_shell_category(category: str | None) -> bool:
     return str(category).strip().lower() in _HOLLOW_SHELL_CATEGORIES
 
 
+def _repair_topology_arrays_phase(
+    mesh_obj,
+    *,
+    remove_internal_shells: bool,
+    morph_close: float | None,
+) -> dict:
+    """Fase de filtro do ``topology_clean`` em arrays (numpy/scipy) + morph-close.
+
+    Ordem **nova** face ao caminho bmesh: welds primeiro (mesh conexo, ~6x
+    menos vértices sem os splits de normal) e morph-close **depois** — o
+    solidify deixa de criar paredes por-triângulo em mesh split e o VDB passa
+    a ver volume (casco exterior em vez de 2 shells preservadas).
+    """
+    log = logging.getLogger(__name__)
+    from gamedev_shared.mesh_repair_arrays import (
+        extract_arrays,
+        repair_arrays_topology_clean,
+        replace_mesh_arrays,
+    )
+
+    co, tris = extract_arrays(mesh_obj)
+    co, tris, stats = repair_arrays_topology_clean(
+        co,
+        tris,
+        do_remove_internal_shells=remove_internal_shells,
+    )
+    replace_mesh_arrays(mesh_obj, co, tris)
+
+    if morph_close is not None and morph_close > 0:
+        from gamedev_shared.mesh_repair import morphological_close
+
+        mc_stats = morphological_close(mesh_obj, distance=float(morph_close))
+        log.info(
+            "morph-close (pós-weld): %s→%s faces (voxel=%.3f)",
+            mc_stats.get("faces_before"),
+            mc_stats.get("faces_after"),
+            mc_stats.get("voxel_size", 0.0),
+        )
+    return stats
+
+
 def _prepare_topology_bpy(
     mesh_obj,
     fill_holes_sides: int | None = None,
@@ -154,6 +195,8 @@ def _prepare_topology_bpy(
     morph_close: float | None = None,
     remove_internal_shells: bool | None = None,
     category: str | None = None,
+    engine: str = "auto",
+    has_armature: bool = False,
 ) -> None:
     """Pipeline de preparação de topologia — perfil Shared ``topology_clean``.
 
@@ -164,6 +207,12 @@ def _prepare_topology_bpy(
     (boundary=0 mas visualmente abertas). Destrói UVs — só pré-paint.
 
     Edifícios (``building``/``chapel``…): strip de cascas internas por defeito.
+
+    ``engine``: ``auto``/``arrays`` usa a fase vetorizada
+    (:mod:`gamedev_shared.mesh_repair_arrays`) quando o mesh é seguro (sem
+    UVs/weights/shape-keys/armature — ver :func:`arrays_engine_ok`); os passos
+    topológicos (fill/caps/watertight/normais) correm sempre em bmesh.
+    ``bpy`` força o caminho legado completo.
     """
     log = logging.getLogger(__name__)
 
@@ -171,31 +220,62 @@ def _prepare_topology_bpy(
     n_verts_before = len(mesh_obj.data.vertices)
 
     from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+    from gamedev_shared.mesh_repair_arrays import arrays_engine_ok
 
     hollow = _is_hollow_shell_category(category)
     if remove_internal_shells is None:
         remove_internal_shells = hollow
 
-    if morph_close is not None and morph_close > 0:
-        from gamedev_shared.mesh_repair import morphological_close
-
-        mc_stats = morphological_close(mesh_obj, distance=float(morph_close))
-        log.info(
-            "morph-close: %s→%s faces (voxel=%.3f)",
-            mc_stats.get("faces_before"),
-            mc_stats.get("faces_after"),
-            mc_stats.get("voxel_size", 0.0),
-        )
+    arrays_ok = arrays_engine_ok(mesh_obj, has_armature=has_armature)
+    use_arrays = engine in ("auto", "arrays") and arrays_ok
+    if engine == "arrays" and not arrays_ok:
+        log.warning("engine=arrays pedido, mas o mesh tem UVs/weights/shape-keys/armature — fallback bpy")
 
     overrides: dict = {}
     if fill_holes_sides is not None:
         overrides["fill_holes_sides"] = int(fill_holes_sides)
     if watertight is not None:
         overrides["watertight"] = bool(watertight)
-    if remove_internal_shells:
-        overrides["do_remove_internal_shells"] = True
 
-    stats = repair_mesh_object_with_profile(mesh_obj, "topology_clean", **overrides)
+    if use_arrays:
+        stats = _repair_topology_arrays_phase(
+            mesh_obj,
+            remove_internal_shells=bool(remove_internal_shells),
+            morph_close=morph_close,
+        )
+        # Filtros já feitos em arrays — restam os passos topológicos do perfil.
+        stats.update(
+            repair_mesh_object_with_profile(
+                mesh_obj,
+                "topology_clean",
+                do_sanitize=False,
+                do_reweld_coincident=False,
+                do_exact_weld=False,
+                weld_mode="none",
+                do_dissolve_loose=False,
+                do_long_edges=False,
+                sliver_max_aspect=None,
+                debris_face_ratio=0.0,
+                do_remove_internal_shells=False,
+                **overrides,
+            )
+        )
+    else:
+        if morph_close is not None and morph_close > 0:
+            from gamedev_shared.mesh_repair import morphological_close
+
+            mc_stats = morphological_close(mesh_obj, distance=float(morph_close))
+            log.info(
+                "morph-close: %s→%s faces (voxel=%.3f)",
+                mc_stats.get("faces_before"),
+                mc_stats.get("faces_after"),
+                mc_stats.get("voxel_size", 0.0),
+            )
+
+        if remove_internal_shells:
+            overrides["do_remove_internal_shells"] = True
+
+        stats = repair_mesh_object_with_profile(mesh_obj, "topology_clean", **overrides)
     if stats.get("boundary_before") is not None or stats.get("boundary_after") is not None:
         log.info(
             "prepare_topology watertight: boundary %s→%s (loops_capped=%s)",
@@ -297,6 +377,7 @@ def prepare_mesh_topology(
     size_m: list[float] | tuple[float, ...] | None = None,
     remove_internal_shells: bool | None = None,
     category: str | None = None,
+    engine: str = "auto",
     **_legacy: object,
 ) -> Path:
     """Prepara topologia de um GLB: weld, fill holes, watertight seletivo.
@@ -320,6 +401,10 @@ def prepare_mesh_topology(
             weld) façam sentido físico. No-op se já em escala.
         remove_internal_shells: Strip cascas internas. ``None`` → auto building.
         category: Categoria do asset (hints de fecho de shell).
+        engine: ``auto``/``arrays`` ativa a fase vetorizada (numpy/scipy) nos
+            passos de filtro quando o mesh não tem UVs/weights/shape-keys/
+            armature (10-100x mais rápida em meshes grandes, mesma semântica);
+            ``bpy`` força o caminho legado completo.
         **_legacy: Aceita kwargs mortos (``skip_remesh``, ``force_close_base``)
             por compat — ignorados.
 
@@ -341,6 +426,7 @@ def prepare_mesh_topology(
             size_m=size_m,
             remove_internal_shells=remove_internal_shells,
             category=category,
+            engine=engine,
         )
     except ImportError:
         log.warning("bpy indisponível — prepare_mesh_topology ignorado (mesh NÃO foi reparada)")
@@ -360,6 +446,7 @@ def _prepare_mesh_topology_impl(
     size_m: list[float] | tuple[float, ...] | None = None,
     remove_internal_shells: bool | None = None,
     category: str | None = None,
+    engine: str = "auto",
 ):
     if _was_trimesh:
         import tempfile
@@ -383,6 +470,8 @@ def _prepare_mesh_topology_impl(
         morph_close=morph_close,
         remove_internal_shells=remove_internal_shells,
         category=category,
+        engine=engine,
+        has_armature=bool(arm_objs),
     )
     # Sem normal-split no export: reabre boundary no reimport (paint/LOD).
     # Shade-smooth já aplicado; importer/jogo recalcula normais se preciso.

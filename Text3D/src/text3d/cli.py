@@ -1544,7 +1544,7 @@ def bake_master_cmd(
     default=None,
     help=(
         "Fecho morfológico volumétrico (metros): dilate→erode via voxel remesh. "
-        "Funde double shells finas. Omitido=auto (N×voxel MC via "
+        "Funde double shells finas. Omitido=auto (Nxvoxel MC via "
         "--morph-close-voxels/--category). 0=desliga. Valores altos derretem detalhe."
     ),
 )
@@ -1601,6 +1601,17 @@ def bake_master_cmd(
     default=None,
     help="Strip cascas internas. Omitido: auto ON para building/chapel.",
 )
+@click.option(
+    "--engine",
+    type=click.Choice(["auto", "arrays", "bpy"]),
+    default="auto",
+    show_default=True,
+    help=(
+        "Motor de reparo: arrays = fase vetorizada numpy/scipy nos filtros "
+        "(10-100x em meshes grandes, mesh sem UVs/weights/armature); bpy = "
+        "caminho legado bmesh completo; auto = arrays quando seguro."
+    ),
+)
 def topology_fix_cmd(
     input_mesh: Path,
     output: Path | None,
@@ -1615,6 +1626,7 @@ def topology_fix_cmd(
     export_origin: str | None,
     export_rotation_x_deg: float | None,
     remove_internal_shells: bool | None,
+    engine: str,
 ) -> None:
     """Repara topologia de um GLB cru (Stage 2 da pipeline).
 
@@ -1668,6 +1680,7 @@ def topology_fix_cmd(
             size_m=size_m_vals,
             remove_internal_shells=remove_internal_shells,
             category=cat_eff or category,
+            engine=engine,
         )
         if export_origin is not None and export_origin != "none":
             from .utils.export import convert_mesh
