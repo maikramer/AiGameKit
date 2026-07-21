@@ -177,12 +177,14 @@ class BackendManager:
         *,
         query_free_mib: Any = None,
         clear_vram: Any = None,
+        query_process_vram_mib: Any = None,
     ) -> None:
         self._registry = registry
         self._states: dict[str, _LoadedState] = {}
         self._struct_lock = threading.RLock()  # reentrant: callbacks injetados (query_free_mib) podem chamar is_loaded
         self._query_free_mib = query_free_mib
         self._clear_vram = clear_vram
+        self._query_process_vram_mib = query_process_vram_mib
         self.stats = StatsCollector()
 
     # ------------------------------------------------------------------
@@ -195,6 +197,28 @@ class BackendManager:
         from gamedev_shared.gpu import query_gpu_free_mib
 
         return query_gpu_free_mib()
+
+    def _admit_free_mib(self) -> int | None:
+        """VRAM livre para decisão de admit de um job **in-process**.
+
+        ``NVML free + max(0, reserved - allocated)`` do allocator torch: o
+        próximo job corre NESTE processo e aloca primeiro do cache — o free
+        cru do driver subestima o utilizável (ex.: ~1.5 GiB de segmentos em
+        cache pós-generate que o driver conta como «usados» mas que o
+        allocator reutiliza sem nova alocação ao SO). O contexto CUDA
+        (~100-300 MiB) é pago uma vez por processo e os peaks são calibrados
+        in-process — não se cobra de novo por job.
+
+        Sem torch inicializado (ou sem CUDA) equivale ao free cru.
+        """
+        free = self._free_mib()
+        if free is None:
+            return None
+        stats = self._torch_alloc_stats()
+        reusable = stats.get("reusable_mib")
+        if not reusable:
+            return free
+        return free + int(reusable)
 
     def _wait_for_admit(self, peak_mib: int, free_mib: int | None) -> int | None:
         """Poll VRAM livre até caber ``peak`` ou timeout (processo externo a sair).
@@ -216,7 +240,7 @@ class BackendManager:
                     if snap is not None and snap.ref_count <= 0:
                         self._evict_unlocked(victim)
             self._clear_cache()
-            free = self._free_mib()
+            free = self._admit_free_mib()
             if can_admit(free, peak_mib):
                 _logger.info(f"[UMS] VRAM admit OK após espera (livre={free} peak={peak_mib}).")
                 return free
@@ -236,6 +260,53 @@ class BackendManager:
             clear_cuda_memory()
         except Exception as e:
             _logger.warn(f"Falha ao limpar cache CUDA após evicção: {e}")
+
+    def _process_vram_mib(self) -> int | None:
+        """VRAM do PID UMS (NVML/smi), com fallback ao allocator torch."""
+        if self._query_process_vram_mib is not None:
+            return self._query_process_vram_mib()
+        try:
+            from gamedev_shared.gpu import process_vram_mib, torch_reserved_mib
+
+            proc = process_vram_mib()
+            if proc is not None:
+                return proc
+            return torch_reserved_mib()
+        except Exception:
+            return None
+
+    def scrub_dead_vram(self, *, min_mib: int | None = None) -> dict[str, Any]:
+        """Limpa cache CUDA com ``loaded=[]`` e reporta residual restante.
+
+        O residual que sobrevive ao scrub é contexto CUDA do processo + cache
+        não libertável — baseline do worker, **sem acção destrutiva** (o admit
+        de jobs in-process credita o cache reutilizável via
+        :meth:`_admit_free_mib`; clientes externos recebem resposta honesta).
+
+        Returns:
+            Dict com ``scrubbed``, ``process_vram_mib_before/after``, ``loaded``.
+        """
+        threshold = int(P.DEAD_VRAM_MIB if min_mib is None else min_mib)
+        loaded = self.loaded_names()
+        before = self._process_vram_mib()
+        # Sempre clear após unload / evict vazio — allocator pode segurar activação.
+        self._clear_cache()
+        after = self._process_vram_mib()
+        residual = after if after is not None else before
+        dead = bool(not loaded and residual is not None and residual >= threshold)
+        if dead:
+            _logger.warn(
+                f"[UMS] VRAM residual: process={residual} MiB com loaded=[] "
+                f"(threshold={threshold}) — contexto/cache do worker (baseline)."
+            )
+        return {
+            "scrubbed": True,
+            "loaded": list(loaded),
+            "process_vram_mib_before": before,
+            "process_vram_mib_after": after,
+            "dead_vram": dead,
+            "threshold_mib": threshold,
+        }
 
     # ------------------------------------------------------------------
     # Inventário (snapshots para o VRAMPlanner e para ``status``)
@@ -551,20 +622,20 @@ class BackendManager:
                 self._evict_unlocked(name)
 
             # Precisa carregar — evictar até caber o PICO (não só pesos YAML).
-            free = self._free_mib()
+            free = self._admit_free_mib()
             if free is not None and free < peak:
                 names_to_evict = plan_eviction(self._all_snapshots(), peak, free)
                 for victim in names_to_evict:
                     self._evict_unlocked(victim)
                 self._clear_cache()
-                free = self._free_mib()
+                free = self._admit_free_mib()
 
             if state is None:
                 state = _LoadedState()
                 self._states[name] = state
 
         # Espera VRAM transitória FORA do struct_lock (não bloquear evict/status).
-        free = self._free_mib()
+        free = self._admit_free_mib()
         if not can_admit(free, peak):
             free = self._wait_for_admit(peak, free)
             if not can_admit(free, peak):
@@ -597,7 +668,7 @@ class BackendManager:
                 with self._struct_lock:
                     self._evict_unlocked(name)
             # Re-check VRAM (outra carga pode ter corrido entretanto).
-            free = self._free_mib()
+            free = self._admit_free_mib()
             if not can_admit(free, peak):
                 free = self._wait_for_admit(peak, free)
             if not can_admit(free, peak):
@@ -788,7 +859,13 @@ class BackendManager:
     def evict(self, name: str) -> bool:
         """Evicta (unload) um backend específico. Retorna ``True`` se estava carregado."""
         with self._struct_lock:
-            return self._evict_unlocked(name)
+            evicted = self._evict_unlocked(name)
+        if evicted:
+            self._clear_cache()
+            # Último backend fora → residual costuma ficar no contexto CUDA.
+            if not self.loaded_names():
+                self.scrub_dead_vram()
+        return evicted
 
     def evict_all(self) -> int:
         """Evicta TODOS os backends carregados (release global). Retorna o nº evicted."""
@@ -798,8 +875,8 @@ class BackendManager:
             for n in names:
                 if self._evict_unlocked(n):
                     count += 1
-        if count:
-            self._clear_cache()
+        # Sempre scrub — mesmo com count=0 (loaded=[] mas contexto CUDA vivo).
+        self.scrub_dead_vram()
         return count
 
     def ensure_vram(
@@ -818,6 +895,9 @@ class BackendManager:
 
         Peak de admit usa **pesos completos** (``group_offload=False``): ensure-vram
         liberta espaço para um load frio; largest-onloaded só vale pós-offload.
+
+        Se não há backends evictáveis mas a VRAM livre ainda é baixa, faz scrub
+        de residual morto (cache/contexto no próprio UMS) e reavalia.
         """
         target = int(needed_mib)
         if backend:
@@ -853,11 +933,17 @@ class BackendManager:
         if names_to_evict:
             self._clear_cache()
             free = self._free_mib()
-            return free is None or free >= target
-        return free is not None and free >= target
+            if free is None or free >= target:
+                return True
+        # Sem vítimas (ou ainda curto): residual no próprio processo UMS.
+        self.scrub_dead_vram()
+        free = self._free_mib()
+        return free is None or free >= target
 
     def _evict_unlocked(self, name: str) -> bool:
         """Evicta SEM adquirir struct_lock (caller deve ter o lock). Retorna True se evicted."""
+        import gc
+
         state = self._states.get(name)
         if state is None or state.model is None:
             return False
@@ -866,13 +952,25 @@ class BackendManager:
             return False
         adapter = self._registry.adapter(name)
         _logger.info(f"[UMS] A evictar backend {name!r}...")
-        with contextlib.suppress(Exception):
-            adapter.unload(state.model)
+        model = state.model
         state.model = None
         state.load_shape = {}
         state.last_used = 0.0
+        try:
+            adapter.unload(model)
+        except Exception as e:
+            _logger.warn(f"[UMS] unload({name!r}) falhou: {e}")
+        del model
+        gc.collect()
         self.stats.record_evict(name)
-        _logger.info(f"[UMS] Backend {name!r} evicted (VRAM liberta).")
+        # Pesos Python libertados; o contexto CUDA do processo (~0.1-0.3 GiB)
+        # fica — é baseline partilhado por todos os jobs futuros deste worker,
+        # já contado nos peaks calibrados in-process (ver _admit_free_mib).
+        residual = self._process_vram_mib()
+        if residual is not None and residual >= int(P.DEAD_VRAM_MIB):
+            _logger.info(f"[UMS] Backend {name!r} evicted; residual process={residual} MiB (contexto/cache).")
+        else:
+            _logger.info(f"[UMS] Backend {name!r} evicted (VRAM liberta).")
         return True
 
     # ------------------------------------------------------------------
@@ -900,8 +998,39 @@ class BackendManager:
                         "last_used": state.last_used if state else 0.0,
                     }
                 )
+            loaded_count = sum(1 for b in backends if b["loaded"])
+            loaded_vram = sum(b["vram_mib"] for b in backends if b["loaded"])
+        # Fora do lock: NVML/smi pode ser lento.
+        process_vram = self._process_vram_mib()
+        alloc_stats = self._torch_alloc_stats()
+        return {
+            "loaded_count": loaded_count,
+            "loaded_vram_mib": loaded_vram,
+            "process_vram_mib": process_vram,
+            "torch_alloc": alloc_stats,
+            "backends": backends,
+        }
+
+    @staticmethod
+    def _torch_alloc_stats() -> dict[str, int | None]:
+        """Stats do allocator torch do processo (diagnóstico de VRAM residual).
+
+        ``allocated`` = tensores vivos; ``reserved`` = segmentos do allocator
+        (cache reutilizável pelo próximo job in-process); ``reusable`` =
+        ``reserved - allocated`` (crédito de admit — ver ``_admit_free_mib``).
+        ``None`` se torch ainda não inicializou CUDA neste processo.
+        """
+        try:
+            import torch
+
+            if not torch.cuda.is_available() or not torch.cuda.is_initialized():
+                return {"allocated_mib": None, "reserved_mib": None, "reusable_mib": None}
+            allocated = int(torch.cuda.memory_allocated() // (1024 * 1024))
+            reserved = int(torch.cuda.memory_reserved() // (1024 * 1024))
             return {
-                "loaded_count": sum(1 for b in backends if b["loaded"]),
-                "loaded_vram_mib": sum(b["vram_mib"] for b in backends if b["loaded"]),
-                "backends": backends,
+                "allocated_mib": allocated,
+                "reserved_mib": reserved,
+                "reusable_mib": max(0, reserved - allocated),
             }
+        except Exception:
+            return {"allocated_mib": None, "reserved_mib": None, "reusable_mib": None}

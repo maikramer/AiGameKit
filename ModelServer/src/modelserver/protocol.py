@@ -163,6 +163,11 @@ VRAM_FLAT_SLACK_MIB = _env_int("GAMEDEV_UMS_VRAM_FLAT_SLACK_MIB", 32)
 # Espera curta dentro de ensure_loaded antes de recusar (evict+clear já feitos).
 VRAM_ADMIT_WAIT_SEC = _env_float("GAMEDEV_UMS_VRAM_ADMIT_WAIT_SEC", 8.0)
 VRAM_ADMIT_POLL_SEC = _env_float("GAMEDEV_UMS_VRAM_ADMIT_POLL_SEC", 0.5)
+# Limiar para o aviso de residual no PID do UMS com ``loaded=[]`` (contexto
+# CUDA / cache que sobrevive ao scrub). O residual é baseline do worker: o
+# admit in-process credita o cache reutilizável (reserved-allocated) — sem
+# acção destrutiva sobre o processo.
+DEAD_VRAM_MIB = _env_int("GAMEDEV_UMS_DEAD_VRAM_MIB", 256)
 
 # Default cmd quando ausente no request (retrocompat com per-tool: gerar).
 DEFAULT_CMD = CMD_GENERATE

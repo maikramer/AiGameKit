@@ -330,6 +330,7 @@ class UnifiedModelServer:
                     "queue_depth": qsnap.get("queue_depth", 0),
                     "inflight": qsnap.get("inflight", 0),
                     "affinity_hits": getattr(self.workers, "_affinity_hits", 0),
+                    "process_vram_mib": mgr_status.get("process_vram_mib"),
                 },
                 **mgr_status,
             }
@@ -404,12 +405,22 @@ class UnifiedModelServer:
             backend = request.get("backend")
             if backend:
                 evicted = self.manager.evict(str(backend))
+                scrub = self.manager.scrub_dead_vram() if not self.manager.loaded_names() else None
+                msg = f"backend {backend} {'evicted' if evicted else 'não estava carregado'}"
+                if scrub and scrub.get("dead_vram"):
+                    msg += f" (residual process={scrub.get('process_vram_mib_after')} MiB — contexto/cache)"
                 return {
                     "status": P.STATUS_OK if evicted else P.STATUS_ERROR,
-                    "message": f"backend {backend} {'evicted' if evicted else 'não estava carregado'}",
+                    "message": msg,
+                    "scrub": scrub,
                 }
             count = self.manager.evict_all()
-            return {"status": P.STATUS_OK, "message": f"{count} backend(s) evicted"}
+            proc = self.manager._process_vram_mib()
+            return {
+                "status": P.STATUS_OK,
+                "message": f"{count} backend(s) evicted (cache scrubbed)",
+                "scrub": {"process_vram_mib": proc},
+            }
 
         if cmd == P.CMD_PRELOAD:
             backend = request.get("backend")

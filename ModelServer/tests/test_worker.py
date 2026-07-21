@@ -348,7 +348,8 @@ class TestVramFlatRetryGuard:
             # 1ª tentativa + 1 requeue; no 2º flat consecutivo falha sem mais requeues.
             assert len(mgr.generate_calls) == 2
             assert job.result is not None
-            assert "presa pelo próprio UMS" in (job.result.get("hint") or "")
+            hint = job.result.get("hint") or ""
+            assert "VRAM livre não subiu após retries" in hint
         finally:
             pool.stop()
 

@@ -612,12 +612,6 @@ def try_ums_delegation(
             import json
 
             console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
-        # VRAM_INSUFFICIENT: NUNCA fallback in-process — isso OOMa a GPU.
-        if code.upper() == "VRAM_INSUFFICIENT":
-            import click
-
-            tip = hint or UMS_DO_NOT_KILL_TIP
-            raise click.ClickException(f"UMS [{code}]: {err}. Sem fallback in-process (evita OOM). {tip}")
         # UMS ainda com jobs → não competir in-process pela mesma GPU.
         if ums_is_busy():
             import click

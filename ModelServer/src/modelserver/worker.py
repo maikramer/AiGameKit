@@ -356,9 +356,8 @@ class WorkerPool:
                     "hint",
                     (
                         "VRAM livre não subiu após retries e não há backends evictáveis "
-                        "(memória pode estar presa pelo próprio UMS ou por processo externo). "
-                        "Verifica `nvidia-smi`/`ums status`; se o UMS retém VRAM sem backends "
-                        "loaded, reinicia-o (`ums stop && ums start`)."
+                        "(memória pode estar presa por processo externo — ver `nvidia-smi` "
+                        "e `ums status`/`debug` para o breakdown do worker). Não mates PIDs GPU."
                     ),
                 )
             else:

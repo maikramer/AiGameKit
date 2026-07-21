@@ -78,6 +78,96 @@ class TestEviction:
         assert count == 2
         assert mgr.loaded_names() == []
 
+    def test_evict_all_scrubs_even_when_empty(self) -> None:
+        """Bug fix: loaded=[] ainda pode ter contexto CUDA — scrub sempre."""
+        clears: list[int] = []
+        registry = _make_registry()
+        mgr = BackendManager(
+            registry,
+            query_free_mib=lambda: 99999,
+            clear_vram=lambda: clears.append(1),
+            query_process_vram_mib=lambda: 1400,
+        )
+        assert mgr.evict_all() == 0
+        assert clears, "evict_all com loaded=[] deve scrub cache"
+        info = mgr.scrub_dead_vram()
+        assert info["dead_vram"] is True
+
+
+class TestAdmitFreeAccounting:
+    """``_admit_free_mib`` credita o cache do allocator (reserved-allocated)."""
+
+    def test_credits_reusable_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        registry = _make_registry()
+        mgr = BackendManager(registry, query_free_mib=lambda: 4000, clear_vram=lambda: None)
+        monkeypatch.setattr(
+            BackendManager,
+            "_torch_alloc_stats",
+            staticmethod(lambda: {"allocated_mib": 100, "reserved_mib": 1500, "reusable_mib": 1400}),
+        )
+        assert mgr._admit_free_mib() == 4000 + 1400
+
+    def test_no_torch_no_credit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        registry = _make_registry()
+        mgr = BackendManager(registry, query_free_mib=lambda: 4000, clear_vram=lambda: None)
+        monkeypatch.setattr(
+            BackendManager,
+            "_torch_alloc_stats",
+            staticmethod(lambda: {"allocated_mib": None, "reserved_mib": None, "reusable_mib": None}),
+        )
+        assert mgr._admit_free_mib() == 4000
+
+    def test_admit_succeeds_with_cache_credit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """free cru insuficiente + cache reutilizável suficiente → backend carrega."""
+        registry = _make_registry()
+        # gamma: vram_mib=5000 → peak = 5000 + activation + safety (> 4000 cru).
+        state = {"free": 4000}
+        mgr = BackendManager(registry, query_free_mib=lambda: state["free"], clear_vram=lambda: None)
+        monkeypatch.setattr(
+            BackendManager,
+            "_torch_alloc_stats",
+            staticmethod(lambda: {"allocated_mib": 100, "reserved_mib": 4000, "reusable_mib": 3900}),
+        )
+        resp = mgr.generate("gamma", {"prompt": "x", "output": "/tmp/x.png"})
+        assert resp["status"] == "ok"
+        assert mgr.is_loaded("gamma")
+
+    def test_refusal_when_credit_insufficient(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """free + cache ainda abaixo do peak → recusa honesta (sem OOM)."""
+        registry = _make_registry()
+        state = {"free": 100}
+        mgr = BackendManager(registry, query_free_mib=lambda: state["free"], clear_vram=lambda: None)
+        monkeypatch.setattr(
+            BackendManager,
+            "_torch_alloc_stats",
+            staticmethod(lambda: {"allocated_mib": 0, "reserved_mib": 50, "reusable_mib": 50}),
+        )
+        with pytest.raises(Exception) as excinfo:
+            mgr.ensure_loaded("gamma")
+        assert "peak" in str(excinfo.value).lower() or "VRAM" in str(excinfo.value)
+
+    def test_ensure_vram_scrubs_dead_residual(self) -> None:
+        """Sem backends evictáveis mas free baixo → scrub residual e reavalia."""
+        state = {"free": 500, "clears": 0}
+
+        def _free() -> int:
+            return state["free"]
+
+        def _clear() -> None:
+            state["clears"] += 1
+            state["free"] = 7000
+
+        registry = _make_registry()
+        mgr = BackendManager(
+            registry,
+            query_free_mib=_free,
+            clear_vram=_clear,
+            query_process_vram_mib=lambda: 1400,
+        )
+        ok = mgr.ensure_vram(6000)
+        assert ok is True
+        assert state["clears"] >= 1
+
     def test_auto_eviction_when_vram_low(self) -> None:
         """VRAM baixa: evicta idle; se pico ainda não cabe → recusa (sem OOM)."""
         registry = _make_registry()

@@ -348,6 +348,9 @@ def estimate_vram_requirement(
 def clear_cuda_memory(devices: list[int] | None = None) -> None:
     """Força GC e esvazia cache CUDA — útil entre fases pesadas.
 
+    Também tenta ``ipc_collect`` (quando existe) para libertar blocos partilhados
+    que ``empty_cache`` sozinho deixa no processo (VRAM «morta» no UMS).
+
     Args:
         devices: Lista de índices GPU para limpar. Se ``None``, limpa apenas
             o dispositivo atual (comportamento original).
@@ -356,14 +359,51 @@ def clear_cuda_memory(devices: list[int] | None = None) -> None:
     gc.collect()
     if not torch.cuda.is_available():
         return
-    if devices is None:
+
+    def _scrub_device() -> None:
+        torch.cuda.synchronize()
         torch.cuda.empty_cache()
+        ipc = getattr(torch.cuda, "ipc_collect", None)
+        if callable(ipc):
+            with contextlib.suppress(Exception):
+                ipc()
+        torch.cuda.empty_cache()
+
+    if devices is None:
+        _scrub_device()
         return
     original = torch.cuda.current_device()
     for d in devices:
         torch.cuda.set_device(d)
-        torch.cuda.empty_cache()
+        _scrub_device()
     torch.cuda.set_device(original)
+
+
+def process_vram_mib(pid: int | None = None) -> int | None:
+    """VRAM (MiB) reportada pelo driver para o processo ``pid`` (default: self).
+
+    Soma entradas de :func:`list_nvidia_compute_apps` com o mesmo PID.
+    ``None`` se o processo não aparecer na lista (sem contexto CUDA / NVML down).
+    """
+    target = os.getpid() if pid is None else int(pid)
+    total = 0
+    found = False
+    for app_pid, _name, mib in list_nvidia_compute_apps():
+        if app_pid != target or mib is None:
+            continue
+        total += int(mib)
+        found = True
+    return total if found else None
+
+
+def torch_reserved_mib(device: int = 0) -> int | None:
+    """MiB reservados pelo allocator PyTorch no dispositivo (fallback sem NVML)."""
+    torch = _torch()
+    if not torch.cuda.is_available():
+        return None
+    with contextlib.suppress(Exception):
+        return int(torch.cuda.memory_reserved(device) // (1024 * 1024))
+    return None
 
 
 DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT = 0.15

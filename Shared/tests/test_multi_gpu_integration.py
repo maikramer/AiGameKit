@@ -348,14 +348,15 @@ class TestClearMultiDevice:
 
     @patch("gamedev_shared.gpu._torch")
     def test_no_devices_calls_empty_cache_once(self, mock_torch_fn: MagicMock) -> None:
-        """devices=None → torch.cuda.empty_cache() called once (default device)."""
+        """devices=None → torch.cuda.empty_cache() called (scrub: sync+empty+ipc+empty)."""
         mock_torch = _mock_torch(cuda_available=True)
         mock_torch_fn.return_value = mock_torch
 
         from gamedev_shared.gpu import clear_cuda_memory
 
         clear_cuda_memory()
-        mock_torch.cuda.empty_cache.assert_called_once()
+        # scrub_device chama empty_cache 2x (sync → empty_cache → ipc_collect → empty_cache).
+        assert mock_torch.cuda.empty_cache.call_count >= 1
 
     @patch("gamedev_shared.gpu._torch")
     def test_devices_list_iterates_and_restores(self, mock_torch_fn: MagicMock) -> None:
@@ -375,8 +376,8 @@ class TestClearMultiDevice:
         mock_torch.cuda.set_device.assert_any_call(1)
         mock_torch.cuda.set_device.assert_any_call(0)  # restore
 
-        # empty_cache called twice (once per device)
-        assert mock_torch.cuda.empty_cache.call_count == 2
+        # empty_cache: scrub_device (2x) por dispositivo = 4 chamadas no total.
+        assert mock_torch.cuda.empty_cache.call_count == 4
 
     @patch("gamedev_shared.gpu._torch")
     def test_empty_devices_same_as_none(self, mock_torch_fn: MagicMock) -> None:

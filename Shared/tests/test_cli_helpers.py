@@ -169,12 +169,38 @@ class TestTryUmsDelegation:
                 "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
             )
 
-    def test_raises_on_vram_insufficient(self) -> None:
-        """VRAM_INSUFFICIENT nunca faz fallback in-process (evita OOM)."""
+    def test_vram_insufficient_falls_back_in_process(self) -> None:
+        """VRAM_INSUFFICIENT sem fila busy → fallback in-process (caller decide)."""
+        console = MagicMock()
+        with (
+            patch("gamedev_shared.model_server.ums_is_busy", return_value=False),
+            patch(
+                "gamedev_shared.cli_helpers.delegate_to_ums",
+                return_value={
+                    "status": "error",
+                    "error_code": "VRAM_INSUFFICIENT",
+                    "error": "peak 6553 > free 5657",
+                    "hint": "evict other backends",
+                },
+            ),
+        ):
+            result = try_ums_delegation(
+                "paint3d",
+                {"output": "/tmp/x.glb"},
+                t_start=time.time(),
+                noun="Mesh",
+                console=console,
+            )
+        # Caller cai in-process (GPU limpa fora do UMS) — sem auto-exit do supervisor.
+        assert result is False
+
+    def test_vram_insufficient_busy_raises(self) -> None:
+        """VRAM_INSUFFICIENT com UMS busy → sem fallback (evita competir pela GPU)."""
         import click
 
         console = MagicMock()
         with (
+            patch("gamedev_shared.model_server.ums_is_busy", return_value=True),
             patch(
                 "gamedev_shared.cli_helpers.delegate_to_ums",
                 return_value={

@@ -83,10 +83,10 @@ def shape_specs_from_items(
     items: list[dict[str, Any]],
     *,
     manifest_dir: Path,
-    steps: int = 50,
+    steps: int | None = None,
     guidance: float = 4.5,
-    octree_resolution: int = 384,
-    num_chunks: int = 20000,
+    octree_resolution: int | None = None,
+    num_chunks: int | None = None,
     mc_level: float | str = "auto",
     bounds_mode: str = "auto",
     export_origin: str = "feet",
@@ -100,6 +100,9 @@ def shape_specs_from_items(
 
     ``topology_fix=False`` no batch phased (clean fica no ensure_to_paint / master).
     Peak VRAM: profile explícito > hw_auto > admit-safe (não hardcode uint8).
+
+    ``octree_resolution``/``steps``/``num_chunks`` omitidos (``None``) → não vão no
+    payload UMS → ``bbox_tune`` size-based pode subir octree (ex. longhouse → 448).
     """
     try:
         from text3d.ums_payload import build_generate_request
@@ -108,14 +111,20 @@ def shape_specs_from_items(
 
     wave_sdnq, wave_mem = resolve_text3d_vram_opts(sdnq_preset, memory_efficient)
 
+    def _opt_int(item: dict[str, Any], *keys: str, wave: int | None) -> int | None:
+        for k in keys:
+            if k in item and item[k] is not None:
+                return int(item[k])
+        return int(wave) if wave is not None else None
+
     specs: list[UmsJobSpec] = []
     for item in items:
         aid = str(item["id"])
         img = _resolve_path(manifest_dir, str(item["image"]))
         out = _resolve_path(manifest_dir, str(item["output"]))
-        item_steps = int(item.get("steps", steps))
-        item_octree = int(item.get("octree_resolution", item.get("octree", octree_resolution)))
-        item_chunks = int(item.get("num_chunks", item.get("chunks", num_chunks)))
+        item_steps = _opt_int(item, "steps", wave=steps)
+        item_octree = _opt_int(item, "octree_resolution", "octree", wave=octree_resolution)
+        item_chunks = _opt_int(item, "num_chunks", "chunks", wave=num_chunks)
         # Wave já resolveu via hw_auto; item pode override (ainda passa pelo resolver).
         item_sdnq, item_mem = resolve_text3d_vram_opts(
             item.get("sdnq_preset", wave_sdnq),
@@ -216,10 +225,10 @@ def run_shape_wave_or_fallback(
     gpu_ids: list[int] | None = None,
     quality: str | None = None,
     export_origin: str = "feet",
-    steps: int = 50,
+    steps: int | None = None,
     guidance: float = 4.5,
-    octree_resolution: int = 384,
-    num_chunks: int = 20000,
+    octree_resolution: int | None = None,
+    num_chunks: int | None = None,
     mc_level: float | str = "auto",
     bounds_mode: str = "auto",
     sdnq_preset: str | None = None,
@@ -308,6 +317,7 @@ def run_paint_wave_or_fallback(
     )
     if not specs:
         return None
+
     # Idem shape: evitar preload sync (timeout/Broken pipe). 1.º job carrega.
     wave = run_gpu_wave(
         "paint3d",
