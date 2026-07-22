@@ -182,6 +182,41 @@ def discover_monorepo_tool_bin(
     return None
 
 
+def discover_monorepo_tool_python(
+    tool_name: str,
+    *,
+    monorepo: Path | None = None,
+) -> str | None:
+    """Resolve o interpretador Python do venv da tool no checkout.
+
+    Útil para o UMS spawnar workers subprocesso no venv canónico de cada tool:
+    ``Text3D/.venv/bin/python -m text3d serve --ums-worker``.
+
+    Args:
+        tool_name: Chave em :data:`TOOL_LAYOUT` (ex. ``text3d``, ``paint3d``).
+        monorepo: Raiz do monorepo; se ``None``, tenta detetar automaticamente.
+
+    Returns:
+        Caminho absoluto do ``python`` do venv, ou ``None`` se o venv não existir.
+    """
+    layout = TOOL_LAYOUT.get(tool_name)
+    if layout is None or layout.kind != "python":
+        return None
+
+    if monorepo is None:
+        from .monorepo import try_find_monorepo_root
+
+        monorepo = try_find_monorepo_root(Path(__file__).resolve())
+    if monorepo is None:
+        return None
+
+    scripts = _venv_scripts_dir(monorepo.resolve() / layout.folder / ".venv")
+    for cand in (scripts / "python", scripts / "python.exe"):
+        if _is_executable(cand):
+            return str(cand.resolve())
+    return None
+
+
 def apply_monorepo_tool_bins(env: dict[str, str]) -> dict[str, str]:
     """Preenche ``*_BIN`` em falta com CLIs do checkout (quando preferência monorepo activa).
 

@@ -30,6 +30,10 @@ class BackendDescriptor:
         footprint_key: Chave do registry ``gamedev_shared.lowvram.FOOTPRINTS`` (ex:
             ``"flux-klein-9b"``). Se definida, o ``vram_mib`` é derivado do footprint
             (mais preciso que o valor estático). Opcional.
+        tool: Nome da tool monorepo (ex: ``text3d``, ``paint3d``) para o modo
+            subprocess-per-backend. Se definido, o BackendManager despacha jobs
+            para um worker persistente no venv da tool em vez de importar o
+            adapter in-process. ``None`` = backend in-process (durante migração).
     """
 
     name: str
@@ -37,6 +41,7 @@ class BackendDescriptor:
     vram_mib: int
     priority: int
     footprint_key: str | None = None
+    tool: str | None = None
 
 
 def _default_yaml_path() -> str:
@@ -77,6 +82,7 @@ def load_descriptors(yaml_path: str | None = None) -> dict[str, BackendDescripto
             vram_mib=int(entry["vram_mib"]),
             priority=int(entry.get("priority", 0)),
             footprint_key=entry.get("footprint_key"),
+            tool=entry.get("tool"),
         )
     return descriptors
 
