@@ -19,6 +19,7 @@
 profile: quaternius-hero
 
 bone_map:
+  # Ver quaternius.yaml — root estático nos pés; só pelvis no map (+ location).
   pelvis: [pelvis, Hips]
   spine_01: [spine_01, Spine]
   spine_02: [spine_02, Chest]

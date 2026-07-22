@@ -19,6 +19,10 @@ profile: quaternius
 # Osso do source não mapeado -> ignorado. Osso do target sem correspondência
 # -> fica estático (mantém rest pose).
 bone_map:
+  # ``root`` NÃO entra no map: ``ensure_feet_root_bone`` cria-o nos pés e
+  # deixa-o estático (identidade). Retargetar rotação do root Quaternius
+  # injecta quat ±90° (Y-up↔Z-up) e ao play a origem salta para a cintura.
+  # Location do pelvis (bob) continua — é o que planta o gait.
   pelvis: [pelvis, Hips]
   spine_01: [spine_01, Spine]
   spine_02: [spine_02, Chest]

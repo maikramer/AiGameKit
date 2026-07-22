@@ -1562,6 +1562,7 @@ def cmd_retarget(
     target_arm.name = "Target"
 
     source_arm = _import_retarget_source(source_path, "Target")
+    rt.ensure_feet_root_bone(target_arm)
 
     if replace:
         rt._clear_nla_tracks("Target")

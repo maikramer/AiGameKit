@@ -17,6 +17,11 @@ nunca lida de ``pose.bone.matrix`` a meio do frame — essa leitura seria stale
 dos quaternions é forçada frame a frame (``make_compatible``) para evitar
 interpolação pelo caminho longo (trambolhão no viewer).
 
+Location / root: Quaternius tem ``root`` + ``pelvis.location`` (bob). O target
+ganha um ``root`` estático nos pés (nunca animado — retargetar a rotação do
+root Quaternius injecta ±90° Y↔Z e a origem salta para a cintura no play).
+Só ``pelvis`` recebe location (+ rotações dos ossos mapeados).
+
 Não é retargeting universal (ex.: não resolve rigs com topologias muito diferentes),
 mas é robusto e simples para humanoides. Alternativas mais complexas (constraints
 Copy Transforms + bake visual, retarget por chains) foram prototipadas e produziram
@@ -35,6 +40,10 @@ from pathlib import Path
 from typing import Any
 
 _DATA_DIR = Path(__file__).resolve().parent / "data" / "retarget"
+
+# Só pelvis: root fica identidade fixa (ver ensure_feet_root_bone).
+_LOCATION_SRC_BONES = frozenset({"pelvis"})
+_HIPS_CANDIDATES = ("pelvis", "Hips")
 
 
 def _bpy():
@@ -94,6 +103,63 @@ def _available_profiles() -> list[str]:
     if not _DATA_DIR.is_dir():
         return []
     return sorted(p.stem for p in _DATA_DIR.glob("*.yaml"))
+
+
+def _bone_rest_height(arm: Any, names: tuple[str, ...] = _HIPS_CANDIDATES) -> float:
+    """Altura rest do hips (máx |y|,|z| do head) — escala location source→target."""
+    for name in names:
+        bone = arm.data.bones.get(name)
+        if bone is None:
+            continue
+        h = bone.head_local
+        return max(abs(float(h.y)), abs(float(h.z)), 1e-3)
+    return 1.0
+
+
+def ensure_feet_root_bone(arm_obj: Any) -> bool:
+    """Garante osso ``root`` na origem (pés) como pai de ``pelvis``/``Hips``.
+
+    Rigs SkinTokens chegam muitas vezes com ``pelvis`` como única raiz — o
+    ponto fixo da animação fica a meio do corpo. Quaternius usa ``root``→``pelvis``.
+
+    Returns:
+        ``True`` se o bone foi criado; ``False`` se já existia ou não aplicável.
+    """
+    bpy = _bpy()
+    if arm_obj is None or getattr(arm_obj, "type", None) != "ARMATURE":
+        raise ValueError("ensure_feet_root_bone: objecto ARMATURE obrigatório")
+    if "root" in arm_obj.data.bones:
+        return False
+
+    hips_name: str | None = None
+    for cand in _HIPS_CANDIDATES:
+        bone = arm_obj.data.bones.get(cand)
+        if bone is not None and bone.parent is None:
+            hips_name = cand
+            break
+    if hips_name is None:
+        return False
+
+    bpy.context.view_layer.objects.active = arm_obj
+    arm_obj.select_set(True)
+    bpy.ops.object.mode_set(mode="EDIT")
+    try:
+        ebones = arm_obj.data.edit_bones
+        hips = ebones[hips_name]
+        root = ebones.new("root")
+        root.head = (0.0, 0.0, 0.0)
+        hx, hy, hz = float(hips.head.x), float(hips.head.y), float(hips.head.z)
+        span = max((hx * hx + hy * hy + hz * hz) ** 0.5 * 0.12, 0.05)
+        # Tail ao longo do eixo vertical dominante (Z após import glTF no Blender).
+        if abs(hz) >= abs(hy):
+            root.tail = (0.0, 0.0, span)
+        else:
+            root.tail = (0.0, span, 0.0)
+        root.use_deform = False
+        hips.parent = root
+    finally:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    return True
 
 
 def _topo_sort_target_bones(arm: Any, names: list[str]) -> list[str]:
@@ -247,6 +313,11 @@ def retarget_animation(
     full_order = _armature_topo_order(target)
     tgt_rest_quat = {b.name: b.matrix_local.to_quaternion() for b in target.data.bones}
     tgt_parent = {b.name: (b.parent.name if b.parent else None) for b in target.data.bones}
+    loc_scale = _bone_rest_height(target) / _bone_rest_height(source)
+    # tgt bones que recebem location (root + pelvis/Hips).
+    loc_targets = {
+        tgt for tgt, src in tgt_to_src.items() if src in _LOCATION_SRC_BONES
+    }
 
     # Reset do estado de animação do target. O reset do basis de TODOS os pose
     # bones garante que ossos não mapeados ficam mesmo no rest (a propagação
@@ -307,6 +378,12 @@ def retarget_animation(
             tpb = target.pose.bones[bn]
             tpb.rotation_quaternion = target_basis
             tpb.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+            # Hip bob / root lock: location em espaço do pai (Quaternius Standard
+            # tem root≈0 e pelvis com cm de sway — sem isto o corpo pende da cintura).
+            if bn in loc_targets:
+                sl = source.pose.bones[tgt_to_src[bn]].location
+                tpb.location = (float(sl.x) * loc_scale, float(sl.y) * loc_scale, float(sl.z) * loc_scale)
+                tpb.keyframe_insert(data_path="location", frame=frame)
 
     bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -350,6 +427,11 @@ def retarget_batch(
     target = bpy.data.objects.get(target_arm_name)
     if target is None:
         raise ValueError(f"Target armature não encontrado: {target_arm_name!r}")
+    # Antes dos clips: root nos pés (SkinTokens → pelvis-as-root), estático.
+    ensure_feet_root_bone(target)
+    if "root" in target.pose.bones:
+        pb = target.pose.bones["root"]
+        pb.matrix_basis.identity()
     if replace:
         _clear_nla_tracks(target_arm_name)
 
