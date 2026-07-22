@@ -56,6 +56,49 @@ class TestEstimateVram:
         assert double == pytest.approx(single * 2, rel=0.01)
 
 
+class TestProcessVramMib:
+    def test_sums_matching_pid(self, monkeypatch):
+        monkeypatch.setattr(
+            gpu_module,
+            "list_nvidia_compute_apps",
+            lambda: [(111, "python", 400), (111, "python", 200), (222, "other", 999)],
+        )
+        assert gpu_module.process_vram_mib(111) == 600
+
+    def test_none_when_missing(self, monkeypatch):
+        monkeypatch.setattr(gpu_module, "list_nvidia_compute_apps", lambda: [(1, "x", 10)])
+        assert gpu_module.process_vram_mib(999) is None
+
+
+class TestClearCudaMemoryIpc:
+    def test_calls_ipc_collect_when_present(self, monkeypatch):
+        calls: list[str] = []
+
+        class _Cuda:
+            @staticmethod
+            def is_available() -> bool:
+                return True
+
+            @staticmethod
+            def synchronize() -> None:
+                calls.append("sync")
+
+            @staticmethod
+            def empty_cache() -> None:
+                calls.append("empty")
+
+            @staticmethod
+            def ipc_collect() -> None:
+                calls.append("ipc")
+
+        fake_torch = SimpleNamespace(cuda=_Cuda())
+        monkeypatch.setattr(gpu_module, "_torch", lambda: fake_torch)
+        gpu_module.clear_cuda_memory()
+        assert "empty" in calls
+        assert "ipc" in calls
+        assert "sync" in calls
+
+
 class TestWarnIfVramOccupied:
     def test_no_warning_when_empty(self, monkeypatch):
         monkeypatch.setattr(gpu_module, "list_nvidia_compute_apps", lambda: [])
