@@ -16,6 +16,8 @@ Intervenções deste script (idempotente — corre as 3 de uma vez):
    volta do ombro (glenohumeral = head de ``upperarm_*``) sobre a base já
    mínima. Para humanoides musculados/gordos (merchant/ogre): a T-pose
    horizontal estica músculo/gordura.
+3. **Leg spread** — pernas abertas ~10° à volta do hip (head de ``thigh_*``)
+   para haver gap claro entre coxas (evita webbing / pernas fundidas no MC).
 
 Não precisa bpy — lê ``quaternius_tpose_bone.json`` empacotado (fonte
 editável; o ``.txt`` é regenerado a partir do JSON).
@@ -45,10 +47,15 @@ APOSE_DWARF_JSON = OMNI_DIR / "quaternius_apose_dwarf_bone.json"
 
 # Ângulo de descida dos braços na A-pose (graus abaixo da horizontal).
 APOSE_ARM_ANGLE_DEG = 45.0
+# Abertura das pernas na A-pose (graus para fora no plano XY). Demasiado
+# pequeno → MC funde coxas; demasiado grande → pose estranha / pés demasiado
+# afastados. ~10° dá gap leve sem caricatura.
+APOSE_LEG_SPREAD_DEG = 10.0
 
 # Dedos a remover do esqueleto (ficam 22 ossos: 0-21 da numeração original).
 FINGER_NAMES = ("index", "middle", "ring", "pinky", "thumb")
 ARM_CHAIN = ("upperarm", "lowerarm", "hand")
+LEG_CHAIN = ("thigh", "calf", "foot", "ball")
 
 
 def _load_bones(path: Path) -> dict[str, np.ndarray]:
@@ -109,10 +116,36 @@ def apose_arms(bones: dict[str, np.ndarray], angle_deg: float = APOSE_ARM_ANGLE_
     return out
 
 
+def apose_legs(
+    bones: dict[str, np.ndarray],
+    spread_deg: float = APOSE_LEG_SPREAD_DEG,
+) -> dict[str, np.ndarray]:
+    """Abre pernas (thigh→ball) à volta do hip — gap entre coxas no condicionamento Omni."""
+    out = dict(bones)
+    for side in ("_l", "_r"):
+        thigh = f"thigh{side}"
+        if thigh not in out:
+            continue
+        pivot = out[thigh][0].copy()
+        # Outward no plano XY: _l (+X) → +ângulo; _r (−X) → −ângulo.
+        angle = abs(spread_deg) if side == "_l" else -abs(spread_deg)
+        chain = [n for n in out if n != "_meta" and n.endswith(side) and n.startswith(LEG_CHAIN)]
+        for name in chain:
+            seg = out[name]
+            out[name] = np.stack([_rot_xy(seg[0], pivot, angle), _rot_xy(seg[1], pivot, angle)])
+    return out
+
+
 def _report(bones: dict[str, np.ndarray], label: str) -> None:
     names = [n for n in bones if n != "_meta"]
     ys = [bones[f"hand_{s}"][1][1] for s in ("l", "r") if f"hand_{s}" in bones]
-    print(f"  {label}: {len(names)} ossos" + (f", mãos em y≈{min(ys):+.3f}..{max(ys):+.3f}" if ys else ""))
+    feet_x = [bones[f"foot_{s}"][1][0] for s in ("l", "r") if f"foot_{s}" in bones]
+    extra = ""
+    if ys:
+        extra += f", mãos y≈{min(ys):+.3f}..{max(ys):+.3f}"
+    if len(feet_x) == 2:
+        extra += f", pés x≈{min(feet_x):+.3f}..{max(feet_x):+.3f} (gap={max(feet_x) - min(feet_x):.3f})"
+    print(f"  {label}: {len(names)} ossos{extra}")
 
 
 def main() -> int:
@@ -130,17 +163,25 @@ def main() -> int:
         _write_bones(dwarf, DWARF_JSON, note="esqueleto mínimo 22 ossos (sem dedos)")
         print(f"  → {DWARF_JSON.name} + .txt (dwarf mínimo)")
 
-    # 3) A-pose (braços -45°) sobre a base mínima — ficheiro NOVO/actualizado.
-    apose = apose_arms(minimal)
+    # 3) A-pose (braços -45° + pernas abertas) sobre a base mínima.
+    apose = apose_legs(apose_arms(minimal))
     _report(apose, "A-pose")
-    _write_bones(apose, APOSE_JSON, note=f"A-pose braços -{APOSE_ARM_ANGLE_DEG:g}°, sem dedos")
+    _write_bones(
+        apose,
+        APOSE_JSON,
+        note=(f"A-pose braços -{APOSE_ARM_ANGLE_DEG:g}°, pernas ±{APOSE_LEG_SPREAD_DEG:g}°, sem dedos"),
+    )
     print(f"  → {APOSE_JSON.name} + .txt (A-pose mínima)")
 
-    # 4) A-pose dwarf (chibi musculado/baixo) — mesma rotação sobre o dwarf mínimo.
+    # 4) A-pose dwarf — mesma rotação sobre o dwarf mínimo.
     if DWARF_JSON.is_file():
-        apose_dwarf = apose_arms(_load_bones(DWARF_JSON))
+        apose_dwarf = apose_legs(apose_arms(_load_bones(DWARF_JSON)))
         _report(apose_dwarf, "A-pose dwarf")
-        _write_bones(apose_dwarf, APOSE_DWARF_JSON, note=f"A-pose dwarf braços -{APOSE_ARM_ANGLE_DEG:g}°, sem dedos")
+        _write_bones(
+            apose_dwarf,
+            APOSE_DWARF_JSON,
+            note=(f"A-pose dwarf braços -{APOSE_ARM_ANGLE_DEG:g}°, pernas ±{APOSE_LEG_SPREAD_DEG:g}°, sem dedos"),
+        )
         print(f"  → {APOSE_DWARF_JSON.name} + .txt (A-pose dwarf mínima)")
     return 0
 

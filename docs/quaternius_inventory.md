@@ -74,8 +74,8 @@ The simple-rpg rigs (hero, goblin, wolf, ogre...) use Mixamo naming WITHOUT the
 
 | Quaternius (source) | simple-rpg (target) | Notes |
 |---|---|---|
-| `root` | (skip) | root offset node, no deform |
-| `pelvis` | `Hips` | |
+| `root` | `root` (estático) | criado nos pés; **nunca** retargetar rotação (±90° Y↔Z) |
+| `pelvis` | `pelvis` / `Hips` | location+rotation (bob); sem location o clip pende da cintura |
 | `spine_01` | `Spine` | |
 | `spine_02` | `Chest` | |
 | `spine_03` | `UpperChest` | ogre has extra `Neck1`; map to `Neck` or skip |
