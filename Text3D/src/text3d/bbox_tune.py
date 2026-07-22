@@ -21,10 +21,13 @@ from typing import Any
 _REF_M = 1.5
 # Alvo aproximado de voxel em metros (buracos MC ~1-2 voxels).
 _TARGET_VOXEL_M = 0.025
-# Escala máxima relativa ao base do tier (evita OOM / tempos absurdos).
-# Só sobe: assets pequenos ficam no tier VRAM/quality; grandes ganham octree.
+# Escala relativa ao base do tier (evita OOM / tempos absurdos).
 _MAX_SCALE = 3.0
-_MIN_SCALE = 1.0
+_MIN_SCALE = 0.75
+# Octree: calcular → se <160 → 160; senão degraus de 32 até 512.
+_OCTREE_FLOOR = 160
+_OCTREE_CEILING = 512
+_OCTREE_STEP = 32
 
 # Morph-close / «voxel merge»: N × voxel_m MC. Default ~1/8 voxel (1 vox
 # derretia detalhe — capela). Auto ON: funde double-shell sub-voxel; remesh
@@ -158,8 +161,8 @@ _PRESET_CHAR_M: dict[str, float] = {
     "cube": 1.0,
 }
 
-# Valores Omni / flashvdm tipicamente estáveis.
-_OCTREE_LADDER = (128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 480, 512)
+# Ladder 160..512 step 32 (ver ``_snap_octree``).
+_OCTREE_LADDER = tuple(range(_OCTREE_FLOOR, _OCTREE_CEILING + 1, _OCTREE_STEP))
 
 # Tecto INFORMATIVO do latent (≠ tecto VRAM): acima disto o field do VAE não
 # tem detalhe novo — sampling mais fino só resolve ruído interior (componentes
@@ -298,12 +301,11 @@ def max_octree_for_vram(
         return 448 if group_offload else 384
     if group_offload:
         # Stream pesos → VRAM ≈ ativação + MC. Sacrifica tempo, enche a GPU.
+        # 6 GB + sdnq-int4 + group_offload aguenta 448 (validado longhouse ~10 m).
         if total_vram_gib >= 10.0:
             return 512
-        if total_vram_gib >= 7.5:
-            return 448
         if total_vram_gib >= 6.0:
-            return 416
+            return 448
         if total_vram_gib >= 5.0:
             return 384
         return 320
@@ -318,17 +320,18 @@ def max_octree_for_vram(
     return 256
 
 
-def _snap_octree(value: int, *, lo: int, hi: int) -> int:
-    v = max(lo, min(hi, int(value)))
-    best = _OCTREE_LADDER[0]
-    best_d = abs(best - v)
-    for cand in _OCTREE_LADDER:
-        if cand < lo or cand > hi:
-            continue
-        d = abs(cand - v)
-        if d < best_d:
-            best, best_d = cand, d
-    return int(best)
+def _snap_octree(value: int, *, lo: int = _OCTREE_FLOOR, hi: int = _OCTREE_CEILING) -> int:
+    """Piso 160; acima disso, degrau de 32 até 512 (ou ``hi``/``lo`` mais apertados)."""
+    floor = max(_OCTREE_FLOOR, int(lo))
+    ceil = min(_OCTREE_CEILING, int(hi))
+    if ceil < floor:
+        ceil = floor
+    v = int(value)
+    if v <= floor:
+        return floor
+    # Nearest multiple of step above floor.
+    snapped = floor + int(round((v - floor) / _OCTREE_STEP)) * _OCTREE_STEP
+    return max(floor, min(ceil, snapped))
 
 
 def tune_hunyuan_for_bbox(
@@ -340,7 +343,7 @@ def tune_hunyuan_for_bbox(
     category: str | None = None,
     bbox_preset: str | None = None,
     total_vram_gib: float | None = None,
-    min_octree: int = 128,
+    min_octree: int = _OCTREE_FLOOR,
     volume_decoder: str | None = None,
     group_offload: bool = False,
     target_voxel_m: float | None = None,
@@ -353,8 +356,8 @@ def tune_hunyuan_for_bbox(
         size_m: ``[L,H,W]`` em metros (preferido).
         category / bbox_preset: prior de tamanho típico (não muda a fórmula).
         total_vram_gib: tecto de octree.
-        min_octree: piso (flashvdm exige ≥256).
-        volume_decoder: se ``flashvdm``, força ``min_octree≥256``.
+        min_octree: piso efectivo (≥160).
+        volume_decoder: ignorado no piso (flashvdm abaixo de 256 → decode denso).
         group_offload: tecto mais alto (pesos em stream → VRAM para MC).
         target_voxel_m: voxel-mundo alvo explícito; ``None`` → percetual via
             :func:`target_voxel_for` (categoria/preset + tier de qualidade).
@@ -377,14 +380,18 @@ def tune_hunyuan_for_bbox(
             morph_close=None,
         )
 
-    lo = int(min_octree)
-    if (volume_decoder or "").strip().lower() == "flashvdm":
-        lo = max(lo, 256)
+    lo = max(_OCTREE_FLOOR, int(min_octree))
+    # ``volume_decoder`` não sobe o piso: flashvdm abaixo de 256 → decode denso.
 
-    # min(tecto VRAM, tecto informativo do latent): octree acima do que o
-    # latent consegue expressar só gera ruído interno — nunca subir até lá,
-    # mesmo com VRAM de sobra. Detalhe extra vem de textura/normal bake.
-    hi = max(lo, min(max_octree_for_vram(total_vram_gib, group_offload=group_offload), latent_detail_ceiling()))
+    # min(tecto VRAM, tecto latent, 512): acima do latent só gera ruído interno.
+    hi = max(
+        lo,
+        min(
+            max_octree_for_vram(total_vram_gib, group_offload=group_offload),
+            latent_detail_ceiling(),
+            _OCTREE_CEILING,
+        ),
+    )
 
     # Escala pelo eixo maior vs referência de prop.
     scale = max(_MIN_SCALE, min(_MAX_SCALE, float(char_m) / _REF_M))
@@ -396,10 +403,9 @@ def tune_hunyuan_for_bbox(
         tv = target_voxel_for(category, bbox_preset, quality)
     desired_abs = round(float(char_m) / tv)
     desired_scale = round(base_o * scale)
-    # Media geometrica: respeita tier VRAM e ainda sobe com metros.
-    target = max(base_o, round((desired_abs * desired_scale) ** 0.5))
-    # tier ja no/acima do tecto VRAM → manter; senao snap na escada
-    octree = base_o if base_o >= hi else _snap_octree(target, lo=max(lo, base_o), hi=hi)
+    # Média geométrica tamanho×tier; snap: <160→160, senão ±32 até 512/hi.
+    desired = round((desired_abs * desired_scale) ** 0.5)
+    octree = _snap_octree(desired, lo=lo, hi=hi)
 
     # Steps sobem mais suave que o octree (custo tempo linear-ish).
     step_scale = 0.9 + 0.1 * scale

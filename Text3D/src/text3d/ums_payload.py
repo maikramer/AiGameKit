@@ -11,10 +11,10 @@ def build_generate_request(
     *,
     from_image: str,
     output: str,
-    steps: int = 50,
+    steps: int | None = None,
     guidance: float = 4.5,
-    octree_resolution: int = 384,
-    num_chunks: int = 20000,
+    octree_resolution: int | None = None,
+    num_chunks: int | None = None,
     seed: int | None = None,
     seed_fingerprint: int | None = None,
     mc_level: float | str = "auto",
@@ -51,14 +51,14 @@ def build_generate_request(
     """Monta payload UMS text3d com peak/load opts.
 
     ``bbox_tune=True`` deixa o adapter/UMS afinar steps/octree/chunks.
+    ``octree_resolution``/``steps``/``num_chunks`` só entram no payload quando
+    explícitos — se presentes, ``ums_generate`` trata como override e **não**
+    sobe o eixo no size-tune (era o bug que fixava 384 e matava buildings).
     """
     payload: dict[str, Any] = {
         "from_image": str(from_image),
         "output": str(output),
-        "steps": int(steps),
         "guidance": float(guidance),
-        "octree_resolution": int(octree_resolution),
-        "num_chunks": int(num_chunks),
         "seed": seed,
         "mc_level": mc_level,
         "bounds_mode": bounds_mode,
@@ -75,6 +75,12 @@ def build_generate_request(
         "verbose": bool(verbose),
         "bbox_tune": bool(bbox_tune),
     }
+    if steps is not None:
+        payload["steps"] = int(steps)
+    if octree_resolution is not None:
+        payload["octree_resolution"] = int(octree_resolution)
+    if num_chunks is not None:
+        payload["num_chunks"] = int(num_chunks)
     if seed_fingerprint is not None:
         # Override de re-roll (GameAssets manifest seed:) — entra no sidecar
         # Omni; distinto do RNG ``seed``.

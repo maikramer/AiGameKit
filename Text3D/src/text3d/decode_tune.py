@@ -56,6 +56,8 @@ AUTO_MC_LEVEL_MIN = -0.01
 # interior é ruído e o grid denso visita-o todo. Decoders surface-focused
 # (flashvdm) amostram só perto da superfície.
 SURFACE_DECODER_MIN_OCTREE = 448
+# FastGeometryExtractor (flashvdm) recusa octree < 256.
+FLASHVDM_MIN_OCTREE = 256
 
 
 def bounds_for_bbox(
@@ -136,6 +138,20 @@ def prefer_surface_decoder(volume_decoder: str, octree_resolution: int) -> bool:
     inteiro do field (ruído) — mais lixo interno E mais VRAM.
     """
     return volume_decoder in ("vanilla", "hierarchical") and int(octree_resolution) >= SURFACE_DECODER_MIN_OCTREE
+
+
+def resolve_fast_decode(volume_decoder: str, octree_resolution: int) -> bool:
+    """Decide ``fast_decode`` (flashvdm) para o octree efectivo.
+
+    flashvdm exige ≥ :data:`FLASHVDM_MIN_OCTREE`. Abaixo disso (ex. piso
+    bbox_tune 160) cai para decode denso — não sobe o octree.
+    """
+    o = int(octree_resolution)
+    if o < FLASHVDM_MIN_OCTREE:
+        return False
+    if (volume_decoder or "").strip().lower() == "flashvdm":
+        return True
+    return prefer_surface_decoder(volume_decoder, o)
 
 
 def bytes_per_query_default() -> int:

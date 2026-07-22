@@ -11,6 +11,7 @@ explícito usa-se bbox humanoid 2u (ver ``DEFAULT_OMNI_BBOX``).
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 from collections.abc import Callable
@@ -187,10 +188,27 @@ class HunyuanTextTo3DGenerator:
             self._bg_remover.unload()
             self._bg_remover = None
         if self._hunyuan_pipeline is None:
+            self._offload_plan = None
+            _clear_cuda_cache()
             return
         self._log("A libertar pipeline Hunyuan Omni...")
-        del self._hunyuan_pipeline
+        pipe = self._hunyuan_pipeline
         self._hunyuan_pipeline = None
+        self._offload_plan = None
+        # Group-offload / accelerate deixam hooks e staging buffers na GPU —
+        # tentar CPU + drop refs antes do GC (contexto CUDA ~1 GiB continua
+        # no processo até o UMS sair; isto só liberta pesos/activação).
+        for attr in ("model", "cond_stage_model", "first_stage_model", "scheduler"):
+            mod = getattr(pipe, attr, None)
+            if mod is None:
+                continue
+            to_cpu = getattr(mod, "to", None)
+            if callable(to_cpu):
+                with contextlib.suppress(Exception):
+                    to_cpu("cpu")
+            with contextlib.suppress(Exception):
+                setattr(pipe, attr, None)
+        del pipe
         _clear_cuda_cache()
 
     def unload_hunyuan(self) -> None:
@@ -627,19 +645,23 @@ class HunyuanTextTo3DGenerator:
         )
 
         from .decode_tune import (
-            auto_num_chunks as _auto_num_chunks,
-        )
-        from .decode_tune import (
+            FLASHVDM_MIN_OCTREE,
             bounds_for_bbox,
-            prefer_surface_decoder,
+            resolve_fast_decode,
             resolve_mc_level,
         )
+        from .decode_tune import (
+            auto_num_chunks as _auto_num_chunks,
+        )
 
-        fast_decode = self.volume_decoder == "flashvdm"
-        # Octree alto + decoder denso = grid a visitar o interior inteiro do
-        # field (ruído) — forçar decoder surface-focused (flashvdm).
-        if not fast_decode and prefer_surface_decoder(self.volume_decoder, octree_resolution):
-            fast_decode = True
+        wanted_flash = (self.volume_decoder or "").strip().lower() == "flashvdm"
+        fast_decode = resolve_fast_decode(self.volume_decoder, octree_resolution)
+        if wanted_flash and not fast_decode and int(octree_resolution) < FLASHVDM_MIN_OCTREE:
+            self._log(
+                f"flashvdm exige octree≥{FLASHVDM_MIN_OCTREE}; "
+                f"octree={octree_resolution} → decode denso (não sobe octree)"
+            )
+        elif fast_decode and not wanted_flash:
             self._log(
                 f"Decoder denso a octree={octree_resolution} → flashvdm forçado "
                 f"(surface-focused; menos lixo interno/VRAM)"

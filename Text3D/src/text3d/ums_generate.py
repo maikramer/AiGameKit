@@ -105,6 +105,9 @@ def run_generate(
             total_vram_gib = float(vram_raw) if vram_raw is not None else None
         except (TypeError, ValueError):
             total_vram_gib = None
+        _vd = request.get("volume_decoder")
+        if _vd is None:
+            _vd = getattr(model, "volume_decoder", None)
         steps, octree, chunks, _bt = apply_bbox_tune(
             steps=steps,
             octree=octree,
@@ -113,7 +116,7 @@ def run_generate(
             category=request.get("category"),
             bbox_preset=request.get("bbox_preset"),
             total_vram_gib=total_vram_gib,
-            volume_decoder=request.get("volume_decoder"),
+            volume_decoder=_vd,
             tune_steps=not user_steps,
             tune_octree=not user_octree,
             tune_chunks=not user_chunks,

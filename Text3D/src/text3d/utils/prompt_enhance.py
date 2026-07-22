@@ -79,6 +79,35 @@ _RENDER_SUFFIX = (
 
 _RENDER_SUFFIX_LIGHT = "flat lit, clean render, game asset"
 
+# Bipedais / humanoides: gap leve entre pernas na imagem 2D (Hunyuan lê
+# silhueta — coxas coladas → webbing no mesh). Só quando o prompt sugere personagem.
+_BIPED_STANCE = (
+    "feet slightly apart with a clear open gap between the legs, "
+    "thighs separated, relaxed upright stance, no fused or joined legs"
+)
+
+_BIPED_MARKERS: tuple[str, ...] = (
+    "standing",
+    "humanoid",
+    "character",
+    "person",
+    "warrior",
+    "bandit",
+    "hero",
+    "goblin",
+    "merchant",
+    "witch",
+    "creature",
+    "enemy",
+    "npc",
+    "legs",
+    "feet",
+    "a-pose",
+    "apose",
+    "t-pose",
+    "tpose",
+)
+
 # ---------------------------------------------------------------------------
 # Detector de termos já presentes (evitar duplicação)
 # ---------------------------------------------------------------------------
@@ -129,6 +158,20 @@ def sanitize_prompt(prompt: str) -> str:
     return result
 
 
+def _looks_bipedal(prompt_lower: str) -> bool:
+    return any(m in prompt_lower for m in _BIPED_MARKERS)
+
+
+def _with_biped_stance(prompt: str) -> str:
+    """Acrescenta stance de pernas abertas se ainda não estiver no prompt."""
+    pl = prompt.lower()
+    if "gap between" in pl or "feet slightly apart" in pl or "thighs separated" in pl:
+        return prompt
+    if not _looks_bipedal(pl):
+        return prompt
+    return f"{prompt.rstrip(',. ')}, {_BIPED_STANCE}"
+
+
 def enhance_prompt_for_clean_base(prompt: str, aggressive: bool = True) -> str:
     """Envolve o prompt do utilizador num enquadramento de render limpo.
 
@@ -138,11 +181,13 @@ def enhance_prompt_for_clean_base(prompt: str, aggressive: bool = True) -> str:
     prompt_lower = prompt.lower()
 
     if _has_clean_markers(prompt_lower):
-        return prompt
+        return _with_biped_stance(prompt)
 
     if aggressive:
-        return f"{_RENDER_PREFIX}, {prompt.strip()}, {_RENDER_SUFFIX}"
-    return f"{_RENDER_PREFIX_LIGHT}, {prompt.strip()}, {_RENDER_SUFFIX_LIGHT}"
+        base = f"{_RENDER_PREFIX}, {prompt.strip()}, {_RENDER_SUFFIX}"
+    else:
+        base = f"{_RENDER_PREFIX_LIGHT}, {prompt.strip()}, {_RENDER_SUFFIX_LIGHT}"
+    return _with_biped_stance(base)
 
 
 def create_optimized_prompt(prompt: str, aggressive: bool = True) -> str:

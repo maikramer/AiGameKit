@@ -23,6 +23,7 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 | Base plane | `utils/mesh_base_plane.py` (288 lines) | Base plane detection/removal |
 | Background removal | `utils/bg_removal.py` (98 lines) | BiRefNet |
 | Collision mesh | `utils/collision.py` (82 lines) | Convex hull + quadric decimation |
+| Split at height | `utils/mesh_split.py` | Thin wrapper → `gamedev_shared.mesh_split` (stump+top) |
 | Defaults | `defaults.py` (111 lines) | Constants, presets, export rotation/origin |
 | Omni controls / presets | `utils/omni_controls.py`, `omni_presets.py` | bbox max=1.0; pose Quaternius |
 | UMS payload builder | `ums_payload.py` | Shared with GameAssets batch waves |
@@ -32,7 +33,7 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 
 **Generation:** `generate`, `generate-batch`
 **Pipeline:** `topology-fix`, `bake-master`
-**Mesh Ops:** `lod`, `remesh`, `remesh-textured`, `collision`, `align-plus-z`
+**Mesh Ops:** `lod`, `remesh`, `remesh-textured`, `collision`, `split-at-height`, `align-plus-z`
 **Utility:** `convert`, `doctor`, `info`, `gpu-processes`, `models`, `skill install`
 
 ## PIPELINE STAGES (GameAssets master pipeline integration)
@@ -74,6 +75,8 @@ Stage 5 — `collision`: Convex hull + quadric decimation for physics mesh.
 **`simplify-textured`:** Decimates GLB preserving texture and UV (bpy Decimate COLLAPSE via `remesh_textured_glb`). Without texture, falls back to geometry-only decimation.
 
 **`align-plus-z`:** Calls `align_largest_plus_z_face_normal_to_ground` with a `--min-height-ratio` guard to prevent "folding" humanoid meshes when the heuristic misidentifies the ground-facing plane.
+
+**`split-at-height`:** Horizontal Y-up bisect into named `Stump` + `Top` meshes (Shared `mesh_split`). Caps cut faces by default. `--split-files` also writes `{stem}_stump.glb` / `{stem}_top.glb`. Used by GameAssets for `category=tree` after LOD0.
 
 ## TESTS
 
