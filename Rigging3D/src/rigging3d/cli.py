@@ -578,6 +578,10 @@ def _fix_bone_orientation_or_warn(glb_path: Path) -> None:
     animações de outro rig. Não falha o pipeline se der erro (best-effort,
     tal como ``_validate_and_fix_origin``); a malha em bind pose nunca é
     afectada (inverse bind matrix cancela sempre a rest pose).
+
+    O re-export do bone_repair já aplica smooth-by-angle (anti V/Tri=3); se
+    ele falhar, fazemos aqui um passe só de smooth para não entregar o
+    ficheiro flat do export vendored do SkinTokens.
     """
     try:
         from .bone_repair import fix_bone_orientation
@@ -585,12 +589,41 @@ def _fix_bone_orientation_or_warn(glb_path: Path) -> None:
         result = fix_bone_orientation(glb_path, glb_path)
     except Exception as exc:  # noqa: BLE001
         console.print(f"[yellow]⚠ fix-bone-orientation falhou (não fatal): {exc}[/yellow]")
+        _smooth_shade_glb_or_warn(glb_path)
         return
     if result.bones_fixed:
         console.print(
             f"[green]Bone orientation:[/green] {len(result.bones_fixed)} bone(s) corrigidos "
             f"({', '.join(result.bones_fixed)}) — pronto para retarget."
         )
+
+
+def _smooth_shade_glb_or_warn(glb_path: Path) -> None:
+    """Passe só de smooth-by-angle + re-export (anti V/Tri=3), best-effort."""
+    try:
+        import bpy
+        from gamedev_shared.bpy_mesh import clear_scene, smooth_shade_scene
+
+        clear_scene()
+        bpy.ops.import_scene.gltf(filepath=str(glb_path))
+        meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+        smooth_shade_scene(meshes)
+        bpy.ops.object.select_all(action="SELECT")
+        bpy.ops.export_scene.gltf(
+            filepath=str(glb_path),
+            export_format="GLB",
+            use_selection=True,
+            export_apply=False,
+            export_skins=True,
+            export_animations=True,
+            export_normals=True,
+            export_tangents=True,
+            export_texcoords=True,
+            export_materials="EXPORT",
+            export_image_format="AUTO",
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[yellow]⚠ smooth-shade pós-rig falhou (não fatal): {exc}[/yellow]")
 
 
 # ---------------------------------------------------------------------------

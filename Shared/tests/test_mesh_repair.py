@@ -706,7 +706,6 @@ class TestClampBaseFlareAndTaubin:
         clear_scene()
 
 
-
 class TestRemoveInternalShellFaces:
     def test_solid_box_untouched(self, _bpy) -> None:
         from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays

@@ -84,13 +84,13 @@ def fix_bone_orientation(
         BoneRepairResult com a lista de bones corrigidos.
     """
     import bpy
-    from gamedev_shared.bpy_mesh import clear_scene
+    from gamedev_shared.bpy_mesh import clear_scene, smooth_shade_scene
 
     input_glb = Path(input_glb)
     output_glb = Path(output_glb)
 
     clear_scene()
-    _, arm = _import_glb(input_glb)
+    meshes, arm = _import_glb(input_glb)
 
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode="EDIT")
@@ -101,6 +101,11 @@ def fix_bone_orientation(
 
     bones_total = len(arm.data.bones)
     log.info("fix-bone-orientation: %d/%d bones corrigidos em %s", len(fixed), bones_total, input_glb.name)
+
+    # Anti V/Tri=3: o export do SkinTokens (vendored, sem kwargs) sai flat e
+    # este é o último passe do pipeline sobre o ficheiro — smooth-by-angle
+    # aqui faz o exporter deduplicar loops (rigged do ogre: 2.8M → ~470k verts).
+    smooth_shade_scene(meshes)
 
     output_glb.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.object.select_all(action="SELECT")

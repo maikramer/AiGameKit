@@ -3008,30 +3008,20 @@ def fall_keyframes(
     return chains
 
 
-def _weld_scene_meshes() -> None:
-    bpy = _bpy()
+def _smooth_scene_meshes() -> None:
+    """Smooth-by-angle em todas as meshes da cena (anti V/Tri=3 no export).
 
-    for obj in bpy.data.objects:
-        if obj.type != "MESH":
-            continue
-        nv = len(obj.data.vertices)
-        if nv > 150_000:
-            dist = 0.003
-        elif nv > 100_000:
-            dist = 0.005
-        elif nv > 50_000:
-            dist = 0.008
-        else:
-            dist = 0.01
+    Substitui o antigo ``_weld_scene_meshes``: o ``remove_doubles`` com
+    ``use_sharp_edge_from_normals`` não juntava vértices de meshes flat
+    (normais per-face divergem) e o ``contextlib.suppress`` no caller
+    escondia falhas de modo EDIT em background — o entregável saía com
+    V/Tri=3 (ex.: bandit_lod0 15M em vez de ~6M). O smooth deterministico
+    faz o exporter glTF deduplicar loops sem tocar na topologia nem nos
+    skin weights (remove_doubles podia fundir vértices weighted).
+    """
+    from gamedev_shared.bpy_mesh import smooth_shade_scene
 
-        bpy.context.view_layer.objects.active = obj
-        bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.select_all(action="SELECT")
-        obj.data.calc_normals_split()
-        bpy.ops.mesh.remove_doubles(threshold=dist, use_sharp_edge_from_normals=True)
-        bpy.ops.mesh.customdata_custom_splitnormals_clear()
-        bpy.ops.mesh.faces_shade_smooth()
-        bpy.ops.object.mode_set(mode="OBJECT")
+    smooth_shade_scene(_bpy().data.objects)
 
 
 def export_glb(path: Path, *, draco: bool = False, meshopt: bool = False) -> None:
@@ -3039,7 +3029,7 @@ def export_glb(path: Path, *, draco: bool = False, meshopt: bool = False) -> Non
     path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(Exception):
-        _weld_scene_meshes()
+        _smooth_scene_meshes()
     # ACTIONS: preserva melhor clips múltiplos do que NLA_TRACKS quando as
     # animações são reimportadas/empilhadas via NLA.
     export_kwargs: dict[str, Any] = {

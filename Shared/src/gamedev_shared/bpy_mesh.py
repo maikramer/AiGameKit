@@ -6,6 +6,7 @@ plus conversion functions for trimesh compatibility at package boundaries.
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 from pathlib import Path
 from typing import Any
@@ -138,6 +139,31 @@ def apply_smooth_by_angle(obj: Any, degrees: float = 60.0) -> None:
     with contextlib.suppress(AttributeError):
         mesh.use_auto_smooth = True
         mesh.auto_smooth_angle = angle
+
+
+def smooth_shade_scene(objects: Any, degrees: float = 60.0) -> None:
+    """Smooth-shade every mesh object, clearing imported flat/custom-split normals.
+
+    GLBs sem ``NORMAL`` (ex.: saída do topology-fix, que exporta com
+    ``export_normals=False``) importam no bpy com todas as faces **flat**. Um
+    re-export glTF ingénuo escreve então normais por canto de face e parte
+    todos os vértices (V/Tri ≈ 3 — ficheiros 3-4x maiores: bandit_lod0 15M,
+    boss_ogre_lod0 33M). Forçar smooth-by-angle faz o exporter deduplicar
+    loops de volta a vértices partilhados (V/Tri ≈ 0.65).
+
+    Idempotente e seguro em background mode. Aplicar antes de qualquer
+    ``bpy.ops.export_scene.gltf`` que re-exporte meshes importados de GLBs da
+    pipeline (skin_transfer, rigging3d bone_repair, animator3d game-pack).
+    """
+    for obj in objects:
+        if getattr(obj, "type", None) != "MESH":
+            continue
+        mesh = obj.data
+        with contextlib.suppress(Exception):
+            # Larga custom split normals herdadas do import (bpy < 4.1 API;
+            # em 5.x o atributo é recriado pelo shade_smooth_by_angle).
+            mesh.free_normals_split()
+        apply_smooth_by_angle(obj, degrees)
 
 
 def _needs_tangents(objects: Any) -> bool:

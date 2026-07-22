@@ -168,9 +168,11 @@ def copy_armature_animations(src_arm: Any, dst_arm: Any) -> int:
     dst_arm.animation_data_create()
     dst_ad = dst_arm.animation_data
     copied = 0
+    referenced: set[str] = set()
 
     if src_ad.action is not None:
         dst_ad.action = src_ad.action
+        referenced.add(src_ad.action.name)
         copied += 1
 
     for track in src_ad.nla_tracks:
@@ -181,6 +183,7 @@ def copy_armature_animations(src_arm: Any, dst_arm: Any) -> int:
             if strip.action is None:
                 continue
             new_strip = new_track.strips.new(strip.name, int(strip.frame_start), strip.action)
+            referenced.add(strip.action.name)
             with contextlib.suppress(Exception):
                 new_strip.frame_end = strip.frame_end
             with contextlib.suppress(Exception):
@@ -189,10 +192,18 @@ def copy_armature_animations(src_arm: Any, dst_arm: Any) -> int:
 
     if copied == 0:
         # glTF import may leave actions in bpy.data.actions without NLA yet.
+        # Dedup por nome: o import pode criar cópias ``.001`` da mesma clip e
+        # empurrar todas para NLA gerava entregáveis com animações duplicadas
+        # (bandit/boss_ogre com 14-18 clips em vez de 7-9).
+        seen: set[str] = set()
         for act in bpy.data.actions:
+            clip_name = act.name.split(".")[0]
+            if act.name in referenced or clip_name in seen:
+                continue
+            seen.add(clip_name)
             track = dst_ad.nla_tracks.new()
-            track.name = act.name
-            track.strips.new(act.name, 1, act)
+            track.name = clip_name
+            track.strips.new(clip_name, 1, act)
             copied += 1
 
     return copied
@@ -235,8 +246,14 @@ def export_skinned_glb(
     """Export mesh+armature with skins+animations. Never ``export_apply``."""
     import bpy
 
+    from gamedev_shared.bpy_mesh import smooth_shade_scene
+
     output_glb = Path(output_glb)
     output_glb.parent.mkdir(parents=True, exist_ok=True)
+
+    # Anti V/Tri=3: GLBs sem NORMAL importam flat; sem este passe o exporter
+    # escreve normais per-face e quadruplica os vértices do entregável.
+    smooth_shade_scene([mesh_obj])
 
     bpy.ops.object.select_all(action="DESELECT")
     arm_obj.select_set(True)

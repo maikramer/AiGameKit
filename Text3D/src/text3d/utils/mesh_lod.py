@@ -62,13 +62,18 @@ def _load_glb_with_armatures(path: Path) -> tuple:
     """Importa GLB via bpy, devolve (mesh_obj, armature_objs).
 
     Limpa a cena antes de importar. Preserva transforms, armatures,
-    shape keys e materiais.
+    shape keys e materiais. Meshopt-aware: em bpy < 5.2 descomprime antes
+    via ``gltf-transform`` (``bpy_readable_glb``) — necessário para gerar a
+    ladder a partir de um lod0 já finalizado com EXT_meshopt_compression.
     """
     import bpy
 
+    from gamedev_shared.skin_transfer import bpy_readable_glb
+
     path = Path(path).expanduser().resolve()
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=str(path))
+    with bpy_readable_glb(path) as import_path:
+        bpy.ops.import_scene.gltf(filepath=str(import_path))
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     if not mesh_objs:
         raise ValueError(f"No mesh objects found in {path}")
@@ -195,7 +200,7 @@ def _prepare_topology_bpy(
     morph_close: float | None = None,
     remove_internal_shells: bool | None = None,
     category: str | None = None,
-    engine: str = "auto",
+    engine: str = "arrays",
     has_armature: bool = False,
 ) -> None:
     """Pipeline de preparação de topologia — perfil Shared ``topology_clean``.
@@ -208,7 +213,7 @@ def _prepare_topology_bpy(
 
     Edifícios (``building``/``chapel``…): strip de cascas internas por defeito.
 
-    ``engine``: ``auto``/``arrays`` usa a fase vetorizada
+    ``engine``: ``arrays`` (default) / ``auto`` usam a fase vetorizada
     (:mod:`gamedev_shared.mesh_repair_arrays`) quando o mesh é seguro (sem
     UVs/weights/shape-keys/armature — ver :func:`arrays_engine_ok`); os passos
     topológicos (fill/caps/watertight/normais) correm sempre em bmesh.
@@ -377,7 +382,7 @@ def prepare_mesh_topology(
     size_m: list[float] | tuple[float, ...] | None = None,
     remove_internal_shells: bool | None = None,
     category: str | None = None,
-    engine: str = "auto",
+    engine: str = "arrays",
     **_legacy: object,
 ) -> Path:
     """Prepara topologia de um GLB: weld, fill holes, watertight seletivo.
@@ -446,7 +451,7 @@ def _prepare_mesh_topology_impl(
     size_m: list[float] | tuple[float, ...] | None = None,
     remove_internal_shells: bool | None = None,
     category: str | None = None,
-    engine: str = "auto",
+    engine: str = "arrays",
 ):
     if _was_trimesh:
         import tempfile
@@ -575,6 +580,9 @@ def _generate_lod_glb_triplet_impl(
         raise ValueError(f"Mesh com poucas faces ({n}); LOD não aplicável.")
     if meshfix:
         _fill_holes_bpy(mesh_obj, sides=30)
+    # Anti V/Tri=3: inputs sem NORMAL (ou flat) re-exportavam normais per-face
+    # e lod0 herdava a explosão de vértices (decimate por nível já suavizava).
+    _shade_smooth(mesh_obj)
     lod0_path = output_dir / f"{basename}_lod0.glb"
     _export_glb(lod0_path, mesh_obj, arm_objs)
     out_paths: list[Path] = [lod0_path]
