@@ -75,6 +75,10 @@
       "types": "./dist/plugins/debug/index.d.ts",
       "import": "./dist/plugins/debug/index.js"
     },
+    "./profiler": {
+      "types": "./dist/plugins/profiler/index.d.ts",
+      "import": "./dist/plugins/profiler/index.js"
+    },
     "./extras/sky": {
       "types": "./dist/extras/sky-env.d.ts",
       "import": "./dist/extras/sky-env.js"

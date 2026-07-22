@@ -1,5 +1,5 @@
 import type { System } from '../../core';
-import { defineQuery, TIME_CONSTANTS } from '../../core';
+import { defineSystem, defineQuery, TIME_CONSTANTS } from '../../core';
 import { Rigidbody, TouchedEvent, TouchEndedEvent } from './components';
 import {
   copyRigidbodyToTransforms,
@@ -11,7 +11,8 @@ import { getPhysicsContext } from './systems';
 const touchedEventQuery = defineQuery([TouchedEvent]);
 const touchEndedEventQuery = defineQuery([TouchEndedEvent]);
 
-export const CollisionEventCleanupSystem: System = {
+export const CollisionEventCleanupSystem: System = defineSystem({
+  name: 'CollisionEventCleanupSystem',
   group: 'setup',
   update: (state) => {
     for (const entity of touchedEventQuery(state.world)) {
@@ -22,9 +23,10 @@ export const CollisionEventCleanupSystem: System = {
       state.removeComponent(entity, TouchEndedEvent);
     }
   },
-};
+});
 
-export const PhysicsRapierSyncSystem: System = {
+export const PhysicsRapierSyncSystem: System = defineSystem({
+  name: 'PhysicsRapierSyncSystem',
   group: 'fixed',
   update: (state) => {
     const context = getPhysicsContext(state);
@@ -40,9 +42,10 @@ export const PhysicsRapierSyncSystem: System = {
       }
     }
   },
-};
+});
 
-export const PhysicsInterpolationSystem: System = {
+export const PhysicsInterpolationSystem: System = defineSystem({
+  name: 'PhysicsInterpolationSystem',
   group: 'simulation',
   first: true,
   update: (state) => {
@@ -50,4 +53,4 @@ export const PhysicsInterpolationSystem: System = {
       state.scheduler.getAccumulator() / TIME_CONSTANTS.FIXED_TIMESTEP;
     interpolateTransforms(state, alpha);
   },
-};
+});

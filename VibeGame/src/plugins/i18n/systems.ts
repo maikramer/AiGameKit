@@ -1,4 +1,4 @@
-import { defineQuery, type System } from '../../core';
+import { defineSystem, defineQuery, type System } from '../../core';
 import { HudPanel } from '../hud/components';
 import { getStringAt, internString } from '../hud/context';
 import { I18nConfig, I18nText } from './components';
@@ -8,7 +8,8 @@ import { t } from './utils';
 const i18nHudQuery = defineQuery([I18nText, HudPanel]);
 const i18nConfigQuery = defineQuery([I18nConfig]);
 
-export const I18nResolveSystem: System = {
+export const I18nResolveSystem: System = defineSystem({
+  name: 'I18nResolveSystem',
   group: 'simulation',
   update: (state) => {
     for (const eid of i18nHudQuery(state.world)) {
@@ -19,9 +20,10 @@ export const I18nResolveSystem: System = {
       I18nText.resolved[eid] = 1;
     }
   },
-};
+});
 
-export const I18nAutoDefaultsSystem: System = {
+export const I18nAutoDefaultsSystem: System = defineSystem({
+  name: 'I18nAutoDefaultsSystem',
   group: 'setup',
   update: (state) => {
     for (const eid of i18nConfigQuery(state.world)) {
@@ -32,4 +34,4 @@ export const I18nAutoDefaultsSystem: System = {
       I18nConfig.applied[eid] = 1;
     }
   },
-};
+});

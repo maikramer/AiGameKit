@@ -1,12 +1,8 @@
 import type { State, System } from '../../core';
 import { InventoryComponent } from './components';
-import {
-  emitEvent,
-  getDataRegistry,
-  INVENTORY_ADDED,
-  INVENTORY_REMOVED,
-} from '../rpg-core';
+import { emitEvent, getDataRegistry, INVENTORY_ADDED, INVENTORY_REMOVED } from '../rpg-core';
 import type { ItemDef, ItemStack } from '../rpg-core/types';
+import { defineSystem } from '../../core';
 
 interface PendingEvent {
   readonly event: string;
@@ -147,7 +143,8 @@ export function removeItem(
   return true;
 }
 
-export const InventoryEventBridgeSystem: System = {
+export const InventoryEventBridgeSystem: System = defineSystem({
+  name: 'InventoryEventBridgeSystem',
   group: 'simulation',
   update(state: State): void {
     const queue = pendingEvents.get(state);
@@ -170,7 +167,7 @@ export const InventoryEventBridgeSystem: System = {
       }
     }
   },
-};
+});
 
 export interface InventoryStackData {
   itemId: string;

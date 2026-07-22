@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { System, defineQueryLive } from '../../core';
+import { defineSystem, System, defineQueryLive, Parent } from '../../core';
 import type { State } from '../../core';
-import { Parent } from '../../core';
 import { Transform, WorldTransform } from './components';
 import {
   composeTransformMatrix,
@@ -34,7 +33,8 @@ function ancestorIsDirty(state: State, entity: number): boolean {
   return false;
 }
 
-export const TransformHierarchySystem: System = {
+export const TransformHierarchySystem: System = defineSystem({
+  name: 'TransformHierarchySystem',
   group: 'simulation',
   last: true,
   update: (state) => {
@@ -134,4 +134,4 @@ export const TransformHierarchySystem: System = {
       }
     }
   },
-};
+});

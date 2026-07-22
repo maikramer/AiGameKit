@@ -1,8 +1,4 @@
-import {
-  registerReadyGate,
-  setLoadingEnforcement,
-  type System,
-} from '../../core';
+import { defineSystem, registerReadyGate, setLoadingEnforcement, type System } from '../../core';
 import { gltfAssetsReady } from '../gltf-xml/ready-gate';
 import { mountLoadingScreen, updateLoadingScreen } from './context';
 
@@ -16,7 +12,8 @@ import { mountLoadingScreen, updateLoadingScreen } from './context';
  * very start of bootstrap (before building the runtime). This system also
  * mounts it on first run as a fallback.
  */
-export const LoadingScreenSystem: System = {
+export const LoadingScreenSystem: System = defineSystem({
+  name: 'LoadingScreenSystem',
   group: 'draw',
   setup(state) {
     if (state.headless || typeof document === 'undefined') return;
@@ -31,4 +28,4 @@ export const LoadingScreenSystem: System = {
     if (state.headless || typeof document === 'undefined') return;
     updateLoadingScreen(state);
   },
-};
+});

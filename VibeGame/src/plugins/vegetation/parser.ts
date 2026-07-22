@@ -2,6 +2,7 @@ import type { Parser, XMLValue } from '../../core';
 import { setSpawnGroupSpec } from '../spawner/context';
 import { SpawnerPending } from '../spawner/components';
 import { prefetchGltfLocalYBounds } from '../gltf-xml/gltf-bounds-cache';
+import { resolveVariationSpec } from '../spawn-variation';
 import { resolveGroupSpawnFields } from '../spawner/profiles';
 import type { SpawnGroupSpec } from '../spawner/types';
 import { Vegetation } from './components';
@@ -148,6 +149,9 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
     count,
     patchScaleMin: authorScaleMin ? resolved.scaleMin : null,
     patchScaleMax: authorScaleMax ? resolved.scaleMax : null,
+    scaleAxisMin: resolved.scaleAxisMin,
+    scaleAxisMax: resolved.scaleAxisMax,
+    variation: resolveVariationSpec(element.attributes, 'foliage'),
     meshRolesRaw:
       element.attributes['mesh-roles'] !== undefined
         ? String(element.attributes['mesh-roles'])

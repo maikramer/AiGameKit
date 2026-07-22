@@ -11,9 +11,10 @@ import {
   NavMeshQuery as NavMeshQueryClass,
   init,
 } from 'recast-navigation';
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { Transform } from '../transforms/components';
+import { setTransformFacingXZ } from '../transforms/utils';
 import { Terrain, TerrainPad } from '../terrain/components';
 import { getTerrainContext, isTerrainDynamicsBlocking } from '../terrain/utils';
 import { Road } from '../road/components';
@@ -171,7 +172,8 @@ function terrainCarversReady(state: State): boolean {
  * obstacles are ready. Does NOT register a loading-gate entry — bake runs in
  * a Worker (with sync fallback) while AI uses direct steering until ready.
  */
-export const NavMeshInitSystem: System = {
+export const NavMeshInitSystem: System = defineSystem({
+  name: 'NavMeshInitSystem',
   group: 'setup',
   setup(state) {
     if (state.headless) return;
@@ -225,7 +227,7 @@ export const NavMeshInitSystem: System = {
     rt.initStartedAt = performance.now();
     void generateNavMesh(state, rt, worldSize);
   },
-};
+});
 
 async function generateNavMesh(
   state: State,
@@ -284,7 +286,8 @@ async function generateNavMesh(
   }
 }
 
-export const NavMeshAgentSystem: System = {
+export const NavMeshAgentSystem: System = defineSystem({
+  name: 'NavMeshAgentSystem',
   group: 'simulation',
   update(state: State) {
     if (state.headless) return;
@@ -367,8 +370,10 @@ export const NavMeshAgentSystem: System = {
 
       const v = agent.velocity();
       const speed = Math.hypot(v.x, v.z);
-      if (speed > 0.05) {
-        Transform.eulerY[eid] = Math.atan2(v.x, v.z);
+      // eulerY is degrees; never write atan2 radians here — hierarchy sync
+      // would treat them as ~±3° and agents look sideways / moonwalk.
+      if (NavMeshAgent.faceVelocity[eid] === 1 && speed > 0.05) {
+        setTransformFacingXZ(Transform, eid, v.x, v.z);
       }
 
       // Skip dirty when parked — avoids cascading WorldTransform recomputes.
@@ -395,7 +400,7 @@ export const NavMeshAgentSystem: System = {
     rt.initStarted = false;
     if (activeRuntime === rt) activeRuntime = null;
   },
-};
+});
 
 export function _getActiveRuntime(): NavMeshRuntime | null {
   return activeRuntime;

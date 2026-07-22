@@ -1,4 +1,11 @@
 import { commitRemovals } from 'bitecs';
+import {
+  beginProfilerFrame,
+  endProfilerFrame,
+  isExternalProfilerFrame,
+  isProfilerEnabled,
+  profileSystemUpdate,
+} from '../profiler';
 import { TIME_CONSTANTS } from './constants';
 import { sortSystemsByConstraints } from './ordering';
 import type { State } from './state';
@@ -38,6 +45,10 @@ export class Scheduler {
     mutableTime.deltaTime = scaledDelta;
     this.accumulator += scaledDelta;
 
+    const profiling = isProfilerEnabled();
+    const ownFrame = profiling && !isExternalProfilerFrame();
+    if (ownFrame) beginProfilerFrame();
+
     commitRemovals(state.world);
     this.runSystemGroup(state, 'setup');
 
@@ -60,6 +71,8 @@ export class Scheduler {
     this.runSystemGroup(state, 'simulation');
     this.runSystemGroup(state, 'late');
     this.runSystemGroup(state, 'draw');
+
+    if (ownFrame) endProfilerFrame(unscaledDelta);
   }
 
   setMaxFixedStepsPerFrame(n: number): void {
@@ -75,12 +88,18 @@ export class Scheduler {
     group: 'setup' | 'simulation' | 'fixed' | 'late' | 'draw'
   ) {
     const systems = this.getSystemsByGroup(state, group);
+    const profiling = isProfilerEnabled();
     for (const system of systems) {
       if (!this.setup.has(system)) {
         system.setup?.(state);
         this.setup.add(system);
       }
-      system.update?.(state);
+      if (!system.update) continue;
+      if (profiling) {
+        profileSystemUpdate(group, system, () => system.update!(state));
+      } else {
+        system.update(state);
+      }
     }
   }
 

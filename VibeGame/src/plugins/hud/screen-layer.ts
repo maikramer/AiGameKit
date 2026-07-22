@@ -1,5 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import type { ParserParams, State, System, XMLValue } from '../../core';
+import { defineSystem } from '../../core';
 
 const HUD_SCREEN_LAYER_CLASS = 'vibe-hud-screen-layer';
 const HUD_SCREEN_LAYER_STYLE =
@@ -85,7 +86,8 @@ export function unregisterHudWidget(state: State, widgetId: string): void {
   }
 }
 
-export const HudScreenUpdateSystem: System = {
+export const HudScreenUpdateSystem: System = defineSystem({
+  name: 'HudScreenUpdateSystem',
   group: 'late',
   update(state: State): void {
     const widgets = stateToWidgets.get(state);
@@ -117,7 +119,7 @@ export const HudScreenUpdateSystem: System = {
     }
     stateToLayer.delete(state);
   },
-};
+});
 
 export function hudScreenLayerParser(): void {
   // The layer is created eagerly by HudPlugin.initialize; the <HudScreenLayer/>

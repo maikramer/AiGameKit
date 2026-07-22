@@ -6,10 +6,17 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
-# Build outputs
+# Build outputs / caches
 dist/
 build/
+.vite/
+.cache/
+.turbo/
+coverage/
 *.tsbuildinfo
+
+# Knowledge-graph / agent AST cache (do not let Vite watch this)
+graphify-out/
 
 # IDE
 .vscode/

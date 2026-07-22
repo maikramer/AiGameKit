@@ -1,14 +1,7 @@
 import { logger } from '../../core/utils/logger';
 import type { Component } from '../../core';
 
-import {
-  Parent,
-  Tag,
-  Layer,
-  defineQuery,
-  type State,
-  type System,
-} from '../../core';
+import { defineSystem, Parent, Tag, Layer, defineQuery, type State, type System } from '../../core';
 import { MAX_ENTITIES } from '../../core/ecs/constants';
 import {
   startCoroutine,
@@ -17,6 +10,7 @@ import {
 } from '../../core/ecs/coroutines';
 import { getTagName } from '../../core/ecs/tags';
 import { Collider, TouchedEvent, TouchEndedEvent } from '../physics/components';
+import { DistanceCull } from '../rendering/components';
 import { Transform } from '../transforms/components';
 import { GltfPending } from '../gltf-xml/components';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
@@ -37,6 +31,11 @@ import {
   setEntityScriptSetupInflight,
   setPrevEnabled,
 } from './context';
+import {
+  beginScriptProfilePass,
+  endScriptProfilePass,
+  profileScriptCall,
+} from './script-profiler';
 import type {
   CollisionOther,
   MonoBehaviourContext,
@@ -235,16 +234,33 @@ function shouldWaitForGltf(state: State, eid: number): boolean {
   return GltfPending.loaded[eid] === 0;
 }
 
-export const EntityScriptSystem: System = {
+/**
+ * Visual distance-cull also pauses gameplay scripts. Spawned props/enemies with
+ * `max-distance` keep MonoBehaviour attached; running AI/anim while hidden is wasted.
+ */
+function isDistanceCulled(state: State, eid: number): boolean {
+  return (
+    state.hasComponent(eid, DistanceCull) && DistanceCull.culled[eid] === 1
+  );
+}
+
+export const EntityScriptSystem: System = defineSystem({
+  name: 'EntityScriptSystem',
   group: 'simulation',
   update(state: State): void {
     if (state.headless) return;
 
     const glob = getEntityScriptsGlob(state);
+    const profiling = beginScriptProfilePass(state.time.frameCount);
 
     for (const eid of entityScriptQuery(state.world)) {
       const file = getScriptFile(state, eid);
       if (!file) {
+        continue;
+      }
+
+      // Setup (ready===0) still runs so distant spawns can load once; hot updates skip.
+      if (MonoBehaviour.ready[eid] === 1 && isDistanceCulled(state, eid)) {
         continue;
       }
 
@@ -374,15 +390,19 @@ export const EntityScriptSystem: System = {
         continue;
       }
 
-      mod.update(buildContext(state, eid));
+      profileScriptCall(profiling, file, 'update', () => {
+        mod.update!(buildContext(state, eid));
+      });
     }
+
+    if (profiling) endScriptProfilePass();
   },
-};
+});
 
 function resolveModule(
   state: State,
   eid: number
-): { mod: MonoBehaviourModule } | null {
+): { mod: MonoBehaviourModule; file: string } | null {
   const file = getScriptFile(state, eid);
   if (!file) return null;
 
@@ -395,48 +415,64 @@ function resolveModule(
   const mod = getCachedMonoBehaviourModule(state, globKey);
   if (!mod) return null;
 
-  return { mod };
+  return { mod, file };
 }
 
-export const EntityScriptFixedUpdateSystem: System = {
+export const EntityScriptFixedUpdateSystem: System = defineSystem({
+  name: 'EntityScriptFixedUpdateSystem',
   group: 'fixed',
   update(state: State): void {
     if (state.headless) return;
+
+    const profiling = beginScriptProfilePass(state.time.frameCount);
 
     for (const eid of entityScriptQuery(state.world)) {
       if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1) {
         continue;
       }
+      if (isDistanceCulled(state, eid)) continue;
 
       const resolved = resolveModule(state, eid);
       if (!resolved || !resolved.mod.fixedUpdate) {
         continue;
       }
 
-      resolved.mod.fixedUpdate(buildContext(state, eid));
+      profileScriptCall(profiling, resolved.file, 'fixed', () => {
+        resolved.mod.fixedUpdate!(buildContext(state, eid));
+      });
     }
-  },
-};
 
-export const EntityScriptLateUpdateSystem: System = {
+    if (profiling) endScriptProfilePass();
+  },
+});
+
+export const EntityScriptLateUpdateSystem: System = defineSystem({
+  name: 'EntityScriptLateUpdateSystem',
   group: 'late',
   update(state: State): void {
     if (state.headless) return;
+
+    const profiling = beginScriptProfilePass(state.time.frameCount);
 
     for (const eid of entityScriptQuery(state.world)) {
       if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1) {
         continue;
       }
+      if (isDistanceCulled(state, eid)) continue;
 
       const resolved = resolveModule(state, eid);
       if (!resolved || !resolved.mod.lateUpdate) {
         continue;
       }
 
-      resolved.mod.lateUpdate(buildContext(state, eid));
+      profileScriptCall(profiling, resolved.file, 'late', () => {
+        resolved.mod.lateUpdate!(buildContext(state, eid));
+      });
     }
+
+    if (profiling) endScriptProfilePass();
   },
-};
+});
 
 function isTriggerCollision(state: State, eid1: number, eid2: number): boolean {
   const hasC1 = state.hasComponent(eid1, Collider);
@@ -446,16 +482,19 @@ function isTriggerCollision(state: State, eid1: number, eid2: number): boolean {
   return false;
 }
 
-export const EntityScriptCollisionBridgeSystem: System = {
+export const EntityScriptCollisionBridgeSystem: System = defineSystem({
+  name: 'EntityScriptCollisionBridgeSystem',
   group: 'simulation',
   update(state: State): void {
     if (state.headless) return;
 
+    const profiling = beginScriptProfilePass(state.time.frameCount);
     _enteredPairs.clear();
 
     for (const eid of touchedWithScriptQuery(state.world)) {
       if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1)
         continue;
+      if (isDistanceCulled(state, eid)) continue;
 
       const other = TouchedEvent.other[eid];
       const trigger = isTriggerCollision(state, eid, other);
@@ -472,17 +511,20 @@ export const EntityScriptCollisionBridgeSystem: System = {
 
         const ctx = buildContext(state, eid);
         _collisionOther.entity = other;
-        if (trigger) {
-          resolved.mod.onTriggerEnter?.(ctx, _collisionOther);
-        } else {
-          resolved.mod.onCollisionEnter?.(ctx, _collisionOther);
-        }
+        profileScriptCall(profiling, resolved.file, 'collision', () => {
+          if (trigger) {
+            resolved.mod.onTriggerEnter?.(ctx, _collisionOther);
+          } else {
+            resolved.mod.onCollisionEnter?.(ctx, _collisionOther);
+          }
+        });
       }
     }
 
     for (const eid of touchEndedWithScriptQuery(state.world)) {
       if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1)
         continue;
+      if (isDistanceCulled(state, eid)) continue;
 
       const other = TouchEndedEvent.other[eid];
       const pairs = getActiveCollisionPairs(state);
@@ -494,11 +536,13 @@ export const EntityScriptCollisionBridgeSystem: System = {
 
       const ctx = buildContext(state, eid);
       _collisionOther.entity = other;
-      if (wasTrigger) {
-        resolved.mod.onTriggerExit?.(ctx, _collisionOther);
-      } else {
-        resolved.mod.onCollisionExit?.(ctx, _collisionOther);
-      }
+      profileScriptCall(profiling, resolved.file, 'collision', () => {
+        if (wasTrigger) {
+          resolved.mod.onTriggerExit?.(ctx, _collisionOther);
+        } else {
+          resolved.mod.onCollisionExit?.(ctx, _collisionOther);
+        }
+      });
     }
 
     const activePairs = getActiveCollisionPairs(state);
@@ -509,6 +553,7 @@ export const EntityScriptCollisionBridgeSystem: System = {
       }
       if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1)
         continue;
+      if (isDistanceCulled(state, eid)) continue;
 
       const resolved = resolveModule(state, eid);
       if (!resolved) continue;
@@ -521,15 +566,19 @@ export const EntityScriptCollisionBridgeSystem: System = {
         }
         if (_enteredPairs.has(collisionPairKey(eid, other))) continue;
         _collisionOther.entity = other;
-        if (trigger) {
-          resolved.mod.onTriggerStay?.(ctx, _collisionOther);
-        } else {
-          resolved.mod.onCollisionStay?.(ctx, _collisionOther);
-        }
+        profileScriptCall(profiling, resolved.file, 'collision', () => {
+          if (trigger) {
+            resolved.mod.onTriggerStay?.(ctx, _collisionOther);
+          } else {
+            resolved.mod.onCollisionStay?.(ctx, _collisionOther);
+          }
+        });
       }
       if (others.size === 0) {
         activePairs.delete(eid);
       }
     }
+
+    if (profiling) endScriptProfilePass();
   },
-};
+});

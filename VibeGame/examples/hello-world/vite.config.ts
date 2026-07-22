@@ -9,9 +9,7 @@ export default defineConfig({
     fs: {
       allow: ['..'],
     },
-    watch: {
-      ignored: ['!**/node_modules/vibegame/**'],
-    },
+    // server.watch.ignored: set by vibegame() (graphify-out, caches, blobs, …)
   },
   build: {
     target: 'esnext',

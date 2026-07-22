@@ -37,6 +37,7 @@ describe('NavMeshAgent component', () => {
     expect(NavMeshAgent.radius[0]).toBeCloseTo(0.4, 5);
     expect(NavMeshAgent.height[0]).toBeCloseTo(1.0, 5);
     expect(NavMeshAgent.enabled[0]).toBe(1);
+    expect(NavMeshAgent.faceVelocity[0]).toBe(1);
   });
 
   it('initializes movement state to zeroed arrays', () => {

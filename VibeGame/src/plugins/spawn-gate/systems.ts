@@ -1,4 +1,4 @@
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { getBvhSurfaceHeight } from '../bvh';
 import { getGroundHeight, getTerrainContext } from '../terrain';
 import { isTerrainDynamicsBlocking } from '../terrain/utils';
@@ -87,7 +87,8 @@ export function gateEntity(
     opts?.skinDistance ?? GROUND_CONTACT_SKIN;
 }
 
-export const SpawnGateSystem: System = {
+export const SpawnGateSystem: System = defineSystem({
+  name: 'SpawnGateSystem',
   group: 'fixed',
   update(state: State): void {
     const terrainReady = isTerrainGateReady(state);
@@ -129,7 +130,7 @@ export const SpawnGateSystem: System = {
       SpawnGateComponent.ready[eid] = 1;
     }
   },
-};
+});
 
 /** Pin the entity at its spawn Y and kill any velocity so gravity cannot build up. */
 function freezeAt(

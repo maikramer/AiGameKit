@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { getScene, setupCsmMaterials } from '../rendering';
 import { sampleTerrainSurface } from '../spawner/surface';
@@ -78,7 +78,8 @@ function disposeRoad(state: State, eid: number): void {
  * (depois dos TerrainPads aplainarem — a estrada tem de amostrar as alturas
  * pós-flatten). Mundos sem terreno constroem plano a y=0.
  */
-export const RoadApplySystem: System = {
+export const RoadApplySystem: System = defineSystem({
+  name: 'RoadApplySystem',
   group: 'setup',
   after: [TerrainPadApplySystem],
   update(state: State) {
@@ -264,4 +265,4 @@ export const RoadApplySystem: System = {
     if (!cars) return;
     for (const eid of [...cars.keys()]) disposeRoad(state, eid);
   },
-};
+});

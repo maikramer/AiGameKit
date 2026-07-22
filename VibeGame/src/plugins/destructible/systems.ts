@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { animatorRegistry } from '../gltf-anim/systems';
 import { InputState } from '../input/components';
@@ -179,7 +179,8 @@ function breakProp(state: State, eid: number, player: number): void {
   state.destroyEntity(eid);
 }
 
-export const DestructibleSystem: System = {
+export const DestructibleSystem: System = defineSystem({
+  name: 'DestructibleSystem',
   group: 'simulation',
 
   update(state: State) {
@@ -257,4 +258,4 @@ export const DestructibleSystem: System = {
       Destructible.impactFraction[target] || 0.75
     );
   },
-};
+});

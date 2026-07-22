@@ -2,6 +2,7 @@
 import { defineQuery, type State } from '../../core';
 import { Terrain, TerrainPad } from '../terrain/components';
 import { sampleHeightAt, type HeightSampler } from '../terrain/height-sampler';
+import { meshSurfaceResolutionForPoint } from '../terrain/lod-select';
 import { getTerrainContext } from '../terrain/utils';
 import { Transform, WorldTransform } from '../transforms/components';
 import { Lake, River } from '../water/components';
@@ -52,6 +53,11 @@ export function isGroundMutationPending(state: State): boolean {
  * keeps them flush with what is actually drawn: on peaks/ridges that fall
  * between mesh vertices the analytic height sits above the flat triangle, which
  * is exactly why a subset of trees appeared to float.
+ *
+ * Callers should pass a resolution from {@link meshSurfaceResolutionForPoint}
+ * when a density map is present — featured regions (river/pad/road) render
+ * leaf chunks finer than `Terrain.resolution`, and sampling only the base
+ * lattice leaves props floating above the visible carve/falloff.
  */
 export function sampleMeshSurfaceHeight(
   sampler: HeightSampler,
@@ -257,8 +263,14 @@ export function sampleTerrainSurface(
 
     const localX = wx - ox;
     const localZ = wz - oz;
-    const baseRes = Terrain.resolution[entity];
-    const h = sampleMeshSurfaceHeight(data.sampler, localX, localZ, baseRes);
+    const meshRes = meshSurfaceResolutionForPoint(
+      Terrain.resolution[entity],
+      Terrain.levels[entity],
+      data.density,
+      localX,
+      localZ
+    );
+    const h = sampleMeshSurfaceHeight(data.sampler, localX, localZ, meshRes);
     const ty = terrainBaseY(state, entity);
 
     const heightAtRawSlope = (x: number, z: number) =>
@@ -305,8 +317,14 @@ export function sampleTerrainSurfaceMatrix(
 
     const localX = wx - ox;
     const localZ = wz - oz;
-    const baseRes = Terrain.resolution[entity];
-    const h = sampleMeshSurfaceHeight(data.sampler, localX, localZ, baseRes);
+    const meshRes = meshSurfaceResolutionForPoint(
+      Terrain.resolution[entity],
+      Terrain.levels[entity],
+      data.density,
+      localX,
+      localZ
+    );
+    const h = sampleMeshSurfaceHeight(data.sampler, localX, localZ, meshRes);
     const ty = terrainBaseY(state, entity);
 
     const heightAtRawSlope = (x: number, z: number) =>

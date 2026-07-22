@@ -1,7 +1,7 @@
 import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { TextureRecipe } from './texture-recipe';
 import { getRenderingContext } from './utils';
 
@@ -148,7 +148,8 @@ const CHANNEL_MAP = [
   'displacementMap', // 5
 ] as const;
 
-export const TextureRecipeLoadSystem: System = {
+export const TextureRecipeLoadSystem: System = defineSystem({
+  name: 'TextureRecipeLoadSystem',
   group: 'setup',
   update: (state) => {
     // Resolve the renderer lazily so the decode cache can pick KTX2 when the
@@ -258,9 +259,10 @@ export const TextureRecipeLoadSystem: System = {
       _ktx2Loader = undefined;
     }
   },
-};
+});
 
-export const TextureRecipeCleanupSystem: System = {
+export const TextureRecipeCleanupSystem: System = defineSystem({
+  name: 'TextureRecipeCleanupSystem',
   group: 'draw',
   update: (state) => {
     for (const [eid, texture] of textureAssets) {
@@ -278,7 +280,7 @@ export const TextureRecipeCleanupSystem: System = {
       }
     }
   },
-};
+});
 
 /**
  * Aplica a textura carregada ao material de um mesh Three.js.

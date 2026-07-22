@@ -8,6 +8,7 @@ export { GltfSceneSyncSystem } from './gltf-scene-sync';
 export {
   GltfAutoInstanceSystem,
   addInstancedGltf,
+  getInstancePoolStats,
   isGltfInstanced,
   markGltfInstanced,
   setInstancedLodThreshold,
@@ -19,3 +20,4 @@ export {
   registerGltfLocalYBounds,
 } from './gltf-bounds-cache';
 export { gltfAssetsReady } from './ready-gate';
+export { getGltfRootGroup } from './group-registry';

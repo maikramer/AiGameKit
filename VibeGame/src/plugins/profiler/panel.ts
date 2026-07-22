@@ -1,0 +1,645 @@
+import { defineQuery, getAllEntities } from '../../core';
+import type { State } from '../../core';
+import {
+  copyProfilerSnapshot,
+  downloadProfilerSnapshot,
+  getProfilerMode,
+  getProfilerSnapshot,
+  isProfilerFrozen,
+  resetProfiler,
+  toggleProfilerFreeze,
+  type ProfilerSnapshot,
+  type ProfilerTimingStats,
+} from '../../core/profiler';
+import { getActiveGltfLoadCount } from '../../extras/gltf-bridge';
+import { getAdaptiveQualityTier } from '../adaptive-quality';
+import { getBvhStats } from '../bvh/utils';
+import { getRenderingContext } from '../rendering/utils';
+import { Terrain } from '../terrain/components';
+import { getTerrainStats } from '../terrain/terrain-queries';
+import { getInstancePoolStats } from '../gltf-xml/auto-instance';
+import { getEntityScriptFrameStats } from '../entity-script';
+
+const PANEL_ID = 'vibegame-profiler-panel';
+const REFRESH_FRAMES = 10;
+const HOT_MS = 1.0;
+const BUDGET_60 = 1000 / 60;
+const BUDGET_30 = 1000 / 30;
+
+const terrainQuery = defineQuery([Terrain]);
+
+type SortMode = 'avg' | 'p95' | 'last';
+
+export interface ProfilerPanelRuntime {
+  root: HTMLDivElement;
+  filterInput: HTMLInputElement;
+  groupSelect: HTMLSelectElement;
+  sortSelect: HTMLSelectElement;
+  summaryEl: HTMLPreElement;
+  systemsEl: HTMLPreElement;
+  scriptsEl: HTMLPreElement;
+  countersEl: HTMLPreElement;
+  statusEl: HTMLSpanElement;
+  freezeBtn: HTMLButtonElement;
+  visible: boolean;
+  filter: string;
+  groupFilter: string;
+  sortMode: SortMode;
+  /** Hide systems below this average (ms). 0 = show all. */
+  minAvgMs: number;
+  lastRefreshFrame: number;
+  systemNames: string[];
+}
+
+function bar(pct: number, width = 14): string {
+  const filled = Math.max(0, Math.min(width, Math.round((pct / 100) * width)));
+  return '█'.repeat(filled) + '░'.repeat(width - filled);
+}
+
+function fmtMs(ms: number): string {
+  return ms.toFixed(2).padStart(6, ' ');
+}
+
+function fmtPct(pct: number): string {
+  return pct.toFixed(1).padStart(5, ' ');
+}
+
+function shortOrigin(origin: string): string {
+  if (!origin || origin === 'unknown') return '';
+  return origin
+    .replace(/^plugins\//, '')
+    .replace(/^app\/[^/]+\//, 'app/')
+    .replace(/\.ts$/, '');
+}
+
+function renderSummary(snap: ProfilerSnapshot): string {
+  const headroom60 = BUDGET_60 - snap.frameAvgMs;
+  const headroom30 = BUDGET_30 - snap.frameAvgMs;
+  const over60 = snap.frameAvgMs > BUDGET_60;
+  const lines = [
+    `FPS ${snap.fps.toFixed(1)}   frame avg ${fmtMs(snap.frameAvgMs)}  p95 ${fmtMs(snap.frameP95Ms)}  (min ${snap.frameMinMs.toFixed(1)} / max ${snap.frameMaxMs.toFixed(1)})`,
+    `budget 60fps ${fmtMs(BUDGET_60)}  headroom ${fmtMs(headroom60)}${over60 ? '  OVER BUDGET' : ''}   |  30fps headroom ${fmtMs(headroom30)}`,
+    `mode=${snap.mode}  window=${snap.windowFrames}  frames=${snap.frameCount}${snap.frozen ? '  FROZEN' : ''}`,
+    '',
+    'Groups:',
+  ];
+  for (const g of snap.groups) {
+    if (g.avgMs <= 0.001 && g.group === 'custom') continue;
+    lines.push(
+      `  ${g.group.padEnd(12)} ${fmtMs(g.avgMs)} ms  ${fmtPct(g.pct)}%  ${bar(g.pct)}`
+    );
+  }
+  const hot = [...snap.systems]
+    .filter((s) => s.avgMs >= 0.05)
+    .sort((a, b) => b.avgMs - a.avgMs)
+    .slice(0, 5);
+  if (hot.length > 0) {
+    lines.push('', 'Top hot:');
+    for (const s of hot) {
+      const origin = shortOrigin(s.origin);
+      lines.push(
+        `  ${fmtMs(s.avgMs)} ${s.name}${origin ? `  ← ${origin}` : ''}`
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+function filteredRows(
+  snap: ProfilerSnapshot,
+  filter: string,
+  groupFilter: string,
+  sortMode: SortMode,
+  minAvgMs = 0
+): ProfilerTimingStats[] {
+  const q = filter.trim().toLowerCase();
+  // Entity scripts have their own panel section (`script/…`); keep other customs here.
+  const customs = snap.customs
+    .filter((c) => !c.name.startsWith('script/'))
+    .map((c) => ({
+      ...c,
+      name: `custom/${c.name}`,
+      origin: c.origin === 'unknown' ? 'custom-span' : c.origin,
+    }));
+  let rows = [...snap.systems, ...customs].filter((s) => {
+    if (minAvgMs > 0 && s.avgMs < minAvgMs) return false;
+    if (groupFilter && groupFilter !== 'all' && s.group !== groupFilter) {
+      return false;
+    }
+    if (!q) return true;
+    const origin = shortOrigin(s.origin).toLowerCase();
+    return (
+      s.name.toLowerCase().includes(q) ||
+      s.group.toLowerCase().includes(q) ||
+      origin.includes(q)
+    );
+  });
+  rows = rows.sort((a, b) => {
+    if (sortMode === 'p95') return b.p95Ms - a.p95Ms;
+    if (sortMode === 'last') return b.lastMs - a.lastMs;
+    return b.avgMs - a.avgMs;
+  });
+  return rows;
+}
+
+function rowsToTsv(rows: ProfilerTimingStats[]): string {
+  const header = ['avgMs', 'p95Ms', 'lastMs', 'pct', 'group', 'name', 'origin'];
+  const lines = [header.join('\t')];
+  for (const s of rows) {
+    lines.push(
+      [
+        s.avgMs.toFixed(3),
+        s.p95Ms.toFixed(3),
+        s.lastMs.toFixed(3),
+        s.pct.toFixed(2),
+        s.group,
+        s.name,
+        s.origin,
+      ].join('\t')
+    );
+  }
+  return lines.join('\n');
+}
+
+function renderSystems(
+  snap: ProfilerSnapshot,
+  filter: string,
+  groupFilter: string,
+  sortMode: SortMode,
+  minAvgMs: number
+): string {
+  const rows = filteredRows(snap, filter, groupFilter, sortMode, minAvgMs);
+  if (rows.length === 0) return '(no systems match filter)';
+
+  const lines = [
+    'avg    p95    last   %     group        name                         origin',
+    '-'.repeat(96),
+  ];
+  for (const s of rows.slice(0, 45)) {
+    const hot = s.avgMs >= HOT_MS || s.p95Ms >= HOT_MS * 1.5 ? '!' : ' ';
+    const origin = shortOrigin(s.origin);
+    const name = s.name.length > 28 ? `${s.name.slice(0, 27)}…` : s.name;
+    lines.push(
+      `${hot}${fmtMs(s.avgMs)} ${fmtMs(s.p95Ms)} ${fmtMs(s.lastMs)} ${fmtPct(s.pct)}%  ${s.group.padEnd(12)} ${name.padEnd(28)} ${origin}`
+    );
+  }
+  if (rows.length > 45) {
+    lines.push(`… +${rows.length - 45} more (refine filter)`);
+  }
+  lines.push('');
+  lines.push(
+    'click a row to copy "name · origin" · ! = hot (≥1ms avg or high p95)'
+  );
+  return lines.join('\n');
+}
+
+function renderEntityScripts(
+  snap: ProfilerSnapshot,
+  sortMode: SortMode,
+  minAvgMs: number
+): string {
+  const entityCounts = new Map(
+    getEntityScriptFrameStats().map((s) => [s.span, s.entities])
+  );
+  let rows = snap.customs.filter((c) => c.name.startsWith('script/'));
+  if (minAvgMs > 0) {
+    rows = rows.filter((c) => c.avgMs >= minAvgMs);
+  }
+  rows = rows.sort((a, b) => {
+    if (sortMode === 'p95') return b.p95Ms - a.p95Ms;
+    if (sortMode === 'last') return b.lastMs - a.lastMs;
+    return b.avgMs - a.avgMs;
+  });
+  if (rows.length === 0) {
+    return '(no entity scripts timed — open profiler while scripts run)';
+  }
+
+  const lines = [
+    'avg    p95    last   ents  name                         origin',
+    '-'.repeat(72),
+  ];
+  for (const s of rows.slice(0, 40)) {
+    const hot = s.avgMs >= HOT_MS || s.p95Ms >= HOT_MS * 1.5 ? '!' : ' ';
+    const ents = String(entityCounts.get(s.name) ?? '—').padStart(4, ' ');
+    const name = s.name.length > 28 ? `${s.name.slice(0, 27)}…` : s.name;
+    lines.push(
+      `${hot}${fmtMs(s.avgMs)} ${fmtMs(s.p95Ms)} ${fmtMs(s.lastMs)} ${ents}  ${name.padEnd(28)} ${shortOrigin(s.origin)}`
+    );
+  }
+  if (rows.length > 40) {
+    lines.push(`… +${rows.length - 40} more`);
+  }
+  lines.push('');
+  lines.push(
+    'script/<file> = update · .fixed / .late / .collision = other phases'
+  );
+  return lines.join('\n');
+}
+
+function collectCounters(state: State): string {
+  const lines: string[] = [];
+  const ctx = getRenderingContext(state);
+  const renderer = ctx.renderer;
+  if (renderer?.info) {
+    const info = renderer.info;
+    lines.push('renderer.info');
+    lines.push(
+      `  calls=${info.render.calls}  tris=${info.render.triangles}  points=${info.render.points}  lines=${info.render.lines}`
+    );
+    lines.push(
+      `  geoms=${info.memory.geometries}  textures=${info.memory.textures}  programs=${info.programs?.length ?? '?'}`
+    );
+  } else {
+    lines.push('renderer.info: (no renderer)');
+  }
+
+  try {
+    const tier = getAdaptiveQualityTier(state);
+    lines.push(`adaptiveQuality.tier=${tier}`);
+  } catch {
+    lines.push('adaptiveQuality: n/a');
+  }
+
+  lines.push(`entities=${Array.from(getAllEntities(state.world)).length}`);
+  lines.push(`systems=${state.systems.size}`);
+  lines.push(`gltfLoads=${getActiveGltfLoadCount()}`);
+
+  try {
+    const pools = getInstancePoolStats(state);
+    lines.push(
+      `gltfInstances: pools=${pools.poolCount} slots=${pools.slotCount} pending=${pools.pendingCount}`
+    );
+  } catch {
+    lines.push('gltfInstances: n/a');
+  }
+
+  try {
+    const bvh = getBvhStats(state);
+    lines.push(`bvh meshes=${bvh.meshCount} entities=${bvh.entityCount}`);
+  } catch {
+    lines.push('bvh: n/a');
+  }
+
+  const terrains = terrainQuery(state.world);
+  if (terrains.length === 0) {
+    lines.push('terrain: (none)');
+  } else {
+    for (const eid of terrains.slice(0, 3)) {
+      const stats = getTerrainStats(state, eid);
+      if (!stats) {
+        lines.push(`terrain[${eid}]: not ready`);
+        continue;
+      }
+      lines.push(
+        `terrain[${eid}]: chunks=${stats.activeChunks} drawCalls=${stats.drawCalls} instances=${stats.totalInstances}`
+      );
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function stylePanel(root: HTMLDivElement): void {
+  const s = root.style;
+  s.position = 'fixed';
+  s.top = '8px';
+  s.left = '8px';
+  s.zIndex = '10001';
+  s.width = 'min(720px, calc(100vw - 16px))';
+  s.maxHeight = 'calc(100vh - 16px)';
+  s.overflow = 'auto';
+  s.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  s.fontSize = '11px';
+  s.lineHeight = '1.35';
+  s.color = '#e8e8e8';
+  s.background = 'rgba(12, 14, 18, 0.92)';
+  s.border = '1px solid rgba(255,255,255,0.12)';
+  s.borderRadius = '8px';
+  s.padding = '10px 12px';
+  s.pointerEvents = 'auto';
+  s.userSelect = 'text';
+  s.display = 'none';
+  s.boxShadow = '0 8px 28px rgba(0,0,0,0.45)';
+}
+
+function styleButton(btn: HTMLButtonElement): void {
+  btn.style.fontFamily = 'inherit';
+  btn.style.fontSize = '11px';
+  btn.style.padding = '3px 8px';
+  btn.style.marginRight = '6px';
+  btn.style.marginBottom = '4px';
+  btn.style.cursor = 'pointer';
+  btn.style.background = 'rgba(255,255,255,0.08)';
+  btn.style.color = '#eee';
+  btn.style.border = '1px solid rgba(255,255,255,0.18)';
+  btn.style.borderRadius = '4px';
+}
+
+function styleSelect(sel: HTMLSelectElement): void {
+  sel.style.fontFamily = 'inherit';
+  sel.style.fontSize = '11px';
+  sel.style.padding = '3px 6px';
+  sel.style.marginRight = '6px';
+  sel.style.background = 'rgba(0,0,0,0.35)';
+  sel.style.color = '#eee';
+  sel.style.border = '1px solid rgba(255,255,255,0.15)';
+  sel.style.borderRadius = '4px';
+}
+
+export function createProfilerPanel(): ProfilerPanelRuntime {
+  const root = document.createElement('div');
+  root.id = PANEL_ID;
+  stylePanel(root);
+
+  const header = document.createElement('div');
+  header.style.display = 'flex';
+  header.style.flexWrap = 'wrap';
+  header.style.alignItems = 'center';
+  header.style.gap = '4px';
+  header.style.marginBottom = '8px';
+
+  const title = document.createElement('strong');
+  title.textContent = 'VibeGame Profiler';
+  title.style.marginRight = '8px';
+
+  const statusEl = document.createElement('span');
+  statusEl.style.opacity = '0.8';
+
+  const filterInput = document.createElement('input');
+  filterInput.type = 'search';
+  filterInput.placeholder = 'filter name/group/origin…';
+  filterInput.style.flex = '1 1 160px';
+  filterInput.style.minWidth = '140px';
+  filterInput.style.fontFamily = 'inherit';
+  filterInput.style.fontSize = '11px';
+  filterInput.style.padding = '4px 6px';
+  filterInput.style.background = 'rgba(0,0,0,0.35)';
+  filterInput.style.color = '#eee';
+  filterInput.style.border = '1px solid rgba(255,255,255,0.15)';
+  filterInput.style.borderRadius = '4px';
+
+  const groupSelect = document.createElement('select');
+  styleSelect(groupSelect);
+  for (const g of [
+    'all',
+    'setup',
+    'fixed',
+    'simulation',
+    'late',
+    'draw',
+    'render',
+    'custom',
+  ] as const) {
+    const opt = document.createElement('option');
+    opt.value = g;
+    opt.textContent = g === 'all' ? 'group: all' : `group: ${g}`;
+    groupSelect.appendChild(opt);
+  }
+
+  const sortSelect = document.createElement('select');
+  styleSelect(sortSelect);
+  for (const [value, label] of [
+    ['avg', 'sort: avg'],
+    ['p95', 'sort: p95'],
+    ['last', 'sort: last'],
+  ] as const) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    sortSelect.appendChild(opt);
+  }
+
+  const noiseLabel = document.createElement('label');
+  noiseLabel.style.display = 'inline-flex';
+  noiseLabel.style.alignItems = 'center';
+  noiseLabel.style.gap = '4px';
+  noiseLabel.style.marginRight = '6px';
+  noiseLabel.style.opacity = '0.9';
+  const noiseCheck = document.createElement('input');
+  noiseCheck.type = 'checkbox';
+  noiseCheck.checked = true;
+  noiseCheck.title = 'Hide systems under 0.05ms avg';
+  const noiseText = document.createElement('span');
+  noiseText.textContent = 'hide noise';
+  noiseLabel.append(noiseCheck, noiseText);
+
+  const freezeBtn = document.createElement('button');
+  freezeBtn.type = 'button';
+  freezeBtn.textContent = 'Freeze';
+  styleButton(freezeBtn);
+
+  const resetBtn = document.createElement('button');
+  resetBtn.type = 'button';
+  resetBtn.textContent = 'Reset';
+  styleButton(resetBtn);
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.textContent = 'Copy JSON';
+  styleButton(copyBtn);
+
+  const copyTsvBtn = document.createElement('button');
+  copyTsvBtn.type = 'button';
+  copyTsvBtn.textContent = 'Copy TSV';
+  styleButton(copyTsvBtn);
+
+  const dlBtn = document.createElement('button');
+  dlBtn.type = 'button';
+  dlBtn.textContent = 'Download';
+  styleButton(dlBtn);
+
+  header.append(
+    title,
+    statusEl,
+    filterInput,
+    groupSelect,
+    sortSelect,
+    noiseLabel,
+    freezeBtn,
+    resetBtn,
+    copyBtn,
+    copyTsvBtn,
+    dlBtn
+  );
+
+  const summaryEl = document.createElement('pre');
+  summaryEl.style.margin = '0 0 10px';
+  summaryEl.style.whiteSpace = 'pre-wrap';
+
+  const systemsLabel = document.createElement('div');
+  systemsLabel.textContent = 'Systems (with origin)';
+  systemsLabel.style.opacity = '0.7';
+  systemsLabel.style.marginBottom = '4px';
+
+  const systemsEl = document.createElement('pre');
+  systemsEl.style.margin = '0 0 10px';
+  systemsEl.style.whiteSpace = 'pre';
+  systemsEl.style.cursor = 'pointer';
+  systemsEl.style.overflowX = 'auto';
+
+  const scriptsLabel = document.createElement('div');
+  scriptsLabel.textContent = 'Entity scripts (per file)';
+  scriptsLabel.style.opacity = '0.7';
+  scriptsLabel.style.marginBottom = '4px';
+
+  const scriptsEl = document.createElement('pre');
+  scriptsEl.style.margin = '0 0 10px';
+  scriptsEl.style.whiteSpace = 'pre';
+  scriptsEl.style.overflowX = 'auto';
+
+  const countersLabel = document.createElement('div');
+  countersLabel.textContent = 'Counters';
+  countersLabel.style.opacity = '0.7';
+  countersLabel.style.marginBottom = '4px';
+
+  const countersEl = document.createElement('pre');
+  countersEl.style.margin = '0';
+  countersEl.style.whiteSpace = 'pre-wrap';
+
+  const hint = document.createElement('div');
+  hint.style.marginTop = '8px';
+  hint.style.opacity = '0.55';
+  hint.textContent =
+    '[P] toggle  [Shift+P] sample↔deep  [Pause] freeze  · ?profiler=1';
+
+  root.append(
+    header,
+    summaryEl,
+    scriptsLabel,
+    scriptsEl,
+    systemsLabel,
+    systemsEl,
+    countersLabel,
+    countersEl,
+    hint
+  );
+
+  const runtime: ProfilerPanelRuntime = {
+    root,
+    filterInput,
+    groupSelect,
+    sortSelect,
+    summaryEl,
+    systemsEl,
+    scriptsEl,
+    countersEl,
+    statusEl,
+    freezeBtn,
+    visible: false,
+    filter: '',
+    groupFilter: 'all',
+    sortMode: 'avg',
+    minAvgMs: 0.05,
+    lastRefreshFrame: 0,
+    systemNames: [],
+  };
+
+  filterInput.addEventListener('input', () => {
+    runtime.filter = filterInput.value;
+  });
+  groupSelect.addEventListener('change', () => {
+    runtime.groupFilter = groupSelect.value;
+  });
+  sortSelect.addEventListener('change', () => {
+    runtime.sortMode = sortSelect.value as SortMode;
+  });
+  noiseCheck.addEventListener('change', () => {
+    runtime.minAvgMs = noiseCheck.checked ? 0.05 : 0;
+  });
+  freezeBtn.addEventListener('click', () => {
+    toggleProfilerFreeze();
+    freezeBtn.textContent = isProfilerFrozen() ? 'Unfreeze' : 'Freeze';
+  });
+  resetBtn.addEventListener('click', () => {
+    resetProfiler();
+    runtime.statusEl.textContent = ' reset';
+  });
+  copyBtn.addEventListener('click', () => {
+    void copyProfilerSnapshot();
+  });
+  copyTsvBtn.addEventListener('click', () => {
+    const snap = getProfilerSnapshot();
+    const rows = filteredRows(
+      snap,
+      runtime.filter,
+      runtime.groupFilter,
+      runtime.sortMode,
+      runtime.minAvgMs
+    );
+    void navigator.clipboard?.writeText(rowsToTsv(rows));
+    runtime.statusEl.textContent = ` copied TSV (${rows.length})`;
+  });
+  dlBtn.addEventListener('click', () => {
+    downloadProfilerSnapshot();
+  });
+  systemsEl.addEventListener('click', (ev) => {
+    if (runtime.systemNames.length === 0) return;
+    const rect = systemsEl.getBoundingClientRect();
+    const lineHeight =
+      parseFloat(getComputedStyle(systemsEl).lineHeight) || 14.85;
+    const idx = Math.floor((ev.clientY - rect.top) / lineHeight);
+    const dataIdx = idx - 2;
+    if (dataIdx < 0 || dataIdx >= runtime.systemNames.length) return;
+    const payload = runtime.systemNames[dataIdx]!;
+    void navigator.clipboard?.writeText(payload);
+    runtime.statusEl.textContent = ` copied ${payload}`;
+  });
+
+  const parent = document.body ?? document.documentElement;
+  parent.appendChild(root);
+  return runtime;
+}
+
+export function setProfilerPanelVisible(
+  runtime: ProfilerPanelRuntime,
+  visible: boolean
+): void {
+  runtime.visible = visible;
+  runtime.root.style.display = visible ? 'block' : 'none';
+}
+
+export function refreshProfilerPanel(
+  state: State,
+  runtime: ProfilerPanelRuntime
+): void {
+  if (!runtime.visible) return;
+  if (state.time.frameCount - runtime.lastRefreshFrame < REFRESH_FRAMES) {
+    return;
+  }
+  runtime.lastRefreshFrame = state.time.frameCount;
+
+  const snap = getProfilerSnapshot();
+  runtime.statusEl.textContent = ` ${getProfilerMode()}${isProfilerFrozen() ? ' · frozen' : ''}`;
+  runtime.freezeBtn.textContent = isProfilerFrozen() ? 'Unfreeze' : 'Freeze';
+  runtime.summaryEl.textContent = renderSummary(snap);
+  const rows = filteredRows(
+    snap,
+    runtime.filter,
+    runtime.groupFilter,
+    runtime.sortMode,
+    runtime.minAvgMs
+  ).slice(0, 45);
+  runtime.systemNames = rows.map((s) => {
+    const origin = shortOrigin(s.origin);
+    return origin ? `${s.name} · ${origin}` : s.name;
+  });
+  runtime.scriptsEl.textContent = renderEntityScripts(
+    snap,
+    runtime.sortMode,
+    runtime.minAvgMs
+  );
+  runtime.systemsEl.textContent = renderSystems(
+    snap,
+    runtime.filter,
+    runtime.groupFilter,
+    runtime.sortMode,
+    runtime.minAvgMs
+  );
+  runtime.countersEl.textContent = collectCounters(state);
+}
+
+export function destroyProfilerPanel(runtime: ProfilerPanelRuntime): void {
+  if (runtime.root.parentNode) {
+    runtime.root.parentNode.removeChild(runtime.root);
+  }
+}

@@ -3,6 +3,7 @@ import type { Parser, XMLValue } from '../../core';
 import { formatUnknownElement } from '../../core/recipes/diagnostics';
 import { setSpawnGroupSpec } from './context';
 import { prefetchGltfLocalYBounds } from '../gltf-xml/gltf-bounds-cache';
+import { resolveVariationSpec } from '../spawn-variation';
 import {
   applyChildTemplateProfile,
   normalizeChildTemplateProfileId,
@@ -313,6 +314,8 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     scaleDiscreteValues: resolvedSpawn.scaleDiscreteValues,
     scaleMin: resolvedSpawn.scaleMin,
     scaleMax: resolvedSpawn.scaleMax,
+    scaleAxisMin: resolvedSpawn.scaleAxisMin,
+    scaleAxisMax: resolvedSpawn.scaleAxisMax,
     yawDistribution: resolvedSpawn.yawDistribution,
     yawDiscreteDeg: resolvedSpawn.yawDiscreteDeg,
     surfaceEpsilon: resolvedSpawn.surfaceEpsilon,
@@ -335,6 +338,7 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
       0,
       toNumber(element.attributes['cluster-radius'], 0)
     ),
+    variation: resolveVariationSpec(element.attributes, groupProfileId),
     templates,
   };
 
@@ -342,6 +346,11 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     const t = spec.scaleMin;
     spec.scaleMin = spec.scaleMax;
     spec.scaleMax = t;
+  }
+  if (spec.scaleAxisMax < spec.scaleAxisMin) {
+    const t = spec.scaleAxisMin;
+    spec.scaleAxisMin = spec.scaleAxisMax;
+    spec.scaleAxisMax = t;
   }
 
   setSpawnGroupSpec(state, entity, spec);

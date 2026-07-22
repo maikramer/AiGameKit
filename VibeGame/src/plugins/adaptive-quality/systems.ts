@@ -1,4 +1,4 @@
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { getRenderingContext } from '../rendering/utils';
 import { AdaptiveQuality } from './components';
 import {
@@ -22,15 +22,15 @@ const EMA_ALPHA = 0.08;
  * flapping on oscillating load.
  */
 const HOT_FRAMES_TO_DOWNSCALE = 45; // ~0.75s at 60fps — react faster under load
-const COLD_FRAMES_TO_UPSCALE = 180; // ~3s — require sustained headroom to upgrade
+const COLD_FRAMES_TO_UPSCALE = 300; // ~5s — require sustained headroom to upgrade
 
 /** Hysteresis: downscale when frame time exceeds target by this factor, upgrade
  *  when it drops below target by this factor (we want clear headroom). */
-const DOWNSCALE_HYSTERESIS = 1.05;
-const UPSCALE_HYSTERESIS = 0.85;
+const DOWNSCALE_HYSTERESIS = 1.08;
+const UPSCALE_HYSTERESIS = 0.72;
 
 /** Cooldown (ms) between any two tier transitions to avoid rapid oscillation. */
-const TRANSITION_COOLDOWN_MS = 2000;
+const TRANSITION_COOLDOWN_MS = 3500;
 
 /**
  * Measurement system: samples the real (unscaled) frame delta each frame and
@@ -39,7 +39,8 @@ const TRANSITION_COOLDOWN_MS = 2000;
  * but `state.time.unscaledDeltaTime` holds the delta of the previous step,
  * which is exactly what we want — the last completed frame's duration).
  */
-export const AdaptiveQualityMeasureSystem: System = {
+export const AdaptiveQualityMeasureSystem: System = defineSystem({
+  name: 'AdaptiveQualityMeasureSystem',
   group: 'late',
   update(state: State) {
     const entities = adaptiveQuery(state.world);
@@ -58,7 +59,7 @@ export const AdaptiveQualityMeasureSystem: System = {
       prev <= 0 ? sampleMs : prev * (1 - EMA_ALPHA) + sampleMs * EMA_ALPHA;
     AdaptiveQuality.emaFrameMs[eid] = ema;
   },
-};
+});
 
 /**
  * Apply system: decides whether to change the tier based on the EMA, applies
@@ -70,7 +71,8 @@ export const AdaptiveQualityMeasureSystem: System = {
  * Runs in `draw`, `after` the camera/light sync but `before` the final render
  * (which happens in the runtime loop after `state.step`).
  */
-export const AdaptiveQualityApplySystem: System = {
+export const AdaptiveQualityApplySystem: System = defineSystem({
+  name: 'AdaptiveQualityApplySystem',
   group: 'draw',
   update(state: State) {
     const entities = adaptiveQuery(state.world);
@@ -130,7 +132,7 @@ export const AdaptiveQualityApplySystem: System = {
     // so it doesn't clobber this.
     applyPixelRatioLever(state, eid, newTier);
   },
-};
+});
 
 /** Module-level helper: apply the tier's pixel-ratio scale to the renderer,
  *  clamped to the user-configured [minPixelRatio, maxPixelRatio]. Exported via

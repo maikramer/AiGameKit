@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { State, System } from '../../core';
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import {
   getGpuTier,
   getRenderingContext,
@@ -209,7 +209,8 @@ function renderReflection(
  * visible body would not pay for itself. Gated off on low GPU tiers
  * (`detectGpuTier`).
  */
-export const WaterReflectionSystem: System = {
+export const WaterReflectionSystem: System = defineSystem({
+  name: 'WaterReflectionSystem',
   group: 'draw',
   after: [CameraSyncSystem],
   update(state: State) {
@@ -293,4 +294,4 @@ export const WaterReflectionSystem: System = {
     _lastReflectEntity = null;
     _lastReflectCam.set(Number.NaN, Number.NaN, Number.NaN);
   },
-};
+});

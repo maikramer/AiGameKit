@@ -7,7 +7,7 @@ import {
   type WebGLRenderer,
 } from 'three';
 import type { Pass } from 'postprocessing';
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { CameraSyncSystem } from '../rendering/systems';
 import { getRenderingContext, threeCameras } from '../rendering/utils';
 import { MainCamera } from '../rendering/components';
@@ -50,7 +50,8 @@ const activeEffectInstances: Array<{
   entity: number;
 }> = [];
 
-export const PostprocessingBuildSystem: System = {
+export const PostprocessingBuildSystem: System = defineSystem({
+  name: 'PostprocessingBuildSystem',
   group: 'draw',
   after: [CameraSyncSystem],
   update(state: State) {
@@ -159,9 +160,10 @@ export const PostprocessingBuildSystem: System = {
       savedToneMappingByRenderer.delete(renderer);
     }
   },
-};
+});
 
-export const PostprocessingEffectUpdateSystem: System = {
+export const PostprocessingEffectUpdateSystem: System = defineSystem({
+  name: 'PostprocessingEffectUpdateSystem',
   group: 'draw',
   after: [PostprocessingBuildSystem, CameraSyncSystem],
   update(state: State) {
@@ -210,7 +212,7 @@ export const PostprocessingEffectUpdateSystem: System = {
       }
     }
   },
-};
+});
 
 /**
  * Apply Adaptive Quality tier presets to the live effect passes. Each lever is
@@ -237,15 +239,19 @@ function applyAdaptiveEffectLevers(state: State): void {
       switch (def.key) {
         case 'ssao': {
           const n8ao = pass as unknown as N8AOPostPass;
-          // halfRes is a configuration flag that triggers a render-target
-          // realloc on change; N8AO guards this internally. Only write when it
-          // actually differs to avoid per-frame reallocs.
+          const base = Postprocessing.ssaoIntensity[entity];
+          const intensity = Math.max(0, base * preset.ssaoIntensityScale);
+          // Tier Low scales intensity to 0 — disable the pass so N8AO does not
+          // keep filling an AO buffer for no visible benefit.
+          const enabled = intensity > 1e-4 && Postprocessing.ssao[entity] === 1;
+          const passWithEnabled = n8ao as unknown as { enabled?: boolean };
+          if (passWithEnabled.enabled !== enabled) {
+            passWithEnabled.enabled = enabled;
+          }
+          if (!enabled) break;
           if (n8ao?.configuration?.halfRes !== preset.ssaoHalfResolution) {
             n8ao.configuration.halfRes = preset.ssaoHalfResolution;
           }
-          // Apply only when the effective component × tier value changes.
-          const base = Postprocessing.ssaoIntensity[entity];
-          const intensity = Math.max(0, base * preset.ssaoIntensityScale);
           if (n8ao.configuration.intensity !== intensity) {
             n8ao.configuration.intensity = intensity;
           }
@@ -323,7 +329,8 @@ interface FogCache {
 const fogCacheByScene = new WeakMap<Scene, FogCache>();
 const _fogColor = new Color();
 
-export const FogSyncSystem: System = {
+export const FogSyncSystem: System = defineSystem({
+  name: 'FogSyncSystem',
   group: 'draw',
   after: [CameraSyncSystem],
   update(state: State) {
@@ -378,4 +385,4 @@ export const FogSyncSystem: System = {
       fogCacheByScene.delete(context.scene);
     }
   },
-};
+});

@@ -1,4 +1,5 @@
 import type { ParsedElement, XMLValue } from '../../core';
+import type { VariationVisualSpec } from '../spawn-variation';
 import type {
   ChildTemplateProfileId,
   GroundAlignMode,
@@ -64,6 +65,13 @@ export interface SpawnGroupSpec {
   scaleDiscreteValues: number[];
   scaleMin: number;
   scaleMax: number;
+  /**
+   * Per-axis proportion jitter multiplied after the uniform scale.
+   * Each of X/Y/Z draws independently in `[scaleAxisMin, scaleAxisMax]`.
+   * Default `1`/`1` keeps uniform scale only.
+   */
+  scaleAxisMin: number;
+  scaleAxisMax: number;
   yawDistribution: YawDistributionMode;
   /** Yaw extra em graus (0–360); vazio = linear em `[0, 360)` se `yaw-distribution=linear`. */
   yawDiscreteDeg: number[];
@@ -110,5 +118,7 @@ export interface SpawnGroupSpec {
    * these instead of generating `clusterCount` random hubs (shared grass→flower).
    */
   clusterCenters?: Array<[number, number]>;
+  /** Visual variation (hue/sat/brightness/contrast); geometry uses scale/yaw fields. */
+  variation: VariationVisualSpec;
   templates: SpawnTemplateSpec[];
 }

@@ -1,6 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
-import { defineQuery, type System } from '../../core';
+import { defineSystem, defineQuery, type System } from '../../core';
 import {
   clearGltfMasterCache,
   loadGltfLodToSceneForEntity,
@@ -61,7 +61,8 @@ function applyTransformToGroup(group: THREE.Object3D, eid: number): void {
   }
 }
 
-export const GltfXmlLoadSystem: System = {
+export const GltfXmlLoadSystem: System = defineSystem({
+  name: 'GltfXmlLoadSystem',
   group: 'setup',
   update: (state) => {
     const scene = getScene(state);
@@ -176,4 +177,4 @@ export const GltfXmlLoadSystem: System = {
     clearGltfMasterCache();
     clearGltfBoundsCache();
   },
-};
+});

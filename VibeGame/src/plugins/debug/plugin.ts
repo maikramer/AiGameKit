@@ -1,9 +1,4 @@
-import {
-  defineQuery,
-  getAllEntities,
-  getTotalActiveCoroutineCount,
-  type Component,
-} from '../../core';
+import { defineSystem, defineQuery, getAllEntities, getTotalActiveCoroutineCount, type Component } from '../../core';
 import type { Plugin, State, System } from '../../core';
 import Stats from 'stats-gl';
 import { getTerrainContext } from '../terrain/utils';
@@ -44,6 +39,8 @@ export interface VibeGameDebugBridge {
   rendering(): unknown;
   physics(): unknown;
   debug: DebugRegistryHandle;
+  /** Present when {@link ProfilerPlugin} is registered (installed onto this object). */
+  profiler?: import('../profiler').VibeGameProfilerHandle;
 }
 
 type TypedArrayField =
@@ -489,7 +486,8 @@ function renderRegistrySection(state: State, visible: boolean): string {
   return out;
 }
 
-export const DebugOverlaySystem: System = {
+export const DebugOverlaySystem: System = defineSystem({
+  name: 'DebugOverlaySystem',
   group: 'draw',
   last: true,
   update(state: State): void {
@@ -551,7 +549,7 @@ export const DebugOverlaySystem: System = {
       `Systems:    ${state.systems.size}\n` +
       `Coroutines: ${coroutineCount}\n` +
       `GLTF loads: ${gltfLoads}\n` +
-      `[?] toggle   [*] wireframe${runtime.wireframeOn ? ' ON' : ''}   [G] GPU stats${runtime.statsGlVisible ? ' ON' : ''}   [T] tweak panel${runtime.tweakpaneVisible ? ' ON' : ''}` +
+      `[?] toggle   [*] wireframe${runtime.wireframeOn ? ' ON' : ''}   [G] GPU stats${runtime.statsGlVisible ? ' ON' : ''}   [T] tweak panel${runtime.tweakpaneVisible ? ' ON' : ''}   [P] profiler` +
       registrySection;
   },
   dispose(state: State): void {
@@ -575,7 +573,7 @@ export const DebugOverlaySystem: System = {
     }
     overlayByState.delete(state);
   },
-};
+});
 
 /**
  * Installs `window.__VIBEGAME__`, a read-only introspection bridge over the live

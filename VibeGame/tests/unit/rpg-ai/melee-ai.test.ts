@@ -113,7 +113,7 @@ describe('MeleeAiBehaviour — FSM transitions', () => {
     expect(AiStateComponent.target[CREATURE_EID]).toBe(HERO_EID);
   });
 
-  it('detect→chase on the next frame while still in detectRange', () => {
+  it('detect→chase after detect grace while still in detectRange', () => {
     const state = makeStubState();
     resetAi(CREATURE_EID);
     resetHealth(CREATURE_EID, 50);
@@ -123,8 +123,10 @@ describe('MeleeAiBehaviour — FSM transitions', () => {
 
     const ai = new (createMeleeAi(makeConfig()))();
     ai.update(state as unknown as State, CREATURE_EID);
+    expect(AiStateComponent.mode[CREATURE_EID]).toBe(AI_MODE_DETECT);
     place(CREATURE_EID, 10, 0);
-    ai.update(state as unknown as State, CREATURE_EID);
+    // DETECT_GRACE ≈ 0.28s → ~20 frames at 16ms.
+    for (let i = 0; i < 25; i++) ai.update(state as unknown as State, CREATURE_EID);
 
     expect(AiStateComponent.mode[CREATURE_EID]).toBe(AI_MODE_CHASE);
   });
@@ -139,8 +141,7 @@ describe('MeleeAiBehaviour — FSM transitions', () => {
 
     const ai = new (createMeleeAi(makeConfig()))();
     ai.update(state as unknown as State, CREATURE_EID);
-    place(CREATURE_EID, 10, 0);
-    ai.update(state as unknown as State, CREATURE_EID);
+    for (let i = 0; i < 25; i++) ai.update(state as unknown as State, CREATURE_EID);
     place(CREATURE_EID, 2, 0);
     ai.update(state as unknown as State, CREATURE_EID);
 
@@ -227,7 +228,7 @@ describe('MeleeAiBehaviour — leash returns to idle when target flees', () => {
 
     const ai = new (createMeleeAi(makeConfig()))();
     ai.update(state as unknown as State, CREATURE_EID);
-    ai.update(state as unknown as State, CREATURE_EID);
+    for (let i = 0; i < 25; i++) ai.update(state as unknown as State, CREATURE_EID);
     expect(AiStateComponent.mode[CREATURE_EID]).toBe(AI_MODE_CHASE);
 
     place(HERO_EID, 50, 0);
@@ -235,6 +236,42 @@ describe('MeleeAiBehaviour — leash returns to idle when target flees', () => {
 
     expect(AiStateComponent.mode[CREATURE_EID]).toBe(AI_MODE_IDLE);
     expect(AiStateComponent.target[CREATURE_EID]).toBe(0);
+  });
+});
+
+describe('MeleeAiBehaviour — lunge does not stick when target leaves melee', () => {
+  it('finishes an in-flight lunge instead of freezing in AI_MODE_LUNGE', () => {
+    const state = makeStubState();
+    bindCombatState(state as unknown as State);
+    resetAi(CREATURE_EID);
+    resetHealth(CREATURE_EID, 50);
+    resetHealth(HERO_EID, 100);
+    place(CREATURE_EID, 1.2, 0);
+    place(HERO_EID, 0, 0);
+
+    const ai = new (createMeleeAi(
+      makeConfig({
+        attackCooldown: 0,
+        lungeWindup: 0.05,
+        lungeDuration: 0.2,
+        lungeRecovery: 0.05,
+      })
+    ))();
+
+    // Enter attack and start windup/lunge.
+    for (let i = 0; i < 8; i++) ai.update(state as unknown as State, CREATURE_EID);
+
+    // Target steps outside attackRange but stays in detectRange mid-lunge.
+    place(HERO_EID, 5, 0);
+    for (let i = 0; i < 40; i++) ai.update(state as unknown as State, CREATURE_EID);
+
+    // Must not remain stuck in LUNGE (presentation would loop the jump clip).
+    expect(AiStateComponent.mode[CREATURE_EID]).not.toBe(AI_MODE_LUNGE);
+    expect(
+      [AI_MODE_CHASE, AI_MODE_ATTACK, AI_MODE_IDLE, AI_MODE_DETECT].includes(
+        AiStateComponent.mode[CREATURE_EID] as 0 | 1 | 2 | 3
+      )
+    ).toBe(true);
   });
 });
 

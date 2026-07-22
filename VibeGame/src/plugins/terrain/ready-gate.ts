@@ -1,9 +1,4 @@
-import {
-  defineQuery,
-  registerReadyGate,
-  type State,
-  type System,
-} from '../../core';
+import { defineSystem, defineQuery, registerReadyGate, type State, type System } from '../../core';
 import { Terrain } from './components';
 import { getTerrainContext, isTerrainDynamicsBlocking } from './utils';
 
@@ -31,9 +26,10 @@ export function terrainReady(state: State): boolean {
   return !isTerrainDynamicsBlocking(state);
 }
 
-export const TerrainReadyGateSystem: System = {
+export const TerrainReadyGateSystem: System = defineSystem({
+  name: 'TerrainReadyGateSystem',
   group: 'setup',
   setup(state) {
     registerReadyGate(state, 'terrain', terrainReady);
   },
-};
+});

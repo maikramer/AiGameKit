@@ -1,3 +1,4 @@
+import type { VariationVisualSpec } from '../spawn-variation';
 import type { VegetationRole } from './roles';
 import { classifyVegetationRole, parseMeshRoleOverrides } from './roles';
 import {
@@ -42,6 +43,9 @@ export interface VegetationPatchPlan {
   baseDensityPerKm2: number;
   /** Base count before role split (fixed mode). */
   baseCount: number;
+  scaleAxisMin: number;
+  scaleAxisMax: number;
+  variation: VariationVisualSpec;
   layers: VegetationLayerPlan[];
   /** All mesh URLs (for wind / prefetch). */
   allMeshes: string[];
@@ -70,6 +74,11 @@ export interface BuildVegetationPlanInput {
   /** null = use per-mesh tier defaults. */
   patchScaleMin: number | null;
   patchScaleMax: number | null;
+  /** Per-axis proportion jitter (same contract as StaticSpawner). */
+  scaleAxisMin: number;
+  scaleAxisMax: number;
+  /** Visual variation preset/spec (hue/brightness/contrast). */
+  variation: VariationVisualSpec;
   meshRolesRaw?: string | null;
 }
 
@@ -216,6 +225,9 @@ export function buildVegetationPlan(
     }
   }
 
+  const axisLo = Math.min(input.scaleAxisMin, input.scaleAxisMax);
+  const axisHi = Math.max(input.scaleAxisMin, input.scaleAxisMax);
+
   return {
     smart: useSmart,
     seed: input.seed,
@@ -233,6 +245,9 @@ export function buildVegetationPlan(
     spawnCountMode: input.spawnCountMode,
     baseDensityPerKm2: input.densityPerKm2,
     baseCount: input.count,
+    scaleAxisMin: axisLo,
+    scaleAxisMax: axisHi,
+    variation: input.variation,
     layers,
     allMeshes: [...input.meshes],
   };

@@ -58,7 +58,13 @@ export {
 export { OrbitCamera, OrbitCameraPlugin } from './plugins/orbit-camera';
 export { getScene } from './plugins/rendering';
 export { MeshRenderer } from './plugins/rendering';
-export { Transform, WorldTransform } from './plugins/transforms';
+export {
+  Transform,
+  WorldTransform,
+  planarYawRadians,
+  setTransformYawRadians,
+  setTransformFacingXZ,
+} from './plugins/transforms';
 export { AnimatedCharacter, HasAnimator } from './plugins/animation';
 export {
   animatorRegistry,
@@ -233,10 +239,25 @@ export {
   resolveGroupSpawnFields,
   roleToProfile,
   yawAnglesFromStepDeg,
+  SpawnVariation,
+  defaultVariationForGroupProfile,
+  getVariationPreset,
+  hashWorldXZ,
+  normalizeVariationPresetId,
+  resolveVariationSpec,
+  sampleVariation,
+  writeSpawnVariation,
+} from './plugins/spawner';
+export type {
+  VariationGeometryInput,
+  VariationPresetId,
+  VariationSample,
+  VariationVisualSpec,
 } from './plugins/spawner';
 export type { TerrainEntityData } from './plugins/terrain';
 export {
   getGltfLocalYBounds,
+  getGltfRootGroup,
   prefetchGltfLocalYBounds,
   GltfPending,
   gltfAssetsReady,
@@ -789,6 +810,14 @@ export type {
   DebugVarEntry,
   RegisterDebugActionOptions,
 } from './plugins/debug';
+
+/**
+ * Hierarchical frame profiler (per-system timings, in-game panel, User Timing).
+ * Opt-in via {@link ProfilerPlugin}. Keys: `P` toggle, `Shift+P` sample↔deep.
+ * URL: `?profiler=1` or `?profiler=deep`. Bridge: `__VIBEGAME__.profiler`.
+ */
+export { ProfilerPlugin, ProfilerPanelSystem } from './plugins/profiler';
+export type { VibeGameProfilerHandle } from './plugins/profiler';
 
 /**
  * Spawn gate plugin: opt-in latch that holds entities at their spawn Y until

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { State, System } from '../../core';
+import { defineSystem, type State, type System } from '../../core';
 import { getWindVector } from '../weather/state';
 
 /** URLs whose InstancedMesh2 pools should receive wind sway. */
@@ -108,7 +108,8 @@ const windTimeByState = new WeakMap<State, number>();
  * Drives wind uniforms on materials patched via
  * {@link maybePatchVegetationWindMaterial}.
  */
-export const VegetationWindSystem: System = {
+export const VegetationWindSystem: System = defineSystem({
+  name: 'VegetationWindSystem',
   group: 'draw',
   update(state: State): void {
     const live = windMatsByState.get(state);
@@ -131,4 +132,4 @@ export const VegetationWindSystem: System = {
       u.uVegWindAmp.value = amp;
     }
   },
-};
+});

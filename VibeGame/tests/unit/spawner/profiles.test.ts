@@ -16,8 +16,10 @@ describe('spawn profiles', () => {
     expect(d.groundAlign).toBe('aabb');
     expect(d.baseYOffset).toBe(0.02);
     expect(d.randomYaw).toBe(true);
-    expect(d.scaleMin).toBe(1.6);
-    expect(d.scaleMax).toBe(2.2);
+    expect(d.scaleMin).toBe(0.7);
+    expect(d.scaleMax).toBe(1.4);
+    expect(d.scaleAxisMin).toBe(0.9);
+    expect(d.scaleAxisMax).toBe(1.1);
   });
 
   it('resolveGroupSpawnFields usa perfil quando attrs ausentes', () => {
@@ -25,7 +27,8 @@ describe('spawn profiles', () => {
     expect(r.alignToTerrain).toBe(true);
     expect(r.groundAlign).toBe('aabb');
     expect(r.baseYOffset).toBe(0.02);
-    expect(r.scaleMin).toBe(1.6);
+    expect(r.scaleMin).toBe(0.7);
+    expect(r.scaleAxisMin).toBe(0.9);
     expect(r.maxSlopeDeg).toBe(45);
     expect(r.maxSlopePlacementAttempts).toBe(48);
     expect(r.avoidWater).toBe(true);

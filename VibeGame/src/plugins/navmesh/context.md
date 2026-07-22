@@ -56,14 +56,14 @@ scene.add(debugMesh);
 | Component          | Fields                                                                           | Description                                    |
 | ------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------- |
 | `nav-mesh-surface` | `enabled`, `generated`                                                           | Flag: presence triggers navmesh build          |
-| `nav-mesh-agent`   | `agentIndex`, `speed`, `radius`, `height`, `targetX/Y/Z`, `hasTarget`, `enabled` | Agent data; `agentIndex=-1` means unregistered |
+| `nav-mesh-agent`   | `agentIndex`, `speed`, `radius`, `height`, `targetX/Y/Z`, `hasTarget`, `enabled`, `faceVelocity` | Agent data; `agentIndex=-1` means unregistered. `faceVelocity=1` (default) writes yaw from crowd velocity via `setTransformFacingXZ` (degrees). Set `0` when presentation owns facing. |
 
 ## Systems
 
 | System               | Group        | Description                                                                        |
 | -------------------- | ------------ | ---------------------------------------------------------------------------------- |
 | `NavMeshInitSystem`  | `setup`      | Early WASM init + prefetch; bakes off-thread (no loading gate)                     |
-| `NavMeshAgentSystem` | `simulation` | Creates/removes Crowd agents, applies targets, syncs position/heading to Transform |
+| `NavMeshAgentSystem` | `simulation` | Creates/removes Crowd agents, applies targets, syncs XZ position; optional yaw from velocity (`faceVelocity`) |
 
 ## Recipes
 

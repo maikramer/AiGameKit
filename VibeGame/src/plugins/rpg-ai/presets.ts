@@ -82,6 +82,17 @@ export function presetToMeleeAiConfig(preset: MeleeAiPreset): MeleeAiConfig {
     hoverMax: preset.hoverMax,
   };
   if (preset.targetEid !== undefined) cfg.targetEid = preset.targetEid;
+  if (preset.strafe !== undefined) cfg.strafe = preset.strafe;
+  if (preset.lowHpKiteFrac !== undefined) cfg.lowHpKiteFrac = preset.lowHpKiteFrac;
+  if (preset.enrageBelowFrac !== undefined) {
+    cfg.enrageBelowFrac = preset.enrageBelowFrac;
+  }
+  if (preset.enrageSpeedMult !== undefined) {
+    cfg.enrageSpeedMult = preset.enrageSpeedMult;
+  }
+  if (preset.enrageCooldownMult !== undefined) {
+    cfg.enrageCooldownMult = preset.enrageCooldownMult;
+  }
   return cfg;
 }
 

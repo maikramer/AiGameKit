@@ -1,11 +1,13 @@
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { Parser, State, System } from '../../core';
 import { Transform } from '../transforms/components';
 import { TerrainPad } from './components';
 import { registerGroundBrush } from './brush-registry';
+import { applyOverride } from './density-map';
 import { flattenRect } from './flatten';
 import { rebuildTerrainDerivatives } from './height-brush';
 import { sampleHeightAt } from './height-sampler';
+import { refreshChunkResolutions } from './systems';
 import { getTerrainContext } from './utils';
 import { logger } from '../../core/utils/logger';
 
@@ -22,7 +24,8 @@ const padQuery = defineQuery([TerrainPad, Transform]);
  * `after: [TerrainPadApplySystem]` — pads must stamp before lakes/rivers
  * carve, or a pad overlapping a channel would fill it back in.
  */
-export const TerrainPadApplySystem: System = {
+export const TerrainPadApplySystem: System = defineSystem({
+  name: 'TerrainPadApplySystem',
   group: 'setup',
   update(state: State) {
     if (state.headless) return;
@@ -64,13 +67,32 @@ export const TerrainPadApplySystem: System = {
         falloff,
         cornerRadius,
       });
+
+      // Density boost over the pad+falloff so leaf chunks resolve the skirt
+      // blend (same contract as road/river). Without it the mesh stays on the
+      // coarse lattice and spawners float above the visible falloff slope —
+      // the west city exit is the classic case.
+      const reachX = halfX + falloff;
+      const reachZ = halfZ + falloff;
+      if (data.density) {
+        applyOverride(
+          data.density,
+          {
+            minX: lx - reachX,
+            maxX: lx + reachX,
+            minZ: lz - reachZ,
+            maxZ: lz + reachZ,
+          },
+          255
+        );
+        refreshChunkResolutions(state, field.entity, data);
+      }
+
       if (changed) rebuildTerrainDerivatives(state, field.entity, data);
 
       // Persist resolved height so navmesh / consumers can read the pad plane
       // even when the recipe used auto height (height=0 before apply).
       TerrainPad.height[eid] = targetY;
-      const reachX = halfX + falloff;
-      const reachZ = halfZ + falloff;
       registerGroundBrush(state, {
         kind: 'pad',
         minX: lx - reachX,
@@ -89,7 +111,7 @@ export const TerrainPadApplySystem: System = {
       );
     }
   },
-};
+});
 
 /** Parses `<TerrainPad at="x z" size="w d">` into Transform + TerrainPad. */
 export const terrainPadParser: Parser = ({ entity, element }) => {

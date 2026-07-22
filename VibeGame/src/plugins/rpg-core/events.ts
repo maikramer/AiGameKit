@@ -1,5 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import type { State, System } from '../../core';
+import { defineSystem } from '../../core';
 
 export type EventHandler = (payload: unknown) => void;
 
@@ -144,12 +145,13 @@ export function onEvent(
   return getEventBus(state).on(event, handler, opts);
 }
 
-export const EventBusCleanupSystem: System = {
+export const EventBusCleanupSystem: System = defineSystem({
+  name: 'EventBusCleanupSystem',
   group: 'simulation',
   update(state: State): void {
     getEventBus(state).cleanupDestroyedEntities((eid) => state.exists(eid));
   },
-};
+});
 
 export const COMBAT_DAMAGED = 'combat:damaged';
 export const COMBAT_HEALED = 'combat:healed';

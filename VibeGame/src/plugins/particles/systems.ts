@@ -15,6 +15,7 @@ import {
   presetNeedsUprightCone,
 } from './presets';
 import { preloadParticleTextures } from './textures';
+import { defineSystem } from '../../core';
 
 const emitterQuery = defineQuery([ParticleEmitter]);
 
@@ -171,7 +172,8 @@ function destroyParticleSystem(state: State, entity: number): void {
   systems.delete(entity);
 }
 
-export const ParticleUpdateSystem: System = {
+export const ParticleUpdateSystem: System = defineSystem({
+  name: 'ParticleUpdateSystem',
   group: 'draw',
 
   setup(state: State) {
@@ -275,4 +277,4 @@ export const ParticleUpdateSystem: System = {
     stateRendererMap.delete(state);
     stateParticleSystems.delete(state);
   },
-};
+});

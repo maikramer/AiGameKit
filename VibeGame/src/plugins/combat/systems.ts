@@ -1,4 +1,4 @@
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { COMBAT_DEATH, emitEvent } from '../rpg-core/events';
 import { TouchedEvent } from '../physics/components';
 import {
@@ -18,7 +18,8 @@ const healthQuery = defineQuery([Health]);
 // (bitecs query arrays are cached; only the Set allocation is hot-path waste).
 const _projectileConfigSet = new Set<number>();
 
-export const DamageResolutionSystem: System = {
+export const DamageResolutionSystem: System = defineSystem({
+  name: 'DamageResolutionSystem',
   group: 'simulation',
   update(state: State): void {
     const entities = touchedProjectileQuery(state.world);
@@ -39,9 +40,10 @@ export const DamageResolutionSystem: System = {
       state.destroyEntity(eid);
     }
   },
-};
+});
 
-export const ProjectileCleanupSystem: System = {
+export const ProjectileCleanupSystem: System = defineSystem({
+  name: 'ProjectileCleanupSystem',
   group: 'simulation',
   update(state: State): void {
     const entities = projectileQuery(state.world);
@@ -60,9 +62,10 @@ export const ProjectileCleanupSystem: System = {
       }
     }
   },
-};
+});
 
-export const CombatDeathCleanupSystem: System = {
+export const CombatDeathCleanupSystem: System = defineSystem({
+  name: 'CombatDeathCleanupSystem',
   group: 'simulation',
   update(state: State): void {
     const entities = healthQuery(state.world);
@@ -74,4 +77,4 @@ export const CombatDeathCleanupSystem: System = {
       }
     }
   },
-};
+});

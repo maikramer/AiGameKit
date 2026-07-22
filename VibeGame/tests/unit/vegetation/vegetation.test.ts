@@ -94,6 +94,7 @@ describe('Vegetation recipe', () => {
       '/assets/meshes/vegetation/grass.glb'
     );
     expect(spec!.templates[0]!.attributes.instanced).toBe('true');
+    expect(spec!.variation.preset).toBe('foliage');
 
     const windUrls = getVegetationWindUrls(state);
     expect(windUrls.has('/assets/meshes/vegetation/grass.glb')).toBe(true);
@@ -207,6 +208,19 @@ describe('spawnSpecFromLayer clusterCenters', () => {
       count: 0,
       patchScaleMin: null,
       patchScaleMax: null,
+      scaleAxisMin: 0.9,
+      scaleAxisMax: 1.1,
+      variation: {
+        preset: 'foliage' as const,
+        hueJitterDeg: 8,
+        saturationMin: 0.9,
+        saturationMax: 1.12,
+        brightnessMin: 0.88,
+        brightnessMax: 1.14,
+        contrastMin: 0.92,
+        contrastMax: 1.1,
+        spatial: 0.45,
+      },
     });
     const flower = plan.layers.find((l) => l.role === 'flower')!;
     const hubs: Array<[number, number]> = [
@@ -217,5 +231,8 @@ describe('spawnSpecFromLayer clusterCenters', () => {
     expect(spec.clusterCenters).toEqual(hubs);
     expect(spec.clusterRadius).toBe(2);
     expect(spec.densityPerKm2).toBeCloseTo(1500);
+    expect(spec.scaleAxisMin).toBe(0.9);
+    expect(spec.scaleAxisMax).toBe(1.1);
+    expect(spec.variation.preset).toBe('foliage');
   });
 });

@@ -43,6 +43,14 @@ function getCanvasAspect(state: State): {
   return { width, height, aspect: width / height };
 }
 
+function cameraClipPlanes(entity: number): { near: number; far: number } {
+  const near = MainCamera.near[entity];
+  const far = MainCamera.far[entity];
+  const n = Number.isFinite(near) && near > 0 ? near : 0.1;
+  const f = Number.isFinite(far) && far > n ? far : 1000;
+  return { near: n, far: f };
+}
+
 function createThreeCamera(
   entity: number,
   state: State,
@@ -51,6 +59,7 @@ function createThreeCamera(
   orthoSize: number
 ): THREE.Camera {
   const { aspect } = getCanvasAspect(state);
+  const { near, far } = cameraClipPlanes(entity);
 
   let camera: THREE.Camera;
 
@@ -62,11 +71,11 @@ function createThreeCamera(
       halfWidth,
       halfHeight,
       -halfHeight,
-      0.1,
-      1000
+      near,
+      far
     );
   } else {
-    camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 1000);
+    camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
   }
 
   threeCameras.set(entity, camera);
@@ -79,25 +88,40 @@ function syncCameraSettings(
   state: State
 ): void {
   const { aspect } = getCanvasAspect(state);
+  const { near, far } = cameraClipPlanes(entity);
 
   if (camera instanceof THREE.OrthographicCamera) {
     const orthoSize = MainCamera.orthoSize[entity];
     const halfHeight = orthoSize / 2;
     const halfWidth = halfHeight * aspect;
+    let dirty = false;
 
     if (camera.top !== halfHeight || camera.right !== halfWidth) {
       camera.left = -halfWidth;
       camera.right = halfWidth;
       camera.top = halfHeight;
       camera.bottom = -halfHeight;
-      camera.updateProjectionMatrix();
+      dirty = true;
     }
+    if (camera.near !== near || camera.far !== far) {
+      camera.near = near;
+      camera.far = far;
+      dirty = true;
+    }
+    if (dirty) camera.updateProjectionMatrix();
   } else if (camera instanceof THREE.PerspectiveCamera) {
     const fov = MainCamera.fov[entity];
+    let dirty = false;
     if (camera.fov !== fov) {
       camera.fov = fov;
-      camera.updateProjectionMatrix();
+      dirty = true;
     }
+    if (camera.near !== near || camera.far !== far) {
+      camera.near = near;
+      camera.far = far;
+      dirty = true;
+    }
+    if (dirty) camera.updateProjectionMatrix();
   }
 }
 

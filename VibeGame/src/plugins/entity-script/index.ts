@@ -20,6 +20,12 @@ export { getOrLoadMonoBehaviourModule } from './context';
 export { getOrLoadMonoBehaviourModule as getOrLoadEntityScriptModule } from './context';
 export { EntityScriptPlugin } from './plugin';
 export {
+  getEntityScriptFrameStats,
+  scriptBaseName,
+  scriptSpanName,
+} from './script-profiler';
+export type { EntityScriptFrameStat, ScriptProfilePhase } from './script-profiler';
+export {
   EntityScriptCollisionBridgeSystem,
   EntityScriptSystem,
 } from './system';

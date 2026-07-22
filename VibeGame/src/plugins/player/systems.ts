@@ -1,4 +1,4 @@
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { ThirdPersonCamera } from '../player-controller';
 import { InputState } from '../input';
 import { OrbitCamera } from '../orbit-camera';
@@ -36,7 +36,8 @@ function resolveCameraYaw(world: import('../../core').IWorld): number {
   return 0;
 }
 
-export const PlayerMovementSystem: System = {
+export const PlayerMovementSystem: System = defineSystem({
+  name: 'PlayerMovementSystem',
   group: 'fixed',
   update: (state) => {
     const playerEntities = playerMovementQuery(state.world);
@@ -170,9 +171,10 @@ export const PlayerMovementSystem: System = {
       Rigidbody.poseDirty[entity] = 1;
     }
   },
-};
+});
 
-export const PlayerGroundedSystem: System = {
+export const PlayerGroundedSystem: System = defineSystem({
+  name: 'PlayerGroundedSystem',
   group: 'fixed',
   before: [PlayerMovementSystem],
   update: (state) => {
@@ -220,7 +222,7 @@ export const PlayerGroundedSystem: System = {
       }
     }
   },
-};
+});
 
 function ensureCameraInputState(state: State, cam: number): void {
   if (!state.hasComponent(cam, InputState)) {
@@ -228,7 +230,8 @@ function ensureCameraInputState(state: State, cam: number): void {
   }
 }
 
-export const PlayerCameraLinkingSystem: System = {
+export const PlayerCameraLinkingSystem: System = defineSystem({
+  name: 'PlayerCameraLinkingSystem',
   group: 'simulation',
   update: (state) => {
     const players = playersQuery(state.world);
@@ -261,4 +264,4 @@ export const PlayerCameraLinkingSystem: System = {
       }
     }
   },
-};
+});

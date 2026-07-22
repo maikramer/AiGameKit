@@ -20,7 +20,7 @@ debug/
 ## Scope
 
 - **In-scope**: Post-FX keyboard toggles, in-browser stats overlay, wireframe toggle, ECS introspection bridge, DEV-only debug action/var registry, registry rendering inside the overlay.
-- **Out-of-scope**: Performance tracing (use the browser profiler), scene graph editing UI, production telemetry. Everything here is a dev affordance.
+- **Out-of-scope**: Scene graph editing UI, production telemetry. Hierarchical performance tracing lives in the opt-in `ProfilerPlugin` (`vibegame/profiler`); use that panel or Chrome Performance (`deep` mode) rather than only the FPS overlay here.
 
 ## Entry Points
 

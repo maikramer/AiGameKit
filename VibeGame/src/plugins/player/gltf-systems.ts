@@ -31,6 +31,7 @@ import { computePlayerFootAnchor } from './player-foot-anchor';
 import { Transform, WorldTransform } from '../transforms';
 import { PlayerController, PlayerGltfConfig } from './components';
 import { PLAYER_COLLIDER_DEFAULTS } from './constants';
+import { defineSystem } from '../../core';
 
 let nextModelUrlIndex = 1;
 const modelUrlByIndex = new Map<number, string>();
@@ -375,7 +376,8 @@ function meleeHit(state: State, attacker: number): void {
 const playerGltfSetupQuery = defineQuery([PlayerController, PlayerGltfConfig]);
 
 /** Runs in the first setup bucket so {@link HasAnimator} exists before the procedural character is spawned. */
-export const PlayerGltfEnsureHasAnimatorSystem: System = {
+export const PlayerGltfEnsureHasAnimatorSystem: System = defineSystem({
+  name: 'PlayerGltfEnsureHasAnimatorSystem',
   group: 'setup',
   first: true,
   update: (state) => {
@@ -385,9 +387,10 @@ export const PlayerGltfEnsureHasAnimatorSystem: System = {
       }
     }
   },
-};
+});
 
-export const PlayerGltfSetupSystem: System = {
+export const PlayerGltfSetupSystem: System = defineSystem({
+  name: 'PlayerGltfSetupSystem',
   group: 'draw',
   update: (state) => {
     for (const eid of playerGltfSetupQuery(state.world)) {
@@ -471,7 +474,7 @@ export const PlayerGltfSetupSystem: System = {
             Transform.dirty[eid] = 1;
             if (state.hasComponent(eid, Rigidbody)) {
               Rigidbody.posY[eid] = newBodyY;
-              markRigidbodyPoseDirty(state, eid);
+              markRigidbodyPoseDirty(eid);
               const body = getBodyForEntity(state, eid);
               if (body) {
                 const t = body.translation();
@@ -504,7 +507,7 @@ export const PlayerGltfSetupSystem: System = {
         });
     }
   },
-};
+});
 
 const playerGltfAnimQuery = defineQuery([
   PlayerController,
@@ -516,7 +519,8 @@ function ensureDebugCapsule(_state: State): LineSegments | null {
   return null;
 }
 
-export const PlayerGltfAnimStateSystem: System = {
+export const PlayerGltfAnimStateSystem: System = defineSystem({
+  name: 'PlayerGltfAnimStateSystem',
   group: 'simulation',
   update: (state) => {
     const dt = state.time.deltaTime;
@@ -690,7 +694,7 @@ export const PlayerGltfAnimStateSystem: System = {
       syncTransformToRoot(eid, animator, state, dt);
     }
   },
-};
+});
 
 function syncTransformToRoot(
   eid: number,

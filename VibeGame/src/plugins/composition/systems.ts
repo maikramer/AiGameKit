@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import {
   getBodyForEntity,
@@ -67,7 +67,8 @@ function syncGroupPose(group: THREE.Object3D, eid: number, state: State): void {
   }
 }
 
-export const CompositionSetupSystem: System = {
+export const CompositionSetupSystem: System = defineSystem({
+  name: 'CompositionSetupSystem',
   group: 'setup',
   update(state) {
     if (state.headless) return;
@@ -93,11 +94,12 @@ export const CompositionSetupSystem: System = {
       CompositionPending.meshBuilt[eid] = 1;
     }
   },
-};
+});
 
 // Compound colliders attach post-physics-init because the Collider component is
 // SOA one-row-per-entity; multiple colliders per body need direct Rapier calls.
-export const CompositionColliderSystem: System = {
+export const CompositionColliderSystem: System = defineSystem({
+  name: 'CompositionColliderSystem',
   group: 'fixed',
   after: [PhysicsInitializationSystem],
   update(state) {
@@ -129,9 +131,10 @@ export const CompositionColliderSystem: System = {
       CompositionPending.colliderBuilt[eid] = 1;
     }
   },
-};
+});
 
-export const CompositionSyncSystem: System = {
+export const CompositionSyncSystem: System = defineSystem({
+  name: 'CompositionSyncSystem',
   group: 'simulation',
   after: [TransformHierarchySystem],
   update(state) {
@@ -143,4 +146,4 @@ export const CompositionSyncSystem: System = {
       syncGroupPose(group, eid, state);
     });
   },
-};
+});

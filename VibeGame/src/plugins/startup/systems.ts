@@ -1,4 +1,4 @@
-import { defineQuery, Parent, type System } from '../../core';
+import { defineSystem, defineQuery, Parent, type System } from '../../core';
 import { AnimatedCharacter } from '../animation';
 import { HasAnimator } from '../animation/components';
 import { InputState } from '../input';
@@ -23,7 +23,8 @@ const playersQuery = defineQuery([PlayerController]);
 const mainCameraQuery = defineQuery([MainCamera]);
 const playersWithoutAnimatorQuery = defineQuery([PlayerController]);
 
-export const LightingStartupSystem: System = {
+export const LightingStartupSystem: System = defineSystem({
+  name: 'LightingStartupSystem',
   group: 'setup',
   update: (state) => {
     const existingHemisphereLight = ambientQuery(state.world);
@@ -38,9 +39,10 @@ export const LightingStartupSystem: System = {
       state.addComponent(light, AmbientLight);
     }
   },
-};
+});
 
-export const PlayerStartupSystem: System = {
+export const PlayerStartupSystem: System = defineSystem({
+  name: 'PlayerStartupSystem',
   group: 'setup',
   update: (state) => {
     const existingPlayers = playersQuery(state.world);
@@ -104,9 +106,10 @@ export const PlayerStartupSystem: System = {
       state.addComponent(entity, InputState);
     }
   },
-};
+});
 
-export const CameraStartupSystem: System = {
+export const CameraStartupSystem: System = defineSystem({
+  name: 'CameraStartupSystem',
   group: 'setup',
   update: (state) => {
     const existingCameras = mainCameraQuery(state.world);
@@ -119,9 +122,10 @@ export const CameraStartupSystem: System = {
       OrbitCamera.inputSource[camera] = camera;
     }
   },
-};
+});
 
-export const PlayerCharacterSystem: System = {
+export const PlayerCharacterSystem: System = defineSystem({
+  name: 'PlayerCharacterSystem',
   group: 'setup',
   update(state) {
     const playersWithoutCharacter = playersWithoutAnimatorQuery(
@@ -139,4 +143,4 @@ export const PlayerCharacterSystem: System = {
       Parent.entity[character] = player;
     }
   },
-};
+});

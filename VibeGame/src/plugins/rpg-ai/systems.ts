@@ -1,4 +1,4 @@
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { AiStateComponent } from './components';
 import { runMeleeAiFrame } from './behaviour';
@@ -6,7 +6,8 @@ import { getMeleeAiConfig, getOrCreateAiInstanceState } from './components';
 
 const aiQuery = defineQuery([AiStateComponent]);
 
-export const RpgAiSystem: System = {
+export const RpgAiSystem: System = defineSystem({
+  name: 'RpgAiSystem',
   group: 'simulation',
   update(state: State): void {
     for (const eid of aiQuery(state.world)) {
@@ -16,4 +17,4 @@ export const RpgAiSystem: System = {
       runMeleeAiFrame(state, eid, config, inst);
     }
   },
-};
+});

@@ -210,6 +210,7 @@ export { MeuSystem } from './systems';
 | `spawner`           | `<SpawnGroup>`, `<GameObject place="…">` no terreno — [context.md](./spawner/context.md) | Média        |
 | `startup`           | Execução deferida pós-inicialização                                                      | Baixa        |
 | `debug`             | Debug overlays (wireframes, etc.)                                                        | Baixa        |
+| `profiler`          | Profiler hierárquico (systems/grupos, painel `P`, `?profiler=1`) — opt-in                 | Baixa        |
 | `sky`               | Skybox equirectangular + IBL (PMREM)                                                     | Média        |
 | `audio`             | Áudio espacial (Howler, `<AudioSource>`) — [`docs/AUDIO.md`](../../docs/AUDIO.md)        | Média        |
 | `postprocessing`    | Bloom, SMAA, dithering, tonemapping (registry)                                           | Alta         |

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { defineQuery, type System } from '../../core';
-import { MainCamera } from '../rendering/components';
+import { defineSystem, defineQuery, type System } from '../../core';
+import { DistanceCull, MainCamera } from '../rendering/components';
 import { CameraSyncSystem } from '../rendering/systems';
 import { Transform, WorldTransform } from '../transforms/components';
 import { GltfLod, GltfPending } from './components';
@@ -14,7 +14,8 @@ const _objPos = new THREE.Vector3();
 const _lastLodCam = { x: Number.NaN, y: Number.NaN, z: Number.NaN };
 const LOD_CAM_STILL_EPS_SQ = 0.01; // ~0.1 m
 
-export const GltfLodSystem: System = {
+export const GltfLodSystem: System = defineSystem({
+  name: 'GltfLodSystem',
   group: 'draw',
   after: [CameraSyncSystem],
   update(state) {
@@ -39,12 +40,24 @@ export const GltfLodSystem: System = {
     for (const eid of lodQuery(state.world)) {
       if (GltfPending.loaded[eid] !== 1) continue;
 
+      const root = getGltfRootGroup(state, eid);
+      if (!root) continue;
+
+      // Visibility every frame (before settled early-out). DistanceCull owns
+      // show/hide via max-distance; LOD only picks which child mesh is active.
+      if (state.hasComponent(eid, DistanceCull)) {
+        const culled = DistanceCull.culled[eid] === 1;
+        if (root.visible === culled) root.visible = !culled;
+        if (culled) continue;
+      } else if (!root.visible) {
+        root.visible = true;
+      }
+
+      const childCount = root.children.length;
+      if (childCount < 2) continue;
+
       // Camera barely moved: settled LODs stay valid — skip dist + child scan.
       if (camStill && GltfLod.settled[eid] === 1) continue;
-
-      const root = getGltfRootGroup(state, eid);
-      const childCount = root?.children.length ?? 0;
-      if (!root || childCount < 2) continue;
 
       const useWorld = state.hasComponent(eid, WorldTransform);
       const ox = useWorld ? WorldTransform.posX[eid] : Transform.posX[eid];
@@ -59,15 +72,9 @@ export const GltfLodSystem: System = {
       const near = GltfLod.thresholdNear[eid];
       const mid = GltfLod.thresholdMid[eid];
 
-      const farCutoff = mid * 1.15;
-      if (dist > farCutoff) {
-        root.visible = false;
-        continue;
-      }
-      root.visible = true;
-
       const prevLevel = GltfLod.activeLevel[eid];
       const raw = pickLodLevel(dist, near, mid, prevLevel);
+      // Beyond mid threshold, keep the farthest LOD child visible.
       const level = Math.min(raw, childCount - 1);
       if (level === prevLevel && GltfLod.settled[eid] === 1) {
         continue;
@@ -92,4 +99,4 @@ export const GltfLodSystem: System = {
       }
     }
   },
-};
+});

@@ -1,4 +1,5 @@
 import type { Adapter, Plugin } from '../../core';
+import { SpawnVariation } from '../spawn-variation';
 import { PlacePending, SpawnerPending, TerrainSpawned } from './components';
 import { entityParser } from './entity-parser';
 import {
@@ -32,6 +33,7 @@ export const SpawnerPlugin: Plugin = {
     spawnerPending: SpawnerPending,
     placePending: PlacePending,
     terrainSpawned: TerrainSpawned,
+    spawnVariation: SpawnVariation,
     'spawn-exclusion': SpawnExclusion,
   },
   config: {
@@ -54,6 +56,13 @@ export const SpawnerPlugin: Plugin = {
         aabbPending: 0,
         scaleY: 1,
         normalY: 1,
+      },
+      spawnVariation: {
+        colorR: 1,
+        colorG: 1,
+        colorB: 1,
+        brightness: 1,
+        contrast: 1,
       },
       'spawn-exclusion': {
         x: 0,

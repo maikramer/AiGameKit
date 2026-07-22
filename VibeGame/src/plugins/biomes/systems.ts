@@ -1,4 +1,4 @@
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { NULL_ENTITY } from '../../core/ecs/constants';
 import { lerp } from '../../core/math';
@@ -252,7 +252,8 @@ function bgmLayerFor(entity: number): number {
  * the new target, and applies lerped fog/ambient plus a one-shot music
  * crossfade. Visual writes happen only while a blend is in progress.
  */
-export const BiomeDetectionSystem: System = {
+export const BiomeDetectionSystem: System = defineSystem({
+  name: 'BiomeDetectionSystem',
   group: 'late',
   update(state: State): void {
     if (state.headless) return;
@@ -322,4 +323,4 @@ export const BiomeDetectionSystem: System = {
     }
     ActiveBiome.blend[player] = blend;
   },
-};
+});

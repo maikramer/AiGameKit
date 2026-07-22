@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { BodyType, Collider, Rigidbody } from '../physics/components';
 import { getBodyForEntity } from '../physics/systems';
 import { Transform, WorldTransform } from '../transforms';
@@ -100,7 +100,8 @@ function applyBehavior(eid: number, row: SteeringRow): void {
   row.vehicle.fleeActive = b === 2;
 }
 
-export const SteeringSyncSystem: System = {
+export const SteeringSyncSystem: System = defineSystem({
+  name: 'SteeringSyncSystem',
   group: 'simulation',
   update: (state) => {
     const dt = state.time.deltaTime || 1 / 60;
@@ -190,4 +191,4 @@ export const SteeringSyncSystem: System = {
       }
     }
   },
-};
+});

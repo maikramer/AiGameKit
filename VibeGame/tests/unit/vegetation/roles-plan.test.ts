@@ -71,6 +71,19 @@ describe('buildVegetationPlan', () => {
     count: 0,
     patchScaleMin: null,
     patchScaleMax: null,
+    scaleAxisMin: 0.9,
+    scaleAxisMax: 1.1,
+    variation: {
+      preset: 'foliage' as const,
+      hueJitterDeg: 8,
+      saturationMin: 0.9,
+      saturationMax: 1.12,
+      brightnessMin: 0.88,
+      brightnessMax: 1.14,
+      contrastMin: 0.92,
+      contrastMax: 1.1,
+      spatial: 0.45,
+    },
   };
 
   it('smart=false → single flat layer', () => {

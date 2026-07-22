@@ -2,7 +2,7 @@ import { logger } from '../../core/utils/logger';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
-import { defineQuery, isPhysicsHeld } from '../../core';
+import { defineSystem, defineQuery, isPhysicsHeld } from '../../core';
 import type { State, System } from '../../core';
 import { CameraSyncSystem } from '../rendering/systems';
 import { getRenderingContext, MainCamera } from '../rendering';
@@ -423,6 +423,13 @@ uniform sampler2D uSandAlbedo;
 uniform sampler2D uSandNR;
 uniform float uSandScale;
 uniform float uSandBlend;
+// Procedural sand overlay (noise layer 0): world-XZ fBm patches on flat
+// mid/low ground. Independent of lake/river shore sand (uSandBlend).
+uniform float uNoiseSandStrength;
+uniform float uNoiseSandScale;
+uniform float uNoiseSandThreshold;
+uniform float uNoiseSandHeightMin;
+uniform float uNoiseSandHeightMax;
 uniform int uLakeCount;
 uniform vec4 uLakes[${MAX_LAKES}];
 uniform vec4 uRiverSegs[${MAX_RIVER_SEGS}];
@@ -511,8 +518,52 @@ float riverMask() {
   }
   return m;
 }
-float sandMask() {
+// Classic value-noise fBm (2 octaves). Cheap universal basis for future
+// overlay layers (gravel, moss, …) — keep hash/noise helpers shared.
+float hash21(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float valueNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i);
+  float b = hash21(i + vec2(1.0, 0.0));
+  float c = hash21(i + vec2(0.0, 1.0));
+  float d = hash21(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+float fbm2(vec2 p) {
+  return valueNoise(p) * 0.65 + valueNoise(p * 2.17 + 19.7) * 0.35;
+}
+/**
+ * Noise sand overlay: soft patches where fBm exceeds threshold, gated by
+ * altitude band and flatness so cliffs/peaks stay grassy/rocky.
+ */
+float noiseSandMask() {
+  if (uNoiseSandStrength < 0.001) return 0.0;
+  float h = uMaxHeight > 0.0 ? clamp(vWorldY / uMaxHeight, 0.0, 1.0) : 0.0;
+  float hMin = uNoiseSandHeightMin;
+  float hMax = max(uNoiseSandHeightMax, hMin + 0.02);
+  float soft = max((hMax - hMin) * 0.22, 0.04);
+  float heightGate = smoothstep(hMin, hMin + soft, h)
+                   * (1.0 - smoothstep(hMax - soft, hMax, h));
+  float flatness = clamp(vGeomNormal.y, 0.0, 1.0);
+  float flatGate = smoothstep(uSlopeThreshold - uSlopeSoftness,
+                              min(uSlopeThreshold + uSlopeSoftness + 0.15, 1.0),
+                              flatness);
+  float n = fbm2(vWorldXZ * uNoiseSandScale);
+  float edge = 0.14;
+  // "patch" is a GLSL reserved word (tessellation) — use sandPatch.
+  float sandPatch = smoothstep(uNoiseSandThreshold,
+                               uNoiseSandThreshold + edge, n);
+  return sandPatch * heightGate * flatGate * uNoiseSandStrength;
+}
+float waterSandMask() {
   return clamp(max(lakeMask(), riverMask()), 0.0, 1.0) * uSandBlend;
+}
+float sandMask() {
+  return max(waterSandMask(), noiseSandMask());
 }
 
 void main() {
@@ -706,6 +757,11 @@ function buildTerrainMaterial(
       uSandNR: { value: _sandNRTexture },
       uSandScale: { value: SAND_UV_SCALE },
       uSandBlend: { value: 0 },
+      uNoiseSandStrength: { value: 0 },
+      uNoiseSandScale: { value: 0.014 },
+      uNoiseSandThreshold: { value: 0.58 },
+      uNoiseSandHeightMin: { value: 0.02 },
+      uNoiseSandHeightMax: { value: 0.48 },
       uLakeCount: { value: 0 },
       // Per-lake: xy = world centre, z = outer sand radius (carve), w = waterline.
       uLakes: { value: lakeVecs },
@@ -1042,7 +1098,8 @@ export function applyLoadedSampler(
   fireHeightmapReloadCallbacks(state);
 }
 
-export const TerrainFieldBootstrapSystem: System = {
+export const TerrainFieldBootstrapSystem: System = defineSystem({
+  name: 'TerrainFieldBootstrapSystem',
   group: 'fixed',
   update(state: State) {
     if (state.headless) return;
@@ -1121,9 +1178,10 @@ export const TerrainFieldBootstrapSystem: System = {
     }
     _sharedTerrainMaterials.clear();
   },
-};
+});
 
-export const TerrainLodSelectSystem: System = {
+export const TerrainLodSelectSystem: System = defineSystem({
+  name: 'TerrainLodSelectSystem',
   group: 'draw',
   after: [CameraSyncSystem],
   update(state: State) {
@@ -1265,9 +1323,10 @@ export const TerrainLodSelectSystem: System = {
       }
     }
   },
-};
+});
 
-export const TerrainMeshSystem: System = {
+export const TerrainMeshSystem: System = defineSystem({
+  name: 'TerrainMeshSystem',
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
@@ -1429,7 +1488,7 @@ export const TerrainMeshSystem: System = {
       }
     }
   },
-};
+});
 
 /**
  * Build a Rapier heightfield (column-major) for one chunk, sampled over
@@ -1550,7 +1609,8 @@ function recycleChunkBody(
  * visual LOD chunk gets its own heightfield collider (built/torn down to track
  * the chunk set), so collision matches the rendered surface everywhere.
  */
-export const TerrainChunkColliderSystem: System = {
+export const TerrainChunkColliderSystem: System = defineSystem({
+  name: 'TerrainChunkColliderSystem',
   group: 'simulation',
   update(state: State) {
     if (state.headless) return;
@@ -1683,7 +1743,7 @@ export const TerrainChunkColliderSystem: System = {
       removeChunkColliders(rapierWorld, data);
     }
   },
-};
+});
 
 /**
  * Sync the height/slope colour-tint uniforms from each `Terrain` entity's
@@ -1704,10 +1764,16 @@ interface TintCache {
   slopeSoftness: number;
   heightBlendStrength: number;
   aoStrength: number;
+  noiseSandStrength: number;
+  noiseSandScale: number;
+  noiseSandThreshold: number;
+  noiseSandHeightMin: number;
+  noiseSandHeightMax: number;
 }
 const _tintCacheByField = new WeakMap<THREE.Material, TintCache>();
 
-export const TerrainHeightColorSyncSystem: System = {
+export const TerrainHeightColorSyncSystem: System = defineSystem({
+  name: 'TerrainHeightColorSyncSystem',
   group: 'draw',
   after: [TerrainMeshSystem],
   update(state: State) {
@@ -1729,6 +1795,11 @@ export const TerrainHeightColorSyncSystem: System = {
       const slopeSoftness = Terrain.slopeSoftness[entity];
       const heightBlendStrength = Terrain.heightBlendStrength[entity];
       const aoStrength = Terrain.aoStrength[entity];
+      const noiseSandStrength = Terrain.noiseSandStrength[entity];
+      const noiseSandScale = Terrain.noiseSandScale[entity];
+      const noiseSandThreshold = Terrain.noiseSandThreshold[entity];
+      const noiseSandHeightMin = Terrain.noiseSandHeightMin[entity];
+      const noiseSandHeightMax = Terrain.noiseSandHeightMax[entity];
 
       let cache = _tintCacheByField.get(mat);
       if (!cache) {
@@ -1743,6 +1814,11 @@ export const TerrainHeightColorSyncSystem: System = {
           slopeSoftness: NaN,
           heightBlendStrength: NaN,
           aoStrength: NaN,
+          noiseSandStrength: NaN,
+          noiseSandScale: NaN,
+          noiseSandThreshold: NaN,
+          noiseSandHeightMin: NaN,
+          noiseSandHeightMax: NaN,
         };
         _tintCacheByField.set(mat, cache);
       }
@@ -1788,11 +1864,32 @@ export const TerrainHeightColorSyncSystem: System = {
         u.uAoStrength.value = aoStrength;
         cache.aoStrength = aoStrength;
       }
+      if (cache.noiseSandStrength !== noiseSandStrength) {
+        u.uNoiseSandStrength.value = noiseSandStrength;
+        cache.noiseSandStrength = noiseSandStrength;
+      }
+      if (cache.noiseSandScale !== noiseSandScale) {
+        u.uNoiseSandScale.value = noiseSandScale;
+        cache.noiseSandScale = noiseSandScale;
+      }
+      if (cache.noiseSandThreshold !== noiseSandThreshold) {
+        u.uNoiseSandThreshold.value = noiseSandThreshold;
+        cache.noiseSandThreshold = noiseSandThreshold;
+      }
+      if (cache.noiseSandHeightMin !== noiseSandHeightMin) {
+        u.uNoiseSandHeightMin.value = noiseSandHeightMin;
+        cache.noiseSandHeightMin = noiseSandHeightMin;
+      }
+      if (cache.noiseSandHeightMax !== noiseSandHeightMax) {
+        u.uNoiseSandHeightMax.value = noiseSandHeightMax;
+        cache.noiseSandHeightMax = noiseSandHeightMax;
+      }
     }
   },
-};
+});
 
-export const TerrainDebugSystem: System = {
+export const TerrainDebugSystem: System = defineSystem({
+  name: 'TerrainDebugSystem',
   group: 'draw',
   after: [CameraSyncSystem],
   update(state: State) {
@@ -1812,4 +1909,4 @@ export const TerrainDebugSystem: System = {
       TerrainDebugInfo.lastUpdated[entity] = now;
     }
   },
-};
+});

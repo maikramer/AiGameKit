@@ -5,6 +5,9 @@ import {
   WorldTransform,
   syncEulerFromQuaternion,
   syncQuaternionFromEuler,
+  planarYawRadians,
+  setTransformYawRadians,
+  setTransformFacingXZ,
   copyTransform,
   setTransformIdentity,
   composeTransformMatrix,
@@ -114,6 +117,49 @@ describe('Transform Utilities', () => {
       expect(WorldTransform.eulerX[entity]).toBeCloseTo(45, 2);
       expect(WorldTransform.eulerY[entity]).toBeCloseTo(0, 5);
       expect(WorldTransform.eulerZ[entity]).toBeCloseTo(0, 5);
+    });
+  });
+
+  describe('planar facing helpers', () => {
+    let state: State;
+    let entity: number;
+
+    beforeEach(() => {
+      state = new State();
+      entity = state.createEntity();
+      state.addComponent(entity, Transform);
+    });
+
+    it('planarYawRadians matches +Z=0, +X=+π/2', () => {
+      expect(planarYawRadians(0, 1)).toBeCloseTo(0, 5);
+      expect(planarYawRadians(1, 0)).toBeCloseTo(Math.PI / 2, 5);
+      expect(planarYawRadians(0, -1)).toBeCloseTo(Math.PI, 5);
+    });
+
+    it('setTransformYawRadians stores degrees and a matching quaternion', () => {
+      setTransformYawRadians(Transform, entity, Math.PI / 2);
+      expect(Transform.eulerY[entity]).toBeCloseTo(90, 5);
+      expect(Transform.dirty[entity]).toBe(1);
+      // Hierarchy-style sync must not clobber a correct degrees write.
+      syncQuaternionFromEuler(Transform, entity);
+      const q = eulerToQuaternion(0, 90, 0);
+      expect(Transform.rotY[entity]).toBeCloseTo(q.y, 3);
+      expect(Transform.rotW[entity]).toBeCloseTo(q.w, 3);
+    });
+
+    it('setTransformFacingXZ faces +X as 90° yaw', () => {
+      setTransformFacingXZ(Transform, entity, 1, 0);
+      expect(Transform.eulerY[entity]).toBeCloseTo(90, 5);
+    });
+
+    it('regression: writing atan2 radians into eulerY breaks facing after sync', () => {
+      // Old navmesh/creature bug: store radians in a degrees field.
+      Transform.eulerY[entity] = Math.atan2(1, 0); // ~1.57 "degrees"
+      syncQuaternionFromEuler(Transform, entity);
+      expect(Math.abs(Transform.eulerY[entity])).toBeLessThan(5);
+      // Correct path faces +X (~90°).
+      setTransformFacingXZ(Transform, entity, 1, 0);
+      expect(Transform.eulerY[entity]).toBeCloseTo(90, 5);
     });
   });
 

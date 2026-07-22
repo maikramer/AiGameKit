@@ -51,3 +51,19 @@ export type {
   SpawnTemplateSpec,
   YawDistributionMode,
 } from './types';
+export {
+  SpawnVariation,
+  defaultVariationForGroupProfile,
+  getVariationPreset,
+  hashWorldXZ,
+  normalizeVariationPresetId,
+  resolveVariationSpec,
+  sampleVariation,
+  writeSpawnVariation,
+} from '../spawn-variation';
+export type {
+  VariationGeometryInput,
+  VariationPresetId,
+  VariationSample,
+  VariationVisualSpec,
+} from '../spawn-variation';

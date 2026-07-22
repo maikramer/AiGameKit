@@ -68,6 +68,13 @@ terrain/
 - colorRock: ui32 (0x808080) — cliff rock color
 - slopeThreshold: f32 (0.55) — slope angle for rock texture
 - slopeSoftness: f32 (0.1) — slope blend softness
+- heightBlendStrength: f32 (0.35) — height/slope colour tint mix
+- aoStrength: f32 (0.85) — NAR AO multiply strength
+- noiseSandStrength: f32 (0.4) — procedural sand overlay (0 = off); world-XZ fBm patches on flat mid/low ground
+- noiseSandScale: f32 (0.014) — fBm frequency (higher = smaller patches)
+- noiseSandThreshold: f32 (0.58) — fBm cutoff (higher = sparser)
+- noiseSandHeightMin: f32 (0.02) — normalised height band start for sand patches
+- noiseSandHeightMax: f32 (0.48) — normalised height band end for sand patches
 
 #### TerrainChunk (N entities — dynamically spawned/despawned)
 

@@ -1,6 +1,7 @@
 import type { State } from './state';
 import type { System } from './types';
 import type { CoroutineYieldValue } from './yield-instructions';
+import { defineSystem } from '../profiler';
 
 export interface CoroutineEntry {
   generator: Generator;
@@ -215,7 +216,8 @@ export function cleanupEntityCoroutines(state: State, eid: number): void {
   byState.delete(eid);
 }
 
-export const CoroutineRunnerSystem: System = {
+export const CoroutineRunnerSystem: System = defineSystem({
+  name: 'CoroutineRunnerSystem',
   group: 'simulation',
   update(state: State): void {
     const byState = coroutineState.get(state);
@@ -238,7 +240,7 @@ export const CoroutineRunnerSystem: System = {
       }
     }
   },
-};
+});
 
 function processQueue(
   state: State,
@@ -265,16 +267,18 @@ function processQueue(
   }
 }
 
-export const CoroutineLateFrameSystem: System = {
+export const CoroutineLateFrameSystem: System = defineSystem({
+  name: 'CoroutineLateFrameSystem',
   group: 'late',
   update(state: State): void {
     processQueue(state, endOfFrameQueue);
   },
-};
+});
 
-export const CoroutineFixedUpdateSystem: System = {
+export const CoroutineFixedUpdateSystem: System = defineSystem({
+  name: 'CoroutineFixedUpdateSystem',
   group: 'fixed',
   update(state: State): void {
     processQueue(state, fixedUpdateQueue);
   },
-};
+});

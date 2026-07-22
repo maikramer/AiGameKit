@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Container, reversePainterSortStable, Text } from '@pmndrs/uikit';
-import { defineQueryLive, type State, type System } from '../../core';
+import { defineSystem, defineQueryLive, type State, type System } from '../../core';
 import { getRenderingContext, getScene } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
 import { HudPanel } from './components';
@@ -51,7 +51,8 @@ function ensureRendererConfigured(renderer: THREE.WebGLRenderer): void {
   renderer.setTransparentSort(reversePainterSortStable);
 }
 
-export const HudBuildSystem: System = {
+export const HudBuildSystem: System = defineSystem({
+  name: 'HudBuildSystem',
   group: 'setup',
   update: (state) => {
     if (state.headless) return;
@@ -114,9 +115,10 @@ export const HudBuildSystem: System = {
       HudPanel.built[eid] = 1;
     }
   },
-};
+});
 
-export const HudSyncSystem: System = {
+export const HudSyncSystem: System = defineSystem({
+  name: 'HudSyncSystem',
   group: 'draw',
   update: (state) => {
     if (state.headless) return;
@@ -152,4 +154,4 @@ export const HudSyncSystem: System = {
       }
     }
   },
-};
+});

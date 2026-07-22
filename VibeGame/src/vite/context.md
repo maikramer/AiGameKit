@@ -4,13 +4,18 @@ Vite plugins for VibeGame development and build tooling.
 
 ## Structure
 
-- **index.ts** - Plugin exports
+- **index.ts** - Plugin exports (`vibegame`, console forwarding, watch helpers)
+- **watch-ignored.ts** - Shared `server.watch.ignored` patterns (ENOSPC guard)
 - **console-plugin.ts** - Console forwarding for development
+- **hot-reload.ts** - Optional asset HMR via dedicated `fs.watch` (not Vite chokidar)
 
 ## Plugins
 
 ### vibegame()
-WASM configuration plugin that aliases Rapier3D to the compatible version.
+- Aliases Rapier3D to the compatible WASM build
+- Merges `VIBEGAME_SERVER_WATCH_IGNORED` into `server.watch.ignored` so examples
+  never chokidar-watch graphify caches, GameAssets workdirs, or huge `public/assets`
+  blobs (still served as static files; HMR stays on `src/` / HTML / TS)
 
 ### consoleForwarding()
 Development plugin that forwards browser console output to terminal:

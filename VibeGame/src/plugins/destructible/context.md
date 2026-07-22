@@ -46,7 +46,11 @@ destructible/
   once per entity on the first hit.
 - shakeOnHit: ui8 (0) — decaying wobble on the visual with each hit (trees)
 - cutHeight: f32 (0.6) — trunk cut height in meters for `fall`/`split`
-  (clamped to `[0.2, height*0.4]` so the top is always the larger piece)
+  (clamped to `[0.2, height*0.4]` so the top is always the larger piece).
+  When the GLB already has named meshes `Stump` + `Top` (from
+  `text3d split-at-height`), `fall` uses those real halves and ignores
+  clipping; `cutHeight` is only used for legacy single-mesh trees.
+  Vertical `split` still uses clipping planes.
 - popupColorR/G/B: f32 (1) — set via `popup-color: #d4c9a8`
 - popupSize: f32 (0.4)
 

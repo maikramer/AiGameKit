@@ -1,4 +1,4 @@
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { isKeyDown } from '../input';
 import { PlayerController } from '../player';
@@ -51,7 +51,8 @@ function resolvePlayer(state: State): number {
  * presses F. The phase (intro/progress/complete) is derived from the giver's
  * current state. Runs in `late` so it follows player movement.
  */
-export const QuestTriggerSystem: System = {
+export const QuestTriggerSystem: System = defineSystem({
+  name: 'QuestTriggerSystem',
   group: 'late',
   update(state: State): void {
     const fPressed = consumeFPress(state);
@@ -89,7 +90,7 @@ export const QuestTriggerSystem: System = {
 
     showDialogue(state, { speakerEid: nearestEid, def, phase });
   },
-};
+});
 
 interface PendingKill {
   readonly target: string;
@@ -157,7 +158,8 @@ function applyQuestRewards(state: State, def: QuestDef): void {
  * completing them (emitting `quest:completed` + applying rewards) when the
  * objective count is reached.
  */
-export const QuestProgressSystem: System = {
+export const QuestProgressSystem: System = defineSystem({
+  name: 'QuestProgressSystem',
   group: 'simulation',
   update(state: State): void {
     const queue = stateToKillQueue.get(state);
@@ -188,6 +190,6 @@ export const QuestProgressSystem: System = {
       }
     }
   },
-};
+});
 
 export { QUEST_STATE_AVAILABLE, QUEST_STATE_TAKEN, QUEST_STATE_COMPLETED };

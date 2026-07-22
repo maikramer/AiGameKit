@@ -1,5 +1,5 @@
 import { logger } from '../../core/utils/logger';
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import {
   getTerrainContext,
   registerHeightmapReloadCallback,
@@ -178,8 +178,8 @@ function resyncTerrainSpawnedHeights(state: State): void {
   }
 }
 
-export const TerrainSpawnSystem: System = {
-  // Same 'setup' bucket as pads/water/roads, strictly AFTER they stamp — so the
+export const TerrainSpawnSystem: System = defineSystem({
+  name: 'TerrainSpawnSystem',  // Same 'setup' bucket as pads/water/roads, strictly AFTER they stamp — so the
   // first spawn batch samples post-carve heights in the same frame the
   // heightmap lands (simulation would also work via the pending gate, but a
   // late Road flatten used to slip past the gate and bury/float trees).
@@ -379,7 +379,7 @@ export const TerrainSpawnSystem: System = {
                 state,
                 wx,
                 wz,
-                templateRadiusBase * spec.scaleMax
+                templateRadiusBase * spec.scaleMax * spec.scaleAxisMax
               )
             ) {
               continue;
@@ -412,7 +412,12 @@ export const TerrainSpawnSystem: System = {
           // Always honour SpawnExclusion (+ footprints from earlier groups).
           // `avoidOverlaps` only controls whether THIS group registers discs.
           if (
-            !isSpawnAreaFree(state, wx, wz, templateRadiusBase * spec.scaleMax)
+            !isSpawnAreaFree(
+              state,
+              wx,
+              wz,
+              templateRadiusBase * spec.scaleMax * spec.scaleAxisMax
+            )
           ) {
             continue;
           }
@@ -431,7 +436,12 @@ export const TerrainSpawnSystem: System = {
           }
           if (
             !foundValidSlope &&
-            !isSpawnAreaFree(state, wx, wz, templateRadiusBase * spec.scaleMax)
+            !isSpawnAreaFree(
+              state,
+              wx,
+              wz,
+              templateRadiusBase * spec.scaleMax * spec.scaleAxisMax
+            )
           ) {
             continue;
           }
@@ -454,7 +464,7 @@ export const TerrainSpawnSystem: System = {
             state,
             wx,
             wz,
-            templateRadiusBase * spec.scaleMax
+            templateRadiusBase * spec.scaleMax * spec.scaleAxisMax
           );
         }
         spawnOne(state, spec, rand, wx, wy, wz, template);
@@ -463,7 +473,7 @@ export const TerrainSpawnSystem: System = {
       SpawnerPending.spawned[eid] = 1;
     }
   },
-};
+});
 
 /**
  * Applies the deferred AABB base lift for props spawned with
@@ -479,7 +489,8 @@ export const TerrainSpawnSystem: System = {
  * controller, and the initial `mirrorPoseToRigidbody` already placed any
  * Fixed body. Rewriting a sleeping body's Y here would desync it.
  */
-export const TerrainSpawnBoundsCatchUpSystem: System = {
+export const TerrainSpawnBoundsCatchUpSystem: System = defineSystem({
+  name: 'TerrainSpawnBoundsCatchUpSystem',
   group: 'simulation',
   // Spawn now runs in setup; catch-up still follows in simulation so GLB
   // bounds that arrive mid-frame get a Y lift before physics/draw.
@@ -517,4 +528,4 @@ export const TerrainSpawnBoundsCatchUpSystem: System = {
       }
     }
   },
-};
+});

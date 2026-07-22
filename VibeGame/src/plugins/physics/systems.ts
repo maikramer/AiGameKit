@@ -2,12 +2,7 @@ import { logger } from '../../core/utils/logger';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { ActiveEvents } from '@dimforge/rapier3d-compat';
 import type { State, System } from '../../core';
-import {
-  defineQuery,
-  defineQueryLive,
-  isPhysicsHeld,
-  TIME_CONSTANTS,
-} from '../../core';
+import { defineSystem, defineQuery, defineQueryLive, isPhysicsHeld, TIME_CONSTANTS } from '../../core';
 import { Transform, WorldTransform } from '../transforms';
 import {
   ApplyAngularImpulse,
@@ -157,7 +152,8 @@ export function invalidateCollider(state: State, entity: number): void {
   context.failedColliders.delete(entity);
 }
 
-export const PhysicsWorldSystem: System = {
+export const PhysicsWorldSystem: System = defineSystem({
+  name: 'PhysicsWorldSystem',
   group: 'fixed',
   first: true,
   update: (state) => {
@@ -218,7 +214,7 @@ export const PhysicsWorldSystem: System = {
       stateToPhysicsContext.delete(state);
     }
   },
-};
+});
 
 /**
  * Entities with `place="…"` only reach their world pose after terrain
@@ -231,7 +227,8 @@ function isPlacementPending(state: State, entity: number): boolean {
   return (placePending as { spawned: Uint8Array }).spawned[entity] === 0;
 }
 
-export const PhysicsInitializationSystem: System = {
+export const PhysicsInitializationSystem: System = defineSystem({
+  name: 'PhysicsInitializationSystem',
   group: 'fixed',
   after: [PhysicsWorldSystem],
   update: (state) => {
@@ -313,7 +310,7 @@ export const PhysicsInitializationSystem: System = {
       }
     }
   },
-};
+});
 
 function createRigidbodyForEntity(
   entity: number,
@@ -585,7 +582,8 @@ function createCharacterControllerForEntity(
   context.entityToCharacterController.set(entity, controller);
 }
 
-export const PhysicsCleanupSystem: System = {
+export const PhysicsCleanupSystem: System = defineSystem({
+  name: 'PhysicsCleanupSystem',
   group: 'fixed',
   after: [PhysicsInitializationSystem],
   update: (state) => {
@@ -620,9 +618,10 @@ export const PhysicsCleanupSystem: System = {
       }
     }
   },
-};
+});
 
-export const CharacterMovementSystem: System = {
+export const CharacterMovementSystem: System = defineSystem({
+  name: 'CharacterMovementSystem',
   group: 'fixed',
   after: [PhysicsCleanupSystem],
   update: (state) => {
@@ -652,9 +651,10 @@ export const CharacterMovementSystem: System = {
       );
     }
   },
-};
+});
 
-export const ApplyInputSystem: System = {
+export const ApplyInputSystem: System = defineSystem({
+  name: 'ApplyInputSystem',
   group: 'fixed',
   after: [CharacterMovementSystem],
   update: (state) => {
@@ -677,9 +677,10 @@ export const ApplyInputSystem: System = {
       if (body) applyAngularImpulseToEntity(entity, body, state);
     }
   },
-};
+});
 
-export const SetVelocitySystem: System = {
+export const SetVelocitySystem: System = defineSystem({
+  name: 'SetVelocitySystem',
   group: 'fixed',
   after: [ApplyInputSystem],
   update: (state) => {
@@ -699,9 +700,10 @@ export const SetVelocitySystem: System = {
       }
     }
   },
-};
+});
 
-export const KinematicMovementSystem: System = {
+export const KinematicMovementSystem: System = defineSystem({
+  name: 'KinematicMovementSystem',
   group: 'fixed',
   after: [SetVelocitySystem],
   update: (state) => {
@@ -721,9 +723,10 @@ export const KinematicMovementSystem: System = {
       }
     }
   },
-};
+});
 
-export const TeleportationSystem: System = {
+export const TeleportationSystem: System = defineSystem({
+  name: 'TeleportationSystem',
   group: 'fixed',
   after: [KinematicMovementSystem],
   update: (state) => {
@@ -738,9 +741,10 @@ export const TeleportationSystem: System = {
       Rigidbody.poseDirty[entity] = 0;
     }
   },
-};
+});
 
-export const PhysicsStepSystem: System = {
+export const PhysicsStepSystem: System = defineSystem({
+  name: 'PhysicsStepSystem',
   group: 'fixed',
   after: [TeleportationSystem],
   update: (state) => {
@@ -759,7 +763,7 @@ export const PhysicsStepSystem: System = {
     worldRapier.step(context.eventQueue);
     processCollisionEvents(context.eventQueue, state, context);
   },
-};
+});
 
 function processCollisionEvents(
   eventQueue: RAPIER.EventQueue,

@@ -1,12 +1,10 @@
-import { defineQuery, type System } from '../../core';
-import { NULL_ENTITY } from '../../core';
+import { defineSystem, defineQuery, type System, NULL_ENTITY, Parent } from '../../core';
 import {
   CharacterController,
   CharacterMovement,
   InterpolatedTransform,
 } from '../physics';
 import { InputState } from '../input';
-import { Parent } from '../../core';
 import { AnimatedCharacter } from './components';
 import { ANIMATION_CONFIG, ANIMATION_STATES } from './constants';
 import {
@@ -20,7 +18,8 @@ import {
 
 const animatedCharacterQuery = defineQuery([AnimatedCharacter]);
 
-export const AnimatedCharacterInitializationSystem: System = {
+export const AnimatedCharacterInitializationSystem: System = defineSystem({
+  name: 'AnimatedCharacterInitializationSystem',
   group: 'setup',
   update(state) {
     for (const entity of animatedCharacterQuery(state.world)) {
@@ -58,9 +57,10 @@ export const AnimatedCharacterInitializationSystem: System = {
       );
     }
   },
-};
+});
 
-export const AnimatedCharacterUpdateSystem: System = {
+export const AnimatedCharacterUpdateSystem: System = defineSystem({
+  name: 'AnimatedCharacterUpdateSystem',
   group: 'simulation',
   update(state) {
     const characters = animatedCharacterQuery(state.world);
@@ -209,4 +209,4 @@ export const AnimatedCharacterUpdateSystem: System = {
       }
     }
   },
-};
+});

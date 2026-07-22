@@ -1,7 +1,7 @@
 import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { eulerToQuaternion } from '../../core/math';
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { getGroundHeight, getTerrainContext } from '../terrain';
 import { PlacePending } from './components';
 import { TerrainSpawned } from './components';
@@ -162,7 +162,8 @@ function registerPlacedColliderFootprint(state: State, eid: number): void {
  * `WorldTransform` (e.g. particle emitters under `<entity place="…">`) would stay wrong until the
  * next frame — emitters looked “stuck” near world origin / wrong height.
  */
-export const TerrainPlaceSystem: System = {
+export const TerrainPlaceSystem: System = defineSystem({
+  name: 'TerrainPlaceSystem',
   group: 'simulation',
   first: true,
   update(state) {
@@ -249,4 +250,4 @@ export const TerrainPlaceSystem: System = {
       PlacePending.spawned[eid] = 1;
     }
   },
-};
+});

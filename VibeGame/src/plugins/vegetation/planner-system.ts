@@ -1,4 +1,4 @@
-import { defineQuery, Parent, type State, type System } from '../../core';
+import { defineSystem, defineQuery, Parent, type State, type System } from '../../core';
 import { getTerrainContext } from '../terrain';
 import { Transform } from '../transforms/components';
 import { SpawnerPending } from '../spawner/components';
@@ -27,7 +27,8 @@ function isTerrainHeightmapPending(state: State): boolean {
  * Materialize smart vegetation layers: shared cluster hubs → child SpawnGroupSpecs
  * → SpawnerPending. Runs in setup before TerrainSpawnSystem.
  */
-export const VegetationPlannerSystem: System = {
+export const VegetationPlannerSystem: System = defineSystem({
+  name: 'VegetationPlannerSystem',
   group: 'setup',
   after: [
     TerrainPadApplySystem,
@@ -118,4 +119,4 @@ export const VegetationPlannerSystem: System = {
       runtime.hubsReady = true;
     }
   },
-};
+});

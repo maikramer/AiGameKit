@@ -1,5 +1,6 @@
 import type { State } from '../../core';
 import { Terrain } from './components';
+import { meshSurfaceResolutionForPoint } from './lod-select';
 import { getTerrainContext } from './utils';
 import type { TerrainEntityData } from './utils';
 
@@ -276,11 +277,19 @@ export function sampleTerrainHeight(
   const pointHeight = (px: number, pz: number): number => {
     if (!field) return 0;
     const { data, entity } = field;
+    const localX = px - data.worldOffset.x;
+    const localZ = pz - data.worldOffset.z;
     return surfaceHeightAt(
       data.sampler,
-      px - data.worldOffset.x,
-      pz - data.worldOffset.z,
-      Terrain.resolution[entity]
+      localX,
+      localZ,
+      meshSurfaceResolutionForPoint(
+        Terrain.resolution[entity],
+        Terrain.levels[entity],
+        data.density,
+        localX,
+        localZ
+      )
     );
   };
 

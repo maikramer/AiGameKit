@@ -1,4 +1,4 @@
-import { defineQuery, type System } from '../../core';
+import { defineSystem, defineQuery, type System } from '../../core';
 import { InputState, GamepadInput } from './components';
 import {
   cleanupEventListeners,
@@ -38,7 +38,8 @@ function zeroMovement(eid: number): void {
   InputState.jump[eid] = 0;
 }
 
-export const InputSystem: System = {
+export const InputSystem: System = defineSystem({
+  name: 'InputSystem',
   group: 'simulation',
 
   setup: () => {
@@ -68,14 +69,15 @@ export const InputSystem: System = {
     cleanupEventListeners();
     clearAllInput();
   },
-};
+});
 
 export const applyDeadzone = (raw: number, dz: number): number => {
   if (Math.abs(raw) < dz) return 0;
   return (raw - Math.sign(raw) * dz) / (1 - dz);
 };
 
-export const GamepadInputSystem: System = {
+export const GamepadInputSystem: System = defineSystem({
+  name: 'GamepadInputSystem',
   group: 'simulation',
 
   update: (state) => {
@@ -136,4 +138,4 @@ export const GamepadInputSystem: System = {
         InputState.jump[eid] = GamepadInput.buttonA[eid];
     }
   },
-};
+});

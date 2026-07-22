@@ -23,6 +23,12 @@ import { DistanceCull } from '../rendering/components';
 import { Rigidbody } from '../physics/components';
 import { syncBodyQuaternionFromEuler } from '../physics/utils';
 import { Transform } from '../transforms/components';
+import {
+  getVariationPreset,
+  sampleVariation,
+  writeSpawnVariation,
+  type VariationVisualSpec,
+} from '../spawn-variation';
 import { TerrainSpawned } from './components';
 import { setAabbPendingUrl } from './bounds-context';
 
@@ -59,43 +65,16 @@ function mergeTemplateAttributes(
   return out;
 }
 
+function resolveVisualSpec(
+  spec: Pick<SpawnGroupSpec, 'variation'> | { variation?: VariationVisualSpec }
+): VariationVisualSpec {
+  return spec.variation ?? getVariationPreset('none');
+}
+
 /**
  * Spawns one entity from a template at world (wx, wy, wz) using the same rules as
  * {@link TerrainSpawnSystem} / spawn-group (scale jitter, terrain normal, AABB ground align).
  */
-function pickScaleJitter(
-  spec: Pick<
-    SpawnGroupSpec,
-    'scaleDistribution' | 'scaleDiscreteValues' | 'scaleMin' | 'scaleMax'
-  >,
-  rand: () => number
-): number {
-  if (
-    spec.scaleDistribution === 'discrete' &&
-    spec.scaleDiscreteValues.length > 0
-  ) {
-    const arr = spec.scaleDiscreteValues;
-    return arr[Math.floor(rand() * arr.length)]!;
-  }
-  return spec.scaleMin + rand() * (spec.scaleMax - spec.scaleMin);
-}
-
-function pickYawRad(
-  spec: Pick<
-    SpawnGroupSpec,
-    'randomYaw' | 'yawDistribution' | 'yawDiscreteDeg'
-  >,
-  rand: () => number
-): number {
-  if (!spec.randomYaw) return 0;
-  if (spec.yawDistribution === 'discrete' && spec.yawDiscreteDeg.length > 0) {
-    const arr = spec.yawDiscreteDeg;
-    const deg = arr[Math.floor(rand() * arr.length)]!;
-    return (deg * Math.PI) / 180;
-  }
-  return rand() * Math.PI * 2;
-}
-
 export function spawnTemplateAtTerrain(
   state: State,
   spec: Pick<
@@ -108,12 +87,14 @@ export function spawnTemplateAtTerrain(
     | 'scaleDiscreteValues'
     | 'scaleMin'
     | 'scaleMax'
+    | 'scaleAxisMin'
+    | 'scaleAxisMax'
     | 'yawDistribution'
     | 'yawDiscreteDeg'
     | 'surfaceEpsilon'
     | 'surfaceEpsilonAuto'
     | 'maxDistance'
-  >,
+  > & { variation?: VariationVisualSpec },
   rand: () => number,
   wx: number,
   wy: number,
@@ -126,11 +107,29 @@ export function spawnTemplateAtTerrain(
       : undefined;
   const parts = parseTransformAttr(tmplTransform);
   const base = defaultTransformParts();
-  const scaleJitter = pickScaleJitter(spec, rand);
+
+  const sample = sampleVariation(
+    {
+      randomYaw: spec.randomYaw,
+      scaleDistribution: spec.scaleDistribution,
+      scaleDiscreteValues: spec.scaleDiscreteValues,
+      scaleMin: spec.scaleMin,
+      scaleMax: spec.scaleMax,
+      scaleAxisMin: spec.scaleAxisMin,
+      scaleAxisMax: spec.scaleAxisMax,
+      yawDistribution: spec.yawDistribution,
+      yawDiscreteDeg: spec.yawDiscreteDeg,
+    },
+    resolveVisualSpec(spec),
+    rand,
+    wx,
+    wz
+  );
+
   base.scale = [
-    parts.scale[0] * scaleJitter,
-    parts.scale[1] * scaleJitter,
-    parts.scale[2] * scaleJitter,
+    parts.scale[0] * sample.scaleUniform * sample.axisX,
+    parts.scale[1] * sample.scaleUniform * sample.axisY,
+    parts.scale[2] * sample.scaleUniform * sample.axisZ,
   ];
 
   const surface = sampleTerrainSurfaceMatrix(
@@ -142,7 +141,7 @@ export function spawnTemplateAtTerrain(
   );
   const normal = surface?.normal ?? upNormal;
 
-  const yawRad = pickYawRad(spec, rand);
+  const yawRad = sample.yawRad;
 
   const MIN_ALIGN_SLOPE_RAD = 0.06;
   const slopeSteepEnough =
@@ -159,7 +158,12 @@ export function spawnTemplateAtTerrain(
 
   const urlRaw = template.attributes.url;
   const url = typeof urlRaw === 'string' ? urlRaw.trim() : '';
-  const scaleY = Math.max(scaleJitter * parts.scale[1], 1e-6);
+  const scaleY = Math.max(
+    sample.scaleUniform * sample.axisY * parts.scale[1],
+    1e-6
+  );
+  const scaleXZ =
+    sample.scaleUniform * Math.max(sample.axisX, sample.axisZ);
 
   const aabb = getGltfLocalAABB(url);
   const halfWidth = aabb
@@ -168,7 +172,7 @@ export function spawnTemplateAtTerrain(
   const sink = surface
     ? sinkOffsetForSlope(
         surface.slopeAngleRad,
-        halfWidth * scaleJitter,
+        halfWidth * scaleXZ,
         spec.alignToTerrain ? surface.slopeAngleRad : 0
       )
     : 0;
@@ -189,10 +193,6 @@ export function spawnTemplateAtTerrain(
         foot.set(0, lift, 0);
       }
     } else {
-      // Bounds pending: the AABB lift is skipped for now. If the prefetch is
-      // still in flight, the catch-up system will fix Y once they arrive; if
-      // there's no URL fetcher at all, warn once so the missing <gltf-load>
-      // is visible.
       if (isGltfBoundsPrefetchInflight(url)) {
         needsBoundsCatchUp = true;
       } else {
@@ -222,6 +222,7 @@ export function spawnTemplateAtTerrain(
       state.addComponent(eid, DistanceCull);
       DistanceCull.maxDistance[eid] = spec.maxDistance;
     }
+    writeSpawnVariation(state, eid, sample);
     mirrorPoseToRigidbody(state, eid);
     registerTerrainSpawned(state, eid, wy, spec.surfaceEpsilon, {
       needsBoundsCatchUp,
@@ -237,6 +238,7 @@ export function spawnTemplateAtTerrain(
     state.addComponent(eid, DistanceCull);
     DistanceCull.maxDistance[eid] = spec.maxDistance;
   }
+  writeSpawnVariation(state, eid, sample);
   mirrorPoseToRigidbody(state, eid);
   registerTerrainSpawned(state, eid, wy, spec.surfaceEpsilon, {
     needsBoundsCatchUp,

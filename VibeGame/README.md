@@ -75,6 +75,11 @@ vibegame run -- --host    # pass --host to Vite
 | `--skip-app-install`                       | Skip `bun install` in the app directory                 |
 | `--` (separator)                           | All arguments after `--` are forwarded to `bun run dev` |
 
+The `vibegame()` Vite plugin ignores heavy non-source trees (`graphify-out/`,
+pipeline workdirs, `public/assets/` blobs, caches, `.git`, …) so chokidar does
+not hit Linux `ENOSPC` (inotify watcher limit). Prefer that product default over
+raising `fs.inotify.max_user_watches`.
+
 ### `vibegame --version`
 
 Show the installed VibeGame version.
@@ -445,7 +450,7 @@ Handles:
 
 ## Plugin Reference
 
-VibeGame includes 44 plugins (29 registered by default, 15 opt-in) organized by category. See [`src/plugins/README.md`](src/plugins/README.md) for the full architecture and plugin creation template, and [`docs/PLUGINS.md`](docs/PLUGINS.md) for the complete list.
+VibeGame includes 45 plugins (29 registered by default, 16 opt-in) organized by category. See [`src/plugins/README.md`](src/plugins/README.md) for the full architecture and plugin creation template, and [`docs/PLUGINS.md`](docs/PLUGINS.md) for the complete list.
 
 ### Core
 
@@ -523,6 +528,7 @@ Not in `DefaultPlugins`. Add via the [builder API](#builder-api).
 | `i18n`              | Internationalization with locale auto-detection (`<I18nText>`)   |
 | `loading`           | Loading screen and asset progress tracking                       |
 | `debug`             | Debug overlays (wireframes, stats, post-FX toggle)               |
+| `profiler`          | Hierarchical frame profiler (per-system timings, `P` / `?profiler=1`) |
 | `combat`            | Combat system (factions, projectiles)                            |
 | `spawn-gate`        | Gated spawner triggers (`<SpawnGate>`)                           |
 | `rpg-core`          | RPG data containers and loot tables (`<RpgData>`, `<LootTable>`) |

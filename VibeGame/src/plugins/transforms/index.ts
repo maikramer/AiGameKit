@@ -5,6 +5,9 @@ export { TransformHierarchySystem } from './systems';
 export {
   syncEulerFromQuaternion,
   syncQuaternionFromEuler,
+  planarYawRadians,
+  setTransformYawRadians,
+  setTransformFacingXZ,
   copyTransform,
   setTransformIdentity,
   composeTransformMatrix,

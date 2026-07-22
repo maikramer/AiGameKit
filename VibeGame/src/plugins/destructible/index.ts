@@ -6,6 +6,8 @@ export {
   CRACK_STYLE_VERTICAL,
   CRACK_STYLE_VORONOI,
   DestructibleFxSystem,
+  findTreeSplitParts,
+  prepareTreeFallHalves,
   startHitShake,
   startRockShatter,
   startTreeFall,

@@ -40,6 +40,47 @@ export function syncQuaternionFromEuler(
   transform.rotW[entity] = _quatScratch.w;
 }
 
+const RAD2DEG = 180 / Math.PI;
+
+/**
+ * Planar yaw (radians) for a ground-plane direction.
+ * Convention: ``atan2(dx, dz)`` — local +Z forward at yaw 0 (Three.js / Quaternius).
+ */
+export function planarYawRadians(dx: number, dz: number): number {
+  return Math.atan2(dx, dz);
+}
+
+/**
+ * Set Transform yaw from radians. Writes ``eulerY`` in **degrees** (ECS contract)
+ * and syncs the quaternion so ``TransformHierarchySystem`` cannot clobber facing.
+ */
+export function setTransformYawRadians(
+  transform: TransformComponent,
+  entity: number,
+  yawRadians: number
+): void {
+  transform.eulerX[entity] = 0;
+  transform.eulerY[entity] = yawRadians * RAD2DEG;
+  transform.eulerZ[entity] = 0;
+  syncQuaternionFromEuler(transform, entity);
+  transform.dirty[entity] = 1;
+}
+
+/** Face along a planar direction (optional yaw offset in radians for asset forward). */
+export function setTransformFacingXZ(
+  transform: TransformComponent,
+  entity: number,
+  dx: number,
+  dz: number,
+  yawOffsetRadians = 0
+): void {
+  setTransformYawRadians(
+    transform,
+    entity,
+    planarYawRadians(dx, dz) + yawOffsetRadians
+  );
+}
+
 export function copyTransform(
   from: TransformComponent,
   to: TransformComponent,

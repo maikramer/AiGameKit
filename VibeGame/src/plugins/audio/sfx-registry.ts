@@ -2,6 +2,7 @@ import { logger } from '../../core/utils/logger';
 import type { State, System } from '../../core';
 import { AudioSource } from './components';
 import { playAudioEmitter } from './systems';
+import { defineSystem } from '../../core';
 
 const namedSfxRegistry = new WeakMap<State, Map<string, number>>();
 
@@ -32,7 +33,8 @@ export function playNamedSfx(state: State, name: string): void {
   playAudioEmitter(state, eid);
 }
 
-export const NamedSfxResolverSystem: System = {
+export const NamedSfxResolverSystem: System = defineSystem({
+  name: 'NamedSfxResolverSystem',
   group: 'setup',
   update(state: State) {
     const registry = getOrCreateRegistry(state);
@@ -42,4 +44,4 @@ export const NamedSfxResolverSystem: System = {
       }
     }
   },
-};
+});

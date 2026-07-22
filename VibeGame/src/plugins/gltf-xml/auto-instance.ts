@@ -2,15 +2,22 @@ import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { InstancedMesh2 } from '@three.ez/instanced-mesh';
 import type { State, System } from '../../core';
-import { Parent } from '../../core';
+import { defineSystem, Parent } from '../../core';
 import { loadGltfMasterTracked } from '../../extras/gltf-bridge';
 import { getSceneGeneration } from '../../extras/scene-generation';
 import { getScene, setupCsmMaterial } from '../rendering';
 import { maybePatchVegetationWindMaterial } from '../vegetation/wind';
+import {
+  findSpawnVariation,
+  INSTANCE_VARIATION_UNIFORM_SCHEMA,
+  maybePatchInstanceVariationMaterial,
+} from '../spawn-variation';
 import { DistanceCull } from '../rendering/components';
 import { BodyType, Rigidbody } from '../physics/components';
 import { Transform, WorldTransform } from '../transforms/components';
 import { registerGltfLocalYBounds } from './gltf-bounds-cache';
+
+const _instanceColor = new THREE.Color(1, 1, 1);
 
 /**
  * Auto-instancing for identical static GLBs (`<GLTFLoader instanced="true">`).
@@ -195,6 +202,25 @@ export function getInstancedPoolUrl(
   return undefined;
 }
 
+/** Aggregated GLB auto-instance pool counters for the profiler panel. */
+export function getInstancePoolStats(state: State): {
+  poolCount: number;
+  slotCount: number;
+  pendingCount: number;
+} {
+  const pools = poolsByState.get(state);
+  if (!pools || pools.size === 0) {
+    return { poolCount: 0, slotCount: 0, pendingCount: 0 };
+  }
+  let slotCount = 0;
+  let pendingCount = 0;
+  for (const pool of pools.values()) {
+    slotCount += pool.slotByEntity.size;
+    pendingCount += pool.pendingAdds.length;
+  }
+  return { poolCount: pools.size, slotCount, pendingCount };
+}
+
 /**
  * Detach the entity's instance slot from its pool (the pooled visual vanishes
  * immediately). Used to "de-instance" a prop that needs a private scene-graph
@@ -287,7 +313,41 @@ function writeSlotMatrix(
     _instanceMatrix.multiplyMatrices(entityMatrix, prim.local);
     prim.mesh.setMatrixAt(slot.id, _instanceMatrix);
   }
+  writeSlotVariation(state, pool, slot);
   pool.boundsDirty = true;
+}
+
+let warnedMissingVarUniforms = false;
+
+/** Apply per-instance colour + brightness/contrast from SpawnVariation. */
+function writeSlotVariation(
+  state: State,
+  pool: GltfInstancePool,
+  slot: InstanceSlotState
+): void {
+  if (!pool.primitives) return;
+  const v = findSpawnVariation(state, slot.entity);
+  const r = v?.colorR ?? 1;
+  const g = v?.colorG ?? 1;
+  const b = v?.colorB ?? 1;
+  const brightness = v?.brightness ?? 1;
+  const contrast = v?.contrast ?? 1;
+  _instanceColor.setRGB(r, g, b);
+  for (const prim of pool.primitives) {
+    prim.mesh.setColorAt(slot.id, _instanceColor);
+    try {
+      prim.mesh.setUniformAt(slot.id, 'uVarBrightness', brightness);
+      prim.mesh.setUniformAt(slot.id, 'uVarContrast', contrast);
+    } catch (err) {
+      if (!warnedMissingVarUniforms) {
+        warnedMissingVarUniforms = true;
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.warn(
+          `[gltf-instance] spawn variation uniforms unavailable on "${pool.url}": ${msg}`
+        );
+      }
+    }
+  }
 }
 
 function slotUsesWorld(state: State, eid: number): boolean {
@@ -439,6 +499,7 @@ function buildLevelPrimitives(
       : [mesh.material]) {
       setupCsmMaterial(state, mat);
       maybePatchVegetationWindMaterial(state, pool.lodUrls[0], mat);
+      maybePatchInstanceVariationMaterial(mat);
     }
     const instanced = new InstancedMesh2(mesh.geometry, mesh.material, {
       capacity: INITIAL_CAPACITY,
@@ -447,6 +508,9 @@ function buildLevelPrimitives(
     instanced.castShadow = mesh.castShadow;
     instanced.receiveShadow = mesh.receiveShadow;
     instanced.setFirstLODDistance(pool.near);
+    instanced.initUniformsPerInstance(INSTANCE_VARIATION_UNIFORM_SCHEMA);
+    // Force colorsTexture so the first compile includes USE_INSTANCING_COLOR_INDIRECT.
+    instanced.setColorAt(0, _instanceColor.setRGB(1, 1, 1));
     scene.add(instanced);
     primitives.push({ mesh: instanced, local: mesh.matrixWorld.clone() });
   });
@@ -490,6 +554,7 @@ function attachLodLevel(
         pool.lodUrls[level] ?? pool.lodUrls[0],
         mat
       );
+      maybePatchInstanceVariationMaterial(mat);
     }
     pool.primitives[i].mesh.addLOD(
       meshes[i].geometry,
@@ -591,7 +656,8 @@ const STATIC_SLOT_SCAN_INTERVAL = 4;
  * LOD selection and frustum culling per instance are handled internally by
  * `InstancedMesh2` every render — no camera-distance bookkeeping needed here.
  */
-export const GltfAutoInstanceSystem: System = {
+export const GltfAutoInstanceSystem: System = defineSystem({
+  name: 'GltfAutoInstanceSystem',
   group: 'draw',
 
   update(state: State) {
@@ -649,4 +715,4 @@ export const GltfAutoInstanceSystem: System = {
     instancedFlagByState.delete(state);
     instancedLodUrlsByState.delete(state);
   },
-};
+});

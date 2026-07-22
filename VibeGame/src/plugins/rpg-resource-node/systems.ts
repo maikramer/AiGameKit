@@ -1,4 +1,4 @@
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { emitEvent } from '../rpg-core/events';
 import { ResourceNode } from './components';
@@ -12,7 +12,8 @@ const depletedQuery = defineQuery([ResourceNode]);
  * {@link NODE_RESPAWNED} for each restored node. Runs in the `simulation`
  * group so it ticks every frame alongside gameplay logic.
  */
-export const ResourceNodeRespawnSystem: System = {
+export const ResourceNodeRespawnSystem: System = defineSystem({
+  name: 'ResourceNodeRespawnSystem',
   group: 'simulation',
 
   update(state: State) {
@@ -30,4 +31,4 @@ export const ResourceNodeRespawnSystem: System = {
       } satisfies NodeRespawnedPayload);
     }
   },
-};
+});

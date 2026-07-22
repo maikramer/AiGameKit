@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
-import type { State, System } from '../../core';
+import { defineSystem, type State, type System } from '../../core';
 import { getScene, setupCsmMaterial } from '../rendering';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import { spawnParticleBurst } from '../particles/utils';
@@ -34,7 +34,8 @@ interface ShakeFx {
 interface FallFx {
   pivot: THREE.Object3D;
   stump: THREE.Object3D;
-  topPlane: THREE.Plane;
+  /** Null when using pre-split Stump/Top meshes (no shader clipping). */
+  topPlane: THREE.Plane | null;
   materials: THREE.Material[];
   axis: THREE.Vector3;
   dirX: number;
@@ -338,11 +339,146 @@ function cloneVisualAtWorld(source: THREE.Object3D): THREE.Object3D {
   return copy;
 }
 
+function clonePartAtWorld(part: THREE.Object3D): THREE.Object3D {
+  part.updateWorldMatrix(true, true);
+  const copy = part.clone(true);
+  part.matrixWorld.decompose(copy.position, copy.quaternion, copy.scale);
+  return copy;
+}
+
+function cloneMaterialsForFade(root: THREE.Object3D): THREE.Material[] {
+  const out: THREE.Material[] = [];
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh !== true) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const cloned = mats.map((m) => {
+      const c = m.clone();
+      out.push(c);
+      return c;
+    });
+    mesh.material = Array.isArray(mesh.material) ? cloned : cloned[0];
+  });
+  return out;
+}
+
+function nameLooksLikeStump(name: string): boolean {
+  const n = name.toLowerCase();
+  return n === 'stump' || n.endsWith('_stump') || /(^|[^a-z])stump([^a-z]|$)/.test(n);
+}
+
+function nameLooksLikeTop(name: string): boolean {
+  const n = name.toLowerCase();
+  return (
+    n === 'top' ||
+    n.endsWith('_top') ||
+    n === 'canopy' ||
+    n.includes('canopy') ||
+    n.includes('crown') ||
+    /(^|[^a-z])top([^a-z]|$)/.test(n)
+  );
+}
+
+/**
+ * Locate pre-baked stump/top meshes from `text3d split-at-height`
+ * (names `Stump` / `Top`, also `*_stump`, canopy/crown).
+ */
+export function findTreeSplitParts(
+  root: THREE.Object3D
+): { stump: THREE.Object3D; top: THREE.Object3D } | null {
+  let stump: THREE.Object3D | undefined;
+  let top: THREE.Object3D | undefined;
+  root.traverse((obj) => {
+    if (obj === root) return;
+    if (!stump && nameLooksLikeStump(obj.name)) stump = obj;
+    if (!top && nameLooksLikeTop(obj.name)) top = obj;
+  });
+  if (stump && top && stump !== top) return { stump, top };
+  return null;
+}
+
+/** Build stump/top clones for a tree fall (mesh split or clipping fallback). */
+export function prepareTreeFallHalves(
+  source: THREE.Object3D,
+  cutHeight: number
+): {
+  stump: THREE.Object3D;
+  top: THREE.Object3D;
+  cutPoint: THREE.Vector3;
+  groundY: number;
+  topLength: number;
+  topPlane: THREE.Plane | null;
+  materials: THREE.Material[];
+} | null {
+  const parts = findTreeSplitParts(source);
+  if (parts) {
+    const stump = clonePartAtWorld(parts.stump);
+    const top = clonePartAtWorld(parts.top);
+    const materials = [
+      ...cloneMaterialsForFade(stump),
+      ...cloneMaterialsForFade(top),
+    ];
+    const stumpBox = new THREE.Box3().setFromObject(stump);
+    const topBox = new THREE.Box3().setFromObject(top);
+    if (stumpBox.isEmpty() || topBox.isEmpty()) return null;
+    const groundY = stumpBox.min.y;
+    const cutY = stumpBox.max.y;
+    const cutPoint = new THREE.Vector3(
+      (stumpBox.min.x + stumpBox.max.x) / 2,
+      cutY,
+      (stumpBox.min.z + stumpBox.max.z) / 2
+    );
+    return {
+      stump,
+      top,
+      cutPoint,
+      groundY,
+      topLength: Math.max(topBox.max.y - cutY, 0.5),
+      topPlane: null,
+      materials,
+    };
+  }
+
+  const top = cloneVisualAtWorld(source);
+  const stump = cloneVisualAtWorld(source);
+  const box = new THREE.Box3().setFromObject(top);
+  if (box.isEmpty()) return null;
+  const height = box.max.y - box.min.y;
+  const groundY = box.min.y;
+  const cutY = groundY + Math.min(Math.max(cutHeight, 0.2), height * 0.4);
+  const cutPoint = new THREE.Vector3(
+    (box.min.x + box.max.x) / 2,
+    cutY,
+    (box.min.z + box.max.z) / 2
+  );
+  const stumpPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), cutY);
+  applyClipPlane(stump, stumpPlane);
+  const topPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -cutY);
+  const topMats = applyClipPlane(top, topPlane);
+  const stumpMats: THREE.Material[] = [];
+  stump.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh !== true) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    stumpMats.push(...mats);
+  });
+  return {
+    stump,
+    top,
+    cutPoint,
+    groundY,
+    topLength: Math.max(height - (cutY - groundY), 0.5),
+    topPlane,
+    materials: [...topMats, ...stumpMats],
+  };
+}
+
 /**
  * Felled-tree effect: split the visual at `cutHeight`, leave a stump and tip
  * the top half over in direction (dirX, dirZ), with dust on impact and a
- * fade-out. Returns false (caller falls back to the plain burst) when the
- * entity has no visual group or no scene.
+ * fade-out. Prefers pre-split `Stump`/`Top` meshes from the GLB; falls back to
+ * clipping planes for legacy single-mesh trees. Returns false (caller falls
+ * back to the plain burst) when the entity has no visual group or no scene.
  */
 export function startTreeFall(
   state: State,
@@ -365,27 +501,11 @@ export function startTreeFall(
     dirZ /= len;
   }
 
-  const top = cloneVisualAtWorld(source);
-  const stump = cloneVisualAtWorld(source);
+  const halves = prepareTreeFallHalves(source, cutHeight);
+  if (!halves) return false;
 
-  const box = new THREE.Box3().setFromObject(top);
-  if (box.isEmpty()) return false;
-  const height = box.max.y - box.min.y;
-  const groundY = box.min.y;
-  const cutY = groundY + Math.min(Math.max(cutHeight, 0.2), height * 0.4);
-  const cutPoint = new THREE.Vector3(
-    (box.min.x + box.max.x) / 2,
-    cutY,
-    (box.min.z + box.max.z) / 2
-  );
-
-  // Stump keeps y <= cutY (fixed world plane); the top keeps y >= cutY via a
-  // plane that is re-derived every frame from the pivot rotation so the cut
-  // stays glued to the falling piece.
-  const stumpPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), cutY);
-  applyClipPlane(stump, stumpPlane);
-  const topPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -cutY);
-  const topMats = applyClipPlane(top, topPlane);
+  const { stump, top, cutPoint, groundY, topLength, topPlane, materials } =
+    halves;
 
   const pivot = new THREE.Object3D();
   pivot.position.copy(cutPoint);
@@ -394,24 +514,16 @@ export function startTreeFall(
   scene.add(pivot);
   scene.add(stump);
 
-  const stumpMats: THREE.Material[] = [];
-  stump.traverse((obj) => {
-    const mesh = obj as THREE.Mesh;
-    if (mesh.isMesh !== true) return;
-    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    stumpMats.push(...mats);
-  });
-
   getFxStore(state).falls.push({
     pivot,
     stump,
     topPlane,
-    materials: [...topMats, ...stumpMats],
+    materials,
     axis: new THREE.Vector3(dirZ, 0, -dirX).normalize(),
     dirX,
     dirZ,
     cutPoint,
-    topLength: Math.max(height - (cutY - groundY), 0.5),
+    topLength,
     groundY,
     elapsed: 0,
     impactDone: false,
@@ -658,11 +770,13 @@ function updateFall(state: State, fx: FallFx, dt: number): boolean {
     });
   }
 
-  // keep the cut plane glued to the rotating top half
-  _q.copy(fx.pivot.quaternion);
-  _n.set(0, 1, 0).applyQuaternion(_q);
-  fx.topPlane.normal.copy(_n);
-  fx.topPlane.constant = -_n.dot(fx.cutPoint);
+  // keep the cut plane glued to the rotating top half (clipping fallback only)
+  if (fx.topPlane) {
+    _q.copy(fx.pivot.quaternion);
+    _n.set(0, 1, 0).applyQuaternion(_q);
+    fx.topPlane.normal.copy(_n);
+    fx.topPlane.constant = -_n.dot(fx.cutPoint);
+  }
 
   const fadeStart = FALL_DURATION + FALL_HOLD;
   if (t > fadeStart) {
@@ -784,7 +898,8 @@ function updateShatter(fx: ShatterFx, dt: number): boolean {
   return true;
 }
 
-export const DestructibleFxSystem: System = {
+export const DestructibleFxSystem: System = defineSystem({
+  name: 'DestructibleFxSystem',
   group: 'draw',
 
   update(state: State) {
@@ -821,4 +936,4 @@ export const DestructibleFxSystem: System = {
       if (!updateShatter(store.shatters[i], dt)) store.shatters.splice(i, 1);
     }
   },
-};
+});

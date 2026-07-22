@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { defineQuery, type System } from '../../core';
+import { defineSystem, defineQuery, type System } from '../../core';
 import { castBvhRay } from '../bvh/utils';
 import { PhysicsInterpolationSystem } from '../physics/systems';
 import { RaycastHit, RaycastSource } from './components';
@@ -12,7 +12,8 @@ const _dir = new THREE.Vector3();
 const _rapierDir = { x: 0, y: 0, z: 0 };
 
 /** Limpa resultados antes do resto do frame (setup corre primeiro). */
-export const RaycastResetSystem: System = {
+export const RaycastResetSystem: System = defineSystem({
+  name: 'RaycastResetSystem',
   group: 'setup',
   first: true,
   update: (state) => {
@@ -20,9 +21,10 @@ export const RaycastResetSystem: System = {
       RaycastHit.hitValid[eid] = 0;
     }
   },
-};
+});
 
-export const RaycastSystem: System = {
+export const RaycastSystem: System = defineSystem({
+  name: 'RaycastSystem',
   group: 'simulation',
   after: [PhysicsInterpolationSystem],
   update: (state) => {
@@ -81,4 +83,4 @@ export const RaycastSystem: System = {
       RaycastHit.hitPointZ[eid] = hit.point.z;
     }
   },
-};
+});

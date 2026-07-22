@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Text } from 'troika-three-text';
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { getScene, threeCameras, MainCamera } from '../rendering';
 import { CameraSyncSystem } from '../rendering/systems';
@@ -70,7 +70,8 @@ function disposeTextObject(state: State, entity: number, obj: Text): void {
  * and is destroyed at `duration`. Screen-space entries are skipped (handled
  * by FloatingTextScreenUpdateSystem).
  */
-export const FloatingTextUpdateSystem: System = {
+export const FloatingTextUpdateSystem: System = defineSystem({
+  name: 'FloatingTextUpdateSystem',
   group: 'draw',
   after: [CameraSyncSystem],
 
@@ -142,7 +143,7 @@ export const FloatingTextUpdateSystem: System = {
     objects.clear();
     textObjectsByState.delete(state);
   },
-};
+});
 
 /**
  * Screen-space floating text (space === 1): DOM spans recycled via the
@@ -150,7 +151,8 @@ export const FloatingTextUpdateSystem: System = {
  * on first use, animates rise + drift + scale-pop + fade, then releases the
  * span back to the pool when the entity is destroyed.
  */
-export const FloatingTextScreenUpdateSystem: System = {
+export const FloatingTextScreenUpdateSystem: System = defineSystem({
+  name: 'FloatingTextScreenUpdateSystem',
   group: 'late',
 
   update(state: State) {
@@ -184,4 +186,4 @@ export const FloatingTextScreenUpdateSystem: System = {
   dispose(state: State) {
     disposeScreenFloatPool(state);
   },
-};
+});

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { Transform } from '../transforms/components';
 import { getTerrainContext } from '../terrain/utils';
@@ -323,7 +323,8 @@ export function makeLakeGeometry(
  * rim, carves the bowl into the shared sampler, rebuilds terrain derivatives
  * (chunk meshes, physics heightfields, BVH) and spawns the water surface.
  */
-export const LakeApplySystem: System = {
+export const LakeApplySystem: System = defineSystem({
+  name: 'LakeApplySystem',
   // 'setup' runs before the spawner's fixed-group placement pass: lakes must
   // carve in the same frame the heightmap lands, or the first spawn batch
   // samples pre-carve heights and plants trees inside the water.
@@ -395,10 +396,11 @@ export const LakeApplySystem: System = {
       }
     }
   },
-};
+});
 
 /** Scrolls the ripple time uniform on every live water surface. */
-export const WaterAnimSystem: System = {
+export const WaterAnimSystem: System = defineSystem({
+  name: 'WaterAnimSystem',
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
@@ -409,7 +411,7 @@ export const WaterAnimSystem: System = {
         state.time.elapsed;
     }
   },
-};
+});
 
 const riverQuery = defineQuery([River, Transform]);
 
@@ -419,7 +421,8 @@ const riverQuery = defineQuery([River, Transform]);
  * {@link applyWaterShape}. The path comes from the side-channel (set by the
  * River recipe parser); width/depth/etc. from the component.
  */
-export const RiverApplySystem: System = {
+export const RiverApplySystem: System = defineSystem({
+  name: 'RiverApplySystem',
   group: 'setup',
   after: [TerrainPadApplySystem],
   update(state: State) {
@@ -466,4 +469,4 @@ export const RiverApplySystem: System = {
       if (applied) River.applied[eid] = 1;
     }
   },
-};
+});

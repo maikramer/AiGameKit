@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { State, System } from '../../core';
+import { defineSystem, type State, type System } from '../../core';
 import { TransformHierarchySystem } from '../transforms';
 import { Transform, WorldTransform } from '../transforms/components';
 import { GltfPending } from './components';
@@ -121,7 +121,8 @@ function applyWorldLikeTransformToGroup(
   }
 }
 
-export const GltfSceneSyncSystem: System = {
+export const GltfSceneSyncSystem: System = defineSystem({
+  name: 'GltfSceneSyncSystem',
   group: 'simulation',
   after: [TransformHierarchySystem],
   update(state) {
@@ -137,4 +138,4 @@ export const GltfSceneSyncSystem: System = {
       applyWorldLikeTransformToGroup(group, eid, state);
     });
   },
-};
+});

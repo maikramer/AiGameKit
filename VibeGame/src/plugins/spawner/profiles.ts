@@ -24,6 +24,9 @@ export interface GroupSpawnDefaults {
   randomYaw: boolean;
   scaleMin: number;
   scaleMax: number;
+  /** Per-axis proportion multiplier range (after uniform scale). `1`/`1` = none. */
+  scaleAxisMin: number;
+  scaleAxisMax: number;
   surfaceEpsilon: number;
   surfaceEpsilonAuto: boolean;
   /**
@@ -67,6 +70,8 @@ const LEGACY: GroupSpawnDefaults = {
   randomYaw: false,
   scaleMin: 1,
   scaleMax: 1,
+  scaleAxisMin: 1,
+  scaleAxisMax: 1,
   surfaceEpsilon: 0.75,
   surfaceEpsilonAuto: false,
   maxSlopeDeg: 45,
@@ -88,8 +93,11 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     groundAlign: 'aabb',
     baseYOffset: 0.02,
     randomYaw: true,
-    scaleMin: 1.6,
-    scaleMax: 2.2,
+    // Authored GLBs are world-sized; mild uniform + per-axis proportion jitter.
+    scaleMin: 0.7,
+    scaleMax: 1.4,
+    scaleAxisMin: 0.9,
+    scaleAxisMax: 1.1,
     surfaceEpsilon: 0.75,
     surfaceEpsilonAuto: false,
     maxSlopeDeg: 45,
@@ -108,8 +116,11 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     groundAlign: 'aabb',
     baseYOffset: 0.02,
     randomYaw: true,
-    scaleMin: 0.9,
-    scaleMax: 1.3,
+    // Grass/flowers read larger than authored GLB; same axis jitter as trees.
+    scaleMin: 1.4,
+    scaleMax: 2.8,
+    scaleAxisMin: 0.9,
+    scaleAxisMax: 1.1,
     surfaceEpsilon: 0.75,
     surfaceEpsilonAuto: false,
     maxSlopeDeg: 45,
@@ -130,6 +141,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     randomYaw: true,
     scaleMin: 1,
     scaleMax: 1,
+    scaleAxisMin: 1,
+    scaleAxisMax: 1,
     surfaceEpsilon: 0.75,
     surfaceEpsilonAuto: false,
     maxSlopeDeg: 45,
@@ -148,8 +161,10 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     groundAlign: 'none',
     baseYOffset: 0.35,
     randomYaw: true,
-    scaleMin: 0.85,
-    scaleMax: 1.1,
+    scaleMin: 1,
+    scaleMax: 1,
+    scaleAxisMin: 1,
+    scaleAxisMax: 1,
     surfaceEpsilon: 0.75,
     surfaceEpsilonAuto: false,
     maxSlopeDeg: 45,
@@ -170,6 +185,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     randomYaw: false,
     scaleMin: 1,
     scaleMax: 1,
+    scaleAxisMin: 1,
+    scaleAxisMax: 1,
     surfaceEpsilon: 0.75,
     surfaceEpsilonAuto: false,
     maxSlopeDeg: 90,
@@ -420,6 +437,8 @@ export function resolveGroupSpawnFields(
     randomYaw: optBool(attrs['random-yaw'], p.randomYaw),
     scaleMin: optNumber(attrs['scale-min'], p.scaleMin),
     scaleMax: optNumber(attrs['scale-max'], p.scaleMax),
+    scaleAxisMin: optNumber(attrs['scale-axis-min'], p.scaleAxisMin),
+    scaleAxisMax: optNumber(attrs['scale-axis-max'], p.scaleAxisMax),
     surfaceEpsilon: optNumber(attrs['surface-epsilon'], p.surfaceEpsilon),
     surfaceEpsilonAuto: optBool(
       attrs['surface-epsilon-auto'],

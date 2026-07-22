@@ -21,6 +21,7 @@ import {
 import { clearComponentFields, setComponentFields } from './utils';
 import { Parent } from './components';
 import { TIME_CONSTANTS } from './constants';
+import { noteSystemRegistration } from '../profiler';
 import { Scheduler } from './scheduler';
 import { Time as TimeSingleton } from './time';
 import type {
@@ -134,6 +135,7 @@ export class State {
   registerSystem(system: System): void {
     if (!this.systems.has(system)) {
       this.systems.add(system);
+      noteSystemRegistration(system);
     }
   }
 

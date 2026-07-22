@@ -29,7 +29,8 @@ import {
 
 const hostilesQuery = defineQuery([Health, FactionComponent]);
 
-const DETECT_GRACE = 0;
+/** Brief telegraph before idle→chase so packs don't instantly rush. */
+const DETECT_GRACE = 0.28;
 const LUNGE_HIT_FACTOR = 1.5;
 const LUNGE_BURST_SPEED = 6.0;
 // Face-to-face combat ring: the creature approaches to RING_DESIRED and backs
@@ -152,6 +153,28 @@ function applyLungeMovement(
   Transform.dirty[eid] = 1;
 }
 
+/** Re-enable nav after an aborted/finished lunge so steering can resume. */
+function resetLungeState(
+  state: State,
+  eid: number,
+  inst: AiInstanceState
+): void {
+  if (inst.lungePhase === 'ready') return;
+  inst.lungePhase = 'ready';
+  inst.lungeTimer = 0;
+  if (state.hasComponent(eid, NavMeshAgent)) {
+    NavMeshAgent.enabled[eid] = 1;
+  }
+}
+
+/** Walk back to spawn instead of idling wherever the chase ended. */
+function beginReturnHome(inst: AiInstanceState): void {
+  inst.hovering = false;
+  inst.wanderX = inst.originX;
+  inst.wanderZ = inst.originZ;
+  inst.idleTimer = 2.5 + aiRandom() * 1.5;
+}
+
 /**
  * Advance the melee AI FSM one frame for `eid`. Reads/writes {@link Transform},
  * {@link AiStateComponent} and {@link AiInstanceState}; applies damage via the
@@ -184,9 +207,9 @@ export function runMeleeAiFrame(
     inst.originSet = true;
     comp.leash[eid] = config.leashRadius;
     // Steering is navmesh-driven: ensure the entity carries a NavMeshAgent so
-    // NavMeshAgentSystem creates a crowd agent and writes its position/heading
-    // back into Transform each frame. Without this the FSM had no mover (the
-    // old MeleeAi recipe omitted the agent → enemies never moved).
+    // NavMeshAgentSystem creates a crowd agent and writes its position (XZ)
+    // back into Transform each frame. Facing/yaw is owned by presentation
+    // (``NavMeshAgent.faceVelocity=0``) or by navmesh when faceVelocity=1.
     if (!state.hasComponent(eid, NavMeshAgent)) {
       state.addComponent(eid, NavMeshAgent);
     }
@@ -202,6 +225,7 @@ export function runMeleeAiFrame(
       removeAgent(state, eid);
       NavMeshAgent.enabled[eid] = 0;
     }
+    resetLungeState(state, eid, inst);
     comp.mode[eid] = AI_MODE_DEAD;
     comp.target[eid] = 0;
     return;
@@ -214,9 +238,39 @@ export function runMeleeAiFrame(
       : acquireTarget(state, eid, config);
   comp.target[eid] = targetEid;
 
+  // In-flight lunge must always tick — the outer range checks used to early-
+  // return while mode stayed LUNGE (jump clip clamped forever, nav disabled).
+  if (inst.lungePhase !== 'ready') {
+    if (
+      targetEid > 0 &&
+      withinLeash(
+        inst,
+        Transform.posX[targetEid],
+        Transform.posZ[targetEid],
+        config.leashRadius
+      )
+    ) {
+      const dist = distanceXZ(
+        Transform.posX[eid],
+        Transform.posZ[eid],
+        Transform.posX[targetEid],
+        Transform.posZ[targetEid]
+      );
+      tickAttack(state, eid, inst, config, targetEid, dist, dt);
+    } else {
+      resetLungeState(state, eid, inst);
+      comp.mode[eid] = AI_MODE_IDLE;
+      comp.target[eid] = 0;
+      beginReturnHome(inst);
+      tickIdle(state, eid, inst, config, dt);
+    }
+    return;
+  }
+
   const mode = comp.mode[eid];
 
   if (targetEid <= 0) {
+    beginReturnHome(inst);
     tickIdle(state, eid, inst, config, dt);
     comp.mode[eid] = AI_MODE_IDLE;
     return;
@@ -229,6 +283,7 @@ export function runMeleeAiFrame(
   if (!withinLeash(inst, tx, tz, config.leashRadius)) {
     comp.mode[eid] = AI_MODE_IDLE;
     comp.target[eid] = 0;
+    beginReturnHome(inst);
     tickIdle(state, eid, inst, config, dt);
     return;
   }
@@ -252,6 +307,9 @@ export function runMeleeAiFrame(
           comp.mode[eid] = AI_MODE_CHASE;
         }
       }
+    } else if (mode === AI_MODE_LUNGE || mode === AI_MODE_ATTACK) {
+      // Target stepped out of melee but is still in sight — resume chase.
+      comp.mode[eid] = AI_MODE_CHASE;
     }
     if (comp.mode[eid] !== AI_MODE_CHASE) {
       return;
@@ -260,8 +318,10 @@ export function runMeleeAiFrame(
     return;
   }
 
+  // Lost the target (out of detect): drop aggro and walk home cleanly.
   comp.mode[eid] = AI_MODE_IDLE;
   comp.target[eid] = 0;
+  beginReturnHome(inst);
   tickIdle(state, eid, inst, config, dt);
 }
 
@@ -331,17 +391,21 @@ function steerCombat(
     tz = z - dz * k;
   }
 
-  // Tangential orbit (strafe / kite). Only while CLOSING THE GAP — never in
-  // melee range, so the enemy plants and commits to its attack instead of
-  // sliding circles around the player (which makes it impossible to hit).
-  if (allowStrafe && (config.strafe || lowHp) && dist > desired * 1.15) {
+  // Tangential orbit while closing / kiting. Light strafe is also allowed in
+  // the attack ring when configured so packs circle between swings.
+  const canOrbit =
+    allowStrafe &&
+    (config.strafe || lowHp) &&
+    (dist > desired * 1.05 || (config.strafe && dist <= desired * 1.2));
+  if (canOrbit) {
     inst.strafeTimer -= dt;
     if (inst.strafeTimer <= 0) {
-      inst.strafeTimer = 1.5 + aiRandom() * 1.5;
+      inst.strafeTimer = 1.2 + aiRandom() * 1.4;
       inst.strafeDir = -inst.strafeDir;
     }
-    tx += -uz * inst.strafeDir * 0.8;
-    tz += ux * inst.strafeDir * 0.8;
+    const orbit = lowHp || dist > desired * 1.15 ? 0.9 : 0.55;
+    tx += -uz * inst.strafeDir * orbit;
+    tz += ux * inst.strafeDir * orbit;
   }
 
   // Peer separation: nudge away from other living agents so packs don't overlap.
@@ -405,7 +469,7 @@ function tickAttack(
 
   if (inst.lungePhase === 'ready') {
     comp.mode[eid] = AI_MODE_ATTACK;
-    // Hold the combat ring between swings (back off if the player closes in).
+    // Hold the combat ring between swings; strafe when the preset asks for it.
     steerCombat(
       state,
       eid,
@@ -414,7 +478,7 @@ function tickAttack(
       config,
       chaseSpeedFor(eid, config),
       dt,
-      false
+      !!config.strafe
     );
     comp.cooldown[eid] = Math.max(0, comp.cooldown[eid] - dt);
     if (comp.cooldown[eid] <= 0) {
@@ -434,9 +498,9 @@ function tickAttack(
     return;
   }
 
-  comp.mode[eid] = AI_MODE_LUNGE;
-
   if (inst.lungePhase === 'windup') {
+    // Keep ATTACK so presentation plays the attack/idle clip, not jump.
+    comp.mode[eid] = AI_MODE_ATTACK;
     inst.lungeTimer -= dt;
     if (inst.lungeTimer <= 0) {
       inst.lungePhase = 'lunge';
@@ -446,6 +510,7 @@ function tickAttack(
   }
 
   if (inst.lungePhase === 'lunge') {
+    comp.mode[eid] = AI_MODE_LUNGE;
     inst.lungeTimer -= dt;
     applyLungeMovement(eid, inst, config, targetEid, dt);
     if (inst.lungeTimer <= 0) {
@@ -461,6 +526,8 @@ function tickAttack(
     return;
   }
 
+  // Recovery: plant / face, then re-arm.
+  comp.mode[eid] = AI_MODE_ATTACK;
   inst.lungeTimer -= dt;
   if (inst.lungeTimer <= 0) {
     inst.lungePhase = 'ready';

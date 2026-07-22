@@ -4,6 +4,9 @@ import { join, relative } from 'node:path';
 import {
   CombatPlugin,
   DebugPlugin,
+  ProfilerPlugin,
+  enableProfiler,
+  getProfilerTop,
   Health,
   damageHealth,
   healHealth,
@@ -97,6 +100,12 @@ describe('Public API surface — promoted symbols', () => {
     expect(typeof registerDebugAction).toBe('function');
     expect(typeof registerDebugVar).toBe('function');
     expect(typeof getDebugRegistry).toBe('function');
+  });
+
+  it('exports the profiler plugin and core helpers', () => {
+    expect(ProfilerPlugin).toBeDefined();
+    expect(typeof enableProfiler).toBe('function');
+    expect(typeof getProfilerTop).toBe('function');
   });
 
   it('exports navmesh agent helpers', () => {

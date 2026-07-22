@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { getRenderingContext } from '../rendering';
 import { Transform } from '../transforms/components';
@@ -136,7 +136,8 @@ const waderQuery = defineQuery([Transform, CharacterMovement]);
  * Runs in the fixed group before the character controller consumes
  * desired velocities and waterDrag.
  */
-export const WaterInteractionSystem: System = {
+export const WaterInteractionSystem: System = defineSystem({
+  name: 'WaterInteractionSystem',
   group: 'fixed',
   before: [CharacterMovementSystem],
   update(state: State) {
@@ -225,10 +226,11 @@ export const WaterInteractionSystem: System = {
       st.prevY = y;
     }
   },
-};
+});
 
 /** Expands and fades the live ripple rings; reclaims dead ones. */
-export const WaterRippleFxSystem: System = {
+export const WaterRippleFxSystem: System = defineSystem({
+  name: 'WaterRippleFxSystem',
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
@@ -269,4 +271,4 @@ export const WaterRippleFxSystem: System = {
     ctx.ringGeometry = null;
     FX.delete(state);
   },
-};
+});

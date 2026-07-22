@@ -47,7 +47,7 @@ export interface QualityTierPreset {
  *  - High trims the heaviest single-pass costs (SSAO half-res, point-shadow
  *    throttle, leaner god-rays) while keeping the look.
  *  - Medium drops water mirror + DPR, softens DoF/god-rays further.
- *  - Low is a survival tier: DPR 0.75, mirror off, DoF off, SSAO intensity 0.
+ *  - Low is a survival tier: DPR ~0.55, mirror off, DoF off, SSAO intensity 0.
  */
 export const TIER_PRESETS: readonly QualityTierPreset[] = [
   // Tier 0 — Max
@@ -85,7 +85,7 @@ export const TIER_PRESETS: readonly QualityTierPreset[] = [
   },
   // Tier 3 — Low
   {
-    pixelRatioScale: 0.75,
+    pixelRatioScale: 0.55,
     ssaoHalfResolution: true,
     ssaoIntensityScale: 0.0,
     bloomMipmapBlur: false,

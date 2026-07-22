@@ -1,6 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
-import { defineQuery, type System } from '../../core';
+import { defineSystem, defineQuery, type System } from '../../core';
 import { Rigidbody, BodyType, Collider } from '../physics/components';
 import { syncBodyQuaternionFromEuler } from '../physics/utils';
 import { Transform } from '../transforms/components';
@@ -21,7 +21,8 @@ const _offsetLocal = new THREE.Vector3();
 
 const MIN_HALF_DIM = 0.05;
 
-export const GltfDynamicPhysicsSystem: System = {
+export const GltfDynamicPhysicsSystem: System = defineSystem({
+  name: 'GltfDynamicPhysicsSystem',
   group: 'setup',
   after: [GltfXmlLoadSystem],
   update(state) {
@@ -139,4 +140,4 @@ export const GltfDynamicPhysicsSystem: System = {
       GltfPhysicsPending.ready[eid] = 1;
     }
   },
-};
+});

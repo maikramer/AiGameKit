@@ -2,6 +2,12 @@ import { logger } from './core/utils/logger';
 import type { BuilderOptions } from './builder';
 import type { State } from './core';
 import { TIME_CONSTANTS, XMLParser, XMLValueParser } from './core';
+import {
+  beginExternalProfilerFrame,
+  endExternalProfilerFrame,
+  isProfilerEnabled,
+  profileRenderPass,
+} from './core/profiler';
 import { parseXMLToEntities } from './core/recipes/parser';
 import {
   RenderContext,
@@ -109,23 +115,50 @@ export class GameRuntime {
               ? TIME_CONSTANTS.MAX_FRAME_DELTA
               : deltaTime;
 
+          const profiling = isProfilerEnabled();
+          if (profiling) beginExternalProfilerFrame();
+
           this.state.step(clamped);
 
           const scene = getScene(this.state);
-          if (!scene) return;
+          if (!scene) {
+            if (profiling) endExternalProfilerFrame(clamped);
+            return;
+          }
 
           const cameraEntities = mainCameraQuery(this.state.world);
-          if (cameraEntities.length === 0) return;
+          if (cameraEntities.length === 0) {
+            if (profiling) endExternalProfilerFrame(clamped);
+            return;
+          }
 
           const camera = threeCameras.get(cameraEntities[0]);
-          if (!camera) return;
+          if (!camera) {
+            if (profiling) endExternalProfilerFrame(clamped);
+            return;
+          }
 
-          if (context.postProcessing) {
-            context.postProcessing.render();
+          const draw = () => {
+            if (context.postProcessing) {
+              context.postProcessing.render();
+            } else {
+              renderer.render(scene, camera);
+            }
+          };
+          if (profiling) {
+            profileRenderPass(draw);
+            endExternalProfilerFrame(clamped);
           } else {
-            renderer.render(scene, camera);
+            draw();
           }
         } catch (e) {
+          if (isProfilerEnabled()) {
+            try {
+              endExternalProfilerFrame(0);
+            } catch {
+              // ignore profiler teardown errors during loop failures
+            }
+          }
           const now = currentTime as number;
           if (now - lastErrorLogTime >= 1000) {
             logger.error('[VibeGame] Animation loop error:', e);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import CameraControls from 'camera-controls';
-import { defineQuery, type System } from '../../core';
+import { defineSystem, defineQuery, type System } from '../../core';
 import { Transform, WorldTransform } from '../transforms';
 import { InputState } from '../input';
 import { threeCameras } from '../rendering/utils';
@@ -15,7 +15,8 @@ const orbitCameraQuery = defineQuery([OrbitCamera, Transform]);
 const orbitCameraInputQuery = defineQuery([OrbitCamera]);
 const inputStateQuery = defineQuery([InputState]);
 
-export const OrbitCameraSetupSystem: System = {
+export const OrbitCameraSetupSystem: System = defineSystem({
+  name: 'OrbitCameraSetupSystem',
   group: 'setup',
   update: (state) => {
     const cameraEntities = orbitCameraQuery(state.world);
@@ -43,7 +44,7 @@ export const OrbitCameraSetupSystem: System = {
       }
     }
   },
-};
+});
 
 /**
  * Reads pointer/scroll intent from the ECS InputState (populated by the input
@@ -52,7 +53,8 @@ export const OrbitCameraSetupSystem: System = {
  * mode (no domElement → no native drag), so there is zero DOM-listener
  * conflict with the input plugin.
  */
-export const OrbitCameraInputSystem: System = {
+export const OrbitCameraInputSystem: System = defineSystem({
+  name: 'OrbitCameraInputSystem',
   group: 'simulation',
   update: (state) => {
     const cameraEntities = orbitCameraInputQuery(state.world);
@@ -97,7 +99,7 @@ export const OrbitCameraInputSystem: System = {
       }
     }
   },
-};
+});
 
 // Module-scope scratch: OrbitCameraSystem runs once per frame and is not
 // reentrant, so reusing these avoids per-camera allocations.
@@ -110,7 +112,8 @@ const _camPos = new THREE.Vector3();
  * component fields (read by e.g. player yaw resolution) and the Transform
  * (so the rendering plugin's CameraSyncSystem stays consistent).
  */
-export const OrbitCameraSystem: System = {
+export const OrbitCameraSystem: System = defineSystem({
+  name: 'OrbitCameraSystem',
   group: 'draw',
   update: (state) => {
     const cameraEntities = orbitCameraQuery(state.world);
@@ -178,7 +181,7 @@ export const OrbitCameraSystem: System = {
       Transform.dirty[cameraEntity] = 1;
     }
   },
-};
+});
 
 /**
  * Construct a CameraControls instance for an orbit-camera entity, configured

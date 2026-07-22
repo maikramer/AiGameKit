@@ -1,4 +1,4 @@
-import type { System } from '../../core';
+import { defineSystem, type System } from '../../core';
 import { disposeBvhContext } from './utils';
 import { syncStaticMeshBvh } from './static-meshes';
 import { syncTerrainBvh } from './terrain';
@@ -8,14 +8,16 @@ import { syncTerrainBvh } from './terrain';
 // cheap. Static GLTF sync is similar but also handles rigidbody Fixed→Dynamic
 // transitions and entity destruction, so it polls each simulation tick.
 
-export const BvhTerrainSyncSystem: System = {
+export const BvhTerrainSyncSystem: System = defineSystem({
+  name: 'BvhTerrainSyncSystem',
   group: 'simulation',
   update: (state) => {
     syncTerrainBvh(state);
   },
-};
+});
 
-export const BvhStaticMeshSyncSystem: System = {
+export const BvhStaticMeshSyncSystem: System = defineSystem({
+  name: 'BvhStaticMeshSyncSystem',
   group: 'simulation',
   after: [BvhTerrainSyncSystem],
   update: (state) => {
@@ -26,4 +28,4 @@ export const BvhStaticMeshSyncSystem: System = {
   dispose: (state) => {
     disposeBvhContext(state);
   },
-};
+});

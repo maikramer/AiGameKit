@@ -22,4 +22,10 @@ export const NavMeshAgent = {
   targetZ: new Float32Array(MAX_ENTITIES),
   hasTarget: new Uint8Array(MAX_ENTITIES),
   enabled: new Uint8Array(MAX_ENTITIES).fill(1),
+  /**
+   * When 1, ``NavMeshAgentSystem`` writes planar yaw from crowd velocity.
+   * Set to 0 when presentation/AI owns facing (melee creatures: chase=velocity,
+   * attack=face target) so two writers do not fight over ``Transform.eulerY``.
+   */
+  faceVelocity: new Uint8Array(MAX_ENTITIES).fill(1),
 } as const;

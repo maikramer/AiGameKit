@@ -1,6 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { getRenderingContext } from '../rendering';
 import { EquirectSky, getEquirectSkyUrl } from './components';
 
@@ -71,7 +71,8 @@ async function applyEquirectSky(
  * a live renderer). Applies it as `scene.background` (visual sky dome) and
  * PMREM-filters it into `scene.environment` for sky-accurate IBL reflections.
  */
-export const EquirectSkyLoadSystem: System = {
+export const EquirectSkyLoadSystem: System = defineSystem({
+  name: 'EquirectSkyLoadSystem',
   group: 'simulation',
   update(state: State) {
     if (state.headless) return;
@@ -130,4 +131,4 @@ export const EquirectSkyLoadSystem: System = {
       EquirectSky.applied[eid] = 0;
     }
   },
-};
+});

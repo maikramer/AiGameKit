@@ -2,7 +2,7 @@ import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { CSM } from 'three/examples/jsm/csm/CSM.js';
 import type { State } from '../../core';
-import { defineQueryLive, type System } from '../../core';
+import { defineSystem, defineQueryLive, type System } from '../../core';
 import { WorldTransform } from '../transforms';
 import { ThirdPersonCamera } from '../player-controller/components';
 import {
@@ -322,7 +322,8 @@ function disposeSceneGraph(root: THREE.Object3D): void {
   });
 }
 
-export const MeshInstanceSystem: System = {
+export const MeshInstanceSystem: System = defineSystem({
+  name: 'MeshInstanceSystem',
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
@@ -375,7 +376,7 @@ export const MeshInstanceSystem: System = {
       }
     }
   },
-};
+});
 
 /** How many frames between instance-bounds recomputes. Balances cull accuracy
  *  against the O(instances) cost of computeBoundingSphere. Every ~0.13s at
@@ -412,7 +413,8 @@ function applyDistanceCullCastShadow(
   });
 }
 
-export const DistanceCullSystem: System = {
+export const DistanceCullSystem: System = defineSystem({
+  name: 'DistanceCullSystem',
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
@@ -464,7 +466,7 @@ export const DistanceCullSystem: System = {
       }
     }
   },
-};
+});
 
 interface CsmCache {
   cascades: number;
@@ -632,7 +634,8 @@ function updateCsmDirectionalLight(
   csm.update();
 }
 
-export const LightSyncSystem: System = {
+export const LightSyncSystem: System = defineSystem({
+  name: 'LightSyncSystem',
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
@@ -867,9 +870,10 @@ export const LightSyncSystem: System = {
     // the scene with a sun no `DirectionalLight` entity asked for anymore).
     if (!csmActive) disposeCsm(state, scene);
   },
-};
+});
 
-export const PointSpotLightSyncSystem: System = {
+export const PointSpotLightSyncSystem: System = defineSystem({
+  name: 'PointSpotLightSyncSystem',
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
@@ -1130,13 +1134,14 @@ export const PointSpotLightSyncSystem: System = {
       }
     }
   },
-};
+});
 
 // NOTE: RendererSetupSystem was removed — its logic was identical to
 // SceneRenderSystem and caused duplicate resize listeners / double-setup.
 // All renderer creation is now handled by SceneRenderSystem.
 
-export const CameraSyncSystem: System = {
+export const CameraSyncSystem: System = defineSystem({
+  name: 'CameraSyncSystem',
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
@@ -1170,9 +1175,10 @@ export const CameraSyncSystem: System = {
       syncCameraSettings(camera, entity, state);
     }
   },
-};
+});
 
-export const SceneRenderSystem: System = {
+export const SceneRenderSystem: System = defineSystem({
+  name: 'SceneRenderSystem',
   group: 'draw',
   last: true,
   async setup(state: State) {
@@ -1341,4 +1347,4 @@ export const SceneRenderSystem: System = {
       deleteCanvasElement(entity);
     }
   },
-};
+});

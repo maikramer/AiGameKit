@@ -1,4 +1,4 @@
-import { defineQuery, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import * as THREE from 'three';
 import { MainCamera, threeCameras } from '../rendering';
 import { CameraSyncSystem } from '../rendering/systems';
@@ -46,7 +46,8 @@ const _camHit3: BvhRaycastHit = {
   key: '',
 };
 
-export const ThirdPersonCameraSystem: System = {
+export const ThirdPersonCameraSystem: System = defineSystem({
+  name: 'ThirdPersonCameraSystem',
   group: 'draw',
   // Run after the generic camera sync so this system is the sole authority over
   // the third-person camera's Three.js transform (otherwise the two fight and
@@ -298,4 +299,4 @@ export const ThirdPersonCameraSystem: System = {
       }
     }
   },
-};
+});

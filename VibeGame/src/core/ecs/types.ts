@@ -8,6 +8,8 @@ export type Component = Record<string, unknown>;
 import type { State } from './state';
 
 export interface System {
+  /** Display name for the profiler panel / User Timing marks. */
+  readonly name?: string;
   readonly update?: (state: State) => void;
   readonly setup?: (state: State) => void;
   readonly dispose?: (state: State) => void;

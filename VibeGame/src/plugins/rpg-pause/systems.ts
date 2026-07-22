@@ -1,4 +1,4 @@
-import type { State, System } from '../../core';
+import { defineSystem, type State, type System } from '../../core';
 import { emitEvent } from '../rpg-core/events';
 import { setInputMovementSuppressed } from '../input';
 
@@ -102,9 +102,10 @@ export function suppressInput(state: State, on: boolean): void {
   }
 }
 
-export const PauseSystem: System = {
+export const PauseSystem: System = defineSystem({
+  name: 'PauseSystem',
   group: 'late',
   update(state: State): void {
     sync(state, true);
   },
-};
+});

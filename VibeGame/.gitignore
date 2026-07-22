@@ -10,6 +10,13 @@ dist/
 build/
 docs/
 *.tsbuildinfo
+.vite/
+.cache/
+.turbo/
+coverage/
+
+# Knowledge-graph / agent AST cache (ENOSPC if Vite watches it)
+graphify-out/
 
 # IDE
 .vscode/

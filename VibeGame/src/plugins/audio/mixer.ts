@@ -1,5 +1,5 @@
 import { logger } from '../../core/utils/logger';
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { Adapter, Parser, Recipe, State, System } from '../../core';
 import { setMasterVolume as bank_setMasterVolume, setBusVolume } from './bank';
 import { AudioSource, MusicLayerComponent } from './components';
@@ -124,7 +124,8 @@ export function crossfadeMusicLayers(
   mix.fadeDuration = Math.max(0.0001, duration);
 }
 
-export const MusicMixerSystem: System = {
+export const MusicMixerSystem: System = defineSystem({
+  name: 'MusicMixerSystem',
   group: 'simulation',
   update(state: State): void {
     if (state.headless) return;
@@ -154,7 +155,7 @@ export const MusicMixerSystem: System = {
         MusicLayerComponent.volume[eid] * fade * mix.music * mix.master;
     }
   },
-};
+});
 
 function num(value: string | number): number {
   return typeof value === 'number' ? value : Number(value);

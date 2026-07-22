@@ -1,9 +1,4 @@
-import {
-  defineQuery,
-  registerReadyGate,
-  type State,
-  type System,
-} from '../../core';
+import { defineSystem, defineQuery, registerReadyGate, type State, type System } from '../../core';
 import { PlacePending, SpawnerPending } from './components';
 
 const spawnerQuery = defineQuery([SpawnerPending]);
@@ -25,9 +20,10 @@ function spawnReady(state: State): boolean {
   return true;
 }
 
-export const SpawnReadyGateSystem: System = {
+export const SpawnReadyGateSystem: System = defineSystem({
+  name: 'SpawnReadyGateSystem',
   group: 'setup',
   setup(state) {
     registerReadyGate(state, 'spawn', spawnReady);
   },
-};
+});

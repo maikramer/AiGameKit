@@ -1,4 +1,4 @@
-import { defineQuery, type Recipe, type State, type System } from '../../core';
+import { defineSystem, defineQuery, type Recipe, type State, type System } from '../../core';
 import { isKeyDown } from '../input/utils';
 import { getRenderingContext } from '../rendering/utils';
 import { Postprocessing } from '../postprocessing/components';
@@ -118,7 +118,8 @@ export function setPostFxBindings(
   s.bindings = bindings;
 }
 
-export const PostFxToggleSystem: System = {
+export const PostFxToggleSystem: System = defineSystem({
+  name: 'PostFxToggleSystem',
   group: 'simulation',
   update(state: State) {
     const entities = postprocessingQuery(state.world);
@@ -140,7 +141,7 @@ export const PostFxToggleSystem: System = {
       ctx.postProcessing = undefined;
     }
   },
-};
+});
 
 export const postFxToggleRecipe: Recipe = {
   name: 'PostFxDebugToggle',

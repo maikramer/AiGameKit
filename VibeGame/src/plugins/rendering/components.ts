@@ -19,6 +19,10 @@ export const MainCamera = {
   projection: new Uint8Array(MAX_ENTITIES),
   fov: new Float32Array(MAX_ENTITIES),
   orthoSize: new Float32Array(MAX_ENTITIES),
+  /** Perspective/ortho near clip (world units). */
+  near: new Float32Array(MAX_ENTITIES),
+  /** Perspective/ortho far clip (world units). Shorter = less distant draw. */
+  far: new Float32Array(MAX_ENTITIES),
 } as const;
 
 export const AmbientLight = {

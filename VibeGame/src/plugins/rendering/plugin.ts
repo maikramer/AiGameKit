@@ -86,6 +86,8 @@ export const RenderingPlugin: Plugin = {
         projection: 0,
         fov: 75,
         orthoSize: 10,
+        near: 0.1,
+        far: 1000,
       },
       pointLight: {
         color: 0xffffff,

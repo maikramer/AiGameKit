@@ -50,6 +50,13 @@ transforms/
 #### TransformHierarchySystem
 - Group: simulation (last)
 - Syncs euler/quaternion and computes world transforms
+
+#### Facing helpers (`utils.ts`)
+- `planarYawRadians(dx, dz)` — `atan2(dx, dz)` (+Z forward at 0)
+- `setTransformYawRadians(transform, eid, yawRad)` — writes **degrees** into `eulerY` + syncs quat + dirty
+- `setTransformFacingXZ(transform, eid, dx, dz, yawOffsetRad?)` — face a planar direction
+
+Never write `Math.atan2(...)` directly into `Transform.eulerY` (radians vs degrees); hierarchy sync will treat radians as ~±3° and agents moonwalk / strafe-face-wrong.
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->

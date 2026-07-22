@@ -1,5 +1,5 @@
 import type { System } from '../../core';
-import { defineQuery, TIME_CONSTANTS } from '../../core';
+import { defineSystem, defineQuery, TIME_CONSTANTS } from '../../core';
 import { KinematicMove, Rigidbody } from '../physics/components';
 import { KinematicMovementSystem } from '../physics/systems';
 import { Transform } from '../transforms/components';
@@ -18,7 +18,8 @@ function applyEasing(t: number, easing: number): number {
   }
 }
 
-export const TweenProcessingSystem: System = {
+export const TweenProcessingSystem: System = defineSystem({
+  name: 'TweenProcessingSystem',
   group: 'fixed',
   before: [KinematicMovementSystem],
   update: (state) => {
@@ -112,4 +113,4 @@ export const TweenProcessingSystem: System = {
       }
     }
   },
-};
+});

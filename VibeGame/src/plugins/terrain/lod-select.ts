@@ -6,6 +6,8 @@
  * spawning / despawning ECS entities to match.
  */
 
+import { boostAt, type DensityMap } from './density-map';
+
 export interface ChunkDesc {
   originX: number;
   originZ: number;
@@ -216,4 +218,34 @@ export function effectiveResolution(
   const factor = 1 + (Math.min(densityBoost, 255) / 255) * 7;
   const boosted = Math.round(lodRes * factor);
   return Math.min(baseResolution, Math.max(lodRes, boosted));
+}
+
+/**
+ * Lattice resolution for spawn/ground sampling that matches the *rendered*
+ * mesh near featured regions (density boost).
+ *
+ * `sampleMeshSurfaceHeight` uses `step = worldSize / resolution`. Leaf chunks
+ * under a river/pad boost render at
+ * `step = (worldSize / 2^levels) / effectiveResolution(...)`. Without this
+ * bridge, spawners sit on the coarse base lattice (~31 m in simple-rpg) while
+ * the visible surface follows the carve/falloff at ~4 m — trees and grass
+ * float above the west-exit river bank and city pad skirt.
+ */
+export function meshSurfaceResolutionForPoint(
+  baseResolution: number,
+  levels: number,
+  density: DensityMap | undefined,
+  localX: number,
+  localZ: number
+): number {
+  const base = Math.max(1, Math.floor(baseResolution) || 1);
+  if (!density) return base;
+  const boost = boostAt(density, localX, localZ);
+  if (boost <= 0) return base;
+  const depth = Math.max(0, Math.floor(levels) || 0);
+  const leafRes = effectiveResolution(base, depth, boost);
+  // Equate leaf step to sampleMeshSurfaceHeight's worldSize/res step:
+  // res = leafRes * 2^depth.
+  const equiv = leafRes * 2 ** depth;
+  return Math.max(base, Math.floor(equiv));
 }

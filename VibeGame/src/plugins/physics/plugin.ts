@@ -1,4 +1,4 @@
-import type { Adapter, Plugin, System } from '../../core';
+import { defineSystem, type Adapter, type Plugin, type System } from '../../core';
 import { setColliderMeshUrl } from './mesh-collider';
 import {
   ApplyAngularImpulse,
@@ -42,10 +42,11 @@ import {
 } from './physics-sync';
 import { initializePhysics } from './utils';
 
-const PhysicsRapierSyncAfterStep: System = {
+const PhysicsRapierSyncAfterStep: System = defineSystem({
+  name: 'PhysicsRapierSyncAfterStep',
   ...PhysicsRapierSyncSystem,
   after: [PhysicsStepSystem],
-};
+});
 
 export const PhysicsPlugin: Plugin = {
   initialize: initializePhysics,

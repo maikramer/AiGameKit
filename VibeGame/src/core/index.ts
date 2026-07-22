@@ -137,3 +137,34 @@ export {
   setLoadingEnforcement,
 } from './loading-gate';
 export type { ReadyCheck } from './loading-gate';
+
+export {
+  _resetProfilerForTests,
+  beginSpan,
+  copyProfilerSnapshot,
+  disableProfiler,
+  downloadProfilerSnapshot,
+  enableProfiler,
+  endSpan,
+  freezeProfiler,
+  getProfilerMode,
+  getProfilerSnapshot,
+  getProfilerTop,
+  isProfilerEnabled,
+  isProfilerFrozen,
+  defineSystem,
+  namedSystem,
+  recordCustomTiming,
+  resetProfiler,
+  setProfilerMode,
+  toggleProfilerFreeze,
+  unfreezeProfiler,
+  withSpan,
+} from './profiler';
+export type {
+  ProfilerGroup,
+  ProfilerGroupStats,
+  ProfilerMode,
+  ProfilerSnapshot,
+  ProfilerTimingStats,
+} from './profiler';

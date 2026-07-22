@@ -1,6 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import { Howl, Howler } from 'howler';
-import { defineQuery } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { AudioSource, AudioListener } from './components';
 import { MainCamera } from '../rendering/components';
@@ -117,7 +117,8 @@ export function resumeAudioContextOnFirstUserGesture(): void {
 }
 
 /** Garante AudioListener na entidade da câmara (MainCamera + Transform). */
-export const AudioListenerSetupSystem: System = {
+export const AudioListenerSetupSystem: System = defineSystem({
+  name: 'AudioListenerSetupSystem',
   group: 'setup',
   update(state: State) {
     if (state.headless) return;
@@ -130,9 +131,10 @@ export const AudioListenerSetupSystem: System = {
       }
     }
   },
-};
+});
 
-export const AudioSystem: System = {
+export const AudioSystem: System = defineSystem({
+  name: 'AudioSystem',
   group: 'simulation',
   last: true,
   after: [TransformHierarchySystem],
@@ -327,7 +329,7 @@ export const AudioSystem: System = {
     }
     clearAudioClipRegistry();
   },
-};
+});
 
 /** Per-entity normalized clip time last frame, for marker crossing detection. */
 const clipSoundTracker = new Map<number, { clip: string; norm: number }>();
@@ -339,7 +341,8 @@ const clipSoundCleanupRegistered = new Set<number>();
  * fixados a animações (`addClipSound`) quando o tempo normalizado do clip cruza
  * o marcador. Corre depois do `GltfAnimationUpdateSystem` (grupo 'draw').
  */
-export const SoundBankSystem: System = {
+export const SoundBankSystem: System = defineSystem({
+  name: 'SoundBankSystem',
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
@@ -391,4 +394,4 @@ export const SoundBankSystem: System = {
       }
     }
   },
-};
+});

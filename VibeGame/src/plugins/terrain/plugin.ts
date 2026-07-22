@@ -84,6 +84,13 @@ export const TerrainPlugin: Plugin = {
         // encostas) rather than overriding biome colours.
         heightBlendStrength: 0.35,
         aoStrength: 0.85,
+        // Subtle valley/midland sand patches via world-XZ fBm — breaks up
+        // uniform grass without needing a 5th splat channel. 0 disables.
+        noiseSandStrength: 0.4,
+        noiseSandScale: 0.014,
+        noiseSandThreshold: 0.58,
+        noiseSandHeightMin: 0.02,
+        noiseSandHeightMax: 0.48,
       },
     },
     adapters: {

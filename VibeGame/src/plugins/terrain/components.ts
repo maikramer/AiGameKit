@@ -32,6 +32,20 @@ export const Terrain = {
   heightBlendStrength: new Float32Array(MAX_ENTITIES),
   /** 0 = AO map ignored, 1 = full AO multiply. Gates the NAR blue channel. */
   aoStrength: new Float32Array(MAX_ENTITIES),
+  /**
+   * Procedural noise overlays (first layer = sand patches). Strength 0 disables
+   * the sand overlay; >0 blends the shared sand albedo onto flat mid/low ground
+   * via world-XZ fBm. Independent of lake/river shore sand.
+   */
+  noiseSandStrength: new Float32Array(MAX_ENTITIES),
+  /** World-space frequency of the sand fBm (higher = smaller patches). */
+  noiseSandScale: new Float32Array(MAX_ENTITIES),
+  /** fBm must exceed this (0..1) before sand appears — higher = sparser. */
+  noiseSandThreshold: new Float32Array(MAX_ENTITIES),
+  /** Normalised height (0..1 of maxHeight) where sand patches may start. */
+  noiseSandHeightMin: new Float32Array(MAX_ENTITIES),
+  /** Normalised height (0..1 of maxHeight) where sand patches fade out. */
+  noiseSandHeightMax: new Float32Array(MAX_ENTITIES),
 } as const;
 
 /**

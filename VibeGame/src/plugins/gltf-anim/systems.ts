@@ -1,4 +1,4 @@
-import { defineQueryLive, type State, type System } from '../../core';
+import { defineSystem, defineQueryLive, type State, type System } from '../../core';
 import { GltfAnimator } from '../../extras/gltf-animator';
 import { MainCamera, threeCameras } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
@@ -31,7 +31,8 @@ const ANIM_SKIP_DIST_SQ = 150 * 150;
 /** Beyond this: update mixer every other frame. */
 const ANIM_HALF_DIST_SQ = 80 * 80;
 
-export const GltfAnimationUpdateSystem: System = {
+export const GltfAnimationUpdateSystem: System = defineSystem({
+  name: 'GltfAnimationUpdateSystem',
   group: 'draw',
   update: (state) => {
     const dt = state.time.deltaTime;
@@ -118,4 +119,4 @@ export const GltfAnimationUpdateSystem: System = {
     animatorRegistry.clear();
     nextRegistryIndex = 1;
   },
-};
+});

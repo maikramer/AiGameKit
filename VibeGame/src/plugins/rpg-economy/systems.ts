@@ -9,6 +9,7 @@ import {
   removeItem,
 } from '../rpg-inventory';
 import { addResource, getResource, spendResource } from '../rpg-vault';
+import { defineSystem } from '../../core';
 
 export const GOLD_KIND = 'gold';
 
@@ -105,7 +106,8 @@ export function sellItem(
 // Reserved simulation-group hook. Economy has no events of its own: Vault
 // already emits ECONOMY_GAINED/SPENT synchronously and Inventory's own bridge
 // drains INVENTORY_ADDED/REMOVED each step. Kept for future composite events.
-export const EconomyEventBridgeSystem: System = {
+export const EconomyEventBridgeSystem: System = defineSystem({
+  name: 'EconomyEventBridgeSystem',
   group: 'simulation',
   update(_state: State): void {},
-};
+});

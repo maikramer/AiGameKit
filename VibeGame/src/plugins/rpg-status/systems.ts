@@ -1,4 +1,5 @@
 import type { State, System } from '../../core';
+import { defineSystem } from '../../core';
 import { getEventBus } from '../rpg-core';
 import {
   drainPendingEvents,
@@ -6,16 +7,18 @@ import {
   tickStatusEffects,
 } from './components';
 
-export const StatusEffectTickSystem: System = {
+export const StatusEffectTickSystem: System = defineSystem({
+  name: 'StatusEffectTickSystem',
   group: 'simulation',
   update(state: State): void {
     ensureDeathSubscription(state);
     const dt = state.time.deltaTime;
     if (dt > 0) tickStatusEffects(state, dt);
   },
-};
+});
 
-export const StatusEffectEventBridgeSystem: System = {
+export const StatusEffectEventBridgeSystem: System = defineSystem({
+  name: 'StatusEffectEventBridgeSystem',
   group: 'simulation',
   update(state: State): void {
     const events = drainPendingEvents(state);
@@ -25,4 +28,4 @@ export const StatusEffectEventBridgeSystem: System = {
       bus.emit(event, payload);
     }
   },
-};
+});

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { defineQueryLive } from '../../core';
+import { defineSystem, defineQueryLive } from '../../core';
 import type { State, System } from '../../core';
 import { getRenderingContext, MainCamera, threeCameras } from '../rendering';
 import { WorldTransform } from '../transforms/components';
@@ -45,7 +45,8 @@ function approach(
  * runs the optional slow weather cycle, smooths current values and animates
  * the cloud field + rain volume around the camera.
  */
-export const WeatherSystem: System = {
+export const WeatherSystem: System = defineSystem({
+  name: 'WeatherSystem',
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
@@ -151,6 +152,6 @@ export const WeatherSystem: System = {
       cars.rain.material.dispose();
     }
   },
-};
+});
 
 export { RAIN_COUNT };

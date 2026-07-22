@@ -24,6 +24,11 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 export interface GltfAnimatorOptions {
   /** Default crossfade duration in seconds. */
   crossfadeDuration?: number;
+  /**
+   * Mixer root. Defaults to ``gltf.scene``. Use a LOD clone (or other
+   * instance) so clips drive the visible mesh, not the cached master.
+   */
+  root?: Object3D;
 }
 
 /** Named set of locomotion clip names for state-based animation switching. */
@@ -107,7 +112,7 @@ export class GltfAnimator {
   private additiveTarget = 0;
 
   constructor(gltf: GLTF, options: GltfAnimatorOptions = {}) {
-    this.mixer = new AnimationMixer(gltf.scene);
+    this.mixer = new AnimationMixer(options.root ?? gltf.scene);
     this.crossfadeDuration = options.crossfadeDuration ?? 0.25;
 
     for (const clip of gltf.animations) {
