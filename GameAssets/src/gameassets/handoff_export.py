@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -16,9 +17,13 @@ from .manifest import ManifestRow
 from .paths import (
     _animator3d_output_path,
     _base_stem,
+    _collision_path,
     _lod_animated_path,
     _lod_path,
     _rigging3d_output_path,
+    _split_path,
+    _stump_path,
+    _top_path,
 )
 from .profile import GameProfile
 
@@ -33,12 +38,10 @@ def resolve_handoff_mesh(
     prefer_rigged: bool,
     rig_suffix: str = "_rigged",
 ) -> tuple[Path | None, str]:
-    """Escolhe o GLB entregável para handoff (animated > rigged > lod0 > base).
+    """Escolhe o GLB entregável para handoff (lod0 animado > lod0 > animated alias > rigged > base).
 
-    Master pipeline promove animate→``id_lod0.glb`` e publica alias
-    ``id_rigged_animated.glb``. Handoff antigo só olhava para
-    ``{stem}_animated.glb`` (nome legacy errado) e falhava mesmo com LOD0
-    animado no disco.
+    Entregável canónico é sempre ``id_lod0.glb``. Aliases ``*_rigged_animated`` /
+    bare ``id.glb`` só entram como fallback legado.
     """
     stem = _base_stem(mesh_path.stem)
     parent = mesh_path.parent
@@ -50,14 +53,17 @@ def resolve_handoff_mesh(
     lod0_rigged = parent / f"{stem}_lod0_rigged.glb"
 
     if prefer_animated:
+        # LOD0 promovido (clips) — preferência sobre aliases legacy.
+        if row.generate_animate and lod0.is_file():
+            return lod0, "animated"
         for cand in (rigged_animated, lod0_animated, legacy_animated):
             if cand.is_file():
                 return cand, "animated"
-        # LOD0 promovido (tem clips) — só preferir quando a row pediu animate.
-        if row.generate_animate and lod0.is_file():
-            return lod0, "animated"
 
     if prefer_rigged:
+        if row.generate_rig and not row.generate_animate and lod0.is_file():
+            # Rig-only: lod0 já é o entregável promovido.
+            return lod0, "rigged"
         for cand in (rig_out, lod0_rigged):
             if cand.is_file():
                 return cand, "rigged"
@@ -115,7 +121,11 @@ def run_handoff(
     bgm_sample_rate: int = 44100,
     dry_run: bool,
 ) -> dict[str, Any]:
-    """Resolve meshes/áudio, copia ou symlink, devolve manifest dict."""
+    """Resolve meshes/áudio, copia ou symlink, devolve manifest dict.
+
+    Modelos públicos: só ``{pid}_lod{N}.glb`` + ``{pid}_collision.glb``.
+    Sem bare ``{pid}.glb``.
+    """
     from .cli import (
         _audio_path_for_row_manifest,
         _paths_for_row_manifest,
@@ -159,21 +169,26 @@ def run_handoff(
                 out["rows"].append(entry)
                 continue
 
-            dst = models_dir / f"{pid}.glb"
-            rel_url = f"/assets/models/{pid}.glb"
+            # Entregável canónico = *_lod0.glb (nunca bare {pid}.glb).
+            dst_lod0 = models_dir / f"{pid}_lod0.glb"
+            rel_lod0 = f"/assets/models/{pid}_lod0.glb"
             entry["model"] = {
                 "kind": chosen_kind,
                 "source": str(chosen),
-                "url": rel_url,
-                "dest": str(dst),
+                "url": rel_lod0,
+                "dest": str(dst_lod0),
             }
             if not dry_run:
-                _install_file(chosen, dst, copy=copy)
+                _install_file(chosen, dst_lod0, copy=copy)
+                # Remove bare legado se existir no destino.
+                bare_dst = models_dir / f"{pid}.glb"
+                if bare_dst.is_file() or bare_dst.is_symlink():
+                    with contextlib.suppress(OSError):
+                        bare_dst.unlink()
 
-            # LOD triplet
-            lod_basename = row.id.replace("/", "_")
-            lod_urls = []
-            for level in range(3):
+            lod_basename = _base_stem(row.id.replace("/", "_"))
+            lod_urls = [rel_lod0]
+            for level in range(1, 3):
                 lod_src = chosen.parent / f"{lod_basename}_lod{level}.glb"
                 if lod_src.is_file():
                     dst_lod = models_dir / f"{pid}_lod{level}.glb"
@@ -181,17 +196,33 @@ def run_handoff(
                     lod_urls.append(rel_lod)
                     if not dry_run:
                         _install_file(lod_src, dst_lod, copy=copy)
-            if lod_urls:
-                entry["model"]["lod"] = lod_urls
+            entry["model"]["lod"] = lod_urls
 
-            # Collision mesh
-            coll_src = chosen.parent / f"{chosen.stem}_collision.glb"
+            # Collision: sempre {base}_collision.glb (não {chosen.stem}_collision).
+            coll_src = _collision_path(mesh_path)
+            if not coll_src.is_file():
+                coll_src = chosen.parent / f"{lod_basename}_collision.glb"
             if coll_src.is_file():
                 dst_coll = models_dir / f"{pid}_collision.glb"
                 rel_coll = f"/assets/models/{pid}_collision.glb"
                 entry["model"]["collision"] = {"url": rel_coll, "source": str(coll_src), "dest": str(dst_coll)}
                 if not dry_run:
                     _install_file(coll_src, dst_coll, copy=copy)
+
+            # Tree split sidecars (Stump+Top composition + halves).
+            for key, src in (
+                ("split_url", _split_path(mesh_path)),
+                ("stump_url", _stump_path(mesh_path)),
+                ("top_url", _top_path(mesh_path)),
+            ):
+                if not src.is_file():
+                    continue
+                suffix = src.name[len(lod_basename) :]  # _split.glb / _stump.glb / _top.glb
+                dst = models_dir / f"{pid}{suffix}"
+                rel = f"/assets/models/{pid}{suffix}"
+                entry["model"][key] = rel
+                if not dry_run:
+                    _install_file(src, dst, copy=copy)
 
         if row.generate_audio:
             audio_src = _audio_path_for_row_manifest(profile, manifest_dir, row)

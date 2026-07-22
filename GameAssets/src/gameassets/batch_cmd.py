@@ -3463,7 +3463,9 @@ def batch_cmd(
                                     img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
                                     mesh_painted = _painted_existing(mesh_final) or _painted_path(mesh_final)
 
-                                    if mesh_final.is_file() and not force:
+                                    from .paths import _lod_path as _lod_path_skip
+
+                                    if _lod_path_skip(mesh_final, 0).is_file() and not force:
                                         _queue_master(rec, mesh_final, row)
                                         finalized_indices.add(idx)
                                         append_log(rec)
@@ -3542,7 +3544,9 @@ def batch_cmd(
                                     img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
                                     mesh_painted = _painted_existing(mesh_final) or _painted_path(mesh_final)
 
-                                    if mesh_final.is_file() and not force:
+                                    from .paths import _lod_path as _lod_path_skip2
+
+                                    if _lod_path_skip2(mesh_final, 0).is_file() and not force:
                                         _queue_master(rec, mesh_final, row)
                                         finalized_indices.add(idx)
                                         append_log(rec)

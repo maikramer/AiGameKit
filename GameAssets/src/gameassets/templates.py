@@ -82,11 +82,12 @@ text3d:
 paint3d:
   preserve_origin: true
 
-# Round 2 — master pipeline (único caminho). DAG completo:
-#   topology-fix → bake-master → LOD → collision → rigging → transfer-weights
-#   → animate → promote (lod0=animated/rigged/painted) → validate.
-# Outputs em meshes/ ficam todos finalizados (KTX2+meshopt+tangents);
-# intermediários (shape/painted/clean/rigged_hi) movidos para meshes/_intermediate/.
+# Round 3 — master pipeline (único caminho). DAG:
+#   topology-fix → paint → rigging (sobre painted) → animate 1x →
+#   text3d lod sobre animated/rigged (lod0/1/2) → collision → validate.
+# Estáticos: bake-master identity (lod0=painted) + lod do painted.
+# Outputs em meshes/ ficam finalizados (KTX2+meshopt+tangents);
+# intermediários (shape/painted/clean/rigged/rigged_animated) em meshes/_intermediate/.
 master_pipeline: true
 master_validate: true
 # bake_normals resolvido por categoria (humanoid/creature/armor/weapon/chest/tool

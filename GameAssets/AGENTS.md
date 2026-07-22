@@ -29,6 +29,7 @@ Batch asset orchestrator for the GameDev pipeline. 28 Python files, ~12K LOC. Ca
 4. **bake-master** — `text3d bake-master` (LOD0 with normal bake + KTX2 via gltf-transform; meshopt via bpy 5.2+ preferido)
 5. **lod** — `text3d lod` (LOD1/LOD2 from LOD0)
 6. **collision** — `text3d collision` (convex hull collision mesh)
+6b. **split-at-height** — `text3d split-at-height` for `category=tree` (LOD0 → Stump+Top; sidecars `*_split`/`*_stump`/`*_top`)
 7. **rig** — `rigging3d pipeline` (rig the high-poly clean mesh)
 8. **transfer-weights** — `rigging3d transfer-weights --source HI --target LOD0/1/2`
 9. **animate** — `animator3d game-pack` per LOD

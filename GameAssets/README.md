@@ -862,7 +862,7 @@ After handoff, GLBs are available at `/assets/models/` in the Vite project. Use 
 - `loadGltfToScene` — Basic GLB loading
 - `loadGltfAnimated` — GLB with animation support
 - `loadGltfToSceneWithAnimator` — GLB with full animator control
-- Declarative: `<PlayerGLTF pos="0 0 0" model-url="/assets/models/hero.glb"></PlayerGLTF>` in `world.xml`
+- Declarative: `<PlayerGLTF pos="0 0 0" model-url="/assets/models/hero_lod0.glb"></PlayerGLTF>` in `world.xml`
 
 For PBR sky environments: `applyEquirectSkyEnvironment` from `vibegame` (`VibeGame/src/extras/sky-env.ts`).
 

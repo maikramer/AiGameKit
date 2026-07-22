@@ -143,7 +143,7 @@ def emit_world_xml(plan: DreamPlan) -> str:
     for p in plan.scene.placements:
         if p.asset_id not in three_d_ids:
             continue
-        url = f"/assets/models/{p.asset_id}.glb"
+        url = f"/assets/models/{p.asset_id}_lod0.glb"
         if p.asset_id in rigged_ids:
             pos = p.pos or "0 60 0"
             lines.append(f'  <PlayerGLTF model-url="{_xml_escape(url)}" pos="{_xml_escape(pos)}"></PlayerGLTF>')

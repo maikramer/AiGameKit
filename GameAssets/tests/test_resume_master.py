@@ -122,9 +122,10 @@ def test_classify_master_done(tmp_path: Path) -> None:
     assert state == _ROW_DONE
 
 
-def test_classify_master_need_rig_hi(tmp_path: Path) -> None:
+def test_classify_master_need_rig(tmp_path: Path) -> None:
+    """Round 3: painted pronto mas sem ``_rigged`` -> need_rig (rig sobre painted)."""
     from gameassets.paths import (
-        _ROW_NEED_RIG_HI,
+        _ROW_NEED_RIG,
         _classify_row_state_master,
         _clean_path,
         _lod_path,
@@ -147,7 +148,137 @@ def test_classify_master_need_rig_hi(tmp_path: Path) -> None:
     state = _classify_row_state_master(
         img_final=img, mesh_final=mesh, want_texture=True, wants_rig=True, wants_animate=False
     )
-    assert state == _ROW_NEED_RIG_HI
+    assert state == _ROW_NEED_RIG
+
+
+def test_classify_master_need_animate(tmp_path: Path) -> None:
+    """Round 3: ``_rigged`` pronto mas sem ``_rigged_animated`` -> need_animate."""
+    from gameassets.paths import (
+        _ROW_NEED_ANIMATE,
+        _animated_path,
+        _classify_row_state_master,
+        _clean_path,
+        _lod_path,
+        _painted_path,
+        _rigged_path,
+        _shape_path,
+    )
+
+    img = tmp_path / "img.png"
+    _touch(img)
+    mesh = tmp_path / "mesh.glb"
+    for p in (
+        _shape_path(mesh),
+        _clean_path(mesh),
+        _painted_path(mesh),
+        _lod_path(mesh, 0),
+        _lod_path(mesh, 1),
+        _lod_path(mesh, 2),
+        _rigged_path(mesh),
+    ):
+        _touch(p)
+    assert not _animated_path(mesh).is_file()
+    state = _classify_row_state_master(
+        img_final=img, mesh_final=mesh, want_texture=True, wants_rig=True, wants_animate=True
+    )
+    assert state == _ROW_NEED_ANIMATE
+
+
+def _minimal_rig_glb(path: Path, *, animated: bool, with_paint: bool = True) -> None:
+    """GLB mínimo parseável com skin (+clip se ``animated``) para o classificador."""
+    import json
+    import struct
+
+    nodes: list[dict] = [{"name": "Armature"}, {"name": "Mesh_skinned", "skin": 0, "mesh": 0}]
+    root: dict = {
+        "asset": {"version": "2.0"},
+        "nodes": nodes,
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+        "accessors": [{"count": 3, "type": "VEC3", "componentType": 5126}],
+        "bufferViews": [{"buffer": 0, "byteLength": 36}],
+        "buffers": [{"byteLength": 36}],
+        "skins": [{"joints": [0]}],
+        "scenes": [{"nodes": [0]}],
+        "scene": 0,
+    }
+    if with_paint:
+        root["materials"] = [{"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}}]
+        root["textures"] = [{"source": 0}]
+        root["images"] = [{"uri": "data:image/png;base64,x"}]
+    if animated:
+        root["animations"] = [{"name": "idle", "channels": [], "samplers": []}]
+    js = json.dumps(root).encode("utf-8")
+    js += b" " * ((4 - len(js) % 4) % 4)
+    bin_chunk = b"\x00" * 36
+    total = 12 + 8 + len(js) + 8 + len(bin_chunk)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        b"glTF"
+        + struct.pack("<II", 2, total)
+        + struct.pack("<I4s", len(js), b"JSON")
+        + js
+        + struct.pack("<I4s", len(bin_chunk), b"BIN\x00")
+        + bin_chunk
+    )
+
+
+def test_classify_master_done_promoted_animated(tmp_path: Path) -> None:
+    """Round 3: ladder animada completa (skins+clips+paint em lod0/1/2) -> DONE."""
+    from gameassets.paths import (
+        _ROW_DONE,
+        _classify_row_state_master,
+        _clean_path,
+        _lod_path,
+        _painted_path,
+        _shape_path,
+    )
+
+    img = tmp_path / "img.png"
+    _touch(img)
+    mesh = tmp_path / "mesh.glb"
+    _touch(_shape_path(mesh))
+    _touch(_clean_path(mesh))
+    _touch(_painted_path(mesh))
+    for lvl in range(3):
+        _minimal_rig_glb(_lod_path(mesh, lvl), animated=True)
+    state = _classify_row_state_master(
+        img_final=img, mesh_final=mesh, want_texture=True, wants_rig=True, wants_animate=True
+    )
+    assert state == _ROW_DONE
+
+
+def test_classify_master_need_lod_gen_when_lod0_white(tmp_path: Path) -> None:
+    """lod0 parseável sem paint com painted+intermediários presentes -> need_lod_gen.
+
+    Sem intermediários o estado correto é need_rig (re-rigar do zero); com
+    ``_rigged``/``_rigged_animated`` bons em ``_intermediate/``, basta re-correr
+    a ladder (anti mesh branca do DAG antigo).
+    """
+    from gameassets.paths import (
+        _ROW_NEED_LOD_GEN,
+        _animated_path,
+        _classify_row_state_master,
+        _clean_path,
+        _lod_path,
+        _painted_path,
+        _rigged_path,
+        _shape_path,
+    )
+
+    img = tmp_path / "img.png"
+    _touch(img)
+    mesh = tmp_path / "mesh.glb"
+    _touch(_shape_path(mesh))
+    _touch(_clean_path(mesh))
+    _touch(_painted_path(mesh))
+    _minimal_rig_glb(_rigged_path(mesh), animated=False)
+    _minimal_rig_glb(_animated_path(mesh), animated=True)
+    for lvl in range(3):
+        _minimal_rig_glb(_lod_path(mesh, lvl), animated=True, with_paint=lvl != 0)
+    state = _classify_row_state_master(
+        img_final=img, mesh_final=mesh, want_texture=True, wants_rig=True, wants_animate=True
+    )
+    assert state == _ROW_NEED_LOD_GEN
 
 
 def test_resume_master_pipeline_importable() -> None:

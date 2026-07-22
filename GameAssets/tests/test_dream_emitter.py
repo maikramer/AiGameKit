@@ -104,15 +104,15 @@ class TestEmitWorldXml:
     def test_contains_gltf_load(self) -> None:
         xml = emit_world_xml(_sample_plan())
         assert "GLTFLoader" in xml
-        assert "/assets/models/crystal.glb" in xml
+        assert "/assets/models/crystal_lod0.glb" in xml
 
     def test_emits_player_gltf_for_rigged_character(self) -> None:
         plan = _sample_plan()
         plan.scene.placements.append(Placement(asset_id="hero", pos="0 1 0", scale="1 1 1"))
         xml = emit_world_xml(plan)
         assert "PlayerGLTF" in xml
-        assert "/assets/models/hero.glb" in xml
-        assert "/assets/models/crystal.glb" in xml
+        assert "/assets/models/hero_lod0.glb" in xml
+        assert "/assets/models/crystal_lod0.glb" in xml
 
     def test_player_gltf_default_pos_high_y(self) -> None:
         plan = _sample_plan()

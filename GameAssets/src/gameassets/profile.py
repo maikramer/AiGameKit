@@ -69,6 +69,10 @@ class Text3DProfile:
     # Peak VRAM UMS (shape wave). None → hw_auto / admit-safe no ums_batch.
     # ``memory_efficient`` não é modo de perfil — só sdnq_preset explícito; resto hw_auto.
     sdnq_preset: str | None = None
+    # Split stump+top (text3d split-at-height). None = auto (on para category=tree).
+    split_at_height: bool | None = None
+    split_cut_height: float | None = 0.6
+    split_files: bool = True
 
 
 @dataclass
@@ -260,10 +264,10 @@ class GameProfile:
     terrain3d: Terrain3DProfile | None = None
     rocks3d: Rocks3DProfile | None = None
     generation: str | None = None
-    # Stage 4 - bake-master pipeline (LOD0 master, transfer-weights, validate).
-    # Master pipeline é o único caminho. DAG completo (topology-fix ->
-    # bake-master -> LOD -> collision -> rigging -> transfer-weights -> animate ->
-    # promote -> validate). Mantido como campo para retro-compat de game.yaml.
+    # Master pipeline Round 3 é o único caminho. DAG (topology-fix -> paint ->
+    # rigging sobre painted -> animate x1 -> text3d lod sobre animated/rigged ->
+    # collision -> validate; estático: bake-master identity + lod do painted).
+    # Mantido como campo para retro-compat de game.yaml.
     master_pipeline: bool = True
     master_validate: bool = True
     master_bake_normals: bool = False
@@ -557,6 +561,15 @@ class GameProfile:
                 raise ValueError(f"text3d.omni: {e}") from e
             sdnq_raw = raw_t3.get("sdnq_preset")
             sdnq_s = str(sdnq_raw).strip() if sdnq_raw not in (None, "") else None
+            sah_raw = raw_t3.get("split_at_height")
+            sah_b: bool | None = None if sah_raw is None else bool(sah_raw)
+            sch_raw = raw_t3.get("split_cut_height")
+            try:
+                sch_f = float(sch_raw) if sch_raw not in (None, "") else 0.6
+            except (TypeError, ValueError) as e:
+                raise ValueError("text3d.split_cut_height deve ser um número (metros)") from e
+            sf_raw = raw_t3.get("split_files")
+            sf_b = True if sf_raw is None else bool(sf_raw)
             t3 = Text3DProfile(
                 preset=pr,
                 export_origin=eo,
@@ -575,6 +588,9 @@ class GameProfile:
                 simplify_texture_size=sts_i,
                 omni=t3_omni,
                 sdnq_preset=sdnq_s,
+                split_at_height=sah_b,
+                split_cut_height=sch_f,
+                split_files=sf_b,
             )
         p3d: Paint3DProfile | None = None
         raw_p3d = data.get("paint3d")
@@ -883,6 +899,9 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
         ),
         omni=t3.omni,
         sdnq_preset=t3.sdnq_preset,
+        split_at_height=t3.split_at_height,
+        split_cut_height=t3.split_cut_height,
+        split_files=t3.split_files,
     )
 
     p3d = profile.paint3d or Paint3DProfile()

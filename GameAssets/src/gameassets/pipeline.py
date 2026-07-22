@@ -6,12 +6,19 @@ Contém:
   ``resume`` e ``cli`` (ex.: ``_text3d_argv``, ``_paint3d_texture_argv``,
   ``_rigging3d_pipeline_argv``, ``_animator3d_game_pack_argv``).
 * O orquestrador master pipeline (``run_master_pipeline`` /
-  ``resume_master_pipeline``) com a sequência:
+  ``resume_master_pipeline``) com a sequência (Round 3):
 
-      text3d topology-fix (``_clean`` HI)
-      -> simplify ``_to_paint`` (Decimate Shared, orçamento atlas) -> paint3d
-      -> bake-master (painted + high-poly clean) -> lod -> collision
-      -> rigging3d -> animate -> validate
+      text3d topology-fix (``_clean``)
+      -> simplify ``_to_paint`` (orçamento atlas) -> paint3d (``_painted``)
+      -> rigging3d sobre o PAINTED (``_rigged``)        [assets com rig]
+      -> animator3d game-pack x1 (``_rigged_animated``) [assets com animate]
+      -> text3d lod sobre o animated/rigged -> lod0/1/2 (decimate preserva
+         skins+clips; estático: bake-master identity + lod do painted)
+      -> collision -> validate
+
+  Sem ``_rigged_hi`` (rig sobre ``_clean`` HI sem textura, descartado) nem
+  ``transfer-weights`` por LOD (KDTree x3): o rig corre uma vez sobre a
+  topologia final e a ladder herda tudo por decimação.
 """
 
 from __future__ import annotations
@@ -49,27 +56,33 @@ from .param_optimizer import (
     should_optimize_text3d,
 )
 from .paths import (
+    _animated_existing,
+    _animated_path,
     _canonical_mesh_final,
     _clean_existing,
     _clean_path,
     _collision_path,
+    _glb_is_promoted_animated,
+    _glb_is_promoted_rigged,
     _intermediate_dir,
-    _lod_animated_path,
     _lod_path,
-    _lod_rigged_path,
     _painted_existing,
     _painted_path,
     _path_for_log,
-    _rigged_hi_existing,
-    _rigged_hi_path,
+    _rigged_existing,
+    _rigged_path,
     _shape_existing,
     _shape_path,
     _shell_path,
+    _split_path,
+    _stump_path,
     _to_paint_existing,
     _to_paint_path,
-    archive_leftover_lod_rigged,
+    _top_path,
+    _unsplit_lod0_path,
+    archive_legacy_rig_intermediates,
+    finalize_mesh_deliverables,
     move_to_intermediate,
-    publish_rigged_animated_alias,
 )
 from .profile import Animator3DProfile, GameProfile, Paint3DProfile, Rigging3DProfile, Rocks3DProfile
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
@@ -179,6 +192,94 @@ def _collision_output_path(mesh_path: Path) -> Path:
     return _collision_path(mesh_path)
 
 
+def wants_split_at_height(profile: GameProfile, row: ManifestRow) -> bool:
+    """True quando o asset deve correr ``text3d split-at-height``.
+
+    Default on para ``category=tree``; ``text3d.split_at_height: false`` desliga.
+    """
+    t3 = profile.text3d
+    if t3 is not None and t3.split_at_height is False:
+        return False
+    if t3 is not None and t3.split_at_height is True:
+        return True
+    cat = (row.category or "").strip().lower()
+    return cat == "tree"
+
+
+def _split_at_height_done(mesh_final: Path) -> bool:
+    """Resume: unsplit arquivado + composição ``id_split.glb`` já existem."""
+    return _unsplit_lod0_path(mesh_final).is_file() and _split_path(mesh_final).is_file()
+
+
+def run_split_at_height_stage(
+    *,
+    text3d_bin: str,
+    mesh_final: Path,
+    profile: GameProfile,
+    run_stage: Any,
+) -> StageResult:
+    """Backup LOD0 unsplit → ``text3d split-at-height`` → promove composição a LOD0.
+
+    Também escreve ``id_split.glb`` e, se ``split_files``, ``id_stump`` / ``id_top``.
+    """
+    import shutil
+
+    lod0 = _lod_path(mesh_final, 0)
+    if not lod0.is_file():
+        return StageResult("split-at-height", False, 0.0, "lod0 ausente")
+
+    if _split_at_height_done(mesh_final) and lod0.is_file():
+        return StageResult("split-at-height", True, 0.0, "skipped (split existente)", _split_path(mesh_final))
+
+    unsplit = _unsplit_lod0_path(mesh_final)
+    unsplit.parent.mkdir(parents=True, exist_ok=True)
+    if not unsplit.is_file():
+        shutil.copy2(lod0, unsplit)
+
+    split_out = _split_path(mesh_final)
+    t3 = profile.text3d
+    cut_h = 0.6 if t3 is None or t3.split_cut_height is None else float(t3.split_cut_height)
+    want_files = True if t3 is None else bool(t3.split_files)
+
+    argv = [
+        text3d_bin,
+        "split-at-height",
+        str(unsplit),
+        "-o",
+        str(split_out),
+        "--cut-height",
+        str(cut_h),
+    ]
+    if want_files:
+        argv.append("--split-files")
+
+    s = run_stage("split-at-height", argv, split_out)
+    if not s.ok or not split_out.is_file():
+        return s
+
+    # Promove composição a LOD0 (árvore = Stump+Top).
+    shutil.copy2(split_out, lod0)
+
+    if want_files:
+        # CLI escreve {stem}_stump / {stem}_top a partir do stem de -o (id_split).
+        raw_stump = split_out.with_name(f"{split_out.stem}_stump{split_out.suffix}")
+        raw_top = split_out.with_name(f"{split_out.stem}_top{split_out.suffix}")
+        stump = _stump_path(mesh_final)
+        top = _top_path(mesh_final)
+        if raw_stump.is_file() and raw_stump.resolve() != stump.resolve():
+            shutil.move(str(raw_stump), str(stump))
+        if raw_top.is_file() and raw_top.resolve() != top.resolve():
+            shutil.move(str(raw_top), str(top))
+
+    return StageResult(
+        "split-at-height",
+        True,
+        s.elapsed_s,
+        f"cut_height={cut_h} → {split_out.name} (+lod0)",
+        split_out,
+    )
+
+
 def _post_text3d_mesh_extras(
     profile: GameProfile,
     row: ManifestRow,
@@ -198,7 +299,7 @@ def _post_text3d_mesh_extras(
     bake_normals: bool | None = None,
     on_progress_line: Any = None,
 ) -> bool:
-    """Define mesh_path e corre o master pipeline (LOD0 master, transfer-weights, validate).
+    """Define mesh_path e corre o master pipeline (Round 3: rig sobre painted -> animate x1 -> ladder).
 
     Devolve True se algum passo falhou. O master pipeline é agora o único
     caminho - o antigo fluxo linha-a-linha (text3d lod / rigging3d /
@@ -645,8 +746,13 @@ def _text3d_argv(
         target = get_target_faces(row.category, face_ratio=fr)
         opts = optimize_text3d_for_target(target)
         args.extend(["--steps", str(opts.steps)])
-        args.extend(["--octree-resolution", str(opts.octree_resolution)])
         args.extend(["--num-chunks", str(opts.num_chunks)])
+        # Com size_m/height_m o Text3D ``bbox_tune`` sobe octree por metros.
+        # Passar ``--octree-resolution`` aqui marca o eixo como override e
+        # bloqueia o size-tune (buildings ficavam presos em 256).
+        omni_pre = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+        if omni_pre.size_m is None and omni_pre.height_m is None:
+            args.extend(["--octree-resolution", str(opts.octree_resolution)])
     else:
         explicit_hunyuan = t3.steps is not None or t3.octree_resolution is not None or t3.num_chunks is not None
         if t3.preset and not explicit_hunyuan:
@@ -746,12 +852,15 @@ def _rocks3d_pipeline_failed(
         preview = merge_subprocess_output(r, max_chars=4000) or err
         console.print(f"[red]rocks3d falhou[/red] {row.id}: {preview}")
         return True
-    if not mesh_final.is_file():
+    if not mesh_final.is_file() and not _lod_path(mesh_final, 0).is_file():
         rec["status"] = "error"
         rec["error"] = "rocks3d não produziu GLB"
         console.print(f"[red]rocks3d sem GLB[/red] {row.id}")
         return True
-    rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
+    # Bare → lod0; meshes/ só deliverables _lod*.
+    finalize_mesh_deliverables(mesh_final)
+    lod0 = _lod_path(mesh_final, 0)
+    rec["mesh_path"] = _path_for_log(lod0 if lod0.is_file() else mesh_final, manifest_dir)
     return False
 
 
@@ -835,6 +944,8 @@ def _topology_fix_extra_argv(
         args.extend(["--category", str(cat)])
     if t3 is not None and t3.octree_resolution:
         args.extend(["--octree", str(int(t3.octree_resolution))])
+    # Default explícito: engine arrays (CLI já defaulta arrays; força no batch).
+    args.extend(["--engine", "arrays"])
     return args
 
 
@@ -1204,6 +1315,173 @@ def _glb_has_animations(path: Path) -> bool:
         return False
 
 
+def _glb_has_duplicate_clips(path: Path) -> bool:
+    """True se o GLB tem clips duplicadas (``attack`` + ``attack.001`` ...).
+
+    Legado do DAG antigo: o game-pack corria sobre meshes que já traziam
+    clips copiadas pelo transfer-weights e o Blender renomeava as cópias com
+    sufixo ``.00N`` (bandit/boss_ogre com 14-18 clips em vez de 7-9). Um GLB
+    assim NÃO é fonte aceitável para a ladder — o animate corre de novo.
+    """
+    try:
+        with open(path, "rb") as f:
+            if f.read(4) != b"glTF":
+                return False
+            f.read(8)
+            json_len = struct.unpack("<I", f.read(4))[0]
+            f.read(4)
+            j = json.loads(f.read(json_len))
+        names = [a.get("name", "") for a in (j.get("animations") or [])]
+        bases = [n.split(".")[0] for n in names]
+        return len(names) != len(set(names)) or len(bases) != len(set(bases))
+    except Exception:
+        return False
+
+
+def _finish_lod_with_rollback(
+    p: Path,
+    level: int,
+    expect_ok: Callable[[Path], bool],
+    res: MasterPipelineResult,
+) -> None:
+    """``gltf_transform_finish`` com backup: rollback se perder skin/clips/paint.
+
+    Corre DEPOIS da ladder estar completa — a partir daqui nenhum stage lê
+    estes GLBs via bpy (collision usa o ``_painted``), logo meshopt é seguro.
+    Entregável animado sem compressão > lod mudo: se o roundtrip npx destruir
+    ``skins[]``/clips/materiais, restaura o ficheiro pré-finish.
+    """
+    import shutil as _sh_finish
+
+    pre = p.with_suffix(p.suffix + ".pre_finish")
+    try:
+        _sh_finish.copy2(p, pre)
+        from text3d.utils.gltf_finish import gltf_transform_finish
+
+        gltf_transform_finish(p, p)
+        if not expect_ok(p):
+            log.error("master: finish lod%d destruiu skins/clips/paint — a restaurar pré-finish", level)
+            _sh_finish.copy2(pre, p)
+            res.stages.append(
+                StageResult(
+                    f"finish-lod{level}-rollback",
+                    False,
+                    0.0,
+                    "finish destruiu animations/skins; restaurado pré-finish",
+                    p,
+                )
+            )
+    except Exception as exc:
+        log.warning("master: finish promoted lod%d falhou: %s", level, exc)
+    finally:
+        with contextlib.suppress(OSError):
+            if pre.is_file():
+                pre.unlink()
+
+
+def _run_static_lod_stages(
+    *,
+    run_stage: Callable[[str, list[str], Path | None], StageResult],
+    res: MasterPipelineResult,
+    mesh_final: Path,
+    painted_p: Path,
+    target_faces: int,
+    base: str,
+    with_lod: bool,
+    bake_normals: bool,
+    text3d_bin: str,
+    with_rig: bool,
+) -> None:
+    """Caminho estático (sem rig): bake-master identity + ladder do painted.
+
+    LOD0 DEVE ser o painted (mesma topologia); LOD1/2 por ``text3d lod
+    --painted-mesh`` (remesh textured). Se um lod0 promovido (rig/animated de
+    outra run) existir, nada é clobberado. O finish (meshopt) corre nos
+    LOD1/2 dentro do próprio text3d lod — depois desta fase nenhum stage lê
+    os entregáveis via bpy (collision usa o painted).
+    """
+    import shutil as _sh
+
+    lod0_p = _lod_path(mesh_final, 0)
+    lod1_p = _lod_path(mesh_final, 1)
+    lod2_p = _lod_path(mesh_final, 2)
+    painted_faces = _count_faces_glb(painted_p)
+    lod0_faces = _count_faces_glb(lod0_p) if lod0_p.is_file() else -1
+    # Entregável já promovido (animate/rig) NÃO pode ser clobberado por painted→lod0.
+    lod0_is_promoted = lod0_p.is_file() and (
+        _glb_is_promoted_animated(lod0_p) or (with_rig and _glb_is_promoted_rigged(lod0_p))
+    )
+    lod0_matches_painted = (
+        lod0_p.is_file()
+        and not lod0_is_promoted
+        and _glb_has_materials(lod0_p)
+        and painted_faces > 0
+        and lod0_faces >= int(painted_faces * 0.99)
+    )
+
+    if lod0_is_promoted:
+        res.stages.append(
+            StageResult("bake-master", True, 0.0, f"skipped (lod0 already promoted faces={lod0_faces})", lod0_p)
+        )
+    elif lod0_matches_painted:
+        res.stages.append(StageResult("bake-master", True, 0.0, f"skipped (lod0=painted faces={lod0_faces})", lod0_p))
+    else:
+        # Cópia directa painted → lod0 (identidade). bake-normals high→low só
+        # faz sentido com decimação; com lod0=painted seria redundante.
+        _sh.copy2(painted_p, lod0_p)
+        lod0_matches_painted = True
+        msg = f"lod0=painted copy faces={painted_faces}"
+        if bake_normals:
+            msg += " (bake-normals skipped: lod0=painted)"
+        res.stages.append(StageResult("bake-master", True, 0.0, msg, lod0_p))
+    res.lod0_path = lod0_p
+
+    # Stage 5 - LOD1/LOD2 a partir do PAINTED (não do lod0 crushado).
+    # Skip só se lod0=painted E lod1/2 têm densidade saudável (~ratio 0.40/0.15).
+    if with_lod:
+        lod1_faces = _count_faces_glb(lod1_p) if lod1_p.is_file() else -1
+        lod2_faces = _count_faces_glb(lod2_p) if lod2_p.is_file() else -1
+        lod_ladder_ok = (
+            lod0_matches_painted
+            and lod1_p.is_file()
+            and lod2_p.is_file()
+            and _glb_has_materials(lod1_p)
+            and _glb_has_materials(lod2_p)
+            and painted_faces > 0
+            and lod1_faces >= int(painted_faces * 0.25)
+            and lod2_faces >= int(painted_faces * 0.08)
+            and lod2_faces < lod1_faces
+        )
+        if lod0_is_promoted:
+            res.stages.append(StageResult("lod", True, 0.0, "skipped (lod0 already promoted)", lod1_p))
+        elif lod_ladder_ok:
+            res.stages.append(StageResult("lod", True, 0.0, "skipped (lod1/lod2 ok)", lod1_p))
+        else:
+            lod_min1 = max(target_faces // 2, 500)
+            lod_min2 = max(target_faces // 4, 150)
+            lod_argv = [
+                text3d_bin,
+                "lod",
+                str(painted_p),
+                "-o",
+                str(mesh_final.parent),
+                "--basename",
+                base,
+                "--painted-mesh",
+                str(painted_p),
+                "--lod1-ratio",
+                "0.40",
+                "--lod2-ratio",
+                "0.15",
+                "--min-faces-lod1",
+                str(lod_min1),
+                "--min-faces-lod2",
+                str(lod_min2),
+            ]
+            s = run_stage("lod", lod_argv, None)
+            res.stages.append(s)
+
+
 def run_master_pipeline(
     profile: GameProfile,
     row: ManifestRow,
@@ -1322,7 +1600,15 @@ def run_master_pipeline(
             res.ok = False
             return res
 
-    # Stage 4 - bake-master (painted -> lod0 com tangents/KTX2/meshopt)
+    # ------------------------------------------------------------------
+    # Round 3 DAG — painted é pré-condição; daqui dois caminhos:
+    #   rig:    rigging3d sobre o PAINTED -> animator3d game-pack x1 ->
+    #           text3d lod sobre o animated/rigged (decimate preserva
+    #           armature/weights/clips nativamente) -> lod0/1/2 + finish.
+    #   static: bake-master identity (lod0=painted) + ladder do painted.
+    # Sem rigged_hi (GPU sobre _clean HI sem textura, descartado) nem
+    # transfer-weights por LOD (KDTree x3 + game-pack x3 + clips duplicadas).
+    # ------------------------------------------------------------------
     if not painted_p.is_file():
         res.ok = False
         res.stages.append(StageResult("bake-master", False, 0.0, f"painted ausente: {painted_p}"))
@@ -1334,84 +1620,147 @@ def run_master_pipeline(
     if target_faces <= 0:
         target_faces = 8000
     lod0_p = _lod_path(mesh_final, 0)
-    # Quando há rigging/anim downstream, o LOD0 vai ser re-importado por bpy
-    # (rigging3d, animator3d). bpy não suporta EXT_meshopt_compression,
-    # portanto saltamos a compressão em bake-master e re-aplicamos
-    # gltf_transform_finish na promoção (Stage 9.5) sobre o output final.
-    needs_bpy_downstream = (with_rig and rigging3d_bin is not None) or (with_animate and animator3d_bin is not None)
-
-    # LOD0 DEVE ser o painted (mesma topologia). Skip só se faces ≈ painted.
-    # Bug antigo: skip com "lod0 com material" aceitava lod0 derretido (~10%).
-    from .paths import _base_stem as _bs_bake
-    from .paths import _intermediate_dir as _inter_bake_dir
-
-    _bake_base = _bs_bake(mesh_final.stem)
-    _painted_lod0_arch = _inter_bake_dir(mesh_final) / f"{_bake_base}_lod0_painted{mesh_final.suffix}"
-    painted_faces = _count_faces_glb(painted_p)
-    lod0_faces = _count_faces_glb(lod0_p) if lod0_p.is_file() else -1
-    lod0_matches_painted = (
-        lod0_p.is_file()
-        and _glb_has_materials(lod0_p)
-        and painted_faces > 0
-        and lod0_faces >= int(painted_faces * 0.99)
-    )
-
-    import shutil as _sh_bake
-
-    if lod0_matches_painted:
-        res.stages.append(StageResult("bake-master", True, 0.0, f"skipped (lod0=painted faces={lod0_faces})", lod0_p))
-    else:
-        # Cópia directa painted → lod0 (identidade). Sem bake-master remesh.
-        # bake-normals high→low só faz sentido com decimação; com lod0=painted
-        # o normal map seria redudante — saltamos.
-        _sh_bake.copy2(painted_p, lod0_p)
-        lod0_faces = painted_faces
-        lod0_matches_painted = True
-        msg = f"lod0=painted copy faces={painted_faces}"
-        if bake_normals:
-            msg += " (bake-normals skipped: lod0=painted)"
-        res.stages.append(StageResult("bake-master", True, 0.0, msg, lod0_p))
-        # Arquiva referência debug se existia lod0 crush antigo no archive path
-        if _painted_lod0_arch.is_file() and not _glb_has_materials(_painted_lod0_arch):
-            with contextlib.suppress(OSError):
-                _painted_lod0_arch.unlink()
-    res.lod0_path = lod0_p
-
-    # Stage 5 - LOD1/LOD2 a partir do PAINTED (não do lod0 crushado).
-    # Sem --target-faces → text3d lod copia painted→lod0 e decima lod1/2 por ratio.
     lod1_p = _lod_path(mesh_final, 1)
     lod2_p = _lod_path(mesh_final, 2)
-    if with_lod:
-        lod1_faces = _count_faces_glb(lod1_p) if lod1_p.is_file() else -1
-        lod2_faces = _count_faces_glb(lod2_p) if lod2_p.is_file() else -1
-        # Skip só se lod0=painted E lod1/2 têm densidade saudável (~ratio 0.40/0.15).
-        # lod1~10% painted = ladder antiga esmagada — forçar regen.
-        lod_ladder_ok = (
-            lod0_matches_painted
-            and lod1_p.is_file()
-            and lod2_p.is_file()
-            and _glb_has_materials(lod1_p)
-            and _glb_has_materials(lod2_p)
-            and painted_faces > 0
-            and lod1_faces >= int(painted_faces * 0.25)
-            and lod2_faces >= int(painted_faces * 0.08)
-            and lod2_faces < lod1_faces
+
+    from .paths import _base_stem as _bs_bake
+
+    _bake_base = _bs_bake(mesh_final.stem)
+
+    # Arquiva intermediários do DAG antigo (rigged_hi, per-lod rigged/
+    # animated/pre_promote) antes de qualquer skip — idempotente.
+    archived_legacy = archive_legacy_rig_intermediates(mesh_final)
+    if archived_legacy:
+        log.info("master: %d intermediários legados -> _intermediate/", len(archived_legacy))
+
+    lod0_promoted_anim = _glb_is_promoted_animated(lod0_p) if lod0_p.is_file() else False
+    lod0_promoted_rig = _glb_is_promoted_rigged(lod0_p) if lod0_p.is_file() else False
+
+    rigged_p = _rigged_existing(mesh_final) or _rigged_path(mesh_final)
+    animated_p = _animated_existing(mesh_final) or _animated_path(mesh_final)
+
+    def _rigged_ok(p: Path | None) -> bool:
+        """Rigged utilizável: skin real + o paint herdado do painted."""
+        return p is not None and p.is_file() and _glb_has_skin(p) and _glb_has_materials(p)
+
+    def _animated_ok(p: Path | None) -> bool:
+        """Animated utilizável: skin + clips + paint, sem clips duplicadas .00N."""
+        return (
+            p is not None
+            and p.is_file()
+            and _glb_has_skin(p)
+            and _glb_has_animations(p)
+            and _glb_has_materials(p)
+            and not _glb_has_duplicate_clips(p)
         )
-        if lod_ladder_ok:
-            res.stages.append(StageResult("lod", True, 0.0, "skipped (lod1/lod2 ok)", lod1_p))
+
+    promotion_kind = "none"
+    rig_source: Path | None = None
+
+    if with_rig and rigging3d_bin:
+        # Stage 7 - rigging3d pipeline sobre o PAINTED (topologia final do
+        # LOD0, com textura — ~6x mais leve que o antigo rig sobre _clean HI
+        # e o output serve directamente de fonte da ladder).
+        if lod0_promoted_anim or (not with_animate and lod0_promoted_rig):
+            res.stages.append(StageResult("rigging3d", True, 0.0, "skipped (lod0 já promovido)", lod0_p))
+        elif with_animate and _animated_ok(animated_p):
+            res.stages.append(StageResult("rigging3d", True, 0.0, "skipped (animated existente)", animated_p))
+        elif _rigged_ok(rigged_p):
+            res.stages.append(StageResult("rigging3d", True, 0.0, "skipped (rigged existente)", rigged_p))
         else:
+            rig_argv = _rigging3d_pipeline_argv(
+                rigging3d_bin,
+                painted_p,
+                rigged_p,
+                seed=_seed_for_row(profile, row.id),
+                rig_profile=profile.rigging3d,
+                gpu_ids=gpu_ids,
+                hw_auto=profile.hw_auto,
+                quality=profile.generation,
+            )
+            s = _run("rigging3d", rig_argv, rigged_p)
+            res.stages.append(s)
+            if s.ok and not _rigged_ok(rigged_p):
+                # Gate: skin real E paint herdado — senão a ladder nasce branca.
+                res.stages.append(
+                    StageResult("rigging3d-gate", False, 0.0, "rigged sem skins[] ou sem baseColorTexture", rigged_p)
+                )
+                s = StageResult("rigging3d", False, s.elapsed_s, "rigged output inválido (gate)", rigged_p)
+            if not s.ok:
+                with_rig = False  # fallback estático — o asset não fica sem LODs
+
+        # Stage 8 - animator3d game-pack x1 sobre o rigged (antes: um por LOD).
+        if with_rig and with_animate and animator3d_bin:
+            if lod0_promoted_anim:
+                res.stages.append(StageResult("animate", True, 0.0, "skipped (lod0 já animado)", lod0_p))
+            elif _animated_ok(animated_p):
+                res.stages.append(StageResult("animate", True, 0.0, "skipped (animated existente)", animated_p))
+            elif _rigged_ok(rigged_p):
+                # Animation config: per-row ``animate:`` sub-dict overrides global ``animator3d:`` profile.
+                anim_prof = profile.animator3d or Animator3DProfile()
+                eff_preset = (row.animate_preset or anim_prof.preset or "humanoid").strip().lower()
+                # Fallback por categoria só quando nem a row nem o profile definem preset.
+                # ``creature`` -> humanoid (mocap); não-humanoides reais exigem animate.preset explícito.
+                if not row.animate_preset and not (profile.animator3d and profile.animator3d.preset):
+                    eff_preset = animator_preset_for_category(row.category)
+                eff_clips = row.animate_clips or anim_prof.clips
+                eff_procedural = row.animate_procedural if row.animate_procedural is not None else anim_prof.procedural
+                eff_force_preset = (
+                    row.animate_force_preset if row.animate_force_preset is not None else anim_prof.force_preset
+                )
+                an_argv = _animator3d_game_pack_argv(
+                    animator3d_bin,
+                    rigged_p,
+                    animated_p,
+                    preset=eff_preset,
+                    clips=eff_clips,
+                    procedural=eff_procedural,
+                    force_preset=eff_force_preset,
+                )
+                s = _run("animate", an_argv, animated_p)
+                res.stages.append(s)
+                if s.ok and not _animated_ok(animated_p):
+                    log.error("master: animate perdeu skin/clips/paint (%s) — a promover rigged", animated_p.name)
+                    res.stages.append(
+                        StageResult("animate-gate", False, 0.0, "animated sem skins/clips/baseColorTexture", animated_p)
+                    )
+            else:
+                res.stages.append(StageResult("animate", False, 0.0, "rigged indisponível para animate", rigged_p))
+
+        # Fonte da ladder: animated > rigged (animate falhado => promove rigged).
+        if with_animate and _animated_ok(animated_p):
+            rig_source = animated_p
+            promotion_kind = "animated"
+        elif _rigged_ok(rigged_p):
+            rig_source = rigged_p
+            promotion_kind = "rigged"
+
+    # Fallback de resume: entregável já promovido mas os intermediários foram
+    # apagados — a ladder (re)gera-se a partir do próprio lod0 (o import do
+    # text3d lod é meshopt-aware via bpy 5.2 / gltf-transform).
+    if with_rig and rig_source is None and (lod0_promoted_anim or lod0_promoted_rig):
+        rig_source = lod0_p
+        promotion_kind = "animated" if lod0_promoted_anim else "rigged"
+
+    # Stage 9 - lod0 + ladder a partir da fonte rigada.
+    if rig_source is not None:
+        expect = _glb_is_promoted_animated if promotion_kind == "animated" else _glb_is_promoted_rigged
+        ladder_ok = expect(lod0_p) and (
+            not with_lod or (lod1_p.is_file() and lod2_p.is_file() and expect(lod1_p) and expect(lod2_p))
+        )
+        if ladder_ok:
+            res.stages.append(StageResult("lod", True, 0.0, f"skipped (ladder {promotion_kind} ok)", lod0_p))
+        elif with_lod:
             lod_min1 = max(target_faces // 2, 500)
             lod_min2 = max(target_faces // 4, 150)
             lod_argv = [
                 text3d_bin,
                 "lod",
-                str(painted_p),
+                str(rig_source),
                 "-o",
                 str(mesh_final.parent),
                 "--basename",
-                mesh_final.stem,
-                "--painted-mesh",
-                str(painted_p),
+                _bake_base,
                 "--lod1-ratio",
                 "0.40",
                 "--lod2-ratio",
@@ -1422,40 +1771,48 @@ def run_master_pipeline(
                 str(lod_min2),
                 "--no-meshopt",
             ]
-            # Resume: se já há rigged_hi (+ clips), LOD rebinda skin/skel/anims
-            # via gamedev_shared.skin_transfer (evita game-pack de novo).
-            _skin_hi = _rigged_hi_existing(mesh_final)
-            if _skin_hi is not None and _skin_hi.is_file():
-                lod_argv.extend(["--skin-source", str(_skin_hi)])
-                _anim_src: Path | None = None
-                if lod0_p.is_file() and _glb_has_animations(lod0_p):
-                    _anim_src = lod0_p
-                else:
-                    _alias = mesh_final.parent / f"{_bake_base}_rigged_animated{mesh_final.suffix}"
-                    if _alias.is_file() and _glb_has_animations(_alias):
-                        _anim_src = _alias
-                if _anim_src is not None:
-                    lod_argv.extend(["--animation-source", str(_anim_src)])
-            # Igual a bake-master: salta finish quando bpy precisa importar
-            # depois (rigging/animação por LOD). Re-comprimimos na promoção.
-            if needs_bpy_downstream:
-                lod_argv.append("--no-finish")
             s = _run("lod", lod_argv)
             res.stages.append(s)
-            # Após regen, lod0 deve match painted
-            lod0_faces = _count_faces_glb(lod0_p) if lod0_p.is_file() else -1
-            lod0_matches_painted = lod0_p.is_file() and painted_faces > 0 and lod0_faces >= int(painted_faces * 0.99)
+            # Finish (KTX2+meshopt+tangents) por ficheiro, DEPOIS da ladder
+            # completa — nenhum stage posterior lê estes GLBs via bpy
+            # (collision usa o painted). Rollback automático se o roundtrip
+            # destruir skins/clips — entregável sem compressão > lod mudo.
+            for lvl, p in ((0, lod0_p), (1, lod1_p), (2, lod2_p)):
+                if p.is_file():
+                    _finish_lod_with_rollback(p, lvl, expect, res)
+        else:
+            import shutil as _sh
 
-    # Stage 6 - collision a partir do LOD0
+            _sh.copy2(rig_source, lod0_p)
+            _finish_lod_with_rollback(lod0_p, 0, expect, res)
+            res.stages.append(StageResult("lod", True, 0.0, f"lod0={promotion_kind} copy (sem ladder)", lod0_p))
+        res.lod0_path = lod0_p
+    else:
+        _run_static_lod_stages(
+            run_stage=_run,
+            res=res,
+            mesh_final=mesh_final,
+            painted_p=painted_p,
+            target_faces=target_faces,
+            base=_bake_base,
+            with_lod=with_lod,
+            bake_normals=bool(bake_normals),
+            text3d_bin=text3d_bin,
+            with_rig=with_rig,
+        )
+
+    # Stage 6 - collision a partir do PAINTED (geometria estática idêntica ao
+    # lod0, sem armature nem meshopt — o builder não precisa de os desenredar).
     if with_collision:
         coll_p = _collision_path(mesh_final)
         if coll_p.is_file():
             res.stages.append(StageResult("collision", True, 0.0, "skipped (collision existente)", coll_p))
         else:
+            coll_src = painted_p if painted_p.is_file() else lod0_p
             coll_argv = [
                 text3d_bin,
                 "collision",
-                str(lod0_p),
+                str(coll_src),
                 "-o",
                 str(coll_p),
             ]
@@ -1478,272 +1835,18 @@ def run_master_pipeline(
                 except Exception as exc:
                     log.warning("master: finish collision falhou: %s", exc)
 
-    # Stage 7 - rigging3d pipeline sobre _clean.glb. Skip se já temos um
-    # rigged_hi válido (em meshes/ ou _intermediate/) - resume-friendly.
-    rigged_hi_existing = _rigged_hi_existing(mesh_final)
-    rigged_hi_p = rigged_hi_existing if rigged_hi_existing is not None else _rigged_hi_path(mesh_final)
-    if with_rig and rigging3d_bin:
-        if rigged_hi_existing is not None and rigged_hi_existing.is_file():
-            res.stages.append(StageResult("rigging3d-hi", True, 0.0, "skipped (rigged_hi existente)", rigged_hi_p))
-        else:
-            rig_argv = _rigging3d_pipeline_argv(
-                rigging3d_bin,
-                clean_p,
-                rigged_hi_p,
-                seed=_seed_for_row(profile, row.id),
-                rig_profile=profile.rigging3d,
-                gpu_ids=gpu_ids,
-                hw_auto=profile.hw_auto,
-                quality=profile.generation,
-            )
-            s = _run("rigging3d-hi", rig_argv, rigged_hi_p)
-            res.stages.append(s)
-            if not s.ok:
-                with_rig = False  # bloqueia stages dependentes mas não aborta o asset
-
-    # Stage 8 - Rigging por LOD via ``rigging3d transfer-weights``.
-    #
-    # Re-usa o skeleton+skin do ``_rigged_hi.glb`` e transfere os weights
-    # para cada LOD low-poly via KDTree (ver ``transfer_weights.py``),
-    # produzindo GLB com Armature real (re-importável por bpy -> animator3d).
-    # Não corre o modelo de inferência de novo (sem GPU).
-    #
-    # Se lod0 foi promovido a animated SEM paint (bug antigo), restaura o
-    # bake-master arquivado em ``_intermediate/*_lodN_painted.glb`` antes
-    # do transfer - senão o target é mesh branca e o paint nunca volta.
-    from .paths import _base_stem as _bs_restore
-
-    _base_restore = _bs_restore(mesh_final.stem)
-    _inter_restore = _intermediate_dir(mesh_final)
-    for _lvl, _lod in enumerate((lod0_p, lod1_p, lod2_p)):
-        if not _lod.is_file():
-            continue
-        if _glb_has_materials(_lod):
-            continue
-        _painted_lod = _inter_restore / f"{_base_restore}_lod{_lvl}_painted{mesh_final.suffix}"
-        if _painted_lod.is_file() and _glb_has_materials(_painted_lod):
-            import shutil as _sh_restore
-
-            _sh_restore.copy2(_painted_lod, _lod)
-            log.warning(
-                "master: lod%d sem paint - restaurado de %s antes do transfer",
-                _lvl,
-                _painted_lod.name,
-            )
-
-    rigged_lods: list[Path] = []
-    if with_rig and rigging3d_bin and rigged_hi_p.is_file():
-        targets: list[Path] = [lod0_p]
-        if lod1_p.is_file():
-            targets.append(lod1_p)
-        if lod2_p.is_file():
-            targets.append(lod2_p)
-        for i, tgt in enumerate(targets):
-            out = _lod_rigged_path(mesh_final, i)
-            merge_argv = [
-                rigging3d_bin,
-                "transfer-weights",
-                "--source",
-                str(rigged_hi_p),
-                "--target",
-                str(tgt),
-                "--output",
-                str(out),
-            ]
-            # Preferir clips já existentes (lod0 animado / alias) — Shared
-            # skin_transfer copia NLA/actions para o novo topology.
-            _anim_for_xfer: Path | None = None
-            if lod0_p.is_file() and _glb_has_animations(lod0_p):
-                _anim_for_xfer = lod0_p
-            else:
-                _alias_xfer = mesh_final.parent / f"{_base_restore}_rigged_animated{mesh_final.suffix}"
-                if _alias_xfer.is_file() and _glb_has_animations(_alias_xfer):
-                    _anim_for_xfer = _alias_xfer
-            if _anim_for_xfer is not None:
-                merge_argv.extend(["--animation-source", str(_anim_for_xfer)])
-            s = _run(f"rigging3d-merge-lod{i}", merge_argv, out)
-            res.stages.append(s)
-            if s.ok and out.is_file():
-                # Valida que o output tem skin (o exportador GLTF do Blender
-                # às vezes não emite skin para outputs de transfer-weights).
-                has_skin = _glb_has_skin(out)
-                if has_skin:
-                    rigged_lods.append(out)
-                else:
-                    log.warning("master: rigged-lod%d sem skin (transfer-weights); a usar rigged_hi", i)
-
-    # Fallback: se nenhum LOD rigged válido, NÃO usar rigged_hi cego -
-    # rigged_hi vem do _clean (sem paint) e produziria LOD0 branco.
-    # Só fallback se o painted também não tiver material (asset sem paint).
-    if with_rig and with_animate and not rigged_lods and rigged_hi_p.is_file():
-        painted_has_mat = _glb_has_materials(painted_p) if painted_p.is_file() else False
-        if painted_has_mat:
-            log.error(
-                "master: transfer-weights sem skin válido mas painted TEM material - "
-                "a recusar fallback rigged_hi (evita LOD0 branco sem paint). "
-                "Corrigir transfer-weights e re-correr resume."
-            )
-            res.stages.append(
-                StageResult(
-                    "rigging3d-fallback",
-                    False,
-                    0.0,
-                    "recusado: painted tem material; transfer-weights tem de emitir skins[]",
-                    rigged_hi_p,
-                )
-            )
-            with_animate = False
-        else:
-            rigged_lods = [rigged_hi_p]
-            res.stages.append(
-                StageResult(
-                    "rigging3d-fallback",
-                    True,
-                    0.0,
-                    "usando rigged_hi (sem painted/material)",
-                    rigged_hi_p,
-                )
-            )
-
-    # Stage 9 - animate cada LOD rigged.
-    # Animation config: per-row ``animate:`` sub-dict overrides global ``animator3d:`` profile.
-    animated_lods: list[Path] = []
-    anim_prof = profile.animator3d or Animator3DProfile()
-    # Resolve effective animation settings (row overrides -> profile defaults -> category fallback).
-    eff_preset = (row.animate_preset or anim_prof.preset or "humanoid").strip().lower()
-    # Fallback por categoria só quando nem a row nem o profile definem preset.
-    # ``creature`` -> humanoid (mocap); não-humanoides reais exigem animate.preset explícito.
-    if not row.animate_preset and not (profile.animator3d and profile.animator3d.preset):
-        eff_preset = animator_preset_for_category(row.category)
-    eff_clips = row.animate_clips or anim_prof.clips
-    eff_procedural = row.animate_procedural if row.animate_procedural is not None else anim_prof.procedural
-    eff_force_preset = row.animate_force_preset if row.animate_force_preset is not None else anim_prof.force_preset
-    if with_rig and with_animate and animator3d_bin and rigged_lods:
-        for rg in rigged_lods:
-            try:
-                level_str = rg.stem.split("_lod")[1].split("_")[0]
-                lvl = int(level_str)
-            except (IndexError, ValueError):
-                lvl = 0
-            anim_p = _lod_animated_path(mesh_final, lvl)
-            an_argv = _animator3d_game_pack_argv(
-                animator3d_bin,
-                rg,
-                anim_p,
-                preset=eff_preset,
-                clips=eff_clips,
-                procedural=eff_procedural,
-                force_preset=eff_force_preset,
-            )
-            s = _run(f"animate-lod{lvl}", an_argv, anim_p)
-            res.stages.append(s)
-            if s.ok and anim_p.is_file():
-                # Gate: animate NÃO pode perder o paint do input rigged.
-                if _glb_has_materials(rg) and not _glb_has_materials(anim_p):
-                    log.error(
-                        "master: animate-lod%d perdeu materiais/texturas (%s -> %s)",
-                        lvl,
-                        rg.name,
-                        anim_p.name,
-                    )
-                    res.stages.append(
-                        StageResult(
-                            f"animate-lod{lvl}-paint-check",
-                            False,
-                            0.0,
-                            "output animado sem baseColorTexture",
-                            anim_p,
-                        )
-                    )
-                    continue
-                # Round 2: finish em _animated.glb (mantém skin/animation tracks).
-                # Sem UASTC/KTX2 (requer CLI ktx externo) - usa só dedup+prune+meshopt.
-                try:
-                    from text3d.utils.gltf_finish import gltf_transform_finish
-
-                    gltf_transform_finish(anim_p, anim_p, apply_uastc=False, apply_meshopt=True)
-                    if not anim_p.is_file():
-                        log.error("master: finish animated apagou %s - a re-gerar sem finish", anim_p)
-                except Exception as exc:
-                    log.warning("master: finish animated falhou em %s: %s", anim_p, exc)
-                if anim_p.is_file():
-                    animated_lods.append(anim_p)
-
-    # Stage 9.5 - Promoção: o output do estágio mais alto vira lodN.glb.
-    # Semântica: lod0.glb é SEMPRE o asset pronto-pra-jogo. Se houve animate,
-    # lod0=animated; se houve só rig, lod0=rigged; senão fica o bake-master.
-    # Versões "intermediárias" (bake-master sem rig, ou rigged se animado
-    # promovido) movem-se para _intermediate/ para debug, evitando ficheiros
-    # redundantes em meshes/.
-    promotion_kind = "none"
-    if animated_lods:
-        promotion_kind = "animated"
-        winners = animated_lods
-    elif rigged_lods:
-        promotion_kind = "rigged"
-        winners = rigged_lods
-    else:
-        winners = []
-
-    import shutil as _shutil
-
-    if winners:
-        log.info("master: promovendo %s outputs como lod0/1/2 (%s)", len(winners), promotion_kind)
-        promoted_levels: set[int] = set()
-        for w in winners:
-            try:
-                level_str = w.stem.rsplit("_lod", 1)[1].split("_")[0]
-                level = int(level_str)
-            except (IndexError, ValueError):
-                continue
-            target = _lod_path(mesh_final, level)
-            # Move bake-master output para _intermediate/_lodN_painted.glb (debug).
-            if target.is_file() and target.resolve() != w.resolve():
-                base = mesh_final.stem
-                from .paths import _base_stem as _bs
-
-                base = _bs(base)
-                debug = _intermediate_dir(mesh_final) / f"{base}_lod{level}_painted{mesh_final.suffix}"
-                debug.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    _shutil.move(str(target), str(debug))
-                except OSError as exc:
-                    log.warning("master: move bake-master->intermediate falhou: %s", exc)
-            try:
-                _shutil.move(str(w), str(target))
-                promoted_levels.add(level)
-            except OSError as exc:
-                log.warning("master: promoção %s->%s falhou: %s", w, target, exc)
-                continue
-            # Garante que o output final está totalmente optimizado
-            # (KTX2+meshopt+tangents+dedup+prune). Bake-master e
-            # rigging/animação correm com finish minimal quando há bpy
-            # downstream - aplicamos a finalização pesada aqui no fim.
-            try:
-                from text3d.utils.gltf_finish import gltf_transform_finish
-
-                gltf_transform_finish(target, target)
-            except Exception as exc:
-                log.warning("master: finish promoted lod%d falhou: %s", level, exc)
-
-        # Se animated promovido, arquivar _lod*_rigged e publicar alias de runtime.
-        if promotion_kind == "animated":
-            for r in rigged_lods:
-                if r.is_file():
-                    try:
-                        move_to_intermediate(r, mesh_final)
-                    except OSError as exc:
-                        log.warning("master: move rigged->intermediate falhou: %s", exc)
-            # Catch leftovers from resume/re-rig parcial (podem existir sem skin).
-            archived = archive_leftover_lod_rigged(mesh_final)
-            if archived:
-                log.info("master: arquivados %d lod*_rigged órfãos -> _intermediate/", len(archived))
-            # Alias estável para o jogo: id_rigged_animated.glb ← id_lod0.glb
-            lod0_promoted = _lod_path(mesh_final, 0)
-            alias = publish_rigged_animated_alias(mesh_final, lod0_promoted)
-            if alias is not None:
-                log.info("master: alias runtime %s ← %s", alias.name, lod0_promoted.name)
-                res.stages.append(StageResult("publish-rigged-animated-alias", True, 0.0, alias.name, alias))
+    # Stage 6b - split-at-height (árvores): composição Stump+Top no LOD0.
+    # Corre depois da collision para o hull nascer do painted/lod0 unsplit.
+    if wants_split_at_height(profile, row):
+        s = run_split_at_height_stage(
+            text3d_bin=text3d_bin,
+            mesh_final=mesh_final,
+            profile=profile,
+            run_stage=_run,
+        )
+        res.stages.append(s)
+        if not s.ok:
+            res.ok = False
 
     # Stage 10 - validação. LOD0 é gate; LOD1/2 são warnings.
     # As regras efectivas dependem de quem foi promovido: animated.yaml >
@@ -1789,6 +1892,24 @@ def run_master_pipeline(
     move_to_intermediate(shape_p, mesh_final)
     move_to_intermediate(painted_p, mesh_final)
     # rigged_hi e clean já nascem em _intermediate/.
+
+    # Deliverables: só id_lodN + id_collision. Arquiva bare / aliases.
+    finalized = finalize_mesh_deliverables(mesh_final)
+    if finalized:
+        log.info(
+            "master: deliverables limpos (%d): %s",
+            len(finalized),
+            ", ".join(p.name for p in finalized[:8]),
+        )
+        res.stages.append(
+            StageResult(
+                "finalize-deliverables",
+                True,
+                0.0,
+                f"archived/promoted {len(finalized)} non-lod files",
+                _lod_path(mesh_final, 0),
+            )
+        )
 
     res.recompute_totals()
     return res

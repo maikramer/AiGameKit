@@ -18,14 +18,15 @@ _ROW_NEED_ANIMATE = "need_animate"
 _ROW_NEED_LOD = "need_lod"
 _ROW_NEED_COLLISION = "need_collision"
 
-# Round 2 - checkpoints do master pipeline (DAG novo).
+# Round 2/3 - checkpoints do master pipeline.
 _ROW_NEED_TOPOLOGY_FIX = "need_topology_fix"  # tem _shape, falta _clean
 _ROW_NEED_BAKE_MASTER = "need_bake_master"  # tem _painted+_clean, falta _lod0
-_ROW_NEED_LOD_GEN = "need_lod_gen"  # tem _lod0, faltam _lod1/_lod2
-_ROW_NEED_RIG_HI = "need_rig_hi"  # tem _clean, falta _rigged_hi
-_ROW_NEED_TRANSFER = "need_transfer"  # tem _rigged_hi+_lodN, faltam _lodN_rigged
-_ROW_NEED_ANIMATE_LOD = "need_animate_lod"  # tem _lodN_rigged, faltam _lodN_animated
+_ROW_NEED_LOD_GEN = "need_lod_gen"  # tem _lod0, faltam _lod1/_lod2 (ou ladder sem skin/clips)
 _ROW_NEED_VALIDATE = "need_validate"  # tudo gerado, falta validação
+# Round 3: rig sobre painted -> animate x1 -> ladder sobre animated/rigged.
+# Reutiliza _ROW_NEED_RIG / _ROW_NEED_ANIMATE (mesma semântica do classificador
+# legacy). Os estados antigos need_rig_hi / need_transfer / need_animate_lod
+# deixaram de existir com o fim do rigged_hi e do transfer-weights por LOD.
 
 
 def _glb_has_base_color(path: Path) -> bool:
@@ -189,34 +190,12 @@ def _animator3d_output_path(base_output: Path) -> Path:
 
 
 def publish_rigged_animated_alias(mesh_final: Path, lod0: Path) -> Path | None:
-    """Após promote animated->``lod0``, publica alias de runtime ``id_rigged_animated.glb``.
+    """Deprecated no-op: entregável canónico é ``id_lod0.glb``.
 
-    O master pipeline promove o GLB animado para ``id_lod0.glb`` (entregável
-    canónico). O VibeGame / exemplos ainda pedem ``id_rigged_animated.glb``.
-    Sem este alias, scripts e ``index.html`` acabam a carregar
-    ``id_lod0_rigged.glb`` (sem clips) ou 404.
-
-    Returns:
-        Path do alias escrito, ou ``None`` se ``lod0`` não existir.
+    Mantido para imports legados. Preferir :func:`finalize_mesh_deliverables`.
     """
-    import os
-    import shutil
-
-    if not lod0.is_file():
-        return None
-    alias = _animator3d_output_path(mesh_final)
-    try:
-        if alias.exists() or alias.is_symlink():
-            if alias.resolve() == lod0.resolve():
-                return alias
-            alias.unlink()
-    except OSError:
-        pass
-    try:
-        os.link(lod0, alias)
-    except OSError:
-        shutil.copy2(lod0, alias)
-    return alias
+    _ = (mesh_final, lod0)
+    return None
 
 
 def archive_leftover_lod_rigged(mesh_final: Path) -> list[Path]:
@@ -231,6 +210,83 @@ def archive_leftover_lod_rigged(mesh_final: Path) -> list[Path]:
     for leftover in sorted(mesh_final.parent.glob(f"{base}_lod*_rigged{mesh_final.suffix}")):
         if leftover.is_file():
             moved.append(move_to_intermediate(leftover, mesh_final))
+    return moved
+
+
+def archive_legacy_rig_intermediates(mesh_final: Path) -> list[Path]:
+    """Arquiva intermediários do DAG pré-Round-3 que ficaram em ``meshes/``.
+
+    O DAG antigo gerava ``_rigged_hi`` (rig sobre ``_clean`` HI, sem textura),
+    ``_lodN_rigged``/``_lodN_animated`` (transfer-weights + game-pack por LOD)
+    e ``_lodN_pre_promote`` (arquivos de promoção) — tudo em ``meshes/`` antes
+    do move final. O DAG novo (rig sobre painted → animate ×1 → ladder sobre o
+    animated) não usa nenhum deles; ficam em ``_intermediate/`` para debug.
+
+    Idempotente: corre no início de cada master pipeline; ficheiros já em
+    ``_intermediate/`` são ignorados (glob só em ``meshes/``).
+    """
+    mesh_final = _canonical_mesh_final(mesh_final)
+    base = _base_stem(mesh_final.stem)
+    suffix = mesh_final.suffix
+    moved: list[Path] = []
+    patterns = (
+        f"{base}_rigged_hi{suffix}",
+        f"{base}_lod*_rigged{suffix}",
+        f"{base}_lod*_animated{suffix}",
+        f"{base}_lod*_pre_promote{suffix}",
+    )
+    for pat in patterns:
+        for leftover in sorted(mesh_final.parent.glob(pat)):
+            if leftover.is_file():
+                moved.append(move_to_intermediate(leftover, mesh_final))
+    return moved
+
+
+def finalize_mesh_deliverables(mesh_final: Path) -> list[Path]:
+    """Deixa em ``meshes/`` ``id_lod{N}`` + ``id_collision`` (+ split/stump/top).
+
+    ``mesh_final`` (``id.glb``) é âncora lógica de paths — não entregável.
+    - Bare sem lod0 → rename ``id.glb`` → ``id_lod0.glb``.
+    - Com lod0 → arquiva bare, ``*_rigged_animated``, ``*_rigged``, ``*_animated``.
+    - ``*_split`` / ``*_stump`` / ``*_top`` permanecem em ``meshes/`` (árvores).
+    """
+    mesh_final = _canonical_mesh_final(mesh_final)
+    lod0 = _lod_path(mesh_final, 0)
+    moved: list[Path] = []
+    suffix = mesh_final.suffix
+
+    if mesh_final.is_file() and not lod0.is_file():
+        try:
+            if lod0.exists() or lod0.is_symlink():
+                lod0.unlink()
+        except OSError:
+            pass
+        try:
+            mesh_final.rename(lod0)
+        except OSError:
+            shutil.copy2(mesh_final, lod0)
+            with contextlib.suppress(OSError):
+                mesh_final.unlink()
+        moved.append(lod0)
+
+    if not lod0.is_file():
+        return moved
+
+    def _same_as_lod0(p: Path) -> bool:
+        try:
+            return p.resolve() == lod0.resolve()
+        except OSError:
+            return False
+
+    candidates = [
+        mesh_final,
+        _animator3d_output_path(mesh_final),
+        _rigging3d_output_path(mesh_final, "_rigged"),
+        mesh_final.with_name(f"{_base_stem(mesh_final.stem)}_animated{suffix}"),
+    ]
+    for cand in candidates:
+        if cand.is_file() and not _same_as_lod0(cand):
+            moved.append(move_to_intermediate(cand, mesh_final))
     return moved
 
 
@@ -309,9 +365,36 @@ def _to_paint_path(mesh_final: Path) -> Path:
 
 
 def _rigged_hi_path(mesh_final: Path) -> Path:
-    """``id_rigged_hi.glb`` em ``_intermediate/`` - Stage 7 (rig sobre _clean)."""
+    """``id_rigged_hi.glb`` em ``_intermediate/`` - Stage 7 **legado** (rig sobre _clean).
+
+    Round 3: o rig corre sobre o ``_painted`` e produz ``_rigged.glb``
+    (:func:`_rigged_path`). ``_rigged_hi`` só existe em runs antigas —
+    mantido para detecção/arquivo (resume migra sem reutilizar).
+    """
     base = _base_stem(mesh_final.stem)
     return _intermediate_dir(mesh_final) / f"{base}_rigged_hi{mesh_final.suffix}"
+
+
+def _rigged_path(mesh_final: Path) -> Path:
+    """``id_rigged.glb`` em ``_intermediate/`` - rig sobre o ``_painted`` (Round 3).
+
+    Substitui o antigo ``_rigged_hi`` (rig sobre ``_clean`` HI sem textura):
+    o painted já tem a topologia final do LOD0, logo o rigged nasce com
+    materiais/UVs e serve directamente de fonte para a ladder LOD.
+    """
+    base = _base_stem(mesh_final.stem)
+    return _intermediate_dir(mesh_final) / f"{base}_rigged{mesh_final.suffix}"
+
+
+def _animated_path(mesh_final: Path) -> Path:
+    """``id_rigged_animated.glb`` em ``_intermediate/`` - game-pack sobre ``_rigged`` (Round 3).
+
+    Um único game-pack por asset (antes: um por LOD). Fica arquivado em
+    ``_intermediate/`` como fonte da ladder para resume — nunca vai para o
+    jogo (o entregável animado é ``id_lod0.glb`` promovido).
+    """
+    base = _base_stem(mesh_final.stem)
+    return _intermediate_dir(mesh_final) / f"{base}_rigged_animated{mesh_final.suffix}"
 
 
 def _lod_path(mesh_final: Path, level: int) -> Path:
@@ -340,6 +423,34 @@ def _collision_path(mesh_final: Path) -> Path:
     mesh_final = _canonical_mesh_final(mesh_final)
     base = _base_stem(mesh_final.stem)
     return mesh_final.with_name(f"{base}_collision{mesh_final.suffix}")
+
+
+def _split_path(mesh_final: Path) -> Path:
+    """``id_split.glb`` — composição multi-mesh Stump+Top (entregável)."""
+    mesh_final = _canonical_mesh_final(mesh_final)
+    base = _base_stem(mesh_final.stem)
+    return mesh_final.with_name(f"{base}_split{mesh_final.suffix}")
+
+
+def _stump_path(mesh_final: Path) -> Path:
+    """``id_stump.glb`` — metade inferior do split-at-height."""
+    mesh_final = _canonical_mesh_final(mesh_final)
+    base = _base_stem(mesh_final.stem)
+    return mesh_final.with_name(f"{base}_stump{mesh_final.suffix}")
+
+
+def _top_path(mesh_final: Path) -> Path:
+    """``id_top.glb`` — metade superior do split-at-height."""
+    mesh_final = _canonical_mesh_final(mesh_final)
+    base = _base_stem(mesh_final.stem)
+    return mesh_final.with_name(f"{base}_top{mesh_final.suffix}")
+
+
+def _unsplit_lod0_path(mesh_final: Path) -> Path:
+    """``_intermediate/id_lod0_unsplit.glb`` — LOD0 antes do split (árvores)."""
+    mesh_final = _canonical_mesh_final(mesh_final)
+    base = _base_stem(mesh_final.stem)
+    return _intermediate_dir(mesh_final) / f"{base}_lod0_unsplit{mesh_final.suffix}"
 
 
 def move_to_intermediate(src: Path, mesh_final: Path) -> Path:
@@ -416,6 +527,16 @@ def _rigged_hi_existing(mesh_final: Path) -> Path | None:
     return _resolve_intermediate_or_main(_rigged_hi_path(mesh_final), mesh_final)
 
 
+def _rigged_existing(mesh_final: Path) -> Path | None:
+    """Encontra o GLB ``_rigged`` (Round 3) em ``_intermediate/`` ou ``meshes/``."""
+    return _resolve_intermediate_or_main(_rigged_path(mesh_final), mesh_final)
+
+
+def _animated_existing(mesh_final: Path) -> Path | None:
+    """Encontra o GLB ``_rigged_animated`` (Round 3) em ``_intermediate/`` ou ``meshes/``."""
+    return _resolve_intermediate_or_main(_animated_path(mesh_final), mesh_final)
+
+
 def _shape_existing(mesh_final: Path) -> Path | None:
     """Devolve o ``id_shape.glb`` existente em ``meshes/`` ou ``_intermediate/``."""
     return _resolve_intermediate_or_main(_shape_path(mesh_final), mesh_final)
@@ -472,11 +593,12 @@ def _classify_row_state_master(
     wants_collision: bool = True,
     omni_stale: bool = False,
 ) -> str:
-    """Classifica estado da row para o master pipeline (Round 2 DAG novo).
+    """Classifica estado da row para o master pipeline (Round 3 DAG).
 
     Ordem de detecção espelha o DAG: image -> shape -> topology-fix (clean) ->
-    paint -> bake-master (lod0) -> lod gen -> rig_hi -> transfer -> animate ->
-    validate. Devolve o primeiro estágio que ainda falta.
+    paint -> rig (sobre painted) -> animate (x1) -> ladder lod0/1/2 (a partir
+    do animated/rigged; estático: bake-master + lod do painted) -> validate.
+    Devolve o primeiro estágio que ainda falta.
 
     ``omni_stale``: shape existe mas fingerprint Omni mudou -> ``need_shape``.
     """
@@ -486,7 +608,6 @@ def _classify_row_state_master(
     lod0 = _lod_path(mesh_final, 0)
     lod1 = _lod_path(mesh_final, 1)
     lod2 = _lod_path(mesh_final, 2)
-    rigged_hi_any = _rigged_hi_existing(mesh_final)
 
     if not _valid_file(img_final) and shape_any is None and clean_any is None:
         return _ROW_NEED_IMAGE
@@ -498,34 +619,37 @@ def _classify_row_state_master(
         return _ROW_NEED_TOPOLOGY_FIX
     if want_texture and painted_any is None:
         return _ROW_NEED_PAINT
+
+    promoted_anim = _valid_file(lod0) and _glb_is_promoted_animated(lod0)
+    promoted_rig = _valid_file(lod0) and _glb_is_promoted_rigged(lod0)
+
+    # Rig/animate: saltar só quando o entregável final já reflecte o estágio
+    # (intermediários podem ter sido limpos pelo utilizador — não re-rigar).
+    if wants_rig and not (promoted_anim or promoted_rig):
+        if _rigged_existing(mesh_final) is None:
+            return _ROW_NEED_RIG
+        if wants_animate and _animated_existing(mesh_final) is None:
+            return _ROW_NEED_ANIMATE
+
     if not _valid_file(lod0):
         return _ROW_NEED_BAKE_MASTER
-    # lod0 animado/branco sem baseColorTexture enquanto painted existe ->
-    # re-transfer (não marcar DONE; senão resume ignora meshes brancos).
-    if wants_animate and painted_any is not None and _valid_file(lod0) and not _glb_has_base_color(lod0):
-        return _ROW_NEED_TRANSFER
+    # lod0 branco sem baseColorTexture enquanto painted existe -> a ladder
+    # não herdou o paint (bug histórico) — regenerar a partir da fonte.
+    # Só flaga com GLB parseável (dummy/corrupto não bloqueia o resume).
+    if painted_any is not None and _valid_file(lod0):
+        lod0_json = _glb_json(lod0)
+        if lod0_json is not None and lod0_json.get("meshes") and not _glb_has_base_color(lod0):
+            return _ROW_NEED_LOD_GEN
     if wants_lod and (not _valid_file(lod1) or not _valid_file(lod2)):
         return _ROW_NEED_LOD_GEN
-    if wants_rig and rigged_hi_any is None:
-        return _ROW_NEED_RIG_HI
-    # Entregável já promovido em lod0 -> DONE (rigged/animated intermediários
-    # foram arquivados; não pedir de novo).
-    if wants_animate and _glb_is_promoted_animated(lod0):
-        return _ROW_DONE
-    if wants_rig and not wants_animate and _glb_is_promoted_rigged(lod0):
-        return _ROW_DONE
     if wants_rig:
-        # checa transfers
-        targets = [lod0]
-        if wants_lod:
-            targets.extend([lod1, lod2])
-        rig_outs = [_lod_rigged_path(mesh_final, i) for i in range(len(targets))]
-        if any(not _valid_file(p) for p in rig_outs):
-            return _ROW_NEED_TRANSFER
-        if wants_animate:
-            anim_outs = [_lod_animated_path(mesh_final, i) for i in range(len(targets))]
-            if any(not _valid_file(p) for p in anim_outs):
-                return _ROW_NEED_ANIMATE_LOD
+        # Entregável tem de estar promovido ao nível esperado (animated >
+        # rigged), em lod0 E na ladder — senão falta a promoção/ladder rigada.
+        expect = _glb_is_promoted_animated if wants_animate else _glb_is_promoted_rigged
+        if not expect(lod0):
+            return _ROW_NEED_LOD_GEN
+        if wants_lod and (not expect(lod1) or not expect(lod2)):
+            return _ROW_NEED_LOD_GEN
     return _ROW_DONE
 
 

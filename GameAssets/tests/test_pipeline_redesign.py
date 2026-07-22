@@ -10,12 +10,11 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_publish_rigged_animated_alias_and_archive(tmp_path: Path) -> None:
-    """After animate→lod0 promote, alias + archive leftover lod*_rigged."""
+def test_finalize_deliverables_archives_bare_and_aliases(tmp_path: Path) -> None:
+    """Com lod0: bare + *_rigged_animated + lod*_rigged → _intermediate/."""
     from gameassets.paths import (
-        _animator3d_output_path,
         archive_leftover_lod_rigged,
-        publish_rigged_animated_alias,
+        finalize_mesh_deliverables,
     )
 
     meshes = tmp_path / "meshes"
@@ -23,19 +22,41 @@ def test_publish_rigged_animated_alias_and_archive(tmp_path: Path) -> None:
     mesh_final = meshes / "hero.glb"
     lod0 = meshes / "hero_lod0.glb"
     rigged = meshes / "hero_lod0_rigged.glb"
+    alias = meshes / "hero_rigged_animated.glb"
     lod0.write_bytes(b"animated-content")
+    mesh_final.write_bytes(b"bare-dup")
     rigged.write_bytes(b"stale-rig")
-
-    alias = publish_rigged_animated_alias(mesh_final, lod0)
-    assert alias == _animator3d_output_path(mesh_final)
-    assert alias is not None and alias.is_file()
-    assert alias.read_bytes() == b"animated-content"
+    alias.write_bytes(b"alias-dup")
 
     moved = archive_leftover_lod_rigged(mesh_final)
     assert len(moved) == 1
     assert not rigged.is_file()
     assert (meshes / "_intermediate" / "hero_lod0_rigged.glb").is_file()
 
+    finalized = finalize_mesh_deliverables(mesh_final)
+    assert not mesh_final.is_file()
+    assert not alias.is_file()
+    assert lod0.is_file()
+    assert (meshes / "_intermediate" / "hero.glb").is_file()
+    assert (meshes / "_intermediate" / "hero_rigged_animated.glb").is_file()
+    assert len(finalized) >= 2
+
+
+def test_finalize_promotes_bare_to_lod0_when_missing(tmp_path: Path) -> None:
+    from gameassets.paths import _lod_path, finalize_mesh_deliverables
+
+    meshes = tmp_path / "meshes"
+    meshes.mkdir()
+    mesh_final = meshes / "crate.glb"
+    mesh_final.write_bytes(b"only-bare")
+    finalize_mesh_deliverables(mesh_final)
+    lod0 = _lod_path(mesh_final, 0)
+    assert lod0.is_file()
+    assert lod0.read_bytes() == b"only-bare"
+    assert not mesh_final.is_file()
+
+
+def test_path_helpers_layout(tmp_path: Path) -> None:
     from gameassets.paths import (
         _clean_path,
         _intermediate_dir,
@@ -67,6 +88,69 @@ def test_publish_rigged_animated_alias_and_archive(tmp_path: Path) -> None:
     assert _lod_path(mesh_final, 2) == mesh_final.parent / "goblin_lod2.glb"
     assert _lod_rigged_path(mesh_final, 1) == mesh_final.parent / "goblin_lod1_rigged.glb"
     assert _lod_animated_path(mesh_final, 0) == mesh_final.parent / "goblin_lod0_animated.glb"
+
+
+def _minimal_glb(path: Path, *, animated: bool) -> None:
+    """GLB mínimo com (opcional) skin+clip+paint — suficiente para classifiers."""
+    import json
+    import struct
+
+    nodes: list[dict] = [{"name": "Mesh"}]
+    meshes = [{"primitives": [{"attributes": {"POSITION": 0}}]}]
+    materials = [{"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}}]
+    images = [{"uri": "data:image/png;base64,x"}]
+    textures = [{"source": 0}]
+    accessors = [{"count": 3, "type": "VEC3", "componentType": 5126}]
+    buffer_views = [{"buffer": 0, "byteLength": 36}]
+    buffers = [{"byteLength": 36}]
+    skins: list[dict] = []
+    animations: list[dict] = []
+    if animated:
+        nodes = [{"name": "Armature"}, {"name": "Mesh_skinned", "skin": 0, "mesh": 0}]
+        skins = [{"joints": [0]}]
+        animations = [{"name": "idle", "channels": [], "samplers": []}]
+    root = {
+        "asset": {"version": "2.0"},
+        "nodes": nodes,
+        "meshes": meshes,
+        "materials": materials,
+        "textures": textures,
+        "images": images,
+        "accessors": accessors,
+        "bufferViews": buffer_views,
+        "buffers": buffers,
+        "scenes": [{"nodes": [0]}],
+        "scene": 0,
+    }
+    if skins:
+        root["skins"] = skins
+    if animations:
+        root["animations"] = animations
+    js = json.dumps(root).encode("utf-8")
+    js += b" " * ((4 - len(js) % 4) % 4)
+    bin_chunk = b"\x00" * 36
+    bin_chunk += b"\x00" * ((4 - len(bin_chunk) % 4) % 4)
+    total = 12 + 8 + len(js) + 8 + len(bin_chunk)
+    path.write_bytes(
+        b"glTF"
+        + struct.pack("<II", 2, total)
+        + struct.pack("<I4s", len(js), b"JSON")
+        + js
+        + struct.pack("<I4s", len(bin_chunk), b"BIN\x00")
+        + bin_chunk
+    )
+
+
+def test_glb_is_promoted_animated_detects_skin_and_clips(tmp_path: Path) -> None:
+    from gameassets.paths import _glb_is_promoted_animated, _glb_is_promoted_rigged
+
+    anim = tmp_path / "hero_lod0.glb"
+    static = tmp_path / "crate_lod0.glb"
+    _minimal_glb(anim, animated=True)
+    _minimal_glb(static, animated=False)
+    assert _glb_is_promoted_animated(anim) is True
+    assert _glb_is_promoted_rigged(anim) is True
+    assert _glb_is_promoted_animated(static) is False
 
 
 def test_canonical_mesh_final_from_painted_keeps_production_in_meshes(tmp_path: Path) -> None:

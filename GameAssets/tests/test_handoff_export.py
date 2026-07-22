@@ -29,14 +29,14 @@ def _row(**kwargs: object) -> ManifestRow:
     return ManifestRow(**defaults)  # type: ignore[arg-type]
 
 
-def test_resolve_handoff_prefers_rigged_animated_alias(tmp_path: Path) -> None:
+def test_resolve_handoff_prefers_lod0_over_rigged_animated_alias(tmp_path: Path) -> None:
     mesh = tmp_path / "hero.glb"
     lod0 = tmp_path / "hero_lod0.glb"
     alias = tmp_path / "hero_rigged_animated.glb"
     lod0.write_bytes(b"lod0")
     alias.write_bytes(b"alias")
     chosen, kind = resolve_handoff_mesh(mesh, _row(), prefer_animated=True, prefer_rigged=True)
-    assert chosen == alias
+    assert chosen == lod0
     assert kind == "animated"
 
 

@@ -417,8 +417,7 @@ def resume_cmd(
         return _ROW_NEED_RIG if it["wants_rig"] else (_ROW_NEED_ANIMATE if it["wants_animate"] else _ROW_DONE)
 
     def _after_paint_ok(it: dict[str, Any], row: Any, rec: dict[str, Any], painted_out: Path | None = None) -> None:
-        if painted_out is not None and painted_out.is_file():
-            _install_file(painted_out, it["mesh_final"])
+        # Painted em _intermediate/; não instalar bare id.glb (entregável = *_lodN).
         it["state"] = _next_state_after_paint(it, row)
         master_q.enqueue(rec, it["mesh_final"], row)
 
@@ -1038,6 +1037,7 @@ def resume_cmd(
                                 batch_args.append("--force")
                             if no_ums:
                                 batch_args.append("--no-ums")
+                            batch_args.extend(["--quality", profile.generation or "medium"])
                             if t3_opts:
                                 if t3_opts.allow_shared_gpu:
                                     batch_args.append("--allow-shared-gpu")
@@ -1779,6 +1779,7 @@ def resume_cmd(
                                 batch_args.append("--force")
                             if no_ums:
                                 batch_args.append("--no-ums")
+                            batch_args.extend(["--quality", profile.generation or "medium"])
                             if t3_opts:
                                 if t3_opts.allow_shared_gpu:
                                     batch_args.append("--allow-shared-gpu")

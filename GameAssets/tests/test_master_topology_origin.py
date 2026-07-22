@@ -29,3 +29,12 @@ def test_run_master_pipeline_topology_fix_stage_present() -> None:
     src = inspect.getsource(run_master_pipeline)
     assert '"topology-fix"' in src or "'topology-fix'" in src
     assert src.count("topology-fix") >= 2
+
+
+def test_topology_fix_extra_argv_defaults_engine_arrays() -> None:
+    from gameassets.pipeline import _topology_fix_extra_argv
+    from gameassets.profile import GameProfile
+
+    args = _topology_fix_extra_argv(GameProfile(title="t", genre="g", tone="t", style_preset="s", output_dir="."))
+    assert "--engine" in args
+    assert args[args.index("--engine") + 1] == "arrays"
