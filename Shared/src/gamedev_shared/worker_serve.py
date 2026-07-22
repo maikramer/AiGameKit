@@ -168,7 +168,11 @@ def run_worker_loop(
             except Exception as exc:
                 tb = traceback.format_exc()
                 code = ERR_VRAM_INSUFFICIENT if _is_vram_error(exc) else ERR_GENERATE_FAILED
-                if state["abort"] and code == ERR_GENERATE_FAILED:
+                # Cancelado cooperativamente: o UMS mandou abort (state["abort"])
+                # ou o adapter substituiu o hook e ele retorna True.
+                hook = request.get("_abort")
+                aborted = state["abort"] or (callable(hook) and bool(hook()))
+                if aborted and code == ERR_GENERATE_FAILED:
                     code = ERR_CANCELLED
                 emit_event(
                     EVENT_ERROR,
