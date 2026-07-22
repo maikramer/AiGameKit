@@ -89,17 +89,9 @@ class IdleEvictor:
         """Verifica backends carregados e evicta os idle há demasiado tempo."""
         now = time.monotonic()
         manager = self._manager
-
-        # Snapshot dos backends carregados com last_used (thread-safe).
-        with manager._struct_lock:
-            candidates: list[tuple[str, float, int]] = []  # (name, last_used, ref_count)
-            for name, state in manager._states.items():
-                if state.model is not None and state.ref_count == 0 and state.last_used > 0:
-                    idle_sec = now - state.last_used
-                    if idle_sec >= self._idle_timeout_sec:
-                        candidates.append((name, state.last_used, state.ref_count))
-
-        for name, last_used, _ref_count in candidates:
+        # API pública do manager — mode-agnostic (in-process e subprocesso).
+        candidates = manager.idle_candidates(self._idle_timeout_sec)
+        for name, last_used in candidates:
             idle_sec = now - last_used
             _logger.info(f"[UMS] IdleEvictor: backend {name!r} idle há {idle_sec:.0f}s — a evictar.")
             evicted = manager.evict(name)

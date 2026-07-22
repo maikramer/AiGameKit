@@ -154,12 +154,37 @@ def read_event(stream: TextIO) -> dict[str, Any] | None:
 def emit_event(event: str, **fields: Any) -> None:
     """Emitir um evento no stdout (uma linha JSON + flush obrigatório).
 
-    Usado pelo worker. ``out`` fixo em ``sys.stdout`` — o UMS liga o stdout do
-    subprocesso a um pipe e lê linha-a-linha.
+    Usado pelo worker. Por defeito escreve em ``sys.stdout``; mas quando o
+    worker activa o modo JSONL dedicado (via :func:`set_jsonl_stream` em
+    :mod:`worker_serve`), escreve nesse stream limpo — separado dos prints/
+    warnings da tool (que vão para stderr).
+
+    Args:
+        event: Nome do evento (ex.: ``"ready"``, ``"progress"``, ``"done"``).
+        **fields: Campos extra do evento (ex.: ``pct=0.5``, ``result={...}``).
     """
     msg = {"event": event, **fields}
-    sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
-    sys.stdout.flush()
+    line = json.dumps(msg, ensure_ascii=False) + "\n"
+    stream = _jsonl_stream or sys.stdout
+    stream.write(line)
+    stream.flush()
+
+
+# Stream JSONL dedicado para o modo worker — activado por
+# :func:`gamedev_shared.worker_serve._install_jsonl_stdout`. Quando não-None,
+# ``emit_event`` usa este stream em vez de ``sys.stdout`` (que entretanto foi
+# redireccionado para stderr).
+_jsonl_stream: Any = None
+
+
+def set_jsonl_stream(stream: Any) -> None:
+    """Define o stream JSONL dedicado (modo worker subprocesso).
+
+    Chamado por :func:`gamedev_shared.worker_serve._install_jsonl_stdout`.
+    Passar ``None`` para restaurar o comportamento default (sys.stdout).
+    """
+    global _jsonl_stream
+    _jsonl_stream = stream
 
 
 def read_cmd(stream: TextIO | None = None) -> dict[str, Any] | None:

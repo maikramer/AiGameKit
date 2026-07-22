@@ -210,7 +210,11 @@ class SubprocessWorkerPool:
         with state.lock:
             from gamedev_shared.worker_protocol import send_cmd
 
-            send_cmd(state.proc.stdin, CMD_GENERATE, request=request)
+            # Strip hooks in-process antes de serializar para JSONL — o worker
+            # recebe-os via request e reconstrói os seus próprios a partir do
+            # estado interno (state["abort"] + emissor de progress).
+            serializable_request = {k: v for k, v in request.items() if not k.startswith("_") and not callable(v)}
+            send_cmd(state.proc.stdin, CMD_GENERATE, request=serializable_request)
             deadline = time.monotonic() + self._event_timeout
             abort_sent = False
             while True:

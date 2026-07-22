@@ -22,6 +22,7 @@ Lifecycle do worker:
 
 from __future__ import annotations
 
+import io
 import sys
 import traceback
 from typing import Any
@@ -54,6 +55,41 @@ def _is_vram_error(exc: Exception) -> bool:
     return "out of memory" in msg or "cuda oom" in msg or ("vram" in msg and "insuf" in msg)
 
 
+# Canal JSONL dedicado — separado do stdout "real" da tool (que vai para
+# stderr capturado pelo UMS). Inicializado em ``run_worker_loop``.
+_jsonl_stdout: Any = None
+
+
+def _install_jsonl_stdout() -> None:
+    """Redirecciona o stdout original da tool para stderr e cria um canal JSONL.
+
+    O stdout é o canal do protocolo JSONL — qualquer texto extra (print,
+    warnings, tqdm) corrompe os eventos. A tool continua a poder fazer print/
+    logging (vai para o log do worker via stderr); só os eventos JSONL usam o
+    novo stdout limpo.
+
+    Usa :func:`gamedev_shared.worker_protocol.set_jsonl_stream` para que
+    ``emit_event`` escreva neste stream dedicado.
+    """
+    import os
+    import sys
+
+    real_stdout = sys.stdout
+    # Tudo o que a tool imprime vai para o stderr do worker (log do UMS).
+    sys.stdout = sys.stderr
+    # Novo stdout limpo só para JSONL — duplica o fd original (que o UMS lê).
+    # Se o stdout não tem fileno() (ex.: capsys em testes), usar o próprio.
+    try:
+        jsonl_fd = os.dup(real_stdout.fileno())
+        jsonl_stream = os.fdopen(jsonl_fd, "w", buffering=1)  # line-buffered
+    except (AttributeError, OSError, io.UnsupportedOperation):
+        jsonl_stream = real_stdout
+    # Activar no protocolo — emit_event passa a usar este stream.
+    from gamedev_shared import worker_protocol
+
+    worker_protocol.set_jsonl_stream(jsonl_stream)
+
+
 def run_worker_loop(
     adapter_class: type,
     *,
@@ -69,9 +105,14 @@ def run_worker_loop(
         adapter_class: classe ``BackendAdapter`` concreta da tool (instância sem
             args; tem métodos ``load/generate/unload``).
         backend_name: Nome do backend (ex.: ``text3d``) — só para diagnóstico.
-        version: Versão do protocolo esperada (para quebra-graceful entre UMS
+        version: Versão do protocolo esperado (para quebra-graceful entre UMS
             e worker de versões diferentes).
     """
+    # CRÍTICO: o stdout é o canal JSONL do protocolo — qualquer texto extra
+    # (print, warnings torch, tqdm) corrompe os eventos. Redireccionar o stdout
+    # "real" da tool para stderr (capturado pelo UMS no log) e substituir por
+    # um canal estrito só para JSONL via set_jsonl_stream no worker_protocol.
+    _install_jsonl_stdout()
     adapter = adapter_class()
     model: Any = None
     # Caixa mutável para o flag de abort — closures que o adapter chama durante

@@ -818,3 +818,34 @@ def decompose(
 
 if __name__ == "__main__":
     main()
+
+
+@main.command("serve")
+@click.option(
+    "--ums-worker",
+    is_flag=True,
+    help=(
+        "Modo worker subprocesso do UMS: lê comandos JSONL do stdin (load / "
+        "generate / unload / shutdown) e emite eventos no stdout. Usado pelo "
+        "SubprocessWorkerPool do ModelServer — part3d corre no seu próprio "
+        "venv e o supervisor (ModelServer/.venv) coordena via JSONL."
+    ),
+)
+def serve(ums_worker: bool) -> None:
+    """Modo worker subprocesso do UMS (subprocess-per-backend).
+
+    Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
+    Com ``--ums-worker`` arranca o loop canónico
+    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter part3d
+    local (:mod:`part3d.worker_serve_adapter`).
+    """
+    if not ums_worker:
+        from rich.console import Console
+
+        Console().print("[yellow]part3d serve sem --ums-worker não faz nada.[/yellow]")
+        return
+
+    from gamedev_shared.worker_serve import run_worker_loop
+    from part3d.worker_serve_adapter import Adapter
+
+    run_worker_loop(Adapter, backend_name="part3d")

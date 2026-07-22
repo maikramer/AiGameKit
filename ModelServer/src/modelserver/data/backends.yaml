@@ -7,7 +7,7 @@
 # vram_mib: estimativa estática (MiB) — fallback se footprint_key falhar.
 # footprint_key: chave gamedev_shared.lowvram.FOOTPRINTS. O UMS admite jobs com
 #   peak = pesos(quant) + activation_gib + GAMEDEV_UMS_VRAM_SAFETY_MIB — NÃO só
-#   pesos. GPUs ~6 GB recusam text3d fp16 full; usam sdnq-int4.
+#   pesos. GPUs ~6 GB recusam text3d fp16 full; usam sdnq-int4.
 # priority: prioridade de evicção. Valores MAIORES = mais pesado/urgente de MANTER
 #   carregado (menos provável de ser evicted). Backends leves (priority baixa)
 #   são evicted primeiro quando a VRAM escasseia. Tie-break: LRU.
@@ -15,6 +15,12 @@
 #   Import lazy: só é importado quando o backend é efetivamente pedido.
 #   Assim, não é preciso ter todas as deps (torch/diffusers/stable-audio)
 #   instaladas para arrancar o UMS — só para o backend usado.
+# tool: nome da tool monorepo (ex.: text3d, paint3d) — modo subprocess-per-backend.
+#   Quando definido, o BackendManager despacha para um SubprocessWorkerPool que
+#   arranca um worker persistente no venv da tool (ex.: Text3D/.venv) a falar
+#   JSONL via stdin/stdout (ver gamedev_shared.worker_serve + worker_protocol).
+#   Sem 'tool:' = backend in-process (legado; adapter importado no processo UMS).
+#   Env GAMEDEV_UMS_SUBPROCESS=0 desliga globalmente (rollback rápido).
 
 backends:
   - name: text2icon
@@ -22,49 +28,58 @@ backends:
     vram_mib: 3000
     footprint_key: sana-sprint-600m
     priority: 20
+    tool: text2icon
 
   - name: texture2d
     adapter: modelserver.adapters.texture2d
     vram_mib: 2500
     priority: 20
+    tool: texture2d
 
   - name: text2d
     adapter: modelserver.adapters.text2d
     vram_mib: 4500
     footprint_key: flux-klein-9b
     priority: 25
+    tool: text2d
 
   - name: skymap2d
     adapter: modelserver.adapters.skymap2d
     vram_mib: 7000
     footprint_key: flux-dev-uint4
     priority: 25
+    tool: skymap2d
 
   - name: text3d
     adapter: modelserver.adapters.text3d
     vram_mib: 10000
     footprint_key: hunyuan3d-omni
     priority: 40
+    tool: text3d
 
   - name: paint3d
     adapter: modelserver.adapters.paint3d
     vram_mib: 4000
     footprint_key: hunyuan-paint
     priority: 40
+    tool: paint3d
 
   - name: part3d
     adapter: modelserver.adapters.part3d
     vram_mib: 5200
     footprint_key: hunyuan3d-part
     priority: 35
+    tool: part3d
 
   - name: text2sound
     adapter: modelserver.adapters.text2sound
     vram_mib: 5000
     footprint_key: stable-audio-open
     priority: 30
+    tool: text2sound
 
   - name: terrain3d
     adapter: modelserver.adapters.terrain3d
     vram_mib: 6000
     priority: 40
+    tool: terrain3d

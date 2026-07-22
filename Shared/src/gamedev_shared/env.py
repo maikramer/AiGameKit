@@ -213,7 +213,11 @@ def discover_monorepo_tool_python(
     scripts = _venv_scripts_dir(monorepo.resolve() / layout.folder / ".venv")
     for cand in (scripts / "python", scripts / "python.exe"):
         if _is_executable(cand):
-            return str(cand.resolve())
+            # NÃO resolver o symlink: ``Paint3D/.venv/bin/python`` é um link
+            # para o python base UV, mas é o symlink que activa o venv (sys.path
+            # aponta para os site-packages da tool). ``.resolve()`` quebraria
+            # isto — o python base NU não tem os packages da tool.
+            return str(cand)
     return None
 
 

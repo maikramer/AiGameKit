@@ -62,7 +62,17 @@ class UnifiedModelServer:
         clear_vram: Any = None,
     ) -> None:
         self.registry = registry if registry is not None else Registry()
-        self.manager = BackendManager(self.registry, query_free_mib=query_free_mib, clear_vram=clear_vram)
+        # Pool de subprocessos para backends com 'tool:' definido (Fase 3-4).
+        # Lazy-created: se nenhum backend usar subprocesso, o pool fica inerte.
+        from .subprocess_pool import SubprocessWorkerPool
+
+        subprocess_pool = SubprocessWorkerPool()
+        self.manager = BackendManager(
+            self.registry,
+            query_free_mib=query_free_mib,
+            clear_vram=clear_vram,
+            subprocess_pool=subprocess_pool,
+        )
         self.socket_path = Path(socket_path) if socket_path else P.DEFAULT_SOCKET_PATH
         self.ppid_path = _pid_path(self.socket_path)
         self.idle_timeout_sec = idle_timeout_min * 60
@@ -819,6 +829,11 @@ class UnifiedModelServer:
             self.idle_evictor.stop()
         with contextlib.suppress(Exception):
             self.manager.evict_all()
+        # Terminar workers subprocesso (subprocess-per-backend, Fase 3-4).
+        pool = getattr(self.manager, "_subprocess_pool", None)
+        if pool is not None:
+            with contextlib.suppress(Exception):
+                pool.shutdown_all()
         if self._bound:
             # Só remover socket/pid se fomos nós a criá-los (bind OK) — um
             # double-start que falhou o bind não pode apagar os do UMS vivo.

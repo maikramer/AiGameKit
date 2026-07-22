@@ -23,7 +23,16 @@ from gamedev_shared.worker_protocol import (
     read_cmd,
     read_event,
     send_cmd,
+    set_jsonl_stream,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_jsonl_stream():
+    """Reset do stream JSONL entre testes (modo worker persiste entre chamadas)."""
+    set_jsonl_stream(None)
+    yield
+    set_jsonl_stream(None)
 
 
 class TestEncodeDecode:

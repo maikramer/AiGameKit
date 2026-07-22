@@ -16,6 +16,7 @@ cada backend carregado (model object, ref_count, last_used).
 from __future__ import annotations
 
 import contextlib
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -150,7 +151,16 @@ class ShapeBusyError(RuntimeError):
 
 @dataclass
 class _LoadedState:
-    """Estado runtime de um backend carregado (não no Registry — mutável)."""
+    """Estado runtime de um backend carregado (não no Registry — mutável).
+
+    Dois modos:
+      - **in-process** (legacy): ``model`` guarda o objecto torch vivo no
+        processo UMS; ``is_loaded()`` ≡ ``model is not None``.
+      - **subprocess** (Fase 3+): ``model`` fica a ``None`` e usa-se o
+        marcador ``subprocess_loaded`` para indicar que o worker persistente
+        tem o modelo carregado; o objecto torch vive noutro processo, no
+        ``SubprocessWorkerPool``.
+    """
 
     model: Any = None
     ref_count: int = 0
@@ -158,6 +168,20 @@ class _LoadedState:
     gen_lock: threading.Lock = field(default_factory=threading.Lock)
     # Shape do load (views/res/quant/…) — mismatch com novo request ⇒ reload.
     load_shape: dict[str, Any] = field(default_factory=dict)
+    # Modo subprocesso: True quando o worker persistente tem o modelo carregado.
+    # Em modo in-process fica sempre False — ``is_loaded()`` usa ``model``.
+    subprocess_loaded: bool = False
+
+    def is_loaded(self) -> bool:
+        """True se o backend tem um modelo carregado (in-process ou subprocesso)."""
+        return self.model is not None or self.subprocess_loaded
+
+    def mark_unloaded(self) -> None:
+        """Marca o backend como descarregado em qualquer modo."""
+        self.model = None
+        self.subprocess_loaded = False
+        self.load_shape = {}
+        self.last_used = 0.0
 
 
 class BackendManager:
@@ -178,6 +202,7 @@ class BackendManager:
         query_free_mib: Any = None,
         clear_vram: Any = None,
         query_process_vram_mib: Any = None,
+        subprocess_pool: Any = None,
     ) -> None:
         self._registry = registry
         self._states: dict[str, _LoadedState] = {}
@@ -186,6 +211,25 @@ class BackendManager:
         self._clear_vram = clear_vram
         self._query_process_vram_mib = query_process_vram_mib
         self.stats = StatsCollector()
+        # Pool de subprocessos (modo subprocess-per-backend). ``None`` desliga o
+        # modo (todos os backends correm in-process, legado). Quando definido,
+        # backends com ``desc.tool`` no registry despacham para o pool.
+        self._subprocess_pool = subprocess_pool
+
+    def _use_subprocess(self, name: str) -> bool:
+        """True se ``name`` deve correr em subprocesso (desc.tool definido e pool activo).
+
+        Env ``GAMEDEV_UMS_SUBPROCESS=0`` desliga globalmente (rollback rápido).
+        """
+        if self._subprocess_pool is None:
+            return False
+        if os.environ.get("GAMEDEV_UMS_SUBPROCESS", "1") == "0":
+            return False
+        try:
+            desc = self._registry.descriptor(name)
+        except KeyError:
+            return False
+        return bool(desc.tool)
 
     # ------------------------------------------------------------------
     # Helpers de injeção de GPU (lazy para evitar import torch no arranque)
@@ -315,13 +359,13 @@ class BackendManager:
     def loaded_names(self) -> list[str]:
         """Nomes dos backends atualmente carregados (com modelo em VRAM)."""
         with self._struct_lock:
-            return [n for n, s in self._states.items() if s.model is not None]
+            return [n for n, s in self._states.items() if s.is_loaded()]
 
     def is_loaded(self, name: str) -> bool:
         """True se o backend ``name`` tem modelo carregado."""
         with self._struct_lock:
             state = self._states.get(name)
-            return state is not None and state.model is not None
+            return state is not None and state.is_loaded()
 
     def shape_matches_loaded(self, name: str, request: dict[str, Any] | None = None) -> bool:
         """True se ``name`` está carregado e o request não pede outro load_shape.
@@ -331,7 +375,7 @@ class BackendManager:
         """
         with self._struct_lock:
             state = self._states.get(name)
-            if state is None or state.model is None:
+            if state is None or not state.is_loaded():
                 return False
             load_kwargs = {k: v for k, v in (request or {}).items() if k in _LOAD_KWARG_KEYS}
             if not load_kwargs:
@@ -340,11 +384,16 @@ class BackendManager:
 
     def _snapshot(self, name: str) -> LoadedBackend | None:
         state = self._states.get(name)
-        if state is None or state.model is None:
+        if state is None or not state.is_loaded():
             return None
         desc = self._registry.descriptor(name)
         # Eviction: liberta o pico worst-case (pesos fp16 + activação).
         vram_mib = self.peak_vram_mib(name, quant_mode="none")
+        # Modo subprocesso: preferir a VRAM reportada pelo worker quando houver.
+        if state.subprocess_loaded and self._subprocess_pool is not None:
+            pool_vram = self._subprocess_pool.vram_mib(name)
+            if pool_vram and pool_vram > 0:
+                vram_mib = pool_vram
         return LoadedBackend(
             name=name,
             vram_mib=vram_mib if vram_mib > 0 else desc.vram_mib,
@@ -586,7 +635,11 @@ class BackendManager:
         exceções do adapter (ImportError se deps em falta, erros de carga).
         """
         desc = self._registry.descriptor(name)  # KeyError se desconhecido
-        adapter = self._registry.adapter(name)
+        # Em modo subprocesso, o adapter real nunca é importado neste processo
+        # — vive no venv da tool. Só é resolvido no caminho in-process abaixo.
+        adapter: Any = None
+        if not self._use_subprocess(name):
+            adapter = self._registry.adapter(name)
         quant, mem_eff, group_off, streams = self.resolve_peak_params(name, load_kwargs)
         # Admit no load: pesos completos — EXCEPTO backends cujo load já é
         # streaming (diffusers model_cpu offload, text2d): aí o pico de warmup é
@@ -605,7 +658,7 @@ class BackendManager:
 
         with self._struct_lock:
             state = self._states.get(name)
-            if state is not None and state.model is not None:
+            if state is not None and state.is_loaded():
                 if not self._shape_mismatch(state.load_shape, load_kwargs):
                     state.last_used = time.monotonic()
                     if _pin:
@@ -652,13 +705,13 @@ class BackendManager:
         # servir pedidos entretanto). Mas guardamos o gen_lock do backend.
         with state.gen_lock:
             # Re-verificar (outro thread pode ter carregado enquanto esperávamos).
-            if state.model is not None and not self._shape_mismatch(state.load_shape, load_kwargs):
+            if state.is_loaded() and not self._shape_mismatch(state.load_shape, load_kwargs):
                 state.last_used = time.monotonic()
                 if _pin:
                     with self._struct_lock:
                         state.ref_count += 1
                 return state.model
-            if state.model is not None and self._shape_mismatch(state.load_shape, load_kwargs):
+            if state.is_loaded() and self._shape_mismatch(state.load_shape, load_kwargs):
                 if state.ref_count > 0:
                     raise ShapeBusyError(
                         name,
@@ -688,6 +741,25 @@ class BackendManager:
             # footprint_key é sinal de peak/admit — nunca chega ao ctor do adapter.
             load_kwargs.pop("footprint_key", None)
             t0 = time.perf_counter()
+            use_subprocess = self._use_subprocess(name)
+            if use_subprocess:
+                # Modo subprocesso: o model object vive noutro processo.
+                # SubprocessWorkerPool carrega o worker persistente.
+                tool = desc.tool
+                self._subprocess_pool.load(name, tool, load_kwargs)
+                load_time = time.perf_counter() - t0
+                with self._struct_lock:
+                    # model fica None; o marcador is_loaded() vem de subprocess_loaded.
+                    state.model = None
+                    state.subprocess_loaded = True
+                    state.load_shape = new_shape
+                    state.last_used = time.monotonic()
+                    if _pin:
+                        state.ref_count += 1
+                self.stats.record_load(name, load_time)
+                _logger.info(f"[UMS] Backend {name!r} carregado em {load_time:.1f}s (subprocesso {tool}).")
+                # Retornar um marcador não-None (callers usam como handle opaco).
+                return state
             model = adapter.load(**load_kwargs)
             load_time = time.perf_counter() - t0
             with self._struct_lock:
@@ -810,7 +882,18 @@ class BackendManager:
                 if callable(progress_cb):
                     with contextlib.suppress(Exception):
                         progress_cb(None, f"generating via {name}")
-                response = self._registry.adapter(name).generate(model, req)
+                if self._use_subprocess(name):
+                    # Modo subprocesso: o adapter.generate in-process é substituído
+                    # pela chamada ao worker persistente via JSONL.
+                    abort_cb = req.get("_abort")
+                    response = self._subprocess_pool.generate(
+                        name,
+                        req,
+                        on_progress=progress_cb,
+                        should_abort=abort_cb if callable(abort_cb) else None,
+                    )
+                else:
+                    response = self._registry.adapter(name).generate(model, req)
                 gen_time = time.perf_counter() - t0
                 state.last_used = time.monotonic()
                 self.stats.record_generate(name, gen_time)
@@ -870,7 +953,7 @@ class BackendManager:
     def evict_all(self) -> int:
         """Evicta TODOS os backends carregados (release global). Retorna o nº evicted."""
         with self._struct_lock:
-            names = [n for n, s in self._states.items() if s.model is not None]
+            names = [n for n, s in self._states.items() if s.is_loaded()]
             count = 0
             for n in names:
                 if self._evict_unlocked(n):
@@ -878,6 +961,26 @@ class BackendManager:
         # Sempre scrub — mesmo com count=0 (loaded=[] mas contexto CUDA vivo).
         self.scrub_dead_vram()
         return count
+
+    def idle_candidates(self, idle_timeout_sec: float) -> list[tuple[str, float]]:
+        """Lista ``(name, last_used)`` dos backends loaded idle há mais de ``idle_timeout_sec``.
+
+        API pública usada pelo IdleEvictor — evita acesso externo a ``_states``
+        e abstrai o modo (in-process vs subprocesso). Filtra: carregados (via
+        ``is_loaded()``), ``ref_count == 0`` e ``last_used > 0``.
+        """
+        now = time.monotonic()
+        with self._struct_lock:
+            out: list[tuple[str, float]] = []
+            for name, state in self._states.items():
+                if (
+                    state.is_loaded()
+                    and state.ref_count == 0
+                    and state.last_used > 0
+                    and now - state.last_used >= idle_timeout_sec
+                ):
+                    out.append((name, state.last_used))
+            return out
 
     def ensure_vram(
         self,
@@ -945,17 +1048,25 @@ class BackendManager:
         import gc
 
         state = self._states.get(name)
-        if state is None or state.model is None:
+        if state is None or not state.is_loaded():
             return False
         if state.ref_count > 0:
             _logger.warn(f"[UMS] Recusa evictar {name!r}: {state.ref_count} ref(s) ativa(s).")
             return False
-        adapter = self._registry.adapter(name)
         _logger.info(f"[UMS] A evictar backend {name!r}...")
+        if state.subprocess_loaded and self._subprocess_pool is not None:
+            # Modo subprocesso: o worker persiste vivo; só descarrega pesos.
+            try:
+                self._subprocess_pool.unload(name)
+            except Exception as e:
+                _logger.warn(f"[UMS] subprocess unload({name!r}) falhou: {e}")
+            state.mark_unloaded()
+            self.stats.record_evict(name)
+            _logger.info(f"[UMS] Backend {name!r} evicted (subprocesso descarregado).")
+            return True
+        adapter = self._registry.adapter(name)
         model = state.model
-        state.model = None
-        state.load_shape = {}
-        state.last_used = 0.0
+        state.mark_unloaded()
         try:
             adapter.unload(model)
         except Exception as e:
@@ -984,7 +1095,7 @@ class BackendManager:
             for name in sorted(self._registry.names):
                 desc = self._registry.descriptor(name)
                 state = self._states.get(name)
-                loaded = state is not None and state.model is not None
+                loaded = state is not None and state.is_loaded()
                 peak = self.peak_vram_mib(name, quant_mode="none")
                 backends.append(
                     {

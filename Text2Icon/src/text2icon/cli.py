@@ -929,6 +929,36 @@ def server_stop_cmd() -> None:
         sys.exit(1)
 
 
+@cli.command("serve")
+@click.option(
+    "--ums-worker",
+    is_flag=True,
+    help=(
+        "Modo worker subprocesso do UMS: lê comandos JSONL do stdin (load / "
+        "generate / unload / shutdown) e emite eventos no stdout. Usado pelo "
+        "SubprocessWorkerPool do ModelServer — text2icon corre no seu próprio "
+        "venv e o supervisor (ModelServer/.venv) coordena via JSONL."
+    ),
+)
+def serve(ums_worker: bool) -> None:
+    """Modo worker subprocesso do UMS (subprocess-per-backend).
+
+    Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
+    Com ``--ums-worker`` arranca o loop canónico
+    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter text2icon
+    local (:mod:`text2icon.worker_serve_adapter`).
+    """
+    if not ums_worker:
+        console.print("[yellow]text2icon serve sem --ums-worker não faz nada.[/yellow]")
+        console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
+        return
+
+    from gamedev_shared.worker_serve import run_worker_loop
+    from text2icon.worker_serve_adapter import Adapter
+
+    run_worker_loop(Adapter, backend_name="text2icon")
+
+
 def main() -> None:
     try:
         cli()
