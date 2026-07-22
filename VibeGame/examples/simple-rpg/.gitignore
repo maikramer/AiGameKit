@@ -1,6 +1,14 @@
 node_modules/
 dist/
+build/
 bun.lock
+.vite/
+.cache/
+.turbo/
+coverage/
+
+# Knowledge-graph / agent AST cache (blows Vite inotify watchers)
+graphify-out/
 
 # Pipeline intermediários — nunca trackear backups/intermediários que caem em public/.
 # O runtime só carrega GLBs explicitamente referenciados em index.html / src/.
@@ -11,6 +19,19 @@ public/assets/meshes/_city_gen/
 public/assets/meshes/*.bak
 public/assets/meshes/*.pre_leftmul.bak
 public/assets/meshes/*.orig
+
+# GameAssets workdirs / local Part3D scratch (not runtime source)
+sample-gameassets/.gameassets_work/
+_part3d_*/
+_unused_*/
+logs/
+.playwright-mcp/
+.sisyphus/
+
+# Manifest backups
+manifest*.yaml.bak*
+*.bak
+*.bak_*
 
 # Screenshots de debug / relatórios de build (não versionar)
 *.jpeg

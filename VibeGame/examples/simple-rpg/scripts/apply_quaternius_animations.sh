@@ -3,6 +3,7 @@
 #
 # Humanoides (retarget Quaternius): recebem os 12 clips do perfil quaternius.
 # Não-humanoides (scorpion): mantêm animação procedural, só renomeiam tracks.
+# Saída canónica: ${id}_lod0.glb (é o que o runtime carrega).
 #
 # Uso:  bash VibeGame/examples/simple-rpg/scripts/apply_quaternius_animations.sh
 # Pré:  animator3d no PATH (ou Animator3D/.venv/bin/animator3d), pack Quaternius em cache
@@ -38,35 +39,49 @@ NON_HUMANOIDS=(scorpion)
 # Scorpion tem Walk/Run/Jump/Attack/Roar (+ BreatheIdle); NÃO tem Fall.
 RENAME_MAP="Animator3D_BreatheIdle:idle,Animator3D_Walk:walk,Animator3D_Run:run,Animator3D_Jump:jump,Animator3D_Attack:attack,Animator3D_Roar:roar"
 
+resolve_src() {
+  local id="$1"
+  local candidate
+  for candidate in \
+    "${MESHES_DIR}/${id}_rigged.glb" \
+    "${MESHES_DIR}/${id}.glb" \
+    "${MESHES_DIR}/${id}_lod0.glb"; do
+    if [ -f "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 echo "════════════════════════════════════════════════════════════"
 echo "  Quaternius retarget — simple-rpg"
 echo "  animator3d: $ANIMATOR3D"
 echo "  meshes:     $MESHES_DIR"
+echo "  output:     \${id}_lod0.glb"
 echo "  humanoides: ${#HUMANOIDS[@]}  | não-humanoides (rename): ${#NON_HUMANOIDS[@]}"
 echo "════════════════════════════════════════════════════════════"
 
-# --- Humanoides: retarget Quaternius sobre o _rigged.glb (sem animação) ---
+# --- Humanoides: retarget Quaternius → ${id}_lod0.glb ---
 for id in "${HUMANOIDS[@]}"; do
-  src="$MESHES_DIR/${id}_rigged.glb"
-  dst="$MESHES_DIR/${id}_rigged_animated.glb"
-  if [ ! -f "$src" ]; then
-    echo "  [SKIP] $id — $src não encontrado"
+  dst="$MESHES_DIR/${id}_lod0.glb"
+  if ! src="$(resolve_src "$id")"; then
+    echo "  [SKIP] $id — sem fonte (_rigged / bare / lod0)"
     continue
   fi
-  # Backup do animated atual (se existir e não for já um backup).
+  # Backup do lod0 atual (se existir e não for já um backup).
   if [ -f "$dst" ] && [ ! -f "${dst}.bak" ]; then
     cp "$dst" "${dst}.bak"
   fi
-  echo "▶ $id (retarget Quaternius)"
+  echo "▶ $id (retarget Quaternius)  src=$(basename "$src") → $(basename "$dst")"
   $ANIMATOR3D retarget-batch "$src" "$dst" \
     --profile quaternius --clips "$CLIPS" 2>&1 | grep -E "✓|✗|retarget-batch|Error|não mapeados" || true
   echo ""
 done
 
-# --- Não-humanoides: rename de tracks procedurais ---
-# Exporta para /tmp (exportar no mesmo dir que o input pode falhar) e copia no fim.
+# --- Não-humanoides: rename de tracks procedurais no lod0 ---
 for id in "${NON_HUMANOIDS[@]}"; do
-  src="$MESHES_DIR/${id}_rigged_animated.glb"
+  src="$MESHES_DIR/${id}_lod0.glb"
   if [ ! -f "$src" ]; then
     echo "  [SKIP] $id (rename) — $src não encontrado"
     continue
@@ -89,5 +104,5 @@ for id in "${NON_HUMANOIDS[@]}"; do
 done
 
 echo "════════════════════════════════════════════════════════════"
-echo "  Concluído. Backups dos humanoides em *.bak."
+echo "  Feito. Runtime carrega \${id}_lod0.glb."
 echo "════════════════════════════════════════════════════════════"

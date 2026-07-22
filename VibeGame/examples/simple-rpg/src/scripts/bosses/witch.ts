@@ -5,7 +5,7 @@ import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/witch_boss_lod0.glb',
+  modelUrl: '/assets/meshes/witch_boss_lod2.glb',
   clips: {
     idle: 'idle',
     walk: 'walk',

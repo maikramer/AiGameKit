@@ -34,7 +34,9 @@ const nodeStubsPlugin = (): Plugin => ({
 
 export default defineConfig({
   resolve: {
-    dedupe: ['three'],
+    // Keep engine SoA (Transform, etc.) as a single module instance so entity
+    // scripts and main.ts share the same component arrays.
+    dedupe: ['three', 'vibegame'],
     alias: {
       vibegame: path.join(vibegameRoot, 'src/index.ts'),
       'vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),
@@ -52,10 +54,9 @@ export default defineConfig({
     fs: {
       // The whole VibeGame root: the engine source AND its node_modules
       // (e.g. troika-three-text) are served from outside examples/.
+      // Watch ignores (graphify-out, public/assets, pipeline dirs, …) come
+      // from the shared vibegame() plugin — do not widen watch to these trees.
       allow: ['..', vibegameRoot],
-    },
-    watch: {
-      ignored: ['!**/node_modules/vibegame/**'],
     },
   },
   optimizeDeps: {

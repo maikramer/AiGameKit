@@ -1,0 +1,20 @@
+assets:
+- id: village_longhouse
+  seed: 90210
+  idea: large medieval wooden longhouse mead-hall with carved timber beams, shingled
+    steep roof, grand double doors, glowing warm windows, stone foundation, elder
+    meeting hall
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: building
+    size_m:
+    - 10.0
+    - 5.0
+    - 6.0

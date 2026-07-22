@@ -3,7 +3,7 @@ import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/bandit_lod0.glb',
+  modelUrl: '/assets/meshes/bandit_lod2.glb',
   clips: {
     idle: 'idle',
     walk: 'walk',
@@ -14,13 +14,17 @@ const behaviours = createCreatureBehaviours({
     attack: 'attack',
   },
   hp: 50,
-  chaseSpeed: 2.4,
+  chaseSpeed: 2.5,
   wanderSpeed: 1.0,
   wanderRadius: 8,
   attackDamage: 12,
+  detectRange: 17,
+  leashRadius: 32,
+  attackCooldown: 2.0,
   lootGoldMin: 15,
   lootGoldMax: 35,
   strafe: true,
+  lowHpKiteFrac: 0.4,
   enemyType: 'bandit',
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });

@@ -17,6 +17,8 @@ import {
   SaveLoadPlugin,
   I18nPlugin,
   DebugPlugin,
+  ProfilerPlugin,
+  withSpan,
   RpgPlugins,
   registerDebugAction,
   registerDebugVar,
@@ -167,9 +169,11 @@ function heroWalkableSurfaceY(
 }
 
 const HeroGroundSnapSystem: System = {
+  name: 'HeroGroundSnapSystem',
   group: 'fixed',
   after: [PhysicsStepSystem],
   update(state: State) {
+    return withSpan('rpg/hero-ground-snap', () => {
     const heroEid = state.getEntityByName('hero');
     if (heroEid === null || !state.hasComponent(heroEid, Transform)) return;
 
@@ -249,6 +253,7 @@ const HeroGroundSnapSystem: System = {
     if (physicsGroundBelow(state, body, x, snapY, z)) {
       heroGroundSnapped = true;
     }
+    });
   },
 };
 
@@ -454,8 +459,10 @@ function harvestStackKey(x: number, z: number): string {
 }
 
 const CombatFeedbackSystem: System = {
+  name: 'CombatFeedbackSystem',
   group: 'simulation',
   update(state: State) {
+    withSpan('rpg/combat-feedback', () => {
     const hero = state.getEntityByName('hero');
     tickCombatTarget(state, state.time.deltaTime);
 
@@ -524,6 +531,7 @@ const CombatFeedbackSystem: System = {
         playSound(isWoodEntity(e) ? 'chop-hit' : 'mine-hit');
       }
     }
+    });
   },
 };
 
@@ -558,7 +566,8 @@ const dictEN: Record<string, string> = {
     'Bomb: B (hold to aim)   Cycle weapon: V\n' +
     'Use potion: 1   Use antidote: 2\n' +
     'Dash: C   Heal: E   Power Strike: R\n' +
-    'Pause menu: Q',
+    'Pause menu: Q\n' +
+    'Profiler: P (Shift+P deep)   Debug overlay: ?   GPU stats: G',
   'hud.title': 'Crystal Vale',
   'hud.saved': 'Game saved!',
   'hud.loaded': 'Save restored.',
@@ -593,7 +602,8 @@ const dictPT: Record<string, string> = {
     'Bomba: B (segure p/ mirar)   Trocar arma: V\n' +
     'Usar poção: 1   Usar antídoto: 2\n' +
     'Investida: C   Cura: E   Golpe Forte: R\n' +
-    'Menu de pausa: Q',
+    'Menu de pausa: Q\n' +
+    'Profiler: P (Shift+P deep)   Overlay debug: ?   GPU: G',
   'hud.title': 'Vale do Cristal',
   'hud.saved': 'Jogo gravado!',
   'hud.loaded': 'Progresso restaurado.',
@@ -923,8 +933,10 @@ function switchBgm(layer: 'explore' | 'battle'): void {
 }
 
 const BgmSystem: System = {
+  name: 'BgmSystem',
   group: 'simulation',
   update(_state: State) {
+    withSpan('rpg/bgm', () => {
     // Wait for the AudioContext to be running (unlocked by the user gesture)
     // before starting BGM — Howler queues plays on a suspended context but
     // they may not resume reliably.
@@ -948,6 +960,7 @@ const BgmSystem: System = {
       switchBgm('explore');
       bgmLastSwitch = now;
     }
+    });
   },
 };
 
@@ -979,6 +992,7 @@ async function bootstrap(): Promise<void> {
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
   withPlugin(DebugPlugin);
+  withPlugin(ProfilerPlugin);
 
   withSystem(HeroSetupSystem);
   withSystem(HeroGroundSnapSystem);
@@ -1262,6 +1276,21 @@ async function bootstrap(): Promise<void> {
   // DEV-gated by the registry itself). Invoke via:
   //   __VIBEGAME__.debug.getVar('heroDebug')
   //   __VIBEGAME__.debug.callAction('spawnFloatingText', 'hi', 0, 2, 0)
+  //   __VIBEGAME__.profiler.top(15)
+  registerDebugAction(
+    state,
+    'profilerTop',
+    (...args: unknown[]) => {
+      const n = typeof args[0] === 'number' ? args[0] : 15;
+      const w = window as unknown as {
+        __VIBEGAME__?: { profiler?: { top: (k?: number) => unknown } };
+      };
+      return w.__VIBEGAME__?.profiler?.top(n);
+    },
+    {
+      description: 'Return top profiler systems (__VIBEGAME__.profiler.top)',
+    }
+  );
   registerDebugVar(state, 'heroState', () => state);
   registerDebugVar(state, 'diagTerrainReady', () => terrainReady(state));
   registerDebugVar(state, 'diagDynamicsBlocking', () =>

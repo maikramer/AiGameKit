@@ -32,7 +32,7 @@ upload a new release, and update `assets.lock.json` (`version` + `url` + `sha256
 | Terrain (2 km, quadtree LOD)               | Built-in `<Terrain>`                   | Declarative in `index.html` (matches `public/assets/terrain/heightmap.png`)                                                |
 | Sky IBL + background                       | Skymap2D (equirect PNG) + `sky` plugin | `<EquirectSky url="/assets/sky/sky.png">` in `index.html`                                                                  |
 | NavMesh                                    | `NavMeshPlugin`                        | `<NavMesh>` in `index.html` (AI pathfinding surface)                                                                       |
-| Player (animated GLB + WASD)               | Built-in `<PlayerGLTF>`                | `<PlayerGLTF name="hero" model-url="/assets/meshes/hero_rigged_animated.glb">`                                             |
+| Player (animated GLB + WASD)               | Built-in `<PlayerGLTF>`                | `<PlayerGLTF name="hero" model-url="/assets/meshes/hero_lod0.glb">`                                                        |
 | Third-person camera + post-fx              | Built-in `<ThirdPersonCamera>`         | Declarative (bloom, vignette, SSAO, AGX tonemap; `<PostFxDebugToggle>` cycles effects on 1-6)                              |
 | Audio mixer + layered music                | Engine audio plugin                    | `<AudioMixer>` + `<MusicLayer layer="explore\|battle">` (crossfaded by biome)                                              |
 | Central walled city                        | Built-in `<Composition>` + primitives  | Walls with 4 cardinal gates, corner towers, 4 houses, well, campfire, market stalls, torches                               |
@@ -211,6 +211,29 @@ The final boss (Ogre) is the `<BossBar>` target in the HUD. It stays dormant unt
 **Bombs and abilities.** Buy bombs from the merchant, then throw them with **B** (tap to drop at your feet, hold to aim an arc at the nearest enemy). Abilities live on a cooldown bar: **C** dash, **E** heal, **R** power strike (`src/game/abilities.ts`).
 
 **Consumables.** Potions (**1**, heal) and antidotes (**2**, cure poison) sit on a hotbar (`src/game/consumables.ts`). Quest rewards and harvested resources (wood, stone, quest items) stack in the inventory.
+
+## Profiling
+
+The demo registers the engine `ProfilerPlugin` (plus `DebugPlugin`). Find CPU bottlenecks without guessing:
+
+| Input | Action |
+|-------|--------|
+| **`P`** | Toggle the in-game profiler panel (per-system timings, group bars, renderer/terrain counters) |
+| **`Shift+P`** | Cycle `sample` ↔ `deep` (User Timing marks for Chrome Performance) |
+| **`Pause`** | Freeze / unfreeze the snapshot |
+| **`?profiler=1`** | Open the profiler on load (`?profiler=deep` for marks) |
+| **`?`** | Debug overlay (FPS / entity counts) |
+| **`G`** | stats-gl GPU/CPU/draw-call panel |
+
+Console / Playwright:
+
+```js
+__VIBEGAME__.profiler.top(15)
+__VIBEGAME__.profiler.snapshot()
+__VIBEGAME__.profiler.download()
+```
+
+Filter the systems list for `terrain`, `vegetation`, `render`, or `rpg/` (game-side spans on hero snap, combat feedback, BGM).
 
 ## Extending
 

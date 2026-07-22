@@ -569,6 +569,7 @@ assets:
 - id: village_longhouse
   # Round regen: buraco de field na frente/base (artefacto SDF; imagem e bbox boas).
   # Re-roll via seed explícito (entra no fingerprint Omni → stale só deste shape no resume).
+  # Octree: autotune Text3D por size_m (10 m → ~448 em 6 GB+offload) — sem override.
   seed: 90210
   idea: large medieval wooden longhouse mead-hall with carved timber beams, shingled steep roof, grand
     double doors, glowing warm windows, stone foundation, elder meeting hall
