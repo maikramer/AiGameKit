@@ -2129,6 +2129,122 @@ def remesh_textured_cmd(
     console.print(f"[bold green]✓[/bold green] [cyan]{out_p}[/cyan] [dim]({sz})[/dim]")
 
 
+@cli.command("split-at-height")
+@click.argument("input_mesh", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="GLB multi-mesh de saída (objectos Stump + Top).",
+)
+@click.option(
+    "--cut-height",
+    type=float,
+    default=None,
+    help="Altura do corte em metros acima da base (bbox.min.y). Default 0.6.",
+)
+@click.option(
+    "--cut-ratio",
+    type=float,
+    default=None,
+    help="Fracao da altura AABB (0-1) como alternativa a --cut-height.",
+)
+@click.option(
+    "--cap/--no-cap",
+    default=True,
+    show_default=True,
+    help="Fechar o corte com disco convexo + chanfro suave (bevel).",
+)
+@click.option(
+    "--bevel-offset",
+    type=float,
+    default=None,
+    help="Largura do chanfro no rebordo (metros). Default: auto (~8%% do raio).",
+)
+@click.option(
+    "--bevel-segments",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Segmentos do bevel no rebordo (0=off, recomendado p/ fecho seamless).",
+)
+@click.option(
+    "--bevel-profile",
+    type=float,
+    default=0.7,
+    show_default=True,
+    help="Profile do bevel (0.5=recto, ~0.7=arredondado).",
+)
+@click.option("--stump-name", type=str, default="Stump", show_default=True, help="Nome do mesh stump.")
+@click.option("--top-name", type=str, default="Top", show_default=True, help="Nome do mesh top/canopy.")
+@click.option(
+    "--split-files",
+    is_flag=True,
+    default=False,
+    help="Também escreve {stem}_stump.glb e {stem}_top.glb junto do output.",
+)
+def split_at_height_cmd(
+    input_mesh: Path,
+    output: Path,
+    cut_height: float | None,
+    cut_ratio: float | None,
+    cap: bool,
+    bevel_offset: float | None,
+    bevel_segments: int,
+    bevel_profile: float,
+    stump_name: str,
+    top_name: str,
+    split_files: bool,
+) -> None:
+    """Parte um GLB num plano horizontal em stump + top.
+
+    Útil para árvores destruíveis: stump fica no chão, top anima a queda.
+    O corte é fechado com disco + chanfro suave em ambas as metades.
+    Por defeito exporta um único GLB com dois meshes nomeados; ``--split-files``
+    acrescenta GLBs separados.
+
+    \b
+        text3d split-at-height tree_lod0.glb -o tree_split.glb --cut-height 0.6
+        text3d split-at-height tree.glb -o tree.glb --cut-ratio 0.25 --split-files
+    """
+    from .utils.mesh_split import split_at_height_glb
+
+    if cut_height is not None and cut_ratio is not None:
+        raise click.ClickException("Use --cut-height ou --cut-ratio, não ambos")
+    if bevel_segments < 0:
+        raise click.ClickException("--bevel-segments deve ser >= 0")
+    if not 0.0 <= bevel_profile <= 1.0:
+        raise click.ClickException("--bevel-profile deve estar em [0, 1]")
+    try:
+        with console.status("[bold yellow]A partir malha por altura…", spinner="dots"):
+            result = split_at_height_glb(
+                input_mesh,
+                output,
+                cut_height=cut_height,
+                cut_ratio=cut_ratio,
+                cap=cap,
+                bevel_offset=bevel_offset,
+                bevel_segments=bevel_segments,
+                bevel_profile=bevel_profile,
+                stump_name=stump_name,
+                top_name=top_name,
+                split_files=split_files,
+            )
+    except (RuntimeError, TypeError, ValueError) as e:
+        raise click.ClickException(str(e)) from e
+
+    console.print(Rule("[bold green]split-at-height", style="green"))
+    console.print(
+        f"[bold green]✓[/bold green] [cyan]{result.output.resolve()}[/cyan] "
+        f"[dim](cut_y={result.cut_y:.3f}, stump={result.stump_faces}f, top={result.top_faces}f)[/dim]"
+    )
+    if result.stump_path is not None:
+        console.print(f"  stump → [cyan]{result.stump_path.resolve()}[/cyan]")
+    if result.top_path is not None:
+        console.print(f"  top   → [cyan]{result.top_path.resolve()}[/cyan]")
+
+
 @cli.command("collision")
 @click.argument("input_mesh", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--output", "-o", type=click.Path(path_type=Path), required=True, help="Output collision GLB")
