@@ -570,4 +570,228 @@ mod tests {
         let p = Preset::Skin.params();
         assert_eq!(p.metallic_scale, 0.0);
     }
+
+    fn assert_params_sane(p: PresetParams) {
+        assert!(p.metallic_scale >= 0.0);
+        assert!(p.height_blur_radius_0 >= 0.0);
+        assert!(p.height_blur_radius_1 >= p.height_blur_radius_0);
+        assert!(p.normal_strength >= 0.0);
+        assert!(p.smoothness_base >= 0.0 && p.smoothness_base <= 1.0);
+        assert!(p.edge_contrast >= 0.0);
+        assert!(p.ao_depth_scale >= 0.0);
+        assert!(p.normal_flip_y <= 1);
+        assert!(p.seamless <= 1);
+    }
+
+    #[test]
+    fn test_all_preset_display_roundtrips() {
+        for preset in Preset::ALL {
+            let s = preset.to_string();
+            let parsed: Preset = s.parse().unwrap();
+            assert_eq!(parsed.to_string(), s);
+        }
+    }
+
+    #[test]
+    fn test_auto_display_and_parse() {
+        assert_eq!(Preset::Auto.to_string(), "auto");
+        let p: Preset = "AUTO".parse().unwrap();
+        assert_eq!(p, Preset::Auto);
+    }
+
+    #[test]
+    fn test_from_str_mixed_case_metal() {
+        let p: Preset = "MeTaL".parse().unwrap();
+        assert_eq!(p, Preset::Metal);
+    }
+
+    #[test]
+    fn test_from_str_mixed_case_foliage() {
+        let p: Preset = "FoLiAgE".parse().unwrap();
+        assert_eq!(p, Preset::Foliage);
+    }
+
+    #[test]
+    fn test_unknown_preset_lists_available() {
+        let err: Result<Preset, _> = "diamond".parse();
+        let err = err.unwrap_err();
+        assert!(err.contains("Unknown preset"));
+        assert!(err.contains("diamond"));
+        assert!(err.contains("default"));
+    }
+
+    #[test]
+    fn test_unknown_preset_empty_string() {
+        assert!("".parse::<Preset>().is_err());
+    }
+
+    #[test]
+    fn test_unknown_preset_whitespace_not_trimmed() {
+        assert!(" skin".parse::<Preset>().is_err());
+    }
+
+    #[test]
+    fn test_preset_params_size_is_64_bytes() {
+        assert_eq!(std::mem::size_of::<PresetParams>(), 64);
+        assert_eq!(std::mem::align_of::<PresetParams>(), 4);
+    }
+
+    #[test]
+    fn test_default_params_sane() {
+        assert_params_sane(Preset::Default.params());
+    }
+
+    #[test]
+    fn test_skin_params_sane() {
+        assert_params_sane(Preset::Skin.params());
+    }
+
+    #[test]
+    fn test_floor_params_sane() {
+        assert_params_sane(Preset::Floor.params());
+    }
+
+    #[test]
+    fn test_metal_params_sane() {
+        let p = Preset::Metal.params();
+        assert_params_sane(p);
+        assert!(p.metallic_scale >= 1.0);
+    }
+
+    #[test]
+    fn test_fabric_params_sane() {
+        assert_params_sane(Preset::Fabric.params());
+    }
+
+    #[test]
+    fn test_wood_params_sane() {
+        assert_params_sane(Preset::Wood.params());
+    }
+
+    #[test]
+    fn test_stone_params_sane() {
+        assert_params_sane(Preset::Stone.params());
+    }
+
+    #[test]
+    fn test_concrete_params_sane() {
+        assert_params_sane(Preset::Concrete.params());
+    }
+
+    #[test]
+    fn test_leather_params_sane() {
+        assert_params_sane(Preset::Leather.params());
+    }
+
+    #[test]
+    fn test_marble_params_sane() {
+        assert_params_sane(Preset::Marble.params());
+    }
+
+    #[test]
+    fn test_sand_params_sane() {
+        assert_params_sane(Preset::Sand.params());
+    }
+
+    #[test]
+    fn test_foliage_params_sane() {
+        assert_params_sane(Preset::Foliage.params());
+    }
+
+    #[test]
+    fn test_plaster_params_sane() {
+        assert_params_sane(Preset::Plaster.params());
+    }
+
+    #[test]
+    fn test_asphalt_params_sane() {
+        assert_params_sane(Preset::Asphalt.params());
+    }
+
+    #[test]
+    fn test_brick_params_sane() {
+        assert_params_sane(Preset::Brick.params());
+    }
+
+    #[test]
+    fn test_ice_params_sane() {
+        assert_params_sane(Preset::Ice.params());
+    }
+
+    #[test]
+    fn test_snow_params_sane() {
+        assert_params_sane(Preset::Snow.params());
+    }
+
+    #[test]
+    fn test_lava_params_sane() {
+        assert_params_sane(Preset::Lava.params());
+    }
+
+    #[test]
+    fn test_water_params_sane() {
+        assert_params_sane(Preset::Water.params());
+    }
+
+    #[test]
+    fn test_auto_params_match_default() {
+        let a = Preset::Auto.params();
+        let d = Preset::Default.params();
+        assert_eq!(a.height_contrast, d.height_contrast);
+        assert_eq!(a.metallic_scale, d.metallic_scale);
+    }
+
+    #[test]
+    fn test_each_selectable_preset_has_positive_height_blur() {
+        for preset in Preset::ALL {
+            let p = preset.params();
+            assert!(p.height_blur_radius_0 > 0.0);
+            assert!(p.height_contrast > 0.0);
+        }
+    }
+
+    #[test]
+    fn test_skin_smoothness_metallic_boost_zero() {
+        let p = Preset::Skin.params();
+        assert_eq!(p.smoothness_metallic_boost, 0.0);
+    }
+
+    #[test]
+    fn test_metal_has_metallic_variance() {
+        let p = Preset::Metal.params();
+        assert!(p.metallic_local_variance_factor > 0.0);
+    }
+
+    #[test]
+    fn test_display_strings_are_lowercase_snake() {
+        for preset in Preset::ALL {
+            let s = preset.to_string();
+            assert_eq!(s, s.to_lowercase());
+            assert!(!s.contains(' '));
+        }
+    }
+
+    #[test]
+    fn test_parse_each_all_member() {
+        for preset in Preset::ALL {
+            let parsed: Preset = preset.to_string().parse().unwrap();
+            assert_eq!(parsed, *preset);
+        }
+    }
+
+    #[test]
+    fn test_pad_fields_zeroed_on_all_presets() {
+        for preset in Preset::ALL {
+            let p = preset.params();
+            assert_eq!(p._pad0, 0.0);
+            assert_eq!(p._pad1, 0.0);
+        }
+    }
+
+    #[test]
+    fn test_seamless_flag_default_off() {
+        for preset in Preset::ALL {
+            assert_eq!(preset.params().seamless, 0);
+        }
+    }
 }

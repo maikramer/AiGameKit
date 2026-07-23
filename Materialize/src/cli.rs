@@ -328,4 +328,171 @@ mod tests {
         assert_eq!(NormalFormat::Opengl.to_flag(), 0);
         assert_eq!(NormalFormat::Directx.to_flag(), 1);
     }
+
+    #[test]
+    fn test_map_names_lists_seven_entries() {
+        assert_eq!(MAP_NAMES.len(), 7);
+        assert!(MAP_NAMES.contains(&"curvature"));
+    }
+
+    #[test]
+    fn test_preset_descriptions_covers_auto() {
+        let names: Vec<_> = PRESET_DESCRIPTIONS.iter().map(|(n, _)| *n).collect();
+        assert!(names.contains(&"auto"));
+        assert!(names.contains(&"water"));
+        assert_eq!(names.len(), 20);
+    }
+
+    #[test]
+    fn test_inline_overrides_default_all_none() {
+        let ov = InlineOverrides::default();
+        assert!(ov.height_contrast.is_none());
+        assert!(ov.normal_format.is_none());
+        assert!(ov.ao_depth_scale.is_none());
+    }
+
+    #[test]
+    fn test_cli_overrides_extracts_height_contrast() {
+        let cli =
+            Cli::try_parse_from(["materialize", "in.png", "--height-contrast", "2.5"]).unwrap();
+        let ov = cli.overrides();
+        assert_eq!(ov.height_contrast, Some(2.5));
+    }
+
+    #[test]
+    fn test_cli_overrides_extracts_multiple_fields() {
+        let cli = Cli::try_parse_from([
+            "materialize",
+            "in.png",
+            "--normal-strength",
+            "3.0",
+            "--metallic-scale",
+            "0.5",
+            "--edge-contrast",
+            "1.1",
+        ])
+        .unwrap();
+        let ov = cli.overrides();
+        assert_eq!(ov.normal_strength, Some(3.0));
+        assert_eq!(ov.metallic_scale, Some(0.5));
+        assert_eq!(ov.edge_contrast, Some(1.1));
+    }
+
+    #[test]
+    fn test_cli_overrides_normal_format_directx() {
+        let cli =
+            Cli::try_parse_from(["materialize", "in.png", "--normal-format", "directx"]).unwrap();
+        assert_eq!(cli.overrides().normal_format, Some(NormalFormat::Directx));
+    }
+
+    #[test]
+    fn test_cli_try_parse_defaults() {
+        let cli = Cli::try_parse_from(["materialize", "tex.png"]).unwrap();
+        assert_eq!(cli.format, OutputFormat::Png);
+        assert_eq!(cli.output, ".");
+        assert!(!cli.verbose);
+    }
+
+    #[test]
+    fn test_output_format_display_all_variants() {
+        assert_eq!(OutputFormat::Png.to_string(), "png");
+        assert_eq!(OutputFormat::Jpg.to_string(), "jpg");
+        assert_eq!(OutputFormat::Tga.to_string(), "tga");
+        assert_eq!(OutputFormat::Exr.to_string(), "exr");
+    }
+
+    #[test]
+    fn test_output_format_parse_tga_exr() {
+        assert_eq!("TGA".parse::<OutputFormat>().unwrap(), OutputFormat::Tga);
+        assert_eq!("exr".parse::<OutputFormat>().unwrap(), OutputFormat::Exr);
+    }
+
+    #[test]
+    fn test_apply_inline_overrides_to_params() {
+        use crate::preset::{Preset, PresetParams};
+
+        fn apply_inline(ov: &InlineOverrides, params: &mut PresetParams) {
+            if let Some(v) = ov.height_contrast {
+                params.height_contrast = v;
+            }
+            if let Some(v) = ov.normal_strength {
+                params.normal_strength = v;
+            }
+            if let Some(fmt) = ov.normal_format {
+                params.normal_flip_y = fmt.to_flag();
+            }
+            if let Some(v) = ov.metallic_scale {
+                params.metallic_scale = v;
+            }
+            if let Some(v) = ov.ao_depth_scale {
+                params.ao_depth_scale = v;
+            }
+        }
+
+        let mut p = Preset::Default.params();
+        let ov = InlineOverrides {
+            height_contrast: Some(9.0),
+            normal_strength: Some(4.0),
+            normal_format: Some(NormalFormat::Directx),
+            metallic_scale: Some(0.25),
+            ao_depth_scale: Some(2.0),
+            ..Default::default()
+        };
+        apply_inline(&ov, &mut p);
+        assert_eq!(p.height_contrast, 9.0);
+        assert_eq!(p.normal_strength, 4.0);
+        assert_eq!(p.normal_flip_y, 1);
+        assert_eq!(p.metallic_scale, 0.25);
+        assert_eq!(p.ao_depth_scale, 2.0);
+    }
+
+    #[test]
+    fn test_cli_overrides_smoothness_fields() {
+        let cli = Cli::try_parse_from([
+            "materialize",
+            "x.png",
+            "--smoothness-base",
+            "0.4",
+            "--smoothness-boost",
+            "0.1",
+            "--smoothness-roughness",
+            "0.9",
+        ])
+        .unwrap();
+        let ov = cli.overrides();
+        assert_eq!(ov.smoothness_base, Some(0.4));
+        assert_eq!(ov.smoothness_boost, Some(0.1));
+        assert_eq!(ov.smoothness_roughness, Some(0.9));
+    }
+
+    #[test]
+    fn test_cli_overrides_height_blur_and_metallic_variance() {
+        let cli = Cli::try_parse_from([
+            "materialize",
+            "x.png",
+            "--height-blur",
+            "0.5",
+            "--metallic-local-variance",
+            "0.8",
+        ])
+        .unwrap();
+        let ov = cli.overrides();
+        assert_eq!(ov.height_blur, Some(0.5));
+        assert_eq!(ov.metallic_local_variance, Some(0.8));
+    }
+
+    #[test]
+    fn test_output_format_err_message_format() {
+        let err = "bmp".parse::<OutputFormat>().unwrap_err();
+        assert!(err.starts_with("Unsupported format:"));
+    }
+
+    #[test]
+    fn test_cli_info_subcommand_parses() {
+        let cli = Cli::try_parse_from(["materialize", "info", "photo.png"]).unwrap();
+        match cli.subcommand {
+            Some(CliSubcommand::Info { input }) => assert_eq!(input, "photo.png"),
+            other => panic!("expected info subcommand, got {other:?}"),
+        }
+    }
 }

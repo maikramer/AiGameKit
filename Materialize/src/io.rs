@@ -488,4 +488,233 @@ mod tests {
         let img = metallic_to_image(1, 1, &[200u8]);
         assert_eq!(img.to_luma8().get_pixel(0, 0)[0], 200);
     }
+
+    #[test]
+    fn test_parse_only_height() {
+        let s = MapSelection::parse_only("height").unwrap();
+        assert!(s.height);
+        assert!(!s.normal);
+        assert!(!s.metallic);
+    }
+
+    #[test]
+    fn test_parse_only_normal_and_ao() {
+        let s = MapSelection::parse_only("normal, ao").unwrap();
+        assert!(s.normal);
+        assert!(s.ao);
+        assert!(!s.height);
+    }
+
+    #[test]
+    fn test_parse_only_all_maps() {
+        let s = MapSelection::parse_only("height,normal,metallic,smoothness,edge,ao,curvature")
+            .unwrap();
+        assert!(s.curvature);
+        assert!(s.smoothness);
+    }
+
+    #[test]
+    fn test_parse_only_unknown_map() {
+        let e = MapSelection::parse_only("height,foobar").unwrap_err();
+        assert!(e.contains("unknown map"));
+        assert!(e.contains("foobar"));
+    }
+
+    #[test]
+    fn test_parse_only_case_insensitive() {
+        let s = MapSelection::parse_only("HEIGHT,Normal").unwrap();
+        assert!(s.height);
+        assert!(s.normal);
+    }
+
+    #[test]
+    fn test_parse_only_empty_spec() {
+        let s = MapSelection::parse_only("").unwrap();
+        assert!(!s.height);
+        assert_eq!(s.count(), 0);
+    }
+
+    #[test]
+    fn test_parse_skip_disables_height() {
+        let s = MapSelection::parse_skip("height").unwrap();
+        assert!(!s.height);
+        assert!(s.normal);
+    }
+
+    #[test]
+    fn test_parse_skip_multiple() {
+        let s = MapSelection::parse_skip("metallic,smoothness,edge").unwrap();
+        assert!(!s.metallic);
+        assert!(!s.smoothness);
+        assert!(!s.edge);
+        assert!(s.height);
+    }
+
+    #[test]
+    fn test_parse_skip_unknown() {
+        assert!(MapSelection::parse_skip("bogus").is_err());
+    }
+
+    #[test]
+    fn test_map_selection_all_without_curvature() {
+        let s = MapSelection::all(false);
+        assert_eq!(s.count(), 6);
+        assert!(!s.curvature);
+    }
+
+    #[test]
+    fn test_map_selection_all_with_curvature() {
+        let s = MapSelection::all(true);
+        assert_eq!(s.count(), 7);
+        assert!(s.curvature);
+    }
+
+    #[test]
+    fn test_get_output_paths_only_height() {
+        let mut sel = MapSelection::default();
+        sel.height = true;
+        let p = get_output_paths("tex.png", "out", "png", &sel, false);
+        assert_eq!(p.height_path.as_deref(), Some("out/tex_height.png"));
+        assert!(p.normal_path.is_none());
+    }
+
+    #[test]
+    fn test_get_output_paths_only_normal() {
+        let mut sel = MapSelection::default();
+        sel.normal = true;
+        let p = get_output_paths("a.png", "d", "png", &sel, false);
+        assert_eq!(p.normal_path.as_deref(), Some("d/a_normal.png"));
+        assert!(p.height_path.is_none());
+    }
+
+    #[test]
+    fn test_get_output_paths_partial_three_maps() {
+        let mut sel = MapSelection::default();
+        sel.metallic = true;
+        sel.ao = true;
+        sel.edge = true;
+        let p = get_output_paths("m.png", "o", "tga", &sel, false);
+        assert!(p.metallic_path.unwrap().ends_with("_metallic.tga"));
+        assert!(p.ao_path.is_some());
+        assert!(p.smoothness_path.is_none());
+    }
+
+    #[test]
+    fn test_roughness_to_image_inverts_smoothness() {
+        let smooth = vec![0u8, 64, 128, 255];
+        let img = roughness_to_image(2, 2, &smooth);
+        let l = img.to_luma8();
+        assert_eq!(l.get_pixel(0, 0)[0], 255);
+        assert_eq!(l.get_pixel(1, 1)[0], 0);
+        assert_eq!(l.get_pixel(0, 1)[0], 127);
+    }
+
+    #[test]
+    fn test_curvature_to_image_dimensions() {
+        let d = vec![1u8, 2, 3, 4];
+        let img = curvature_to_image(2, 2, &d);
+        assert_eq!(img.width(), 2);
+        assert_eq!(img.to_luma8().get_pixel(1, 0)[0], 2);
+    }
+
+    #[test]
+    fn test_height_to_image_clamps_negative() {
+        let data = vec![-0.5f32; 4];
+        let img = height_to_image(2, 2, &data);
+        assert_eq!(img.to_luma8().get_pixel(0, 0)[0], 0);
+    }
+
+    #[test]
+    fn test_height_to_image_exact_one() {
+        let data = vec![1.0f32; 1];
+        let img = height_to_image(1, 1, &data);
+        assert_eq!(img.to_luma8().get_pixel(0, 0)[0], 255);
+    }
+
+    #[test]
+    fn test_smoothness_to_image_values() {
+        let img = smoothness_to_image(1, 2, &[10, 20]);
+        assert_eq!(img.height(), 2);
+        assert_eq!(img.to_luma8().get_pixel(0, 1)[0], 20);
+    }
+
+    #[test]
+    fn test_edge_to_image_full_buffer() {
+        let data: Vec<u8> = (0..100).map(|i| i as u8).collect();
+        let img = edge_to_image(10, 10, &data);
+        assert_eq!(img.to_luma8().get_pixel(5, 5)[0], 55);
+    }
+
+    #[test]
+    fn test_ao_to_image_single_channel() {
+        let img = ao_to_image(3, 1, &[100, 150, 200]);
+        assert_eq!(img.width(), 3);
+        assert_eq!(img.to_luma8().get_pixel(2, 0)[0], 200);
+    }
+
+    #[test]
+    fn test_save_image_tga_roundtrip() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("out.tga");
+        let img = image::RgbImage::from_pixel(1, 1, image::Rgb([10, 20, 30]));
+        save_image(
+            &image::DynamicImage::ImageRgb8(img),
+            path.to_str().unwrap(),
+            image::ImageFormat::Tga,
+            95,
+        )
+        .expect("tga");
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn test_get_output_paths_output_stem_fallback() {
+        let sel = MapSelection::all(false);
+        let p = get_output_paths("", ".", "png", &sel, false);
+        assert!(p.height_path.unwrap().contains("output_height"));
+    }
+
+    #[test]
+    fn test_parse_skip_leaves_curvature_on_by_default_in_all() {
+        let s = MapSelection::parse_skip("height").unwrap();
+        assert!(!s.curvature);
+    }
+
+    #[test]
+    fn test_parse_only_trailing_comma_ignored() {
+        let s = MapSelection::parse_only("height,").unwrap();
+        assert!(s.height);
+    }
+
+    #[test]
+    fn test_normal_to_image_four_pixels_rgba_stride() {
+        let data = vec![1, 2, 3, 255, 4, 5, 6, 255, 7, 8, 9, 255, 10, 11, 12, 255];
+        let img = normal_to_image(2, 2, &data);
+        let rgb = img.to_rgb8();
+        assert_eq!(rgb.get_pixel(1, 1)[2], 12);
+    }
+
+    #[test]
+    fn test_get_output_paths_roughness_jpg_ext() {
+        let sel = MapSelection::all(false);
+        let p = get_output_paths("x.png", "o", "jpeg", &sel, true);
+        assert_eq!(p.smoothness_path.as_deref(), Some("o/x_roughness.jpg"));
+    }
+
+    #[test]
+    fn test_map_selection_default_all_false() {
+        let s = MapSelection::default();
+        assert_eq!(s.count(), 0);
+    }
+
+    #[test]
+    fn test_load_image_with_unicode_path_segment() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("tést.png");
+        image::RgbImage::from_pixel(1, 1, image::Rgb([1, 1, 1]))
+            .save(&path)
+            .expect("save");
+        let loaded = load_image(path.to_str().unwrap()).expect("load");
+        assert_eq!(loaded.height(), 1);
+    }
 }

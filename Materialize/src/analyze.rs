@@ -269,7 +269,11 @@ fn dominant_bin(hist: &[u32; HIST_BINS]) -> Option<usize> {
         .enumerate()
         .max_by_key(|(_, v)| *v)
         .unwrap_or((0, &0));
-    if val == 0 { None } else { Some(idx) }
+    if val == 0 {
+        None
+    } else {
+        Some(idx)
+    }
 }
 
 fn bin_to_hue_centre(bin: usize) -> f32 {
@@ -541,5 +545,354 @@ mod tests {
         let s = format_report(&c);
         assert!(s.contains("Detected:"));
         assert!(s.contains("confidence"));
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_pure_green() {
+        let [h, s, l] = rgb_to_hsl([0.0, 1.0, 0.0]);
+        assert!((h - 1.0 / 3.0).abs() < 0.02 || (h - 2.0 / 3.0).abs() < 0.02);
+        assert!((s - 1.0).abs() < 0.01);
+        assert!((l - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_pure_blue() {
+        let [h, s, _l] = rgb_to_hsl([0.0, 0.0, 1.0]);
+        assert!((h - 2.0 / 3.0).abs() < 0.02);
+        assert!((s - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_gray_zero_saturation() {
+        let [h, s, l] = rgb_to_hsl([0.5, 0.5, 0.5]);
+        assert!(s < 0.01);
+        assert!((l - 0.5).abs() < 0.01);
+        let _ = h;
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_black() {
+        let [_, s, l] = rgb_to_hsl([0.0, 0.0, 0.0]);
+        assert!(s < 0.01);
+        assert!(l < 0.01);
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_white() {
+        let [_, s, l] = rgb_to_hsl([1.0, 1.0, 1.0]);
+        assert!(s < 0.01);
+        assert!((l - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_cyan() {
+        let [h, s, l] = rgb_to_hsl([0.0, 1.0, 1.0]);
+        assert!(s > 0.9);
+        assert!((l - 0.5).abs() < 0.05);
+        assert!(h > 0.4 && h < 0.6);
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_magenta() {
+        let [h, s, _] = rgb_to_hsl([1.0, 0.0, 1.0]);
+        assert!(s > 0.9);
+        assert!(h < 0.2 || h > 0.8);
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_yellow() {
+        let [h, s, l] = rgb_to_hsl([1.0, 1.0, 0.0]);
+        assert!(s > 0.9);
+        assert!((l - 0.5).abs() < 0.05);
+        assert!(h > 0.12 && h < 0.22);
+    }
+
+    #[test]
+    fn test_luma_pure_red() {
+        let l = luma(Rgba([255, 0, 0, 255]));
+        assert!(l > 0.2 && l < 0.35);
+    }
+
+    #[test]
+    fn test_luma_pure_green() {
+        let l = luma(Rgba([0, 255, 0, 255]));
+        assert!(l > 0.6);
+    }
+
+    #[test]
+    fn test_luma_pure_blue() {
+        let l = luma(Rgba([0, 0, 255, 255]));
+        assert!(l < 0.15);
+    }
+
+    #[test]
+    fn test_dominant_bin_all_zero() {
+        assert_eq!(dominant_bin(&[0; HIST_BINS]), None);
+    }
+
+    #[test]
+    fn test_dominant_bin_single_peak() {
+        let mut h = [0u32; HIST_BINS];
+        h[5] = 42;
+        assert_eq!(dominant_bin(&h), Some(5));
+    }
+
+    #[test]
+    fn test_dominant_bin_last_wins_on_tie() {
+        let mut h = [0u32; HIST_BINS];
+        h[2] = 10;
+        h[7] = 10;
+        // `max_by_key` keeps the last maximum when counts tie.
+        assert_eq!(dominant_bin(&h), Some(7));
+    }
+
+    #[test]
+    fn test_bin_to_hue_centre_bin_zero() {
+        assert!((bin_to_hue_centre(0) - 0.5 / HIST_BINS as f32).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_bin_to_hue_centre_last_bin() {
+        let centre = bin_to_hue_centre(HIST_BINS - 1);
+        assert!((centre - (11.5 / 12.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_analyze_flat_red() {
+        let f = analyze(&flat(48, 48, Rgba([200, 40, 40, 255])));
+        assert!(f.sat_mean > 0.5);
+        assert!(f.luma_mean > 0.2);
+    }
+
+    #[test]
+    fn test_analyze_flat_green_high_sat() {
+        let f = analyze(&flat(48, 48, Rgba([30, 180, 30, 255])));
+        assert!(f.sat_mean > 0.4);
+    }
+
+    #[test]
+    fn test_analyze_flat_blue() {
+        let f = analyze(&flat(48, 48, Rgba([20, 20, 220, 255])));
+        assert!(f.sat_mean > 0.7);
+    }
+
+    #[test]
+    fn test_analyze_alpha_transparency_coverage() {
+        let mut img = RgbaImage::new(32, 32);
+        for y in 0..32 {
+            for x in 0..32 {
+                let a = if x < 16 { 128u8 } else { 255u8 };
+                img.put_pixel(x, y, Rgba([100, 100, 100, a]));
+            }
+        }
+        let f = analyze(&DynamicImage::ImageRgba8(img));
+        assert!(f.alpha_coverage > 0.0 && f.alpha_coverage < 1.0);
+    }
+
+    #[test]
+    fn test_analyze_vertical_gradient_edges() {
+        let mut img = RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                let v = if y < 32 { 0u8 } else { 255u8 };
+                img.put_pixel(x, y, Rgba([v, v, v, 255]));
+            }
+        }
+        let f = analyze(&DynamicImage::ImageRgba8(img));
+        assert!(f.edge_density > 0.05);
+    }
+
+    #[test]
+    fn test_analyze_non_tileable_high_mse() {
+        let mut img = RgbaImage::new(32, 32);
+        for y in 0..32 {
+            for x in 0..32 {
+                let v = (x * 8) as u8;
+                img.put_pixel(x, y, Rgba([v, v, v, 255]));
+            }
+        }
+        let f = analyze(&DynamicImage::ImageRgba8(img));
+        assert!(f.tile_mse > 0.01);
+    }
+
+    #[test]
+    fn test_analyze_tiny_image() {
+        let f = analyze(&flat(2, 2, Rgba([128, 128, 128, 255])));
+        assert!(f.luma_mean > 0.4 && f.luma_mean < 0.6);
+    }
+
+    #[test]
+    fn test_analyze_checkerboard_local_variance() {
+        let mut img = RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                let v = if (x / 4 + y / 4) % 2 == 0 {
+                    30u8
+                } else {
+                    220u8
+                };
+                img.put_pixel(x, y, Rgba([v, v, v, 255]));
+            }
+        }
+        let f = analyze(&DynamicImage::ImageRgba8(img));
+        assert!(f.local_contrast_variance > 0.001);
+        assert!(f.edge_density > 0.1);
+    }
+
+    #[test]
+    fn test_analyze_hue_hist_red_dominant() {
+        let f = analyze(&flat(64, 64, Rgba([220, 30, 30, 255])));
+        let peak = dominant_bin(&f.hue_hist).expect("hue peak");
+        let centre = bin_to_hue_centre(peak);
+        assert!(centre < 0.08 || centre > 0.92);
+    }
+
+    #[test]
+    fn test_analyze_hue_hist_green_dominant() {
+        let f = analyze(&flat(64, 64, Rgba([40, 200, 50, 255])));
+        let peak = dominant_bin(&f.hue_hist);
+        assert!(peak.is_some());
+        let c = bin_to_hue_centre(peak.unwrap());
+        assert!(c > 0.15 && c < 0.45);
+    }
+
+    #[test]
+    fn test_format_report_contains_feature_lines() {
+        let c = classify(&analyze(&flat(16, 16, Rgba([128, 64, 32, 255]))));
+        let s = format_report(&c);
+        assert!(s.contains("luma_mean="));
+        assert!(s.contains("sat_mean="));
+        assert!(s.contains("edge_density="));
+        assert!(s.contains("tile_mse="));
+        assert!(s.contains("alpha_coverage="));
+    }
+
+    #[test]
+    fn test_format_report_shows_preset_name() {
+        let c = classify(&analyze(&flat(16, 16, Rgba([255, 255, 255, 255]))));
+        let s = format_report(&c);
+        assert!(s.contains("default"));
+    }
+
+    #[test]
+    fn test_format_report_hue_peak_na_on_gray() {
+        let c = classify(&analyze(&flat(32, 32, Rgba([128, 128, 128, 255]))));
+        let s = format_report(&c);
+        assert!(s.contains("hue_peak=n/a") || s.contains("hue_peak=0."));
+    }
+
+    #[test]
+    fn test_classify_clones_features() {
+        let f = analyze(&flat(32, 32, Rgba([100, 100, 100, 255])));
+        let c = classify(&f);
+        assert_eq!(c.features.luma_mean, f.luma_mean);
+        assert_eq!(c.features.tile_mse, f.tile_mse);
+    }
+
+    #[test]
+    fn test_classify_confidence_bounded() {
+        let f = analyze(&flat(32, 32, Rgba([128, 128, 128, 255])));
+        let c = classify(&f);
+        assert!(c.confidence >= 0.0 && c.confidence <= 1.0);
+    }
+
+    #[test]
+    fn test_classify_skin_tone_synthetic() {
+        let mut img = RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                img.put_pixel(x, y, Rgba([210, 160, 140, 255]));
+            }
+        }
+        let c = classify(&analyze(&DynamicImage::ImageRgba8(img)));
+        assert!(matches!(
+            c.preset,
+            Preset::Skin | Preset::Default | Preset::Sand
+        ));
+    }
+
+    #[test]
+    fn test_classify_dark_stone_gray() {
+        let mut img = RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                let n = hash01(x, y) * 40.0;
+                let v = (80.0 + n) as u8;
+                img.put_pixel(x, y, Rgba([v, v - 5, v - 10, 255]));
+            }
+        }
+        let c = classify(&analyze(&DynamicImage::ImageRgba8(img)));
+        assert!(matches!(
+            c.preset,
+            Preset::Stone | Preset::Default | Preset::Metal
+        ));
+    }
+
+    #[test]
+    fn test_luma_at_matches_luma_pixel() {
+        let img = RgbaImage::from_pixel(4, 4, Rgba([100, 150, 200, 255]));
+        let l0 = luma(Rgba([100, 150, 200, 255]));
+        let l1 = luma_at(&img, 0, 0);
+        assert!((l0 - l1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_mid_orange() {
+        let [h, s, l] = rgb_to_hsl([1.0, 0.5, 0.0]);
+        assert!(h > 0.05 && h < 0.15);
+        assert!(s > 0.9);
+        assert!((l - 0.5).abs() < 0.05);
+    }
+
+    #[test]
+    fn test_analyze_luma_std_zero_on_flat() {
+        let f = analyze(&flat(64, 64, Rgba([90, 90, 90, 255])));
+        assert!(f.luma_std < 0.01);
+    }
+
+    #[test]
+    fn test_analyze_sat_std_low_on_flat_color() {
+        let f = analyze(&flat(64, 64, Rgba([90, 90, 90, 255])));
+        assert!(f.sat_std < 0.05);
+    }
+
+    #[test]
+    fn test_image_features_equality() {
+        let f1 = analyze(&flat(8, 8, Rgba([1, 2, 3, 255])));
+        let f2 = f1.clone();
+        assert_eq!(f1, f2);
+    }
+
+    #[test]
+    fn test_classify_bright_silver_metal_candidate() {
+        let f = analyze(&flat(64, 64, Rgba([180, 185, 190, 255])));
+        let c = classify(&f);
+        assert!(matches!(
+            c.preset,
+            Preset::Metal | Preset::Snow | Preset::Default
+        ));
+    }
+
+    #[test]
+    fn test_format_report_confidence_two_decimals() {
+        let c = classify(&analyze(&flat(8, 8, Rgba([50, 50, 50, 255]))));
+        let s = format_report(&c);
+        assert!(s.contains("confidence"));
+        assert!(s.matches('.').count() >= 2);
+    }
+
+    #[test]
+    fn test_classify_default_confidence_is_point_four() {
+        let c = classify(&analyze(&flat(32, 32, Rgba([255, 255, 255, 255]))));
+        assert_eq!(c.preset, Preset::Default);
+        assert!((c.confidence - 0.4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_equal_rgb_is_achromatic() {
+        let [h, s, l] = rgb_to_hsl([0.2, 0.2, 0.2]);
+        assert!(s < 0.01);
+        assert!((l - 0.2).abs() < 0.01);
+        let _ = h;
     }
 }
