@@ -14,13 +14,21 @@ const behaviours = createCreatureBehaviours({
     attack: 'attack',
   },
   hp: 30,
-  chaseSpeed: 2.8,
+  chaseSpeed: 3.0,
   wanderSpeed: 1.0,
   wanderRadius: 6,
-  attackDamage: 8,
+  attackDamage: 7,
+  attackCooldown: 1.4,
   lootGoldMin: 4,
   lootGoldMax: 10,
+  // Swarming pest: fragile, frantic, very short windup — throws itself at the
+  // hero in numbers. Dies fast but interrupts casts/movement.
+  lungeWindup: 0.12,
+  lungeDuration: 0.2,
+  lungeRecovery: 0.3,
+  lungeStandoff: 0.7,
   enemyType: 'bogling',
+  behaviorProfile: { separate: true, flock: true },
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });
 

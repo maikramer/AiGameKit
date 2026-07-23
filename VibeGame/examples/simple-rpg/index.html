@@ -110,6 +110,18 @@
       sky="#ffffff"
       resume-audio-on-user-gesture="true"
     >
+      <!-- Projectile template used by ranged enemies (e.g. the archer). The
+           archer script fires this via spawnProjectileFromTemplate. Visual is
+           attached by main.ts's projectile watcher; the template only defines
+           kinematics + damage + the 'enemy' faction so hero collision applies. -->
+      <ProjectileTemplate
+        id="enemy-arrow"
+        speed="16"
+        damage="8"
+        max-life="2.5"
+        sensor-radius="0.3"
+        faction="enemy"
+      ></ProjectileTemplate>
       <!-- ============================================================
            GRUPO "environment": céu, iluminação global, pós-processamento,
            áudio, clima e as 4 cunhas de bioma cardeais. Tudo aqui é global
@@ -3625,6 +3637,30 @@
 
           max-distance="100">
           <GameObject role="enemy" script="enemies/bandit.ts">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/bandit_lod2.glb"
+            lod1-url="/assets/meshes/bandit_lod2.glb"
+            lod2-url="/assets/meshes/bandit_lod2.glb"
+            lod-threshold-near="18"
+            lod-threshold-mid="55"
+          ></GLTFLoader>
+        </GameObject>
+        </DynamicSpawner>
+        <!-- Arqueiro inimigo (ranged): mantém distância e dispara setas.
+             Reutiliza o mesh do bandit como placeholder. -->
+        <DynamicSpawner
+          avoid-water="1"
+          count="2"
+          seed="555"
+          region-min="58 0 -65"
+          region-max="150 0 65"
+          align-to-terrain="false"
+          random-yaw="true"
+          avoid-overlaps="false"
+          max-slope-deg="40"
+          max-distance="100">
+          <GameObject role="enemy" script="archer.ts">
           <GLTFLoader
             role="visual"
             url="/assets/meshes/bandit_lod2.glb"

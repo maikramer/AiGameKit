@@ -35,6 +35,8 @@ import {
   removeAgent,
   planarYawRadians,
   setTransformYawRadians,
+  spawnProjectileFromTemplate,
+  hasLineOfSight,
 } from 'vibegame';
 import type { MeleeAiConfig } from 'vibegame';
 import {
@@ -153,6 +155,18 @@ export interface CreatureConfig {
   lowHpKiteFrac?: number;
   /** Enrage (faster, shorter cooldown) below this HP fraction. */
   enrageBelowFrac?: number;
+  /** Seconds the creature braces (telegraph) before a lunge burst. */
+  lungeWindup?: number;
+  /** Seconds the lunge burst travels. */
+  lungeDuration?: number;
+  /** Seconds the creature pauses (vulnerable) after a lunge. */
+  lungeRecovery?: number;
+  /** Min gap kept between creature and hero during a lunge (anti-overlap). */
+  lungeStandoff?: number;
+  /** Enrage speed multiplier (default 1.4). */
+  enrageSpeedMult?: number;
+  /** Enrage cooldown multiplier (default 0.5). */
+  enrageCooldownMult?: number;
   /** SFX played on the intro roar / first activation. */
   roarSound?: string;
   /** Big banner shown on death (boss). */
@@ -183,6 +197,50 @@ export interface CreatureConfig {
    * only for assets that face −Z in bind pose.
    */
   facingYawOffset?: number;
+  /**
+   * When true (default), the creature only acquires the hero when an
+   * unobstructed line of sight exists (BVH raycast). Set false for sense-based
+   * mobs that should aggro through walls.
+   */
+  requireLineOfSight?: boolean;
+  /**
+   * Optional steering/decision profile for the yuka AI layer. When set, the
+   * creature additionally drives a {@link YukaAgentComponent} so it can pursuit
+   * / evade / flock instead of the pure-melee chase ring. Omit to keep the
+   * legacy melee-only behavior (back-compat).
+   */
+  behaviorProfile?: CreatureBehaviorProfile;
+  /**
+   * Registered projectile template id (see `<ProjectileTemplate>` in
+   * `index.html`). When set, the creature becomes ranged: it holds a long
+   * stand-off and fires this template on `rangedCooldown` seconds, and the
+   * melee lunge is suppressed. The first creature type to use this becomes the
+   * game's only ranged attacker.
+   */
+  rangedTemplate?: string;
+  /** Seconds between ranged shots (default 2.0; only with `rangedTemplate`). */
+  rangedCooldown?: number;
+}
+
+/**
+ * Steering personality for the yuka layer. Maps directly to how a creature
+ * *feels*: wolves back off after biting (hit-and-run), casters flee to range,
+ * goblins dodge, tanks body-block. Optional fields default to the legacy
+ * melee-chase ring when omitted.
+ */
+export interface CreatureBehaviorProfile {
+  /** Below this HP fraction, flee toward maxRange instead of pressing in. */
+  fleeBelowHpFrac?: number;
+  /** Preferred stand-off distance from the hero (m). 0 = body-block (legacy). */
+  standOffRange?: number;
+  /** Distance at which the creature stops fleeing and re-engages (m). */
+  reengageRange?: number;
+  /** Kite (evade while firing) when the hero is close, vs pure flee. */
+  kite?: boolean;
+  /** Apply separation so the creature does not stack on allies. */
+  separate?: boolean;
+  /** Flock with allies (alignment + cohesion + separation). */
+  flock?: boolean;
 }
 
 interface PresentationState {
@@ -216,6 +274,8 @@ interface PresentationState {
   sleeping: boolean;
   /** Last frame we refreshed terrain Y while idle. */
   lastGroundFrame: number;
+  /** Seconds remaining before the next ranged shot (ranged creatures only). */
+  rangedCdTimer: number;
 }
 
 const playerQuery = defineQuery([PlayerController]);
@@ -379,27 +439,45 @@ export interface CreatureBehaviours {
 export function createCreatureBehaviours(
   cfg: CreatureConfig
 ): CreatureBehaviours {
+  // A ranged creature holds a long stand-off and fires projectiles; the FSM is
+  // still used for perception + positioning, but the lunge is suppressed (huge
+  // cooldown) and the actual damage is dealt by `spawnProjectileFromTemplate`
+  // in the update loop. This keeps all the presentation/sleep/loot machinery.
+  const isRanged = !!cfg.rangedTemplate;
   // One shared FSM config per creature type. `targetEid` (the hero) is resolved
   // lazily — the engine FSM then chases/attacks it without needing a faction
   // hostility matrix set up.
   const meleeConfig: MeleeAiConfig = {
     detectRange: cfg.detectRange ?? AI_DEFAULTS.detectRange,
-    attackRange: cfg.attackRange ?? AI_DEFAULTS.attackRange,
-    attackCooldown: cfg.attackCooldown ?? AI_DEFAULTS.attackCooldown,
+    // Ranged: engage at stand-off distance so ATTACK mode kicks in early and the
+    // creature holds its firing ring instead of closing to melee.
+    attackRange: cfg.attackRange ?? (isRanged ? 9 : AI_DEFAULTS.attackRange),
+    // Suppress the lunge for ranged attackers (cooldown ~never). The update
+    // loop owns the fire cadence via `rangedCooldown`.
+    attackCooldown:
+      cfg.attackCooldown ??
+      (isRanged ? 9999 : AI_DEFAULTS.attackCooldown),
     attackDamage: cfg.attackDamage,
     chaseSpeed: cfg.chaseSpeed,
     wanderSpeed: cfg.wanderSpeed,
     wanderRadius: cfg.wanderRadius,
     leashRadius: cfg.leashRadius ?? AI_DEFAULTS.leashRadius,
-    lungeWindup: AI_DEFAULTS.lungeWindup,
-    lungeDuration: AI_DEFAULTS.lungeDuration,
-    lungeRecovery: AI_DEFAULTS.lungeRecovery,
-    lungeStandoff: AI_DEFAULTS.lungeStandoff,
+    lungeWindup: cfg.lungeWindup ?? AI_DEFAULTS.lungeWindup,
+    lungeDuration: cfg.lungeDuration ?? AI_DEFAULTS.lungeDuration,
+    lungeRecovery: cfg.lungeRecovery ?? AI_DEFAULTS.lungeRecovery,
+    lungeStandoff: cfg.lungeStandoff ?? AI_DEFAULTS.lungeStandoff,
     hoverMin: AI_DEFAULTS.hoverMin,
     hoverMax: AI_DEFAULTS.hoverMax,
     strafe: cfg.strafe,
     lowHpKiteFrac: cfg.lowHpKiteFrac,
     enrageBelowFrac: cfg.enrageBelowFrac,
+    enrageSpeedMult: cfg.enrageSpeedMult,
+    enrageCooldownMult: cfg.enrageCooldownMult,
+    // Line-of-sight on by default: creatures must actually see the hero before
+    // aggroing, instead of beelining through walls. Individual wrappers can
+    // opt out (cfg.requireLineOfSight === false) for blind/sense-based mobs.
+    requireLineOfSight:
+      cfg.requireLineOfSight ?? true,
   };
 
   let cachedPlayer = 0;
@@ -711,6 +789,7 @@ export function createCreatureBehaviours(
       xmlWaitFrames: preferXml ? 0 : 999,
       sleeping: false,
       lastGroundFrame: -999,
+      rangedCdTimer: 0,
     };
     presentationMap(ctx.state).set(eid, s);
 
@@ -855,6 +934,45 @@ export function createCreatureBehaviours(
         mode === AI_MODE_ATTACK ||
         mode === AI_MODE_LUNGE;
 
+      // Ranged attack (casters/archers): fire a projectile on a cooldown when
+      // engaged and the hero is visible. The FSM's lunge is suppressed for
+      // ranged creatures (attackCooldown ≈ ∞), so this is their only offense.
+      if (isRanged && cfg.rangedTemplate && inCombat && cachedPlayer > 0) {
+        s.rangedCdTimer -= dt;
+        if (s.rangedCdTimer <= 0) {
+          // Only fire with a clear shot — mirrors the LOS gate on acquisition,
+          // so a pillar breaks the attack cadence instead of shots through it.
+          const seeHero = hasLineOfSight(
+            ctx.state,
+            Transform.posX[eid],
+            Transform.posZ[eid],
+            Transform.posX[cachedPlayer],
+            Transform.posZ[cachedPlayer]
+          );
+          if (seeHero) {
+            try {
+              spawnProjectileFromTemplate(
+                ctx.state,
+                eid,
+                cfg.rangedTemplate,
+                { eid: cachedPlayer }
+              );
+              s.rangedCdTimer = cfg.rangedCooldown ?? 2.0;
+              if (cfg.clips.attack && s.playing !== cfg.clips.attack) {
+                playClip(s, cfg.clips.attack, { loop: false });
+              }
+            } catch {
+              // Template not registered yet (e.g. scene still loading) — retry
+              // next cycle without resetting the timer fully.
+              s.rangedCdTimer = 0.5;
+            }
+          } else {
+            // No shot this frame; short retry so we fire soon after breaking LOS.
+            s.rangedCdTimer = 0.3;
+          }
+        }
+      }
+
       if (mode === AI_MODE_DEAD || isDead(eid)) {
         handleDeath(ctx, s, eid);
         s.deathTimer -= dt;
@@ -909,15 +1027,19 @@ export function createCreatureBehaviours(
       s.lastHp = hp;
 
       // The FSM owns XZ (via the crowd agent / lunge). We own the terrain Y and
-      // the visual transform. Throttle expensive BVH/terrain snaps while idle.
+      // the visual transform. Sampling is adaptive: while moving we snap every
+      // frame (a creature crossing a slope at chase speed would otherwise float
+      // for up to IDLE_GROUND_INTERVAL frames); while parked we throttle to
+      // IDLE_GROUND_INTERVAL to save the BVH raycast cost.
       const x = Transform.posX[eid];
       const z = Transform.posZ[eid];
       const frame = ctx.state.time.frameCount;
+      const planarStep = Math.hypot(x - s.prevX, z - s.prevZ);
       const needGround =
         inCombat ||
         !s.ready ||
-        frame - s.lastGroundFrame >= IDLE_GROUND_INTERVAL ||
-        Math.hypot(x - s.prevX, z - s.prevZ) > 0.05;
+        planarStep > 0.02 ||
+        frame - s.lastGroundFrame >= IDLE_GROUND_INTERVAL;
       let visualY = Transform.posY[eid];
       if (needGround) {
         const groundY = groundHeight(ctx, x, z, Transform.posY[eid]);

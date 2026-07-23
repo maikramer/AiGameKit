@@ -14,18 +14,26 @@ const behaviours = createCreatureBehaviours({
     attack: 'attack',
   },
   hp: 25,
-  chaseSpeed: 2.1,
+  chaseSpeed: 2.2,
   wanderSpeed: 0.9,
   wanderRadius: 10,
-  attackDamage: 14,
+  attackDamage: 15,
   detectRange: 18,
   leashRadius: 30,
-  attackCooldown: 2.4,
+  attackCooldown: 2.6,
   lootGoldMin: 10,
   lootGoldMax: 20,
   strafe: true,
   lowHpKiteFrac: 0.45,
+  // Evasive glass-cannon: high damage but fragile, so it kites hard at low HP.
+  // Long-ish windup telegraphs the strike; the threat is it relentless
+  // re-engages from orbit rather than committing.
+  lungeWindup: 0.32,
+  lungeDuration: 0.26,
+  lungeRecovery: 0.45,
+  lungeStandoff: 1.0,
   enemyType: 'shade',
+  behaviorProfile: { separate: true },
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });
 

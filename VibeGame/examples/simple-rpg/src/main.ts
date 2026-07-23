@@ -14,6 +14,7 @@ import {
   // Plugins (engine RPG stack)
   LoadingPlugin,
   NavMeshPlugin,
+  YukaAiPlugin,
   SaveLoadPlugin,
   I18nPlugin,
   DebugPlugin,
@@ -123,6 +124,7 @@ import { addStone } from './scripts/inventory';
 import { addWood } from './scripts/wood';
 import { anyCreatureAggro } from './scripts/creature';
 import { getEnemyLabel } from './scripts/enemy-registry';
+import { setupAggroChain } from './scripts/aggro-chain';
 
 import darkForestQuestsData from './data/quests/dark_forest_quests.json';
 import desertQuestsData from './data/quests/desert_quests.json';
@@ -989,6 +991,7 @@ async function bootstrap(): Promise<void> {
   withPlugin(SpawnGatePlugin);
   withPlugin(ParticlesPlugin);
   withPlugin(NavMeshPlugin);
+  withPlugin(YukaAiPlugin);
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
   withPlugin(DebugPlugin);
@@ -1010,6 +1013,10 @@ async function bootstrap(): Promise<void> {
   resetBuilder();
   const runtime = await builder.build();
   const state = runtime.getState();
+
+  // Pack behavior: hitting one enemy alerts nearby allies with line of sight
+  // to the hero, so a pack fights together instead of each mob aggroing alone.
+  setupAggroChain(state);
 
   GRIPS = await loadHeldItemGrips('/data/held-items.json');
 
