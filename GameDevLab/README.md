@@ -7,13 +7,13 @@
 GameDevLab is the unified debugging and quality-assurance tool for the entire GameDev pipeline. It provides:
 
 - **`check`** — Declarative GLB validation against YAML/JSON rules (CI-ready, exit 0/1)
-- **`debug`** — Visual debugging: multi-angle screenshots, metadata inspection, side-by-side comparison, agent bundles, and rig inspection
+- **`debug`** — Visual debugging: multi-angle screenshots, metadata inspection, side-by-side comparison, agent bundles, rig inspection, material inspection, and turntable GIFs
 - **`bench`** — GPU benchmarks for Paint3D quantization, SDNQ sweeps, full pipeline optimization, and batch sweeps
 - **`perf`** — Performance analytics over an SQLite database (runs, VRAM analysis, config recommendations)
 - **`profile`** — CPU profiling via cProfile
 - **`mesh`** — Mesh quality inspection (topology, geometry, artifacts), visual QA, and topological diff
 
-Requires `gamedev-shared` as a dependency. Rendering commands (`debug screenshot`, `debug compare`, `debug bundle`, `debug inspect-rig`, `mesh qa`, `mesh render-views`) require `animator3d` on `PATH` or `ANIMATOR3D_BIN` set.
+Requires `gamedev-shared` as a dependency. All rendering commands use **native bpy** (`pip install bpy`) — no `animator3d` dependency. Weight heatmaps, turntable GIFs, material inspection, and overlay diffs are all handled in-process.
 
 ## Installation
 
@@ -61,7 +61,7 @@ Rule files support vertex/face limits, `world_bounds`, required bones, and more.
 
 ### debug — Visual Debug Tools
 
-All rendering commands delegate to `animator3d` (requires `ANIMATOR3D_BIN` or `animator3d` on `PATH`).
+All rendering commands use **native bpy** (no `animator3d` subprocess). Install bpy with `pip install bpy` (Python 3.13+, Blender 5.2 LTS).
 
 #### `debug screenshot GLB`
 
@@ -117,7 +117,7 @@ gamedev-lab debug inspect modelo.glb -o metadata.json
 
 #### `debug inspect-rig GLB`
 
-Rig inspection with bone wireframe and optional weight heatmap. Delegates to `animator3d inspect-rig`.
+Rig inspection with bone wireframe and optional weight heatmap. **Native bpy** — renders bone overlay and Blue→Green→Red weight ramp in-process (no `animator3d`).
 
 ```bash
 gamedev-lab debug inspect-rig modelo.glb -o ./rig_debug --show-weights spine
@@ -132,6 +132,46 @@ gamedev-lab debug inspect-rig modelo.glb -o ./rig_debug --show-weights spine
 | `--engine` | str | `workbench` | Render engine: `workbench` or `eevee` |
 | `--ortho` | flag | false | Orthographic camera |
 | `--no-transparent-film` | flag | false | Opaque background |
+
+#### `debug inspect-material GLB`
+
+Material/texture PBR inspection with EEVEE rendering. Dumps Principled BSDF inputs, image textures (resolution, colorspace, wrap mode), and renders views faithfully capturing PBR materials.
+
+```bash
+gamedev-lab debug inspect-material modelo.glb -o ./mat_debug
+gamedev-lab debug inspect-material modelo.glb --engine workbench
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output-dir` | path | `{stem}_material` | Output directory |
+| `--views` | str | `front,three_quarter,right` | Comma-separated view names |
+| `-r, --resolution` | int | `512` | Render resolution |
+| `--engine` | str | `eevee` | Render engine (`eevee` captures PBR; `workbench` is faster) |
+| `--ortho` | flag | false | Orthographic camera |
+| `--no-transparent-film` | flag | false | Opaque background |
+
+Output: `material_report.json` (with `materials` array) + `material_{view}.png` screenshots.
+
+#### `debug turntable GLB`
+
+360° turntable GIF animation. Orbits the camera around the model in N frames and combines them into a looping GIF via Pillow.
+
+```bash
+gamedev-lab debug turntable modelo.glb -o ./turn.gif --frames 36
+gamedev-lab debug turntable modelo.glb --engine eevee --show-bones
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output` | path | `{stem}_turntable.gif` | Output `.gif` path |
+| `--frames` | int | `24` | Number of rotation steps (≥4) |
+| `-r, --resolution` | int | `384` | Render resolution (square) |
+| `--engine` | str | `workbench` | Render engine |
+| `--ortho` | flag | false | Orthographic camera |
+| `--no-transparent-film` | flag | false | Opaque background |
+| `--show-bones` | flag | false | Show armature wireframe |
+| `--duration` | int | `120` | Per-frame duration in GIF (ms) |
 
 #### `debug compare A B`
 
@@ -151,10 +191,11 @@ gamedev-lab debug compare before.glb after.glb -o ./ci --image-metrics --fail-be
 | `--struct-diff` / `--no-struct-diff` | flag | `true` | Compute `inspect_diff` (vertex/face deltas per view) |
 | `--image-metrics` | flag | false | Compute MAE, RMSE, SSIM per view (numpy) |
 | `--fail-below-ssim` | float | None | Exit 1 if any view's SSIM falls below threshold (requires `--image-metrics`) |
+| `--overlay` | flag | false | Generate visual diff overlays (50% blend + absolute difference heatmap) |
 | `--engine` | str | `workbench` | Render engine: `workbench` or `eevee` |
 | `--ortho` | flag | false | Orthographic camera |
 
-Output: side-by-side PNGs per view (`compare_{view}.png`) + `diff_report.json` with `inspect_diff` section and optional `image_metrics`.
+Output: side-by-side PNGs per view (`compare_{view}.png`), optional overlay diffs (`overlay_{view}.png`), and `diff_report.json` with `inspect_diff` section and optional `image_metrics`/`overlay` arrays.
 
 ---
 
@@ -514,10 +555,11 @@ active.
 
 | Variable | Description |
 |----------|-------------|
-| `ANIMATOR3D_BIN` | Path to `animator3d` binary (required for rendering commands) |
 | `GAMEDEV_PROFILE` | Enable profiling when set to `1` |
 | `GAMEDEV_PROFILE_LOG` | Profiler log output path |
 | `GAMEDEV_ROOT` | Monorepo root directory (auto-detected if omitted) |
+
+> **Note:** Rendering commands require `bpy` installed in the active venv (`pip install bpy`, Python 3.13+ / Blender 5.2 LTS). There is no `ANIMATOR3D_BIN` dependency — all rendering is native.
 
 ## Pipeline Integration
 

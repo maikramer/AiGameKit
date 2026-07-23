@@ -9,6 +9,7 @@ from typing import Any
 __all__ = [
     "extract_json_from_output",
     "inspect_glb",
+    "inspect_materials",
 ]
 
 
@@ -181,3 +182,97 @@ def extract_json_from_output(text: str) -> dict[str, Any]:
         "_parse_error": True,
         "raw_preview": text[:8000] if len(text) > 8000 else text,
     }
+
+
+def inspect_materials() -> list[dict[str, Any]]:
+    """Read material and texture metadata from the current Blender scene.
+
+    For each material in ``bpy.data.materials``: name, ``use_nodes``,
+    blend method, and a list of nodes (type + label). If a Principled BSDF
+    node is present, captures its key inputs (base color, metallic,
+    roughness, alpha, emissive). Image texture nodes expose size,
+    channels, colorspace, and extension/wrap mode.
+
+    Returns:
+        List of material dicts (empty list if no materials).
+    """
+    import bpy
+
+    _PRINCIPLED_INPUTS = (
+        "Base Color",
+        "Metallic",
+        "Roughness",
+        "Alpha",
+        "Emission Color",
+        "Emission",
+        "IOR",
+        "Normal",
+    )
+    out: list[dict[str, Any]] = []
+    for mat in bpy.data.materials:
+        entry: dict[str, Any] = {
+            "name": mat.name,
+            "use_nodes": bool(mat.use_nodes),
+            "blend_method": getattr(mat, "blend_method", "OPAQUE"),
+            "nodes": [],
+        }
+        tree = mat.node_tree
+        if not mat.use_nodes or tree is None:
+            out.append(entry)
+            continue
+
+        principled: dict[str, Any] | None = None
+        for node in tree.nodes:
+            node_info: dict[str, Any] = {
+                "name": node.name,
+                "type": node.type,
+                "label": node.label or "",
+            }
+            if node.type == "BSDF_PRINCIPLED":
+                pinputs: dict[str, Any] = {}
+                for pin_name in _PRINCIPLED_INPUTS:
+                    sock = node.inputs.get(pin_name)
+                    if sock is None:
+                        continue
+                    val: Any
+                    if hasattr(sock, "default_value"):
+                        dv = sock.default_value
+                        # Color/Multi-value sockets expose array-like values.
+                        if hasattr(dv, "__len__") and not isinstance(dv, str):
+                            val = [float(x) for x in dv]
+                        else:
+                            val = float(dv) if isinstance(dv, (int, float)) else dv
+                    else:
+                        val = None
+                    pinputs[pin_name] = val
+                # Detect linked image texture on base color.
+                bc_sock = node.inputs.get("Base Color")
+                if bc_sock is not None and bc_sock.is_linked:
+                    link = bc_sock.links[0] if bc_sock.links else None
+                    if link is not None:
+                        node_info["base_color_link"] = link.from_node.type
+                principled = pinputs
+            elif node.type == "TEX_IMAGE":
+                img = getattr(node, "image", None)
+                node_info["image"] = (
+                    {
+                        "name": img.name if img else None,
+                        "width": int(img.size[0]) if img else 0,
+                        "height": int(img.size[1]) if img else 0,
+                        "channels": int(img.channels) if img else 0,
+                        "colorspace": img.colorspace_settings.name
+                        if img and hasattr(img, "colorspace_settings")
+                        else None,
+                        "filepath": (img.filepath if img and img.filepath else None),
+                    }
+                    if img
+                    else None
+                )
+                ext = node.image_extension if hasattr(node, "image_extension") else None
+                node_info["extension"] = ext
+            entry["nodes"].append(node_info)
+
+        if principled is not None:
+            entry["principled_inputs"] = principled
+        out.append(entry)
+    return out

@@ -15,7 +15,7 @@ from rich.console import Console
 from gamedev_lab import __version__
 from gamedev_lab.cli_rich import click
 from gamedev_lab.compare_inspect import diff_inspect
-from gamedev_lab.debug_tools import extract_json_from_output, inspect_glb
+from gamedev_lab.debug_tools import inspect_glb
 from gamedev_lab.validate_rules import evaluate_inspect_rules, load_rules_file
 
 console = Console()
@@ -118,7 +118,7 @@ def check_glb_cmd(
 
 @main.group("debug")
 def debug_group() -> None:
-    """Screenshots, inspect, compare e bundle (native bpy; inspect-rig usa animator3d)."""
+    """Screenshots, inspect, compare e bundle (native bpy — sem animator3d)."""
 
 
 @debug_group.command("screenshot")
@@ -282,43 +282,37 @@ def debug_bundle(
     bundle_path = output_dir / "bundle.json"
 
     if include_rig:
-        from gamedev_shared.subprocess_utils import merge_subprocess_output, resolve_binary, run_cmd
+        from gamedev_lab.renderer import render_screenshots as _rig_render
+        from gamedev_lab.renderer import render_weight_heatmap
 
+        rig_dir = output_dir / "rig"
         try:
-            abin = resolve_binary("ANIMATOR3D_BIN", "animator3d")
-        except FileNotFoundError:
-            abin = None
-
-        if abin:
-            rig_dir = output_dir / "rig"
-            argv_rig = [
-                abin,
-                "inspect-rig",
-                str(input_path),
-                "-o",
-                str(rig_dir),
-                "--views",
-                views,
-                "--resolution",
-                str(resolution),
-                "--engine",
-                engine,
-            ]
-            if ortho:
-                argv_rig.append("--ortho")
-            if no_transparent_film:
-                argv_rig.append("--no-transparent-film")
+            rig_report = _rig_render(
+                input_path,
+                rig_dir,
+                views=views,
+                resolution=resolution,
+                engine=engine,
+                ortho=ortho,
+                transparent_film=not no_transparent_film,
+                show_bones=True,
+            )
             if rig_weights:
-                argv_rig.extend(["--show-weights", rig_weights])
-            r_rig = run_cmd(argv_rig)
-            if r_rig.returncode != 0:
-                err = merge_subprocess_output(r_rig, max_chars=2000) or "inspect-rig falhou"
-                console.print(f"[yellow]inspect-rig:[/yellow] {err}")
-            else:
-                bundle["rig_report"] = extract_json_from_output(r_rig.stdout)
-                bundle["rig_dir"] = str(rig_dir)
-        else:
-            console.print("[yellow]animator3d não encontrado — rig skip.[/yellow]")
+                wt_report = render_weight_heatmap(
+                    input_path,
+                    rig_dir,
+                    rig_weights,
+                    views=views,
+                    resolution=resolution,
+                    engine=engine,
+                    ortho=ortho,
+                    transparent_film=not no_transparent_film,
+                )
+                rig_report["weight_heatmap"] = wt_report.get("weight_heatmap")
+            bundle["rig_report"] = rig_report
+            bundle["rig_dir"] = str(rig_dir)
+        except Exception as exc:
+            console.print(f"[yellow]rig inspect falhou:[/yellow] {exc}")
 
     bundle_path.write_text(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -363,44 +357,160 @@ def debug_inspect_rig(
     ortho: bool,
     no_transparent_film: bool,
 ) -> None:
-    """Rig: vistas com ossos e opcional heatmap (delega a animator3d)."""
-    from gamedev_shared.subprocess_utils import merge_subprocess_output, resolve_binary, run_cmd
-
-    try:
-        abin = resolve_binary("ANIMATOR3D_BIN", "animator3d")
-    except FileNotFoundError:
-        console.print("[red]animator3d não encontrado.[/red]")
-        sys.exit(1)
+    """Rig: vistas com ossos e opcional heatmap (native bpy, sem animator3d)."""
+    from gamedev_lab.renderer import render_screenshots, render_weight_heatmap
 
     if output_dir is None:
         output_dir = input_path.parent / f"{input_path.stem}_rig_debug"
 
-    argv = [
-        abin,
-        "inspect-rig",
-        str(input_path),
-        "-o",
-        str(output_dir),
-        "--views",
-        views,
-        "--resolution",
-        str(resolution),
-        "--engine",
-        engine,
-    ]
-    if ortho:
-        argv.append("--ortho")
-    if no_transparent_film:
-        argv.append("--no-transparent-film")
-    if show_weights:
-        argv.extend(["--show-weights", show_weights])
-
-    r = run_cmd(argv)
-    if r.returncode != 0:
-        err = merge_subprocess_output(r, max_chars=2000) or "inspect-rig falhou"
-        console.print(f"[red]Erro:[/red] {err}")
+    try:
+        report = render_screenshots(
+            input_path,
+            output_dir,
+            views=views,
+            resolution=resolution,
+            engine=engine,
+            ortho=ortho,
+            transparent_film=not no_transparent_film,
+            show_bones=True,
+        )
+        if show_weights:
+            wt_report = render_weight_heatmap(
+                input_path,
+                output_dir,
+                show_weights,
+                views=views,
+                resolution=resolution,
+                engine=engine,
+                ortho=ortho,
+                transparent_film=not no_transparent_film,
+            )
+            report["weight_heatmap"] = wt_report.get("weight_heatmap")
+    except ImportError as exc:
+        console.print(f"[red]bpy não disponível:[/red] {exc}")
+        console.print("[dim]Instala com: pip install bpy[/dim]")
         sys.exit(1)
-    sys.stdout.write(r.stdout)
+    except Exception as exc:
+        console.print(f"[red]Erro:[/red] {exc}")
+        sys.exit(1)
+
+    console.print(f"[green]Rig debug:[/green] {output_dir} ({len(report.get('screenshots', []))} vistas)")
+    sys.stdout.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+
+
+@debug_group.command("inspect-material")
+@click.argument("input_path", type=click.Path(exists=True, path_type=Path))
+@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Pasta destino.")
+@click.option("--views", default="front,three_quarter,right", show_default=True)
+@click.option("--resolution", "-r", default=512, show_default=True, type=int)
+@click.option(
+    "--engine",
+    type=click.Choice(["workbench", "eevee"]),
+    default="eevee",
+    show_default=True,
+    help="EEVEE captura PBR fielmente; workbench é mais rápido.",
+)
+@click.option("--ortho", is_flag=True)
+@click.option("--no-transparent-film", "no_transparent_film", is_flag=True)
+def debug_inspect_material(
+    input_path: Path,
+    output_dir: Path | None,
+    views: str,
+    resolution: int,
+    engine: str,
+    ortho: bool,
+    no_transparent_film: bool,
+) -> None:
+    """Inspeciona materiais/texturas PBR + renderiza vistas (native bpy, sem animator3d)."""
+    from gamedev_lab.renderer import render_inspect_material
+
+    if output_dir is None:
+        output_dir = input_path.parent / f"{input_path.stem}_material"
+
+    try:
+        report = render_inspect_material(
+            input_path,
+            output_dir,
+            views=views,
+            resolution=resolution,
+            engine=engine,
+            ortho=ortho,
+            transparent_film=not no_transparent_film,
+        )
+    except ImportError as exc:
+        console.print(f"[red]bpy não disponível:[/red] {exc}")
+        console.print("[dim]Instala com: pip install bpy[/dim]")
+        sys.exit(1)
+    except Exception as exc:
+        console.print(f"[red]Erro:[/red] {exc}")
+        sys.exit(1)
+
+    n_mat = len(report.get("materials", []))
+    n_shots = len(report.get("screenshots", []))
+    console.print(f"[green]Material inspect:[/green] {output_dir} ({n_mat} materiais, {n_shots} vistas)")
+    sys.stdout.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+
+
+@debug_group.command("turntable")
+@click.argument("input_path", type=click.Path(exists=True, path_type=Path))
+@click.option("--output", "-o", type=click.Path(path_type=Path), default=None, help="Ficheiro .gif destino.")
+@click.option("--frames", default=24, show_default=True, type=int, help="Número de passos de rotação.")
+@click.option("--resolution", "-r", default=384, show_default=True, type=int, help="Resolução px (quadrado).")
+@click.option(
+    "--engine",
+    type=click.Choice(["workbench", "eevee"]),
+    default="workbench",
+    show_default=True,
+)
+@click.option("--ortho", is_flag=True, help="Câmara ortográfica.")
+@click.option("--no-transparent-film", "no_transparent_film", is_flag=True)
+@click.option("--show-bones", is_flag=True, help="Mostrar armature wireframe.")
+@click.option(
+    "--duration",
+    "duration_ms",
+    default=120,
+    show_default=True,
+    type=int,
+    help="Duração por frame no GIF (ms).",
+)
+def debug_turntable(
+    input_path: Path,
+    output: Path | None,
+    frames: int,
+    resolution: int,
+    engine: str,
+    ortho: bool,
+    no_transparent_film: bool,
+    show_bones: bool,
+    duration_ms: int,
+) -> None:
+    """Gera GIF turntable 360° do modelo (native bpy + Pillow, sem animator3d)."""
+    from gamedev_lab.renderer import render_turntable
+
+    if output is None:
+        output = input_path.parent / f"{input_path.stem}_turntable.gif"
+
+    try:
+        report = render_turntable(
+            input_path,
+            output,
+            frames=frames,
+            resolution=resolution,
+            engine=engine,
+            ortho=ortho,
+            transparent_film=not no_transparent_film,
+            show_bones=show_bones,
+            frame_duration_ms=duration_ms,
+        )
+    except ImportError as exc:
+        console.print(f"[red]bpy não disponível:[/red] {exc}")
+        console.print("[dim]Instala com: pip install bpy[/dim]")
+        sys.exit(1)
+    except Exception as exc:
+        console.print(f"[red]Erro:[/red] {exc}")
+        sys.exit(1)
+
+    console.print(f"[green]Turntable GIF:[/green] {report['path']} ({report['frames']} frames)")
 
 
 @debug_group.command("compare")
@@ -435,6 +545,12 @@ def debug_inspect_rig(
     help="Exit 1 se alguma vista tiver SSIM abaixo deste valor (requer --image-metrics).",
 )
 @click.option(
+    "--overlay",
+    "overlay",
+    is_flag=True,
+    help="Gera imagens de diferença visual (blend 50% + diff absoluto heatmap).",
+)
+@click.option(
     "--engine",
     type=click.Choice(["workbench", "eevee"]),
     default=None,
@@ -451,6 +567,7 @@ def debug_compare(
     struct_diff: bool,
     image_metrics: bool,
     fail_below_ssim: float | None,
+    overlay: bool,
     engine: str | None,
     ortho: bool,
 ) -> None:
@@ -510,12 +627,48 @@ def debug_compare(
     except ImportError:
         console.print("[yellow]Pillow não instalado — side-by-side não gerado.[/yellow]")
 
+    overlay_paths: list[dict[str, Any]] = []
+    if overlay:
+        try:
+            import numpy as np
+            from PIL import Image
+
+            from gamedev_lab.compare_images import load_pair_same_size
+
+            view_list_ov = [v.strip() for v in views.split(",") if v.strip()]
+            for vn in view_list_ov:
+                pa = dir_a / f"{vn}.png"
+                pb = dir_b / f"{vn}.png"
+                if not (pa.is_file() and pb.is_file()):
+                    continue
+                fa, fb = load_pair_same_size(pa, pb)
+                # Blend 50/50 para detetar desvios espaciais.
+                blend = fa * 0.5 + fb * 0.5
+                # Diff absoluto amplificado (heatmap grayscale→turbo-like).
+                abs_diff = np.clip(np.abs(fa - fb) * 4.0, 0.0, 1.0)
+                # Combinar lado-a-lado: blend | diff
+                h, w = fa.shape[:2]
+                combined = np.zeros((h, w * 2, 3), dtype=np.float32)
+                combined[:, :w] = blend
+                # Diff como heatmap: R=dif, G=0.5*dif, B=0 (vermelho = grande diferença).
+                combined[:, w:, 0] = abs_diff[..., 0]
+                combined[:, w:, 1] = abs_diff[..., 1] * 0.4
+                combined[:, w:, 2] = abs_diff[..., 2] * 0.1
+                arr_u8 = (np.clip(combined, 0.0, 1.0) * 255.0).astype(np.uint8)
+                out_img = Image.fromarray(arr_u8, mode="RGB")
+                out_path = output_dir / f"overlay_{vn}.png"
+                out_img.save(out_path)
+                overlay_paths.append({"view": vn, "path": str(out_path)})
+        except ImportError:
+            console.print("[yellow]Pillow/numpy não disponível — overlay não gerado.[/yellow]")
+
     diff_report: dict[str, Any] = {
         "file_a": str(file_a),
         "file_b": str(file_b),
         "report_a": reports.get("a", {}),
         "report_b": reports.get("b", {}),
         "side_by_side": side_by_side_paths,
+        "overlay": overlay_paths,
     }
     if with_inspect:
         diff_report["inspect"] = inspect_side
@@ -548,7 +701,12 @@ def debug_compare(
     diff_path = output_dir / "diff_report.json"
     diff_path.write_text(json.dumps(diff_report, indent=2, ensure_ascii=False) + "\n")
     console.print(f"[green]Comparação:[/green] {output_dir}")
-    console.print(f"  {len(side_by_side_paths)} imagens side-by-side, report em {diff_path}")
+    parts = [f"{len(side_by_side_paths)} side-by-side"]
+    if overlay_paths:
+        parts.append(f"{len(overlay_paths)} overlay")
+    if diff_report.get("image_metrics"):
+        parts.append(f"{len(diff_report['image_metrics'])} métricas")
+    console.print(f"  {', '.join(parts)} — report em {diff_path}")
 
 
 # ---------------------------------------------------------------------------

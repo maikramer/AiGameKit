@@ -593,7 +593,7 @@ class MeshInspector:
         return s
 
     # ------------------------------------------------------------------
-    # Render views via Animator3D
+    # Render views via native bpy renderer (no Animator3D subprocess)
     # ------------------------------------------------------------------
 
     def _render_views(

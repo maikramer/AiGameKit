@@ -1,13 +1,16 @@
 """Native bpy EEVEE/Workbench screenshot rendering for GLB files.
 
 Provides headless multi-angle PNG rendering using bpy directly,
-without delegating to Animator3D via subprocess.
+without delegating to Animator3D via subprocess. Includes weight-painting
+heatmaps, turntable GIFs, and material inspection — all fully native.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -150,6 +153,24 @@ def _show_armature_wireframe(visible: bool) -> None:
             obj.hide_set(not visible)
 
 
+def weight_to_color(w: float) -> tuple[float, float, float]:
+    """Map a vertex weight [0..1] to a Blue→Green→Red color (2-segment ramp).
+
+    Matches Animator3D's weight heatmap palette (no yellow): w=0→Blue,
+    w=0.5→Green, w=1→Red. Extracted as pure function for unit testing.
+
+    Args:
+        w: Vertex weight clamped to [0, 1].
+
+    Returns:
+        ``(r, g, b)`` tuple, each in [0, 1].
+    """
+    w = max(0.0, min(1.0, float(w)))
+    if w < 0.5:
+        return (0.0, w * 2.0, 1.0 - w * 2.0)
+    return ((w - 0.5) * 2.0, 1.0 - (w - 0.5) * 2.0, 0.0)
+
+
 def render_screenshots(
     glb_path: str | Path,
     output_dir: str | Path,
@@ -258,4 +279,289 @@ def render_screenshots(
     report_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
     meta["report_path"] = str(report_path)
 
+    return meta
+
+
+def render_weight_heatmap(
+    glb_path: str | Path,
+    output_dir: str | Path,
+    bone_name: str,
+    *,
+    views: str = "front,three_quarter,right,back",
+    resolution: int = 512,
+    engine: str = "workbench",
+    ortho: bool = False,
+    transparent_film: bool = True,
+) -> dict[str, Any]:
+    """Render weight-painting heatmaps for a bone using native bpy.
+
+    For each mesh with a vertex group matching ``bone_name``, paints a
+    vertex color layer (Blue→Green→Red ramp via :func:`weight_to_color`)
+    and renders views with workbench ``color_type="VERTEX"``. Bones are
+    shown as wireframe overlay on every view.
+
+    Args:
+        glb_path: Path to GLB/GLTF file.
+        output_dir: Directory to write PNGs and report into.
+        bone_name: Vertex group / bone name for weight lookup.
+        views: Comma-separated view names.
+        resolution: Render resolution in pixels (square).
+        engine: ``"workbench"`` or ``"eevee"``.
+        ortho: Use orthographic camera.
+        transparent_film: Render with transparent background.
+
+    Returns:
+        Report dict with ``weight_heatmap`` ({bone, screenshots, render_settings}).
+    """
+    from gamedev_shared.bpy_mesh import clear_scene
+
+    glb_path = Path(glb_path).expanduser().resolve()
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    bpy = _require_bpy()
+    clear_scene()
+    bpy.ops.import_scene.gltf(filepath=str(glb_path))
+
+    painted_meshes: list[str] = []
+    for obj in bpy.context.scene.objects:
+        if obj.type != "MESH":
+            continue
+        vg = obj.vertex_groups.get(bone_name)
+        if vg is None:
+            continue
+        mesh = obj.data
+        layer = mesh.vertex_colors.get("WeightHeatmap")
+        if layer is None:
+            layer = mesh.vertex_colors.new(name="WeightHeatmap")
+        colors = layer.data
+        loops = mesh.loops
+        for li, loop in enumerate(loops):
+            vi = loop.vertex_index
+            try:
+                w = float(vg.weight(vi))
+            except (RuntimeError, TypeError):
+                w = 0.0
+            r, g, b = weight_to_color(w)
+            colors[li].color = (r, g, b, 1.0)
+        mesh.update()
+        painted_meshes.append(obj.name)
+
+    _show_armature_wireframe(True)
+    _setup_render(resolution, engine=engine, film_transparent=transparent_film)
+    bpy.context.scene.display.shading.color_type = "VERTEX"
+
+    view_names = [v.strip() for v in views.split(",") if v.strip()] or DEFAULT_VIEWS
+    safe_bone = bone_name.replace("/", "_").replace(" ", "_")
+
+    screenshots: list[dict[str, Any]] = []
+    for view_name in view_names:
+        preset = CAMERA_PRESETS.get(view_name)
+        if preset is None:
+            continue
+        loc, target = preset
+        camera = _add_camera(loc, target, ortho=ortho)
+        _auto_frame_camera(camera)
+
+        out_path = output_dir / f"weights_{safe_bone}_{view_name}.png"
+        bpy.context.scene.render.filepath = str(out_path)
+        bpy.ops.render.render(write_still=True)
+        screenshots.append({"view": view_name, "bone": bone_name, "path": str(out_path)})
+        _remove_camera(camera)
+
+    from gamedev_lab.debug_tools import _enrich_inspect_data, _inspect_scene
+
+    meta = _inspect_scene()
+    _enrich_inspect_data(meta, glb_path)
+    meta["weight_heatmap"] = {
+        "bone": bone_name,
+        "painted_meshes": painted_meshes,
+        "screenshots": screenshots,
+        "render_settings": {
+            "resolution": resolution,
+            "engine": engine,
+            "ortho": ortho,
+            "film_transparent": transparent_film,
+        },
+    }
+    report_path = output_dir / f"weights_{safe_bone}_report.json"
+    report_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
+    meta["report_path"] = str(report_path)
+    return meta
+
+
+def render_turntable(
+    glb_path: str | Path,
+    output_path: str | Path,
+    *,
+    frames: int = 24,
+    resolution: int = 384,
+    engine: str = "workbench",
+    ortho: bool = False,
+    transparent_film: bool = True,
+    show_bones: bool = False,
+    frame_duration_ms: int = 120,
+) -> dict[str, Any]:
+    """Render a 360° turntable GIF of a GLB using native bpy.
+
+    Orbits the camera around the model in ``frames`` steps, renders each
+    PNG, then combines them into a single looping GIF via Pillow.
+
+    Args:
+        glb_path: Path to GLB/GLTF file.
+        output_path: Output ``.gif`` path.
+        frames: Number of rotation steps (≥4).
+        resolution: Render resolution in pixels (square).
+        engine: ``"workbench"`` or ``"eevee"``.
+        ortho: Use orthographic camera.
+        transparent_film: Render with transparent background.
+        show_bones: Show armature wireframe overlay.
+        frame_duration_ms: Per-frame duration in the GIF.
+
+    Returns:
+        Dict with ``path``, ``frames``, ``resolution``.
+    """
+    from mathutils import Vector
+
+    from gamedev_shared.bpy_mesh import clear_scene
+
+    glb_path = Path(glb_path).expanduser().resolve()
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    frames = max(4, int(frames))
+
+    bpy = _require_bpy()
+    clear_scene()
+    bpy.ops.import_scene.gltf(filepath=str(glb_path))
+
+    _show_armature_wireframe(show_bones)
+    _setup_render(resolution, engine=engine, film_transparent=transparent_film)
+
+    # Compute orbit center + radius from mesh bounds (numpy).
+    import numpy as np
+
+    all_coords = []
+    for obj in bpy.context.scene.objects:
+        if obj.type == "MESH":
+            all_coords.extend([obj.matrix_world @ Vector(c) for c in obj.bound_box])
+    pts = np.array([(v.x, v.y, v.z) for v in all_coords]) if all_coords else np.array([[0.0, 0.0, 0.5]])
+    center = pts.mean(axis=0)
+    extent = float((pts.max(axis=0) - pts.min(axis=0)).max())
+    radius = max(extent * 1.3, 2.0)
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="gamedevlab_turntable_"))
+    png_paths: list[str] = []
+    try:
+        for i in range(frames):
+            angle = 2.0 * math.pi * i / frames
+            loc_x = float(center[0] + radius * math.sin(angle))
+            loc_y = float(center[1] - radius * math.cos(angle))
+            loc_z = float(center[2] + extent * 0.35)
+            target = (float(center[0]), float(center[1]), float(center[2]))
+            camera = _add_camera((loc_x, loc_y, loc_z), target, ortho=ortho)
+            _auto_frame_camera(camera)
+
+            out_png = tmp_dir / f"frame_{i:04d}.png"
+            bpy.context.scene.render.filepath = str(out_png)
+            bpy.ops.render.render(write_still=True)
+            png_paths.append(str(out_png))
+            _remove_camera(camera)
+
+        from PIL import Image
+
+        images = [Image.open(p).convert("RGBA") for p in png_paths]
+        images[0].save(
+            str(output_path),
+            save_all=True,
+            append_images=images[1:],
+            loop=0,
+            duration=frame_duration_ms,
+            disposal=2,
+        )
+        for im in images:
+            im.close()
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return {
+        "path": str(output_path),
+        "frames": frames,
+        "resolution": resolution,
+        "engine": engine,
+        "ortho": ortho,
+        "show_bones": show_bones,
+    }
+
+
+def render_inspect_material(
+    glb_path: str | Path,
+    output_dir: str | Path,
+    *,
+    views: str = "front,three_quarter,right",
+    resolution: int = 512,
+    engine: str = "eevee",
+    ortho: bool = False,
+    transparent_film: bool = True,
+) -> dict[str, Any]:
+    """Render views + dump material/texture metadata using native bpy.
+
+    Uses EEVEE by default to capture PBR materials faithfully. Returns
+    material info (Principled BSDF inputs, image textures, colorspace,
+    wrap modes) alongside screenshots.
+
+    Args:
+        glb_path: Path to GLB/GLTF file.
+        output_dir: Directory to write PNGs and report into.
+        views: Comma-separated view names.
+        resolution: Render resolution in pixels (square).
+        engine: ``"workbench"`` or ``"eevee"`` (default eevee for PBR).
+        ortho: Use orthographic camera.
+        transparent_film: Render with transparent background.
+
+    Returns:
+        Report dict with ``materials``, ``screenshots``, and metadata.
+    """
+    from gamedev_shared.bpy_mesh import clear_scene
+
+    glb_path = Path(glb_path).expanduser().resolve()
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    bpy = _require_bpy()
+    clear_scene()
+    bpy.ops.import_scene.gltf(filepath=str(glb_path))
+
+    from gamedev_lab.debug_tools import _enrich_inspect_data, _inspect_scene, inspect_materials
+
+    meta = _inspect_scene()
+    _enrich_inspect_data(meta, glb_path)
+    meta["materials"] = inspect_materials()
+
+    _setup_render(resolution, engine=engine, film_transparent=transparent_film)
+
+    view_names = [v.strip() for v in views.split(",") if v.strip()] or ["front", "three_quarter", "right"]
+    screenshots: list[dict[str, Any]] = []
+    for view_name in view_names:
+        preset = CAMERA_PRESETS.get(view_name)
+        if preset is None:
+            continue
+        loc, target = preset
+        camera = _add_camera(loc, target, ortho=ortho)
+        _auto_frame_camera(camera)
+        out_path = output_dir / f"material_{view_name}.png"
+        bpy.context.scene.render.filepath = str(out_path)
+        bpy.ops.render.render(write_still=True)
+        screenshots.append({"view": view_name, "path": str(out_path)})
+        _remove_camera(camera)
+
+    meta["screenshots"] = screenshots
+    meta["render_settings"] = {
+        "resolution": resolution,
+        "engine": engine,
+        "ortho": ortho,
+        "film_transparent": transparent_film,
+    }
+    report_path = output_dir / "material_report.json"
+    report_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
+    meta["report_path"] = str(report_path)
     return meta
