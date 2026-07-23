@@ -28,9 +28,11 @@ import json
 import os
 import urllib.request
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, cast
 
 _DATA_DIR = Path(__file__).resolve().parent / "data"
 _LOCKFILE = _DATA_DIR / "quaternius.lock.json"
@@ -52,10 +54,10 @@ class QuaterniusPack:
 
 
 @lru_cache(maxsize=1)
-def _lock_data() -> dict:
+def _lock_data() -> dict[str, Any]:
     """Lê e cacheia o lockfile JSON do pack."""
     with _LOCKFILE.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        return cast(dict[str, Any], json.load(f))
 
 
 def cache_dir() -> Path:
@@ -86,7 +88,7 @@ def is_pack_cached(*, verify: bool = True) -> bool:
         return False
     if not verify:
         return True
-    return _sha256(zip_path) == lock["expected_sha256"]
+    return _sha256(zip_path) == str(lock["expected_sha256"])
 
 
 def _sha256(path: Path) -> str:
@@ -123,7 +125,7 @@ def _resolve_signed_download_url(lock: dict) -> str:
             f"itch.io não devolveu 'url' assinado para o upload {lock['upload_id']} "
             f"(resposta: {str(payload)[:200]}). Descarrega manualmente em {slug}."
         )
-    return signed
+    return str(signed)
 
 
 def _download(url: str, dest: Path, *, expected_sha256: str | None = None) -> None:
@@ -152,7 +154,7 @@ def _extract(zip_path: Path, extract_root: Path) -> Path:
     """Extrai o zip (idempotente) e devolve o caminho do diretório interno do pack."""
     extract_root.mkdir(parents=True, exist_ok=True)
     lock = _lock_data()
-    inner = extract_root / lock["inner_dir"]
+    inner: Path = extract_root / str(lock["inner_dir"])
     # Idempotente: só extrai se o GLB esperado não existir.
     if not (inner / lock["files"]["glb"]).is_file():
         with zipfile.ZipFile(zip_path) as zf:
@@ -163,7 +165,7 @@ def _extract(zip_path: Path, extract_root: Path) -> Path:
 def fetch_quaternius_pack(
     *,
     force: bool = False,
-    on_status=None,
+    on_status: Callable[[str], None] | None = None,
 ) -> QuaterniusPack:
     """Garante que o pack Quaternius está em cache; descarrega+extrai se faltar.
 

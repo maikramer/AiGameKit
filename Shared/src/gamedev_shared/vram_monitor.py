@@ -183,7 +183,7 @@ def find_quantization_sweet_spot(
     try:
         import torch
     except ImportError:
-        torch = None  # type: ignore[assignment]
+        torch = None
 
     print("=" * 70)
     print("BUSCANDO SWEET SPOT DE QUANTIZAÇÃO")

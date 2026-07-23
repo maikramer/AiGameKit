@@ -792,9 +792,9 @@ def count_boundary_edges_fast(obj: Any) -> int:
     m = len(me.loop_triangles)
     if m == 0:
         return 0
-    tris = np.empty(m * 3, dtype=np.int64)
-    me.loop_triangles.foreach_get("vertices", tris)
-    tris = tris.reshape(-1, 3)
+    tris_flat = np.empty(m * 3, dtype=np.int64)
+    me.loop_triangles.foreach_get("vertices", tris_flat)
+    tris: np.ndarray = tris_flat.reshape(-1, 3)
     e = np.empty((m * 3, 2), dtype=np.int64)
     e[0::3, 0] = tris[:, 0]
     e[0::3, 1] = tris[:, 1]
@@ -1104,7 +1104,7 @@ def morphological_close(
         for i, w in enumerate(weights):
             if w > 0.0:
                 vg.add([i], float(w), "REPLACE")
-        return vg.name
+        return str(vg.name)
 
     def _displace(amount: float, group: str | None = None) -> None:
         mod = obj.modifiers.new("MorphDisp", "DISPLACE")
@@ -1188,9 +1188,9 @@ def morphological_close(
         # transferir os pesos por vizinho-mais-próximo à mesh fundida.
         me = obj.data
         n_pre = len(me.vertices)
-        pre_coords = np.empty(n_pre * 3, dtype=np.float64)
-        me.vertices.foreach_get("co", pre_coords)
-        pre_coords = pre_coords.reshape(-1, 3)
+        pre_coords_flat = np.empty(n_pre * 3, dtype=np.float64)
+        me.vertices.foreach_get("co", pre_coords_flat)
+        pre_coords: np.ndarray = pre_coords_flat.reshape(-1, 3)
         _voxel()  # dilatação funde as margens da racha
 
         from mathutils import Vector as _Vec
@@ -1404,7 +1404,7 @@ def taubin_smooth(
 
     def _laplacian_step(factor: float) -> None:
         # Δ = avg(neighbors) - v
-        deltas = [None] * len(bm.verts)
+        deltas: list[tuple[float, float, float] | None] = [None] * len(bm.verts)
         for v in bm.verts:
             linked = v.link_edges
             if not linked:

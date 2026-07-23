@@ -23,7 +23,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -175,7 +175,7 @@ def _binary_dilate(mask: np.ndarray, iterations: int) -> np.ndarray:
             t = torch.from_numpy(mask.astype(np.float32)).to(device)[None, None]
             for _ in range(iters):
                 t = F.max_pool2d(t, kernel_size=3, stride=1, padding=1)
-            return (t[0, 0] > 0.5).detach().cpu().numpy()
+            return cast(np.ndarray, (t[0, 0] > 0.5).detach().cpu().numpy())
         except Exception as exc:
             log.debug("dilate GPU fallback CPU: %s", exc)
     out = mask.astype(bool, copy=True)
@@ -298,7 +298,7 @@ def _rasterize_cut_plane(
 
     coords = np.empty(n_verts * 3, dtype=np.float64)
     me.vertices.foreach_get("co", coords)
-    coords = coords.reshape(-1, 3)
+    coords = cast(np.ndarray, coords.reshape(-1, 3))
 
     # Verts da casca vertical (|nz| baixo) na banda do corte.
     bark_vert = np.zeros(n_verts, dtype=bool)
@@ -386,7 +386,7 @@ def _solidify_cut_mask(mask: np.ndarray, *, close_iters: int) -> np.ndarray:
     solid = _largest_mask_component(solid)
     # Garantir que o anel da casca (mask) entra no keep — senão contain
     # apaga as paredes cujo XY cai na borda da grelha.
-    return solid | mask
+    return cast(np.ndarray, solid | mask)
 
 
 def _snap_cap_to_bark_rim(

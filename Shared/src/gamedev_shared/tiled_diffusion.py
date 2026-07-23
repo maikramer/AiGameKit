@@ -262,10 +262,12 @@ def enable_tiled_diffusion(
         else:
             vae_scale = 8
 
+    vae_scale_int = 8 if vae_scale is None else int(vae_scale)
+
     callback = TiledDiffusionCallback(
         tile_size_px=tile_size_px,
         stride_px=stride_px,
-        vae_scale=vae_scale,
+        vae_scale=vae_scale_int,
         log_fn=log_fn,
     )
 

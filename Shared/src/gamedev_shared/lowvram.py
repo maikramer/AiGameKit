@@ -193,7 +193,7 @@ def _cpu_plan(notes: tuple[str, ...]) -> OffloadPlan:
 
 
 def plan_offload(
-    gpu_specs: list[tuple[int, int]],
+    gpu_specs: list[tuple[int, int]] | list[tuple[int, int, int]],
     footprint: ModelFootprint,
     *,
     allow_quant: tuple[str, ...] | None = None,

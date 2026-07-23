@@ -25,7 +25,7 @@ from __future__ import annotations
 import io
 import sys
 import traceback
-from typing import Any
+from typing import Any, TextIO, cast
 
 from .worker_protocol import (
     CMD_ABORT,
@@ -81,9 +81,9 @@ def _install_jsonl_stdout() -> None:
     # Se o stdout não tem fileno() (ex.: capsys em testes), usar o próprio.
     try:
         jsonl_fd = os.dup(real_stdout.fileno())
-        jsonl_stream = os.fdopen(jsonl_fd, "w", buffering=1)  # line-buffered
+        jsonl_stream: TextIO = os.fdopen(jsonl_fd, "w", buffering=1)  # line-buffered
     except (AttributeError, OSError, io.UnsupportedOperation):
-        jsonl_stream = real_stdout
+        jsonl_stream = cast(TextIO, real_stdout)
     # Activar no protocolo — emit_event passa a usar este stream.
     from gamedev_shared import worker_protocol
 

@@ -18,6 +18,7 @@ import logging
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,7 +49,7 @@ def _decompress_glb(src: Path, dst: Path) -> bool:
 
 
 @contextmanager
-def bpy_readable_glb(path: Path):
+def bpy_readable_glb(path: Path) -> Iterator[Path]:
     """Yield a path bpy's GLTF importer can read (meshopt-aware)."""
     src = Path(path).resolve()
     try:

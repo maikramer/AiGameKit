@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import { State } from '../../../src/core/ecs/state';
 import {
   NavMeshAgent,
@@ -33,7 +33,20 @@ function lakeAt(
   };
 }
 
+function resetNavMeshAgentDefaults(): void {
+  // SoA slots are module-global; other suites overwrite indices — re-seed defaults.
+  NavMeshAgent.agentIndex.fill(-1);
+  NavMeshAgent.radius.fill(0.4);
+  NavMeshAgent.height.fill(1.0);
+  NavMeshAgent.enabled.fill(1);
+  NavMeshAgent.faceVelocity.fill(1);
+}
+
 describe('navmesh bulk: NavMeshAgent defaults', () => {
+  beforeAll(() => {
+    resetNavMeshAgentDefaults();
+  });
+
   for (let eid = 0; eid < 20; eid++) {
     it(`NavMeshAgent.agentIndex[${eid}] defaults to -1`, () => {
       expect(NavMeshAgent.agentIndex[eid]).toBe(-1);
@@ -81,6 +94,12 @@ describe('navmesh bulk: agent target SOA / clearAgentTarget', () => {
 });
 
 describe('navmesh bulk: NavMeshSurface / NavMeshWalkable', () => {
+  beforeAll(() => {
+    NavMeshSurface.enabled.fill(1);
+    NavMeshSurface.generated.fill(0);
+    NavMeshWalkable.enabled.fill(1);
+  });
+
   for (let eid = 0; eid < 15; eid++) {
     it(`NavMeshSurface.enabled[${eid}] default 1`, () => {
       expect(NavMeshSurface.enabled[eid]).toBe(1);

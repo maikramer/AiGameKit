@@ -31,7 +31,7 @@ e as funções que precisam de componentes conexos usam um union-find numpy.
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 
@@ -367,7 +367,7 @@ def drop_long_edge_faces(
     n = int(doomed.sum())
     if n == 0 or n > max_removal_ratio * len(tris):
         return np.asarray(verts, dtype=np.float64), np.asarray(tris, dtype=np.int64), 0
-    v, f = compact_mesh(verts, tris, ~doomed)
+    v, f = compact_mesh(verts, tris, np.asarray(~doomed, dtype=bool))
     return v, f, n
 
 
@@ -389,7 +389,7 @@ def drop_sliver_faces(
     n = int(doomed.sum())
     if n == 0 or n > max_removal_ratio * len(tris):
         return np.asarray(verts, dtype=np.float64), np.asarray(tris, dtype=np.int64), 0
-    v, f = compact_mesh(verts, tris, ~doomed)
+    v, f = compact_mesh(verts, tris, np.asarray(~doomed, dtype=bool))
     return v, f, n
 
 
@@ -428,7 +428,7 @@ def drop_loose_debris(
 def boundary_edges(tris: np.ndarray) -> np.ndarray:
     """Arestas de fronteira (exactamente 1 face incidente) — (K, 2)."""
     edges, counts, _ = _unique_edges(tris)
-    return edges[counts == 1]
+    return cast(np.ndarray, edges[counts == 1])
 
 
 def boundary_edge_count(tris: np.ndarray) -> int:
@@ -599,7 +599,7 @@ def drop_internal_shell_faces(
                 max_removal_ratio,
             )
             break
-        verts, tris = compact_mesh(verts, tris, ~doomed)
+        verts, tris = compact_mesh(verts, tris, np.asarray(~doomed, dtype=bool))
         total_removed += n
         log.info("drop_internal_shell_faces: pass %d removeu %d faces (wall_gap=%.4f)", _pass, n, wall_gap)
     return verts, tris, total_removed
@@ -785,7 +785,7 @@ def extract_arrays(obj: Any) -> tuple[np.ndarray, np.ndarray]:
     n = len(me.vertices)
     co = np.empty(n * 3, dtype=np.float64)
     me.vertices.foreach_get("co", co)
-    co = co.reshape(-1, 3)
+    co = cast(np.ndarray, co.reshape(-1, 3))
     me.calc_loop_triangles()
     m = len(me.loop_triangles)
     tris = np.empty(m * 3, dtype=np.int64)

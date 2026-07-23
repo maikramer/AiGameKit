@@ -110,5 +110,8 @@ class TestEnsureToPaint:
             )
         assert out == to_paint
         assert to_paint.is_file()
-        assert run_cmd.call_args[0][0][:2] == ["text3d", "simplify"]
-        assert "--target-faces" in run_cmd.call_args[0][0]
+        # simplify then optional re-topology-fix (last call may be topology-fix).
+        cmds = [c.args[0][:2] for c in run_cmd.call_args_list]
+        assert ["text3d", "simplify"] in cmds
+        simplify_argv = next(c.args[0] for c in run_cmd.call_args_list if c.args[0][:2] == ["text3d", "simplify"])
+        assert "--target-faces" in simplify_argv

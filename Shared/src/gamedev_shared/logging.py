@@ -72,7 +72,7 @@ _TOOL_ALIASES: dict[str, str] = {
 }
 
 _lock = threading.RLock()
-_file_fp: TextIO[str] | None = None
+_file_fp: TextIO | None = None
 _file_path: Path | None = None
 _tool_name: str | None = None
 _min_rank: int = 20

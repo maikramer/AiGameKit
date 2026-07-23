@@ -26,7 +26,7 @@ from .logging import Logger
 _logger = Logger()
 
 
-def _torch():
+def _torch() -> Any:
     """Lazy import do torch (evita dependência GPU ao importar o módulo)."""
     import torch
 
@@ -152,6 +152,10 @@ class DiffusionGeneratorBase(ABC):
           3. Aplicar colocação de device (``self._place_pipeline(pipe)`` ou custom)
           4. Guardar em ``self._pipe`` e retornar
         """
+
+    @abstractmethod
+    def generate(self, prompt: str, **kwargs: Any) -> tuple[Any, dict[str, Any]]:
+        """Executa uma geração. Subclasses definem kwargs e o tipo de imagem concretos."""
 
     def unload(self) -> None:
         """Descarrega o pipeline e liberta VRAM. Idempotente."""

@@ -58,20 +58,23 @@ describe('input matrix: addInputMapping', () => {
   ];
   for (const action of actions) {
     it(`addInputMapping appends to ${action}`, () => {
-      const before = INPUT_CONFIG.mappings[action].length;
-      addInputMapping(action, `TestKey_${action}`);
-      expect(INPUT_CONFIG.mappings[action].length).toBeGreaterThanOrEqual(
-        before
-      );
+      const code = `TestKey_${action}`;
+      const list = INPUT_CONFIG.mappings[action];
+      const before = list.length;
+      addInputMapping(action, code);
+      expect(list.length).toBeGreaterThanOrEqual(before);
+      // Drop test-only binding so shared INPUT_CONFIG stays clean for other files.
+      const idx = list.indexOf(code);
+      if (idx >= 0) list.splice(idx, 1);
     });
   }
   it('does not duplicate the same code twice', () => {
     const list = INPUT_CONFIG.mappings.moveUp;
-    const len = list.length;
     addInputMapping('moveUp', 'KeyZ_dup_test');
     addInputMapping('moveUp', 'KeyZ_dup_test');
     expect(list.filter((c) => c === 'KeyZ_dup_test').length).toBe(1);
-    void len;
+    const idx = list.indexOf('KeyZ_dup_test');
+    if (idx >= 0) list.splice(idx, 1);
   });
 });
 

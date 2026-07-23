@@ -81,7 +81,7 @@ def protect_boundary_vertices(obj: Any) -> str | None:
     vg = obj.vertex_groups.get(_LOD_PROTECT_GROUP) or obj.vertex_groups.new(name=_LOD_PROTECT_GROUP)
     vg.add(list(boundary_verts), 1.0, "REPLACE")
     log.info("Proteção de fronteira: %d vértices em rebordos abertos", len(boundary_verts))
-    return vg.name
+    return str(vg.name)
 
 
 def decimate_mesh_object(

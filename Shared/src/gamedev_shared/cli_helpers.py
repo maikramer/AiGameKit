@@ -44,7 +44,7 @@ def add_ums_options(fn: F) -> F:
     try:
         import rich_click as click
     except ImportError:  # pragma: no cover
-        import click  # type: ignore[no-redef]
+        import click
 
     fn = click.option(
         "--ums-stream",
@@ -64,7 +64,7 @@ def add_ums_options(fn: F) -> F:
         default=None,
         help=("Prioridade na fila UMS (default: interactive, ou GAMEDEV_UMS_PRIORITY). GameAssets batch usa 'batch'."),
     )(fn)
-    return fn  # type: ignore[return-value]
+    return fn
 
 
 def env_bool(env_var: str, cli_wants: bool) -> bool:

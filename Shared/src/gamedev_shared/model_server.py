@@ -33,7 +33,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .logging import Logger
 
@@ -192,7 +192,7 @@ def send_request(
             lines = data.decode("utf-8", errors="replace").strip().split("\n")
             if not lines:
                 return None
-            return json.loads(lines[-1])
+            return cast(dict[str, Any] | None, json.loads(lines[-1]))
     except (OSError, json.JSONDecodeError):
         return None
 
@@ -352,7 +352,7 @@ def _resolve_ums_start_cmd(
     *,
     modelserver_bin: str | None = None,
     canonical_python: Path | None = None,
-    path_lookup: Callable[[], str | None] | None = None,
+    path_lookup: Callable[[str], str | None] | None = None,
     import_probe: Callable[[], bool] | None = None,
     sys_executable: str = "python",
 ) -> tuple[list[str] | None, str]:
@@ -383,7 +383,7 @@ def _resolve_ums_start_cmd(
             return [p, "start"], ""
     if canonical_python is not None:
         return [str(canonical_python), "-m", "modelserver", "start"], ""
-    lookup = path_lookup or (lambda: None)
+    lookup = path_lookup or (lambda _name: None)
     on_path = lookup("gamedev-model-server") or lookup("ums")
     if on_path:
         return [on_path, "start"], ""
