@@ -1,30 +1,31 @@
 assets:
-- id: boss_ogre
-  idea: menacing large fantasy RPG boss monster, muscular green ogre troll with sharp
-    teeth and small tusks, hunched powerful build, thick dark armor scraps, standing
-    upright in relaxed A-pose with massive arms angled down at 45 degrees away from
-    the body, visible gap between arms and torso, open hands with spread fingers,
-    hands empty, no weapons, no props, full body visible, front-facing, cartoon stylized
-    but bigger and scarier than a goblin, game asset
-  kind: character
-  category: creature
-  pipeline:
-  - 3d
-  - paint
-  - rig
-  - animate
-  - lod
-  - collision
-  lod_levels: 2
-  generation: fast
-  animate:
-    preset: humanoid
-    force_preset: true
-    clips: idle,walk,run,jump,attack,hit,death,punch,roar
-  omni:
-    control_type: pose
-    pose_preset: quaternius-apose
-    size_m:
-    - 1.2
-    - 2.8
-    - 0.9
+  - id: boss_ogre
+    idea:
+      menacing large fantasy RPG boss monster, muscular green ogre troll with sharp
+      teeth and small tusks, hunched powerful build, thick dark armor scraps, standing
+      upright in relaxed A-pose with massive arms angled down at 45 degrees away from
+      the body, visible gap between arms and torso, open hands with spread fingers,
+      hands empty, no weapons, no props, full body visible, front-facing, cartoon stylized
+      but bigger and scarier than a goblin, game asset
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 2
+    generation: fast
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death,punch,roar
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 1.2
+        - 2.8
+        - 0.9

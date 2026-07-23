@@ -127,6 +127,6 @@ class TestResolveBinaryMonorepo:
         with (
             patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True),
             patch("gamedev_shared.subprocess_utils.shutil.which", return_value=None),
+            pytest.raises(FileNotFoundError, match="text3d"),
         ):
-            with pytest.raises(FileNotFoundError, match="text3d"):
-                resolve_binary("TEXT3D_BIN", "text3d")
+            resolve_binary("TEXT3D_BIN", "text3d")

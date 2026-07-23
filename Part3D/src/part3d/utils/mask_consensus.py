@@ -47,7 +47,7 @@ def collect_prompt_heads(
     scores = np.asarray(ious, dtype=np.float64).reshape(-1)
     if heads.ndim != 2 or heads.shape[1] != scores.shape[0]:
         raise ValueError("masks must be [N, H] matching ious length H")
-    n_heads = scores.shape[0]
+    scores.shape[0]
     best = int(np.argmax(scores))
     if not multi_head:
         return [(np.asarray(heads[:, best]).astype(bool), float(scores[best]), prompt_index)]
@@ -149,7 +149,7 @@ def cluster_masks_bestfit(
 def distinct_prompt_support(member_indices: list[int], prompt_ids: list[int] | np.ndarray) -> int:
     """Count unique prompt ids among cluster members (avoids multi-head inflation)."""
     ids = np.asarray(prompt_ids)
-    return int(len({int(ids[i]) for i in member_indices}))
+    return len({int(ids[i]) for i in member_indices})
 
 
 def fuse_cluster_mask(
@@ -247,10 +247,7 @@ def build_sorted_mask_pool(
     order = np.argsort(-np.asarray(ious, dtype=np.float64))
     sorted_masks = [masks[int(i)] for i in order]
     sorted_ious = [float(ious[int(i)]) for i in order]
-    if prompt_ids is None:
-        sorted_pids = [int(i) for i in order]
-    else:
-        sorted_pids = [int(prompt_ids[int(i)]) for i in order]
+    sorted_pids = [int(i) for i in order] if prompt_ids is None else [int(prompt_ids[int(i)]) for i in order]
     return sorted_masks, sorted_ious, sorted_pids
 
 

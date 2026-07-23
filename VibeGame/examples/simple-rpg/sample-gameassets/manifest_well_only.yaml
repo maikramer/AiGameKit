@@ -1,18 +1,19 @@
 assets:
-- id: medieval_well
-  idea: round medieval stone well with wooden bucket on rope, iron crank handle, mossy stonework, fantasy
-    village water source
-  kind: prop
-  category: prop
-  pipeline:
-  - 3d
-  - paint
-  - lod
-  - collision
-  omni:
-    control_type: bbox
-    bbox_preset: crate
-    size_m:
-    - 1.4
-    - 1.6
-    - 1.4
+  - id: medieval_well
+    idea:
+      round medieval stone well with wooden bucket on rope, iron crank handle, mossy stonework, fantasy
+      village water source
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: crate
+      size_m:
+        - 1.4
+        - 1.6
+        - 1.4

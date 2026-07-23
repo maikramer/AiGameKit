@@ -196,7 +196,7 @@ class HunyuanTextTo3DGenerator:
         self._hunyuan_pipeline = None
         self._offload_plan = None
         # Group-offload / accelerate deixam hooks e staging buffers na GPU —
-        # tentar CPU + drop refs antes do GC (contexto CUDA ~1 GiB continua
+        # tentar CPU + drop refs antes do GC (contexto CUDA ~1 GiB continua
         # no processo até o UMS sair; isto só liberta pesos/activação).
         for attr in ("model", "cond_stage_model", "first_stage_model", "scheduler"):
             mod = getattr(pipe, attr, None)

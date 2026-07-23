@@ -159,7 +159,16 @@ describe('rpg-ai bulk: preset helpers', () => {
         id: `mob-${i}`,
         hp: 100,
         ...sampleConfig(i),
-        assets: { modelUrl: '/m.glb', clips: {} },
+        assets: {
+          modelUrl: '/m.glb',
+          clips: {
+            idle: 'idle',
+            walk: 'walk',
+            run: 'run',
+            lunge: 'lunge',
+            death: 'death',
+          },
+        },
         loot: { goldMin: 1, goldMax: 2 },
       };
       const cfg = presetToMeleeAiConfig(preset);

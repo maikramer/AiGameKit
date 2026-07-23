@@ -36,6 +36,10 @@
       "vibegame/respawn": ["./src/plugins/respawn/index.ts"],
       "vibegame/startup": ["./src/plugins/startup/index.ts"],
       "vibegame/transforms": ["./src/plugins/transforms/index.ts"],
+      "vibegame/terrain": ["./src/plugins/terrain/index.ts"],
+      "vibegame/bvh": ["./src/plugins/bvh/index.ts"],
+      "vibegame/debug": ["./src/plugins/debug/index.ts"],
+      "vibegame/profiler": ["./src/plugins/profiler/index.ts"],
       "vibegame/composition": ["./src/plugins/composition/index.ts"],
       "vibegame/group": ["./src/plugins/group/index.ts"],
       "vibegame/road": ["./src/plugins/road/index.ts"],
@@ -43,6 +47,7 @@
       "vibegame/line": ["./src/plugins/line/index.ts"],
       "vibegame/vite": ["./src/vite/index.ts"],
       "vibegame/cli": ["./src/cli/index.ts"],
+      "vibegame/audio/bank": ["./src/plugins/audio/bank.ts"],
       "vibegame/core/validation": ["./src/core/validation/index.ts"]
     }
   },

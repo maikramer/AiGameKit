@@ -13,6 +13,7 @@ import {
   sizeTierFromHeight,
 } from '../../../src/plugins/vegetation/size-tier';
 import { buildVegetationPlan } from '../../../src/plugins/vegetation/plan';
+import { getVariationPreset } from '../../../src/plugins/spawn-variation/presets';
 
 describe('parseVegetationMeshes', () => {
   const inputs: Array<{ raw: unknown; want: string[] }> = [
@@ -168,7 +169,7 @@ describe('buildVegetationPlan smart layering', () => {
     patchScaleMax: null,
     scaleAxisMin: 0.9,
     scaleAxisMax: 1.1,
-    variation: {},
+    variation: getVariationPreset('none'),
   };
 
   it('smart multi-role yields 3 layers', () => {

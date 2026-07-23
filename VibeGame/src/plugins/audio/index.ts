@@ -27,6 +27,7 @@ export {
   setAudioEnabled,
   addClipSound,
   getClipSounds,
+  _resetSoundBank,
 } from './bank';
 export type {
   SoundDef,

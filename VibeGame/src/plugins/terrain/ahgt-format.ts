@@ -107,7 +107,8 @@ export function parseAhgt(bytes: Uint8Array): {
     ) as AhgtMeta;
   } catch (err) {
     throw new Error(
-      `AHGT: invalid metadata JSON — ${err instanceof Error ? err.message : err}`
+      `AHGT: invalid metadata JSON — ${err instanceof Error ? err.message : err}`,
+      { cause: err }
     );
   }
 

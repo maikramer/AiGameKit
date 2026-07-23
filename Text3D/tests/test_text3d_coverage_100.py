@@ -334,7 +334,7 @@ def test_split_components_box() -> None:
 def test_classify_component_labels_single() -> None:
     out = mesh_metrics.classify_component_labels(_box_mesh())
     assert out is not None
-    labels, main, internal, external, vols = out
+    _labels, main, internal, _external, _vols = out
     assert int(main) == 0
     assert len(internal) == 0
 

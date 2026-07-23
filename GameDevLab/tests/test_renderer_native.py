@@ -170,7 +170,7 @@ class TestCliNativeRendererCommands:
     def test_debug_inspect_rig_help(self) -> None:
         r = CliRunner().invoke(main, ["debug", "inspect-rig", "--help"])
         assert r.exit_code == 0
-        assert "native bpy" in r.output.lower() or "sem animator3d" in r.output.lower()
+        assert "native bpy" in r.output.lower()
 
     def test_debug_inspect_material_help(self) -> None:
         r = CliRunner().invoke(main, ["debug", "inspect-material", "--help"])
@@ -193,13 +193,8 @@ class TestCliNativeRendererCommands:
         assert "--include-rig" in r.output
 
     def test_debug_group_help_no_animator_mention(self) -> None:
-        """O grupo debug não deve citar animator3d como dependência ativa.
-
-        A única menção permitida é 'sem animator3d' (afirmando independência).
-        """
+        """O grupo debug não deve citar animator3d (render é native bpy)."""
         r = CliRunner().invoke(main, ["debug", "--help"])
         assert r.exit_code == 0
-        lowered = r.output.lower()
-        # Remove todas as ocorrências de 'sem animator3d' e verifica que não sobra.
-        cleaned = lowered.replace("sem animator3d", "")
-        assert "animator3d" not in cleaned
+        assert "animator3d" not in r.output.lower()
+        assert "native bpy" in r.output.lower()

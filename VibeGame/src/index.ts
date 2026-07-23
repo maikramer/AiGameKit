@@ -38,6 +38,7 @@ export type { HeldItemGrip, HeldItemGripRegistry } from './extras/held-item';
 export {
   applyEquirectSkyEnvironment,
   autoLoadSkyEnvironment,
+  disposeSkyEnv,
 } from './extras/sky-env';
 export type { EquirectSkyOptions } from './extras/sky-env';
 
@@ -204,6 +205,13 @@ export {
   entitySpawnerRecipe,
   getPlacementSpecs,
   isNormalWithinSlopeLimit,
+  composeSpawnRotation,
+  defaultTransformParts,
+  formatTransformAttr,
+  parseAt,
+  parseSemicolonPlaceString,
+  parseTransformAttr,
+  slopeAngleRad,
   normalFromHeightSampler,
   partialAlignEuler,
   registerSpawnFootprint,
@@ -276,12 +284,6 @@ export {
   unregisterBvhForEntity,
 } from './plugins/bvh';
 export type { BvhRaycastHit } from './plugins/bvh';
-
-export {
-  AiSteeringPlugin,
-  SteeringAgent,
-  SteeringTarget,
-} from './plugins/ai-steering';
 
 export {
   NavMeshPlugin,
@@ -655,6 +657,7 @@ export type {
 export {
   YukaAiPlugin,
   YukaAgentSystem,
+  npcRecipe,
   YukaAgentComponent,
   YUKA_BEHAVIOR_NONE,
   YUKA_BEHAVIOR_SEEK,

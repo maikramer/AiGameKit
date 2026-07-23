@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, Transform, Rigidbody } from 'vibegame';
+import { State } from 'vibegame';
 import { OrbitCamera } from 'vibegame/orbit-camera';
 import { OrbitCameraPlugin } from 'vibegame/orbit-camera';
 
 describe('OrbitCamera default field matrix', () => {
-  const defaults = OrbitCameraPlugin.config?.defaults?.['orbit-camera']!;
+  const defaultsBlock = OrbitCameraPlugin.config?.defaults?.['orbit-camera'];
+  if (defaultsBlock == null) {
+    throw new Error('OrbitCameraPlugin defaults missing');
+  }
+  const defaults = defaultsBlock;
 
   for (let i = 0; i < 30; i++) {
     it(`default targetDistance stable (i=${i})`, () => {
@@ -60,7 +64,11 @@ describe('OrbitCamera per-entity writes', () => {
 });
 
 describe('OrbitCamera offset defaults', () => {
-  const defaults = OrbitCameraPlugin.config?.defaults?.['orbit-camera']!;
+  const defaultsBlock = OrbitCameraPlugin.config?.defaults?.['orbit-camera'];
+  if (defaultsBlock == null) {
+    throw new Error('OrbitCameraPlugin defaults missing');
+  }
+  const defaults = defaultsBlock;
 
   it('offsetY default is 1.25', () => {
     expect(defaults.offsetY).toBe(1.25);

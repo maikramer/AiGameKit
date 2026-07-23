@@ -265,7 +265,7 @@ describe('GameRuntime', () => {
 
   it('should stop animation loop when runtime is stopped', async () => {
     let frameCount = 0;
-    let maxFrames = 0;
+    let maxFrames: number;
 
     state.registerSystem({
       update: () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { State } from 'vibegame';
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 import { WeatherComponent } from '../../../src/plugins/weather/components';
 import {
@@ -69,7 +70,8 @@ describe('WeatherPlugin', () => {
   it('wind adapter parses "x z" into component fields', () => {
     const wind = WeatherPlugin.config!.adapters!.weather.wind;
     const entity = 3;
-    wind(entity, '0.6 0.8');
+    const state = new State();
+    wind(entity, '0.6 0.8', state);
     expect(WeatherComponent.windDirX[entity]).toBeCloseTo(0.6, 5);
     expect(WeatherComponent.windDirZ[entity]).toBeCloseTo(0.8, 5);
     WeatherComponent.windDirX[entity] = 0;

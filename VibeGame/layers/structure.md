@@ -121,12 +121,12 @@ Bundles (not individual `plugin.ts` folders):
 - **defaults.ts** — `DefaultPlugins` (standard engine stack; tree-shake via `withoutPlugins`)
 - **rpg-bundle.ts** — `RpgPlugins` (opt-in RPG stack for games like simple-rpg)
 
-All plugins under `src/plugins/*/plugin.ts` (49):
+All plugins under `src/plugins/*/plugin.ts` (51):
 
 | #   | Folder            | Export                                              |
 | --- | ----------------- | --------------------------------------------------- |
 | 1   | adaptive-quality  | AdaptiveQualityPlugin                               |
-| 2   | ai-steering       | AiSteeringPlugin                                    |
+| 2   | ai-yuka           | YukaAiPlugin                                        |
 | 3   | animation         | AnimationPlugin                                     |
 | 4   | audio             | AudioPlugin                                         |
 | 5   | biomes            | BiomesPlugin                                        |

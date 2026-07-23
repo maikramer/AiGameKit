@@ -59,10 +59,25 @@ export function registerGameSounds(): void {
  */
 export function preloadGameSounds(): void {
   const keys = [
-    'save', 'load', 'bomb-drop', 'heal', 'enemy-hurt', 'enemy-death',
-    'boss-roar', 'shop-open', 'buy', 'error', 'player-hurt', 'coin',
-    'item-drop', 'mine-hit', 'chop-hit', 'mine-break', 'chop-break',
-    'levelup', 'swing',
+    'save',
+    'load',
+    'bomb-drop',
+    'heal',
+    'enemy-hurt',
+    'enemy-death',
+    'boss-roar',
+    'shop-open',
+    'buy',
+    'error',
+    'player-hurt',
+    'coin',
+    'item-drop',
+    'mine-hit',
+    'chop-hit',
+    'mine-break',
+    'chop-break',
+    'levelup',
+    'swing',
   ];
   for (const key of keys) {
     const handle = playSound(key, { volume: 0 });

@@ -4,7 +4,7 @@ import type { SteeringBehavior } from 'yuka';
 
 /**
  * Per-entity rich runtime kept off the ECS arrays, mirroring the side-table
- * pattern used by `rpg-ai` (config/instance) and `ai-steering` (SteeringRow).
+ * pattern used by `rpg-ai` (config/instance side tables).
  * The {@link Vehicle} is a yuka object (not queryable/serializable), so it
  * cannot live in a typed-array component.
  */

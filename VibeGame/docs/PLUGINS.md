@@ -99,11 +99,11 @@ Documentação completa: [`docs/AUDIO.md`](AUDIO.md).
 
 ## Engine features (gameplay)
 
-| Plugin        | Pasta          | Descrição                                                                              |
-| ------------- | -------------- | -------------------------------------------------------------------------------------- |
-| `raycast`     | `raycast/`     | Raycast Rapier (`castRayAndGetNormal`). Recipe: `RaycastSource`                        |
-| `navmesh`     | `navmesh/`     | Navmesh com `three-pathfinding`. Recipes: `NavMesh`, `NavMeshWalkable`, `NavMeshAgent` |
-| `ai-steering` | `ai-steering/` | Steering **yuka** (seek / wander / flee). Recipe: `NPC`                                |
+| Plugin    | Pasta      | Descrição                                                                              |
+| --------- | ---------- | -------------------------------------------------------------------------------------- |
+| `raycast` | `raycast/` | Raycast Rapier (`castRayAndGetNormal`). Recipe: `RaycastSource`                        |
+| `navmesh` | `navmesh/` | Navmesh com `three-pathfinding`. Recipes: `NavMesh`, `NavMeshWalkable`, `NavMeshAgent` |
+| `ai-yuka` | `ai-yuka/` | Steering **yuka** (seek / wander / flee + flock/pursuit). Recipe: `NPC`                |
 
 ## Opcionais (registar com `withPlugin`)
 

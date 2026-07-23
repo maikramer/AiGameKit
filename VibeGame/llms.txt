@@ -753,7 +753,7 @@ const health = Health.current[entity];
 - **Dialog trees** - No branching conversation system built-in (implementable with UI / custom data)
 - **Custom shaders** - Fixed Three.js materials; no user shader graph
 
-**Built-in today (do not claim missing):** `audio` (Howler + `<AudioSource>`), `save-load`, `particles`, `terrain`, `navmesh`, `ai-steering`, declarative `sky`, GLTF animation — see `docs/PLUGINS.md` and `docs/AUDIO.md`.
+**Built-in today (do not claim missing):** `audio` (Howler + `<AudioSource>`), `save-load`, `particles`, `terrain`, `navmesh`, `ai-yuka` (`<NPC>`), declarative `sky`, GLTF animation — see `docs/PLUGINS.md` and `docs/AUDIO.md`.
 
 ### Recommended Approaches
 - **Complex UI** → HTML/CSS overlays (this is actually superior to most game engines)

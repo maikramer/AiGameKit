@@ -315,9 +315,7 @@ def retarget_animation(
     tgt_parent = {b.name: (b.parent.name if b.parent else None) for b in target.data.bones}
     loc_scale = _bone_rest_height(target) / _bone_rest_height(source)
     # tgt bones que recebem location (root + pelvis/Hips).
-    loc_targets = {
-        tgt for tgt, src in tgt_to_src.items() if src in _LOCATION_SRC_BONES
-    }
+    loc_targets = {tgt for tgt, src in tgt_to_src.items() if src in _LOCATION_SRC_BONES}
 
     # Reset do estado de animação do target. O reset do basis de TODOS os pose
     # bones garante que ossos não mapeados ficam mesmo no rest (a propagação

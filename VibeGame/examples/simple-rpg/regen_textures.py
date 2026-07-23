@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -170,9 +169,9 @@ def generate_pbr(name: str, preset: str) -> bool:
 
 
 def main() -> None:
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Regeneração de texturas do simple-rpg ({len(SPECS)} texturas)")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     ok_count = 0
     fail_count = 0
@@ -191,9 +190,9 @@ def main() -> None:
         else:
             fail_count += 1
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Concluído: {ok_count} OK, {fail_count} falhas")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
 
 if __name__ == "__main__":

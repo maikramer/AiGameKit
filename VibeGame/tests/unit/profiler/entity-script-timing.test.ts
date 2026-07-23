@@ -64,9 +64,9 @@ describe('entity-script per-file profiler spans', () => {
       {
         update: () => {
           creatureCalls += 1;
-          const end = performance.now() + 0.2;
+          const end = performance.now() + 1;
           while (performance.now() < end) {
-            /* busy */
+            /* busy — keep above timer quantum under parallel suite load */
           }
         },
       },
@@ -82,6 +82,8 @@ describe('entity-script per-file profiler spans', () => {
       2
     );
 
+    // Re-arm after other files may have touched the global profiler singleton.
+    enableProfiler('sample');
     beginProfilerFrame();
     state.time.frameCount = 1;
     EntityScriptSystem.update!(state);
@@ -101,7 +103,7 @@ describe('entity-script per-file profiler spans', () => {
     const bandit = snap.customs.find(
       (c) => c.name === scriptSpanName('bandit.ts')
     )!;
-    expect(creature.avgMs).toBeGreaterThan(bandit.avgMs);
+    expect(creature.lastMs).toBeGreaterThan(bandit.lastMs);
 
     const stats = getEntityScriptFrameStats();
     expect(stats.find((s) => s.span === 'script/creature')?.entities).toBe(3);
@@ -113,6 +115,7 @@ describe('entity-script per-file profiler spans', () => {
       fixedUpdate: () => {},
     });
 
+    enableProfiler('sample');
     beginProfilerFrame();
     state.time.frameCount = 2;
     EntityScriptFixedUpdateSystem.update!(state);

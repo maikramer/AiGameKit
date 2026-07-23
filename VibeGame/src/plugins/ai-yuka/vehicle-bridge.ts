@@ -142,12 +142,15 @@ export function bindTarget(runtime: YukaRuntime, target: TargetProxy): void {
     PursuitBehavior | undefined;
   const evade = runtime.behaviors.get('evade') as
     (EvadeBehavior & { pursuer?: Vehicle }) | undefined;
+  const seek = runtime.behaviors.get('seek') as
+    (SeekBehavior & { target: { copy(p: unknown): void } }) | undefined;
   const arrive = runtime.behaviors.get('arrive') as
     (ArriveBehavior & { target: { copy(p: unknown): void } }) | undefined;
   const flee = runtime.behaviors.get('flee') as
     (FleeBehavior & { target: { copy(p: unknown): void } }) | undefined;
   if (pursuit && pursuit.evader !== target) pursuit.evader = target;
   if (evade && evade.pursuer !== target) evade.pursuer = target;
+  if (seek) seek.target.copy(target.position);
   if (arrive) arrive.target.copy(target.position);
   if (flee) flee.target.copy(target.position);
 }

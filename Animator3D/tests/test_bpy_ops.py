@@ -90,9 +90,7 @@ def test_humanoid_action_falls_back_to_procedural_when_not_humanoid(monkeypatch)
     monkeypatch.setattr(bpy_ops, "attack_keyframes", fake_attack)
     monkeypatch.setattr(bpy_ops, "_classify_bone_chains", lambda _name: {})
 
-    bpy_ops._humanoid_action_keyframes(
-        "mine", "Armature", frame_start=1, frame_end=40, action_name="Animator3D_Mine"
-    )
+    bpy_ops._humanoid_action_keyframes("mine", "Armature", frame_start=1, frame_end=40, action_name="Animator3D_Mine")
     assert len(calls) == 1
     assert calls[0]["action_name"] == "Animator3D_Mine"
     # mine profile: strikes=1, arm_amp=1.20
@@ -110,9 +108,7 @@ def test_humanoid_action_uses_humanoid_path_when_humanoid(monkeypatch) -> None:
     monkeypatch.setattr(bpy_ops, "attack_keyframes", lambda *a, **kw: attack_calls.append(kw) or {})
     monkeypatch.setattr(bpy_ops, "_classify_bone_chains", lambda _name: {})
 
-    bpy_ops._humanoid_action_keyframes(
-        "chop", "Armature", frame_start=1, frame_end=40, action_name="Animator3D_Chop"
-    )
+    bpy_ops._humanoid_action_keyframes("chop", "Armature", frame_start=1, frame_end=40, action_name="Animator3D_Chop")
     assert attack_calls == []  # humanoid path, sem fallback procedural
 
 

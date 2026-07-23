@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { AiSteeringPlugin } from '../../../src/plugins/ai-steering/plugin';
+import { YukaAiPlugin } from '../../../src/plugins/ai-yuka/plugin';
 import { CombatPlugin } from '../../../src/plugins/combat/plugin';
 import { DefaultPlugins } from '../../../src/plugins/defaults';
 import { HudPlugin } from '../../../src/plugins/hud/plugin';
@@ -18,7 +18,7 @@ describe('Engine feature plugins registration', () => {
 
   it('includes gameplay plugins in DefaultPlugins', () => {
     expect(DefaultPlugins).toContain(RaycastPlugin);
-    expect(DefaultPlugins).toContain(AiSteeringPlugin);
+    expect(DefaultPlugins).toContain(YukaAiPlugin);
     expect(DefaultPlugins).toContain(HudPlugin);
   });
 

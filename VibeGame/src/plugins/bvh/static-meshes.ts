@@ -152,13 +152,9 @@ export function syncStaticMeshBvh(state: State): {
         removed++;
       }
 
-      let shouldInclude = false;
-      if (state.hasComponent(entity, Rigidbody)) {
-        shouldInclude = Rigidbody.type[entity] === BodyType.Fixed;
-      } else {
-        // GLTF without rigidbody → treat as static decorative geometry.
-        shouldInclude = true;
-      }
+      const shouldInclude = state.hasComponent(entity, Rigidbody)
+        ? Rigidbody.type[entity] === BodyType.Fixed
+        : true;
       if (!shouldInclude) return;
 
       // LOD roots keep every level as a sibling child with visibility toggled

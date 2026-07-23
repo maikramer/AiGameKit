@@ -305,7 +305,7 @@ def test_resolve_handoff_animated_pref(tmp_path: Path) -> None:
     lod0 = _lod_path(mf, 0)
     _write_glb(lod0, {"asset": {"version": "2.0"}, "animations": [{"name": "run"}]})
     row = _row(generate_animate=True)
-    p, kind = resolve_handoff_mesh(mf, row, prefer_animated=True, prefer_rigged=False)
+    _p, kind = resolve_handoff_mesh(mf, row, prefer_animated=True, prefer_rigged=False)
     assert kind == "animated"
 
 

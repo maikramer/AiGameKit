@@ -13,6 +13,7 @@ The blend weight is a smoothstep from 1.0 (full smooth) inside --inner
 (fraction of half-diagonal) to 0.0 (no smooth) outside --outer. --sigma is the
 Gaussian blur radius in pixels applied to the smoothed copy.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -94,7 +95,9 @@ def main() -> int:
     out = radial_smooth(arr, args.sigma, args.inner, args.outer)
 
     Image.fromarray((out * 255.0).round().astype(np.uint8), mode="L").save(args.output)
-    print(f"Wrote {args.output} ({img.size[0]}x{img.size[1]}, sigma={args.sigma}, inner={args.inner}, outer={args.outer})")
+    print(
+        f"Wrote {args.output} ({img.size[0]}x{img.size[1]}, sigma={args.sigma}, inner={args.inner}, outer={args.outer})"
+    )
     return 0
 
 

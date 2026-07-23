@@ -98,7 +98,7 @@ export const AnimatedCharacterUpdateSystem: System = defineSystem({
       }
 
       const prevState = AnimatedCharacter.animationState[character];
-      let currentState = prevState;
+      let currentState: number;
 
       resetBodyPartTransforms(
         AnimatedCharacter.headEntity[character],

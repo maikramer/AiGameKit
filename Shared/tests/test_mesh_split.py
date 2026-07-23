@@ -61,7 +61,7 @@ class TestCleanupCutLeaks:
     def test_drops_thin_sheet_near_cut(self) -> None:
         import bmesh
 
-        # Corpo: cubo 1×1×1 em z∈[0,1].
+        # Corpo: cubo 1x1x1 em z∈[0,1].
         bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0, 0, 0.5))
         body = bpy.context.active_object
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
@@ -241,11 +241,7 @@ class TestBridgeCapToBark:
         bm = bmesh.new()
         bm.from_mesh(obj.data)
         bm.edges.ensure_lookup_table()
-        n = sum(
-            1
-            for e in bm.edges
-            if len(e.link_faces) == 1 and any(abs(v.co.z - cut_z) <= band for v in e.verts)
-        )
+        n = sum(1 for e in bm.edges if len(e.link_faces) == 1 and any(abs(v.co.z - cut_z) <= band for v in e.verts))
         bm.free()
         return n
 

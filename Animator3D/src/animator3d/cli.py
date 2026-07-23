@@ -1476,9 +1476,7 @@ def _game_pack_quaternius_retarget(
         wanted = [s.strip() for s in clip_filter.split(",") if s.strip()]
         only_clips = [c for c in wanted if c in profile.clip_map]
         if not only_clips:
-            console.print(
-                f"[yellow]Nenhum clip do filtro existe no perfil quaternius-hero:[/yellow] {clip_filter}"
-            )
+            console.print(f"[yellow]Nenhum clip do filtro existe no perfil quaternius-hero:[/yellow] {clip_filter}")
             return False
 
     try:

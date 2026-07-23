@@ -485,7 +485,7 @@ class TestResolveModelIdAndNativeResolution:
         assert _native_resolution_from_model(model_id) == meters
 
 
-class TestTerrainConfigDefaults:
+class TestTerrainConfigDefaultsExtended:
     def test_default_size_and_mode(self) -> None:
         cfg = TerrainConfig()
         assert cfg.size == 2048

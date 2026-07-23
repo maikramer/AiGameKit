@@ -388,15 +388,15 @@ def test_sdnq_auto_mem_quant() -> None:
 
 
 def test_sdnq_auto_no_mem() -> None:
-    assert resolve_sdnq_preset("auto", memory_efficient=False, quantize_dit=True) == None
+    assert resolve_sdnq_preset("auto", memory_efficient=False, quantize_dit=True) is None
 
 
 def test_sdnq_auto_no_quant() -> None:
-    assert resolve_sdnq_preset("auto", memory_efficient=True, quantize_dit=False) == None
+    assert resolve_sdnq_preset("auto", memory_efficient=True, quantize_dit=False) is None
 
 
 def test_sdnq_none_mode() -> None:
-    assert resolve_sdnq_preset("none", memory_efficient=True, quantize_dit=True) == None
+    assert resolve_sdnq_preset("none", memory_efficient=True, quantize_dit=True) is None
 
 
 def test_sdnq_int8_explicit() -> None:
@@ -420,15 +420,15 @@ def test_sdnq_sdnq_pass_through() -> None:
 
 
 def test_sdnq_fp16_off() -> None:
-    assert resolve_sdnq_preset("fp16", memory_efficient=True, quantize_dit=True) == None
+    assert resolve_sdnq_preset("fp16", memory_efficient=True, quantize_dit=True) is None
 
 
 def test_sdnq_off_mode() -> None:
-    assert resolve_sdnq_preset("off", memory_efficient=True, quantize_dit=True) == None
+    assert resolve_sdnq_preset("off", memory_efficient=True, quantize_dit=True) is None
 
 
 def test_sdnq_unknown_mode() -> None:
-    assert resolve_sdnq_preset("weird-quant", memory_efficient=True, quantize_dit=True) == None
+    assert resolve_sdnq_preset("weird-quant", memory_efficient=True, quantize_dit=True) is None
 
 
 def test_volume_decoder_explicit_hierarchical() -> None:
@@ -533,14 +533,14 @@ def test_distinct_prompt_support_counts_unique() -> None:
 
 def test_build_sorted_mask_pool_order() -> None:
     masks = [np.array([1, 0]), np.array([0, 1])]
-    sm, si, sp = build_sorted_mask_pool(masks, [0.2, 0.9], [5, 7])
+    _sm, si, sp = build_sorted_mask_pool(masks, [0.2, 0.9], [5, 7])
     assert si[0] == pytest.approx(0.9)
     assert sp[0] == 7
 
 
 def test_consensus_cluster_and_fuse_filters_low_support() -> None:
     masks = [np.array([1, 0, 0]), np.array([0, 1, 0])]
-    fused, fi, mem, reps = consensus_cluster_and_fuse(
+    fused, _fi, _mem, _reps = consensus_cluster_and_fuse(
         masks, [0.95, 0.94], [0, 1], min_cluster_support=3, min_predicted_iou=1.0
     )
     assert fused == []

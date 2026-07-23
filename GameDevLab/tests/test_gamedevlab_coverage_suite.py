@@ -139,7 +139,7 @@ class TestEvaluateInspectRules:
 
     def test_bones_contain_missing(self) -> None:
         insp = self._inspect_ok()
-        ok, fails, _ = evaluate_inspect_rules(insp, {"bones_contain": ["LeftToe"]})
+        ok, _fails, _ = evaluate_inspect_rules(insp, {"bones_contain": ["LeftToe"]})
         assert ok is False
 
     def test_attributes_required(self) -> None:
@@ -182,7 +182,7 @@ class TestEvaluateInspectRules:
     def test_v_per_tri_max(self) -> None:
         insp = self._inspect_ok()
         insp["glb_meta"]["v_per_tri"] = 4.0
-        ok, fails, _ = evaluate_inspect_rules(insp, {"mesh_totals": {"v_per_tri": {"max": 2.0}}})
+        ok, _fails, _ = evaluate_inspect_rules(insp, {"mesh_totals": {"v_per_tri": {"max": 2.0}}})
         assert ok is False
 
 

@@ -63,7 +63,9 @@ export function setTransformYawRadians(
   transform.eulerY[entity] = yawRadians * RAD2DEG;
   transform.eulerZ[entity] = 0;
   syncQuaternionFromEuler(transform, entity);
-  transform.dirty[entity] = 1;
+  if ('dirty' in transform) {
+    (transform as typeof Transform).dirty[entity] = 1;
+  }
 }
 
 /** Face along a planar direction (optional yaw offset in radians for asset forward). */

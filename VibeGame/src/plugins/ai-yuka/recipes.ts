@@ -4,7 +4,7 @@ import type { Recipe } from '../../core';
 export const npcRecipe: Recipe = {
   name: 'NPC',
   merge: true,
-  components: ['transform', 'steeringAgent', 'steeringTarget', 'meshRenderer'],
+  components: ['transform', 'yukaAgent', 'meshRenderer'],
   overrides: {
     'meshRenderer.shape': 1,
     'meshRenderer.sizeX': 0.44,

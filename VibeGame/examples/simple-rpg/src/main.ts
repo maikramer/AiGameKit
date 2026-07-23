@@ -14,7 +14,6 @@ import {
   // Plugins (engine RPG stack)
   LoadingPlugin,
   NavMeshPlugin,
-  YukaAiPlugin,
   SaveLoadPlugin,
   I18nPlugin,
   DebugPlugin,
@@ -176,85 +175,85 @@ const HeroGroundSnapSystem: System = {
   after: [PhysicsStepSystem],
   update(state: State) {
     return withSpan('rpg/hero-ground-snap', () => {
-    const heroEid = state.getEntityByName('hero');
-    if (heroEid === null || !state.hasComponent(heroEid, Transform)) return;
+      const heroEid = state.getEntityByName('hero');
+      if (heroEid === null || !state.hasComponent(heroEid, Transform)) return;
 
-    // Void-recovery failsafe: kinematic CCT can fall through if snap was
-    // released before a real Rapier hit existed underfoot, or if a respawn
-    // landed over not-yet-built ground. Re-arm instead of looping the void.
-    if (heroGroundSnapped) {
-      if (!terrainReady(state)) return;
-      const gx = Transform.posX[heroEid];
-      const gz = Transform.posZ[heroEid];
-      const surfaceY = heroWalkableSurfaceY(state, gx, gz);
-      if (
-        Number.isFinite(surfaceY) &&
-        Transform.posY[heroEid] < (surfaceY as number) - VOID_FALL_MARGIN
-      ) {
-        heroGroundSnapped = false;
-      } else {
+      // Void-recovery failsafe: kinematic CCT can fall through if snap was
+      // released before a real Rapier hit existed underfoot, or if a respawn
+      // landed over not-yet-built ground. Re-arm instead of looping the void.
+      if (heroGroundSnapped) {
+        if (!terrainReady(state)) return;
+        const gx = Transform.posX[heroEid];
+        const gz = Transform.posZ[heroEid];
+        const surfaceY = heroWalkableSurfaceY(state, gx, gz);
+        if (
+          Number.isFinite(surfaceY) &&
+          Transform.posY[heroEid] < (surfaceY as number) - VOID_FALL_MARGIN
+        ) {
+          heroGroundSnapped = false;
+        } else {
+          return;
+        }
+      }
+
+      const body = getBodyForEntity(state, heroEid);
+      if (!body) return;
+
+      const x = Transform.posX[heroEid];
+      const z = Transform.posZ[heroEid];
+
+      if (!terrainReady(state)) {
+        if (heroSpawnY === null) heroSpawnY = Transform.posY[heroEid];
+        Transform.posY[heroEid] = heroSpawnY;
+        Transform.dirty[heroEid] = 1;
+        Rigidbody.velX[heroEid] = 0;
+        Rigidbody.velY[heroEid] = 0;
+        Rigidbody.velZ[heroEid] = 0;
+        body.setTranslation({ x, y: heroSpawnY, z }, true);
+        body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
+        const CM = state.getComponent('character-movement');
+        if (CM && state.hasComponent(heroEid, CM)) CM.velocityY[heroEid] = 0;
         return;
       }
-    }
 
-    const body = getBodyForEntity(state, heroEid);
-    if (!body) return;
+      const groundY = heroWalkableSurfaceY(state, x, z);
+      if (!Number.isFinite(groundY)) return;
+      const snapY = getBodyYForFeetAt(
+        state,
+        heroEid,
+        (groundY as number) + GROUND_CONTACT_SKIN
+      );
 
-    const x = Transform.posX[heroEid];
-    const z = Transform.posZ[heroEid];
-
-    if (!terrainReady(state)) {
-      if (heroSpawnY === null) heroSpawnY = Transform.posY[heroEid];
-      Transform.posY[heroEid] = heroSpawnY;
+      Transform.posX[heroEid] = x;
+      Transform.posY[heroEid] = snapY;
+      Transform.posZ[heroEid] = z;
       Transform.dirty[heroEid] = 1;
+
+      Rigidbody.posX[heroEid] = x;
+      Rigidbody.posY[heroEid] = snapY;
+      Rigidbody.posZ[heroEid] = z;
       Rigidbody.velX[heroEid] = 0;
       Rigidbody.velY[heroEid] = 0;
       Rigidbody.velZ[heroEid] = 0;
-      body.setTranslation({ x, y: heroSpawnY, z }, true);
+
+      body.setTranslation({ x, y: snapY, z }, true);
       body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
+      body.wakeUp();
+
       const CM = state.getComponent('character-movement');
-      if (CM && state.hasComponent(heroEid, CM)) CM.velocityY[heroEid] = 0;
-      return;
-    }
+      if (CM && state.hasComponent(heroEid, CM)) {
+        // Hold vertical only — keep horizontal input so the hero isn't frozen
+        // while Rapier heightfields finish streaming in.
+        CM.velocityY[heroEid] = 0;
+      }
 
-    const groundY = heroWalkableSurfaceY(state, x, z);
-    if (!Number.isFinite(groundY)) return;
-    const snapY = getBodyYForFeetAt(
-      state,
-      heroEid,
-      (groundY as number) + GROUND_CONTACT_SKIN
-    );
-
-    Transform.posX[heroEid] = x;
-    Transform.posY[heroEid] = snapY;
-    Transform.posZ[heroEid] = z;
-    Transform.dirty[heroEid] = 1;
-
-    Rigidbody.posX[heroEid] = x;
-    Rigidbody.posY[heroEid] = snapY;
-    Rigidbody.posZ[heroEid] = z;
-    Rigidbody.velX[heroEid] = 0;
-    Rigidbody.velY[heroEid] = 0;
-    Rigidbody.velZ[heroEid] = 0;
-
-    body.setTranslation({ x, y: snapY, z }, true);
-    body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
-    body.wakeUp();
-
-    const CM = state.getComponent('character-movement');
-    if (CM && state.hasComponent(heroEid, CM)) {
-      // Hold vertical only — keep horizontal input so the hero isn't frozen
-      // while Rapier heightfields finish streaming in.
-      CM.velocityY[heroEid] = 0;
-    }
-
-    // Release ONLY on a real shape cast under the capsule. AABB coverage
-    // (isTerrainColliderAt) was too early: snap released → gravity → void →
-    // re-snap → visible "falling from the sky" loop when the heightfield
-    // wasn't under the feet yet.
-    if (physicsGroundBelow(state, body, x, snapY, z)) {
-      heroGroundSnapped = true;
-    }
+      // Release ONLY on a real shape cast under the capsule. AABB coverage
+      // (isTerrainColliderAt) was too early: snap released → gravity → void →
+      // re-snap → visible "falling from the sky" loop when the heightfield
+      // wasn't under the feet yet.
+      if (physicsGroundBelow(state, body, x, snapY, z)) {
+        heroGroundSnapped = true;
+      }
     });
   },
 };
@@ -465,74 +464,79 @@ const CombatFeedbackSystem: System = {
   group: 'simulation',
   update(state: State) {
     withSpan('rpg/combat-feedback', () => {
-    const hero = state.getEntityByName('hero');
-    tickCombatTarget(state, state.time.deltaTime);
+      const hero = state.getEntityByName('hero');
+      tickCombatTarget(state, state.time.deltaTime);
 
-    for (const e of healthFxQuery(state.world)) {
-      const cur = Health.current[e];
-      const prev = prevHp.get(e);
-      prevHp.set(e, cur);
-      if (prev === undefined || cur >= prev - 0.01) continue;
-      const dmg = Math.round(prev - cur);
-      if (dmg <= 0) continue;
-      const isHero = e === hero;
-      const big = !isHero && dmg >= 22;
-      spawnDamageNumber(state, {
-        x: Transform.posX[e],
-        y: Transform.posY[e] + (isHero ? 1.7 : 2.1),
-        z: Transform.posZ[e],
-        amount: dmg,
-        onHero: isHero,
-        crit: big,
-        stackKey: `dmg@${e}`,
-      });
-      playSound(isHero ? 'player-hurt' : 'enemy-hurt');
-      if (!isHero) {
-        setCombatTarget(e, {
-          label: getEnemyLabel(e) || state.getEntityName(e) || 'Enemy',
+      for (const e of healthFxQuery(state.world)) {
+        const cur = Health.current[e];
+        const prev = prevHp.get(e);
+        prevHp.set(e, cur);
+        if (prev === undefined || cur >= prev - 0.01) continue;
+        const dmg = Math.round(prev - cur);
+        if (dmg <= 0) continue;
+        const isHero = e === hero;
+        const big = !isHero && dmg >= 22;
+        spawnDamageNumber(state, {
+          x: Transform.posX[e],
+          y: Transform.posY[e] + (isHero ? 1.7 : 2.1),
+          z: Transform.posZ[e],
+          amount: dmg,
+          onHero: isHero,
+          crit: big,
+          stackKey: `dmg@${e}`,
         });
-      } else if (hero !== null) {
-        // When the hero is hit, soft-lock the nearest living foe for the TargetBar.
-        let best = -1;
-        let bestD2 = Infinity;
-        const hx = Transform.posX[hero];
-        const hz = Transform.posZ[hero];
-        const merchant = state.getEntityByName('merchant');
-        for (const foe of healthFxQuery(state.world)) {
-          if (foe === hero || foe === merchant || Health.current[foe] <= 0)
-            continue;
-          const dx = Transform.posX[foe] - hx;
-          const dz = Transform.posZ[foe] - hz;
-          const d2 = dx * dx + dz * dz;
-          if (d2 < bestD2 && d2 < 400) {
-            bestD2 = d2;
-            best = foe;
+        playSound(isHero ? 'player-hurt' : 'enemy-hurt');
+        if (!isHero) {
+          setCombatTarget(e, {
+            label: getEnemyLabel(e) || state.getEntityName(e) || 'Enemy',
+          });
+        } else if (hero !== null) {
+          // When the hero is hit, soft-lock the nearest living foe for the TargetBar.
+          let best = -1;
+          let bestD2 = Infinity;
+          const hx = Transform.posX[hero];
+          const hz = Transform.posZ[hero];
+          const merchant = state.getEntityByName('merchant');
+          for (const foe of healthFxQuery(state.world)) {
+            if (foe === hero || foe === merchant || Health.current[foe] <= 0)
+              continue;
+            const dx = Transform.posX[foe] - hx;
+            const dz = Transform.posZ[foe] - hz;
+            const d2 = dx * dx + dz * dz;
+            if (d2 < bestD2 && d2 < 400) {
+              bestD2 = d2;
+              best = foe;
+            }
+          }
+          if (best >= 0) {
+            setCombatTarget(best, {
+              label:
+                getEnemyLabel(best) || state.getEntityName(best) || 'Enemy',
+            });
           }
         }
-        if (best >= 0) {
-          setCombatTarget(best, {
-            label: getEnemyLabel(best) || state.getEntityName(best) || 'Enemy',
-          });
+        // Award XP to the hero on the blow that kills a creature.
+        if (!isHero && cur <= 0 && prev > 0 && hero !== null) {
+          addXp(
+            state,
+            hero,
+            Math.max(2, Math.round((Health.max[e] || 30) / 12))
+          );
         }
       }
-      // Award XP to the hero on the blow that kills a creature.
-      if (!isHero && cur <= 0 && prev > 0 && hero !== null) {
-        addXp(state, hero, Math.max(2, Math.round((Health.max[e] || 30) / 12)));
-      }
-    }
 
-    for (const e of destructibleFxQuery(state.world)) {
-      const pend = Destructible.pendingImpact[e];
-      const prev = prevPending.get(e) ?? 0;
-      prevPending.set(e, pend);
-      if (prev > 0 && pend <= 0) {
-        // Hit feedback is the crack overlay + shake + woodchip/shard burst +
-        // SFX (all driven by the engine destructible plugin). No floating text
-        // here — a lone '*' reads as a square box and the popup/loot already
-        // stack on break.
-        playSound(isWoodEntity(e) ? 'chop-hit' : 'mine-hit');
+      for (const e of destructibleFxQuery(state.world)) {
+        const pend = Destructible.pendingImpact[e];
+        const prev = prevPending.get(e) ?? 0;
+        prevPending.set(e, pend);
+        if (prev > 0 && pend <= 0) {
+          // Hit feedback is the crack overlay + shake + woodchip/shard burst +
+          // SFX (all driven by the engine destructible plugin). No floating text
+          // here — a lone '*' reads as a square box and the popup/loot already
+          // stack on break.
+          playSound(isWoodEntity(e) ? 'chop-hit' : 'mine-hit');
+        }
       }
-    }
     });
   },
 };
@@ -939,29 +943,29 @@ const BgmSystem: System = {
   group: 'simulation',
   update(_state: State) {
     withSpan('rpg/bgm', () => {
-    // Wait for the AudioContext to be running (unlocked by the user gesture)
-    // before starting BGM — Howler queues plays on a suspended context but
-    // they may not resume reliably.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ctxRunning = (window as any).Howler?.ctx?.state === 'running';
-    if (!bgmStarted) {
-      if (!ctxRunning) return; // keep waiting for the user gesture
-      bgmStarted = true;
-      switchBgm('explore');
-      return;
-    }
-    // Only switch if the layer actually changed AND at least 1s passed since
-    // the last switch (prevents rapid oscillation from aggro flapping).
-    const inCombat = anyCreatureAggro();
-    const now = performance.now();
-    if (now - bgmLastSwitch < 1000) return;
-    if (inCombat && bgmCurrentLayer !== 'battle') {
-      switchBgm('battle');
-      bgmLastSwitch = now;
-    } else if (!inCombat && bgmCurrentLayer === 'battle') {
-      switchBgm('explore');
-      bgmLastSwitch = now;
-    }
+      // Wait for the AudioContext to be running (unlocked by the user gesture)
+      // before starting BGM — Howler queues plays on a suspended context but
+      // they may not resume reliably.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ctxRunning = (window as any).Howler?.ctx?.state === 'running';
+      if (!bgmStarted) {
+        if (!ctxRunning) return; // keep waiting for the user gesture
+        bgmStarted = true;
+        switchBgm('explore');
+        return;
+      }
+      // Only switch if the layer actually changed AND at least 1s passed since
+      // the last switch (prevents rapid oscillation from aggro flapping).
+      const inCombat = anyCreatureAggro();
+      const now = performance.now();
+      if (now - bgmLastSwitch < 1000) return;
+      if (inCombat && bgmCurrentLayer !== 'battle') {
+        switchBgm('battle');
+        bgmLastSwitch = now;
+      } else if (!inCombat && bgmCurrentLayer === 'battle') {
+        switchBgm('explore');
+        bgmLastSwitch = now;
+      }
     });
   },
 };
@@ -991,7 +995,6 @@ async function bootstrap(): Promise<void> {
   withPlugin(SpawnGatePlugin);
   withPlugin(ParticlesPlugin);
   withPlugin(NavMeshPlugin);
-  withPlugin(YukaAiPlugin);
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
   withPlugin(DebugPlugin);

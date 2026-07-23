@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { State } from 'vibegame';
 import {
   clearGltfBoundsCache,
-  getGltfLocalAABB,
   getGltfLocalYBounds,
   normalizeGltfUrlKey,
   registerGltfLocalYBounds,

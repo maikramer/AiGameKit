@@ -455,8 +455,7 @@ export function createCreatureBehaviours(
     // Suppress the lunge for ranged attackers (cooldown ~never). The update
     // loop owns the fire cadence via `rangedCooldown`.
     attackCooldown:
-      cfg.attackCooldown ??
-      (isRanged ? 9999 : AI_DEFAULTS.attackCooldown),
+      cfg.attackCooldown ?? (isRanged ? 9999 : AI_DEFAULTS.attackCooldown),
     attackDamage: cfg.attackDamage,
     chaseSpeed: cfg.chaseSpeed,
     wanderSpeed: cfg.wanderSpeed,
@@ -476,8 +475,7 @@ export function createCreatureBehaviours(
     // Line-of-sight on by default: creatures must actually see the hero before
     // aggroing, instead of beelining through walls. Individual wrappers can
     // opt out (cfg.requireLineOfSight === false) for blind/sense-based mobs.
-    requireLineOfSight:
-      cfg.requireLineOfSight ?? true,
+    requireLineOfSight: cfg.requireLineOfSight ?? true,
   };
 
   let cachedPlayer = 0;
@@ -829,280 +827,274 @@ export function createCreatureBehaviours(
   }
 
   function update(ctx: MonoBehaviourContext): void {
-      const eid = ctx.entity;
-      const map = presentationMap(ctx.state);
-      let s = map.get(eid);
-      if (!s) {
-        // Module-identity split: ``start`` ran in another copy of this file.
-        // Re-run start so AI/ground/clips resume instead of silently no-op'ing.
-        start(ctx);
-        s = map.get(eid);
-        if (!s) return;
-      }
+    const eid = ctx.entity;
+    const map = presentationMap(ctx.state);
+    let s = map.get(eid);
+    if (!s) {
+      // Module-identity split: ``start`` ran in another copy of this file.
+      // Re-run start so AI/ground/clips resume instead of silently no-op'ing.
+      start(ctx);
+      s = map.get(eid);
+      if (!s) return;
+    }
 
-      // Adopt merged/self or child <GLTFLoader lod*> from index.html.
-      if (!s.group && s.xmlWaitFrames < 999) {
-        if (tryAdoptXmlVisual(ctx, eid, s)) {
-          // adopted
-        } else if (isXmlVisualPending(ctx.state, eid)) {
-          // Keep waiting while the XML loader is in flight — never fall back
-          // to a duplicate lod0 scene.add() mesh.
-          s.xmlWaitFrames = Math.min(s.xmlWaitFrames + 1, 179);
-        } else if (s.xmlWaitFrames < 300) {
-          s.xmlWaitFrames += 1;
-        } else {
-          s.xmlWaitFrames = 999;
-          loadFallbackSingle(ctx, eid, s);
-        }
+    // Adopt merged/self or child <GLTFLoader lod*> from index.html.
+    if (!s.group && s.xmlWaitFrames < 999) {
+      if (tryAdoptXmlVisual(ctx, eid, s)) {
+        // adopted
+      } else if (isXmlVisualPending(ctx.state, eid)) {
+        // Keep waiting while the XML loader is in flight — never fall back
+        // to a duplicate lod0 scene.add() mesh.
+        s.xmlWaitFrames = Math.min(s.xmlWaitFrames + 1, 179);
+      } else if (s.xmlWaitFrames < 300) {
+        s.xmlWaitFrames += 1;
+      } else {
+        s.xmlWaitFrames = 999;
+        loadFallbackSingle(ctx, eid, s);
       }
+    }
 
-      // Late-arriving lod1/lod2 children (streamed after near LOD). Attach
-      // even while sleeping so a denser LOD doesn't appear in bind/jump pose.
-      if (s.group && s.xmlVisual) {
-        const urls = deriveLodUrls(cfg.modelUrl);
-        if (
-          urls &&
-          s.group.children.length > s.lodAnimators.filter(Boolean).length
-        ) {
-          void attachLodAnimators(ctx.state, s, urls);
-        }
+    // Late-arriving lod1/lod2 children (streamed after near LOD). Attach
+    // even while sleeping so a denser LOD doesn't appear in bind/jump pose.
+    if (s.group && s.xmlVisual) {
+      const urls = deriveLodUrls(cfg.modelUrl);
+      if (
+        urls &&
+        s.group.children.length > s.lodAnimators.filter(Boolean).length
+      ) {
+        void attachLodAnimators(ctx.state, s, urls);
       }
+    }
 
-      // ── Boss gate: stay dormant (hidden, no AI) until the gate opens, then
-      //    reveal + intro roar before engaging. ──────────────────────────────
-      if (!s.activated) {
-        // Cheap staggered poll — don't burn frames while waiting for the gate.
-        if (
-          (ctx.state.time.frameCount + eid) % SLEEP_CHECK_INTERVAL !== 0
-        ) {
-          return;
-        }
-        if (cfg.gateUntil && !cfg.gateUntil()) return;
-        s.activated = true;
-        if (s.group) s.group.visible = true;
-        if (cfg.clips.roar) {
-          s.roarTimer = 2.5;
-          if (cfg.roarSound) playSound(cfg.roarSound);
-        }
-      } else if (!shouldSimulate(ctx, s, eid)) {
-        // Sleeping: park on idle once so frozen jump/lunge poses don't linger.
-        if (s.group && s.playing !== cfg.clips.idle) {
-          playClip(s, cfg.clips.idle);
-          for (const anim of s.lodAnimators) anim?.update(0);
-        }
+    // ── Boss gate: stay dormant (hidden, no AI) until the gate opens, then
+    //    reveal + intro roar before engaging. ──────────────────────────────
+    if (!s.activated) {
+      // Cheap staggered poll — don't burn frames while waiting for the gate.
+      if ((ctx.state.time.frameCount + eid) % SLEEP_CHECK_INTERVAL !== 0) {
         return;
       }
-
-      // Ensure the FSM always has the hero as explicit target while awake.
-      resolvePlayer(ctx);
-
-      if (s.roarTimer > 0 && s.group) {
-        s.roarTimer -= ctx.deltaTime;
-        for (const anim of s.lodAnimators) anim?.update(ctx.deltaTime);
-        if (cfg.clips.roar && s.playing !== cfg.clips.roar) {
-          playClip(s, cfg.clips.roar, { loop: false });
-        }
-        const rx = Transform.posX[eid];
-        const rz = Transform.posZ[eid];
-        const ry = groundHeight(ctx, rx, rz, Transform.posY[eid]);
-        if (Number.isFinite(ry)) {
-          const fy = feetY(ry, s.footOffset);
-          Transform.posY[eid] = fy;
-          if (!s.xmlVisual) {
-            s.group.position.set(rx, fy, rz);
-          }
-        }
-        return;
+      if (cfg.gateUntil && !cfg.gateUntil()) return;
+      s.activated = true;
+      if (s.group) s.group.visible = true;
+      if (cfg.clips.roar) {
+        s.roarTimer = 2.5;
+        if (cfg.roarSound) playSound(cfg.roarSound);
       }
+    } else if (!shouldSimulate(ctx, s, eid)) {
+      // Sleeping: park on idle once so frozen jump/lunge poses don't linger.
+      if (s.group && s.playing !== cfg.clips.idle) {
+        playClip(s, cfg.clips.idle);
+        for (const anim of s.lodAnimators) anim?.update(0);
+      }
+      return;
+    }
 
-      // ── AI (engine FSM): perception, FSM, navmesh steering, attack damage.
-      const inst = getOrCreateAiInstanceState(ctx.state, eid);
-      runMeleeAiFrame(ctx.state, eid, meleeConfig, inst);
-      // Agent may be attached on first AI tick — reclaim yaw ownership.
-      claimFacingOwnership(ctx.state, eid);
+    // Ensure the FSM always has the hero as explicit target while awake.
+    resolvePlayer(ctx);
 
-      // Presentation: visuals, clips, terrain-Y, hit-flash, death FX + loot.
-      if (!s.group) return;
+    if (s.roarTimer > 0 && s.group) {
+      s.roarTimer -= ctx.deltaTime;
       for (const anim of s.lodAnimators) anim?.update(ctx.deltaTime);
-      if (s.animator && !s.lodAnimators.includes(s.animator)) {
-        s.animator.update(ctx.deltaTime);
+      if (cfg.clips.roar && s.playing !== cfg.clips.roar) {
+        playClip(s, cfg.clips.roar, { loop: false });
       }
-      const dt = ctx.deltaTime;
-      const mode = AiStateComponent.mode[eid];
-      const inCombat =
-        mode === AI_MODE_CHASE ||
-        mode === AI_MODE_ATTACK ||
-        mode === AI_MODE_LUNGE;
-
-      // Ranged attack (casters/archers): fire a projectile on a cooldown when
-      // engaged and the hero is visible. The FSM's lunge is suppressed for
-      // ranged creatures (attackCooldown ≈ ∞), so this is their only offense.
-      if (isRanged && cfg.rangedTemplate && inCombat && cachedPlayer > 0) {
-        s.rangedCdTimer -= dt;
-        if (s.rangedCdTimer <= 0) {
-          // Only fire with a clear shot — mirrors the LOS gate on acquisition,
-          // so a pillar breaks the attack cadence instead of shots through it.
-          const seeHero = hasLineOfSight(
-            ctx.state,
-            Transform.posX[eid],
-            Transform.posZ[eid],
-            Transform.posX[cachedPlayer],
-            Transform.posZ[cachedPlayer]
-          );
-          if (seeHero) {
-            try {
-              spawnProjectileFromTemplate(
-                ctx.state,
-                eid,
-                cfg.rangedTemplate,
-                { eid: cachedPlayer }
-              );
-              s.rangedCdTimer = cfg.rangedCooldown ?? 2.0;
-              if (cfg.clips.attack && s.playing !== cfg.clips.attack) {
-                playClip(s, cfg.clips.attack, { loop: false });
-              }
-            } catch {
-              // Template not registered yet (e.g. scene still loading) — retry
-              // next cycle without resetting the timer fully.
-              s.rangedCdTimer = 0.5;
-            }
-          } else {
-            // No shot this frame; short retry so we fire soon after breaking LOS.
-            s.rangedCdTimer = 0.3;
-          }
+      const rx = Transform.posX[eid];
+      const rz = Transform.posZ[eid];
+      const ry = groundHeight(ctx, rx, rz, Transform.posY[eid]);
+      if (Number.isFinite(ry)) {
+        const fy = feetY(ry, s.footOffset);
+        Transform.posY[eid] = fy;
+        if (!s.xmlVisual) {
+          s.group.position.set(rx, fy, rz);
         }
       }
+      return;
+    }
 
-      if (mode === AI_MODE_DEAD || isDead(eid)) {
-        handleDeath(ctx, s, eid);
-        s.deathTimer -= dt;
-        if (s.deathTimer <= 0) {
-          if (!s.xmlVisual) s.group.removeFromParent();
-          else s.group.visible = false;
-          s.group = null;
-        }
-        return;
-      }
+    // ── AI (engine FSM): perception, FSM, navmesh steering, attack damage.
+    const inst = getOrCreateAiInstanceState(ctx.state, eid);
+    runMeleeAiFrame(ctx.state, eid, meleeConfig, inst);
+    // Agent may be attached on first AI tick — reclaim yaw ownership.
+    claimFacingOwnership(ctx.state, eid);
 
-      if (!s.ready) {
-        const gy = groundHeight(
-          ctx,
+    // Presentation: visuals, clips, terrain-Y, hit-flash, death FX + loot.
+    if (!s.group) return;
+    for (const anim of s.lodAnimators) anim?.update(ctx.deltaTime);
+    if (s.animator && !s.lodAnimators.includes(s.animator)) {
+      s.animator.update(ctx.deltaTime);
+    }
+    const dt = ctx.deltaTime;
+    const mode = AiStateComponent.mode[eid];
+    const inCombat =
+      mode === AI_MODE_CHASE ||
+      mode === AI_MODE_ATTACK ||
+      mode === AI_MODE_LUNGE;
+
+    // Ranged attack (casters/archers): fire a projectile on a cooldown when
+    // engaged and the hero is visible. The FSM's lunge is suppressed for
+    // ranged creatures (attackCooldown ≈ ∞), so this is their only offense.
+    if (isRanged && cfg.rangedTemplate && inCombat && cachedPlayer > 0) {
+      s.rangedCdTimer -= dt;
+      if (s.rangedCdTimer <= 0) {
+        // Only fire with a clear shot — mirrors the LOS gate on acquisition,
+        // so a pillar breaks the attack cadence instead of shots through it.
+        const seeHero = hasLineOfSight(
+          ctx.state,
           Transform.posX[eid],
           Transform.posZ[eid],
-          Transform.posY[eid] || 500
+          Transform.posX[cachedPlayer],
+          Transform.posZ[cachedPlayer]
         );
-        if (!Number.isFinite(gy)) return;
-        Transform.posY[eid] = feetY(gy, s.footOffset);
-        Transform.dirty[eid] = 1;
-        s.ready = true;
-        s.lastGroundFrame = ctx.state.time.frameCount;
-      }
-
-      // Hit flash + hit-reaction clip on HP drop (damage numbers/SFX come from main.ts watcher).
-      if (s.flashTimer > 0) {
-        s.flashTimer -= dt;
-        if (s.flashTimer <= 0) applyFlash(s, false);
-      }
-      if (s.hitTimer > 0) s.hitTimer -= dt;
-      const hp = Health.current[eid];
-      if (s.lastHp > hp) {
-        collectFlashMats(s);
-        s.flashTimer = 0.11;
-        applyFlash(s, true);
-        // Play hit-reaction clip if available (brief stagger, then AI resumes).
-        if (cfg.clips.hit && s.animator && mode !== AI_MODE_DEAD) {
-          if (playClip(s, cfg.clips.hit, { loop: false })) {
-            s.hitTimer = 0.35;
+        if (seeHero) {
+          try {
+            spawnProjectileFromTemplate(ctx.state, eid, cfg.rangedTemplate, {
+              eid: cachedPlayer,
+            });
+            s.rangedCdTimer = cfg.rangedCooldown ?? 2.0;
+            if (cfg.clips.attack && s.playing !== cfg.clips.attack) {
+              playClip(s, cfg.clips.attack, { loop: false });
+            }
+          } catch {
+            // Template not registered yet (e.g. scene still loading) — retry
+            // next cycle without resetting the timer fully.
+            s.rangedCdTimer = 0.5;
           }
+        } else {
+          // No shot this frame; short retry so we fire soon after breaking LOS.
+          s.rangedCdTimer = 0.3;
         }
-        spawnParticleBurst(ctx.state, {
-          x: Transform.posX[eid],
-          y: Transform.posY[eid] + 1.0,
-          z: Transform.posZ[eid],
-          preset: 'sparks',
-          count: 6,
-          duration: 0.4,
-        });
       }
-      s.lastHp = hp;
+    }
 
-      // The FSM owns XZ (via the crowd agent / lunge). We own the terrain Y and
-      // the visual transform. Sampling is adaptive: while moving we snap every
-      // frame (a creature crossing a slope at chase speed would otherwise float
-      // for up to IDLE_GROUND_INTERVAL frames); while parked we throttle to
-      // IDLE_GROUND_INTERVAL to save the BVH raycast cost.
-      const x = Transform.posX[eid];
-      const z = Transform.posZ[eid];
-      const frame = ctx.state.time.frameCount;
-      const planarStep = Math.hypot(x - s.prevX, z - s.prevZ);
-      const needGround =
-        inCombat ||
-        !s.ready ||
-        planarStep > 0.02 ||
-        frame - s.lastGroundFrame >= IDLE_GROUND_INTERVAL;
-      let visualY = Transform.posY[eid];
-      if (needGround) {
-        const groundY = groundHeight(ctx, x, z, Transform.posY[eid]);
-        visualY = Number.isFinite(groundY)
-          ? feetY(groundY, s.footOffset)
-          : Transform.posY[eid];
-        Transform.posY[eid] = visualY;
-        Transform.dirty[eid] = 1;
-        s.lastGroundFrame = frame;
-      } else {
-        visualY = Transform.posY[eid];
+    if (mode === AI_MODE_DEAD || isDead(eid)) {
+      handleDeath(ctx, s, eid);
+      s.deathTimer -= dt;
+      if (s.deathTimer <= 0) {
+        if (!s.xmlVisual) s.group.removeFromParent();
+        else s.group.visible = false;
+        s.group = null;
       }
+      return;
+    }
 
-      // Facing policy (single writer — navmesh faceVelocity is off):
-      //   chase / move → face displacement; attack / lunge → face target.
-      const vx = x - s.prevX;
-      const vz = z - s.prevZ;
-      const moveSpeed = dt > 0 ? Math.hypot(vx, vz) / dt : 0;
-      const yawOff = cfg.facingYawOffset ?? 0;
-      const faceTarget =
-        mode === AI_MODE_ATTACK || mode === AI_MODE_LUNGE;
-      if (faceTarget && cachedPlayer > 0) {
-        s.heading =
-          planarYawRadians(
-            Transform.posX[cachedPlayer] - x,
-            Transform.posZ[cachedPlayer] - z
-          ) + yawOff;
-      } else if (moveSpeed > MOVE_FACE_SPEED) {
-        s.heading = planarYawRadians(vx, vz) + yawOff;
-      }
-      s.prevX = x;
-      s.prevZ = z;
+    if (!s.ready) {
+      const gy = groundHeight(
+        ctx,
+        Transform.posX[eid],
+        Transform.posZ[eid],
+        Transform.posY[eid] || 500
+      );
+      if (!Number.isFinite(gy)) return;
+      Transform.posY[eid] = feetY(gy, s.footOffset);
+      Transform.dirty[eid] = 1;
+      s.ready = true;
+      s.lastGroundFrame = ctx.state.time.frameCount;
+    }
 
-      if (s.xmlVisual) {
-        applyHeadingToTransform(eid, s.heading);
-      } else {
-        s.group.position.set(x, visualY, z);
-        s.group.rotation.set(0, s.heading, 0);
+    // Hit flash + hit-reaction clip on HP drop (damage numbers/SFX come from main.ts watcher).
+    if (s.flashTimer > 0) {
+      s.flashTimer -= dt;
+      if (s.flashTimer <= 0) applyFlash(s, false);
+    }
+    if (s.hitTimer > 0) s.hitTimer -= dt;
+    const hp = Health.current[eid];
+    if (s.lastHp > hp) {
+      collectFlashMats(s);
+      s.flashTimer = 0.11;
+      applyFlash(s, true);
+      // Play hit-reaction clip if available (brief stagger, then AI resumes).
+      if (cfg.clips.hit && s.animator && mode !== AI_MODE_DEAD) {
+        if (playClip(s, cfg.clips.hit, { loop: false })) {
+          s.hitTimer = 0.35;
+        }
       }
+      spawnParticleBurst(ctx.state, {
+        x: Transform.posX[eid],
+        y: Transform.posY[eid] + 1.0,
+        z: Transform.posZ[eid],
+        preset: 'sparks',
+        count: 6,
+        duration: 0.4,
+      });
+    }
+    s.lastHp = hp;
 
-      if (inCombat) aggroEntities.add(eid);
-      else aggroEntities.delete(eid);
+    // The FSM owns XZ (via the crowd agent / lunge). We own the terrain Y and
+    // the visual transform. Sampling is adaptive: while moving we snap every
+    // frame (a creature crossing a slope at chase speed would otherwise float
+    // for up to IDLE_GROUND_INTERVAL frames); while parked we throttle to
+    // IDLE_GROUND_INTERVAL to save the BVH raycast cost.
+    const x = Transform.posX[eid];
+    const z = Transform.posZ[eid];
+    const frame = ctx.state.time.frameCount;
+    const planarStep = Math.hypot(x - s.prevX, z - s.prevZ);
+    const needGround =
+      inCombat ||
+      !s.ready ||
+      planarStep > 0.02 ||
+      frame - s.lastGroundFrame >= IDLE_GROUND_INTERVAL;
+    let visualY = Transform.posY[eid];
+    if (needGround) {
+      const groundY = groundHeight(ctx, x, z, Transform.posY[eid]);
+      visualY = Number.isFinite(groundY)
+        ? feetY(groundY, s.footOffset)
+        : Transform.posY[eid];
+      Transform.posY[eid] = visualY;
+      Transform.dirty[eid] = 1;
+      s.lastGroundFrame = frame;
+    } else {
+      visualY = Transform.posY[eid];
+    }
 
-      // Clip selection: hit-reaction takes priority (brief stagger).
-      // Then AI mode picks the locomotion/combat clip.
-      let clip: string;
-      if (s.hitTimer > 0 && cfg.clips.hit) {
-        clip = cfg.clips.hit;
-      } else {
-        clip = pickClip(mode, moveSpeed > MOVE_FACE_SPEED);
-      }
-      if (s.animator && s.playing !== clip) {
-        playClip(
-          s,
-          clip,
-          clip === cfg.clips.lunge || clip === cfg.clips.hit
-            ? { loop: false }
-            : undefined
-        );
-      }
-      if (s.animator && cfg.runTimeScale !== undefined) {
-        s.animator.setTimeScale(mode === AI_MODE_CHASE ? cfg.runTimeScale : 1);
-      }
+    // Facing policy (single writer — navmesh faceVelocity is off):
+    //   chase / move → face displacement; attack / lunge → face target.
+    const vx = x - s.prevX;
+    const vz = z - s.prevZ;
+    const moveSpeed = dt > 0 ? Math.hypot(vx, vz) / dt : 0;
+    const yawOff = cfg.facingYawOffset ?? 0;
+    const faceTarget = mode === AI_MODE_ATTACK || mode === AI_MODE_LUNGE;
+    if (faceTarget && cachedPlayer > 0) {
+      s.heading =
+        planarYawRadians(
+          Transform.posX[cachedPlayer] - x,
+          Transform.posZ[cachedPlayer] - z
+        ) + yawOff;
+    } else if (moveSpeed > MOVE_FACE_SPEED) {
+      s.heading = planarYawRadians(vx, vz) + yawOff;
+    }
+    s.prevX = x;
+    s.prevZ = z;
+
+    if (s.xmlVisual) {
+      applyHeadingToTransform(eid, s.heading);
+    } else {
+      s.group.position.set(x, visualY, z);
+      s.group.rotation.set(0, s.heading, 0);
+    }
+
+    if (inCombat) aggroEntities.add(eid);
+    else aggroEntities.delete(eid);
+
+    // Clip selection: hit-reaction takes priority (brief stagger).
+    // Then AI mode picks the locomotion/combat clip.
+    let clip: string;
+    if (s.hitTimer > 0 && cfg.clips.hit) {
+      clip = cfg.clips.hit;
+    } else {
+      clip = pickClip(mode, moveSpeed > MOVE_FACE_SPEED);
+    }
+    if (s.animator && s.playing !== clip) {
+      playClip(
+        s,
+        clip,
+        clip === cfg.clips.lunge || clip === cfg.clips.hit
+          ? { loop: false }
+          : undefined
+      );
+    }
+    if (s.animator && cfg.runTimeScale !== undefined) {
+      s.animator.setTimeScale(mode === AI_MODE_CHASE ? cfg.runTimeScale : 1);
+    }
   }
 
   function onDestroy(ctx: MonoBehaviourContext): void {

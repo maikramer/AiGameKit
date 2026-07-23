@@ -194,7 +194,7 @@ class TestProfileFromSpecsCoverage:
 
     def test_frozen_profile_immutable(self) -> None:
         p = profile_from_specs([])
-        with pytest.raises(Exception):
+        with pytest.raises((AttributeError, TypeError)):
             p.device = "cuda"  # type: ignore[misc]
 
 

@@ -36,11 +36,19 @@ const lock = JSON.parse(readFileSync(join(root, 'assets.lock.json'), 'utf8'));
 
 const extractTo = resolve(root, lock.extractTo);
 const sentinel = join(extractTo, 'assets', '.assets-version');
-const force = process.argv.includes('--force') || process.env.FETCH_ASSETS_FORCE === '1';
+const force =
+  process.argv.includes('--force') || process.env.FETCH_ASSETS_FORCE === '1';
 
 /** Pastas de assets binários — se alguma tiver ficheiros além de .gitkeep,
  * assumimos que há trabalho de dev local e não devemos substituir. */
-const ASSET_DIRS = ['textures', 'icons', 'audio', 'sky', 'terrain', 'particles'];
+const ASSET_DIRS = [
+  'textures',
+  'icons',
+  'audio',
+  'sky',
+  'terrain',
+  'particles',
+];
 
 function log(msg) {
   process.stdout.write(`[fetch-assets] ${msg}\n`);
@@ -50,7 +58,9 @@ function assetsPresent() {
   for (const d of ASSET_DIRS) {
     const dir = join(extractTo, 'assets', d);
     if (!existsSync(dir)) continue;
-    const real = readdirSync(dir).filter((f) => f !== '.gitkeep' && !f.startsWith('.'));
+    const real = readdirSync(dir).filter(
+      (f) => f !== '.gitkeep' && !f.startsWith('.')
+    );
     if (real.length > 0) return true;
   }
   return false;
@@ -59,14 +69,19 @@ function assetsPresent() {
 // Caso 1: --force → sempre baixar.
 if (!force) {
   // Caso 2: sentinel com versão correta → skip.
-  if (existsSync(sentinel) && readFileSync(sentinel, 'utf8').trim() === lock.version) {
+  if (
+    existsSync(sentinel) &&
+    readFileSync(sentinel, 'utf8').trim() === lock.version
+  ) {
     log(`assets ${lock.version} already present — skipping.`);
     process.exit(0);
   }
   // Caso 3: há ficheiros locais (dev em curso) → skip com hint.
   if (assetsPresent()) {
     log('local assets detected — skipping download (dev mode).');
-    log('  use --force or FETCH_ASSETS_FORCE=1 to re-download from the release.');
+    log(
+      '  use --force or FETCH_ASSETS_FORCE=1 to re-download from the release.'
+    );
     process.exit(0);
   }
 }
@@ -94,7 +109,10 @@ async function main() {
   const vegDir = join(extractTo, 'assets', 'meshes', 'vegetation');
   const vegBak = join(tmpdir(), 'simple-rpg-vegetation-preserve');
   let preservedVeg = false;
-  if (existsSync(vegDir) && readdirSync(vegDir).some((f) => f.endsWith('.glb'))) {
+  if (
+    existsSync(vegDir) &&
+    readdirSync(vegDir).some((f) => f.endsWith('.glb'))
+  ) {
     rmSync(vegBak, { recursive: true, force: true });
     cpSync(vegDir, vegBak, { recursive: true });
     preservedVeg = true;

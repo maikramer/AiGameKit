@@ -37,7 +37,7 @@ def value_noise(seed: int) -> float:
     """
     # Hash: multiplica por um primo grande, XOR com shift, normaliza.
     h = (seed * 73856093) & 0xFFFFFFFF
-    h ^= (h >> 13)
+    h ^= h >> 13
     h = (h * 1274126177) & 0xFFFFFFFF
     # Mapeia [0, 2^32) para [-1, 1].
     return (h / 0x7FFFFFFF) - 1.0

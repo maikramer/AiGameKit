@@ -451,7 +451,8 @@ export function recordCustomTiming(
   ms: number,
   origin = 'custom-span'
 ): void {
-  if (!enabled || frozen || ms <= 0) return;
+  // Keep zero-duration samples (empty script hooks still show up as spans).
+  if (!enabled || frozen || ms < 0) return;
   scratch.customs.set(name, (scratch.customs.get(name) ?? 0) + ms);
   if (origin && origin !== 'unknown') {
     originBySystemName.set(name, origin);

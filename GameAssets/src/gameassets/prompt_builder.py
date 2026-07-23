@@ -74,6 +74,7 @@ def _is_apose_preset(pose_preset: str | None) -> bool:
     """True se o pose_preset é uma variante A-pose (quaternius-apose e aliases)."""
     return bool(pose_preset) and "apose" in str(pose_preset).strip().lower().replace("-", "")
 
+
 # O título do jogo no prompt tende a aparecer como texto/logótipo na imagem; não incluir.
 # Restrições extra para 2D (referência) — modelos desenhadores de UI/caption.
 _UI_TEXT_NEGATIVES: tuple[str, ...] = (

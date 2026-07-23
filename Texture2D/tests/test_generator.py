@@ -224,6 +224,14 @@ class TestInit:
         assert gen.torch_dtype == torch.float32
 
     def test_init_dtype_fp16_on_cuda(self):
-        """Mesmo que a base devolva bfloat16 em CUDA, o SD força float16."""
+        """Mesmo que a base devolva bfloat16 em CUDA, o SD força float16.
+
+        Sem CUDA real a base faz fallback ``cuda``→``cpu`` (float32) — skip.
+        """
+        if not torch.cuda.is_available():
+            import pytest
+
+            pytest.skip("CUDA required for fp16 dtype assertion")
         gen = TextureGenerator(device="cuda")
+        assert gen.device.startswith("cuda")
         assert gen.torch_dtype == torch.float16

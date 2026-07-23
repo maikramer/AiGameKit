@@ -56,7 +56,6 @@ describe('navmesh bulk: NavMeshAgent defaults', () => {
 describe('navmesh bulk: agent target SOA / clearAgentTarget', () => {
   for (let i = 0; i < 25; i++) {
     it(`NavMeshAgent target fields for entity slot ${i + 1}`, () => {
-      const state = new State();
       const eid = i + 1;
       const x = i * 1.1;
       const y = i * 0.5;

@@ -269,11 +269,7 @@ fn dominant_bin(hist: &[u32; HIST_BINS]) -> Option<usize> {
         .enumerate()
         .max_by_key(|(_, v)| *v)
         .unwrap_or((0, &0));
-    if val == 0 {
-        None
-    } else {
-        Some(idx)
-    }
+    if val == 0 { None } else { Some(idx) }
 }
 
 fn bin_to_hue_centre(bin: usize) -> f32 {

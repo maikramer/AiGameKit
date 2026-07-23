@@ -20,9 +20,13 @@ import {
   setCompositionData,
 } from '../../../src/plugins/composition/primitives';
 import { Group } from 'three';
+import type { XMLValue } from '../../../src/core/xml/types';
 
 function padSpec(overrides: Partial<PrimitiveSpec> = {}): PrimitiveSpec {
-  return parsePrimitiveSpec('pad', { size: '4 6', ...overrides });
+  return parsePrimitiveSpec('pad', {
+    size: '4 6',
+    ...(overrides as Record<string, XMLValue>),
+  });
 }
 
 describe('composition matrix: parseColorHex', () => {

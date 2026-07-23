@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { State, NULL_ENTITY, defineQuery } from 'vibegame';
 import {
   AnimatedCharacter,

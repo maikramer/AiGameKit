@@ -187,14 +187,12 @@ export class RiverChannel implements WaterShape {
         const surfY = this.surfaceHeights[i] ?? 0;
         // Approximate the lateral offset with the segment normal used by the
         // ribbon builder (miter differences are sub-texel at 3 m stations).
-        let nx = 0;
-        let nz = 0;
         const j = Math.min(i, n - 2);
         const dx = path[(j + 1) * 2]! - path[j * 2]!;
         const dz = path[(j + 1) * 2 + 1]! - path[j * 2 + 1]!;
         const len = Math.hypot(dx, dz) || 1;
-        nx = -dz / len;
-        nz = dx / len;
+        const nx = -dz / len;
+        const nz = dx / len;
         const depthAt = (px: number, pz: number): number =>
           Math.max(0, surfY - sampleHeightAt(s, px, pz));
         groundDepth[i * 3] = depthAt(x - nx * halfW, z - nz * halfW);

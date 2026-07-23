@@ -32,7 +32,7 @@ export type YukaBehaviorMask = number;
  *
  * `targetEid` is the *focus* entity (usually the hero); `targetX/Z` is the
  * static fallback used when `targetEid` is 0. Both are planar — Y is owned by
- * terrain snap, never by the steerer (same contract as `ai-steering`).
+ * terrain snap, never by the steerer.
  */
 export const YukaAgentComponent = {
   /** When 0 the system skips this entity entirely (sleeping / dead). */

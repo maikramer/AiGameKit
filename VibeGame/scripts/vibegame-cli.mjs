@@ -137,7 +137,14 @@ function parseRunArgs(args) {
     else if (f === '--skip-app-install') skipAppInstall = true;
     else if (f === '--fetch-assets') fetchAssets = true;
   }
-  return { install, skipBuild, skipEngineInstall, skipAppInstall, fetchAssets, devArgs };
+  return {
+    install,
+    skipBuild,
+    skipEngineInstall,
+    skipAppInstall,
+    fetchAssets,
+    devArgs,
+  };
 }
 
 /**

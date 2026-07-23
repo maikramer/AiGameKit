@@ -1,5 +1,6 @@
 export { YukaAiPlugin } from './plugin';
 export { YukaAgentSystem } from './systems';
+export { npcRecipe } from './recipes';
 export {
   YukaAgentComponent,
   YUKA_BEHAVIOR_NONE,

@@ -145,7 +145,11 @@ describe('orbit camera registry', () => {
 });
 
 describe('OrbitCamera defaults numeric sanity', () => {
-  const defaults = OrbitCameraPlugin.config?.defaults?.['orbit-camera']!;
+  const defaultsBlock = OrbitCameraPlugin.config?.defaults?.['orbit-camera'];
+  if (defaultsBlock == null) {
+    throw new Error('OrbitCameraPlugin defaults missing');
+  }
+  const defaults = defaultsBlock;
 
   for (const field of [
     'minDistance',

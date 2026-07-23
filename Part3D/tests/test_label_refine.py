@@ -13,6 +13,7 @@ from part3d.utils.label_refine import (  # noqa: E402
     relabel_connected_components,
 )
 
+
 def _plane_grid(size: int = 20) -> trimesh.Trimesh:
     vertices = np.array([[x, y, 0.0] for y in range(size + 1) for x in range(size + 1)])
     faces: list[list[int]] = []
@@ -196,6 +197,4 @@ def test_expand_aabbs_pads_each_axis() -> None:
     # half extents = (1,2,3); pad = 0.1 * half
     np.testing.assert_allclose(out[0, 0], [-0.1, -0.2, -0.3])
     np.testing.assert_allclose(out[0, 1], [2.1, 4.2, 6.3])
-    assert expand_aabbs(aabb, margin_frac=0.0) is aabb or np.allclose(
-        expand_aabbs(aabb, margin_frac=0.0), aabb
-    )
+    assert expand_aabbs(aabb, margin_frac=0.0) is aabb or np.allclose(expand_aabbs(aabb, margin_frac=0.0), aabb)

@@ -212,7 +212,7 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     cmaxRaw !== null &&
     String(cmaxRaw).trim() !== '';
 
-  let spawnCountMode: SpawnCountMode = 'fixed';
+  let spawnCountMode: SpawnCountMode;
   let count = 0;
   let densityPerKm2 = 0;
   let countRangeMin = 0;
@@ -280,7 +280,7 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
   const pickRaw = (element.attributes['pick-strategy'] as string | undefined)
     ?.trim()
     .toLowerCase();
-  let pickStrategy: SpawnGroupSpec['pickStrategy'] = 'random';
+  let pickStrategy: SpawnGroupSpec['pickStrategy'];
   if (pickRaw === 'round-robin' || pickRaw === 'round_robin') {
     pickStrategy = 'round-robin';
   } else if (pickRaw === 'random' || pickRaw === undefined) {

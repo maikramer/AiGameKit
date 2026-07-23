@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
+import { getAllEntities } from 'bitecs';
 import { State, defineQuery } from 'vibegame';
 import { StartupPlugin } from '../../../src/plugins/startup';
 import {
@@ -68,9 +69,9 @@ describe('LightingStartupSystem behavior', () => {
       const light = state.createEntity();
       state.addComponent(light, DirectionalLight);
       state.addComponent(light, AmbientLight);
-      const before = state.world.entityCount;
+      const before = getAllEntities(state.world).length;
       LightingStartupSystem.update!(state);
-      expect(state.world.entityCount).toBe(before);
+      expect(getAllEntities(state.world).length).toBe(before);
     });
   }
 });

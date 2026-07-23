@@ -77,7 +77,12 @@ export class DataRegistry {
     try {
       doc = parseYaml(yamlText);
     } catch (err) {
-      throw new Error(`Failed to parse YAML: ${(err as Error).message ?? err}`);
+      throw new Error(
+        `Failed to parse YAML: ${(err as Error).message ?? err}`,
+        {
+          cause: err,
+        }
+      );
     }
     // `parseYaml` returns `null` for an empty document — treat as no-op.
     if (doc === null || doc === undefined) return;
@@ -89,7 +94,12 @@ export class DataRegistry {
     try {
       doc = JSON.parse(jsonText);
     } catch (err) {
-      throw new Error(`Failed to parse JSON: ${(err as Error).message ?? err}`);
+      throw new Error(
+        `Failed to parse JSON: ${(err as Error).message ?? err}`,
+        {
+          cause: err,
+        }
+      );
     }
     this.ingest(doc);
   }

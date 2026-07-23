@@ -87,7 +87,7 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
   const hasDensity = hasAttr(element.attributes, 'density-per-km2');
   const hasCount = hasAttr(element.attributes, 'count');
 
-  let spawnCountMode: SpawnGroupSpec['spawnCountMode'] = 'density';
+  let spawnCountMode: SpawnGroupSpec['spawnCountMode'];
   let count = 0;
   let densityPerKm2 = 90000;
   if (hasDensity) {

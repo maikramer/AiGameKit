@@ -1,3 +1,10 @@
+export { parseAt, parseSemicolonPlaceString } from './place-fields';
+export {
+  composeSpawnRotation,
+  defaultTransformParts,
+  formatTransformAttr,
+  parseTransformAttr,
+} from './transform-merge';
 export { PlacePending, SpawnerPending, TerrainSpawned } from './components';
 export { SpawnerPlugin } from './plugin';
 export { entitySpawnerRecipe, spawnGroupRecipe } from './recipes';

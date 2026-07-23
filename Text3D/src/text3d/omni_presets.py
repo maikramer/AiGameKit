@@ -177,7 +177,7 @@ def size_m_from_height(
 
     Precedência footprint:
     1. ``footprint_m`` → L=W=footprint (coluna / prop)
-    2. ``bbox_aspect`` → L,W = height × (aspect_L/H, aspect_W/H)
+    2. ``bbox_aspect`` → L,W = height x (aspect_L/H, aspect_W/H)
     3. senão footprint = ``0.4 * height`` (coluna genérica)
     """
     h = float(height_m)
@@ -226,7 +226,7 @@ def merge_omni_controls(
 
     ``height_m`` / ``footprint_m`` (authoring): expandem para ``size_m`` se
     ausente. Com ``control_type=bbox`` e ``footprint_m`` definido, o aspect
-    height×footprint vira **bbox Omni** (molde que o modelo preenche) —
+    heightxfootprint vira **bbox Omni** (molde que o modelo preenche) —
     não é só escala pós-mesh. Com pose, só ``size_m`` mundo (esqueleto manda).
     """
     ct = (control_type or "none").strip().lower()

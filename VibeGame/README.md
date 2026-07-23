@@ -512,7 +512,7 @@ Registered by default.
 | `hud`           | On-screen HUD panels and widgets (`<HudPanel>`, `<Minimap>`, HealthBar, XpBar, etc.)                  |
 | `raycast`       | Raycasting for interaction (`<RaycastSource>`)                                                        |
 | `navmesh`       | Navigation mesh and agents (`<NavMesh>`, `<NavMeshWalkable>`, `<NavMeshAgent>`)                       |
-| `ai-steering`   | Autonomous NPC wandering via Yuka (`<NPC>`)                                                           |
+| `ai-yuka`       | Autonomous NPC steering via Yuka (`<NPC>`, flock/pursuit/seek)                                        |
 | `particles`     | Particle systems and bursts (three.quarks)                                                            |
 | `floating-text` | Floating damage / combat text overlays                                                                |
 | `destructible`  | Destructible props and breakable objects                                                              |
@@ -522,24 +522,24 @@ Registered by default.
 
 Not in `DefaultPlugins`. Add via the [builder API](#builder-api).
 
-| Plugin              | Description                                                      |
-| ------------------- | ---------------------------------------------------------------- |
-| `save-load`         | Save/load game state to localStorage (msgpackr)                  |
-| `i18n`              | Internationalization with locale auto-detection (`<I18nText>`)   |
-| `loading`           | Loading screen and asset progress tracking                       |
-| `debug`             | Debug overlays (wireframes, stats, post-FX toggle)               |
+| Plugin              | Description                                                           |
+| ------------------- | --------------------------------------------------------------------- |
+| `save-load`         | Save/load game state to localStorage (msgpackr)                       |
+| `i18n`              | Internationalization with locale auto-detection (`<I18nText>`)        |
+| `loading`           | Loading screen and asset progress tracking                            |
+| `debug`             | Debug overlays (wireframes, stats, post-FX toggle)                    |
 | `profiler`          | Hierarchical frame profiler (per-system timings, `P` / `?profiler=1`) |
-| `combat`            | Combat system (factions, projectiles)                            |
-| `spawn-gate`        | Gated spawner triggers (`<SpawnGate>`)                           |
-| `rpg-core`          | RPG data containers and loot tables (`<RpgData>`, `<LootTable>`) |
-| `rpg-ai`            | RPG enemy AI (`<MeleeAi>`)                                       |
-| `rpg-economy`       | Shops and price tables (`<PriceTable>`)                          |
-| `rpg-inventory`     | Inventory system (`<Inventory>`)                                 |
-| `rpg-pause`         | Pause coordination (`<PauseCoordinator>`)                        |
-| `rpg-progression`   | XP and leveling (`<Progression>`)                                |
-| `rpg-resource-node` | Harvestable resources (`<ResourceNode>`)                         |
-| `rpg-status`        | Status effects (poison, heal-over-time, buffs)                   |
-| `rpg-vault`         | Persistent item storage (`<Vault>`)                              |
+| `combat`            | Combat system (factions, projectiles)                                 |
+| `spawn-gate`        | Gated spawner triggers (`<SpawnGate>`)                                |
+| `rpg-core`          | RPG data containers and loot tables (`<RpgData>`, `<LootTable>`)      |
+| `rpg-ai`            | RPG enemy AI (`<MeleeAi>`)                                            |
+| `rpg-economy`       | Shops and price tables (`<PriceTable>`)                               |
+| `rpg-inventory`     | Inventory system (`<Inventory>`)                                      |
+| `rpg-pause`         | Pause coordination (`<PauseCoordinator>`)                             |
+| `rpg-progression`   | XP and leveling (`<Progression>`)                                     |
+| `rpg-resource-node` | Harvestable resources (`<ResourceNode>`)                              |
+| `rpg-status`        | Status effects (poison, heal-over-time, buffs)                        |
+| `rpg-vault`         | Persistent item storage (`<Vault>`)                                   |
 
 ### Planned (not yet implemented)
 
@@ -636,7 +636,7 @@ End-to-end demo of the GameDev monorepo workflow:
 | Pushable crates (30)    | Text3D                  | `<SpawnGroup profile="gltf-crate">`                        |
 | BGM + SFX               | Text2Sound              | `<AudioSource>` + `playAudioEmitter`                       |
 | Particles (fire, rain)  | Built-in                | `<ParticleSystem>`                                         |
-| AI-steering NPCs (3)    | Built-in                | `AiSteeringPlugin` (`<NPC>`)                               |
+| Yuka AI NPCs            | Built-in                | `YukaAiPlugin` (`<NPC>`)                                   |
 | Save / Load             | Built-in                | `SaveLoadPlugin` (Q/E keys)                                |
 | i18n (EN/PT)            | Built-in                | `I18nPlugin`                                               |
 | Follow camera + post-fx | Built-in                | `<ThirdPersonCamera>` + `postprocessing` (bloom, vignette) |

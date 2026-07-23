@@ -66,6 +66,10 @@ class TestResolveRowOmniSoftfill:
 
 class TestShapeSpecsSdnq:
     def test_default_sdnq_uint8_in_payload(self, tmp_path: Path) -> None:
+        import sys
+        import types
+        from unittest.mock import MagicMock
+
         items = [
             {
                 "id": "a",
@@ -77,10 +81,14 @@ class TestShapeSpecsSdnq:
             }
         ]
         (tmp_path / "a.png").write_bytes(b"x")
-        with patch("text3d.ums_payload.build_generate_request") as mock_build:
-            mock_build.return_value = {"ok": True}
+        mock_build = MagicMock(return_value={"ok": True})
+        # CI GameAssets não instala Text3D; inject stub para o import lazy.
+        pkg = types.ModuleType("text3d")
+        ums = types.ModuleType("text3d.ums_payload")
+        ums.build_generate_request = mock_build  # type: ignore[attr-defined]
+        with patch.dict(sys.modules, {"text3d": pkg, "text3d.ums_payload": ums}):
             shape_specs_from_items(items, manifest_dir=tmp_path)
-            assert mock_build.called
-            kw = mock_build.call_args.kwargs
-            assert kw.get("sdnq_preset") == "sdnq-int4"
-            assert kw.get("memory_efficient") is True
+        assert mock_build.called
+        kw = mock_build.call_args.kwargs
+        assert kw.get("sdnq_preset") == "sdnq-int4"
+        assert kw.get("memory_efficient") is True

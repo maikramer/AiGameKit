@@ -28,7 +28,10 @@ export default [
         HTMLImageElement: 'readonly',
         HTMLInputElement: 'readonly',
         HTMLButtonElement: 'readonly',
+        HTMLSelectElement: 'readonly',
+        HTMLPreElement: 'readonly',
         HTMLSpanElement: 'readonly',
+        getComputedStyle: 'readonly',
         ImageData: 'readonly',
         CanvasImageSource: 'readonly',
         CanvasRenderingContext2D: 'readonly',
@@ -254,6 +257,20 @@ export default [
         'error',
         { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
       ],
+    },
+  },
+  // Navmesh worker scripts (main thread + dedicated worker)
+  {
+    files: [
+      'src/plugins/navmesh/bake-worker.ts',
+      'src/plugins/navmesh/bake.worker.ts',
+    ],
+    languageOptions: {
+      globals: {
+        Worker: 'readonly',
+        MessageEvent: 'readonly',
+        self: 'readonly',
+      },
     },
   },
   // Template files are examples, not part of the main codebase

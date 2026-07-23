@@ -16,6 +16,15 @@ import {
   yawAnglesFromStepDeg,
   optBool,
   optNumber,
+  composeSpawnRotation,
+  defaultTransformParts,
+  disposeSkyEnv,
+  formatTransformAttr,
+  isNormalWithinSlopeLimit,
+  parseAt,
+  parseSemicolonPlaceString,
+  parseTransformAttr,
+  slopeAngleRad,
 } from 'vibegame';
 import {
   defineSoundBank,
@@ -25,22 +34,7 @@ import {
   setBusVolume,
   getBusVolume,
   _resetSoundBank,
-} from '../src/plugins/audio/bank';
-import {
-  parseAt,
-  parseSemicolonPlaceString,
-} from '../src/plugins/spawner/place-fields';
-import {
-  parseTransformAttr,
-  defaultTransformParts,
-  formatTransformAttr,
-  composeSpawnRotation,
-} from '../src/plugins/spawner/transform-merge';
-import {
-  slopeAngleRad,
-  isNormalWithinSlopeLimit,
-} from '../src/plugins/spawner/surface';
-import { disposeSkyEnv } from '../src/extras/sky-env';
+} from 'vibegame/audio/bank';
 
 describe('coverage-100 pure helpers', () => {
   beforeEach(() => {

@@ -162,7 +162,7 @@ def _topo_device() -> str:
 
 
 def _binary_dilate(mask: np.ndarray, iterations: int) -> np.ndarray:
-    """Dilatação 3×3; torch CUDA quando disponível (mesmo contrato topology-fix)."""
+    """Dilatação 3x3; torch CUDA quando disponível (mesmo contrato topology-fix)."""
     iters = max(0, int(iterations))
     if iters == 0:
         return mask.astype(bool, copy=True)
@@ -242,7 +242,7 @@ def _stamp_segment(mask: np.ndarray, x0: float, y0: float, x1: float, y1: float,
     for t in np.linspace(0.0, 1.0, steps):
         x = x0 + (x1 - x0) * t
         y = y0 + (y1 - y0) * t
-        cx, cy = int(round(x)), int(round(y))
+        cx, cy = round(x), round(y)
         for dy in range(-radius, radius + 1):
             for dx in range(-radius, radius + 1):
                 i, j = cy + dy, cx + dx
@@ -503,10 +503,7 @@ def _bridge_cap_to_bark(
 
     # 2) Snap leve do anel do cap à casca (XY, ≤ max_bridge_dist).
     bark_verts = [
-        v
-        for v in bm.verts
-        if abs(v.co.z - cut_up) <= band * 1.5
-        and any(abs(f.normal.z) < 0.55 for f in v.link_faces)
+        v for v in bm.verts if abs(v.co.z - cut_up) <= band * 1.5 and any(abs(f.normal.z) < 0.55 for f in v.link_faces)
     ]
     snapped = 0
     if len(bark_verts) >= 3:
@@ -574,9 +571,7 @@ def _bridge_cap_to_bark(
     fill_edges = [
         e
         for e in bm.edges
-        if e.is_valid
-        and len(e.link_faces) == 1
-        and all(abs(v.co.z - cut_up) <= band for v in e.verts)
+        if e.is_valid and len(e.link_faces) == 1 and all(abs(v.co.z - cut_up) <= band for v in e.verts)
     ]
     filled = 0
     if fill_edges:
@@ -590,9 +585,7 @@ def _bridge_cap_to_bark(
         remaining = [
             e
             for e in bm.edges
-            if e.is_valid
-            and len(e.link_faces) == 1
-            and all(abs(v.co.z - cut_up) <= band for v in e.verts)
+            if e.is_valid and len(e.link_faces) == 1 and all(abs(v.co.z - cut_up) <= band for v in e.verts)
         ]
         if remaining:
             try:
@@ -650,9 +643,7 @@ def _bridge_cap_to_bark(
         fill_edges_2 = [
             e
             for e in bm.edges
-            if e.is_valid
-            and len(e.link_faces) == 1
-            and all(abs(v.co.z - cut_up) <= band for v in e.verts)
+            if e.is_valid and len(e.link_faces) == 1 and all(abs(v.co.z - cut_up) <= band for v in e.verts)
         ]
         if fill_edges_2:
             try:
@@ -1504,7 +1495,7 @@ def _seal_and_bevel_cut(
     stats["horiz_stripped"] = float(_strip_horizontals_near_cut(obj, cut_up, band=band_pre))
 
     mask, ox, oy, cell_eff = _rasterize_cut_plane(obj, cut_up, cell=cell, max_grid=DEFAULT_SEAL_MAX_GRID)
-    close_iters = max(1, int(round(close_m / max(cell_eff, 1e-6))))
+    close_iters = max(1, round(close_m / max(cell_eff, 1e-6)))
     solid = _solidify_cut_mask(mask, close_iters=close_iters)
     stats["mask_cells"] = int(mask.sum())
     stats["solid_cells"] = int(solid.sum())

@@ -220,6 +220,41 @@ def omni_is_active(omni: OmniControls) -> bool:
     return omni_has_geom_control(omni) or omni.size_m is not None or omni.height_m is not None
 
 
+# Mirror de ``text3d.omni_presets.CATEGORY_OMNI_DEFAULTS`` — fallback quando Text3D
+# não está instalado (CI GameAssets / orquestração sem o pacote GPU).
+_CATEGORY_OMNI_DEFAULTS_FALLBACK: dict[str, dict[str, str]] = {
+    "humanoid": {"control_type": "pose", "pose_preset": "quaternius-apose"},
+    "weapon": {"control_type": "bbox", "bbox_preset": "sword"},
+    "tool": {"control_type": "bbox", "bbox_preset": "sword"},
+    "door": {"control_type": "bbox", "bbox_preset": "door"},
+    "chest": {"control_type": "bbox", "bbox_preset": "chest"},
+    "furniture": {"control_type": "bbox", "bbox_preset": "furniture"},
+    "building": {"control_type": "bbox", "bbox_preset": "building"},
+    "vegetation": {"control_type": "bbox", "bbox_preset": "tree"},
+    "tree": {"control_type": "bbox", "bbox_preset": "tree"},
+    "prop": {"control_type": "bbox", "bbox_preset": "crate"},
+    "terrain": {"control_type": "bbox", "bbox_preset": "cube"},
+    "rock": {"control_type": "bbox", "bbox_preset": "cube"},
+    "item": {"control_type": "bbox", "bbox_preset": "cube"},
+    "shield": {"control_type": "bbox", "bbox_preset": "shield"},
+    "barrel": {"control_type": "bbox", "bbox_preset": "barrel"},
+}
+
+
+def _category_omni_defaults(category: str | None) -> dict[str, str]:
+    """Defaults soft por categoria; Text3D se disponível, senão fallback local."""
+    if not category:
+        return {}
+    try:
+        from text3d.omni_presets import category_omni_defaults
+
+        return dict(category_omni_defaults(category))
+    except ImportError:
+        key = str(category).strip().lower()
+        base = _CATEGORY_OMNI_DEFAULTS_FALLBACK.get(key)
+        return dict(base) if base else {}
+
+
 def softfill_omni_from_category(omni: OmniControls, category: str | None) -> OmniControls:
     """Preenche Omni inactivo com defaults por categoria (Text3D CATEGORY_OMNI).
 
@@ -228,11 +263,7 @@ def softfill_omni_from_category(omni: OmniControls, category: str | None) -> Omn
     """
     if omni_has_geom_control(omni):
         return expand_omni_world_size(omni, category=category)
-    try:
-        from text3d.omni_presets import category_omni_defaults
-    except ImportError:
-        return omni
-    defaults = category_omni_defaults(category)
+    defaults = _category_omni_defaults(category)
     if not defaults:
         return expand_omni_world_size(omni, category=category)
     filled = OmniControls(

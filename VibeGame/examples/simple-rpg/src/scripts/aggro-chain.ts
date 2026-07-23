@@ -63,7 +63,15 @@ export function setupAggroChain(state: State): number {
       if (dx * dx + dz * dz > CALL_RADIUS_SQ) continue;
       // LOS from the ally to the hero (not to the victim): we want allies that
       // can actually join the fight, not ones that hear a scream behind a wall.
-      if (!hasLineOfSight(state, Transform.posX[ally], Transform.posZ[ally], hx, hz)) {
+      if (
+        !hasLineOfSight(
+          state,
+          Transform.posX[ally],
+          Transform.posZ[ally],
+          hx,
+          hz
+        )
+      ) {
         continue;
       }
       const cfg = getMeleeAiConfig(state, ally);
@@ -71,7 +79,7 @@ export function setupAggroChain(state: State): number {
       comp.target[ally] = hero;
       // Nudge a sleeping/IDLE ally out of idle so it commits this frame.
       if (comp.mode[ally] === 0 /* AI_MODE_IDLE */) {
-        comp.mode[ally] = 2 /* AI_MODE_CHASE */;
+        comp.mode[ally] = 2; /* AI_MODE_CHASE */
       }
     }
   });

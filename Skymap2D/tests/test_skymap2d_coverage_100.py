@@ -42,7 +42,7 @@ def test_validate_prompt_basic(prompt: str, ok: bool) -> None:
 def test_validate_prompt_max_length(prompt: str, max_len: int, ok: bool) -> None:
     from skymap2d.utils import validate_prompt
 
-    valid, err = validate_prompt(prompt, max_length=max_len)
+    valid, _err = validate_prompt(prompt, max_length=max_len)
     assert valid is ok
 
 
@@ -125,7 +125,7 @@ def test_validate_dimensions_non_2_1_ratio_still_valid_with_mock_logger(w: int, 
 def test_validate_params_guidance_in_range(guidance: float) -> None:
     from skymap2d.utils import validate_params
 
-    ok, err = validate_params({"guidance_scale": guidance, "num_inference_steps": 40, "width": 2048, "height": 1024})
+    ok, _err = validate_params({"guidance_scale": guidance, "num_inference_steps": 40, "width": 2048, "height": 1024})
     assert ok is True
 
 
@@ -133,7 +133,7 @@ def test_validate_params_guidance_in_range(guidance: float) -> None:
 def test_validate_params_guidance_out_of_range(guidance: float) -> None:
     from skymap2d.utils import validate_params
 
-    ok, err = validate_params({"guidance_scale": guidance})
+    ok, _err = validate_params({"guidance_scale": guidance})
     assert ok is False
 
 
@@ -337,7 +337,7 @@ def test_merge_negative_prompt(preset: str, user: str, expect_substr: str) -> No
     from skymap2d.generator import merge_negative_prompt
 
     merged = merge_negative_prompt(preset, user)
-    assert expect_substr.lower() in merged.lower() or merged == user or merged == preset
+    assert merged in (user, preset) or expect_substr.lower() in merged.lower()
 
 
 def test_default_model_id_env_override() -> None:

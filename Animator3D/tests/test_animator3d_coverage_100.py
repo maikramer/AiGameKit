@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -244,8 +245,6 @@ def test_animator3d_version_in_help() -> None:
 
 
 def test_cmd_export_calls_bpy_ops(tmp_path: Path) -> None:
-    import sys
-
     from animator3d.cli import cmd_export
 
     inp = tmp_path / "in.glb"
@@ -253,9 +252,12 @@ def test_cmd_export_calls_bpy_ops(tmp_path: Path) -> None:
     out = tmp_path / "out.glb"
 
     mock_ops = MagicMock()
-    with patch("animator3d.cli._require_bpy"):
-        with patch.dict(sys.modules, {"animator3d.bpy_ops": mock_ops}):
-            cmd_export.callback(inp, out, draco=False)
+    with (
+        patch("animator3d.cli._require_bpy"),
+        patch.dict(sys.modules, {"animator3d.bpy_ops": mock_ops}),
+        patch("animator3d.bpy_ops", mock_ops, create=True),
+    ):
+        cmd_export.callback(inp, out, draco=False)
 
     mock_ops.clear_scene.assert_called_once()
     mock_ops.import_asset.assert_called_once_with(inp)
@@ -391,8 +393,6 @@ def test_clip_name_or_default_whitespace(empty: str) -> None:
 
 @pytest.mark.parametrize("draco", [True, False])
 def test_cmd_export_draco_flag(tmp_path: Path, draco: bool) -> None:
-    import sys
-
     from animator3d.cli import cmd_export
 
     inp = tmp_path / "m.glb"
@@ -400,9 +400,12 @@ def test_cmd_export_draco_flag(tmp_path: Path, draco: bool) -> None:
     out = tmp_path / "o.glb"
     mock_ops = MagicMock()
 
-    with patch("animator3d.cli._require_bpy"):
-        with patch.dict(sys.modules, {"animator3d.bpy_ops": mock_ops}):
-            cmd_export.callback(inp, out, draco=draco)
+    with (
+        patch("animator3d.cli._require_bpy"),
+        patch.dict(sys.modules, {"animator3d.bpy_ops": mock_ops}),
+        patch("animator3d.bpy_ops", mock_ops, create=True),
+    ):
+        cmd_export.callback(inp, out, draco=draco)
     mock_ops.export_auto.assert_called_with(out, draco=draco)
 
 

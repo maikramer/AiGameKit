@@ -22,6 +22,18 @@ const agentQuery = defineQuery([YukaAgentComponent, Transform]);
 /** Neighbors considered for separation/flock. Smaller = cheaper, tighter packs. */
 const NEIGHBOR_RADIUS = 4;
 
+/** True when the entity has Health and is at or below zero HP. */
+function isDeadAgent(state: State, eid: number): boolean {
+  return state.hasComponent(eid, Health) && Health.current[eid] <= 0;
+}
+
+/** True when focus eid is usable (missing Health = treat as alive). */
+function isFocusAlive(state: State, focusEid: number): boolean {
+  if (focusEid <= 0) return false;
+  if (!state.hasComponent(focusEid, Health)) return true;
+  return Health.current[focusEid] > 0;
+}
+
 /**
  * The yuka agent system. Each frame, for every active {@link YukaAgentComponent}
  * entity it:
@@ -30,10 +42,8 @@ const NEIGHBOR_RADIUS = 4;
  *   3. Populates `vehicle.neighbors` from same-faction allies (for sep/flock).
  *   4. Rebinds the target proxy to the focus entity / static target.
  *   5. Applies the behavior bitmask.
- *   6. Runs `vehicle.update(dt)` and forwards the goal to the navmesh crowd.
- *
- * It never writes `Transform.posX/Z` directly — that is the crowd's job. This
- * is what prevents the position-fighting that made the old lunges jittery.
+ *   6. Runs `vehicle.update(dt)` and forwards the goal to the navmesh crowd,
+ *      or writes planar `Transform` when no crowd agent is driving the entity.
  */
 export const YukaAgentSystem: System = defineSystem({
   name: 'YukaAgentSystem',
@@ -47,7 +57,7 @@ export const YukaAgentSystem: System = defineSystem({
     for (let i = 0; i < agents.length; i++) {
       const eid = agents[i];
       if (YukaAgentComponent.active[eid] === 0) continue;
-      if (Health.current[eid] <= 0) {
+      if (isDeadAgent(state, eid)) {
         const rt = runtimes.get(eid);
         if (rt) deleteYukaRuntime(state, eid);
         continue;
@@ -67,7 +77,7 @@ export const YukaAgentSystem: System = defineSystem({
       if (YukaAgentComponent.active[eid] === 0) continue;
       const rt = runtimes.get(eid);
       if (!rt) continue;
-      if (Health.current[eid] <= 0) continue;
+      if (isDeadAgent(state, eid)) continue;
 
       stepAgent(state, eid, rt, dt, runtimes, proxyByEid);
     }
@@ -86,6 +96,7 @@ function stepAgent(
   runtimes: Map<number, YukaRuntime>,
   proxyByEid: Map<number, TargetProxy>
 ): void {
+  const groundY = Transform.posY[eid];
   syncVehicleFromTransform(rt, eid);
   rt.vehicle.maxSpeed = YukaAgentComponent.maxSpeed[eid] || 3;
   rt.vehicle.maxForce = YukaAgentComponent.maxForce[eid] || 8;
@@ -103,7 +114,7 @@ function stepAgent(
 
   // Resolve + bind target (hero proxy or static point).
   const focusEid = YukaAgentComponent.targetEid[eid];
-  if (focusEid > 0 && Health.current[focusEid] > 0) {
+  if (isFocusAlive(state, focusEid)) {
     let proxy = proxyByEid.get(focusEid);
     if (!proxy) {
       proxy = new TargetProxy();
@@ -117,18 +128,26 @@ function stepAgent(
     bindTarget(rt, proxy);
   } else {
     // Static target → reuse a per-frame static proxy positioned at targetX/Z.
-    // (bindTarget copies the proxy position into arrive/flee Vector3 targets.)
+    // (bindTarget copies the proxy position into seek/arrive/flee Vector3 targets.)
     if (!_staticProxy) _staticProxy = new TargetProxy();
     _staticProxy.position.set(
       YukaAgentComponent.targetX[eid],
-      Transform.posY[eid],
+      groundY,
       YukaAgentComponent.targetZ[eid]
     );
     bindTarget(rt, _staticProxy);
   }
 
   applyBehaviorMask(rt, YukaAgentComponent.behavior[eid]);
-  emitNavTarget(state, rt, eid, dt);
+  const droveCrowd = emitNavTarget(state, rt, eid, dt);
+  if (!droveCrowd) {
+    // No NavMeshAgent (or suspended): own planar Transform writeback.
+    // Y stays external (terrain snap / placement).
+    rt.vehicle.position.y = groundY;
+    Transform.posX[eid] = rt.vehicle.position.x;
+    Transform.posZ[eid] = rt.vehicle.position.z;
+    Transform.dirty[eid] = 1;
+  }
 }
 
 /**
@@ -152,7 +171,7 @@ function populateNeighbors(
     const other = all[i];
     if (other === eid) continue;
     if (YukaAgentComponent.active[other] === 0) continue;
-    if (Health.current[other] <= 0) continue;
+    if (isDeadAgent(state, other)) continue;
     if (FactionComponent.tag[other] !== myFaction) continue;
     const dx = Transform.posX[other] - x;
     const dz = Transform.posZ[other] - z;

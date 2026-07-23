@@ -51,7 +51,7 @@ class TestCollectPromptHeads:
         pred_mask[:4, 0, 1] = True
         pred_mask[3:, 1, 0] = True
         pred_iou = np.array([[0.9, 0.88, 0.1], [0.8, 0.2, 0.1]])
-        masks, ious, pids = collect_batch_heads(
+        masks, _ious, pids = collect_batch_heads(
             pred_mask, pred_iou, base_prompt_index=10, multi_head=True, score_ratio=0.9
         )
         assert len(masks) >= 2
@@ -83,7 +83,7 @@ class TestClusterAndFuse:
         masks = [_mask(12, slice(0, 4)), _mask(12, slice(0, 4)), _mask(12, slice(8, 12))]
         ious = [0.9, 0.85, 0.4]
         prompt_ids = [0, 1, 2]  # two prompts agree on door; singleton low-iou dropped
-        fused, fused_ious, members, reps = consensus_cluster_and_fuse(
+        fused, _fused_ious, _members, reps = consensus_cluster_and_fuse(
             masks,
             ious,
             prompt_ids,

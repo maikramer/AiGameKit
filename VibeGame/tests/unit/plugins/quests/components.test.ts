@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from '../../../../src/core/ecs/state';
 import {
   MAX_QUESTS,
   QuestGiver,

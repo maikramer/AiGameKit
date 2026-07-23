@@ -63,7 +63,7 @@ function loadRpgDataFile(state: State, src: string): void {
     );
     return;
   }
-  let isDir = false;
+  let isDir: boolean;
   try {
     isDir = fs.statSync(src).isDirectory();
   } catch (err) {

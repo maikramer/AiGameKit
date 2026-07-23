@@ -83,6 +83,10 @@
       "types": "./dist/extras/sky-env.d.ts",
       "import": "./dist/extras/sky-env.js"
     },
+    "./audio/bank": {
+      "types": "./dist/plugins/audio/bank.d.ts",
+      "import": "./dist/plugins/audio/bank.js"
+    },
     "./particles": {
       "types": "./dist/plugins/particles/index.d.ts",
       "import": "./dist/plugins/particles/index.js"

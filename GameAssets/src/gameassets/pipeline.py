@@ -906,7 +906,7 @@ def _topology_fix_extra_argv(
 
     ``morph_close`` (metros) row > profile → ``--morph-close``.
     ``morph_close_voxels`` / voxel_merge row > profile → ``--morph-close-voxels``.
-    Omitido → auto Text3D (N por category: terrain/rock=3× default 0.125).
+    Omitido → auto Text3D (N por category: terrain/rock=3x default 0.125).
     ``--size-m`` também escala a mesh para metros reais no topology-fix.
     """
     args: list[str] = []
@@ -1479,7 +1479,7 @@ def _run_static_lod_stages(
         elif lod_ladder_ok and lod0_matches_painted:
             res.stages.append(StageResult("lod", True, 0.0, "skipped (lod1/lod2 ok)", lod1_p))
         else:
-            # LOD0 budget = 1.2× category target_faces (alinha com lod0.yaml
+            # LOD0 budget = 1.2x category target_faces (alinha com lod0.yaml
             # max_per_category). Piso 8 para evitar degeneração em categorias
             # pequenas (ex.: effects target=2000).
             lod0_target = max(8, int(target_faces * 1.2))
@@ -1645,7 +1645,7 @@ def run_master_pipeline(
         return res
 
     fr = effective_face_ratio(profile, row)
-    # target_faces = orçamento base; LOD0 = 1.2×target, LOD1 = target/2, LOD2 = target/4.
+    # target_faces = orçamento base; LOD0 = 1.2xtarget, LOD1 = target/2, LOD2 = target/4.
     target_faces = get_target_faces(row.category or "", face_ratio=fr) if row.category else 0
     if target_faces <= 0:
         target_faces = 8000

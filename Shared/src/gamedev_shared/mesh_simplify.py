@@ -231,7 +231,7 @@ def simplify_glb(
 
     arms = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
     export_objs: list[Any] = [obj, *arms] if arms else [obj]
-    save_glb(export_objs, path_out, export_apply=False if arms else True)
+    save_glb(export_objs, path_out, export_apply=not arms)
     clear_scene()
     log.info("Resultado: %s (%d faces)", path_out, stats["faces_after"])
     return path_out

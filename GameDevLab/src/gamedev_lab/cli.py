@@ -118,7 +118,7 @@ def check_glb_cmd(
 
 @main.group("debug")
 def debug_group() -> None:
-    """Screenshots, inspect, compare e bundle (native bpy — sem animator3d)."""
+    """Screenshots, inspect, compare e bundle (native bpy only)."""
 
 
 @debug_group.command("screenshot")
@@ -357,7 +357,7 @@ def debug_inspect_rig(
     ortho: bool,
     no_transparent_film: bool,
 ) -> None:
-    """Rig: vistas com ossos e opcional heatmap (native bpy, sem animator3d)."""
+    """Rig: vistas com ossos e opcional heatmap (native bpy only)."""
     from gamedev_lab.renderer import render_screenshots, render_weight_heatmap
 
     if output_dir is None:
@@ -421,7 +421,7 @@ def debug_inspect_material(
     ortho: bool,
     no_transparent_film: bool,
 ) -> None:
-    """Inspeciona materiais/texturas PBR + renderiza vistas (native bpy, sem animator3d)."""
+    """Inspeciona materiais/texturas PBR + renderiza vistas (native bpy only)."""
     from gamedev_lab.renderer import render_inspect_material
 
     if output_dir is None:
@@ -484,7 +484,7 @@ def debug_turntable(
     show_bones: bool,
     duration_ms: int,
 ) -> None:
-    """Gera GIF turntable 360° do modelo (native bpy + Pillow, sem animator3d)."""
+    """Gera GIF turntable 360° do modelo (native bpy + Pillow only)."""
     from gamedev_lab.renderer import render_turntable
 
     if output is None:

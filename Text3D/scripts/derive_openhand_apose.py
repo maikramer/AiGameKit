@@ -127,7 +127,7 @@ def apose_legs(
         if thigh not in out:
             continue
         pivot = out[thigh][0].copy()
-        # Outward no plano XY: _l (+X) → +ângulo; _r (−X) → −ângulo.
+        # Outward no plano XY: _l (+X) → +ângulo; _r (-X) → -ângulo.
         angle = abs(spread_deg) if side == "_l" else -abs(spread_deg)
         chain = [n for n in out if n != "_meta" and n.endswith(side) and n.startswith(LEG_CHAIN)]
         for name in chain:

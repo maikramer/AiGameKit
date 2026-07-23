@@ -1,19 +1,20 @@
 assets:
-- id: market_stall
-  idea: bustling medieval market stall with striped canvas awning, wooden counter,
-    hanging fruits and vegetables, sacks of grain, cheerful merchant booth, solid
-    intact wooden posts without holes or eaten geometry, manifold canopy and counter
-  kind: environment
-  category: building
-  pipeline:
-  - 3d
-  - paint
-  - lod
-  - collision
-  omni:
-    control_type: bbox
-    bbox_preset: building
-    size_m:
-    - 3.0
-    - 2.5
-    - 2.0
+  - id: market_stall
+    idea:
+      bustling medieval market stall with striped canvas awning, wooden counter,
+      hanging fruits and vegetables, sacks of grain, cheerful merchant booth, solid
+      intact wooden posts without holes or eaten geometry, manifold canopy and counter
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: building
+      size_m:
+        - 3.0
+        - 2.5
+        - 2.0

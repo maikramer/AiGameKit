@@ -66,7 +66,8 @@ function resolveCdpWs(): string | undefined {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     throw new Error(
-      `PLAYWRIGHT_CDP_URL: não foi possível obter WebSocket de ${base}/json/version (${msg})`
+      `PLAYWRIGHT_CDP_URL: não foi possível obter WebSocket de ${base}/json/version (${msg})`,
+      { cause: e }
     );
   }
 }

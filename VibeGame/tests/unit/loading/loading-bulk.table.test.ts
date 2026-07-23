@@ -94,7 +94,8 @@ describe('cancelLoadingFade removes overlay', () => {
 describe('LoadingScreenSystem setup on State', () => {
   for (let headless of [true, false]) {
     it(`headless=${headless} setup does not throw`, () => {
-      const state = new State({ headless });
+      const state = new State();
+      state.headless = headless;
       expect(() => LoadingScreenSystem.setup?.(state)).not.toThrow();
     });
   }

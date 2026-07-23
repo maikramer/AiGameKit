@@ -7,7 +7,11 @@ import {
 } from '../../../src/plugins/spawn-gate';
 
 describe('SpawnGate plugin defaults matrix', () => {
-  const defaults = SpawnGatePlugin.config?.defaults?.['spawn-gate']!;
+  const defaultsBlock = SpawnGatePlugin.config?.defaults?.['spawn-gate'];
+  if (defaultsBlock == null) {
+    throw new Error('SpawnGatePlugin defaults missing');
+  }
+  const defaults = defaultsBlock;
 
   for (let i = 0; i < 25; i++) {
     it(`default ready is 0 (i=${i})`, () => {

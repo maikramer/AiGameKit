@@ -45,7 +45,7 @@ def test_validate_prompt_exceeds_max_length() -> None:
 def test_validate_prompt_custom_max_length() -> None:
     from text2icon.utils import validate_prompt
 
-    valid, err = validate_prompt("abc", max_length=2)
+    valid, _err = validate_prompt("abc", max_length=2)
     assert valid is False
 
 

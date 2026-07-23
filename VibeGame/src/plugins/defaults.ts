@@ -1,5 +1,5 @@
 ﻿import type { Plugin } from '../core';
-import { AiSteeringPlugin } from './ai-steering/plugin';
+import { YukaAiPlugin } from './ai-yuka/plugin';
 import { AnimationPlugin } from './animation/plugin';
 import { BvhPlugin } from './bvh/plugin';
 import { CompositionPlugin } from './composition/plugin';
@@ -45,7 +45,6 @@ export const DefaultPlugins: Plugin[] = [
   InputPlugin,
   PhysicsPlugin,
   RaycastPlugin,
-  AiSteeringPlugin,
   RenderingPlugin,
   PostprocessingPlugin,
   AdaptiveQualityPlugin,
@@ -59,6 +58,7 @@ export const DefaultPlugins: Plugin[] = [
   SpawnerPlugin,
   CompositionPlugin,
   NavMeshPlugin,
+  YukaAiPlugin,
   AudioPlugin,
   EquirectSkyPlugin,
   BiomesPlugin,

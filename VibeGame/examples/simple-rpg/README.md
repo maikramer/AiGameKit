@@ -72,8 +72,8 @@ upload a new release, and update `assets.lock.json` (`version` + `url` + `sha256
 | Terrain            | `terrain` plugin         | Heightmap with quadtree LOD and per-chunk Rapier heightfield collision                                  |
 | Biome detection    | `biomes` plugin          | Fog color/density, ambient light, terrain texture, and BGM layer crossfade by `<BiomeRegion>`           |
 
-> Note: this demo does **not** use `AiSteeringPlugin` (Yuka wandering). All
-> creatures and bosses run through the engine melee-AI FSM from `RpgAiPlugin`.
+> Note: creature locomotion may use `YukaAiPlugin` (in `DefaultPlugins`); melee
+> lunges still go through the engine melee-AI FSM from `RpgAiPlugin`.
 
 ## Pipeline (step by step)
 
@@ -216,14 +216,14 @@ The final boss (Ogre) is the `<BossBar>` target in the HUD. It stays dormant unt
 
 The demo registers the engine `ProfilerPlugin` (plus `DebugPlugin`). Find CPU bottlenecks without guessing:
 
-| Input | Action |
-|-------|--------|
-| **`P`** | Toggle the in-game profiler panel (per-system timings, group bars, renderer/terrain counters) |
-| **`Shift+P`** | Cycle `sample` ↔ `deep` (User Timing marks for Chrome Performance) |
-| **`Pause`** | Freeze / unfreeze the snapshot |
-| **`?profiler=1`** | Open the profiler on load (`?profiler=deep` for marks) |
-| **`?`** | Debug overlay (FPS / entity counts) |
-| **`G`** | stats-gl GPU/CPU/draw-call panel |
+| Input             | Action                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| **`P`**           | Toggle the in-game profiler panel (per-system timings, group bars, renderer/terrain counters) |
+| **`Shift+P`**     | Cycle `sample` ↔ `deep` (User Timing marks for Chrome Performance)                            |
+| **`Pause`**       | Freeze / unfreeze the snapshot                                                                |
+| **`?profiler=1`** | Open the profiler on load (`?profiler=deep` for marks)                                        |
+| **`?`**           | Debug overlay (FPS / entity counts)                                                           |
+| **`G`**           | stats-gl GPU/CPU/draw-call panel                                                              |
 
 Console / Playwright:
 

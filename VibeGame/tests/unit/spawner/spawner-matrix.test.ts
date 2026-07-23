@@ -9,9 +9,11 @@ import {
   parseSpaceSeparatedNumbers,
   resolveGroupSpawnFields,
   roleToProfile,
+  type SpawnGroupProfileId,
   yawAnglesFromStepDeg,
 } from 'vibegame';
 import { normalizeChildTemplateProfileId } from '../../../src/plugins/spawner/profiles';
+import type { XMLValue } from '../../../src/core/xml/types';
 import {
   parseAt,
   parseSemicolonPlaceString,
@@ -30,7 +32,7 @@ import {
 import * as THREE from 'three';
 
 describe('spawner matrix: normalizeGroupProfileId', () => {
-  const cases: Array<[string, string | undefined, string]> = [
+  const cases: Array<[string, string | undefined, SpawnGroupProfileId]> = [
     ['empty', '', 'none'],
     ['none literal', 'none', 'none'],
     ['tree', 'tree', 'tree'],
@@ -45,7 +47,7 @@ describe('spawner matrix: normalizeGroupProfileId', () => {
 });
 
 describe('spawner matrix: roleToProfile', () => {
-  const map: Array<[string, string | null]> = [
+  const map: Array<[string, SpawnGroupProfileId | null]> = [
     ['tree', 'tree'],
     ['enemy', 'physics-box'],
     ['dynamic', 'physics-box'],
@@ -208,13 +210,13 @@ describe('spawner matrix: slope helpers', () => {
 
 describe('spawner matrix: child template profiles', () => {
   it('physics-crate fills dynamic-part defaults', () => {
-    const attrs: Record<string, string> = {};
+    const attrs: Record<string, XMLValue> = {};
     applyChildTemplateProfile('dynamic-part', attrs, 'physics-crate');
     expect(attrs.shape).toBe('box');
     expect(attrs.mass).toBe(1.2);
   });
   it('gltf-crate fills gltfdynamic defaults', () => {
-    const attrs: Record<string, string> = {};
+    const attrs: Record<string, XMLValue> = {};
     applyChildTemplateProfile('gltfdynamic', attrs, 'gltf-crate');
     expect(attrs.mass).toBe(1.5);
     expect(attrs['collider-shape']).toBe('box');

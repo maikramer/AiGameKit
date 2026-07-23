@@ -29,7 +29,7 @@ _OCTREE_FLOOR = 160
 _OCTREE_CEILING = 512
 _OCTREE_STEP = 32
 
-# Morph-close / «voxel merge»: N × voxel_m MC. Default ~1/8 voxel (1 vox
+# Morph-close / «voxel merge»: N x voxel_m MC. Default ~1/8 voxel (1 vox
 # derretia detalhe — capela). Auto ON: funde double-shell sub-voxel; remesh
 # interno usa grid ≥ octree (ver ``morphological_close``). Opt-out:
 # ``--morph-close 0``. Override: ``--morph-close-voxels`` / category map.
@@ -62,7 +62,7 @@ _CATEGORY_APPROACH_M: dict[str, float] = {
 }
 _DEFAULT_APPROACH_M = 1.0
 
-# Voxel-merge (N × voxel_m) por categoria. Rochas/cliffs: 3× default — menos
+# Voxel-merge (N x voxel_m) por categoria. Rochas/cliffs: 3x default — menos
 # detalhe geométrico, mais fecho de buracos MC / base aberta.
 _CATEGORY_MORPH_VOXELS: dict[str, float] = {
     "terrain": 3.0 * DEFAULT_MORPH_VOXELS,  # 0.375
@@ -246,7 +246,7 @@ def morph_close_voxels_for(
 ) -> float:
     """N de «voxel merge» (morph-close): explícito > category > default ``0.125``.
 
-    ``terrain`` / ``rock`` → 3× default (cliffs/rochas: mais fecho, menos detalhe).
+    ``terrain`` / ``rock`` → 3x default (cliffs/rochas: mais fecho, menos detalhe).
     """
     if explicit is not None:
         v = float(explicit)
@@ -301,7 +301,7 @@ def max_octree_for_vram(
         return 448 if group_offload else 384
     if group_offload:
         # Stream pesos → VRAM ≈ ativação + MC. Sacrifica tempo, enche a GPU.
-        # 6 GB + sdnq-int4 + group_offload aguenta 448 (validado longhouse ~10 m).
+        # 6 GB + sdnq-int4 + group_offload aguenta 448 (validado longhouse ~10 m).
         if total_vram_gib >= 10.0:
             return 512
         if total_vram_gib >= 6.0:
@@ -330,7 +330,7 @@ def _snap_octree(value: int, *, lo: int = _OCTREE_FLOOR, hi: int = _OCTREE_CEILI
     if v <= floor:
         return floor
     # Nearest multiple of step above floor.
-    snapped = floor + int(round((v - floor) / _OCTREE_STEP)) * _OCTREE_STEP
+    snapped = floor + round((v - floor) / _OCTREE_STEP) * _OCTREE_STEP
     return max(floor, min(ceil, snapped))
 
 
@@ -403,7 +403,7 @@ def tune_hunyuan_for_bbox(
         tv = target_voxel_for(category, bbox_preset, quality)
     desired_abs = round(float(char_m) / tv)
     desired_scale = round(base_o * scale)
-    # Média geométrica tamanho×tier; snap: <160→160, senão ±32 até 512/hi.
+    # Média geométrica tamanhoxtier; snap: <160→160, senão ±32 até 512/hi.
     desired = round((desired_abs * desired_scale) ** 0.5)
     octree = _snap_octree(desired, lo=lo, hi=hi)
 
@@ -501,12 +501,12 @@ def resolve_morph_close(
     auto: bool = True,
     morph_close_voxels: float | None = None,
 ) -> float | None:
-    """Resolve morph-close soft: metros explícitos > auto(N×voxel) > None.
+    """Resolve morph-close soft: metros explícitos > auto(Nxvoxel) > None.
 
     - ``explicit > 0``: metros absolutos.
     - ``explicit == 0``: desligado.
     - ``explicit is None``: auto ``morph_close_voxels`` (ou category/default)
-      × voxel_m da escala física. ``terrain``/``rock`` = 3× default.
+      x voxel_m da escala física. ``terrain``/``rock`` = 3x default.
       ``auto=False`` desliga.
     """
     if explicit is not None:

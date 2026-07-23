@@ -114,7 +114,7 @@ export async function loadHeightmapFromUrl(
   try {
     response = await fetch(url);
   } catch (e) {
-    throw new Error(`Heightmap fetch failed: ${url} — ${e}`);
+    throw new Error(`Heightmap fetch failed: ${url} — ${e}`, { cause: e });
   }
   if (!response.ok) {
     throw new Error(`Heightmap fetch ${response.status}: ${url}`);
@@ -124,7 +124,7 @@ export async function loadHeightmapFromUrl(
   try {
     blob = await response.blob();
   } catch (e) {
-    throw new Error(`Heightmap blob failed: ${e}`);
+    throw new Error(`Heightmap blob failed: ${e}`, { cause: e });
   }
 
   let image: DecodedImage;
@@ -132,7 +132,8 @@ export async function loadHeightmapFromUrl(
     image = await decodeImageBlob(blob);
   } catch (e) {
     throw new Error(
-      `Heightmap decode failed (${blob.type}, ${blob.size}B): ${e}`
+      `Heightmap decode failed (${blob.type}, ${blob.size}B): ${e}`,
+      { cause: e }
     );
   }
 

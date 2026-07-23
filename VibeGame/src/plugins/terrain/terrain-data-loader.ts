@@ -48,7 +48,8 @@ export async function loadTerrainData(url: string): Promise<TerrainData> {
     response = await fetch(url);
   } catch (err) {
     throw new Error(
-      `Failed to fetch terrain data from ${url}: ${(err as Error).message}`
+      `Failed to fetch terrain data from ${url}: ${(err as Error).message}`,
+      { cause: err }
     );
   }
 
@@ -63,7 +64,8 @@ export async function loadTerrainData(url: string): Promise<TerrainData> {
     json = await response.json();
   } catch (err) {
     throw new Error(
-      `Invalid JSON in terrain data from ${url}: ${(err as Error).message}`
+      `Invalid JSON in terrain data from ${url}: ${(err as Error).message}`,
+      { cause: err }
     );
   }
 

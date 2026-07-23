@@ -24,9 +24,8 @@ describe('scene-generation', () => {
     const state = new State();
     const before = getSceneGeneration(state);
 
-    let last = before;
     for (let i = 1; i <= 5; i++) {
-      last = bumpSceneGeneration(state);
+      const last = bumpSceneGeneration(state);
       expect(last).toBe(before + i);
     }
 

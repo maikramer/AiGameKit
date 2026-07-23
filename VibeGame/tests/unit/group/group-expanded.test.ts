@@ -39,7 +39,7 @@ describe('group: GroupPlugin registration', () => {
 describe('groupRecipe stable exports', () => {
   for (let i = 0; i < 20; i++) {
     it(`groupRecipe.components[0] remains transform (check ${i})`, () => {
-      expect(groupRecipe.components[0]).toBe('transform');
+      expect(groupRecipe.components?.[0]).toBe('transform');
     });
   }
 

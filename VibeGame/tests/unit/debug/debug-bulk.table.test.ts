@@ -5,6 +5,7 @@ import {
   applyPostFxToggle,
   DEFAULT_POSTFX_BINDINGS,
   parsePostFxBindings,
+  type PostFxEffectField,
 } from '../../../src/plugins/debug/postfx-toggle';
 import {
   getDebugRegistry,
@@ -25,7 +26,7 @@ function makePostprocessing() {
 }
 
 describe('parsePostFxBindings — effect aliases', () => {
-  const pairs: Array<[string, string]> = [
+  const pairs: Array<[string, PostFxEffectField]> = [
     ['bloom', 'bloom'],
     ['ca', 'chromaticAberration'],
     ['chromaticaberration', 'chromaticAberration'],
@@ -62,7 +63,6 @@ describe('DEFAULT_POSTFX_BINDINGS keys', () => {
 describe('applyPostFxToggle modulus cycles', () => {
   const eid = 0;
   const debounce = new Set<string>();
-  const fields = makePostprocessing();
 
   const mods: Record<string, number> = {
     bloom: 2,

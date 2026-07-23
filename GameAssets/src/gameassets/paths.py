@@ -219,7 +219,7 @@ def archive_legacy_rig_intermediates(mesh_final: Path) -> list[Path]:
     O DAG antigo gerava ``_rigged_hi`` (rig sobre ``_clean`` HI, sem textura),
     ``_lodN_rigged``/``_lodN_animated`` (transfer-weights + game-pack por LOD)
     e ``_lodN_pre_promote`` (arquivos de promoção) — tudo em ``meshes/`` antes
-    do move final. O DAG novo (rig sobre painted → animate ×1 → ladder sobre o
+    do move final. O DAG novo (rig sobre painted → animate x1 → ladder sobre o
     animated) não usa nenhum deles; ficam em ``_intermediate/`` para debug.
 
     Idempotente: corre no início de cada master pipeline; ficheiros já em
