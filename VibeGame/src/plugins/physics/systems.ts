@@ -2,7 +2,13 @@ import { logger } from '../../core/utils/logger';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { ActiveEvents } from '@dimforge/rapier3d-compat';
 import type { State, System } from '../../core';
-import { defineSystem, defineQuery, defineQueryLive, isPhysicsHeld, TIME_CONSTANTS } from '../../core';
+import {
+  defineSystem,
+  defineQuery,
+  defineQueryLive,
+  isPhysicsHeld,
+  TIME_CONSTANTS,
+} from '../../core';
 import { Transform, WorldTransform } from '../transforms';
 import {
   ApplyAngularImpulse,
@@ -596,7 +602,8 @@ export const PhysicsCleanupSystem: System = defineSystem({
     for (const [entity, collider] of context.entityToCollider) {
       if (!state.hasComponent(entity, Collider)) {
         worldRapier.removeCollider(collider, true);
-        (collider as unknown as { free: () => void }).free();
+        const freeC = (collider as unknown as { free?: () => void }).free;
+        if (typeof freeC === 'function') freeC.call(collider);
         context.entityToCollider.delete(entity);
         context.colliderToEntity.delete(collider.handle);
       }
@@ -605,7 +612,8 @@ export const PhysicsCleanupSystem: System = defineSystem({
     for (const [entity, body] of context.entityToRigidbody) {
       if (!state.hasComponent(entity, Rigidbody)) {
         worldRapier.removeRigidBody(body);
-        (body as unknown as { free: () => void }).free();
+        const freeB = (body as unknown as { free?: () => void }).free;
+        if (typeof freeB === 'function') freeB.call(body);
         context.entityToRigidbody.delete(entity);
       }
     }
@@ -613,7 +621,8 @@ export const PhysicsCleanupSystem: System = defineSystem({
     for (const [entity, controller] of context.entityToCharacterController) {
       if (!state.hasComponent(entity, CharacterController)) {
         worldRapier.removeCharacterController(controller);
-        (controller as unknown as { free: () => void }).free();
+        const freeK = (controller as unknown as { free?: () => void }).free;
+        if (typeof freeK === 'function') freeK.call(controller);
         context.entityToCharacterController.delete(entity);
       }
     }

@@ -1,4 +1,9 @@
-import { defineSystem, registerReadyGate, setLoadingEnforcement, type System } from '../../core';
+import {
+  defineSystem,
+  registerReadyGate,
+  setLoadingEnforcement,
+  type System,
+} from '../../core';
 import { gltfAssetsReady } from '../gltf-xml/ready-gate';
 import { mountLoadingScreen, updateLoadingScreen } from './context';
 

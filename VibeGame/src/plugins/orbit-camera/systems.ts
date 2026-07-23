@@ -160,8 +160,7 @@ export const OrbitCameraSystem: System = defineSystem({
       // consumers (e.g. player yaw resolution) keep working. The camera-controls
       // azimuth accumulates beyond [0, 2π) on full turns; wrap it for stability.
       OrbitCamera.currentYaw[cameraEntity] =
-        ((controls.azimuthAngle % (Math.PI * 2)) + Math.PI * 2) %
-        (Math.PI * 2);
+        ((controls.azimuthAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
       OrbitCamera.currentPitch[cameraEntity] = controls.polarAngle;
       OrbitCamera.currentDistance[cameraEntity] = controls.distance;
 
@@ -188,10 +187,7 @@ export const OrbitCameraSystem: System = defineSystem({
  * from the component's per-entity settings. No domElement → programmatic mode,
  * no DOM listeners, no conflict with the input plugin.
  */
-function createControls(
-  entity: number,
-  camera: THREE.Camera
-): CameraControls {
+function createControls(entity: number, camera: THREE.Camera): CameraControls {
   const controls = new CameraControls(
     camera as THREE.PerspectiveCamera | THREE.OrthographicCamera
   );

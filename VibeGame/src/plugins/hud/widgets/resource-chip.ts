@@ -7,7 +7,12 @@ import type {
   WidgetHandle,
 } from '../screen-layer';
 import css from '../styles/resource-chip.css?raw';
-import { injectWidgetCss, readAttr, resolveTargetEntity, setWidgetIcon } from './shared';
+import {
+  injectWidgetCss,
+  readAttr,
+  resolveTargetEntity,
+  setWidgetIcon,
+} from './shared';
 
 const WIDGET_TAG = 'resource';
 const DEFAULT_TARGET_NAMES = ['hero', 'player'];

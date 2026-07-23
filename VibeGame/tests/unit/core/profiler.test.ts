@@ -82,9 +82,9 @@ describe('ProfilerSession', () => {
     expect(snap.mode).toBe('sample');
     expect(snap.windowFrames).toBeGreaterThan(0);
     expect(snap.systems.some((s) => s.name === 'FastSystem')).toBe(true);
-    expect(snap.groups.some((g) => g.group === 'simulation' && g.avgMs > 0)).toBe(
-      true
-    );
+    expect(
+      snap.groups.some((g) => g.group === 'simulation' && g.avgMs > 0)
+    ).toBe(true);
   });
 
   it('records custom spans via withSpan', () => {

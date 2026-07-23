@@ -3,10 +3,12 @@ export { BvhPlugin } from './plugin';
 export { BvhStaticMeshSyncSystem, BvhTerrainSyncSystem } from './systems';
 export {
   castBvhRay,
+  DEFAULT_VISION_BLOCK_LAYERS,
   disposeBvhContext,
   getBvhContext,
   getBvhSurfaceHeight,
   getBvhStats,
+  hasLineOfSight,
   registerBvhMesh,
   unregisterBvhForEntity,
   unregisterBvhMesh,

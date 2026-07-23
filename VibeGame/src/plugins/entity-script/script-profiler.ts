@@ -3,10 +3,7 @@
  * Aggregates many entity invocations into one custom profiler span per file.
  */
 
-import {
-  isProfilerEnabled,
-  recordCustomTiming,
-} from '../../core/profiler';
+import { isProfilerEnabled, recordCustomTiming } from '../../core/profiler';
 
 export type ScriptProfilePhase = 'update' | 'fixed' | 'late' | 'collision';
 

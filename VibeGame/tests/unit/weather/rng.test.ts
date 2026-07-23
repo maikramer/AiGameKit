@@ -29,6 +29,16 @@ describe('Weather seeded RNG', () => {
     });
   });
 
+  describe('mulberry32 seed sweep', () => {
+    for (let seed = 1; seed <= 80; seed++) {
+      it(`seed ${seed} first draw is in [0, 1)`, () => {
+        const v = mulberry32(seed)();
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThan(1);
+      });
+    }
+  });
+
   describe('rngForSeed', () => {
     it('returns Math.random when seed is 0 (backward compat)', () => {
       // Math.random is the default random source; identity comparison is the

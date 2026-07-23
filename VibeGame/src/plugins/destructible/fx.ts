@@ -364,7 +364,9 @@ function cloneMaterialsForFade(root: THREE.Object3D): THREE.Material[] {
 
 function nameLooksLikeStump(name: string): boolean {
   const n = name.toLowerCase();
-  return n === 'stump' || n.endsWith('_stump') || /(^|[^a-z])stump([^a-z]|$)/.test(n);
+  return (
+    n === 'stump' || n.endsWith('_stump') || /(^|[^a-z])stump([^a-z]|$)/.test(n)
+  );
 }
 
 function nameLooksLikeTop(name: string): boolean {

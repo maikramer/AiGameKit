@@ -162,8 +162,7 @@ export function spawnTemplateAtTerrain(
     sample.scaleUniform * sample.axisY * parts.scale[1],
     1e-6
   );
-  const scaleXZ =
-    sample.scaleUniform * Math.max(sample.axisX, sample.axisZ);
+  const scaleXZ = sample.scaleUniform * Math.max(sample.axisX, sample.axisZ);
 
   const aabb = getGltfLocalAABB(url);
   const halfWidth = aabb

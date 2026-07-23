@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, System, defineQuery } from 'vibegame';
 import {
@@ -18,9 +18,19 @@ import {
 import { setRenderingCanvas } from 'vibegame/rendering';
 import { handleKeyDown, clearAllInput } from '../../../src/plugins/input/utils';
 
+const prevPerformance = global.performance;
+const prevWindow = global.window;
+const prevDocument = global.document;
+
 describe('Input Plugin', () => {
   let state: State;
   let entity: number;
+
+  afterEach(() => {
+    global.performance = prevPerformance;
+    global.window = prevWindow;
+    global.document = prevDocument;
+  });
 
   beforeEach(() => {
     const dom = new JSDOM(

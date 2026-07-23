@@ -652,6 +652,39 @@ export type {
   MeleeAiPreset,
 } from './plugins/rpg-ai';
 
+export {
+  YukaAiPlugin,
+  YukaAgentSystem,
+  YukaAgentComponent,
+  YUKA_BEHAVIOR_NONE,
+  YUKA_BEHAVIOR_SEEK,
+  YUKA_BEHAVIOR_ARRIVE,
+  YUKA_BEHAVIOR_PURSUIT,
+  YUKA_BEHAVIOR_EVADE,
+  YUKA_BEHAVIOR_FLEE,
+  YUKA_BEHAVIOR_WANDER,
+  YUKA_BEHAVIOR_SEPARATION,
+  YUKA_BEHAVIOR_FLOCK,
+  YUKA_BEHAVIOR_HOLD_RING,
+  DEFAULT_VISION_BLOCK_LAYERS,
+  hasLineOfSight,
+  decide,
+  applyDecision,
+  createYukaRuntime,
+  TargetProxy,
+  getYukaRuntime,
+  getYukaRuntimeMap,
+  deleteYukaRuntime,
+} from './plugins/ai-yuka';
+export type {
+  YukaBehaviorMask,
+  CreatureDecisionProfile,
+  DecisionInput,
+  DecisionResult,
+  YukaRuntime,
+  SteeringBehaviorId,
+} from './plugins/ai-yuka';
+
 export type {
   FactionTag,
   ItemDef,

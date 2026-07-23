@@ -1,4 +1,9 @@
-import { defineSystem, defineQueryLive, type State, type System } from '../../core';
+import {
+  defineSystem,
+  defineQueryLive,
+  type State,
+  type System,
+} from '../../core';
 import { GltfAnimator } from '../../extras/gltf-animator';
 import { MainCamera, threeCameras } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';

@@ -80,6 +80,15 @@ export interface MeleeAiConfig {
    * hostile (via `isHostile`) is acquired.
    */
   targetEid?: number;
+  /**
+   * When true, {@link acquireTarget} only returns a candidate that has an
+   * unobstructed line of sight (BVH raycast at eye height). Default false to
+   * preserve the legacy distance-only rule for configs that predate this flag.
+   * The explicit `targetEid` path always bypasses LOS (a leashed/locked target
+   * stays locked) so a creature already in combat does not drop aggro behind a
+   * pillar mid-fight.
+   */
+  requireLineOfSight?: boolean;
   // ── Optional behaviour enrichment (all back-compatible / off by default) ──
   /** Orbit the target while waiting between swings instead of standing still. */
   strafe?: boolean;

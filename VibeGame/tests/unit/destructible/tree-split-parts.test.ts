@@ -51,9 +51,9 @@ describe('prepareTreeFallHalves', () => {
     expect(halves).not.toBeNull();
     expect(halves!.topPlane).toBeNull();
     for (const mat of halves!.materials) {
-      expect(mat.clippingPlanes == null || mat.clippingPlanes.length === 0).toBe(
-        true
-      );
+      expect(
+        mat.clippingPlanes == null || mat.clippingPlanes.length === 0
+      ).toBe(true);
     }
   });
 

@@ -1,4 +1,10 @@
-import { defineSystem, defineQuery, getAllEntities, getTotalActiveCoroutineCount, type Component } from '../../core';
+import {
+  defineSystem,
+  defineQuery,
+  getAllEntities,
+  getTotalActiveCoroutineCount,
+  type Component,
+} from '../../core';
 import type { Plugin, State, System } from '../../core';
 import Stats from 'stats-gl';
 import { getTerrainContext } from '../terrain/utils';

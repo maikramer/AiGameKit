@@ -298,6 +298,45 @@ export function getBvhSurfaceHeight(
   return hit ? hit.point.y : null;
 }
 
+const _losOrigin = new THREE.Vector3();
+const _losDir = new THREE.Vector3();
+
+/**
+ * Default layers that block vision: terrain (0x0001) + static props (0x0002).
+ * Mirrors the constants used by creature presentation scripts.
+ */
+export const DEFAULT_VISION_BLOCK_LAYERS = 0x0001 | 0x0002;
+
+/**
+ * Return true when nothing on `layerMask` blocks the straight planar line from
+ * `(fromX,fromZ)` to `(toX,toZ)`. The ray is cast at a fixed `eyeHeight` above
+ * y=0 so it clears the floor plane (a ray grazing the ground hits it at once).
+ *
+ * Before this existed, AI target acquisition was pure distance — creatures
+ * aggrod the player through walls. Gating acquisition on LOS means a creature
+ * must actually *see* you. When the BVH has no registered meshes the function
+ * is permissive (returns true), so the behavior degrades gracefully to the old
+ * distance-only rule in scenes without BVH geometry.
+ */
+export function hasLineOfSight(
+  state: State,
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  eyeHeight = 1.2,
+  layerMask = DEFAULT_VISION_BLOCK_LAYERS
+): boolean {
+  const dx = toX - fromX;
+  const dz = toZ - fromZ;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist < 1e-3) return true;
+  _losOrigin.set(fromX, eyeHeight, fromZ);
+  _losDir.set(dx, 0, dz).normalize();
+  const hit = castBvhRay(state, _losOrigin, _losDir, dist - 0.15, layerMask);
+  return hit === null;
+}
+
 export function getBvhStats(state: State): {
   meshCount: number;
   entityCount: number;

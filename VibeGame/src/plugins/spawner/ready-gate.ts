@@ -1,4 +1,10 @@
-import { defineSystem, defineQuery, registerReadyGate, type State, type System } from '../../core';
+import {
+  defineSystem,
+  defineQuery,
+  registerReadyGate,
+  type State,
+  type System,
+} from '../../core';
 import { PlacePending, SpawnerPending } from './components';
 
 const spawnerQuery = defineQuery([SpawnerPending]);

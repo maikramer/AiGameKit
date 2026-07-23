@@ -7,6 +7,7 @@ import {
   damageHealth,
   isHostile,
 } from '../combat/components';
+import { hasLineOfSight } from '../bvh/utils';
 import {
   setAgentTarget,
   clearAgentTarget,
@@ -71,22 +72,24 @@ export function acquireTarget(
   }
   const ox = Transform.posX[eid];
   const oz = Transform.posZ[eid];
+  const requireLos = config.requireLineOfSight === true;
   let bestEid = 0;
   let bestDist = Infinity;
   for (const candidate of hostilesQuery(state.world)) {
     if (candidate === eid) continue;
     if (!entityAlive(state, candidate)) continue;
     if (!isHostile(state, eid, candidate)) continue;
-    const d = distanceXZ(
-      ox,
-      oz,
-      Transform.posX[candidate],
-      Transform.posZ[candidate]
-    );
-    if (d < bestDist) {
-      bestDist = d;
-      bestEid = candidate;
-    }
+    const cx = Transform.posX[candidate];
+    const cz = Transform.posZ[candidate];
+    const d = distanceXZ(ox, oz, cx, cz);
+    if (d >= bestDist) continue;
+    // LOS gate: skip candidates hidden behind terrain/props. The explicit
+    // targetEid path above bypasses this so a locked target stays locked even
+    // if a pillar briefly breaks sight mid-fight. hasLineOfSight is permissive
+    // (returns true) when no BVH geometry is registered.
+    if (requireLos && !hasLineOfSight(state, ox, oz, cx, cz)) continue;
+    bestDist = d;
+    bestEid = candidate;
   }
   return bestEid;
 }
@@ -162,8 +165,10 @@ function resetLungeState(
   if (inst.lungePhase === 'ready') return;
   inst.lungePhase = 'ready';
   inst.lungeTimer = 0;
+  // Lunge aborted (lost target / leashed / died): un-suspend so navmesh
+  // steering resumes. enabled was never cleared (we suspend, not disable).
   if (state.hasComponent(eid, NavMeshAgent)) {
-    NavMeshAgent.enabled[eid] = 1;
+    NavMeshAgent.suspended[eid] = 0;
   }
 }
 
@@ -489,11 +494,13 @@ function tickAttack(
       const dz = Transform.posZ[targetEid] - Transform.posZ[eid];
       inst.lungeDirX = dx / len;
       inst.lungeDirZ = dz / len;
-      // The lunge is direct Transform motion; drop the crowd agent so its
-      // per-frame position readback doesn't overwrite the dash. Re-created
-      // (enabled below) once the lunge returns to 'ready'.
-      removeAgent(state, eid);
-      NavMeshAgent.enabled[eid] = 0;
+      // The lunge is direct Transform motion. Suspend the crowd agent (keep it
+      // alive, freeze its readback) so the dash is not overwritten — WITHOUT
+      // removing + re-adding the agent, which snapped position on re-add (the
+      // jitter/popping players felt at every lunge). Suspended is cleared when
+      // the lunge returns to 'ready'.
+      clearAgentTarget(state, eid);
+      NavMeshAgent.suspended[eid] = 1;
     }
     return;
   }
@@ -534,9 +541,9 @@ function tickAttack(
     comp.cooldown[eid] = isEnraged(eid, config)
       ? config.attackCooldown * (config.enrageCooldownMult ?? 0.5)
       : config.attackCooldown;
-    // Lunge done: re-enable the agent so NavMeshAgentSystem recreates it and
-    // resumes navmesh steering.
-    NavMeshAgent.enabled[eid] = 1;
+    // Lunge done: un-suspend the crowd agent (still alive from the windup) so
+    // navmesh steering resumes. No addAgent → no position snap.
+    NavMeshAgent.suspended[eid] = 0;
   }
 }
 

@@ -299,11 +299,29 @@ describe('Transform Hierarchy System', () => {
     const parent = state.createEntity();
     const child = state.createEntity();
 
-    state.addComponent(grandfather, Transform, { posX: 10, rotW: 1, scaleX: 1, scaleY: 1, scaleZ: 1 });
-    state.addComponent(parent, Transform, { posX: 5, rotW: 1, scaleX: 1, scaleY: 1, scaleZ: 1 });
+    state.addComponent(grandfather, Transform, {
+      posX: 10,
+      rotW: 1,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+    });
+    state.addComponent(parent, Transform, {
+      posX: 5,
+      rotW: 1,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+    });
     state.addComponent(parent, Parent);
     Parent.entity[parent] = grandfather;
-    state.addComponent(child, Transform, { posX: 2, rotW: 1, scaleX: 1, scaleY: 1, scaleZ: 1 });
+    state.addComponent(child, Transform, {
+      posX: 2,
+      rotW: 1,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
+    });
     state.addComponent(child, Parent);
     Parent.entity[child] = parent;
 

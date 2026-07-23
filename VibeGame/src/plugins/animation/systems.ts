@@ -1,4 +1,10 @@
-import { defineSystem, defineQuery, type System, NULL_ENTITY, Parent } from '../../core';
+import {
+  defineSystem,
+  defineQuery,
+  type System,
+  NULL_ENTITY,
+  Parent,
+} from '../../core';
 import {
   CharacterController,
   CharacterMovement,

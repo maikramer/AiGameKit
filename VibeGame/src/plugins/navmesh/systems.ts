@@ -305,6 +305,7 @@ export const NavMeshAgentSystem: System = defineSystem({
           continue;
         }
         if (NavMeshAgent.enabled[eid] === 0) continue;
+        if (NavMeshAgent.suspended[eid] === 1) continue;
         if (NavMeshAgent.hasTarget[eid] === 1) {
           existing.requestMoveTarget({
             x: NavMeshAgent.targetX[eid],
@@ -362,6 +363,10 @@ export const NavMeshAgentSystem: System = defineSystem({
         rt.agents.delete(eid);
         continue;
       }
+      // A suspended agent (e.g. mid-lunge) is frozen: leave its crowd agent in
+      // place but do NOT overwrite Transform from its position, so the owning
+      // logic can move the entity directly without fighting the readback.
+      if (NavMeshAgent.suspended[eid] === 1) continue;
       const p = agent.position();
       const prevX = Transform.posX[eid];
       const prevZ = Transform.posZ[eid];

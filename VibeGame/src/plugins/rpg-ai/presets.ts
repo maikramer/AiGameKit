@@ -83,7 +83,8 @@ export function presetToMeleeAiConfig(preset: MeleeAiPreset): MeleeAiConfig {
   };
   if (preset.targetEid !== undefined) cfg.targetEid = preset.targetEid;
   if (preset.strafe !== undefined) cfg.strafe = preset.strafe;
-  if (preset.lowHpKiteFrac !== undefined) cfg.lowHpKiteFrac = preset.lowHpKiteFrac;
+  if (preset.lowHpKiteFrac !== undefined)
+    cfg.lowHpKiteFrac = preset.lowHpKiteFrac;
   if (preset.enrageBelowFrac !== undefined) {
     cfg.enrageBelowFrac = preset.enrageBelowFrac;
   }
@@ -92,6 +93,9 @@ export function presetToMeleeAiConfig(preset: MeleeAiPreset): MeleeAiConfig {
   }
   if (preset.enrageCooldownMult !== undefined) {
     cfg.enrageCooldownMult = preset.enrageCooldownMult;
+  }
+  if (preset.requireLineOfSight !== undefined) {
+    cfg.requireLineOfSight = preset.requireLineOfSight;
   }
   return cfg;
 }

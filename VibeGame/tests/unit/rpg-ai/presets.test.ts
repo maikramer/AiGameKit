@@ -91,9 +91,7 @@ describe('creature presets — YAML load + registry lookup', () => {
     expect(slime?.chaseSpeed).toBe(1.8);
     expect(slime?.attackDamage).toBe(18);
     expect(slime?.detectRange).toBe(18);
-    expect(slime?.assets.modelUrl).toBe(
-      '/assets/meshes/slime_rigged_animated.glb'
-    );
+    expect(slime?.assets.modelUrl).toBe('/assets/meshes/slime_lod0.glb');
     expect(slime?.loot.goldMin).toBe(15);
     expect(slime?.loot.goldMax).toBe(30);
   });
@@ -110,9 +108,7 @@ describe('creature presets — YAML load + registry lookup', () => {
     expect(goblin?.hp).toBe(40);
     expect(goblin?.chaseSpeed).toBe(2.4);
     expect(goblin?.attackDamage).toBe(12);
-    expect(goblin?.assets.modelUrl).toBe(
-      '/assets/meshes/goblin_rigged_animated.glb'
-    );
+    expect(goblin?.assets.modelUrl).toBe('/assets/meshes/goblin_lod0.glb');
   });
 
   it('boss.yaml parses into a preset with the roar extension', async () => {

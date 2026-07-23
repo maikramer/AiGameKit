@@ -28,4 +28,13 @@ export const NavMeshAgent = {
    * attack=face target) so two writers do not fight over ``Transform.eulerY``.
    */
   faceVelocity: new Uint8Array(MAX_ENTITIES).fill(1),
+  /**
+   * When 1, the crowd agent is kept alive but **frozen**: the readback loop
+   * skips writing its position/velocity back into Transform, and no move target
+   * is issued. Used by the melee lunge so the dash (direct Transform writes)
+   * is not overwritten by the crowd, without destroying + re-creating the agent
+   * (which snapped position on re-add). Distinct from `enabled` (0 = the system
+   * tears the agent down entirely).
+   */
+  suspended: new Uint8Array(MAX_ENTITIES),
 } as const;

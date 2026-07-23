@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { Container, reversePainterSortStable, Text } from '@pmndrs/uikit';
-import { defineSystem, defineQueryLive, type State, type System } from '../../core';
+import {
+  defineSystem,
+  defineQueryLive,
+  type State,
+  type System,
+} from '../../core';
 import { getRenderingContext, getScene } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
 import { HudPanel } from './components';

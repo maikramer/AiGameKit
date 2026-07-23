@@ -24,7 +24,10 @@ export {
   scriptBaseName,
   scriptSpanName,
 } from './script-profiler';
-export type { EntityScriptFrameStat, ScriptProfilePhase } from './script-profiler';
+export type {
+  EntityScriptFrameStat,
+  ScriptProfilePhase,
+} from './script-profiler';
 export {
   EntityScriptCollisionBridgeSystem,
   EntityScriptSystem,

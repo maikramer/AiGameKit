@@ -1,6 +1,11 @@
 import type { State, System } from '../../core';
 import { InventoryComponent } from './components';
-import { emitEvent, getDataRegistry, INVENTORY_ADDED, INVENTORY_REMOVED } from '../rpg-core';
+import {
+  emitEvent,
+  getDataRegistry,
+  INVENTORY_ADDED,
+  INVENTORY_REMOVED,
+} from '../rpg-core';
 import type { ItemDef, ItemStack } from '../rpg-core/types';
 import { defineSystem } from '../../core';
 

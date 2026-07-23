@@ -126,7 +126,8 @@ describe('MeleeAiBehaviour — FSM transitions', () => {
     expect(AiStateComponent.mode[CREATURE_EID]).toBe(AI_MODE_DETECT);
     place(CREATURE_EID, 10, 0);
     // DETECT_GRACE ≈ 0.28s → ~20 frames at 16ms.
-    for (let i = 0; i < 25; i++) ai.update(state as unknown as State, CREATURE_EID);
+    for (let i = 0; i < 25; i++)
+      ai.update(state as unknown as State, CREATURE_EID);
 
     expect(AiStateComponent.mode[CREATURE_EID]).toBe(AI_MODE_CHASE);
   });
@@ -141,7 +142,8 @@ describe('MeleeAiBehaviour — FSM transitions', () => {
 
     const ai = new (createMeleeAi(makeConfig()))();
     ai.update(state as unknown as State, CREATURE_EID);
-    for (let i = 0; i < 25; i++) ai.update(state as unknown as State, CREATURE_EID);
+    for (let i = 0; i < 25; i++)
+      ai.update(state as unknown as State, CREATURE_EID);
     place(CREATURE_EID, 2, 0);
     ai.update(state as unknown as State, CREATURE_EID);
 
@@ -228,7 +230,8 @@ describe('MeleeAiBehaviour — leash returns to idle when target flees', () => {
 
     const ai = new (createMeleeAi(makeConfig()))();
     ai.update(state as unknown as State, CREATURE_EID);
-    for (let i = 0; i < 25; i++) ai.update(state as unknown as State, CREATURE_EID);
+    for (let i = 0; i < 25; i++)
+      ai.update(state as unknown as State, CREATURE_EID);
     expect(AiStateComponent.mode[CREATURE_EID]).toBe(AI_MODE_CHASE);
 
     place(HERO_EID, 50, 0);
@@ -259,11 +262,13 @@ describe('MeleeAiBehaviour — lunge does not stick when target leaves melee', (
     ))();
 
     // Enter attack and start windup/lunge.
-    for (let i = 0; i < 8; i++) ai.update(state as unknown as State, CREATURE_EID);
+    for (let i = 0; i < 8; i++)
+      ai.update(state as unknown as State, CREATURE_EID);
 
     // Target steps outside attackRange but stays in detectRange mid-lunge.
     place(HERO_EID, 5, 0);
-    for (let i = 0; i < 40; i++) ai.update(state as unknown as State, CREATURE_EID);
+    for (let i = 0; i < 40; i++)
+      ai.update(state as unknown as State, CREATURE_EID);
 
     // Must not remain stuck in LUNGE (presentation would loop the jump clip).
     expect(AiStateComponent.mode[CREATURE_EID]).not.toBe(AI_MODE_LUNGE);

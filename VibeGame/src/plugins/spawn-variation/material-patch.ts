@@ -61,8 +61,7 @@ export function maybePatchInstanceVariationMaterial(
     shader.fragmentShader = injectVariationFragment(shader.fragmentShader);
   };
   const prevKey = mat.customProgramCacheKey?.bind(mat);
-  mat.customProgramCacheKey = () =>
-    `${prevKey ? prevKey() : ''}|spawnVarBC4`;
+  mat.customProgramCacheKey = () => `${prevKey ? prevKey() : ''}|spawnVarBC4`;
   mat.needsUpdate = true;
   patchedMats.add(mat);
 }

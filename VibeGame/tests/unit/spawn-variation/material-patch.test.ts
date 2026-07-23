@@ -19,9 +19,9 @@ describe('maybePatchInstanceVariationMaterial', () => {
     };
     mat.onBeforeCompile!(shader as never, null as never);
     expect(shader.fragmentShader).toContain('#include <map_fragment>');
-    expect(shader.fragmentShader.indexOf('#include <map_fragment>')).toBeLessThan(
-      shader.fragmentShader.indexOf('uVarContrast')
-    );
+    expect(
+      shader.fragmentShader.indexOf('#include <map_fragment>')
+    ).toBeLessThan(shader.fragmentShader.indexOf('uVarContrast'));
     expect(shader.fragmentShader).toContain('uVarBrightness');
     expect(shader.fragmentShader).toContain('USE_INSTANCING_INDIRECT');
   });

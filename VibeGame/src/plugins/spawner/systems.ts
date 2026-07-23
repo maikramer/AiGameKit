@@ -179,7 +179,7 @@ function resyncTerrainSpawnedHeights(state: State): void {
 }
 
 export const TerrainSpawnSystem: System = defineSystem({
-  name: 'TerrainSpawnSystem',  // Same 'setup' bucket as pads/water/roads, strictly AFTER they stamp — so the
+  name: 'TerrainSpawnSystem', // Same 'setup' bucket as pads/water/roads, strictly AFTER they stamp — so the
   // first spawn batch samples post-carve heights in the same frame the
   // heightmap lands (simulation would also work via the pending gate, but a
   // late Road flatten used to slip past the gate and bury/float trees).

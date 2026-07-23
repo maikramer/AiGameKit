@@ -1,6 +1,6 @@
 /* eslint-disable import/no-namespace */
 
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import * as GAME from 'vibegame';
 import { DefaultPlugins } from 'vibegame/defaults';
@@ -16,6 +16,24 @@ import { TransformsPlugin } from 'vibegame/transforms';
 const MAX_ENTITIES = 100000;
 
 describe('Global API', () => {
+  const prev = {
+    DOMParser: global.DOMParser,
+    document: global.document,
+    MutationObserver: global.MutationObserver,
+    requestAnimationFrame: global.requestAnimationFrame,
+    cancelAnimationFrame: global.cancelAnimationFrame,
+    performance: global.performance,
+  };
+
+  afterEach(() => {
+    global.DOMParser = prev.DOMParser;
+    global.document = prev.document;
+    global.MutationObserver = prev.MutationObserver;
+    global.requestAnimationFrame = prev.requestAnimationFrame;
+    global.cancelAnimationFrame = prev.cancelAnimationFrame;
+    global.performance = prev.performance;
+  });
+
   beforeEach(() => {
     GAME.resetBuilder();
     const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');

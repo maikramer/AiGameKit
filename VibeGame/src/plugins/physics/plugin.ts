@@ -1,4 +1,9 @@
-import { defineSystem, type Adapter, type Plugin, type System } from '../../core';
+import {
+  defineSystem,
+  type Adapter,
+  type Plugin,
+  type System,
+} from '../../core';
 import { setColliderMeshUrl } from './mesh-collider';
 import {
   ApplyAngularImpulse,

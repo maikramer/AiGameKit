@@ -1,5 +1,13 @@
 import type { Plugin, State, System } from '../../core';
-import { defineSystem, disableProfiler, enableProfiler, getProfilerMode, isProfilerEnabled, setProfilerMode, toggleProfilerFreeze } from '../../core/profiler';
+import {
+  defineSystem,
+  disableProfiler,
+  enableProfiler,
+  getProfilerMode,
+  isProfilerEnabled,
+  setProfilerMode,
+  toggleProfilerFreeze,
+} from '../../core/profiler';
 import { installProfilerBridge } from './handle';
 import {
   createProfilerPanel,
@@ -73,7 +81,8 @@ function parseUrlProfilerFlag(): 'sample' | 'deep' | null {
     const raw = params.get('profiler');
     if (raw === null) return null;
     const v = raw.trim().toLowerCase();
-    if (v === '' || v === '1' || v === 'true' || v === 'sample') return 'sample';
+    if (v === '' || v === '1' || v === 'true' || v === 'sample')
+      return 'sample';
     if (v === 'deep') return 'deep';
     if (v === '0' || v === 'false' || v === 'off') return null;
     return 'sample';

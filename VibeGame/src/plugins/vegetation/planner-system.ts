@@ -1,4 +1,10 @@
-import { defineSystem, defineQuery, Parent, type State, type System } from '../../core';
+import {
+  defineSystem,
+  defineQuery,
+  Parent,
+  type State,
+  type System,
+} from '../../core';
 import { getTerrainContext } from '../terrain';
 import { Transform } from '../transforms/components';
 import { SpawnerPending } from '../spawner/components';

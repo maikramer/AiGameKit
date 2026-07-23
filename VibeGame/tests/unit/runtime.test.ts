@@ -9,6 +9,17 @@ describe('GameRuntime', () => {
   let state: State;
   let dom: JSDOM;
   let GameRuntime: any;
+  const prev = {
+    DOMParser: global.DOMParser,
+    document: global.document,
+    window: global.window,
+    MutationObserver: global.MutationObserver,
+    Node: global.Node,
+    HTMLElement: global.HTMLElement,
+    requestAnimationFrame: global.requestAnimationFrame,
+    cancelAnimationFrame: global.cancelAnimationFrame,
+    performance: global.performance,
+  };
 
   beforeEach(async () => {
     dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
@@ -30,6 +41,15 @@ describe('GameRuntime', () => {
 
   afterEach(() => {
     runtime.stop();
+    global.DOMParser = prev.DOMParser;
+    global.document = prev.document;
+    global.window = prev.window;
+    global.MutationObserver = prev.MutationObserver;
+    global.Node = prev.Node;
+    global.HTMLElement = prev.HTMLElement;
+    global.requestAnimationFrame = prev.requestAnimationFrame;
+    global.cancelAnimationFrame = prev.cancelAnimationFrame;
+    global.performance = prev.performance;
   });
 
   it('should create a runtime instance', () => {

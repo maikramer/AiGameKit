@@ -1,4 +1,10 @@
-import { defineSystem, defineQuery, type Recipe, type State, type System } from '../../core';
+import {
+  defineSystem,
+  defineQuery,
+  type Recipe,
+  type State,
+  type System,
+} from '../../core';
 import { isKeyDown } from '../input/utils';
 import { getRenderingContext } from '../rendering/utils';
 import { Postprocessing } from '../postprocessing/components';

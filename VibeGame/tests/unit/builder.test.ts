@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, TIME_CONSTANTS } from 'vibegame';
 
@@ -7,6 +7,23 @@ const MAX_ENTITIES = 100000;
 describe('GameBuilder', () => {
   let builder: any;
   let GameBuilder: any;
+  const prev = {
+    DOMParser: global.DOMParser,
+    document: global.document,
+    MutationObserver: global.MutationObserver,
+    requestAnimationFrame: global.requestAnimationFrame,
+    cancelAnimationFrame: global.cancelAnimationFrame,
+    performance: global.performance,
+  };
+
+  afterEach(() => {
+    global.DOMParser = prev.DOMParser;
+    global.document = prev.document;
+    global.MutationObserver = prev.MutationObserver;
+    global.requestAnimationFrame = prev.requestAnimationFrame;
+    global.cancelAnimationFrame = prev.cancelAnimationFrame;
+    global.performance = prev.performance;
+  });
 
   beforeEach(async () => {
     const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');

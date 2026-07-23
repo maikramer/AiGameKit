@@ -5,13 +5,7 @@ export type ProfilerMode = 'off' | 'sample' | 'deep';
 
 /** Frame phases timed by the scheduler / runtime, plus manual custom spans. */
 export type ProfilerGroup =
-  | 'setup'
-  | 'fixed'
-  | 'simulation'
-  | 'late'
-  | 'draw'
-  | 'render'
-  | 'custom';
+  'setup' | 'fixed' | 'simulation' | 'late' | 'draw' | 'render' | 'custom';
 
 export interface ProfilerTimingStats {
   name: string;
@@ -146,7 +140,10 @@ function ensureAccum(
 
 /** Strip Vite query/hash and normalize slashes for stack-frame parsing. */
 function cleanStackLine(line: string): string {
-  return line.replace(/\\/g, '/').replace(/\?[^:\s]*/g, '').replace(/#[^:\s]*/g, '');
+  return line
+    .replace(/\\/g, '/')
+    .replace(/\?[^:\s]*/g, '')
+    .replace(/#[^:\s]*/g, '');
 }
 
 /**
@@ -166,7 +163,11 @@ export function captureCallerOrigin(skip = 0): string {
   let skipped = 0;
   for (const raw of lines) {
     const line = cleanStackLine(raw);
-    if (!line.includes('.ts') && !line.includes('.js') && !line.includes('.tsx')) {
+    if (
+      !line.includes('.ts') &&
+      !line.includes('.js') &&
+      !line.includes('.tsx')
+    ) {
       continue;
     }
     if (
@@ -295,7 +296,9 @@ export function toggleProfilerFreeze(): boolean {
   return true;
 }
 
-function usableFnName(fn: ((...args: never[]) => unknown) | undefined): string | null {
+function usableFnName(
+  fn: ((...args: never[]) => unknown) | undefined
+): string | null {
   if (!fn?.name) return null;
   const n = fn.name;
   if (
@@ -321,8 +324,7 @@ export function resolveSystemName(system: System): string {
   if (!name) name = usableFnName(system.setup) ?? '';
   if (!name) {
     anonCounter += 1;
-    const origin =
-      systemOriginCache.get(system) ?? captureCallerOrigin();
+    const origin = systemOriginCache.get(system) ?? captureCallerOrigin();
     systemOriginCache.set(system, origin);
     name = `unnamed:${shortOrigin(origin)}#${anonCounter}`;
   }

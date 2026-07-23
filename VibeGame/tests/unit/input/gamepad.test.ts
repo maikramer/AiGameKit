@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State } from 'vibegame';
 import {
@@ -12,6 +12,11 @@ import {
   setTargetCanvas,
   setFocusedCanvas,
 } from '../../../src/plugins/input/utils';
+
+const prevPerformance = global.performance;
+const prevWindow = global.window;
+const prevDocument = global.document;
+const prevNavigator = global.navigator;
 
 function makeMockGamepad(overrides: Partial<Gamepad> = {}): Gamepad {
   return {
@@ -33,6 +38,13 @@ function makeMockGamepad(overrides: Partial<Gamepad> = {}): Gamepad {
 describe('GamepadInput', () => {
   let state: State;
   let entity: number;
+
+  afterEach(() => {
+    global.performance = prevPerformance;
+    global.window = prevWindow;
+    global.document = prevDocument;
+    global.navigator = prevNavigator;
+  });
 
   beforeEach(() => {
     const dom = new JSDOM(

@@ -1,7 +1,15 @@
 import { logger } from '../../core/utils/logger';
 import type { Component } from '../../core';
 
-import { defineSystem, Parent, Tag, Layer, defineQuery, type State, type System } from '../../core';
+import {
+  defineSystem,
+  Parent,
+  Tag,
+  Layer,
+  defineQuery,
+  type State,
+  type System,
+} from '../../core';
 import { MAX_ENTITIES } from '../../core/ecs/constants';
 import {
   startCoroutine,

@@ -186,7 +186,8 @@ async function parseGlbCollisionMeshViaLoader(
     }
     const idxAttr = geom.index;
     if (idxAttr) {
-      for (let i = 0; i < idxAttr.count; i++) indices.push(base + idxAttr.getX(i));
+      for (let i = 0; i < idxAttr.count; i++)
+        indices.push(base + idxAttr.getX(i));
     } else {
       for (let i = 0; i < posAttr.count; i++) indices.push(base + i);
     }

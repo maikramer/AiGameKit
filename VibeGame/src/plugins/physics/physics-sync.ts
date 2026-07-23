@@ -1,6 +1,12 @@
 import type { System } from '../../core';
 import { defineSystem, defineQuery, TIME_CONSTANTS } from '../../core';
-import { Rigidbody, TouchedEvent, TouchEndedEvent } from './components';
+import {
+  InterpolatedTransform,
+  Rigidbody,
+  TouchedEvent,
+  TouchEndedEvent,
+} from './components';
+import { Transform, WorldTransform } from '../transforms/components';
 import {
   copyRigidbodyToTransforms,
   interpolateTransforms,
@@ -36,10 +42,22 @@ export const PhysicsRapierSyncSystem: System = defineSystem({
       // conversão de euler por corpo parado por step. Kinematic ficam de
       // fora do skip (o estado de sleep deles não garante pose imutável).
       if (body.isSleeping() && !body.isKinematic()) continue;
-      if (state.hasComponent(entity, Rigidbody)) {
-        syncRigidbodyToECS(entity, body, state);
-        copyRigidbodyToTransforms(entity, state);
+      // copyRigidbodyToTransforms requires Transform + WorldTransform +
+      // InterpolatedTransform in addition to Rigidbody. Short-lived physics
+      // entities (projectiles) can lose Transform mid-destroy while their
+      // Rapier body is still in entityToRigidbody for a frame; skip those
+      // instead of throwing, which otherwise spams the console and aborts the
+      // fixed-step loop.
+      if (
+        !state.hasComponent(entity, Rigidbody) ||
+        !state.hasComponent(entity, Transform) ||
+        !state.hasComponent(entity, WorldTransform) ||
+        !state.hasComponent(entity, InterpolatedTransform)
+      ) {
+        continue;
       }
+      syncRigidbodyToECS(entity, body, state);
+      copyRigidbodyToTransforms(entity, state);
     }
   },
 });
