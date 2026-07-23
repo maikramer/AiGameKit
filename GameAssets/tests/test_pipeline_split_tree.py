@@ -76,6 +76,7 @@ def test_run_split_at_height_stage_mock(tmp_path: Path) -> None:
         assert name == "split-at-height"
         assert "split-at-height" in argv
         assert "--cut-height" in argv
+        assert argv[argv.index("--cut-height") + 1] == "0.55"
         assert "--split-files" in argv
         # Input deve ser o unsplit em _intermediate/
         assert any("lod0_unsplit" in a for a in argv)
@@ -99,6 +100,29 @@ def test_run_split_at_height_stage_mock(tmp_path: Path) -> None:
     assert _top_path(mesh_final).read_bytes() == b"top"
     assert not raw_stump.exists()
     assert not raw_top.exists()
+
+
+def test_run_split_omits_cut_height_when_default(tmp_path: Path) -> None:
+    meshes = tmp_path / "meshes"
+    meshes.mkdir()
+    mesh_final = meshes / "tree_oak.glb"
+    lod0 = _lod_path(mesh_final, 0)
+    lod0.write_bytes(b"unsplit-lod0")
+    split_out = _split_path(mesh_final)
+
+    def _fake_run(name: str, argv: list[str], output: Path | None = None) -> StageResult:
+        assert "--cut-height" not in argv
+        split_out.write_bytes(b"split")
+        return StageResult(name, True, 0.1, "ok", split_out)
+
+    result = run_split_at_height_stage(
+        text3d_bin="text3d",
+        mesh_final=mesh_final,
+        profile=_profile(text3d=Text3DProfile(split_files=False)),
+        run_stage=_fake_run,
+    )
+    assert result.ok
+    assert "min(0.8,h/4)" in (result.error or "")
 
 
 def test_run_split_skips_when_done(tmp_path: Path) -> None:

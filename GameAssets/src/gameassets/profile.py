@@ -71,7 +71,8 @@ class Text3DProfile:
     sdnq_preset: str | None = None
     # Split stump+top (text3d split-at-height). None = auto (on para category=tree).
     split_at_height: bool | None = None
-    split_cut_height: float | None = 0.6
+    # None → text3d/Shared usam min(0.8 m, altura/4).
+    split_cut_height: float | None = None
     split_files: bool = True
 
 

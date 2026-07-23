@@ -238,7 +238,7 @@ def run_split_at_height_stage(
 
     split_out = _split_path(mesh_final)
     t3 = profile.text3d
-    cut_h = 0.6 if t3 is None or t3.split_cut_height is None else float(t3.split_cut_height)
+    cut_h = None if t3 is None else t3.split_cut_height
     want_files = True if t3 is None else bool(t3.split_files)
 
     argv = [
@@ -247,9 +247,9 @@ def run_split_at_height_stage(
         str(unsplit),
         "-o",
         str(split_out),
-        "--cut-height",
-        str(cut_h),
     ]
+    if cut_h is not None:
+        argv.extend(["--cut-height", str(float(cut_h))])
     if want_files:
         argv.append("--split-files")
 
@@ -271,11 +271,12 @@ def run_split_at_height_stage(
         if raw_top.is_file() and raw_top.resolve() != top.resolve():
             shutil.move(str(raw_top), str(top))
 
+    cut_msg = f"cut_height={cut_h}" if cut_h is not None else "cut=min(0.8,h/4)"
     return StageResult(
         "split-at-height",
         True,
         s.elapsed_s,
-        f"cut_height={cut_h} → {split_out.name} (+lod0)",
+        f"{cut_msg} → {split_out.name} (+lod0)",
         split_out,
     )
 
@@ -1084,6 +1085,29 @@ def ensure_to_paint_for_paint(
         f"[green]✓ to_paint[/green] {row_id} -> {to_paint_p.name}"
         + (f" ({out_faces:,} faces)" if out_faces > 0 else "")
     )
+
+    # Re-topology-fix no to_paint: o simplify (decimate) parte o mesh em
+    # ilhas (1→33+ comps). Um segundo topology-fix (morph default auto, SEM
+    # o override do profile para não amplificar) fecha as ilhas novamente
+    # (33→1 comp, 0 boundary) antes do paint/split. Crítico para que o
+    # split-at-height produza um corte limpo sem fendas Hunyuan.
+    refix_p = to_paint_p.with_name(to_paint_p.stem + "_refixed" + to_paint_p.suffix)
+    refix_argv = [text3d_bin, "topology-fix", str(to_paint_p), "-o", str(refix_p)]
+    # Morph default (auto) — SEM _topology_fix_extra_argv (não amplificar o override do user).
+    refix_argv.extend(["--engine", "arrays"])
+    if row is not None and row.category:
+        refix_argv.extend(["--category", str(row.category)])
+    r2 = run_cmd(refix_argv, extra_env=child_env, cwd=manifest_dir)
+    if r2.returncode == 0 and refix_p.is_file():
+        refix_p.replace(to_paint_p)
+        refix_faces = _count_faces_glb(to_paint_p)
+        console.print(
+            f"[green]✓ to_paint re-fix[/green] {row_id}"
+            + (f" ({refix_faces:,} faces, ilhas fechadas)" if refix_faces > 0 else "")
+        )
+    else:
+        log.warning("to_paint re-fix falhou para %s (continua com simplify)", row_id)
+
     return to_paint_p
 
 
@@ -1388,20 +1412,19 @@ def _run_static_lod_stages(
     target_faces: int,
     base: str,
     with_lod: bool,
-    bake_normals: bool,
+    bake_normals: bool,  # reservado para futuras variantes HI/LO bake
     text3d_bin: str,
     with_rig: bool,
 ) -> None:
-    """Caminho estático (sem rig): bake-master identity + ladder do painted.
+    """Caminho estático (sem rig): ladder LOD0/1/2 via ``text3d lod``.
 
-    LOD0 DEVE ser o painted (mesma topologia); LOD1/2 por ``text3d lod
-    --painted-mesh`` (remesh textured). Se um lod0 promovido (rig/animated de
-    outra run) existir, nada é clobberado. O finish (meshopt) corre nos
-    LOD1/2 dentro do próprio text3d lod — depois desta fase nenhum stage lê
-    os entregáveis via bpy (collision usa o painted).
+    LOD0 = 1.2x ``target_faces`` (decimado do painted com preservação de UV),
+    LOD1 = target/2, LOD2 = target/4. ``--finish-lod0`` aplica tangents +
+    KTX2 + meshopt ao LOD0 (alinha com regras lod0.yaml). Se um lod0 promovido
+    (rig/animated de outra run) existir, nada e clobberado. O finish corre
+    dentro do proprio ``text3d lod`` — depois desta fase nenhum stage le os
+    entregaveis via bpy (collision usa o painted).
     """
-    import shutil as _sh
-
     lod0_p = _lod_path(mesh_final, 0)
     lod1_p = _lod_path(mesh_final, 1)
     lod2_p = _lod_path(mesh_final, 2)
@@ -1426,24 +1449,23 @@ def _run_static_lod_stages(
     elif lod0_matches_painted:
         res.stages.append(StageResult("bake-master", True, 0.0, f"skipped (lod0=painted faces={lod0_faces})", lod0_p))
     else:
-        # Cópia directa painted → lod0 (identidade). bake-normals high→low só
-        # faz sentido com decimação; com lod0=painted seria redundante.
-        _sh.copy2(painted_p, lod0_p)
-        lod0_matches_painted = True
-        msg = f"lod0=painted copy faces={painted_faces}"
-        if bake_normals:
-            msg += " (bake-normals skipped: lod0=painted)"
-        res.stages.append(StageResult("bake-master", True, 0.0, msg, lod0_p))
+        # LOD0 será gerado pelo text3d lod abaixo (com --target-faces e
+        # --finish-lod0). Não fazemos copy painted→lod0 porque a ladder agora
+        # decima LOD0 para 1.2x target_faces + aplica tangents/KTX2/meshopt.
+        res.stages.append(
+            StageResult("bake-master", True, 0.0, f"deferred to lod stage (painted faces={painted_faces})", lod0_p)
+        )
     res.lod0_path = lod0_p
 
-    # Stage 5 - LOD1/LOD2 a partir do PAINTED (não do lod0 crushado).
-    # Skip só se lod0=painted E lod1/2 têm densidade saudável (~ratio 0.40/0.15).
+    # Stage 5 - Ladder completa (LOD0/1/2) a partir do PAINTED.
+    # text3d lod com --target-faces decima LOD0=1.2x target, LOD1=target/2,
+    # LOD2=target/4. --finish-lod0 aplica tangents+KTX2+meshopt ao LOD0.
+    # Skip só se lod0 promoted OU ladder já válida.
     if with_lod:
         lod1_faces = _count_faces_glb(lod1_p) if lod1_p.is_file() else -1
         lod2_faces = _count_faces_glb(lod2_p) if lod2_p.is_file() else -1
         lod_ladder_ok = (
-            lod0_matches_painted
-            and lod1_p.is_file()
+            lod1_p.is_file()
             and lod2_p.is_file()
             and _glb_has_materials(lod1_p)
             and _glb_has_materials(lod2_p)
@@ -1454,9 +1476,13 @@ def _run_static_lod_stages(
         )
         if lod0_is_promoted:
             res.stages.append(StageResult("lod", True, 0.0, "skipped (lod0 already promoted)", lod1_p))
-        elif lod_ladder_ok:
+        elif lod_ladder_ok and lod0_matches_painted:
             res.stages.append(StageResult("lod", True, 0.0, "skipped (lod1/lod2 ok)", lod1_p))
         else:
+            # LOD0 budget = 1.2× category target_faces (alinha com lod0.yaml
+            # max_per_category). Piso 8 para evitar degeneração em categorias
+            # pequenas (ex.: effects target=2000).
+            lod0_target = max(8, int(target_faces * 1.2))
             lod_min1 = max(target_faces // 2, 500)
             lod_min2 = max(target_faces // 4, 150)
             lod_argv = [
@@ -1469,6 +1495,9 @@ def _run_static_lod_stages(
                 base,
                 "--painted-mesh",
                 str(painted_p),
+                "--target-faces",
+                str(lod0_target),
+                "--finish-lod0",
                 "--lod1-ratio",
                 "0.40",
                 "--lod2-ratio",
@@ -1605,7 +1634,8 @@ def run_master_pipeline(
     #   rig:    rigging3d sobre o PAINTED -> animator3d game-pack x1 ->
     #           text3d lod sobre o animated/rigged (decimate preserva
     #           armature/weights/clips nativamente) -> lod0/1/2 + finish.
-    #   static: bake-master identity (lod0=painted) + ladder do painted.
+    #   static: text3d lod com --target-faces (LOD0=1.2x target) +
+    #           --finish-lod0 (tangents+KTX2+meshopt). LOD1/2 = target/2, /4.
     # Sem rigged_hi (GPU sobre _clean HI sem textura, descartado) nem
     # transfer-weights por LOD (KDTree x3 + game-pack x3 + clips duplicadas).
     # ------------------------------------------------------------------
@@ -1615,7 +1645,7 @@ def run_master_pipeline(
         return res
 
     fr = effective_face_ratio(profile, row)
-    # target_faces = orçamento para LOD1/2 (mínimos), NÃO para esmagar LOD0.
+    # target_faces = orçamento base; LOD0 = 1.2×target, LOD1 = target/2, LOD2 = target/4.
     target_faces = get_target_faces(row.category or "", face_ratio=fr) if row.category else 0
     if target_faces <= 0:
         target_faces = 8000
