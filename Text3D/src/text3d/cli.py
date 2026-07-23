@@ -2142,7 +2142,7 @@ def remesh_textured_cmd(
     "--cut-height",
     type=float,
     default=None,
-    help="Altura do corte em metros acima da base (bbox.min.y). Default 0.6.",
+    help="Altura do corte em metros acima da base (bbox.min.y). Default: min(0.8, altura/4).",
 )
 @click.option(
     "--cut-ratio",
@@ -2205,7 +2205,7 @@ def split_at_height_cmd(
     acrescenta GLBs separados.
 
     \b
-        text3d split-at-height tree_lod0.glb -o tree_split.glb --cut-height 0.6
+        text3d split-at-height tree_lod0.glb -o tree_split.glb
         text3d split-at-height tree.glb -o tree.glb --cut-ratio 0.25 --split-files
     """
     from .utils.mesh_split import split_at_height_glb

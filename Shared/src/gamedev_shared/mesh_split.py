@@ -9,7 +9,8 @@ Fecho do corte (cascas Hunyuan abertas — fill topológico falha):
 1. Rasteriza intersecção malha↔plano → máscara 2D;
 2. Morph close 2D + flood-fill → **só interior** da silhueta;
 3. Tampão *plano* no Z do corte (erode 1 célula, sem paredes/bevel/morph 3D);
-4. Clip verts que saíram da silhueta; UV de casca nas faces do corte.
+4. Contém banda ao volume (apaga verts/faces fora da silhueta; strip horizontais);
+5. Tampão plano fresco + 2ª contain; shell interno; leak/slivers + reweld.
 
 Sem bevel / morph voxel 3D — esses criavam o “colar” na casca.
 
@@ -28,7 +29,11 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-DEFAULT_CUT_HEIGHT = 0.6
+# Corte default: min(0.8 m, 1/4 da altura) — acima das raízes, abaixo da copa.
+DEFAULT_CUT_HEIGHT_MAX = 0.8
+DEFAULT_CUT_HEIGHT_RATIO = 0.25
+# Compat: testes / docs que ainda referem ``DEFAULT_CUT_HEIGHT``.
+DEFAULT_CUT_HEIGHT = DEFAULT_CUT_HEIGHT_MAX
 DEFAULT_STUMP_NAME = "Stump"
 DEFAULT_TOP_NAME = "Top"
 # Bevel off: colar/anel no corte — fecho seamless = tampão plano interior.
@@ -41,6 +46,15 @@ DEFAULT_SEAL_CLOSE_M = 0.03  # sela vãos ≤ ~3 cm na silhueta 2D
 DEFAULT_SEAL_MAX_GRID = 384
 # Clip banda (só puxar verts fora da silhueta).
 DEFAULT_SEAL_BAND_CELLS = 3.0
+# Pós-seal: folhas finas / micro-ilhas que “vazam” no plano de corte.
+DEFAULT_LEAK_MAX_THICKNESS = 0.02  # m — bbox min-extent
+DEFAULT_LEAK_MIN_SPAN = 0.06  # m — bbox max-extent (folha, não blob)
+DEFAULT_LEAK_BAND_M = 0.08  # m — à volta do plano de corte
+DEFAULT_LEAK_MICRO_FACES = 16
+DEFAULT_LEAK_MICRO_VOL_FRAC = 0.001
+# Fuse banda do corte: dissolve coplanar + fundir.
+DEFAULT_FUSE_ANGLE_DEG = 10.0
+DEFAULT_FUSE_WELD_M = 0.014
 
 # Blender Z-up == glTF Y-up após export.
 _UP_AXIS = 2
@@ -236,10 +250,43 @@ def _stamp_segment(mask: np.ndarray, x0: float, y0: float, x1: float, y1: float,
                     mask[i, j] = True
 
 
+def _largest_mask_component(mask: np.ndarray) -> np.ndarray:
+    """Mantém só a maior componente 4-conectada de células True."""
+    if not mask.any():
+        return mask
+    h, w = mask.shape
+    seen = np.zeros_like(mask, dtype=bool)
+    best: list[tuple[int, int]] = []
+    for y0 in range(h):
+        for x0 in range(w):
+            if not mask[y0, x0] or seen[y0, x0]:
+                continue
+            stack = [(y0, x0)]
+            seen[y0, x0] = True
+            comp: list[tuple[int, int]] = []
+            while stack:
+                y, x = stack.pop()
+                comp.append((y, x))
+                for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not seen[ny, nx]:
+                        seen[ny, nx] = True
+                        stack.append((ny, nx))
+            if len(comp) > len(best):
+                best = comp
+    out = np.zeros_like(mask)
+    for y, x in best:
+        out[y, x] = True
+    return out
+
+
 def _rasterize_cut_plane(
     obj: Any, cut_up: float, *, cell: float, max_grid: int
 ) -> tuple[np.ndarray, float, float, float]:
     """Máscara 2D da intersecção malha↔plano Z=cut_up.
+
+    Só usa faces *quase verticais* (casca) — fins/horizontais no corte
+    inchavam a silhueta e o tampão “vazava” para fora do tronco.
 
     Returns:
         ``(mask[row=y, col=x], origin_x, origin_y, cell)``
@@ -253,12 +300,20 @@ def _rasterize_cut_plane(
     me.vertices.foreach_get("co", coords)
     coords = coords.reshape(-1, 3)
 
-    # Banda: faces que cruzam o plano ou verts perto dele.
+    # Verts da casca vertical (|nz| baixo) na banda do corte.
+    bark_vert = np.zeros(n_verts, dtype=bool)
+    for poly in me.polygons:
+        if abs(float(poly.normal.z)) >= 0.55:
+            continue
+        for vi in poly.vertices:
+            bark_vert[vi] = True
+
     band = max(cell * 2.0, 0.03)
-    near = np.abs(coords[:, 2] - cut_up) <= band
+    near = bark_vert & (np.abs(coords[:, 2] - cut_up) <= band)
     if not near.any():
-        # fallback: todos os verts (bisect deveria ter criado verts no plano)
-        near = np.ones(n_verts, dtype=bool)
+        near = np.abs(coords[:, 2] - cut_up) <= band
+    if not near.any():
+        near = bark_vert if bark_vert.any() else np.ones(n_verts, dtype=bool)
 
     xs = coords[near, 0]
     ys = coords[near, 1]
@@ -267,7 +322,6 @@ def _rasterize_cut_plane(
     min_y, max_y = float(ys.min()) - pad, float(ys.max()) + pad
     span_x = max(max_x - min_x, cell)
     span_y = max(max_y - min_y, cell)
-    # Cap de grelha.
     cell_eff = max(cell, span_x / max_grid, span_y / max_grid)
     w = int(np.ceil(span_x / cell_eff)) + 1
     h = int(np.ceil(span_y / cell_eff)) + 1
@@ -278,14 +332,15 @@ def _rasterize_cut_plane(
     def _to_cell(x: float, y: float) -> tuple[float, float]:
         return (x - min_x) / cell_eff, (y - min_y) / cell_eff
 
-    # Stamp verts no plano (radius=1 liga o anel da casca sem blob convexo).
-    on_plane = np.abs(coords[:, 2] - cut_up) <= max(cell_eff, 0.02)
+    on_plane = bark_vert & (np.abs(coords[:, 2] - cut_up) <= max(cell_eff, 0.02))
     for x, y in coords[on_plane, :2]:
         cx, cy = _to_cell(float(x), float(y))
         _stamp_segment(mask, cx, cy, cx, cy, radius=1)
 
-    # Intersecção aresta↔plano.
+    # Intersecção aresta↔plano — só arestas de faces verticais.
     for poly in me.polygons:
+        if abs(float(poly.normal.z)) >= 0.55:
+            continue
         verts = list(poly.vertices)
         n = len(verts)
         for i in range(n):
@@ -308,6 +363,7 @@ def _rasterize_cut_plane(
             cx, cy = _to_cell(float(px), float(py))
             _stamp_segment(mask, cx, cy, cx, cy, radius=1)
 
+    # Não filtrar CC no anel cru (pode partir o perímetro); solidify trata.
     return mask, min_x, min_y, cell_eff
 
 
@@ -321,10 +377,442 @@ def _solidify_cut_mask(mask: np.ndarray, *, close_iters: int) -> np.ndarray:
         return mask
     closed = _binary_close(mask, max(1, close_iters))
     solid = ~_flood_fill_exterior(closed)
-    solid = _binary_open(solid, 1)
+    # Open leve; se esvaziar, fica o fill cru. Depois maior CC.
+    opened = _binary_open(solid, 1)
+    if opened.any():
+        solid = opened
     if not solid.any():
         solid = ~_flood_fill_exterior(_binary_dilate(mask, 1))
-    return solid
+    solid = _largest_mask_component(solid)
+    # Garantir que o anel da casca (mask) entra no keep — senão contain
+    # apaga as paredes cujo XY cai na borda da grelha.
+    return solid | mask
+
+
+def _snap_cap_to_bark_rim(
+    obj: Any,
+    cut_up: float,
+    *,
+    band: float,
+    weld_dist: float,
+) -> dict[str, int]:
+    """Snap verts do tampão (só faces horiz) ao rebordo da casca + remove_doubles.
+
+    O tampão em grelha nasce com verts nos centros das células — longe demais
+    do anel do bisect para um weld fraco, fica ilha a flutuar no gap.
+    """
+    import bmesh
+    from mathutils.kdtree import KDTree
+
+    from gamedev_shared.mesh_repair import remove_doubles
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    targets: list[Any] = []
+    for v in bm.verts:
+        if abs(v.co.z - cut_up) > band:
+            continue
+        if any(abs(f.normal.z) < 0.55 for f in v.link_faces):
+            targets.append(v)
+    if len(targets) < 3:
+        bm.free()
+        return {"snapped": 0, "welded": 0}
+
+    kd = KDTree(len(targets))
+    for i, v in enumerate(targets):
+        kd.insert(v.co, i)
+    kd.balance()
+
+    snapped = 0
+    max_dist = float(max(weld_dist * 2.5, 1e-4))
+    for v in bm.verts:
+        if abs(v.co.z - cut_up) > band:
+            continue
+        if not v.link_faces:
+            continue
+        # Só verts “de tampão”: todas as faces ligadas são horizontais.
+        if any(abs(f.normal.z) < 0.55 for f in v.link_faces):
+            continue
+        # Só o *anel* do tampão (boundary) — interior não precisa de snap
+        # e um weld global largo colapsa a casca.
+        if not any(len(e.link_faces) == 1 for e in v.link_edges):
+            continue
+        _co, idx, dist = kd.find(v.co)
+        if idx is None or dist > max_dist:
+            continue
+        t = targets[idx]
+        v.co.x = t.co.x
+        v.co.y = t.co.y
+        v.co.z = float(cut_up)
+        snapped += 1
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    # Weld curto: só funde pares já sobrepostos pelo snap.
+    welded = remove_doubles(obj, float(max(min(weld_dist, 0.012), 1e-5)))
+    return {"snapped": snapped, "welded": int(welded)}
+
+
+def _bridge_cap_to_bark(
+    obj: Any,
+    cut_up: float,
+    *,
+    band: float,
+    max_bridge_dist: float = 0.05,
+    weld_dist: float = DEFAULT_FUSE_WELD_M,
+) -> dict[str, int]:
+    """Ponte robusta cap↔casca: fecha gaps onde o snap falha.
+
+    O snap só do anel deixa o cap a flutuar quando a casca Hunyuan é
+    irregular (fendas, bifurcações, raízes a atravessar o corte). Aqui:
+
+    1. Flatten de toda a banda do corte para z=cut_up (anti-Z-fight);
+    2. **Edges de bridge explícitos**: para cada boundary vert do cap, criar
+       uma aresta até ao boundary vert da casca mais próximo (KDTree em XY);
+    3. ``triangle_fill`` sobre o conjunto combinado (cap + casca + bridges)
+       — os bridges transformam as duas boundaries desconexas num anel
+       conjunto que o fill fecha com triângulos;
+    4. ``remove_doubles`` para fundir overlaps.
+
+    Não colapsa a casca: só liga o cap a ela, não mexe em verts fora da banda.
+    """
+    import bmesh
+    from mathutils import Vector
+    from mathutils.kdtree import KDTree
+
+    from gamedev_shared.mesh_repair import remove_doubles
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    bm.faces.ensure_lookup_table()
+
+    # 1) Flatten: verts do cap (faces horiz) na banda → z=cut_up.
+    flattened = 0
+    for v in bm.verts:
+        if abs(v.co.z - cut_up) > band:
+            continue
+        if any(abs(f.normal.z) >= 0.65 for f in v.link_faces):
+            v.co.z = float(cut_up)
+            flattened += 1
+
+    bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+
+    # 2) Snap leve do anel do cap à casca (XY, ≤ max_bridge_dist).
+    bark_verts = [
+        v
+        for v in bm.verts
+        if abs(v.co.z - cut_up) <= band * 1.5
+        and any(abs(f.normal.z) < 0.55 for f in v.link_faces)
+    ]
+    snapped = 0
+    if len(bark_verts) >= 3:
+        kd_snap = KDTree(len(bark_verts))
+        for i, v in enumerate(bark_verts):
+            kd_snap.insert(Vector((v.co.x, v.co.y, cut_up)), i)
+        kd_snap.balance()
+        for v in bm.verts:
+            if abs(v.co.z - cut_up) > band:
+                continue
+            if not v.link_faces or any(abs(f.normal.z) < 0.55 for f in v.link_faces):
+                continue
+            if not any(len(e.link_faces) == 1 for e in v.link_edges):
+                continue
+            _co, idx, dist = kd_snap.find(Vector((v.co.x, v.co.y, cut_up)))
+            if idx is None or dist > max_bridge_dist:
+                continue
+            t = bark_verts[idx]
+            v.co.x = t.co.x
+            v.co.y = t.co.y
+            v.co.z = float(cut_up)
+            snapped += 1
+        bm.verts.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+
+    # 3) Edges de bridge explícitos: cap boundary → bark boundary mais próximo.
+    bark_boundary = [
+        v
+        for v in bm.verts
+        if v.is_valid
+        and abs(v.co.z - cut_up) <= band
+        and any(len(e.link_faces) == 1 for e in v.link_edges)
+        and any(abs(f.normal.z) < 0.55 for f in v.link_faces)
+    ]
+    cap_boundary = [
+        v
+        for v in bm.verts
+        if v.is_valid
+        and abs(v.co.z - cut_up) <= band
+        and any(len(e.link_faces) == 1 for e in v.link_edges)
+        and all(abs(f.normal.z) >= 0.65 for f in v.link_faces)
+    ]
+    bridges = 0
+    if bark_boundary and cap_boundary:
+        kd_bridge = KDTree(len(bark_boundary))
+        for i, v in enumerate(bark_boundary):
+            kd_bridge.insert(Vector((v.co.x, v.co.y, cut_up)), i)
+        kd_bridge.balance()
+        for cv in cap_boundary:
+            _co, idx, dist = kd_bridge.find(Vector((cv.co.x, cv.co.y, cut_up)))
+            if idx is None or dist > max_bridge_dist * 3.0:
+                continue
+            bv = bark_boundary[idx]
+            # Só criar se não existir já.
+            if any(e.other_vert(cv) == bv for e in cv.link_edges):
+                continue
+            try:
+                bm.edges.new((cv, bv))
+                bridges += 1
+            except Exception:
+                pass
+        bm.edges.ensure_lookup_table()
+
+    # 4) triangle_fill sobre todas as boundaries combinadas (cap + bark + bridges).
+    fill_edges = [
+        e
+        for e in bm.edges
+        if e.is_valid
+        and len(e.link_faces) == 1
+        and all(abs(v.co.z - cut_up) <= band for v in e.verts)
+    ]
+    filled = 0
+    if fill_edges:
+        try:
+            ret = bmesh.ops.triangle_fill(bm, use_beauty=True, use_dissolve=False, edges=fill_edges)
+            filled = sum(1 for g in ret.get("geom", []) if hasattr(g, "loops") and len(g.loops) > 0)
+        except Exception as exc:
+            log.debug("bridge triangle_fill falhou: %s", exc)
+        # Fallback: holes_fill para o que sobrar.
+        bm.edges.ensure_lookup_table()
+        remaining = [
+            e
+            for e in bm.edges
+            if e.is_valid
+            and len(e.link_faces) == 1
+            and all(abs(v.co.z - cut_up) <= band for v in e.verts)
+        ]
+        if remaining:
+            try:
+                ret = bmesh.ops.holes_fill(bm, edges=remaining, sides=0)
+                filled += len(ret.get("faces", []))
+            except Exception as exc:
+                log.debug("bridge holes_fill falhou: %s", exc)
+
+    # 5) Re-flatten faces novas do fill (triangle_fill pode criar em 3D).
+    bm.faces.ensure_lookup_table()
+    for f in bm.faces:
+        if not f.is_valid or abs(f.normal.z) < 0.55:
+            continue
+        c = f.calc_center_median()
+        if abs(c.z - cut_up) > 0.005:
+            for v in f.verts:
+                if abs(v.co.z - cut_up) <= band:
+                    v.co.z = float(cut_up)
+
+    # 6) Segunda passagem: re-bridge + re-fill para fechar gaps remanescentes.
+    bark_boundary_2 = [
+        v
+        for v in bm.verts
+        if v.is_valid
+        and abs(v.co.z - cut_up) <= band
+        and any(len(e.link_faces) == 1 for e in v.link_edges)
+        and any(abs(f.normal.z) < 0.55 for f in v.link_faces)
+    ]
+    cap_boundary_2 = [
+        v
+        for v in bm.verts
+        if v.is_valid
+        and abs(v.co.z - cut_up) <= band
+        and any(len(e.link_faces) == 1 for e in v.link_edges)
+        and all(abs(f.normal.z) >= 0.65 for f in v.link_faces)
+    ]
+    if bark_boundary_2 and cap_boundary_2:
+        kd2 = KDTree(len(bark_boundary_2))
+        for i, v in enumerate(bark_boundary_2):
+            kd2.insert(Vector((v.co.x, v.co.y, cut_up)), i)
+        kd2.balance()
+        for cv in cap_boundary_2:
+            _co, idx, dist = kd2.find(Vector((cv.co.x, cv.co.y, cut_up)))
+            if idx is None or dist > max_bridge_dist * 3.0:
+                continue
+            bv = bark_boundary_2[idx]
+            if any(e.other_vert(cv) == bv for e in cv.link_edges):
+                continue
+            try:
+                bm.edges.new((cv, bv))
+                bridges += 1
+            except Exception:
+                pass
+        bm.edges.ensure_lookup_table()
+        fill_edges_2 = [
+            e
+            for e in bm.edges
+            if e.is_valid
+            and len(e.link_faces) == 1
+            and all(abs(v.co.z - cut_up) <= band for v in e.verts)
+        ]
+        if fill_edges_2:
+            try:
+                ret = bmesh.ops.triangle_fill(bm, use_beauty=True, use_dissolve=False, edges=fill_edges_2)
+                filled += sum(1 for g in ret.get("geom", []) if hasattr(g, "loops") and len(g.loops) > 0)
+            except Exception:
+                pass
+        # Re-flatten faces novas da 2ª passagem.
+        bm.faces.ensure_lookup_table()
+        for f in bm.faces:
+            if not f.is_valid or abs(f.normal.z) < 0.55:
+                continue
+            c = f.calc_center_median()
+            if abs(c.z - cut_up) > 0.005:
+                for v in f.verts:
+                    if abs(v.co.z - cut_up) <= band:
+                        v.co.z = float(cut_up)
+
+    loose = [v for v in bm.verts if not v.link_faces]
+    if loose:
+        bmesh.ops.delete(bm, geom=loose, context="VERTS")
+
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+
+    welded = int(remove_doubles(obj, float(max(min(weld_dist, 0.012), 1e-5))))
+    return {"snapped": snapped, "flattened": flattened, "bridges": bridges, "filled": filled, "welded": welded}
+
+
+def _strip_horizontals_near_cut(obj: Any, cut_up: float, *, band: float, nz_min: float = 0.72) -> int:
+    """Apaga faces quase horizontais na banda do corte (caps/leaks/prateleiras)."""
+    import bmesh
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    doomed = [f for f in bm.faces if abs(f.normal.z) >= nz_min and abs(f.calc_center_median().z - cut_up) <= band]
+    n = len(doomed)
+    if doomed:
+        bmesh.ops.delete(bm, geom=doomed, context="FACES")
+        loose = [v for v in bm.verts if not v.link_faces]
+        if loose:
+            bmesh.ops.delete(bm, geom=loose, context="VERTS")
+        bm.to_mesh(obj.data)
+        obj.data.update()
+    bm.free()
+    return n
+
+
+def _cell_inside(mask: np.ndarray, origin_x: float, origin_y: float, cell: float, x: float, y: float) -> bool:
+    """True se (x,y) cai numa célula True da máscara 2D."""
+    h, w = mask.shape
+    cx = int(np.floor((x - origin_x) / cell))
+    cy = int(np.floor((y - origin_y) / cell))
+    return 0 <= cy < h and 0 <= cx < w and bool(mask[cy, cx])
+
+
+def _contain_cut_band_to_volume(
+    obj: Any,
+    allowed: np.ndarray,
+    *,
+    origin_x: float,
+    origin_y: float,
+    cell: float,
+    cut_up: float,
+    band_half: float,
+    strip_horizontal: bool = True,
+    delete_outside_verts: bool = True,
+) -> dict[str, int]:
+    """Contém a banda do corte ao volume 2D — **apaga** o que sai (não puxa).
+
+    Puxar verts criava prateleiras/folhas no gap. Aqui:
+
+    1. Apaga verts na banda com XY fora de ``allowed`` (se ``delete_outside_verts``);
+    2. Apaga faces com centro fora de ``allowed`` (qualquer orientação);
+    3. Opcional: apaga faces quase horizontais na banda (caps/leaks velhos).
+    """
+    import bmesh
+
+    h, w = allowed.shape
+    if h < 2 or w < 2 or not allowed.any():
+        return {"verts_deleted": 0, "faces_deleted": 0, "horiz_stripped": 0}
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    bm.faces.ensure_lookup_table()
+    z_pad = float(band_half)
+
+    n_verts = 0
+    if delete_outside_verts:
+        outside_verts = [
+            v
+            for v in bm.verts
+            if abs(v.co.z - cut_up) <= z_pad
+            and not _cell_inside(allowed, origin_x, origin_y, cell, float(v.co.x), float(v.co.y))
+        ]
+        n_verts = len(outside_verts)
+        if outside_verts:
+            bmesh.ops.delete(bm, geom=outside_verts, context="VERTS")
+            bm.faces.ensure_lookup_table()
+            bm.verts.ensure_lookup_table()
+
+    doomed_faces: list[Any] = []
+    horiz: list[Any] = []
+    for f in bm.faces:
+        if not f.is_valid:
+            continue
+        c = f.calc_center_median()
+        if abs(c.z - cut_up) > z_pad:
+            continue
+        # Faces fora do volume (só quando estamos a conter de verdade).
+        if delete_outside_verts and not _cell_inside(allowed, origin_x, origin_y, cell, float(c.x), float(c.y)):
+            doomed_faces.append(f)
+            continue
+        if delete_outside_verts:
+            n_out = sum(
+                1
+                for v in f.verts
+                if abs(v.co.z - cut_up) <= z_pad
+                and not _cell_inside(allowed, origin_x, origin_y, cell, float(v.co.x), float(v.co.y))
+            )
+            if n_out >= max(2, (len(f.verts) + 1) // 2):
+                doomed_faces.append(f)
+                continue
+        if strip_horizontal and abs(f.normal.z) >= 0.72:
+            if delete_outside_verts:
+                # Pré-cap: limpar todas as horizontais na banda.
+                horiz.append(f)
+            else:
+                # Pós-cap: horizontais com centro/maioria fora do allowed.
+                n_out = sum(
+                    1
+                    for v in f.verts
+                    if not _cell_inside(allowed, origin_x, origin_y, cell, float(v.co.x), float(v.co.y))
+                )
+                if n_out >= max(1, len(f.verts) // 2) or not _cell_inside(
+                    allowed, origin_x, origin_y, cell, float(c.x), float(c.y)
+                ):
+                    horiz.append(f)
+
+    n_faces = len(doomed_faces)
+    n_horiz = 0
+    if doomed_faces:
+        bmesh.ops.delete(bm, geom=doomed_faces, context="FACES")
+        bm.faces.ensure_lookup_table()
+    if strip_horizontal and horiz:
+        horiz_ok = [f for f in horiz if f.is_valid]
+        n_horiz = len(horiz_ok)
+        if horiz_ok:
+            bmesh.ops.delete(bm, geom=horiz_ok, context="FACES")
+
+    loose = [v for v in bm.verts if not v.link_faces]
+    if loose:
+        bmesh.ops.delete(bm, geom=loose, context="VERTS")
+
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return {"verts_deleted": n_verts, "faces_deleted": n_faces, "horiz_stripped": n_horiz}
 
 
 def _clip_band_to_silhouette(
@@ -337,73 +825,18 @@ def _clip_band_to_silhouette(
     cut_up: float,
     band_half: float,
 ) -> dict[str, int]:
-    """Puxa/apaga geometria da banda que saiu da silhueta 2D (só interior)."""
-    import bmesh
-
-    h, w = allowed.shape
-    if h < 2 or w < 2 or not allowed.any():
-        return {"pulled": 0, "faces_deleted": 0}
-
-    # Prefixo: lista de células permitidas p/ nearest.
-    ay, ax = np.nonzero(allowed)
-    allow_pts = np.stack([ax.astype(np.float64), ay.astype(np.float64)], axis=1)
-
-    def _nearest_cell(ix: float, iy: float) -> tuple[int, int]:
-        d = (allow_pts[:, 0] - ix) ** 2 + (allow_pts[:, 1] - iy) ** 2
-        j = int(np.argmin(d))
-        return int(allow_pts[j, 0]), int(allow_pts[j, 1])
-
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    bm.verts.ensure_lookup_table()
-    bm.faces.ensure_lookup_table()
-    pulled = 0
-    z_pad = band_half * 1.6
-    for v in bm.verts:
-        if abs(v.co.z - cut_up) > z_pad:
-            continue
-        ix = (v.co.x - origin_x) / cell
-        iy = (v.co.y - origin_y) / cell
-        cx, cy = int(round(ix)), int(round(iy))
-        if 0 <= cy < h and 0 <= cx < w and allowed[cy, cx]:
-            continue
-        nx, ny = _nearest_cell(ix, iy)
-        # Puxar para o centro da célula permitida (fica *dentro* da borda).
-        v.co.x = origin_x + (nx + 0.5) * cell
-        v.co.y = origin_y + (ny + 0.5) * cell
-        pulled += 1
-
-    # Só apagar faces de tampão (|nz| alto) ainda fora — casca vertical já puxada.
-    doomed: list[Any] = []
-    for f in bm.faces:
-        if abs(f.normal.z) < 0.75:
-            continue
-        c = f.calc_center_median()
-        if abs(c.z - cut_up) > z_pad:
-            continue
-        ix = (c.x - origin_x) / cell
-        iy = (c.y - origin_y) / cell
-        # 2×2 células à volta (anti-alias da grelha).
-        inside = False
-        for dy in (0, 1):
-            for dx in (0, 1):
-                cx, cy = int(np.floor(ix)) + dx, int(np.floor(iy)) + dy
-                if 0 <= cy < h and 0 <= cx < w and allowed[cy, cx]:
-                    inside = True
-                    break
-            if inside:
-                break
-        if not inside:
-            doomed.append(f)
-    if doomed:
-        bmesh.ops.delete(bm, geom=doomed, context="FACES")
-    loose = [v for v in bm.verts if not v.link_faces and abs(v.co.z - cut_up) <= z_pad]
-    if loose:
-        bmesh.ops.delete(bm, geom=loose, context="VERTS")
-    bm.to_mesh(obj.data)
-    obj.data.update()
-    bm.free()
-    return {"pulled": pulled, "faces_deleted": len(doomed)}
+    """Compat: delega para contain-by-delete (já não puxa verts)."""
+    r = _contain_cut_band_to_volume(
+        obj,
+        allowed,
+        origin_x=origin_x,
+        origin_y=origin_y,
+        cell=cell,
+        cut_up=cut_up,
+        band_half=band_half,
+        strip_horizontal=False,
+    )
+    return {"pulled": 0, "faces_deleted": r["faces_deleted"] + r["verts_deleted"]}
 
 
 def _mask_to_flat_cap_object(
@@ -772,6 +1205,250 @@ def _soft_bevel_cut_rim(
     return n
 
 
+def _cleanup_cut_leak_geometry(
+    obj: Any,
+    cut_up: float,
+    *,
+    max_thickness: float = DEFAULT_LEAK_MAX_THICKNESS,
+    min_span: float = DEFAULT_LEAK_MIN_SPAN,
+    band: float = DEFAULT_LEAK_BAND_M,
+    micro_faces: int = DEFAULT_LEAK_MICRO_FACES,
+    micro_vol_frac: float = DEFAULT_LEAK_MICRO_VOL_FRAC,
+) -> dict[str, int]:
+    """Remove folhas finas / micro-ilhas que vazam no plano de corte.
+
+    Heurística (por componente conexo de faces):
+
+    - **thin sheet near cut**: bbox intersecta a banda do corte, espessura
+      (min-extent) ≤ ``max_thickness`` e span (max-extent) ≥ ``min_span``;
+    - **micro debris**: poucas faces e volume bbox ≪ componente principal.
+
+    Nunca apaga o componente de maior volume (corpo da malha). Folhagem longe
+    do corte não é tocada pela regra thin.
+    """
+    import bmesh
+
+    me = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    if not bm.faces:
+        bm.free()
+        return {"thin_faces": 0, "debris_faces": 0, "components_dropped": 0}
+
+    parent = list(range(len(bm.faces)))
+
+    def _find(a: int) -> int:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def _union(a: int, b: int) -> None:
+        ra, rb = _find(a), _find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for e in bm.edges:
+        linked = [f.index for f in e.link_faces]
+        for i in range(1, len(linked)):
+            _union(linked[0], linked[i])
+
+    comps: dict[int, list[Any]] = {}
+    for f in bm.faces:
+        comps.setdefault(_find(f.index), []).append(f)
+
+    scored: list[tuple[list[Any], float, float, float, float, float, float]] = []
+    for faces in comps.values():
+        xs: list[float] = []
+        ys: list[float] = []
+        zs: list[float] = []
+        for f in faces:
+            for v in f.verts:
+                xs.append(float(v.co.x))
+                ys.append(float(v.co.y))
+                zs.append(float(v.co.z))
+        dx = max(xs) - min(xs)
+        dy = max(ys) - min(ys)
+        dz = max(zs) - min(zs)
+        vol = max(dx, 1e-9) * max(dy, 1e-9) * max(dz, 1e-9)
+        scored.append((faces, vol, dx, dy, dz, min(zs), max(zs)))
+
+    max_vol = max(s[1] for s in scored)
+    doomed: list[Any] = []
+    thin_n = 0
+    debris_n = 0
+    dropped = 0
+    for faces, vol, dx, dy, dz, z0, z1 in scored:
+        if vol >= max_vol * 0.99:
+            continue
+        n = len(faces)
+        near = z0 <= cut_up + band and z1 >= cut_up - band
+        min_e = min(dx, dy, dz)
+        max_e = max(dx, dy, dz)
+        thin = max_thickness > 0 and near and min_e <= max_thickness and max_e >= min_span
+        debris = (
+            micro_faces > 0 and micro_vol_frac > 0 and n <= micro_faces and vol < max(1e-8, micro_vol_frac * max_vol)
+        )
+        if not (thin or debris):
+            continue
+        doomed.extend(faces)
+        dropped += 1
+        if thin:
+            thin_n += n
+        else:
+            debris_n += n
+
+    if doomed:
+        bmesh.ops.delete(bm, geom=doomed, context="FACES")
+        orphans = [v for v in bm.verts if not v.link_faces]
+        if orphans:
+            bmesh.ops.delete(bm, geom=orphans, context="VERTS")
+        bm.to_mesh(me)
+        me.update()
+    bm.free()
+    return {"thin_faces": thin_n, "debris_faces": debris_n, "components_dropped": dropped}
+
+
+def _fuse_cut_band(
+    obj: Any,
+    cut_up: float,
+    *,
+    band: float,
+    angle_deg: float = DEFAULT_FUSE_ANGLE_DEG,
+    weld_dist: float = DEFAULT_FUSE_WELD_M,
+) -> dict[str, int]:
+    """Dissolve arestas coplanares / curtas na banda do corte e funde verts.
+
+    Mata prateleiras/Z-fight: achata Z das faces horiz no plano, dissolve
+    arestas entre faces quase coplanares, remove degeneradas, ``remove_doubles``.
+    """
+    import math
+
+    import bmesh
+
+    from gamedev_shared.mesh_repair import remove_doubles
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    bm.faces.ensure_lookup_table()
+
+    # 1) Achatar verts de faces horiz no plano de corte (anti Z-fight / shelves).
+    flattened = 0
+    for v in bm.verts:
+        if abs(v.co.z - cut_up) > band:
+            continue
+        if any(abs(f.normal.z) >= 0.65 for f in v.link_faces):
+            v.co.z = float(cut_up)
+            flattened += 1
+
+    # 2) Dissolve arestas entre faces quase coplanares na banda.
+    cos_a = math.cos(math.radians(float(angle_deg)))
+    coplanar = [
+        e
+        for e in bm.edges
+        if len(e.link_faces) == 2
+        and all(abs(v.co.z - cut_up) <= band for v in e.verts)
+        and float(e.link_faces[0].normal.dot(e.link_faces[1].normal)) >= cos_a
+    ]
+    dissolved = 0
+    if coplanar:
+        bmesh.ops.dissolve_edges(bm, edges=coplanar, use_verts=True, use_face_split=False)
+        dissolved = len(coplanar)
+        bm.edges.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+
+    # 3) Dissolve arestas muito curtas na banda.
+    short_lim = float(max(weld_dist * 0.75, 1e-4))
+    short = [
+        e
+        for e in bm.edges
+        if e.is_valid and all(abs(v.co.z - cut_up) <= band for v in e.verts) and e.calc_length() < short_lim
+    ]
+    if short:
+        bmesh.ops.dissolve_edges(bm, edges=short, use_verts=True, use_face_split=False)
+        dissolved += len(short)
+        bm.faces.ensure_lookup_table()
+
+    # 4) Apagar faces degeneradas / slivers extremos na banda.
+    doomed = []
+    for f in bm.faces:
+        if not f.is_valid:
+            continue
+        c = f.calc_center_median()
+        if abs(c.z - cut_up) > band:
+            continue
+        area = float(f.calc_area())
+        if area < 1e-10:
+            doomed.append(f)
+            continue
+        longest = max((e.calc_length() for e in f.edges), default=0.0)
+        if longest * longest / area > 120.0:
+            doomed.append(f)
+    if doomed:
+        bmesh.ops.delete(bm, geom=doomed, context="FACES")
+    loose = [v for v in bm.verts if not v.link_faces]
+    if loose:
+        bmesh.ops.delete(bm, geom=loose, context="VERTS")
+
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+
+    welded = int(remove_doubles(obj, float(max(weld_dist, 1e-5))))
+    return {"flattened": flattened, "dissolved_edges": dissolved, "welded": welded}
+
+
+def _post_seal_cleanup(obj: Any, cut_up: float, *, cell: float) -> dict[str, int | float]:
+    """Limpeza pós-fecho: fuse banda → micro-ilhas → slivers → weld → re-patch."""
+    from gamedev_shared.mesh_repair import (
+        delete_loose,
+        dissolve_degenerate,
+        remove_doubles,
+        remove_sliver_faces,
+    )
+
+    band = max(DEFAULT_LEAK_BAND_M, cell * 5.0)
+    weld = max(DEFAULT_FUSE_WELD_M, cell * 0.9)
+    fuse = _fuse_cut_band(
+        obj,
+        cut_up,
+        band=band,
+        angle_deg=DEFAULT_FUSE_ANGLE_DEG,
+        weld_dist=weld,
+    )
+
+    leak = _cleanup_cut_leak_geometry(
+        obj,
+        cut_up,
+        max_thickness=max(DEFAULT_LEAK_MAX_THICKNESS, cell * 1.5),
+        min_span=DEFAULT_LEAK_MIN_SPAN,
+        band=band,
+        micro_faces=8,
+        micro_vol_frac=1e-4,
+    )
+    slivers = remove_sliver_faces(obj, max_aspect=50.0, max_removal_ratio=0.20)
+    dissolve_degenerate(obj, threshold=max(1e-6, cell * 0.08))
+    delete_loose(obj)
+    # Segunda passagem fuse após apagar ilhas.
+    fuse2 = _fuse_cut_band(obj, cut_up, band=band, angle_deg=DEFAULT_FUSE_ANGLE_DEG, weld_dist=weld)
+    filled = _patch_cut_plane_holes(obj, cut_up, tol=max(0.05, cell * 2.5))
+    welded = remove_doubles(obj, max(1e-5, cell * 0.35))
+    return {
+        "leak_thin": float(leak["thin_faces"]),
+        "leak_debris": float(leak["debris_faces"]),
+        "leak_comps": float(leak["components_dropped"]),
+        "slivers": float(slivers),
+        "welded": float(welded + fuse["welded"] + fuse2["welded"]),
+        "refilled": float(filled),
+        "dissolved_edges": float(fuse["dissolved_edges"] + fuse2["dissolved_edges"]),
+        "flattened": float(fuse["flattened"] + fuse2["flattened"]),
+    }
+
+
 def _seal_and_bevel_cut(
     obj: Any,
     cut_up: float,
@@ -807,11 +1484,24 @@ def _seal_and_bevel_cut(
         "device": 1.0 if _topo_device() == "cuda" else 0.0,
         "clip_pulled": 0.0,
         "clip_faces_deleted": 0.0,
+        "horiz_stripped": 0.0,
+        "leak_thin": 0.0,
+        "leak_debris": 0.0,
+        "slivers": 0.0,
+        "internal_shell": 0.0,
+        "dissolved_edges": 0.0,
+        "flattened": 0.0,
+        "bridge_filled": 0.0,
+        "morph_closed": 0.0,
     }
     _ = bevel_offset  # API estável; bevel desligado por omissão.
 
     uv_src = _duplicate_object(obj, f"{obj.name}_uvsrc")
     uv_src.hide_set(True)
+
+    # 0) Tirar horizontais *antes* da máscara — senão leaks incham a silhueta.
+    band_pre = max(cell * DEFAULT_SEAL_BAND_CELLS, 0.05)
+    stats["horiz_stripped"] = float(_strip_horizontals_near_cut(obj, cut_up, band=band_pre))
 
     mask, ox, oy, cell_eff = _rasterize_cut_plane(obj, cut_up, cell=cell, max_grid=DEFAULT_SEAL_MAX_GRID)
     close_iters = max(1, int(round(close_m / max(cell_eff, 1e-6))))
@@ -819,10 +1509,31 @@ def _seal_and_bevel_cut(
     stats["mask_cells"] = int(mask.sum())
     stats["solid_cells"] = int(solid.sum())
 
-    # Tampão plano *dentro* da silhueta (erode 1 — nunca pastas bordas).
+    # Keep = silhueta solid (casca no rebordo). Cap = erode 1 (tampão interior).
     cap_mask = _binary_erode(solid, 1)
     if not cap_mask.any():
         cap_mask = solid
+
+    band_half = cell_eff * DEFAULT_SEAL_BAND_CELLS
+    # 1) Contém ao volume da casca (apaga verts/faces fora).
+    pre = _contain_cut_band_to_volume(
+        obj,
+        solid,
+        origin_x=ox,
+        origin_y=oy,
+        cell=cell_eff,
+        cut_up=cut_up,
+        band_half=band_half,
+        strip_horizontal=False,
+    )
+    stats["clip_faces_deleted"] = float(pre["faces_deleted"] + pre["verts_deleted"])
+
+    # 1b) Fill nativo no rebordo (já ligado à casca) antes do tampão-grelha.
+    _patch_cut_plane_holes(obj, cut_up, tol=max(0.05, cell_eff * 2.5))
+    remove_doubles(obj, max(cell_eff * 0.35, 1e-4))
+
+    # 2) Tampão + bridge robusto cap↔casca (snap + flatten + fill + weld).
+    weld_dist = max(cell_eff * 1.1, 0.016)
     cap = _mask_to_flat_cap_object(
         cap_mask,
         origin_x=ox,
@@ -834,30 +1545,77 @@ def _seal_and_bevel_cut(
     )
     if cap is not None:
         obj = _join_two(obj, cap)
-
-    # Soldar tampão ao rebordo do bisect (mesmo plano Z).
-    remove_doubles(obj, max(cell_eff * 0.35, 1e-4))
-
-    # Puxar qualquer vert na banda que tenha saído da silhueta.
-    band_half = cell_eff * DEFAULT_SEAL_BAND_CELLS
-    allowed_clip = solid  # estrito: sem dilate para fora
-    clip = _clip_band_to_silhouette(
+    bridge = _bridge_cap_to_bark(
         obj,
-        allowed_clip,
+        cut_up,
+        band=band_half * 1.5,
+        max_bridge_dist=max(cell_eff * 4.0, 0.05),
+        weld_dist=weld_dist,
+    )
+    stats["clip_pulled"] = float(bridge["snapped"])
+    stats["bridge_filled"] = float(bridge["filled"])
+
+    # 3) Bleed: horizontais fora do cap_mask; re-tampão + bridge se mexeu.
+    bleed = _contain_cut_band_to_volume(
+        obj,
+        cap_mask,
         origin_x=ox,
         origin_y=oy,
         cell=cell_eff,
         cut_up=cut_up,
         band_half=band_half,
+        strip_horizontal=True,
+        delete_outside_verts=False,
     )
-    stats["clip_pulled"] = float(clip["pulled"])
-    stats["clip_faces_deleted"] = float(clip["faces_deleted"])
-    remove_doubles(obj, max(1e-5, cell_eff * 0.2))
+    stats["clip_faces_deleted"] += float(bleed["faces_deleted"])
+    stats["horiz_stripped"] += float(bleed["horiz_stripped"])
+    if bleed["horiz_stripped"] > 0:
+        cap2 = _mask_to_flat_cap_object(
+            cap_mask,
+            origin_x=ox,
+            origin_y=oy,
+            cell=cell_eff,
+            z=float(cut_up),
+            keep_below=keep_below,
+            name=f"{obj.name}_cap2",
+        )
+        if cap2 is not None:
+            obj = _join_two(obj, cap2)
+        bridge2 = _bridge_cap_to_bark(
+            obj,
+            cut_up,
+            band=band_half * 1.5,
+            max_bridge_dist=max(cell_eff * 4.0, 0.05),
+            weld_dist=weld_dist,
+        )
+        stats["clip_pulled"] += float(bridge2["snapped"])
+        stats["bridge_filled"] += float(bridge2["filled"])
+
+    # 4) Só folhas finas órfãs no corte (micro-debris desligado — partia cubos/casca).
+    leak = _cleanup_cut_leak_geometry(
+        obj,
+        cut_up,
+        max_thickness=max(DEFAULT_LEAK_MAX_THICKNESS, cell_eff * 1.5),
+        min_span=DEFAULT_LEAK_MIN_SPAN,
+        band=max(DEFAULT_LEAK_BAND_M, cell_eff * 4.0),
+        micro_faces=0,
+        micro_vol_frac=0.0,
+    )
+    stats["leak_thin"] = float(leak["thin_faces"])
+    stats["leak_debris"] = float(leak["debris_faces"])
+    if leak["thin_faces"] > 0:
+        _patch_cut_plane_holes(obj, cut_up, tol=max(0.05, cell_eff * 2.5))
+        remove_doubles(obj, max(cell_eff * 0.35, 1e-4))
+
+    # 4b) Morph close 3D desativado: destrói o cap+bridge (reescreve toda a
+    # topologia via voxel remesh). As fendas Hunyuan na banda são intrínsecas
+    # e não fecháveis sem destruir o fecho. O bridge+fill cobre o disco.
+    # morph_close_3d disponível via _morph_close_band se necessário no futuro.
 
     _transfer_uvs_and_materials(uv_src, obj)
     stats["uv_bark_fixed"] = _retarget_cut_face_uvs_to_bark(obj, uv_src, cut_up, tol=max(0.04, cell_eff * 2.0))
 
-    # Bevel opcional (default 0) — evita colar na casca.
+    # Bevel opcional (default 0).
     if int(bevel_segments) > 0:
         radius = 0.5 * max(float(obj.dimensions.x), float(obj.dimensions.y), cell_eff * 4.0)
         off = bevel_offset
@@ -873,8 +1631,12 @@ def _seal_and_bevel_cut(
             tol=max(0.04, cell_eff * 2.0),
         )
 
-    _patch_cut_plane_holes(obj, cut_up, tol=max(0.05, cell_eff * 2.5))
-    remove_doubles(obj, max(1e-5, cell_eff * 0.2))
+    post = _post_seal_cleanup(obj, cut_up, cell=cell_eff)
+    stats["leak_thin"] = float(stats["leak_thin"]) + float(post["leak_thin"])
+    stats["leak_debris"] = float(stats["leak_debris"]) + float(post["leak_debris"])
+    stats["slivers"] = post["slivers"]
+    stats["dissolved_edges"] = float(post.get("dissolved_edges", 0))
+    stats["flattened"] = float(post.get("flattened", 0))
 
     triangulate(obj)
     normals_consistent(obj, inside=False)
@@ -887,15 +1649,20 @@ def _seal_and_bevel_cut(
     bpy.ops.object.delete()
 
     log.info(
-        "seal_cut %s: mask=%d solid=%d flat_cap gpu2d=%s clip_pull=%d clip_del=%d uv_bark=%d bevel=%d boundary=%d",
+        "seal_cut %s: mask=%d solid=%d contain_del=%d horiz_strip=%d "
+        "snap=%d bridge_fill=%d fuse_diss=%d flat=%d leak_thin=%d uv_bark=%d slivers=%d boundary=%d",
         obj.name,
         stats["mask_cells"],
         stats["solid_cells"],
-        "cuda" if stats["device"] else "cpu",
-        int(stats["clip_pulled"]),
         int(stats["clip_faces_deleted"]),
+        int(stats["horiz_stripped"]),
+        int(stats["clip_pulled"]),
+        int(stats.get("bridge_filled", 0)),
+        int(stats.get("dissolved_edges", 0)),
+        int(stats.get("flattened", 0)),
+        int(stats["leak_thin"]),
         stats["uv_bark_fixed"],
-        stats["bevel_faces"],
+        int(stats["slivers"]),
         stats["boundary_after"],
     )
     return obj, stats
@@ -970,6 +1737,18 @@ def split_mesh_object_at_height(
     return stump, top
 
 
+def default_cut_height_m(mesh_height: float) -> float:
+    """Altura de corte default: ``min(0.8 m, 1/4 da altura da malha)``."""
+    h = float(mesh_height)
+    if h <= 1e-8:
+        raise ValueError("altura da malha nula")
+    cut = min(DEFAULT_CUT_HEIGHT_MAX, h * DEFAULT_CUT_HEIGHT_RATIO)
+    # Guarda: deixar margem aos extremos (≥1% / 1 cm).
+    max_ok = h * 0.49
+    min_ok = min(0.01, h * 0.05)
+    return float(max(min_ok, min(cut, max_ok)))
+
+
 def resolve_cut_y(
     bbox_min_up: float,
     bbox_max_up: float,
@@ -981,7 +1760,7 @@ def resolve_cut_y(
 
     Em bpy o eixo up é Z; o valor exportado corresponde ao Y do glTF.
     ``cut_height`` (metros) e ``cut_ratio`` (0-1) sao mutuamente exclusivos.
-    Default: ``DEFAULT_CUT_HEIGHT`` metros acima de ``bbox_min_up``.
+    Default: ``min(0.8 m, altura/4)`` acima de ``bbox_min_up``.
     """
     height = float(bbox_max_up) - float(bbox_min_up)
     if height <= 1e-8:
@@ -995,13 +1774,15 @@ def resolve_cut_y(
         if not 0.0 < ratio < 1.0:
             raise ValueError(f"cut_ratio deve estar em (0, 1); recebido {ratio}")
         cut = float(bbox_min_up) + ratio * height
-    else:
-        h = DEFAULT_CUT_HEIGHT if cut_height is None else float(cut_height)
+    elif cut_height is not None:
+        h = float(cut_height)
         if h <= 0.0:
             raise ValueError(f"cut_height deve ser > 0; recebido {h}")
         if h >= height:
             raise ValueError(f"cut_height ({h}) >= altura da malha ({height:.4f})")
         cut = float(bbox_min_up) + h
+    else:
+        cut = float(bbox_min_up) + default_cut_height_m(height)
 
     eps = max(1e-4, height * 0.01)
     if cut <= bbox_min_up + eps or cut >= bbox_max_up - eps:
@@ -1030,7 +1811,7 @@ def split_glb_at_height(
     Args:
         path_in: GLB de entrada (tipicamente single-mesh).
         path_out: GLB multi-mesh de saída.
-        cut_height: Metros acima da base (pés). Default 0.6.
+        cut_height: Metros acima da base (pés). Default ``min(0.8, altura/4)``.
         cut_ratio: Fracção da altura AABB (alternativa a ``cut_height``).
         cap: Fechar corte com fecho voxel (silhueta 2D + remesh) + chanfro.
         bevel_offset: Largura do chanfro (metros); None = auto.
