@@ -4,12 +4,19 @@
 // This module makes [J] deal damage to enemies in a frontal arc, scaling with
 // the resolved attack bonus (Strength ranks + merchant sword upgrades, folded
 // into heroStats.attackBonus by HeroStatsSystem).
+//
+// Swing SFX + damage land near the strike peak of the attack clip (not the
+// key-press edge). Quaternius-style packs are ~1.5s with the cut ~25–40% in
+// and a long recovery — 0.7 of duration lands in the settle, far too late.
 import {
   Health,
+  PlayerGltfConfig,
   Transform,
   WorldTransform,
+  animatorRegistry,
   damageHealth,
   defineQuery,
+  getPlayerAttackClip,
   isDead,
   isKeyDown,
   playSound,
@@ -32,6 +39,9 @@ const MELEE_ARC_DOT = Math.cos((90 * Math.PI) / 180);
 const MELEE_VERTICAL = 2.5;
 const SWING_COOLDOWN = 0.42;
 const FACE_HOLD = 0.45;
+/** Strike peak ≈27% on hero sword/attack; slightly after for whoosh/hit feel. */
+const SWING_IMPACT_FRACTION = 0.35;
+const FALLBACK_IMPACT_DELAY = 0.22;
 
 const healthQuery = defineQuery([Health, Transform]);
 const _fwd = { x: 0, z: 0 };
@@ -39,6 +49,17 @@ let swingTimer = 0;
 let jPressed = false;
 let faceHoldTimer = 0;
 let meleeOwnsFace = false;
+
+interface PendingSwing {
+  delay: number;
+  hero: number;
+  aimX: number;
+  aimZ: number;
+  dmg: number;
+  merchant: number | null;
+}
+
+let pending: PendingSwing | null = null;
 
 function heroForward(hero: number): void {
   const x = WorldTransform.rotX[hero];
@@ -56,9 +77,79 @@ function labelFor(state: State, eid: number): string {
   return getEnemyLabel(eid) || state.getEntityName(eid) || 'Enemy';
 }
 
+/** Seconds until the whoosh/hit frame (strike peak of the attack clip). */
+function swingImpactDelay(state: State, hero: number): number {
+  if (!state.hasComponent(hero, PlayerGltfConfig)) return FALLBACK_IMPACT_DELAY;
+  const regIdx = PlayerGltfConfig.animatorRegistryIndex[hero];
+  const animator = regIdx ? animatorRegistry.get(regIdx) : undefined;
+  if (!animator) return FALLBACK_IMPACT_DELAY;
+  // Prefer the context clip the engine will play (sword/axe/spear/chop/mine).
+  const hint = getPlayerAttackClip();
+  const keywords = hint
+    ? [hint, 'attack', 'swing', 'punch', 'slash']
+    : [
+        'sword',
+        'axe',
+        'spear',
+        'chop',
+        'mine',
+        'attack',
+        'swing',
+        'punch',
+        'slash',
+      ];
+  let attackName = '';
+  for (const kw of keywords) {
+    const lower = kw.toLowerCase();
+    const exact = animator.clipNames.find((n) => n.toLowerCase() === lower);
+    const hit =
+      exact ?? animator.clipNames.find((n) => n.toLowerCase().includes(lower));
+    if (hit) {
+      attackName = hit;
+      break;
+    }
+  }
+  const duration = attackName
+    ? (animator.clips.get(attackName)?.duration ?? 0)
+    : 0;
+  return duration > 0
+    ? duration * SWING_IMPACT_FRACTION
+    : FALLBACK_IMPACT_DELAY;
+}
+
+function landSwing(state: State, swing: PendingSwing): void {
+  playSound('swing', { originEid: swing.hero });
+
+  const hx = Transform.posX[swing.hero];
+  const hy = Transform.posY[swing.hero];
+  const hz = Transform.posZ[swing.hero];
+
+  for (const e of healthQuery(state.world)) {
+    if (e === swing.hero || e === swing.merchant || isDead(e)) continue;
+    const dx = Transform.posX[e] - hx;
+    const dz = Transform.posZ[e] - hz;
+    const dy = Transform.posY[e] - hy;
+    const d2 = dx * dx + dz * dz;
+    if (d2 > MELEE_RANGE_SQ || Math.abs(dy) > MELEE_VERTICAL) continue;
+    const dist = Math.sqrt(d2) || 1;
+    if ((swing.aimX * dx + swing.aimZ * dz) / dist < MELEE_ARC_DOT) continue;
+    damageHealth(e, swing.dmg);
+    setCombatTarget(e, { label: labelFor(state, e) });
+    spawnParticleBurst(state, {
+      x: Transform.posX[e],
+      y: Transform.posY[e] + 1.0,
+      z: Transform.posZ[e],
+      preset: 'sparks',
+      count: 6,
+      duration: 0.35,
+    });
+  }
+}
+
 /**
  * Poll [J] and, on the press edge (rate-limited by a swing cooldown), soft-lock
- * the nearest enemy, face them, and damage living foes inside the swing cone.
+ * the nearest enemy and face them. Swing SFX + damage fire near the strike
+ * peak (~35% of the attack clip), not on the key edge.
  */
 export function updateMelee(state: State, hero: number, dt: number): void {
   if (swingTimer > 0) swingTimer = Math.max(0, swingTimer - dt);
@@ -70,6 +161,17 @@ export function updateMelee(state: State, hero: number, dt: number): void {
     }
   }
 
+  if (pending) {
+    pending.delay -= dt;
+    if (pending.delay <= 0) {
+      const swing = pending;
+      pending = null;
+      if (!isGamePaused() && swing.hero > 0 && !isDead(swing.hero)) {
+        landSwing(state, swing);
+      }
+    }
+  }
+
   if (isGamePaused() || hero <= 0 || isDead(hero)) {
     jPressed = isKeyDown('KeyJ');
     return;
@@ -78,9 +180,10 @@ export function updateMelee(state: State, hero: number, dt: number): void {
   const down = isKeyDown('KeyJ');
   const edge = down && !jPressed;
   jPressed = down;
-  if (!edge || swingTimer > 0) return;
-  swingTimer = SWING_COOLDOWN;
-  playSound('swing');
+  if (!edge || swingTimer > 0 || pending) return;
+
+  const delay = swingImpactDelay(state, hero);
+  swingTimer = Math.max(SWING_COOLDOWN, delay + 0.05);
 
   const merchant = state.getEntityByName('merchant');
   heroForward(hero);
@@ -122,26 +225,14 @@ export function updateMelee(state: State, hero: number, dt: number): void {
     setCombatTarget(lockEid, { label: labelFor(state, lockEid) });
   }
 
-  for (const e of healthQuery(state.world)) {
-    if (e === hero || e === merchant || isDead(e)) continue;
-    const dx = Transform.posX[e] - hx;
-    const dz = Transform.posZ[e] - hz;
-    const dy = Transform.posY[e] - hy;
-    const d2 = dx * dx + dz * dz;
-    if (d2 > MELEE_RANGE_SQ || Math.abs(dy) > MELEE_VERTICAL) continue;
-    const dist = Math.sqrt(d2) || 1;
-    if ((aimX * dx + aimZ * dz) / dist < MELEE_ARC_DOT) continue;
-    damageHealth(e, dmg);
-    setCombatTarget(e, { label: labelFor(state, e) });
-    spawnParticleBurst(state, {
-      x: Transform.posX[e],
-      y: Transform.posY[e] + 1.0,
-      z: Transform.posZ[e],
-      preset: 'sparks',
-      count: 6,
-      duration: 0.35,
-    });
-  }
+  pending = {
+    delay,
+    hero,
+    aimX,
+    aimZ,
+    dmg,
+    merchant,
+  };
 }
 
 /** HMR/teardown reset of the swing edge state. */
@@ -149,6 +240,7 @@ export function clearMelee(): void {
   swingTimer = 0;
   jPressed = false;
   faceHoldTimer = 0;
+  pending = null;
   if (meleeOwnsFace) {
     setPlayerFaceTarget(null);
     meleeOwnsFace = false;

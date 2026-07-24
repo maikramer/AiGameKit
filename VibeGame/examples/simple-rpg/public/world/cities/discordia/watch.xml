@@ -1,0 +1,44 @@
+<!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+  Edit this file for this district only. Cell coords: space-separated (at="2 1").
+-->
+<Group name="city.watch" pos="0 0 0">
+          <!-- §4.4d TORRE DE VIGIA (GLB ~3×9×3 m nativo; ~9 m). Canto NE. -->
+          <GameObject
+            name="watchtower"
+            place="at: 26 26; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/watchtower_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/watchtower_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+
+          <!-- Base Composition da torre desligada (GLB watchtower activo; evita double collider). -->
+          <!--
+        <Composition place="at: 26 26; align-to-terrain: 0" body="fixed" collider="auto">
+          <Box pos="0 1.5 0" size="2.4 3.0 2.4" color="#6a5236"
+            texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 3"
+            normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="0 3.3 0" size="2.8 0.25 2.8" color="#5a4530"></Box>
+          <Box pos="0 4.2 0" size="1.8 1.6 1.8" color="#6a5236"></Box>
+          <Box pos="0 5.2 0" size="2.2 0.2 2.2" color="#7a3b28"></Box>
+          <Box pos="1.4 1.6 0" size="0.12 3.0 0.5" rotation="0 0 0.35" color="#5a3a20"></Box>
+          <Box pos="1.5 0.8 0" size="0.5 0.08 0.12" color="#6b4a2b"></Box>
+          <Box pos="1.7 1.5 0" size="0.5 0.08 0.12" color="#6b4a2b"></Box>
+          <Box pos="1.9 2.2 0" size="0.5 0.08 0.12" color="#6b4a2b"></Box>
+        </Composition>
+        -->
+          <!-- Bandeira ao lado da torre de vigia -->
+          <Composition
+            place="at: 28.5 24; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 5.0 0" size="0.08 5.0 0.08" color="#4a3020"></Box>
+            <Sphere pos="0 7.6 0" size="0.12" color="#d4b84a"></Sphere>
+            <Box pos="0.4 6.8 0" size="0.05 0.9 0.6" color="#3a5a8a"></Box>
+          </Composition>
+        </Group>

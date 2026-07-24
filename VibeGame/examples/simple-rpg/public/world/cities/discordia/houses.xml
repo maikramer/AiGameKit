@@ -1,0 +1,754 @@
+<!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+  Edit this file for this district only. Cell coords: space-separated (at="2 1").
+-->
+<Group name="city.houses" pos="0 0 0">
+          <!-- ============================================================
+           §4.4 CASAS — anel em volta da praça, portas viradas para ela.
+           Blueprint comum (variante A, 5×6 m): soco de pedra + piso de
+           tábuas + paredes de reboco h2.3 + vigas de canto + telhado de
+           2 águas θ=0.58 rad (beiral 0.45 m) + EMPENAS FECHADAS em 3
+           degraus + cumeeira. A geometria do telhado assenta no topo da
+           parede (beiral y=2.6, cumeeira y≈4.53) — nada de lajes soltas.
+           ============================================================ -->
+          <!-- Casa A (E da praça / distrito residencial, porta a oeste p/ via N-S) -->
+          <Composition
+            transform="rotation: 0 -90 0"
+            place="at: 20 10; align-to-terrain: 0"
+            body="fixed"
+            collider="auto"
+          >
+            <!-- Soco + piso -->
+            <Box
+              pos="0 0.15 0"
+              size="5.6 0.3 6.6"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="5 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="0 0.34 0"
+              size="5.0 0.12 6.0"
+              texture-url="/assets/textures/wood_planks.png"
+              texture-repeat="4 4"
+              normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+            ></Box>
+            <!-- Paredes (frente +z com vão de porta) -->
+            <Box
+              pos="0 1.45 -2.85"
+              size="5.0 2.3 0.3"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="-2.35 1.45 0"
+              size="0.3 2.3 6.0"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="2.35 1.45 0"
+              size="0.3 2.3 6.0"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="-1.65 1.45 2.85"
+              size="1.7 2.3 0.3"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="1.65 1.45 2.85"
+              size="1.7 2.3 0.3"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="0 2.27 2.85"
+              size="1.6 0.66 0.3"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <!-- Vigas de canto (enxaimel) -->
+            <Box
+              pos="-2.45 1.5 -2.95"
+              size="0.22 2.6 0.22"
+              color="#3a2414"
+            ></Box>
+            <Box
+              pos="2.45 1.5 -2.95"
+              size="0.22 2.6 0.22"
+              color="#3a2414"
+            ></Box>
+            <Box
+              pos="-2.45 1.5 2.95"
+              size="0.22 2.6 0.22"
+              color="#3a2414"
+            ></Box>
+            <Box pos="2.45 1.5 2.95" size="0.22 2.6 0.22" color="#3a2414"></Box>
+            <!-- Telhado 2 águas: lajes apoiadas no beiral, encontram na cumeeira -->
+            <Box
+              pos="-1.52 3.64 0"
+              size="3.53 0.18 6.9"
+              rotation="0 0 0.58"
+              texture-url="/assets/textures/roof_tiles.png"
+              texture-repeat="3 5"
+              normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
+            ></Box>
+            <Box
+              pos="1.52 3.64 0"
+              size="3.53 0.18 6.9"
+              rotation="0 0 -0.58"
+              texture-url="/assets/textures/roof_tiles.png"
+              texture-repeat="3 5"
+              normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
+            ></Box>
+            <Box pos="0 4.62 0" size="0.4 0.2 7.0" color="#3a2414"></Box>
+            <!-- Empenas fechadas (3 degraus, frente e trás) -->
+            <Box pos="0 2.92 2.85" size="3.9 0.65 0.24" color="#e8dcc8"></Box>
+            <Box pos="0 3.56 2.85" size="2.0 0.65 0.24" color="#e8dcc8"></Box>
+            <Box pos="0 4.05 2.85" size="0.6 0.4 0.24" color="#e8dcc8"></Box>
+            <Box pos="0 2.92 -2.85" size="3.9 0.65 0.24" color="#e8dcc8"></Box>
+            <Box pos="0 3.56 -2.85" size="2.0 0.65 0.24" color="#e8dcc8"></Box>
+            <Box pos="0 4.05 -2.85" size="0.6 0.4 0.24" color="#e8dcc8"></Box>
+            <!-- Porta + soleira + lanterna -->
+            <Box
+              pos="0 1.05 2.94"
+              size="1.1 1.9 0.1"
+              color="#4a3020"
+              texture-url="/assets/textures/wood_planks.png"
+              texture-repeat="1 3"
+              normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+            ></Box>
+            <Box
+              pos="0 0.06 3.25"
+              size="1.4 0.12 0.6"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="0.85 2.15 3.0"
+              size="0.16 0.26 0.16"
+              color="#3a2414"
+            ></Box>
+            <Sphere pos="0.85 2.1 3.05" size="0.09" color="#ffcc66"></Sphere>
+            <PointLight
+              pos="0.85 2.1 3.2"
+              point-light="color: 0xffcc88; intensity: 1.6; distance: 6; decay: 2"
+            ></PointLight>
+            <!-- Janelas laterais com postigos -->
+            <Box
+              pos="2.52 1.6 0"
+              size="0.06 0.85 0.85"
+              color="#22303c"
+              roughness="0.15"
+              metalness="0.2"
+            ></Box>
+            <Box pos="2.51 1.6 0" size="0.04 1.0 1.0" color="#3a2414"></Box>
+            <Box
+              pos="2.53 1.6 -0.6"
+              size="0.05 1.05 0.32"
+              color="#5a3a20"
+            ></Box>
+            <Box pos="2.53 1.6 0.6" size="0.05 1.05 0.32" color="#5a3a20"></Box>
+            <Box
+              pos="-2.52 1.6 0"
+              size="0.06 0.85 0.85"
+              color="#22303c"
+              roughness="0.15"
+              metalness="0.2"
+            ></Box>
+            <Box pos="-2.51 1.6 0" size="0.04 1.0 1.0" color="#3a2414"></Box>
+            <Box
+              pos="-2.53 1.6 -0.6"
+              size="0.05 1.05 0.32"
+              color="#5a3a20"
+            ></Box>
+            <Box
+              pos="-2.53 1.6 0.6"
+              size="0.05 1.05 0.32"
+              color="#5a3a20"
+            ></Box>
+            <!-- Lenha empilhada na lateral -->
+            <Box
+              pos="2.9 0.42 -1.6"
+              size="0.18 0.18 1.0"
+              rotation="0 0 1.5708"
+              color="#4a3220"
+            ></Box>
+            <Box
+              pos="2.9 0.66 -1.6"
+              size="0.16 0.16 0.9"
+              rotation="0 0 1.5708"
+              color="#5a3a20"
+            ></Box>
+          </Composition>
+
+          <!-- Casa B (NW da praça, porta virada a sudeste para a praça).
+           Variante 4.4×5.2 m com postigos verdes e horta ao lado. -->
+          <Composition
+            transform="rotation: 0 135 0"
+            place="at: -15 15; align-to-terrain: 0"
+            body="fixed"
+            collider="auto"
+          >
+            <Box
+              pos="0 0.15 0"
+              size="5.0 0.3 5.8"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="4 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="0 0.34 0"
+              size="4.4 0.12 5.2"
+              texture-url="/assets/textures/wood_planks.png"
+              texture-repeat="4 4"
+              normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+            ></Box>
+            <Box
+              pos="0 1.35 -2.45"
+              size="4.4 2.1 0.3"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="-2.05 1.35 0"
+              size="0.3 2.1 5.2"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="2.05 1.35 0"
+              size="0.3 2.1 5.2"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="-1.45 1.35 2.45"
+              size="1.5 2.1 0.3"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="1.45 1.35 2.45"
+              size="1.5 2.1 0.3"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="0 2.1 2.45"
+              size="1.4 0.6 0.3"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box pos="-2.15 1.4 -2.55" size="0.2 2.4 0.2" color="#3a2414"></Box>
+            <Box pos="2.15 1.4 -2.55" size="0.2 2.4 0.2" color="#3a2414"></Box>
+            <Box pos="-2.15 1.4 2.55" size="0.2 2.4 0.2" color="#3a2414"></Box>
+            <Box pos="2.15 1.4 2.55" size="0.2 2.4 0.2" color="#3a2414"></Box>
+            <Box
+              pos="-1.35 3.33 0"
+              size="3.11 0.18 6.0"
+              rotation="0 0 0.58"
+              texture-url="/assets/textures/roof_tiles.png"
+              texture-repeat="3 4"
+              normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
+            ></Box>
+            <Box
+              pos="1.35 3.33 0"
+              size="3.11 0.18 6.0"
+              rotation="0 0 -0.58"
+              texture-url="/assets/textures/roof_tiles.png"
+              texture-repeat="3 4"
+              normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
+            ></Box>
+            <Box pos="0 4.19 0" size="0.4 0.18 6.1" color="#3a2414"></Box>
+            <Box pos="0 2.68 2.45" size="3.3 0.6 0.24" color="#e8dcc8"></Box>
+            <Box pos="0 3.26 2.45" size="1.6 0.58 0.24" color="#e8dcc8"></Box>
+            <Box pos="0 3.75 2.45" size="0.45 0.35 0.24" color="#e8dcc8"></Box>
+            <Box pos="0 2.68 -2.45" size="3.3 0.6 0.24" color="#e8dcc8"></Box>
+            <Box pos="0 3.26 -2.45" size="1.6 0.58 0.24" color="#e8dcc8"></Box>
+            <Box pos="0 3.75 -2.45" size="0.45 0.35 0.24" color="#e8dcc8"></Box>
+            <Box
+              pos="0 1.0 2.54"
+              size="1.0 1.7 0.1"
+              color="#4a3020"
+              texture-url="/assets/textures/wood_planks.png"
+              texture-repeat="1 3"
+              normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+            ></Box>
+            <Box
+              pos="0 0.06 2.85"
+              size="1.3 0.12 0.6"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="2.22 1.5 0"
+              size="0.06 0.8 0.8"
+              color="#22303c"
+              roughness="0.15"
+              metalness="0.2"
+            ></Box>
+            <Box pos="2.21 1.5 0" size="0.04 0.95 0.95" color="#3a2414"></Box>
+            <Box pos="2.23 1.5 -0.56" size="0.05 1.0 0.3" color="#4a5a2e"></Box>
+            <Box pos="2.23 1.5 0.56" size="0.05 1.0 0.3" color="#4a5a2e"></Box>
+            <Box
+              pos="-2.22 1.5 0"
+              size="0.06 0.8 0.8"
+              color="#22303c"
+              roughness="0.15"
+              metalness="0.2"
+            ></Box>
+            <Box pos="-2.21 1.5 0" size="0.04 0.95 0.95" color="#3a2414"></Box>
+            <Box
+              pos="-2.23 1.5 -0.56"
+              size="0.05 1.0 0.3"
+              color="#4a5a2e"
+            ></Box>
+            <Box pos="-2.23 1.5 0.56" size="0.05 1.0 0.3" color="#4a5a2e"></Box>
+          </Composition>
+          <!-- Barril de água da chuva no canto da casa B -->
+          <GameObject
+            place="at: -20.5 20; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: box; size: 0.55 0.7 0.55"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/wooden_barrel_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <!-- Horta da casa B: canteiro + legumes -->
+          <Composition
+            transform="rotation: 0 45 0"
+            place="at: -12 19; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 0.12 0" size="3.4 0.24 1.8" color="#4a3424"></Box>
+            <Sphere pos="-1.1 0.32 -0.35" size="0.18" color="#d97a2a"></Sphere>
+            <Sphere pos="-0.3 0.32 0.3" size="0.16" color="#7ab040"></Sphere>
+            <Sphere pos="0.5 0.32 -0.25" size="0.18" color="#d97a2a"></Sphere>
+            <Sphere pos="1.2 0.32 0.25" size="0.16" color="#7ab040"></Sphere>
+            <Box pos="-1.65 0.5 0" size="0.08 0.8 0.08" color="#5a3a20"></Box>
+            <Box pos="1.65 0.5 0" size="0.08 0.8 0.08" color="#5a3a20"></Box>
+          </Composition>
+
+          <!-- Casa C (SW da praça, porta virada a nordeste para a praça).
+           Mesmo blueprint da casa A com chaminé de pedra e reboco quente. -->
+          <Composition
+            transform="rotation: 0 45 0"
+            place="at: -14 -16; align-to-terrain: 0"
+            body="fixed"
+            collider="auto"
+          >
+            <Box
+              pos="0 0.15 0"
+              size="5.6 0.3 6.6"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="5 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="0 0.34 0"
+              size="5.0 0.12 6.0"
+              texture-url="/assets/textures/wood_planks.png"
+              texture-repeat="4 4"
+              normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+            ></Box>
+            <Box
+              pos="0 1.45 -2.85"
+              size="5.0 2.3 0.3"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="-2.35 1.45 0"
+              size="0.3 2.3 6.0"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="2.35 1.45 0"
+              size="0.3 2.3 6.0"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="-1.65 1.45 2.85"
+              size="1.7 2.3 0.3"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="1.65 1.45 2.85"
+              size="1.7 2.3 0.3"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="0 2.27 2.85"
+              size="1.6 0.66 0.3"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="-2.45 1.5 -2.95"
+              size="0.22 2.6 0.22"
+              color="#3a2414"
+            ></Box>
+            <Box
+              pos="2.45 1.5 -2.95"
+              size="0.22 2.6 0.22"
+              color="#3a2414"
+            ></Box>
+            <Box
+              pos="-2.45 1.5 2.95"
+              size="0.22 2.6 0.22"
+              color="#3a2414"
+            ></Box>
+            <Box pos="2.45 1.5 2.95" size="0.22 2.6 0.22" color="#3a2414"></Box>
+            <Box
+              pos="-1.52 3.64 0"
+              size="3.53 0.18 6.9"
+              rotation="0 0 0.58"
+              texture-url="/assets/textures/roof_tiles.png"
+              texture-repeat="3 5"
+              normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
+            ></Box>
+            <Box
+              pos="1.52 3.64 0"
+              size="3.53 0.18 6.9"
+              rotation="0 0 -0.58"
+              texture-url="/assets/textures/roof_tiles.png"
+              texture-repeat="3 5"
+              normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
+            ></Box>
+            <Box pos="0 4.62 0" size="0.4 0.2 7.0" color="#3a2414"></Box>
+            <Box pos="0 2.92 2.85" size="3.9 0.65 0.24" color="#d8b894"></Box>
+            <Box pos="0 3.56 2.85" size="2.0 0.65 0.24" color="#d8b894"></Box>
+            <Box pos="0 4.05 2.85" size="0.6 0.4 0.24" color="#d8b894"></Box>
+            <Box pos="0 2.92 -2.85" size="3.9 0.65 0.24" color="#d8b894"></Box>
+            <Box pos="0 3.56 -2.85" size="2.0 0.65 0.24" color="#d8b894"></Box>
+            <Box pos="0 4.05 -2.85" size="0.6 0.4 0.24" color="#d8b894"></Box>
+            <!-- Chaminé de pedra na água traseira -->
+            <Box
+              pos="1.7 3.9 -1.3"
+              size="0.5 2.2 0.5"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="1.7 5.05 -1.3"
+              size="0.65 0.12 0.65"
+              color="#2a2a2a"
+            ></Box>
+            <Box
+              pos="0 1.05 2.94"
+              size="1.1 1.9 0.1"
+              color="#4a3020"
+              texture-url="/assets/textures/wood_planks.png"
+              texture-repeat="1 3"
+              normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+            ></Box>
+            <Box
+              pos="0 0.06 3.25"
+              size="1.4 0.12 0.6"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <!-- Feixe de ervas junto à porta -->
+            <Box pos="0.75 2.1 2.95" size="0.04 0.04 0.4" color="#5a3a20"></Box>
+            <Sphere pos="0.75 1.85 2.98" size="0.12" color="#5a7a3a"></Sphere>
+            <Box
+              pos="2.52 1.6 0"
+              size="0.06 0.85 0.85"
+              color="#22303c"
+              roughness="0.15"
+              metalness="0.2"
+            ></Box>
+            <Box pos="2.51 1.6 0" size="0.04 1.0 1.0" color="#3a2414"></Box>
+            <Box
+              pos="2.53 1.6 -0.6"
+              size="0.05 1.05 0.32"
+              color="#6b4a2b"
+            ></Box>
+            <Box pos="2.53 1.6 0.6" size="0.05 1.05 0.32" color="#6b4a2b"></Box>
+            <Box
+              pos="-2.52 1.6 0"
+              size="0.06 0.85 0.85"
+              color="#22303c"
+              roughness="0.15"
+              metalness="0.2"
+            ></Box>
+            <Box pos="-2.51 1.6 0" size="0.04 1.0 1.0" color="#3a2414"></Box>
+            <Box
+              pos="-2.53 1.6 -0.6"
+              size="0.05 1.05 0.32"
+              color="#6b4a2b"
+            ></Box>
+            <Box
+              pos="-2.53 1.6 0.6"
+              size="0.05 1.05 0.32"
+              color="#6b4a2b"
+            ></Box>
+          </Composition>
+
+          <!-- Casa do Pastor (distrito NW/Oeste, junto ao curral; porta a norte
+           para a via E-W). Telhado verde-musgo + palheira. -->
+          <Composition
+            place="at: -24 -12; align-to-terrain: 0"
+            body="fixed"
+            collider="auto"
+          >
+            <Box
+              pos="0 0.15 0"
+              size="5.0 0.3 5.8"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="4 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="0 0.34 0"
+              size="4.4 0.12 5.2"
+              texture-url="/assets/textures/wood_planks.png"
+              texture-repeat="4 4"
+              normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+            ></Box>
+            <Box
+              pos="0 1.35 -2.45"
+              size="4.4 2.1 0.3"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="-2.05 1.35 0"
+              size="0.3 2.1 5.2"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="2.05 1.35 0"
+              size="0.3 2.1 5.2"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="-1.45 1.35 2.45"
+              size="1.5 2.1 0.3"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="1.45 1.35 2.45"
+              size="1.5 2.1 0.3"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box
+              pos="0 2.1 2.45"
+              size="1.4 0.6 0.3"
+              color="#c4a07a"
+              texture-url="/assets/textures/wall_plaster.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"
+            ></Box>
+            <Box pos="-2.15 1.4 -2.55" size="0.2 2.4 0.2" color="#3a2414"></Box>
+            <Box pos="2.15 1.4 -2.55" size="0.2 2.4 0.2" color="#3a2414"></Box>
+            <Box pos="-2.15 1.4 2.55" size="0.2 2.4 0.2" color="#3a2414"></Box>
+            <Box pos="2.15 1.4 2.55" size="0.2 2.4 0.2" color="#3a2414"></Box>
+            <Box
+              pos="-1.35 3.33 0"
+              size="3.11 0.18 6.0"
+              rotation="0 0 0.58"
+              color="#4a5a3a"
+            ></Box>
+            <Box
+              pos="1.35 3.33 0"
+              size="3.11 0.18 6.0"
+              rotation="0 0 -0.58"
+              color="#4a5a3a"
+            ></Box>
+            <Box pos="0 4.19 0" size="0.4 0.18 6.1" color="#3a4a2e"></Box>
+            <Box pos="0 2.68 2.45" size="3.3 0.6 0.24" color="#d8c4a0"></Box>
+            <Box pos="0 3.26 2.45" size="1.6 0.58 0.24" color="#d8c4a0"></Box>
+            <Box pos="0 3.75 2.45" size="0.45 0.35 0.24" color="#d8c4a0"></Box>
+            <Box pos="0 2.68 -2.45" size="3.3 0.6 0.24" color="#d8c4a0"></Box>
+            <Box pos="0 3.26 -2.45" size="1.6 0.58 0.24" color="#d8c4a0"></Box>
+            <Box pos="0 3.75 -2.45" size="0.45 0.35 0.24" color="#d8c4a0"></Box>
+            <Box
+              pos="0 1.0 2.54"
+              size="1.0 1.7 0.1"
+              color="#4a3020"
+              texture-url="/assets/textures/wood_planks.png"
+              texture-repeat="1 3"
+              normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+            ></Box>
+            <Box
+              pos="0 0.06 2.85"
+              size="1.3 0.12 0.6"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <!-- Óculo redondo na empena frontal -->
+            <Cylinder
+              pos="0 3.1 2.58"
+              size="0.3 0.3 0.1"
+              rotation="1.5708 0 0"
+              color="#22303c"
+            ></Cylinder>
+            <!-- Palheira anexa (feno) -->
+            <Cylinder
+              pos="3.2 0.8 1.2"
+              size="1.1 1.1 1.5"
+              color="#c4a44a"
+            ></Cylinder>
+            <Cylinder
+              pos="3.2 1.65 1.2"
+              size="1.2 1.2 0.2"
+              color="#b89438"
+            ></Cylinder>
+            <!-- Cerca baixa do quintal (lado +X — não atravessa a porta +Z) -->
+            <Box pos="3.0 0.35 -1.0" size="0.08 0.7 0.08" color="#3a2414"></Box>
+            <Box pos="3.0 0.35 1.0" size="0.08 0.7 0.08" color="#3a2414"></Box>
+            <Box pos="3.0 0.6 0" size="0.06 0.06 2.2" color="#5a3a20"></Box>
+          </Composition>
+
+          <!-- Varal entre casa B e horta -->
+          <Composition
+            place="at: -13 16.5; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="-1.4 1.1 0" size="0.08 2.2 0.08" color="#4a3018"></Box>
+            <Box pos="1.4 1.1 0" size="0.08 2.2 0.08" color="#4a3018"></Box>
+            <Box pos="0 2.1 0" size="2.9 0.04 0.04" color="#3a2414"></Box>
+            <Box pos="-0.6 1.85 0" size="0.5 0.55 0.04" color="#c8d0d8"></Box>
+            <Box pos="0.5 1.9 0" size="0.45 0.5 0.04" color="#6a3a4a"></Box>
+          </Composition>
+          <!-- Pilha de lenha + cepo junto à casa A (distrito E) -->
+          <Composition
+            place="at: 25 11; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Cylinder
+              pos="0 0.3 0"
+              size="0.32 0.32 0.6"
+              color="#6b4a2b"
+            ></Cylinder>
+            <Box
+              pos="0.6 0.2 0"
+              size="0.8 0.22 0.28"
+              rotation="0 0.3 0.2"
+              color="#5a3a20"
+            ></Box>
+            <Box
+              pos="0.7 0.4 -0.15"
+              size="0.7 0.2 0.25"
+              rotation="0 -0.2 0.15"
+              color="#6b4a2b"
+            ></Box>
+            <Box pos="0.5 0.55 0.1" size="0.65 0.18 0.22" color="#4a3018"></Box>
+          </Composition>
+          <!-- Bebedouro de pedra no curral -->
+          <Composition
+            place="at: -26 -4; align-to-terrain: 0"
+            body="fixed"
+            collider="auto"
+          >
+            <Box
+              pos="0 0.25 0"
+              size="1.6 0.5 0.9"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="0 0.45 0" size="1.3 0.15 0.6" color="#3a5a70"></Box>
+          </Composition>
+          <!-- Curral baixo junto ao pastor (quintal oeste). -->
+          <Composition
+            place="at: -26 -14; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="-2.5 0.4 0" size="0.1 0.8 5.0" color="#5a3a20"></Box>
+            <Box pos="2.5 0.4 0" size="0.1 0.8 5.0" color="#5a3a20"></Box>
+            <Box pos="0 0.4 2.5" size="5.0 0.8 0.1" color="#5a3a20"></Box>
+            <Box pos="-1.5 0.4 -2.5" size="2.0 0.8 0.1" color="#5a3a20"></Box>
+            <Box pos="1.5 0.4 -2.5" size="2.0 0.8 0.1" color="#5a3a20"></Box>
+            <Box pos="0 0.85 0" size="0.08 0.08 4.8" color="#4a3018"></Box>
+          </Composition>
+          <!-- Lenha + cepo no distrito da forja. -->
+          <Composition
+            place="at: -22 -18; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Cylinder
+              pos="0 0.35 0"
+              size="0.35 0.35 0.7"
+              color="#6b4a2b"
+            ></Cylinder>
+            <Box
+              pos="0.7 0.25 0.2"
+              size="0.9 0.25 0.35"
+              rotation="0 0.4 0.3"
+              color="#5a3a20"
+            ></Box>
+            <Box
+              pos="0.9 0.45 -0.1"
+              size="0.8 0.25 0.3"
+              rotation="0 -0.3 0.2"
+              color="#6b4a2b"
+            ></Box>
+            <Box
+              pos="0.5 0.65 0.15"
+              size="0.7 0.22 0.28"
+              rotation="0 0.2 0.1"
+              color="#4a3018"
+            ></Box>
+          </Composition>
+        </Group>

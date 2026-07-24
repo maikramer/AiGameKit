@@ -1,0 +1,236 @@
+<!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+  Edit this file for this district only. Cell coords: space-separated (at="2 1").
+-->
+<Group name="city.roads" pos="0 0 0">
+          <!-- §4.3b Vias empedradas: praça central (<Pad>) + estradas <Road>
+           para os 4 portões. As estradas nascem enterradas no núcleo da
+           praça (end-feather-start 0 → junção sólida) e continuam além dos
+           portões. A estrada para o pântano PARA no barranco norte do rio
+           (a ponte faz a travessia) e recomeça na margem sul. -->
+          <Composition
+            place="at: 0 0; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Pad
+              pos="0 0.03 0"
+              size="16 16"
+              corner-radius="5"
+              edge-feather="2.2"
+              edge-noise="0.55"
+              texture-url="/assets/textures/cobblestone_road.png"
+              texture-scale="16"
+              normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+            ></Pad>
+          </Composition>
+
+          <!-- Estrada NORTE (portão norte → Floresta Sombria, z positivo) -->
+          <Road
+            path="0 3  0 36  -1.5 52  -1.5 64"
+            width="5.4"
+            flatten="true"
+            texture-scale="16"
+            edge-feather="1.1"
+            edge-noise="0.45"
+            end-feather-start="2"
+            end-feather-end="4"
+            texture-url="/assets/textures/cobblestone_road.png"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Road>
+
+          <!-- Estrada SUL (portão sul → barranco norte do rio; a ponte cruza) -->
+          <Road
+            path="0 -3  0 -36  2 -46  2 -52"
+            width="5.4"
+            flatten="true"
+            texture-scale="16"
+            edge-feather="1.1"
+            edge-noise="0.45"
+            end-feather-start="2"
+            end-feather-end="3"
+            texture-url="/assets/textures/cobblestone_road.png"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Road>
+
+          <!-- Estrada SUL (retoma na margem sul do rio → Pântano) -->
+          <Road
+            path="2 -71  2 -80  0 -92"
+            width="5.0"
+            flatten="true"
+            texture-scale="16"
+            edge-feather="1.1"
+            edge-noise="0.45"
+            end-feather-start="3"
+            end-feather-end="5"
+            texture-url="/assets/textures/cobblestone_road.png"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Road>
+
+          <!-- Estrada ESTE (→ Deserto) -->
+          <Road
+            path="3 0  36 0  50 3  62 1"
+            width="5.4"
+            flatten="true"
+            texture-scale="16"
+            edge-feather="1.1"
+            edge-noise="0.45"
+            end-feather-start="2"
+            end-feather-end="4"
+            texture-url="/assets/textures/cobblestone_road.png"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Road>
+
+          <!-- Estrada OESTE (→ Picos): PARA na margem este do rio; a ponte
+           cruza; retoma a oeste do canal. -->
+          <Road
+            path="-3 0  -36 0  -48 -1"
+            width="5.4"
+            flatten="true"
+            texture-scale="16"
+            edge-feather="1.1"
+            edge-noise="0.45"
+            end-feather-start="2"
+            end-feather-end="3"
+            texture-url="/assets/textures/cobblestone_road.png"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Road>
+          <!-- Estrada OESTE (retoma após o rio → Picos Gelados) -->
+          <Road
+            path="-70 -2  -82 -3  -95 -2"
+            width="5.0"
+            flatten="true"
+            texture-scale="16"
+            edge-feather="1.1"
+            edge-noise="0.45"
+            end-feather-start="3"
+            end-feather-end="5"
+            texture-url="/assets/textures/cobblestone_road.png"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Road>
+
+          <!-- §4.3c Vias internas (anel entre praça e distritos) — cobble
+           estreito; não flatten agressivo (só liga cantos da praça). -->
+          <Road
+            path="8 8  16 10  18 6"
+            width="3.2"
+            flatten="true"
+            texture-scale="16"
+            edge-feather="0.9"
+            edge-noise="0.4"
+            end-feather-start="1.5"
+            end-feather-end="2.5"
+            texture-url="/assets/textures/cobblestone_road.png"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Road>
+          <Road
+            path="-8 8  -14 12  -16 8"
+            width="3.2"
+            flatten="true"
+            texture-scale="16"
+            edge-feather="0.9"
+            edge-noise="0.4"
+            end-feather-start="1.5"
+            end-feather-end="2.5"
+            texture-url="/assets/textures/cobblestone_road.png"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Road>
+          <Road
+            path="-8 -8  -12 -14  -16 -18"
+            width="3.2"
+            flatten="true"
+            texture-scale="16"
+            edge-feather="0.9"
+            edge-noise="0.4"
+            end-feather-start="1.5"
+            end-feather-end="2.5"
+            texture-url="/assets/textures/cobblestone_road.png"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Road>
+          <Road
+            path="8 -8  10 -12  14 -16"
+            width="3.2"
+            flatten="true"
+            texture-scale="16"
+            edge-feather="0.9"
+            edge-noise="0.4"
+            end-feather-start="1.5"
+            end-feather-end="2.5"
+            texture-url="/assets/textures/cobblestone_road.png"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Road>
+
+          <!-- Postes de lanterna ao longo das vias cardeais (sem PointLight). -->
+          <Composition
+            place="at: 4 16; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+            <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+            <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+          </Composition>
+          <Composition
+            place="at: -4 16; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+            <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+            <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+          </Composition>
+          <Composition
+            place="at: 4 -16; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+            <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+            <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+          </Composition>
+          <Composition
+            place="at: -4 -16; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+            <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+            <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+          </Composition>
+          <Composition
+            place="at: 16 4; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+            <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+            <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+          </Composition>
+          <Composition
+            place="at: 16 -4; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+            <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+            <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+          </Composition>
+          <Composition
+            place="at: -16 4; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+            <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+            <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+          </Composition>
+          <Composition
+            place="at: -16 -4; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+            <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+            <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+          </Composition>
+        </Group>

@@ -1,0 +1,43 @@
+- id: pine_dark
+  idea: tall dark cartoon pine tree, deep green needle canopy, narrow brown trunk, moody fantasy forest
+  kind: environment
+  category: vegetation
+  pipeline: [3d, paint, lod, collision]
+  omni:
+    control_type: bbox
+    bbox_preset: tree
+    size_m: [2.0, 9.0, 2.0]
+- id: cactus
+  idea: cartoon desert saguaro cactus tall column with wider left-right silhouette, three green arms
+  kind: environment
+  category: vegetation
+  pipeline: [3d, paint, lod, collision]
+  omni:
+    control_type: bbox
+    size_m: [2.0, 4.0, 2.0]
+- id: dead_willow
+  idea: bare cartoon dead willow tree drooping branches, grey bark, spooky swamp, twisted trunk
+  kind: environment
+  category: vegetation
+  pipeline: [3d, paint, lod, collision]
+  omni:
+    control_type: bbox
+    size_m: [3.0, 7.0, 3.0]
+- id: tree_pine
+  idea: tall cartoon pine tree with layered triangle foliage in rich green, narrow brown trunk, Christmas tree shape
+  kind: environment
+  category: vegetation
+  pipeline: [3d, paint, lod, collision]
+  omni:
+    control_type: bbox
+    bbox_preset: tree
+    size_m: [2.0, 9.0, 2.0]
+- id: dead_tree
+  idea: bare cartoon dead tree wide silhouette, broad gnarled trunk and branches, pale grey bark, spooky dark fantasy
+  kind: environment
+  category: vegetation
+  pipeline: [3d, paint, lod, collision]
+  lod_levels: 2
+  omni:
+    control_type: bbox
+    size_m: [2.5, 7.0, 1.7]

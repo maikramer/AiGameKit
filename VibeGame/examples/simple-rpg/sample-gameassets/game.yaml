@@ -30,6 +30,9 @@ text3d:
   # Decode Omni: bounds anisotrópicos + mc_level ∝ 1/octree (pinholes).
   bounds_mode: auto
   mc_level: auto
+  # Split-at-height para árvores: split ANTES do LOD → cada peça (Stump+Top)
+  # é LODed separadamente → composição Stump+Top em cada LOD + collision por peça.
+  split_at_height: true
   # Octree: omitido de propósito — Text3D ``bbox_tune`` sobe por size_m/category
   # (ex. longhouse 10 m → ~448 em 6 GB+offload). Override só se precisares
   # forçar: manifest ``text3d.octree_resolution``. Não entra no fingerprint Omni.

@@ -17,6 +17,7 @@ import {
   isDead,
   isKeyDown,
   playSound,
+  playSoundAt,
   spawnFloatingText,
   spawnParticleBurst,
 } from 'vibegame';
@@ -253,7 +254,7 @@ function doPowerStrike(state: State, hero: number): void {
     count: 30,
     duration: 0.7,
   });
-  playSound('mine-break');
+  playSoundAt('mine-break', hx, hy, hz, { originEid: hero });
   const r2 = POWER_RADIUS * POWER_RADIUS;
   const damage = POWER_DAMAGE + heroStats.attackBonus;
   let hits = 0;

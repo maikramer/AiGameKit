@@ -13,6 +13,7 @@ import {
   spawnParticleBurst,
   spawnFloatingText,
   playSound,
+  playSoundAt,
 } from 'vibegame';
 import type { State } from 'vibegame';
 import { heroStats } from './skills';
@@ -118,7 +119,7 @@ export function spawnBomb(
     flightDur: 0,
     owner,
   });
-  playSound('bomb-drop');
+  playSoundAt('bomb-drop', x, y, z, { originEid: owner });
 }
 
 /** Lob a bomb along an arc from→to, then it lands and fuses (hold + release). */
@@ -151,7 +152,7 @@ export function throwBomb(
     flightDur: Math.max(0.4, Math.min(0.9, dist * 0.06)),
     owner,
   });
-  playSound('swing');
+  playSound('swing', { originEid: owner });
 }
 
 const _p = new THREE.Vector3();
@@ -194,7 +195,7 @@ function explode(state: State, b: Bomb): void {
     count: 40,
     duration: 1.0,
   });
-  playSound('mine-break');
+  playSoundAt('mine-break', b.x, b.y, b.z, { originEid: b.owner });
   spawnFloatingText(state, '💥', {
     x: b.x,
     y: b.y + 1.4,

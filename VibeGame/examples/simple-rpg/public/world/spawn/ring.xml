@@ -1,0 +1,444 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+  Cell coords for CityGrid: space-separated (at="2 1").
+-->
+<!-- Anel de recursos + exclusões periurbanas. -->
+      <!-- GRUPO "valley-outskirts": anel de recursos à volta da cidade
+           (carvalhos, pedras, laguinho, rio, goblins de aviso). Área de
+           transição entre a cidade e os biomas profundos. -->
+      <Group name="valley-outskirts" pos="0 0 0">
+        <!-- ============================================================
+           §5 ANEL DO VALE — recursos junto à cidade (fora da muralha ±32,
+           dentro de ~±58). Exclusion r=42 limpa o interior; vegetação e
+           árvores ficam no anel imediato, não num carpete até ±90.
+           ============================================================ -->
+        <!-- Erva / plantas / flores só no anel periurbano. -->
+        <Vegetation
+          meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb"
+          density-per-km2="55000"
+          seed="41"
+          region-min="-58 0 -58"
+          region-max="58 0 58"
+          scale-min="1.4"
+          scale-max="2.8"
+          max-slope-deg="35"
+          avoid-water="1"
+          avoid-overlaps="0"
+          max-distance="100"
+          cluster-count="40"
+          cluster-radius="3.4"
+          flower-near-radius="2.4"
+          flower-density-ratio="0.34"
+          plant-density-ratio="0.45"
+          smart="1"
+          wind="1"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="foliage"
+        ></Vegetation>
+        <!-- Laguinho NW da muralha mas ESTE do rio (antes -50,42 sobrepunha
+           o carve em x≈-58 → disco a flutuar sobre a ravina). -->
+        <Lake
+          at="-40 52"
+          radius="8"
+          depth="5.0"
+          water-offset="0.55"
+          color="#2a6685"
+          opacity="0.72"
+        ></Lake>
+        <!-- Rio: sul → oeste (x≲-58) → NW sem passar no laguinho.
+           path = [x0 z0 ...] nascente primeiro. -->
+        <!-- width = lâmina; carve total = width + 2·bank-width (+ feather). -->
+        <River
+          path="205 -62 170 -55 140 -45 110 -38 82 -40 48 -58 12 -62 -20 -62 -45 -66 -58 -58 -58 -20 -58 5 -62 22 -75 32 -90 48 -110 62 -130 80 -155 105 -180 135 -210 165 -241 192"
+          width="8"
+          depth="3.7"
+          water-offset="1.2"
+          bank-width="3.2"
+          bank-height="0.85"
+          color="#2a6685"
+          opacity="0.88"
+        ></River>
+        <!-- Ponte de madeira sobre o rio, na saída sul da cidade. ANCORADA
+             NO BARRANCO NORTE (fora do carve do rio, z=-52.5) — o place
+             amostra a altura do terreno no ponto âncora, e ancorar no meio
+             do canal punha o deck ao nível do LEITO (ponte submersa). O
+             deck estende-se em z local negativo e cruza o canal inteiro
+             (centro do rio ~z=-61.5 em x=2, alinhado com a estrada sul).
+             Rampas nas duas margens, guarda-corpo fino e pilares no leito.
+             collider auto dá piso sólido e bloqueia queda lateral. -->
+        <Composition
+          place="at: 2 -52.5; align-to-terrain: 0"
+          body="fixed"
+          collider="auto"
+        >
+          <!-- Rampa norte (sobe da estrada para o tabuleiro) -->
+          <Box
+            pos="0 0.37 -1.7"
+            size="3.4 0.22 3.7"
+            rotation="0.21 0 0"
+            color="#7a5a38"
+          ></Box>
+          <!-- Tabuleiro plano sobre o canal -->
+          <Box
+            pos="0 0.75 -9"
+            size="3.4 0.26 11.2"
+            texture-url="/assets/textures/wood_planks.png"
+            texture-repeat="3 9"
+            normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+          ></Box>
+          <!-- Rampa sul (desce para a margem do pântano) -->
+          <Box
+            pos="0 0.37 -16.3"
+            size="3.4 0.22 3.7"
+            rotation="-0.21 0 0"
+            color="#7a5a38"
+          ></Box>
+          <!-- Guarda-corpos finos (balaústre + corrimão), só no vão -->
+          <Box pos="-1.62 1.15 -9" size="0.1 0.55 11.2" color="#6a4a2c"></Box>
+          <Box pos="1.62 1.15 -9" size="0.1 0.55 11.2" color="#6a4a2c"></Box>
+          <Box pos="-1.62 1.5 -9" size="0.16 0.12 11.5" color="#5a4026"></Box>
+          <Box pos="1.62 1.5 -9" size="0.16 0.12 11.5" color="#5a4026"></Box>
+          <!-- Postes do corrimão nas cabeceiras -->
+          <Box pos="-1.62 1.0 -3.6" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="1.62 1.0 -3.6" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="-1.62 1.0 -14.4" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="1.62 1.0 -14.4" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <!-- Pilares que descem ao leito do rio -->
+          <Box pos="-1.3 -1.3 -6.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+          <Box pos="1.3 -1.3 -6.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+          <Box pos="-1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+          <Box pos="1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+        </Composition>
+        <!-- Ponte OESTE: mesma blueprint, yaw 90° (local −Z → mundo −X).
+           Âncora na margem ESTE (fora do carve, x≈-50); canal ~x=-58 em z≈-1. -->
+        <Composition
+          transform="rotation: 0 90 0"
+          place="at: -50 -1; align-to-terrain: 0"
+          body="fixed"
+          collider="auto"
+        >
+          <Box
+            pos="0 0.37 -1.7"
+            size="3.4 0.22 3.7"
+            rotation="0.21 0 0"
+            color="#7a5a38"
+          ></Box>
+          <Box
+            pos="0 0.75 -9"
+            size="3.4 0.26 11.2"
+            texture-url="/assets/textures/wood_planks.png"
+            texture-repeat="3 9"
+            normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+          ></Box>
+          <Box
+            pos="0 0.37 -16.3"
+            size="3.4 0.22 3.7"
+            rotation="-0.21 0 0"
+            color="#7a5a38"
+          ></Box>
+          <Box pos="-1.62 1.15 -9" size="0.1 0.55 11.2" color="#6a4a2c"></Box>
+          <Box pos="1.62 1.15 -9" size="0.1 0.55 11.2" color="#6a4a2c"></Box>
+          <Box pos="-1.62 1.5 -9" size="0.16 0.12 11.5" color="#5a4026"></Box>
+          <Box pos="1.62 1.5 -9" size="0.16 0.12 11.5" color="#5a4026"></Box>
+          <Box pos="-1.62 1.0 -3.6" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="1.62 1.0 -3.6" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="-1.62 1.0 -14.4" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="1.62 1.0 -14.4" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="-1.3 -1.3 -6.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+          <Box pos="1.3 -1.3 -6.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+          <Box pos="-1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+          <Box pos="1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+        </Composition>
+        <!-- Vitórias-régias no laguinho (-40,52 r=8). -->
+        <StaticSpawner
+          profile="tree"
+          count="3"
+          seed="326"
+          region-min="-47 0 45"
+          region-max="-33 0 59"
+          in-water="1"
+          align-to-terrain="0"
+          max-slope-attempts="128"
+          scale-min="0.7"
+          scale-max="1.4"
+          avoid-overlaps="1"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="tree"
+        >
+          <GameObject role="static">
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/lily_pad_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+        </StaticSpawner>
+        <StaticSpawner
+          profile="tree"
+          count="9"
+          seed="7"
+          region-min="-58 0 -58"
+          region-max="58 0 58"
+          align-to-terrain="1"
+          ground-align="auto"
+          scale-min="0.7"
+          scale-max="1.4"
+          avoid-overlaps="1"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="tree"
+        >
+          <GameObject
+            role="static"
+            destructible="popup-text: Wood; popup-color: #8b4513; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7"
+            script="tree.ts"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/tree_oak_lod0.glb"
+              lod1-url="/assets/meshes/tree_oak_lod1.glb"
+              lod2-url="/assets/meshes/tree_oak_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="wood"
+              yield="3"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+        </StaticSpawner>
+        <StaticSpawner
+          profile="tree"
+          count="7"
+          seed="99"
+          region-min="-58 0 -58"
+          region-max="58 0 58"
+          align-to-terrain="1"
+          ground-align="auto"
+          scale-min="0.7"
+          scale-max="1.4"
+          avoid-overlaps="1"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="rock"
+        >
+          <GameObject
+            role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/rock_mossy_lod2.glb"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="3"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+        </StaticSpawner>
+
+        <!-- §4.x Pedras de margem do rio — form_outcrop no anel de barranco
+           (near-water). Região larga; o filtro só aceita carve sem água. -->
+        <StaticSpawner
+          profile="tree"
+          count="14"
+          seed="401"
+          region-min="-200 0 -100"
+          region-max="220 0 200"
+          near-water="1"
+          avoid-water="0"
+          align-to-terrain="1"
+          ground-align="auto"
+          max-slope-deg="58"
+          max-slope-attempts="128"
+          scale-min="0.7"
+          scale-max="1.4"
+          avoid-overlaps="1"
+          pick-strategy="random"
+          footprint-radius="1.4"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="tree"
+        >
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_2_lod2.glb"
+              lod1-url="/assets/meshes/form_outcrop_2_lod2.glb"
+              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_5_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_5_lod2.glb"
+              lod1-url="/assets/meshes/form_outcrop_5_lod2.glb"
+              lod2-url="/assets/meshes/form_outcrop_5_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_8_lod2.glb"
+              lod1-url="/assets/meshes/form_outcrop_8_lod2.glb"
+              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_2_lod2.glb"
+              lod1-url="/assets/meshes/form_outcrop_2_lod2.glb"
+              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_8_lod2.glb"
+              lod1-url="/assets/meshes/form_outcrop_8_lod2.glb"
+              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+          </GameObject>
+        </StaticSpawner>
+        <!-- Outcrops cénicos no vale (fora da cidade) — não colheitáveis. -->
+        <StaticSpawner
+          profile="tree"
+          count="6"
+          seed="402"
+          region-min="-55 0 -55"
+          region-max="55 0 55"
+          avoid-water="1"
+          align-to-terrain="1"
+          ground-align="auto"
+          scale-min="0.7"
+          scale-max="1.4"
+          avoid-overlaps="1"
+          pick-strategy="random"
+          footprint-radius="1.6"
+          cluster-count="2"
+          cluster-radius="10"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="tree"
+        >
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_2_lod2.glb"
+              lod1-url="/assets/meshes/form_outcrop_2_lod2.glb"
+              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_stack_6_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_stack_6_lod2.glb"
+              lod1-url="/assets/meshes/form_stack_6_lod2.glb"
+              lod2-url="/assets/meshes/form_stack_6_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_8_lod2.glb"
+              lod1-url="/assets/meshes/form_outcrop_8_lod2.glb"
+              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+          </GameObject>
+        </StaticSpawner>
+
+        <!-- Goblins de aviso a caminho da floresta norte (briga inicial). A
+           cidade murada fica livre de inimigos — a DynamicSpawner não
+           respeita o SpawnExclusion. A banda começa em z>=40 (e não em 28)
+           para não ficar em cima do ponto de respawn do portão norte
+           (0,28): com detectRange=18 os goblins nasciam a ~3.6 m do herói
+           e matavam-no logo ao renascer. -->
+        <DynamicSpawner
+          avoid-water="1"
+          count="3"
+          seed="11"
+          region-min="-26 0 40"
+          region-max="26 0 52"
+          align-to-terrain="false"
+          random-yaw="true"
+          avoid-overlaps="false"
+          max-slope-deg="40"
+          max-distance="100"
+        >
+          <GameObject role="enemy" script="goblin-wander.ts">
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/goblin_lod2.glb"
+              lod1-url="/assets/meshes/goblin_lod2.glb"
+              lod2-url="/assets/meshes/goblin_lod2.glb"
+              lod-threshold-near="18"
+              lod-threshold-mid="55"
+            ></GLTFLoader>
+          </GameObject>
+        </DynamicSpawner>
+      </Group>
+      <!-- FIM valley-outskirts -->

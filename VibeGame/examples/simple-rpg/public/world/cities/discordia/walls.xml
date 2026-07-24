@@ -1,0 +1,425 @@
+<!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+  Edit this file for this district only. Cell coords: space-separated (at="2 1").
+-->
+<Group name="city.walls" pos="0 0 0">
+          <!-- §4.1 Muralha quadrada ampliada (semi-lado 32, altura 3.5) com 4
+           portões cardeais (vão de 8 m centrado em cada eixo) + ameias no
+           topo + torres de canto reforçadas. collider=auto → bloqueia o
+           jogador; os portões são a única passagem.
+           Muros em pedra com texture-url mountain_stone para dar peso visual. -->
+          <Composition
+            place="at: 0 0; align-to-terrain: 0"
+            body="fixed"
+            collider="auto"
+          >
+            <!-- Norte (z=+32): 2 segmentos laterais ao vão central de 8 m.
+               Torres de canto em ±32 (largura 1.8 → face interna ±31.1).
+               Vão do portão: ±4. Cada segmento: de ±4 a ±31.1 = comprimento 27.1,
+               centro ±17.55. Liga as torres ao vão sem sobrepor o portão. -->
+            <Box
+              pos="-17.55 1.0 32"
+              size="27.1 5.0 0.7"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="7 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="17.55 1.0 32"
+              size="27.1 5.0 0.7"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="7 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <!-- Sul (z=-32) -->
+            <Box
+              pos="-17.55 1.0 -32"
+              size="27.1 5.0 0.7"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="7 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="17.55 1.0 -32"
+              size="27.1 5.0 0.7"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="7 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <!-- Leste (x=+32) -->
+            <Box
+              pos="32 1.0 -17.55"
+              size="0.7 5.0 27.1"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 7"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="32 1.0 17.55"
+              size="0.7 5.0 27.1"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 7"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <!-- Oeste (x=-32) -->
+            <Box
+              pos="-32 1.0 -17.55"
+              size="0.7 5.0 27.1"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 7"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="-32 1.0 17.55"
+              size="0.7 5.0 27.1"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 7"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <!-- Ameias (merlons) no topo — 6 por segmento, espaçadas ~4.5 m.
+               Posições x/z: ±7, ±11.5, ±16, ±20.5, ±25, ±29 (de ±4 a ±31.1) -->
+            <!-- Norte: segmento esquerdo -->
+            <Box pos="-29 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="-25 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="-20.5 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="-16 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="-11.5 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="-7 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <!-- Norte: segmento direito -->
+            <Box pos="7 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="11.5 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="16 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="20.5 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="25 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="29 3.85 32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <!-- Sul (z=-32) -->
+            <Box pos="-29 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="-25 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="-20.5 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="-16 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="-11.5 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="-7 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="7 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="11.5 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="16 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="20.5 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="25 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <Box pos="29 3.85 -32" size="0.8 0.7 0.75" color="#5a4530"></Box>
+            <!-- Leste (x=+32) -->
+            <Box pos="32 3.85 -29" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 -25" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 -20.5" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 -16" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 -11.5" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 -7" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 7" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 11.5" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 16" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 20.5" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 25" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="32 3.85 29" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <!-- Oeste (x=-32) -->
+            <Box pos="-32 3.85 -29" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 -25" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 -20.5" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 -16" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 -11.5" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 -7" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 7" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 11.5" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 16" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 20.5" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 25" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <Box pos="-32 3.85 29" size="0.75 0.7 0.8" color="#5a4530"></Box>
+            <!-- Torres de canto (mais altas e largas que a muralha, com telhado cónico) -->
+            <Box
+              pos="32 1.65 32"
+              size="1.8 6.3 1.8"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 3"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="-32 1.65 32"
+              size="1.8 6.3 1.8"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 3"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="32 1.65 -32"
+              size="1.8 6.3 1.8"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 3"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="-32 1.65 -32"
+              size="1.8 6.3 1.8"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 3"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <!-- Telhado cónico das torres (caixa inclinada a imitar cone, por falta de primitiva cone) -->
+            <Box pos="32 5.4 32" size="2.4 0.5 2.4" color="#7a3b28"></Box>
+            <Box pos="-32 5.4 32" size="2.4 0.5 2.4" color="#7a3b28"></Box>
+            <Box pos="32 5.4 -32" size="2.4 0.5 2.4" color="#7a3b28"></Box>
+            <Box pos="-32 5.4 -32" size="2.4 0.5 2.4" color="#7a3b28"></Box>
+            <Box pos="32 5.8 32" size="1.6 0.4 1.6" color="#6a2b1a"></Box>
+            <Box pos="-32 5.8 32" size="1.6 0.4 1.6" color="#6a2b1a"></Box>
+            <Box pos="32 5.8 -32" size="1.6 0.4 1.6" color="#6a2b1a"></Box>
+            <Box pos="-32 5.8 -32" size="1.6 0.4 1.6" color="#6a2b1a"></Box>
+            <!-- Postes de portão (enquadram cada vão central de 8 m) -->
+            <Box pos="-4.5 1.25 32" size="0.6 5.5 0.8" color="#4a3018"></Box>
+            <Box pos="4.5 1.25 32" size="0.6 5.5 0.8" color="#4a3018"></Box>
+            <Box pos="-4.5 1.25 -32" size="0.6 5.5 0.8" color="#4a3018"></Box>
+            <Box pos="4.5 1.25 -32" size="0.6 5.5 0.8" color="#4a3018"></Box>
+            <Box pos="32 1.25 -4.5" size="0.8 5.5 0.6" color="#4a3018"></Box>
+            <Box pos="32 1.25 4.5" size="0.8 5.5 0.6" color="#4a3018"></Box>
+            <Box pos="-32 1.25 -4.5" size="0.8 5.5 0.6" color="#4a3018"></Box>
+            <Box pos="-32 1.25 4.5" size="0.8 5.5 0.6" color="#4a3018"></Box>
+          </Composition>
+
+          <!-- §4.2 Portões ampliados: arco de pedra + lintel + braseiro
+           decorativo + estandarte por portão. Tudo decorativo (collider
+           none) para o vão (8 m) ficar livre. Cor do estandarte = bioma
+           para onde o portão aponta.
+           NOTA: sem PointLight aqui — a engine tem limite de 12 luzes
+           pontuais e as 12 estão reservadas para praça/casas/biomas. -->
+          <!-- Portão NORTE → Floresta -->
+          <Composition
+            place="at: 0 0; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <!-- Arco de pedra (lintel + impostas laterais) -->
+            <Box
+              pos="0 4 32"
+              size="9.5 0.6 0.9"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="4 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="-4.5 2.8 32"
+              size="0.7 2.8 0.9"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="4.5 2.8 32"
+              size="0.7 2.8 0.9"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <!-- Mastro + estandarte -->
+            <Box pos="-3.5 5 32" size="0.12 1.6 0.12" color="#5a3a20"></Box>
+            <Box pos="-3 5.3 32" size="0.8 1.0 0.06" color="#2a5a34"></Box>
+            <!-- Braseiro -->
+            <Sphere pos="0 4.5 32" size="0.18" color="#ffaa33"></Sphere>
+          </Composition>
+          <!-- Portão SUL → Pântano -->
+          <Composition
+            place="at: 0 0; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box
+              pos="0 4 -32"
+              size="9.5 0.6 0.9"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="4 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="-4.5 2.8 -32"
+              size="0.7 2.8 0.9"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="4.5 2.8 -32"
+              size="0.7 2.8 0.9"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="3.5 5 -32" size="0.12 1.6 0.12" color="#5a3a20"></Box>
+            <Box pos="3 5.3 -32" size="0.8 1.0 0.06" color="#3a5a40"></Box>
+            <Sphere pos="0 4.5 -32" size="0.18" color="#ffaa33"></Sphere>
+          </Composition>
+          <!-- Portão LESTE → Deserto -->
+          <Composition
+            place="at: 0 0; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box
+              pos="32 4 0"
+              size="0.9 0.6 9.5"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 4"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="32 2.8 -4.5"
+              size="0.9 2.8 0.7"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="32 2.8 4.5"
+              size="0.9 2.8 0.7"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="32 5 -3.5" size="0.12 1.6 0.12" color="#5a3a20"></Box>
+            <Box pos="32 5.3 -3" size="0.06 1.0 0.8" color="#c28a3a"></Box>
+            <Sphere pos="32 4.5 0" size="0.18" color="#ffaa33"></Sphere>
+          </Composition>
+          <!-- Portão OESTE → Picos -->
+          <Composition
+            place="at: 0 0; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box
+              pos="-32 4 0"
+              size="0.9 0.6 9.5"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 4"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="-32 2.8 -4.5"
+              size="0.9 2.8 0.7"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box
+              pos="-32 2.8 4.5"
+              size="0.9 2.8 0.7"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="-32 5 3.5" size="0.12 1.6 0.12" color="#5a3a20"></Box>
+            <Box pos="-32 5.3 3" size="0.06 1.0 0.8" color="#5a8ab0"></Box>
+            <Sphere pos="-32 4.5 0" size="0.18" color="#ffaa33"></Sphere>
+          </Composition>
+
+          <!-- §4.2b Casamatas — place at 0 0 (mesmo Y muralha); offset local ±24.
+           Fundação enterrada (~1.2 m) tapa gaps em depressões residuais. -->
+          <Composition
+            place="at: 0 0; align-to-terrain: 0"
+            body="fixed"
+            collider="auto"
+          >
+            <!-- N -->
+            <Box
+              pos="-6 0.5 28"
+              size="2.2 3.4 2.0"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="-6 2.15 28" size="2.6 0.22 2.4" color="#7a3b28"></Box>
+            <Box pos="-6 0.9 29" size="0.85 1.5 0.08" color="#4a3020"></Box>
+            <Sphere pos="-6 2.5 28" size="0.12" color="#ffaa44"></Sphere>
+            <Box
+              pos="6 0.5 28"
+              size="2.2 3.4 2.0"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="6 2.15 28" size="2.6 0.22 2.4" color="#7a3b28"></Box>
+            <Box pos="6 0.9 29" size="0.85 1.5 0.08" color="#4a3020"></Box>
+            <Sphere pos="6 2.5 28" size="0.12" color="#ffaa44"></Sphere>
+            <!-- S -->
+            <Box
+              pos="-6 0.5 -28"
+              size="2.2 3.4 2.0"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="-6 2.15 -28" size="2.6 0.22 2.4" color="#7a3b28"></Box>
+            <Box pos="-6 0.9 -29" size="0.85 1.5 0.08" color="#4a3020"></Box>
+            <Sphere pos="-6 2.5 -28" size="0.12" color="#ffaa44"></Sphere>
+            <Box
+              pos="6 0.5 -28"
+              size="2.2 3.4 2.0"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="6 2.15 -28" size="2.6 0.22 2.4" color="#7a3b28"></Box>
+            <Box pos="6 0.9 -29" size="0.85 1.5 0.08" color="#4a3020"></Box>
+            <Sphere pos="6 2.5 -28" size="0.12" color="#ffaa44"></Sphere>
+            <!-- E -->
+            <Box
+              pos="28 0.5 -6"
+              size="2.0 3.4 2.2"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="28 2.15 -6" size="2.4 0.22 2.6" color="#7a3b28"></Box>
+            <Box pos="29 0.9 -6" size="0.08 1.5 0.85" color="#4a3020"></Box>
+            <Sphere pos="28 2.5 -6" size="0.12" color="#ffaa44"></Sphere>
+            <Box
+              pos="28 0.5 6"
+              size="2.0 3.4 2.2"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="28 2.15 6" size="2.4 0.22 2.6" color="#7a3b28"></Box>
+            <Box pos="29 0.9 6" size="0.08 1.5 0.85" color="#4a3020"></Box>
+            <Sphere pos="28 2.5 6" size="0.12" color="#ffaa44"></Sphere>
+            <!-- O -->
+            <Box
+              pos="-28 0.5 -6"
+              size="2.0 3.4 2.2"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="-28 2.15 -6" size="2.4 0.22 2.6" color="#7a3b28"></Box>
+            <Box pos="-29 0.9 -6" size="0.08 1.5 0.85" color="#4a3020"></Box>
+            <Sphere pos="-28 2.5 -6" size="0.12" color="#ffaa44"></Sphere>
+            <Box
+              pos="-28 0.5 6"
+              size="2.0 3.4 2.2"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="2 2"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Box>
+            <Box pos="-28 2.15 6" size="2.4 0.22 2.6" color="#7a3b28"></Box>
+            <Box pos="-29 0.9 6" size="0.08 1.5 0.85" color="#4a3020"></Box>
+            <Sphere pos="-28 2.5 6" size="0.12" color="#ffaa44"></Sphere>
+          </Composition>
+        </Group>

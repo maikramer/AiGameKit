@@ -18,6 +18,65 @@ from pathlib import Path
 AUDIO_DIR = Path("/home/maikeu/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/audio")
 T2S = [".venv/bin/python", "-m", "text2sound", "generate"]
 
+
+def _probe_duration(path: Path) -> float | None:
+    try:
+        r = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=nw=1:nk=1",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if r.returncode != 0:
+            return None
+        return float(r.stdout.strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _hard_trim(path: Path, seconds: float) -> bool:
+    """ffmpeg trim+fade when generator ignored --duration/--crop."""
+    tmp = path.with_suffix(path.suffix + ".trimtmp")
+    try:
+        r = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(path),
+                "-t",
+                f"{seconds:.3f}",
+                "-af",
+                f"afade=t=out:st={max(0.0, seconds - 0.05):.3f}:d=0.05",
+                "-c:a",
+                "libvorbis",
+                "-q:a",
+                "5",
+                str(tmp),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if r.returncode != 0 or not tmp.exists():
+            tmp.unlink(missing_ok=True)
+            return False
+        tmp.replace(path)
+        return True
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        return False
+
+
 # Cada spec: (filename, prompt, category, profile, duration, seed, extra_flags)
 # category → audio_kind → negative prompt + compressor preset automáticos.
 # quality high → LUFS -15, enhance ON, mastering chain.
@@ -272,7 +331,23 @@ def main() -> int:
         if result.returncode == 0:
             ok += 1
             size = out.stat().st_size if out.exists() else 0
-            print(f"  ✓ {size} bytes in {elapsed:.1f}s")
+            # text2sound --crop has historically left ~28s tails; refuse silent
+            # "success" when the file is wildly longer than the requested clip.
+            dur = _probe_duration(out)
+            limit = max(duration * 1.8, duration + 1.5)
+            if dur is not None and dur > limit and profile != "music":
+                print(
+                    f"  ⚠ {size} bytes in {elapsed:.1f}s but duration={dur:.1f}s "
+                    f"> limit {limit:.1f}s — hard-trimming to {duration:.2f}s"
+                )
+                if not _hard_trim(out, duration + 0.08):
+                    fail += 1
+                    ok -= 1
+                    print("  ✗ trim failed")
+                else:
+                    print(f"  ✓ trimmed → {_probe_duration(out):.2f}s")
+            else:
+                print(f"  ✓ {size} bytes in {elapsed:.1f}s" + (f" ({dur:.2f}s)" if dur else ""))
         else:
             fail += 1
             print(f"  ✗ FAILED ({elapsed:.1f}s)")

@@ -7,6 +7,7 @@ import {
   loadGltfToSceneWithAnimator,
   notifyEnemyKilled,
   playSound,
+  playSoundAt,
   spawnFloatingText,
 } from 'vibegame';
 import type { MonoBehaviourContext, State } from 'vibegame';
@@ -15,8 +16,6 @@ import {
   Parent,
   defineQuery,
   PlayerController,
-  sampleTerrainHeight,
-  getBvhSurfaceHeight,
   Health,
   isDead,
   spawnParticleBurst,
@@ -37,6 +36,8 @@ import {
   setTransformYawRadians,
   spawnProjectileFromTemplate,
   hasLineOfSight,
+  sampleTerrainSurface,
+  TerrainSpawned,
 } from 'vibegame';
 import type { MeleeAiConfig } from 'vibegame';
 import {
@@ -45,20 +46,10 @@ import {
   unregisterEnemy,
 } from './enemy-registry';
 
-const TERRAIN_LAYER = 0x0001;
-/** Static GLTF / Fixed bodies registered by ``BvhStaticMeshSyncSystem``. */
-const STATIC_MESH_LAYER = 0x0002;
 /**
- * Extra lift above the sampled surface so skinned bind-pose AABBs and the
- * coarse-vs-rendered height delta don't bury feet in the visible mesh.
- * Tuned against north-exit cobbles (goblins were knee-deep at 0.08).
- */
-const FOOT_CLEARANCE = 0.32;
-
-/**
- * Beyond detect range (+ margin) creatures sleep: no AI, no animator, no
- * terrain snap. Wake checks are staggered so a pack far from the hero costs
- * almost nothing while the player is in town.
+ * Beyond detect range (+ margin) creatures sleep: no AI, no animator.
+ * Boot ground Y is owned by the shared spawner path (same as trees):
+ * AABB + sampleTerrainSurface + TerrainSpawned resync — not this script.
  */
 const SLEEP_RANGE_MARGIN = 8;
 const SLEEP_CHECK_INTERVAL = 20;
@@ -181,8 +172,8 @@ export interface CreatureConfig {
    * Uniform visual scale applied to the loaded model (default 1).
    * The asset pipeline (Hunyuan) normalizes every GLB to a ~2-unit bounding
    * box — small pests ship as tall as the hero and the ogre *shorter* — so
-   * each creature declares its real in-world size here. footOffset and the
-   * health bar are children of the scaled group, so they follow for free.
+   * each creature declares its real in-world size here. Spawner AABB lift and
+   * the health bar follow the scaled group.
    */
   modelScale?: number;
   /**
@@ -250,8 +241,6 @@ interface PresentationState {
   lodAnimators: (GltfAnimator | null)[];
   /** Visual owned by child GLTFLoader — do not scene-position the group. */
   xmlVisual: boolean;
-  footOffset: number;
-  ready: boolean;
   playing: string;
   heading: number;
   prevX: number;
@@ -280,9 +269,26 @@ interface PresentationState {
 
 const playerQuery = defineQuery([PlayerController]);
 const xmlVisualQuery = defineQuery([Parent, GltfPending]);
-const _box = new THREE.Box3();
 /** Planar speed (m/s) above which chase/idle facing follows displacement. */
 const MOVE_FACE_SPEED = 0.3;
+
+/**
+ * Same Y formula as `resyncTerrainSpawnedHeights` / trees: mesh surface +
+ * spawn-time AABB yOffset. Used while awake on slopes — not a boot snap.
+ */
+function applySharedTerrainY(state: State, eid: number): void {
+  if (!state.hasComponent(eid, TerrainSpawned)) return;
+  const eps = TerrainSpawned.surfaceEpsilon[eid] || 0.75;
+  const s = sampleTerrainSurface(
+    state,
+    Transform.posX[eid],
+    Transform.posZ[eid],
+    eps
+  );
+  if (!s) return;
+  Transform.posY[eid] = s.worldY + TerrainSpawned.yOffset[eid];
+  Transform.dirty[eid] = 1;
+}
 
 function deriveLodUrls(modelUrl: string): [string, string, string] | null {
   const m = modelUrl.match(/^(.*)_lod([012])\.glb$/i);
@@ -334,62 +340,6 @@ function isXmlVisualPending(state: State, eid: number): boolean {
     if (GltfPending.loaded[child] !== 1) return true;
   }
   return false;
-}
-
-function groundHeight(
-  ctx: MonoBehaviourContext,
-  x: number,
-  z: number,
-  fromY: number
-): number {
-  // Prefer the *rendered* LOD lattice (what the player sees). The terrain BVH
-  // is a coarse 128-seg plane over the whole map and sits below chunk meshes —
-  // using it first buried goblins near the north exit path.
-  let terrainY = sampleTerrainHeight(ctx.state, x, z);
-  if (!Number.isFinite(terrainY) || (terrainY === 0 && Math.abs(fromY) > 2)) {
-    terrainY = Number.NaN;
-  }
-  if (!Number.isFinite(terrainY)) {
-    const bvhTerrain = getBvhSurfaceHeight(
-      ctx.state,
-      x,
-      fromY + 60,
-      z,
-      2000,
-      TERRAIN_LAYER
-    );
-    if (
-      bvhTerrain != null &&
-      Number.isFinite(bvhTerrain) &&
-      !(Math.abs(fromY) > 5 && bvhTerrain < fromY - 20)
-    ) {
-      terrainY = bvhTerrain;
-    }
-  }
-
-  // Static props/roads on BVH layer 0x0002: stand on top when higher.
-  const propY = getBvhSurfaceHeight(
-    ctx.state,
-    x,
-    fromY + 60,
-    z,
-    2000,
-    STATIC_MESH_LAYER
-  );
-  let best = terrainY;
-  if (
-    propY != null &&
-    Number.isFinite(propY) &&
-    !(Math.abs(fromY) > 5 && propY < fromY - 20)
-  ) {
-    best = Number.isFinite(best) ? Math.max(best, propY) : propY;
-  }
-  return Number.isFinite(best) ? best : fromY;
-}
-
-/** Feet Y = sampled ground + local foot offset + clearance. */
-function feetY(groundY: number, footOffset: number): number {
-  return groundY + footOffset + FOOT_CLEARANCE;
 }
 
 function collectFlashMats(s: PresentationState): void {
@@ -565,9 +515,14 @@ export function createCreatureBehaviours(
   ): void {
     if (s.deathHandled) return;
     s.deathHandled = true;
-    s.deathTimer = 2.0;
+    s.deathTimer = 1.6;
     aggroEntities.delete(eid);
     unregisterEnemy(eid);
+    // Kill hit-flash so corpses don't sit white/glowing until despawn.
+    if (s.flashMats) applyFlash(s, false);
+    s.flashTimer = 0;
+    // Never re-pull XML/fallback visuals after death (was resurrecting the mesh).
+    s.xmlWaitFrames = 999;
 
     // Diagnostic: legit death has hp<=0; hp>0 means a stale DEAD mode slipped through.
     if (Health.current[eid] > 0) {
@@ -581,10 +536,10 @@ export function createCreatureBehaviours(
         }
       );
     }
-    playSound('enemy-death');
     const x = Transform.posX[eid];
     const y = Transform.posY[eid];
     const z = Transform.posZ[eid];
+    playSoundAt('enemy-death', x, y, z, { originEid: eid });
     if (cfg.defeatedText) {
       spawnFloatingText(ctx.state, cfg.defeatedText, {
         x,
@@ -602,7 +557,7 @@ export function createCreatureBehaviours(
     if (cfg.enemyType) {
       notifyEnemyKilled(ctx.state, cfg.enemyType);
     }
-    playSound('item-drop');
+    playSoundAt('item-drop', x, y, z, { originEid: eid });
     spawnParticleBurst(ctx.state, {
       x,
       y: y + 0.5,
@@ -676,17 +631,7 @@ export function createCreatureBehaviours(
     s.xmlVisual = xmlVisual;
     const scale = cfg.modelScale ?? 1;
     if (scale !== 1) group.scale.setScalar(scale);
-    group.updateWorldMatrix(true, true);
-    // ``setFromObject`` is a *world* AABB. XML visuals are already placed on
-    // terrain, so ``-_box.min.y`` would embed the spawn height (~40) into the
-    // foot offset. Adding that back to ``groundY`` cancels the terrain and
-    // buries the model near Y=0 the moment sleep→wake starts snapping.
-    _box.setFromObject(group);
-    const groupWorldY = group.matrixWorld.elements[13] ?? 0;
-    const worldMinY = _box.min.y;
-    // Local feet offset (never negative — that would bury the model).
-    const local = Number.isFinite(worldMinY) ? -(worldMinY - groupWorldY) : 0;
-    s.footOffset = Number.isFinite(local) ? Math.max(0, local) : 0;
+    // Foot/Y placement is the shared spawner AABB path (same as trees).
     if (!s.activated) group.visible = false;
   }
 
@@ -770,8 +715,6 @@ export function createCreatureBehaviours(
       animator: null,
       lodAnimators: [null, null, null],
       xmlVisual: false,
-      footOffset: 0,
-      ready: false,
       playing: '',
       heading: Math.random() * Math.PI * 2,
       prevX: Transform.posX[eid],
@@ -839,7 +782,8 @@ export function createCreatureBehaviours(
     }
 
     // Adopt merged/self or child <GLTFLoader lod*> from index.html.
-    if (!s.group && s.xmlWaitFrames < 999) {
+    // Skip once dead — re-adopt was bringing corpses back (glowing/fallen "sleep").
+    if (!s.deathHandled && !s.group && s.xmlWaitFrames < 999) {
       if (tryAdoptXmlVisual(ctx, eid, s)) {
         // adopted
       } else if (isXmlVisualPending(ctx.state, eid)) {
@@ -878,7 +822,15 @@ export function createCreatureBehaviours(
       if (s.group) s.group.visible = true;
       if (cfg.clips.roar) {
         s.roarTimer = 2.5;
-        if (cfg.roarSound) playSound(cfg.roarSound);
+        if (cfg.roarSound) {
+          playSoundAt(
+            cfg.roarSound,
+            Transform.posX[eid],
+            Transform.posY[eid],
+            Transform.posZ[eid],
+            { originEid: eid }
+          );
+        }
       }
     } else if (!shouldSimulate(ctx, s, eid)) {
       // Sleeping: park on idle once so frozen jump/lunge poses don't linger.
@@ -898,15 +850,13 @@ export function createCreatureBehaviours(
       if (cfg.clips.roar && s.playing !== cfg.clips.roar) {
         playClip(s, cfg.clips.roar, { loop: false });
       }
-      const rx = Transform.posX[eid];
-      const rz = Transform.posZ[eid];
-      const ry = groundHeight(ctx, rx, rz, Transform.posY[eid]);
-      if (Number.isFinite(ry)) {
-        const fy = feetY(ry, s.footOffset);
-        Transform.posY[eid] = fy;
-        if (!s.xmlVisual) {
-          s.group.position.set(rx, fy, rz);
-        }
+      applySharedTerrainY(ctx.state, eid);
+      if (!s.xmlVisual) {
+        s.group.position.set(
+          Transform.posX[eid],
+          Transform.posY[eid],
+          Transform.posZ[eid]
+        );
       }
       return;
     }
@@ -970,25 +920,17 @@ export function createCreatureBehaviours(
       handleDeath(ctx, s, eid);
       s.deathTimer -= dt;
       if (s.deathTimer <= 0) {
-        if (!s.xmlVisual) s.group.removeFromParent();
-        else s.group.visible = false;
-        s.group = null;
+        if (s.group) {
+          if (!s.xmlVisual) s.group.removeFromParent();
+          else s.group.visible = false;
+          s.group = null;
+        }
+        // Remove ECS entity so AI/health/nav stop and packs don't keep a ghost.
+        if (ctx.state.exists(eid)) {
+          ctx.state.destroyEntity(eid);
+        }
       }
       return;
-    }
-
-    if (!s.ready) {
-      const gy = groundHeight(
-        ctx,
-        Transform.posX[eid],
-        Transform.posZ[eid],
-        Transform.posY[eid] || 500
-      );
-      if (!Number.isFinite(gy)) return;
-      Transform.posY[eid] = feetY(gy, s.footOffset);
-      Transform.dirty[eid] = 1;
-      s.ready = true;
-      s.lastGroundFrame = ctx.state.time.frameCount;
     }
 
     // Hit flash + hit-reaction clip on HP drop (damage numbers/SFX come from main.ts watcher).
@@ -1019,32 +961,21 @@ export function createCreatureBehaviours(
     }
     s.lastHp = hp;
 
-    // The FSM owns XZ (via the crowd agent / lunge). We own the terrain Y and
-    // the visual transform. Sampling is adaptive: while moving we snap every
-    // frame (a creature crossing a slope at chase speed would otherwise float
-    // for up to IDLE_GROUND_INTERVAL frames); while parked we throttle to
-    // IDLE_GROUND_INTERVAL to save the BVH raycast cost.
+    // FSM owns XZ; terrain Y uses the same sampler/offset as trees
+    // (sampleTerrainSurface + TerrainSpawned.yOffset), only while awake.
     const x = Transform.posX[eid];
     const z = Transform.posZ[eid];
     const frame = ctx.state.time.frameCount;
     const planarStep = Math.hypot(x - s.prevX, z - s.prevZ);
     const needGround =
       inCombat ||
-      !s.ready ||
       planarStep > 0.02 ||
       frame - s.lastGroundFrame >= IDLE_GROUND_INTERVAL;
-    let visualY = Transform.posY[eid];
     if (needGround) {
-      const groundY = groundHeight(ctx, x, z, Transform.posY[eid]);
-      visualY = Number.isFinite(groundY)
-        ? feetY(groundY, s.footOffset)
-        : Transform.posY[eid];
-      Transform.posY[eid] = visualY;
-      Transform.dirty[eid] = 1;
+      applySharedTerrainY(ctx.state, eid);
       s.lastGroundFrame = frame;
-    } else {
-      visualY = Transform.posY[eid];
     }
+    const visualY = Transform.posY[eid];
 
     // Facing policy (single writer — navmesh faceVelocity is off):
     //   chase / move → face displacement; attack / lunge → face target.

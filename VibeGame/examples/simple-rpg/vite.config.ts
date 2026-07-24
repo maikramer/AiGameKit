@@ -60,14 +60,18 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    // recast-navigation ships WASM that esbuild's prebundler mangles — exclude it
-    // (and its three helper) so the runtime loads the real module.
+    // recast-navigation / yoga (@pmndrs/uikit) ship WASM that esbuild's
+    // prebundler mangles — exclude so the runtime loads the real module
+    // (also avoids Firefox DevTools "URL constructor: is not a valid URL"
+    // on wasm:… sourceMappingURL=null).
     // @gltf-transform/core lazy-imports node:fs/node:path for I/O; never prebundle
     // it in the browser (the engine only calls the validator on explicit demand).
     exclude: [
       'vibegame',
       'recast-navigation',
       '@recast-navigation/three',
+      '@pmndrs/uikit',
+      'yoga-layout',
       '@gltf-transform/core',
       '@gltf-transform/functions',
     ],

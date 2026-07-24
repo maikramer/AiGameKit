@@ -29,9 +29,10 @@ upload a new release, and update `assets.lock.json` (`version` + `url` + `sha256
 
 | Element                                    | Source / Plugin                        | How it loads                                                                                                               |
 | ------------------------------------------ | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Terrain (2 km, quadtree LOD)               | Built-in `<Terrain>`                   | Declarative in `index.html` (matches `public/assets/terrain/heightmap.png`)                                                |
-| Sky IBL + background                       | Skymap2D (equirect PNG) + `sky` plugin | `<EquirectSky url="/assets/sky/sky.png">` in `index.html`                                                                  |
-| NavMesh                                    | `NavMeshPlugin`                        | `<NavMesh>` in `index.html` (AI pathfinding surface)                                                                       |
+| Terrain (2 km, quadtree LOD)               | Built-in `<Terrain>`                   | Declarative in `index.html` shell (`world-base`; heightmap under `public/assets/terrain/`)                                 |
+| Sky IBL + background                       | Skymap2D (equirect PNG) + `sky` plugin | `<EquirectSky>` in `public/world/environment.xml`                                                                          |
+| NavMesh                                    | `NavMeshPlugin`                        | `<NavMesh>` in `index.html` (`world-base`)                                                                                 |
+| World layout (city, biomes, spawn)         | `<Include>` + city-layout recipes      | Fragments under `public/world/` (see that folder’s `context.md`)                                                           |
 | Player (animated GLB + WASD)               | Built-in `<PlayerGLTF>`                | `<PlayerGLTF name="hero" model-url="/assets/meshes/hero_lod0.glb">`                                                        |
 | Third-person camera + post-fx              | Built-in `<ThirdPersonCamera>`         | Declarative (bloom, vignette, SSAO, AGX tonemap; `<PostFxDebugToggle>` cycles effects on 1-6)                              |
 | Audio mixer + layered music                | Engine audio plugin                    | `<AudioMixer>` + `<MusicLayer layer="explore\|battle">` (crossfaded by biome)                                              |
@@ -185,7 +186,7 @@ The world spans **four biome regions** radiating from the central walled city. E
 | **Swamp** (south)       | z < -28  | Murky fog, dense           | bogling                   | Bog Warden   | swamp_boglings, swamp_bogwarden, swamp_bogmoss |
 | **Frozen Peaks** (west) | x < -28  | Cold fog, icy              | goblin, slime, frost wolf | Ogre (final) | peaks_goblins, peaks_frost, peaks_ogre         |
 
-Each biome is declared via `<BiomeRegion polygon="[x,z;x,z;...]">` in `index.html`. The `biomes` plugin detects the player's position and crossfades fog color, density, ambient light, terrain texture, and the BGM layer when entering a new region.
+Each biome is declared via `<BiomeRegion polygon="[x,z;x,z;...]">` in `public/world/environment.xml`. The `biomes` plugin detects the player's position and crossfades fog color, density, ambient light, terrain texture, and the BGM layer when entering a new region.
 
 **Quest system:** 12 NPCs (3 per biome) offer quests loaded from `src/data/quests/*.json`. Quests are either kill-N-enemies or collect-N-resources. Walk up to an NPC and press **F** to open the dialogue balloon, accept the quest, then track progress in the **Quests** tab of the pause menu. Quest state persists via `SaveLoadPlugin`.
 
@@ -235,13 +236,33 @@ __VIBEGAME__.profiler.download()
 
 Filter the systems list for `terrain`, `vegetation`, `render`, or `rpg/` (game-side spans on hero snap, combat feedback, BGM).
 
+## World maps (`public/world/`)
+
+`index.html` is a **shell**: hero, terrain, UI, and `<Include src="/world/…">` tags.
+Edit the fragment for the domain you care about:
+
+| Edit this                                     | To change                                         |
+| --------------------------------------------- | ------------------------------------------------- |
+| `public/world/cities/discordia.xml`           | City shell (`SpawnExclusion` + district Includes) |
+| `public/world/cities/discordia/houses.xml`    | Casas (`Composition`)                             |
+| `public/world/cities/discordia/utilities.xml` | Praça + landmarks (poço, tochas, santuários)      |
+| `public/world/cities/discordia/*.xml`         | Outros distritos: walls, roads, forge, market, …  |
+| `public/world/cities/town-demo.xml`           | Isolated demo town (CityGrid prefabs)             |
+| `public/world/vegetation/crystal-vale.xml`    | Biome props / vegetation                          |
+| `public/world/spawn/ring.xml`                 | Resource ring around the city                     |
+| `public/world/creatures/enemies.xml`          | Enemy / boss spawners                             |
+| `public/world/ai/npcs.xml`                    | Quest NPC entities in the Scene                   |
+| `public/world/environment.xml`                | Sky, light, post, biomes polygons                 |
+
+`CityGrid` / `Street` / `Building` / `Slot` recipes: cell coords space-separated (`at="2 1"`). Details in [`public/world/context.md`](public/world/context.md) and engine `src/plugins/city-layout/context.md`.
+
 ## Extending
 
 - Add more assets: edit `sample-gameassets/manifest_full.csv` (and the per-biome subset manifests), re-run batch + handoff.
-- Change layout: edit `index.html` (`<Composition>`, `<StaticSpawner>`, `<DynamicSpawner>`, `<BiomeRegion>`, etc.) or regenerate via `gameassets dream`.
+- Change layout: edit the matching file under `public/world/` (not the whole `index.html`), or regenerate via `gameassets dream`.
 - Add game logic: edit `src/main.ts` and the entity scripts under `src/scripts/`. Add new systems with `withSystem`.
-- Add quests: drop a new JSON into `src/data/quests/`, import it in `src/main.ts`, and add a matching `<DialogueNPC dialogue-id="…">` in `index.html`.
-- Add enemies or bosses: write an entity script in `src/scripts/` (see `creature.ts` for the shared `createCreatureBehaviours` builder) and spawn it via `<DynamicSpawner>` or a placed `<GameObject>`.
+- Add quests: drop a new JSON into `src/data/quests/`, import it in `src/main.ts`, and add a matching `<DialogueNPC dialogue-id="…">` in `public/world/ai/npcs.xml`.
+- Add enemies or bosses: write an entity script in `src/scripts/` (see `creature.ts` for the shared `createCreatureBehaviours` builder) and spawn it via `<DynamicSpawner>` in `public/world/creatures/enemies.xml` or a placed `<GameObject>`.
 - Tweak AI presets: edit the YAML under `public/data/ai/` (boss, goblin, slime), loaded into the data registry at boot.
 - Add particle effects: presets load sprites from `/assets/particles/`; destruction uses `dust`/`leaves`/`woodchips`/`rockshards`; campfire uses `fire`/`smoke`. Add more via `<ParticleSystem preset="…">` / `<ParticleBurst>`.
 - Use `gameassets dream "your idea" --dry-run` to regenerate a full plan + files from scratch.

@@ -1,0 +1,30 @@
+<!--
+  Discordia (walled city) — shell. District Compositions live under cities/discordia/*.xml.
+  Contracts: SpawnExclusion r=42, gates ±32 (sync main.ts RESPAWN_POINTS).
+  Edit houses → discordia/houses.xml; plaza/landmarks → discordia/utilities.xml; etc.
+-->
+<!-- GRUPO "city": contentor. Includes = distritos. place=at continua em coords mundo. -->
+<Group name="city" pos="0 0 0">
+  <!-- §4 CIDADE MURADA (VALE) — muralha ±32; praça; vias; distritos. -->
+  <SpawnExclusion at="0 0" radius="42"></SpawnExclusion>
+  <TerrainPad
+    at="0 0"
+    size="96 96"
+    falloff="16"
+    corner-radius="14"
+  ></TerrainPad>
+
+  <Include src="/world/cities/discordia/walls.xml"></Include>
+  <Include src="/world/cities/discordia/roads.xml"></Include>
+  <Include src="/world/cities/discordia/utilities.xml"></Include>
+  <Include src="/world/cities/discordia/houses.xml"></Include>
+  <Include src="/world/cities/discordia/forge.xml"></Include>
+  <Include src="/world/cities/discordia/barn.xml"></Include>
+  <Include src="/world/cities/discordia/watch.xml"></Include>
+  <Include src="/world/cities/discordia/chapel.xml"></Include>
+  <Include src="/world/cities/discordia/market.xml"></Include>
+  <Include src="/world/cities/discordia/longhouse.xml"></Include>
+  <Include src="/world/cities/discordia/skirts.xml"></Include>
+  <Include src="/world/cities/discordia/grid.xml"></Include>
+</Group>
+<!-- FIM city -->

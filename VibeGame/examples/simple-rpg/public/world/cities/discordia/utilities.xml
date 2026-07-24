@@ -1,0 +1,228 @@
+<!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+  Edit this file for this district only. Cell coords: space-separated (at="2 1").
+-->
+<!-- utilities: plaza amenities + landmarks (well, torches, shrines). -->
+<Group name="city.plaza" pos="0 0 0">
+          <!-- §4.3 PRAÇA CENTRAL (pad 16×16): poço, fogueira comunitária,
+           mastro com a bandeira e bancos. O herói nasce no centro.
+           Rotações de raiz (transform="rotation: …") são em GRAUS;
+           rotações de primitivas dentro de <Composition> são em RADIANOS. -->
+          <!-- Poço medieval (~1.6 m nativo, sem scale manual). Centro-oeste da praça. -->
+          <GameObject
+            name="well"
+            place="at: -4 2; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/medieval_well_lod2.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/medieval_well_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <!-- Fogueira comunitária -->
+          <Composition
+            place="at: 6 -5; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Cylinder
+              pos="0 0.12 0"
+              size="1.0 1.15 0.25"
+              color="#6f6a63"
+            ></Cylinder>
+            <Cylinder
+              pos="0 0.35 0"
+              size="0.12 0.12 1.5"
+              rotation="1.5 0 0.2"
+              color="#5a3a20"
+            ></Cylinder>
+            <Cylinder
+              pos="0 0.35 0"
+              size="0.12 0.12 1.5"
+              rotation="1.5 1.0 -0.2"
+              color="#6b4a2b"
+            ></Cylinder>
+            <Sphere pos="0 0.7 0" size="0.55" color="#ff7722"></Sphere>
+            <Sphere pos="0 1.05 0" size="0.32" color="#ffcc33"></Sphere>
+            <PointLight
+              pos="0 1.1 0"
+              point-light="color: 0xff8a33; intensity: 3; distance: 10; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>
+          <!-- Mastro com a bandeira da cidade junto ao poço -->
+          <Composition
+            place="at: -6 8; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 2.0 0" size="0.1 4.0 0.1" color="#5a3a20"></Box>
+            <Sphere pos="0 4.05 0" size="0.13" color="#d4b84a"></Sphere>
+            <Box pos="0.5 3.2 0" size="0.06 1.0 0.8" color="#b03b3b"></Box>
+            <Box pos="0.5 3.65 0" size="0.06 0.12 0.84" color="#d4b84a"></Box>
+          </Composition>
+          <!-- Bancos de madeira virados para a fogueira (rotação em graus) -->
+          <GameObject
+            transform="rotation: 0 35 0"
+            place="at: 4 -3; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: box; size: 1.2 0.5 0.5"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/wooden_bench_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            transform="rotation: 0 -35 0"
+            place="at: 8 -3; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: box; size: 1.2 0.5 0.5"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/wooden_bench_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+
+          <!-- §4.3d Densidade da praça (só Composition — funciona sem GLB). -->
+          <Composition
+            place="at: -4 -4; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 0.28 0" size="1.4 0.12 0.45" color="#6b4a2b"></Box>
+            <Box pos="-0.55 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
+            <Box pos="0.55 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
+          </Composition>
+          <Composition
+            place="at: 3 5; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 0.28 0" size="1.4 0.12 0.45" color="#6b4a2b"></Box>
+            <Box pos="-0.55 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
+            <Box pos="0.55 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
+          </Composition>
+          <Composition
+            place="at: -8 2; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Cylinder
+              pos="0 0.25 0"
+              size="0.4 0.4 0.5"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Cylinder>
+            <Sphere pos="0 0.55 0.1" size="0.12" color="#7ab040"></Sphere>
+            <Sphere pos="0.15 0.55 -0.1" size="0.1" color="#c45a7a"></Sphere>
+          </Composition>
+          <Composition
+            place="at: 8 2; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Cylinder
+              pos="0 0.25 0"
+              size="0.4 0.4 0.5"
+              color="#6a5236"
+              texture-url="/assets/textures/mountain_stone.png"
+              texture-repeat="1 1"
+              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+            ></Cylinder>
+            <Sphere pos="-0.1 0.55 0" size="0.12" color="#e8d080"></Sphere>
+            <Sphere pos="0.12 0.55 0.1" size="0.1" color="#7ab040"></Sphere>
+          </Composition>
+          <!-- (placeholder do poço removido — GLB medieval_well_lod0 está activo) -->
+          <!-- Totens de distrito nos 4 cantos da praça -->
+          <Composition
+            place="at: 9 9; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 0.9 0" size="0.15 1.8 0.15" color="#5a3a20"></Box>
+            <Box pos="0.35 1.5 0" size="0.55 0.4 0.06" color="#3a5a8a"></Box>
+          </Composition>
+          <Composition
+            place="at: -9 9; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 0.9 0" size="0.15 1.8 0.15" color="#5a3a20"></Box>
+            <Box pos="0.35 1.5 0" size="0.55 0.4 0.06" color="#4a6a3a"></Box>
+          </Composition>
+          <Composition
+            place="at: -9 -9; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 0.9 0" size="0.15 1.8 0.15" color="#5a3a20"></Box>
+            <Box pos="0.35 1.5 0" size="0.55 0.4 0.06" color="#8a4a32"></Box>
+          </Composition>
+          <Composition
+            place="at: 9 -9; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 0.9 0" size="0.15 1.8 0.15" color="#5a3a20"></Box>
+            <Box pos="0.35 1.5 0" size="0.55 0.4 0.06" color="#b03b3b"></Box>
+          </Composition>
+          <!-- §4.6 Quadro de avisos (borda sul da praça, junto à via) -->
+          <Composition
+            place="at: 4 -10; align-to-terrain: 0"
+            body="fixed"
+            collider="auto"
+          >
+            <Box pos="-0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+            <Box pos="0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+            <Box pos="0 1.35 0" size="1.8 1.0 0.1" color="#7a5230"></Box>
+            <Box pos="0 1.55 0.06" size="1.5 0.5 0.04" color="#e8ddc8"></Box>
+            <Box pos="0 1.9 0" size="2.0 0.14 0.3" color="#4a3018"></Box>
+          </Composition>
+          <!-- §4.7 Tochas da praça (2 com luz — orçamento de PointLights) -->
+          <Composition
+            place="at: 7 7; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+            <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+            <PointLight
+              pos="0 2.05 0"
+              point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"
+            ></PointLight>
+          </Composition>
+          <Composition
+            place="at: -7 -7; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+            <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+            <PointLight
+              pos="0 2.05 0"
+              point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"
+            ></PointLight>
+          </Composition>
+        </Group>
+
+<Group name="city.landmarks" pos="0 0 0">
+          <!-- §4.8 Santuários místicos junto às vias E-W (sólidos, [F]) -->
+          <GameObject
+            name="rune-pillar"
+            place="at: -26 14; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base"
+            script="stone-pillar.ts"
+          ></GameObject>
+          <GameObject
+            name="crystal-shrine"
+            place="at: 26 14; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
+            script="crystal-shrine.ts"
+          ></GameObject>
+        </Group>

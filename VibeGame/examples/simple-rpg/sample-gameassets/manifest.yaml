@@ -249,11 +249,11 @@ assets:
       - lod
       - collision
     lod_levels: 1
+    # Bípede humanoid (como bandit): Quaternius mocap — não procedural creature.
     animate:
-      preset: creature
-      clips: idle,walk,run,jump,attack,death,roar
-      procedural: true
+      preset: humanoid
       force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
     omni:
       control_type: pose
       pose_preset: quaternius-apose

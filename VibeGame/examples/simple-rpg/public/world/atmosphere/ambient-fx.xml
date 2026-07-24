@@ -1,0 +1,52 @@
+<!--
+  Ambient particle FX (ground dust, fireflies). Loaded via Include from index.html.
+  Positions sit in biome wedges outside the city pad (±28).
+-->
+<Group name="atmosphere.ambient" pos="0 0 0">
+  <!-- Deserto E — poeira rasteira na areia -->
+  <ParticleSystem
+    preset="ground-dust"
+    transform="pos: 85 0.25 0"
+  ></ParticleSystem>
+  <ParticleSystem
+    preset="ground-dust"
+    transform="pos: 110 0.25 35"
+  ></ParticleSystem>
+  <ParticleSystem
+    preset="ground-dust"
+    transform="pos: 105 0.25 -40"
+  ></ParticleSystem>
+  <ParticleSystem
+    preset="ground-dust"
+    transform="pos: 130 0.25 10"
+  ></ParticleSystem>
+  <ParticleSystem
+    preset="ground-dust"
+    transform="pos: 95 0.25 -20"
+  ></ParticleSystem>
+  <ParticleSystem
+    preset="ground-dust"
+    transform="pos: 145 0.25 -15"
+  ></ParticleSystem>
+
+  <!-- Floresta Sombria N — fireflies em clearings -->
+  <ParticleSystem
+    preset="fireflies"
+    transform="pos: 0 1.2 90"
+  ></ParticleSystem>
+  <ParticleSystem
+    preset="fireflies"
+    transform="pos: -25 1.2 115"
+  ></ParticleSystem>
+  <ParticleSystem
+    preset="fireflies"
+    transform="pos: 22 1.2 105"
+  ></ParticleSystem>
+
+  <!-- Bruxa — fumo baixo na clareira (landmark já em crystal-vale) -->
+  <ParticleSystem
+    preset="smoke"
+    transform="pos: -8 1.5 135"
+    particle-emitter="preset: smoke; emission-rate: 8; start-life-min: 2; start-life-max: 4; start-speed-min: 0.4; start-speed-max: 1.0; start-size-min: 0.4; start-size-max: 0.9; start-color: #888888; looping: 1; world-space: 1"
+  ></ParticleSystem>
+</Group>

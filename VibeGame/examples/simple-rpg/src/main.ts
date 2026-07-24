@@ -32,9 +32,9 @@ import {
   setLocale,
   // audio
   playSound,
+  playSoundAt,
   setBusVolume,
   setBusMuted,
-  resumeAudioContextIfSuspended,
   // input
   addInputMapping,
   isKeyDown,
@@ -485,7 +485,17 @@ const CombatFeedbackSystem: System = {
           crit: big,
           stackKey: `dmg@${e}`,
         });
-        playSound(isHero ? 'player-hurt' : 'enemy-hurt');
+        if (isHero) {
+          playSound('player-hurt', { originEid: e });
+        } else {
+          playSoundAt(
+            'enemy-hurt',
+            Transform.posX[e],
+            Transform.posY[e],
+            Transform.posZ[e],
+            { originEid: e }
+          );
+        }
         if (!isHero) {
           setCombatTarget(e, {
             label: getEnemyLabel(e) || state.getEntityName(e) || 'Enemy',
@@ -534,7 +544,13 @@ const CombatFeedbackSystem: System = {
           // SFX (all driven by the engine destructible plugin). No floating text
           // here — a lone '*' reads as a square box and the popup/loot already
           // stack on break.
-          playSound(isWoodEntity(e) ? 'chop-hit' : 'mine-hit');
+          playSoundAt(
+            isWoodEntity(e) ? 'chop-hit' : 'mine-hit',
+            Transform.posX[e],
+            Transform.posY[e],
+            Transform.posZ[e],
+            { originEid: e }
+          );
         }
       }
     });
@@ -934,7 +950,7 @@ function switchBgm(layer: 'explore' | 'battle'): void {
       }
     }
   }
-  playSound(`bgm-${layer}`);
+  playSound(`bgm-${layer}`, { origin: 'music' });
   bgmCurrentLayer = layer;
 }
 
@@ -1248,7 +1264,9 @@ async function bootstrap(): Promise<void> {
         stackBaseY: y + 1.2,
         stackGap: 0.5,
       });
-      playSound('chop-break');
+      playSoundAt('chop-break', x, y, z, {
+        originEid: eid ?? undefined,
+      });
     } else {
       addStone(1);
       addItem(state, hero, 'stone', 1);
@@ -1263,7 +1281,9 @@ async function bootstrap(): Promise<void> {
         stackBaseY: y + 1.2,
         stackGap: 0.5,
       });
-      playSound('mine-break');
+      playSoundAt('mine-break', x, y, z, {
+        originEid: eid ?? undefined,
+      });
     }
   });
 
@@ -1423,13 +1443,8 @@ async function bootstrap(): Promise<void> {
     return JSON.stringify(hands);
   });
 
-  if (typeof document !== 'undefined') {
-    const startBgm = () => {
-      resumeAudioContextIfSuspended();
-      document.removeEventListener('pointerdown', startBgm);
-    };
-    document.addEventListener('pointerdown', startBgm, { once: true });
-  }
+  // Audio unlock + deferred bank preload: Scene resume-audio-on-user-gesture
+  // (engine resumeAudioContextOnFirstUserGesture → allowSoundPreload).
 
   await runtime.start();
 }

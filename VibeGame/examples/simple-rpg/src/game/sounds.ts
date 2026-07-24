@@ -1,36 +1,82 @@
-import { addClipSound, defineSoundBank, playSound } from 'vibegame';
+import { defineSoundBank, preloadSounds } from 'vibegame';
 
 /**
  * Single source of truth for every sound in the game.
  *
- * To add a sound: add one line here, then call `playSound('key')` anywhere —
- * no scene entity, no eid lookup, no per-frame wiring. SFX route through the
- * 'sfx' bus by default; music through 'music' (see pause-menu volume sliders).
+ * World SFX (hurt/death/harvest/explosions) are ``spatial: true`` and must be
+ * fired with ``playSoundAt`` / ``playSoundOn`` so Howler attenuates by distance
+ * and the bank culls past ``maxDistance``. UI / hero-local SFX stay 2D.
  */
 export function registerGameSounds(): void {
+  const worldSfx = {
+    spatial: true as const,
+    minDistance: 2,
+    maxDistance: 36,
+    rolloff: 1.2,
+  };
+
   defineSoundBank({
-    // ── SFX (bus 'sfx') ──────────────────────────────────────────────
+    // ── UI / hero-local (2D) ─────────────────────────────────────────
     save: { url: '/assets/audio/sfx_save.ogg', volume: 0.48 },
     load: { url: '/assets/audio/sfx_load.ogg', volume: 0.44 },
-    'bomb-drop': { url: '/assets/audio/sfx_bomb_drop.ogg', volume: 0.5 },
     heal: { url: '/assets/audio/sfx_heal.ogg', volume: 0.48 },
-    'enemy-hurt': { url: '/assets/audio/sfx_enemy_hurt.ogg', volume: 0.42 },
-    'enemy-death': { url: '/assets/audio/sfx_enemy_death.ogg', volume: 0.5 },
-    'boss-roar': { url: '/assets/audio/sfx_boss_roar.ogg', volume: 0.55 },
     'shop-open': { url: '/assets/audio/sfx_shop_open.ogg', volume: 0.45 },
     buy: { url: '/assets/audio/sfx_buy.ogg', volume: 0.45 },
     error: { url: '/assets/audio/sfx_error.ogg', volume: 0.4 },
     'player-hurt': { url: '/assets/audio/sfx_player_hurt.ogg', volume: 0.5 },
     coin: { url: '/assets/audio/sfx_coin.ogg', volume: 0.42 },
-    'item-drop': { url: '/assets/audio/sfx_item_drop.ogg', volume: 0.4 },
-    'mine-hit': { url: '/assets/audio/sfx_mine_hit.ogg', volume: 0.45 },
-    'chop-hit': { url: '/assets/audio/sfx_chop_hit.ogg', volume: 0.45 },
-    'mine-break': { url: '/assets/audio/sfx_mine_break.ogg', volume: 0.5 },
-    'chop-break': { url: '/assets/audio/sfx_chop_break.ogg', volume: 0.5 },
     levelup: { url: '/assets/audio/sfx_levelup.ogg', volume: 0.55 },
     swing: { url: '/assets/audio/sfx_swing.ogg', volume: 0.3 },
 
-    // ── Music (bus 'music', looped) ──────────────────────────────────
+    // ── World SFX (spatial — use playSoundAt) ────────────────────────
+    'bomb-drop': {
+      url: '/assets/audio/sfx_bomb_drop.ogg',
+      volume: 0.5,
+      ...worldSfx,
+    },
+    'enemy-hurt': {
+      url: '/assets/audio/sfx_enemy_hurt.ogg',
+      volume: 0.42,
+      ...worldSfx,
+    },
+    'enemy-death': {
+      url: '/assets/audio/sfx_enemy_death.ogg',
+      volume: 0.5,
+      ...worldSfx,
+    },
+    'boss-roar': {
+      url: '/assets/audio/sfx_boss_roar.ogg',
+      volume: 0.55,
+      ...worldSfx,
+      maxDistance: 48,
+    },
+    'item-drop': {
+      url: '/assets/audio/sfx_item_drop.ogg',
+      volume: 0.4,
+      ...worldSfx,
+    },
+    'mine-hit': {
+      url: '/assets/audio/sfx_mine_hit.ogg',
+      volume: 0.45,
+      ...worldSfx,
+    },
+    'chop-hit': {
+      url: '/assets/audio/sfx_chop_hit.ogg',
+      volume: 0.45,
+      ...worldSfx,
+    },
+    'mine-break': {
+      url: '/assets/audio/sfx_mine_break.ogg',
+      volume: 0.5,
+      ...worldSfx,
+    },
+    'chop-break': {
+      url: '/assets/audio/sfx_chop_break.ogg',
+      volume: 0.5,
+      ...worldSfx,
+    },
+
+    // ── Music (bus 'music', looped, 2D) ──────────────────────────────
     'bgm-battle': {
       url: '/assets/audio/bgm_battle.ogg',
       volume: 0.22,
@@ -44,21 +90,14 @@ export function registerGameSounds(): void {
       loop: true,
     },
   });
-
-  // Example of an animation-pinned sound: the attack whoosh fires from the
-  // attack clip itself rather than from input-handling code. (Kept commented
-  // because the current swing SFX is driven by the input edge in main.ts.)
-  // addClipSound('attack', { at: 0.25, sound: 'swing' });
-  void addClipSound;
 }
 
 /**
- * Preload every sound in the bank so the first in-game play has no fetch/decode
- * latency. Howler only creates a Howl on first playSound(); calling it here with
- * volume 0 + immediate stop forces the network fetch + decode up front.
+ * Preload bank clips (decode into Howl cache) without audible play/stop.
+ * Spatial defs warm the spatial Howl used by ``playSoundAt``.
  */
 export function preloadGameSounds(): void {
-  const keys = [
+  preloadSounds([
     'save',
     'load',
     'bomb-drop',
@@ -78,10 +117,5 @@ export function preloadGameSounds(): void {
     'chop-break',
     'levelup',
     'swing',
-  ];
-  for (const key of keys) {
-    const handle = playSound(key, { volume: 0 });
-    // Howler stop() cancels playback but the audio data is already fetched.
-    if (handle && typeof handle.stop === 'function') handle.stop();
-  }
+  ]);
 }
