@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -134,6 +135,12 @@ console = Console()
     default=False,
     help="Desliga UMS (auto-start off + waves GPU via subprocess CLI; tools recebem --no-ums).",
 )
+@click.option(
+    "--redo-split",
+    is_flag=True,
+    default=False,
+    help="Invalida artefactos de split (stump/top/lod/collision) e refaz a partir do painted.",
+)
 def resume_cmd(
     profile_path: Path,
     manifest_path: Path,
@@ -147,6 +154,7 @@ def resume_cmd(
     no_dashboard: bool,
     ums_stream: bool,
     no_ums: bool,
+    redo_split: bool,
 ) -> None:
     """Batch inteligente: analisa o estado de cada asset e executa apenas as fases pendentes.
 
@@ -211,6 +219,9 @@ def resume_cmd(
 
     child_env = dict(subprocess_gpu_env(gpu_ids=gpu_ids))
     apply_ums_child_env(child_env, ums_stream=ums_stream, no_ums=no_ums)
+    if redo_split:
+        child_env["GAMEDEV_REDO_SPLIT"] = "1"
+        os.environ["GAMEDEV_REDO_SPLIT"] = "1"
     if not no_ums:
         try:
             from gamedev_shared.model_server import ensure_ums_running

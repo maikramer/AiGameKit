@@ -26,6 +26,9 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import os
+import re
+import shutil
 import struct
 import time
 from collections.abc import Callable
@@ -192,18 +195,141 @@ def _collision_output_path(mesh_path: Path) -> Path:
     return _collision_path(mesh_path)
 
 
+_TREE_LIKE_NAME_RE = re.compile(
+    r"(?:^|[^a-z0-9])(tree|pine|oak|willow|cactus|fir|spruce|palm)(?:[^a-z0-9]|$)",
+    re.IGNORECASE,
+)
+
+
+def _row_bbox_preset(row: ManifestRow) -> str | None:
+    """``bbox_preset`` efectivo: override Omni da row ou default da categoria."""
+    omni = row.omni
+    if omni is not None:
+        if isinstance(omni, dict):
+            bp = omni.get("bbox_preset")
+        else:
+            bp = getattr(omni, "bbox_preset", None)
+        if bp:
+            return str(bp).strip().lower()
+    cat = (row.category or "").strip().lower()
+    if not cat:
+        return None
+    try:
+        from .omni_ctrl import _category_omni_defaults
+
+        return (_category_omni_defaults(cat).get("bbox_preset") or "").strip().lower() or None
+    except Exception:
+        if cat in {"tree", "vegetation"}:
+            return "tree"
+        return None
+
+
+def is_tree_like_asset(row: ManifestRow) -> bool:
+    """Árvore derrubável: category tree/vegetation + bbox tree ou nome típico."""
+    cat = (row.category or "").strip().lower()
+    if cat not in {"tree", "vegetation"}:
+        return False
+    if (_row_bbox_preset(row) or "") == "tree":
+        return True
+    blob = f"{row.id} {row.idea or ''}"
+    return bool(_TREE_LIKE_NAME_RE.search(blob))
+
+
 def wants_split_at_height(profile: GameProfile, row: ManifestRow) -> bool:
     """True quando o asset deve correr ``text3d split-at-height``.
 
-    Default on para ``category=tree``; ``text3d.split_at_height: false`` desliga.
+    ``split_at_height: false`` desliga. ``true`` ou default (omitido) só activa
+    assets tree-like (vegetation/tree + bbox_preset tree ou nome típico) —
+    rocks/props nunca, mesmo com flag global true.
     """
     t3 = profile.text3d
     if t3 is not None and t3.split_at_height is False:
         return False
-    if t3 is not None and t3.split_at_height is True:
-        return True
-    cat = (row.category or "").strip().lower()
-    return cat == "tree"
+    return is_tree_like_asset(row)
+
+
+def _split_seal_stamp_path(mesh_final: Path) -> Path:
+    mesh_final = _canonical_mesh_final(mesh_final)
+    base = mesh_final.stem
+    # stem pode ser id.glb → base = id
+    from .paths import _base_stem, _intermediate_dir
+
+    return _intermediate_dir(mesh_final) / f"{_base_stem(base)}_split_seal.txt"
+
+
+def invalidate_split_artifacts(mesh_final: Path) -> list[Path]:
+    """Apaga derivados do split (mantém ``*_painted.glb`` unsplit).
+
+    Remove stump/top painted, dirs LOD por peça, lods compostos, collisions
+    stump/top/fallback e temp de split — para resume a partir do seal novo.
+    """
+    from .paths import _base_stem, _collision_path, _intermediate_dir, _lod_path
+
+    mesh_final = _canonical_mesh_final(mesh_final)
+    base = _base_stem(mesh_final.stem)
+    inter = _intermediate_dir(mesh_final)
+    removed: list[Path] = []
+
+    def _rm(p: Path) -> None:
+        if p.is_file():
+            p.unlink(missing_ok=True)
+            removed.append(p)
+        elif p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+            removed.append(p)
+
+    for name in (
+        f"{base}_stump_painted.glb",
+        f"{base}_top_painted.glb",
+        f"{base}_split_tmp.glb",
+        f"{base}_split_seal.txt",
+    ):
+        _rm(inter / name)
+    for dname in (f"{base}_stump_lod", f"{base}_top_lod"):
+        _rm(inter / dname)
+    for lvl in (0, 1, 2):
+        _rm(_lod_path(mesh_final, lvl))
+    parent = mesh_final.parent
+    for name in (
+        f"{base}_stump_collision.glb",
+        f"{base}_top_collision.glb",
+        f"{base}_stump.glb",
+        f"{base}_top.glb",
+        f"{base}_split.glb",
+    ):
+        _rm(parent / name)
+    _rm(_collision_path(mesh_final))
+    # Unsplit backup do path legado (não apagar painted).
+    return removed
+
+
+def _split_seal_stale(mesh_final: Path) -> bool:
+    """True se falta stamp ou o seal no disco ≠ ``SEAL_VERSION`` actual."""
+    try:
+        from gamedev_shared.mesh_split import SEAL_VERSION
+    except Exception:
+        SEAL_VERSION = "bisect-fill-v1"
+    stamp = _split_seal_stamp_path(mesh_final)
+    if not stamp.is_file():
+        # Artefactos split existem sem stamp → assumir stale (seal antigo).
+        inter = _intermediate_dir(mesh_final)
+        from .paths import _base_stem
+
+        base = _base_stem(mesh_final.stem)
+        if (inter / f"{base}_stump_painted.glb").is_file():
+            return True
+        return False
+    return stamp.read_text(encoding="utf-8").strip() != str(SEAL_VERSION)
+
+
+def _write_split_seal_stamp(mesh_final: Path) -> None:
+    try:
+        from gamedev_shared.mesh_split import SEAL_VERSION
+    except Exception:
+        SEAL_VERSION = "bisect-fill-v1"
+    stamp = _split_seal_stamp_path(mesh_final)
+    stamp.parent.mkdir(parents=True, exist_ok=True)
+    stamp.write_text(f"{SEAL_VERSION}\n", encoding="utf-8")
 
 
 def _split_at_height_done(mesh_final: Path) -> bool:
@@ -222,7 +348,6 @@ def run_split_at_height_stage(
 
     Também escreve ``id_split.glb`` e, se ``split_files``, ``id_stump`` / ``id_top``.
     """
-    import shutil
 
     lod0 = _lod_path(mesh_final, 0)
     if not lod0.is_file():
@@ -247,6 +372,7 @@ def run_split_at_height_stage(
         str(unsplit),
         "-o",
         str(split_out),
+        "--no-cap",
     ]
     if cut_h is not None:
         argv.extend(["--cut-height", str(float(cut_h))])
@@ -1382,7 +1508,7 @@ def _finish_lod_with_rollback(
         _sh_finish.copy2(p, pre)
         from text3d.utils.gltf_finish import gltf_transform_finish
 
-        gltf_transform_finish(p, p)
+        fr = gltf_transform_finish(p, p, apply_uastc=True, apply_meshopt=True)
         if not expect_ok(p):
             log.error("master: finish lod%d destruiu skins/clips/paint — a restaurar pré-finish", level)
             _sh_finish.copy2(pre, p)
@@ -1395,6 +1521,22 @@ def _finish_lod_with_rollback(
                     p,
                 )
             )
+        else:
+            log.info(
+                "master: finish lod%d ktx2=%s meshopt=%s(%s)",
+                level,
+                fr.ktx2_applied,
+                fr.meshopt_applied,
+                fr.meshopt_backend or "-",
+            )
+            if not fr.ktx2_applied or not fr.meshopt_applied:
+                log.warning(
+                    "master: finish lod%d incompleto (ktx2=%s meshopt=%s) — "
+                    "correr `text3d doctor` (npx @gltf-transform/cli + libmeshoptimizer)",
+                    level,
+                    fr.ktx2_applied,
+                    fr.meshopt_applied,
+                )
     except Exception as exc:
         log.warning("master: finish promoted lod%d falhou: %s", level, exc)
     finally:
@@ -1509,6 +1651,205 @@ def _run_static_lod_stages(
             ]
             s = run_stage("lod", lod_argv, None)
             res.stages.append(s)
+
+
+def _run_split_lod_stages(
+    *,
+    run_stage: Callable[[str, list[str], Path | None], StageResult],
+    res: MasterPipelineResult,
+    mesh_final: Path,
+    painted_p: Path,
+    target_faces: int,
+    base: str,
+    with_lod: bool,
+    text3d_bin: str,
+    profile: GameProfile,
+) -> None:
+    """Caminho split-antes-de-LOD para árvores (Stump+Top em cada LOD).
+
+    DAG: painted → split-at-height → stump_painted + top_painted
+         → LOD stump (lod0/1/2) + LOD top (lod0/1/2)
+         → composição lodN = stump_lodN + top_lodN (nomes Stump/Top)
+         → collision stump + collision top (separados)
+
+    Cada LOD preserva os nomes Stump/Top para o DestructiblePlugin (fall style).
+    Collision é gerado por peça (stump_collision + top_collision).
+    """
+    import bpy
+
+    from gamedev_shared.bpy_mesh import clear_scene, save_glb
+
+    inter_dir = mesh_final.parent / "_intermediate"
+    inter_dir.mkdir(parents=True, exist_ok=True)
+
+    t3 = profile.text3d
+    cut_h = None if t3 is None else t3.split_cut_height
+
+    # --- 1. Split no painted (uma vez) ---
+    stump_painted = inter_dir / f"{base}_stump_painted.glb"
+    top_painted = inter_dir / f"{base}_top_painted.glb"
+
+    force_split = os.environ.get("GAMEDEV_REDO_SPLIT", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    stale_seal = _split_seal_stale(mesh_final)
+    if force_split or stale_seal:
+        removed = invalidate_split_artifacts(mesh_final)
+        if removed:
+            log.info(
+                "split-lod: invalidate %d artefactos (force=%s stale_seal=%s)",
+                len(removed),
+                force_split,
+                stale_seal,
+            )
+
+    need_split = not (stump_painted.is_file() and top_painted.is_file())
+    if need_split:
+        split_out = inter_dir / f"{base}_split_tmp.glb"
+        argv = [
+            text3d_bin,
+            "split-at-height",
+            str(painted_p),
+            "-o",
+            str(split_out),
+            "--split-files",
+            "--no-cap",
+        ]
+        if cut_h is not None:
+            argv.extend(["--cut-height", str(float(cut_h))])
+        s = run_stage("split-at-height", argv, split_out)
+        res.stages.append(s)
+        if not s.ok:
+            res.ok = False
+            return
+        raw_stump = split_out.with_name(f"{split_out.stem}_stump{split_out.suffix}")
+        raw_top = split_out.with_name(f"{split_out.stem}_top{split_out.suffix}")
+        if raw_stump.is_file():
+            shutil.move(str(raw_stump), str(stump_painted))
+        if raw_top.is_file():
+            shutil.move(str(raw_top), str(top_painted))
+        # Limpar temporário.
+        split_out.unlink(missing_ok=True)
+        _write_split_seal_stamp(mesh_final)
+
+    if not stump_painted.is_file() or not top_painted.is_file():
+        res.stages.append(StageResult("split-at-height", False, 0.0, "stump/top painted ausentes"))
+        res.ok = False
+        return
+
+    if not _split_seal_stamp_path(mesh_final).is_file():
+        _write_split_seal_stamp(mesh_final)
+
+    # --- 2. LOD por peça ---
+    lod0_p = _lod_path(mesh_final, 0)
+    lod1_p = _lod_path(mesh_final, 1)
+    lod2_p = _lod_path(mesh_final, 2)
+
+    if with_lod:
+        stump_target = max(8, int(target_faces * 0.45))
+        top_target = max(8, int(target_faces * 0.75))
+        stump_dir = inter_dir / f"{base}_stump_lod"
+        top_dir = inter_dir / f"{base}_top_lod"
+        stump_dir.mkdir(exist_ok=True)
+        top_dir.mkdir(exist_ok=True)
+
+        # LOD stump.
+        stump_lod_argv = [
+            text3d_bin,
+            "lod",
+            str(stump_painted),
+            "-o",
+            str(stump_dir),
+            "--basename",
+            "stump",
+            "--painted-mesh",
+            str(stump_painted),
+            "--target-faces",
+            str(stump_target),
+            "--finish-lod0",
+            "--lod1-ratio",
+            "0.40",
+            "--lod2-ratio",
+            "0.15",
+            "--min-faces-lod1",
+            str(max(stump_target // 2, 300)),
+            "--min-faces-lod2",
+            str(max(stump_target // 4, 100)),
+        ]
+        s_stump = run_stage("lod-stump", stump_lod_argv, None)
+        res.stages.append(s_stump)
+
+        # LOD top.
+        top_lod_argv = [
+            text3d_bin,
+            "lod",
+            str(top_painted),
+            "-o",
+            str(top_dir),
+            "--basename",
+            "top",
+            "--painted-mesh",
+            str(top_painted),
+            "--target-faces",
+            str(top_target),
+            "--finish-lod0",
+            "--lod1-ratio",
+            "0.40",
+            "--lod2-ratio",
+            "0.15",
+            "--min-faces-lod1",
+            str(max(top_target // 2, 400)),
+            "--min-faces-lod2",
+            str(max(top_target // 4, 150)),
+        ]
+        s_top = run_stage("lod-top", top_lod_argv, None)
+        res.stages.append(s_top)
+
+        # --- 3. Composição lodN = stump_lodN + top_lodN ---
+        for lvl, out_p in ((0, lod0_p), (1, lod1_p), (2, lod2_p)):
+            stump_lod = stump_dir / f"stump_lod{lvl}.glb"
+            top_lod = top_dir / f"top_lod{lvl}.glb"
+            if not stump_lod.is_file() or not top_lod.is_file():
+                log.warning("split-lod: falta lod%d (stump=%s top=%s)", lvl, stump_lod, top_lod)
+                continue
+            clear_scene()
+            for glb in (stump_lod, top_lod):
+                bpy.ops.import_scene.gltf(filepath=str(glb))
+            # Renomear para Stump/Top (findTreeSplitParts procura estes nomes).
+            for obj in bpy.context.scene.objects:
+                if obj.type != "MESH":
+                    continue
+                if "stump" in obj.name.lower():
+                    obj.name = "Stump"
+                    obj.data.name = "Stump"
+                elif "top" in obj.name.lower():
+                    obj.name = "Top"
+                    obj.data.name = "Top"
+            objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+            save_glb(objs, out_p, export_apply=True)
+            clear_scene()
+            res.stages.append(StageResult(f"compose-lod{lvl}", True, 0.0, f"stump+top → {out_p.name}", out_p))
+
+    res.lod0_path = lod0_p
+
+    # --- 4. Collision por peça ---
+    stump_coll = _stump_path(mesh_final).parent / f"{base}_stump_collision.glb"
+    top_coll = _stump_path(mesh_final).parent / f"{base}_top_collision.glb"
+    for src, dst, name in ((stump_painted, stump_coll, "collision-stump"), (top_painted, top_coll, "collision-top")):
+        if dst.is_file():
+            res.stages.append(StageResult(name, True, 0.0, "skipped (existente)", dst))
+            continue
+        coll_argv = [text3d_bin, "collision", str(src), "-o", str(dst), "--max-faces", "200"]
+        s = run_stage(name, coll_argv, dst)
+        res.stages.append(s)
+
+    # Collision principal (fallback para compatibilidade — usa stump).
+    coll_p = _collision_path(mesh_final)
+    if not coll_p.is_file() and stump_coll.is_file():
+        shutil.copy2(stump_coll, coll_p)
 
 
 def run_master_pipeline(
@@ -1817,6 +2158,20 @@ def run_master_pipeline(
             _finish_lod_with_rollback(lod0_p, 0, expect, res)
             res.stages.append(StageResult("lod", True, 0.0, f"lod0={promotion_kind} copy (sem ladder)", lod0_p))
         res.lod0_path = lod0_p
+    elif wants_split_at_height(profile, row):
+        # Árvores com split-at-height: split ANTES do LOD, cada peça LODed
+        # separadamente, composição Stump+Top em cada LOD, collision por peça.
+        _run_split_lod_stages(
+            run_stage=_run,
+            res=res,
+            mesh_final=mesh_final,
+            painted_p=painted_p,
+            target_faces=target_faces,
+            base=_bake_base,
+            with_lod=with_lod,
+            text3d_bin=text3d_bin,
+            profile=profile,
+        )
     else:
         _run_static_lod_stages(
             run_stage=_run,
@@ -1833,7 +2188,9 @@ def run_master_pipeline(
 
     # Stage 6 - collision a partir do PAINTED (geometria estática idêntica ao
     # lod0, sem armature nem meshopt — o builder não precisa de os desenredar).
-    if with_collision:
+    # Saltado quando o split-lod já gerou collision por peça (stump+top).
+    _split_lod_did_collision = wants_split_at_height(profile, row) and not bool(rig_source)
+    if with_collision and not _split_lod_did_collision:
         coll_p = _collision_path(mesh_final)
         if coll_p.is_file():
             res.stages.append(StageResult("collision", True, 0.0, "skipped (collision existente)", coll_p))
@@ -1865,9 +2222,10 @@ def run_master_pipeline(
                 except Exception as exc:
                     log.warning("master: finish collision falhou: %s", exc)
 
-    # Stage 6b - split-at-height (árvores): composição Stump+Top no LOD0.
-    # Corre depois da collision para o hull nascer do painted/lod0 unsplit.
-    if wants_split_at_height(profile, row):
+    # Stage 6b - split-at-height LEGADO: só para árvores que NÃO passaram pelo
+    # _run_split_lod_stages (ex.: category=tree sem rig, path estático antigo).
+    # O _run_split_lod_stages já faz split+LOD+collision por peça internamente.
+    if wants_split_at_height(profile, row) and not _split_lod_did_collision:
         s = run_split_at_height_stage(
             text3d_bin=text3d_bin,
             mesh_final=mesh_final,

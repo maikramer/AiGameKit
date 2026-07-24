@@ -17,6 +17,7 @@ from gameassets.paths import (
 )
 from gameassets.pipeline import (
     StageResult,
+    invalidate_split_artifacts,
     run_split_at_height_stage,
     wants_split_at_height,
 )
@@ -51,14 +52,23 @@ def test_wants_split_default_on_for_tree() -> None:
     assert wants_split_at_height(_profile(), _row("rock")) is False
 
 
+def test_wants_split_vegetation_tree_like() -> None:
+    """Manifests usam category=vegetation; oak/pine devem activar split."""
+    assert wants_split_at_height(_profile(), _row("vegetation", id="tree_oak", idea="oak")) is True
+    assert wants_split_at_height(_profile(), _row("vegetation", id="dead_willow", idea="willow")) is True
+
+
 def test_wants_split_explicit_off() -> None:
     profile = _profile(text3d=Text3DProfile(split_at_height=False))
     assert wants_split_at_height(profile, _row("tree")) is False
 
 
-def test_wants_split_explicit_on_non_tree() -> None:
+def test_wants_split_explicit_on_skips_non_tree() -> None:
+    """split_at_height:true global NÃO parte rocks/props — só tree-like."""
     profile = _profile(text3d=Text3DProfile(split_at_height=True))
-    assert wants_split_at_height(profile, _row("prop")) is True
+    assert wants_split_at_height(profile, _row("prop")) is False
+    assert wants_split_at_height(profile, _row("rock")) is False
+    assert wants_split_at_height(profile, _row("vegetation", id="tree_pine")) is True
 
 
 def test_run_split_at_height_stage_mock(tmp_path: Path) -> None:
@@ -147,6 +157,31 @@ def test_run_split_skips_when_done(tmp_path: Path) -> None:
     assert result.ok
     assert "skipped" in (result.error or "")
     run_stage.assert_not_called()
+
+
+def test_invalidate_split_artifacts_keeps_painted(tmp_path: Path) -> None:
+    meshes = tmp_path / "meshes"
+    inter = meshes / "_intermediate"
+    inter.mkdir(parents=True)
+    mesh_final = meshes / "tree_oak.glb"
+    painted = inter / "tree_oak_painted.glb"
+    painted.write_bytes(b"painted")
+    (inter / "tree_oak_stump_painted.glb").write_bytes(b"stump")
+    (inter / "tree_oak_top_painted.glb").write_bytes(b"top")
+    (inter / "tree_oak_stump_lod").mkdir()
+    (inter / "tree_oak_stump_lod" / "stump_lod0.glb").write_bytes(b"l")
+    (_lod_path(mesh_final, 0)).write_bytes(b"lod0")
+    (meshes / "tree_oak_stump_collision.glb").write_bytes(b"sc")
+    (meshes / "tree_oak_collision.glb").write_bytes(b"c")
+
+    removed = invalidate_split_artifacts(mesh_final)
+    assert removed
+    assert painted.is_file()
+    assert not (inter / "tree_oak_stump_painted.glb").exists()
+    assert not (inter / "tree_oak_top_painted.glb").exists()
+    assert not (inter / "tree_oak_stump_lod").exists()
+    assert not _lod_path(mesh_final, 0).exists()
+    assert not (meshes / "tree_oak_stump_collision.glb").exists()
 
 
 def test_profile_parses_split_fields() -> None:
