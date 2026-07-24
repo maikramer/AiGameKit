@@ -32,7 +32,7 @@ export const DestructiblePlugin: Plugin = {
         hits: 1,
         hitsTaken: 0,
         range: 3.5,
-        impactFraction: 0.75,
+        impactFraction: 0.35,
         pendingImpact: 0,
         preset: 5, // explosion
         burstCount: 60,

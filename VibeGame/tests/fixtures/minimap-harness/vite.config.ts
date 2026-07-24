@@ -1,6 +1,9 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
-const stub = '/fs-stub.js';
+const root = path.dirname(fileURLToPath(import.meta.url));
+const stub = path.resolve(root, 'fs-stub.js');
 
 export default defineConfig({
   root: '.',

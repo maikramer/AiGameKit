@@ -41,6 +41,9 @@ export const BiomesPlugin: Plugin = {
         ambientG: 1,
         ambientB: 1,
         bgmLayer: 0,
+        rain: 0,
+        // −1 = no cloud override (inherit Weather cycle).
+        clouds: -1,
       },
       'active-biome': {
         current: NULL_ENTITY,

@@ -7,7 +7,12 @@ import { WeatherComponent } from './components';
 import { createCloudField, updateCloudField } from './clouds';
 import type { CloudField } from './clouds';
 import { createRain, RAIN_COUNT } from './rain';
-import { effectiveRainTarget, getWeather, setWeather } from './state';
+import {
+  effectiveCloudsTarget,
+  effectiveRainTarget,
+  getWeather,
+  setWeather,
+} from './state';
 
 const weatherQuery = defineQueryLive([WeatherComponent]);
 const cameraQuery = defineQueryLive([MainCamera, WorldTransform]);
@@ -84,8 +89,8 @@ export const WeatherSystem: System = defineSystem({
       w.cloudsTarget = Math.min(1, Math.max(0, base + drift));
     }
 
-    // Smooth toward targets.
-    w.clouds = approach(w.clouds, w.cloudsTarget, dt, w.fadeSeconds);
+    // Smooth toward targets (biome clouds override cycle when active).
+    w.clouds = approach(w.clouds, effectiveCloudsTarget(w), dt, w.fadeSeconds);
     w.rain = approach(w.rain, effectiveRainTarget(w), dt, w.fadeSeconds);
 
     // Camera anchor.

@@ -17,6 +17,16 @@ import {
   type ProfilerSnapshot,
   type ProfilerTimingStats,
 } from '../../core/profiler';
+import {
+  getAudioDebugSnapshot,
+  type AudioDebugSnapshot,
+} from '../audio/debug-log';
+import type { ProfilerTabId } from './url';
+
+export interface ProfilerTabBridge {
+  getTab(): ProfilerTabId;
+  setTab(tab: ProfilerTabId): void;
+}
 
 export interface VibeGameProfilerHandle {
   enable(mode?: Exclude<ProfilerMode, 'off'>): void;
@@ -33,7 +43,12 @@ export interface VibeGameProfilerHandle {
   reset(): void;
   download(filename?: string): ProfilerSnapshot;
   copy(): Promise<boolean>;
+  getTab(): ProfilerTabId;
+  setTab(tab: ProfilerTabId): void;
+  audioSnapshot(): AudioDebugSnapshot;
 }
+
+let tabBridge: ProfilerTabBridge | null = null;
 
 export function createProfilerHandle(): VibeGameProfilerHandle {
   return {
@@ -79,11 +94,23 @@ export function createProfilerHandle(): VibeGameProfilerHandle {
     copy() {
       return copyProfilerSnapshot();
     },
+    getTab() {
+      return tabBridge?.getTab() ?? 'systems';
+    },
+    setTab(tab) {
+      tabBridge?.setTab(tab);
+    },
+    audioSnapshot() {
+      return getAudioDebugSnapshot();
+    },
   };
 }
 
 /** Attach or replace `window.__VIBEGAME__.profiler`. */
-export function installProfilerBridge(): VibeGameProfilerHandle {
+export function installProfilerBridge(
+  tabs?: ProfilerTabBridge
+): VibeGameProfilerHandle {
+  if (tabs) tabBridge = tabs;
   const handle = createProfilerHandle();
   if (typeof window === 'undefined') return handle;
   const w = window as unknown as {

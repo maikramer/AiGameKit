@@ -69,4 +69,18 @@ describe('loading-gate registry', () => {
     expect(isPhysicsHeld(state)).toBe(false);
     expect(isWorldLoadedLatched(state)).toBe(true);
   });
+
+  it('shaders gate blocks latch until warmed (mirrors LoadingPlugin)', () => {
+    let shadersOk = false;
+    registerReadyGate(state, 'assets', () => true);
+    registerReadyGate(state, 'shaders', () => shadersOk);
+    setLoadingEnforcement(state, true);
+
+    expect(isPhysicsHeld(state)).toBe(true);
+    expect(getLoadingProgress(state).pending).toContain('shaders');
+
+    shadersOk = true;
+    expect(isPhysicsHeld(state)).toBe(false);
+    expect(isWorldReady(state)).toBe(true);
+  });
 });

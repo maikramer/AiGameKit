@@ -87,12 +87,11 @@ const DEFAULT_LOCOMOTION_SET = 'default';
 
 const ATTACK_RANGE = 3.0; // m — forgiving reach so swings connect
 const ATTACK_DAMAGE = 25;
-// Fraction of the attack clip after which the blow lands — the hit registers
-// near the end of the swing (matching the visual impact) instead of the instant
-// the button is pressed. Mirrors Destructible.impactFraction for props.
-const ATTACK_IMPACT_FRACTION = 0.7;
+// Fraction of the attack clip after which the blow lands. Quaternius-style
+// packs peak the cut ~25–40% in (then long recovery); 0.7 lands in the settle.
+const ATTACK_IMPACT_FRACTION = 0.35;
 // Fallback impact delay when the clip duration is unknown.
-const ATTACK_IMPACT_FALLBACK = 0.4; // s
+const ATTACK_IMPACT_FALLBACK = 0.22; // s
 const prevPrimary = new Map<number, number>();
 // Per-attacker countdown until the pending melee blow lands (seconds).
 const pendingMelee = new Map<number, number>();
@@ -114,6 +113,11 @@ let idleClipHint: string | null = null;
  * to fall back to the generic attack/swing clip. */
 export function setPlayerAttackClip(hint: string | null): void {
   attackClipHint = hint;
+}
+
+/** Current attack-clip keyword (e.g. ``sword`` / ``chop``), or null. */
+export function getPlayerAttackClip(): string | null {
+  return attackClipHint;
 }
 
 /** Override the idle clip (e.g. 'swordidle' for a combat-guard stance when a

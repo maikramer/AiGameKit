@@ -8,6 +8,7 @@ import {
   ppBloomStrengthAdapter,
   ppVignetteDarknessAdapter,
   rainAdapter,
+  cloudsAdapter,
   fogColorAdapter,
   fogDensityAdapter,
   parsePolygonString,
@@ -84,6 +85,7 @@ export const biomeRegionParser: Parser = ({ entity, element, state }) => {
   BiomeRegion.ppBloomStrength[entity] = 0;
   BiomeRegion.ppVignetteDarkness[entity] = 0;
   BiomeRegion.rain[entity] = 0;
+  BiomeRegion.clouds[entity] = -1;
 
   const typeRaw = attr(a, 'type');
   if (typeRaw !== undefined) typeAdapter(entity, typeRaw, state);
@@ -118,6 +120,8 @@ export const biomeRegionParser: Parser = ({ entity, element, state }) => {
     ppVignetteDarknessAdapter(entity, ppVignetteRaw, state);
   const rainRaw = attr(a, 'rain');
   if (rainRaw !== undefined) rainAdapter(entity, rainRaw, state);
+  const cloudsRaw = attr(a, 'clouds');
+  if (cloudsRaw !== undefined) cloudsAdapter(entity, cloudsRaw, state);
 
   const terrainTextureRaw = attr(a, 'terrain-texture');
 

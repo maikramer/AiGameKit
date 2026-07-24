@@ -26,7 +26,9 @@ over a single 10 km terrain with no loading.
   fog-color="#0a1815"
   fog-density="0.04"
   ambient="#3a4a55"
-  bgm-layer="2">
+  bgm-layer="2"
+  clouds="0.85"
+  rain="0">
 </BiomeRegion>
 ```
 
@@ -34,6 +36,10 @@ All attributes are consumed by `biomeRegionParser` (listed in
 `parserAttributes`), which applies defaults then runs the adapters in
 `adapters.ts` and registers the region (vertices + AABB) in the per-state
 WeakMap queried by `findBiomeRegionAt`.
+
+`clouds` (0..1) overrides Weather cloud coverage while the player is inside
+the region; omit or `-1` to inherit the global Weather / cycle baseline.
+`rain` already drives precipitation the same way.
 
 ## System — BiomeDetectionSystem (group `late`)
 

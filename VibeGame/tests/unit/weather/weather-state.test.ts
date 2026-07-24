@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import { State } from '../../../src/core/ecs/state';
 import {
+  effectiveCloudsTarget,
   effectiveRainTarget,
   getWeather,
   getWindVector,
+  setEnvironmentClouds,
   setEnvironmentRain,
   setWeather,
 } from '../../../src/plugins/weather/state';
@@ -40,6 +42,17 @@ describe('weather runtime state', () => {
     setEnvironmentRain(state, -2);
     expect(getWeather(state).environmentRain).toBe(0);
   });
+
+  it('biome clouds override cycle target; −1 clears override', () => {
+    const state = new State();
+    setWeather(state, { clouds: 0.5 });
+    expect(effectiveCloudsTarget(getWeather(state))).toBeCloseTo(0.5, 5);
+    setEnvironmentClouds(state, 0.85);
+    expect(effectiveCloudsTarget(getWeather(state))).toBeCloseTo(0.85, 5);
+    setEnvironmentClouds(state, -1);
+    expect(getWeather(state).environmentClouds).toBe(-1);
+    expect(effectiveCloudsTarget(getWeather(state))).toBeCloseTo(0.5, 5);
+  });
 });
 
 describe('<BiomeRegion> weather/pp attrs', () => {
@@ -60,13 +73,32 @@ describe('<BiomeRegion> weather/pp attrs', () => {
       type: '3',
       polygon: '[-10,-10;10,-10;10,10;-10,10]',
       rain: '0.55',
+      clouds: '0.85',
       'pp-exposure': '0.9',
       'pp-bloom-strength': '0.25',
       'pp-vignette-darkness': '0.8',
     });
     expect(BiomeRegion.rain[eid]).toBeCloseTo(0.55, 5);
+    expect(BiomeRegion.clouds[eid]).toBeCloseTo(0.85, 5);
     expect(BiomeRegion.ppExposure[eid]).toBeCloseTo(0.9, 5);
     expect(BiomeRegion.ppBloomStrength[eid]).toBeCloseTo(0.25, 5);
     expect(BiomeRegion.ppVignetteDarkness[eid]).toBeCloseTo(0.8, 5);
+  });
+
+  it('defaults clouds to −1 (no override) when omitted', async () => {
+    await import('../../../src/plugins/rendering/plugin');
+    const { createEntityFromRecipe } =
+      await import('../../../src/core/recipes/parser');
+    const { BiomesPlugin } = await import('../../../src/plugins/biomes/plugin');
+    const { BiomeRegion } =
+      await import('../../../src/plugins/biomes/components');
+    const state = new State();
+    state.registerPlugin(BiomesPlugin);
+    const eid = createEntityFromRecipe(state, 'BiomeRegion', {
+      id: 'test-default-clouds',
+      type: '1',
+      polygon: '[-5,-5;5,-5;5,5;-5,5]',
+    });
+    expect(BiomeRegion.clouds[eid]).toBe(-1);
   });
 });

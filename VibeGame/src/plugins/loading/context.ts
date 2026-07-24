@@ -115,6 +115,7 @@ function humanizePending(pending: string[]): string {
     terrain: 'Building terrain',
     spawn: 'Placing world objects',
     assets: 'Loading assets',
+    shaders: 'Warming shaders',
   };
   return pending.map((p) => labels[p] ?? p).join(' · ') + '…';
 }
@@ -133,27 +134,22 @@ export function updateLoadingScreen(state: State): void {
   if (ui.firstShown === 0) ui.firstShown = now;
 
   const progress = getLoadingProgress(state);
+  // Warm only after sibling gates pass — shaders latch is one-shot and must
+  // compile the fully populated scene, not an empty boot frame.
+  const pendingOthers = progress.pending.filter((p) => p !== 'shaders');
+  if (pendingOthers.length === 0) {
+    warmupSceneShaders(state);
+  }
+
   const ready = isWorldReady(state);
   const pct =
     progress.total === 0
       ? 100
       : Math.round((progress.ready / progress.total) * 100);
   ui.bar.style.width = `${pct}%`;
-
-  // Compile materials + silent orbit renders while the overlay still covers
-  // the canvas — moves the first-look hitch off the critical play path.
-  let warmed = false;
-  if (ready) {
-    warmed = warmupSceneShaders(state);
-    if (!warmed) {
-      ui.status.textContent = 'Warming shaders…';
-      return;
-    }
-  }
-
   ui.status.textContent = ready ? 'Ready' : humanizePending(progress.pending);
 
-  if (ready && warmed && now - ui.firstShown >= MIN_VISIBLE_MS) {
+  if (ready && now - ui.firstShown >= MIN_VISIBLE_MS) {
     ui.done = true;
     const root = ui.root;
     root.style.opacity = '0';

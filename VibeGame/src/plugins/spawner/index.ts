@@ -22,6 +22,7 @@ export {
 export type { PlacementSpec } from './place-types';
 export { getPlacementSpecs, setPlacementSpec } from './place-context';
 export {
+  isGroundMutationPending,
   isNormalWithinSlopeLimit,
   normalFromHeightSampler,
   sampleMeshSurfaceHeight,

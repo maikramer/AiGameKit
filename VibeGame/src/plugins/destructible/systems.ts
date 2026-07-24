@@ -255,7 +255,7 @@ export const DestructibleSystem: System = defineSystem({
     Destructible.hitsTaken[target] += 1;
     Destructible.pendingImpact[target] = attackImpactDelay(
       player,
-      Destructible.impactFraction[target] || 0.75
+      Destructible.impactFraction[target] || 0.35
     );
   },
 });

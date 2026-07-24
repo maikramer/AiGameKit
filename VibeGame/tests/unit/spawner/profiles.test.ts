@@ -6,6 +6,7 @@ import {
   optNumber,
   parseSpaceSeparatedNumbers,
   resolveGroupSpawnFields,
+  roleToProfile,
   yawAnglesFromStepDeg,
 } from 'vibegame';
 
@@ -20,6 +21,17 @@ describe('spawn profiles', () => {
     expect(d.scaleMax).toBe(1.4);
     expect(d.scaleAxisMin).toBe(0.9);
     expect(d.scaleAxisMax).toBe(1.1);
+  });
+
+  it('creature partilha path de chão das árvores (aabb) sem jitter de escala', () => {
+    const d = getGroupSpawnDefaults('creature');
+    expect(d.alignToTerrain).toBe(true);
+    expect(d.groundAlign).toBe('aabb');
+    expect(d.baseYOffset).toBe(0.02);
+    expect(d.scaleMin).toBe(1);
+    expect(d.scaleMax).toBe(1);
+    expect(roleToProfile('enemy')).toBe('creature');
+    expect(roleToProfile('npc')).toBe('creature');
   });
 
   it('resolveGroupSpawnFields usa perfil quando attrs ausentes', () => {

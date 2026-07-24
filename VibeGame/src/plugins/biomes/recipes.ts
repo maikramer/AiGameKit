@@ -21,6 +21,7 @@ export const biomeRegionRecipe: Recipe = {
     'pp-bloom-strength',
     'pp-vignette-darkness',
     'rain',
+    'clouds',
     'terrain-texture',
   ],
   parserOwnsChildren: false,

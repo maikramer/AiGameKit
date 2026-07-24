@@ -245,6 +245,8 @@ function shouldWaitForGltf(state: State, eid: number): boolean {
 /**
  * Visual distance-cull also pauses gameplay scripts. Spawned props/enemies with
  * `max-distance` keep MonoBehaviour attached; running AI/anim while hidden is wasted.
+ * Ground placement is owned by the spawner (`TerrainSpawned` / AABB), not by
+ * keeping distant scripts awake.
  */
 function isDistanceCulled(state: State, eid: number): boolean {
   return (

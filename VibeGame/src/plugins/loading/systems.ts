@@ -5,6 +5,7 @@ import {
   type System,
 } from '../../core';
 import { gltfAssetsReady } from '../gltf-xml/ready-gate';
+import { isSceneShadersWarmed } from '../rendering/shader-warmup';
 import { mountLoadingScreen, updateLoadingScreen } from './context';
 
 /**
@@ -24,9 +25,11 @@ export const LoadingScreenSystem: System = defineSystem({
     if (state.headless || typeof document === 'undefined') return;
     // Engage the physics hold and add the GLTF assets gate (critical loads
     // only — lod1/lod2 stream in the background). Domain gates (terrain,
-    // spawn) are registered by their own plugins.
+    // spawn) are registered by their own plugins. `shaders` blocks physics
+    // latch + overlay fade until silent yaw/pitch compiles finish.
     setLoadingEnforcement(state, true);
     registerReadyGate(state, 'assets', () => gltfAssetsReady(state));
+    registerReadyGate(state, 'shaders', () => isSceneShadersWarmed(state));
     mountLoadingScreen();
   },
   update(state) {

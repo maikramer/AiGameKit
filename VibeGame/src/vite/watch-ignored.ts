@@ -47,7 +47,8 @@ export const VIBEGAME_SERVER_WATCH_IGNORED: readonly string[] = [
   '**/playwright-report/**',
   '**/test-results/**',
 
-  // Huge runtime blobs — served as static files, no HMR needed
+  // Huge runtime blobs — no HMR watch (ENOSPC). Still served at runtime;
+  // `vibegamePublicLiveServe` covers files added after Vite's public Set snapshot.
   '**/public/assets/**',
   '**/*.glb',
   '**/*.gltf',

@@ -19,6 +19,14 @@ import { Terrain } from '../terrain/components';
 import { getTerrainStats } from '../terrain/terrain-queries';
 import { getInstancePoolStats } from '../gltf-xml/auto-instance';
 import { getEntityScriptFrameStats } from '../entity-script';
+import {
+  armAudioDebug,
+  clearAudioDebugLog,
+  getAudioDebugSnapshot,
+  type AudioDebugSnapshot,
+} from '../audio/debug-log';
+import { isBusMuted, setBusMuted, stopAllBankPlays } from '../audio/bank';
+import { syncProfilerTabToUrl, type ProfilerTabId } from './url';
 
 const PANEL_ID = 'vibegame-profiler-panel';
 const REFRESH_FRAMES = 10;
@@ -41,6 +49,11 @@ export interface ProfilerPanelRuntime {
   countersEl: HTMLPreElement;
   statusEl: HTMLSpanElement;
   freezeBtn: HTMLButtonElement;
+  systemsPane: HTMLDivElement;
+  audioPane: HTMLDivElement;
+  audioBodyEl: HTMLPreElement;
+  tabButtons: Record<ProfilerTabId, HTMLButtonElement>;
+  tab: ProfilerTabId;
   visible: boolean;
   filter: string;
   groupFilter: string;
@@ -49,6 +62,7 @@ export interface ProfilerPanelRuntime {
   minAvgMs: number;
   lastRefreshFrame: number;
   systemNames: string[];
+  onTabChange?: (tab: ProfilerTabId) => void;
 }
 
 function bar(pct: number, width = 14): string {
@@ -346,10 +360,158 @@ function styleSelect(sel: HTMLSelectElement): void {
   sel.style.borderRadius = '4px';
 }
 
+function shortKey(key: string, max = 48): string {
+  if (key.length <= max) return key;
+  return `${key.slice(0, 20)}…${key.slice(-24)}`;
+}
+
+function renderAudioTab(snap: AudioDebugSnapshot): string {
+  const t0 = snap.events.length > 0 ? snap.events[0]!.t : 0;
+  const gameplayEvents = snap.events.filter((e) => e.kind !== 'preload');
+  const lines: string[] = [
+    `ctx=${snap.ctxState}  armed=${snap.armed ? 'yes' : 'no'}  master=${snap.masterVolume.toFixed(2)}  plays/s=${snap.playsLastSec}`,
+    `buses: ${
+      snap.buses.length === 0
+        ? '(none yet)'
+        : snap.buses
+            .map(
+              (b) =>
+                `${b.name}=${b.volume.toFixed(2)}${b.muted ? '(mute)' : ''}`
+            )
+            .join('  ')
+    }`,
+  ];
+  if (snap.preloadCount > 0) {
+    lines.push(
+      `boot preload: ${snap.preloadCount} silent cache warm(s) — not gameplay plays`
+    );
+  }
+  lines.push('', `Active (${snap.active.length}):`);
+  if (snap.active.length === 0) {
+    lines.push('  (none)');
+  } else {
+    for (const a of snap.active.slice(0, 40)) {
+      const flags = [
+        a.loop ? 'loop' : '',
+        a.spatial ? 'spatial' : '',
+        a.origin ? `origin=${a.origin}` : '',
+        a.followEid != null && a.followEid !== a.originEid
+          ? `follow=${a.followEid}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+      lines.push(
+        `  ${shortKey(a.key).padEnd(40)} bus=${a.bus.padEnd(6)} vol=${a.volume.toFixed(2)} age=${(a.ageMs / 1000).toFixed(1)}s ${flags}`
+      );
+    }
+  }
+  lines.push('', `Top keys (gameplay plays):`);
+  if (snap.topKeys.length === 0) {
+    lines.push('  (none)');
+  } else {
+    for (const k of snap.topKeys) {
+      lines.push(`  ${String(k.count).padStart(4)}×  ${shortKey(k.key)}`);
+    }
+  }
+  lines.push('', `Top origins (who fired):`);
+  if (snap.topOrigins.length === 0) {
+    lines.push('  (none)');
+  } else {
+    for (const o of snap.topOrigins) {
+      lines.push(
+        `  ${String(o.count).padStart(4)}×  ${shortKey(o.origin, 40)}`
+      );
+    }
+  }
+  if (snap.unknownKeys.length > 0) {
+    lines.push('', 'Unknown keys:');
+    for (const k of snap.unknownKeys) lines.push(`  ! ${k}`);
+  }
+  // Default log hides silent boot preloads so loading screen noise does not
+  // look like world SFX; armed stacks still keep preloads in the ring/JSON.
+  lines.push(
+    '',
+    `Recent log (${gameplayEvents.length} gameplay / ${snap.events.length} total, oldest→newest):`
+  );
+  const tail = gameplayEvents.slice(-60);
+  for (const e of tail) {
+    const rel = ((e.t - t0) / 1000).toFixed(2).padStart(7);
+    const meta = [
+      e.origin ? `origin=${e.origin}` : '',
+      e.source,
+      e.bus ? `bus=${e.bus}` : '',
+      e.volume != null ? `v=${e.volume.toFixed(2)}` : '',
+      e.spatial ? 'spatial' : '',
+      e.detail ?? '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const caller = e.caller ? `  ← ${e.caller.split(' ← ')[0]}` : '';
+    lines.push(
+      `${rel}s  ${e.kind.padEnd(7)}  ${shortKey(e.key, 28).padEnd(28)}  ${meta}${caller}`
+    );
+  }
+  return lines.join('\n');
+}
+
+function styleTabBtn(btn: HTMLButtonElement, active: boolean): void {
+  styleButton(btn);
+  btn.style.marginRight = '4px';
+  btn.style.opacity = active ? '1' : '0.65';
+  btn.style.borderColor = active
+    ? 'rgba(120,200,255,0.55)'
+    : 'rgba(255,255,255,0.15)';
+  btn.style.background = active ? 'rgba(40,80,120,0.55)' : 'rgba(0,0,0,0.35)';
+}
+
+export function setProfilerPanelTab(
+  runtime: ProfilerPanelRuntime,
+  tab: ProfilerTabId,
+  opts?: { syncUrl?: boolean; notify?: boolean }
+): void {
+  runtime.tab = tab;
+  runtime.systemsPane.style.display = tab === 'systems' ? 'block' : 'none';
+  runtime.audioPane.style.display = tab === 'audio' ? 'block' : 'none';
+  for (const id of ['systems', 'audio'] as const) {
+    styleTabBtn(runtime.tabButtons[id], id === tab);
+  }
+  if (tab === 'audio') armAudioDebug(true);
+  if (opts?.syncUrl !== false) syncProfilerTabToUrl(tab);
+  if (opts?.notify !== false) runtime.onTabChange?.(tab);
+}
+
 export function createProfilerPanel(): ProfilerPanelRuntime {
   const root = document.createElement('div');
   root.id = PANEL_ID;
   stylePanel(root);
+
+  const tabBar = document.createElement('div');
+  tabBar.style.display = 'flex';
+  tabBar.style.alignItems = 'center';
+  tabBar.style.gap = '2px';
+  tabBar.style.marginBottom = '8px';
+
+  const title = document.createElement('strong');
+  title.textContent = 'VibeGame Profiler';
+  title.style.marginRight = '10px';
+
+  const systemsTabBtn = document.createElement('button');
+  systemsTabBtn.type = 'button';
+  systemsTabBtn.textContent = 'Systems';
+  const audioTabBtn = document.createElement('button');
+  audioTabBtn.type = 'button';
+  audioTabBtn.textContent = 'Audio';
+
+  const statusEl = document.createElement('span');
+  statusEl.style.opacity = '0.8';
+  statusEl.style.marginLeft = '8px';
+
+  tabBar.append(title, systemsTabBtn, audioTabBtn, statusEl);
+
+  const systemsPane = document.createElement('div');
+  const audioPane = document.createElement('div');
+  audioPane.style.display = 'none';
 
   const header = document.createElement('div');
   header.style.display = 'flex';
@@ -357,13 +519,6 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   header.style.alignItems = 'center';
   header.style.gap = '4px';
   header.style.marginBottom = '8px';
-
-  const title = document.createElement('strong');
-  title.textContent = 'VibeGame Profiler';
-  title.style.marginRight = '8px';
-
-  const statusEl = document.createElement('span');
-  statusEl.style.opacity = '0.8';
 
   const filterInput = document.createElement('input');
   filterInput.type = 'search';
@@ -449,8 +604,6 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   styleButton(dlBtn);
 
   header.append(
-    title,
-    statusEl,
     filterInput,
     groupSelect,
     sortSelect,
@@ -496,13 +649,7 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   countersEl.style.margin = '0';
   countersEl.style.whiteSpace = 'pre-wrap';
 
-  const hint = document.createElement('div');
-  hint.style.marginTop = '8px';
-  hint.style.opacity = '0.55';
-  hint.textContent =
-    '[P] toggle  [Shift+P] sample↔deep  [Pause] freeze  · ?profiler=1';
-
-  root.append(
+  systemsPane.append(
     header,
     summaryEl,
     scriptsLabel,
@@ -510,9 +657,64 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
     systemsLabel,
     systemsEl,
     countersLabel,
-    countersEl,
-    hint
+    countersEl
   );
+
+  const audioToolbar = document.createElement('div');
+  audioToolbar.style.display = 'flex';
+  audioToolbar.style.flexWrap = 'wrap';
+  audioToolbar.style.gap = '4px';
+  audioToolbar.style.marginBottom = '8px';
+
+  const clearLogBtn = document.createElement('button');
+  clearLogBtn.type = 'button';
+  clearLogBtn.textContent = 'Clear log';
+  styleButton(clearLogBtn);
+
+  const stopAllBtn = document.createElement('button');
+  stopAllBtn.type = 'button';
+  stopAllBtn.textContent = 'Stop all';
+  styleButton(stopAllBtn);
+
+  const copyAudioBtn = document.createElement('button');
+  copyAudioBtn.type = 'button';
+  copyAudioBtn.textContent = 'Copy JSON';
+  styleButton(copyAudioBtn);
+
+  const muteSfxBtn = document.createElement('button');
+  muteSfxBtn.type = 'button';
+  muteSfxBtn.textContent = 'Mute sfx';
+  styleButton(muteSfxBtn);
+
+  const muteMusicBtn = document.createElement('button');
+  muteMusicBtn.type = 'button';
+  muteMusicBtn.textContent = 'Mute music';
+  styleButton(muteMusicBtn);
+
+  audioToolbar.append(
+    clearLogBtn,
+    stopAllBtn,
+    copyAudioBtn,
+    muteSfxBtn,
+    muteMusicBtn
+  );
+
+  const audioBodyEl = document.createElement('pre');
+  audioBodyEl.style.margin = '0';
+  audioBodyEl.style.whiteSpace = 'pre';
+  audioBodyEl.style.overflowX = 'auto';
+  audioBodyEl.style.maxHeight = '70vh';
+  audioBodyEl.style.overflowY = 'auto';
+
+  audioPane.append(audioToolbar, audioBodyEl);
+
+  const hint = document.createElement('div');
+  hint.style.marginTop = '8px';
+  hint.style.opacity = '0.55';
+  hint.textContent =
+    '[P] toggle  [Shift+P] sample↔deep  [Pause] freeze  · ?profiler=audio  · ?profilerTab=systems|audio';
+
+  root.append(tabBar, systemsPane, audioPane, hint);
 
   const runtime: ProfilerPanelRuntime = {
     root,
@@ -525,6 +727,11 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
     countersEl,
     statusEl,
     freezeBtn,
+    systemsPane,
+    audioPane,
+    audioBodyEl,
+    tabButtons: { systems: systemsTabBtn, audio: audioTabBtn },
+    tab: 'systems',
     visible: false,
     filter: '',
     groupFilter: 'all',
@@ -533,6 +740,16 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
     lastRefreshFrame: 0,
     systemNames: [],
   };
+
+  styleTabBtn(systemsTabBtn, true);
+  styleTabBtn(audioTabBtn, false);
+
+  systemsTabBtn.addEventListener('click', () => {
+    setProfilerPanelTab(runtime, 'systems');
+  });
+  audioTabBtn.addEventListener('click', () => {
+    setProfilerPanelTab(runtime, 'audio');
+  });
 
   filterInput.addEventListener('input', () => {
     runtime.filter = filterInput.value;
@@ -585,6 +802,34 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
     runtime.statusEl.textContent = ` copied ${payload}`;
   });
 
+  clearLogBtn.addEventListener('click', () => {
+    // Keep silent boot cache rows so loading noise stays labeled as preload.
+    clearAudioDebugLog({ keepPreload: true });
+    runtime.statusEl.textContent = ' audio log cleared (kept boot preload)';
+    runtime.audioBodyEl.textContent = renderAudioTab(getAudioDebugSnapshot());
+  });
+  stopAllBtn.addEventListener('click', () => {
+    stopAllBankPlays();
+    runtime.statusEl.textContent = ' stopped all bank plays';
+    runtime.audioBodyEl.textContent = renderAudioTab(getAudioDebugSnapshot());
+  });
+  copyAudioBtn.addEventListener('click', () => {
+    void navigator.clipboard?.writeText(
+      JSON.stringify(getAudioDebugSnapshot(), null, 2)
+    );
+    runtime.statusEl.textContent = ' copied audio JSON';
+  });
+  muteSfxBtn.addEventListener('click', () => {
+    const next = !isBusMuted('sfx');
+    setBusMuted('sfx', next);
+    muteSfxBtn.textContent = next ? 'Unmute sfx' : 'Mute sfx';
+  });
+  muteMusicBtn.addEventListener('click', () => {
+    const next = !isBusMuted('music');
+    setBusMuted('music', next);
+    muteMusicBtn.textContent = next ? 'Unmute music' : 'Mute music';
+  });
+
   const parent = document.body ?? document.documentElement;
   parent.appendChild(root);
   return runtime;
@@ -607,6 +852,13 @@ export function refreshProfilerPanel(
     return;
   }
   runtime.lastRefreshFrame = state.time.frameCount;
+
+  if (runtime.tab === 'audio') {
+    const audioSnap = getAudioDebugSnapshot();
+    runtime.statusEl.textContent = ` ${getProfilerMode()} · audio${isProfilerFrozen() ? ' · frozen' : ''} · active=${audioSnap.active.length} · log=${audioSnap.events.length}`;
+    runtime.audioBodyEl.textContent = renderAudioTab(audioSnap);
+    return;
+  }
 
   const snap = getProfilerSnapshot();
   runtime.statusEl.textContent = ` ${getProfilerMode()}${isProfilerFrozen() ? ' · frozen' : ''}`;

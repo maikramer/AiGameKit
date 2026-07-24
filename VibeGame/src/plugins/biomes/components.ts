@@ -35,6 +35,11 @@ export const BiomeRegion = {
   ppVignetteDarkness: new Float32Array(MAX_ENTITIES),
   /** Rain intensity 0..1 while the player is inside this biome. */
   rain: new Float32Array(MAX_ENTITIES),
+  /**
+   * Cloud coverage 0..1 while inside this biome.
+   * Sentinel `-1` = no override (keep Weather / cycle baseline).
+   */
+  clouds: new Float32Array(MAX_ENTITIES),
 } as const;
 
 /**

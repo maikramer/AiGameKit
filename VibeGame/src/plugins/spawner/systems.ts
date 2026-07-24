@@ -35,7 +35,6 @@ import {
 import { LakeApplySystem, RiverApplySystem } from '../water/systems';
 import { RoadApplySystem } from '../road/systems';
 import { TerrainPadApplySystem } from '../terrain/pad-systems';
-
 const spawnerQuery = defineQuery([SpawnerPending]);
 const terrainSpawnedQuery = defineQuery([TerrainSpawned]);
 const exclusionQuery = defineQuery([SpawnExclusion]);

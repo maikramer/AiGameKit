@@ -9,7 +9,11 @@ import { PlayerController } from '../player/components';
 import { Postprocessing } from '../postprocessing/components';
 import { AmbientLight } from '../rendering/components';
 import { crossfadeMusicLayers } from '../audio/mixer';
-import { setEnvironmentRain } from '../weather/state';
+import {
+  getWeather,
+  setEnvironmentClouds,
+  setEnvironmentRain,
+} from '../weather/state';
 import { Terrain, setTerrainSplat } from '../terrain';
 import { ActiveBiome, BiomeRegion } from './components';
 import { findBiomeRegionAt, getBiomeRegions } from './parser';
@@ -240,6 +244,21 @@ function applyVisuals(
   const rainOf = (eid: number): number =>
     eid === NO_BIOME ? 0 : BiomeRegion.rain[eid]!;
   setEnvironmentRain(state, lerp(rainOf(fromEid), rainOf(toEid), blend));
+
+  // Biome cloud coverage (−1 = inherit Weather cycle). While either side has
+  // an explicit override, lerp toward baseline (Weather cloudsTarget) for the
+  // inherit side so exits from dark-forest fade smoothly.
+  const fromHas =
+    fromEid !== NO_BIOME && (BiomeRegion.clouds[fromEid] ?? -1) >= 0;
+  const toHas = toEid !== NO_BIOME && (BiomeRegion.clouds[toEid] ?? -1) >= 0;
+  if (!fromHas && !toHas) {
+    setEnvironmentClouds(state, -1);
+  } else {
+    const baseline = getWeather(state).cloudsTarget;
+    const f = fromHas ? BiomeRegion.clouds[fromEid]! : baseline;
+    const t = toHas ? BiomeRegion.clouds[toEid]! : baseline;
+    setEnvironmentClouds(state, lerp(f, t, blend));
+  }
 }
 
 function bgmLayerFor(entity: number): number {

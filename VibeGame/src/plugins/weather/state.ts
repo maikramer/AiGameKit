@@ -17,6 +17,11 @@ export interface WeatherRuntime {
   rainTarget: number;
   /** Rain requested by the active biome (blends via BiomeDetectionSystem). */
   environmentRain: number;
+  /**
+   * Cloud coverage from the active biome (−1 = inactive / inherit cycle).
+   * When ≥ 0, wins over `cloudsTarget` (see {@link effectiveCloudsTarget}).
+   */
+  environmentClouds: number;
   /** Seconds for target ramps. */
   fadeSeconds: number;
 }
@@ -36,6 +41,7 @@ export function getWeather(state: State): WeatherRuntime {
       rain: 0,
       rainTarget: 0,
       environmentRain: 0,
+      environmentClouds: -1,
       fadeSeconds: 4,
     };
     RUNTIME.set(state, w);
@@ -79,9 +85,26 @@ export function setEnvironmentRain(state: State, value: number): void {
   getWeather(state).environmentRain = value < 0 ? 0 : value > 1 ? 1 : value;
 }
 
+/**
+ * Biome-driven cloud coverage. Pass `-1` to clear the override so the Weather
+ * cycle / `cloudsTarget` resume control.
+ */
+export function setEnvironmentClouds(state: State, value: number): void {
+  if (value < 0) {
+    getWeather(state).environmentClouds = -1;
+    return;
+  }
+  getWeather(state).environmentClouds = value > 1 ? 1 : value;
+}
+
 /** Effective rain target (API/cycle vs biome — the wetter one wins). */
 export function effectiveRainTarget(w: WeatherRuntime): number {
   return Math.max(w.rainTarget, w.environmentRain);
+}
+
+/** Effective clouds: biome override when set, else cycle/API target. */
+export function effectiveCloudsTarget(w: WeatherRuntime): number {
+  return w.environmentClouds >= 0 ? w.environmentClouds : w.cloudsTarget;
 }
 
 /** World-space wind vector (direction × strength), for gameplay/FX. */

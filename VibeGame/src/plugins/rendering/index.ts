@@ -18,7 +18,11 @@ export {
 } from './texture-recipe-system';
 export { RenderingPlugin } from './plugin';
 export { rendererRecipe, pointLightRecipe, spotLightRecipe } from './recipes';
-export { resetShaderWarmup, warmupSceneShaders } from './shader-warmup';
+export {
+  isSceneShadersWarmed,
+  resetShaderWarmup,
+  warmupSceneShaders,
+} from './shader-warmup';
 export {
   applyNeutralEnvironment,
   CameraProjection,

@@ -2,7 +2,7 @@ import type { ParticleSystemParameters } from 'three.quarks';
 import { RenderMode } from 'three.quarks';
 import { ConstantValue, IntervalValue } from 'quarks.core';
 import { ColorRange } from 'quarks.core';
-import { SphereEmitter, ConeEmitter } from 'quarks.core';
+import { SphereEmitter, ConeEmitter, RectangleEmitter } from 'quarks.core';
 import { SizeOverLife, ColorOverLife, ApplyForce } from 'quarks.core';
 import { PiecewiseBezier, Bezier, Gradient } from 'quarks.core';
 import { Vector3, Vector4 } from 'quarks.core';
@@ -21,7 +21,8 @@ export type PresetName =
   | 'splash'
   | 'woodchips'
   | 'rockshards'
-  | 'leaves';
+  | 'leaves'
+  | 'ground-dust';
 
 // New presets append at the end: ParticleEmitter.preset stores the index.
 const PRESET_NAMES: readonly PresetName[] = [
@@ -38,12 +39,15 @@ const PRESET_NAMES: readonly PresetName[] = [
   'woodchips',
   'rockshards',
   'leaves',
+  'ground-dust',
 ];
 
 /** Aliases used by games that don't match PRESET_NAMES exactly. */
 const PRESET_ALIASES: Record<string, PresetName> = {
   sparkle: 'magic',
   sparkles: 'magic',
+  'sand-dust': 'ground-dust',
+  sanddust: 'ground-dust',
 };
 
 /**
@@ -216,6 +220,47 @@ function dustPreset(): Partial<SystemParams> {
         new PiecewiseBezier([[new Bezier(1, 1.1, 0.9, 0.35), 0]])
       ),
       worldForce(-1, 2.5),
+    ],
+  };
+}
+
+/** Low sheet of sand/dust that skims the ground (ambient desert FX). */
+function groundDustPreset(): Partial<SystemParams> {
+  return {
+    material: particleMaterial({ preset: 'dust', opacity: 0.55 }),
+    looping: true,
+    duration: 8,
+    startLife: new IntervalValue(1.6, 3.2),
+    startSpeed: new IntervalValue(0.15, 0.55),
+    startSize: new IntervalValue(0.18, 0.45),
+    startColor: new ColorRange(
+      new Vector4(0.82, 0.72, 0.48, 0.35),
+      new Vector4(0.92, 0.84, 0.62, 0.55)
+    ),
+    emissionOverTime: new ConstantValue(28),
+    shape: new RectangleEmitter({ width: 8, height: 6, thickness: 1 }),
+    worldSpace: true,
+    renderMode: RenderMode.BillBoard,
+    behaviors: [
+      new SizeOverLife(
+        new PiecewiseBezier([[new Bezier(0.7, 1, 0.85, 0.2), 0]])
+      ),
+      new ColorOverLife(
+        new Gradient(
+          [
+            [new Vector3(0.85, 0.75, 0.5), 0],
+            [new Vector3(0.78, 0.68, 0.45), 0.55],
+            [new Vector3(0.7, 0.6, 0.4), 1],
+          ],
+          [
+            [0.45, 0],
+            [0.35, 0.4],
+            [0, 1],
+          ]
+        )
+      ),
+      // Drift along +X with a faint upward lift (skims terrain).
+      new ApplyForce(new Vector3(1, 0.08, 0.25), new ConstantValue(1.1)),
     ],
   };
 }
@@ -497,6 +542,7 @@ const PRESET_FACTORIES: Record<PresetName, () => Partial<SystemParams>> = {
   woodchips: woodchipsPreset,
   rockshards: rockshardsPreset,
   leaves: leavesPreset,
+  'ground-dust': groundDustPreset,
 };
 
 export function createPresetParams(name: PresetName): Partial<SystemParams> {

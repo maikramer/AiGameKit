@@ -7,6 +7,7 @@ export type SpawnGroupProfileId =
   | 'none'
   | 'tree'
   | 'foliage'
+  | 'creature'
   | 'physics-box'
   | 'gltf-crate'
   /** Defaults for `place="…"` on `<entity>` (deterministic terrain placement). */
@@ -134,6 +135,33 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     yawDiscreteDeg: [],
     maxDistance: 120,
   },
+  /**
+   * Skinned/scripted actors (enemies, NPCs). Same ground path as trees:
+   * mesh-surface sample + AABB foot lift + TerrainSpawned resync after city
+   * pads/roads. No tree-style scale jitter.
+   */
+  creature: {
+    alignToTerrain: true,
+    groundAlign: 'aabb',
+    baseYOffset: 0.02,
+    randomYaw: true,
+    scaleMin: 1,
+    scaleMax: 1,
+    scaleAxisMin: 1,
+    scaleAxisMax: 1,
+    surfaceEpsilon: 0.75,
+    surfaceEpsilonAuto: false,
+    maxSlopeDeg: 40,
+    maxSlopePlacementAttempts: 48,
+    avoidWater: true,
+    avoidOverlaps: false,
+    footprintRadius: 0,
+    scaleDistribution: 'linear',
+    yawDistribution: 'linear',
+    scaleDiscreteValues: [],
+    yawDiscreteDeg: [],
+    maxDistance: 100,
+  },
   'physics-box': {
     alignToTerrain: false,
     groundAlign: 'none',
@@ -220,7 +248,7 @@ export function normalizeGroupProfileId(
   if (s === '' || s === 'none') return 'none';
   if (s in GROUP_PROFILES) return s as SpawnGroupProfileId;
   logger.warn(
-    `[spawn-group] profile="${raw}" desconhecido; use none | tree | foliage | physics-box | gltf-crate | place. Usando "none".`
+    `[spawn-group] profile="${raw}" desconhecido; use none | tree | foliage | creature | physics-box | gltf-crate | place. Usando "none".`
   );
   return 'none';
 }
@@ -287,9 +315,11 @@ export function roleToProfile(role: string): SpawnGroupProfileId | null {
     case 'tree':
       return 'tree';
     case 'enemy':
+    case 'npc':
+    case 'creature':
+      return 'creature';
     case 'dynamic':
     case 'pickup':
-    case 'npc':
     case 'kinematic':
       return 'physics-box';
     case 'prop':

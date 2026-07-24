@@ -14,9 +14,11 @@ Particle system plugin using three.quarks (`BatchedRenderer` + `ParticleSystem`)
 ## Presets
 
 fire, rain, snow, smoke, dust, explosion, sparks, magic, fireflies, splash,
-woodchips, rockshards, leaves
+woodchips, rockshards, leaves, ground-dust
 
-Alias: `sparkle` → `magic`.
+Alias: `sparkle` → `magic`; `sand-dust` → `ground-dust`.
+
+`ground-dust` — low sheet emitter for ambient sand/dust (desert FX).
 
 ## Textures
 

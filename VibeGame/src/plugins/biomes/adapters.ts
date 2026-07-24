@@ -200,6 +200,8 @@ export const ppVignetteDarknessAdapter: Adapter = floatField(
 );
 /** `rain` — precipitation intensity 0..1 inside the biome. */
 export const rainAdapter: Adapter = floatField(BiomeRegion.rain);
+/** `clouds` — cloud coverage 0..1 inside the biome (−1 / omit = inherit). */
+export const cloudsAdapter: Adapter = floatField(BiomeRegion.clouds);
 
 export const bgmLayerAdapter: Adapter = (entity, value) => {
   const n = parseInt(String(value), 10);

@@ -62,6 +62,7 @@ export const ParticlesPlugin: Plugin = {
           woodchips: 10,
           rockshards: 11,
           leaves: 12,
+          'ground-dust': 13,
         },
         'render-mode': {
           billboard: 0,

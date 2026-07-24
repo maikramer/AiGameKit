@@ -36,7 +36,10 @@ interface FallFx {
   stump: THREE.Object3D;
   /** Null when using pre-split Stump/Top meshes (no shader clipping). */
   topPlane: THREE.Plane | null;
+  /** All materials (top + stump) — used for opacity fade of the top. */
   materials: THREE.Material[];
+  /** Only the top's materials — disposed when the top fades out. */
+  topMaterials: THREE.Material[];
   axis: THREE.Vector3;
   dirX: number;
   dirZ: number;
@@ -305,9 +308,9 @@ export function startHitShake(state: State, entity: number): boolean {
 
 // --- Tree fall ---------------------------------------------------------------
 
-const FALL_DURATION = 1.15;
+const FALL_DURATION = 1.0;
 const FALL_MAX_ANGLE = Math.PI * 0.47;
-const FALL_HOLD = 1.1;
+const FALL_TOP_HOLD = 0.3;
 const FALL_FADE = 0.7;
 
 /** Clone a copy's materials with a shared clipping plane; returns the clones. */
@@ -411,15 +414,15 @@ export function prepareTreeFallHalves(
   topLength: number;
   topPlane: THREE.Plane | null;
   materials: THREE.Material[];
+  topMaterials: THREE.Material[];
 } | null {
   const parts = findTreeSplitParts(source);
   if (parts) {
     const stump = clonePartAtWorld(parts.stump);
     const top = clonePartAtWorld(parts.top);
-    const materials = [
-      ...cloneMaterialsForFade(stump),
-      ...cloneMaterialsForFade(top),
-    ];
+    const stumpMats = cloneMaterialsForFade(stump);
+    const topMats = cloneMaterialsForFade(top);
+    const materials = [...stumpMats, ...topMats];
     const stumpBox = new THREE.Box3().setFromObject(stump);
     const topBox = new THREE.Box3().setFromObject(top);
     if (stumpBox.isEmpty() || topBox.isEmpty()) return null;
@@ -438,6 +441,7 @@ export function prepareTreeFallHalves(
       topLength: Math.max(topBox.max.y - cutY, 0.5),
       topPlane: null,
       materials,
+      topMaterials: topMats,
     };
   }
 
@@ -472,6 +476,7 @@ export function prepareTreeFallHalves(
     topLength: Math.max(height - (cutY - groundY), 0.5),
     topPlane,
     materials: [...topMats, ...stumpMats],
+    topMaterials: topMats,
   };
 }
 
@@ -506,7 +511,7 @@ export function startTreeFall(
   const halves = prepareTreeFallHalves(source, cutHeight);
   if (!halves) return false;
 
-  const { stump, top, cutPoint, groundY, topLength, topPlane, materials } =
+  const { stump, top, cutPoint, groundY, topLength, topPlane, materials, topMaterials } =
     halves;
 
   const pivot = new THREE.Object3D();
@@ -521,6 +526,7 @@ export function startTreeFall(
     stump,
     topPlane,
     materials,
+    topMaterials,
     axis: new THREE.Vector3(dirZ, 0, -dirX).normalize(),
     dirX,
     dirZ,
@@ -780,16 +786,17 @@ function updateFall(state: State, fx: FallFx, dt: number): boolean {
     fx.topPlane.constant = -_n.dot(fx.cutPoint);
   }
 
-  const fadeStart = FALL_DURATION + FALL_HOLD;
+  const fadeStart = FALL_DURATION + FALL_TOP_HOLD;
   if (t > fadeStart) {
     const k = (t - fadeStart) / FALL_FADE;
     if (k >= 1) {
+      // Top: remove + dispose apenas os materiais do top.
       fx.pivot.removeFromParent();
-      fx.stump.removeFromParent();
-      for (const m of fx.materials) m.dispose();
+      for (const m of fx.topMaterials) m.dispose();
       return false;
     }
-    setOpacity(fx.materials, 1 - k);
+    // Fade só no top — stump fica permanente na cena.
+    setOpacity(fx.topMaterials, 1 - k);
   }
   return true;
 }

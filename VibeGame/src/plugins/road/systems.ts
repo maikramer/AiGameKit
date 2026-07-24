@@ -228,8 +228,10 @@ export const RoadApplySystem: System = defineSystem({
         yOffset: Road.yOffset[eid] || 0.12,
       });
 
+      // White base only when a map multiplies it; bare roads use stone tint
+      // so missing texture-url does not flash as a glowing white pad.
       const material = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
+        color: data.textureUrl ? 0xffffff : 0x8a7a68,
         roughness: Road.roughness[eid] || 1,
         metalness: Road.metalness[eid],
         vertexColors: true,
