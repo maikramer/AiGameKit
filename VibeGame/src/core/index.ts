@@ -95,8 +95,17 @@ export {
   traverseElements,
   XMLParser,
   XMLValueParser,
+  MAX_INCLUDE_DEPTH,
+  createFetchIncludeLoader,
+  expandIncludes,
+  unwrapIncludeFragment,
 } from './xml';
-export type { ParsedElement, XMLValue } from './xml';
+export type {
+  ParsedElement,
+  XMLValue,
+  ExpandIncludesOptions,
+  IncludeLoader,
+} from './xml';
 
 export {
   getRecipeSchema,

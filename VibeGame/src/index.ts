@@ -47,6 +47,7 @@ export {
   PlayerGltfConfig,
   playerGltfRecipe,
   setPlayerAttackClip,
+  getPlayerAttackClip,
   setPlayerIdleClip,
   setPlayerHeldItem,
   setPlayerFaceTarget,
@@ -95,8 +96,10 @@ export {
   NamedSfxResolverSystem,
   playNamedSfx,
   registerNamedSfx,
+  allowSoundPreload,
   defineSoundBank,
   getSoundDef,
+  preloadSounds,
   playSound,
   playSoundAt,
   playSoundOn,
@@ -199,6 +202,7 @@ export {
   SpawnerPlugin,
   SpawnerPending,
   PlacePending,
+  TerrainSpawned,
   TerrainSpawnSystem,
   TerrainPlaceSystem,
   entityParser,
@@ -216,6 +220,7 @@ export {
   partialAlignEuler,
   registerSpawnFootprint,
   isSpawnAreaFree,
+  isGroundMutationPending,
   sampleMeshSurfaceHeight,
   sampleTerrainSurface,
   setPlacementSpec,
@@ -850,10 +855,15 @@ export type {
 /**
  * Hierarchical frame profiler (per-system timings, in-game panel, User Timing).
  * Opt-in via {@link ProfilerPlugin}. Keys: `P` toggle, `Shift+P` sample↔deep.
- * URL: `?profiler=1` or `?profiler=deep`. Bridge: `__VIBEGAME__.profiler`.
+ * URL: `?profiler=1`, `?profiler=audio`, `?profilerTab=systems|audio`.
+ * Bridge: `__VIBEGAME__.profiler` (`getTab` / `setTab` / `audioSnapshot`).
  */
-export { ProfilerPlugin, ProfilerPanelSystem } from './plugins/profiler';
-export type { VibeGameProfilerHandle } from './plugins/profiler';
+export {
+  ProfilerPlugin,
+  ProfilerPanelSystem,
+  parseProfilerUrl,
+} from './plugins/profiler';
+export type { VibeGameProfilerHandle, ProfilerTabId } from './plugins/profiler';
 
 /**
  * Spawn gate plugin: opt-in latch that holds entities at their spawn Y until
@@ -886,6 +896,12 @@ export {
 export { getRenderingContext } from './plugins/rendering';
 /** @internal registry of active THREE.Camera instances keyed by camera entity. */
 export { threeCameras } from './plugins/rendering';
+/** Silent first-look shader compile used by the loading overlay / physics hold. */
+export {
+  isSceneShadersWarmed,
+  resetShaderWarmup,
+  warmupSceneShaders,
+} from './plugins/rendering';
 
 /**
  * Pause coordination plugin: modal stack that suppresses time (timeScale=0)
@@ -1025,6 +1041,28 @@ export type {
   RoadGeometryOptions,
   RoadCorridorOpts,
 } from './plugins/road';
+
+export {
+  CityLayoutPlugin,
+  CITY_LAYOUT_RECIPES,
+  cityGridRecipe,
+  streetRecipe,
+  buildingRecipe,
+  slotRecipe,
+  wallRectRecipe,
+  plazaRecipe,
+  propRecipe,
+  blockRecipe,
+  buildingRowRecipe,
+  prefabChildren,
+  listAllPrefabs,
+  BUILDING_PREFABS,
+  PROP_PREFABS,
+  cellToWorld,
+  parseCell,
+  parseOrigin,
+  parseCellRect,
+} from './plugins/city-layout';
 
 export { GroupPlugin, groupRecipe } from './plugins/group';
 

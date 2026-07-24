@@ -1,7 +1,13 @@
 import { logger } from './core/utils/logger';
 import type { BuilderOptions } from './builder';
 import type { State } from './core';
-import { TIME_CONSTANTS, XMLParser, XMLValueParser } from './core';
+import {
+  TIME_CONSTANTS,
+  XMLParser,
+  XMLValueParser,
+  createFetchIncludeLoader,
+  expandIncludes,
+} from './core';
 import {
   beginExternalProfilerFrame,
   endExternalProfilerFrame,
@@ -267,7 +273,7 @@ export class GameRuntime {
       }
     }
 
-    this.processWorldContent(element);
+    await this.processWorldContent(element);
 
     const resumeAudio = element.getAttribute('resume-audio-on-user-gesture');
     if (resumeAudio === 'true' || resumeAudio === '') {
@@ -275,23 +281,27 @@ export class GameRuntime {
     }
   }
 
-  private processWorldContent(worldElement: HTMLElement): void {
+  private async processWorldContent(worldElement: HTMLElement): Promise<void> {
     try {
       const originalHTML = worldElement.innerHTML;
 
       this.validateNoSelfClosingTags(originalHTML);
 
+      const expandedHTML = await expandIncludes(originalHTML, {
+        load: createFetchIncludeLoader(),
+      });
+
       if (
         typeof process !== 'undefined' &&
         process.env?.NODE_ENV !== 'production'
       ) {
-        this.validateXMLStructure(originalHTML);
+        this.validateXMLStructure(expandedHTML);
       }
 
-      const xmlContent = `<Scene>${originalHTML}</Scene>`;
+      const xmlContent = `<Scene>${expandedHTML}</Scene>`;
       this.state.xmlSource = xmlContent;
 
-      if (/<script\b/i.test(originalHTML)) {
+      if (/<script\b/i.test(expandedHTML)) {
         logger.warn(
           '[VibeGame] <script> tags in world XML are ignored. ' +
             'Use recipe `script` attributes or entity MonoBehaviour scripts instead.'
@@ -301,7 +311,7 @@ export class GameRuntime {
       const parseResult = XMLParser.parse(xmlContent);
 
       if (parseResult.root.tagName === 'parsererror') {
-        const errorText = originalHTML.substring(0, 200);
+        const errorText = expandedHTML.substring(0, 200);
         throw new Error(
           `[XML Parsing] Invalid XML syntax detected.\n` +
             `  Check your HTML for malformed tags or attributes.\n` +

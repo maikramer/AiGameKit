@@ -34,6 +34,7 @@ import { RoadPlugin } from './road/plugin';
 import { WaterPlugin } from './water/plugin';
 import { WeatherPlugin } from './weather/plugin';
 import { VegetationPlugin } from './vegetation/plugin';
+import { CityLayoutPlugin } from './city-layout/plugin';
 
 export const DefaultPlugins: Plugin[] = [
   TransformsPlugin,
@@ -64,6 +65,7 @@ export const DefaultPlugins: Plugin[] = [
   BiomesPlugin,
   WaterPlugin,
   RoadPlugin,
+  CityLayoutPlugin,
   WeatherPlugin,
   VegetationPlugin,
   ParticlesPlugin,

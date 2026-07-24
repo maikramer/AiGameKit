@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { YukaAiPlugin } from '../../../src/plugins/ai-yuka/plugin';
 import { CombatPlugin } from '../../../src/plugins/combat/plugin';
+import { CityLayoutPlugin } from '../../../src/plugins/city-layout/plugin';
 import { DefaultPlugins } from '../../../src/plugins/defaults';
 import { HudPlugin } from '../../../src/plugins/hud/plugin';
 import { I18nPlugin } from '../../../src/plugins/i18n/plugin';
@@ -20,6 +21,7 @@ describe('Engine feature plugins registration', () => {
     expect(DefaultPlugins).toContain(RaycastPlugin);
     expect(DefaultPlugins).toContain(YukaAiPlugin);
     expect(DefaultPlugins).toContain(HudPlugin);
+    expect(DefaultPlugins).toContain(CityLayoutPlugin);
   });
 
   it('optional plugins are not in DefaultPlugins', () => {

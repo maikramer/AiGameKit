@@ -546,12 +546,18 @@ function help() {
     '  vibegame run [opts] [-- …]  Build da engine + dev (bun install na engine se faltar deps)'
   );
   console.log(
+    '  vibegame analyze [entry]   Offline world compile (Includes, assets, solid overlaps)'
+  );
+  console.log(
     '  vibegame anim-viewer [opts]  Launch rigged-GLB animation inspector (alias: av)'
   );
   console.log('  vibegame playwright …    Run Playwright CLI (alias: pw)');
   console.log('  vibegame --version       Show version');
   console.log('  vibegame help            This message');
   console.log('');
+  console.log(
+    '  vibegame analyze [--public-dir DIR] [--json] [--fail-on error|warn]'
+  );
   console.log(
     '  vibegame run --install / -i / --sync   Força bun install na engine antes do build'
   );
@@ -830,6 +836,20 @@ if (first === 'create' || first === '-c') {
 if (first === 'playwright' || first === 'pw') {
   const pwArgs = argv.slice(1);
   runPlaywright(pwArgs);
+}
+
+if (first === 'analyze' || first === 'a') {
+  const analyzeScript = join(root, 'src', 'cli', 'analyze', 'index.ts');
+  if (!existsSync(analyzeScript)) {
+    console.error('[vibegame analyze] missing', analyzeScript);
+    process.exit(1);
+  }
+  const r = spawnSync(
+    process.env.BUN_BIN || 'bun',
+    [analyzeScript, ...argv.slice(1)],
+    { cwd: process.cwd(), stdio: 'inherit', env: process.env }
+  );
+  process.exit(r.status === null ? 1 : r.status);
 }
 
 if (first === 'run' || first === 'r') {

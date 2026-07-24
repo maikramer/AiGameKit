@@ -4,6 +4,13 @@ export {
   parseWorldXml,
 } from './headless';
 export type { HeadlessOptions } from './headless';
+export { analyzeWorld } from './analyze/run';
+export type {
+  AnalyzeIssue,
+  AnalyzeOptions,
+  AnalyzeResult,
+  Footprint,
+} from './analyze/types';
 export {
   getAllSequences,
   getComponentData,

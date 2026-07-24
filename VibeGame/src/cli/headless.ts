@@ -1,6 +1,7 @@
 import { JSDOM } from 'jsdom';
+import * as path from 'path';
 import { State } from '../core/ecs/state';
-import { XMLParser } from '../core/xml';
+import { expandIncludes, XMLParser } from '../core/xml';
 import { parseXMLToEntities } from '../core/recipes/parser';
 import type { Plugin } from '../core/ecs/types';
 
@@ -60,17 +61,50 @@ export function parseWorldXml(state: State, xml: string): void {
   parseXMLToEntities(state, result.root);
 }
 
+export async function parseWorldXmlWithIncludes(
+  state: State,
+  xml: string,
+  options: {
+    /** Map Include src → absolute file path, or directory that hosts site-root paths. */
+    resolveInclude: (src: string) => string;
+  }
+): Promise<void> {
+  const { readFile } = await import('fs/promises');
+  const expanded = await expandIncludes(xml, {
+    load: async (src) => readFile(options.resolveInclude(src), 'utf-8'),
+  });
+  parseWorldXml(state, expanded);
+}
+
 export async function loadWorldFromFile(
   state: State,
-  filePath: string
+  filePath: string,
+  options: {
+    /**
+     * Directory that mirrors the game `public/` root for `/world/…` includes.
+     * Defaults to the directory containing `filePath`.
+     */
+    publicDir?: string;
+  } = {}
 ): Promise<void> {
   const { readFile } = await import('fs/promises');
   const content = await readFile(filePath, 'utf-8');
+  const publicDir = options.publicDir ?? path.dirname(filePath);
 
-  const worldMatch = content.match(/<world[^>]*>([\s\S]*?)<\/world>/);
-  if (worldMatch) {
-    parseWorldXml(state, worldMatch[0]);
-  } else {
-    parseWorldXml(state, content);
-  }
+  const resolveInclude = (src: string): string => {
+    if (src.startsWith('/')) {
+      return path.join(publicDir, src.replace(/^\//, ''));
+    }
+    return path.resolve(publicDir, src);
+  };
+
+  const worldMatch = content.match(/<world[^>]*>([\s\S]*?)<\/world>/i);
+  const sceneMatch = content.match(/<scene[^>]*>([\s\S]*?)<\/scene\s*>/i);
+  const body = worldMatch
+    ? worldMatch[0]
+    : sceneMatch
+      ? sceneMatch[1]!
+      : content;
+
+  await parseWorldXmlWithIncludes(state, body, { resolveInclude });
 }
