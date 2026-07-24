@@ -15,8 +15,10 @@ export {
   registerNamedSfx,
 } from './sfx-registry';
 export {
+  allowSoundPreload,
   defineSoundBank,
   getSoundDef,
+  preloadSounds,
   playSound,
   playSoundAt,
   playSoundOn,
@@ -27,6 +29,11 @@ export {
   setAudioEnabled,
   addClipSound,
   getClipSounds,
+  listActiveBankPlays,
+  listBusDebugState,
+  stopAllBankPlays,
+  setAudioListenerWorldPos,
+  getAudioListenerWorldPos,
   _resetSoundBank,
 } from './bank';
 export type {
@@ -35,6 +42,31 @@ export type {
   SoundHandle,
   ClipSoundMarker,
 } from './bank';
+export {
+  armAudioDebug,
+  armAudioDebugFromUrl,
+  clearAudioDebugLog,
+  formatAudioOrigin,
+  getAudioDebugEvents,
+  getAudioDebugSnapshot,
+  isAudioDebugArmed,
+  recordAudioDebugEvent,
+  setAudioEntityNameProvider,
+  _resetAudioDebugLog,
+} from './debug-log';
+export type {
+  AudioDebugActivePlay,
+  AudioDebugEvent,
+  AudioDebugEventKind,
+  AudioDebugSnapshot,
+  AudioDebugSource,
+} from './debug-log';
+export {
+  createAudioHandle,
+  ensureAudioBridge,
+  installAudioBridge,
+  type VibeGameAudioHandle,
+} from './bridge';
 export {
   MUSIC_ENTER_BATTLE,
   MUSIC_EXIT_BATTLE,

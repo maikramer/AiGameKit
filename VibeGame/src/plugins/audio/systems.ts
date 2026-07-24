@@ -9,11 +9,19 @@ import { Transform, WorldTransform } from '../transforms/components';
 import { GltfAnimationState } from '../gltf-anim/components';
 import { animatorRegistry } from '../gltf-anim/systems';
 import {
+  allowSoundPreload,
   fireClipMarkers,
   getClipSounds,
   pruneFollowingPlays,
+  setAudioListenerWorldPos,
   syncFollowingPlayPositions,
 } from './bank';
+import { ensureAudioBridge } from './bridge';
+import {
+  formatAudioOrigin,
+  recordAudioDebugEvent,
+  setAudioEntityNameProvider,
+} from './debug-log';
 
 // Howler.js spatial audio uses stereo panning only (no HRTF).
 
@@ -83,6 +91,11 @@ export function playAudioEmitter(state: State, eid: number): void {
   if (state.headless) return;
   const { howlMap, prevPlaying } = getOrCreateState(state);
   const howl = howlMap.get(eid);
+  const url = clipRegistry.get(AudioSource.clipPath[eid]) ?? `eid:${eid}`;
+  const origin = formatAudioOrigin({
+    originEid: eid,
+    originName: state.getEntityName(eid),
+  });
   if (howl && AudioSource.loop[eid] === 0) {
     AudioSource.playing[eid] = 0;
     prevPlaying.set(eid, 0);
@@ -90,9 +103,35 @@ export function playAudioEmitter(state: State, eid: number): void {
     howl.play();
     AudioSource.playing[eid] = 1;
     prevPlaying.set(eid, 1);
+    recordAudioDebugEvent({
+      kind: 'play',
+      key: url,
+      source: 'emitter',
+      volume: AudioSource.volume[eid],
+      loop: false,
+      spatial: AudioSource.spatial[eid] === 1,
+      followEid: eid,
+      originEid: origin.originEid,
+      originName: origin.originName,
+      origin: origin.origin,
+      detail: 'playAudioEmitter restart',
+    });
     return;
   }
   AudioSource.playing[eid] = 1;
+  recordAudioDebugEvent({
+    kind: 'play',
+    key: url,
+    source: 'emitter',
+    volume: AudioSource.volume[eid],
+    loop: AudioSource.loop[eid] === 1,
+    spatial: AudioSource.spatial[eid] === 1,
+    followEid: eid,
+    originEid: origin.originEid,
+    originName: origin.originName,
+    origin: origin.origin,
+    detail: 'playAudioEmitter flag',
+  });
 }
 
 /** Retoma o AudioContext do Howler se estiver suspenso (política de autoplay dos browsers). */
@@ -104,12 +143,22 @@ export function resumeAudioContextIfSuspended(): void {
 }
 
 /**
- * No browser, regista um `pointerdown` único para retomar o contexto de áudio.
- * Sem efeito fora de ambiente DOM.
+ * No browser, regista um `pointerdown` único para desbloquear preload Howl +
+ * retomar o AudioContext (política de autoplay). Sem efeito fora de DOM.
  */
+/** Minimal silent WAV so Howler can spawn AudioContext inside a user gesture. */
+const SILENT_WAV =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+
 export function resumeAudioContextOnFirstUserGesture(): void {
   if (typeof document === 'undefined') return;
   const handler = () => {
+    // Create/warm Howls inside the gesture so AudioContext is not born suspended.
+    allowSoundPreload();
+    if (!Howler.ctx) {
+      const unlock = new Howl({ src: [SILENT_WAV], volume: 0, preload: true });
+      unlock.unload();
+    }
     resumeAudioContextIfSuspended();
     document.removeEventListener('pointerdown', handler);
   };
@@ -140,6 +189,8 @@ export const AudioSystem: System = defineSystem({
   after: [TransformHierarchySystem],
   update(state: State) {
     if (state.headless) return;
+    ensureAudioBridge();
+    setAudioEntityNameProvider((eid) => state.getEntityName(eid));
 
     const { howlMap, prevPlaying, howlPropSnapshot } = getOrCreateState(state);
     const entities = audioQuery(state.world);
@@ -157,6 +208,10 @@ export const AudioSystem: System = defineSystem({
           if (!url) continue;
 
           const spatial = AudioSource.spatial[eid] === 1;
+          // World pose (AudioSystem runs after TransformHierarchySystem).
+          const wx = WorldTransform.posX[eid];
+          const wy = WorldTransform.posY[eid];
+          const wz = WorldTransform.posZ[eid];
           howl = new Howl({
             src: [url],
             preload: true,
@@ -164,11 +219,7 @@ export const AudioSystem: System = defineSystem({
             volume: AudioSource.volume[eid],
             rate: AudioSource.pitch[eid],
             ...(spatial && {
-              pos: [
-                Transform.posX[eid],
-                Transform.posY[eid],
-                Transform.posZ[eid],
-              ],
+              pos: [wx, wy, wz],
               pannerAttr: {
                 refDistance: AudioSource.minDistance[eid],
                 maxDistance: AudioSource.maxDistance[eid],
@@ -200,10 +251,49 @@ export const AudioSystem: System = defineSystem({
           });
         }
         howl.play();
+        const url = clipRegistry.get(clipId) ?? `clip:${clipId}`;
+        const origin = formatAudioOrigin({
+          originEid: eid,
+          originName: state.getEntityName(eid),
+        });
+        recordAudioDebugEvent({
+          kind: 'play',
+          key: url,
+          source: 'audio-source',
+          volume: AudioSource.volume[eid],
+          loop: AudioSource.loop[eid] === 1,
+          spatial: AudioSource.spatial[eid] === 1,
+          followEid: eid,
+          originEid: origin.originEid,
+          originName: origin.originName,
+          origin: origin.origin,
+          pos:
+            AudioSource.spatial[eid] === 1
+              ? [
+                  WorldTransform.posX[eid],
+                  WorldTransform.posY[eid],
+                  WorldTransform.posZ[eid],
+                ]
+              : undefined,
+        });
       }
 
       if (playing === 0 && wasPlaying === 1 && howl) {
         howl.stop();
+        const url = clipRegistry.get(clipId) ?? `clip:${clipId}`;
+        const origin = formatAudioOrigin({
+          originEid: eid,
+          originName: state.getEntityName(eid),
+        });
+        recordAudioDebugEvent({
+          kind: 'stop',
+          key: url,
+          source: 'audio-source',
+          followEid: eid,
+          originEid: origin.originEid,
+          originName: origin.originName,
+          origin: origin.origin,
+        });
       }
 
       if (howl) {
@@ -234,9 +324,9 @@ export const AudioSystem: System = defineSystem({
         }
 
         if (spatial) {
-          const px = Transform.posX[eid];
-          const py = Transform.posY[eid];
-          const pz = Transform.posZ[eid];
+          const px = WorldTransform.posX[eid];
+          const py = WorldTransform.posY[eid];
+          const pz = WorldTransform.posZ[eid];
           if (snap.posX !== px || snap.posY !== py || snap.posZ !== pz) {
             howl.pos(px, py, pz);
             snap.posX = px;
@@ -295,6 +385,7 @@ export const AudioSystem: System = defineSystem({
         audio.listenerPosZ = z;
         // Howler.pos trata browsers só com setPosition() vs AudioParam positionX/Y/Z.
         Howler.pos(x, y, z);
+        setAudioListenerWorldPos(x, y, z);
       }
     } else if (
       audioQuery(state.world).length > 0 &&

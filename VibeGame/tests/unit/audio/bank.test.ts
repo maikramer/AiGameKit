@@ -18,6 +18,7 @@ class MockHowl {
   pos = mock((_x?: number, _y?: number, _z?: number, _id?: number) => {});
   pannerAttr = mock(() => {});
   fade = mock(() => {});
+  load = mock(() => {});
   once = mock((event: string, cb: () => void, id?: number) => {
     if (event === 'end' && id != null) this._ends.set(id, cb);
   });
@@ -131,5 +132,30 @@ describe('Sound bank', () => {
     bank.addClipSound('Walk', { at: 0.1, sound: 'step' });
     bank.fireClipMarkers(7, 'Walk', 0.9, 0.15); // wrapped past 0.1
     expect(howlInstances).toHaveLength(1);
+  });
+
+  it('defers preload until allowSoundPreload when DOM gesture gate is active', () => {
+    const hadDocument = typeof document !== 'undefined';
+    if (!hadDocument) {
+      // Simulate browser gate: document with addEventListener.
+      (globalThis as any).document = {
+        addEventListener() {},
+        removeEventListener() {},
+      };
+    }
+    bank._resetSoundBank();
+    bank.setAudioEnabled(true);
+    bank.defineSoundBank({ coin: { url: '/coin.ogg' } });
+
+    bank.preloadSounds(['coin']);
+    expect(howlInstances).toHaveLength(0);
+
+    bank.allowSoundPreload();
+    expect(howlInstances).toHaveLength(1);
+    expect(howlInstances[0]._opts.src).toEqual(['/coin.ogg']);
+
+    if (!hadDocument) {
+      delete (globalThis as any).document;
+    }
   });
 });

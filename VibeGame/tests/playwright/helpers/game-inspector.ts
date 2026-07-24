@@ -22,69 +22,87 @@ type Bridge = {
   step: (dt?: number) => void;
 };
 
-function getBridge(): Bridge {
-  return (window as unknown as Record<string, unknown>).__VIBEGAME__ as Bridge;
-}
-
 export class GameInspector {
   constructor(private page: Page) {}
 
   async isReady(): Promise<boolean> {
     return this.page.evaluate(() => {
-      return (
-        typeof window !== 'undefined' &&
-        !!(window as unknown as Record<string, unknown>).__VIBEGAME__
-      );
+      const b = (window as unknown as { __VIBEGAME__?: Bridge }).__VIBEGAME__;
+      return typeof b?.entity === 'function';
     });
   }
 
   async waitForBridge(timeout = 15000): Promise<void> {
     await this.page.waitForFunction(
-      () => !!(window as unknown as Record<string, unknown>).__VIBEGAME__,
+      () => {
+        const b = (window as unknown as { __VIBEGAME__?: Bridge }).__VIBEGAME__;
+        return typeof b?.entity === 'function';
+      },
       undefined,
       { timeout }
     );
   }
 
   async snapshot(): Promise<string> {
-    return this.page.evaluate(() => getBridge().snapshot());
+    return this.page.evaluate(() => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.snapshot();
+    });
   }
 
   async entities(): Promise<EntityData[]> {
-    return this.page.evaluate(() => getBridge().entities());
+    return this.page.evaluate(() => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.entities();
+    });
   }
 
   async entity(name: string): Promise<EntityData | null> {
-    return this.page.evaluate((n) => getBridge().entity(n), name);
+    return this.page.evaluate((n) => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.entity(n);
+    }, name);
   }
 
   async component(
     eid: number,
     name: string
   ): Promise<Record<string, number> | null> {
-    return this.page.evaluate(([e, n]) => getBridge().component(e, n), [
-      eid,
-      name,
-    ] as [number, string]);
-  }
-
-  async query(...componentNames: string[]): Promise<number[]> {
     return this.page.evaluate(
-      (names) => getBridge().query(...names),
-      componentNames
+      ([e, n]) => {
+        const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+        return b.component(e, n);
+      },
+      [eid, name] as [number, string]
     );
   }
 
+  async query(...componentNames: string[]): Promise<number[]> {
+    return this.page.evaluate((names) => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.query(...names);
+    }, componentNames);
+  }
+
   async componentNames(): Promise<string[]> {
-    return this.page.evaluate(() => getBridge().componentNames());
+    return this.page.evaluate(() => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.componentNames();
+    });
   }
 
   async namedEntities(): Promise<Array<{ name: string; eid: number }>> {
-    return this.page.evaluate(() => getBridge().namedEntities());
+    return this.page.evaluate(() => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.namedEntities();
+    });
   }
 
   async step(dt?: number): Promise<void> {
-    await this.page.evaluate((delta) => getBridge().step(delta), dt);
+    await this.page.evaluate((delta) => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      b.step(delta);
+    }, dt);
   }
 
   async captureConsoleErrors(): Promise<string[]> {

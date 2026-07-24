@@ -17,6 +17,12 @@ import { logger } from '../../core/utils/logger';
  * expose a single "SFX volume" / "Music volume" slider without touching emitters.
  */
 import { Howl } from 'howler';
+import {
+  formatAudioOrigin,
+  recordAudioDebugEvent,
+  setAudioDebugProviders,
+  type AudioDebugActivePlay,
+} from './debug-log';
 
 export interface SoundDef {
   /** Asset URL (one entry per key). */
@@ -46,6 +52,16 @@ export interface PlayOptions {
   pitch?: number;
   /** Override the routing bus for this play. */
   bus?: string;
+  /**
+   * Entity that caused this play (profiler ``origin=name#eid``).
+   * Prefer this on ``playSoundAt`` so far/world SFX show who fired them.
+   */
+  originEid?: number;
+  /**
+   * Explicit origin tag when there is no entity
+   * (e.g. ``ui``, ``music``, ``boot/preload``).
+   */
+  origin?: string;
 }
 
 export interface SoundHandle {
@@ -69,8 +85,14 @@ interface ActivePlay {
   id: number;
   baseVolume: number;
   busName: string;
+  loop: boolean;
+  spatial: boolean;
+  startedAt: number;
   /** When set, FollowEmitterSystem repositions this play to the entity each frame. */
   followEid?: number;
+  originEid?: number;
+  originName?: string;
+  origin?: string;
   /** Last spatial pos pushed to Howler (skip setPos when unchanged). */
   lastX?: number;
   lastY?: number;
@@ -78,13 +100,64 @@ interface ActivePlay {
 }
 
 const bank = new Map<string, SoundDef>();
+/** Separate caches: a 2D preload must not poison later spatial plays. */
 const howls = new Map<string, Howl>();
+const howlsSpatial = new Map<string, Howl>();
 const buses = new Map<string, BusState>();
 const active = new Set<ActivePlay>();
 
 let masterVolume = 1;
 // Disabled under headless (node/tests) where there is no Web Audio context.
 let audioEnabled = typeof window !== 'undefined';
+
+/**
+ * Browsers warn if Howler creates an AudioContext before a user gesture.
+ * Preloads queue until {@link allowSoundPreload} (wired to first pointerdown).
+ * Headless / no-DOM environments unlock immediately.
+ */
+let soundPreloadAllowed =
+  typeof document === 'undefined' ||
+  typeof document.addEventListener !== 'function';
+const pendingSoundPreload = new Set<string>();
+
+/** Last listener world pose (written by AudioSystem). Used to cull far SFX. */
+let listenerX = 0;
+let listenerY = 0;
+let listenerZ = 0;
+let listenerValid = false;
+
+/** Push the audio listener pose so spatial plays can cull beyond maxDistance. */
+export function setAudioListenerWorldPos(
+  x: number,
+  y: number,
+  z: number
+): void {
+  listenerX = x;
+  listenerY = y;
+  listenerZ = z;
+  listenerValid = true;
+}
+
+export function getAudioListenerWorldPos(): {
+  x: number;
+  y: number;
+  z: number;
+} | null {
+  return listenerValid ? { x: listenerX, y: listenerY, z: listenerZ } : null;
+}
+
+function isBeyondHearRange(
+  x: number,
+  y: number,
+  z: number,
+  maxDistance: number
+): boolean {
+  if (!listenerValid || !(maxDistance > 0)) return false;
+  const dx = x - listenerX;
+  const dy = y - listenerY;
+  const dz = z - listenerZ;
+  return dx * dx + dy * dy + dz * dz > maxDistance * maxDistance;
+}
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -122,10 +195,12 @@ export function defineSoundBank(defs: Record<string, SoundDef>): void {
   for (const [key, def] of Object.entries(defs)) {
     bank.set(key, def);
     // A redefined key should rebuild its Howl on next play.
-    const existing = howls.get(key);
-    if (existing) {
-      existing.unload();
-      howls.delete(key);
+    for (const map of [howls, howlsSpatial]) {
+      const existing = map.get(key);
+      if (existing) {
+        existing.unload();
+        map.delete(key);
+      }
     }
   }
 }
@@ -158,6 +233,13 @@ export function getBusVolume(name: string): number {
 export function setBusMuted(name: string, muted: boolean): void {
   bus(name).muted = muted;
   applyAllGains();
+  recordAudioDebugEvent({
+    kind: 'busMute',
+    key: name,
+    source: 'bank',
+    bus: name,
+    detail: muted ? 'muted' : 'unmuted',
+  });
 }
 
 export function isBusMuted(name: string): boolean {
@@ -171,9 +253,14 @@ export function setAudioEnabled(enabled: boolean): void {
 
 // ── Playback ─────────────────────────────────────────────────────────────────
 
-function ensureHowl(key: string, def: SoundDef): Howl | null {
+function ensureHowl(
+  key: string,
+  def: SoundDef,
+  wantSpatial: boolean
+): Howl | null {
   if (!audioEnabled) return null;
-  let h = howls.get(key);
+  const map = wantSpatial ? howlsSpatial : howls;
+  let h = map.get(key);
   if (!h) {
     h = new Howl({
       src: [def.url],
@@ -181,15 +268,15 @@ function ensureHowl(key: string, def: SoundDef): Howl | null {
       loop: def.loop ?? false,
       volume: def.volume ?? 1,
       rate: def.pitch ?? 1,
-      ...(def.spatial && {
+      ...(wantSpatial && {
         pannerAttr: {
           refDistance: def.minDistance ?? 1,
-          maxDistance: def.maxDistance ?? 100,
+          maxDistance: def.maxDistance ?? 40,
           rolloffFactor: def.rolloff ?? 1,
         },
       }),
     });
-    howls.set(key, h);
+    map.set(key, h);
   }
   return h;
 }
@@ -211,6 +298,14 @@ function makeHandle(ap: ActivePlay): SoundHandle {
     stop() {
       ap.howl.stop(ap.id);
       active.delete(ap);
+      recordAudioDebugEvent({
+        kind: 'stop',
+        key: ap.key,
+        source: 'bank',
+        bus: ap.busName,
+        howlId: ap.id,
+        followEid: ap.followEid,
+      });
     },
     setVolume(v: number) {
       ap.baseVolume = clamp01(v);
@@ -221,10 +316,27 @@ function makeHandle(ap: ActivePlay): SoundHandle {
       ap.howl.fade(from, 0, Math.max(0, seconds) * 1000, ap.id);
       ap.howl.once('fade', () => ap.howl.stop(ap.id), ap.id);
       active.delete(ap);
+      recordAudioDebugEvent({
+        kind: 'fade',
+        key: ap.key,
+        source: 'bank',
+        bus: ap.busName,
+        howlId: ap.id,
+        detail: `fadeOut ${seconds.toFixed(2)}s`,
+      });
     },
     fadeIn(toVolume: number, seconds: number) {
       ap.baseVolume = clamp01(toVolume);
       ap.howl.fade(0, gainFor(ap), Math.max(0, seconds) * 1000, ap.id);
+      recordAudioDebugEvent({
+        kind: 'fade',
+        key: ap.key,
+        source: 'bank',
+        bus: ap.busName,
+        howlId: ap.id,
+        volume: toVolume,
+        detail: `fadeIn ${seconds.toFixed(2)}s`,
+      });
     },
     setPosition(x: number, y: number, z: number) {
       ap.howl.pos(x, y, z, ap.id);
@@ -241,31 +353,169 @@ function playInternal(
   const def = bank.get(key);
   if (!def) {
     logger.warn(`[audio] playSound: unknown key "${key}"`);
+    recordAudioDebugEvent({
+      kind: 'unknown',
+      key,
+      source: 'bank',
+    });
     return NULL_HANDLE;
   }
-  const h = ensureHowl(key, def);
+  const busName = opts?.bus ?? def.bus ?? 'sfx';
+  const loop = def.loop ?? false;
+  // Spatial only when we have a world anchor. ``def.spatial`` marks clips that
+  // *should* be played via playSoundAt/On — bare playSound stays 2D (UI/preload)
+  // so they never spawn at (0,0,0) and haunt the map.
+  const spatial = !!(pos || followEid !== undefined);
+  const maxDistance = def.maxDistance ?? 40;
+  const originInfo = formatAudioOrigin({
+    originEid: opts?.originEid,
+    origin: opts?.origin,
+    followEid,
+    fallback: spatial ? 'world' : busName === 'music' ? 'music' : 'ui',
+  });
+
+  // World one-shots: skip if listener is past attenuation range (full-volume
+  // ghosts used to play across the whole map via 2D playSound).
+  if (
+    spatial &&
+    pos &&
+    isBeyondHearRange(pos[0], pos[1], pos[2], maxDistance)
+  ) {
+    recordAudioDebugEvent({
+      kind: 'skip',
+      key,
+      source: 'bank',
+      bus: busName,
+      spatial: true,
+      pos,
+      followEid,
+      originEid: originInfo.originEid,
+      originName: originInfo.originName,
+      origin: originInfo.origin,
+      detail: `cull>${maxDistance}m`,
+    });
+    return NULL_HANDLE;
+  }
+
+  const h = ensureHowl(key, def, spatial);
   if (!h) return NULL_HANDLE;
 
   const id = h.play();
-  const busName = opts?.bus ?? def.bus ?? 'sfx';
   const ap: ActivePlay = {
     key,
     howl: h,
     id,
     baseVolume: (def.volume ?? 1) * (opts?.volume ?? 1),
     busName,
+    loop,
+    spatial,
+    startedAt:
+      typeof performance !== 'undefined' ? performance.now() : Date.now(),
     followEid,
+    originEid: originInfo.originEid,
+    originName: originInfo.originName,
+    origin: originInfo.origin,
   };
   h.rate(opts?.pitch ?? def.pitch ?? 1, id);
   h.volume(gainFor(ap), id);
   if (pos) h.pos(pos[0], pos[1], pos[2], id);
   active.add(ap);
 
+  recordAudioDebugEvent({
+    kind: 'play',
+    key,
+    source: 'bank',
+    bus: busName,
+    volume: ap.baseVolume,
+    loop,
+    spatial,
+    followEid,
+    originEid: ap.originEid,
+    originName: ap.originName,
+    origin: ap.origin,
+    pos,
+    howlId: id,
+  });
+
   // One-shots remove themselves; loops live until stopped.
-  if (!(def.loop ?? false)) {
-    h.once('end', () => active.delete(ap), id);
+  if (!loop) {
+    h.once(
+      'end',
+      () => {
+        active.delete(ap);
+        recordAudioDebugEvent({
+          kind: 'end',
+          key: ap.key,
+          source: 'bank',
+          bus: ap.busName,
+          howlId: ap.id,
+          originEid: ap.originEid,
+          originName: ap.originName,
+          origin: ap.origin,
+        });
+      },
+      id
+    );
   }
   return makeHandle(ap);
+}
+
+/**
+ * Allow Howl construction for preloads (call from a user-gesture handler).
+ * Flushes any keys queued by {@link preloadSounds} before unlock.
+ */
+export function allowSoundPreload(): void {
+  if (soundPreloadAllowed) return;
+  soundPreloadAllowed = true;
+  if (pendingSoundPreload.size === 0) return;
+  const keys = [...pendingSoundPreload];
+  pendingSoundPreload.clear();
+  preloadSounds(keys);
+}
+
+/**
+ * Warm Howl decode/cache without playing. Prefer this over
+ * ``playSound(key, { volume: 0 })`` + stop — that polluted the profiler with
+ * fake play/stop pairs and only warmed the 2D cache (spatial defs still cold).
+ *
+ * For ``def.spatial`` keys, warms the spatial Howl (what ``playSoundAt`` uses).
+ * In the browser, defers until {@link allowSoundPreload} so Howler does not
+ * create an AudioContext before a user gesture (autoplay policy warning).
+ */
+export function preloadSounds(keys?: readonly string[]): void {
+  if (!audioEnabled) return;
+  const list = keys ?? [...bank.keys()];
+  if (!soundPreloadAllowed) {
+    for (const key of list) {
+      if (!bank.has(key)) {
+        logger.warn(`[audio] preloadSounds: unknown key "${key}"`);
+        continue;
+      }
+      pendingSoundPreload.add(key);
+    }
+    return;
+  }
+  for (const key of list) {
+    const def = bank.get(key);
+    if (!def) {
+      logger.warn(`[audio] preloadSounds: unknown key "${key}"`);
+      continue;
+    }
+    const wantSpatial = !!def.spatial;
+    const h = ensureHowl(key, def, wantSpatial);
+    if (!h) continue;
+    // Howler fetches/decodes on construction when preload:true; load() is idempotent.
+    h.load();
+    recordAudioDebugEvent({
+      kind: 'preload',
+      key,
+      source: 'bank',
+      bus: def.bus ?? 'sfx',
+      spatial: wantSpatial,
+      origin: 'boot/preload',
+      detail: wantSpatial ? 'spatial cache' : '2d cache',
+    });
+  }
 }
 
 /** Fire a 2D (non-positional) sound. Overlapping calls layer freely. */
@@ -344,9 +594,76 @@ export function pruneFollowingPlays(exists: (eid: number) => boolean): void {
     if (ap.followEid !== undefined && !exists(ap.followEid)) {
       ap.howl.stop(ap.id);
       active.delete(ap);
+      recordAudioDebugEvent({
+        kind: 'stop',
+        key: ap.key,
+        source: 'bank',
+        bus: ap.busName,
+        howlId: ap.id,
+        followEid: ap.followEid,
+        detail: 'prune missing entity',
+      });
     }
   }
 }
+
+/** Live bank plays for the profiler Audio tab. */
+export function listActiveBankPlays(): AudioDebugActivePlay[] {
+  const t = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const out: AudioDebugActivePlay[] = [];
+  for (const ap of active) {
+    out.push({
+      key: ap.key,
+      bus: ap.busName,
+      volume: ap.baseVolume,
+      loop: ap.loop,
+      spatial: ap.spatial,
+      followEid: ap.followEid,
+      originEid: ap.originEid,
+      originName: ap.originName,
+      origin: ap.origin,
+      howlId: ap.id,
+      startedAt: ap.startedAt,
+      ageMs: t - ap.startedAt,
+    });
+  }
+  return out;
+}
+
+export function listBusDebugState(): {
+  name: string;
+  volume: number;
+  muted: boolean;
+}[] {
+  return [...buses.entries()].map(([name, b]) => ({
+    name,
+    volume: b.volume,
+    muted: b.muted,
+  }));
+}
+
+/** Stop every active bank play (profiler / panic mute). */
+export function stopAllBankPlays(): void {
+  for (const ap of [...active]) {
+    ap.howl.stop(ap.id);
+    active.delete(ap);
+    recordAudioDebugEvent({
+      kind: 'stop',
+      key: ap.key,
+      source: 'bank',
+      bus: ap.busName,
+      howlId: ap.id,
+      detail: 'stopAll',
+    });
+  }
+}
+
+// Wire debug snapshot providers once (module load).
+setAudioDebugProviders({
+  listActive: listActiveBankPlays,
+  listBuses: listBusDebugState,
+  getMaster: () => masterVolume,
+});
 
 // ── Animation-pinned sounds ───────────────────────────────────────────────────
 
@@ -403,10 +720,17 @@ export function fireClipMarkers(
 
 export function _resetSoundBank(): void {
   for (const h of howls.values()) h.unload();
+  for (const h of howlsSpatial.values()) h.unload();
   bank.clear();
   howls.clear();
+  howlsSpatial.clear();
   buses.clear();
   active.clear();
   clipMarkers.clear();
+  pendingSoundPreload.clear();
+  soundPreloadAllowed =
+    typeof document === 'undefined' ||
+    typeof document.addEventListener !== 'function';
   masterVolume = 1;
+  listenerValid = false;
 }

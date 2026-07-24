@@ -17,6 +17,8 @@ import {
   registerAudioClip,
 } from './systems';
 import { NamedSfxResolverSystem } from './sfx-registry';
+import { installAudioBridge } from './bridge';
+import { armAudioDebugFromUrl } from './debug-log';
 
 function audioUrlAdapter(entity: number, value: string, _state: State): void {
   registerAudioClip(entity, value.trim());
@@ -55,6 +57,14 @@ export const AudioPlugin: Plugin = {
     audioSource: AudioSource,
     AudioListener,
     'music-layer': MusicLayerComponent,
+  },
+  initialize(state: State): void {
+    // Arm stack capture before preload/BGM so loading plays are attributed.
+    armAudioDebugFromUrl();
+    // DebugPlugin may not have created __VIBEGAME__ yet — retry from systems.
+    if (typeof window !== 'undefined' && !state.headless) {
+      installAudioBridge();
+    }
   },
   config: {
     defaults: {

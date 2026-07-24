@@ -3,6 +3,7 @@ import { defineSystem, defineQuery } from '../../core';
 import type { Adapter, Parser, Recipe, State, System } from '../../core';
 import { setMasterVolume as bank_setMasterVolume, setBusVolume } from './bank';
 import { AudioSource, MusicLayerComponent } from './components';
+import { recordAudioDebugEvent } from './debug-log';
 
 export const MUSIC_LAYER_EXPLORE = 0;
 export const MUSIC_LAYER_BATTLE = 1;
@@ -106,6 +107,15 @@ const musicLayerQuery = defineQuery([MusicLayerComponent]);
 export function playMusicLayer(state: State, layer: string | number): void {
   const mix = getAudioMix(state);
   mix.activeLayer = resolveMusicLayer(layer);
+  recordAudioDebugEvent({
+    kind: 'play',
+    key: `music-layer:${mix.activeLayer}`,
+    source: 'music',
+    bus: 'music',
+    loop: true,
+    origin: 'music',
+    detail: `playMusicLayer ${String(layer)}`,
+  });
   for (const eid of musicLayerQuery(state.world)) {
     const isActive = MusicLayerComponent.layer[eid] === mix.activeLayer;
     MusicLayerComponent.fade[eid] = isActive ? 1 : 0;
