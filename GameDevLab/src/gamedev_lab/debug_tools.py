@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from gamedev_lab.glb_import import import_glb
+
 __all__ = [
     "extract_json_from_output",
     "inspect_glb",
@@ -156,9 +158,9 @@ def inspect_glb(glb_path: str | Path) -> dict[str, Any]:
     from gamedev_shared.bpy_mesh import clear_scene
 
     path = Path(glb_path).expanduser().resolve()
-    bpy = _require_bpy()
+    _require_bpy()
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=str(path))
+    import_glb(path)
 
     data = _inspect_scene()
     _enrich_inspect_data(data, path)

@@ -14,6 +14,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from gamedev_lab.glb_import import import_glb
+
 # Camera presets: (location, look_at_target) — Y-up glTF convention.
 CAMERA_PRESETS: dict[str, tuple[tuple[float, float, float], tuple[float, float, float]]] = {
     "front": ((0, -4, 1.2), (0, 0, 0.5)),
@@ -76,7 +78,29 @@ def _setup_render(
     if scene.render.engine == "BLENDER_WORKBENCH":
         scene.display.shading.background_type = "VIEWPORT"
         scene.display.shading.light = "STUDIO"
-        scene.display.shading.color_type = "MATERIAL"
+        # TEXTURE shows the base-color map (falls back to material color
+        # when the mesh has no texture); MATERIAL ignores textures entirely.
+        scene.display.shading.color_type = "TEXTURE"
+    else:
+        _ensure_scene_lighting()
+
+
+def _ensure_scene_lighting() -> None:
+    """Give EEVEE renders light: GLB scenes usually ship no lights/world."""
+    bpy = _require_bpy()
+    scene = bpy.context.scene
+    if scene.world is None:
+        scene.world = bpy.data.worlds.new("DebugWorld")
+    scene.world.use_nodes = True
+    bg = scene.world.node_tree.nodes.get("Background")
+    if bg is not None:
+        bg.inputs[0].default_value = (0.9, 0.9, 0.9, 1.0)
+        bg.inputs[1].default_value = 1.0
+    if not any(obj.type == "LIGHT" for obj in scene.objects):
+        bpy.ops.object.light_add(type="SUN", location=(3, -3, 5))
+        sun = bpy.context.object
+        sun.data.energy = 3.0
+        sun.rotation_euler = (math.radians(45), 0, math.radians(35))
 
 
 def _add_camera(
@@ -131,11 +155,9 @@ def _auto_frame_camera(camera) -> None:
         return
 
     needed_dist = extent / (2 * math.tan(camera.data.angle / 2))
-    scale = needed_dist / dist if dist > 0 else 1.0
-    if scale > 0.3:
-        new_loc = Vector(center) - direction.normalized() * needed_dist * 1.3
-        camera.location = new_loc
-        _look_at(camera, tuple(center))
+    new_loc = Vector(center) - direction.normalized() * needed_dist * 1.3
+    camera.location = new_loc
+    _look_at(camera, tuple(center))
 
 
 def _remove_camera(camera) -> None:
@@ -215,7 +237,7 @@ def render_screenshots(
 
     bpy = _require_bpy()
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=str(glb_path))
+    import_glb(glb_path)
 
     view_names = [v.strip() for v in views.split(",") if v.strip()]
     if not view_names:
@@ -321,7 +343,7 @@ def render_weight_heatmap(
 
     bpy = _require_bpy()
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=str(glb_path))
+    import_glb(glb_path)
 
     painted_meshes: list[str] = []
     for obj in bpy.context.scene.objects:
@@ -432,7 +454,7 @@ def render_turntable(
 
     bpy = _require_bpy()
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=str(glb_path))
+    import_glb(glb_path)
 
     _show_armature_wireframe(show_bones)
     _setup_render(resolution, engine=engine, film_transparent=transparent_film)
@@ -529,7 +551,7 @@ def render_inspect_material(
 
     bpy = _require_bpy()
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=str(glb_path))
+    import_glb(glb_path)
 
     from gamedev_lab.debug_tools import _enrich_inspect_data, _inspect_scene, inspect_materials
 

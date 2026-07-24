@@ -382,3 +382,62 @@ class TestCompositeDocument:
         assert meta["primitive_count"] == 1
         assert meta["triangle_count_total"] == 2
         assert meta["world_bounds_y_min"] == pytest.approx(0.0)
+
+
+class TestQuantizedBounds:
+    """KHR_mesh_quantization: bounds dequantizados + transform do nó."""
+
+    def test_normalized_short_with_node_scale(self, tmp_path: Path) -> None:
+        # POSITION short normalizado: raw -32767 → -1.0; node scale 0.5 +
+        # translation y=1 → world y_min = 1 - 0.5 = 0.5.
+        gltf = base_gltf(
+            accessors=[
+                {
+                    "count": 3,
+                    "componentType": 5122,
+                    "normalized": True,
+                    "min": [-32767, -32767, -32767],
+                    "max": [32767, 32767, 32767],
+                }
+            ],
+            meshes=[{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            nodes=[{"mesh": 0, "scale": [0.5, 0.5, 0.5], "translation": [0.0, 1.0, 0.0]}],
+            scenes=[{"nodes": [0]}],
+            extensionsUsed=["KHR_mesh_quantization"],
+            extensionsRequired=["KHR_mesh_quantization"],
+        )
+        meta = glb_extract_meta(write_glb(tmp_path, gltf))
+        assert meta["world_bounds_y_min"] == pytest.approx(0.5)
+
+    def test_parent_child_hierarchy(self, tmp_path: Path) -> None:
+        # Pai translada y=2, filho escala 0.5: min local -1 → world 2 - 0.5 = 1.5.
+        gltf = base_gltf(
+            accessors=[{"count": 3, "min": [-1.0, -1.0, -1.0], "max": [1.0, 1.0, 1.0]}],
+            meshes=[{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            nodes=[
+                {"translation": [0.0, 2.0, 0.0], "children": [1]},
+                {"mesh": 0, "scale": [0.5, 0.5, 0.5]},
+            ],
+            scenes=[{"nodes": [0]}],
+        )
+        meta = glb_extract_meta(write_glb(tmp_path, gltf))
+        assert meta["world_bounds_y_min"] == pytest.approx(1.5)
+
+    def test_mesh_without_node_uses_identity(self, tmp_path: Path) -> None:
+        gltf = base_gltf(
+            accessors=[{"count": 3, "min": [0.0, -2.0, 0.0], "max": [1.0, 1.0, 1.0]}],
+            meshes=[{"primitives": [{"attributes": {"POSITION": 0}}]}],
+        )
+        meta = glb_extract_meta(write_glb(tmp_path, gltf))
+        assert meta["world_bounds_y_min"] == pytest.approx(-2.0)
+
+    def test_node_matrix_column_major(self, tmp_path: Path) -> None:
+        # matrix column-major com translation y=3 (últimos 4: 0,3,0,1).
+        gltf = base_gltf(
+            accessors=[{"count": 3, "min": [0.0, -1.0, 0.0], "max": [1.0, 1.0, 1.0]}],
+            meshes=[{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            nodes=[{"mesh": 0, "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 3, 0, 1]}],
+            scenes=[{"nodes": [0]}],
+        )
+        meta = glb_extract_meta(write_glb(tmp_path, gltf))
+        assert meta["world_bounds_y_min"] == pytest.approx(2.0)

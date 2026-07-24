@@ -322,6 +322,57 @@ def debug_bundle(
     sys.stdout.write(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n")
 
 
+@debug_group.command("cut-review")
+@click.argument("input_path", type=click.Path(exists=True, path_type=Path))
+@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Pasta destino.")
+@click.option(
+    "--cut-height",
+    type=float,
+    default=None,
+    help="Altura do corte em metros (default: min(0.8, h/4) a partir da base).",
+)
+@click.option("--resolution", "-r", default=512, show_default=True, type=int)
+@click.option("--engine", type=click.Choice(["workbench", "eevee"]), default="workbench", show_default=True)
+@click.option("--band", default=0.12, show_default=True, type=float, help="Meia-banda do plano (m).")
+def debug_cut_review(
+    input_path: Path,
+    output_dir: Path | None,
+    cut_height: float | None,
+    resolution: int,
+    engine: str,
+    band: float,
+) -> None:
+    """Zoom no plano de corte + métricas (boundary, loops, UV) — sem regenerar LOD."""
+    from gamedev_lab.cut_review import review_cut
+
+    if output_dir is None:
+        output_dir = input_path.parent / f"{input_path.stem}_cut_review"
+
+    try:
+        report = review_cut(
+            input_path,
+            output_dir,
+            cut_height=cut_height,
+            resolution=resolution,
+            engine=engine,
+            band=band,
+        )
+    except Exception as exc:
+        console.print(f"[red]Erro:[/red] {exc}")
+        sys.exit(1)
+
+    ok = report.get("ok", False)
+    color = "green" if ok else "yellow"
+    console.print(
+        f"[{color}]cut-review[/{color}] boundary={report.get('boundary_edges_near_cut')} "
+        f"horiz={report.get('horizontal_faces_on_cut')} uv={report.get('uv_on_cut_faces')} "
+        f"→ {output_dir}"
+    )
+    console.print(json.dumps(report, indent=2, ensure_ascii=False))
+    if not ok:
+        sys.exit(2)
+
+
 @debug_group.command("inspect")
 @click.argument("input_path", type=click.Path(exists=True, path_type=Path))
 @click.option("--output", "-o", type=click.Path(path_type=Path), default=None, help="Guardar JSON em ficheiro.")
