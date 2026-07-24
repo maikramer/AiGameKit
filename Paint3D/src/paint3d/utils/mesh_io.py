@@ -27,18 +27,30 @@ def _merge_duplicates_bmesh(obj, threshold: float = _MERGE_THRESHOLD) -> None:
 
 
 def save_glb(objects, output_path: str | Path) -> Path:
-    """Exporta mesh objects como GLB com merge de vértices, sem normals, JPEG."""
+    """Exporta mesh objects como GLB com merge, NORMAL+TANGENT, JPEG.
+
+    Normais/tangentes têm de sobreviver no ``_painted`` — o lod/finish
+    recalcular a partir de mesh flat (sem NORMAL) gera V/Tri≈3 (edges vivos).
+    ``smooth_shade_scene`` antes do export evita o import flat do input
+    (topology-fix também exporta sem NORMAL).
+    """
     if not isinstance(objects, (list, tuple)):
         objects = [objects]
 
-    for obj in objects:
-        if obj.type == "MESH" and obj.data.uv_layers:
+    mesh_objs = [obj for obj in objects if getattr(obj, "type", None) == "MESH"]
+    for obj in mesh_objs:
+        if obj.data.uv_layers:
             _merge_duplicates_bmesh(obj)
+
+    from gamedev_shared.bpy_mesh import smooth_shade_scene
+
+    smooth_shade_scene(mesh_objs)
 
     _bpy_save_glb(
         objects,
         output_path,
-        export_normals=False,
+        export_normals=True,
+        export_tangents=True,
         export_image_format="JPEG",
     )
     return output_path

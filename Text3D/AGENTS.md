@@ -32,7 +32,7 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 ## CLI COMMANDS
 
 **Generation:** `generate`, `generate-batch`
-**Pipeline:** `topology-fix`, `bake-master`
+**Pipeline:** `topology-fix`, `bake-master`, `finish` (KTX2+meshopt re-compress in-place)
 **Mesh Ops:** `lod`, `remesh`, `remesh-textured`, `collision`, `split-at-height`, `align-plus-z`
 **Utility:** `convert`, `doctor`, `info`, `gpu-processes`, `models`, `skill install`
 
@@ -60,7 +60,7 @@ Stage 5 — `collision`: Convex hull + quadric decimation for physics mesh.
 
 **LOD and rigged meshes:** `text3d lod` preserves armatures and animations. No separate LOD path exists for rigged assets. Weight transfer to LODs is handled by `rigging3d transfer-weights`.
 
-**bake-master dependencies:** KTX2 requires `npx @gltf-transform/cli`. Meshopt prefers bpy 5.2+ + system `libmeshoptimizer.so` (`libmeshoptimizer-dev`); falls back to gltf-transform. `text3d doctor` checks both. Without them, `bake-master` produces an uncompressed LOD0 and `gamedev-lab check glb` will fail `texture_format: ktx2` / `compression: meshopt` rules.
+**bake-master / finish dependencies:** KTX2/UASTC requires Node `npx @gltf-transform/cli` **and** the Khronos CLI `ktx` (KTX-Software; installer põe em `~/.local/opt/KTX-Software`). Meshopt prefers bpy 5.2+ + system `libmeshoptimizer.so` (`libmeshoptimizer-dev`); falls back to gltf-transform. `text3d doctor` checks npx, ktx e meshopt. Sem deps, finish/bake-master degradam com warning; `gamedev-lab check glb` pode falhar `texture_format: ktx2` / `compression: meshopt`. Re-comprimir assets: `text3d finish asset.glb`.
 
 ## ANTI-PATTERNS
 

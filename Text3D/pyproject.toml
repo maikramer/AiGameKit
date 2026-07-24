@@ -44,6 +44,8 @@ dependencies = [
     "gamedev-shared @ file:../Shared",
     "text2d @ file:../Text2D",
     "pymeshfix>=0.18.0",
+    # UV unwrap na rota de reconstrução de LOD texturado (remesh-textured).
+    "xatlas>=0.0.10",
 ]
 
 classifiers = [

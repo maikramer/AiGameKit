@@ -2,9 +2,10 @@
 
 Pipeline canónico aplicado a todo output ``meshes/``:
 
-1. Recalcular tangents (MikkTSpace) via bpy quando há UVs.
+1. Shade-smooth + NORMAL + tangents (MikkTSpace) via bpy quando há UVs.
 2. ``gltf-transform dedup``  — remove buffers/imagens duplicadas.
-3. ``gltf-transform prune``  — remove nós/materiais/texturas não-referenciados.
+3. ``gltf-transform prune --keep-attributes`` — limpa nós órfãos **sem**
+   apagar TANGENT/NORMAL (prune default do CLI 4.x remove TANGENT).
 4. ``gltf-transform uastc``  — comprime texturas para KTX2/UASTC (ainda via npx).
 5. Meshopt — **preferir bpy 5.2+** (``export_meshopt_compression_enable``);
    fallback ``gltf-transform meshopt`` quando bpy/runtime indisponível ou quando
@@ -16,8 +17,10 @@ não abortam (graceful degradation: GLB sai válido mesmo sem npx / sem libmesho
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import os
 import shutil
 import struct
 import subprocess
@@ -26,6 +29,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+# Locais usuais do binário ``ktx`` (KTX-Software) quando instalado via
+# text3d extras / tarball user-local — gltf-transform uastc precisa dele no PATH.
+_KTX_PATH_CANDIDATES = (
+    Path.home() / ".local" / "bin",
+    Path.home() / ".local" / "opt" / "KTX-Software" / "bin",
+)
 
 
 @dataclass
@@ -43,8 +53,27 @@ class FinishResult:
         return self.dedup_applied and self.prune_applied and self.ktx2_applied and self.meshopt_applied
 
 
+def _ensure_finish_path() -> None:
+    """Garante ~/.local/bin (+ opt/KTX-Software) no PATH do processo actual."""
+    parts = os.environ.get("PATH", "").split(os.pathsep)
+    prepend: list[str] = []
+    for cand in _KTX_PATH_CANDIDATES:
+        s = str(cand)
+        if cand.is_dir() and s not in parts and s not in prepend:
+            prepend.append(s)
+    if prepend:
+        os.environ["PATH"] = os.pathsep.join([*prepend, *parts])
+
+
 def _has_npx() -> bool:
+    _ensure_finish_path()
     return shutil.which("npx") is not None
+
+
+def _has_ktx() -> bool:
+    """True quando o CLI ``ktx`` (KTX-Software) está no PATH — requisito do uastc."""
+    _ensure_finish_path()
+    return shutil.which("ktx") is not None
 
 
 def _run_gltf_transform(
@@ -55,8 +84,16 @@ def _run_gltf_transform(
     *,
     timeout: int = 600,
 ) -> tuple[bool, str]:
+    _ensure_finish_path()
     if not _has_npx():
         return False, "npx ausente no PATH"
+    if subcmd == "uastc" and not _has_ktx():
+        return (
+            False,
+            "ktx (KTX-Software) ausente no PATH — necessário para UASTC/KTX2; "
+            "instale https://github.com/KhronosGroup/KTX-Software/releases "
+            "ou `./install.sh text3d` (extras)",
+        )
     args = ["npx", "--yes", "@gltf-transform/cli", subcmd, str(src), str(dst)]
     if extra_args:
         args.extend(extra_args)
@@ -68,6 +105,11 @@ def _run_gltf_transform(
         return False, f"gltf-transform {subcmd} timeout"
     if r.returncode != 0:
         snippet = (r.stderr or r.stdout or "")[-400:]
+        if subcmd == "uastc" and ("command -v ktx" in snippet or "ktx" in snippet.lower()):
+            return (
+                False,
+                f"gltf-transform uastc precisa do CLI `ktx` (KTX-Software) no PATH — {snippet.strip()}",
+            )
         return False, snippet
     return True, ""
 
@@ -102,23 +144,47 @@ def _glb_has_meshopt(path: Path) -> bool:
     return "EXT_meshopt_compression" in used or "KHR_meshopt_compression" in used
 
 
-def _recalc_tangents_inplace(glb_path: Path) -> bool:
-    """Re-importa o GLB no bpy, calcula tangents e re-exporta no mesmo path.
+def _glb_has_skins(path: Path) -> bool:
+    """True quando o GLB tem skinning (armature / JOINTS)."""
+    meta = _glb_json(path)
+    if not meta:
+        return False
+    return bool(meta.get("skins"))
 
-    Devolve True se tangents foram adicionados (UVs presentes), False c.c.
-    Falha graciosa em ausência de bpy.
+
+def _glb_vertex_attrs(path: Path) -> set[str]:
+    """Conjunto de attrs de vértice presentes em qualquer primitive do GLB."""
+    meta = _glb_json(path)
+    if not meta:
+        return set()
+    found: set[str] = set()
+    for mesh in meta.get("meshes") or []:
+        for prim in mesh.get("primitives") or []:
+            attrs = prim.get("attributes") or {}
+            found.update(str(k) for k in attrs)
+    return found
+
+
+def _recalc_tangents_inplace(glb_path: Path) -> bool:
+    """Garante NORMAL+TANGENT no GLB via bpy (smooth-by-angle + MikkTSpace).
+
+    Sempre aplica ``smooth_shade_scene`` antes do export — import de GLB sem
+    NORMAL fica flat e o exporter escreve V/Tri≈3 (edges vivos). Tangents só
+    quando há UVs. Devolve True se o export correu com UVs (tangents pedidos).
     """
     try:
         import bpy
 
-        from gamedev_shared.bpy_mesh import clear_scene
+        from gamedev_shared.bpy_mesh import clear_scene, smooth_shade_scene
     except ImportError:
         log.debug("gltf_finish: bpy ausente — tangents não recalculados")
         return False
 
     clear_scene()
     try:
-        bpy.ops.import_scene.gltf(filepath=str(glb_path))
+        from gamedev_shared.bpy_mesh import import_gltf
+
+        import_gltf(glb_path)
     except Exception as exc:
         log.warning("gltf_finish: import bpy falhou: %s", exc)
         return False
@@ -128,6 +194,9 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
     if not mesh_objs:
         return False
 
+    # Anti V/Tri=3: mesh flat (sem NORMAL no ficheiro) → exporter per-corner.
+    smooth_shade_scene(mesh_objs)
+
     has_uv = False
     for m in mesh_objs:
         if m.data.uv_layers:
@@ -136,9 +205,6 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
                 m.data.calc_tangents()
             except Exception as exc:
                 log.debug("calc_tangents falhou em %s: %s", m.name, exc)
-
-    if not has_uv:
-        return False
 
     bpy.ops.object.select_all(action="DESELECT")
     for o in [*mesh_objs, *arm_objs]:
@@ -151,7 +217,7 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
         "use_selection": True,
         "export_apply": False,
         "export_normals": True,
-        "export_tangents": True,
+        "export_tangents": has_uv,
         "export_texcoords": True,
         "export_materials": "EXPORT",
         "export_image_format": "AUTO",
@@ -173,7 +239,7 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
     except Exception as exc:
         log.warning("gltf_finish: export bpy falhou: %s", exc)
         return False
-    return True
+    return has_uv
 
 
 def _apply_meshopt_bpy(glb_in: Path, glb_out: Path) -> tuple[bool, str]:
@@ -203,7 +269,9 @@ def _apply_meshopt_bpy(glb_in: Path, glb_out: Path) -> tuple[bool, str]:
 
     clear_scene()
     try:
-        bpy.ops.import_scene.gltf(filepath=str(glb_in))
+        from gamedev_shared.bpy_mesh import import_gltf
+
+        import_gltf(glb_in)
     except Exception as exc:
         return False, f"import falhou: {exc}"
 
@@ -211,6 +279,14 @@ def _apply_meshopt_bpy(glb_in: Path, glb_out: Path) -> tuple[bool, str]:
     arm_objs = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
     if not mesh_objs:
         return False, "sem meshes"
+
+    from gamedev_shared.bpy_mesh import smooth_shade_scene
+
+    smooth_shade_scene(mesh_objs)
+    for m in mesh_objs:
+        if m.data.uv_layers:
+            with contextlib.suppress(Exception):
+                m.data.calc_tangents()
 
     bpy.ops.object.select_all(action="DESELECT")
     for o in [*mesh_objs, *arm_objs]:
@@ -284,16 +360,19 @@ def gltf_transform_finish(
     apply_dedup: bool = True,
     apply_prune: bool = True,
     apply_uastc: bool = True,
-    apply_meshopt: bool = False,
+    apply_meshopt: bool = True,
     uastc_level: int = 2,
     uastc_rdo: float = 1.0,
     meshopt_level: str = "high",
 ) -> FinishResult:
     """Pipeline padrão de finalização de GLB.
 
-    Ordem fixa: tangents → dedup → prune → uastc → meshopt. Cada passo é
-    opcional. Quando ``glb_in == glb_out``, escreve in-place após pipeline
-    em tempdir.
+    Ordem fixa: shade+tangents → dedup → prune(--keep-attributes) → uastc →
+    meshopt. Cada passo é opcional. Quando ``glb_in == glb_out``, escreve
+    in-place após pipeline em tempdir.
+
+    ``prune`` **tem** de usar ``--keep-attributes true`` — sem isso o
+    gltf-transform remove TANGENT (medido: goblin_lod0_animated).
 
     ``apply_meshopt`` ativa ``EXT_meshopt_compression``. Preferência:
     bpy 5.2+ nativo (quando runtime ``libmeshoptimizer`` OK e sem KTX2 no
@@ -313,15 +392,34 @@ def gltf_transform_finish(
         current = tmp / "0.glb"
         shutil.copy2(glb_in, current)
 
+        attrs_before = _glb_vertex_attrs(current)
+        had_tangent = "TANGENT" in attrs_before
+
         if apply_tangents:
+            # bpy 5.x sem KHR_texture_basisu falha o import de KTX2
+            # ("Extension KHR_texture_basisu is not available") e o passe de
+            # shade/tangents fica no-op — V/Tri≈3 e sem TANGENT. Descomprimir
+            # para PNG antes; uastc mais abaixo volta a KTX2.
+            if _glb_has_ktx2(current):
+                staged = tmp / "ktxdecompress.glb"
+                ok_d, err_d = _run_gltf_transform("ktxdecompress", current, staged)
+                if ok_d:
+                    current = staged
+                    log.info("gltf_finish: KTX2→PNG (ktxdecompress) antes de shade/tangents")
+                else:
+                    log.warning("gltf_finish: ktxdecompress falhou — %s", err_d)
+
+            # Sempre shade+export: import flat (sem NORMAL) ou V/Tri≈3 legado
+            # precisam do passe; smooth_shade_scene é idempotente em mesh boa.
             ok = _recalc_tangents_inplace(current)
-            res.tangents_added = ok
+            res.tangents_added = ok or "TANGENT" in _glb_vertex_attrs(current)
 
         steps: list[tuple[str, str, list[str] | None]] = []
         if apply_dedup:
             steps.append(("dedup", "dedup", None))
         if apply_prune:
-            steps.append(("prune", "prune", None))
+            # keep-attributes: sem isto prune apaga TANGENT (gltf-transform 4.x).
+            steps.append(("prune", "prune", ["--keep-attributes", "true"]))
         if apply_uastc:
             steps.append(("uastc", "uastc", ["--level", str(uastc_level), "--rdo", str(uastc_rdo)]))
 
@@ -349,13 +447,47 @@ def gltf_transform_finish(
             else:
                 if bpy_err:
                     log.debug("gltf_finish: meshopt bpy skip — %s", bpy_err)
-                ok, err = _run_gltf_transform("meshopt", current, staged, ["--level", meshopt_level])
-                if ok:
-                    current = staged
-                    res.meshopt_applied = True
-                    res.meshopt_backend = "gltf-transform"
+                # gltf-transform meshopt aplica KHR_mesh_quantization com volume
+                # "mesh" e recentra o bbox (ex. Y∈[-1,1]). Em GLBs skinned isso
+                # desloca a origem para o centro do personagem — pés deixam de
+                # ficar em y=0 (medido: bandit_lod0 vs bandit_lod0_animated).
+                if _glb_has_skins(current):
+                    log.warning(
+                        "gltf_finish: meshopt gltf-transform omitido (GLB skinned) — "
+                        "KHR_mesh_quantization desloca origem/pés (%s)",
+                        bpy_err or "bpy indisponível",
+                    )
                 else:
-                    log.warning("gltf_finish: passo meshopt falhou — %s", err)
+                    ok, err = _run_gltf_transform("meshopt", current, staged, ["--level", meshopt_level])
+                    if ok:
+                        current = staged
+                        res.meshopt_applied = True
+                        res.meshopt_backend = "gltf-transform"
+                    else:
+                        log.warning("gltf_finish: passo meshopt falhou — %s", err)
+
+        attrs_after = _glb_vertex_attrs(current)
+        # Restaurar se prune/meshopt (legado / flags erradas) mataram attrs.
+        # Só quando ainda não há KTX2 — roundtrip bpy após uastc re-encoda imagens.
+        need_n = apply_tangents and "NORMAL" not in attrs_after
+        need_t = (
+            apply_tangents
+            and "TANGENT" not in attrs_after
+            and (had_tangent or res.tangents_added or "TEXCOORD_0" in attrs_after)
+        )
+        if (need_n or need_t) and not _glb_has_ktx2(current):
+            log.warning(
+                "gltf_finish: attrs perdidos após transform (N=%s T=%s) — a restaurar",
+                "NORMAL" in attrs_after,
+                "TANGENT" in attrs_after,
+            )
+            if _recalc_tangents_inplace(current):
+                res.tangents_added = True
+        elif need_t and _glb_has_ktx2(current):
+            log.warning(
+                "gltf_finish: TANGENT ausente após KTX2 — não dá para restaurar sem re-encode; "
+                "verifique prune --keep-attributes"
+            )
 
         shutil.copy2(current, glb_out)
 

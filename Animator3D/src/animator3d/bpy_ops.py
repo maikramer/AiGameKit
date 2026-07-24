@@ -69,7 +69,13 @@ def import_asset(path: Path) -> list[str]:
     if suffix in {".glb", ".gltf"}:
         # bpy < 5.2: decompress meshopt via gltf-transform. 5.2+: native import.
         path = _decompress_meshopt_glb(path)
-        bpy.ops.import_scene.gltf(filepath=str(path))
+        try:
+            from gamedev_shared.bpy_mesh import import_gltf
+
+            import_gltf(path)
+        except Exception:
+            # Fallback: import directo (sem strip) se Shared indisponível.
+            bpy.ops.import_scene.gltf(filepath=str(path), bone_heuristic="TEMPERANCE")
     elif suffix == ".fbx":
         bpy.ops.import_scene.fbx(filepath=str(path))
     else:

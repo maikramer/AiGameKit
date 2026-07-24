@@ -40,6 +40,46 @@ def test_meshopt_bpy_helpers_importable() -> None:
     assert callable(_glb_has_meshopt)
 
 
+def test_finish_defaults_enable_ktx2_and_meshopt() -> None:
+    import inspect
+
+    from text3d.utils.gltf_finish import gltf_transform_finish
+
+    params = inspect.signature(gltf_transform_finish).parameters
+    assert params["apply_uastc"].default is True
+    assert params["apply_meshopt"].default is True
+
+
+def test_prune_keeps_vertex_attributes() -> None:
+    """Regression: prune sem --keep-attributes apaga TANGENT (gltf-transform 4.x)."""
+    import inspect
+
+    from text3d.utils import gltf_finish
+
+    src = inspect.getsource(gltf_finish.gltf_transform_finish)
+    assert "--keep-attributes" in src
+    assert "true" in src
+    assert "ktxdecompress" in src
+
+
+def test_meshopt_skips_gltf_transform_for_skinned() -> None:
+    """Regression: meshopt gltf-transform + quantize desloca origem em skinned."""
+    import inspect
+
+    from text3d.utils import gltf_finish
+
+    src = inspect.getsource(gltf_finish.gltf_transform_finish)
+    assert "_glb_has_skins" in src
+    assert "omitido (GLB skinned)" in src
+    assert callable(gltf_finish._glb_has_skins)
+
+
+def test_glb_vertex_attrs_helper() -> None:
+    from text3d.utils.gltf_finish import _glb_vertex_attrs
+
+    assert _glb_vertex_attrs(Path("/nonexistent/nope.glb")) == set()
+
+
 def test_finish_graceful_when_input_missing(tmp_path: Path) -> None:
     from text3d.utils.gltf_finish import gltf_transform_finish
 
@@ -50,9 +90,10 @@ def test_finish_graceful_when_input_missing(tmp_path: Path) -> None:
 
 
 def test_has_npx_helper_returns_bool() -> None:
-    from text3d.utils.gltf_finish import _has_npx
+    from text3d.utils.gltf_finish import _has_ktx, _has_npx
 
     assert isinstance(_has_npx(), bool)
+    assert isinstance(_has_ktx(), bool)
 
 
 @pytest.mark.skipif(not __import__("shutil").which("npx"), reason="npx não está disponível neste ambiente")

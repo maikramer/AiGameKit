@@ -73,7 +73,9 @@ def _load_glb_with_armatures(path: Path) -> tuple:
     path = Path(path).expanduser().resolve()
     clear_scene()
     with bpy_readable_glb(path) as import_path:
-        bpy.ops.import_scene.gltf(filepath=str(import_path))
+        from gamedev_shared.bpy_mesh import import_gltf
+
+        import_gltf(import_path)
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     if not mesh_objs:
         raise ValueError(f"No mesh objects found in {path}")
@@ -95,8 +97,18 @@ def _export_textured_glb(
 
     ``export_normals=False`` (usado após topology-fix watertight) evita que o
     exporter glTF parta vértices em arestas duras e reabra o volume no reimport.
+    Com ``export_normals=True`` aplica ``smooth_shade_scene`` antes — senão
+    import flat → V/Tri≈3 no entregável.
     """
     import bpy
+
+    from gamedev_shared.bpy_mesh import smooth_shade_scene
+
+    if export_normals:
+        smooth_shade_scene([mesh_obj])
+        if mesh_obj.data.uv_layers:
+            with contextlib.suppress(Exception):
+                mesh_obj.data.calc_tangents()
 
     export_objects = [mesh_obj, *arm_objs]
     bpy.ops.object.select_all(action="DESELECT")
@@ -107,7 +119,7 @@ def _export_textured_glb(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     has_armature = bool(arm_objs)
     if export_tangents is None:
-        export_tangents = bool(export_normals)
+        export_tangents = bool(export_normals) and bool(mesh_obj.data.uv_layers)
     bpy.ops.export_scene.gltf(
         filepath=str(output_path),
         export_format="GLB",
@@ -314,31 +326,20 @@ def _prepare_topology_bpy(
 
 
 def _decimate_to_target(mesh_obj, target_faces: int) -> int:
-    import bpy
+    """Decimate COLLAPSE até ``target_faces``.
 
-    current = len(mesh_obj.data.polygons)
-    if current <= target_faces:
-        return current
-    t = max(4, min(int(target_faces), current - 1))
-    if t >= current:
-        return current
+    Weld micro-duplicados primeiro: GLBs rigged/animated com V/Tri≈3 (verts
+    já partidos no ficheiro — ``smooth_shade`` sozinho NÃO funde) fazem o
+    Decimate colapsar triângulos isolados → LOD1/2 “moth-eaten”.
+    """
+    from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+    from gamedev_shared.mesh_simplify import simplify_mesh_object
 
-    bpy.context.view_layer.objects.active = mesh_obj
-
-    while len(mesh_obj.data.polygons) > t:
-        current = len(mesh_obj.data.polygons)
-        mod = mesh_obj.modifiers.new("Decimate", "DECIMATE")
-        mod.decimate_type = "COLLAPSE"
-        mod.ratio = max(0.01, t / current)
-        mod.use_symmetry = False
-        mod.use_collapse_triangulate = True
-        bpy.ops.object.modifier_apply(modifier=mod.name)
-        if len(mesh_obj.data.polygons) == current:
-            break
-
-    _shade_smooth(mesh_obj)
-
-    return len(mesh_obj.data.polygons)
+    # Sem pre_decimate_uv / weld pré-COLLAPSE — travam o rácio (~20k piso).
+    # Post-clean depois do Decimate stepwise.
+    stats = simplify_mesh_object(mesh_obj, target_faces, repair=False)
+    repair_mesh_object_with_profile(mesh_obj, "post_decimate")
+    return int(stats.get("faces_after", len(mesh_obj.data.polygons)))
 
 
 # ---------------------------------------------------------------------------
@@ -574,15 +575,21 @@ def _generate_lod_glb_triplet_impl(
     min_faces_lod2,
     meshfix,
 ):
+    from gamedev_shared.mesh_repair import remove_doubles
+
     mesh_obj, arm_objs = _load_glb_with_armatures(input_path)
     n = len(mesh_obj.data.polygons)
     if n < 4:
         raise ValueError(f"Mesh com poucas faces ({n}); LOD não aplicável.")
     if meshfix:
         _fill_holes_bpy(mesh_obj, sides=30)
-    # Anti V/Tri=3: inputs sem NORMAL (ou flat) re-exportavam normais per-face
-    # e lod0 herdava a explosão de vértices (decimate por nível já suavizava).
+    # Rigged/animated frequentemente chegam com verts já duplicados (V/Tri≈3).
+    # smooth_shade NÃO funde — só remove_doubles. Sem weld, Decimate rasga.
+    welded = remove_doubles(mesh_obj, threshold=0.0001)
+    if welded:
+        log.info("LOD geometry: welded %d duplicate verts (input V/Tri≈3)", welded)
     _shade_smooth(mesh_obj)
+    n = len(mesh_obj.data.polygons)
     lod0_path = output_dir / f"{basename}_lod0.glb"
     _export_glb(lod0_path, mesh_obj, arm_objs)
     out_paths: list[Path] = [lod0_path]
@@ -612,7 +619,7 @@ def generate_lod_textured_glb_triplet(
     target_faces: int | None = None,
     apply_finish: bool = True,
     finish_lod0: bool = False,
-    apply_meshopt: bool = False,
+    apply_meshopt: bool = True,
     skin_source: Path | None = None,
     animation_source: Path | None = None,
 ) -> list[Path]:
@@ -621,8 +628,8 @@ def generate_lod_textured_glb_triplet(
     Se ``target_faces`` for dado: LOD0 = target_faces, LOD1 = target/2, LOD2 = target/4.
     Caso contrário usa ``lod1_ratio`` e ``lod2_ratio`` sobre o original.
 
-    ``apply_meshopt`` controla EXT_meshopt_compression (desactivado por defeito;
-    a quantização pode deslocar origem e inverter orientação nalguns viewers).
+    ``apply_meshopt`` controla EXT_meshopt_compression (activo por defeito;
+    quantização POSITION SHORT via KHR_mesh_quantization — CLI gltf-transform 4.x).
 
     ``skin_source``: GLB rigged (weights + skeleton). Após cada LOD, rebind via
     ``gamedev_shared.skin_transfer`` (KDTree weights + armature + anims).

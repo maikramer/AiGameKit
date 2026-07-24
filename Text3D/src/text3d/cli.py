@@ -1318,6 +1318,23 @@ def doctor():
             "[yellow]não encontrado — KTX2/UASTC precisa Node.js; meshopt pode usar bpy 5.2+ nativo[/yellow]",
         )
 
+    # KTX-Software ``ktx`` — requisito real do passo uastc (além do npx).
+    try:
+        from text3d.utils.gltf_finish import _has_ktx
+
+        if _has_ktx():
+            ktx_path = _sh.which("ktx") or "?"
+            extra.add_row("ktx (KTX-Software)", f"OK ({ktx_path}) — UASTC/KTX2")
+        else:
+            extra.add_row(
+                "ktx (KTX-Software)",
+                "[yellow]ausente — UASTC/KTX2 falha sem isto; "
+                "https://github.com/KhronosGroup/KTX-Software/releases "
+                "ou reinstall text3d extras[/yellow]",
+            )
+    except Exception as exc:
+        extra.add_row("ktx (KTX-Software)", f"[yellow]erro: {exc}[/yellow]")
+
     console.print(extra)
 
     console.print(
@@ -1449,9 +1466,12 @@ def convert(input_file, output, rotate):
 )
 @click.option(
     "--meshopt/--no-meshopt",
-    default=False,
+    default=True,
     show_default=True,
-    help="Aplica EXT_meshopt_compression via @gltf-transform/cli (npx).",
+    help=(
+        "Aplica EXT_meshopt_compression (bpy 5.2+ + libmeshoptimizer preferido; "
+        "fallback @gltf-transform/cli quando input já tem KTX2)."
+    ),
 )
 @click.option(
     "--texture-size",
@@ -2152,9 +2172,9 @@ def remesh_textured_cmd(
 )
 @click.option(
     "--cap/--no-cap",
-    default=True,
+    default=False,
     show_default=True,
-    help="Fechar o corte com disco convexo + chanfro suave (bevel).",
+    help="Fechar o corte (legado/experimental — default off: só bisect).",
 )
 @click.option(
     "--bevel-offset",
@@ -2243,6 +2263,88 @@ def split_at_height_cmd(
         console.print(f"  stump → [cyan]{result.stump_path.resolve()}[/cyan]")
     if result.top_path is not None:
         console.print(f"  top   → [cyan]{result.top_path.resolve()}[/cyan]")
+
+
+@cli.command("finish")
+@click.argument("input_glb", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="GLB de saída (default: in-place sobre o input).",
+)
+@click.option("--ktx2/--no-ktx2", default=True, show_default=True, help="Comprime texturas para KTX2/UASTC.")
+@click.option(
+    "--meshopt/--no-meshopt",
+    default=True,
+    show_default=True,
+    help="Aplica EXT_meshopt_compression (bpy nativo ou gltf-transform).",
+)
+@click.option("--tangents/--no-tangents", default=True, show_default=True, help="Recalcula tangents MikkTSpace.")
+@click.option("--dedup/--no-dedup", default=True, show_default=True, help="gltf-transform dedup.")
+@click.option("--prune/--no-prune", default=True, show_default=True, help="gltf-transform prune.")
+def finish_cmd(
+    input_glb: Path,
+    output: Path | None,
+    ktx2: bool,
+    meshopt: bool,
+    tangents: bool,
+    dedup: bool,
+    prune: bool,
+) -> None:
+    """Finaliza GLB: tangents → dedup → prune → KTX2/UASTC → meshopt.
+
+    Caminho feliz para re-comprimir assets já gerados sem regenerar a pipeline.
+
+    \b
+    text3d finish hero_lod0.glb
+    text3d finish hero_lod0.glb -o hero_lod0_opt.glb --no-tangents
+    """
+    from .utils.gltf_finish import gltf_transform_finish
+
+    out = output if output is not None else input_glb
+    res = gltf_transform_finish(
+        input_glb,
+        out,
+        apply_tangents=tangents,
+        apply_dedup=dedup,
+        apply_prune=prune,
+        apply_uastc=ktx2,
+        apply_meshopt=meshopt,
+    )
+    flags = []
+    if res.tangents_added:
+        flags.append("tangents")
+    if res.dedup_applied:
+        flags.append("dedup")
+    if res.prune_applied:
+        flags.append("prune")
+    if res.ktx2_applied:
+        flags.append("ktx2")
+    if res.meshopt_applied:
+        flags.append(f"meshopt:{res.meshopt_backend or '?'}")
+    try:
+        sz = format_bytes(Path(res.output_path).stat().st_size)
+    except OSError:
+        sz = "?"
+    detail = "+".join(flags) if flags else "sem passos aplicados"
+    if res.skipped_reason:
+        console.print(f"[yellow]finish[/yellow] skipped: {res.skipped_reason}")
+        sys.exit(1)
+    console.print(
+        Rule(
+            f"[bold green]finish[/bold green] → {res.output_path} [dim]({sz}; {detail})[/dim]",
+            style="green",
+        )
+    )
+    if ktx2 and not res.ktx2_applied:
+        console.print("[yellow]aviso:[/yellow] KTX2 não aplicado — `text3d doctor` (npx @gltf-transform/cli)")
+    if meshopt and not res.meshopt_applied:
+        console.print(
+            "[yellow]aviso:[/yellow] meshopt não aplicado — "
+            "`text3d doctor` (libmeshoptimizer-dev e/ou npx @gltf-transform/cli)"
+        )
 
 
 @cli.command("collision")

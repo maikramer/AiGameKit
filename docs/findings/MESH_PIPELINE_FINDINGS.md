@@ -64,9 +64,13 @@ Cadeia tip.: sanitize NaN → weld → long_edges/slivers → debris → fill ho
 ### Compressão entregável
 
 - Meshopt: bpy 5.2+ `export_meshopt_compression_enable` (+ `libmeshoptimizer-dev`
-  Linux).
-- KTX2/UASTC: Node + `@gltf-transform/cli`.
-- Sem deps: bake-master fallback gracioso; `gamedev-lab check` pode falhar
+  Linux); default ON em `gltf_transform_finish` / bake-master / lod finish.
+- KTX2/UASTC: Node + `@gltf-transform/cli` **+** CLI `ktx` (KTX-Software).
+  Sem `ktx`, uastc falha silenciosamente (só warning) — doctor agora verifica.
+- GameAssets path rigged: `lod --no-meshopt` depois `_finish_lod_with_rollback`
+  com uastc+meshopt (rollback se perder skins/clips).
+- Re-comprimir: `text3d finish asset.glb`.
+- Sem deps: fallback gracioso; `gamedev-lab check` pode falhar
   regras `texture_format: ktx2` / `compression: meshopt`.
 - Doctor: `text3d doctor`.
 
