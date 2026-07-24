@@ -15,62 +15,21 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import shutil
-import subprocess
-import tempfile
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from gamedev_shared.gltf_decode import bpy_readable_glb, run_gltf_transform
 
 log = logging.getLogger(__name__)
 
 
 def _decompress_glb(src: Path, dst: Path) -> bool:
     """Decompress GLB via ``gltf-transform copy`` (strip EXT_meshopt)."""
-    if shutil.which("npx") is None:
-        return False
-    try:
-        r = subprocess.run(
-            ["npx", "--yes", "@gltf-transform/cli", "copy", str(src), str(dst)],
-            capture_output=True,
-            text=True,
-            timeout=300,
-            check=False,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
-        log.warning("skin_transfer decompress failed: %s", exc)
-        return False
-    if r.returncode != 0:
-        log.warning("skin_transfer decompress rc=%d: %s", r.returncode, (r.stderr or "")[-300:])
-        return False
-    return dst.is_file()
-
-
-@contextmanager
-def bpy_readable_glb(path: Path) -> Iterator[Path]:
-    """Yield a path bpy's GLTF importer can read (meshopt-aware)."""
-    src = Path(path).resolve()
-    try:
-        from gamedev_shared.bpy_mesh import gltf_import_supports_meshopt
-
-        if gltf_import_supports_meshopt():
-            yield src
-            return
-    except ImportError:
-        pass
-
-    with tempfile.NamedTemporaryFile(suffix=".glb", delete=False) as tmp:
-        tmp_path = Path(tmp.name)
-    try:
-        if _decompress_glb(src, tmp_path):
-            yield tmp_path
-        else:
-            yield src
-    finally:
-        with contextlib.suppress(OSError):
-            tmp_path.unlink(missing_ok=True)
+    ok, err = run_gltf_transform("copy", src, dst)
+    if not ok:
+        log.warning("skin_transfer decompress failed: %s", err)
+    return ok
 
 
 @dataclass
@@ -86,7 +45,12 @@ class SkinTransferResult:
 def _import_glb(path: Path) -> tuple[Any, list[Any]]:
     import bpy
 
-    bpy.ops.import_scene.gltf(filepath=str(path))
+    try:
+        from gamedev_shared.bpy_mesh import import_gltf
+
+        import_gltf(path)
+    except Exception:
+        bpy.ops.import_scene.gltf(filepath=str(path), bone_heuristic="TEMPERANCE")
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     arms = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
     if not meshes:
@@ -216,7 +180,9 @@ def _load_animations_from_glb(anim_glb: Path, dst_arm: Any, keep_objects: set[An
 
     before = {o.as_pointer() for o in bpy.context.scene.objects}
     with bpy_readable_glb(anim_glb) as anim_path:
-        bpy.ops.import_scene.gltf(filepath=str(anim_path))
+        from gamedev_shared.bpy_mesh import import_gltf
+
+        import_gltf(anim_path)
 
     new_arms = [
         o for o in bpy.context.scene.objects if o.type == "ARMATURE" and o.as_pointer() not in before and o != dst_arm
@@ -312,7 +278,9 @@ def transfer_skin_to_mesh(
     src_arm = src_arms[0]
 
     with bpy_readable_glb(target_glb) as tgt_path:
-        bpy.ops.import_scene.gltf(filepath=str(tgt_path))
+        from gamedev_shared.bpy_mesh import import_gltf
+
+        import_gltf(tgt_path)
     all_meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     tgt_candidates = [o for o in all_meshes if o is not src_mesh]
     if not tgt_candidates:

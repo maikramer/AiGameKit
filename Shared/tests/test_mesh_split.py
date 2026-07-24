@@ -121,38 +121,49 @@ class TestSplitMeshObject:
 
     def test_splits_cube_into_two(self) -> None:
         # Cubo com altura no Z do Blender (0..2), como glTF Y-up após import.
+        # Default: só corte (sem seal) — buraco no plano é esperado.
         bpy.ops.mesh.primitive_cube_add(size=2.0, location=(0, 0, 1))
         obj = bpy.context.active_object
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-        stump, top = split_mesh_object_at_height(obj, 0.6, cap=True, bevel_segments=3)
+        stump, top = split_mesh_object_at_height(obj, 0.6, cap=False)
         assert stump.name == "Stump"
         assert top.name == "Top"
         assert face_count(stump) >= 4
         assert face_count(top) >= 4
         _smin, smax = get_bounds(stump)
         tmin, tmax = get_bounds(top)
-        # Tampão + bevel alargam um pouco além do plano de corte.
-        assert smax[2] <= 0.6 + 0.35
-        assert tmin[2] >= 0.6 - 0.35
+        assert smax[2] <= 0.6 + 0.05
+        assert tmin[2] >= 0.6 - 0.05
         assert tmax[2] > smax[2]
 
-        # Cubo: corte selado (faces horizontais no plano). Voxel morph pode
-        # deixar ≤2 micro-edges residuais no canto — aceitável vs buraco aberto.
         import bmesh
 
         for half in (stump, top):
             bm = bmesh.new()
             bm.from_mesh(half.data)
             near = sum(1 for e in bm.edges if len(e.link_faces) == 1 and all(abs(v.co.z - 0.6) < 0.12 for v in e.verts))
+            bm.free()
+            # Corte aberto: cubo deixa loop de 4 arestas no plano.
+            assert near >= 4, f"{half.name} deveria ter boundary no corte (near={near})"
+
+    def test_cut_only_is_default(self) -> None:
+        """Default cap=False — não inventa faces de fecho no plano."""
+        bpy.ops.mesh.primitive_cube_add(size=2.0, location=(0, 0, 1))
+        obj = bpy.context.active_object
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        stump, top = split_mesh_object_at_height(obj, 0.6)
+        import bmesh
+
+        for half in (stump, top):
+            bm = bmesh.new()
+            bm.from_mesh(half.data)
             horiz = sum(
                 1
                 for f in bm.faces
-                if abs(f.normal.z) > 0.8 and abs(sum(v.co.z for v in f.verts) / len(f.verts) - 0.6) < 0.15
+                if abs(f.normal.z) > 0.8 and abs(sum(v.co.z for v in f.verts) / len(f.verts) - 0.6) < 0.08
             )
             bm.free()
-            assert horiz >= 1, f"{half.name} sem faces de fecho no corte"
-            # Clip à silhueta pode deixar micro-edges; buraco aberto = dezenas+.
-            assert near <= 16, f"{half.name} ainda tem {near} boundary edges no corte"
+            assert horiz == 0, f"{half.name} não deveria ter fill no corte (horiz={horiz})"
 
 
 class TestSplitGlb:

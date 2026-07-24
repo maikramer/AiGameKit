@@ -4,15 +4,8 @@ Usa ``bpy.ops.mesh.bisect`` no eixo vertical do Blender (Z-up). O export glTF
 (``export_yup``) mapeia Blender Z → glTF Y, por isso ``cut_height`` em metros
 acima da base corresponde ao Y do jogo.
 
-Fecho do corte (cascas Hunyuan abertas — fill topológico falha):
-
-1. Rasteriza intersecção malha↔plano → máscara 2D;
-2. Morph close 2D + flood-fill → **só interior** da silhueta;
-3. Tampão *plano* no Z do corte (erode 1 célula, sem paredes/bevel/morph 3D);
-4. Contém banda ao volume (apaga verts/faces fora da silhueta; strip horizontais);
-5. Tampão plano fresco + 2ª contain; shell interno; leak/slivers + reweld.
-
-Sem bevel / morph voxel 3D — esses criavam o “colar” na casca.
+Default: **só corte** (``cap=False``, ``use_fill=False``) — sem tampão, fill,
+fuse ou UV retarget. Fecho do buraco fica para depois (``--cap`` / ``cap=True``).
 
 Export multi-mesh via ``save_glb``.
 """
@@ -52,9 +45,13 @@ DEFAULT_LEAK_MIN_SPAN = 0.06  # m — bbox max-extent (folha, não blob)
 DEFAULT_LEAK_BAND_M = 0.08  # m — à volta do plano de corte
 DEFAULT_LEAK_MICRO_FACES = 16
 DEFAULT_LEAK_MICRO_VOL_FRAC = 0.001
-# Fuse banda do corte: dissolve coplanar + fundir.
+# Fuse banda do corte: dissolve coplanar + fundir (só no fallback raster).
 DEFAULT_FUSE_ANGLE_DEG = 10.0
 DEFAULT_FUSE_WELD_M = 0.014
+# Se após bisect-fill ainda há demasiadas boundary no plano → tampão grelha.
+DEFAULT_BOUNDARY_FALLBACK = 64
+# Fingerprint do algoritmo de split — resume invalida derivados se mudar.
+SEAL_VERSION = "cut-only-v1"
 
 # Blender Z-up == glTF Y-up após export.
 _UP_AXIS = 2
@@ -101,7 +98,10 @@ def _duplicate_object(obj: Any, name: str) -> Any:
 
 
 def _bisect_keep_side(obj: Any, cut_up_world: float, *, keep_below: bool) -> None:
-    """Bisect plano horizontal (Blender Z-up); ``keep_below=True`` → stump."""
+    """Bisect plano horizontal (Blender Z-up); ``keep_below=True`` → stump.
+
+    Só corta — ``use_fill=False`` (sem tampão nativo; evita artefactos).
+    """
     import bpy
     from mathutils import Vector
 
@@ -128,6 +128,17 @@ def _bisect_keep_side(obj: Any, cut_up_world: float, *, keep_below: bool) -> Non
         threshold=1e-5,
     )
     bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def _count_boundary_near_cut(obj: Any, cut_up: float, *, band: float = 0.08) -> int:
+    """Arestas de fronteira com ambos os verts na banda do plano de corte."""
+    import bmesh
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    n = sum(1 for e in bm.edges if len(e.link_faces) == 1 and all(abs(v.co.z - cut_up) <= band for v in e.verts))
+    bm.free()
+    return n
 
 
 # ---------------------------------------------------------------------------
@@ -1393,8 +1404,18 @@ def _fuse_cut_band(
     return {"flattened": flattened, "dissolved_edges": dissolved, "welded": welded}
 
 
-def _post_seal_cleanup(obj: Any, cut_up: float, *, cell: float) -> dict[str, int | float]:
-    """Limpeza pós-fecho: fuse banda → micro-ilhas → slivers → weld → re-patch."""
+def _post_seal_cleanup(
+    obj: Any,
+    cut_up: float,
+    *,
+    cell: float,
+    aggressive: bool = False,
+) -> dict[str, int | float]:
+    """Limpeza pós-fecho.
+
+    Default (``aggressive=False``): dissolve + weld curto + re-patch — preserva UV.
+    ``aggressive=True`` (fallback raster): fuse banda + leak islands.
+    """
     from gamedev_shared.mesh_repair import (
         delete_loose,
         dissolve_degenerate,
@@ -1404,95 +1425,74 @@ def _post_seal_cleanup(obj: Any, cut_up: float, *, cell: float) -> dict[str, int
 
     band = max(DEFAULT_LEAK_BAND_M, cell * 5.0)
     weld = max(DEFAULT_FUSE_WELD_M, cell * 0.9)
-    fuse = _fuse_cut_band(
-        obj,
-        cut_up,
-        band=band,
-        angle_deg=DEFAULT_FUSE_ANGLE_DEG,
-        weld_dist=weld,
-    )
+    dissolved = 0
+    flattened = 0
+    leak_thin = 0.0
+    leak_debris = 0.0
+    leak_comps = 0.0
+    welded_extra = 0
 
-    leak = _cleanup_cut_leak_geometry(
-        obj,
-        cut_up,
-        max_thickness=max(DEFAULT_LEAK_MAX_THICKNESS, cell * 1.5),
-        min_span=DEFAULT_LEAK_MIN_SPAN,
-        band=band,
-        micro_faces=8,
-        micro_vol_frac=1e-4,
-    )
+    if aggressive:
+        fuse = _fuse_cut_band(
+            obj,
+            cut_up,
+            band=band,
+            angle_deg=DEFAULT_FUSE_ANGLE_DEG,
+            weld_dist=weld,
+        )
+        dissolved += int(fuse["dissolved_edges"])
+        flattened += int(fuse["flattened"])
+        welded_extra += int(fuse["welded"])
+        leak = _cleanup_cut_leak_geometry(
+            obj,
+            cut_up,
+            max_thickness=max(DEFAULT_LEAK_MAX_THICKNESS, cell * 1.5),
+            min_span=DEFAULT_LEAK_MIN_SPAN,
+            band=band,
+            micro_faces=8,
+            micro_vol_frac=1e-4,
+        )
+        leak_thin = float(leak["thin_faces"])
+        leak_debris = float(leak["debris_faces"])
+        leak_comps = float(leak["components_dropped"])
+        fuse2 = _fuse_cut_band(obj, cut_up, band=band, angle_deg=DEFAULT_FUSE_ANGLE_DEG, weld_dist=weld)
+        dissolved += int(fuse2["dissolved_edges"])
+        flattened += int(fuse2["flattened"])
+        welded_extra += int(fuse2["welded"])
+
     slivers = remove_sliver_faces(obj, max_aspect=50.0, max_removal_ratio=0.20)
     dissolve_degenerate(obj, threshold=max(1e-6, cell * 0.08))
     delete_loose(obj)
-    # Segunda passagem fuse após apagar ilhas.
-    fuse2 = _fuse_cut_band(obj, cut_up, band=band, angle_deg=DEFAULT_FUSE_ANGLE_DEG, weld_dist=weld)
     filled = _patch_cut_plane_holes(obj, cut_up, tol=max(0.05, cell * 2.5))
     welded = remove_doubles(obj, max(1e-5, cell * 0.35))
     return {
-        "leak_thin": float(leak["thin_faces"]),
-        "leak_debris": float(leak["debris_faces"]),
-        "leak_comps": float(leak["components_dropped"]),
+        "leak_thin": leak_thin,
+        "leak_debris": leak_debris,
+        "leak_comps": leak_comps,
         "slivers": float(slivers),
-        "welded": float(welded + fuse["welded"] + fuse2["welded"]),
+        "welded": float(welded + welded_extra),
         "refilled": float(filled),
-        "dissolved_edges": float(fuse["dissolved_edges"] + fuse2["dissolved_edges"]),
-        "flattened": float(fuse["flattened"] + fuse2["flattened"]),
+        "dissolved_edges": float(dissolved),
+        "flattened": float(flattened),
     }
 
 
-def _seal_and_bevel_cut(
+def _seal_raster_cap_fallback(
     obj: Any,
     cut_up: float,
     *,
     keep_below: bool,
-    bevel_offset: float | None = None,
-    bevel_segments: int = DEFAULT_BEVEL_SEGMENTS,
-    bevel_profile: float = DEFAULT_BEVEL_PROFILE,
-    cell: float = DEFAULT_SEAL_CELL,
-    close_m: float = DEFAULT_SEAL_CLOSE_M,
-) -> tuple[Any, dict[str, int | float]]:
-    """Fecha o corte de forma seamless: tampão plano interior, sem bevel/morph 3D.
+    cell: float,
+    close_m: float,
+    stats: dict[str, int | float],
+) -> Any:
+    """Tampão grelha 2D + contain/bridge — só quando bisect-fill deixa buracos grandes."""
+    from gamedev_shared.mesh_repair import remove_doubles
 
-    Returns:
-        ``(obj_final, stats)``.
-    """
-    import bpy
-
-    from gamedev_shared.bpy_mesh import apply_smooth_by_angle
-    from gamedev_shared.mesh_repair import (
-        count_boundary_edges_fast,
-        normals_consistent,
-        remove_doubles,
-        triangulate,
-    )
-
-    stats: dict[str, int | float] = {
-        "mask_cells": 0,
-        "solid_cells": 0,
-        "uv_bark_fixed": 0,
-        "bevel_faces": 0,
-        "boundary_after": -1,
-        "device": 1.0 if _topo_device() == "cuda" else 0.0,
-        "clip_pulled": 0.0,
-        "clip_faces_deleted": 0.0,
-        "horiz_stripped": 0.0,
-        "leak_thin": 0.0,
-        "leak_debris": 0.0,
-        "slivers": 0.0,
-        "internal_shell": 0.0,
-        "dissolved_edges": 0.0,
-        "flattened": 0.0,
-        "bridge_filled": 0.0,
-        "morph_closed": 0.0,
-    }
-    _ = bevel_offset  # API estável; bevel desligado por omissão.
-
-    uv_src = _duplicate_object(obj, f"{obj.name}_uvsrc")
-    uv_src.hide_set(True)
-
-    # 0) Tirar horizontais *antes* da máscara — senão leaks incham a silhueta.
     band_pre = max(cell * DEFAULT_SEAL_BAND_CELLS, 0.05)
-    stats["horiz_stripped"] = float(_strip_horizontals_near_cut(obj, cut_up, band=band_pre))
+    stats["horiz_stripped"] = float(stats.get("horiz_stripped", 0)) + float(
+        _strip_horizontals_near_cut(obj, cut_up, band=band_pre)
+    )
 
     mask, ox, oy, cell_eff = _rasterize_cut_plane(obj, cut_up, cell=cell, max_grid=DEFAULT_SEAL_MAX_GRID)
     close_iters = max(1, round(close_m / max(cell_eff, 1e-6)))
@@ -1500,13 +1500,11 @@ def _seal_and_bevel_cut(
     stats["mask_cells"] = int(mask.sum())
     stats["solid_cells"] = int(solid.sum())
 
-    # Keep = silhueta solid (casca no rebordo). Cap = erode 1 (tampão interior).
     cap_mask = _binary_erode(solid, 1)
     if not cap_mask.any():
         cap_mask = solid
 
     band_half = cell_eff * DEFAULT_SEAL_BAND_CELLS
-    # 1) Contém ao volume da casca (apaga verts/faces fora).
     pre = _contain_cut_band_to_volume(
         obj,
         solid,
@@ -1517,13 +1515,13 @@ def _seal_and_bevel_cut(
         band_half=band_half,
         strip_horizontal=False,
     )
-    stats["clip_faces_deleted"] = float(pre["faces_deleted"] + pre["verts_deleted"])
+    stats["clip_faces_deleted"] = float(
+        float(stats.get("clip_faces_deleted", 0)) + pre["faces_deleted"] + pre["verts_deleted"]
+    )
 
-    # 1b) Fill nativo no rebordo (já ligado à casca) antes do tampão-grelha.
     _patch_cut_plane_holes(obj, cut_up, tol=max(0.05, cell_eff * 2.5))
     remove_doubles(obj, max(cell_eff * 0.35, 1e-4))
 
-    # 2) Tampão + bridge robusto cap↔casca (snap + flatten + fill + weld).
     weld_dist = max(cell_eff * 1.1, 0.016)
     cap = _mask_to_flat_cap_object(
         cap_mask,
@@ -1546,7 +1544,6 @@ def _seal_and_bevel_cut(
     stats["clip_pulled"] = float(bridge["snapped"])
     stats["bridge_filled"] = float(bridge["filled"])
 
-    # 3) Bleed: horizontais fora do cap_mask; re-tampão + bridge se mexeu.
     bleed = _contain_cut_band_to_volume(
         obj,
         cap_mask,
@@ -1558,8 +1555,8 @@ def _seal_and_bevel_cut(
         strip_horizontal=True,
         delete_outside_verts=False,
     )
-    stats["clip_faces_deleted"] += float(bleed["faces_deleted"])
-    stats["horiz_stripped"] += float(bleed["horiz_stripped"])
+    stats["clip_faces_deleted"] = float(stats["clip_faces_deleted"]) + float(bleed["faces_deleted"])
+    stats["horiz_stripped"] = float(stats["horiz_stripped"]) + float(bleed["horiz_stripped"])
     if bleed["horiz_stripped"] > 0:
         cap2 = _mask_to_flat_cap_object(
             cap_mask,
@@ -1579,10 +1576,9 @@ def _seal_and_bevel_cut(
             max_bridge_dist=max(cell_eff * 4.0, 0.05),
             weld_dist=weld_dist,
         )
-        stats["clip_pulled"] += float(bridge2["snapped"])
-        stats["bridge_filled"] += float(bridge2["filled"])
+        stats["clip_pulled"] = float(stats["clip_pulled"]) + float(bridge2["snapped"])
+        stats["bridge_filled"] = float(stats["bridge_filled"]) + float(bridge2["filled"])
 
-    # 4) Só folhas finas órfãs no corte (micro-debris desligado — partia cubos/casca).
     leak = _cleanup_cut_leak_geometry(
         obj,
         cut_up,
@@ -1597,16 +1593,100 @@ def _seal_and_bevel_cut(
     if leak["thin_faces"] > 0:
         _patch_cut_plane_holes(obj, cut_up, tol=max(0.05, cell_eff * 2.5))
         remove_doubles(obj, max(cell_eff * 0.35, 1e-4))
+    stats["seal_mode"] = 1.0  # raster fallback
+    return obj
 
-    # 4b) Morph close 3D desativado: destrói o cap+bridge (reescreve toda a
-    # topologia via voxel remesh). As fendas Hunyuan na banda são intrínsecas
-    # e não fecháveis sem destruir o fecho. O bridge+fill cobre o disco.
-    # morph_close_3d disponível via _morph_close_band se necessário no futuro.
 
+def _seal_and_bevel_cut(
+    obj: Any,
+    cut_up: float,
+    *,
+    keep_below: bool,
+    bevel_offset: float | None = None,
+    bevel_segments: int = DEFAULT_BEVEL_SEGMENTS,
+    bevel_profile: float = DEFAULT_BEVEL_PROFILE,
+    cell: float = DEFAULT_SEAL_CELL,
+    close_m: float = DEFAULT_SEAL_CLOSE_M,
+    boundary_fallback: int = DEFAULT_BOUNDARY_FALLBACK,
+) -> tuple[Any, dict[str, int | float]]:
+    """Fecha o corte: bisect-fill nativo + UV casca; raster só se boundary alto.
+
+    Returns:
+        ``(obj_final, stats)``.
+    """
+    import bpy
+
+    from gamedev_shared.bpy_mesh import apply_smooth_by_angle
+    from gamedev_shared.mesh_repair import (
+        count_boundary_edges_fast,
+        delete_loose,
+        dissolve_degenerate,
+        normals_consistent,
+        remove_doubles,
+        triangulate,
+    )
+
+    stats: dict[str, int | float] = {
+        "mask_cells": 0,
+        "solid_cells": 0,
+        "uv_bark_fixed": 0,
+        "bevel_faces": 0,
+        "boundary_after": -1,
+        "boundary_near_cut": -1,
+        "device": 1.0 if _topo_device() == "cuda" else 0.0,
+        "clip_pulled": 0.0,
+        "clip_faces_deleted": 0.0,
+        "horiz_stripped": 0.0,
+        "leak_thin": 0.0,
+        "leak_debris": 0.0,
+        "slivers": 0.0,
+        "internal_shell": 0.0,
+        "dissolved_edges": 0.0,
+        "flattened": 0.0,
+        "bridge_filled": 0.0,
+        "morph_closed": 0.0,
+        "seal_mode": 0.0,  # 0=bisect-fill, 1=raster fallback
+        "holes_patched": 0.0,
+    }
+    _ = bevel_offset  # API estável; bevel desligado por omissão.
+
+    # Snapshot UV antes de qualquer limpeza pós-bisect.
+    uv_src = _duplicate_object(obj, f"{obj.name}_uvsrc")
+    uv_src.hide_set(True)
+
+    cell_eff = float(cell)
+    # 1) Pós-bisect leve no rebordo (não fuse agressivo — destrói UV).
+    dissolve_degenerate(obj, threshold=max(1e-6, cell_eff * 0.08))
+    remove_doubles(obj, max(1e-5, cell_eff * 0.25))
+    delete_loose(obj)
+    stats["holes_patched"] = float(_patch_cut_plane_holes(obj, cut_up, tol=max(0.05, cell_eff * 2.5)))
+    remove_doubles(obj, max(1e-5, cell_eff * 0.25))
+
+    near = _count_boundary_near_cut(obj, cut_up, band=max(0.08, cell_eff * 4.0))
+    stats["boundary_near_cut"] = float(near)
+
+    # 2) Fallback raster só se o fill nativo deixou buracos grandes.
+    if near > int(boundary_fallback):
+        log.warning(
+            "seal_cut %s: boundary_near_cut=%d > %d — fallback raster-cap",
+            obj.name,
+            near,
+            boundary_fallback,
+        )
+        obj = _seal_raster_cap_fallback(
+            obj,
+            cut_up,
+            keep_below=keep_below,
+            cell=cell,
+            close_m=close_m,
+            stats=stats,
+        )
+        cell_eff = float(cell)  # raster may refine; keep nominal for UV tol
+
+    # 3) UV: transfer + faces do fill → casca vertical.
     _transfer_uvs_and_materials(uv_src, obj)
     stats["uv_bark_fixed"] = _retarget_cut_face_uvs_to_bark(obj, uv_src, cut_up, tol=max(0.04, cell_eff * 2.0))
 
-    # Bevel opcional (default 0).
     if int(bevel_segments) > 0:
         radius = 0.5 * max(float(obj.dimensions.x), float(obj.dimensions.y), cell_eff * 4.0)
         off = bevel_offset
@@ -1622,7 +1702,8 @@ def _seal_and_bevel_cut(
             tol=max(0.04, cell_eff * 2.0),
         )
 
-    post = _post_seal_cleanup(obj, cut_up, cell=cell_eff)
+    aggressive = float(stats.get("seal_mode", 0)) >= 1.0
+    post = _post_seal_cleanup(obj, cut_up, cell=cell_eff, aggressive=aggressive)
     stats["leak_thin"] = float(stats["leak_thin"]) + float(post["leak_thin"])
     stats["leak_debris"] = float(stats["leak_debris"]) + float(post["leak_debris"])
     stats["slivers"] = post["slivers"]
@@ -1633,6 +1714,7 @@ def _seal_and_bevel_cut(
     normals_consistent(obj, inside=False)
     apply_smooth_by_angle(obj, 60.0)
     stats["boundary_after"] = count_boundary_edges_fast(obj)
+    stats["boundary_near_cut"] = float(_count_boundary_near_cut(obj, cut_up, band=max(0.08, cell_eff * 4.0)))
 
     bpy.ops.object.select_all(action="DESELECT")
     uv_src.hide_set(False)
@@ -1640,19 +1722,15 @@ def _seal_and_bevel_cut(
     bpy.ops.object.delete()
 
     log.info(
-        "seal_cut %s: mask=%d solid=%d contain_del=%d horiz_strip=%d "
-        "snap=%d bridge_fill=%d fuse_diss=%d flat=%d leak_thin=%d uv_bark=%d slivers=%d boundary=%d",
+        "seal_cut %s: mode=%s holes=%d near_cut=%d uv_bark=%d mask=%d solid=%d leak_thin=%d slivers=%d boundary=%d",
         obj.name,
+        "raster" if aggressive else "bisect-fill",
+        int(stats["holes_patched"]),
+        int(stats["boundary_near_cut"]),
+        stats["uv_bark_fixed"],
         stats["mask_cells"],
         stats["solid_cells"],
-        int(stats["clip_faces_deleted"]),
-        int(stats["horiz_stripped"]),
-        int(stats["clip_pulled"]),
-        int(stats.get("bridge_filled", 0)),
-        int(stats.get("dissolved_edges", 0)),
-        int(stats.get("flattened", 0)),
         int(stats["leak_thin"]),
-        stats["uv_bark_fixed"],
         int(stats["slivers"]),
         stats["boundary_after"],
     )
@@ -1663,7 +1741,7 @@ def split_mesh_object_at_height(
     obj: Any,
     cut_y_world: float,
     *,
-    cap: bool = True,
+    cap: bool = False,
     bevel_offset: float | None = None,
     bevel_segments: int = DEFAULT_BEVEL_SEGMENTS,
     bevel_profile: float = DEFAULT_BEVEL_PROFILE,
@@ -1673,7 +1751,8 @@ def split_mesh_object_at_height(
     """Parte *obj* num plano horizontal à altura ``cut_y_world`` (Blender Z).
 
     Em bpy o up é Z; após ``save_glb`` isso vira Y no glTF/jogo.
-    Com ``cap=True`` fecha stump e top com fecho voxel + chanfro suave.
+    Default ``cap=False``: só bisect (buraco aberto no corte).
+    ``cap=True`` activa o fecho legado (experimental — pode criar artefactos).
 
     Returns:
         ``(stump, top)`` — dois objectos bpy novos; o original é removido.
@@ -1789,7 +1868,7 @@ def split_glb_at_height(
     *,
     cut_height: float | None = None,
     cut_ratio: float | None = None,
-    cap: bool = True,
+    cap: bool = False,
     bevel_offset: float | None = None,
     bevel_segments: int = DEFAULT_BEVEL_SEGMENTS,
     bevel_profile: float = DEFAULT_BEVEL_PROFILE,
@@ -1804,10 +1883,10 @@ def split_glb_at_height(
         path_out: GLB multi-mesh de saída.
         cut_height: Metros acima da base (pés). Default ``min(0.8, altura/4)``.
         cut_ratio: Fracção da altura AABB (alternativa a ``cut_height``).
-        cap: Fechar corte com fecho voxel (silhueta 2D + remesh) + chanfro.
-        bevel_offset: Largura do chanfro (metros); None = auto.
-        bevel_segments: Segmentos do bevel (suavidade do chanfro).
-        bevel_profile: Profile do bevel (0.5=recto, ~0.65=arredondado).
+        cap: Se True, tenta fechar o corte (legado/experimental). Default False.
+        bevel_offset: Largura do chanfro (metros); None = auto. Só com ``cap``.
+        bevel_segments: Segmentos do bevel. Só com ``cap``.
+        bevel_profile: Profile do bevel. Só com ``cap``.
         stump_name / top_name: Nomes dos objectos exportados.
         split_files: Se True, também escreve ``{stem}_stump.glb`` e ``{stem}_top.glb``.
 

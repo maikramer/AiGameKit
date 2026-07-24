@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import contextlib
+import platform
+import shutil
+import tarfile
+import tempfile
+import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from clified.installer.python_installer import PythonProjectInstaller
+
+# KTX-Software — CLI ``ktx`` exigido por ``gltf-transform uastc`` (KTX2).
+_KTX_VERSION = "4.4.2"
+_KTX_RELEASE_BASE = f"https://github.com/KhronosGroup/KTX-Software/releases/download/v{_KTX_VERSION}"
 
 
 class Text3DPostInstall:
@@ -23,11 +33,67 @@ class Text3DPostInstall:
 
     def run(self) -> None:
         self.setup_models()
+        self.ensure_ktx_software()
         self.create_text3d_wrappers()
         self.setup_directories()
         if not self.skip_env_config:
             self.write_env_file()
         self._show_text3d_summary()
+
+    def ensure_ktx_software(self) -> None:
+        """Instala KTX-Software user-local se ``ktx`` não estiver no PATH (Linux)."""
+        log = self._i.logger
+        if shutil.which("ktx"):
+            log.info(f"ktx já no PATH: {shutil.which('ktx')}")
+            return
+        if self._i.is_windows:
+            log.info("KTX-Software: instale manualmente em Windows (gltf-transform uastc precisa de `ktx`).")
+            return
+
+        machine = platform.machine().lower()
+        if machine in ("x86_64", "amd64"):
+            arch = "x86_64"
+        elif machine in ("aarch64", "arm64"):
+            arch = "arm64"
+        else:
+            log.info(f"KTX-Software: arch {machine} sem tarball pré-built — instale manualmente.")
+            return
+
+        dest = Path.home() / ".local" / "opt" / "KTX-Software"
+        bin_dir = Path.home() / ".local" / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        existing = dest / "bin" / "ktx"
+        if existing.is_file():
+            link = bin_dir / "ktx"
+            if not link.exists():
+                with contextlib.suppress(OSError):
+                    link.symlink_to(existing)
+            log.info(f"ktx já instalado em {existing}")
+            return
+
+        url = f"{_KTX_RELEASE_BASE}/KTX-Software-{_KTX_VERSION}-Linux-{arch}.tar.bz2"
+        log.step(f"A instalar KTX-Software {_KTX_VERSION} ({arch})…")
+        try:
+            with tempfile.TemporaryDirectory(prefix="ktx_install_") as tdir:
+                tarball = Path(tdir) / "ktx.tar.bz2"
+                urllib.request.urlretrieve(url, tarball)
+                with tarfile.open(tarball, "r:bz2") as tf:
+                    tf.extractall(tdir, filter="data")
+                extracted = next(Path(tdir).glob("KTX-Software-*"), None)
+                if extracted is None or not (extracted / "bin" / "ktx").is_file():
+                    log.info("KTX-Software: layout inesperado no tarball — skip")
+                    return
+                if dest.exists():
+                    shutil.rmtree(dest)
+                shutil.move(str(extracted), str(dest))
+            ktx_bin = dest / "bin" / "ktx"
+            link = bin_dir / "ktx"
+            if link.is_symlink() or link.exists():
+                link.unlink()
+            link.symlink_to(ktx_bin)
+            log.success(f"ktx → {link} ({ktx_bin})")
+        except Exception as exc:
+            log.info(f"KTX-Software: falha na instalação automática ({exc}); KTX2 ficará offline até instalar `ktx`.")
 
     def setup_models(self) -> None:
         log = self._i.logger
@@ -79,6 +145,8 @@ class Text3DPostInstall:
                 "# Text3D — gerado pelo instalador GameDev\n"
                 "# source ~/.config/text3d/env.sh\n"
                 'export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"\n'
+                "# KTX-Software (gltf-transform uastc → KTX2)\n"
+                'export PATH="$HOME/.local/bin:$HOME/.local/opt/KTX-Software/bin:$PATH"\n'
                 "\n"
                 "# Descomenta se precisares de CUDA_HOME explícito (PyTorch / drivers):\n"
                 "# export CUDA_HOME=/usr/local/cuda-11.8\n"

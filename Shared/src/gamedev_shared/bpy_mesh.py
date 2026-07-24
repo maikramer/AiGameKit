@@ -93,17 +93,76 @@ def gltf_meshopt_export_kwargs(
     }
 
 
+def strip_bone_display_meshes() -> int:
+    """Remove bone viewport display meshes (``Icosphere``, etc.) from the scene.
+
+    ``import_scene.gltf`` with default ``bone_heuristic=BLENDER`` materializes
+    bone custom shapes as real mesh objects. Re-export then embeds them in the
+    GLB; world bounds expand to the helper (often a unit icosphere at origin)
+    and the character looks like its pivot sits far below the feet.
+
+    Returns:
+        Number of mesh objects removed.
+    """
+    bpy = _require_bpy()
+    for arm in bpy.context.scene.objects:
+        if arm.type != "ARMATURE":
+            continue
+        for bone in arm.pose.bones:
+            if getattr(bone, "custom_shape", None) is not None:
+                bone.custom_shape = None
+
+    helpers: list[Any] = []
+    for obj in bpy.context.scene.objects:
+        if obj.type != "MESH":
+            continue
+        name = obj.name.lower()
+        if name.startswith("icosphere") or name.startswith("bone_display"):
+            helpers.append(obj)
+            continue
+        # Tiny unskinned orphan mesh, no materials — typical leftover display.
+        if (
+            obj.parent is None
+            and len(obj.data.vertices) <= 64
+            and not obj.data.materials
+            and not any(m.type == "ARMATURE" for m in obj.modifiers)
+        ):
+            helpers.append(obj)
+
+    for obj in helpers:
+        with contextlib.suppress(Exception):
+            bpy.data.objects.remove(obj, do_unlink=True)
+    return len(helpers)
+
+
+def import_gltf(path: str | Path, *, bone_heuristic: str = "TEMPERANCE", **kwargs: Any) -> list:
+    """Import GLB/GLTF with round-trip-safe bone heuristic and strip helpers.
+
+    ``TEMPERANCE`` avoids creating bone display meshes on import (BLENDER
+    default would spawn ``Icosphere`` custom shapes). Also strips any display
+    meshes already baked into the file.
+    """
+    bpy = _require_bpy()
+    path = Path(path).expanduser().resolve()
+    import_kw: dict[str, Any] = {"filepath": str(path), "bone_heuristic": bone_heuristic, **kwargs}
+    # Older bpy may not expose bone_heuristic — retry without it.
+    try:
+        bpy.ops.import_scene.gltf(**import_kw)
+    except TypeError:
+        import_kw.pop("bone_heuristic", None)
+        bpy.ops.import_scene.gltf(**import_kw)
+    strip_bone_display_meshes()
+    return [o for o in bpy.context.scene.objects if o.type == "MESH"]
+
+
 def load_glb(path: str | Path) -> list:
     """Import GLB/GLTF via bpy, return all imported mesh objects.
 
     Clears scene before import to avoid object pollution.
     Preserves transforms, armatures, shape keys, materials.
     """
-    bpy = _require_bpy()
-    path = Path(path).expanduser().resolve()
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=str(path))
-    return [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    return import_gltf(path)
 
 
 def apply_smooth_by_angle(obj: Any, degrees: float = 60.0) -> None:
@@ -142,23 +201,33 @@ def apply_smooth_by_angle(obj: Any, degrees: float = 60.0) -> None:
 
 
 def smooth_shade_scene(objects: Any, degrees: float = 60.0) -> None:
-    """Smooth-shade every mesh object, clearing imported flat/custom-split normals.
+    """Smooth-shade + weld coincidentes antes de re-export glTF.
 
-    GLBs sem ``NORMAL`` (ex.: saída do topology-fix, que exporta com
-    ``export_normals=False``) importam no bpy com todas as faces **flat**. Um
-    re-export glTF ingénuo escreve então normais por canto de face e parte
-    todos os vértices (V/Tri ≈ 3 — ficheiros 3-4x maiores: bandit_lod0 15M,
-    boss_ogre_lod0 33M). Forçar smooth-by-angle faz o exporter deduplicar
-    loops de volta a vértices partilhados (V/Tri ≈ 0.65).
+    Dois modos de V/Tri≈3:
+    1. Import flat (sem NORMAL) → exporter parte loops. ``shade_smooth`` basta.
+    2. Vértices **já duplicados** no mesh (rigged/animated SkinTokens, etc.) →
+       ``shade_smooth`` sozinho NÃO funde; Decimate COLLAPSE rasga o LOD
+       (triângulos isolados / moth-eaten). Weld ``1e-4`` fecha duplicados
+       exactos sem comer costuras UV úteis.
 
-    Idempotente e seguro em background mode. Aplicar antes de qualquer
-    ``bpy.ops.export_scene.gltf`` que re-exporte meshes importados de GLBs da
+    Idempotente. Aplicar antes de qualquer ``bpy.ops.export_scene.gltf`` da
     pipeline (skin_transfer, rigging3d bone_repair, animator3d game-pack).
     """
+    import bmesh
+
     for obj in objects:
         if getattr(obj, "type", None) != "MESH":
             continue
         mesh = obj.data
+        # Weld antes do shade: verts já partidos no ficheiro.
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+        before = len(bm.verts)
+        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+        if len(bm.verts) < before:
+            bm.to_mesh(mesh)
+            mesh.update()
+        bm.free()
         with contextlib.suppress(Exception):
             # Larga custom split normals herdadas do import (bpy < 4.1 API;
             # em 5.x o atributo é recriado pelo shade_smooth_by_angle).
@@ -198,15 +267,17 @@ def save_glb(objects: Any, path: str | Path, **kwargs: Any) -> None:
       where they will be recomputed downstream).
     - ``export_tangents=True``: MikkTSpace tangents are written so tangent-space
       normal maps render without seams across UV islands (and stay correct when
-      a skinned mesh deforms). Automatically disabled when ``export_normals`` is
-      off, since tangents without normals are meaningless.
+      a skinned mesh deforms). When the caller does **not** pass
+      ``export_tangents`` explicitly, auto-disabled unless a NORMAL_MAP node is
+      present (avoids UV-seam splits on plain geometry). Explicit
+      ``export_tangents=True|False`` is always respected. Forced off when
+      ``export_normals`` is off.
     - ``export_all_influences=False``: skin weights limited to the 4 most
       influential joints per vertex (GLTF standard); avoids extra
       ``JOINTS_n/WEIGHTS_n`` attribute sets.
 
     Any keyword passed via ``**kwargs`` overrides the corresponding default and
-    is forwarded to ``bpy.ops.export_scene.gltf``. This is what callers like
-    Paint3D rely on to enforce JPEG / no-normals on their stage outputs.
+    is forwarded to ``bpy.ops.export_scene.gltf``.
     """
     import contextlib
     import io
@@ -258,6 +329,7 @@ def save_glb(objects: Any, path: str | Path, **kwargs: Any) -> None:
     meshopt = bool(kwargs.pop("meshopt", False))
     meshopt_ext = str(kwargs.pop("meshopt_extension", "EXT_meshopt_compression"))
     user_set_apply = "export_apply" in kwargs
+    user_set_tangents = "export_tangents" in kwargs
     export_kwargs.update(kwargs)
     if meshopt:
         export_kwargs.update(gltf_meshopt_export_kwargs(enable=True, extension=meshopt_ext))
@@ -265,15 +337,13 @@ def save_glb(objects: Any, path: str | Path, **kwargs: Any) -> None:
     if has_armature and not user_set_apply:
         export_kwargs["export_apply"] = False
 
-    # Tangents are only needed to render a tangent-space *normal map*, and
-    # exporting them splits vertices at UV seams. So enable them only when a
-    # mesh actually has both UVs and a normal-map material — otherwise plain
-    # geometry would be needlessly inflated (e.g. a cube 8→24 verts).
-    if export_kwargs.get("export_tangents") and export_kwargs.get("export_normals", True):
+    # Tangents: explicit kwargs win. Otherwise auto — only when a NORMAL_MAP
+    # material exists (UV-seam splits are otherwise pure cost).
+    if not export_kwargs.get("export_normals", True):
+        export_kwargs["export_tangents"] = False
+    elif not user_set_tangents and export_kwargs.get("export_tangents"):
         candidates = objects if objects else bpy.context.scene.objects
         export_kwargs["export_tangents"] = _needs_tangents(candidates)
-    else:
-        export_kwargs["export_tangents"] = False
 
     # Suppress bpy stdout spam
     stdout = io.StringIO()
