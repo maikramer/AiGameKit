@@ -17,9 +17,11 @@ class TestImportGlb:
         decoded = tmp_path / "decoded.glb"
         decoded.write_bytes(b"decoded")
 
+        seen: list[Path] = []
+
         @contextmanager
         def fake_readable(path):
-            assert Path(path) == src
+            seen.append(Path(path))
             yield decoded
 
         fake_bpy = MagicMock()
@@ -29,7 +31,9 @@ class TestImportGlb:
         ):
             import_glb(src)
 
-        fake_bpy.ops.import_scene.gltf.assert_called_once_with(filepath=str(decoded))
+        # Decode acontece uma única vez, no ``import_gltf`` do Shared.
+        assert seen == [src.resolve()]
+        fake_bpy.ops.import_scene.gltf.assert_called_once_with(filepath=str(decoded), bone_heuristic="TEMPERANCE")
 
     def test_renderer_and_debug_tools_use_import_glb(self):
         """Regression guard: no direct import_scene.gltf calls left in tool modules."""

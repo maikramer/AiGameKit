@@ -63,6 +63,8 @@ Rule files support vertex/face limits, `world_bounds`, required bones, and more.
 
 All rendering commands use **native bpy** (no `animator3d` subprocess). Install bpy with `pip install bpy` (Python 3.13+, Blender 5.2 LTS).
 
+GLBs with `KHR_texture_basisu` (KTX2) or `EXT_meshopt_compression` — i.e. pipeline deliverables after `--finish-lod0`/bake-master — are decoded automatically before import via `gamedev_shared.gltf_decode` (needs Node.js/`npx` for `@gltf-transform/cli`; without it the importer's own error surfaces).
+
 #### `debug screenshot GLB`
 
 Generate multi-angle screenshots using the native bpy renderer.
@@ -83,6 +85,30 @@ gamedev-lab debug screenshot modelo.glb -o ./frames --frame-list 1,36,72
 | `--engine` | str | `workbench` | Render engine: `workbench` or `eevee` |
 | `--ortho` | flag | false | Orthographic camera |
 | `--no-transparent-film` | flag | false | Opaque background |
+
+#### `debug cut-review GLB`
+
+Zoom cameras on the horizontal cut band (tree stump/top after `text3d split-at-height`)
+plus JSON metrics — without regenerating the full LOD ladder.
+
+```bash
+gamedev-lab debug cut-review stump.glb -o ./cut_review --cut-height 0.8
+text3d split-at-height painted.glb -o /tmp/split.glb --split-files --no-cap
+gamedev-lab debug cut-review /tmp/split_stump.glb -o /tmp/cut/
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output-dir` | path | `{stem}_cut_review` | PNGs + `cut_review.json` |
+| `--cut-height` | float | auto `min(0.8,h/4)` from base | Cut plane height (m) |
+| `-r, --resolution` | int | `512` | Render resolution |
+| `--engine` | str | `workbench` | `workbench` or `eevee` |
+| `--band` | float | `0.12` | Half-band around cut for metrics (m) |
+
+JSON fields: `boundary_edges_near_cut`, `open_loops_near_cut`,
+`horizontal_faces_on_cut`, `uv_on_cut_faces`, `ok`. Weld-before-measure avoids
+false boundary from glTF UV/normal vertex splits. Exit `2` if `ok` is false.
+Pipeline notes: [`docs/findings/MESH_PIPELINE_FINDINGS.md`](../docs/findings/MESH_PIPELINE_FINDINGS.md).
 
 #### `debug bundle GLB`
 
@@ -172,6 +198,41 @@ gamedev-lab debug turntable modelo.glb --engine eevee --show-bones
 | `--no-transparent-film` | flag | false | Opaque background |
 | `--show-bones` | flag | false | Show armature wireframe |
 | `--duration` | int | `120` | Per-frame duration in GIF (ms) |
+
+#### `debug viz GLB --mode MODE`
+
+Mesh-debug visualizations (native bpy render). Each mode writes per-view PNGs
+with an embedded legend/colorbar plus `viz_report.json` with mode metrics.
+
+```bash
+gamedev-lab debug viz modelo.glb -m normals              # normal → RGB color scale
+gamedev-lab debug viz modelo.glb -m normals-arrows       # sampled arrows along vertex normals
+gamedev-lab debug viz modelo.glb -m orientation          # backfaces red / front faces blue (EEVEE)
+gamedev-lab debug viz modelo.glb -m uv                   # UV_GRID checker (distortion/seams)
+gamedev-lab debug viz modelo.glb -m edges --wireframe    # boundary red / non-manifold orange
+gamedev-lab debug viz rigged.glb -m weights              # dominant bone per vertex + legend
+gamedev-lab debug viz rigged.glb -m weights --weights-view count       # influences per vertex
+gamedev-lab debug viz rigged.glb -m weights --weights-view unweighted  # weightless verts magenta
+gamedev-lab debug viz rigged.glb -m weights --weights-view bone --bone Head  # single-bone heatmap + colorbar
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-m, --mode` | choice | required | `normals` \| `normals-arrows` \| `orientation` \| `uv` \| `edges` \| `weights` |
+| `-o, --output-dir` | path | `{stem}_viz/{mode}` | Output directory |
+| `--views` | str | `front,three_quarter,right,back` | Comma-separated views |
+| `-r, --resolution` | int | `512` | Render resolution |
+| `--engine` | str | `workbench` | Render engine (`orientation` forces eevee) |
+| `--sample` | int | `2000` | Max arrows (normals-arrows) |
+| `--arrow-length` | float | 3% bbox | Arrow length in meters |
+| `--bone` | str | None | Bone name for single-bone heatmap (weights) |
+| `--weights-view` | choice | `dominant` | `dominant` \| `count` \| `unweighted` \| `bone` |
+| `--wireframe` | flag | false | Black wireframe overlay on any mode |
+| `--world-space` | flag | false | World-space normals (normals mode) |
+
+Notes: KTX2/meshopt GLBs are decoded automatically before import. `edges` and
+the `orientation` flipped-face estimate weld glTF seam-splits first, so only
+real holes/inversions are reported. Arrows sample the armature-posed mesh.
 
 #### `debug compare A B`
 

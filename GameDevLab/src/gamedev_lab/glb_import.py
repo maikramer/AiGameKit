@@ -20,7 +20,7 @@ def import_glb(glb_path: str | Path) -> None:
     not a unit helper at the origin.
     """
     from gamedev_shared.bpy_mesh import import_gltf
-    from gamedev_shared.gltf_decode import bpy_readable_glb
 
-    with bpy_readable_glb(glb_path) as readable:
-        import_gltf(readable)
+    # O decode KTX2/meshopt vive no ``import_gltf`` (Shared) — decodificar aqui
+    # também duplicaria a passagem pelo ``@gltf-transform/cli``.
+    import_gltf(glb_path)

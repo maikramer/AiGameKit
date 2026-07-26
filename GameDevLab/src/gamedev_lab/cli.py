@@ -449,6 +449,98 @@ def debug_inspect_rig(
     sys.stdout.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
 
 
+@debug_group.command("viz")
+@click.argument("input_path", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--mode",
+    "-m",
+    type=click.Choice(["normals", "normals-arrows", "orientation", "uv", "edges", "weights"]),
+    required=True,
+    help="Visualização: normais em cor, setas de normais, orientação de faces, UV checker, edges, skin weights.",
+)
+@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Pasta destino.")
+@click.option("--views", default="front,three_quarter,right,back", show_default=True)
+@click.option("--resolution", "-r", default=512, show_default=True, type=int)
+@click.option(
+    "--engine",
+    type=click.Choice(["workbench", "eevee"]),
+    default="workbench",
+    show_default=True,
+    help="Engine (modo orientation força eevee).",
+)
+@click.option("--ortho", is_flag=True)
+@click.option("--no-transparent-film", "no_transparent_film", is_flag=True)
+@click.option("--sample", default=2000, show_default=True, type=int, help="Máx. setas (normals-arrows).")
+@click.option("--arrow-length", default=None, type=float, help="Comprimento das setas em metros (default 3% bbox).")
+@click.option("--bone", default=None, type=str, help="Heatmap de um osso (modo weights).")
+@click.option(
+    "--weights-view",
+    type=click.Choice(["dominant", "count", "unweighted", "bone"]),
+    default="dominant",
+    show_default=True,
+    help="Sub-vista do modo weights.",
+)
+@click.option("--wireframe", is_flag=True, help="Overlay wireframe preto sobre o shading do modo.")
+@click.option("--world-space", "world_space", is_flag=True, help="Normais em world space (modo normals).")
+def debug_viz(
+    input_path: Path,
+    mode: str,
+    output_dir: Path | None,
+    views: str,
+    resolution: int,
+    engine: str,
+    ortho: bool,
+    no_transparent_film: bool,
+    sample: int,
+    arrow_length: float | None,
+    bone: str | None,
+    weights_view: str,
+    wireframe: bool,
+    world_space: bool,
+) -> None:
+    """Visualizações de debug de mesh (native bpy render).
+
+    Modos: normals (escala de cor), normals-arrows (setas), orientation
+    (backfaces a vermelho), uv (checker), edges (boundary/non-manifold),
+    weights (dominant/count/unweighted/bone).
+    """
+    from gamedev_lab.viz import render_viz
+
+    if output_dir is None:
+        output_dir = input_path.parent / f"{input_path.stem}_viz" / mode
+
+    try:
+        report = render_viz(
+            input_path,
+            output_dir,
+            mode,
+            views=views,
+            resolution=resolution,
+            engine=engine,
+            ortho=ortho,
+            transparent_film=not no_transparent_film,
+            sample=sample,
+            arrow_length=arrow_length,
+            bone=bone,
+            weights_view=weights_view,
+            wireframe=wireframe,
+            world_space=world_space,
+        )
+    except ImportError as exc:
+        console.print(f"[red]bpy não disponível:[/red] {exc}")
+        console.print("[dim]Instala com: pip install bpy[/dim]")
+        sys.exit(1)
+    except Exception as exc:
+        console.print(f"[red]Erro:[/red] {exc}")
+        sys.exit(1)
+
+    n = len(report.get("screenshots", []) or report.get("weight_heatmap", {}).get("screenshots", []))
+    console.print(f"[green]viz {mode}:[/green] {output_dir} ({n} vistas)")
+    metrics = report.get("metrics")
+    if metrics:
+        console.print(json.dumps(metrics, indent=2, ensure_ascii=False, default=str))
+
+
 @debug_group.command("inspect-material")
 @click.argument("input_path", type=click.Path(exists=True, path_type=Path))
 @click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Pasta destino.")
