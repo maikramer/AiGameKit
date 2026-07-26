@@ -45,6 +45,7 @@ class TestAvailabilityGuards:
             assert is_bitsandbytes_available() is False
 
     def test_bitsandbytes_available(self):
+        pytest.importorskip("bitsandbytes")
         assert is_bitsandbytes_available() is True
 
     def test_torchao_unavailable(self):
@@ -52,6 +53,7 @@ class TestAvailabilityGuards:
             assert is_torchao_available() is False
 
     def test_torchao_available(self):
+        pytest.importorskip("torchao")
         assert is_torchao_available() is True
 
     def test_quanto_unavailable(self):
@@ -59,6 +61,7 @@ class TestAvailabilityGuards:
             assert is_quanto_available() is False
 
     def test_quanto_available(self):
+        pytest.importorskip("optimum.quanto")
         assert is_quanto_available() is True
 
     def test_sdnq_unavailable(self):
@@ -66,11 +69,13 @@ class TestAvailabilityGuards:
             assert is_sdnq_available() is False
 
     def test_sdnq_available(self):
+        pytest.importorskip("sdnq")
         assert is_sdnq_available() is True
 
 
 class TestGetGpuComputeCapability:
     def test_returns_major_minor_tuple(self):
+        pytest.importorskip("torch")
         props = MagicMock()
         props.major = 8
         props.minor = 9
@@ -81,6 +86,7 @@ class TestGetGpuComputeCapability:
             assert get_gpu_compute_capability() == (8, 9)
 
     def test_returns_none_when_cuda_absent(self):
+        pytest.importorskip("torch")
         with patch("torch.cuda.is_available", return_value=False):
             assert get_gpu_compute_capability() is None
 
@@ -122,44 +128,55 @@ class TestGetQuantizationConfig:
 
     @patch("gamedev_shared.quantization.supports_fp8", return_value=True)
     def test_auto_resolves_fp8_when_supported(self, _mock):
+        # "auto" devolve None cedo quando bitsandbytes está ausente.
+        pytest.importorskip("bitsandbytes")
         assert get_quantization_config("auto") == {"type": "fp8", "compute_dtype": "float16"}
 
     @patch("gamedev_shared.quantization.is_bitsandbytes_available", return_value=True)
     def test_int4_mode(self, _mock):
+        pytest.importorskip("transformers")
+        pytest.importorskip("torch")
         cfg = get_quantization_config("int4")
         assert cfg["type"] == "bitsandbytes-4bit"
         assert "config" in cfg
 
     @patch("gamedev_shared.quantization.is_bitsandbytes_available", return_value=True)
     def test_4bit_alias(self, _mock):
+        pytest.importorskip("transformers")
+        pytest.importorskip("torch")
         cfg = get_quantization_config("4bit")
         assert cfg["type"] == "bitsandbytes-4bit"
 
     @patch("gamedev_shared.quantization.is_bitsandbytes_available", return_value=True)
     def test_int8_mode(self, _mock):
+        pytest.importorskip("transformers")
         cfg = get_quantization_config("int8")
         assert cfg["type"] == "bitsandbytes-8bit"
         assert "config" in cfg
 
     @patch("gamedev_shared.quantization.is_bitsandbytes_available", return_value=True)
     def test_8bit_alias(self, _mock):
+        pytest.importorskip("transformers")
         cfg = get_quantization_config("8bit")
         assert cfg["type"] == "bitsandbytes-8bit"
 
     @patch("gamedev_shared.quantization.is_quanto_available", return_value=True)
     def test_quanto_int8(self, _mock):
+        pytest.importorskip("optimum.quanto")
         cfg = get_quantization_config("quanto-int8")
         assert cfg["type"] == "quanto-int8"
         assert "config" in cfg
 
     @patch("gamedev_shared.quantization.is_quanto_available", return_value=True)
     def test_quanto_int4(self, _mock):
+        pytest.importorskip("optimum.quanto")
         cfg = get_quantization_config("quanto-int4")
         assert cfg["type"] == "quanto-int4"
         assert "config" in cfg
 
     @patch("gamedev_shared.quantization.is_sdnq_available", return_value=True)
     def test_sdnq_valid_preset(self, _mock):
+        pytest.importorskip("sdnq")
         cfg = get_quantization_config("sdnq-uint8")
         assert cfg["type"] == "sdnq-uint8"
         assert "config" in cfg
@@ -394,6 +411,7 @@ class TestEnableModelCpuOffloadOptimized:
 
 class TestApplyTorchCompile:
     def test_compiles_when_available(self):
+        pytest.importorskip("torch")
         model = MagicMock()
         compiled = MagicMock()
         with patch("torch.compile", return_value=compiled) as mock_compile:
@@ -402,6 +420,7 @@ class TestApplyTorchCompile:
         mock_compile.assert_called_once_with(model, mode="default", fullgraph=False)
 
     def test_custom_mode_and_fullgraph(self):
+        pytest.importorskip("torch")
         model = MagicMock()
         compiled = MagicMock()
         with patch("torch.compile", return_value=compiled) as mock_compile:
@@ -410,6 +429,7 @@ class TestApplyTorchCompile:
         mock_compile.assert_called_once_with(model, mode="max-autotune", fullgraph=True)
 
     def test_returns_original_on_exception(self):
+        pytest.importorskip("torch")
         model = MagicMock()
         with patch("torch.compile", side_effect=RuntimeError("compile failed")):
             assert apply_torch_compile(model) is model

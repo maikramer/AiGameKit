@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from gamedev_shared.profiler.cuda import (
     CudaMemorySnapshot,
     cuda_memory_snapshot,
@@ -257,6 +259,7 @@ class TestCudaMemorySnapshotToDict:
 
 class TestCudaMemorySnapshotFunc:
     def test_no_cuda_returns_unavailable(self):
+        pytest.importorskip("torch")
         with patch("torch.cuda.is_available", return_value=False):
             snap = cuda_memory_snapshot()
         assert snap.available is False
@@ -264,16 +267,33 @@ class TestCudaMemorySnapshotFunc:
         assert snap.to_dict() == {"cuda_available": False}
 
     def test_no_cuda_returns_empty_list_all(self):
+        pytest.importorskip("torch")
         with patch("torch.cuda.is_available", return_value=False):
             assert cuda_memory_snapshot_all() == []
+
+    def test_no_torch_returns_unavailable(self, monkeypatch):
+        """Sem torch instalado, snapshot devolve available=False (não levanta)."""
+        import sys
+
+        monkeypatch.setitem(sys.modules, "torch", None)
+        assert cuda_memory_snapshot().available is False
+        assert cuda_memory_snapshot_all() == []
 
 
 class TestCudaSynchronize:
     def test_no_cuda_no_exception(self):
+        pytest.importorskip("torch")
         with patch("torch.cuda.is_available", return_value=False):
             cuda_synchronize()
 
+    def test_no_torch_no_exception(self, monkeypatch):
+        import sys
+
+        monkeypatch.setitem(sys.modules, "torch", None)
+        cuda_synchronize()
+
     def test_cuda_available_calls_synchronize(self):
+        pytest.importorskip("torch")
         with (
             patch("torch.cuda.is_available", return_value=True),
             patch("torch.cuda.synchronize") as mock_sync,

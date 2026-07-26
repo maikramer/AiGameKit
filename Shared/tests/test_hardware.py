@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import sys
+
+import pytest
+
 from gamedev_shared import hardware
 
 
@@ -15,15 +19,22 @@ def test_hw_auto_enabled_default_and_kill_switch(monkeypatch) -> None:
     assert hardware.hw_auto_enabled("X_HW_AUTO") is True
 
 
+def test_cuda_gpu_specs_without_torch(monkeypatch) -> None:
+    """Sem torch instalado, as listas de specs são vazias (não ImportError)."""
+    monkeypatch.setitem(sys.modules, "torch", None)
+    assert hardware.cuda_gpu_specs() == []
+    assert hardware.cuda_gpu_free_specs() == []
+
+
 def test_cuda_gpu_specs_without_cuda(monkeypatch) -> None:
-    import torch
+    torch = pytest.importorskip("torch")
 
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     assert hardware.cuda_gpu_specs() == []
 
 
 def test_cuda_gpu_specs_shapes(monkeypatch) -> None:
-    import torch
+    torch = pytest.importorskip("torch")
 
     class _Props:
         total_memory = 6 * hardware.GIB

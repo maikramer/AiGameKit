@@ -8,13 +8,14 @@ Biblioteca partilhada do monorepo **GameDev** — código comum entre Text2D, Te
 
 | Módulo | Descrição |
 |--------|-----------|
-| `gamedev_shared.logging` | Logger Rich/ANSI unificado (info, warn, error, step, header, success) |
-| `gamedev_shared.cli_rich` | `rich-click`: `setup_rich_click`, `setup_rich_click_module` (devolve `(click, rich_ok)`); todas as CLIs Python do monorepo usam o segundo no seu `cli_rich.py` |
+| `gamedev_shared.logging` | Logger Rich/ANSI + ficheiro diário (`configure_logging`, bridge stdlib). Guia: [docs/LOGGING_PT.md](../docs/LOGGING_PT.md) |
+| `gamedev_shared.cli_rich` | `rich-click`: `setup_rich_click`, `setup_rich_click_module(tool=…)` — `tool=` activa logging em ficheiro; todas as CLIs Python usam isto no seu `cli_rich.py` |
 | `gamedev_shared.hf` | Token HF (`get_hf_token`) e texto de cache para Rich (`hf_home_display_rich`) — sem dependência de `huggingface_hub` |
 | `gamedev_shared.skill_install` | Instalação de Agent Skills Cursor genérica por `tool_name` (ex.: `rigging3d` quando existir `SKILL.md`) |
 | `gamedev_shared.gpu` | Utilitários GPU/memória (format_bytes, get_gpu_info, clear_cuda_memory, ...) |
-| `gamedev_shared.subprocess_utils` | Execução de ferramentas via subprocess (resolve_binary, run_cmd, RunResult) |
-| `gamedev_shared.env` | Constantes e helpers para variáveis de ambiente do monorepo (`TOOL_BINS`, `get_tool_bin`, …) |
+| `gamedev_shared.subprocess_utils` | Subprocess (`resolve_binary` prefere `<Tool>/.venv/bin` se `GAMEDEV_PREFER_MONOREPO=1`, `run_cmd`, `RunResult`) |
+| `gamedev_shared.cli_helpers` | UMS (`try_ums_delegation`, `with_ums_peak_opts`; `prepare_gpu_exclusive` só após UMS falhar / `--no-ums`) |
+| `gamedev_shared.env` | Env do monorepo (`TOOL_BINS`, `get_tool_bin`, `prefer_monorepo_tools`, …) |
 | `gamedev_shared.installer` | Ponte Clified (`gamedev-install` / `install.sh` → `tools.yaml`) |
 | `gamedev_shared.installer.monorepo` | `find_monorepo_root`, `try_find_monorepo_root` |
 | `gamedev_shared.installer.clified_hooks` | Hooks por ferramenta (Text3D, Text2Sound, Paint3D, Rigging3D) |
@@ -25,12 +26,14 @@ Biblioteca partilhada do monorepo **GameDev** — código comum entre Text2D, Te
 ## Exemplo de uso
 
 ```python
-from gamedev_shared.logging import get_logger
+from gamedev_shared.logging import Logger, configure_logging
 
-log = get_logger("meu_modulo")
+configure_logging("meu_modulo")  # ou via setup_rich_click_module(tool=…)
+log = Logger()
 log.info("Mensagem informativa")
 log.step("A processar item 1/10")
 log.success("Concluído com sucesso")
+# Ficheiro: ~/.cache/gamedev/logs/meu_modulo-YYYY-MM-DD.log
 ```
 
 ```python
@@ -99,14 +102,23 @@ pip install -e "Shared/[dev]"
 
 # Correr testes
 pytest Shared/tests/ -v
+pytest Shared/tests/test_shared_coverage_100.py -q   # piso de cobertura
 
 # Ou via Makefile na raiz do monorepo
 make test-shared
 ```
 
+Guia: [`docs/TESTING_PT.md`](../docs/TESTING_PT.md).
+
+## Logging em ficheiro
+
+Todas as CLIs Python (+ UMS) espelham `Logger` e stdlib para
+`~/.cache/gamedev/logs/<tool>-YYYY-MM-DD.log`. Guia completo:
+[docs/LOGGING_PT.md](../docs/LOGGING_PT.md).
+
 ## Variáveis de Ambiente
 
-Definidas em `gamedev_shared.env` e usadas por todos os pacotes do monorepo:
+Definidas em `gamedev_shared.env` / `logging.py` e usadas por todos os pacotes:
 
 | Variável | Descrição |
 |----------|-----------|
@@ -121,3 +133,9 @@ Definidas em `gamedev_shared.env` e usadas por todos os pacotes do monorepo:
 | `HF_TOKEN` / `HUGGINGFACEHUB_API_TOKEN` | Token Hugging Face (ver também `gamedev_shared.hf`) |
 | `HF_HOME` | Diretório de cache Hugging Face |
 | `PYTORCH_CUDA_ALLOC_CONF` | Configuração de alocação CUDA (auto-definida pelo monorepo se vazia) |
+| `GAMEDEV_LOG_DIR` | Dir de logs (default `~/.cache/gamedev/logs`) |
+| `GAMEDEV_LOG_FILE` | Path exacto do ficheiro de log |
+| `GAMEDEV_LOG_TOOL` | Nome da tool no ficheiro |
+| `GAMEDEV_LOG_LEVEL` | Nível mínimo (`DEBUG`/`INFO`/`WARN`/`ERROR`) |
+| `GAMEDEV_FILE_LOG` | `0` off; `1` força on (pytest) |
+| `GAMEDEV_NO_FILE_LOG` | `1` desliga logging em ficheiro |

@@ -22,9 +22,12 @@ def hw_auto_enabled(env_var: str) -> bool:
 def cuda_gpu_specs() -> list[tuple[int, int]]:
     """Lista (índice, VRAM total em bytes) das GPUs CUDA visíveis.
 
-    Respeita ``CUDA_VISIBLE_DEVICES``. Vazia sem CUDA disponível.
+    Respeita ``CUDA_VISIBLE_DEVICES``. Vazia sem torch/CUDA disponível.
     """
-    import torch
+    try:
+        import torch
+    except ImportError:
+        return []
 
     if not torch.cuda.is_available():
         return []
@@ -41,7 +44,10 @@ def cuda_gpu_free_specs() -> list[tuple[int, int, int]]:
     Livre = ``torch.cuda.mem_get_info`` (conta consumo de outros processos,
     ex. desktop). Útil para escolher a GPU menos ocupada em rigs multi-GPU.
     """
-    import torch
+    try:
+        import torch
+    except ImportError:
+        return []
 
     if not torch.cuda.is_available():
         return []

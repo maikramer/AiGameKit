@@ -21,9 +21,14 @@ API principal (bpy-only):
 * ``cap_boundary_loops`` / ``make_watertight`` — fecho seletivo / total de
   boundary loops.
 * ``clamp_base_flare`` — puxa “pés de elefante” MC (base mais larga que o
-  corpo) para o raio de referência do meio do mesh.
+  corpo) para o raio de referência do meio do mesh (opt-in; **off** em
+  ``topology_clean``).
 * ``taubin_smooth`` — suavização volume-preserving (reduz argila MC sem
-  derreter finos como um remesh).
+  derreter finos como um remesh; **off** em ``topology_clean``).
+* ``force_close_base`` — **removido**. Não reintroduzir: bisect/chão planar
+  destruía edifícios casca-plástico. Base oca por baixo é aceitável em jogo
+  (câmara não olha para baixo). Ver
+  ``docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md``.
 * ``reweld_coincident`` — colapsa vértices coincidentes (útil pós-import
   glTF com normal-split).
 * ``dynamic_weld_distance`` — limiar de weld por densidade de vértices.
@@ -47,7 +52,13 @@ from typing import Any, Literal
 
 import numpy as np
 
-from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays, save_glb
+from gamedev_shared.bpy_mesh import (
+    clear_scene,
+    create_mesh_from_arrays,
+    save_glb,
+    tri_count,
+    vertex_coords,
+)
 
 log = logging.getLogger(__name__)
 
@@ -1121,7 +1132,7 @@ def morphological_close(
         fast_simplification (quadric C++, ~10-15x) quando disponível; senão
         TRIANGULATE + DECIMATE modifiers (fallback lento).
         """
-        faces_remeshed = sum(len(p.vertices) - 2 for p in obj.data.polygons)
+        faces_remeshed = tri_count(obj.data)
         if faces_remeshed <= faces_before or faces_before <= 0:
             return
         from gamedev_shared.mesh_repair_arrays import (
@@ -1157,7 +1168,7 @@ def morphological_close(
         # (~1 voxel) e sela as rachas — o efeito de fecho disponível nesta
         # escala — por ~1/3 do custo da cadeia completa.
         _voxel()
-        faces_remeshed = sum(len(p.vertices) - 2 for p in obj.data.polygons)
+        faces_remeshed = tri_count(obj.data)
         _decimate_back()
         faces_after = len(obj.data.polygons)
         log.info(
@@ -1221,7 +1232,7 @@ def morphological_close(
     # quads (2 tris cada no export). Triangular e decimar de volta ao tri
     # count original: mantém o fecho sem herdar a densidade da grelha
     # (capela: 1.7M → 7.5M tris sem isto).
-    faces_remeshed = sum(len(p.vertices) - 2 for p in obj.data.polygons)
+    faces_remeshed = tri_count(obj.data)
     _decimate_back()
 
     faces_after = len(obj.data.polygons)
@@ -1291,7 +1302,7 @@ def clamp_base_flare(
         return 0
 
     mesh = obj.data
-    coords = np.array([v.co[:] for v in mesh.vertices], dtype=np.float64)
+    coords = vertex_coords(mesh)
     if up_axis is None:
         up_axis = infer_up_axis(coords)
     lo = coords[:, up_axis].min()
@@ -1557,19 +1568,32 @@ def _cap_all_remaining_loops(obj: Any) -> int:
 # ---------------------------------------------------------------------------
 
 
-def dynamic_weld_distance(vertex_count: int) -> float:
+# Fecho transitivo (CC em arrays / remove_doubles) colapsa a malha se o limiar
+# de weld ≥ aresta mediana — cada aresta vira par de fusão e o mesh vira 1 ponto.
+_WELD_MEDIAN_EDGE_CAP = 0.4
+
+
+def dynamic_weld_distance(vertex_count: int, median_edge: float | None = None) -> float:
     """Distância de weld adaptativa pela densidade de vértices (topology-fix).
 
     Malhas densas (>150k) usam limiar menor para preservar detalhe; malhas
     leves (<50k) usam limiar maior para fechar rachaduras de marching cubes.
+
+    Se ``median_edge`` for dado, o limiar é capped a ``0.4 x mediana`` para o
+    fecho transitivo não fundir a malha inteira (lily_pad/slime: dyn=0.008 com
+    mediana≈0.008 → 0 faces no engine arrays).
     """
     if vertex_count > 150_000:
-        return 0.003
-    if vertex_count > 100_000:
-        return 0.005
-    if vertex_count > 50_000:
-        return 0.008
-    return 0.01
+        dist = 0.003
+    elif vertex_count > 100_000:
+        dist = 0.005
+    elif vertex_count > 50_000:
+        dist = 0.008
+    else:
+        dist = 0.01
+    if median_edge is not None and median_edge > 0:
+        dist = min(dist, _WELD_MEDIAN_EDGE_CAP * float(median_edge))
+    return dist
 
 
 @dataclass(frozen=True)
@@ -1915,7 +1939,30 @@ def repair_mesh_object(
         diag = float(np.linalg.norm([bbox.x, bbox.y, bbox.z])) or 1.0
         stats["welded_relative"] = remove_doubles(obj, threshold=max(1e-4, weld_relative * diag))
     elif mode == "vert_density":
-        dist = dynamic_weld_distance(len(obj.data.vertices))
+        med_edge: float | None = None
+        try:
+            me = obj.data
+            me.calc_loop_triangles()
+            n_tri = len(me.loop_triangles)
+            if n_tri > 0:
+                co_flat = np.empty(len(me.vertices) * 3, dtype=np.float64)
+                me.vertices.foreach_get("co", co_flat)
+                co = co_flat.reshape(-1, 3)
+                tri_flat = np.empty(n_tri * 3, dtype=np.int32)
+                me.loop_triangles.foreach_get("vertices", tri_flat)
+                tri = tri_flat.reshape(-1, 3)
+                # Amostra até 64k arestas (3 por tri) — basta para a mediana.
+                e0 = tri[:, 0]
+                e1 = tri[:, 1]
+                sample = min(len(tri), 64_000)
+                if sample < len(tri):
+                    rng = np.random.default_rng(0)
+                    idx = rng.choice(len(tri), size=sample, replace=False)
+                    e0, e1 = e0[idx], e1[idx]
+                med_edge = float(np.median(np.linalg.norm(co[e1] - co[e0], axis=1)))
+        except Exception as exc:
+            log.debug("median_edge para weld_density falhou: %s", exc)
+        dist = dynamic_weld_distance(len(obj.data.vertices), median_edge=med_edge)
         stats["welded_relative"] = remove_doubles(obj, threshold=dist)
         stats["weld_distance"] = int(dist * 1_000_000)  # µm-ish for debug logs
     elif mode == "fixed" and weld_fixed > 0:
@@ -2070,9 +2117,13 @@ def repair_glb(
         "export_image_format": image_format,
     }
     if seal_export:
-        # Sem custom normals/tangents o exporter não parte vértices em arestas
-        # "duras" — caso contrário o fecho watertight reabre no reimport.
-        export_kw["export_normals"] = False
+        # Smooth vertex normals (não omitir NORMAL — viewers ficavam flat), mas
+        # sem arestas duras: a 60° o exporter parte loops nas creases e o fecho
+        # watertight reabre no reimport (boundary > 0). 180° = tudo smooth.
+        from gamedev_shared.bpy_mesh import smooth_shade_scene
+
+        smooth_shade_scene(meshes, degrees=180.0)
+        export_kw["export_normals"] = True
         export_kw["export_tangents"] = False
     # Exportar a cena inteira (None) — inclui armatures, animações e morphs.
     save_glb(None, output_path, **export_kw)
@@ -2116,9 +2167,9 @@ def mesh_to_trimesh(obj: Any) -> Any:
     """Converte bpy mesh object em ``trimesh.Trimesh`` (exige triângulos)."""
     import trimesh
 
-    me = obj.data
-    verts = np.array([tuple(v.co) for v in me.vertices], dtype=np.float64)
-    faces = np.array([tuple(p.vertices) for p in me.polygons], dtype=np.int64)
+    from gamedev_shared.mesh_repair_arrays import extract_arrays
+
+    verts, faces = extract_arrays(obj)
     if verts.size == 0 or faces.size == 0:
         return trimesh.Trimesh(vertices=np.zeros((0, 3)), faces=np.zeros((0, 3), dtype=np.int64), process=False)
     return trimesh.Trimesh(vertices=verts, faces=faces, process=False)

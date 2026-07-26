@@ -55,6 +55,13 @@ _STAGNATION_WELD_DIST = 1e-4
 # em silêncio ("moth-eaten") em vez de colapsar arestas.
 _SOUP_VERTS_PER_FACE = 1.5
 
+# Hunyuan/paint: cascas/paredes duplas com verts coincidentes nas fissuras.
+# ``bfrac`` alto + muitas ilhas → COLLAPSE apaga tris em vez de colapsar
+# arestas (chapel lod2: bfrac 0.25→0.70, comps milhares, silhueta "comida").
+# Weld **só verts de fronteira** (1e-4) reconecta cascas (chapel 3647→4 comps)
+# sem o weld global que trava props UV-densos (crate piso ~22k).
+_FRAGMENT_BOUNDARY_FRAC = 0.12
+
 
 def clamp_decimate_target(n_faces: int, requested: int) -> int:
     """Sobe o target se o rácio pedido for demasiado agressivo.
@@ -117,31 +124,82 @@ def protect_boundary_vertices(obj: Any) -> str | None:
     return str(vg.name)
 
 
-def _weld_if_split_soup(obj: Any) -> int:
-    """Weld exacto (1e-4) quando o mesh é triangle soup (V/Tri≈3).
+def _boundary_edge_fraction(obj: Any) -> float:
+    """Fração de arestas com exactamente 1 face (fronteiras / fissuras)."""
+    import bmesh
 
-    GLBs re-exportados com normais por canto chegam com todos os vértices
-    partidos: cada aresta é "fronteira" e o Decimate COLLAPSE, sem arestas
-    partilhadas, degenera triângulos isolados um a um — o LOD sai roto
-    ("moth-eaten") sem nunca estagnar. O weld só dispara no caso soup;
-    meshes texturados conexos (seams UV) não são tocados — weld cego
-    pré-COLLAPSE trava o rácio (~20k piso medido no crate).
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    n_edges = len(bm.edges) or 1
+    n_boundary = sum(1 for e in bm.edges if len(e.link_faces) == 1)
+    bm.free()
+    return n_boundary / n_edges
+
+
+def _weld_boundary_duplicates(obj: Any, threshold: float = _STAGNATION_WELD_DIST) -> int:
+    """Funde só vértices que tocam aresta de fronteira (fissuras entre cascas).
+
+    Evita weld global de seams UV interiores — esse trava o COLLAPSE em
+    props densos (crate ~22k piso). UVs por loop sobrevivem (bmesh).
+    """
+    import bmesh
+
+    me = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.verts.ensure_lookup_table()
+    boundary_verts = list({v for e in bm.edges if len(e.link_faces) == 1 for v in e.verts})
+    if not boundary_verts:
+        bm.free()
+        return 0
+    before = len(bm.verts)
+    bmesh.ops.remove_doubles(bm, verts=boundary_verts, dist=float(threshold))
+    bm.to_mesh(me)
+    me.update()
+    removed = before - len(me.vertices)
+    bm.free()
+    return int(removed)
+
+
+def _weld_if_split_soup(obj: Any) -> int:
+    """Reconecta topologia partida antes do COLLAPSE (anti moth-eaten).
+
+    Dois casos:
+
+    1. **Triangle soup** (V/Tri≈3): weld exacto em todos os verts.
+    2. **Cascas fragmentadas** (Hunyuan, ``bfrac`` ≥
+       :data:`_FRAGMENT_BOUNDARY_FRAC`): weld só verts de fronteira —
+       reconecta paredes duplas/fissuras sem o piso ~22k do weld global
+       em meshes UV-densos (crate).
 
     Returns:
-        Número de vértices fundidos (0 se não era soup).
+        Número de vértices fundidos (0 se nada feito).
     """
     n_faces = len(obj.data.polygons) or 1
     n_verts = len(obj.data.vertices)
-    if n_verts <= _SOUP_VERTS_PER_FACE * n_faces:
-        return 0
-    from gamedev_shared.mesh_repair import remove_doubles
 
-    welded = int(remove_doubles(obj, threshold=_STAGNATION_WELD_DIST) or 0)
+    if n_verts > _SOUP_VERTS_PER_FACE * n_faces:
+        from gamedev_shared.mesh_repair import remove_doubles
+
+        welded = int(remove_doubles(obj, threshold=_STAGNATION_WELD_DIST) or 0)
+        if welded:
+            log.info(
+                "Triangle soup detectado (%d verts / %d faces) — weld exacto fundiu %d verts antes do COLLAPSE",
+                n_verts,
+                n_faces,
+                welded,
+            )
+        return welded
+
+    bfrac = _boundary_edge_fraction(obj)
+    if bfrac < _FRAGMENT_BOUNDARY_FRAC:
+        return 0
+
+    welded = _weld_boundary_duplicates(obj, _STAGNATION_WELD_DIST)
     if welded:
         log.info(
-            "Triangle soup detectado (%d verts / %d faces) — weld exacto fundiu %d verts antes do COLLAPSE",
-            n_verts,
-            n_faces,
+            "Cascas fragmentadas (bfrac=%.3f) — weld de fronteira fundiu %d verts antes do COLLAPSE",
+            bfrac,
             welded,
         )
     return welded

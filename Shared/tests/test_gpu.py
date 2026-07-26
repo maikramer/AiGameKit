@@ -9,6 +9,8 @@ import pytest
 
 import gamedev_shared.gpu as gpu_module
 from gamedev_shared.gpu import (
+    _parse_nvidia_version_token,
+    check_nvidia_driver_match,
     estimate_vram_requirement,
     format_bytes,
     warn_if_vram_occupied,
@@ -247,3 +249,23 @@ class TestNvmlComputeAppsForDevice:
         # Force import path inside function to see our mock — patch import via sys.modules
         apps = gpu_module._nvml_compute_apps_for_device(0)
         assert apps == [(99, "proc-99", 5)]
+
+
+class TestNvidiaDriverMatch:
+    def test_parse_version_token(self) -> None:
+        assert _parse_nvidia_version_token("Kernel Module  595.71.05  Fri") == "595.71.05"
+        assert _parse_nvidia_version_token("libnvidia-ml.so.595.84") == "595.84"
+
+    def test_mismatch_detected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(gpu_module, "read_nvidia_kernel_module_version", lambda: "595.71.05")
+        monkeypatch.setattr(gpu_module, "read_nvidia_userspace_version", lambda: "595.84")
+        ok, detail = check_nvidia_driver_match()
+        assert ok is False
+        assert "MISMATCH" in detail
+
+    def test_match_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(gpu_module, "read_nvidia_kernel_module_version", lambda: "595.84")
+        monkeypatch.setattr(gpu_module, "read_nvidia_userspace_version", lambda: "595.84")
+        ok, detail = check_nvidia_driver_match()
+        assert ok is True
+        assert "595.84" in detail

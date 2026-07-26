@@ -38,8 +38,13 @@ def torch_dtype_for(device: str | None) -> Any:
 
     CUDA → bfloat16 (formato nativo dos modelos FLUX/Sana); CPU → float32.
     Case-insensitive (aceita ``"CPU"``, ``"cuda:0"``, etc.).
+    ``None`` quando torch não está instalado (dtype só é consumido quando
+    um pipeline carrega — o que exige torch de qualquer forma).
     """
-    torch = _torch()
+    try:
+        torch = _torch()
+    except ImportError:
+        return None
     d = (device or "").lower()
     if d.startswith("cpu"):
         return torch.float32
@@ -76,12 +81,17 @@ class DiffusionGeneratorBase(ABC):
         step_cache: str | None = None,
         channels_last: bool = False,
     ) -> None:
-        torch = _torch()
+        # Sem torch instalado, degrada para CPU — permite instanciar/testar a
+        # base sem o stack GPU; carregar um pipeline continua a exigir torch.
+        try:
+            torch = _torch()
+        except ImportError:
+            torch = None
 
         # Device resolution: default cuda se disponível.
         if device is None:
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        elif device.startswith("cuda") and not torch.cuda.is_available():
+            device = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
+        elif device.startswith("cuda") and (torch is None or not torch.cuda.is_available()):
             device = "cpu"
 
         self.device = device
@@ -130,7 +140,10 @@ class DiffusionGeneratorBase(ABC):
         import gc
 
         gc.collect()
-        torch = _torch()
+        try:
+            torch = _torch()
+        except ImportError:
+            return
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 

@@ -14,12 +14,13 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 
 | Module | Description |
 |--------|-------------|
-| `logging` | Shared `Logger` with Rich/ANSI structured output (`info`, `warn`, `error`, `step`, `header`, `success`) |
+| `logging` | Shared `Logger` with Rich/ANSI console **and** daily file logs (`configure_logging`, stdlib bridge). See [docs/LOGGING.md](../docs/LOGGING.md) |
 | `gpu` | GPU detection, VRAM monitoring, `warn_if_vram_occupied()`, `enforce_exclusive_gpu()`, `kill_gpu_compute_processes_aggressive()`, `format_bytes()`, `clear_cuda_memory()` |
-| `subprocess_utils` | `run_cmd()`, `run_cmd_streaming()`, `resolve_binary()`, `merge_subprocess_output()`, `RunResult` dataclass |
-| `env` | Canonical env-var constants (`TOOL_BINS`, `get_tool_bin()`, `ensure_pytorch_cuda_alloc_conf()`, `subprocess_gpu_env()`, `detect_low_vram()`) |
+| `subprocess_utils` | `run_cmd()`, `run_cmd_streaming()`, `resolve_binary()` (prefers `<Tool>/.venv/bin` when `GAMEDEV_PREFER_MONOREPO=1`), `merge_subprocess_output()`, `RunResult` |
+| `cli_helpers` | UMS opts (`try_ums_delegation`, `with_ums_peak_opts`, `prepare_gpu_exclusive` — GPU prep only after UMS fail / `--no-ums`) |
+| `env` | Canonical env-var constants (`TOOL_BINS`, `get_tool_bin()`, `prefer_monorepo_tools()`, `ensure_pytorch_cuda_alloc_conf()`, `subprocess_gpu_env()`) |
 | `installer/` | Ponte Clified (`install.sh` → `tools.yaml`); hooks por ferramenta (`clified_hooks`, `*_extras`) |
-| `cli_rich` | `setup_rich_click()` / `setup_rich_click_module()` — parametrized rich-click config for all CLIs |
+| `cli_rich` | `setup_rich_click()` / `setup_rich_click_module(tool=…)` — rich-click config; `tool=` wires file logging |
 | `quality` | **QualityEngine** — 5 quality tiers, 14 asset categories, 11 audio kinds, soft parameter resolution with `ParameterSource` tracking |
 | `multi_gpu` | **MultiGPUPlanner** — auto-detect GPUs, split weights via accelerate, `DevicePlan`, `ModelArchitectureRegistry` |
 | `profiler/` | `ProfilerSession` — CPU/RAM/GPU profiling with SQLite perf DB and JSONL span output |
@@ -31,7 +32,10 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 | `seed_utils` | `generate_seed()`, `resolve_effective_seed()`, `seed_everything()` — reproducible generation across random/numpy/torch |
 | `quantization` | `get_quantization_config()` — bitsandbytes int8/int4, torchao, quanto, FP8; `enable_vae_optimizations()`, `enable_attention_optimizations()` |
 | `sdnq` | SDNQ quantization helpers — 4 tested presets (`uint8`, `int8`, `int4`, `fp8`), `quantize_model()`, `create_config()`, VRAM estimation |
-| `bpy_mesh` | Mesh load/save via bpy (`load_glb()`, `save_glb()`, `load_any()`, `create_mesh_from_arrays()`, `save_colored_mesh()`) |
+| `bpy_mesh` | Mesh load/save via bpy (`load_glb()`, `save_glb()`, `load_any()`, `create_mesh_from_arrays()`, `save_colored_mesh()`, `smooth_shade_scene()`); `import_gltf()` defaults to `bone_heuristic=TEMPERANCE` (avoids Icosphere bone-display meshes that bpy's `BLENDER` heuristic materializes) + `strip_bone_display_meshes()` (only when an armature is present) |
+| `gltf_decode` | Decode glTF extensions bpy's importer rejects: `bpy_readable_glb()` context manager (KTX2/BasisU → `ktxdecompress`, meshopt on bpy<5.2 → `copy` via `@gltf-transform/cli`), `glb_extensions()` binary header parse, `bpy_decode_subcommand()`. Used by `import_gltf()` and GameDevLab so finished LODs (KTX2+meshopt) import without `Extension KHR_texture_basisu is not available` |
+| `mesh_simplify` | Decimate COLLAPSE helpers + `pre_decimate_uv` / `post_decimate` repair profiles (Text3D LOD / simplify / to_paint) |
+| `mesh_split` | Height-plane bisect for fellable trees (`SEAL_VERSION=cut-only-v1` fingerprint; GameAssets resume invalidates stale stump/top when seal drifts) |
 | `mesh_utils` | Legacy compatibility (`weld_glb()` — retained as no-op) |
 | `image_utils` | `save_image_with_metadata()`, `create_thumbnail()`, `create_zip()`, `load_bytes_as_rgb()`, `ensure_rgb()` |
 | `vram_monitor` | `VRAMMonitor` — live VRAM monitoring in background thread, `VRAMStats`, `find_quantization_sweet_spot()` |
@@ -63,10 +67,10 @@ cd Shared && pip install -e ".[dev,gpu]"
 | `gpu` | `torch>=2.1.0` | `gpu`, `vram_monitor`, `multi_gpu` |
 | `cli` | `rich-click>=1.8.0` | `cli_rich` |
 | `quantization` | `bitsandbytes`, `torchao`, `optimum-quanto`, `sdnq` | `quantization`, `sdnq` |
-| `low_vram` | `xformers` (Linux) | Low-VRAM GPU optimization |
+| `low_vram` | `xformers` (Linux) | Optional pip extra for xformers — **not** a CLI `--low-vram` flag (VRAM = UMS + hw-auto) |
 | `profiler` | `psutil` | `profiler/` |
 | `mesh` | `bpy>=5.0.1` | `bpy_mesh` |
-| `dev` | `pytest`, `pytest-cov`, `ruff`, `mypy`, `Pillow` | Testing & linting |
+| `dev` | `pytest`, `pytest-cov`, `ruff`, `mypy`, `clified`, `numpy`, `scipy`, `trimesh` | Testing & linting (+ mesh_repair* unit deps for CI) |
 
 ## QualityEngine
 
@@ -106,10 +110,56 @@ plan = planner.plan()   # DevicePlan with device_map
 model = planner.apply() # Model dispatched across GPUs
 ```
 
-- Auto-detects available GPUs via `nvidia-smi`
+- Auto-detects available GPUs via **NVML** (`detect_gpu_ids`; fallback `nvidia-smi`)
 - Splits model weights across GPUs using `accelerate`
 - Tools accept `--gpu-ids "0,1"` CLI flag
 - GameAssets batch/resume propagates `--gpu-ids` and `CUDA_VISIBLE_DEVICES` to all sub-tools
+
+## GPU / NVML (`gamedev_shared.gpu`)
+
+Primary VRAM/process queries use [`nvidia-ml-py`](https://pypi.org/project/nvidia-ml-py/) (NVML). Subprocess `nvidia-smi` remains only as fallback inside `gpu.py`.
+
+```python
+from gamedev_shared.gpu import (
+    nvml_available,
+    query_gpu_free_mib,
+    query_gpu_snapshot,
+    list_gpu_snapshots,
+    list_nvidia_compute_apps,
+    detect_gpu_ids,
+)
+
+nvml_available()           # True when NVML init succeeded
+query_gpu_free_mib(0)      # free MiB on device 0
+list_gpu_snapshots()       # GpuSnapshot(index, name, free_mib, total_mib, used_mib, source)
+list_nvidia_compute_apps() # [(pid, name, used_mib), ...]
+detect_gpu_ids()           # [0, 1, ...]
+```
+
+Used by: UMS `doctor` / admit free-VRAM, GameAssets `info` / GPU preflight, Text3D `gpu-processes`, `detect_low_memory`, exclusive-GPU helpers.
+
+**Not a substitute:** PyPI `hf-vram-calc` estimates LLM/KV-cache peaks — wrong model for diffusion UMS admit (`FOOTPRINTS` + `vram_planner`). Prefer NVML free + calibrated footprints.
+
+## File logging
+
+Every Python CLI (and UMS) mirrors `Logger` + stdlib logging to:
+
+```text
+~/.cache/gamedev/logs/<tool>-YYYY-MM-DD.log
+```
+
+```python
+from gamedev_shared.logging import Logger, configure_logging
+
+configure_logging("text2d")  # called automatically via setup_rich_click_module(tool=…)
+log = Logger()
+log.info("generation started")
+```
+
+- Console: Rich/ANSI (unchanged)
+- File: plain text, UTC timestamps
+- Disable: `GAMEDEV_FILE_LOG=0` or `GAMEDEV_NO_FILE_LOG=1`
+- Full guide: [docs/LOGGING.md](../docs/LOGGING.md)
 
 ## ProfilerSession
 
@@ -170,6 +220,12 @@ Shell scripts at the monorepo root also work without pip install:
 | `PYTORCH_CUDA_ALLOC_CONF` | CUDA allocator config (auto-set if empty) |
 | `GAMEDEV_PROFILE` | Set to `1` to enable profiling |
 | `CUDA_VISIBLE_DEVICES` | GPU device IDs (e.g., `0,1`) |
+| `GAMEDEV_LOG_DIR` | Daily log directory (default `~/.cache/gamedev/logs`) |
+| `GAMEDEV_LOG_FILE` | Exact log file path |
+| `GAMEDEV_LOG_TOOL` | Tool name segment in log filename |
+| `GAMEDEV_LOG_LEVEL` | Min file level (`DEBUG`/`INFO`/`WARN`/`ERROR`) |
+| `GAMEDEV_FILE_LOG` | `0` off; `1` force on (needed under pytest) |
+| `GAMEDEV_NO_FILE_LOG` | `1` disables file logging |
 
 ## Development
 
@@ -179,6 +235,8 @@ cd Shared && pip install -e ".[dev]"
 
 # Run tests
 pytest tests -v
+# Coverage floor (QualityEngine, UMS helpers, path/seed/hardware, …):
+pytest tests/test_shared_coverage_100.py -q
 
 # Or via Makefile at monorepo root
 make test-shared

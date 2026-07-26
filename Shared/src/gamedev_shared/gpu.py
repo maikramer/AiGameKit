@@ -930,3 +930,88 @@ def list_gpu_snapshots() -> list[GpuSnapshot]:
         if snap is not None:
             out.append(snap)
     return out
+
+
+def _parse_nvidia_version_token(text: str) -> str | None:
+    """Extrai ``595.84`` / ``595.71.05`` do primeiro token semântico na string."""
+    import re
+
+    m = re.search(r"\b(\d{3}(?:\.\d+){1,3})\b", text or "")
+    return m.group(1) if m else None
+
+
+def read_nvidia_kernel_module_version() -> str | None:
+    """Versão do módulo NVIDIA carregado (``/proc/driver/nvidia/version``)."""
+    proc = Path("/proc/driver/nvidia/version")
+    if not proc.is_file():
+        return None
+    with contextlib.suppress(OSError, UnicodeError):
+        return _parse_nvidia_version_token(proc.read_text(errors="replace").splitlines()[0])
+    return None
+
+
+def read_nvidia_userspace_version() -> str | None:
+    """Versão das libs userspace (NVML / ``libnvidia-ml.so.*`` / ``nvidia-smi``)."""
+    if _nvml_init():
+        with contextlib.suppress(Exception):
+            import pynvml
+
+            ver = pynvml.nvmlSystemGetDriverVersion()
+            if isinstance(ver, bytes):
+                ver = ver.decode("utf-8", errors="replace")
+            parsed = _parse_nvidia_version_token(str(ver))
+            if parsed:
+                return parsed
+    # Soname tipicamente ``libnvidia-ml.so.595.84`` quando NVML init falha (mismatch).
+    for lib_dir in (Path("/usr/lib/x86_64-linux-gnu"), Path("/usr/lib64"), Path("/usr/lib")):
+        link = lib_dir / "libnvidia-ml.so.1"
+        with contextlib.suppress(OSError):
+            target = link.resolve().name if link.exists() else ""
+            parsed = _parse_nvidia_version_token(target)
+            if parsed:
+                return parsed
+    smi = shutil.which("nvidia-smi")
+    if smi:
+        with contextlib.suppress(Exception):
+            import subprocess
+
+            out = subprocess.run(
+                [smi, "--query-gpu=driver_version", "--format=csv,noheader"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if out.returncode == 0:
+                return _parse_nvidia_version_token(out.stdout.strip().splitlines()[0])
+    return None
+
+
+def check_nvidia_driver_match() -> tuple[bool, str]:
+    """Kernel module vs userspace NVML/libs.
+
+    Returns:
+        ``(ok, detail)``. ``ok=False`` quando versões diferem (clássico
+        ``Driver/library version mismatch`` após apt upgrade sem reboot) —
+        PyTorch/UMS falham no ``nvmlInit`` mesmo com CUDA a times funcionar.
+    """
+    kernel = read_nvidia_kernel_module_version()
+    user = read_nvidia_userspace_version()
+    if kernel is None and user is None:
+        return False, "NVIDIA não detectada (/proc + libnvidia-ml ausentes)"
+    if kernel is None:
+        return False, f"módulo kernel não carregado; userspace={user}"
+    if user is None:
+        return False, f"userspace ilegível; kernel={kernel}"
+    if kernel == user:
+        return True, f"kernel={kernel} userspace={user}"
+    # Aceitar patch extra num lado (595.71.05 ≈ 595.71) mas NÃO 595.71 vs 595.84.
+    k_mm = ".".join(kernel.split(".")[:2])
+    u_mm = ".".join(user.split(".")[:2])
+    if k_mm == u_mm:
+        return True, f"kernel={kernel} userspace={user}"
+    tip = (
+        f"MISMATCH kernel={kernel} userspace={user} — reboot (ou reload módulos nvidia) "
+        f"após upgrade do driver; PyTorch/UMS falham no nvmlInit até alinhar"
+    )
+    return False, tip

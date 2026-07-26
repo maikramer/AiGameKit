@@ -457,3 +457,39 @@ class TestBpyParity:
         assert co.shape == (8, 3) and tris.shape == (6, 3)
         bpy.data.meshes.remove(obj.data)
         bpy.data.meshes.remove(obj2.data)
+
+
+def _flat_grid(n: int = 40, spacing: float = 0.008) -> tuple[np.ndarray, np.ndarray]:
+    """Grelha fina (lily_pad-like): aresta ≈ spacing — weld dyn sem cap colapsava."""
+    xs = np.arange(n, dtype=np.float64) * spacing
+    zs = np.arange(n, dtype=np.float64) * spacing
+    xx, zz = np.meshgrid(xs, zs, indexing="xy")
+    v = np.column_stack([xx.ravel(), np.zeros(n * n), zz.ravel()])
+    tris: list[list[int]] = []
+    for j in range(n - 1):
+        for i in range(n - 1):
+            a = j * n + i
+            b = a + 1
+            c = a + n
+            d = c + 1
+            tris.append([a, c, b])
+            tris.append([b, c, d])
+    return v, np.asarray(tris, dtype=np.int64)
+
+
+class TestWeldDensityMedianCap:
+    def test_dynamic_weld_caps_to_median_edge(self) -> None:
+        from gamedev_shared.mesh_repair import dynamic_weld_distance
+
+        # 54k verts → dyn=0.008; mediana 0.008 → cap 0.0032
+        assert dynamic_weld_distance(54_000, median_edge=0.008) == pytest.approx(0.0032)
+        assert dynamic_weld_distance(54_000, median_edge=None) == pytest.approx(0.008)
+
+    def test_flat_grid_survives_topology_clean_arrays(self) -> None:
+        v, f = _flat_grid(32, spacing=0.008)
+        assert len(f) > 1000
+        v2, f2, stats = repair_arrays_topology_clean(v, f, do_remove_internal_shells=False)
+        assert len(f2) > 0, stats
+        assert len(v2) > 100, stats
+        # Sem cap, weld_distance seria 8000 µm e faces=0.
+        assert stats.get("weld_distance", 0) < 8000

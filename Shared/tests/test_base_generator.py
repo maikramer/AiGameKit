@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 from gamedev_shared.base_generator import DiffusionGeneratorBase, torch_dtype_for
 
 
@@ -30,17 +32,15 @@ class TestTorchDtypeFor:
     """torch_dtype_for helper — usa torch real (presente no venv de teste)."""
 
     def test_cpu_returns_float32(self) -> None:
-        import torch
+        torch = pytest.importorskip("torch")
 
         result = torch_dtype_for("cpu")
         assert result == torch.float32
 
     def test_cuda_returns_bfloat16_if_available(self) -> None:
-        import torch
+        torch = pytest.importorskip("torch")
 
         if not torch.cuda.is_available():
-            import pytest
-
             pytest.skip("Sem GPU CUDA disponível")
         result = torch_dtype_for("cuda")
         assert result == torch.bfloat16

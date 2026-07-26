@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import logging
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 # Blender 5.2 LTS introduced native EXT/KHR_meshopt_compression in the glTF
 # exporter and a matching decoder in the importer. Older bpy needs an external
@@ -101,13 +104,18 @@ def strip_bone_display_meshes() -> int:
     GLB; world bounds expand to the helper (often a unit icosphere at origin)
     and the character looks like its pivot sits far below the feet.
 
+    Only runs when an armature is present — otherwise a legitimate mesh named
+    ``Icosphere`` (tests / props) would be deleted and leave an empty scene.
+
     Returns:
         Number of mesh objects removed.
     """
     bpy = _require_bpy()
-    for arm in bpy.context.scene.objects:
-        if arm.type != "ARMATURE":
-            continue
+    arms = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
+    if not arms:
+        return 0
+
+    for arm in arms:
         for bone in arm.pose.bones:
             if getattr(bone, "custom_shape", None) is not None:
                 bone.custom_shape = None
@@ -141,16 +149,31 @@ def import_gltf(path: str | Path, *, bone_heuristic: str = "TEMPERANCE", **kwarg
     ``TEMPERANCE`` avoids creating bone display meshes on import (BLENDER
     default would spawn ``Icosphere`` custom shapes). Also strips any display
     meshes already baked into the file.
+
+    KTX2/BasisU (``KHR_texture_basisu``) and meshopt-on-old-bpy are pre-decoded
+    via :func:`gamedev_shared.gltf_decode.bpy_readable_glb` so pipeline LODs
+    after ``--finish-lod0`` import without
+    ``Extension KHR_texture_basisu is not available``.
     """
+    from gamedev_shared.gltf_decode import bpy_readable_glb
+
     bpy = _require_bpy()
     path = Path(path).expanduser().resolve()
-    import_kw: dict[str, Any] = {"filepath": str(path), "bone_heuristic": bone_heuristic, **kwargs}
-    # Older bpy may not expose bone_heuristic — retry without it.
-    try:
-        bpy.ops.import_scene.gltf(**import_kw)
-    except TypeError:
-        import_kw.pop("bone_heuristic", None)
-        bpy.ops.import_scene.gltf(**import_kw)
+
+    def _do_import(readable: Path) -> None:
+        import_kw: dict[str, Any] = {
+            "filepath": str(readable),
+            "bone_heuristic": bone_heuristic,
+            **kwargs,
+        }
+        try:
+            bpy.ops.import_scene.gltf(**import_kw)
+        except TypeError:
+            import_kw.pop("bone_heuristic", None)
+            bpy.ops.import_scene.gltf(**import_kw)
+
+    with bpy_readable_glb(path) as readable:
+        _do_import(readable)
     strip_bone_display_meshes()
     return [o for o in bpy.context.scene.objects if o.type == "MESH"]
 
@@ -200,15 +223,131 @@ def apply_smooth_by_angle(obj: Any, degrees: float = 60.0) -> None:
         mesh.auto_smooth_angle = angle
 
 
-def smooth_shade_scene(objects: Any, degrees: float = 60.0) -> None:
+#: Acima deste V/Tri o mesh tem vértices duplicados (normais per-face / split).
+_SPLIT_VERTS_VPT = 2.0
+
+#: Weld de pré-export. Acima de 1e-4 fecha também o ruído de quantização que os
+#: exporters glTF introduzem, sem comer detalhe (µm num asset de metros).
+DEFAULT_PREEXPORT_WELD_DIST = 3e-4
+
+#: Acima deste número de vértices o BMesh do weld pesa mais que os buffers e o
+#: caminho vetorizado assume (meshes sem atributos por-canto).
+_ARRAYS_WELD_MIN_VERTS = 1_000_000
+
+
+def _mesh_is_plain(obj: Any, mesh: Any) -> bool:
+    """True se o mesh só tem posições/faces — seguro para reescrever buffers.
+
+    UVs, shape keys, vertex groups e materiais múltiplos não sobrevivem ao
+    rebuild vetorizado, logo esses meshes ficam no caminho bmesh.
+    """
+    if len(mesh.uv_layers) or len(mesh.materials) > 1:
+        return False
+    if getattr(mesh, "shape_keys", None) is not None:
+        return False
+    if len(getattr(obj, "vertex_groups", ()) or ()):
+        return False
+    if getattr(mesh, "color_attributes", None) and len(mesh.color_attributes):
+        return False
+    # Só topologia all-tri: o rebuild triangula e mudaria quads em silêncio.
+    return len(mesh.loops) == 3 * len(mesh.polygons)
+
+
+def weld_mesh_arrays(mesh: Any, threshold: float) -> int:
+    """Funde vértices coincidentes em arrays (numpy/scipy) em vez de BMesh.
+
+    Mesmo fecho transitivo do ``bmesh.ops.remove_doubles`` (cKDTree, ou grelha
+    de voxels sem scipy), mas sem construir o BMesh — que num soup de milhões
+    de vértices aloca uma ordem de grandeza mais memória do que os buffers e é
+    onde o export encalhava. Só para meshes sem atributos por-canto: o rebuild
+    reescreve posições/faces e perderia UVs/weights.
+
+    Returns:
+        Vértices fundidos (0 se nada mudou).
+    """
+    import numpy as np
+
+    from gamedev_shared.mesh_repair_arrays import compact_mesh, weld_vertices
+
+    n_tris = len(mesh.polygons)
+    if len(mesh.vertices) == 0 or n_tris == 0:
+        return 0
+
+    verts = vertex_coords(mesh)
+    tri = np.empty(n_tris * 3, dtype=np.int32)
+    mesh.polygons.foreach_get("vertices", tri)
+    tris = tri.reshape(-1, 3).astype(np.int64)
+
+    try:
+        verts, tris, merged = weld_vertices(verts, tris, float(threshold), method="exact")
+    except ImportError:
+        verts, tris, merged = weld_vertices(verts, tris, float(threshold), method="grid")
+    if merged <= 0:
+        return 0
+
+    verts, tris = compact_mesh(verts, tris)
+    mesh.clear_geometry()
+    mesh.from_pydata(verts.tolist(), [], tris.tolist())
+    mesh.update()
+    return int(merged)
+
+
+def tri_count(mesh: Any) -> int:
+    """Triângulos de um mesh bpy em O(1), sem iterar polígonos.
+
+    ``len(loops) - 2 * len(polygons)`` é a contagem fan-triangulada, logo vale
+    para quads e n-gons. Iterar ``polygons`` custa segundos em meshes de
+    milhões de faces (voxel remesh), por isso nunca fazê-lo só para contar.
+    """
+    return max(0, len(mesh.loops) - 2 * len(mesh.polygons))
+
+
+def vertex_coords(mesh: Any) -> Any:
+    """``(N, 3)`` float64 das posições locais via ``foreach_get`` (vetorizado)."""
+    import numpy as np
+
+    co = np.empty(len(mesh.vertices) * 3, dtype=np.float64)
+    mesh.vertices.foreach_get("co", co)
+    return co.reshape(-1, 3)
+
+
+def mesh_v_per_tri(mesh: Any) -> float | None:
+    """V/Tri de um mesh bpy em O(1) (sem iterar polígonos).
+
+    ``len(mesh.loops) - 2 * len(mesh.polygons)`` dá a contagem de triângulos de
+    qualquer topologia fan-triangulável, logo serve para quads e n-gons.
+    """
+    polys = len(mesh.polygons)
+    tris = len(mesh.loops) - 2 * polys
+    if tris <= 0:
+        return None
+    return len(mesh.vertices) / tris
+
+
+def smooth_shade_scene(
+    objects: Any,
+    degrees: float = 60.0,
+    *,
+    force_weld: bool = False,
+    weld_dist: float = DEFAULT_PREEXPORT_WELD_DIST,
+) -> None:
     """Smooth-shade + weld coincidentes antes de re-export glTF.
 
     Dois modos de V/Tri≈3:
     1. Import flat (sem NORMAL) → exporter parte loops. ``shade_smooth`` basta.
     2. Vértices **já duplicados** no mesh (rigged/animated SkinTokens, etc.) →
        ``shade_smooth`` sozinho NÃO funde; Decimate COLLAPSE rasga o LOD
-       (triângulos isolados / moth-eaten). Weld ``1e-4`` fecha duplicados
-       exactos sem comer costuras UV úteis.
+       (triângulos isolados / moth-eaten). O weld fecha duplicados sem comer
+       costuras UV úteis.
+
+    Duas optimizações mantêm isto fora do caminho crítico:
+
+    * **Skip por V/Tri** — um shape marching-cubes tem V/Tri≈0.5 e não tem nada
+      para fundir; só V/Tri ≥ 2 denuncia vértices partidos. ``force_weld``
+      ignora a heurística.
+    * **Weld vetorizado** — em meshes grandes sem atributos por-canto o weld
+      corre em arrays (:func:`weld_mesh_arrays`), poupando o BMesh que domina
+      memória e tempo num soup de milhões de vértices.
 
     Idempotente. Aplicar antes de qualquer ``bpy.ops.export_scene.gltf`` da
     pipeline (skin_transfer, rigging3d bone_repair, animator3d game-pack).
@@ -219,20 +358,40 @@ def smooth_shade_scene(objects: Any, degrees: float = 60.0) -> None:
         if getattr(obj, "type", None) != "MESH":
             continue
         mesh = obj.data
-        # Weld antes do shade: verts já partidos no ficheiro.
-        bm = bmesh.new()
-        bm.from_mesh(mesh)
-        before = len(bm.verts)
-        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
-        if len(bm.verts) < before:
-            bm.to_mesh(mesh)
-            mesh.update()
-        bm.free()
+        vpt = mesh_v_per_tri(mesh)
+        needs_weld = force_weld or vpt is None or vpt >= _SPLIT_VERTS_VPT
+        if not needs_weld:
+            log.debug("smooth_shade_scene: weld saltado (%s V/Tri=%.2f)", mesh.name, vpt)
+        elif len(mesh.vertices) >= _ARRAYS_WELD_MIN_VERTS and _mesh_is_plain(obj, mesh):
+            merged = 0
+            try:
+                merged = weld_mesh_arrays(mesh, weld_dist)
+            except Exception as exc:
+                log.warning("weld vetorizado falhou (%s) — a usar bmesh: %s", mesh.name, exc)
+                _weld_mesh_bmesh(bmesh, mesh, weld_dist)
+            else:
+                log.debug("smooth_shade_scene: weld vetorizado fundiu %d verts (%s)", merged, mesh.name)
+        else:
+            _weld_mesh_bmesh(bmesh, mesh, weld_dist)
         with contextlib.suppress(Exception):
             # Larga custom split normals herdadas do import (bpy < 4.1 API;
             # em 5.x o atributo é recriado pelo shade_smooth_by_angle).
             mesh.free_normals_split()
         apply_smooth_by_angle(obj, degrees)
+
+
+def _weld_mesh_bmesh(bmesh: Any, mesh: Any, threshold: float) -> int:
+    """Weld ``remove_doubles`` preservando UVs/weights (single-thread)."""
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    before = len(bm.verts)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=float(threshold))
+    merged = before - len(bm.verts)
+    if merged > 0:
+        bm.to_mesh(mesh)
+        mesh.update()
+    bm.free()
+    return merged
 
 
 def _needs_tangents(objects: Any) -> bool:
@@ -328,6 +487,12 @@ def save_glb(objects: Any, path: str | Path, **kwargs: Any) -> None:
 
     meshopt = bool(kwargs.pop("meshopt", False))
     meshopt_ext = str(kwargs.pop("meshopt_extension", "EXT_meshopt_compression"))
+    # Verificação pós-export (não são kwargs do exporter glTF).
+    verify_stage = kwargs.pop("verify_stage", None)
+    skip_verify = bool(kwargs.pop("skip_verify", False))
+    verify_require_normals = kwargs.pop("verify_require_normals", None)
+    verify_require_uv = kwargs.pop("verify_require_uv", None)
+    verify_require_tangents = kwargs.pop("verify_require_tangents", None)
     user_set_apply = "export_apply" in kwargs
     user_set_tangents = "export_tangents" in kwargs
     export_kwargs.update(kwargs)
@@ -349,6 +514,18 @@ def save_glb(objects: Any, path: str | Path, **kwargs: Any) -> None:
     stdout = io.StringIO()
     with contextlib.redirect_stdout(stdout):
         bpy.ops.export_scene.gltf(**export_kwargs)
+
+    if not skip_verify:
+        with contextlib.suppress(Exception):
+            from gamedev_shared.glb_verify import post_save_verify
+
+            post_save_verify(
+                path,
+                stage=verify_stage if isinstance(verify_stage, str) else None,
+                require_normals=verify_require_normals if isinstance(verify_require_normals, bool) else None,
+                require_uv=verify_require_uv if isinstance(verify_require_uv, bool) else None,
+                require_tangents=verify_require_tangents if isinstance(verify_require_tangents, bool) else None,
+            )
 
 
 def get_mesh_objects() -> list:
@@ -526,8 +703,11 @@ def load_mesh_as_trimesh(path: str | Path) -> Any:
     obj_eval = obj.evaluated_get(depsgraph)
     mesh_eval = obj_eval.to_mesh()
 
-    verts = np.array([tuple(v.co) for v in mesh_eval.vertices], dtype=np.float64)
-    faces = np.array([tuple(p.vertices) for p in mesh_eval.polygons], dtype=np.int64)
+    verts = vertex_coords(mesh_eval)
+    mesh_eval.calc_loop_triangles()
+    tri_flat = np.empty(len(mesh_eval.loop_triangles) * 3, dtype=np.int64)
+    mesh_eval.loop_triangles.foreach_get("vertices", tri_flat)
+    faces = tri_flat.reshape(-1, 3)
 
     # Aplicar matrix_world: o importer glTF põe as rotações de node (ex. o
     # +90°X que endireita assets) na matriz do objeto — ler só ``v.co``

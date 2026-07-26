@@ -59,6 +59,8 @@ bpy = pytest.importorskip("bpy")
 
 from gamedev_shared.bpy_mesh import clear_scene, load_glb, save_glb  # noqa: E402
 from gamedev_shared.mesh_simplify import (  # noqa: E402
+    _boundary_edge_fraction,
+    _weld_if_split_soup,
     decimate_mesh_object,
     has_shape_keys,
     simplify_glb,
@@ -119,6 +121,48 @@ class TestDecimateMeshObject:
         # Armature modifier must survive (never frozen by the apply).
         assert [m.type for m in obj.modifiers] == ["ARMATURE"]
         assert len(obj.data.polygons) <= 500
+
+    def test_fragmented_shells_weld_before_collapse(self) -> None:
+        """Cascas abertas coincidentes: sem weld COLLAPSE rasga; com weld bfrac cai."""
+        obj = _make_double_open_shell()
+        bfrac0 = _boundary_edge_fraction(obj)
+        assert bfrac0 >= 0.12
+        welded = _weld_if_split_soup(obj)
+        assert welded > 0
+        bfrac1 = _boundary_edge_fraction(obj)
+        assert bfrac1 < bfrac0
+        target = max(300, len(obj.data.polygons) // 4)
+        n = decimate_mesh_object(obj, target, protect_boundaries=False)
+        assert n <= int(target * 1.5)
+        # LOD não pode sair "comido" (quase só boundary).
+        assert _boundary_edge_fraction(obj) < 0.45
+
+
+def _make_double_open_shell() -> object:
+    """Duas cascas abertas coincidentes (simula paredes duplas Hunyuan)."""
+    import bmesh
+
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=3, radius=1.0)
+    obj = bpy.context.active_object
+    assert obj is not None
+    # Apaga ~20% faces via bmesh (buracos → boundary).
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.faces.ensure_lookup_table()
+    to_del = [f for i, f in enumerate(bm.faces) if i % 5 == 0]
+    bmesh.ops.delete(bm, geom=to_del, context="FACES")
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    # Segunda casca idêntica (verts coincidentes).
+    bpy.ops.object.duplicate()
+    dup = bpy.context.active_object
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    dup.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.join()
+    return obj
 
 
 class TestSimplifyMeshObject:

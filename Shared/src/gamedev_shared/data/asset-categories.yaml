@@ -154,7 +154,8 @@ categories:
 
   building:
     label: "Building"
-    target_faces: 15000
+    # Edifícios grandes: LOD2 a ~target/3 precisa de base alta p/ silhueta (capela ~7–10 m).
+    target_faces: 28000
     audio:
       profile: music
       kind: ambient_one_shot

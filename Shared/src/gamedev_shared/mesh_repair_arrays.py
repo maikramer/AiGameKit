@@ -737,7 +737,16 @@ def repair_arrays_topology_clean(
     if len(tris) == 0:
         return verts, tris, stats
 
-    dist = dynamic_weld_distance(len(verts)) if weld_density else 0.0
+    faces_before_weld = len(tris)
+    verts_pre_weld = verts
+    tris_pre_weld = tris
+    median_edge: float | None = None
+    if weld_density:
+        edges, _, _ = _unique_edges(tris)
+        if len(edges):
+            elens = np.linalg.norm(verts[edges[:, 0]] - verts[edges[:, 1]], axis=1)
+            median_edge = float(np.median(elens))
+    dist = dynamic_weld_distance(len(verts), median_edge=median_edge) if weld_density else 0.0
     thresholds = [reweld_threshold, weld_threshold] + ([dist] if dist > 0 else [])
     verts, tris, removed = weld_vertices_multi(verts, tris, thresholds, method=weld_method)
     stats["rewelded_coincident"] = int(removed[0]) if len(removed) > 0 else 0
@@ -747,6 +756,21 @@ def repair_arrays_topology_clean(
         stats["weld_distance"] = int(dist * 1_000_000)
     # weld_vertices_multi mantém órfãos só se não houve fusões; compacta sempre.
     verts, tris = compact_mesh(verts, tris)
+    # Cinto: weld densidade ainda colapsou (cap falhou / malha degenerada) →
+    # repetir só reweld+exact a partir do pré-weld.
+    if faces_before_weld > 0 and len(tris) == 0 and dist > 0:
+        log.warning(
+            "weld_density (%.5f, med_edge=%s) zerou faces — retry sem densidade",
+            dist,
+            f"{median_edge:.5f}" if median_edge else "?",
+        )
+        stats["weld_density_collapsed"] = 1
+        thresholds = [reweld_threshold, weld_threshold]
+        verts, tris, removed = weld_vertices_multi(verts_pre_weld, tris_pre_weld, thresholds, method=weld_method)
+        stats["rewelded_coincident"] = int(removed[0]) if len(removed) > 0 else 0
+        stats["welded_exact"] = int(removed[1] - removed[0]) if len(removed) > 1 else 0
+        stats["welded_relative"] = 0
+        verts, tris = compact_mesh(verts, tris)
 
     verts, tris, stats["long_edge_faces"] = drop_long_edge_faces(
         verts,

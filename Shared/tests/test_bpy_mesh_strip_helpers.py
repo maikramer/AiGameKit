@@ -11,6 +11,8 @@ def test_strip_bone_display_meshes_removes_icosphere() -> None:
     from gamedev_shared.bpy_mesh import clear_scene, strip_bone_display_meshes
 
     clear_scene()
+    # Helpers de bone só existem com armature; sem ela o strip é no-op.
+    bpy.ops.object.armature_add()
     bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=1.0)
     ico = bpy.context.active_object
     assert ico is not None
@@ -27,3 +29,17 @@ def test_strip_bone_display_meshes_removes_icosphere() -> None:
     assert removed >= 1
     assert "Icosphere" not in names
     assert "HeroMesh" in names
+
+
+def test_strip_bone_display_meshes_keeps_icosphere_without_armature() -> None:
+    """Prop legítimo chamado ``Icosphere`` não pode desaparecer da cena."""
+    from gamedev_shared.bpy_mesh import clear_scene, strip_bone_display_meshes
+
+    clear_scene()
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=1.0)
+    obj = bpy.context.active_object
+    assert obj is not None
+    obj.name = "Icosphere"
+
+    assert strip_bone_display_meshes() == 0
+    assert "Icosphere" in {o.name for o in bpy.context.scene.objects if o.type == "MESH"}
