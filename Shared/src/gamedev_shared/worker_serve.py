@@ -49,6 +49,46 @@ from .worker_protocol import (
 )
 
 
+def start_parent_watchdog(*, poll_sec: float = 5.0) -> None:
+    """Thread que termina o worker se o supervisor UMS desaparecer.
+
+    O caminho normal é o EOF no stdin (o UMS fecha o pipe ao morrer), mas um
+    ``SIGKILL`` no supervisor ou um pipe herdado por outro processo pode deixar
+    o worker vivo — e um worker vivo segura os pesos e o contexto CUDA para
+    sempre. O watchdog fecha esse buraco: se o PPID mudar (reparenting para
+    ``init``/subreaper), sai.
+
+    ``GAMEDEV_WORKER_PARENT_WATCHDOG=0`` desliga (ex.: correr o worker à mão).
+    """
+    import os
+    import threading
+
+    if os.environ.get("GAMEDEV_WORKER_PARENT_WATCHDOG", "1") == "0":
+        return
+    initial_ppid = os.getppid()
+    if initial_ppid <= 1:
+        return
+
+    def _watch() -> None:
+        import sys as _sys
+        import time as _time
+
+        while True:
+            _time.sleep(poll_sec)
+            if os.getppid() == initial_ppid:
+                continue
+            print(
+                f"[worker] supervisor {initial_ppid} desapareceu (ppid={os.getppid()}) — a sair.",
+                file=_sys.stderr,
+                flush=True,
+            )
+            # _exit: o objectivo é devolver VRAM já; handlers de atexit em torch
+            # podem bloquear num driver preso.
+            os._exit(0)
+
+    threading.Thread(target=_watch, daemon=True, name="worker-parent-watchdog").start()
+
+
 def _is_vram_error(exc: Exception) -> bool:
     """Heurística: erro de VRAM (RuntimeError torch OOM ou texto)."""
     msg = str(exc).lower()
@@ -113,6 +153,7 @@ def run_worker_loop(
     # "real" da tool para stderr (capturado pelo UMS no log) e substituir por
     # um canal estrito só para JSONL via set_jsonl_stream no worker_protocol.
     _install_jsonl_stdout()
+    start_parent_watchdog()
     adapter = adapter_class()
     model: Any = None
     # Caixa mutável para o flag de abort — closures que o adapter chama durante

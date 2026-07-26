@@ -1,15 +1,18 @@
-"""IdleEvictor — thread de background que descarrega backends idle.
+"""IdleEvictor — thread de background que liberta VRAM de backends idle.
 
-Corre periodicamente (default a cada 60s) e evicta backends que estão carregados
-mas sem atividade há mais de ``idle_timeout_sec`` (default 600s = 10 min).
+Três níveis, do mais leve ao mais agressivo:
 
-Isto liberta VRAM para outros processos GPU mesmo quando o UMS não está sob
-pressão de VRAM. O BackendManager continua a poder recarregar o backend a pedido
-(cold start) — a diferença é que a VRAM fica livre para outros usos entre pedidos.
+1. ``unload`` de pesos após ``idle_timeout_sec`` (default 120s). Liberta a maior
+   parte da VRAM mantendo o worker vivo — recarregar é mais rápido que respawn.
+2. ``shutdown`` do subprocesso worker após ``worker_shutdown_sec`` (default
+   300s). Necessário porque o ``unload`` deixa o contexto CUDA do processo
+   (~0.3-1 GiB) na GPU; só a morte do processo o devolve.
+3. Health-check ``ping``/``pong`` aos workers vivos (default a cada 60s): um
+   worker wedged deixa de responder mas continua a segurar VRAM — mata-se e o
+   próximo job faz respawn.
 
-Compatível com o idle_timeout do UMS: o idle_timeout do servidor inteiro (default
-30 min) encerra o processo; o idle_evictor é mais granular — evicta backends
-individuais sem parar o servidor.
+O ``idle_timeout`` do servidor inteiro (``DEFAULT_IDLE_TIMEOUT_MIN``) é
+complementar: encerra o processo supervisor; este evictor é granular.
 """
 
 from __future__ import annotations
@@ -28,8 +31,11 @@ class IdleEvictor:
 
     Args:
         manager: BackendManager cujos backends serão inspecionados.
-        idle_timeout_sec: Segundos de idle antes de evictar (default 600 = 10 min).
-        check_interval_sec: Intervalo entre verificações (default 60s).
+        idle_timeout_sec: Segundos de idle antes de descarregar pesos.
+        check_interval_sec: Intervalo entre verificações.
+        worker_shutdown_sec: Segundos de idle antes de terminar o subprocesso
+            worker (``0`` desliga). Deve ser ``>= idle_timeout_sec``.
+        health_check_sec: Intervalo do ping aos workers vivos (``0`` desliga).
         daemon: Se True, a thread morre quando o processo principal sai.
     """
 
@@ -37,16 +43,21 @@ class IdleEvictor:
         self,
         manager: Any,
         *,
-        idle_timeout_sec: float = 600.0,
-        check_interval_sec: float = 60.0,
+        idle_timeout_sec: float = 120.0,
+        check_interval_sec: float = 15.0,
+        worker_shutdown_sec: float = 300.0,
+        health_check_sec: float = 60.0,
         daemon: bool = True,
     ) -> None:
         self._manager = manager
         self._idle_timeout_sec = idle_timeout_sec
         self._check_interval_sec = check_interval_sec
+        self._worker_shutdown_sec = worker_shutdown_sec
+        self._health_check_sec = health_check_sec
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._daemon = daemon
+        self._last_health_check = 0.0
 
     @property
     def idle_timeout_sec(self) -> float:
@@ -56,6 +67,10 @@ class IdleEvictor:
     def idle_timeout_sec(self, value: float) -> None:
         self._idle_timeout_sec = value
 
+    @property
+    def worker_shutdown_sec(self) -> float:
+        return self._worker_shutdown_sec
+
     def start(self) -> None:
         """Arranca a thread de background (idempotente)."""
         if self._thread is not None and self._thread.is_alive():
@@ -64,7 +79,9 @@ class IdleEvictor:
         self._thread = threading.Thread(target=self._run, daemon=self._daemon, name="ums-idle-evictor")
         self._thread.start()
         _logger.info(
-            f"[UMS] IdleEvictor ativo (timeout={self._idle_timeout_sec:.0f}s, interval={self._check_interval_sec:.0f}s)"
+            f"[UMS] IdleEvictor ativo (unload={self._idle_timeout_sec:.0f}s, "
+            f"worker_shutdown={self._worker_shutdown_sec:.0f}s, "
+            f"health={self._health_check_sec:.0f}s, interval={self._check_interval_sec:.0f}s)"
         )
 
     def stop(self) -> None:
@@ -84,6 +101,14 @@ class IdleEvictor:
                 self._check_and_evict()
             except Exception as e:
                 _logger.warn(f"[UMS] IdleEvictor erro: {e}")
+            try:
+                self._shutdown_idle_workers()
+            except Exception as e:
+                _logger.warn(f"[UMS] IdleEvictor shutdown de workers falhou: {e}")
+            try:
+                self._health_check()
+            except Exception as e:
+                _logger.warn(f"[UMS] IdleEvictor health-check falhou: {e}")
 
     def _check_and_evict(self) -> None:
         """Verifica backends carregados e evicta os idle há demasiado tempo."""
@@ -98,3 +123,35 @@ class IdleEvictor:
             if evicted:
                 # clear_cache após evict para libertar VRAM imediatamente.
                 manager._clear_cache()
+
+    def _shutdown_idle_workers(self) -> None:
+        """Termina subprocessos worker idle — devolve o contexto CUDA à GPU."""
+        if self._worker_shutdown_sec <= 0:
+            return
+        manager = self._manager
+        idle_workers = getattr(manager, "idle_worker_candidates", None)
+        if idle_workers is None:
+            return
+        now = time.monotonic()
+        for name, last_used in idle_workers(self._worker_shutdown_sec):
+            idle_sec = now - last_used if last_used else self._worker_shutdown_sec
+            _logger.info(f"[UMS] IdleEvictor: worker {name!r} idle há {idle_sec:.0f}s — a terminar subprocesso.")
+            manager.shutdown_worker(name)
+
+    def _health_check(self) -> None:
+        """Ping aos workers vivos; mata os que não respondem."""
+        if self._health_check_sec <= 0:
+            return
+        now = time.monotonic()
+        if now - self._last_health_check < self._health_check_sec:
+            return
+        self._last_health_check = now
+        check = getattr(self._manager, "health_check_workers", None)
+        if check is None:
+            return
+        for entry in check() or []:
+            if not entry.get("ok"):
+                _logger.warn(
+                    f"[UMS] health-check: worker {entry.get('backend')!r} sem pong — terminado "
+                    f"(respawn no próximo job)."
+                )

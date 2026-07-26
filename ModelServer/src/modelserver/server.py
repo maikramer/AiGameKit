@@ -25,11 +25,12 @@ from pathlib import Path
 from typing import Any
 
 from gamedev_shared.logging import Logger
-from gamedev_shared.model_server import _ensure_server_dir, _pid_path, is_server_running
+from gamedev_shared.model_server import _ensure_server_dir, _pid_path
 
 from . import protocol as P
 from .backend_manager import BackendManager
 from .job_queue import Job, JobQueue, QueueFullError
+from .process_guard import SingletonLock, lock_path_for
 from .registry import Registry
 from .scheduler import AffinityScheduler
 from .worker import WorkerPool
@@ -53,25 +54,30 @@ class UnifiedModelServer:
         *,
         socket_path: Path | str | None = None,
         idle_timeout_min: int = P.DEFAULT_IDLE_TIMEOUT_MIN,
-        idle_evict_sec: float = 600.0,
+        idle_evict_sec: float = P.IDLE_EVICT_SEC,
+        worker_shutdown_sec: float = P.WORKER_IDLE_SHUTDOWN_SEC,
         max_queue_depth: int = P.MAX_QUEUE_DEPTH,
         max_inflight: int = P.MAX_INFLIGHT,
         max_affinity_cuts: int = P.MAX_AFFINITY_CUTS,
         verbose: bool = False,
         query_free_mib: Any = None,
         clear_vram: Any = None,
+        subprocess_pool: Any = None,
     ) -> None:
         self.registry = registry if registry is not None else Registry()
         # Pool de subprocessos para backends com 'tool:' definido (Fase 3-4).
-        # Lazy-created: se nenhum backend usar subprocesso, o pool fica inerte.
-        from .subprocess_pool import SubprocessWorkerPool
+        # Injectável para testes; por defeito cria um SubprocessWorkerPool real
+        # (fica inerte se nenhum backend usar subprocesso).
+        if subprocess_pool is None:
+            from .subprocess_pool import SubprocessWorkerPool
 
-        subprocess_pool = SubprocessWorkerPool()
+            subprocess_pool = SubprocessWorkerPool()
         self.manager = BackendManager(
             self.registry,
             query_free_mib=query_free_mib,
             clear_vram=clear_vram,
             subprocess_pool=subprocess_pool,
+            reap_strays=self.reap_strays,
         )
         self.socket_path = Path(socket_path) if socket_path else P.DEFAULT_SOCKET_PATH
         self.ppid_path = _pid_path(self.socket_path)
@@ -94,7 +100,13 @@ class UnifiedModelServer:
 
         from .idle_evictor import IdleEvictor
 
-        self.idle_evictor = IdleEvictor(self.manager, idle_timeout_sec=idle_evict_sec)
+        self.idle_evictor = IdleEvictor(
+            self.manager,
+            idle_timeout_sec=idle_evict_sec,
+            check_interval_sec=P.IDLE_EVICT_CHECK_SEC,
+            worker_shutdown_sec=worker_shutdown_sec,
+            health_check_sec=P.WORKER_HEALTH_CHECK_SEC,
+        )
 
         self._server_sock: socket.socket | None = None
         self._bound = False  # True só após bind+listen OK (protege cleanup em double-start)
@@ -102,10 +114,41 @@ class UnifiedModelServer:
         self._last_activity = time.monotonic()
         self._requests_served = 0
         self._pid = os.getpid()
+        # Singleton: só um supervisor por socket. flock é libertado pelo kernel
+        # na morte do processo — não há pid-file stale a limpar.
+        self._singleton = SingletonLock(lock_path_for(self.socket_path))
 
     def _log(self, msg: str) -> None:
         # Sempre ficheiro; consola só com --verbose.
         _logger.info(f"[UMS] {msg}", console=self.verbose)
+
+    # ------------------------------------------------------------------
+    # Órfãos (supervisores/workers de runs anteriores)
+    # ------------------------------------------------------------------
+
+    def reap_strays(self, *, dry_run: bool = False) -> dict[str, Any]:
+        """Mata processos UMS que não são nossos (só seguro com o lock detido).
+
+        Sem o :class:`SingletonLock` não há garantia de que os outros processos
+        sejam lixo — pode ser um supervisor legítimo, e matá-lo racaria a fila.
+        """
+        if not self._singleton.held:
+            return {
+                "count": 0,
+                "reaped": [],
+                "vram_mib_freed": 0,
+                "skipped": "sem singleton lock — reap inseguro",
+            }
+        # Import local: os nomes do módulo colidem com estes métodos.
+        from .process_guard import reap_strays as _reap_strays
+
+        return _reap_strays(self_pid=self._pid, dry_run=dry_run)
+
+    def stray_report(self) -> dict[str, Any]:
+        """Órfãos + VRAM que seguram (informativo; não mata)."""
+        from .process_guard import stray_report as _stray_report
+
+        return _stray_report(self_pid=self._pid)
 
     # ------------------------------------------------------------------
     # Despacho de comandos
@@ -316,6 +359,7 @@ class UnifiedModelServer:
 
         if cmd == P.CMD_STATUS:
             mgr_status = self.manager.status()
+            strays = self.stray_report()
             qsnap = self.queue.snapshot()
             backend_stats = self.manager.stats.get_all()
             last_errors = {name: s["last_error"] for name, s in backend_stats.items() if s.get("last_error")}
@@ -333,6 +377,9 @@ class UnifiedModelServer:
                 "queue": qsnap,
                 "queue_metrics": self.manager.stats.queue_dict(),
                 "eta_sec": eta,
+                "idle_evict_timeout_sec": self.idle_evictor.idle_timeout_sec,
+                "worker_shutdown_sec": self.idle_evictor.worker_shutdown_sec,
+                "strays": strays,
                 "debug": {
                     "loaded_backends": self.manager.loaded_names(),
                     "last_errors": last_errors,
@@ -341,9 +388,17 @@ class UnifiedModelServer:
                     "inflight": qsnap.get("inflight", 0),
                     "affinity_hits": getattr(self.workers, "_affinity_hits", 0),
                     "process_vram_mib": mgr_status.get("process_vram_mib"),
+                    "worker_vram_mib": mgr_status.get("worker_vram_mib"),
+                    "stray_vram_mib": strays.get("vram_mib"),
                 },
                 **mgr_status,
             }
+
+        if cmd == P.CMD_REAP:
+            if request.get("report_only"):
+                return {"status": P.STATUS_OK, **self.stray_report()}
+            result = self.reap_strays(dry_run=bool(request.get("dry_run")))
+            return {"status": P.STATUS_OK, **result}
 
         if cmd == P.CMD_QUEUE:
             snap = self.queue.snapshot()
@@ -483,6 +538,58 @@ class UnifiedModelServer:
                     hint="Verifica deps do backend (gamedev-model-server doctor) e VRAM livre.",
                     backend=name,
                 )
+
+        if cmd == P.CMD_RESPAWN:
+            # Respawn só faz sentido com workers subprocesso activos. Recusar se
+            # há jobs na fila/inflight — matar um worker mid-generate rouba o job.
+            if self.queue.inflight > 0 or self.queue.depth > 0:
+                return self._error(
+                    "fila ocupada — espera os jobs terminarem antes de respawn",
+                    error_code=P.ERR_RESPAWN_BUSY,
+                    hint="ums queue / ums wait <job_id> — não mates o worker a meio de um job.",
+                    queue=self.queue.snapshot(),
+                )
+            from .backend_manager import ShapeBusyError
+
+            backend = request.get("backend")
+            lazy_req = request.get("lazy", True)
+            lazy = lazy_req is None or self.manager._as_bool(lazy_req) is not False
+            try:
+                if backend:
+                    name = str(backend)
+                    if not self.registry.has(name):
+                        return self._error(
+                            f"backend desconhecido: {name}",
+                            error_code=P.ERR_BACKEND_UNKNOWN,
+                            hint=f"Backends válidos: {list(self.registry.names)}",
+                        )
+                    results = [self.manager.respawn(name, lazy=lazy)]
+                else:
+                    results = self.manager.respawn_all(lazy=lazy)
+            except ShapeBusyError as e:
+                return self._error(
+                    str(e),
+                    error_code=P.ERR_RESPAWN_BUSY,
+                    hint="Backend com job a correr (ref_count>0). Espera o job terminar.",
+                )
+            except KeyError as e:
+                return self._error(f"backend desconhecido: {e}", error_code=P.ERR_BACKEND_UNKNOWN)
+            except Exception as e:
+                return self._error(
+                    f"falha no respawn: {e}",
+                    error_code=P.ERR_RESPAWN_FAILED,
+                    hint="Worker provavelmente já morto — o próximo generate arranca um novo.",
+                )
+            # Scrub residual CUDA depois de matar workers (pode libertar contexto).
+            scrub = self.manager.scrub_dead_vram() if not self.manager.loaded_names() else None
+            return {
+                "status": P.STATUS_OK,
+                "message": f"{sum(1 for r in results if r.get('respawned'))}/{len(results)} worker(s) reiniciado(s)",
+                "results": results,
+                "lazy": lazy,
+                "scrub": scrub,
+                "loaded_backends": self.manager.loaded_names(),
+            }
 
         if cmd == P.CMD_ENSURE_VRAM:
             needed = request.get("needed_mib")
@@ -846,6 +953,7 @@ class UnifiedModelServer:
             with contextlib.suppress(OSError):
                 self._server_sock.close()
             self._server_sock = None
+        self._singleton.release()
 
     def _signal_handler(self, signum: int, frame: Any) -> None:
         self._log(f"Sinal {signum} recebido — a encerrar.")
@@ -855,7 +963,29 @@ class UnifiedModelServer:
         """Arranca o UMS (bloqueante). Graceful shutdown via SIGTERM/SIGINT."""
         _ensure_server_dir()
 
-        if self.socket_path.exists() and not is_server_running(self.socket_path):
+        # Singleton ANTES de mexer no socket: o probe ``is_server_running``
+        # falha num supervisor vivo mas ocupado, e o unlink+bind a seguir criava
+        # supervisores paralelos invisíveis (cada um com os seus workers e VRAM).
+        if not self._singleton.acquire():
+            owner = self._singleton.owner_pid()
+            raise RuntimeError(
+                f"UMS já ativo (PID {owner or '?'}) — lock {self._singleton.path}. "
+                "Usa `ums status` / `ums stop`; não arranques um segundo supervisor."
+            )
+
+        # Com o lock nas mãos, qualquer outro processo da família UMS é lixo de
+        # uma run anterior (supervisor zombie ou worker órfão a segurar VRAM).
+        if P.REAP_ON_START:
+            with contextlib.suppress(Exception):
+                report = self.reap_strays()
+                if report.get("count"):
+                    _logger.warn(
+                        f"[UMS] arranque: {report['count']} processo(s) órfão(s) terminado(s) "
+                        f"(~{report.get('vram_mib_freed')} MiB de VRAM recuperados)."
+                    )
+
+        if self.socket_path.exists():
+            # Detemos o lock ⇒ não existe supervisor legítimo; socket é stale.
             with contextlib.suppress(OSError):
                 self.socket_path.unlink(missing_ok=True)
                 self.ppid_path.unlink(missing_ok=True)
@@ -892,7 +1022,10 @@ class UnifiedModelServer:
             f"affinity_cuts={self.scheduler.max_cuts}"
         )
         _logger.info(f"Idle timeout: {self.idle_timeout_sec / 60:.0f} min")
-        _logger.info(f"Idle evictor: backends descarregados após {self.idle_evictor.idle_timeout_sec:.0f}s sem uso")
+        _logger.info(
+            f"Idle evictor: unload após {self.idle_evictor.idle_timeout_sec:.0f}s sem uso, "
+            f"worker terminado após {self.idle_evictor.worker_shutdown_sec:.0f}s"
+        )
 
         self.idle_evictor.start()
 

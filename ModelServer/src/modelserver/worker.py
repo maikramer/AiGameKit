@@ -33,6 +33,14 @@ def _is_vram_insufficient(result: dict[str, Any]) -> bool:
     return "vram insuficiente" in err or "out of memory" in err
 
 
+def _is_worker_dead(result: dict[str, Any]) -> bool:
+    """Worker subprocesso morto / load incompleto — requeue transitório."""
+    if result.get("error_code") == P.ERR_WORKER_DEAD:
+        return True
+    err = str(result.get("error") or "").lower()
+    return "não está vivo" in err or "nao esta vivo" in err or "worker fechou stdout" in err or "eof no load" in err
+
+
 def _vram_retry_worthwhile(result: dict[str, Any], total_mib: int | None) -> bool:
     """False se o pico nunca cabe na GPU (sem retry)."""
     peak = result.get("peak_mib")
@@ -295,6 +303,27 @@ class WorkerPool:
                 "error_code": P.ERR_GENERATE_FAILED,
             }
 
+        # Worker morto transitório: limpar + requeue (IdleEvictor race / crash).
+        if (
+            result.get("status") != P.STATUS_OK
+            and _is_worker_dead(result)
+            and not job.cancel_requested
+            and job.worker_retries < P.MAX_WORKER_DEAD_RETRIES
+        ):
+            msg = f"worker morto — reload+retry ({job.worker_retries + 1}/{P.MAX_WORKER_DEAD_RETRIES})"
+            _logger.warn(f"[UMS-worker] job {job.job_id[:8]} {msg}: {result.get('error')}")
+            on_progress(None, msg)
+            with contextlib.suppress(Exception):
+                self.manager.evict(job.backend)
+            if self.queue.requeue_running(job, reason="worker dead", kind="worker"):
+                return
+            if job.cancel_requested:
+                result = {
+                    "status": P.STATUS_ERROR,
+                    "error": "cancelled during worker retry",
+                    "error_code": P.ERR_CANCELLED,
+                }
+
         # VRAM transitória: evict + backoff + requeue (não matar o batch).
         if (
             result.get("status") != P.STATUS_OK
@@ -370,6 +399,17 @@ class WorkerPool:
                     ),
                 )
             result["vram_retries"] = job.vram_retries
+
+        if _is_worker_dead(result) and result.get("status") != P.STATUS_OK:
+            result.setdefault("error_code", P.ERR_WORKER_DEAD)
+            result.setdefault(
+                "hint",
+                (
+                    "Worker subprocesso morreu durante o job. UMS já retentou; "
+                    "se persistir: `ums respawn <backend>` / `ums doctor`."
+                ),
+            )
+            result["worker_retries"] = job.worker_retries
 
         self.queue.finish(job, result)
 

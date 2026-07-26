@@ -39,6 +39,13 @@ from .vram_planner import (
 
 _logger = Logger()
 
+
+def _is_worker_dead_message(err: str) -> bool:
+    """True se a mensagem indica worker subprocesso morto / load incompleto."""
+    low = err.lower()
+    return "não está vivo" in low or "nao esta vivo" in low or "worker fechou stdout" in low or "eof no load" in low
+
+
 # Kwargs do request que influenciam carga / pico VRAM (passar a ``ensure_loaded``).
 _LOAD_KWARG_KEYS = frozenset(
     {
@@ -165,6 +172,10 @@ class _LoadedState:
     model: Any = None
     ref_count: int = 0
     last_used: float = 0.0
+    # Última atividade preservada através do unload: ``last_used`` volta a 0 ao
+    # descarregar, mas o worker subprocesso continua vivo e o timer de shutdown
+    # tem de contar desde o último job real (ver ``idle_worker_candidates``).
+    last_activity: float = 0.0
     gen_lock: threading.Lock = field(default_factory=threading.Lock)
     # Shape do load (views/res/quant/…) — mismatch com novo request ⇒ reload.
     load_shape: dict[str, Any] = field(default_factory=dict)
@@ -181,6 +192,7 @@ class _LoadedState:
         self.model = None
         self.subprocess_loaded = False
         self.load_shape = {}
+        self.last_activity = self.last_used or time.monotonic()
         self.last_used = 0.0
 
 
@@ -203,6 +215,7 @@ class BackendManager:
         clear_vram: Any = None,
         query_process_vram_mib: Any = None,
         subprocess_pool: Any = None,
+        reap_strays: Any = None,
     ) -> None:
         self._registry = registry
         self._states: dict[str, _LoadedState] = {}
@@ -210,6 +223,10 @@ class BackendManager:
         self._query_free_mib = query_free_mib
         self._clear_vram = clear_vram
         self._query_process_vram_mib = query_process_vram_mib
+        # Recuperação de VRAM presa por supervisores/workers UMS órfãos —
+        # injectado pelo servidor (process_guard.reap_strays) e usado como
+        # último recurso no ensure_vram, antes de recusar o job.
+        self._reap_strays = reap_strays
         self.stats = StatsCollector()
         # Pool de subprocessos (modo subprocess-per-backend). ``None`` desliga o
         # modo (todos os backends correm in-process, legado). Quando definido,
@@ -230,6 +247,23 @@ class BackendManager:
         except KeyError:
             return False
         return bool(desc.tool)
+
+    def _clear_stale_subprocess_unlocked(self, name: str, state: _LoadedState) -> bool:
+        """Se ``subprocess_loaded`` mas o processo worker morreu, limpa o estado.
+
+        Caller deve segurar ``_struct_lock``. Devolve True se limpou (precisa reload).
+        """
+        if not state.is_loaded() or not self._use_subprocess(name):
+            return False
+        pool = self._subprocess_pool
+        if pool is None or pool.is_alive(name):
+            return False
+        _logger.warn(
+            f"[UMS] Backend {name!r}: marcado loaded mas worker morto — limpar p/ reload "
+            f"(evita «worker não está vivo» no generate)."
+        )
+        state.mark_unloaded()
+        return True
 
     # ------------------------------------------------------------------
     # Helpers de injeção de GPU (lazy para evitar import torch no arranque)
@@ -658,6 +692,10 @@ class BackendManager:
 
         with self._struct_lock:
             state = self._states.get(name)
+            if state is not None:
+                # Worker morto mas ``subprocess_loaded`` ainda True → falharia
+                # generate com «não está vivo». Limpar e forçar reload.
+                self._clear_stale_subprocess_unlocked(name, state)
             if state is not None and state.is_loaded():
                 if not self._shape_mismatch(state.load_shape, load_kwargs):
                     state.last_used = time.monotonic()
@@ -705,6 +743,8 @@ class BackendManager:
         # servir pedidos entretanto). Mas guardamos o gen_lock do backend.
         with state.gen_lock:
             # Re-verificar (outro thread pode ter carregado enquanto esperávamos).
+            with self._struct_lock:
+                self._clear_stale_subprocess_unlocked(name, state)
             if state.is_loaded() and not self._shape_mismatch(state.load_shape, load_kwargs):
                 state.last_used = time.monotonic()
                 if _pin:
@@ -740,6 +780,10 @@ class BackendManager:
             )
             # footprint_key é sinal de peak/admit — nunca chega ao ctor do adapter.
             load_kwargs.pop("footprint_key", None)
+            # Dentro de ``gen_lock``: refrescar activity para o IdleEvictor não
+            # usar o timer do ciclo anterior enquanto o spawn/load corre.
+            with self._struct_lock:
+                state.last_activity = time.monotonic()
             t0 = time.perf_counter()
             use_subprocess = self._use_subprocess(name)
             if use_subprocess:
@@ -919,11 +963,22 @@ class BackendManager:
             self.stats.record_error(name, str(e))
             should_evict = True
             err_txt = str(e)
-            code = "VRAM_INSUFFICIENT" if "out of memory" in err_txt.lower() else None
+            err_l = err_txt.lower()
+            code: str | None = None
+            if "out of memory" in err_l:
+                code = P.ERR_VRAM_INSUFFICIENT
+            elif _is_worker_dead_message(err_txt):
+                code = P.ERR_WORKER_DEAD
             out: dict[str, Any] = {"status": "error", "error": err_txt}
             if code:
                 out["error_code"] = code
-                out["hint"] = "OOM na inferência — peak VRAM subestimado ou GPU partilhada. `ums queue`."
+                if code == "VRAM_INSUFFICIENT":
+                    out["hint"] = "OOM na inferência — peak VRAM subestimado ou GPU partilhada. `ums queue`."
+                else:
+                    out["hint"] = (
+                        "Worker subprocesso morto (idle shutdown / crash). "
+                        "UMS requeue automático; se persistir: `ums respawn <backend>`."
+                    )
             return out
         finally:
             # Um único decrement; evict só após ref=0 (senão _evict_unlocked recusa).
@@ -961,6 +1016,207 @@ class BackendManager:
         # Sempre scrub — mesmo com count=0 (loaded=[] mas contexto CUDA vivo).
         self.scrub_dead_vram()
         return count
+
+    # ------------------------------------------------------------------
+    # Respawn (reiniciar SÓ o worker subprocesso de um backend)
+    # ------------------------------------------------------------------
+
+    def respawn(self, name: str, *, lazy: bool = True) -> dict[str, Any]:
+        """Reinicia o worker subprocesso do backend ``name`` sem tocar no supervisor.
+
+        O caso de uso é desenvolvimento: depois de editar código da tool
+        (ex.: ``Text3D/src/text3d/utils/export.py`` onde mora o ``save_mesh`` do
+        GLB), o worker persistente em ``Text3D/.venv`` ainda tem o módulo
+        antigo em memória — ``evict`` só descarrega os pesos, não apanha o
+        código novo. Este método mata o subprocesso e arranca um novo no venv
+        da tool, pelo que o próximo ``generate`` já corre o código atualizado.
+
+        Com ``lazy=True`` (default): só mata o worker vivo (se existir); o
+        reload fica pendente para o próximo ``generate``/``preload`` — não há
+        aquecimento de VRAM desnecessário se a tool não for usada de seguida.
+
+        Com ``lazy=False``: mata o worker E recarrega-o imediatamente com o
+        mesmo ``load_shape`` guardado (quente na próxima chamada).
+
+        Retorna um sumário ``{name, respawned, mode, was_alive, had_model}``.
+
+        Levanta ``KeyError`` se o backend for desconhecido. Backends que não
+        usam subprocesso (``desc.tool`` vazio ou modo in-process) são no-op:
+        não há worker separado para reiniciar — o supervisor já não importa o
+        código da tool em modo subprocesso, e em modo in-process o reload só é
+        possível reiniciando o próprio supervisor.
+        """
+        desc = self._registry.descriptor(name)  # KeyError se desconhecido
+        with self._struct_lock:
+            state = self._states.get(name)
+            was_loaded = bool(state and state.is_loaded())
+            had_model = was_loaded
+            saved_shape: dict[str, Any] = dict(state.load_shape) if state else {}
+            was_alive = self._subprocess_pool.is_alive(name) if self._subprocess_pool else False
+
+            if not self._use_subprocess(name):
+                # In-process / sem tool: não há worker isolado para reiniciar.
+                return {
+                    "name": name,
+                    "respawned": False,
+                    "mode": "in-process",
+                    "was_alive": False,
+                    "had_model": had_model,
+                    "reason": "backend sem worker subprocesso (desc.tool vazio ou GAMEDEV_UMS_SUBPROCESS=0)",
+                }
+
+            if self._subprocess_pool is None:
+                return {
+                    "name": name,
+                    "respawned": False,
+                    "mode": "no-pool",
+                    "was_alive": False,
+                    "had_model": had_model,
+                    "reason": "SubprocessWorkerPool não activo",
+                }
+
+            # Recusar se há ref_count > 0 (job a correr) — segurança contra
+            # matar um worker mid-generate. O dispatch no server.py já valida
+            # fila ocupada antes de chegar aqui; isto é dupla trava.
+            if state is not None and state.ref_count > 0:
+                raise ShapeBusyError(
+                    name,
+                    stored=saved_shape,
+                    requested=saved_shape,
+                )
+
+            # 1) Descarregar marcador + mandar pool matar o subprocesso.
+            if state is not None:
+                state.mark_unloaded()
+            killed = self._subprocess_pool.shutdown(name)
+            # O lazy deixa o worker em «morto» — o próximo ensure_loaded faz
+            # _spawn (state.proc is None) + load.
+            # Modo hot: recarregar com o mesmo load_shape para ficar quente.
+            if not lazy and saved_shape:
+                # Recriar state (shutdown removeu-o do pool interno).
+                if state is None:
+                    state = _LoadedState()
+                    self._states[name] = state
+                tool = desc.tool
+                self._subprocess_pool.load(name, tool, dict(saved_shape))
+                state.subprocess_loaded = True
+                state.load_shape = dict(saved_shape)
+                state.last_used = time.monotonic()
+        self._clear_cache()
+        _logger.info(
+            f"[UMS] respawn {name!r}: worker {'morto' if killed else 'não estava vivo'} "
+            f"(lazy={lazy}, had_model={had_model}, saved_shape={saved_shape})."
+        )
+        return {
+            "name": name,
+            "respawned": killed,
+            "mode": "lazy" if lazy else "hot",
+            "was_alive": was_alive,
+            "had_model": had_model,
+            "load_shape": saved_shape,
+        }
+
+    def respawn_all(self, *, lazy: bool = True) -> list[dict[str, Any]]:
+        """Aplica :meth:`respawn` a todos os backends registados com ``tool:``.
+
+        Útil para o fluxo de desenvolvimento após editar várias tools de uma
+        vez. Retorna a lista de sumários (um por backend).
+        """
+        with self._struct_lock:
+            names = [n for n in self._registry.names if self._use_subprocess(n)]
+        return [self.respawn(n, lazy=lazy) for n in names]
+
+    def idle_worker_candidates(self, idle_timeout_sec: float) -> list[tuple[str, float]]:
+        """``(name, last_activity)`` dos subprocessos worker vivos e idle.
+
+        Só considera workers **sem** modelo carregado (o ``unload`` já correu via
+        :meth:`idle_candidates`) e sem refs. Terminar o processo devolve o
+        contexto CUDA, que o ``unload`` não liberta. O tempo conta desde o
+        último job, não desde o unload.
+
+        Ignora backends com ``gen_lock`` tomado — ``ensure_loaded`` segura esse
+        lock durante o spawn/load (pode demorar >1 min). Sem este guard, o
+        IdleEvictor mata o worker a meio do load (``last_activity`` antiga do
+        ciclo anterior) → ``worker não está vivo`` no generate seguinte.
+        """
+        pool = self._subprocess_pool
+        if pool is None:
+            return []
+        now = time.monotonic()
+        with self._struct_lock:
+            out: list[tuple[str, float]] = []
+            for name, state in self._states.items():
+                if state.ref_count > 0 or state.is_loaded():
+                    continue
+                # load/generate a decorrer — nunca shutdown.
+                if state.gen_lock.locked():
+                    continue
+                if not pool.is_alive(name):
+                    continue
+                if state.last_activity > 0 and now - state.last_activity >= idle_timeout_sec:
+                    out.append((name, state.last_activity))
+            return out
+
+    def shutdown_worker(self, name: str) -> bool:
+        """Termina o subprocesso worker de ``name`` (mantém o backend registado)."""
+        pool = self._subprocess_pool
+        if pool is None:
+            return False
+        with self._struct_lock:
+            state = self._states.get(name)
+            if state is not None and state.ref_count > 0:
+                _logger.warn(f"[UMS] Recusa terminar worker {name!r}: {state.ref_count} ref(s) ativa(s).")
+                return False
+        # Correr shutdown sob ``gen_lock`` (non-blocking): se ``ensure_loaded`` /
+        # ``generate`` tem o lock, abortar — senão a race load↔IdleEvictor mata
+        # o worker recém-spawnado (ver idle_worker_candidates).
+        acquired = False
+        if state is not None:
+            acquired = state.gen_lock.acquire(blocking=False)
+            if not acquired:
+                _logger.info(f"[UMS] Skip shutdown worker {name!r}: load/generate em curso.")
+                return False
+        try:
+            try:
+                done = bool(pool.shutdown(name))
+            except Exception as e:
+                _logger.warn(f"[UMS] shutdown do worker {name!r} falhou: {e}")
+                return False
+            if done:
+                with self._struct_lock:
+                    st = self._states.get(name)
+                    if st is not None and st.is_loaded():
+                        st.mark_unloaded()
+                _logger.info(f"[UMS] Worker {name!r} terminado (contexto CUDA libertado).")
+            return done
+        finally:
+            if acquired and state is not None:
+                state.gen_lock.release()
+
+    def health_check_workers(self) -> list[dict[str, Any]]:
+        """Ping a cada worker vivo; termina os que não respondem.
+
+        Um worker wedged (deadlock no adapter, driver preso) continua a segurar
+        VRAM sem nunca terminar um job. Devolve uma entrada por worker testado.
+        """
+        pool = self._subprocess_pool
+        if pool is None:
+            return []
+        with self._struct_lock:
+            names = [n for n, s in self._states.items() if s.ref_count == 0]
+        out: list[dict[str, Any]] = []
+        for name in names:
+            try:
+                if not pool.is_alive(name):
+                    continue
+                ok = bool(pool.ping(name))
+            except Exception as e:
+                _logger.warn(f"[UMS] ping ao worker {name!r} falhou: {e}")
+                ok = False
+            out.append({"backend": name, "ok": ok})
+            if not ok:
+                self.shutdown_worker(name)
+        return out
 
     def idle_candidates(self, idle_timeout_sec: float) -> list[tuple[str, float]]:
         """Lista ``(name, last_used)`` dos backends loaded idle há mais de ``idle_timeout_sec``.
@@ -1041,7 +1297,27 @@ class BackendManager:
         # Sem vítimas (ou ainda curto): residual no próprio processo UMS.
         self.scrub_dead_vram()
         free = self._free_mib()
+        # Último recurso: VRAM presa por supervisores/workers UMS órfãos de runs
+        # anteriores. Recuperá-la é preferível a recusar o job.
+        if free is not None and free < target and self.reap_strays():
+            free = self._free_mib()
         return free is None or free >= target
+
+    def reap_strays(self) -> bool:
+        """Mata processos UMS órfãos que seguram VRAM. ``True`` se algo foi morto."""
+        if self._reap_strays is None:
+            return False
+        try:
+            report = self._reap_strays()
+        except Exception as e:
+            _logger.warn(f"[UMS] reap de órfãos falhou: {e}")
+            return False
+        count = int((report or {}).get("count") or 0)
+        if count:
+            freed = (report or {}).get("vram_mib_freed")
+            _logger.warn(f"[UMS] {count} processo(s) UMS órfão(s) terminado(s) — ~{freed} MiB recuperados.")
+            self._clear_cache()
+        return count > 0
 
     def _evict_unlocked(self, name: str) -> bool:
         """Evicta SEM adquirir struct_lock (caller deve ter o lock). Retorna True se evicted."""
@@ -1118,9 +1394,31 @@ class BackendManager:
             "loaded_count": loaded_count,
             "loaded_vram_mib": loaded_vram,
             "process_vram_mib": process_vram,
+            "worker_vram_mib": self.worker_vram_mib(),
             "torch_alloc": alloc_stats,
             "backends": backends,
         }
+
+    def worker_vram_mib(self) -> int | None:
+        """VRAM somada dos subprocessos worker deste supervisor.
+
+        O ``process_vram_mib`` só vê o PID do supervisor; com
+        subprocess-per-backend a VRAM real vive nos filhos.
+        """
+        pool = self._subprocess_pool
+        if pool is None:
+            return None
+        try:
+            from .process_guard import descendants, gpu_vram_by_pid
+
+            mine = descendants(os.getpid())
+            if not mine:
+                return None
+            by_pid = gpu_vram_by_pid()
+            total = sum(mib for pid, mib in by_pid.items() if pid in mine)
+            return int(total) or None
+        except Exception:
+            return None
 
     @staticmethod
     def _torch_alloc_stats() -> dict[str, int | None]:

@@ -2,7 +2,7 @@
 """Unified Model Server — CLI principal.
 
 Comandos (alias ``ums`` = ``gamedev-model-server``):
-  start|stop|status|queue|wait|cancel|flush|backends|preload|evict|
+  start|stop|status|queue|wait|cancel|flush|backends|preload|evict|respawn|
   stats|debug|bench|doctor
 
 Agentes / humanos: se a GPU estiver ocupada, usa ``status`` / ``queue`` /
@@ -73,6 +73,37 @@ def _print_do_not_kill_tip(*, inflight: int = 0, depth: int = 0) -> None:
     console.print(f"[{style}]{UMS_DO_NOT_KILL_TIP}[/{style}]")
 
 
+def _describe_stray(proc: dict[str, Any]) -> str:
+    """Uma linha por órfão: ``PID 123 worker/text3d 3470 MiB``."""
+    who = str(proc.get("kind") or "?")
+    if proc.get("backend"):
+        who += f"/{proc['backend']}"
+    vram = f" {proc['vram_mib']} MiB" if proc.get("vram_mib") else ""
+    return f"PID {proc.get('pid')} {who}{vram}"
+
+
+def _print_strays(strays: dict[str, Any]) -> None:
+    """Avisa sobre supervisores/workers UMS órfãos e a VRAM que seguram."""
+    count = int(strays.get("count") or 0)
+    if not count:
+        return
+    vram = strays.get("vram_mib") or 0
+    st = Table(title="[bold red]Processos UMS órfãos", box=box.SIMPLE)
+    st.add_column("PID", justify="right", style="red")
+    st.add_column("Tipo", style="cyan")
+    st.add_column("Backend")
+    st.add_column("VRAM", justify="right")
+    for proc in strays.get("processes") or []:
+        st.add_row(
+            str(proc.get("pid")),
+            str(proc.get("kind")),
+            str(proc.get("backend") or "—"),
+            f"{proc.get('vram_mib')} MiB" if proc.get("vram_mib") else "—",
+        )
+    console.print(st)
+    console.print(f"[yellow]{count} processo(s) órfão(s) a segurar ~{vram} MiB — limpa com `ums reap`.[/yellow]")
+
+
 def _short_job_id(job_id: object, *, n: int = 12) -> str:
     jid = str(job_id or "")
     if not jid:
@@ -96,8 +127,28 @@ def cli() -> None:
     type=int,
     help="Minutos de idle antes de encerrar.",
 )
+@click.option(
+    "--idle-evict-sec",
+    default=P.IDLE_EVICT_SEC,
+    show_default=True,
+    type=float,
+    help="Segundos sem uso antes de descarregar os pesos de um backend.",
+)
+@click.option(
+    "--worker-shutdown-sec",
+    default=P.WORKER_IDLE_SHUTDOWN_SEC,
+    show_default=True,
+    type=float,
+    help="Segundos sem uso antes de terminar o subprocesso worker (0 desliga).",
+)
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
-def start_cmd(socket_path: str | None, idle_timeout_min: int, verbose: bool) -> None:
+def start_cmd(
+    socket_path: str | None,
+    idle_timeout_min: int,
+    idle_evict_sec: float,
+    worker_shutdown_sec: float,
+    verbose: bool,
+) -> None:
     """Arranca o Unified Model Server (foreground)."""
     from gamedev_shared.logging import configure_logging
 
@@ -117,6 +168,8 @@ def start_cmd(socket_path: str | None, idle_timeout_min: int, verbose: bool) -> 
             f"Socket: [cyan]{sock}[/cyan]\n"
             f"Backends: [green]{', '.join(registry.names)}[/green]\n"
             f"Idle timeout: [green]{idle_timeout_min} min[/green]\n"
+            f"Idle evict: [green]{idle_evict_sec:.0f}s[/green] (unload) / "
+            f"[green]{worker_shutdown_sec:.0f}s[/green] (worker)\n"
             f"{log_line}\n"
             f"[dim]Os backends carregam sob procura (lazy). Use 'preload' para "
             f"pré-aquecer um backend específico.[/dim]",
@@ -128,6 +181,8 @@ def start_cmd(socket_path: str | None, idle_timeout_min: int, verbose: bool) -> 
         registry=registry,
         socket_path=sock,
         idle_timeout_min=idle_timeout_min,
+        idle_evict_sec=idle_evict_sec,
+        worker_shutdown_sec=worker_shutdown_sec,
         verbose=verbose,
     )
     try:
@@ -175,7 +230,15 @@ def status_cmd(as_json: bool) -> None:
     t.add_row("PID", str(resp.get("pid", "?")))
     t.add_row("Socket", str(resp.get("socket", "?")))
     t.add_row("Backends carregados", f"{resp.get('loaded_count', 0)} ({resp.get('loaded_vram_mib', 0)} MiB)")
+    worker_vram = resp.get("worker_vram_mib")
+    if worker_vram:
+        t.add_row("VRAM nos workers", f"{worker_vram} MiB")
     t.add_row("Pedidos servidos", str(resp.get("requests_served", 0)))
+    t.add_row(
+        "Idle evict",
+        f"{float(resp.get('idle_evict_timeout_sec') or 0):.0f}s unload / "
+        f"{float(resp.get('worker_shutdown_sec') or 0):.0f}s worker",
+    )
     q = resp.get("queue") or {}
     t.add_row(
         "Fila", f"{q.get('queue_depth', 0)} queued / {q.get('inflight', 0)} inflight (max {q.get('max_depth', '?')})"
@@ -196,6 +259,8 @@ def status_cmd(as_json: bool) -> None:
             inflight=int(q.get("inflight") or 0),
             depth=int(q.get("queue_depth") or 0),
         )
+
+    _print_strays(resp.get("strays") or {})
 
     backends = resp.get("backends", [])
     if backends:
@@ -526,7 +591,11 @@ def preload_cmd(name: str, as_json: bool) -> None:
 @cli.command("evict")
 @click.argument("name", required=False)
 def evict_cmd(name: str | None) -> None:
-    """Evicta um backend específico ou todos (sem argumento)."""
+    """Evicta um backend específico ou todos (sem argumento).
+
+    Descarrega os pesos do modelo mas MANTÉM o worker vivo — NÃO apanha código
+    novo da tool. Para recarregar código editado, usa ``ums respawn``.
+    """
     request: dict = {"cmd": P.CMD_RELEASE}
     if name:
         request["backend"] = name
@@ -539,6 +608,97 @@ def evict_cmd(name: str | None) -> None:
     else:
         console.print(f"[bold red]✗ {resp.get('error', resp)}[/bold red]")
         sys.exit(1)
+
+
+@cli.command("reap")
+@click.option("--dry-run", is_flag=True, help="Só lista o que seria terminado.")
+@click.option("--json", "as_json", is_flag=True, help="Dump JSON da resposta.")
+def reap_cmd(dry_run: bool, as_json: bool) -> None:
+    """Termina supervisores/workers UMS órfãos que seguram VRAM.
+
+    Com o UMS ativo, o pedido é delegado nele (protege-se a si e aos seus
+    workers). Sem UMS, o reap corre localmente e limpa toda a família — é o caso
+    típico de um supervisor zombie que já não responde no socket.
+    """
+    resp = _send({"cmd": P.CMD_REAP, "dry_run": dry_run}, timeout=30.0)
+    if resp is None:
+        from .process_guard import reap_strays as _reap
+
+        resp = {"status": P.STATUS_OK, "local": True, **_reap(dry_run=dry_run)}
+    if as_json:
+        _print_json(resp)
+        return
+    count = int(resp.get("count") or 0)
+    if not count:
+        console.print("[green]✓ Nenhum processo UMS órfão.[/green]")
+        return
+    freed = resp.get("vram_mib_freed")
+    if dry_run:
+        for line in resp.get("would_reap") or []:
+            console.print(f"[yellow]• {line}[/yellow]")
+        console.print(f"[yellow]{count} órfão(s), ~{freed} MiB — corre sem --dry-run para terminar.[/yellow]")
+        return
+    for entry in resp.get("reaped") or []:
+        console.print(f"[green]✓[/green] PID {entry.get('pid')} ({entry.get('kind')}) — {entry.get('signal')}")
+    console.print(f"[bold green]✓ {count} processo(s) terminado(s); ~{freed} MiB de VRAM recuperados.[/bold green]")
+
+
+@cli.command("respawn")
+@click.argument("name", required=False)
+@click.option(
+    "--lazy/--hot",
+    "lazy",
+    default=True,
+    help="lazy (default): mata o worker vivo; o próximo generate arranca-o com código novo. "
+    "hot: mata e recarrega já o modelo (fica quente).",
+)
+def respawn_cmd(name: str | None, lazy: bool) -> None:
+    """Reinicia SÓ o worker de um backend para apanhar código novo da tool.
+
+    Depois de editar código de uma tool (ex.: Text3D ``utils/export.py``), o
+    worker persistente em ``<Tool>/.venv`` ainda tem o módulo antigo em memória
+    — ``evict`` só larga os pesos. ``respawn`` mata o subprocesso e arranca um
+    novo no venv da tool, pelo que o próximo ``generate`` já corre o código
+    atualizado, SEM reiniciar o supervisor UMS.
+
+    Sem argumento: reinicia todos os backends com worker subprocesso.
+    """
+    request: dict = {"cmd": P.CMD_RESPAWN, "lazy": lazy}
+    if name:
+        request["backend"] = name
+    resp = _send(request, timeout=120.0)
+    if resp is None:
+        console.print("[yellow]UMS não está ativo — nada para respawnar.[/yellow]")
+        sys.exit(0)
+    if resp.get("status") != "ok":
+        _print_ums_error(resp)
+        _print_do_not_kill_tip()
+        sys.exit(1)
+
+    results = resp.get("results", []) or []
+    mode = "lazy" if resp.get("lazy", lazy) else "hot"
+    killed = sum(1 for r in results if r.get("respawned"))
+    total = len(results)
+    console.print(f"[bold green]✓ {killed}/{total} worker(s) reiniciado(s) ({mode}) — supervisor intacto.[/bold green]")
+    for r in results:
+        rname = r.get("name", "?")
+        if r.get("respawned"):
+            tag = f"reiniciado ({mode})"
+        elif r.get("mode") in ("in-process", "no-pool"):
+            tag = f"[dim]no-op: {r.get('reason', r.get('mode'))}[/dim]"
+        else:
+            tag = "[dim]não estava vivo[/dim]"
+        shape = r.get("load_shape") or {}
+        shape_str = f" shape={shape}" if shape else ""
+        console.print(f"  • {rname}: {tag}{shape_str}")
+    # Recomendar preload se foi hot e a shape não chegou (worker novo precisa de load).
+    if mode == "hot":
+        console.print(
+            "[dim]Próximo generate está quente se o load_shape foi preservado; "
+            "caso contrário usa `ums preload <backend>`.[/dim]"
+        )
+    else:
+        console.print("[dim]Worker arranca no próximo generate/preload — já com código atualizado.[/dim]")
 
 
 def _print_queue_metrics(qm: dict[str, Any], *, affinity_hits: object = None) -> None:
@@ -923,8 +1083,9 @@ def bench_cmd(rounds: int, as_json: bool, cmds: str) -> None:
 
 
 @cli.command("doctor")
-def doctor_cmd() -> None:
-    """Diagnostica: deps de backends, GPU, socket, fila, peak VRAM, legacy."""
+@click.option("--fix", is_flag=True, help="Corrige o que é seguro (reap de processos UMS órfãos).")
+def doctor_cmd(fix: bool) -> None:
+    """Diagnostica: deps de backends, GPU, socket, fila, peak VRAM, órfãos, legacy."""
     import importlib
     import shutil
 
@@ -1008,6 +1169,39 @@ def doctor_cmd() -> None:
                     )
                 )
 
+    # Órfãos: supervisores/workers de runs anteriores a segurar VRAM.
+    from .process_guard import reap_strays as _reap
+    from .process_guard import stray_report as _stray_report
+
+    strays: dict[str, Any] = {}
+    if ums_up and qresp:
+        strays = qresp.get("strays") or {}
+    else:
+        with contextlib.suppress(Exception):
+            strays = _stray_report()
+    stray_count = int(strays.get("count") or 0)
+    if stray_count:
+        detail = ", ".join(_describe_stray(p) for p in strays.get("processes") or [])
+        if fix:
+            report = _reap()
+            checks.append(
+                (
+                    "Processos UMS órfãos",
+                    True,
+                    f"{report.get('count')} terminado(s) (~{report.get('vram_mib_freed')} MiB) — {detail}",
+                )
+            )
+        else:
+            checks.append(
+                (
+                    "Processos UMS órfãos",
+                    False,
+                    f"{stray_count} a segurar ~{strays.get('vram_mib')} MiB ({detail}) — corre `ums reap`",
+                )
+            )
+    else:
+        checks.append(("Processos UMS órfãos", True, "nenhum"))
+
     # Legacy per-tool sockets (conflito potencial com UMS).
     try:
         legacy = [s for s in discover_active_sockets() if Path(s).resolve() != Path(UMS_SOCKET).resolve()]
@@ -1026,7 +1220,10 @@ def doctor_cmd() -> None:
         checks.append(("Sockets legacy", True, "nenhum per-tool activo"))
 
     # 2. GPU disponível? (NVML preferido; fallback nvidia-smi via Shared)
-    from gamedev_shared.gpu import list_gpu_snapshots, nvml_available
+    from gamedev_shared.gpu import check_nvidia_driver_match, list_gpu_snapshots, nvml_available
+
+    driver_ok, driver_detail = check_nvidia_driver_match()
+    checks.append(("NVIDIA driver match", driver_ok, driver_detail))
 
     snaps = list_gpu_snapshots()
     if snaps:

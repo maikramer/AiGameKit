@@ -256,6 +256,50 @@ class TestServerProtocol:
         assert "desconhecido" in resp["error"]
         assert resp["error_code"] == P.ERR_INVALID_REQUEST
 
+    def test_respawn_inprocess_backend_is_noop(self, running_ums) -> None:
+        # alpha/beta são in-process (tool=None) → respawn devolve no-op.
+        _, sock = running_ums
+        resp = _send_request(sock, {"cmd": P.CMD_RESPAWN, "backend": "alpha"})
+        assert resp["status"] == P.STATUS_OK
+        results = resp["results"]
+        assert len(results) == 1
+        assert results[0]["name"] == "alpha"
+        assert results[0]["respawned"] is False
+        assert results[0]["mode"] == "in-process"
+
+    def test_respawn_unknown_backend(self, running_ums) -> None:
+        _, sock = running_ums
+        resp = _send_request(sock, {"cmd": P.CMD_RESPAWN, "backend": "nonexistent"})
+        assert resp["status"] == P.STATUS_ERROR
+        assert resp["error_code"] == P.ERR_BACKEND_UNKNOWN
+
+    def test_respawn_all_returns_one_per_subprocess_backend(self, tmp_path: Path) -> None:
+        # Registry com backend subprocesso (tool definido) + pool mock injectado.
+        from modelserver.registry import BackendDescriptor, Registry
+
+        from .test_backend_manager_hybrid import MockSubprocessPool
+
+        descriptors = {
+            "sub_be": BackendDescriptor(name="sub_be", adapter="_m", vram_mib=1000, priority=10, tool="text3d"),
+        }
+        registry = Registry(descriptors=descriptors)
+        pool = MockSubprocessPool()
+        srv, socket_path, thread = _start_ums(
+            tmp_path, registry=registry, query_free_mib=lambda: 99999, subprocess_pool=pool
+        )
+        try:
+            resp = _send_request(socket_path, {"cmd": P.CMD_RESPAWN})
+            assert resp["status"] == P.STATUS_OK
+            assert resp["lazy"] is True
+            results = resp["results"]
+            assert len(results) == 1
+            assert results[0]["name"] == "sub_be"
+            # Sem load prévio: was_alive False. (MockSubprocessPool híbrido devolve
+            # True em shutdown mesmo sem worker — o foco aqui é o caminho de protocolo.)
+            assert results[0]["was_alive"] is False
+        finally:
+            _stop_ums(srv, socket_path, thread)
+
     def test_requests_served_counter(self, running_ums) -> None:
         _, sock = running_ums
         _send_request(sock, {"cmd": P.CMD_GENERATE, "backend": "alpha", "prompt": "x", "output": "/tmp/x.png"})
@@ -546,7 +590,12 @@ class TestQueueSchedulerIntegration:
 
 
 class TestDoubleStart:
-    """Regressão: um 2.º UMS no mesmo socket NÃO pode apagar socket/pid do 1.º."""
+    """Regressão: um 2.º UMS no mesmo socket NÃO pode apagar socket/pid do 1.º.
+
+    O singleton por ``flock`` recusa antes de tocar no socket — o histórico era
+    o 2.º supervisor apagar o socket do 1.º (que ficava vivo e invisível, com os
+    seus workers a segurar VRAM).
+    """
 
     def test_second_start_preserves_running_server(self, tmp_path: Path) -> None:
         srv1, sock, thread = _start_ums(tmp_path)
@@ -562,8 +611,9 @@ class TestDoubleStart:
                 query_free_mib=lambda: 99999,
                 clear_vram=lambda: None,
             )
-            with pytest.raises(OSError):
+            with pytest.raises(RuntimeError, match="já ativo"):
                 srv2.serve_forever()
+            assert srv2._singleton.held is False
 
             # Socket e pid file do 1.º servidor têm de estar intactos…
             assert sock.exists()

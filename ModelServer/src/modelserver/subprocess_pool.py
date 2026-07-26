@@ -71,7 +71,15 @@ def _default_spawn(
     stdout: Any,
     stderr: Any,
 ) -> subprocess.Popen:
-    """Spawn por omissão: detached, stdout=PIPE, stderr=ficheiro, stdin=PIPE."""
+    """Spawn por omissão: sessão própria, stdout=PIPE, stderr=ficheiro, stdin=PIPE.
+
+    A sessão própria isola o worker do Ctrl+C do terminal do UMS (o abort é
+    cooperativo, via ``{"cmd":"abort"}``). Para o worker não sobreviver à morte
+    do supervisor há duas redes: EOF no stdin e o watchdog de PPID em
+    :func:`gamedev_shared.worker_serve.start_parent_watchdog`. Não se usa
+    ``PR_SET_PDEATHSIG`` porque no Linux dispara com a morte da *thread* que
+    criou o processo — e o spawn acontece nas threads do ``WorkerPool``.
+    """
     return subprocess.Popen(
         cmd,
         stdin=stdin,
@@ -79,7 +87,7 @@ def _default_spawn(
         stderr=stderr,
         text=True,
         bufsize=1,  # line-buffered
-        start_new_session=True,  # detach: sobrevive ao UMS se este morrer
+        start_new_session=True,
         env=os.environ.copy(),
     )
 

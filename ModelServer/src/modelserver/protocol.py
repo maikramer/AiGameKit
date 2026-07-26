@@ -26,6 +26,11 @@ Comandos suportados:
     {"cmd": "preload", "backend": "X"}
     {"cmd": "ensure-vram", "needed_mib": N, "backend"?: "..."}
         Evicta até N MiB livres; com backend usa max(N, peak=pesos+activação+safety).
+    {"cmd": "respawn", "backend": "X"} / {"cmd": "respawn"}
+        Reinicia SÓ o worker subprocesso de um backend (código novo da tool,
+        sem reiniciar o supervisor UMS). Sem backend: todos os backends.
+        Com ``lazy=true`` (default): mata o worker vivo mas NÃO recarrega — o
+        próximo generate arranca-o já com o código atualizado.
     {"cmd": "shutdown"}
 
   Response:
@@ -57,6 +62,8 @@ CMD_STATS = "stats"
 CMD_LIST_BACKENDS = "list-backends"
 CMD_PRELOAD = "preload"
 CMD_ENSURE_VRAM = "ensure-vram"
+CMD_RESPAWN = "respawn"
+CMD_REAP = "reap"
 
 # Comandos válidos (para validação no servidor).
 KNOWN_COMMANDS = frozenset(
@@ -75,6 +82,8 @@ KNOWN_COMMANDS = frozenset(
         CMD_PRELOAD,
         CMD_ENSURE_VRAM,
         CMD_STATS,
+        CMD_RESPAWN,
+        CMD_REAP,
     }
 )
 
@@ -89,12 +98,16 @@ ERR_BACKEND_UNKNOWN = "BACKEND_UNKNOWN"
 ERR_BACKEND_AMBIGUOUS = "BACKEND_AMBIGUOUS"
 ERR_QUEUE_FULL = "QUEUE_FULL"
 ERR_GENERATE_FAILED = "GENERATE_FAILED"
+ERR_WORKER_DEAD = "WORKER_DEAD"
 ERR_CANCELLED = "CANCELLED"
 ERR_TIMEOUT = "TIMEOUT"
 ERR_JOB_UNKNOWN = "JOB_UNKNOWN"
 ERR_INVALID_REQUEST = "INVALID_REQUEST"
 ERR_PRELOAD_FAILED = "PRELOAD_FAILED"
 ERR_VRAM_INSUFFICIENT = "VRAM_INSUFFICIENT"
+ERR_RESPAWN_FAILED = "RESPAWN_FAILED"
+ERR_RESPAWN_BUSY = "RESPAWN_BUSY"
+ERR_ALREADY_RUNNING = "ALREADY_RUNNING"
 
 # Prioridades de pedido (menor rank = atende primeiro).
 PRIORITY_INTERACTIVE = "interactive"
@@ -141,6 +154,9 @@ STARVATION_TIMEOUT_SEC = float(_env_int("GAMEDEV_UMS_STARVATION_TIMEOUT_SEC", 0)
 # VRAM transitória (processo externo / fragmentação CUDA): requeue em vez de
 # falhar o batch inteiro. Pico > VRAM total da GPU → sem retry (impossível).
 MAX_VRAM_RETRIES = _env_int("GAMEDEV_UMS_MAX_VRAM_RETRIES", 8)
+# Worker subprocesso morreu entre load e generate (IdleEvictor race, OOM kill,
+# crash) — requeue curto em vez de falhar o asset no batch (ex. scorpion_nest).
+MAX_WORKER_DEAD_RETRIES = _env_int("GAMEDEV_UMS_MAX_WORKER_DEAD_RETRIES", 2)
 
 
 def _env_float(name: str, default: float) -> float:
@@ -169,6 +185,20 @@ VRAM_ADMIT_POLL_SEC = _env_float("GAMEDEV_UMS_VRAM_ADMIT_POLL_SEC", 0.5)
 # acção destrutiva sobre o processo.
 DEAD_VRAM_MIB = _env_int("GAMEDEV_UMS_DEAD_VRAM_MIB", 256)
 
+# Descarregar pesos de um backend após este tempo sem uso. 120s equilibra
+# "VRAM livre para o resto do sistema" com o custo do cold start (text3d/paint3d
+# levam dezenas de segundos); num batch contínuo o last_used renova-se e o
+# modelo fica quente.
+IDLE_EVICT_SEC = _env_float("GAMEDEV_UMS_IDLE_EVICT_SEC", 120.0)
+IDLE_EVICT_CHECK_SEC = _env_float("GAMEDEV_UMS_IDLE_EVICT_CHECK_SEC", 15.0)
+# Terminar o subprocesso worker após este tempo sem uso. ``unload`` só liberta
+# pesos — o contexto CUDA do processo (~0.3-1 GiB) só sai com o processo.
+WORKER_IDLE_SHUTDOWN_SEC = _env_float("GAMEDEV_UMS_WORKER_IDLE_SHUTDOWN_SEC", 300.0)
+# Health-check (ping/pong) aos workers vivos; sem pong ⇒ mata e marca para respawn.
+WORKER_HEALTH_CHECK_SEC = _env_float("GAMEDEV_UMS_WORKER_HEALTH_CHECK_SEC", 60.0)
+# Reap de supervisores/workers órfãos no arranque (0 desliga).
+REAP_ON_START = _env_int("GAMEDEV_UMS_REAP_ON_START", 1)
+
 # Default cmd quando ausente no request (retrocompat com per-tool: gerar).
 DEFAULT_CMD = CMD_GENERATE
 
@@ -178,9 +208,10 @@ DEFAULT_GENERATE_TIMEOUT_SEC = 600.0
 # Tamanho máximo de um request (1 linha JSON) — proteção contra reads sem newline.
 MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MiB
 
-# Minutos de idle antes de self-shutdown do UMS (0 = desativado; o IdleEvictor
-# trata de libertar VRAM de backends individuais sem matar o servidor).
-DEFAULT_IDLE_TIMEOUT_MIN = 0
+# Minutos de idle antes de self-shutdown do UMS (0 = desativado). 30 min: os
+# clientes fazem auto-start quando precisam, logo um supervisor parado só está
+# a segurar contexto CUDA e a arriscar ficar zombie.
+DEFAULT_IDLE_TIMEOUT_MIN = _env_int("GAMEDEV_UMS_IDLE_TIMEOUT_MIN", 30)
 
 
 def normalize_priority(value: object | None) -> str:

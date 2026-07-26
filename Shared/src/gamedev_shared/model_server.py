@@ -627,6 +627,38 @@ def cancel_ums_all(
     )
 
 
+def respawn_ums_backend(
+    backend: str | None = None,
+    *,
+    lazy: bool = True,
+    timeout_sec: float = 120.0,
+) -> dict[str, Any] | None:
+    """Reinicia o worker subprocesso de um backend UMS (sem reiniciar o supervisor).
+
+    Caso de uso: depois de editar código de uma tool (ex.: ``Text3D/utils/export.py``
+    onde mora o ``save_mesh`` do GLB), o worker persistente no venv da tool ainda
+    tem o módulo antigo em memória — ``evict``/``release`` só descarrega pesos.
+    Esta chamada mata o subprocesso do worker e arranca um novo, pelo que o
+    próximo ``generate`` já corre o código atualizado.
+
+    Args:
+        backend: Nome do backend (ex.: ``text3d``). ``None`` reinicia todos os
+            backends com worker subprocesso.
+        lazy: Se ``True`` (default), só mata o worker; o reload fica pendente
+            para o próximo ``generate``/``preload``. Se ``False``, recarrega já
+            o modelo com o mesmo ``load_shape`` (fica quente).
+        timeout_sec: Timeout da chamada (load pode demorar em modo ``hot``).
+
+    Returns:
+        Resposta do UMS (``{"status": "ok", "results": [...], ...}``) ou
+        ``None`` se o UMS não estiver ativo (nada para respawnar).
+    """
+    req: dict[str, Any] = {"cmd": "respawn", "lazy": lazy}
+    if backend:
+        req["backend"] = backend
+    return send_to_ums(req, timeout_sec=timeout_sec, auto_start=False)
+
+
 # ---------------------------------------------------------------------------
 # Coordenação de VRAM
 # ---------------------------------------------------------------------------

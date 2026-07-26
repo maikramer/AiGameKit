@@ -21,10 +21,16 @@ class _FakeManager:
         self.raise_exc = raise_exc
         self.track_progress = track_progress
         self.generate_calls: list[tuple[str, dict[str, Any]]] = []
+        self.evict_calls: list[str] = []
         self._loaded: set[str] = set()
 
     def loaded_names(self) -> list[str]:
         return sorted(self._loaded)
+
+    def evict(self, name: str) -> bool:
+        self.evict_calls.append(name)
+        self._loaded.discard(name)
+        return True
 
     def generate(self, name: str, request: dict[str, Any]) -> dict[str, Any]:
         self.generate_calls.append((name, request))
@@ -224,6 +230,63 @@ class TestWorkerPoolRun:
             assert job.vram_retries == 0
             assert job.result is not None
             assert job.result.get("error_code") == P.ERR_VRAM_INSUFFICIENT
+        finally:
+            pool.stop()
+
+    def test_worker_dead_requeues_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Regressão scorpion_nest: «worker não está vivo» → reload+retry."""
+        monkeypatch.setattr(P, "MAX_WORKER_DEAD_RETRIES", 2)
+
+        class _DeadThenOk(_FakeManager):
+            def generate(self, name: str, request: dict[str, Any]) -> dict[str, Any]:
+                self.generate_calls.append((name, request))
+                if len(self.generate_calls) == 1:
+                    return {
+                        "status": P.STATUS_ERROR,
+                        "error": "text3d: worker não está vivo — faz load primeiro",
+                        "error_code": P.ERR_WORKER_DEAD,
+                    }
+                return {"status": P.STATUS_OK, "output": f"/tmp/{name}.glb"}
+
+        q = JobQueue(max_depth=8)
+        mgr = _DeadThenOk()
+        pool = WorkerPool(q, mgr, max_inflight=1)
+        pool.start()
+        try:
+            job = q.enqueue("text3d", {"output": "/tmp/nest.glb"})
+            assert job.done_event.wait(timeout=5.0)
+            assert job.state == P.JOB_DONE
+            assert len(mgr.generate_calls) == 2
+            assert job.worker_retries == 1
+            assert mgr.evict_calls == ["text3d"]
+        finally:
+            pool.stop()
+
+    def test_worker_dead_gives_up_after_max_retries(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(P, "MAX_WORKER_DEAD_RETRIES", 2)
+
+        class _AlwaysDead(_FakeManager):
+            def generate(self, name: str, request: dict[str, Any]) -> dict[str, Any]:
+                self.generate_calls.append((name, request))
+                return {
+                    "status": P.STATUS_ERROR,
+                    "error": "text3d: worker não está vivo — faz load primeiro",
+                    "error_code": P.ERR_WORKER_DEAD,
+                }
+
+        q = JobQueue(max_depth=8)
+        mgr = _AlwaysDead()
+        pool = WorkerPool(q, mgr, max_inflight=1)
+        pool.start()
+        try:
+            job = q.enqueue("text3d", {})
+            assert job.done_event.wait(timeout=5.0)
+            assert job.state == P.JOB_FAILED
+            # 1ª falha + 2 requeues = 3 generates
+            assert len(mgr.generate_calls) == 3
+            assert job.worker_retries == 2
+            assert job.result is not None
+            assert job.result.get("error_code") == P.ERR_WORKER_DEAD
         finally:
             pool.stop()
 

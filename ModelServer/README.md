@@ -53,14 +53,28 @@ O UMS resolve isto com **1 socket, 1 processo, inventário global + scheduler**.
 
 Env overrides: `GAMEDEV_UMS_MAX_AFFINITY_CUTS`, `GAMEDEV_UMS_MAX_QUEUE_DEPTH`,
 `GAMEDEV_UMS_MAX_INFLIGHT`, `GAMEDEV_UMS_STARVATION_TIMEOUT_SEC` (0=off),
-`GAMEDEV_UMS_PRIORITY`, `GAMEDEV_UMS_DEBUG=1`, `GAMEDEV_UMS_AUTO_START_LOG`,
-`GAMEDEV_ALLOW_LEGACY_SERVER=1` (text2icon/texture2d `server` legado).
+`GAMEDEV_UMS_PRIORITY`, `GAMEDEV_UMS_STREAM=1` (mesmo efeito que `--ums-stream` nas CLIs),
+`GAMEDEV_UMS_DEBUG=1`, `GAMEDEV_UMS_AUTO_START_LOG`,
+`GAMEDEV_ALLOW_LEGACY_SERVER=1` (servers per-tool + fallback legacy de `ensure_vram`),
+`GAMEDEV_LOG_DIR` / `GAMEDEV_LOG_FILE` / `GAMEDEV_FILE_LOG` (ficheiros UMS —
+[`docs/LOGGING.md`](../docs/LOGGING.md)).
 
-**Cancel cooperativo:** adapters 2D consultam `_abort` entre steps Diffusers.
-Hunyuan (text3d/paint3d): só entre fases (antes do generate).
+**Cancel / progresso cooperativo** (não mata CUDA mid-kernel):
+
+| Backend | Progresso | Abort |
+|---------|-----------|-------|
+| text2icon / text2d / texture2d / skymap2d | steps Diffusers (`callback_on_step_end`) | entre steps |
+| text2sound | callback do sampler stable-audio | entre steps |
+| text3d | fases: T2D/ref → shape → save | entre fases |
+| paint3d | load mesh → paint → save | entre fases |
+| part3d | segment / parts → save | entre fases |
+| terrain3d | diffusion → export | entre fases |
+
 **ETA / métricas:** `status`/`queue`/`stats` incluem `eta_sec` + `queue_metrics`
-(cuts, wait p50/p95, `queue_full_count`).
+(cuts, wait p50/p95, `queue_full_count`, `affinity_hits` no `debug`).
 **Inflight:** `MAX_INFLIGHT>1` só arranca jobs em paralelo se VRAM livre couber.
+**WAL:** jobs `queued` persistem em `~/.cache/gamedev/ums-jobs.jsonl`; no restart
+rejogam-se; jobs `running` no crash → requeue.
 
 ### Debug nas respostas
 
@@ -127,9 +141,19 @@ log (situação incorrecta — instalar via `./install.sh modelserver`).
 
 ## Uso
 
+### Logs em ficheiro
+
+`ums start` chama `configure_logging("ums")` — path mostrado no painel de arranque.
+Ficheiro diário: `~/.cache/gamedev/logs/ums-YYYY-MM-DD.log`.
+
+- Mensagens internas (`_log`) **sempre** vão para o ficheiro.
+- Consola detalhada só com `ums start -v` / `--verbose`.
+- Guia: [`docs/LOGGING.md`](../docs/LOGGING.md) · [PT](../docs/LOGGING_PT.md).
+
 ```bash
 # Alias curto: ums ≡ gamedev-model-server
 ums start
+ums start -v        # também ecoa [UMS] na consola
 ums status          # backends + HOLDING/QUEUE + tip "não mates GPU"
 ums status --json   # dump completo
 ums queue           # jobs + timings/progress + tip
@@ -142,14 +166,108 @@ ums cancel --all    # limpa fila (+ pede cancel aos running)
 ums flush           # alias de cancel --all
 ums flush --queued-only
 ums evict text2icon
+ums respawn text3d        # reinicia SÓ o worker da tool (código novo, sem tocar no supervisor)
+ums respawn               # todos os backends com worker subprocesso
+ums respawn text3d --hot  # mata e recarrega já o modelo (fica quente)
 ums stats
 ums doctor
 ums stop
 ```
 
+### Reiniciar workers sem reiniciar o UMS (`ums respawn`)
+
+Cada backend com `tool:` no `backends.yaml` corre num **subprocesso persistente**
+no venv da tool (ex.: `Text3D/.venv/bin/python -m text3d serve --ums-worker`).
+O supervisor UMS **não importa código de nenhuma tool** — mudar código de
+`Text3D/`, `Paint3D/`, etc. **não** obriga a reiniciar o UMS.
+
+O catch: o worker persistente mantém os módulos da tool em memória entre jobs.
+`ums evict` só descarrega os **pesos** do modelo; não recarrega o código. Depois
+de editares código da tool (ex.: `Text3D/src/text3d/utils/export.py` onde mora o
+`save_mesh` do GLB), usa `ums respawn` para matar o subprocesso do worker e
+arrancar um novo no venv da tool — o próximo `generate` já corre o código
+atualizado.
+
+```bash
+# Editei Text3D/src/text3d/utils/export.py — quero que o próximo generate use o código novo:
+ums respawn text3d            # lazy (default): mata o worker; reload no próximo generate
+ums respawn text3d --hot      # mata e recarrega já o modelo (quente na próxima chamada)
+ums respawn                   # todos os backends com worker subprocesso (várias tools editadas)
+```
+
+**Guard:** o respawn é recusado (`RESPAWN_BUSY`) se houver jobs na fila ou em
+curso — matar um worker a meio de um `generate` rouba o job. Espera com
+`ums queue` / `ums wait` ou cancela com `ums flush` primeiro.
+
+**Único restart obrigatório:** mudar código do **próprio UMS**
+(`ModelServer/src/modelserver/*.py`), do `backends.yaml`, ou do protocolo
+partilhado (`Shared/.../worker_protocol.py`, `worker_serve.py`) — esses vivem no
+processo supervisor. Para tudo o resto, `ums respawn` chega.
+
+### Robustez: singleton, reap de órfãos e timers de idle
+
+Três mecanismos garantem que ninguém fica com VRAM presa sem dono
+(`src/modelserver/process_guard.py`, `idle_evictor.py`):
+
+**1. Singleton por `flock`.** O supervisor adquire
+`~/.cache/gamedev/model-server.lock` **antes** de tocar no socket. O kernel
+liberta o lock na morte do processo (incluindo `SIGKILL`), logo nunca há estado
+stale — ao contrário do pid-file. Um segundo `ums start` falha com
+`RuntimeError: UMS já ativo (PID …)`.
+
+> Regressão histórica que isto fecha: o arranque apagava o socket quando o probe
+> `is_server_running` falhava. Num supervisor **vivo mas ocupado** o probe falha,
+> e o novo supervisor fazia bind por cima — resultado medido: 3 supervisores
+> vivos, um deles com um worker `text3d` a segurar 3.5 GiB invisíveis no
+> `ums status` (que só fala com o dono do socket).
+
+**2. Reap de órfãos.** Com o lock nas mãos, qualquer outro processo da família
+UMS é lixo de uma run anterior. No arranque (`GAMEDEV_UMS_REAP_ON_START=1`, ou
+manualmente via `ums reap` / `ums doctor --fix`) esses processos levam
+SIGTERM → SIGKILL. Self, descendentes **e ascendentes** ficam protegidos: um
+lançador como `timeout 900 python -m modelserver start` carrega a nossa cmdline
+no argv dele. O `ensure_vram` também faz reap como último recurso antes de
+recusar um job por VRAM.
+
+Do lado do worker há duas redes contra sobreviver ao supervisor: EOF no stdin e
+o watchdog de PPID (`gamedev_shared.worker_serve.start_parent_watchdog`,
+desligável com `GAMEDEV_WORKER_PARENT_WATCHDOG=0`). Não se usa
+`PR_SET_PDEATHSIG` porque no Linux dispara com a morte da *thread* que criou o
+processo — e o spawn acontece nas threads do `WorkerPool`.
+
+**3. Timers de idle (3 níveis).**
+
+| Nível | Default | Env | Efeito |
+|-------|---------|-----|--------|
+| `unload` dos pesos | 120 s | `GAMEDEV_UMS_IDLE_EVICT_SEC` | Liberta a maior parte da VRAM; worker fica vivo (reload rápido) |
+| `shutdown` do worker | 300 s | `GAMEDEV_UMS_WORKER_IDLE_SHUTDOWN_SEC` (0 desliga) | Mata o subprocesso — o `unload` deixa o contexto CUDA (~0.3-1 GiB) preso ao processo |
+| self-shutdown do supervisor | 30 min | `GAMEDEV_UMS_IDLE_TIMEOUT_MIN` (0 desliga) | Os clientes fazem auto-start quando precisam |
+
+Intervalo de verificação: `GAMEDEV_UMS_IDLE_EVICT_CHECK_SEC` (15 s). Health-check
+`ping`/`pong` aos workers vivos a cada `GAMEDEV_UMS_WORKER_HEALTH_CHECK_SEC`
+(60 s): um worker wedged segura VRAM sem terminar jobs — mata-se e o próximo job
+faz respawn. Flags equivalentes no arranque: `ums start --idle-evict-sec` /
+`--worker-shutdown-sec`.
+
+Os tempos contam desde o **último job**, não desde o unload. Em batch contínuo o
+modelo fica quente porque cada job renova o relógio; 120 s evita pagar cold start
+(dezenas de segundos em `text3d`/`paint3d`) nos intervalos entre stages.
+
+**Contabilidade honesta de VRAM.** `ums status` mostra `VRAM nos workers`
+(soma NVML dos subprocessos) e uma tabela `Processos UMS órfãos` com a VRAM que
+seguram — antes só se via o PID do supervisor, que com subprocess-per-backend
+está quase sempre vazio.
+
+```bash
+ums reap --dry-run   # lista órfãos + VRAM, sem matar
+ums reap             # SIGTERM → SIGKILL; delegado no UMS se estiver ativo
+ums doctor --fix     # diagnóstico + reap do que é seguro
+```
+
 ### Agents / anti-patterns
 
-A fila UMS é a **autoridade** de quem usa a GPU. Se `nvidia-smi` mostra VRAM ocupada:
+A fila UMS é a **autoridade** de quem usa a GPU. Se NVML / `ums doctor` /
+`list_gpu_snapshots()` mostram VRAM ocupada:
 
 1. Corre `ums status` / `ums queue` — lê a linha `HOLDING: … | QUEUE: …`.
 2. Espera (`ums wait <job_id>`, ou a tool com `--ums-stream`) **ou** `ums cancel <job_id>` /
@@ -162,12 +280,38 @@ A fila UMS é a **autoridade** de quem usa a GPU. Se `nvidia-smi` mostra VRAM oc
    `ensure_vram` / kill; GPU prep só no fallback in-process.
 5. Se a CLI diz `UMS indisponível — fallback in-process`, arranca
    `ums start` (ou deixa o auto-start) em vez de assumir que a GPU está “livre”.
+6. Testes unitários que mockam `os.kill` / CLI Click: ver armadilhas em
+   [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md)
+   (patch `gpu.os.kill` é global; CLI precisa `--no-ums` + mock GPU prep).
+7. VRAM ocupada mas `ums status` diz `loaded=0`? Olha a tabela **Processos UMS
+   órfãos** no status e corre `ums reap` — é lixo de uma run anterior, não um
+   job legítimo.
+8. UMS com **0 backends** mas ainda ~1 GiB+ em CUDA context: free pode ficar
+   abaixo do peak (ex. text3d `sdnq-int4` ~4991 MiB). Sem jobs na fila →
+   `ums stop` + `ums start` limpa o contexto; **não** pkill com fila busy.
+   Free VRAM: `gamedev_shared.gpu.query_gpu_free_mib` (NVML-first).
+   Residual “morto” com `loaded=[]`: status `process_vram_mib` /
+   `dead_vram_suspect`; IdleEvictor pode self-exit se
+   `GAMEDEV_UMS_DEAD_VRAM_MIB` (default 256) persistir ≥
+   `GAMEDEV_UMS_DEAD_VRAM_EXIT_SEC` (20 s) com fila vazia.
 
 ### Integração com CLIs das tools
 
-As CLIs GPU delegam no UMS (auto-start se `GAMEDEV_UMS_AUTO_START=1`):
+As CLIs GPU delegam no UMS (auto-start se `GAMEDEV_UMS_AUTO_START≠0`):
 `text2icon`, `texture2d`, `text2d`, `skymap2d`, `text3d`, `paint3d`, `part3d`,
 `text2sound`, `terrain3d`.
+
+**Autoridade VRAM:** UMS + **hw-auto** (default). Não há CLI pública
+`--low-vram` / `--memory-efficient` — hw-auto preenche `sdnq_preset` /
+`memory_efficient` no payload (`with_ums_peak_opts`). `prepare_gpu_exclusive`
+só depois de UMS falhar ou `--no-ums`. Servers per-tool:
+`GAMEDEV_ALLOW_LEGACY_SERVER=1`.
+
+**GameAssets waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) +
+opcionais `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` /
+`terrain3d`. Guia:
+[`docs/GAMEASSETS_UMS_BATCH.md`](../docs/GAMEASSETS_UMS_BATCH.md) ·
+[`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
 
 Flags partilhadas (via `gamedev_shared.cli_helpers.add_ums_options`):
 
@@ -181,19 +325,50 @@ Flags partilhadas (via `gamedev_shared.cli_helpers.add_ums_options`):
 gamedev-model-server start
 text2icon generate "espada" -o sword.png
 texture2d generate "madeira" -o wood.png --ums-stream
-text3d generate "goblin" -o goblin.glb --ums-priority interactive
-# Batch GameAssets já exporta GAMEDEV_UMS_PRIORITY=batch nos subprocessos
+text3d generate "goblin" -o goblin.glb --ums-priority interactive --gpu-ids 0,1
+# Batch GameAssets: GAMEDEV_UMS_PRIORITY=batch (+ --ums-stream → GAMEDEV_UMS_STREAM=1)
 ```
+
+**MultiGPU via UMS:** as CLIs injectam `gpu_ids` no payload (`with_ums_load_opts`
+em `gamedev_shared.cli_helpers`). O `BackendManager` passa `gpu_ids` (e
+`verbose` / `sdnq_preset` / `quant_mode` / `offload`) a `adapter.load`. Sem isto,
+`--gpu-ids` só funciona in-process e perde-se na delegação UMS.
+
+### Kernel opts no load (defaults)
+
+Adapters aplicam defaults de `torch.compile` / `channels_last` no `load()`
+(calibrados em RTX 4050 6 GB). Override via kwargs de preload / payload:
+
+| Backend | Default no load |
+|---------|-----------------|
+| `text2d` | `torch_compile=True`, `channels_last=True` |
+| `skymap2d` | `torch_compile=True` |
+| `text2icon` | `channels_last=True`, `torch_compile=False` |
+
+Preload aceita: `torch_compile`, `torch_compile_mode`, `channels_last`
+(`modelserver/server.py`). Guia: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 `queue_full` **não** faz fallback in-process (evita segundo modelo na GPU) —
 a CLI termina com erro; aumenta `GAMEDEV_UMS_MAX_QUEUE_DEPTH` ou espera.
+
+### `ums doctor`
+
+```bash
+ums doctor
+```
+
+Verifica: UMS up, fila (`depth`/`inflight`/`eta`/`affinity_hits`/`queue_full`),
+**peak vs free** por backend carregado, **sockets legacy** activos (conflito),
+GPU NVIDIA, `hf_xet`, import deps de cada backend. Se a fila tem jobs, imprime
+hint explícito: não mates GPU — usa `queue` / `cancel` / `wait`.
 
 ### Coordenação de VRAM
 
 **Pico = pesos(quant) + activação de inferência + `GAMEDEV_UMS_VRAM_SAFETY_MIB`
 (default 384).** O UMS **recusa** load/generate se VRAM livre < pico *e* o pico
-nunca cabe na GPU (ex.: text3d fp16 full ~8 GiB numa 6 GB) — tip: `sdnq-int4` /
-`--quality fast`; pedidos UMS com `memory_efficient` / `sdnq_preset` reduzem o pico admitido).
+nunca cabe na GPU (ex.: text3d fp16 full ~8 GiB numa 6 GB) — tip: hw-auto
+(`sdnq-int4`) / `--quality fast`. Sinais `memory_efficient` / `sdnq_preset` no
+**payload** (não flags CLI públicas) reduzem o pico admitido.
 
 **VRAM transitória** (livre < pico mas pico ≤ VRAM total — processo externo,
 fragmentação CUDA): o worker faz `evict_all` + backoff exponencial + **requeue**
@@ -204,8 +379,10 @@ mostram `vram_retries`; `progress` reporta a espera.
 
 Ferramentas pesadas, **no path in-process**, chamam
 `ensure_vram_available(N, backend="text3d")`. Com UMS ativo → `ensure-vram` usa
-`max(N, peak(backend))`. Sem UMS → release cego aos sockets legacy. Com jobs na
-fila, `kill_gpu_compute_processes_aggressive` recusa matar (`respect_ums_queue=True`).
+`max(N, peak(backend))`. Sem UMS / UMS sem resposta: release a sockets **legacy**
+só com `GAMEDEV_ALLOW_LEGACY_SERVER=1` (default off — evita corridas com o UMS).
+Com jobs na fila, `kill_gpu_compute_processes_aggressive` recusa matar
+(`respect_ums_queue=True`).
 
 **Runtime budget (pós-load):** o admit acima é estático. Depois dos pesos/offload,
 `gamedev_shared.vram_budget` (reexportado em `modelserver.runtime_budget`)
@@ -240,17 +417,40 @@ JSON / NDJSON sobre Unix socket (`~/.cache/gamedev/model-server.sock`):
 | `{"cmd":"status"}` / `stats` | Estado + fila |
 | `{"cmd":"preload","backend":"X"}` | Pré-aquece |
 | `{"cmd":"ensure-vram","needed_mib":N}` | Evicta até N MiB livres |
+| `{"cmd":"respawn","backend":"X","lazy":true}` | Reinicia o worker subprocesso (código novo da tool) |
 | `{"cmd":"shutdown"}` | Graceful |
 
 Com `stream: true` em `generate`/`wait`: linhas NDJSON
 `queued` → `started` → `progress` → resultado final (`status` ok/error).
 
 Cliente Shared: `delegate_to_ums`, `submit_to_ums`, `poll_ums_job`, `wait_ums_job`,
-`cancel_ums_job`, `cancel_ums_all`, `send_request_stream`.
+`cancel_ums_job`, `cancel_ums_all`, `respawn_ums_backend`, `send_request_stream`.
 
 ## Retrocompatibilidade
 
 - Per-tool legacy servers (`text2icon server`, etc.) ficam como **deprecated**
-  fallback; preferir `gamedev-model-server`.
-- `ensure_vram_available`, `discover_server_pids`, `is_server_running` continuam.
+  fallback; preferir `gamedev-model-server`. Arranque legacy exige
+  `GAMEDEV_ALLOW_LEGACY_SERVER=1`.
+- `ensure_vram_available`, `discover_server_pids`, `is_server_running` continuam;
+  o caminho legacy de `ensure_vram` também é opt-in (mesma env).
 - `generate` sync é a API principal das tools; async é opt-in.
+
+## Testes
+
+```bash
+make test-modelserver
+# suite de cobertura (peak/admit, scheduler, JobQueue, protocol — sem socket real):
+pytest ModelServer/tests/test_modelserver_coverage_100.py -q
+```
+
+Guia monorepo: [`docs/TESTING_PT.md`](../docs/TESTING_PT.md) · [`docs/TESTING.md`](../docs/TESTING.md).
+
+## Limites conhecidos
+
+- **Sem kill CUDA mid-kernel** — cancel/progress só em boundaries (steps Diffusers /
+  sampler / fases Hunyuan/Part/Terrain).
+- **MultiGPU no UMS = pass-through** de `gpu_ids` às tools (`MultiGPUPlanner` fica
+  dentro de cada generator; o supervisor não redistribui jobs entre GPUs).
+- **Sem socket TCP / multi-máquina** — Unix domain socket local apenas.
+- **Prioridades:** 2 níveis (`interactive` / `batch`).
+- **WAL leve:** só jobs; não reconstitui modelos em VRAM após crash.

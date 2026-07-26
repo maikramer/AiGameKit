@@ -182,6 +182,22 @@ class TestSubprocessLoad:
         mgr.ensure_loaded("sub_mock", sdnq_preset="sdnq-uint8")
         assert len(pool.load_calls) == 2
 
+    def test_ensure_loaded_reloads_when_worker_dead_but_marked_loaded(self) -> None:
+        """Regressão nest: ``subprocess_loaded`` True + worker morto → reload."""
+        mgr, pool = _make_hybrid_manager()
+        mgr.ensure_loaded("sub_mock", sdnq_preset="sdnq-int4")
+        mgr._states["sub_mock"].ref_count = 0
+        # Simular morte do worker sem o manager saber (crash / idle kill).
+        pool._alive.discard("sub_mock")
+        pool._loaded.discard("sub_mock")
+        assert mgr._states["sub_mock"].subprocess_loaded is True
+
+        mgr.ensure_loaded("sub_mock", sdnq_preset="sdnq-int4")
+
+        assert len(pool.load_calls) == 2
+        assert mgr.is_loaded("sub_mock")
+        assert pool.is_alive("sub_mock")
+
 
 class TestSubprocessGenerate:
     def test_generate_routes_to_pool_with_progress_abort(self) -> None:

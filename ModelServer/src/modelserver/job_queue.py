@@ -38,6 +38,7 @@ class Job:
     state: str = P.JOB_QUEUED
     affinity_cuts: int = 0
     vram_retries: int = 0  # requeues por VRAM_INSUFFICIENT transitória
+    worker_retries: int = 0  # requeues por worker subprocesso morto (transitório)
     # Tracking de progresso do retry: falhar rápido quando a VRAM livre fica
     # plana e não há nada evictável (loop improdutivo — nunca mais acontece).
     vram_flat_retries: int = 0
@@ -476,11 +477,21 @@ class JobQueue:
             self._purge_finished_jobs()
             self._cond.notify_all()
 
-    def requeue_running(self, job: Job, *, reason: str = "vram wait") -> bool:
-        """Devolve job ``running`` → ``queued`` (VRAM transitória).
+    def requeue_running(
+        self,
+        job: Job,
+        *,
+        reason: str = "vram wait",
+        kind: str = "vram",
+    ) -> bool:
+        """Devolve job ``running`` → ``queued`` (VRAM / worker-dead transitório).
 
         Decrementa inflight, NÃO termina o job (``done_event`` fica limpo).
         Coloca à frente da fila para retentar cedo após backoff no worker.
+
+        Args:
+            kind: ``\"vram\"`` incrementa ``vram_retries``; ``\"worker\"``
+                incrementa ``worker_retries``.
 
         Returns:
             ``True`` se o job foi reenfileirado; ``False`` se já não estava running
@@ -496,22 +507,26 @@ class JobQueue:
             self._inflight = max(0, self._inflight - 1)
             job.state = P.JOB_QUEUED
             job.started_at = None
-            job.vram_retries += 1
+            if kind == "worker":
+                job.worker_retries += 1
+                progress_msg = f"worker retry {job.worker_retries}/{P.MAX_WORKER_DEAD_RETRIES}: {reason}"
+            else:
+                job.vram_retries += 1
+                progress_msg = f"vram retry {job.vram_retries}/{P.MAX_VRAM_RETRIES}: {reason}"
             job.result = None
             # Frente: retentar este job assim que o backoff no worker acabar.
             if job.job_id in self._queued:
                 self._queued.remove(job.job_id)
             self._queued.insert(0, job.job_id)
-            job.report_progress(
-                None,
-                f"vram retry {job.vram_retries}/{P.MAX_VRAM_RETRIES}: {reason}",
-            )
+            job.report_progress(None, progress_msg)
             self._append_wal(
                 {
                     "op": "requeue",
                     "job_id": job.job_id,
                     "reason": reason,
+                    "kind": kind,
                     "vram_retries": job.vram_retries,
+                    "worker_retries": job.worker_retries,
                 }
             )
             self._cond.notify_all()

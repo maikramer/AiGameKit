@@ -312,3 +312,45 @@ class TestProgressScrub:
         done = next(e for e in events if e["event"] == "done")
         result = done["result"]
         assert result == {"status": "ok", "output": "/tmp/x.glb", "public": "kept"}
+
+
+class TestParentWatchdog:
+    """Rede de segurança contra workers órfãos a segurar VRAM para sempre.
+
+    O caminho normal é o EOF no stdin; o watchdog cobre o supervisor morto com
+    ``SIGKILL`` (sem fecho do pipe) e o reparenting para ``init``.
+    """
+
+    @staticmethod
+    def _watchdogs() -> int:
+        import threading
+
+        # Outros testes correm ``run_worker_loop``, que também arranca watchdogs.
+        return sum(1 for t in threading.enumerate() if t.name == "worker-parent-watchdog")
+
+    def test_starts_thread_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from gamedev_shared.worker_serve import start_parent_watchdog
+
+        monkeypatch.delenv("GAMEDEV_WORKER_PARENT_WATCHDOG", raising=False)
+        before = self._watchdogs()
+        start_parent_watchdog(poll_sec=3600.0)
+        assert self._watchdogs() == before + 1
+
+    def test_env_flag_disables(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from gamedev_shared.worker_serve import start_parent_watchdog
+
+        monkeypatch.setenv("GAMEDEV_WORKER_PARENT_WATCHDOG", "0")
+        before = self._watchdogs()
+        start_parent_watchdog(poll_sec=3600.0)
+        assert self._watchdogs() == before
+
+    def test_no_watchdog_when_already_orphan(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import os
+
+        from gamedev_shared.worker_serve import start_parent_watchdog
+
+        monkeypatch.delenv("GAMEDEV_WORKER_PARENT_WATCHDOG", raising=False)
+        monkeypatch.setattr(os, "getppid", lambda: 1)
+        before = self._watchdogs()
+        start_parent_watchdog(poll_sec=3600.0)
+        assert self._watchdogs() == before
