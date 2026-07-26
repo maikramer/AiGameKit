@@ -21,7 +21,7 @@ roda 68/68 estável).
 |---|---|
 | 1 — remover `three-pathfinding`, `colyseus.js` | ✅ feito |
 | 2 — `@three.ez/instanced-mesh` em `auto-instance.ts` | ✅ feito (rewrite completo, LOD/culling nativos) |
-| 3 — yuka → substituto | ✅ feito, **mas diferente do plano**: `ai-steering` não tinha navmesh (esse já usa DetourCrowd via `recast-navigation`, plugin `navmesh`, sem yuka). Escrito `vehicle.ts` — steering Reynolds (seek/flee/wander/obstacle) sem nenhuma lib nova, só `THREE.Vector3` |
+| 3 — yuka → substituto | ⚠️ supersedido (2026-07): a fase 3 (2026-07-04) removeu yuka e pôs Reynolds em `ai-steering`. Depois a engine **voltou a yuka** no plugin `ai-yuka` (DefaultPlugins, recipe `<NPC>`), com bridge ao crowd `navmesh`. `ai-steering` foi apagado. Ver `VibeGame/docs/AI.md`. |
 | 4 — CSM (`three-custom-shader-material`) | ✅ feito, **incluindo terrain** (ver detalhe abaixo). `destructible/fx.ts` e `water/systems.ts` migrados primeiro (corrigem o bug histórico de `uTime` congelado). `terrain/systems.ts` migrado numa segunda passada com QA visual no browser — ver "Terrain shader — migração + QA visual" |
 | 5.1 — `n8ao` (SSAO) | ✅ feito, substitui `SSAOPass` (que não tinha `.intensity`) |
 | 5.2 — `detect-gpu` | ✅ feito, tier usado só para sample count do n8ao (`setQualityMode`); radius/intensity continuam 100% autor-controlados |
@@ -138,23 +138,18 @@ Arquivo de referência: `VibeGame/src/plugins/terrain/systems.ts`
 
 ## Fase 3 — Menos uma dep stale: `yuka` → DetourCrowd (recast)
 
-- **Achado:** `yuka` está sem release desde ~2023. Uso restrito a
-  `plugins/ai-steering` (~300 linhas, 3 arquivos): steering behaviors para AI.
-- **Pacote substituto:** nenhum novo — `recast-navigation` (já dependência) expõe
-  **DetourCrowd**: agentes com path following, local avoidance (RVO), raio/altura,
-  max speed/accel, tudo integrado ao navmesh que o plugin `navmesh` já baked.
-- **Como fazer:**
-  1. No plugin `ai-steering`, criar `Crowd` a partir do `NavMesh` existente
-     (`new Crowd(navMesh, { maxAgents, maxAgentRadius })`).
-  2. Cada entidade AI vira `crowd.addAgent(pos, params)`; sistema por frame chama
-     `crowd.update(dt)` e copia `agent.position()`/`agent.velocity()` para
-     `Transform`/`CharacterMovement`.
-  3. Comportamentos tipo seek/flee que hoje usam yuka viram `agent.requestMoveTarget()`
-     (seek) e lógica fina fica no FSM do `rpg-ai` (que já é custom e não usa yuka).
-  4. Remover `yuka` e `types-yuka.d.ts`.
-- **Risco:** médio-baixo. Ganho colateral: avoidance entre inimigos (hoje
-  inexistente) sai de graça. Atenção ao failsafe de navmesh já documentado
-  (gate com timeout) — agentes só entram no crowd após navmesh pronto.
+> **Estado atual (2026-07):** esta fase ficou obsoleta. O caminho canónico é
+> **`ai-yuka`** (dep `yuka` de volta) + bridge `emitNavTarget` → crowd
+> `navmesh` (`recast-navigation`). O plugin `ai-steering` (Reynolds hand-rolled)
+> foi removido. Documentação: [`VibeGame/docs/AI.md`](../VibeGame/docs/AI.md).
+
+- **Achado (histórico, 2026-07-04):** `yuka` estava sem release desde ~2023; uso
+  restrito a steering. Na altura substituiu-se por Reynolds em `ai-steering`.
+- **Pacote substituto (plano original):** nenhum novo — `recast-navigation`
+  DetourCrowd para path following / RVO no navmesh.
+- **Desfecho real:** yuka voltou como motor de *steering intent*; o crowd continua
+  a ser dono do path/writeback quando há `NavMeshAgent`. Separation/flock cobrem
+  o gap de “não empilhar packs” sem depender só do RVO do crowd.
 
 ---
 

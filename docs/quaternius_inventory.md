@@ -152,6 +152,23 @@ Extra clips available (ainda não mapeados, oportunidades futuras):
 - The GLB includes a mesh (the yellow mannequin) — we import it only to get the
   armature + animation tracks; the mesh is discarded (we bake onto the target rig).
 
+## Pitfall: origem nos pés em repouso → cintura ao play
+
+Sintoma clássico no viewer: inanimado OK (eixos nos pés); ao selecionar um clip,
+eixos saltam para a cintura e os pés afundam no grid.
+
+| Causa | Mitigação no pipeline |
+|-------|------------------------|
+| SkinTokens: `pelvis` como única raiz | `ensure_feet_root_bone` cria `root` estático em `(0,0,0)` |
+| Quaternius anima `root` com quat ±90° (Y↔Z) | **`root` fora do `bone_map`** — nunca retargetar rotação/location do root |
+| Só rotações no pelvis (sem location) | `_LOCATION_SRC_BONES = {pelvis}` — bob do gait |
+
+Detalhe operacional + checklist QA:
+[`findings/ANIMATOR_RETARGET_FINDINGS.md`](findings/ANIMATOR_RETARGET_FINDINGS.md).
+
+GLBs gerados **com** `root` no map (23 bones no log) → regenerar com
+`animator3d game-pack`. Não compensar com pós-processamento binário do GLB.
+
 ## Retarget strategy — axis correction com swing removal
 
 **Ficheiro:** `Animator3D/src/animator3d/retarget.py`

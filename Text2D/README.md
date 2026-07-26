@@ -106,9 +106,14 @@ text2d generate "character design" --quality high
 | `--gpu-ids` | str | auto | GPU IDs for multi-GPU split (e.g. `0,1`) |
 | `--quality` | str | `medium` | Quality tier: `fast` / `low` / `medium` / `high` / `highest` |
 | `--hw-auto/--no-hw-auto` | flag | on | Hardware auto-detection: enables CPU offload + 4B model on small GPUs (<7.5 GB), keeps 9B / full-GPU / multi-GPU split on big rigs. Explicit flags win. Env kill-switch: `TEXT2D_HW_AUTO=0` |
+| `--compile/--no-compile` | flag | off (`generate`); **on** (`generate-batch`) | `torch.compile` on the transformer (~−6–10% hot; cold warmup costly) |
+| `--compile-mode` | str | `default` | `default` / `reduce-overhead` / `max-autotune` (Inductor; reduce-overhead only with full-GPU) |
+| `--channels-last/--no-channels-last` | flag | off (`generate`); **on** (`generate-batch`) | NHWC memory format (Ampere+); pairs well with compile |
 | `-v, --verbose` | flag | off | Detailed log output |
 
 When `--quality` is set and explicit `--width` / `--height` / `--steps` are **not** provided, the QualityEngine fills in the tier defaults (see [Quality Presets](#quality-presets)).
+
+Kernel opts on ~6 GB: prefer compile+channels-last for **batch/UMS** (defaults on); keep one-shot `generate` opt-in. Details: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 ### `text2d generate-batch MANIFEST`
 

@@ -97,6 +97,10 @@ Sem PyTorch local — apenas `config/requirements.txt` e `gamedev-shared`.
 | `--cfg-scale` | guidance | CFG scale |
 | `--lora-strength` | 1.0 | Força do LoRA (0.0–2.0) |
 | `--model/-m` | Flux-LoRA-Equirectangular-v3 | Modelo HF |
+| `--compile/--no-compile` | off (`generate`); **on** (`batch`) | `torch.compile` (~−19% hot); cold ~6 min — off em one-shot |
+| `--channels-last` | off | NHWC; pouco ganho nestes benches |
+
+Kernel opts (batch/UMS): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 ## Presets
 

@@ -121,10 +121,13 @@ GameAssets / `resolve_binary` prefer `<Tool>/.venv/bin/<cli>` over stale `~/.loc
 | Change | What to run |
 |--------|-------------|
 | New dependency / entry point / `pyproject.toml` metadata | `./install.sh <tool>` or `clified update <tool>` |
-| Code used by a **running UMS** worker | `gamedev-model-server stop` (next job auto-starts) |
+| Code used by a **running UMS tool worker** | `ums respawn <backend>` (or `ums respawn` for all) — picks up `*/src/` without restarting the supervisor |
+| Code in **ModelServer / worker protocol** (`Shared/.../worker_*.py`) | `gamedev-model-server stop` (next job auto-starts) |
 | Moved the clone (broken wrapper paths) | `./install.sh <tool>` once to rewrite `~/.local/bin` |
 
 Normal Python edits under `*/src/` → save → re-run the CLI / batch. No reinstall.
+VRAM path: UMS + hw-auto (no public `--low-vram`); see
+[`ModelServer/README.md`](../ModelServer/README.md).
 
 ---
 

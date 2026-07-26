@@ -92,9 +92,15 @@ text2d generate "retrato" --gpu-ids 0,1 -o minha.png
 text2d generate "teste" -v          # --verbose no próprio subcomando
 text2d -v generate "teste"          # ou verbose no grupo
 
+# Kernel (opt-in em generate; ON por defeito em generate-batch + UMS)
+text2d generate "retrato" --compile --channels-last -o hot.png
+text2d generate-batch manifest.json -O out/   # compile+CL já ON
+
 text2d info
 text2d models
 ```
+
+Kernel opts (~6 GB): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 ### Variáveis de ambiente
 

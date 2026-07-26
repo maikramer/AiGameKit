@@ -57,7 +57,8 @@ Not bare card size. Not YAML “footprint” alone when it understates activatio
 Consequences:
 
 - Small cards may refuse full fp16 and require quant (`sdnq-int4`, etc.).
-- Clients that run memory-efficient / SDNQ paths **must declare it** (`sdnq_preset`, `memory_efficient=true`, …). Lying by omission makes UMS assume a larger peak and refuse — or worse, admit wrong.
+- Peak signals (`sdnq_preset`, `memory_efficient=true`, …) ride the **UMS payload**, filled by **hw-auto** / `with_ums_peak_opts` — **not** public CLI flags (`--low-vram` / `--memory-efficient` removed). Omitting them makes UMS assume a larger peak and refuse — or worse, admit wrong.
+- `prepare_gpu_exclusive` / aggressive ensure-vram only after UMS fail or `--no-ums`. Legacy per-tool servers: `GAMEDEV_ALLOW_LEGACY_SERVER=1`.
 - In-process `ensure_vram_available(N, backend=…)` should align with UMS peak logic (`max(N, peak)`), not a parallel folk formula.
 
 ## What may change when models grow
@@ -77,10 +78,11 @@ Not allowed to change:
 
 ## Agent protocol when GPU seems “stuck”
 
-1. `ums status` / `ums queue` — see **HOLDING** / who owns the device.
+1. `ums status` / `ums queue` / `ums doctor` — see **HOLDING** / who owns the device; free MiB via NVML (`gamedev_shared.gpu`).
 2. Wait (`ums wait <job_id>`, `--ums-stream`) or cancel deliberately (`ums cancel`).
 3. **Never** `kill` / GPU pkill / `--gpu-kill-others` while UMS has jobs.
-4. `--no-ums` only when intentionally bypassing the supervisor; kill still respects a busy queue.
+4. Idle UMS holding CUDA context with 0 backends and `free < peak`: `ums stop` + `ums start` (only when queue empty).
+5. `--no-ums` only when intentionally bypassing the supervisor; kill still respects a busy queue.
 
 This checklist is part of the premise, not optional etiquette.
 
@@ -99,9 +101,15 @@ This checklist is part of the premise, not optional etiquette.
 - Did we add operator-facing VRAM steps that belong in the supervisor?
 - Under load, do we still prefer queue/wait over kill?
 
+## Concrete examples in this repo
+
+- Batch waves submit×N with sliding window; no sync preload of Omni/paint weights.
+- `*/ums_payload.py` + `with_ums_peak_opts` declare quant so admit is honest.
+- After editing a tool: `ums respawn <backend>` — not “kill GPU and restart everything.”
+
 ## Pointers in this repo
 
 - UMS: [`ModelServer/README.md`](../../ModelServer/README.md)
 - Client helpers: `Shared/src/gamedev_shared/model_server.py`
-- Batch priority: GameAssets sets `GAMEDEV_UMS_PRIORITY=batch`
-- Findings: [`docs/findings/UMS_VRAM_FINDINGS.md`](../findings/UMS_VRAM_FINDINGS.md) (if present)
+- Batch waves: [`GAMEASSETS_UMS_BATCH.md`](../GAMEASSETS_UMS_BATCH.md)
+- Findings: [`UMS_VRAM_FINDINGS.md`](../findings/UMS_VRAM_FINDINGS.md)

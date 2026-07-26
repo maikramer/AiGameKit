@@ -272,7 +272,7 @@
 - Create: `VibeGame/examples/simple-rpg/src/scripts/npc/dialogue-npc.ts`
 
 - [ ] MonoBehaviour: no `start`, load placeholder cube visual (`MeshRenderer` com box geometry cor por `dialogue-id` hash) ou reutilizar `goblin` GLB estático. Anexa `QuestGiver` component + `DialogueData`.
-- [ ] Usa AiSteering wander curto (raio ~3m).
+- [ ] Usa `<NPC behavior="wander">` / `YukaAiPlugin` (wander curto, raio ~3m; ver `VibeGame/docs/AI.md`).
 - [ ] Não tem comportamento além de ficar visível e ser interagível.
 
 ### Task D2: 3 quests JSON files

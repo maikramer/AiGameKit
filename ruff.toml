@@ -31,6 +31,8 @@ exclude = [
     "Rigging3D/src/rigging3d/unirig",
     "Text3D/src/text3d/hy3dshape",
     "Terrain3D/src/terrain3d/vendor",
+    # Probes ad-hoc de investigação (não fazem parte de nenhum pacote).
+    "docs/.debug_axis",
 ]
 
 [lint]

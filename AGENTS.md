@@ -113,17 +113,27 @@ make test              # pytest all Python packages + cargo test Materialize
 
 ```bash
 make test-shared       # pytest Shared only
+make test-modelserver  # pytest ModelServer (UMS) only
 make test-text2d       # pytest Text2D only
+make test-text2icon    # pytest Text2Icon only
 make test-text3d       # pytest Text3D only
 make test-paint3d      # pytest Paint3D only
 make test-part3d       # pytest Part3D only
 make test-gameassets   # pytest GameAssets only
 make test-texture2d    # pytest Texture2D only
+make test-skymap2d     # pytest Skymap2D only
 make test-text2sound   # pytest Text2Sound only
+make test-gamedevlab   # pytest GameDevLab only
+make test-rigging3d    # pytest Rigging3D only
+make test-animator3d   # pytest Animator3D only
 make test-materialize  # cargo test in Materialize/
 make test-terrain3d    # pytest Terrain3D only
+make test-rocks3d      # pytest Rocks3D only
 make test-vibegame     # bun install (frozen) + bun test in VibeGame/
 ```
+
+Coverage floor (≥100 cases/tool), suite naming, and CPU-first rules:
+[`docs/TESTING.md`](docs/TESTING.md) · [Português](docs/TESTING_PT.md).
 
 Animator3D CLI (see [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md)):
 
@@ -274,13 +284,16 @@ def resolve_binary(env_name: str, default_name: str) -> str:
 
 ### Testing conventions
 
-- Framework: **pytest** with `pytest-cov`.
+- Framework: **pytest** with `pytest-cov` (Python); **cargo test** (Materialize); **bun test** (VibeGame).
 - Test file location: `<Package>/tests/test_<module>.py`.
 - Test class organization: group by tested feature in classes (`class TestFeatureName:`).
 - Use `capsys` fixture for stdout/stderr assertions.
 - Use `unittest.mock.patch` and `patch.dict(os.environ, ...)` for env isolation.
 - GPU-dependent tests should auto-skip without CUDA (use `pytest.importorskip` or guards).
 - Config in each `pyproject.toml`: `pythonpath = ["src"]`, `testpaths = ["tests"]`.
+- **Coverage floor:** every installer tool + accessory keeps **≥100** collected automated cases. Prefer CPU-first suites named `test_*_coverage_*.py` (VibeGame: `tests/coverage-100.test.ts`; Materialize: `#[cfg(test)]` in `src/`). Full guide: [`docs/TESTING.md`](docs/TESTING.md).
+- Lazy-import heavy deps (`torch`, `diffusers`) **inside** tests so pytest collection stays cheap.
+- Do not add fluff “pad” tests that only assert source trees are non-empty.
 
 ## Rust Code Style (Materialize/)
 
@@ -328,6 +341,7 @@ The monorepo includes **GameDevLab** (`gamedev-lab`) for GLB debugging, inspecti
 | `gamedev-lab debug compare <a.glb> <b.glb> --struct-diff --image-metrics` | Side-by-side structural + visual comparison |
 | `gamedev-lab debug inspect <glb>` | JSON metadata dump (mesh, armature, animation, materials) |
 | `gamedev-lab debug bundle <glb> -o <dir>` | Full bundle: inspect + screenshots + bundle.json |
+| `gamedev-lab debug viz <glb> -m <mode>` | Mesh-debug viz: `normals`, `normals-arrows`, `orientation`, `uv`, `edges`, `weights` (dominant/count/unweighted/bone); `--wireframe` overlay |
 | `gamedev-lab check glb <glb> <rules.yaml>` | Validate GLB against JSON/YAML rules (CI-ready, exit 0/1) |
 
 ### Mesh Comparison Workflow
@@ -370,50 +384,58 @@ smart job queue (priority + VRAM affinity cuts≤3), and weight+LRU eviction.
 Client helpers live in `Shared/src/gamedev_shared/model_server.py`.
 Alias CLI: `ums` ≡ `gamedev-model-server`.
 
+**File logs:** all Python tools + UMS write
+`~/.cache/gamedev/logs/<tool>-YYYY-MM-DD.log` via `gamedev_shared.logging`
+(`configure_logging` / `Logger`). UMS always files `_log` lines; console needs
+`-v`. Guide: [`docs/LOGGING.md`](docs/LOGGING.md).
+
 **Architecture:** CLIs call `try_ums_delegation` / `delegate_to_ums` **before** any
 in-process GPU prep (auto-starts UMS unless `GAMEDEV_UMS_AUTO_START=0`). Jobs go
 through `JobQueue` → `AffinityScheduler` → `WorkerPool` (`MAX_INFLIGHT=1`).
 Interactive CLI beats batch (`GAMEDEV_UMS_PRIORITY=batch` set by GameAssets).
 Per-tool legacy servers (`text2icon server`, etc.) remain as **deprecated** fallback only.
 
-**Canonical venv (MIGRATION IN PROGRESS):** the UMS must run in its own
-`ModelServer/.venv` (created by `./install.sh modelserver`), not in the venv of
-the tool that happens to call it first. Auto-start precedence
-(`Shared/src/gamedev_shared/model_server.py:_resolve_ums_start_cmd`):
-`MODELSERVER_BIN` → `ModelServer/.venv/bin/python` → `gamedev-model-server` /
-`ums` on PATH → `sys.executable` of the calling tool (last resort, logs a
-warning). Without the canonical venv, the UMS inherits only the caller's
-packages and fails with `ImportError` when another backend is requested
-(ex.: UMS started from `Text3D/.venv` → `No module named 'paint3d'` → client
-falls back in-process and opens a competing subprocess). Target architecture:
-**subprocess-per-backend** — each backend runs in a persistent worker in its
-own tool venv (`<Tool>/.venv`), speaking JSONL with the supervisor via
-stdin/stdout. See `docs/UMS_SUBPROCESS_PLAN.md` (planned phases). Until
-migration completes, backends still run in-process in whichever venv the UMS
-happened to start in.
+**Canonical venv + subprocess workers (live):** UMS runs in `ModelServer/.venv`
+(`./install.sh modelserver`). Auto-start precedence
+(`_resolve_ums_start_cmd`): `MODELSERVER_BIN` → `ModelServer/.venv/bin/python`
+→ `gamedev-model-server`/`ums` on PATH → `sys.executable` (last resort, warns).
+Each GPU backend = persistent worker in `<Tool>/.venv` (JSONL stdin/stdout).
+Design: [`docs/UMS_SUBPROCESS_PLAN.md`](docs/UMS_SUBPROCESS_PLAN.md) (Fases 0–4 ✅).
+Rollback: `GAMEDEV_UMS_SUBPROCESS=0`. After editing tool code: `ums respawn
+<backend>` (not a full UMS restart). GameAssets waves:
+[`docs/GAMEASSETS_UMS_BATCH.md`](docs/GAMEASSETS_UMS_BATCH.md).
 
-**VRAM coordination:** Admit uses **peak = weights(quant) + inference activation +
-safety** — not bare GPU size / YAML footprint. 6 GB cards refuse full fp16 text3d;
-use `sdnq-int4`. Clients that run SDNQ (paint3d `memory_efficient`, etc.) must send
-`sdnq_preset` and/or `memory_efficient=true` — otherwise UMS assumes fp16 peak ~8 GiB
-and refuses. In-process: `ensure_vram_available(N, backend="text3d")` → UMS
-`max(N, peak)`. Kill refuses while UMS queue busy (`respect_ums_queue=True`).
-Calibrated numbers + kernel/Omni findings: [`docs/MODEL_FINDINGS.md`](docs/MODEL_FINDINGS.md).
+**VRAM coordination:** **UMS + hw-auto** are the public VRAM authority. No
+operator CLI `--low-vram` / `--memory-efficient` — hw-auto fills peak signals on
+the UMS payload (`sdnq_preset` / `memory_efficient` via `with_ums_peak_opts` /
+`ums_batch.resolve_*_vram_opts`). Omit those → admit assumes fp16 (~8 GiB
+text3d) → refuse on 6 GB. Call `try_ums_delegation` **before** GPU prep;
+`prepare_gpu_exclusive` only after UMS fail / `--no-ums`. Multi-GPU: put
+`gpu_ids` in the payload (`with_ums_load_opts`) or `--gpu-ids` only applies
+in-process. Legacy per-tool / blind `ensure_vram`: **opt-in**
+`GAMEDEV_ALLOW_LEGACY_SERVER=1`. Kill refuses while UMS busy. Free VRAM:
+**NVML-first** (`gamedev_shared.gpu`, dep `nvidia-ml-py`). Ops:
+[`docs/MODEL_FINDINGS.md`](docs/MODEL_FINDINGS.md),
+[`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md),
+[`docs/GAMEASSETS_UMS_BATCH.md`](docs/GAMEASSETS_UMS_BATCH.md).
 
 ### Agents — VRAM busy checklist (do NOT skip)
 
-1. `gamedev-model-server status` / `queue` / `debug` — see **HOLDING** / who owns the GPU.
+1. `gamedev-model-server status` / `queue` / `doctor` — see **HOLDING** / who owns the GPU.
 2. Wait (`ums wait <job_id>`, tool with `--ums-stream`) or `ums cancel <job_id>`.
 3. **Never** `kill` / GPU pkill / `--gpu-kill-others` while UMS has jobs —
    that races the queue and can murder the wrong workload (bench, sibling tool, batch).
-4. Only use `--no-ums` + in-process when you intentionally bypass the supervisor;
+4. Idle UMS (0 backends) still holding ~1 GiB+ CUDA so `free < peak` (ex. text3d
+   int4 ~4991 MiB): `ums stop` + `ums start` — only with empty queue.
+5. Only use `--no-ums` + in-process when you intentionally bypass the supervisor;
    then kill is still refused if UMS is busy.
-5. Full guide: `ModelServer/README.md` (section *Agents / anti-patterns*).
+6. Full guide: `ModelServer/README.md` (section *Agents / anti-patterns*).
 
 **Commands:**
 ```bash
-ums start|stop|status|queue|wait|cancel|flush|backends|preload|evict|stats|debug|bench|doctor
+ums start|stop|status|queue|wait|cancel|flush|backends|preload|evict|respawn|stats|debug|bench|doctor
 # cancel <job_id|prefixo> | cancel --all | flush [--queued-only]
+# respawn <backend|--all> [--hot]  — reinicia SÓ o worker da tool (código novo), sem reiniciar o supervisor
 # same as: gamedev-model-server …
 text2icon generate "icon" -o out.png   # Auto-delegates to UMS (~7s vs ~20s cold)
 text2icon generate "icon" -o out.png --ums-stream --ums-priority interactive
@@ -426,16 +448,23 @@ text2icon generate "icon" -o out.png --ums-stream --ums-priority interactive
 |----------|---------|
 | `delegate_to_ums(backend, request)` | Sync generate via UMS (main CLI path) |
 | `submit_to_ums` / `poll_ums_job` / `wait_ums_job` / `cancel_ums_job` | Async job API |
+| `respawn_ums_backend(backend, lazy=True)` | Restart a tool's worker subprocess (pick up edited tool code without restarting the supervisor) |
 | `fetch_ums_queue_snapshot` / `ums_is_busy` / `format_ums_holding_summary` | Queue introspection |
 | `UMS_DO_NOT_KILL_TIP` | Stable tip string for CLIs/agents |
-| `ensure_vram_available(needed_mib)` | Ask UMS (or legacy servers) to free VRAM |
+| `ensure_vram_available(needed_mib)` | Ask UMS; legacy sockets only if `GAMEDEV_ALLOW_LEGACY_SERVER=1` |
 | `ensure_ums_running()` | Auto-start UMS supervisor |
 | `discover_server_pids()` | Protect server PIDs from GPU kill |
 | `ModelServer(...)` | Legacy per-tool server class (deprecated) |
 
 **Env vars:** `GAMEDEV_MODEL_SERVER_SOCKET`, `GAMEDEV_UMS_AUTO_START`,
-`GAMEDEV_UMS_PRIORITY`, `GAMEDEV_UMS_MAX_AFFINITY_CUTS`, `GAMEDEV_UMS_MAX_QUEUE_DEPTH`,
-`GAMEDEV_UMS_MAX_INFLIGHT`, `MODELSERVER_BIN`. See `ModelServer/README.md`.
+`GAMEDEV_UMS_PRIORITY`, `GAMEDEV_UMS_STREAM`, `GAMEDEV_UMS_DEBUG`,
+`GAMEDEV_UMS_MAX_AFFINITY_CUTS`, `GAMEDEV_UMS_MAX_QUEUE_DEPTH`,
+`GAMEDEV_UMS_MAX_INFLIGHT`, `GAMEDEV_ALLOW_LEGACY_SERVER`, `MODELSERVER_BIN`,
+`GAMEDEV_PREFER_MONOREPO` (default on — `resolve_binary` prefers
+`<Tool>/.venv/bin`). WAL: `~/.cache/gamedev/ums-jobs.jsonl`.
+Dev edits under `*/src/` are live (editable install); tool worker reload →
+`ums respawn <backend>`; supervisor/protocol → `ums stop`. See
+`ModelServer/README.md`, [`docs/INSTALLING.md`](docs/INSTALLING.md).
 
 ## Commit Conventions
 
@@ -453,28 +482,34 @@ Use Conventional Commits:
 
 CI runs on push/PR to `main` (`.github/workflows/ci.yml`):
 
-1. **lint:** ruff check + ruff format --check + pre-commit
-2. **test-python:** pytest per package on Python 3.13
+1. **lint:** ruff check + ruff format --check + pre-commit (includes **mypy** on Shared — ruff green ≠ lint green)
+2. **test-python:** pytest matrix on Python 3.13 (Shared, GameAssets, Texture2D, Skymap2D, Rigging3D, Text2Sound, GameDevLab, Rocks3D, Animator3D) — each job installs `Shared/.[dev]` first
 3. **test-rust:** cargo fmt --check + cargo clippy + cargo test (Materialize; continue-on-error)
+4. **vibegame:** Bun check + eslint + prettier + test + vite build (root workflow; not only `VibeGame/.github/`)
 
-Excluded from CI (heavy PyTorch / diffusers deps, not viable on GPU-less runners): Text2D, Text3D, Paint3D.
-VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScript).
+Excluded from the Python matrix (heavy PyTorch / diffusers / GPU stacks): Text2D, Text3D, Paint3D, Part3D, Terrain3D, ModelServer.
+
+CI pitfalls (softfill sem Text3D, pedalboard SIGILL, Shared `[dev]` mesh deps, VibeGame flakes): [`docs/TESTING.md`](docs/TESTING.md) · [`docs/TESTING_PT.md`](docs/TESTING_PT.md).
 
 ## Important Notes
 
-- Pre-commit (ruff + mypy) does **not** run VibeGame ESLint/Prettier; use `make lint-vibegame` / `make fmt-check-vibegame` locally or rely on the **vibegame** CI job.
+- Pre-commit (ruff + mypy) does **not** run VibeGame ESLint/Prettier; use `make lint-vibegame` / `make fmt-check-vibegame` locally or rely on the root **vibegame** CI job.
+- Shared `[dev]` must keep `numpy` / `scipy` / `trimesh` so `mesh_repair*` tests collect on CI (`pip install -e Shared/.[dev]`).
 - Do NOT modify vendored code in `Paint3D/src/paint3d/hy3dpaint/`, `Paint3D/src/paint3d/hunyuan3d-2.1/`, or `Rigging3D/src/rigging3d/skintokens/` — these are excluded from lint.
 - Shared must be installed before any other package: `cd Shared && pip install -e .`
 - Each package may have its own `.venv/` — tests should use the package-local venv.
 - Environment variables are the primary configuration mechanism (see README.md "Environment variables" section).
 - Run `make check` before considering work complete.
 - **Git workflow: trabalha sempre diretamente no `main` — NÃO criar branches.** Não usar `git checkout -b`, `git switch -c`, `git worktree`, nem qualquer fluxo de feature-branch. Todas as alterações (commits, edits) são feitas sobre `main`. O utilizador gere merges/integração manualmente; o agente não deve criar ramos paralelos. Exceção só se o utilizador pedir explicitamente um branch numa tarefa específica.
-- **Game asset master pipeline (Text3D `bake-master`)**: meshopt preferido via
-  bpy 5.2+ (`export_meshopt_compression_enable`; Linux: `libmeshoptimizer-dev`).
-  KTX2/UASTC ainda depende de Node.js + `npx @gltf-transform/cli`. Verifica com
-  `text3d doctor`. Sem essas deps, `bake-master` faz fallback gracioso e
-  `gamedev-lab check glb` pode falhar em `texture_format: ktx2` /
-  `compression: meshopt`.
+- **Game asset master pipeline (compressão GLB)**: meshopt + KTX2 **ON** por
+  defeito (`gltf_transform_finish`, bake-master, lod finish). Meshopt: bpy 5.2+
+  (`export_meshopt_compression_enable`; Linux: `libmeshoptimizer-dev`) ou
+  gltf-transform. KTX2/UASTC: Node + `npx @gltf-transform/cli` **e** CLI `ktx`
+  (KTX-Software; `./install.sh text3d` → `~/.local/opt/KTX-Software`).
+  Re-comprimir: `text3d finish asset.glb`. Verifica: `text3d doctor`.
+  Happy path: [`docs/GLB_FINISH_COMPRESSION.md`](docs/GLB_FINISH_COMPRESSION.md).
+  Sem deps → fallback gracioso; `gamedev-lab check glb` pode falhar
+  `texture_format: ktx2` / `compression: meshopt`.
 
 ## Learned User Preferences
 
@@ -487,40 +522,58 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Lógica por objeto no VibeGame: scripts ao nível da **entidade** (estilo MonoBehaviour no modelo); expor via atributo `script` no recipe que cria a entidade (ex. `GLTFLoader`) ou filho `<MonoBehaviour>` com merge, em linha com o plugin `MonoBehaviour`.
 - VibeGame: correções reutilizáveis devem ir para a **engine**; no **jogo/exemplo** (ex. `simple-rpg`) ficam só ajustes específicos desse jogo — incluindo alinhar `index.html`/manifests aos assets em `public/` (não referenciar `_intermediate` no runtime); estabilizar **LOD0** antes de introduzir um sistema de LOD dinâmico completo.
 - Exemplos como `simple-rpg`: pós-processamento e partículas com intensidade moderada para jogabilidade, mesmo quando os efeitos permanecem ativos para teste; para regressões visuais/jogo, preferir que o agente **itere no browser** (MCP Chrome/DevTools ou Playwright) em vez de só listar passos manuais.
-- Áudio 3D e SFX de movimento: preferir integração via sistema da engine (XML/recipes, `AudioListener` + câmera principal) e alinhar o som à ação; evitar silêncio inicial longo nos WAV (trim na geração com `text2sound` ou na importação) para não somar latência perceptível.
+- Áudio 3D e SFX de movimento: preferir integração via sistema da engine (XML/recipes, `AudioListener` + câmera principal) e alinhar o som à ação; evitar silêncio inicial longo **e caudas ~20–30 s** nos WAV (trim na geração / `regen_sounds.py`); whoosh/hit de melee no **pico do clip (~35%)**, não no key-edge; QA com `?profiler=audio` / `__VIBEGAME__.audio`. Detalhe: [`docs/findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md`](docs/findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md), [`VibeGame/docs/AUDIO.md`](VibeGame/docs/AUDIO.md).
 - Instalações e retries de ferramentas devem ser **não-interativos**: `install.sh`, instaladores por pacote e loops de correção não devem bloquear à espera de input (ex. prompts de licença, confirmações); quando a automação falha, reportar e seguir em vez de ficar preso num retry interativo. Em `install.sh --all` priorizar reuso de cache (pip/uv) e alinhamento de versões entre pacotes irmãos para reduzir downloads/builds redundantes.
 - Pipeline de game assets deve tratar o **LOD0 como o asset final entregável** com autodeteção do estágio terminal: se o asset tem animação, o GLB animado vira LOD0; se tem rig sem animação, o rigged vira LOD0; se só chega ao paint, o LOD0 é decimado do painted para 1.2x `target_faces` da categoria (com tangents+KTX2+meshopt via `--finish-lod0`). LOD0 sem rig/animação quando o asset os tem é regressão.
 - CLIs de progresso e dashboards do `gameassets batch` devem refletir **todas as stages** do pipeline (LOD, rig, animate, validate) e não parar visualmente no paint quando há mais trabalho pela frente.
 
 ## Learned Workspace Facts
 
-- Terreno em exemplos VibeGame pode parecer voxel/escadinha; amostragem de altura/normal com um único ponto tende a falhar — estratégias multi-amostra ou suavização costumam ser necessárias para alinhar props ao chão. Problemas de árvores a flutuar ou enterrar foram atribuídos em grande parte a pivô/origem do GLB no centro do mesh em vez da base; o utilizador espera que a pipeline Text3D/GameAssets posicione a origem na base por omissão, com pivô ao centro só quando explicitamente adequado ao tipo de asset. No recipe `<Terrain>`, muitos campos do componente `Terrain` são configuráveis por atributos XML em kebab-case (defaults do plugin); `collision-resolution` (32/64/128) é aplicado ao `TerrainLOD`/`three-terrain-lod` sem ser sobrescrito pela `resolution` da malha do chunk.
+- Terreno em exemplos VibeGame pode parecer voxel/escadinha; amostragem de altura/normal com um único ponto tende a falhar — estratégias multi-amostra ou suavização costumam ser necessárias para alinhar props ao chão. Árvores/erva a flutuar: (1) pivô GLB no centro em vez da base (pipeline Text3D/GameAssets → origem nos pés por omissão); (2) mesh leaf densificado vs spawn grosso — `meshSurfaceResolutionForPoint` tem de usar `maxBoostOverAabb` do deepest leaf (igual ao chunk), não só `boostAt(ponto)` (floats esparsos em dunas/pad skirt); ver `terrain`/`spawner` `context.md`. No recipe `<Terrain>`, campos kebab-case; `collision-resolution` (32/64/128) no `TerrainLOD` sem ser sobrescrito pela `resolution` do chunk.
+- Inimigos / goblin: Rapier **não** planta Y (sem RB/CCT/collider no XML; `goblin_collision.glb` unused; NavMesh só XZ). Não reintroduzir snap `applyTerrainSpawnedY` / AABB lift em agents — grounding real = física. Ver `docs/findings/VIBEGAME_SPAWN_GROUND_FINDINGS.md`.
+- **VibeGame path único de chão (árvores = inimigos):** colocação no solo é do spawner (`TerrainSpawnSystem` → `spawnTemplateAtTerrain` + AABB + `TerrainSpawned` + `resyncTerrainSpawnedHeights` após pad/road/river). Perfil `creature` (`role=enemy|npc|creature`) partilha `groundAlign: aabb` / `alignToTerrain` das árvores — **não** `physics-box` nem `align-to-terrain=false`. Scripts (`creature.ts`) = AI/anim; sem settle/BVH boot Y; `DistanceCull` pausa `update` quando longe (normal). Loading: gates `assets`+`terrain`+`spawn`+`shaders` — sem gate `settle`. Docs: [`docs/findings/VIBEGAME_SPAWN_GROUND_FINDINGS.md`](docs/findings/VIBEGAME_SPAWN_GROUND_FINDINGS.md), `VibeGame/src/plugins/spawner/context.md`.
 - O comando `gameassets mesh reorigin-feet` repõe a origem de GLBs estáticos nos pés/base; modelos rigged com animação podem precisar de correção de orientação de root (ex. rotação) antes de centrar o pivô — não aplicar só `reorigin-feet` sem validar o resultado.
 - O **rigged GLB** tem de herdar a origem/pivô e a orientação do LOD0 (mesh centrada em X/Z, y=0 na sola dos pés, em pé na vertical correta) e o esqueleto tem de estar alinhado e dentro da malha — não rotacionado, não deslocado em Y para fora do mesh. Helpers de debug (ex. icosphere em 0,0,0, eixos visuais) NÃO devem ficar no GLB final exportado pela stage de rig.
-- Text3D / Hunyuan3D (marching cubes): saídas costumam ter paredes grossas/duplas e rachas minúsculas. O reparo canónico vive em `gamedev_shared.mesh_repair` com perfis: `topology_clean` (topology-fix / generate), `pre_decimate_uv` (bake-master / LOD texturado), `part_decode` (Part3D), `post_voxel` (remesh voxel). Cadeia típica: sanitize NaN → weld → long_edges/slivers → debris → fill holes → `make_watertight` (só no clean) → shade-smooth. O CLI tem `simplify-textured` (decimar GLB preservando textura/UV) e `align-plus-z` (com guarda `--min-height-ratio`).
+- Text3D / Hunyuan3D (marching cubes): paredes duplas, rachas, edifícios tipo casca-plástico. Reparo: `gamedev_shared.mesh_repair` perfis `topology_clean` / `pre_decimate_uv` / `part_decode` / `post_voxel`. `topology_clean` actual: weld → slivers/debris → fill → watertight **seletivo** (diâmetro de loop) → shade-smooth; **sem** `force_close_base`/flare/Taubin (removidos — destruíam capela). **Base oca por baixo é OK** — QA `_shape` foca cortes/forma graves, não fechar chão. Refs Text2D eye-level 3/4 (`categories.building` + `prompt_builder`). Paint: `ensure_clean_for_paint` + `paint_prep.restrict_inpaint`. Lições: `docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`.
 - **topology-fix rápido (engine arrays)**: `text3d topology-fix --engine arrays|auto|bpy` (default `arrays`; `auto`≡arrays). GameAssets batch/resume passa `--engine arrays`. Filtros `topology_clean` vetorizados em `gamedev_shared.mesh_repair_arrays` (numpy/scipy) quando o mesh não tem UVs/weights/shape-keys/armature; fill/caps/`make_watertight` ficam em bmesh. Morph-close no engine arrays corre **depois** do weld. Estudo: `docs/TOPOLOGY_FIX_GPU_STUDY.md`.
-- **Octree size-autotune**: `text3d.bbox_tune.tune_hunyuan_for_bbox` sobe octree por `size_m` (tecto VRAM + latent 448). **Não** pôr `octree_resolution` no `game.yaml`/UMS payload a menos que queiras override — chave presente bloqueia o tune. 6 GB+`group_offload` → tecto 448 (buildings ~10 m). Com `size_m`, o face-tier `param_optimizer` também não passa `--octree-resolution`.
+- **Octree size-autotune**: `text3d.bbox_tune.tune_hunyuan_for_bbox` sobe octree por `size_m` (tecto VRAM + latent 448). `char_m` = diâmetro equivalente por **volume** `(L·H·W)^(1/3)` — não o eixo maior/altura. Soft-floor não-linear `160 + 128·e^(-char/2.5)` puxa corpos pequenos/achatados (wolf → 256, nest → 224) sem inflacionar o topo cúbico (chapel 10³ → 448). **Não** pôr `octree_resolution` no `game.yaml`/UMS payload a menos que queiras override — chave presente bloqueia o tune. 6 GB+`group_offload` → tecto 448. Com `size_m`, o face-tier `param_optimizer` também não passa `--octree-resolution`.
 - **UMS VRAM residual morta**: com `loaded=[]` o PID UMS pode ainda segurar ~1 GiB (contexto CUDA). `ums evict` / `evict_all` fazem sempre scrub (`clear_cuda_memory` + `ipc_collect`); status expõe `process_vram_mib` / `dead_vram_suspect`; IdleEvictor pede self-exit se residual ≥`GAMEDEV_UMS_DEAD_VRAM_MIB` (default 256) persistir ≥`GAMEDEV_UMS_DEAD_VRAM_EXIT_SEC` (20s) com fila vazia — próximo auto-start nasce limpo.
+- **UMS singleton + reap de órfãos (`modelserver/process_guard.py`)**: o supervisor adquire `flock` em `~/.cache/gamedev/model-server.lock` **antes** de tocar no socket — sem isso, um probe `is_server_running` falhado (supervisor vivo mas ocupado) levava o novo supervisor a apagar o socket e a fazer bind por cima, ficando **N supervisores vivos invisíveis** ao `ums status`, um deles com worker `text3d` a segurar 3.5 GiB. Com o lock detido, qualquer outro processo da família UMS é lixo: reap SIGTERM→SIGKILL no arranque (`GAMEDEV_UMS_REAP_ON_START=1`), em `ums reap` / `ums doctor --fix` e como último recurso no `ensure_vram`. **Proteger self + descendentes + ascendentes** (`timeout 900 python -m modelserver start` tem a nossa cmdline no argv — matá-lo mata o lançador). Worker: EOF no stdin + watchdog de PPID (`gamedev_shared.worker_serve.start_parent_watchdog`); **não** usar `PR_SET_PDEATHSIG` (dispara com a morte da *thread* que fez spawn, e o spawn corre nas threads do `WorkerPool`).
+- **UMS timers de idle (3 níveis)**: `unload` dos pesos a 120s (`GAMEDEV_UMS_IDLE_EVICT_SEC`), `shutdown` do subprocesso worker a 300s (`GAMEDEV_UMS_WORKER_IDLE_SHUTDOWN_SEC`) e self-shutdown do supervisor a 30 min (`GAMEDEV_UMS_IDLE_TIMEOUT_MIN`, era 0=off). O `unload` **não** liberta o contexto CUDA (~0.3-1 GiB) — só a morte do processo o devolve; medido: worker text2icon 4676 MiB → 113 MiB após shutdown. Tempo conta desde o último **job** (`_LoadedState.last_activity` sobrevive ao `mark_unloaded`, que zera `last_used`). Health-check `ping`/`pong` a cada 60s mata workers wedged. `ums status` mostra `worker_vram_mib` + tabela de órfãos (antes só via o PID do supervisor, quase sempre vazio com subprocess-per-backend).
 - O comando `vibegame run` foi concebido para rebuild/atualização da engine face a exemplos que usam `file:vibegame`; em Windows podem ocorrer falhas de cópia/cache (`ENOENT` no pacote `vibegame`) e é preciso alvo/cwd coerente com a raiz da engine ou exemplo com `dev` ligado à engine.
 - Skymap2D e equirect/PMREM: o modelo HF Flux-LoRA-Equirectangular-v3 devolve imagens em resolução errada (1024×768 em vez do pedido 2048×1024) e com os polos ao centro vertical em vez das bordas; Skymap2D `generator.py` faz auto-resize e shift vertical de 50% para corrigir. O `PMREMGenerator` do Three.js ignora `texture.offset`/`repeat` no shader interno — para ajustar UV de texturas equirect antes de `fromEquirectangular()` é necessário manipular o bitmap a nível de píxeis (canvas). Convenção equirect Three.js: `u = atan(dir.z, dir.x)`, `v = asin(dir.y)` — centro da imagem = horizonte, topo = zénite, fundo = nadir. Texturas equirect em **retrato** (altura > largura) ou com eixos trocados podem mapear o azimute ao eixo vertical do bitmap e produzir artefactos tipo «pilares» no céu; convém normalizar para panorama 2:1 em paisagem antes do PMREM quando isso ocorrer.
 - Dependências de screen-space / pós-processamento (ex. `screen-space-reflections`) podem importar símbolos removidos ou renomeados no Three.js (ex. `WebGLMultipleRenderTargets`), falhando no Vite com «No matching export» até alinhar versões do Three ou substituir o efeito. Em áudio Web, `AudioContext` bloqueado ou `listener.positionX` indisponível costuma ligar-se a autoplay sem gesto do utilizador e/ou à ausência de cadeia válida `AudioListener` + câmera principal.
+- **VibeGame áudio/combate:** bank com cull espacial (`maxDistance` default 40); caches 2D≠spatial; **`preloadSounds` no browser enfileira até gesto** (`allowSoundPreload` via `<Scene resume-audio-on-user-gesture>` / `resumeAudioContextOnFirstUserGesture`) — Howl no boot = warning autoplay; profiler tab Audio (`?profiler=audio`, `__VIBEGAME__.audio`); SFX one-shot curtos (caudas ~20–30 s = “combate infinito”); impacto melee/harvest em **`ATTACK_IMPACT_FRACTION = 0.35`** (pico Quaternius ~27%, não 0.7). Docs: [`VibeGame/docs/AUDIO.md`](VibeGame/docs/AUDIO.md), [`docs/findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md`](docs/findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md).
+- **VibeGame DevTools noise:** Typr (troika FloatingText) → `unsupported GPOS/GSUB` silenciado por `silenceTyprOpentypeNoise` no plugin `vibegame()`; yoga/`@pmndrs/uikit` WASM no prebundle Vite → Firefox `URL constructor` / `sourceMappingURL: null` — excluir `yoga-layout` + `@pmndrs/uikit` de `optimizeDeps` (plugin faz merge; limpar `node_modules/.vite`). WebGL `DEPTH_ATTACHMENT: Attachment has no width or height` no boot → EffectComposer/shadow a 0×0 durante warmup — `syncComposerSize` + guard no warmup + `shadowMapSize` clamp. Ver [`VibeGame/src/vite/context.md`](VibeGame/src/vite/context.md), [`rendering/context.md`](VibeGame/src/plugins/rendering/context.md).
+- **VibeGame world modular:** `<Include src="/world/…">` expande antes do parse (`expandIncludes`, depth≤8, ciclos fail-fast) — browser `fetch`, headless/analyze disco. Plugin `city-layout` (`CityGrid` + Street/Wall/Building; coords célula com **espaço**). Offline: `vibegame analyze index.html` (includes quebrados, assets em falta, overlaps sólidos). Docs: `VibeGame/src/core/xml/context.md`, `city-layout/context.md`, `cli/context.md`; exemplo `simple-rpg/public/world/`.
 - O conteúdo sob `<Scene>` no VibeGame é injetado como HTML (`innerHTML`); a tag nativa **`<script>`** não serve para marcar módulos TS do motor — usar atributo `script` nos recipes ou um nome de elemento que não colida com HTML.
 - Sem URL de heightmap no terreno, `TerrainLOD` / `@interverse/three-terrain-lod` pode gerar um heightmap procedural internamente; os ficheiros exportados pelo Terrain3D (`terrain.json`, `heightmap.png`, etc.) só têm efeito se o recipe/plugin apontar para eles — atributos XML não suportados podem ser ignorados em silêncio. A geração de heightmaps com **Terrain3D** (difusão) pode exceder a VRAM confortável em GPUs da ordem de **~6 GB**; nesse caso o fluxo típico é gerar noutra máquina com mais VRAM e copiar os artefactos para `public/` do exemplo.
 - OpenCode (`opencode.json` no repositório): entradas MCP locais devem declarar `type: "local"` e `command` como array de strings com executável e argumentos (não o par `command` + `args` usado noutras ferramentas).
 - VibeGame: corpos dinâmicos GLTF podem ter colisor desalinhado do mesh se o centro do AABB não coincidir com a origem da entidade — definir `Collider.posOffset*` a partir do delta AABB→Transform em espaço local. No plugin de partículas (`three.quarks`), usar o emissor interno `ParticleSystem.emitter`; um wrapper `ParticleEmitter` à parte faz o batch descartar o sistema no update e as partículas deixam de aparecer.
-- No PyPI, `bpy>=5.2.0` (LTS) exige Python 3.13. Rigging3D e Animator3D usam stack **3.13 + `bpy>=5.2.0`** — não assumir outro Python/`bpy` para estes pacotes. Meshopt nativo no exporter GLTF (`export_meshopt_compression_enable`); em Linux precisa de `libmeshoptimizer.so` (`libmeshoptimizer-dev`). KTX2/UASTC continua via `@gltf-transform/cli`.
+- No PyPI, `bpy>=5.2.0` (LTS) exige Python 3.13. Rigging3D e Animator3D usam stack **3.13 + `bpy>=5.2.0`** — não assumir outro Python/`bpy` para estes pacotes. Meshopt nativo no exporter GLTF (`export_meshopt_compression_enable`); em Linux precisa de `libmeshoptimizer.so` (`libmeshoptimizer-dev`). KTX2/UASTC: `@gltf-transform/cli` **+** binário `ktx` (KTX-Software) — só npx não chega; ver [`docs/GLB_FINISH_COMPRESSION.md`](docs/GLB_FINISH_COMPRESSION.md).
 - **QualityEngine** (`gamedev_shared.quality.QualityEngine`): sistema unificado de presets de qualidade cross-tool. 5 tiers (`fast|low|medium|high|highest`) em `Shared/src/gamedev_shared/data/quality-profiles.yaml`, 14 categorias de assets + 11 audio_kinds em `asset-categories.yaml`. Todas as tools Python expõem `--quality` (e opcionalmente `--category`): Text2D, Texture2D, Skymap2D, Text3D, Paint3D, Part3D, Text2Sound, Rigging3D, Terrain3D. O QualityEngine faz resolução soft — preenche defaults só quando o utilizador não explicitou o parâmetro (via `ParameterSource`). O GameAssets usa `generation:` no `game.yaml` (mapeia para `--quality`) e passa `--quality`/`--category` às sub-tools. Spec: `docs/superpowers/specs/2026-04-30-quality-presets-design.md`.
 
 - **Arquitetura de responsabilidades — mesh operations**: O **Text3D** é o único dono de operações de mesh (LOD, collision, simplify, remesh, remesh-textured, `topology-fix`, `bake-master`). O GameAssets NÃO deve conter código de mesh — apenas orquestra subprocessos `text3d`. Não usar `bpy` nem `trimesh` diretamente no GameAssets (o legado `bpy_simplify.py` foi removido). O `text3d lod` preserva armatures/animations — no master pipeline Round 3 é ele que gera a ladder rigada (decimate sobre o animated/rigged). `rigging3d transfer-weights` continua disponível como CLI manual (rebinding pontual via `gamedev_shared.skin_transfer`), mas deixou de fazer parte do DAG do batch.
 
-- **Master pipeline (`gameassets batch`, default; DAG Round 3)**: DAG canónico em `GameAssets/src/gameassets/pipeline.py` (`run_master_pipeline`): (1) `text3d generate` (shape cru), (2) `text3d topology-fix` (clean, inclui `--export-origin feet|center|none` e `--fill-holes-sides N`), (3) paint (sobre clean/`to_paint`), (4) **`rigging3d pipeline` sobre o `_painted`** (topologia final do LOD0, com textura — não sobre `_clean` HI) → `_intermediate/id_rigged.glb`, (5) **`animator3d game-pack` ×1** sobre o rigged → `_intermediate/id_rigged_animated.glb`, (6) **`text3d lod` sobre o animated/rigged** → lod0/1/2 (o decimate preserva armature/weights/clips nativamente; sem transfer-weights), + finish KTX2/meshopt com rollback automático, (7) collision a partir do painted, (8) `gamedev-lab check glb --category ...`. Estáticos (sem rig): `text3d lod --target-faces 1.2x target --finish-lod0` (LOD0 decimado do painted com tangents+KTX2+meshopt; LOD1=target/2, LOD2=target/4). **Abolidos**: `_rigged_hi` (rig GPU sobre `_clean` HI sem textura, descartado — ogre gerava 134M/2.8M verts inúteis), `transfer-weights`×3 + game-pack×3 (KDTree arriscado, clips `.001` duplicadas). Resume: rig/animate saltam quando `_rigged`/`_rigged_animated` válidos existem ou lod0 já está promovido; intermediários do DAG antigo (`_rigged_hi`, `_lodN_rigged`, `_lodN_animated`, `_lodN_pre_promote`) são arquivados em `_intermediate/` por `archive_legacy_rig_intermediates`. `GameProfile` tem `master_pipeline`, `master_validate`, `master_bake_normais`. A correção de orientação/origem Hunyuan3D → OpenGL tem de ser propagada por **todas** as stages; regressão típica é o mesh aparecer "de barriga para cima" já a partir do `_shape`.
-- **V/Tri=3 (normais per-face) — fix estrutural**: GLBs sem `NORMAL` (topology-fix exporta com `export_normals=False`) importam no bpy **flat-shaded**; um re-export glTF ingénuo escreve normais por canto de face e **triplica/quadruplica os vértices** (medido: bandit_lod0 15M vs ~6M, boss_ogre_lod0 33M vs ~12M). Todo export bpy que re-exporta meshes da pipeline aplica `gamedev_shared.bpy_mesh.smooth_shade_scene` (smooth-by-angle 60°) antes: `skin_transfer.export_skinned_glb`, `rigging3d bone_repair` (+fallback no pipeline), `animator3d export_glb` (substituiu o `_weld_scene_meshes` com `remove_doubles` arriscado), `text3d mesh_lod` (lod0 e pós-decimate). O fix é **preventivo** — GLBs legados já splitados (V/T=3 no ficheiro) só emagrecem regenerando o asset.
+- **Master pipeline (`gameassets batch`, default; DAG Round 3)**: DAG canónico em `GameAssets/src/gameassets/pipeline.py` (`run_master_pipeline`): (1) `text3d generate` (shape cru), (2) `text3d topology-fix` (clean, inclui `--export-origin feet|center|none` e `--fill-holes-sides N`), (3) paint (sobre clean/`to_paint`), (4) **`rigging3d pipeline` sobre o `_painted`** (topologia final do LOD0, com textura — não sobre `_clean` HI) → `_intermediate/id_rigged.glb`, (5) **`animator3d game-pack` ×1** sobre o rigged → `_intermediate/id_rigged_animated.glb`, (6) **`text3d lod` sobre o animated/rigged** → lod0/1/2 (o decimate preserva armature/weights/clips nativamente; sem transfer-weights), + finish KTX2/meshopt com rollback automático, (7) collision a partir do painted, (8) `gamedev-lab check glb --category ...`. Estáticos (sem rig): `text3d lod --target-faces 1.2x target --finish-lod0` (LOD0 decimado do painted com tangents+KTX2+meshopt; LOD1=target/2, LOD2=target/4). **Árvores derrubáveis:** tree-like → `split-at-height` cut-only + stamp `_split_seal.txt`=`SEAL_VERSION` (`cut-only-v1`); resume invalida stump/top se seal drift / `--redo-split`. **Abolidos**: `_rigged_hi`, `transfer-weights`×3 + game-pack×3. Resume: rig/animate saltam quando `_rigged`/`_rigged_animated` válidos existem ou lod0 já está promovido; intermediários do DAG antigo arquivados por `archive_legacy_rig_intermediates`. Correção orientação/origem Hunyuan3D → OpenGL em **todas** as stages.
+- **Retarget Quaternius (`animator3d/retarget.py`) — bugs de eixo/pivô na raiz (NUNCA compensar em pós-processamento binário do GLB)** — detalhe: [`docs/findings/ANIMATOR_RETARGET_FINDINGS.md`](docs/findings/ANIMATOR_RETARGET_FINDINGS.md), inventário [`docs/quaternius_inventory.md`](docs/quaternius_inventory.md): (1) `pose.bone.location` vive no frame de REST do próprio osso e esses frames diferem entre rigs (pelvis Quaternius ≈ +104° X vs target identidade) — copiar componentes cruas troca vertical↔horizontal (agachamento vira deslocamento para trás; pés "flutuam"); converter com `tgt_rest⁻¹ @ src_rest @ location` (ver `loc_conv`); só `pelvis` em `_LOCATION_SRC_BONES`. (2) O swing correction não pode usar o tail sintetizado pelo importador glTF (heurística, ruído por rig — pelvis pode sair horizontal/para baixo e a pose roda 90-180°, "bunda empinada"); usar `_bone_rest_dir` (geometria do esqueleto: filho de tronco mapeado → média dos filhos mapeados → direção desde o pai → tail como último recurso). (3) **`root` estático nos pés** via `ensure_feet_root_bone`; **nunca** mapear/retargetar rotação do `root` Quaternius (±90° Y↔Z) — sintoma: inanimado OK, ao play origem salta para a cintura; `root` fora do `bone_map` em `quaternius*.yaml`. Validação: `lean` tronco + `feetY` vs source; no GLB `root`/rotation ≈ identidade e mesh `ymin≈0`. Intermediários antigos com `root` −90°X → regenerar `game-pack`, nunca bridge/reuso.
+
+- **V/Tri=3 — dois modos**: (A) GLB sem `NORMAL` → import flat → exporter parte loops — `shade_smooth` basta; (B) verts **já duplicados** no ficheiro (comum pós SkinTokens/re-export: `_rigged`/`_animated` V/Tri≈3 enquanto `_painted` ≈0.66) — **weld obrigatório**; shade sozinho não funde. `smooth_shade_scene` = weld (`DEFAULT_PREEXPORT_WELD_DIST` = `3e-4`) + smooth-by-angle, **mas só quando o V/Tri o denuncia** (≥ 2): um shape marching-cubes tem V/Tri≈0.5 e o weld bmesh nele era o passo que fazia o export do shape encalhar; `force_weld=True` ignora a heurística. Acima de 1M verts em meshes sem UV/weights o weld corre em arrays (`weld_mesh_arrays`) para não pagar o BMesh. Round 3 LODa animated/rigged no path geométrico: Decimate sem weld → LOD1/2 moth-eaten (comps≈faces). Path textured (`--painted-mesh` / `mesh_simplify`) já soldava. Detalhe: [`docs/findings/MESH_PIPELINE_FINDINGS.md`](docs/findings/MESH_PIPELINE_FINDINGS.md#vtri3-e-lod-moth-eaten-2026-07).
+
+- **`repair_glb(seal_export=True)` — smooth a 180°, não a 60°**: o fecho watertight só sobrevive ao reimport se o exporter não partir loops. Com `smooth_shade_scene(meshes)` (60°) as creases viram arestas duras, o exporter duplica vértices e o GLB reimportado volta a ter boundary edges (teste `test_repair_glb_watertight_survives_roundtrip`: 48). `degrees=180.0` mantém `NORMAL` no ficheiro (sem viewer flat) sem split. Omitir `NORMAL` (`export_normals=False`) resolvia o boundary mas reintroduzia o V/Tri=3 no próximo re-export.
+- **`strip_bone_display_meshes` só corre com armature na cena**: sem esse guard, um mesh legítimo chamado `Icosphere` (prop/teste) era apagado e a cena ficava vazia. O decode KTX2/meshopt vive no `bpy_mesh.import_gltf` — wrappers como `gamedev_lab.glb_import` não devem decodificar outra vez.
 
 - **Validação GLB — `gamedev-lab check glb`**: usa `GameDevLab/src/gamedev_lab/glb_meta.py` (parser binário do GLB sem `bpy`) para extrair `attributes_present`, `extensions_used`, `texture_mime_types`, `v_per_tri`, `world_bounds_y_min`. Aceita `--category <lod0|lod1|lod2|rigged|collision>` (regras YAML em `GameAssets/src/gameassets/data/rules/*.yaml`) e `--no-bpy-inspect` para correr sem Blender. Regras suportam `mesh_totals.v_per_tri`, `attributes_required`, `texture_format`, `compression`, `origin.y_min`, `face_count.max_per_category`.
+- **Debug visual GLB — `gamedev-lab debug viz <glb> -m <modo>`**: 6 modos de visualização de mesh (`normals`, `normals-arrows`, `orientation`, `uv`, `edges`, `weights` com sub-vistas dominant/count/unweighted/`--bone`), `--wireframe` transversal, legendas Pillow embutidas e `viz_report.json` (`GameDevLab/src/gamedev_lab/viz.py`). Imports de deliverables decodificam KTX2/meshopt automaticamente via `gamedev_shared.gltf_decode.bpy_readable_glb` (`@gltf-transform/cli`). Armadilhas bmesh: seam-splits do glTF criam boundary/flipped falsos — weld `remove_doubles` 1e-4 antes das métricas; modifier WIREFRAME precisa de `use_even_offset=False` (senão explode ±32k em slivers); geometria derivada de rigged tem de amostrar o mesh do depsgraph avaliado (pose ≠ rest); `strip_bone_display_meshes` só atua com armature na cena. Detalhes: `docs/findings/MESH_PIPELINE_FINDINGS.md` §Debug visual.
 
-- **Normais no export GLTF (Text3D)**: NÃO usar `normals_split_custom_set(loop_normals)` em `mesh_lod.py`/`mesh_remesh_textured.py` — o exporter GLTF fica com `V/Tri=3` (normais por loop, sem merge) e infla ficheiros (ex. goblin_shape 33 MB). Usar `shade_smooth` + `auto_smooth_angle` para obter normais por vértice. Em `weld_glb` (`Text3D/src/text3d/utils/export.py`) nunca engolir exceções silenciosamente — usar `try/except` com `log.warning` para ficar visível em pipelines.
+- **Normais no export GLTF (Text3D)**: NÃO usar `normals_split_custom_set(loop_normals)` em `mesh_lod.py`/`mesh_remesh_textured.py` — o exporter GLTF fica com `V/Tri=3` (normais por loop, sem merge) e infla ficheiros (ex. goblin_shape 33 MB). Usar `shade_smooth` + `auto_smooth_angle` para obter normais por vértice. O passe `weld_glb` pós-export foi removido (era no-op desde que o fecho passou a ser do «voxel merge»/morph-close do topology-fix).
+- **Caminho quente do shape — contar/ler mesh sem iterar bpy em Python**: `tri_count(mesh)` (`len(loops) - 2*len(polygons)`, O(1)) e `vertex_coords` / `foreach_get` substituíram list comprehensions em `morphological_close`, `mesh_to_trimesh` e `text3d.utils.mesh_base_plane`. Medido em 1.4M polys: contagem de triângulos 262 ms → ~0 ms, normais de face 980 → 202 ms, centros 917 → 169 ms, vértices 395 → 70 ms (resultados idênticos até ao float32 do bpy). Iterar `polygons`/`vertices` só para agregar é regressão de performance.
+- **«Voxel merge» (morph-close) é o dono do fecho de rachas**: `DEFAULT_MORPH_VOXELS` = `0.18` (terrain/rock 3× = `0.54`), N × voxel_m do MC. Como o fecho volumétrico já sela rachas e double-shell, as stages a jusante não devem acrescentar welds/passes de limpeza «por garantia» — no caminho comum (`grid_clamped`, voxel > distance/2) corre um único voxel remesh em vez da cadeia dilate/erode.
+
 
 - Multi-GPU: a maioria dos pacotes com GPU agora aceitam `--gpu-ids 0,1` para dividir pesos entre GPUs via accelerate (`MultiGPUPlanner` em `gamedev_shared.multi_gpu`). GameAssets batch/`resume` propaga `--gpu-ids` e `CUDA_VISIBLE_DEVICES` a todos os sub-tools; deteta GPUs via NVML (`gamedev_shared.gpu.detect_gpu_ids`) quando omitido. Pipeline stages (3D, rig, animate) são agora auto-detetados do manifest + `game.yaml` blocks; usar `--no-3d`, `--no-rig`, `--no-animate` para opt-out. O env var `PAINT3D_MULTI_GPU` está obsoleto — usar `--gpu-ids`. Resolução por defeito do Text2D passou de 2048 para 1024.
+
+- **UMS independente do código das tools (`ums respawn`)**: o supervisor UMS **não importa código de nenhuma tool** — todos os 9 backends correm como subprocessos persistentes no venv da tool (`<Tool>/.venv`, via `tool:` em `backends.yaml`). Mudar código de `Text3D/`, `Paint3D/`, etc. **não** obriga a reiniciar o UMS. O catch: o worker persistente mantém os módulos em memória; `ums evict` só descarrega pesos, **não** apanha código novo. Depois de editar código de uma tool, usa `ums respawn <backend>` (lazy: mata o worker; reload no próximo generate) ou `ums respawn <backend> --hot` (mata + recarrega com o mesmo `load_shape`). `ums respawn` (sem arg) reinicia todos. Guard: recusado com `RESPAWN_BUSY` se houver jobs na fila/inflight. **Único restart do supervisor**: código do próprio UMS (`ModelServer/src/modelserver/*.py`), `backends.yaml`, ou protocolo partilhado (`Shared/.../worker_protocol.py`, `worker_serve.py`). Implementação: `BackendManager.respawn()`/`respawn_all()`, dispatch `CMD_RESPAWN` em `server.py`, CLI `respawn_cmd`, helper `respawn_ums_backend()`.
 
 ## graphify
 

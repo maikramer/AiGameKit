@@ -2,7 +2,8 @@
 
 Hub: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).  
 Omni shape: [`../OMNI_SHAPE_FINDINGS.md`](../OMNI_SHAPE_FINDINGS.md).  
-Pipeline layout: [`../MONOREPO_GAME_PIPELINE.md`](../MONOREPO_GAME_PIPELINE.md).
+Pipeline layout: [`../MONOREPO_GAME_PIPELINE.md`](../MONOREPO_GAME_PIPELINE.md).  
+Animate / Quaternius: [`ANIMATOR_RETARGET_FINDINGS.md`](ANIMATOR_RETARGET_FINDINGS.md).
 
 **Dono de mesh ops:** Text3D apenas. GameAssets orquestra `text3d` /
 `rigging3d` / `animator3d` / `gamedev-lab` — sem `bpy`/`trimesh` no GameAssets.
@@ -17,32 +18,54 @@ Pipeline layout: [`../MONOREPO_GAME_PIPELINE.md`](../MONOREPO_GAME_PIPELINE.md).
 | Perfil | Uso |
 |--------|-----|
 | `topology_clean` | `topology-fix` / generate clean |
-| `pre_decimate_uv` | Antes bake-master / LOD texturado |
+| `pre_decimate_uv` | Antes bake-master / simplify `_to_paint` — **não** antes do COLLAPSE no LOD texturado (trava rácio) |
+| `post_decimate` | Após Decimate (LOD / remesh-textured / simplify) |
 | `part_decode` | Part3D |
 | `post_voxel` | Após remesh voxel |
 
-Cadeia tip.: sanitize NaN → weld → long_edges/slivers → debris → fill holes →
-`make_watertight` (só clean) → shade-smooth.
+Cadeia tip. (`topology_clean` actual): sanitize/reweld → weld → long_edges/slivers →
+debris → fill (`fill_holes_sides=96`) → `make_watertight` **seletivo**
+(`watertight_max_loop_diameter_ratio≈0.35`, flap-erode ON) → shade-smooth.
+Opcional: morph-close / `--remove-internal-shells`. Flare/Taubin **off**;
+`force_close_base` **removido** (bisect destruía cascas plástico).
+
+Motor default: `text3d topology-fix --engine arrays` (numpy/scipy; ver
+[`../TOPOLOGY_FIX_GPU_STUDY.md`](../TOPOLOGY_FIX_GPU_STUDY.md)).
+
+**Edifícios ocos (capela):** não bisectar chão — casca plástico com fundo invertido.
+**Base oca por baixo é OK** (não é bug de entregável). QA `_shape` = cortes/forma,
+não “fechar chão”. Refs Text2D eye-level 3/4 via `categories.building` +
+`prompt_builder`. Ver
+[`../HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`](../HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 
 ---
 
-## Master DAG (GameAssets default)
+## Master DAG (GameAssets default — Round 3)
 
 ```
-1 generate (shape cru, Omni)
-2 topology-fix (--export-origin feet|center|none, fill-holes-sides)
-3 paint
-4 bake-master (LOD0 + normais HI→LO; KTX2/meshopt opcional)
-5–7 LOD1 / LOD2 / collision
-8 rigging3d transfer-weights (HI → LODs)
-9 animate por LOD
-10 gamedev-lab check glb --category …
+1 generate (shape cru, Omni) → _intermediate/id_shape.glb
+2 topology-fix → id_clean (+ to_paint se preciso)
+3 paint sobre clean/to_paint
+4 rigging3d pipeline sobre _painted → _intermediate/id_rigged.glb
+5 animator3d game-pack ×1 → id_rigged_animated.glb
+6 text3d lod sobre animated/rigged → lod0/1/2 (+ finish KTX2/meshopt)
+7 collision a partir do painted
+8 gamedev-lab check glb --category …
 ```
 
-- Intermediários (`shape`, `painted`, `rigged_hi`, `clean`, …) → `_intermediate/`.
+**`to_paint` (quando o clean precisa de decimate antes do paint):** ordem típica
+`text3d simplify` → **re-**`topology-fix` (não terminar no simplify). Testes que
+assertam o último `run_cmd` têm de olhar a lista completa (`call_args_list`).
+
+Estáticos (sem rig): `text3d lod --painted-mesh` com `--target-faces` (LOD0 ≈
+1.2× category target) + `--finish-lod0` (tangents/KTX2/meshopt). LOD1/2 =
+target/2 e target/4 via o mesmo path textured (`remesh_textured_glb` →
+`mesh_simplify`).
+
+- Intermediários → `_intermediate/` (shape/clean/painted/rigged/…).
 - Resume **tem** de procurar aí (não regenerar do zero).
-- `--legacy-pipeline` força caminho antigo.
 - `text3d generate --no-topology-fix` mantém Stage 1 cru.
+- **Abolidos no DAG:** `_rigged_hi`, `transfer-weights`×N + game-pack×N por LOD.
 
 ### Orientação / origem
 
@@ -54,22 +77,146 @@ Cadeia tip.: sanitize NaN → weld → long_edges/slivers → debris → fill ho
 - `gameassets mesh reorigin-feet` para estáticos; rigged/animados: validar
   rotação root antes de só reorigin.
 
-### Normais / export GLTF
+### Normais / tangentes — sobreviver (não só recalcular)
+
+Sintoma viewer: **edges vivos** ou shading “folha amassada” (normal map sem
+`TANGENT`, ou V/Tri≈3). Preferir **preservar** attrs no DAG; recalcular é
+fallback e falha se bpy não importar KTX2.
+
+| Estágio | NORMAL | TANGENT | Notas |
+|---------|--------|---------|-------|
+| `_shape` | sim (tip. flat) | não | Hunyuan; V/Tri≈3 típico |
+| `_clean` | **não** | não | `topology-fix` `export_normals=False` (watertight) |
+| `_painted` | **sim** | **sim** (se UV) | Paint: `smooth_shade_scene` + `export_normals/tangents=True` |
+| lod / remesh | sim | sim | shade antes de todo export com normals |
+| lod final | sim | sim | finish (ver compressão) |
+
+**Cadeia de falha medida (simple-rpg, 2026-07-23/24):**
+
+1. Paint legado `export_normals=False` → `_painted` só `POSITION`+`TEXCOORD_0`.
+2. Finish/lod bpy importa flat → export com normals → **V/Tri≈3** (edges vivos).
+3. `gltf-transform prune` **sem** `--keep-attributes` apaga **TANGENT**
+   (ex.: `goblin_lod0_animated`).
+4. Re-`text3d finish` em GLB já KTX2: bpy sem `KHR_texture_basisu` → import
+   falha → shade/tangents no-op. Fix: `ktxdecompress` → PNG antes do bpy;
+   uastc re-KTX2.
+
+**Regras de export:**
 
 - **Não** `normals_split_custom_set(loop_normals)` → V/Tri≈3, ficheiros
   inchados (ex. goblin_shape 33 MB).
-- Usar `shade_smooth` + `auto_smooth_angle`.
+- `smooth_shade_scene` / `apply_smooth_by_angle` (60°) antes de
+  `export_scene.gltf` com `export_normals=True`.
+- `save_glb`: `export_tangents` **explícito** no kwargs é respeitado; senão
+  auto só com nó material `NORMAL_MAP`.
 - `weld_glb`: nunca engolir excepções — `log.warning`.
+- Antes de **qualquer** re-export glTF (rig / animate / skin / LOD):
+  `smooth_shade_scene` = **weld `1e-4` + smooth-by-angle** (modo B abaixo).
+
+**Probe + reparar LODs já gerados:**
+
+```bash
+# attrs / V/Tri / TANGENT (sem bpy)
+python3 -c "
+from pathlib import Path
+import sys
+sys.path.insert(0,'GameDevLab/src')
+from gamedev_lab.glb_meta import glb_extract_meta
+m=glb_extract_meta(Path(sys.argv[1]))
+print(m['attributes_present'], 'v/t', m['v_per_tri'], 'T', m['has_tangents'], m['texture_mime_types'])
+" public/assets/meshes/wooden_crate_lod2.glb
+
+# reparar N+T+KTX2 sem regenerar shape/paint
+text3d finish asset_lod0.glb
+```
+
+Bom: `NORMAL`+`TANGENT`, v/t ≪ 2.5, `image/ktx2` no lod final.
+
+### V/Tri≈3 e LOD “moth-eaten” (2026-07)
+
+Dois modos distintos — misturá-los gera fixes incompletos:
+
+| Modo | Sintoma | O que resolve |
+|------|---------|---------------|
+| A — flat import | GLB sem `NORMAL` → bpy flat → exporter parte **loops** | `shade_smooth` / `smooth_shade_scene` |
+| B — verts já duplicados | Mesh no ficheiro com ~3 verts por tri (SkinTokens / re-export) | **`remove_doubles` / weld** — shade sozinho **não** funde |
+
+**Incidente (simple-rpg `shade`, 2026-07-23):**
+
+- `_painted` / `*_lod*_painted`: V/Tri ≈ 0.66–1.1 (saudável).
+- `_rigged` / `_rigged_animated`: V/Tri ≈ **3.0** (verts já partidos).
+- Round 3 chama `text3d lod` **sobre animated/rigged** **sem** `--painted-mesh`
+  → path `generate_lod_glb_triplet` (Decimate COLLAPSE geométrico).
+- Decimate em triângulos isolados → LOD1/2 rasgados (comps ≈ nº faces;
+  viewer “moth-eaten” / fios).
+- Commit `eeac6b6b` (`smooth_shade` only) **não** bastava para o modo B.
+
+**Fix no código:**
+
+1. `smooth_shade_scene` — weld `1e-4` + smooth (Shared `bpy_mesh`).
+2. `generate_lod_glb_triplet` — weld no lod0; LOD1/2 via
+   `mesh_simplify.simplify_mesh_object` (mesmo path que textured /
+   `text3d simplify`).
+3. Path textured (`--painted-mesh`) já usava `simplify_mesh_object` desde
+   `07e668e6` — por isso estáticos / painted LODs não degeneravam igual.
+
+**Diagnóstico rápido:**
+
+```bash
+# V/Tri + counts (sem bpy)
+python3 -c "
+from pathlib import Path
+import sys
+sys.path.insert(0,'GameDevLab/src')
+from gamedev_lab.glb_meta import glb_extract_meta
+p=Path(sys.argv[1]); m=glb_extract_meta(p)
+print(p.name, 'tris=', m['triangle_count_total'], 'verts=', m['vertex_count_total'],
+      'v/tri=', m['v_per_tri'])
+" public/assets/meshes/shade_lod2.glb
+```
+
+- V/Tri ≈ **3.0** em rigged/animated/lod → modo B; re-gerar ladder após fix.
+- V/Tri ≈ 0.5–1.5 com comps≈1 (ou poucas ilhas) → topologia partilhada OK.
+- Comparar `_intermediate/{id}_painted.glb` vs `{id}_rigged_animated.glb`:
+  se painted bom e rigged V/Tri=3, o split aconteceu no **rig/animate export**.
+
+**Anti-padrão:** Decimate COLLAPSE sem weld prévio em mesh **já** V/Tri≈3
+(modo B). **Não** assumir que `smooth_shade` = weld.
+
+### Decimate / orçamento de faces (LOD texturado)
+
+`gamedev_shared.mesh_simplify.decimate_mesh_object` (2026-07-24):
+
+| Armadilha | Efeito | Fix |
+|-----------|--------|-----|
+| ratio extremo numa passagem (0.009) | bpy COLLAPSE no-op parcial → ~22k piso | passes ≤50% (`min_ratio_per_pass=0.5`) |
+| `remove_doubles` / weld **antes** do COLLAPSE em painted saudável | trava ~20k; `lod1==lod2` (ex. `wooden_crate`) | `pre_merge_threshold=0` no simplify; weld só via `smooth_shade_scene` no **export** ou em mesh já V/Tri≈3 |
+| `protect_boundaries` + UV seams | protect cedo → mesmo piso | default `protect_boundaries=False` no LOD texturado |
+| `pre_decimate_uv` antes do COLLAPSE no remesh | piora stall | `remesh_textured_glb`: Decimate sem pre; só `post_decimate` depois |
+
+- Piso topológico real (ex. crate ~4.8k) pode impedir LOD2 ≪ LOD1 — textura
+  deve continuar a descer (`texture_size` lod2 &lt; lod1).
+- Weld **modo B** (rigged V/Tri≈3 → ladder geométrica) continua obrigatório
+  no path `generate_lod_glb_triplet` (`remove_doubles` no lod0) — não confundir
+  com weld pré-COLLAPSE no painted texturado.
 
 ### Compressão entregável
 
+**Happy path (comandos + deps):** [`../GLB_FINISH_COMPRESSION.md`](../GLB_FINISH_COMPRESSION.md).
+
 - Meshopt: bpy 5.2+ `export_meshopt_compression_enable` (+ `libmeshoptimizer-dev`
-  Linux); default ON em `gltf_transform_finish` / bake-master / lod finish.
+  Linux); default **ON** em `gltf_transform_finish` / bake-master / lod finish.
 - KTX2/UASTC: Node + `@gltf-transform/cli` **+** CLI `ktx` (KTX-Software).
-  Sem `ktx`, uastc falha silenciosamente (só warning) — doctor agora verifica.
+  Sem `ktx`, uastc falha (warning) — doctor verifica linha `ktx (KTX-Software)`.
+  Installer Text3D: `ensure_ktx_software()` → `~/.local/opt/KTX-Software`.
+- Ordem fixa: **[ktxdecompress se input já KTX2]** → shade+tangents (bpy) →
+  dedup → **prune `--keep-attributes true`** → **uastc** → meshopt.
+  Pós-uastc o bpy meshopt é skip (KTX2 no input) → fallback gltf-transform.
 - GameAssets path rigged: `lod --no-meshopt` depois `_finish_lod_with_rollback`
   com uastc+meshopt (rollback se perder skins/clips).
-- Re-comprimir: `text3d finish asset.glb`.
+- Re-comprimir / reparar N+T sem regenerar: `text3d finish asset.glb`.
+- Disk: UASTC pode **crescer** JPEG pequenos; PNG grandes tipicamente encolhem
+  (simple-rpg 2026-07: 162 LODs −542 MiB). Valor principal = GPU upload/VRAM.
 - Sem deps: fallback gracioso; `gamedev-lab check` pode falhar
   regras `texture_format: ktx2` / `compression: meshopt`.
 - Doctor: `text3d doctor`.
@@ -81,21 +228,100 @@ Cadeia tip.: sanitize NaN → weld → long_edges/slivers → debris → fill ho
   `GameAssets/.../data/rules/`.
 - `--no-bpy-inspect` para CI leve.
 
+### Debug visual — `gamedev-lab debug viz` (2026-07)
+
+Modos: `normals` (cor), `normals-arrows`, `orientation` (backface vermelho),
+`uv` (checker), `edges` (boundary/non-manifold), `weights`
+(dominant/count/unweighted/`--bone`); `--wireframe` transversal.
+PNGs com legenda Pillow + `viz_report.json`. Fonte: `GameDevLab/src/gamedev_lab/viz.py`.
+
+Armadilhas descobertas (valem para qualquer análise bmesh de GLBs da pipeline):
+
+- **Seam-splits do glTF = falsos positivos.** Export glTF splita vértices por
+  UV/normal; pós-import **toda** edge de seam parece boundary e as ilhas
+  fragmentadas inflam a estimativa de faces invertidas
+  (`recalc_face_normals` diff). Weld curto (`remove_doubles` 1e-4) antes das
+  métricas — medido no bandit_lod0: boundary 15 824 → **0** (watertight real,
+  5 non-manifold), flipped 30 % → **0 %**. Mesma técnica do `cut_review`.
+- **Modifier WIREFRAME explode em geometria suja.** `use_even_offset` (default)
+  escala 1/sin(θ) — slivers/degenerados atiram vértices para ±32k e a câmara
+  auto-frame vai atrás (render "vazio"). Desligar `use_even_offset` +
+  `use_relative_offset` em overlays de debug.
+- **Rigged renderiza em pose; `obj.data.vertices` é rest.** Geometria derivada
+  (setas de normais, overlays) tem de amostrar o mesh avaliado
+  (`evaluated_depsgraph_get()` → `obj.evaluated_get(deps).to_mesh()`), e
+  duplicados de overlay têm de **manter** o modifier ARMATURE.
+- **KTX2/meshopt**: todo import de deliverable passa por
+  `gamedev_shared.gltf_decode.bpy_readable_glb` (decode automático via
+  `@gltf-transform/cli`). `import_gltf` default = `bone_heuristic=TEMPERANCE`
+  — evita materializar meshes de display dos bones (`Icosphere`). O default
+  do `bpy.ops.import_scene.gltf` é `BLENDER`, que **cria** esses helpers e
+  infla world bounds no re-export; não usar `BLENDER` no happy path.
+- **`strip_bone_display_meshes` só com armature na cena** — a heurística
+  "tiny orphan mesh ≤64 verts sem material" apagava assets estáticos
+  legítimos (cubo de teste inteiro).
+- Legendas Pillow: `ImageFont.load_default()` é ASCII-only — acentos/setas
+  viram mojibake.
+
 ### LOD0 terminal
 
 | Pipeline chegou a… | LOD0 deve ser |
 |--------------------|---------------|
 | animate | GLB animado |
 | rig sem animate | rigged |
-| só paint / bake | painted / bake-master |
+| só paint | painted (+ lod finish) |
+
+### Promote (Stage 9.5) + resume — armadilhas
+
+Após animate, winners `*_lodN_animated.glb` viram `meshes/{id}_lodN.glb`.
+Alias runtime: `publish_rigged_animated_alias` → `{id}_rigged_animated.glb` ← lod0.
+
+**Bug (simple-rpg ogre/witch, 2026-07):** resume re-corria bake-master/LOD e
+via `faces(lod0) < 99% painted` fazia `copy2(painted → lod0)` — apagava
+skins/clips. Animated sobrevivia só em `_intermediate/*_lodN_painted.glb`
+(nome enganador do archive do promote).
+
+**Fix (`pipeline.py`):**
+
+1. bake-master / LOD **skip** se lod0 já é entregável promovido
+   (`_glb_is_promoted_animated` / `_glb_is_promoted_rigged`).
+2. Archive pré-promote → `*_lodN_pre_promote.glb` (não colidir com
+   `*_lodN_painted` do bake).
+3. `gltf_transform_finish` pós-promote: se perder skins/clips → rollback
+   para cópia pré-finish.
+
+**Diagnóstico rápido:**
+
+```bash
+# lod0 público sem anim vs archive bom
+python3 -c "import struct,json,sys; p=sys.argv[1]; d=open(p,'rb').read(); o=12
+while o<len(d):
+ n,t=struct.unpack_from('<I4s',d,o); o+=8; c=d[o:o+n]; o+=n
+ if t==b'JSON': j=json.loads(c); print(p,'anims',len(j.get('animations')or[]),'skins',len(j.get('skins')or[])); break
+" public/assets/meshes/boss_ogre_lod0.glb
+```
+
+Se `anims=0` mas `_intermediate/{id}_lod0_painted.glb` (legado) ou
+`*_lod0_pre_promote.glb` tem clips → republicar archive → `*_lod0.glb` e
+corrigir pipeline (já no código). Manifest/`game.yaml` com `rig`+`animate`
+**não** bastam se resume clobberar.
 
 ---
 
 ## Rig / animate (modelos adjacentes)
 
 - Rigging3D: SkinTokens, Python 3.13 + bpy≥5.2.
-- Animator3D: `game-pack`, clips `run`/`jump`/`fall`, preset humanoid.
-- Transfer weights: `rigging3d transfer-weights` (não Text3D).
+- Animator3D: `game-pack` humanoid → retarget Quaternius (não os clips procedurais
+  do preset README, salvo fallback). Ver
+  [`ANIMATOR_RETARGET_FINDINGS.md`](ANIMATOR_RETARGET_FINDINGS.md).
+- **Bípedes “creature” no manifesto** (shade, bandit, goblin…): usar
+  `animate.preset: humanoid` + `force_preset: true` + clips
+  `idle,walk,run,jump,attack,hit,death`. `preset: creature` + `procedural: true`
+  gera ossos estranhos + clips `Animator3D_*` que **não** batem com scripts
+  VibeGame (`idle`/`walk`/…). Detalhe: findings de animate.
+- **Pivô animado:** `root` estático nos pés; **não** retargetar rotação do root
+  Quaternius (±90° → origem salta para a cintura ao play). Location só em `pelvis`.
+- Transfer weights: `rigging3d transfer-weights` (não Text3D; fora do DAG Round 3).
 - `text3d lod` preserva armatures/animations.
 
 Pose Omni: T-pose Quaternius para humanoids; A-pose para corpos gordos/músculo
@@ -104,13 +330,81 @@ findings (semântica).
 
 ---
 
+## Árvores derrubáveis — split-at-height (antes do LOD)
+
+DAG em `_run_split_lod_stages` (`pipeline.py`) quando `wants_split_at_height`:
+
+```
+painted → text3d split-at-height --no-cap --split-files
+       → stump_painted + top_painted
+       → LOD stump 0/1/2 + LOD top 0/1/2
+       → compose lodN = Stump + Top (nomes para DestructiblePlugin fall)
+       → stump_collision + top_collision (+ collision = cópia do stump)
+```
+
+### Quem activa o split
+
+`wants_split_at_height(profile, row)`:
+
+| `text3d.split_at_height` | Comportamento |
+|--------------------------|---------------|
+| `false` | Off |
+| `true` ou omitido | Só assets **tree-like** |
+
+Tree-like = `category ∈ {tree, vegetation}` **e** (`bbox_preset == tree` **ou**
+id/idea match `tree|pine|oak|willow|cactus|fir|spruce|palm`). Rocks/props
+**nunca** partem, mesmo com flag global `true`.
+
+### Cut-only (default 2026-07)
+
+- Default: **só bisect** (`cap=False`, `use_fill=False`) — buraco no plano de
+  corte fica aberto. Fechos (fill/raster/fuse/UV bark) geravam artefactos
+  (tampões flutuantes, UV léak); código legado atrás de `--cap` / `cap=True`.
+- Fingerprint `SEAL_VERSION=cut-only-v1` em `gamedev_shared.mesh_split` —
+  resume invalida stump/top/lod/collision se o seal antigo diferir.
+- Altura default do corte: `min(0.8 m, altura/4)` acima da base.
+
+### Resume / invalidar
+
+```bash
+# Apaga derivados do split; mantém *_painted.glb
+# (helper: invalidate_split_artifacts(mesh_final))
+gameassets resume … --redo-split   # ou GAMEDEV_REDO_SPLIT=1
+```
+
+Apaga: `*_stump_painted` / `*_top_painted`, dirs `*_stump_lod`/`*_top_lod`,
+lods compostos, `*_stump_collision` / `*_top_collision` / `*_collision`.
+
+### Runtime (VibeGame)
+
+- Visual: `*_lod0.glb` com meshes `Stump` + `Top`.
+- Collider fall: `*_stump_collision.glb` (não o hull da árvore inteira).
+- Review rápido sem regenerar LOD:
+  `gamedev-lab debug cut-review stump.glb -o /tmp/cut/ [--cut-height 0.8]`
+
+---
+
 ## Checklist pós-shape (antes paint)
 
-1. 3 views — sem planos a régua (clip).
-2. Bounds / MB razoáveis (não 300 MB achatado).
+QA no **`_shape` fresco** (não GLBs antigos de `public/`):
+
+1. 3 views (`gamedev-lab debug screenshot` — `front,three_quarter,right`) —
+   cortes graves, planos a régua (clip MC/bbox), forma derretida/errada.
+2. Bounds / MB razoáveis (não 300 MB achatado / field cheio).
 3. Semântica OK vs `idea` (lobo≠raposa bípede).
-4. Sidecar `.omni.json` coerente com manifest.
+4. Sidecar `.omni.json` coerente com manifest (`size_m`, bbox_preset).
 5. Origem/orientação visual OK → então topology-fix → paint.
+
+**Ignorar:** base oca / vista para dentro da casca por baixo. `force_close_base`
+removido de propósito.
+
+**Pós-LOD (manual ou batch):**
+
+1. Face count de `*_lod0` ≪ clean/painted high-poly. Incidente watchtower:
+   `lod0` sobrescrito com ~333k (= clean) — restaurar via `text3d lod`.
+2. **V/Tri** em `*_lod1` / `*_lod2` (e rigged/animated): se ≈ **3.0** → modo B
+   (verts duplicados); LOD rasgado até re-gerar com weld/`mesh_simplify`.
+   Ver secção [V/Tri≈3](#vtri3-e-lod-moth-eaten-2026-07).
 
 ---
 
@@ -118,4 +412,18 @@ findings (semântica).
 
 | Data | Nota |
 |------|------|
+| 2026-07-24 | Doc fix: `import_gltf` default=`TEMPERANCE` (não BLENDER); BLENDER materializa Icosphere helpers |
+| 2026-07-24 | `debug viz` (6 modos); weld antes de métricas boundary/flipped (seam-splits); WIREFRAME sem even_offset; depsgraph p/ rigged; `gltf_decode` (KTX2/meshopt); strip helpers só com armature |
+| 2026-07-24 | N/T sobreviver: paint exporta N+T; finish `ktxdecompress`+prune `--keep-attributes`; Decimate stepwise; weld pré-COLLAPSE só modo B (não painted texturado) |
+| 2026-07-24 | V/Tri≈3 modo B: weld obrigatório; LOD geométrico Round 3 moth-eaten; `smooth_shade_scene`+`mesh_simplify` |
+| 2026-07-24 | Estáticos: LOD0=1.2×target + `--finish-lod0` (não identity painted) |
+| 2026-07-24 | Compressão: defaults meshopt ON; `ktx` obrigatório p/ UASTC; `text3d finish`; doc [`GLB_FINISH_COMPRESSION.md`](../GLB_FINISH_COMPRESSION.md); batch simple-rpg −542 MiB |
+| 2026-07-24 | `to_paint`: simplify → re-`topology-fix` (não assert só último cmd) |
+| 2026-07-24 | Split-at-height: DAG stump/top LOD+collision; tree-like only; cut-only default; `--redo-split` |
+| 2026-07-24 | Link `ANIMATOR_RETARGET_FINDINGS` — root estático / cintura-ao-play |
+| 2026-07-24 | DAG Round 3; QA `_shape` (cortes/forma); base oca ignorável |
+| 2026-07-24 | Promote/resume: não clobber lod0 promovido; archive `_pre_promote`; finish rollback |
+| 2026-07-24 | fill=96 + diameter guard; engine `arrays`; link TOPOLOGY_FIX_GPU_STUDY |
+| 2026-07-24 | `topology_clean` sem force_close_base/flare/Taubin; prompts building; watertight seletivo |
+| 2026-07-24 | Ops: após `text3d lod` manual, verificar face count — nunca deixar `*_lod0` = clean high-poly |
 | 2026-07-19 | Compilado de AGENTS.md + ops master pipeline / Omni batch |

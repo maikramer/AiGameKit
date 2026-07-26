@@ -1,6 +1,6 @@
 # Premise 2 — Automate to the edge
 
-> Stages chain without babysitting: shape → clean → paint → bake → LOD → rig → animate → validate → handoff. Resume, profile autodetection, and orchestration exist so neither humans nor agents re-learn the DAG each run.
+> Stages chain without babysitting: shape → clean → paint → rig → animate → LOD → validate → handoff (Round 3). GPU work rides UMS waves; master finalize is deferred. Resume, profile autodetection, and orchestration exist so neither humans nor agents re-learn the DAG each run.
 
 ## Intent
 
@@ -8,19 +8,24 @@ A game asset is not “a mesh file.” It is the **terminal deliverable** of a d
 
 “To the edge” means we automate until the artifact is **engine-ready**, not until the first GPU call returns.
 
-## Canonical stage story (master pipeline)
+## Canonical stage story (master pipeline — Round 3)
 
-Conceptual order (see `GameAssets` `run_master_pipeline` for the real DAG):
+Conceptual order (see `GameAssets` `run_master_pipeline` + UMS waves):
 
-1. **Shape** — `text3d generate` (raw)
+1. **Shape** — `text3d generate` (raw; often UMS shape wave; Omni soft-fill)
 2. **Clean** — `text3d topology-fix` (origin, holes, repair)
-3. **Paint** — `paint3d` (textures)
-4. **Bake master** — `text3d bake-master` → LOD0 (+ optional KTX2/meshopt)
-5. **LOD1 / LOD2 / collision** — derived meshes
-6. **Rig transfer** — when humanoid/rigged profile applies
-7. **Animate** — when animation is in scope
-8. **Validate** — `gamedev-lab check glb`
-9. **Handoff** — into `public/` / VibeGame consumption
+3. **Paint** — `paint3d` (UMS paint wave; master deferred until wave drains)
+4. **Rig** — `rigging3d pipeline` on **`_painted`** (not clean HI)
+5. **Animate** — `animator3d game-pack` **×1** on the rigged GLB
+6. **LOD / finish** — `text3d lod` on animated/rigged → lod0/1/2 (+ KTX2/meshopt); **no** `transfer-weights` in the DAG
+7. **Collision / validate** — as profile requires
+8. **Handoff** — into `public/` / VibeGame consumption
+
+**Statics:** lod ladder from painted. **Abolished:** `_rigged_hi`, bake-master-before-rig as default LOD0, transfer-weights×LOD.
+
+GPU orchestration: [`docs/GAMEASSETS_UMS_BATCH.md`](../GAMEASSETS_UMS_BATCH.md).
+Mesh detail: [`docs/findings/MESH_PIPELINE_FINDINGS.md`](../findings/MESH_PIPELINE_FINDINGS.md).
+GLB compression (KTX2 + meshopt, `text3d finish`, deps `ktx`): [`docs/GLB_FINISH_COMPRESSION.md`](../GLB_FINISH_COMPRESSION.md).
 
 Opt-out flags (`--no-rig`, `--no-animate`, `--legacy-pipeline`, etc.) exist for control. The **default** is the full path implied by manifest + `game.yaml`.
 
@@ -32,7 +37,7 @@ Autodetection of the terminal stage:
 |---------------|----------------|
 | Has animation | Animated GLB |
 | Rigged, no animation | Rigged GLB |
-| Paint only | Painted / baked master |
+| Paint only | Painted (lod finish) |
 
 Shipping an unrigged painted mesh as LOD0 when the profile asked for rig/animation is a **pipeline bug**, not a style choice.
 

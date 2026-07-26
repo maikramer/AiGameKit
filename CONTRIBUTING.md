@@ -29,9 +29,26 @@ make test-shared
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.10 or higher (Animator3D / Rigging3D: see package READMEs — often 3.13 + `bpy`)
 - Git
 - CUDA (optional, for GPU features)
+- Prefer root installers: [`docs/INSTALLING.md`](docs/INSTALLING.md)
+
+### Editable monorepo (no reinstall loop)
+
+`./install.sh <tool>` installs editable (`pip install -e` → `src/`). Edits under
+`*/src/` are live on the next CLI process. `resolve_binary` prefers
+`<Tool>/.venv/bin` when `GAMEDEV_PREFER_MONOREPO=1` (default).
+
+| Change | Action |
+|--------|--------|
+| Normal Python under `*/src/` | Save → re-run CLI / batch |
+| Running UMS **tool worker** | `ums respawn <backend>` |
+| ModelServer / worker protocol | `gamedev-model-server stop` |
+| New dep / entry point | `./install.sh <tool>` |
+
+VRAM: **UMS + hw-auto** — no public `--low-vram` / `--memory-efficient`. Legacy
+per-tool servers: `GAMEDEV_ALLOW_LEGACY_SERVER=1` only.
 
 ### Setting Up a Package
 
@@ -48,6 +65,8 @@ source .venv/bin/activate  # Linux/Mac
 # Install in development mode
 pip install -e '.[dev]'
 ```
+
+Or from repo root: `./install.sh text2d`.
 
 ### Installing All Packages
 
@@ -78,6 +97,7 @@ make test-shared      # Shared library
 make test-text2d     # Text2D
 make test-text3d     # Text3D
 make test-paint3d    # Paint3D
+make test-vibegame   # VibeGame (Bun) — see VibeGame/docs/TESTING.md
 ```
 
 ### Run with Coverage
@@ -269,8 +289,9 @@ GameDev/
 
 If you get CUDA out of memory errors:
 1. Reduce batch size or use `--quality fast` where available
-2. Leave **hw-auto** on (default) so tools pick SDNQ/offload on small GPUs; use **UMS** (`gamedev-model-server`) for coordinated VRAM
-3. Close other GPU applications
+2. Leave **hw-auto** on (default); route GPU work through **UMS** — do not add `--low-vram` (removed)
+3. Check `ums status` / `ums queue` before killing anything GPU-related
+4. Close other GPU applications
 
 ### Model Download Fails
 

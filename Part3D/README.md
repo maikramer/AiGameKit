@@ -2,7 +2,7 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-Semantic decomposition of 3D meshes via **Hunyuan3D-Part** (P3-SAM + X-Part): segmentation and part generation. Optimized for ~6 GB VRAM with sequential CPU offloading, SDNQ quantization, pre-quantized DiT (quanto qint8), and `torch.compile`. Mesh I/O and post-decode repair use **bpy** (same stack as Text3D) — no PyMeshLab.
+Semantic decomposition of 3D meshes via **Hunyuan3D-Part** (P3-SAM + X-Part): segmentation and part generation. Optimized for ~6 GB VRAM with sequential CPU offloading, SDNQ quantization, pre-quantized DiT (quanto qint8), flashvdm decode, and channels_last. Autotune clamps `cond_batch` / `max_parts` and skips DiT `torch.compile` under offload (Conditioner is never compiled — `torch_cluster.fps` × Dynamo). Mesh I/O and post-decode repair use **bpy** (same stack as Text3D) — no PyMeshLab.
 
 ## Overview
 
@@ -94,16 +94,22 @@ part3d decompose character.glb --seed 42 --steps 25 --octree-resolution 256
 | `--no-cpu-offload` | flag | off | Keep all components on GPU (>10 GB) |
 | `--device` | str | None | Force `cuda` / `cpu` |
 | `--segment-only` | flag | off | Segment without part generation |
+| `--parts-mode` | str | **`faces`** | `faces` / `xpart` / `hybrid` — default faces (thin features) |
+| `--segment-mode` | str | `p3sam` | `p3sam` / `geometry` / `hybrid` |
+| `--fine-parts` | flag | off | Preset: hybrid segment + faces export; forces `detail-levels=0` |
+| `--detail-levels` | int | `0` | Hierarchical re-SAM on large labels (0–2) |
 | `-v, --verbose` | flag | off | Verbose logging |
 | `-q, --quantization` | str | `auto` | `auto` / `none` / `int8` / `int4` → SDNQ |
 | `--no-quantize-dit` | flag | off | Skip DiT quantization |
-| `--torch-compile` / `--no-torch-compile` | | off | `torch.compile` on DiT |
+| `--torch-compile` / `--no-torch-compile` | | off | Prefer VAE-only; DiT compile skipped under mem-eff / ≤8 GB offload |
 | `--no-attention-slicing` | flag | off | Disable attention slicing |
 | `--hw-auto/--no-hw-auto` | | on | Soft hw profile; kill-switch `PART3D_HW_AUTO=0` |
 | `--allow-shared-gpu` | flag | off | Allow GPU sharing |
 | `--gpu-kill-others/--no-gpu-kill-others` | | off | Terminate competing GPU processes |
 | `--profile` | flag | off | Timing / VRAM profiling |
 | `--gpu-ids` | str | None | Multi-GPU IDs (e.g. `0,1`) |
+
+**6 GB autotune** (free VRAM via `mem_get_info`): ≤7.5 GB → `cond_batch_size=1`; ≤6.5 GB → DiT `max_parts=1`. Prefer **shape** mesh input (paint GLB can hang `fix_mesh`). Kernel notes: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md) · [`docs/findings/PAINT_PART_FINDINGS.md`](../docs/findings/PAINT_PART_FINDINGS.md).
 
 ## Segmentation quality
 

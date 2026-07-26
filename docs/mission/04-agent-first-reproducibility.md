@@ -88,5 +88,6 @@ Installers, retries, and long jobs must not block on license prompts or Y/N conf
 
 - Agent guide: [`AGENTS.md`](../../AGENTS.md)
 - Zero-to-game: [`docs/ZERO_TO_GAME_AI.md`](../ZERO_TO_GAME_AI.md)
+- Testing / coverage floor + CI pitfalls: [`docs/TESTING.md`](../TESTING.md) · [`docs/TESTING_PT.md`](../TESTING_PT.md)
 - UMS agent checklist: [`ModelServer/README.md`](../../ModelServer/README.md) (Agents / anti-patterns)
 - CLI-for-agents design notes: [`Materialize/docs/plans/2026-03-15-cli-for-ai-agents-design.md`](../../Materialize/docs/plans/2026-03-15-cli-for-ai-agents-design.md)

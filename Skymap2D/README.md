@@ -95,6 +95,11 @@ skymap2d generate "alien planet" -o sky_alien.png
 | `--quality` | str | `medium` | Quality tier: `fast`, `low`, `medium`, `high`, `highest` |
 | `--format` | str | `png` | Output format: `png` (8-bit sRGB) or `exr` (RGB float linear) |
 | `--exr-scale` | float | `1.0` | Multiply linear values when writing EXR |
+| `--compile/--no-compile` | flag | off (`generate`); **on** (`batch`) | `torch.compile` (~−19% hot @ fast); cold ~6 min — keep off for one-shot |
+| `--compile-mode` | str | `default` | Inductor mode |
+| `--channels-last/--no-channels-last` | flag | off | NHWC; little gain in 6 GB skymap benches |
+
+Kernel opts (batch/UMS compile ON by default): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 ### `skymap2d presets`
 
@@ -112,7 +117,7 @@ Generate multiple skymaps from a text file (one prompt per line, `#` comments ig
 skymap2d batch prompts.txt --output-dir skies/ --quality high
 ```
 
-Supports all generation flags (`--width`, `--height`, `--steps`, `--guidance-scale`, `--preset`, `--quality`, `--format`, `--exr-scale`, `--cpu`, `--gpu-ids`).
+Supports all generation flags (`--width`, `--height`, `--steps`, `--guidance-scale`, `--preset`, `--quality`, `--format`, `--exr-scale`, `--cpu`, `--gpu-ids`, `--compile`, `--channels-last`).
 
 ### `skymap2d info`
 

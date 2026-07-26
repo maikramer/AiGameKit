@@ -23,6 +23,8 @@ cd Shared && pip install -e . && cd ../Part3D && pip install -e .
 ```bash
 part3d --help
 part3d decompose mesh.glb -o partes.glb -v
+part3d decompose mesh.glb --parts-mode faces   # default — finos (escada/bandeira)
+part3d decompose mesh.glb --fine-parts         # hybrid segment; detail-levels=0
 part3d decompose mesh.glb --quality fast
 part3d decompose mesh.glb -q int4          # SDNQ int4
 part3d decompose mesh.glb --gpu-ids 0,1    # DiT / auxiliares
@@ -35,6 +37,8 @@ part3d decompose mesh.glb -o partes.glb --no-ums   # forçar in-process
 ```
 
 Flags UMS partilhadas: `--ums-priority`, `--no-ums`, `--ums-stream`.
+
+**6 GB:** autotune põe `cond_batch=1` / `max_parts=1`; DiT `torch.compile` skip com offload; Conditioner nunca compilado. Preferir mesh **shape**. Ver [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 ### Segmentação fina e meshes high-poly
 
@@ -80,6 +84,14 @@ Experiências com props finos (watchtower, etc.):
 - Seed do Text3D muda “soldadura” dos finos — Part3D não corrige geometria fundida na origem.
 - Proxy 50–120k faces se o clean &gt;~200k; VRAM ~6 GB: um job GPU de cada vez.
 
-Detalhe: [`docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
+| Flag | Default | Nota |
+|------|---------|------|
+| `--parts-mode` | **`faces`** | Face-split; finos. `xpart` derrete escada/bandeira |
+| `--fine-parts` | off | Segment `hybrid` + export faces; `detail-levels=0` |
+| `--segment-mode` | `p3sam` | Alt.: `hybrid` / `geometry` |
 
-Documentação completa: [README.md](README.md).
+Fuse peels complementares (mesmo N faces): `part3d.utils.label_fuse.fuse_protrusion_labels`.
+
+Detalhe: [`docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md) · hub: [`docs/findings/PAINT_PART_FINDINGS.md`](../docs/findings/PAINT_PART_FINDINGS.md).
+
+Documentação completa (tabela CLI): [README.md](README.md).

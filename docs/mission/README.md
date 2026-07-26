@@ -12,3 +12,5 @@ Canonical one-liner and summary live in [`AGENTS.md`](../../AGENTS.md) (section 
 | [06-implications-for-agents.md](06-implications-for-agents.md) | Implications when changing this repo |
 
 **How to use:** read the summary in `AGENTS.md` for orientation; open the matching deep dive before a design decision, PR review, or “why does this feel hard?” diagnosis.
+
+**Ops companions:** [GAMEASSETS_UMS_BATCH.md](../GAMEASSETS_UMS_BATCH.md) · [MODEL_FINDINGS.md](../MODEL_FINDINGS.md) · [findings/](../findings/README.md) · [TESTING.md](../TESTING.md) (cobertura + CI).

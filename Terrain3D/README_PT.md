@@ -148,8 +148,14 @@ Terrain3D/
 
 ```bash
 pip install -e ".[dev]"
+make test-terrain3d
+# ou
 pytest tests/ -v
+# cobertura (UMS payload, postprocess, export, CLI --help):
+pytest tests/test_terrain3d_coverage_suite.py tests/test_terrain3d_coverage_100b.py -q
 ```
+
+Piso de cobertura do monorepo: [`docs/TESTING_PT.md`](../docs/TESTING_PT.md).
 
 ## Licença
 

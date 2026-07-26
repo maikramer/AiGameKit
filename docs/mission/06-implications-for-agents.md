@@ -37,15 +37,16 @@ Deep dives: [north star](01-north-star.md) · [ease](02-ease-over-knobs.md) · [
 
 **Do**
 
-- Call `try_ums_delegation` / `delegate_to_ums` before in-process GPU prep.
-- Declare `sdnq_preset` / `memory_efficient` / peak-relevant fields honestly.
+- Call `try_ums_delegation` / `delegate_to_ums` before in-process GPU prep (`prepare_gpu_exclusive` only after UMS fail / `--no-ums`).
+- Fill peak fields via hw-auto / `with_ums_peak_opts` (`sdnq_preset` / `memory_efficient` on the payload — not public CLI knobs).
 - Use `ums status|queue|wait|cancel` in runbooks and agent tips (`UMS_DO_NOT_KILL_TIP`).
 - Keep interactive priority above batch unless the product explicitly wants otherwise.
 
 **Don’t**
 
 - Recommend `--gpu-kill-others`, pkill, or `kill` while UMS holds work.
-- Add a parallel “shadow server” per tool as the new default (legacy servers are deprecated fallback).
+- Document `--low-vram` / `--memory-efficient` as operator flags (removed).
+- Add a parallel “shadow server” per tool as the new default (legacy: `GAMEDEV_ALLOW_LEGACY_SERVER=1` only).
 - Bypass UMS in docs “for speed” without labeling it an advanced escape hatch.
 
 **PR self-check:** Under contention, does the happy path wait/cancel — or murder a sibling job?

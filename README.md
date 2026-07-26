@@ -91,7 +91,7 @@ text3d generate "a dragon" --gpu-ids 0,1       # Split weights across GPU 0 and 
 paint3d texture dragon.glb --gpu-ids 0,1       # Multi-GPU texturing
 ```
 
-Detected automatically via `nvidia-smi` when omitted. GameAssets batch/resume propagates `--gpu-ids` to all sub-tools.
+Detected automatically via NVML (`gamedev_shared.gpu.detect_gpu_ids`, dep `nvidia-ml-py`; fallback `nvidia-smi`) when omitted. GameAssets batch/resume propagates `--gpu-ids` to all sub-tools.
 
 ## Architecture
 
@@ -130,6 +130,16 @@ Full guide (tool table, minimum Python per CLI, **repo root vs `Project/scripts/
 **Hunyuan shape / repair / Part3D lessons** (faces vs X-Part, elephant feet, welded thins): [docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md](docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md) · [Português](docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 
 **Model findings hub** (VRAM, SDNQ, kernels, Omni, UMS, paint/sky/mesh): [docs/MODEL_FINDINGS.md](docs/MODEL_FINDINGS.md) · [docs/findings/](docs/findings/) · Omni [docs/OMNI_SHAPE_FINDINGS.md](docs/OMNI_SHAPE_FINDINGS.md) · benches [docs/KERNEL_OPTS_BENCH.md](docs/KERNEL_OPTS_BENCH.md).
+
+**GLB compression (KTX2 + meshopt, `text3d finish`):** [docs/GLB_FINISH_COMPRESSION.md](docs/GLB_FINISH_COMPRESSION.md).
+
+**UMS batch waves** (GameAssets shape/paint + optional GPU tools): [docs/GAMEASSETS_UMS_BATCH.md](docs/GAMEASSETS_UMS_BATCH.md).
+
+**Mission / premises** (ease, automate, agent-first, VRAM-as-infra): [docs/mission/](docs/mission/README.md) · summary in [AGENTS.md](AGENTS.md).
+
+**File logging** (all Python tools + UMS → `~/.cache/gamedev/logs/`): [docs/LOGGING.md](docs/LOGGING.md) · [Português](docs/LOGGING_PT.md).
+
+**Testing** (coverage floor ≥100/tool, suite naming, CPU-first rules): [docs/TESTING.md](docs/TESTING.md) · [Português](docs/TESTING_PT.md).
 
 **Zero-to-game with AI (generative tools + orchestration + agents):** [docs/ZERO_TO_GAME_AI.md](docs/ZERO_TO_GAME_AI.md) · [Português](docs/ZERO_TO_GAME_AI_PT.md).
 
@@ -335,6 +345,8 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `GAMEDEV_UMS_MAX_AFFINITY_CUTS` | ModelServer | Max VRAM-affinity skips before forcing HOL (default `3`) |
 | `GAMEDEV_UMS_MAX_QUEUE_DEPTH` | ModelServer | Job queue depth before `queue_full` (default `32`) |
 | `GAMEDEV_UMS_MAX_INFLIGHT` | ModelServer | Parallel generations (default `1`) |
+| `GAMEDEV_ALLOW_LEGACY_SERVER` | Shared / tools | `1` = opt-in per-tool legacy servers + legacy `ensure_vram` (default off) |
+| `GAMEDEV_PREFER_MONOREPO` | Shared / GameAssets | Default `1`: `resolve_binary` prefers `<Tool>/.venv/bin` over stale `~/.local/bin` |
 | `GAMEDEV_MODEL_SERVER_SOCKET` | Shared | Override Unix socket path (legacy / tests) |
 | `GAMEDEV_LOG_DIR` | All Python tools + UMS | Directory for daily log files (default `~/.cache/gamedev/logs`) |
 | `GAMEDEV_LOG_FILE` | All Python tools + UMS | Exact log file path (overrides per-tool daily naming) |
@@ -343,9 +355,9 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `GAMEDEV_FILE_LOG` | All Python tools + UMS | `0` disables file logging; `1` forces on (needed under pytest) |
 | `GAMEDEV_NO_FILE_LOG` | All Python tools + UMS | `1` disables file logging |
 
-Logs: `~/.cache/gamedev/logs/<tool>-YYYY-MM-DD.log` (UMS → `ums-….log`). Console stays Rich/ANSI; file is plain text with UTC timestamps.
+Logs: `~/.cache/gamedev/logs/<tool>-YYYY-MM-DD.log` (UMS → `ums-….log`). Console stays Rich/ANSI; file is plain text with UTC timestamps. Full guide: [docs/LOGGING.md](docs/LOGGING.md).
 
-Unified Model Server: [`ModelServer/README.md`](ModelServer/README.md). Tool CLIs accept `--ums-priority`, `--no-ums`, `--ums-stream`.
+Unified Model Server: [`ModelServer/README.md`](ModelServer/README.md). Tool CLIs accept `--ums-priority`, `--no-ums`, `--ums-stream`. VRAM path: **UMS + hw-auto** (no public `--low-vram` / `--memory-efficient`); peak signals ride the UMS payload. Local editable workflow: [`docs/INSTALLING.md`](docs/INSTALLING.md) (*Local edits without reinstall loops*) — edit `*/src/`, `ums respawn <backend>` for running workers.
 
 ## Development
 
@@ -358,7 +370,7 @@ Unified Model Server: [`ModelServer/README.md`](ModelServer/README.md). Tool CLI
 | [**Pytest**](https://pytest.org/) + **pytest-cov** | Tests + coverage | `pyproject.toml` per package |
 | [**Cargo Clippy**](https://doc.rust-lang.org/clippy/) | Lint (Rust) | via Makefile |
 | [**Pre-commit**](https://pre-commit.com/) | Pre-commit hooks | `.pre-commit-config.yaml` |
-| [**GitHub Actions**](https://github.com/features/actions) | CI (lint + test + clippy) | `.github/workflows/ci.yml` |
+| [**GitHub Actions**](https://github.com/features/actions) | CI (lint + mypy + pytest matrix + Materialize + VibeGame Bun) | `.github/workflows/ci.yml` — pitfalls: [`docs/TESTING.md`](docs/TESTING.md) |
 
 ### Makefile (GNU Make)
 

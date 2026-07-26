@@ -276,8 +276,9 @@ cd Materialize
 # Build
 cargo build
 
-# Run tests
+# Run tests (unit tests live in src/ #[cfg(test)] + tests/ integration)
 cargo test
+cargo test --bin materialize-cli   # preset/analyze/io/error/cli coverage
 
 # Format (auto-fix)
 cargo fmt

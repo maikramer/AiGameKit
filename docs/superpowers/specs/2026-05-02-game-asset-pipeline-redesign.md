@@ -215,6 +215,15 @@ Regras por categoria/LOD em `GameAssets/src/gameassets/data/rules/`.
 
 ## Dependências externas
 
-- `npx @gltf-transform/cli` (KTX2, meshopt). Verificado em `text3d doctor`.
-- `bpy 5.1` em Text3D, Rigging3D, Animator3D.
+- `npx @gltf-transform/cli` (dedup/prune/uastc/meshopt fallback). Verificado em `text3d doctor`.
+- **`ktx` (KTX-Software)** — obrigatório para `gltf-transform uastc` → KTX2. Sem isto
+  o passo falha com warning e o GLB fica PNG/JPEG. Installer Text3D:
+  `ensure_ktx_software()` → `~/.local/opt/KTX-Software`. Ver
+  [`docs/GLB_FINISH_COMPRESSION.md`](../../GLB_FINISH_COMPRESSION.md).
+- `libmeshoptimizer-dev` + bpy 5.2+ para meshopt nativo (fallback gltf-transform).
+- `bpy ≥ 5.2` LTS (Python 3.13) em Text3D, Rigging3D, Animator3D.
 - `pymeshlab` em Text3D.
+
+> **Nota Round 3 (pós-spec):** o DAG vivo rigga o `_painted`, anima ×1, depois
+> `text3d lod` + finish com rollback — não o `bake-master`→`transfer-weights`×LOD
+> deste documento. Defaults `meshopt`/`ktx2` = true no código actual.

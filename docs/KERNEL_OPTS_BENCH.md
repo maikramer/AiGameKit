@@ -2,6 +2,7 @@
 
 Medição cold vs hot (mesmo processo: load 1×, generate 2×).
 
+**Guia operacional (flags, defaults UMS/batch, checklist):** [`findings/KERNEL_OPTS_FINDINGS.md`](findings/KERNEL_OPTS_FINDINGS.md).  
 **Hub consolidado (VRAM admit, footprints, Omni, UMS):** [`MODEL_FINDINGS.md`](MODEL_FINDINGS.md).
 
 ## Hardware

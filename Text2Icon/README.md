@@ -57,6 +57,11 @@ text2icon generate "shield emblem" --quant-transformer sdnq-fp8
 | `--ums-priority` | interactive / env | Prioridade na fila UMS (`interactive` \| `batch`) |
 | `--no-ums` | off | Forçar geração in-process (ignorar UMS) |
 | `--ums-stream` | off | Mostrar eventos de fila/progresso do UMS |
+| `--channels-last/--no-channels-last` | off (`generate`); **on** (`batch`) | NHWC (~−13% hot @ 6 GB); default ON em batch + UMS |
+| `--compile/--no-compile` | off | `torch.compile` — em 6 GB **piora** hot; deixar OFF |
+| `--compile-mode` | `default` | Modo Inductor (só se `--compile`) |
+
+Kernel opts: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 ## Unified Model Server (UMS)
 
@@ -117,9 +122,11 @@ Depois `gameassets batch` gera os ícones e `gameassets handoff` copia-os para `
 make test-text2icon
 # ou
 cd Text2Icon && pytest tests/
+# suite de cobertura (payload UMS, utils, hardware, CLI --help):
+pytest tests/test_text2icon_coverage_suite.py tests/test_text2icon_coverage_100b.py -q
 ```
 
-Os testes são CPU-only e fazem mock do torch/Sana (sem download de modelo).
+Os testes são CPU-only e fazem mock do torch/Sana (sem download de modelo). Piso de cobertura do monorepo: [`docs/TESTING_PT.md`](../docs/TESTING_PT.md).
 
 ## Licença
 

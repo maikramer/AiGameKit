@@ -57,7 +57,7 @@ GameDev/
 
 - **Python**: a maioria das ferramentas pede **3.10+**; exceções: **Rigging3D** (3.11), **Animator3D** (3.13 + `bpy` 5.1). Ver README de cada pasta.
 - **VibeGame** usa **Bun** e ferramentas compatíveis com **Node** (ver `VibeGame/package.json`); na raiz do repositório, `make test-vibegame` após instalar o Bun.
-- **GPU** opcional no Text2D; no Text3D/Paint3D/Rigging3D, CUDA com VRAM suficiente é recomendado para tempos aceitáveis. **Texture2D** corre localmente em GPU CUDA (pattern-diffusion). **Skymap2D** não precisa de GPU local (API Hugging Face). **GameAssets** só exige GPU se o perfil/linha invocar ferramentas locais (ex. text2d, text3d). **Multi-GPU:** a maioria das ferramentas com GPU aceita `--gpu-ids 0,1` para dividir pesos do modelo entre várias GPUs NVIDIA via accelerate.
+- **GPU** opcional no Text2D; no Text3D/Paint3D/Rigging3D, CUDA com VRAM suficiente é recomendado para tempos aceitáveis. **Texture2D** corre localmente em GPU CUDA (pattern-diffusion). **Skymap2D** não precisa de GPU local (API Hugging Face). **GameAssets** só exige GPU se o perfil/linha invocar ferramentas locais (ex. text2d, text3d). **Multi-GPU:** a maioria das ferramentas com GPU aceita `--gpu-ids 0,1` para dividir pesos do modelo entre várias GPUs NVIDIA via accelerate; detecção de GPUs / VRAM livre via **NVML** (`gamedev_shared.gpu`, dep `nvidia-ml-py`).
 - Os **pesos dos modelos** (Hugging Face, etc.) têm licenças próprias — consulta os model cards antes de distribuir ou usar em produção.
 
 ## Arranque rápido
@@ -69,6 +69,16 @@ Guia completo em português: **[docs/INSTALLING_PT.md](docs/INSTALLING_PT.md)**.
 **Lições Hunyuan shape / repair / Part3D (faces vs X-Part, pés de elefante, finos soldados):** [docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md](docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 
 **Hub de descobertas dos modelos** (VRAM, SDNQ, kernels, Omni, UMS, paint/sky/mesh): [docs/MODEL_FINDINGS.md](docs/MODEL_FINDINGS.md) · [docs/findings/](docs/findings/) · Omni [docs/OMNI_SHAPE_FINDINGS.md](docs/OMNI_SHAPE_FINDINGS.md) · benches [docs/KERNEL_OPTS_BENCH.md](docs/KERNEL_OPTS_BENCH.md).
+
+**Compressão GLB (KTX2 + meshopt, `text3d finish`):** [docs/GLB_FINISH_COMPRESSION.md](docs/GLB_FINISH_COMPRESSION.md).
+
+**Waves UMS no batch** (shape/paint + tools GPU opcionais): [docs/GAMEASSETS_UMS_BATCH.md](docs/GAMEASSETS_UMS_BATCH.md).
+
+**Missão / premissas** (facilidade, automação, agent-first, VRAM=infra): [docs/mission/](docs/mission/README.md) · resumo em [AGENTS.md](AGENTS.md).
+
+**Logging em ficheiro** (todas as tools Python + UMS → `~/.cache/gamedev/logs/`): [docs/LOGGING_PT.md](docs/LOGGING_PT.md) · [English](docs/LOGGING.md).
+
+**Testes** (piso ≥100/ferramenta, nomes das suites, regras CPU-first): [docs/TESTING_PT.md](docs/TESTING_PT.md) · [English](docs/TESTING.md).
 
 **Do zero ao jogo com IA (modelos + orquestração + agentes):** [docs/ZERO_TO_GAME_AI_PT.md](docs/ZERO_TO_GAME_AI_PT.md) · [English](docs/ZERO_TO_GAME_AI.md).
 
@@ -254,6 +264,21 @@ O monorepo usa variáveis de ambiente para localizar binários e configurar comp
 | `PAINT3D_MULTI_GPU` | Paint3D | **Obsoleto** — usar `--gpu-ids 0,1`. Variável de ambiente legada para dividir VAE entre GPUs |
 | `RIGGING3D_ROOT` | Rigging3D | Raiz da árvore de inferência (por defeito: pacote incluído) |
 | `RIGGING3D_PYTHON` | Rigging3D | Interpretador Python do ambiente de inferência |
+| `MODELSERVER_BIN` | Tools GPU | Path para `gamedev-model-server` (UMS) |
+| `GAMEDEV_UMS_AUTO_START` | Tools GPU | `0` desliga auto-start do UMS |
+| `GAMEDEV_UMS_PRIORITY` | Tools GPU / GameAssets | Prioridade na fila: `interactive` \| `batch` |
+| `GAMEDEV_ALLOW_LEGACY_SERVER` | Shared / tools | `1` = servers per-tool + `ensure_vram` legacy (default off) |
+| `GAMEDEV_PREFER_MONOREPO` | Shared / GameAssets | Default `1`: `resolve_binary` prefere `<Tool>/.venv/bin` a wrappers stale |
+| `GAMEDEV_LOG_DIR` | Todas as tools Python + UMS | Dir de logs diários (default `~/.cache/gamedev/logs`) |
+| `GAMEDEV_LOG_FILE` | Todas as tools Python + UMS | Path exacto do ficheiro de log |
+| `GAMEDEV_LOG_TOOL` | Todas as tools Python + UMS | Nome da tool no ficheiro (auto CLI / `ums`) |
+| `GAMEDEV_LOG_LEVEL` | Todas as tools Python + UMS | Nível mín.: `DEBUG` \| `INFO` \| `WARN` \| `ERROR` |
+| `GAMEDEV_FILE_LOG` | Todas as tools Python + UMS | `0` desliga; `1` força on (preciso sob pytest) |
+| `GAMEDEV_NO_FILE_LOG` | Todas as tools Python + UMS | `1` desliga logging em ficheiro |
+
+Logs: `~/.cache/gamedev/logs/<tool>-YYYY-MM-DD.log` (UMS → `ums-….log`). Guia: [docs/LOGGING_PT.md](docs/LOGGING_PT.md).
+
+UMS: [`ModelServer/README.md`](ModelServer/README.md). CLIs: `--ums-priority`, `--no-ums`, `--ums-stream`. VRAM: **UMS + hw-auto** (sem `--low-vram` / `--memory-efficient` públicos). Dev editável: [`docs/INSTALLING_PT.md`](docs/INSTALLING_PT.md) — editar `*/src/`, `ums respawn <backend>` para workers.
 
 ## Desenvolvimento
 
@@ -268,7 +293,7 @@ O monorepo usa ferramentas centralizadas para lint, formatação, testes e type-
 | [**Pytest**](https://pytest.org/) + **pytest-cov** | Testes + cobertura | `pyproject.toml` por pacote |
 | [**Cargo Clippy**](https://doc.rust-lang.org/clippy/) | Lint (Rust) | via Makefile |
 | [**Pre-commit**](https://pre-commit.com/) | Hooks de pré-commit | `.pre-commit-config.yaml` |
-| [**GitHub Actions**](https://github.com/features/actions) | CI (lint + test + clippy) | `.github/workflows/ci.yml` |
+| [**GitHub Actions**](https://github.com/features/actions) | CI (lint + mypy + pytest matrix + Materialize + VibeGame Bun) | `.github/workflows/ci.yml` — armadilhas: [`docs/TESTING_PT.md`](docs/TESTING_PT.md) |
 
 ### Makefile (GNU Make)
 

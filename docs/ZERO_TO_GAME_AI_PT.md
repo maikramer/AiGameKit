@@ -25,13 +25,22 @@ Fluxo de ponta a ponta para uma personagem texturizada, rigada e animada no brow
 
 ### Animator3D após o rig
 
-Depois do **Rigging3D** produzir um GLB rigado, o **Animator3D** grava animações de jogo procedimentais no asset com `game-pack`:
+Depois do **Rigging3D** produzir um GLB rigado, o **Animator3D** `game-pack` acrescenta clips:
 
 ```bash
-animator3d game-pack rigged.glb animated.glb --preset humanoid
+# Bípedes — retarget Quaternius (nomes limpos: idle, walk, run, …)
+animator3d game-pack rigged.glb animated.glb --preset humanoid --force-preset \
+  --clips idle,walk,run,jump,attack,hit,death
+
+# Não-humanoide — procedimental (nomes Animator3D_*)
+animator3d game-pack creature.glb out.glb --preset creature --procedural --force-preset
 ```
 
-O preset `humanoid` cria cinco clips: **BreatheIdle**, **Walk**, **Run**, **Jump** e **Fall** (no GLB com o prefixo `Animator3D_`; ver abaixo). Outros presets (`creature`, `flying`, …) geram conjuntos diferentes; ver [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md).
+`humanoid` por defeito = mocap Quaternius, **não** clips procedimentais
+`Animator3D_*`. `category: creature` no manifesto ≠ preset `creature` — inimigos
+bípedes precisam `animate.preset: humanoid` + `force_preset`. Ver
+[ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md) e
+[findings/ANIMATOR_RETARGET_FINDINGS.md](findings/ANIMATOR_RETARGET_FINDINGS.md).
 
 ### Integração GameAssets
 
@@ -52,17 +61,14 @@ Em vez de código à mão para cada projeto, usar o elemento **`PlayerGLTF`** no
 - O **Paint3D** preserva isso com **`--preserve-origin`** ao pintar para manter o alinhamento.
 - O **Rigging3D** valida a origem após o merge para o rig e as animações ficarem assentes no chão.
 
-### Nomes dos clips de animação (game-pack `humanoid`)
+### Nomes dos clips de animação
 
-No GLB exportado:
+| Caminho | Nomes no GLB |
+|---------|----------------|
+| `humanoid` (Quaternius, default) | `idle`, `walk`, `run`, `jump`, `attack`, `hit`, `death`, … |
+| Procedimental (`creature` / `flying` / `--procedural`) | `Animator3D_BreatheIdle`, `Animator3D_Walk`, … |
 
-- `Animator3D_BreatheIdle`
-- `Animator3D_Walk`
-- `Animator3D_Run`
-- `Animator3D_Jump`
-- `Animator3D_Fall`
-
-O runtime (`PlayerGLTF` e sistemas relacionados) mapeia o movimento a estes nomes (ou aliases compatíveis).
+`PlayerGLTF` / scripts de inimigos usam os nomes **limpos** Quaternius para bípedes.
 
 ## Handoff técnico
 

@@ -121,10 +121,13 @@ GameAssets / `resolve_binary` preferem `<Tool>/.venv/bin/<cli>` a wrappers stale
 | Mudança | O que correr |
 |---------|----------------|
 | Nova dep / entry point / metadata no `pyproject.toml` | `./install.sh <tool>` ou `clified update <tool>` |
-| Código usado por um worker **UMS** já a correr | `gamedev-model-server stop` (o próximo job auto-arranca) |
+| Código usado por um **worker UMS** da tool já a correr | `ums respawn <backend>` (ou `ums respawn`) — apanha `*/src/` sem reiniciar o supervisor |
+| Código do **ModelServer / protocolo worker** (`Shared/.../worker_*.py`) | `gamedev-model-server stop` (o próximo job auto-arranca) |
 | Clone movido (wrappers com paths partidos) | `./install.sh <tool>` uma vez para reescrever `~/.local/bin` |
 
 Edições Python normais em `*/src/` → guardar → re-correr o CLI / batch. Sem reinstall.
+VRAM: UMS + hw-auto (sem `--low-vram` público); ver
+[`ModelServer/README.md`](../ModelServer/README.md).
 
 ---
 

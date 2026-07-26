@@ -54,13 +54,21 @@ End-to-end flow for a textured, rigged, animated character in the browser:
 
 ### Animator3D after rig
 
-After **Rigging3D** produces a rigged GLB, **Animator3D** bakes procedural game animations into the asset with `game-pack`:
+After **Rigging3D** produces a rigged GLB, **Animator3D** `game-pack` adds clips:
 
 ```bash
-animator3d game-pack rigged.glb animated.glb --preset humanoid
+# Bipeds — Quaternius retarget (clean names: idle, walk, run, …)
+animator3d game-pack rigged.glb animated.glb --preset humanoid --force-preset \
+  --clips idle,walk,run,jump,attack,hit,death
+
+# Non-humanoid — procedural (Animator3D_* names)
+animator3d game-pack creature.glb out.glb --preset creature --procedural --force-preset
 ```
 
-The `humanoid` preset creates five clips: **BreatheIdle**, **Walk**, **Run**, **Jump**, and **Fall** (stored in the GLB with the `Animator3D_` prefix; see below). Other presets (`creature`, `flying`, …) produce different clip sets; see [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md).
+Default `humanoid` = Quaternius mocap, **not** procedural `Animator3D_*`. Manifest
+`category: creature` ≠ animate preset `creature` — bipedal enemies need
+`animate.preset: humanoid` + `force_preset`. See [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md)
+and [findings/ANIMATOR_RETARGET_FINDINGS.md](findings/ANIMATOR_RETARGET_FINDINGS.md).
 
 ### GameAssets integration
 
@@ -81,17 +89,14 @@ Instead of custom glue code for every project, use the **`PlayerGLTF`** element 
 - **Paint3D** preserves that with **`--preserve-origin`** when texturing so the painted mesh stays aligned.
 - **Rigging3D** validates the origin after merge so rigs and animations stay grounded.
 
-### Animation clip naming (`humanoid` game-pack)
+### Animation clip naming
 
-Clips in the exported GLB use this naming:
+| Path | Names in GLB |
+|------|----------------|
+| `humanoid` (Quaternius, default) | `idle`, `walk`, `run`, `jump`, `attack`, `hit`, `death`, … |
+| Procedural (`creature` / `flying` / `--procedural`) | `Animator3D_BreatheIdle`, `Animator3D_Walk`, … |
 
-- `Animator3D_BreatheIdle`
-- `Animator3D_Walk`
-- `Animator3D_Run`
-- `Animator3D_Jump`
-- `Animator3D_Fall`
-
-Runtime (`PlayerGLTF` and related systems) maps movement to these names (or compatible aliases).
+`PlayerGLTF` / enemy scripts map movement to the **clean** Quaternius names for bipeds.
 
 ## 4. Context bundle for coding agents
 

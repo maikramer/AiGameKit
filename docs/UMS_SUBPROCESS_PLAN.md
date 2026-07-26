@@ -1,6 +1,10 @@
 # Plano — ModelServer subprocess-per-backend
 
-Data: 2026-07-21 · Estado: Fase 0 completa, Fases 1-4 planeadas.
+Data: 2026-07-21 · **Estado (2026-07-24): Fases 0–4 implementadas em produção.**
+
+Este ficheiro permanece como desenho + protocolo. Operação viva:
+[`ModelServer/README.md`](../ModelServer/README.md) (`ums respawn`, workers,
+`GAMEDEV_UMS_SUBPROCESS=0` rollback). Batch: [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md).
 
 ## Contexto
 
@@ -47,7 +51,7 @@ Abort cooperativo via `{"cmd":"abort"}`; SIGTERM como fallback de força-bruta.
 
 ## Fases
 
-### Fase 0 — Venv canónico e auto-start correto ✅ (commit pendente)
+### Fase 0 — Venv canónico e auto-start correto ✅
 
 - `Shared/src/gamedev_shared/model_server.py`: nova `_resolve_ums_start_cmd()` com
   precedência correcta (MODELSERVER_BIN → ModelServer/.venv → PATH → sys.executable
@@ -55,7 +59,7 @@ Abort cooperativo via `{"cmd":"abort"}`; SIGTERM como fallback de força-bruta.
 - Testes: `TestResolveUmsStartCmd` (6 casos em `Shared/tests/test_model_server.py`).
 - Docs: `ModelServer/README.md` (secção Instalação) + `AGENTS.md` (canonical venv).
 
-### Fase 1 — Infraestrutura subprocess (sem mudar comportamento)
+### Fase 1 — Infraestrutura subprocess ✅
 
 - `ModelServer/src/modelserver/subprocess_pool.py` — `SubprocessWorkerPool` (spawn
   persistente, JSONL via stdin/stdout, watchdog/abort SIGTERM). Inspirado em
@@ -65,14 +69,14 @@ Abort cooperativo via `{"cmd":"abort"}`; SIGTERM como fallback de força-bruta.
 - `ModelServer/src/modelserver/data/backends.yaml` — cada backend ganha `tool: <name>`.
 - `ModelServer/src/modelserver/registry.py` — `BackendDescriptor.tool: str | None`.
 
-### Fase 2 — `serve --ums-worker` em cada tool
+### Fase 2 — `serve --ums-worker` em cada tool ✅
 
 - `Shared/src/gamedev_shared/worker_serve.py` — `run_worker_loop(adapter_class, backend_name)`.
 - Por tool: `<Tool>/src/<tool>/worker_serve_adapter.py` + subcomando `serve` no CLI.
 - Adapter local da tool espelha o adapter do UMS (mesmas lambdas), mas corre no
   venv da tool.
 
-### Fase 3 — BackendManager híbrido
+### Fase 3 — BackendManager híbrido ✅
 
 - `_LoadedState` ganha `subprocess: SubprocessWorker | None`.
 - `ensure_loaded` / `_evict_unlocked` / `generate` despacham para subprocesso
@@ -80,7 +84,12 @@ Abort cooperativo via `{"cmd":"abort"}`; SIGTERM como fallback de força-bruta.
 - `_admit_free_mib` soma VRAM de todos os PIDs filho via NVML.
 - Feature flag `GAMEDEV_UMS_SUBPROCESS=0` volta ao comportamento in-process.
 
-### Fase 4 — Migração dos 9 backends + rollback
+### Fase 4 — Migração dos 9 backends + rollback ✅
+
+**Pós-fase (ops):** `ums respawn [backend] [--hot]` recarrega código do worker
+sem reiniciar o supervisor; `RESPAWN_BUSY` se fila/inflight. Dead VRAM residual:
+`GAMEDEV_UMS_DEAD_VRAM_MIB` / `GAMEDEV_UMS_DEAD_VRAM_EXIT_SEC` + IdleEvictor
+(ver `findings/UMS_VRAM_FINDINGS.md`).
 
 - Adicionar `tool:` em cada entrada do `backends.yaml`.
 - Rollback automático: subprocesso falha 2× seguidas → `error_code=BACKEND_VENV_MISSING`

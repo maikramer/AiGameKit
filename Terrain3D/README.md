@@ -198,6 +198,8 @@ Terrain3D/
 ```bash
 cd Terrain3D && pip install -e ".[dev]"
 pytest tests/ -v
+# Coverage floor (UMS payload, postprocess, export, CLI --help):
+pytest tests/test_terrain3d_coverage_suite.py tests/test_terrain3d_coverage_100b.py -q
 ruff check .
 ruff format .
 ```
@@ -207,6 +209,8 @@ Run from monorepo root:
 ```bash
 make test-terrain3d
 ```
+
+Monorepo testing guide: [`docs/TESTING.md`](../docs/TESTING.md).
 
 ## License
 

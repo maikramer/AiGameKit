@@ -72,11 +72,20 @@ test-gameassets: ## pytest only in GameAssets/
 test-texture2d: ## pytest only in Texture2D/
 	$(call run-pytest,Texture2D)
 
+test-skymap2d: ## pytest only in Skymap2D/
+	$(call run-pytest,Skymap2D)
+
 test-text2sound: ## pytest only in Text2Sound/
 	$(call run-pytest,Text2Sound)
 
 test-gamedevlab: ## pytest only in GameDevLab/
 	$(call run-pytest,GameDevLab)
+
+test-rigging3d: ## pytest only in Rigging3D/
+	$(call run-pytest,Rigging3D)
+
+test-animator3d: ## pytest only in Animator3D/
+	$(call run-pytest,Animator3D)
 
 test-terrain3d: ## pytest only in Terrain3D/
 	$(call run-pytest,Terrain3D)

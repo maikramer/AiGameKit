@@ -89,7 +89,7 @@ eixo longo residual, semântica, ou buracos SDF.
 | `BOUNDS_EDGE_KEEP` | `0.04` | Eixo longo **nunca** enche `box_v` até ao plano MC |
 | `BOUNDS_MIN_AXIS_FRAC` | `0.08` | Piso eixo fino (0.20 engordava espadas → bastão) |
 | `mc_level` | `auto` | Iso ligeiramente negativo ∝ 1/octree (fecha pinholes) |
-| `morph_close_voxels` / `voxel_merge` | `0.125` (terrain/rock=`0.375`) | N do fecho morfológico («voxel merge») no topology-fix; 3× em cliffs/rochas |
+| `morph_close_voxels` / `voxel_merge` | `0.18` (terrain/rock=`0.54`) | N do fecho morfológico («voxel merge») no topology-fix; 3× em cliffs/rochas |
 | `num_chunks` | auto VRAM | Batch do geo-decoder pós-offload |
 | `octree_resolution` / steps | quality + `bbox_tune` | Soft por `size_m` / category |
 | `volume_decoder` | `flashvdm` típico | Preferir surface-focused em octree alto |
@@ -238,7 +238,7 @@ pós-shape (`topology-fix`) vs regen.
 
 - Shape wave: **não** pré-carregar text3d sync longo (timeout → Broken pipe →
   evict → fila VRAM stuck). 1º job carrega o shape certo.
-- Pico VRAM: clientes SDNQ devem enviar `sdnq_preset` / `memory_efficient`.
+- Pico VRAM: payload UMS com `sdnq_preset` / `memory_efficient` (hw-auto / `resolve_*_vram_opts` — não CLI `--low-vram`).
 - Erro VRAM transitório: UMS requeue + backoff (`GAMEDEV_UMS_MAX_VRAM_RETRIES`).
 - **Nunca** kill GPU enquanto UMS tem jobs.
 - Resume: intermediários em `_intermediate/`; fingerprint Omni tem de bater
@@ -299,6 +299,27 @@ omni:
   size_m: [1.4, 0.8, 0.6]
 ```
 
+### Soft-fill por categoria (batch) — contrato GameAssets
+
+Ordem típica em `resolve_row_omni` / shape wave:
+
+| API (`omni_ctrl`) | Papel |
+|-------------------|--------|
+| `omni_from_dict` / `merge_omni` | Profile + row |
+| `softfill_omni_from_category` | Se **não** há controlo geométrico activo → defaults de categoria (ex. humanoid → pose; vegetação → bbox tree). Preferência: `text3d.omni_presets.CATEGORY_OMNI_DEFAULTS`. Se Text3D **não** está instalado (CI GameAssets-only), usa `_CATEGORY_OMNI_DEFAULTS_FALLBACK` em `omni_ctrl.py` — **não** devolver Omni intacto / no-op. **Não** sobrescreve Omni já definido. `size_m` sozinho **ainda** recebe soft-fill (senão fica só escala) |
+| `expand_omni_world_size` | `height_m` / `footprint_m` → `size_m` |
+| `prepare_shape_for_generation` | Decide regen vs reuse; escreve sidecar |
+| `shape_omni_stale` | Fingerprint sidecar `*_shape.omni.json` vs pedido actual |
+| `omni_to_cli_flags` / `omni_to_batch_item` | CLI subprocess / payload UMS |
+
+Stale: sem sidecar **não** apaga mesh no resume (usar `--force` se mudaste
+Omni sem sidecar). Payload UMS: `text3d.ums_payload.build_generate_request`
+(campos Omni + `seed_fingerprint` / `bbox_tune`; omitir `octree_resolution`
+quando o soft tune size-based manda).
+
+Código: `GameAssets/src/gameassets/omni_ctrl.py` · testes
+`tests/test_omni_softfill.py` · waves: [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md).
+
 ---
 
 ## 10. Trabalho em aberto (estudo → depois regen)
@@ -316,5 +337,8 @@ omni:
 
 | Data | Nota |
 |------|------|
+| 2026-07-24 | Softfill: fallback `_CATEGORY_OMNI_DEFAULTS_FALLBACK` sem pacote Text3D (CI) |
+| 2026-07-24 | Contrato API softfill / prepare / stale + link UMS batch |
+| 2026-07-24 | Soft-fill Omni por categoria + stale sidecar no batch |
 | 2026-07-19 | 1ª versão: max=1 vs 2, knobs, presets, falhas simple-rpg, UMS wave |
 | 2026-07-19 | `height_m`+`footprint_m` = molde bbox (modelo enche); preset `column`/`cactus` |

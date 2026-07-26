@@ -11,7 +11,7 @@ Shared/src/gamedev_shared/installer/
 ├── unified.py           # UnifiedInstaller (CLI unificado gamedev-install)
 ├── python_installer.py  # Lógica de instalação Python
 ├── rust_installer.py    # Lógica de instalação Rust
-├── logging.py           # Logger com Rich
+├── logging.py           # (se existir) logger installer; preferir gamedev_shared.logging + docs/LOGGING.md
 ├── paint3d_extras.py   # Extras Paint3D
 ├── text3d_extras.py     # Extras Text3D
 └── text2sound_extras.py # Extras Text2Sound

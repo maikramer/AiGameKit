@@ -57,8 +57,14 @@ Knobs are a privilege earned after the happy path works.
 - Does `--help` still lead with the finishing command?
 - Do GameAssets and the tool CLI agree on soft defaults?
 
+## Concrete examples in this repo
+
+- **QualityEngine** — one `--quality` dial instead of per-model soup.
+- **Omni soft-fill** — `softfill_omni_from_category` fills pose/bbox when the manifest omits geom controls ([`OMNI_SHAPE_FINDINGS.md`](../OMNI_SHAPE_FINDINGS.md)).
+- **UMS peak** — quant/mem-eff ride in the payload (`resolve_*_vram_opts`); not a public `--low-vram` checklist.
+
 ## Pointers in this repo
 
 - QualityEngine: `Shared/src/gamedev_shared/quality/`, [`docs/superpowers/specs/2026-04-30-quality-presets-design.md`](../superpowers/specs/2026-04-30-quality-presets-design.md)
-- Batch / dream: `GameAssets/src/gameassets/`
+- Batch / dream: `GameAssets/src/gameassets/` · [`GAMEASSETS_UMS_BATCH.md`](../GAMEASSETS_UMS_BATCH.md)
 - Tool CLIs: each package’s `cli.py`

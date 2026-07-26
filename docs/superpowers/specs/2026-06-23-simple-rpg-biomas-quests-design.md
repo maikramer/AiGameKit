@@ -1,8 +1,8 @@
 # Simple RPG — Biomas + Quests + NPCs (Expansão)
 
 **Data:** 2026-06-23
-**Status:** Aprovado (design), pendente implementação
-**Escopo:** Expandir `VibeGame/examples/simple-rpg/` com 3 biomas novos (floresta sombria, deserto, pântano) num único terreno aberto de 10 km, sistema de quests simples (1 quest por NPC), NPCs com diálogo e nova pipeline de assets via GPU.
+**Status:** Implementado (demo Crystal Vale). Layout modular em `public/world/`; cidade contida (exclusion r=42, pad 96×96, anel ±58) — ver `VibeGame/examples/simple-rpg/public/world/context.md` e README do exemplo.
+**Escopo (histórico):** Expandir `VibeGame/examples/simple-rpg/` com 3 biomas novos (floresta sombria, deserto, pântano) num único terreno aberto, sistema de quests simples (1 quest por NPC), NPCs com diálogo e pipeline de assets via GPU.
 
 ---
 
@@ -50,7 +50,7 @@ VibeGame/examples/simple-rpg/
     game.yaml           — +3 profiles por bioma
 ```
 
-Sem dependências npm novas. Usa engine core + plugins existentes (`spawner`, `audio`, `ai-steering`, `save-load`, `hud`).
+Sem dependências npm novas. Usa engine core + plugins existentes (`spawner`, `audio`, `ai-yuka`, `save-load`, `hud`).
 
 ---
 
@@ -283,7 +283,7 @@ Tipos de objective suportados nesta fase:
 | Pântano | Pescador | kill bog_warden boss | 500 gold, blessed_rod |
 | Pântano | Druida | collect 10 bog-moss | 280 gold, nature_amulet |
 
-NPCs usam `AiSteeringPlugin` (Yuka wander curto, raio ~3 m em volta do ponto de spawn). Sprite/portrait via Text2D.
+NPCs usam `YukaAiPlugin` / `<NPC behavior="wander">` (em `DefaultPlugins`; ver `VibeGame/docs/AI.md`). Sprite/portrait via Text2D.
 
 ### 6.2 Inimigos (scripted, animated)
 

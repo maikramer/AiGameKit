@@ -2,7 +2,9 @@
 
 This document defines a **reference layout** and **handoff contract** between the asset-generation tools (centered on [GameAssets](../GameAssets/)) and a **browser runtime** ([VibeGame](../VibeGame/)). It complements [INSTALLING.md](INSTALLING.md).
 
-**Runtime findings (models, VRAM, Omni, mesh):** [MODEL_FINDINGS.md](MODEL_FINDINGS.md).
+**Runtime findings (models, VRAM, Omni, mesh):** [MODEL_FINDINGS.md](MODEL_FINDINGS.md) · [findings/](findings/README.md).  
+**UMS batch waves:** [GAMEASSETS_UMS_BATCH.md](GAMEASSETS_UMS_BATCH.md) · **Mission:** [mission/](mission/README.md).  
+VRAM: **UMS + hw-auto** (no public `--low-vram`); editable monorepo bins: [INSTALLING.md](INSTALLING.md).
 
 ## 1. Roles
 
@@ -54,9 +56,15 @@ For the runtime to load content **without** a custom CMS:
 
 1. **Install CLIs** (repo root): `./install.sh` for the tools you need (see [INSTALLING.md](INSTALLING.md)); include `gameassets`, `text2d`/`texture2d`, `text3d`, optional `paint3d`, `text2sound`, `animator3d` (for animated characters), `vibegame`, etc.
 2. **Author** `game.yaml` + `manifest.csv` + presets ([GameAssets README](../GameAssets/README.md)).
-3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv`. Pipeline stages (3D, rig, animate) are auto-detected from manifest columns and `game.yaml` profile blocks. Add `--no-rig` / `--no-animate` to opt out of specific stages.
+3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv`. GPU stages ride **UMS waves** (shape → paint → optional 2D/audio/terrain; see [GAMEASSETS_UMS_BATCH.md](GAMEASSETS_UMS_BATCH.md)). Master DAG after paint is **Round 3** (rig painted → `game-pack`×1 → `text3d lod`) — [MESH_PIPELINE_FINDINGS](findings/MESH_PIPELINE_FINDINGS.md). Omni knobs / soft-fill by category: [OMNI_SHAPE_FINDINGS.md](OMNI_SHAPE_FINDINGS.md). Stages (3D, rig, animate) auto-detect from manifest + `game.yaml`; `--no-rig` / `--no-animate` / `--no-ums` to opt out.
 4. **Handoff**: **`gameassets handoff --public-dir path/to/public`** copies/symlinks from the profile `output_dir` into `public/assets/…`, writes `assets/gameassets_handoff.json`, and can **prefer animated GLBs** over rigged/base when both exist. Alternatively copy files manually (see [VibeGame/examples/simple-rpg](../VibeGame/examples/simple-rpg/) for a full handoff layout).
 5. **Run** the web app: `bun dev` / `npm run dev`; load GLBs as above. **Skymap2D** equirect PNG/JPG: `applyEquirectSkyEnvironment` from `vibegame` (PMREM + optional background).
+
+**LOD0 contract:** after master pipeline promote, `meshes/{id}_lod0.glb` is the playable deliverable (animated > rigged > painted). Resume must not overwrite a promoted lod0 with painted — see [findings/MESH_PIPELINE_FINDINGS.md](findings/MESH_PIPELINE_FINDINGS.md). Rigged ladder uses geometry `text3d lod` (must weld before Decimate — V/Tri≈3 → moth-eaten LODs). Runtime tip (simple-rpg): hero uses lod0 only; distant enemies may declare `lod1-url` / `lod2-url` on `<GLTFLoader>`.
+
+**Compression contract:** deliverable LODs should carry **KTX2** textures + **meshopt** geometry (`gamedev-lab check` rules). Pipeline finish defaults ON; re-compress with `text3d finish`. Needs `npx @gltf-transform/cli` **and** Khronos `ktx` — see [GLB_FINISH_COMPRESSION.md](GLB_FINISH_COMPRESSION.md). VibeGame `gltf-bridge` loads both via `KTX2Loader` + `MeshoptDecoder`.
+
+**Fellable trees:** tree-like assets get `text3d split-at-height --no-cap` before LOD → composed `Stump`+`Top` lods + `*_stump_collision.glb` for `break-style: fall`. Cut plane left open (no seal). Bipedal enemies need `animate.preset: humanoid` + Quaternius clips — see [findings/ANIMATOR_RETARGET_FINDINGS.md](findings/ANIMATOR_RETARGET_FINDINGS.md).
 
 **Animator3D** can run **inside** `gameassets batch` (auto-detected when `animator3d` profile block exists) or **standalone** on a rigged GLB — see [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md).
 
