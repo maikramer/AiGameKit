@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import shutil
 import sys
@@ -530,15 +531,53 @@ def batch_cmd(
 
     continue_on_error = not fail_fast
     failures = 0
+    # Log detalhado por defeito (manifest/logs/batch-detail.jsonl) + pipeline_trace Shared.
+    # Append-only: truncar no start apagava evidência de falhas anteriores.
+    if log_path is None and not dry_run:
+        log_path = manifest_dir / "logs" / "batch-detail.jsonl"
     if log_path is not None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        log_path.write_text("", encoding="utf-8")
+        log_path.touch(exist_ok=True)
+    with contextlib.suppress(Exception):
+        from gamedev_shared.pipeline_trace import default_log_path, session_id, trace_event
+
+        _trace_p = default_log_path()
+        console.print(f"[dim]pipeline_trace[/dim] {_trace_p}  session={session_id()}  batch_log={log_path or '(off)'}")
+        trace_event(
+            "batch_start",
+            profile=str(profile_path) if profile_path else None,
+            manifest=str(manifest_path),
+            log_path=str(log_path) if log_path else None,
+            force=bool(force),
+            skip_text2d=bool(skip_text2d),
+            skip_audio=bool(skip_audio),
+        )
+    if log_path is not None:
+        with contextlib.suppress(Exception):
+            from gamedev_shared.pipeline_trace import session_id as _sid
+
+            with log_path.open("a", encoding="utf-8") as _lf:
+                _lf.write(
+                    json.dumps(
+                        {
+                            "event": "batch_session",
+                            "session": _sid(),
+                            "manifest": str(manifest_path),
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
 
     def append_log(rec: dict[str, Any]) -> None:
         if log_path is None:
             return
         with log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        with contextlib.suppress(Exception):
+            from gamedev_shared.pipeline_trace import trace_event
+
+            trace_event("batch_record", **rec)
 
     if dry_run:
         dry_plan: list[dict[str, Any]] | None = [] if dry_run_json else None
@@ -1813,6 +1852,7 @@ def batch_cmd(
                                     bounds_mode=getattr(_t3_d, "bounds_mode", None) if _t3_d else None,
                                     mc_level=row_mc_level(row, getattr(_t3_d, "mc_level", None) if _t3_d else None),
                                     seed=row.seed,
+                                    octree_resolution=getattr(_t3_d, "octree_resolution", None) if _t3_d else None,
                                 ):
                                     # Shape fresco / clean resume — não enfileirar.
                                     shape_skipped_d.add(idx)
@@ -3267,6 +3307,7 @@ def batch_cmd(
                                     bounds_mode=getattr(_t3_p, "bounds_mode", None) if _t3_p else None,
                                     mc_level=row_mc_level(row, getattr(_t3_p, "mc_level", None) if _t3_p else None),
                                     seed=row.seed,
+                                    octree_resolution=getattr(_t3_p, "octree_resolution", None) if _t3_p else None,
                                 ):
                                     # Shape fresco / clean resume — seguir paint sem generate-batch.
                                     shape_ok.append(idx)

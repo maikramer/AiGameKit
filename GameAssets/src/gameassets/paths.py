@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import shutil
 from pathlib import Path
 
 from .manifest import ManifestRow
 from .profile import GameProfile
+
+log = logging.getLogger(__name__)
 
 _ROW_DONE = "done"
 _ROW_NEED_IMAGE = "need_image"
@@ -491,6 +494,29 @@ def _valid_file(p: Path) -> bool:
     return p.is_file() and p.stat().st_size > 0
 
 
+def _glb_has_geometry(p: Path, *, min_tris: int = 64) -> bool:
+    """True se o GLB tem geometria útil (rejeita cleans vazios / quase-vazios).
+
+    ``min_tris`` apanha colapsos parciais (ex. scorpion_clean com 13 faces) além
+    dos stubs de 228 bytes sem primitives.
+    """
+    if not _valid_file(p):
+        return False
+    try:
+        from gamedev_shared.glb_verify import extract_glb_meta
+
+        meta = extract_glb_meta(p)
+        if meta.get("_error"):
+            return False
+        if int(meta.get("byte_size") or 0) < 200:
+            return False
+        verts = int(meta.get("vertex_count_total") or 0)
+        tris = int(meta.get("triangle_count_total") or 0)
+        return verts > 0 and tris >= int(min_tris)
+    except Exception:
+        return p.stat().st_size > 500
+
+
 def _resolve_intermediate_or_main(canonical: Path, mesh_final: Path) -> Path | None:
     """Aceita o ficheiro no caminho canónico ou no legacy ``meshes/`` (compat).
 
@@ -513,8 +539,18 @@ def _resolve_intermediate_or_main(canonical: Path, mesh_final: Path) -> Path | N
 
 
 def _clean_existing(mesh_final: Path) -> Path | None:
-    """Encontra o GLB ``_clean`` em ``meshes/`` ou ``_intermediate/``."""
-    return _resolve_intermediate_or_main(_clean_path(mesh_final), mesh_final)
+    """Encontra o GLB ``_clean`` em ``meshes/`` ou ``_intermediate/``.
+
+    Cleans vazios (topology-fix arrays colapsado) são ignorados para o
+    resume voltar a correr topology-fix.
+    """
+    found = _resolve_intermediate_or_main(_clean_path(mesh_final), mesh_final)
+    if found is None:
+        return None
+    if not _glb_has_geometry(found):
+        log.warning("clean inválido/vazio ignorado (força re-topology-fix): %s", found)
+        return None
+    return found
 
 
 def _to_paint_existing(mesh_final: Path) -> Path | None:

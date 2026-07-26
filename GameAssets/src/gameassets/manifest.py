@@ -21,7 +21,7 @@ class RowText3D:
     (o auto negativo engorda ~1 voxel e funde os gaps).
 
     ``morph_close_voxels`` / alias ``voxel_merge``: N do fecho morfológico
-    (default 0.125; terrain/rock=0.375). ``morph_close`` = metros absolutos.
+    (default 0.18; terrain/rock=0.54). ``morph_close`` = metros absolutos.
     """
 
     steps: int | None = None

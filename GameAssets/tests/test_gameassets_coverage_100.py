@@ -486,8 +486,10 @@ def test_manifest_category_lowercase(category: str, tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("split_flag", [True, False])
 def test_wants_split_text3d_flag(split_flag: bool) -> None:
+    """A flag só decide para assets tree-like; props nunca fazem split."""
     p = _profile(text3d=Text3DProfile(split_at_height=split_flag))
-    assert wants_split_at_height(p, _row(category="prop")) is split_flag
+    assert wants_split_at_height(p, _row(id="oak_tree", category="vegetation")) is split_flag
+    assert wants_split_at_height(p, _row(category="prop")) is False
 
 
 def test_emit_manifest_no_3d(tmp_path: Path) -> None:

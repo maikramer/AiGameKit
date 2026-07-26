@@ -290,6 +290,7 @@ def shape_omni_stale(
     bounds_mode: str | None = None,
     mc_level: float | str | None = None,
     seed: int | None = None,
+    octree_resolution: int | None = None,
 ) -> bool:
     """True se shape existe mas fingerprint Omni ≠ esperado (precisa regenerar).
 
@@ -298,6 +299,8 @@ def shape_omni_stale(
     ``bounds_mode`` / ``mc_level`` vêm do ``text3d:`` profile (decode knobs).
     ``seed`` é o override explícito do manifest (``seed:``) — mudá-lo invalida
     só este shape (re-roll cirúrgico); o determinístico nunca entra aqui.
+    ``octree_resolution``: só o override explícito do manifest entra no expected;
+    autotune (``None``) ignora o valor gravado no sidecar (VRAM-dependente).
     """
     if not shape_glb.is_file():
         return True
@@ -324,10 +327,19 @@ def shape_omni_stale(
     if mc_level is not None:
         expected["mc_level"] = mc_level
     expected["seed"] = seed
+    if octree_resolution is not None:
+        expected["octree_resolution"] = int(octree_resolution)
     existing = read_omni_fingerprint(shape_glb)
     if existing is None:
         return False
-    return omni_fingerprint(expected) != omni_fingerprint(existing)
+    fp_exp = omni_fingerprint(expected)
+    fp_got = omni_fingerprint(existing)
+    # Autotune: sidecar pode ter o octree efectivo mas o esperado não pinou —
+    # não invalidar por diferença VRAM/máquina.
+    if fp_exp.get("octree_resolution") is None:
+        fp_exp.pop("octree_resolution", None)
+        fp_got.pop("octree_resolution", None)
+    return fp_exp != fp_got
 
 
 def _derived_glb_paths_for_shape(shape_glb: Path) -> list[Path]:
@@ -451,6 +463,7 @@ def prepare_shape_for_generation(
     bounds_mode: str | None = None,
     mc_level: float | str | None = None,
     seed: int | None = None,
+    octree_resolution: int | None = None,
 ) -> bool:
     """Decide se o shape deve ir ao ``generate-batch`` e limpa output stale.
 
@@ -483,6 +496,7 @@ def prepare_shape_for_generation(
         bounds_mode=bounds_mode,
         mc_level=mc_level,
         seed=seed,
+        octree_resolution=octree_resolution,
     ):
         _unlink_shape_outputs(shape_glb)
         return True

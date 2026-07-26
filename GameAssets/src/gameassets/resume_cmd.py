@@ -269,6 +269,7 @@ def resume_cmd(
                 bounds_mode=getattr(_t3_r, "bounds_mode", None) if _t3_r else None,
                 mc_level=row_mc_level(row, getattr(_t3_r, "mc_level", None) if _t3_r else None),
                 seed=row.seed,
+                octree_resolution=getattr(_t3_r, "octree_resolution", None) if _t3_r else None,
             )
         )
         master_state = _classify_row_state_master(
@@ -766,6 +767,7 @@ def resume_cmd(
                         bounds_mode=getattr(t3_opts, "bounds_mode", None) if t3_opts else None,
                         mc_level=getattr(t3_opts, "mc_level", None) if t3_opts else None,
                         seed=row.seed,
+                        octree_resolution=getattr(t3_opts, "octree_resolution", None) if t3_opts else None,
                     )
                     seed = _seed_for_manifest_row(profile, row)
                     item_d: dict[str, Any] = {
@@ -1508,6 +1510,7 @@ def resume_cmd(
                         bounds_mode=getattr(t3_opts, "bounds_mode", None) if t3_opts else None,
                         mc_level=getattr(t3_opts, "mc_level", None) if t3_opts else None,
                         seed=row.seed,
+                        octree_resolution=getattr(t3_opts, "octree_resolution", None) if t3_opts else None,
                     )
                     seed = _seed_for_manifest_row(profile, row)
                     item: dict[str, Any] = {

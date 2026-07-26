@@ -65,6 +65,7 @@ from .paths import (
     _clean_existing,
     _clean_path,
     _collision_path,
+    _glb_has_geometry,
     _glb_is_promoted_animated,
     _glb_is_promoted_rigged,
     _intermediate_dir,
@@ -205,10 +206,7 @@ def _row_bbox_preset(row: ManifestRow) -> str | None:
     """``bbox_preset`` efectivo: override Omni da row ou default da categoria."""
     omni = row.omni
     if omni is not None:
-        if isinstance(omni, dict):
-            bp = omni.get("bbox_preset")
-        else:
-            bp = getattr(omni, "bbox_preset", None)
+        bp = omni.get("bbox_preset") if isinstance(omni, dict) else getattr(omni, "bbox_preset", None)
         if bp:
             return str(bp).strip().lower()
     cat = (row.category or "").strip().lower()
@@ -316,9 +314,7 @@ def _split_seal_stale(mesh_final: Path) -> bool:
         from .paths import _base_stem
 
         base = _base_stem(mesh_final.stem)
-        if (inter / f"{base}_stump_painted.glb").is_file():
-            return True
-        return False
+        return (inter / f"{base}_stump_painted.glb").is_file()
     return stamp.read_text(encoding="utf-8").strip() != str(SEAL_VERSION)
 
 
@@ -1032,7 +1028,7 @@ def _topology_fix_extra_argv(
 
     ``morph_close`` (metros) row > profile → ``--morph-close``.
     ``morph_close_voxels`` / voxel_merge row > profile → ``--morph-close-voxels``.
-    Omitido → auto Text3D (N por category: terrain/rock=3x default 0.125).
+    Omitido → auto Text3D (N por category: terrain/rock=3x default 0.18).
     ``--size-m`` também escala a mesh para metros reais no topology-fix.
     """
     args: list[str] = []
@@ -1101,6 +1097,9 @@ def ensure_clean_for_paint(
         raise FileNotFoundError(f"shape ausente para topology-fix: {shape_p}")
 
     clean_p = _clean_path(mesh_final)
+    if clean_p.is_file() and not _glb_has_geometry(clean_p):
+        with contextlib.suppress(OSError):
+            clean_p.unlink()
     clean_p.parent.mkdir(parents=True, exist_ok=True)
     topo_argv = [text3d_bin, "topology-fix", str(shape_p), "-o", str(clean_p)]
     topo_argv.extend(_topology_fix_extra_argv(profile, row, manifest_dir=manifest_dir))
@@ -1108,6 +1107,10 @@ def ensure_clean_for_paint(
     if r.returncode != 0 or not clean_p.is_file():
         err = merge_subprocess_output(r, max_chars=400) or "topology-fix falhou"
         raise RuntimeError(err)
+    if not _glb_has_geometry(clean_p):
+        with contextlib.suppress(OSError):
+            clean_p.unlink()
+        raise RuntimeError(f"topology-fix produziu clean vazio: {clean_p}")
     return clean_p
 
 
@@ -1193,6 +1196,8 @@ def ensure_to_paint_for_paint(
     to_paint_p.parent.mkdir(parents=True, exist_ok=True)
     row_id = row.id if row is not None else clean_p.stem
     console.print(f"[cyan]⏳ to_paint[/cyan] {row_id} ({current:,} -> ~{target:,} faces, atlas={tex_size})")
+    # ``_clean`` já passou topology-fix: --no-repair evita pre_decimate_uv /
+    # post_decimate a apagar slivers/paredes finas (edifícios casca-plástico).
     argv = [
         text3d_bin,
         "simplify",
@@ -1201,6 +1206,7 @@ def ensure_to_paint_for_paint(
         str(to_paint_p),
         "--target-faces",
         str(target),
+        "--no-repair",
     ]
     r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
     if r.returncode != 0 or not to_paint_p.is_file():
@@ -1212,15 +1218,21 @@ def ensure_to_paint_for_paint(
         + (f" ({out_faces:,} faces)" if out_faces > 0 else "")
     )
 
-    # Re-topology-fix no to_paint: o simplify (decimate) parte o mesh em
-    # ilhas (1→33+ comps). Um segundo topology-fix (morph default auto, SEM
-    # o override do profile para não amplificar) fecha as ilhas novamente
-    # (33→1 comp, 0 boundary) antes do paint/split. Crítico para que o
-    # split-at-height produza um corte limpo sem fendas Hunyuan.
+    # Re-topology-fix leve: fecha micro-ilhas do COLLAPSE. Morph-close AUTO
+    # derrete cascas de edifícios (chapel: body_pct -19% clean->to_paint) —
+    # desligar morph; weld/fill do profile bastam.
     refix_p = to_paint_p.with_name(to_paint_p.stem + "_refixed" + to_paint_p.suffix)
-    refix_argv = [text3d_bin, "topology-fix", str(to_paint_p), "-o", str(refix_p)]
-    # Morph default (auto) — SEM _topology_fix_extra_argv (não amplificar o override do user).
-    refix_argv.extend(["--engine", "arrays"])
+    refix_argv = [
+        text3d_bin,
+        "topology-fix",
+        str(to_paint_p),
+        "-o",
+        str(refix_p),
+        "--engine",
+        "arrays",
+        "--morph-close",
+        "0",
+    ]
     if row is not None and row.category:
         refix_argv.extend(["--category", str(row.category)])
     r2 = run_cmd(refix_argv, extra_env=child_env, cwd=manifest_dir)
@@ -1229,7 +1241,7 @@ def ensure_to_paint_for_paint(
         refix_faces = _count_faces_glb(to_paint_p)
         console.print(
             f"[green]✓ to_paint re-fix[/green] {row_id}"
-            + (f" ({refix_faces:,} faces, ilhas fechadas)" if refix_faces > 0 else "")
+            + (f" ({refix_faces:,} faces, morph=0)" if refix_faces > 0 else "")
         )
     else:
         log.warning("to_paint re-fix falhou para %s (continua com simplify)", row_id)
@@ -1325,6 +1337,18 @@ def _stage(
 
     _emit("run", 0)
 
+    with contextlib.suppress(Exception):
+        from gamedev_shared.pipeline_trace import trace_stage
+
+        trace_stage(
+            asset=str(item_id or "?"),
+            stage=name,
+            status="start",
+            argv=list(argv),
+            output=str(output) if output else None,
+            cwd=str(cwd) if cwd else None,
+        )
+
     t0 = _time.perf_counter()
     try:
         with ProfilerSession(
@@ -1386,20 +1410,79 @@ def _stage(
     except Exception as exc:
         dt = _time.perf_counter() - t0
         _emit("run", 100, status="error")
+        with contextlib.suppress(Exception):
+            from gamedev_shared.pipeline_trace import trace_exception, trace_stage
+
+            trace_exception("pipeline_stage_error", exc, asset=str(item_id or "?"), stage=name)
+            trace_stage(asset=str(item_id or "?"), stage=name, status="error", seconds=round(dt, 3), error=str(exc))
         return StageResult(name, False, dt, f"ProfilerSession: {exc}", output)
 
     dt = _time.perf_counter() - t0
     if r.returncode != 0:
         err = merge_subprocess_output(r, max_chars=400) or f"{name} falhou (rc={r.returncode})"
         _emit("run", 100, status="error")
+        with contextlib.suppress(Exception):
+            from gamedev_shared.pipeline_trace import trace_stage
+
+            trace_stage(
+                asset=str(item_id or "?"),
+                stage=name,
+                status="fail",
+                seconds=round(dt, 3),
+                returncode=r.returncode,
+                error=err,
+                stdout_tail=(getattr(r, "stdout", None) or "")[-2000:],
+                stderr_tail=(getattr(r, "stderr", None) or "")[-2000:],
+            )
         return StageResult(name, False, dt, err, output)
     if output is not None and not output.is_file():
         _emit("run", 100, status="error")
+        with contextlib.suppress(Exception):
+            from gamedev_shared.pipeline_trace import trace_stage
+
+            trace_stage(
+                asset=str(item_id or "?"),
+                stage=name,
+                status="fail",
+                seconds=round(dt, 3),
+                error="output missing",
+                output=str(output),
+            )
         return StageResult(name, False, dt, f"{name}: output não foi criado", output)
     # Emite como ``progress`` (não ``ok``) - ``ok`` no dashboard sinaliza
     # conclusão do asset INTEIRO; usá-lo aqui faria a célula piscar OK entre
     # cada stage e contar duplicado no progresso global.
     _emit("run", 100, status="progress", seconds=round(dt, 2))
+    verify_payload: dict = {}
+    if output is not None and output.is_file():
+        with contextlib.suppress(Exception):
+            from gamedev_shared.glb_verify import post_save_verify
+
+            vr = post_save_verify(output)
+            if vr is not None:
+                verify_payload = {
+                    "glb_ok": vr.ok,
+                    "glb_stage": vr.stage,
+                    "glb_issues": [i.code for i in vr.issues],
+                    "v_per_tri": vr.meta.get("v_per_tri"),
+                    "has_normals": vr.meta.get("has_normals"),
+                    "has_tangents": vr.meta.get("has_tangents"),
+                    "has_uv": vr.meta.get("has_uv"),
+                    "verts": vr.meta.get("vertex_count_total"),
+                    "tris": vr.meta.get("triangle_count_total"),
+                    "bytes": vr.meta.get("byte_size"),
+                }
+    with contextlib.suppress(Exception):
+        from gamedev_shared.pipeline_trace import trace_stage
+
+        trace_stage(
+            asset=str(item_id or "?"),
+            stage=name,
+            status="ok",
+            seconds=round(dt, 3),
+            output=str(output) if output else None,
+            **verify_payload,
+        )
     return StageResult(name, True, dt, output=output)
 
 
@@ -1626,7 +1709,8 @@ def _run_static_lod_stages(
             # pequenas (ex.: effects target=2000).
             lod0_target = max(8, int(target_faces * 1.2))
             lod_min1 = max(target_faces // 2, 500)
-            lod_min2 = max(target_faces // 4, 150)
+            # Piso LOD2 = target/3 (alinha com text3d lod //3; edifícios grandes).
+            lod_min2 = max(target_faces // 3, 150)
             lod_argv = [
                 text3d_bin,
                 "lod",
@@ -1643,7 +1727,7 @@ def _run_static_lod_stages(
                 "--lod1-ratio",
                 "0.40",
                 "--lod2-ratio",
-                "0.15",
+                "0.22",
                 "--min-faces-lod1",
                 str(lod_min1),
                 "--min-faces-lod2",
@@ -1756,7 +1840,8 @@ def _run_split_lod_stages(
         stump_dir.mkdir(exist_ok=True)
         top_dir.mkdir(exist_ok=True)
 
-        # LOD stump.
+        # LOD stump/top SEM finish (KTX2): bpy 5.2 não importa KHR_texture_basisu
+        # no compose. Finish (UASTC+meshopt) corre no lod composto abaixo.
         stump_lod_argv = [
             text3d_bin,
             "lod",
@@ -1769,7 +1854,7 @@ def _run_split_lod_stages(
             str(stump_painted),
             "--target-faces",
             str(stump_target),
-            "--finish-lod0",
+            "--no-finish",
             "--lod1-ratio",
             "0.40",
             "--lod2-ratio",
@@ -1795,7 +1880,7 @@ def _run_split_lod_stages(
             str(top_painted),
             "--target-faces",
             str(top_target),
-            "--finish-lod0",
+            "--no-finish",
             "--lod1-ratio",
             "0.40",
             "--lod2-ratio",
@@ -1816,8 +1901,11 @@ def _run_split_lod_stages(
                 log.warning("split-lod: falta lod%d (stump=%s top=%s)", lvl, stump_lod, top_lod)
                 continue
             clear_scene()
+            from gamedev_shared.bpy_mesh import import_gltf
+
             for glb in (stump_lod, top_lod):
-                bpy.ops.import_scene.gltf(filepath=str(glb))
+                # import_gltf pré-decodifica KTX2/meshopt (bpy sem BasisU).
+                import_gltf(glb)
             # Renomear para Stump/Top (findTreeSplitParts procura estes nomes).
             for obj in bpy.context.scene.objects:
                 if obj.type != "MESH":
@@ -1832,6 +1920,8 @@ def _run_split_lod_stages(
             save_glb(objs, out_p, export_apply=True)
             clear_scene()
             res.stages.append(StageResult(f"compose-lod{lvl}", True, 0.0, f"stump+top → {out_p.name}", out_p))
+            # Finish no composto (não nas peças) — evita KTX2 no import bpy.
+            _finish_lod_with_rollback(out_p, lvl, _glb_has_materials, res)
 
     res.lod0_path = lod0_p
 
@@ -2123,7 +2213,7 @@ def run_master_pipeline(
             res.stages.append(StageResult("lod", True, 0.0, f"skipped (ladder {promotion_kind} ok)", lod0_p))
         elif with_lod:
             lod_min1 = max(target_faces // 2, 500)
-            lod_min2 = max(target_faces // 4, 150)
+            lod_min2 = max(target_faces // 3, 150)
             lod_argv = [
                 text3d_bin,
                 "lod",
@@ -2135,7 +2225,7 @@ def run_master_pipeline(
                 "--lod1-ratio",
                 "0.40",
                 "--lod2-ratio",
-                "0.15",
+                "0.22",
                 "--min-faces-lod1",
                 str(lod_min1),
                 "--min-faces-lod2",

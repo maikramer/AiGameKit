@@ -24,7 +24,7 @@ face_count:
     tree: 7200
     rock: 1920
     mineral: 2880
-    building: 14400
+    building: 20160
     furniture: 4800
     vegetation: 6000
     vehicle: 9600

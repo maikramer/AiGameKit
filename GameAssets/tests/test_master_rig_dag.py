@@ -12,6 +12,8 @@ import json
 import struct
 from pathlib import Path
 
+from glb_fixtures import write_min_glb
+
 
 def _minimal_glb(path: Path, *, clip_names: list[str] | None = None, with_paint: bool = True) -> None:
     """GLB mínimo com skin; ``clip_names`` controla as animations declaradas."""
@@ -195,8 +197,7 @@ def test_lod0_white_guard_requires_parseable_glb(tmp_path: Path) -> None:
     img.write_bytes(b"png")
     mesh = tmp_path / "mesh.glb"
     for p in (_shape_path(mesh), _clean_path(mesh), _painted_path(mesh)):
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(b"x")
+        write_min_glb(p)
     for lvl in range(3):
         _lod_path(mesh, lvl).write_bytes(b"x")  # dummy: unparseable -> não flaga branco
     state = _classify_row_state_master(

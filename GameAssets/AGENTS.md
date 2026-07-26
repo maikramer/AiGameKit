@@ -1,43 +1,67 @@
 # AGENTS.md — GameAssets
 
-Batch asset orchestrator for the GameDev pipeline. 28 Python files, ~12K LOC. Calls text2d, text3d, paint3d, rigging3d, animator3d, gamedev-lab, terrain3d via subprocess. Does NOT contain mesh code itself.
+Batch asset orchestrator for the GameDev pipeline. Calls text2d, text3d, paint3d,
+rigging3d, animator3d, gamedev-lab, terrain3d via subprocess. Does NOT contain
+mesh code itself.
 
 ## WHERE TO LOOK
 
 | Task | File(s) | Notes |
 |------|---------|-------|
-| Master pipeline DAG | `pipeline.py` (1798 lines) | 10 stages: generate, topology-fix, bake-master, LOD, collision, rig, animate, validate |
-| Batch execution | `batch_cmd.py` (2951 lines) | Largest file. Per-row 2D/3D/audio orchestration |
-| UMS batch waves | `ums_coord.py`, `ums_batch.py` | preload + submit×N + wait; defer master |
-| Model findings | `docs/MODEL_FINDINGS.md` | VRAM / kernels / Omni / UMS co-op |
-| Smart resume | `resume_cmd.py` (1324 lines) | Checkpoint-based, looks in `_intermediate/` |
-| Game profiles | `profile.py` (875 lines) | 12 sub-profile dataclasses + 600-line `from_dict` parser |
-| Dream (idea to game) | `dream/` (5 files, 1295 lines) | `planner.py` (LLM), `emitter.py` (file gen), `runner.py` (orchestration) |
-| Quality presets | `generation_profiles.py` | 5 tiers, maps to `--quality` flags |
-| Asset categories | `categories.py` (549 lines) | 16 categories with target faces + hints |
+| Master pipeline DAG | `pipeline.py` | Round 3: clean→paint→rig painted→game-pack×1→`text3d lod` |
+| Batch execution | `batch_cmd.py` | Per-row 2D/3D/audio; UMS waves + `MasterDeferQueue` |
+| UMS batch waves | `ums_coord.py`, `ums_batch.py` | `run_gpu_wave` (window≤16, `preload=False`); hw_auto peak |
+| Omni soft-fill / stale | `omni_ctrl.py` | `softfill_omni_from_category`; fallback `_CATEGORY_OMNI_DEFAULTS_FALLBACK` when Text3D missing (CI); `prepare_shape_for_generation`; `shape_omni_stale` |
+| UMS batch guide | [`docs/GAMEASSETS_UMS_BATCH.md`](../docs/GAMEASSETS_UMS_BATCH.md) | Operator happy path |
+| Model / mesh findings | `docs/MODEL_FINDINGS.md`, `docs/findings/` | VRAM, Omni, Round 3 DAG |
+| Smart resume | `resume_cmd.py` | Checkpoint; looks in `_intermediate/` |
+| Game profiles | `profile.py` | Sub-profiles + `from_dict` |
+| Dream (idea to game) | `dream/` | planner / emitter / runner |
+| Quality presets | `generation_profiles.py` | Maps to `--quality` |
+| Asset categories | `categories.py` | Target faces + hints |
 | GLB validation rules | `data/rules/*.yaml` | lod0, lod1, lod2, rigged, animated, collision |
-| Handoff to VibeGame | `handoff_export.py` | Copies GLBs (prefers animated) + `manifest.json` |
-| TUI dashboard | `dashboard.py` (358 lines) | Textual-based real-time progress |
+| Handoff to VibeGame | `handoff_export.py` | Prefers animated GLB |
+| TUI dashboard | `dashboard.py` | All stages (not paint-only) |
 
-## MASTER PIPELINE
+## MASTER PIPELINE (Round 3)
 
-`run_master_pipeline()` in `pipeline.py`. Ordered stages with promotion logic:
+`run_master_pipeline()` in `pipeline.py`. GPU shape/paint usually run first via
+UMS waves; master finalize is deferred (`MasterDeferQueue`) until the wave drains.
 
-1. **generate** — `text3d generate` (raw shape GLB; called by `batch_cmd`, not inside `pipeline.py`)
-2. **topology-fix** — `text3d topology-fix` (clean mesh; `--export-origin feet|center|none`, `--fill-holes-sides N`)
-3. **paint** — `paint3d texture` (PBR texture)
-4. **bake-master** — `text3d bake-master` (LOD0 with normal bake + KTX2 via gltf-transform; meshopt via bpy 5.2+ preferido)
-5. **lod** — `text3d lod` (LOD1/LOD2 from LOD0)
-6. **collision** — `text3d collision` (convex hull collision mesh)
-6b. **split-at-height** — `text3d split-at-height` for `category=tree` (LOD0 → Stump+Top; sidecars `*_split`/`*_stump`/`*_top`)
-7. **rig** — `rigging3d pipeline` (rig the high-poly clean mesh)
-8. **transfer-weights** — `rigging3d transfer-weights --source HI --target LOD0/1/2`
-9. **animate** — `animator3d game-pack` per LOD
-10. **validate** — `gamedev-lab check glb` against YAML rules
+1. **generate** — `text3d generate` (raw shape; Omni soft-fill; often `batch_cmd` wave)
+2. **topology-fix** — `text3d topology-fix` (`--export-origin feet|center|none`, `--fill-holes-sides N`)
+3. **paint** — `paint3d` on clean / `to_paint`
+4. **rig** — `rigging3d pipeline` on **`_painted`** → `_intermediate/id_rigged.glb` (not clean HI)
+5. **animate** — `animator3d game-pack` **×1** → `_intermediate/id_rigged_animated.glb`
+6. **lod** — `text3d lod` on animated/rigged (geometry path, **no** `--painted-mesh`) → lod0/1/2 (+ KTX2/meshopt via `_finish_lod_with_rollback`). Keeps armature/weights/clips — **no** `transfer-weights` in the DAG. Text3D must **weld** before Decimate (rigged often V/Tri≈3).
+7. **collision** — from painted (as applicable; finish = dedup/prune only)
+8. **validate** — `gamedev-lab check glb --category …` (rules expect `ktx2` + `meshopt` on lod0)
 
-**Promotion**: animated > rigged > baked > painted. Highest-stage output becomes `lodN.glb`. Earlier intermediates move to `_intermediate/`.
+**Statics (no rig):** `text3d lod --painted-mesh` with `--target-faces` (LOD0≈1.2×) + `--finish-lod0` (meshopt/KTX2 ON).
+**Re-compress without regen:** `text3d finish meshes/id_lod0.glb` — deps + happy path:
+[`docs/GLB_FINISH_COMPRESSION.md`](../docs/GLB_FINISH_COMPRESSION.md).
+**Fellable trees:** when `wants_split_at_height` (tree-like only — not rocks),
+`text3d split-at-height --no-cap` → stump/top painted → LOD each → compose
+`Stump`+`Top` lodN + `*_stump_collision`. Cut-only geometry (`cap=False`);
+stamp `_intermediate/{id}_split_seal.txt` = `SEAL_VERSION` from
+`gamedev_shared.mesh_split` (`cut-only-v1`). Resume: seal drift or
+`--redo-split` / `GAMEDEV_REDO_SPLIT=1` → `invalidate_split_artifacts`
+(keeps unsplit `*_painted.glb`). Details:
+[`docs/findings/MESH_PIPELINE_FINDINGS.md`](../docs/findings/MESH_PIPELINE_FINDINGS.md#árvores-derrubáveis--split-at-height-antes-do-lod).
 
-**Legacy**: `--legacy-pipeline` uses `_post_text3d_mesh_extras` instead.
+**Abolished in default DAG:** `_rigged_hi`, `transfer-weights`×LOD, `game-pack`×LOD,
+bake-master-as-LOD0-before-rig. Manual `rigging3d transfer-weights` remains for
+one-off rebinding.
+
+**Promotion:** animated > rigged > painted → `meshes/{id}_lodN.glb`.
+Pré-promote → `_intermediate/{id}_lodN_pre_promote.glb`.
+Alias `{id}_rigged_animated.glb` ← lod0 (`publish_rigged_animated_alias`).
+
+**Resume must not clobber promoted lod0:** skip LOD regen when
+`_glb_is_promoted_animated` / `_glb_is_promoted_rigged`. Details:
+[`docs/findings/MESH_PIPELINE_FINDINGS.md`](../docs/findings/MESH_PIPELINE_FINDINGS.md).
+
+**Legacy:** `--legacy-pipeline` uses `_post_text3d_mesh_extras` instead.
 
 ## CLI
 
@@ -48,27 +72,41 @@ gameassets debug screenshot|inspect|compare|bundle
 gameassets skill install
 ```
 
-`batch` runs the master pipeline by default. `resume` picks up from last checkpoint. `dream` goes from text description to playable project.
+`batch` runs the master pipeline by default. `resume` picks up from last checkpoint.
+`dream` goes from text description to playable project. Flags: `--no-ums`,
+`--ums-stream`, `--no-rig`, `--no-animate`, `--redo-split`, …
 
 ## ANTI-PATTERNS
 
 - **NO mesh operations here.** Text3D owns all mesh code. GameAssets only orchestrates subprocesses.
 - **NO `bpy` or `trimesh` imports.** If you need mesh work, call `text3d` or `rigging3d`.
-- **NO `_intermediate/` references in runtime or game code.** That directory is for pipeline state only.
-- **LOD0 must be the final deliverable.** If the asset has rig or animation, LOD0 must reflect the highest stage (animated > rigged > painted). Shipping LOD0 without rig/anim when the asset has them is a regression.
-- **Profile resolution order**: generation (quality tier) -> explicit (`game.yaml`) -> defaults (hardcoded). `QualityEngine` fills only `None` fields.
-- **Fragile files**: `batch_cmd.py` (2951L), `pipeline.py` (1798L), `resume_cmd.py` (1324L). Changes here cascade across the entire pipeline. Read before editing.
+- **NO `_intermediate/` references in runtime or game code.** Pipeline state only.
+- **LOD0 must be the final deliverable.** animated > rigged > painted when those stages apply.
+- **Never overwrite promoted lod0/1/2 with painted on resume.** Guard `_glb_is_promoted_*`.
+- **Do not name promote archives `*_lodN_painted`.** Use `*_lodN_pre_promote`.
+- **Do not reintroduce bake-master + transfer-weights as the default DAG.** Round 3 = rig painted → game-pack×1 → `text3d lod`.
+- **Do not Decimate rigged/animated LODs without weld in Text3D.** V/Tri≈3 → moth-eaten LOD1/2. Fix lives in `text3d` / `smooth_shade_scene`, not GameAssets.
+- **Do not enable tree cap (`--cap`) by default.** Cut-only geometry; hole closure is future work. The **version stamp** (`SEAL_VERSION` / `*_split_seal.txt`) is required — do not confuse stamp with mesh caps.
+- **Do not use `animate.preset: creature` for bipedal enemies** that scripts drive with Quaternius clip names — use `humanoid` + `force_preset`.
+- **UMS waves:** no sync preload for shape/paint; do not run master mid-wave (`MasterDeferQueue`).
+- **Profile resolution:** generation (quality) → explicit (`game.yaml`) → defaults. `QualityEngine` fills only `None`.
+- **Softfill without Text3D:** GameAssets CI does not install Text3D — `softfill_omni_from_category` must use the local category fallback, never silently leave Omni empty.
+- **Fragile files:** `batch_cmd.py`, `pipeline.py`, `resume_cmd.py` — read before editing.
 
 ## DATA FILES
 
 | File | Purpose |
 |------|---------|
-| `data/presets.yaml` | 4 built-in style presets: lowpoly, pixel_art, painterly, realistic_stylized |
-| `data/rules/*.yaml` | GLB validation rules per category (lod0, lod1, lod2, rigged, animated, collision) |
-| `cursor_skill/SKILL.md` | Cursor Agent Skill documentation |
+| `data/presets.yaml` | Style presets: lowpoly, pixel_art, painterly, realistic_stylized |
+| `data/rules/*.yaml` | GLB validation rules per category |
+| `cursor_skill/SKILL.md` | Cursor Agent Skill |
 
 ## TESTS
 
-18 test files, 2549 LOC. Run with `make test-gameassets` or `pytest tests/ -v`.
+Run: `make test-gameassets` or `pytest tests/ -v` (package venv).
 
-Key test files: `test_cli_helpers.py` (426L), `test_profile.py` (295L), `test_resume_master.py` (221L), `test_dream_emitter.py` (197L).
+Key: `test_ums_batch.py` / `test_ums_coord.py`, `test_omni_softfill.py`,
+`test_cli_helpers.py`, `test_profile.py`, `test_resume_master.py`,
+`test_dream_emitter.py`, `test_gameassets_coverage_100.py` (CPU floor).
+
+Monorepo guide: [`docs/TESTING.md`](../docs/TESTING.md) · [`docs/TESTING_PT.md`](../docs/TESTING_PT.md).

@@ -110,8 +110,13 @@ class TestEnsureToPaint:
             )
         assert out == to_paint
         assert to_paint.is_file()
-        # simplify then optional re-topology-fix (last call may be topology-fix).
+        # simplify then re-topology-fix (morph=0: não derreter casca de edifício).
         cmds = [c.args[0][:2] for c in run_cmd.call_args_list]
         assert ["text3d", "simplify"] in cmds
+        assert ["text3d", "topology-fix"] in cmds
         simplify_argv = next(c.args[0] for c in run_cmd.call_args_list if c.args[0][:2] == ["text3d", "simplify"])
         assert "--target-faces" in simplify_argv
+        assert "--no-repair" in simplify_argv
+        refix_argv = next(c.args[0] for c in run_cmd.call_args_list if c.args[0][:2] == ["text3d", "topology-fix"])
+        assert "--morph-close" in refix_argv
+        assert refix_argv[refix_argv.index("--morph-close") + 1] == "0"

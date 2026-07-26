@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from glb_fixtures import write_min_glb
+
 
 def _touch(p: Path) -> None:
+    """Cria o ficheiro; GLBs saem parseáveis porque o resume valida geometria."""
     p.parent.mkdir(parents=True, exist_ok=True)
+    if p.suffix.lower() == ".glb":
+        write_min_glb(p)
+        return
     p.write_bytes(b"x")
 
 

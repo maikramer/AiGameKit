@@ -171,18 +171,19 @@ Full pipeline execution. Generates 2D images, 3D meshes, textures, audio, riggin
 | `--profile-log FILE.jsonl` | Profiler log output |
 | `--force` | Regenerate everything (ignore existing outputs) |
 | `--gpu-ids "0,1"` | Multi-GPU IDs (auto-detected via `nvidia-smi` if omitted) |
+| `--ums-stream` | Opt-in: set `GAMEDEV_UMS_STREAM=1` on children (UMS NDJSON; noisy) |
 | `--no-dashboard` | Simple progress bars instead of TUI dashboard |
 | `--plain` | Plain text output (no Rich/TUI, for scripts) |
 
 **Key behaviors:**
 
 - **Exclusive lock:** `.gameassets_batch.lock` (fcntl) prevents two batches in the same folder. `--skip-batch-lock` disables.
-- **VRAM:** GPU sub-tools delegate to **UMS** by default; each tool uses **hw-auto** (SDNQ/offload on small GPUs). No manual `--low-vram` flags.
+- **VRAM / UMS:** GPU sub-tools delegate to **UMS** by default; batch sets `GAMEDEV_UMS_PRIORITY=batch` and inherits other `GAMEDEV_UMS_*` / `GAMEDEV_ALLOW_LEGACY_SERVER` from the parent env. **hw-auto** fills peak signals (`sdnq_preset` / `memory_efficient` on the payload) — no public `--low-vram` / `--memory-efficient` CLI. Batch **waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + optional `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` / `terrain3d` (`run_*_wave_or_fallback`). Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
 - **VRAM preflight:** warns if free VRAM < ~1.8 GiB. `--skip-gpu-preflight` disables.
 - **CUDA:** sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` if unset.
-- **Multi-GPU:** `--gpu-ids 0,1` propagates `CUDA_VISIBLE_DEVICES` and `--gpu-ids` to all sub-tools.
+- **Multi-GPU:** `--gpu-ids 0,1` propagates `CUDA_VISIBLE_DEVICES` and `--gpu-ids` to all sub-tools (and into UMS payloads via each CLI’s `with_ums_load_opts`).
 - **JSONL log:** each record includes `timings_sec` per subprocess (e.g., `image_text2d`, `text3d`, `paint3d_texture`), `audio_path` / `audio_error` when applicable.
-- **Dashboard TUI:** default rich dashboard shows per-asset progress through pipeline stages. Use `--no-dashboard` or `--plain` for headless / CI.
+- **Dashboard TUI:** per-asset pipeline progress; when UMS is up, stats bar shows `UMS q=… run=… eta=…`. Use `--no-dashboard` or `--plain` for headless / CI.
 
 **Batch mode:** Text2D uses `generate-batch` (JSONL manifest) for efficiency; Texture2D rows run individually per row.
 
@@ -192,7 +193,7 @@ Full pipeline execution. Generates 2D images, 3D meshes, textures, audio, riggin
 gameassets resume --profile game.yaml --manifest manifest.yaml [options]
 ```
 
-Smart resume: analyzes each asset's state on disk and runs only pending phases. Safe to re-run after interruption.
+Smart resume: analyzes each asset's state on disk and runs only pending phases. Safe to re-run after interruption. Master pipeline **skips** bake-master / LOD regen when `*_lod0.glb` is already a promoted animated/rigged deliverable (so resume cannot overwrite skins/clips with painted). Tree splits: if `_intermediate/{id}_split_seal.txt` ≠ current `SEAL_VERSION` (`cut-only-v1`), stump/top LODs are invalidated automatically (keeps unsplit `*_painted.glb`). Force with `--redo-split`. See [`docs/findings/MESH_PIPELINE_FINDINGS.md`](../docs/findings/MESH_PIPELINE_FINDINGS.md).
 
 | Flag | Description |
 |------|-------------|
@@ -204,8 +205,11 @@ Smart resume: analyzes each asset's state on disk and runs only pending phases. 
 | `--fail-fast` | Stop on first error |
 | `--work-dir DIR` | Persistent work directory for shapes (default: `.gameassets_work/`) |
 | `--force` | Regenerate everything |
+| `--redo-split` | Clear tree stump/top split artefacts and re-split (`GAMEDEV_REDO_SPLIT=1`) |
 | `--gpu-ids "0,1"` | Multi-GPU IDs |
 | `--no-dashboard` | Simple progress bars |
+
+Resume also ensures UMS is up and propagates `GAMEDEV_UMS_*` (+ `GAMEDEV_UMS_PRIORITY=batch`) to subprocesses, same as batch. `gameassets dream` inherits the parent env with `GAMEDEV_UMS_PRIORITY=batch` when invoking batch.
 
 **State detection per asset:**
 
@@ -665,6 +669,19 @@ Collision mesh generation via `text3d collision` (convex hull).
 | `max_faces` | `int` | `300` | Maximum faces for collision mesh (≥ 4) |
 | `convex_hull` | `bool` | `true` | Use convex hull decomposition |
 
+## Fellable trees (`split-at-height`)
+
+Tree-like rows (`category` tree/vegetation + `bbox_preset=tree` or id/idea match)
+run `text3d split-at-height --no-cap` **before** LOD: stump + top painted → LOD each →
+composed `*_lodN.glb` (`Stump`+`Top` meshes) + `*_stump_collision.glb`.
+
+- Geometry is **cut-only** (open hole at the cut plane). Mesh `--cap` / fill seals are opt-in and not the default.
+- Version stamp: `_intermediate/{id}_split_seal.txt` = `gamedev_shared.mesh_split.SEAL_VERSION` (`cut-only-v1`). Resume regenerates when the stamp is missing or drifts.
+- Force rebuild: `gameassets resume … --redo-split` or `GAMEDEV_REDO_SPLIT=1`.
+- Quick QA without regenerating LODs: `gamedev-lab debug cut-review stump.glb -o ./cut_review --cut-height 0.8`.
+
+Deep dive: [`docs/findings/MESH_PIPELINE_FINDINGS.md`](../docs/findings/MESH_PIPELINE_FINDINGS.md#árvores-derrubáveis--split-at-height-antes-do-lod).
+
 ## Asset Categories
 
 Each asset is classified into a category via `infer_category()` keyword matching (supports Portuguese terms) or explicit `category` field. The category determines **target face count** for `text3d remesh-textured` and injects category-specific hints into prompts.
@@ -675,7 +692,7 @@ Each asset is classified into a category via `infer_category()` keyword matching
 | `creature` | 24,000 | character | Creature concept, side view, organic mesh, no rider |
 | `chest` | 8,000 | prop | Container with lid, no scattered loot |
 | `weapon` | 6,000 | prop | Single clean weapon, no hands holding it |
-| `tree` | 12,000 | environment | Full tree with trunk + canopy separation |
+| `tree` | 12,000 | environment | Full tree; master pipeline may split stump/top (fellable) |
 | `rock` | 3,200 | prop | Simple boulder, low-poly friendly |
 | `mineral` | 4,800 | prop | Crystal with distinct facets, no ground attachment |
 | `building` | 24,000 | environment | Isolated structure, no terrain, clean geometry |
@@ -883,9 +900,12 @@ cd GameAssets && pip install -e ".[dev]"       # GameAssets + dev deps
 cd GameAssets
 pytest tests/                                  # Run all tests
 pytest tests/test_manifest.py                  # Single test file
+pytest tests/test_gameassets_coverage_100.py -q  # Coverage floor (CPU-only)
 pytest -k "test_name_pattern"                  # By keyword
 pytest --cov=src --cov-report=html             # With coverage
 ```
+
+Monorepo coverage rules: [`docs/TESTING.md`](../docs/TESTING.md).
 
 ### Lint / Format
 

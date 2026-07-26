@@ -49,8 +49,8 @@ class Text3DProfile:
     export_origin: str = "feet"
     # Fecho morfológico no topology-fix.
     # morph_close (metros): None = auto; 0 = off; >0 = absoluto.
-    # morph_close_voxels (N / «voxel_merge»): None = category/default (0.125;
-    # terrain/rock=0.375). Ignorado se morph_close (metros) for explícito.
+    # morph_close_voxels (N / «voxel_merge»): None = category/default (0.18;
+    # terrain/rock=0.54). Ignorado se morph_close (metros) for explícito.
     morph_close: float | None = None
     morph_close_voxels: float | None = None
     steps: int | None = None
