@@ -18,7 +18,7 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 | Textured remesh | `utils/mesh_remesh_textured.py` (904 lines) | Isotropic remesh + xatlas UV reprojection |
 | Master bake | `utils/bake_master.py` (288 lines) | LOD0: decimation + tangents + KTX2 + meshopt |
 | Export/format | `utils/export.py` (379 lines) | `save_mesh`, `convert_mesh`, `weld_glb` |
-| GLTF finish | `utils/gltf_finish.py` | Post-LOD: tangents (bpy) + dedup/prune/UASTC (gltf-transform) + meshopt (bpy 5.2 preferido, gltf-transform fallback) |
+| GLTF finish | `utils/gltf_finish.py` | Post-LOD: `[ktxdecompress]` → shade+N+T (bpy) → dedup → prune `--keep-attributes` → UASTC → meshopt |
 | Alignment | `utils/mesh_align_hunyuan.py` (142 lines) | +Z face normal to ground |
 | Base plane | `utils/mesh_base_plane.py` (288 lines) | Base plane detection/removal |
 | Background removal | `utils/bg_removal.py` (98 lines) | BiRefNet |
@@ -40,9 +40,9 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 
 Stage 1 — `generate`: Text/Image → raw GLB. Text2D prompt + Hunyuan3D marching cubes. Key flags: `--export-origin feet|center|none`, `--quality`, `--category`, `--preset`, `--gpu-ids`.
 
-Stage 2 — `topology-fix`: Repair raw mesh. Weld → non-manifold repair → fill holes → shade-smooth. `--fill-holes-sides N` controls how aggressively holes are closed.
+Stage 2 — `topology-fix`: Shared profile `topology_clean` (reweld → weld → slivers/debris → fill → selective watertight → optional shell strip / morph-close → shade-smooth). See `docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`. CLI: `--fill-holes-sides`, `--engine arrays|bpy`, `--morph-close*`, `--remove-internal-shells` / `--keep-internal-shells`, `--category`.
 
-Stage 3 — `bake-master`: LOD0 production mesh. Decimation + normal bake from high-poly + optional KTX2 (UASTC) + meshopt compression. Meshopt prefers bpy 5.2+ (`export_meshopt_compression_enable`; needs `libmeshoptimizer-dev` on Linux). KTX2 still needs Node.js + `npx @gltf-transform/cli`. Falls back gracefully without either.
+Stage 3 — `bake-master`: LOD0 production mesh. Decimation + normal bake from high-poly + **KTX2 (UASTC) + meshopt** (defaults ON). Meshopt: bpy 5.2+ + `libmeshoptimizer-dev`; pós-KTX2 usa gltf-transform. KTX2: Node `npx @gltf-transform/cli` **+** CLI `ktx` (KTX-Software). Ver [`docs/GLB_FINISH_COMPRESSION.md`](../docs/GLB_FINISH_COMPRESSION.md).
 
 Stage 4 — `lod`: LOD triplet (LOD0/1/2) with textured or geometry-only paths. Preserves armatures and animations intact.
 
@@ -54,29 +54,54 @@ Stage 5 — `collision`: Convex hull + quadric decimation for physics mesh.
 
 **Export origin:** `--export-origin feet` is the default for game assets (y=0 at soles). `center` for pivots at mesh center. `none` leaves raw Hunyuan origin.
 
-**Topology fix pipeline** (`prepare_mesh_topology` → Shared profile `topology_clean`): reweld coincident → sanitize → exact + density weld → dissolve/loose → long edges → slivers → debris → fill holes (≤32) → `make_watertight` (skip flap-erode) → `force_close_base` (inferred up-axis) → `clamp_base_flare` (smoothstep) → Taubin (3) → shade-smooth. Do **not** force fill≥64. LOD/bake-master: `pre_decimate_uv` before Decimate, `post_decimate` after.
+**Topology fix pipeline** (`prepare_mesh_topology` → Shared profile `topology_clean`): reweld → weld → dissolve/loose → long edges → slivers → debris → fill → **selective** `make_watertight` (loop diameter guard) → optional morph-close / `--remove-internal-shells` → shade-smooth. Profile: **no** `force_close_base` (removed), **no** flare/Taubin. Bake-master / `_to_paint`: `pre_decimate_uv` OK. LOD texturado (`remesh_textured`): **só** `post_decimate` após COLLAPSE (pre-weld/`pre_decimate_uv` travam o rácio).
 
-**Hunyuan / Part3D lessons** (elephant feet, welded thins, faces vs X-Part, seed variance): [`docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md`](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md) · [PT](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
+**Hollow / plastic-shell buildings (chapel):** do **not** bisect a fake floor — underside turns inward. Fix via Text2D **view/prompt** (eye-level three-quarter, closed foundation; `categories.building` + `prompt_builder` hint_2d+hint_3d). Details: lessons docs below.
 
-**LOD and rigged meshes:** `text3d lod` preserves armatures and animations. No separate LOD path exists for rigged assets. Weight transfer to LODs is handled by `rigging3d transfer-weights`.
+**Hunyuan / Part3D lessons** (plastic shell, prompts, welded thins, faces vs X-Part, seed): [`docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md`](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md) · [PT](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 
-**bake-master / finish dependencies:** KTX2/UASTC requires Node `npx @gltf-transform/cli` **and** the Khronos CLI `ktx` (KTX-Software; installer põe em `~/.local/opt/KTX-Software`). Meshopt prefers bpy 5.2+ + system `libmeshoptimizer.so` (`libmeshoptimizer-dev`); falls back to gltf-transform. `text3d doctor` checks npx, ktx e meshopt. Sem deps, finish/bake-master degradam com warning; `gamedev-lab check glb` pode falhar `texture_format: ktx2` / `compression: meshopt`. Re-comprimir assets: `text3d finish asset.glb`.
+**LOD paths:**
+
+| Flag | Path | Decimate |
+|------|------|----------|
+| `--painted-mesh` | `generate_lod_textured_glb_triplet` → `remesh_textured_glb` | stepwise `mesh_simplify` **sem** pre-merge/`pre_decimate_uv`; `post_decimate` depois |
+| (omitido) | `generate_lod_glb_triplet` (Round 3: input = animated/rigged) | weld lod0 (modo B) + simplify LOD1/2 |
+
+Preserves armatures/animations. Manual rebind: `rigging3d transfer-weights` (fora do DAG Round 3).
+
+**Normals / tangents:** Paint exports `NORMAL`+`TANGENT`; bpy re-exports call `smooth_shade_scene` first. Finish: `ktxdecompress` (if KTX2) → shade+T → dedup → prune `--keep-attributes` → uastc → meshopt. [`docs/GLB_FINISH_COMPRESSION.md`](../docs/GLB_FINISH_COMPRESSION.md).
+
+**V/Tri≈3 / moth-eaten LOD:** (A) flat import → shade; (B) verts already duplicated → **must weld** before Decimate. Shade alone ≠ weld. Do **not** pre-weld healthy painted meshes (stalls ~20k → identical lod1/lod2). Details: [`MESH_PIPELINE_FINDINGS`](../docs/findings/MESH_PIPELINE_FINDINGS.md#vtri3-e-lod-moth-eaten-2026-07).
+
+**bake-master / finish dependencies:** KTX2/UASTC = Node `npx @gltf-transform/cli` **+** CLI `ktx`. Meshopt: bpy 5.2+ + `libmeshoptimizer-dev`; pós-KTX2 → gltf-transform. `text3d doctor` checks npx/ktx/meshopt. Re-comprimir / reparar N+T: `text3d finish asset.glb`.
 
 ## ANTI-PATTERNS
 
-**FORBIDDEN:** `normals_split_custom_set(loop_normals)` in `mesh_lod.py` or `mesh_remesh_textured.py`. This forces the GLTF exporter to write per-corner normals (V/Tri=3), inflating files dramatically (e.g., goblin_shape at 33 MB). Use `shade_smooth` + `auto_smooth_angle` instead.
+**FORBIDDEN:** `normals_split_custom_set(loop_normals)` in `mesh_lod.py` or `mesh_remesh_textured.py`. Use `smooth_shade_scene` / `apply_smooth_by_angle` instead.
 
-**FORBIDDEN:** Silent exception swallowing in `weld_glb` (`export.py`). Use `try/except` with `log.warning` so pipeline failures surface in logs.
+**FORBIDDEN:** Decimate COLLAPSE on a V/Tri≈3 mesh without weld first (LOD geometry path). Assume `smooth_shade` ≠ weld when verts are already duplicated.
+
+**FORBIDDEN:** `gltf-transform prune` without `--keep-attributes` (strips `TANGENT`).
+
+**FORBIDDEN:** Weld/`remove_doubles` immediately before COLLAPSE on healthy painted meshes (stalls face budget → identical lod1/lod2).
+
+**FORBIDDEN:** Silent exception swallowing in `weld_glb` (`export.py`). Use `try/except` with `log.warning`.
 
 **DO NOT modify vendored code** under `src/text3d/hy3dshape/` excepto patches mínimos documentados (Tencent Hunyuan3D-Omni, upstream license).
 
-**`simplify`:** Geometry-only Decimate COLLAPSE via `gamedev_shared.mesh_simplify` (same pre_decimate_uv → Decimate → post_decimate path as LOD / remesh-textured). Use for `_to_paint` / pre-Paint budgets — **not** `remesh` (voxel).
+**`simplify`:** Decimate COLLAPSE via `gamedev_shared.mesh_simplify` (stepwise ≤50%; default no pre-merge / no boundary protect). Use for `_to_paint` — **not** `remesh` (voxel).
 
-**`simplify-textured`:** Decimates GLB preserving texture and UV (bpy Decimate COLLAPSE via `remesh_textured_glb`). Without texture, falls back to geometry-only decimation.
+**`simplify-textured`:** `remesh_textured_glb` (texture/UV); no `pre_decimate_uv` before COLLAPSE.
 
 **`align-plus-z`:** Calls `align_largest_plus_z_face_normal_to_ground` with a `--min-height-ratio` guard to prevent "folding" humanoid meshes when the heuristic misidentifies the ground-facing plane.
 
-**`split-at-height`:** Horizontal Y-up bisect into named `Stump` + `Top` meshes (Shared `mesh_split`). Caps cut faces by default. `--split-files` also writes `{stem}_stump.glb` / `{stem}_top.glb`. Used by GameAssets for `category=tree` after LOD0.
+**`split-at-height`:** Horizontal Y-up bisect into named `Stump` + `Top` meshes
+(Shared `mesh_split`). **Default cut-only** (`--no-cap` / `cap=False`, no fill) —
+open cut plane; `--cap` is legacy/experimental (seal caused artifacts).
+`--split-files` writes `{stem}_stump.glb` / `{stem}_top.glb`. GameAssets runs
+this **before** LOD for tree-like vegetation (`wants_split_at_height`), then LODs
+each half and composes `Stump`+`Top`. Review: `gamedev-lab debug cut-review`.
+See [`docs/findings/MESH_PIPELINE_FINDINGS.md`](../docs/findings/MESH_PIPELINE_FINDINGS.md).
 
 ## TESTS
 

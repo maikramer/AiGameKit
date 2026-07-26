@@ -60,7 +60,8 @@ pip install -e .
 | Subcomando | Descrição |
 |-----------|-----------|
 | `text3d generate PROMPT` | Gera mesh 3D a partir de texto (Text2D → Hunyuan3D) |
-| `text3d doctor` | Verifica PyTorch, VRAM e dependências nativas |
+| `text3d finish GLB` | Tangents + KTX2/UASTC + meshopt (re-comprimir entregável) |
+| `text3d doctor` | Verifica PyTorch, VRAM, `ktx`, npx/gltf-transform, meshopt |
 | `text3d info` | Mostra configuração, GPU, cache e ambiente |
 | `text3d models` | Lista modelos disponíveis |
 | `text3d convert FILE` | Converte mesh entre formatos (PLY → GLB, etc.) |
@@ -80,6 +81,9 @@ text3d doctor
 text3d info
 text3d models
 text3d convert mesh.ply --output mesh.glb
+
+# Re-comprimir LOD entregável (KTX2 + meshopt) — ver docs/GLB_FINISH_COMPRESSION.md
+text3d finish hero_lod0.glb
 
 # Textura num mesh já gerado (projeto Paint3D)
 paint3d texture outputs/meshes/robo.glb -i minha_ref.png -o robo_tex.glb
@@ -147,7 +151,7 @@ Text3D/
 
 ## Limitações do image-to-3D e pós-processo
 
-O Hunyuan3D gera **superfície a partir de uma vista**: geometria fina pode desaparecer ou aparecer aspereza tipo "argila". O reparo canónico é o perfil Shared `topology_clean` via `prepare_mesh_topology` / `text3d topology-fix` (weld, slivers, debris, fill, watertight, shade-smooth). Na master pipeline o Stage 1 fica cru (`--no-topology-fix`) e o Stage 2 faz o clean.
+O Hunyuan3D gera **superfície a partir de uma vista**: geometria fina pode desaparecer ou aparecer aspereza tipo "argila"; edifícios viram casca “plástico” se a ref for worm’s-eye. O reparo canónico é o perfil Shared `topology_clean` via `prepare_mesh_topology` / `text3d topology-fix` (weld, slivers, debris, fill≈96, watertight **seletivo**, shade-smooth — **sem** `force_close_base`/flare/Taubin; motor default `--engine arrays`). Morph-close e strip de cascas são opcionais. Na master pipeline o Stage 1 fica cru (`--no-topology-fix`) e o Stage 2 faz o clean. Lições: [`docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md) · estudo perf: [`docs/TOPOLOGY_FIX_GPU_STUDY.md`](../docs/TOPOLOGY_FIX_GPU_STUDY.md).
 
 ```bash
 # Mais detalhe geométrico (mais VRAM/tempo)

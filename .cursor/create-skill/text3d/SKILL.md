@@ -29,7 +29,8 @@ Pipeline **text-to-3D**: geração de imagem (**Text2D** / FLUX Klein) + **Hunyu
 | `text3d generate … --preset fast\|balanced\|hq` | Perfis (substituem steps/octree/chunks por defeito) |
 | `text3d generate … --save-reference-image` | Guarda PNG de referência (útil antes de `paint3d texture`) |
 | `paint3d texture mesh.glb -i ref.png -o tex.glb` | Textura + material PBR no GLB (Paint3D 2.1); smooth bilateral ativo por defeito |
-| `text3d doctor` | PyTorch, CUDA |
+| `text3d finish asset.glb` | Tangents + KTX2/UASTC + meshopt (re-comprimir LOD) |
+| `text3d doctor` | PyTorch, CUDA, `ktx`, npx/gltf-transform, meshopt |
 | `text3d info` | Sistema e GPU |
 | `text3d convert entrada.ply -o saida.glb` | Conversão PLY/OBJ/GLB |
 | `text3d models` | Lista componentes (Text2D, Hunyuan) |

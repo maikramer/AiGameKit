@@ -6,12 +6,13 @@ Text3D generates 3D meshes from text in two phases: **Text2D** (text → image) 
 
 ## Index
 
-- [Installation](INSTALL.md) — may lag behind the Hunyuan flow; prefer the root README
+- [Installation](INSTALL.md) — may lag behind the Hunyuan flow; prefer the root README (+ [finish deps](INSTALL.md#dependências-de-finish-ktx2--meshopt))
 - [PBR: GLB (Paint 2.1) vs diffuse maps (Materialize)](PBR_MATERIALIZE.md)
 - [Python API](API.md)
 - [Paint (custom_rasterizer)](PAINT_SETUP.md)
-- [Troubleshooting](TROUBLESHOOTING.md) — legacy Shap-E content
+- [Troubleshooting](TROUBLESHOOTING.md) — [GLB compression](TROUBLESHOOTING.md#compressão-glb-ktx2--meshopt); some Shap-E sections are legacy
 - [Examples](EXAMPLES.md) — older examples; use API in [API.md](API.md)
+- Monorepo: [`docs/GLB_FINISH_COMPRESSION.md`](../../docs/GLB_FINISH_COMPRESSION.md) — `text3d finish`, KTX2 + meshopt
 
 ## Overview
 

@@ -15,6 +15,7 @@ from text3d import defaults
 from text3d.bbox_tune import (
     _OCTREE_CEILING,
     _OCTREE_FLOOR,
+    DEFAULT_MORPH_VOXELS,
     BBoxTuneResult,
     _snap_octree,
     characteristic_meters,
@@ -78,14 +79,14 @@ def test_target_voxel_for_in_range(
 @pytest.mark.parametrize(
     "size_m,category,preset,expected_m,source",
     [
-        ([1.0, 2.0, 0.5], None, None, 2.0, "size_m"),
+        ([1.0, 2.0, 0.5], None, None, 1.0, "size_m"),  # (1·2·0.5)^(1/3)=1
         ([0.0, 0.0, 0.0], None, None, None, "none"),
         (None, "building", None, 6.0, "category"),
         (None, None, "chapel", 7.0, "bbox_preset"),
         (None, "tree", None, 5.0, "category"),
         (None, None, "humanoid", 1.7, "bbox_preset"),
         (None, None, None, None, "none"),
-        ([10.0, 8.0, 6.0], "prop", "crate", 10.0, "size_m"),
+        ([10.0, 8.0, 6.0], "prop", "crate", 480.0 ** (1.0 / 3.0), "size_m"),
         (None, None, "sword", 0.9, "bbox_preset"),
         (None, "door", None, 2.2, "category"),
         (None, None, "cube", 1.0, "bbox_preset"),
@@ -186,9 +187,9 @@ def test_max_octree_for_vram(vram: float | None, offload: bool, expected: int) -
 @pytest.mark.parametrize(
     "category,explicit,expected",
     [
-        (None, None, 0.125),
-        ("terrain", None, 0.375),
-        ("rock", None, 0.375),
+        (None, None, DEFAULT_MORPH_VOXELS),
+        ("terrain", None, 3.0 * DEFAULT_MORPH_VOXELS),
+        ("rock", None, 3.0 * DEFAULT_MORPH_VOXELS),
         ("humanoid", 0.5, 0.5),
         ("prop", 0.0, 0.0),
     ],

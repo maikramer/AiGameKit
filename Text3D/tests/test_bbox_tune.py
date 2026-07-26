@@ -38,8 +38,18 @@ class TestResolveFastDecode:
 
 
 class TestTuneHunyuanForBbox:
-    def test_small_humanoid_floors_at_160(self) -> None:
-        """Bandit-scale: desired < base tier → snap piso 160 (sem soft-down)."""
+    def test_char_m_is_volume_equivalent_not_max_axis(self) -> None:
+        from text3d.bbox_tune import characteristic_meters, volume_equivalent_meters
+
+        size = [0.55, 1.65, 0.4]
+        char, src = characteristic_meters(size)
+        assert src == "size_m"
+        assert char == volume_equivalent_meters(size)
+        assert char is not None
+        assert char < max(size)  # volume-eq < altura
+
+    def test_small_humanoid_gets_soft_floor_boost(self) -> None:
+        """Bandit-scale: soft-floor não-linear sobe acima do piso 160."""
         r = tune_hunyuan_for_bbox(
             base_steps=30,
             base_octree=256,
@@ -51,11 +61,13 @@ class TestTuneHunyuanForBbox:
             group_offload=True,
             volume_decoder="flashvdm",
         )
-        assert r.char_m == 1.65
-        assert r.octree == 160
-        assert r.voxel_m > 1.65 / 256
+        # char = (0.55·1.65·0.4)^(1/3) ≈ 0.71 — não o eixo 1.65.
+        assert 0.6 < r.char_m < 0.8
+        assert r.octree > _OCTREE_FLOOR
+        assert r.octree >= 224
+        assert (r.octree - _OCTREE_FLOOR) % _OCTREE_STEP == 0
 
-    def test_large_building_steps_up(self) -> None:
+    def test_large_building_steps_up_unchanged_by_soft_floor(self) -> None:
         r = tune_hunyuan_for_bbox(
             base_steps=30,
             base_octree=256,
@@ -66,7 +78,8 @@ class TestTuneHunyuanForBbox:
             total_vram_gib=6.0,
             group_offload=True,
         )
-        assert r.char_m == 10.0
+        # Volume-eq ≈ 7.83 m — soft-floor ~0; octree na zona alta.
+        assert 7.0 < r.char_m < 8.5
         assert r.octree > 256
         assert r.octree <= _OCTREE_CEILING
         assert (r.octree - _OCTREE_FLOOR) % _OCTREE_STEP == 0
@@ -82,3 +95,12 @@ class TestTuneHunyuanForBbox:
         )
         assert r.applied is False
         assert r.octree == 256
+
+    def test_soft_floor_boost_decays_with_size(self) -> None:
+        from text3d.bbox_tune import small_asset_octree_boost
+
+        b_small = small_asset_octree_boost(1.4)
+        b_mid = small_asset_octree_boost(2.5)
+        b_large = small_asset_octree_boost(10.0)
+        assert b_small > b_mid > b_large
+        assert b_large < 5.0  # chapel: boost desprezável

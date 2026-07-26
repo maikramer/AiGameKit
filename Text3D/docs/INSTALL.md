@@ -5,6 +5,7 @@ Guia completo de instalação do Text3D em diferentes configurações.
 ## Índice
 
 - [Requisitos](#requisitos)
+- [Dependências de finish (KTX2 + meshopt)](#dependências-de-finish-ktx2--meshopt)
 - [Método 1: Virtual Environment (Recomendado)](#método-1-virtual-environment-recomendado)
 - [Método 2: System-Wide](#método-2-system-wide)
 - [Método 3: pip install](#método-3-pip-install)
@@ -39,6 +40,26 @@ Para GPUs NVIDIA:
 ```bash
 sudo apt install -y nvidia-driver-535 nvidia-cuda-toolkit
 ```
+
+## Dependências de finish (KTX2 + meshopt)
+
+Necessárias para `text3d finish`, `bake-master` e LOD com compressão (entregáveis
+validados por `gamedev-lab check` com `texture_format: ktx2` / `compression: meshopt`).
+
+| Dep | Papel | Instalação tip. |
+|-----|-------|-----------------|
+| Node.js + `npx` | `@gltf-transform/cli` (dedup/prune/uastc/meshopt) | [nodejs.org](https://nodejs.org/) / nvm |
+| `ktx` (KTX-Software) | **Obrigatório** para UASTC → KTX2 | `./install.sh text3d` (extras) ou [releases Khronos](https://github.com/KhronosGroup/KTX-Software/releases) → `~/.local/opt/KTX-Software` |
+| `libmeshoptimizer-dev` | meshopt nativo bpy 5.2+ | `sudo apt install libmeshoptimizer-dev` |
+
+```bash
+# Preferido no monorepo (venv + wrappers + ktx user-local)
+./install.sh text3d
+
+text3d doctor   # deve listar npx, @gltf-transform/cli, ktx, meshopt (bpy)
+```
+
+Guia operacional: [`../../docs/GLB_FINISH_COMPRESSION.md`](../../docs/GLB_FINISH_COMPRESSION.md).
 
 ## Método 1: Virtual Environment (Recomendado)
 

@@ -42,29 +42,31 @@ def _export_glb_bpy(
     *,
     export_normals: bool = True,
 ) -> None:
-    """Exporta GLB via bpy + weld pass para limpar vértices duplicados.
+    """Exporta GLB via bpy, com smooth shading antes do exporter.
 
-    ``export_normals=False`` evita normal-split que reabre boundary após
-    topology-fix watertight (reimport no paint/LOD).
+    Com ``export_normals=True`` aplica ``smooth_shade_scene`` antes — mesh
+    flat (``from_pydata`` / import sem NORMAL) senão sai V/Tri≈3 faceted.
+    ``export_normals=False`` só para casos raros de seal watertight sem
+    NORMAL no ficheiro (preferir smooth + NORMAL).
+
+    Não há passe de weld sobre o GLB escrito: o fecho de rachas/shells é do
+    «voxel merge» (morph-close) do topology-fix, e ``smooth_shade_scene`` já
+    funde duplicados quando o V/Tri os denuncia.
     """
-    import logging as _log_mod
+    from gamedev_shared.bpy_mesh import save_glb, smooth_shade_scene
 
-    from gamedev_shared.bpy_mesh import save_glb
+    if objects is not None and not isinstance(objects, (list, tuple)):
+        objects = [objects]
+    if export_normals and objects is not None:
+        meshes = [o for o in objects if getattr(o, "type", None) == "MESH"]
+        if meshes:
+            smooth_shade_scene(meshes)
 
-    save_glb(
-        objects,
-        output_path,
-        export_normals=export_normals,
-        export_tangents=bool(export_normals),
-    )
-    try:
-        from gamedev_shared.mesh_utils import weld_glb as _weld_glb
-
-        _weld_glb(str(output_path))
-    except ImportError:
-        pass
-    except Exception as exc:
-        _log_mod.getLogger(__name__).warning("weld_glb pós-export falhou: %s", exc)
+    glb_kw: dict[str, Any] = {"export_normals": export_normals}
+    if not export_normals:
+        glb_kw["export_tangents"] = False
+    # Com normals=True: omitir export_tangents → save_glb auto (só se NORMAL_MAP).
+    save_glb(objects, output_path, **glb_kw)
 
 
 def _apply_rotation_bpy(obj: Any) -> Any:

@@ -363,6 +363,18 @@ def omni_fingerprint(controls: dict[str, Any]) -> dict[str, Any]:
             seed = int(seed)
         except (TypeError, ValueError):
             seed = None
+    # Octree efectivo do generate (autotune ou override). Gravado no sidecar
+    # para QA/debug; no stale-check, ``None`` no esperado ignora o valor
+    # gravado (autotune VRAM-dependente não invalida). Override explícito no
+    # manifest (``text3d.octree_resolution``) entra no expected e invalida.
+    octree = controls.get("octree_resolution")
+    if octree in (None, ""):
+        octree = None
+    else:
+        try:
+            octree = int(octree)
+        except (TypeError, ValueError):
+            octree = None
     # Escala canónica dos presets bbox (docs Omni 0-1). Mudar isto tem de
     # invalidar sidecars — shapes gerados com max=2 clipavam no MC.
     from .utils.omni_controls import OMNI_BBOX_AXIS_MAX
@@ -394,6 +406,7 @@ def omni_fingerprint(controls: dict[str, Any]) -> dict[str, Any]:
         "mc_level": mc_level,
         "size_m": size_m,
         "seed": seed,
+        "octree_resolution": octree,
         "bbox_axis_max": float(OMNI_BBOX_AXIS_MAX),
     }
 

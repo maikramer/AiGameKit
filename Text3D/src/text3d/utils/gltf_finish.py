@@ -452,6 +452,17 @@ def gltf_transform_finish(
                 # desloca a origem para o centro do personagem — pés deixam de
                 # ficar em y=0 (medido: bandit_lod0 vs bandit_lod0_animated).
                 if _glb_has_skins(current):
+                    # Assets rigados saem SEM meshopt e falham a regra
+                    # `compression: meshopt` das rules do GameAssets — é
+                    # deliberado, os dois backends estão bloqueados:
+                    #   * bpy recusa depois do KTX2 (re-encode de imagens) e o
+                    #     uastc corre antes; aplicá-lo antes do uastc também não
+                    #     serve — o uastc descomprime o EXT_meshopt_compression;
+                    #   * gltf-transform recentra o bbox e tira os pés do y=0.
+                    # `--quantization-volume scene` foi testado (2026-07-26) e
+                    # NÃO evita o recentrar: npc_scout_lod0 saiu com
+                    # `origin.y_min: -1.0` (lod0.yaml apanha, lod1.yaml não).
+                    # Entregável 3x maior > entregável com os pés no ar.
                     log.warning(
                         "gltf_finish: meshopt gltf-transform omitido (GLB skinned) — "
                         "KHR_mesh_quantization desloca origem/pés (%s)",

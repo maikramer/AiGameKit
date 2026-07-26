@@ -1705,18 +1705,39 @@ def topology_fix_cmd(
         if export_origin is not None and export_origin != "none":
             from .utils.export import convert_mesh
 
-            # Sem normais: convert_mesh com export_normals=True reabria boundary
-            # (normal-split) logo após o watertight do topology-fix.
+            # Smooth + NORMAL: omitir normais fazia clean flat; split duro
+            # evita-se com smooth_shade_scene em _export_glb_bpy.
             convert_mesh(
                 out_path,
                 out_path,
                 rotate=False,
                 origin_mode=export_origin,
-                export_normals=False,
+                export_normals=True,
             )
     finally:
         if export_rotation_x_deg is not None:
             _defaults.set_export_rotation_x_rad_override(None)
+
+    # Recusar clean vazio (resume tratava 228 B como "clean existe" e skipava).
+    try:
+        from gamedev_shared.glb_verify import extract_glb_meta
+
+        meta = extract_glb_meta(out_path)
+        verts = int(meta.get("vertex_count_total") or 0)
+        tris = int(meta.get("triangle_count_total") or 0)
+        # <64 tris = colapso (weld density / debris) — não é clean útil.
+        if meta.get("_error") or verts <= 0 or tris < 64:
+            console.print(
+                f"[bold red]✗[/bold red] topology-fix produziu mesh vazia/colapsada "
+                f"(V={verts} T={tris}): [cyan]{out_path}[/cyan]"
+            )
+            with contextlib.suppress(OSError):
+                out_path.unlink()
+            sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        console.print(f"[yellow]aviso: não consegui validar clean: {exc}[/yellow]")
 
     try:
         sz = format_bytes(out_path.stat().st_size)

@@ -137,6 +137,13 @@ def _export_textured_glb(
         export_materials="EXPORT",
         export_image_format="AUTO",
     )
+    with contextlib.suppress(Exception):
+        from gamedev_shared.glb_verify import post_save_verify
+
+        post_save_verify(
+            output_path,
+            require_normals=export_normals if export_normals else False,
+        )
 
 
 _export_glb = _export_textured_glb
@@ -255,29 +262,41 @@ def _prepare_topology_bpy(
         overrides["watertight"] = bool(watertight)
 
     if use_arrays:
+        from gamedev_shared.mesh_repair_arrays import extract_arrays, replace_mesh_arrays
+
+        backup_co, backup_tris = extract_arrays(mesh_obj)
         stats = _repair_topology_arrays_phase(
             mesh_obj,
             remove_internal_shells=bool(remove_internal_shells),
             morph_close=morph_close,
         )
-        # Filtros já feitos em arrays — restam os passos topológicos do perfil.
-        stats.update(
-            repair_mesh_object_with_profile(
-                mesh_obj,
-                "topology_clean",
-                do_sanitize=False,
-                do_reweld_coincident=False,
-                do_exact_weld=False,
-                weld_mode="none",
-                do_dissolve_loose=False,
-                do_long_edges=False,
-                sliver_max_aspect=None,
-                debris_face_ratio=0.0,
-                do_remove_internal_shells=False,
-                **overrides,
+        if n_faces_before > 0 and len(mesh_obj.data.polygons) == 0:
+            log.warning(
+                "engine=arrays zerou mesh (%d→0 faces) — restaurar + fallback bpy",
+                n_faces_before,
             )
-        )
-    else:
+            replace_mesh_arrays(mesh_obj, backup_co, backup_tris)
+            use_arrays = False
+        else:
+            # Filtros já feitos em arrays — restam os passos topológicos do perfil.
+            stats.update(
+                repair_mesh_object_with_profile(
+                    mesh_obj,
+                    "topology_clean",
+                    do_sanitize=False,
+                    do_reweld_coincident=False,
+                    do_exact_weld=False,
+                    weld_mode="none",
+                    do_dissolve_loose=False,
+                    do_long_edges=False,
+                    sliver_max_aspect=None,
+                    debris_face_ratio=0.0,
+                    do_remove_internal_shells=False,
+                    **overrides,
+                )
+            )
+
+    if not use_arrays:
         if morph_close is not None and morph_close > 0:
             from gamedev_shared.mesh_repair import morphological_close
 
@@ -316,13 +335,20 @@ def _prepare_topology_bpy(
 
     _shade_smooth(mesh_obj)
 
+    n_faces_after = len(mesh_obj.data.polygons)
+    n_verts_after = len(mesh_obj.data.vertices)
     log.info(
         "prepare_topology: %d→%d faces, %d→%d vértices",
         n_faces_before,
-        len(mesh_obj.data.polygons),
+        n_faces_after,
         n_verts_before,
-        len(mesh_obj.data.vertices),
+        n_verts_after,
     )
+    if n_faces_before > 0 and n_faces_after == 0:
+        raise RuntimeError(
+            f"prepare_topology zerou a malha ({n_verts_before}→{n_verts_after} verts, "
+            f"{n_faces_before}→0 faces) — abortar export de clean vazio"
+        )
 
 
 def _decimate_to_target(mesh_obj, target_faces: int) -> int:
@@ -479,9 +505,10 @@ def _prepare_mesh_topology_impl(
         engine=engine,
         has_armature=bool(arm_objs),
     )
-    # Sem normal-split no export: reabre boundary no reimport (paint/LOD).
-    # Shade-smooth já aplicado; importer/jogo recalcula normais se preciso.
-    _export_glb(_output, mesh_obj, arm_objs, export_normals=False)
+    # Smooth vertex normals (não omitir NORMAL): export_normals=False deixava
+    # viewers flat e o save_mesh a seguir reintroduzia V/Tri≈3 faceted.
+    # smooth_shade_scene dentro do export evita split duro / boundary reopen.
+    _export_glb(_output, mesh_obj, arm_objs, export_normals=True)
 
     if _was_trimesh:
         import trimesh
@@ -625,8 +652,9 @@ def generate_lod_textured_glb_triplet(
 ) -> list[Path]:
     """Gera três GLB texturizados por decimação com preservação de UV.
 
-    Se ``target_faces`` for dado: LOD0 = target_faces, LOD1 = target/2, LOD2 = target/4.
-    Caso contrário usa ``lod1_ratio`` e ``lod2_ratio`` sobre o original.
+    Se ``target_faces`` for dado: LOD0 = target_faces, LOD1 = max(min1, lod0/2),
+    LOD2 = max(min2, lod0/3). Caso contrário usa ``lod1_ratio`` / ``lod2_ratio``
+    sobre o original.
 
     ``apply_meshopt`` controla EXT_meshopt_compression (activo por defeito;
     quantização POSITION SHORT via KHR_mesh_quantization — CLI gltf-transform 4.x).
@@ -647,7 +675,9 @@ def generate_lod_textured_glb_triplet(
     from gamedev_shared.bpy_mesh import clear_scene
 
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=str(painted))
+    from gamedev_shared.bpy_mesh import import_gltf
+
+    import_gltf(painted)
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     model = max(mesh_objs, key=lambda o: len(o.data.polygons))
     n = len(model.data.polygons)
@@ -668,7 +698,8 @@ def generate_lod_textured_glb_triplet(
     if target_faces and target_faces > 0:
         lod0_target = _clamp_decimate_target(n, target_faces)
         lod1_target = _clamp_decimate_target(n, max(min_faces_lod1, lod0_target // 2))
-        lod2_target = _clamp_decimate_target(n, max(min_faces_lod2, lod0_target // 4))
+        # /3 (não /4): edifícios/props grandes degeneram em silhueta no far LOD.
+        lod2_target = _clamp_decimate_target(n, max(min_faces_lod2, lod0_target // 3))
     else:
         lod0_target = n
         lod1_target = _clamp_decimate_target(n, max(min_faces_lod1, int(n * lod1_ratio)))

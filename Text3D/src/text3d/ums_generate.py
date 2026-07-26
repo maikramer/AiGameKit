@@ -225,6 +225,8 @@ def run_generate(
                 # Só o override explícito (GameAssets manifest seed:) entra no
                 # fingerprint — o RNG seed resolvido fica de fora.
                 "seed": request.get("seed_fingerprint"),
+                # Octree efectivo (autotune ou override) — QA/debug no sidecar.
+                "octree_resolution": octree,
             },
         )
 

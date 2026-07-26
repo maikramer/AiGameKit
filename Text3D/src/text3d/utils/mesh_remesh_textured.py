@@ -141,8 +141,10 @@ def _extract_source_data(obj) -> MeshData:
                     bpy_img = node.image
                     w, h = bpy_img.size
                     if w > 0 and h > 0:
+                        # bpy.pixels = bottom-up (OpenGL); transfer/sample usam
+                        # top-down (V flip em _sample_texture_at_uvs / PIL).
                         pixels = np.array(bpy_img.pixels[:]).reshape(h, w, 4)
-                        texture_image = (pixels[:, :, :3] * 255).astype(np.uint8)
+                        texture_image = np.flipud((pixels[:, :, :3] * 255).astype(np.uint8))
                     break
         if texture_image is not None:
             break
@@ -777,16 +779,14 @@ def _pre_decimate_repair(obj) -> None:
 
 # --- Rota de reconstrução (voxel + xatlas + reprojeção) -------------------
 #
-# Meshes pintados chegam fragmentados em charts UV desconectados (~30-45%
-# das arestas são "fronteira"). O Decimate COLLAPSE rasga essa topologia:
-# separa os charts e degrada o mesh em confete de triângulos isolados —
-# mesmo quando "atinge" o alvo numérico (crate lod0 6000 faces = destruído).
-# Nesses casos reconstruímos: weld → voxel remesh → decimate → xatlas
-# unwrap → reprojeção pixel-a-pixel da textura original.
+# Preferência: Decimate COLLAPSE com UVs/textura originais (preserva o atlas
+# do paint). Rebuild (voxel+xatlas+closest-point rebake) só quando COLLAPSE
+# estagna longe do alvo — NÃO dispara só por ``boundary_edge_fraction``.
+#
+# Motivo: Hunyuan/paint gera paredes duplas; o rebake por closest-point pinta
+# o lado errado da parede e vira "salada de textura" (chapel lod0). UV-preserve
+# fica legível; rebuild fica como rede de segurança do stall.
 
-# Fração de arestas de fronteira acima da qual o mesh é considerado
-# fragmentado (chart soup). Mesh fechado são ~0; crate painted mede 0.30.
-_FRAGMENTED_BOUNDARY_FRAC = 0.20
 # Estagnação do COLLAPSE: acima de slack*alvo, reconstruir.
 _REBUILD_STALL_FACTOR = 1.5
 # Resolução do voxel remesh relativa ao alvo (decimado a seguir).
@@ -897,7 +897,9 @@ def remesh_textured_glb(
         log.info("Hardlink quebrado em %s (nlink>1)", path_out.name)
 
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=str(path_in))
+    from gamedev_shared.bpy_mesh import import_gltf
+
+    import_gltf(path_in)
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     if not mesh_objs:
         raise ValueError(f"Mesh vazia: {path_in}")
@@ -914,66 +916,68 @@ def remesh_textured_glb(
     has_arm = any(o.type == "ARMATURE" for o in bpy.context.scene.objects)
     temp_png: str | None = None
 
-    # Meshes pintados fragmentados (charts UV desconectados) são destruídos
-    # pelo COLLAPSE mesmo quando o alvo numérico é atingido — detectar à
-    # entrada e ir directo à rota de reconstrução (voxel+xatlas+rebake).
-    source: MeshData | None = None
-    if not has_arm:
-        frag = _boundary_edge_fraction(obj)
-        if frag >= _FRAGMENTED_BOUNDARY_FRAC:
-            source = _extract_source_data(obj)
-            if source.uvs is None or source.texture_image is None:
-                log.warning(
-                    "Mesh fragmentado (%.0f%% arestas de fronteira) sem UVs/textura — decimação directa",
-                    100 * frag,
-                )
-                source = None
-            else:
-                log.info(
-                    "Mesh fragmentado (%.0f%% arestas de fronteira) — rota de reconstrução",
-                    100 * frag,
-                )
+    # Sempre UV-preserve primeiro. Rebuild só se COLLAPSE estagnar (stall).
+    # ``pre_decimate_uv`` antes do COLLAPSE trava o rácio em meshes texturados
+    # (crate ~22k piso → lod1==lod2) — só corre sem textura (remove leques).
+    has_texture = False
+    for mat_slot in obj.material_slots:
+        mat = mat_slot.material
+        if not mat or not mat.use_nodes:
+            continue
+        if any(n.type == "TEX_IMAGE" and n.image for n in mat.node_tree.nodes):
+            has_texture = True
+            break
 
-    if source is not None:
-        obj, temp_png = _rebuild_textured_lod(obj, source, effective_target, texture_size or 2048)
-    else:
-        # Decimate via Shared. ``pre_decimate_uv`` antes do COLLAPSE trava o
-        # rácio em meshes texturados (crate ~22k piso → lod1==lod2). Usar só
-        # post_decimate depois; weld prévio fica off (default simplify).
-        simplify_mesh_object(obj, target_faces, repair=False)
-        if repair:
-            from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+    if repair and not has_texture:
+        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
 
+        repair_mesh_object_with_profile(obj, "pre_decimate_uv")
+
+    simplify_mesh_object(obj, target_faces, repair=False)
+    if repair:
+        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+
+        # Texturado: não apagar slivers (remove_sliver_faces abre buracos em
+        # edifícios casca-fina / janelas). Só dissolve+weld exacto+tri.
+        if has_texture:
+            post = repair_mesh_object_with_profile(
+                obj,
+                "post_decimate",
+                post_decimate_sliver_aspect=0.0,
+            )
+        else:
             post = repair_mesh_object_with_profile(obj, "post_decimate")
-            if post.get("sliver_faces"):
-                log.warning("Slivers pós-decimate: %d faces removidas", post["sliver_faces"])
+        if post.get("sliver_faces"):
+            log.warning("Slivers pós-decimate: %d faces removidas", post["sliver_faces"])
 
+    n_after = len(obj.data.polygons)
+    if not has_arm and n_after > int(effective_target * _REBUILD_STALL_FACTOR):
         # Rede de segurança: COLLAPSE estagnou longe do alvo → reimportar
         # o original e reconstruir (o mesh decimado já está degradado).
-        n_after = len(obj.data.polygons)
-        if not has_arm and n_after > int(effective_target * _REBUILD_STALL_FACTOR):
-            clear_scene()
-            bpy.ops.import_scene.gltf(filepath=str(path_in))
-            obj = max(
-                (o for o in bpy.context.scene.objects if o.type == "MESH"),
-                key=lambda o: len(o.data.polygons),
+        clear_scene()
+        from gamedev_shared.bpy_mesh import import_gltf
+
+        import_gltf(path_in)
+        obj = max(
+            (o for o in bpy.context.scene.objects if o.type == "MESH"),
+            key=lambda o: len(o.data.polygons),
+        )
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        source = _extract_source_data(obj)
+        if source.uvs is not None and source.texture_image is not None:
+            log.warning(
+                "COLLAPSE estagnou em %d faces (alvo %d) — rota de reconstrução",
+                n_after,
+                effective_target,
             )
-            bpy.context.view_layer.objects.active = obj
-            obj.select_set(True)
-            source = _extract_source_data(obj)
-            if source.uvs is not None and source.texture_image is not None:
-                log.warning(
-                    "COLLAPSE estagnou em %d faces (alvo %d) — rota de reconstrução",
-                    n_after,
-                    effective_target,
-                )
-                obj, temp_png = _rebuild_textured_lod(obj, source, effective_target, texture_size or 2048)
-            else:
-                log.warning(
-                    "COLLAPSE estagnou em %d faces (alvo %d); sem UVs/textura para reconstruir",
-                    n_after,
-                    effective_target,
-                )
+            obj, temp_png = _rebuild_textured_lod(obj, source, effective_target, texture_size or 2048)
+        else:
+            log.warning(
+                "COLLAPSE estagnou em %d faces (alvo %d); sem UVs/textura para reconstruir",
+                n_after,
+                effective_target,
+            )
 
     mesh = obj.data
 

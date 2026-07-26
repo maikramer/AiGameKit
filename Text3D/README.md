@@ -301,6 +301,26 @@ text3d collision model.glb -o coll.glb --max-faces 500 --no-convex-hull
 | `--max-faces` | int | 300 | Target face count for collision mesh |
 | `--convex-hull/--no-convex-hull` | flag | true | Apply convex hull before simplification |
 
+### `text3d finish GLB`
+
+Finalize a deliverable GLB: tangents → dedup → prune → **KTX2/UASTC** → **meshopt** (defaults ON). Use to re-compress assets without regenerating the pipeline.
+
+```bash
+text3d finish hero_lod0.glb
+text3d finish hero_lod0.glb -o hero_opt.glb --no-tangents
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output` | path | in-place | Output GLB (omit to overwrite input) |
+| `--ktx2/--no-ktx2` | flag | true | UASTC → `image/ktx2` (needs `ktx` CLI) |
+| `--meshopt/--no-meshopt` | flag | true | `EXT_meshopt_compression` |
+| `--tangents/--no-tangents` | flag | true | Recalculate MikkTSpace tangents |
+| `--dedup/--no-dedup` | flag | true | gltf-transform dedup |
+| `--prune/--no-prune` | flag | true | gltf-transform prune |
+
+**Deps:** Node `npx @gltf-transform/cli` **and** Khronos `ktx` (KTX-Software). Meshopt prefers bpy 5.2+ + `libmeshoptimizer-dev`. Check with `text3d doctor`. Full guide: [`docs/GLB_FINISH_COMPRESSION.md`](../docs/GLB_FINISH_COMPRESSION.md).
+
 ### `text3d align-plus-z MESH`
 
 Align the largest +Z face normal to the ground plane. Useful for correcting models generated flat-side-up (e.g., crystal/pedestal orientation). Includes a height-ratio guard to avoid "folding" humanoid models when the heuristic fails.
@@ -339,7 +359,7 @@ text3d gpu-processes
 
 ### `text3d doctor`
 
-Check PyTorch, CUDA, and VRAM availability. Reports per-GPU memory, CUDA version, and the `PYTORCH_CUDA_ALLOC_CONF` setting.
+Check PyTorch, CUDA, VRAM, and **bake/finish tooling**: bpy meshopt runtime (`libmeshoptimizer`), `npx` + `@gltf-transform/cli`, and `ktx` (KTX-Software — required for UASTC/KTX2).
 
 ```bash
 text3d doctor
@@ -380,17 +400,19 @@ text3d skill install --target ./my-game --force
 
 | Step | Detail |
 |------|--------|
-| Sanitize nonfinite | Drop NaN/Inf vertices (bpy) |
+| Sanitize / reweld | NaN guard + coincident reweld |
 | Weld | Exact `1e-5` + density-adaptive distance |
-| Long edges / slivers | Remove outlier fans and needle faces |
-| Loose debris | Drop tiny islands (`ratio=0.0005`, `min_faces=64`) |
-| Fill holes | Small holes (`--fill-holes-sides`, default 12; raised when watertight) |
-| Watertight | Selective planar caps + progressive fill (`make_watertight`) |
+| Long edges / slivers / debris | Outlier fans, needles, tiny islands |
+| Fill holes | `--fill-holes-sides` (profile ~96 when omitted) |
+| Watertight | Selective caps + fill; **loop diameter ratio** limits door/window seals |
+| Optional | `--morph-close*` (thin double-shell); `--remove-internal-shells` (auto building) |
 | Shade-smooth | 60° auto-smooth (no custom split normals) |
 
-LOD / bake-master use profile `pre_decimate_uv` before Decimate (UV-safe weld `0.0005`, slivers, no watertight).
+**Not in profile:** `force_close_base` (removed), base-flare clamp, Taubin. Plastic-shell / open underside buildings: fix with **Text2D view/prompt** (eye-level three-quarter, closed foundation), not a bisected floor.
 
-**Known artifacts:** Hunyuan3D marching-cubes outputs tend to have thick/double walls and tiny cracks. Close only very small holes before watertight — do not treat a large intentional base opening as a defect to seal blindly.
+Default engine: `--engine arrays` (perf study: [`docs/TOPOLOGY_FIX_GPU_STUDY.md`](../docs/TOPOLOGY_FIX_GPU_STUDY.md)). Lessons: [`docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md`](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md) · [PT](../docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
+
+LOD / bake-master use profile `pre_decimate_uv` before Decimate (UV-safe weld `0.0005`, slivers, no watertight).
 
 ## Quality Presets
 

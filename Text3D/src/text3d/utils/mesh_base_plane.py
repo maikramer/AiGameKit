@@ -21,27 +21,41 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
+def _attr_array(collection: object, name: str, dim: int) -> np.ndarray:
+    """``foreach_get`` vetorizado — iterar bpy em Python custa segundos por milhão."""
+    n = len(collection)  # type: ignore[arg-type]
+    buf = np.empty(n * dim, dtype=np.float64)
+    collection.foreach_get(name, buf)  # type: ignore[attr-defined]
+    return buf.reshape(-1, dim) if dim > 1 else buf
+
+
+def _to_world(points: np.ndarray, matrix: object) -> np.ndarray:
+    """Aplica a 4x4 (mathutils) a ``(N, 3)`` de uma vez."""
+    m = np.array(matrix, dtype=np.float64)  # type: ignore[arg-type]
+    return points @ m[:3, :3].T + m[:3, 3]
+
+
 def _vertices_world(obj: bpy.types.Object) -> np.ndarray:
     """World-space vertex positions as ``(N, 3)`` float64."""
-    mw = obj.matrix_world
-    return np.array([(mw @ v.co).to_tuple() for v in obj.data.vertices], dtype=np.float64)
+    return _to_world(_attr_array(obj.data.vertices, "co", 3), obj.matrix_world)
 
 
 def _face_centers_world(obj: bpy.types.Object) -> np.ndarray:
     """World-space polygon centres as ``(N, 3)`` float64."""
-    mw = obj.matrix_world
-    return np.array([(mw @ p.center).to_tuple() for p in obj.data.polygons], dtype=np.float64)
+    return _to_world(_attr_array(obj.data.polygons, "center", 3), obj.matrix_world)
 
 
 def _face_areas(obj: bpy.types.Object) -> np.ndarray:
     """Polygon areas as ``(N,)`` float64."""
-    return np.array([p.area for p in obj.data.polygons], dtype=np.float64)
+    return _attr_array(obj.data.polygons, "area", 1)
 
 
 def _face_normals_world(obj: bpy.types.Object) -> np.ndarray:
     """World-space polygon normals as ``(N, 3)`` float64."""
-    nm = obj.matrix_world.to_3x3().inverted().transposed()
-    return np.array([(nm @ p.normal).normalized().to_tuple() for p in obj.data.polygons], dtype=np.float64)
+    nm = np.array(obj.matrix_world.to_3x3().inverted().transposed(), dtype=np.float64)
+    normals = _attr_array(obj.data.polygons, "normal", 3) @ nm.T
+    lengths = np.linalg.norm(normals, axis=1, keepdims=True)
+    return normals / np.where(lengths > 0.0, lengths, 1.0)
 
 
 def _apply_translation(obj: bpy.types.Object, offset: np.ndarray | list) -> None:

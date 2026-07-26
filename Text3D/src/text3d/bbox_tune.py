@@ -5,7 +5,8 @@ Premissa: **genérico por escala física**, sem regras por tipo de objecto.
 ``size_m`` — igreja 10 m e humanoid 1.7 m usam a mesma fórmula.
 
 O Omni gera no cubo normalizado; o marching cubes usa ``octree_resolution``.
-Após escala para metros, ``voxel_m ≈ char_m / octree``. Este módulo:
+Após escala para metros, ``voxel_m ≈ char_m / octree`` com
+``char_m = (L·H·W)^(1/3)`` (volume, não eixo maior). Este módulo:
 
 1. Sobe octree/steps/chunks para aproximar um voxel-alvo (tecto VRAM).
 2. Sugere ``morph_close`` em metros (~N voxels) para fundir double-shell
@@ -14,6 +15,7 @@ Após escala para metros, ``voxel_m ≈ char_m / octree``. Este módulo:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,12 +30,20 @@ _MIN_SCALE = 0.75
 _OCTREE_FLOOR = 160
 _OCTREE_CEILING = 512
 _OCTREE_STEP = 32
+# Soft-floor não-linear: sobe o piso efectivo nos assets **pequenos**
+# (wolf/nest/props caíam sempre em 160 → pinholes) e decai a ~0 nos grandes
+# (chapel mantém a curva). ``floor_eff = 160 + MAX * e^(-char/τ)``.
+# ``char`` = diâmetro equivalente por volume ``(L·H·W)^(1/3)``.
+_OCTREE_SMALL_BOOST_MAX = 128.0
+_OCTREE_SMALL_BOOST_TAU_M = 2.5
 
-# Morph-close / «voxel merge»: N x voxel_m MC. Default ~1/8 voxel (1 vox
-# derretia detalhe — capela). Auto ON: funde double-shell sub-voxel; remesh
-# interno usa grid ≥ octree (ver ``morphological_close``). Opt-out:
-# ``--morph-close 0``. Override: ``--morph-close-voxels`` / category map.
-DEFAULT_MORPH_VOXELS = 0.125
+# Morph-close / «voxel merge»: N x voxel_m MC. Default ~0.18 voxel — margem
+# leve sobre 0.15 para fechar rachas MC sem chegar perto de 1 vox (que
+# derretia detalhe — capela); o fecho aqui dispensa welds extra a jusante.
+# Auto ON: funde double-shell sub-voxel; remesh interno usa grid ≥ octree (ver
+# ``morphological_close``). Opt-out: ``--morph-close 0``. Override:
+# ``--morph-close-voxels`` / category map.
+DEFAULT_MORPH_VOXELS = 0.18
 _MORPH_VOXELS = DEFAULT_MORPH_VOXELS  # alias interno
 _MORPH_FRAC_LO = 0.0002  # 0.02% char
 _MORPH_FRAC_HI = 0.004  # 0.4% char
@@ -65,7 +75,7 @@ _DEFAULT_APPROACH_M = 1.0
 # Voxel-merge (N x voxel_m) por categoria. Rochas/cliffs: 3x default — menos
 # detalhe geométrico, mais fecho de buracos MC / base aberta.
 _CATEGORY_MORPH_VOXELS: dict[str, float] = {
-    "terrain": 3.0 * DEFAULT_MORPH_VOXELS,  # 0.375
+    "terrain": 3.0 * DEFAULT_MORPH_VOXELS,  # 0.54
     "rock": 3.0 * DEFAULT_MORPH_VOXELS,
 }
 
@@ -203,20 +213,43 @@ class BBoxTuneResult:
     morph_close: float | None = None
 
 
+def volume_equivalent_meters(size_m: list[float] | tuple[float, ...]) -> float | None:
+    """Diâmetro equivalente por volume: ``(L·H·W)^(1/3)``.
+
+    Usar o eixo maior (altura) inflacionava assets altos/finos (árvore, herói)
+    e subestimava corpos volumosos achatados (ninho, lobo). O cubo de mesmo
+    volume dá a escala física correcta para densificar o marching cubes.
+    """
+    if len(size_m) != 3:
+        return None
+    dims = [float(v) for v in size_m]
+    if any(v <= 0 for v in dims):
+        return None
+    return float((dims[0] * dims[1] * dims[2]) ** (1.0 / 3.0))
+
+
 def characteristic_meters(
     size_m: list[float] | tuple[float, ...] | None = None,
     *,
     category: str | None = None,
     bbox_preset: str | None = None,
 ) -> tuple[float | None, str]:
-    """Eixo maior em metros + origem do sinal.
+    """Escala característica em metros + origem do sinal.
+
+    Com ``size_m=[L,H,W]`` usa o **diâmetro equivalente por volume**
+    ``(L·H·W)^(1/3)`` — não o eixo maior. Fallbacks de category/preset
+    continuam a ser um prior de eixo típico (sem volume).
 
     Returns:
         ``(char_m, source)`` — ``char_m`` é ``None`` se não houver pista.
     """
     if size_m is not None:
-        arr = [float(v) for v in size_m]
-        if len(arr) == 3 and max(arr) > 0:
+        vol = volume_equivalent_meters(size_m)
+        if vol is not None and vol > 0:
+            return vol, "size_m"
+        # size_m parcial / zeros: último recurso = eixo maior positivo.
+        arr = [float(v) for v in size_m if float(v) > 0]
+        if arr:
             return float(max(arr)), "size_m"
 
     if bbox_preset:
@@ -334,6 +367,18 @@ def _snap_octree(value: int, *, lo: int = _OCTREE_FLOOR, hi: int = _OCTREE_CEILI
     return max(floor, min(ceil, snapped))
 
 
+def small_asset_octree_boost(char_m: float) -> float:
+    """Boost de octree (unidades) que só afecta o início da curva tamanho→octree.
+
+    ``MAX * exp(-char_m / τ)``: ~95 a 0.78 m (wolf volume-eq), ~47 a 2 m
+    (nest), ~2 a 10 m (chapel) — o final da curva fica intacto.
+    """
+    if char_m <= 0:
+        return 0.0
+
+    return float(_OCTREE_SMALL_BOOST_MAX) * math.exp(-float(char_m) / float(_OCTREE_SMALL_BOOST_TAU_M))
+
+
 def tune_hunyuan_for_bbox(
     *,
     base_steps: int,
@@ -405,6 +450,11 @@ def tune_hunyuan_for_bbox(
     desired_scale = round(base_o * scale)
     # Média geométrica tamanhoxtier; snap: <160→160, senão ±32 até 512/hi.
     desired = round((desired_abs * desired_scale) ** 0.5)
+    # Soft-floor não-linear: puxa o desired para cima só em char_m pequeno
+    # (sem tocar chapel/longhouse). ``max`` e não soma — evita empurrar o
+    # topo da curva quando desired já está alto.
+    soft_floor = float(_OCTREE_FLOOR) + small_asset_octree_boost(float(char_m))
+    desired = max(desired, round(soft_floor))
     octree = _snap_octree(desired, lo=lo, hi=hi)
 
     # Steps sobem mais suave que o octree (custo tempo linear-ish).

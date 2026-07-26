@@ -9,6 +9,7 @@ Guia completo de resolução de problemas comuns.
 - [Problemas de Instalação](#problemas-de-instalação)
 - [Problemas de Modelos](#problemas-de-modelos)
 - [Problemas de Qualidade](#problemas-de-qualidade)
+- [Compressão GLB (KTX2 / meshopt)](#compressão-glb-ktx2--meshopt)
 - [Erros Comuns](#erros-comuns)
 
 ## Problemas de Memória
@@ -406,6 +407,45 @@ if torch.cuda.is_available():
         print(f'GPU: {gpu}')
 "
 ```
+
+## Compressão GLB (KTX2 / meshopt)
+
+Happy path: [`../../docs/GLB_FINISH_COMPRESSION.md`](../../docs/GLB_FINISH_COMPRESSION.md).
+
+### `finish` / bake-master sem KTX2 (fica PNG/JPEG)
+
+**Sintoma:** `text3d finish` reporta aviso KTX2; `gamedev-lab check` falha
+`texture_format: ktx2`; probe JSON mostra `image/png` ou `image/jpeg`.
+
+**Causa típica:** CLI `ktx` (KTX-Software) ausente. `@gltf-transform/cli uastc`
+precisa dele — **só ter `npx` não chega**.
+
+```bash
+text3d doctor                    # linha "ktx (KTX-Software)" deve ser OK
+which ktx || ls ~/.local/opt/KTX-Software/bin/ktx
+./install.sh text3d              # extras instalam ktx user-local
+text3d finish asset_lod0.glb     # re-aplicar uastc+meshopt
+```
+
+### Sem meshopt (`EXT_meshopt_compression` ausente)
+
+**Sintoma:** check falha `compression: meshopt`.
+
+1. `text3d doctor` — meshopt bpy (`libmeshoptimizer`) e/ou gltf-transform.
+2. Ubuntu: `sudo apt install libmeshoptimizer-dev`.
+3. Pós-KTX2 o meshopt bpy é skip de propósito → precisa gltf-transform no PATH.
+4. Re-correr: `text3d finish asset.glb` (defaults meshopt ON).
+
+### Ficheiro cresceu após UASTC
+
+Normal em texturas já JPEG pequenas. UASTC optimiza **GPU**, não necessariamente
+bytes em disco. Em PNG grandes o ganho costuma ser grande.
+
+### Skins/clips perdidos após finish
+
+GameAssets usa rollback automático (`_finish_lod_with_rollback`). Manual:
+guardar cópia pré-finish; se `skins[]`/`animations[]` sumirem, restaurar e
+abrir issue com o GLB.
 
 ## Suporte
 
