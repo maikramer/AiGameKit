@@ -190,6 +190,41 @@ def _armature_topo_order(arm: Any) -> list[str]:
     return order
 
 
+_TRUNK_KEYWORDS = ("spine", "chest", "neck", "head")
+
+
+def _bone_rest_dir(arm: Any, bone_name: str, mapped: set[str]) -> Any:
+    """Direção de rest do osso derivada da GEOMETRIA do esqueleto (armature space).
+
+    O tail sintetizado pelo importador glTF (heurística TEMPERANCE/BLENDER) é
+    ruído por rig — no pelvis pode sair horizontal ou para baixo, e o swing
+    correction roda a pose do pelvis ~90-180°, empurrando os offsets dos filhos
+    (barriga para a frente, "bunda empinada"). A direção semântica de um joint
+    é a linha para o próximo joint da cadeia:
+
+    1. filho mapeado de tronco (spine/chest/neck/head) — continua a cadeia;
+    2. senão, média dos filhos mapeados (mão→dedos, pé→ball);
+    3. senão, direção desde o pai (leaf continua a cadeia);
+    4. último recurso: tail do importador.
+    """
+    bone = arm.data.bones[bone_name]
+    kids = [c for c in bone.children if c.name in mapped]
+    trunk = [c for c in kids if any(k in c.name.lower() for k in _TRUNK_KEYWORDS)]
+    pick = trunk or kids
+    if pick:
+        acc = None
+        for c in pick:
+            v = c.head_local - bone.head_local
+            acc = v if acc is None else acc + v
+        if acc is not None and acc.length > 1e-6:
+            return acc.normalized()
+    if bone.parent is not None:
+        v = bone.head_local - bone.parent.head_local
+        if v.length > 1e-6:
+            return v.normalized()
+    return (bone.tail_local - bone.head_local).normalized()
+
+
 def _axis_correction(src_rest: Any, tgt_rest: Any, src_dir: Any, tgt_dir: Any) -> Any:
     """Correção fixa por osso: converte pose global source em pose global target.
 
@@ -297,11 +332,13 @@ def retarget_animation(
     # pose global source @ correction. O swing entre direções de rest é
     # removido para que T-pose vs A-pose não vire delta duplicado.
     axis_correction: dict[str, Any] = {}
+    src_mapped = set(tgt_to_src.values())
+    tgt_mapped = set(tgt_to_src)
     for tgt_bn, src_bn in tgt_to_src.items():
         src_bone = source.data.bones[src_bn]
         tgt_bone = target.data.bones[tgt_bn]
-        src_dir = (src_bone.tail_local - src_bone.head_local).normalized()
-        tgt_dir = (tgt_bone.tail_local - tgt_bone.head_local).normalized()
+        src_dir = _bone_rest_dir(source, src_bn, src_mapped)
+        tgt_dir = _bone_rest_dir(target, tgt_bn, tgt_mapped)
         axis_correction[tgt_bn] = _axis_correction(
             src_bone.matrix_local.to_quaternion(),
             tgt_bone.matrix_local.to_quaternion(),
@@ -316,6 +353,19 @@ def retarget_animation(
     loc_scale = _bone_rest_height(target) / _bone_rest_height(source)
     # tgt bones que recebem location (root + pelvis/Hips).
     loc_targets = {tgt for tgt, src in tgt_to_src.items() if src in _LOCATION_SRC_BONES}
+    # ``pose.bone.location`` vive no frame de REST do próprio osso, e esses
+    # frames diferem entre rigs (Quaternius pelvis ≈ +104° X vs target
+    # identidade). Copiar componentes cruas troca vertical↔horizontal: o
+    # agachamento (location.y do source) vira deslocamento para trás no
+    # target — corpo não desce e os pés "flutuam". Converter via espaço de
+    # armature: ``tgt_rest⁻¹ @ src_rest @ location``.
+    loc_conv = {
+        tgt_bn: (
+            target.data.bones[tgt_bn].matrix_local.to_3x3().inverted()
+            @ source.data.bones[tgt_to_src[tgt_bn]].matrix_local.to_3x3()
+        )
+        for tgt_bn in loc_targets
+    }
 
     # Reset do estado de animação do target. O reset do basis de TODOS os pose
     # bones garante que ossos não mapeados ficam mesmo no rest (a propagação
@@ -376,10 +426,10 @@ def retarget_animation(
             tpb = target.pose.bones[bn]
             tpb.rotation_quaternion = target_basis
             tpb.keyframe_insert(data_path="rotation_quaternion", frame=frame)
-            # Hip bob / root lock: location em espaço do pai (Quaternius Standard
-            # tem root≈0 e pelvis com cm de sway — sem isto o corpo pende da cintura).
+            # Hip bob / agachamento: location convertida do frame de rest do
+            # osso source para o do target (ver loc_conv acima) + escala.
             if bn in loc_targets:
-                sl = source.pose.bones[tgt_to_src[bn]].location
+                sl = loc_conv[bn] @ source.pose.bones[tgt_to_src[bn]].location
                 tpb.location = (float(sl.x) * loc_scale, float(sl.y) * loc_scale, float(sl.z) * loc_scale)
                 tpb.keyframe_insert(data_path="location", frame=frame)
 

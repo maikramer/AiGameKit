@@ -71,13 +71,20 @@ animator3d game-pack rigged.glb animado.glb --preset humanoid
 
 ### `game-pack`
 
-Gera todos os clips definidos por um preset de uma vez. Presets:
+Gera todos os clips de um preset de uma vez.
 
-- **`humanoid`** — idle, walk, run, jump, fall
-- **`creature`** — idle, walk, attack, roar
-- **`flying`** — idle, hover, soar, dive, land
+- **`humanoid`** — caminho primário: **retarget Quaternius** (CC0). Fallback
+  procedural só se o pack/rig falhar. Inventário:
+  [`docs/quaternius_inventory.md`](../docs/quaternius_inventory.md).
+- **`creature`** / **`flying`** — clips procedurais do preset.
 
-Usa `--clips` com uma lista separada por vírgulas de nomes curtos (correspondência nos nomes dos clips no GLB, por exemplo `idle`, `walk`, `run`) para executar só um subconjunto do preset.
+**Pivô:** cria `root` estático nos pés; **não** anima a rotação do `root`
+Quaternius (±90° → origem salta para a cintura ao play). Location só no
+`pelvis`. Detalhe:
+[`docs/findings/ANIMATOR_RETARGET_FINDINGS.md`](../docs/findings/ANIMATOR_RETARGET_FINDINGS.md).
+
+Usa `--clips` (ex. `idle,walk,run`) para filtrar o perfil/preset. O venv precisa
+de `gamedev-shared` instalado editável (`pip install -e ../Shared`).
 
 ```bash
 animator3d game-pack rigged.glb animated.glb --preset humanoid

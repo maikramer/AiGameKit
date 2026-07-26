@@ -59,17 +59,28 @@ All commands share the `animator3d` entry point. Run `animator3d --help` or
 Generate all animation clips for a preset in one command. This is the primary command used by
 [GameAssets](../GameAssets/) batch processing.
 
+**Humanoid path:** retarget from the Quaternius Universal Animation Library (CC0),
+not the procedural clip list below. Requires `gamedev-shared` editable in the
+Animator3D venv (Quaternius lock + fetch). Inventory + bone maps:
+[`docs/quaternius_inventory.md`](../docs/quaternius_inventory.md). Pivot / axis
+pitfalls (feet OK at rest → waist when a clip plays):
+[`docs/findings/ANIMATOR_RETARGET_FINDINGS.md`](../docs/findings/ANIMATOR_RETARGET_FINDINGS.md).
+
+**Root bone policy:** `ensure_feet_root_bone` creates a static `root` at the feet.
+Never retarget Quaternius `root` rotation (±90° Y↔Z tips the hierarchy on play).
+Only `pelvis` gets location (gait bob).
+
 ```bash
-# Humanoid hero — walk, run, jump, fall, breathe-idle:
+# Humanoid — Quaternius retarget (idle/walk/run/… from profile + --clips):
 animator3d game-pack rigged.glb animated.glb --preset humanoid
 
-# Dragon — breathe-idle, walk, attack, roar:
+# Dragon — procedural preset clips:
 animator3d game-pack dragon.glb dragon_anim.glb --preset creature
 
-# Flying beast — breathe-idle, hover, soar, dive, land:
+# Flying beast — procedural preset clips:
 animator3d game-pack griffin.glb griffin_anim.glb --preset flying
 
-# Only specific clips from a preset:
+# Only specific clips from a preset / Quaternius profile:
 animator3d game-pack hero.glb hero_anim.glb --preset humanoid --clips walk,run,jump
 
 # With Draco compression for smaller file size:
@@ -82,15 +93,20 @@ animator3d game-pack hero.glb hero_anim.glb --preset humanoid --draco
 | `OUTPUT` | path | **required** | Output animated GLB path |
 | `--preset` | choice | `humanoid` | Preset: `humanoid`, `creature`, `flying` |
 | `--clips` | str | (all) | Filter clips by comma-separated names (e.g. `walk,run`) |
+| `--force-preset` | flag | `false` | Skip auto-detect (humanoid→creature) |
+| `--procedural` | flag | `false` | Force procedural clips even for humanoids |
 | `--draco/--no-draco` | flag | `false` | Draco mesh compression |
 
-**Preset clip lists:**
+**Preset clip lists** (procedural path — creatures / `--procedural` / Quaternius fallback):
 
 | Preset | Clips Generated |
 |--------|----------------|
-| `humanoid` | breathe-idle, walk, run, jump, fall |
+| `humanoid` (procedural fallback) | breathe-idle, walk, run, jump, fall, … |
 | `creature` | breathe-idle, walk, attack, roar |
 | `flying` | breathe-idle, hover, soar, dive, land |
+
+Quaternius clean names for humanoids: see `quaternius.yaml` / inventory (`idle`,
+`walk`, `run`, `jump`, `attack`, `hit`, `death`, …).
 
 ---
 

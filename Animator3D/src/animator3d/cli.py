@@ -943,6 +943,8 @@ def _procedural_action_matches_filter(action_name: str, allowed: set[str]) -> bo
             return True
         if a == "death" and bare in {"death", "die", "dead"}:
             return True
+        if a == "hit" and bare in {"hit", "hurt", "flinch", "react"}:
+            return True
     return False
 
 
@@ -980,6 +982,10 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
         ("sword_keyframes", {"frame_end": 32, "action_name": "Animator3D_SwordAttack"}),
         ("gather_keyframes", {"frame_end": 40, "action_name": "Animator3D_Gather"}),
         ("victory_roar_keyframes", {"frame_end": 60, "action_name": "Animator3D_Roar"}),
+        # Explicit hit/death so ``--clips idle,...,hit,death`` fills game scripts
+        # (mine/chop alone never matched the hit/death filter).
+        ("mine_keyframes", {"frame_end": 24, "action_name": "Animator3D_Hit"}),
+        ("chop_keyframes", {"frame_end": 48, "action_name": "Animator3D_Death"}),
     ],
     "flying": [
         ("breathe_idle_keyframes", {"frame_end": 72, "action_name": "Animator3D_BreatheIdle"}),
