@@ -3,6 +3,7 @@ import type { Parser, XMLValue } from '../../core';
 import { formatUnknownElement } from '../../core/recipes/diagnostics';
 import { setSpawnGroupSpec } from './context';
 import { prefetchGltfLocalYBounds } from '../gltf-xml/gltf-bounds-cache';
+import { templateVisualUrl } from './template-url';
 import { resolveVariationSpec } from '../spawn-variation';
 import {
   applyChildTemplateProfile,
@@ -165,7 +166,8 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     if (childTplProfile) {
       tpl.childProfile = childTplProfile;
     }
-    if (child.tagName.toLowerCase() === 'gameobject') {
+    const tag = child.tagName.toLowerCase();
+    if (tag === 'gameobject' || tag === 'creature') {
       const grand = child.children.filter(
         (c) => c.tagName && c.tagName !== 'parsererror'
       );
@@ -356,9 +358,7 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
   setSpawnGroupSpec(state, entity, spec);
 
   for (const tpl of templates) {
-    const u = tpl.attributes.url;
-    if (typeof u === 'string' && u.trim()) {
-      prefetchGltfLocalYBounds(u.trim());
-    }
+    const u = templateVisualUrl(tpl);
+    if (u) prefetchGltfLocalYBounds(u);
   }
 };

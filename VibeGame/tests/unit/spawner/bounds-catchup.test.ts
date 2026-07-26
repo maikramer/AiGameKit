@@ -115,6 +115,7 @@ describe('TerrainSpawnBoundsCatchUpSystem', () => {
     // lift = normalY * (-minY * scaleY) = 1 * (-1.2 * 2) = -2.4
     const expected = surfaceY + 1 * (-bounds.minY * 2);
     expect(Transform.posY[eid]).toBeCloseTo(expected, 5);
+    expect(TerrainSpawned.yOffset[eid]).toBeCloseTo(expected - surfaceY, 5);
     expect(TerrainSpawned.aabbPending[eid]).toBe(0);
     expect(getAabbPendingUrls(state).has(eid)).toBe(false);
   });

@@ -39,9 +39,11 @@ loading/
 The gate registry (`core/loading-gate.ts`) is inert unless a loading screen enables enforcement. `LoadingScreenSystem.setup` does four things:
 
 1. `setLoadingEnforcement(state, true)`: turns on the physics hold. The runtime checks `isPhysicsHeld(state)` (enforcement on AND world not yet latched-ready) and skips the `fixed` / gameplay ticks while it is true. Readiness latches permanently the first time it passes, so transient un-readiness later (e.g. distant terrain chunks rebuilding colliders) never re-triggers the hold.
-2. `registerReadyGate(state, 'assets', () => gltfAssetsReady(state))`: critical GLTF gate (lod0 / scene props). Background lod1/lod2 do not block. Terrain and spawn plugins add their own named gates (`terrain`, `spawn`). Ground placement for trees/enemies is the shared spawner path (`TerrainSpawned` + AABB); spawn defers on `isGroundMutationPending`.
-3. `registerReadyGate(state, 'shaders', () => isSceneShadersWarmed(state))`: blocks physics latch + fade until silent orbit compiles finish. `updateLoadingScreen` only calls `warmupSceneShaders` after every non-shader gate passes (one-shot latch must not fire on an empty boot scene).
+2. `registerReadyGate(state, 'assets', () => gltfAssetsReady(state))`: critical GLTF gate (lod0 / scene props). Background lod1/lod2 do not block. Terrain and spawn plugins add their own named gates (`terrain`, `spawn`).
+3. `registerReadyGate(state, 'shaders', () => isSceneShadersWarmed(state))`: blocks physics latch + fade until the shaders latch opens. Warmup itself is owned by `ShaderWarmupSystem` (rendering plugin) — the overlay driver stops the moment it fades, so it must not own the compile/orbit pump.
 4. `mountLoadingScreen()`: paints the overlay (idempotent; also re-mounted on first update as a fallback).
+
+**Ground Y is not a loading gate.** Trees and enemies share the spawner path (`sampleTerrainSurface` + AABB + `TerrainSpawned` + `resyncTerrainSpawnedHeights`). Spawn already defers on `isGroundMutationPending` (pads/roads/rivers). Do **not** add a `settle` gate or keep distant MonoBehaviour scripts awake only to snap feet — see [`../spawner/context.md`](../spawner/context.md) (_Path único de chão_).
 
 `isWorldReady(state)` is true when every registered gate passes (vacuously true with none). `getLoadingProgress(state)` returns `{ ready, total, pending }` which the bar and status line consume.
 
@@ -62,7 +64,7 @@ None. The overlay is a module-scoped singleton in `context.ts` (one per page), k
 ### Overlay (context.ts)
 
 - `mountLoadingScreen(opts?)`: creates the `#vibegame-loading` fixed overlay (title, subtitle, progress bar, status line) if absent; applies `setLoadingScreenText` live. Call this as the first line of bootstrap for the earliest paint.
-- `updateLoadingScreen(state)`: per-frame driver. Reads `getLoadingProgress`; sets `bar.style.width` to `ready/total`; sets status to a humanized pending list (`terrain` -> "Building terrain", `spawn` -> "Placing world objects", `assets` -> "Loading assets") or "Ready". Fades out (opacity transition) once `isWorldReady` is true AND at least `MIN_VISIBLE_MS` (350ms) elapsed since first show; after `FADE_MS` (450ms) the node is removed.
+- `updateLoadingScreen(state)`: per-frame driver. Reads `getLoadingProgress`; sets `bar.style.width` to `ready/total`; sets status to a humanized pending list (`terrain` -> "Building terrain", `spawn` -> "Placing world objects", `assets` -> "Loading assets", `shaders` -> "Compiling shaders") or "Ready". Fades out (opacity transition) once `isWorldReady` is true AND at least `MIN_VISIBLE_MS` (350ms) elapsed since first show; after `FADE_MS` (450ms) the node is removed.
 - `setLoadingScreenText({ title?, subtitle? })` / `getLoadingScreenText()`: copy control.
 - `cancelLoadingFade()`: clears the pending fade `setTimeout` and removes the overlay. Call from `runtime.destroy()` so the deferred callback never fires on a detached node.
 
@@ -90,6 +92,6 @@ withPlugin(LoadingPlugin);
 await run();
 ```
 
-The overlay shows immediately, the bar fills as the `terrain`, `spawn`, and `assets` gates clear, physics is held until all pass, then the screen fades out and gameplay begins.
+The overlay shows immediately, the bar fills as the `terrain`, `spawn`, `assets`, and `shaders` gates clear, physics is held until all pass, then the screen fades out and gameplay begins.
 
 <!-- /LLM:EXAMPLES -->

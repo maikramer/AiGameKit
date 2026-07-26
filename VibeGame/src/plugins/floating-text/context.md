@@ -1,6 +1,7 @@
 # Floating Text Plugin
 
 <!-- LLM:OVERVIEW -->
+
 Floating text with **two rendering modes** sharing one SOA component:
 
 - **World** (`space: 'world'`, default): troika-three-text SDF glyphs in the 3D
@@ -27,9 +28,11 @@ floating-text/
 ```
 
 <!-- LLM:REFERENCE -->
+
 ### Component
 
 #### floating-text
+
 - elapsed: f32 — advanced by the system
 - duration: f32 (1.4) — lifetime in seconds; entity destroyed at the end
 - riseSpeed: f32 — world mode: m/s (0.9). Screen mode: px/s (50).
@@ -44,6 +47,7 @@ floating-text/
 ### Systems
 
 #### FloatingTextUpdateSystem (world)
+
 - Group: `draw`; runs after `CameraSyncSystem`; no-op when `state.headless`
 - Skips entities with `space === 1`
 - Lazily creates a troika `Text` per entity (6% black outline, renderOrder 999)
@@ -51,6 +55,7 @@ floating-text/
   half of the lifetime, destroys the entity at `duration`
 
 #### FloatingTextScreenUpdateSystem (screen)
+
 - Group: `late`; no-op when `state.headless` or no DOM
 - Skips entities with `space === 0`
 - Lazy-creates the `ScreenFloatPool` on first screen entity
@@ -74,6 +79,7 @@ spawnFloatingTextScreen(state, text, {
 `color` accepts `0xRRGGBB` (number) or `'#rrggbb'` / `'#rgb'` (string).
 
 ## Key Rules
+
 - Strings cannot live in SOA components — sidecar map keyed by entity.
 - The screen pool is a singleton per `State` (WeakMap); size is fixed at first
   access (default 32). When exhausted, the oldest live entry is evicted and its
@@ -82,10 +88,17 @@ spawnFloatingTextScreen(state, text, {
   them (no 3D position needed).
 - troika `Text.sync()` must run after changing text properties; position/quaternion
   are plain Object3D state and need no sync.
+- World-mode fonts go through Typr; unsupported OpenType GPOS/GSUB lookups used to
+  spam `console.debug`. The Vite plugin `silenceTyprOpentypeNoise` (via `vibegame()`)
+  neutralizes those messages — see `src/vite/context.md`. Prefer **screen** mode
+  for combat floaters when DOM HUD is available (no Typr).
+
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
+
 ## Examples
+
 ```ts
 import { spawnFloatingText, spawnFloatingTextScreen } from 'vibegame';
 
@@ -106,4 +119,5 @@ spawnFloatingText(state, 'CRIT 42!', {
   space: 'screen', x: 320, y: 240, crit: true,
 });
 ```
+
 <!-- /LLM:EXAMPLES -->

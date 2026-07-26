@@ -18,7 +18,43 @@ woodchips, rockshards, leaves, ground-dust
 
 Alias: `sparkle` → `magic`; `sand-dust` → `ground-dust`.
 
-`ground-dust` — low sheet emitter for ambient sand/dust (desert FX).
+O enum que valida `preset=` no XML sai de `presetEnumValues()` — **canónicos +
+aliases, da mesma fonte que `presetIndex()`**. Enquanto a lista era copiada à
+mão para `config.enums`, `preset="sparkle"` passava em `presetIndex()` e era
+rejeitado pelo validador de atributos; e um enum rejeitado **aborta o parse do
+mundo inteiro**, não só aquele emissor. Ao acrescentar preset ou alias, não há
+nada a duplicar — mas há uma entrada a acrescentar em `PRESET_TEXTURE_FILE`
+(`textures.ts`), senão o preset fica sem sprite.
+
+| Preset        | Use                                                               |
+| ------------- | ----------------------------------------------------------------- |
+| `dust`        | Destructible / burst-style sand puff (sphere emitter)             |
+| `ground-dust` | **Ambient** low sheet (RectangleEmitter ~8×6 m), horizontal drift |
+| `fireflies`   | Looping glow points — dark forest clearings                       |
+
+New presets **append** at the end of `PRESET_NAMES` (stable indices for SOA).
+
+### Ambient ground dust (XML)
+
+`transform="pos: x y z"` num `<ParticleSystem>` é posição de **mundo**, não
+altura acima do chão. Em mapas com terreno procedural (simple-rpg: solo aos
+23–63 m) um `pos: 110 0.25 35` fica dezenas de metros **enterrado** e nunca se
+vê nada. Ancorar sempre no terreno com `<GameObject place="at: x z">` e deixar
+o emissor como filho a uma altura local:
+
+```html
+<GameObject place="at: 110 35">
+  <ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem>
+</GameObject>
+```
+
+simple-rpg usa este padrão em `public/world/atmosphere/ambient-fx.xml`.
+Prefere `ground-dust` para areia rasteira; `dust` fica para FX de quebra
+(presets do `destructible`).
+
+Presets de ambiente em ciclo (`snow`, `rain`) precisam de `emission-rate`
+explícito: o default de 50/s vira nevão/aguaceiro que tapa a paisagem toda a
+poucas dezenas de metros. ~10/s chega para leitura de bioma.
 
 ## Textures
 

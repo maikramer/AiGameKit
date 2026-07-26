@@ -52,6 +52,7 @@ export default defineConfig({
         'jsdom',
         '@fredli74/typr',
         'fs/promises',
+        'node:fs/promises',
         'node:fs',
         'node:path',
         'fs',

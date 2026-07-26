@@ -18,6 +18,7 @@ import {
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import { WorldTransform } from '../transforms/components';
 import {
+  flushGltfBoundsPrefetch,
   getGltfLocalAABB,
   getGltfLocalYBounds,
 } from '../gltf-xml/gltf-bounds-cache';
@@ -35,6 +36,9 @@ import {
 import { LakeApplySystem, RiverApplySystem } from '../water/systems';
 import { RoadApplySystem } from '../road/systems';
 import { TerrainPadApplySystem } from '../terrain/pad-systems';
+import { templateVisualUrl } from './template-url';
+import { applyTerrainSpawnedY } from './terrain-spawned-y';
+
 const spawnerQuery = defineQuery([SpawnerPending]);
 const terrainSpawnedQuery = defineQuery([TerrainSpawned]);
 const exclusionQuery = defineQuery([SpawnExclusion]);
@@ -58,8 +62,8 @@ function footprintBaseRadius(spec: SpawnGroupSpec, urls: string[]): number {
 function templateUrls(spec: SpawnGroupSpec): string[] {
   const urls: string[] = [];
   for (const tpl of spec.templates) {
-    const u = tpl.attributes.url;
-    if (typeof u === 'string' && u.trim()) urls.push(u.trim());
+    const u = templateVisualUrl(tpl);
+    if (u) urls.push(u);
   }
   return urls;
 }
@@ -162,18 +166,7 @@ function resolveSpawnInstanceCount(
 
 function resyncTerrainSpawnedHeights(state: State): void {
   for (const eid of terrainSpawnedQuery(state.world)) {
-    const x = state.hasComponent(eid, WorldTransform)
-      ? WorldTransform.posX[eid]
-      : Transform.posX[eid];
-    const z = state.hasComponent(eid, WorldTransform)
-      ? WorldTransform.posZ[eid]
-      : Transform.posZ[eid];
-    const eps = TerrainSpawned.surfaceEpsilon[eid] || 0.75;
-    const s = sampleTerrainSurface(state, x, z, eps);
-    if (s) {
-      Transform.posY[eid] = s.worldY + TerrainSpawned.yOffset[eid];
-      Transform.dirty[eid] = 1;
-    }
+    applyTerrainSpawnedY(state, eid);
   }
 }
 
@@ -191,6 +184,10 @@ export const TerrainSpawnSystem: System = defineSystem({
   ],
   update(state) {
     if (state.headless) return;
+
+    // Kick queued AABB prefetches once KTX2/renderer exist (XML parse queues
+    // earlier, before detectSupport can run).
+    flushGltfBoundsPrefetch(state);
 
     const spawnerState = getSpawnerState(state);
 
@@ -495,6 +492,8 @@ export const TerrainSpawnBoundsCatchUpSystem: System = defineSystem({
   // bounds that arrive mid-frame get a Y lift before physics/draw.
   update(state) {
     if (state.headless) return;
+    // Late renderer / KTX2: keep draining the prefetch queue while catch-up waits.
+    flushGltfBoundsPrefetch(state);
     const urls = getAabbPendingUrls(state);
     if (urls.size === 0) return;
 
@@ -511,7 +510,10 @@ export const TerrainSpawnBoundsCatchUpSystem: System = defineSystem({
       const scaleY = TerrainSpawned.scaleY[eid] || 1;
       const normalY = TerrainSpawned.normalY[eid] || 1;
       const lift = normalY * (-b.minY * scaleY);
+      // Lift is part of the foot plant — keep yOffset in sync so resync /
+      // creature re-sample don't drop the AABB correction.
       Transform.posY[eid] += lift;
+      TerrainSpawned.yOffset[eid] += lift;
       Transform.dirty[eid] = 1;
 
       TerrainSpawned.aabbPending[eid] = 0;

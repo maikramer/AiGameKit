@@ -2,10 +2,11 @@
  * Profiler URL contract (AI-friendly):
  *   ?profiler=1|sample|deep|0|off
  *   ?profiler=audio              → enable sample + open Audio tab
- *   ?profilerTab=systems|audio   → select tab (with profiler=1 also)
+ *   ?profiler=world              → enable sample + open World tab
+ *   ?profilerTab=systems|audio|world
  */
 
-export type ProfilerTabId = 'systems' | 'audio';
+export type ProfilerTabId = 'systems' | 'audio' | 'world';
 
 export interface ProfilerUrlConfig {
   /** null = do not auto-open / leave disabled */
@@ -15,7 +16,7 @@ export interface ProfilerUrlConfig {
   audioDebug: boolean;
 }
 
-const TABS: readonly ProfilerTabId[] = ['systems', 'audio'];
+const TABS: readonly ProfilerTabId[] = ['systems', 'audio', 'world'];
 
 export function isProfilerTabId(v: string): v is ProfilerTabId {
   return (TABS as readonly string[]).includes(v);
@@ -37,6 +38,9 @@ export function parseProfilerUrl(
       mode = 'sample';
       tab = 'audio';
       audioDebug = true;
+    } else if (raw === 'world') {
+      mode = 'sample';
+      tab = 'world';
     } else if (raw === '' && params.has('profiler')) {
       mode = 'sample';
     } else if (raw === '1' || raw === 'true' || raw === 'sample') {
@@ -66,24 +70,26 @@ export function parseProfilerUrl(
   }
 }
 
-/** Sync tab (+ shorthand profiler=audio) into the address bar without reload. */
+/** Sync tab (+ shorthand profiler=audio|world) into the address bar without reload. */
 export function syncProfilerTabToUrl(tab: ProfilerTabId): void {
   if (typeof window === 'undefined' || typeof history === 'undefined') return;
   try {
     const url = new URL(window.location.href);
     url.searchParams.set('profilerTab', tab);
-    if (tab === 'audio') {
-      const p = url.searchParams.get('profiler');
-      if (
-        p === null ||
-        p === '' ||
-        p === '1' ||
-        p === 'true' ||
-        p === 'sample'
-      ) {
-        url.searchParams.set('profiler', 'audio');
-      }
-    } else if (url.searchParams.get('profiler') === 'audio') {
+    const p = url.searchParams.get('profiler');
+    const shorthandOk =
+      p === null ||
+      p === '' ||
+      p === '1' ||
+      p === 'true' ||
+      p === 'sample' ||
+      p === 'audio' ||
+      p === 'world';
+    if (tab === 'audio' && shorthandOk) {
+      url.searchParams.set('profiler', 'audio');
+    } else if (tab === 'world' && shorthandOk) {
+      url.searchParams.set('profiler', 'world');
+    } else if (p === 'audio' || p === 'world') {
       url.searchParams.set('profiler', '1');
     }
     history.replaceState(null, '', url.toString());

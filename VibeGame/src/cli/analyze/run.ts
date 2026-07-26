@@ -16,10 +16,12 @@ let domReady = false;
 
 function ensureDom(): void {
   if (domReady) return;
-  if (typeof DOMParser === 'undefined') {
+  const g = globalThis as {
+    DOMParser?: typeof JSDOM.prototype.window.DOMParser;
+  };
+  if (typeof g.DOMParser === 'undefined') {
     const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
-    (globalThis as unknown as { DOMParser: typeof DOMParser }).DOMParser =
-      dom.window.DOMParser;
+    g.DOMParser = dom.window.DOMParser;
   }
   domReady = true;
 }

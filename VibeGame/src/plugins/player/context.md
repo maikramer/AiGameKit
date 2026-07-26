@@ -1,6 +1,7 @@
 # Player Plugin
 
 <!-- LLM:OVERVIEW -->
+
 Complete player character controller with physics movement, jumping, and platform momentum preservation.
 <!-- /LLM:OVERVIEW -->
 
@@ -15,15 +16,39 @@ Complete player character controller with physics movement, jumping, and platfor
 
 ```
 player/
-├── context.md  # This file
-├── index.ts  # Public exports
-├── plugin.ts  # Plugin definition
-├── components.ts  # Player, Jumper components
-├── systems.ts  # PlayerMovementSystem
-├── recipes.ts  # Player recipes
-├── utils.ts  # Movement utilities
-└── constants.ts  # Movement constants
+├── context.md           # This file
+├── index.ts             # Public exports
+├── plugin.ts            # Plugin definition
+├── components.ts        # PlayerController, PlayerGltfConfig
+├── systems.ts           # Player movement / grounded
+├── gltf-systems.ts      # PlayerGLTF load, loco, attack override + impact
+├── recipes.ts           # player / PlayerGLTF recipes
+├── player-collider-fit.ts
+├── player-foot-anchor.ts
+├── utils.ts
+└── constants.ts
 ```
+
+## PlayerGLTF attack timing
+
+Primary attack (mapped key / LMB → `InputState.primaryAction`) plays a one-shot
+override via `setPlayerAttackClip(hint)` (game sets `sword` / `chop` / …).
+
+Blow schedule (not on the key edge):
+
+- `ATTACK_IMPACT_FRACTION` = **0.35** of the attack clip duration
+- Fallback delay ~**0.22 s** if duration unknown
+- On land: internal `meleeHit` + Destructible pending impact uses the same fraction
+
+**Why not 0.7:** Quaternius-style attack packs (~1.5 s) peak the cut around
+**25–40%**; 0.7× duration lands in the long recovery and feels a beat late for
+whoosh/SFX. Measure motion energy on the clip if retuning.
+
+API: `setPlayerAttackClip` / `getPlayerAttackClip` / `setPlayerIdleClip` /
+`setPlayerHeldItem` / `setPlayerFaceTarget` (exported from `gltf-systems.ts`).
+
+Game example (SFX + arc damage at the same fraction):
+`examples/simple-rpg/src/game/melee.ts`. See also [`docs/AUDIO.md`](../../../docs/AUDIO.md).
 
 ## Scope
 
@@ -57,9 +82,11 @@ player/
 - **player**: Complete player setup with physics
 
 <!-- LLM:REFERENCE -->
+
 ### Components
 
 #### Player
+
 - speed: f32 (5.3)
 - jumpHeight: f32 (2.3)
 - rotationSpeed: f32 (10)
@@ -82,16 +109,19 @@ player/
 ### Systems
 
 #### PlayerMovementSystem
+
 - Group: fixed
 - Reads camera yaw for camera-relative movement
 - Handles rotation, jumping with platform momentum inheritance
 
 #### PlayerGroundedSystem
+
 - Group: fixed
 - Tracks grounded state and platform changes
 - Clears momentum on landing
 
 #### PlayerCameraLinkingSystem
+
 - Group: simulation
 - Auto-links player to first available camera
 - Sets camera target and inputSource to player entity
@@ -99,25 +129,31 @@ player/
 ### Recipes
 
 #### player
+
 - Complete player setup with physics
 - Components: player, character-movement, transform, world-transform, body, collider, character-controller, input-state, respawn
 
 ### Functions
 
 #### processInput(moveForward, moveRight, cameraYaw): Vector3
+
 Converts input to world-space movement
 
 #### calculateTangentialVelocity(angVelX, angVelY, angVelZ, offsetX, offsetY, offsetZ): Vector3
+
 Computes tangential velocity from angular rotation (v = ω × r)
 
 #### handleJump(entity, jumpPressed, currentTime, platform?): number
+
 Processes jump with buffering and angular momentum inheritance
 
 #### updateRotation(entity, inputVector, deltaTime, rotationData): Quaternion
+
 Smooth rotation towards movement
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
+
 ## Examples
 
 ### Basic Player Usage (XML)
@@ -155,7 +191,7 @@ const MySystem: GAME.System = {
       if (GAME.Player.isJumping[entity]) {
         console.log('Player is airborne!');
       }
-      
+
       // Modify player speed
       GAME.Player.speed[entity] = 10;
     }
@@ -188,11 +224,13 @@ const PlayerSpawnSystem: GAME.System = {
 ### Movement Controls
 
 **Keyboard:**
+
 - W/S or Arrow Up/Down - Move forward/backward
-- A/D or Arrow Left/Right - Move left/right 
+- A/D or Arrow Left/Right - Move left/right
 - Space - Jump
 
 **Mouse (via orbit camera):**
+
 - Right-click + drag - Rotate camera
 - Scroll wheel - Zoom in/out
 
@@ -207,4 +245,5 @@ GAME
   .withPlugin(GAME.PlayerPlugin)  // Included in defaults
   .run();
 ```
+
 <!-- /LLM:EXAMPLES -->

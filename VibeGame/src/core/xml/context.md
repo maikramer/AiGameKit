@@ -1,13 +1,15 @@
 # XML Module
 
 <!-- LLM:OVERVIEW -->
-Declarative entity creation through XML parsing. Converts A-frame style XML into ECS entities with type-safe attribute parsing for vectors, colors, and other values.
+
+Declarative entity creation through XML parsing. Converts A-frame style XML into ECS entities with type-safe attribute parsing for vectors, colors, and other values. Before parse, `<Include src>` fragments expand recursively (browser fetch or headless disk load).
 <!-- /LLM:OVERVIEW -->
 
 ## Purpose
 
 - Parse XML strings/elements to ECS entities
 - Support A-frame style declarative syntax
+- Expand modular world fragments via `<Include src="…">`
 - Handle attributes and nested structures
 - Type-safe value parsing
 
@@ -15,32 +17,72 @@ Declarative entity creation through XML parsing. Converts A-frame style XML into
 
 ```
 xml/
-├── context.md  # This file
-├── parser.ts  # Main XML parser
-├── traverser.ts  # DOM tree traversal
-├── types.ts  # XML parsing types
-├── values.ts  # Attribute value parsing
-└── index.ts  # Module exports
+├── context.md   # This file
+├── include.ts   # <Include src> expand (depth/cycle guards)
+├── parser.ts    # Main XML parser
+├── traverser.ts # DOM tree traversal
+├── types.ts     # XML parsing types
+├── values.ts    # Attribute value parsing
+└── index.ts     # Module exports
 ```
 
 ## Scope
 
-- **In-scope**: XML to entity conversion, attribute parsing
-- **Out-of-scope**: Component logic, rendering
+- **In-scope**: Include expand, XML to entity conversion, attribute parsing
+- **Out-of-scope**: Component logic, rendering, CityGrid expand (see `plugins/city-layout`)
 
 ## Entry Points
 
+- **include.ts**: `expandIncludes`, `unwrapIncludeFragment`, `createFetchIncludeLoader`
 - **parser.ts**: XMLParser class for entity creation
 - **traverser.ts**: Tree traversal utilities
 - **values.ts**: Parse vectors, colors, numbers
 
 ## Dependencies
 
-- **Internal**: ECS types
-- **External**: DOM API
+- **Internal**: ECS types; runtime calls `expandIncludes` before `parseWorldXml`
+- **External**: DOM API / `fetch` (browser); headless injects a disk `load`
 
 <!-- LLM:REFERENCE -->
+
 ## API Reference
+
+### Include expand (`include.ts`)
+
+Runs **before** Scene XML parsing (`GameRuntime` / headless). Replaces
+`<Include src="…">` / `<include src="…">` (self-closing or paired) with fragment
+text from `options.load(src)`.
+
+| Contract  | Value                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Max depth | `MAX_INCLUDE_DEPTH` = **8**                                                                                              |
+| Cycles    | Fail-fast if `src` already on stack                                                                                      |
+| Wrappers  | `unwrapIncludeFragment` strips BOM, `<?xml?>`, outer `<Scene>` / `<World>` so files can be full scenes or bare fragments |
+| Comments  | Tags inside `<!-- … -->` are ignored                                                                                     |
+
+```typescript
+import {
+  expandIncludes,
+  createFetchIncludeLoader,
+  MAX_INCLUDE_DEPTH,
+} from 'vibegame';
+
+const xml = await expandIncludes(rawHtml, {
+  load: createFetchIncludeLoader(), // browser: fetch(src)
+  maxDepth: MAX_INCLUDE_DEPTH,
+});
+```
+
+Headless / `vibegame analyze`: inject `load` that reads from `--public-dir`
+(or entry dirname). Example layout: `examples/simple-rpg/public/world/`.
+
+```html
+<Scene canvas="#game-canvas">
+  <Include src="/world/environment.xml"></Include>
+  <Include src="/world/cities/discordia.xml"></Include>
+  <Include src="/world/spawn/ring.xml"></Include>
+</Scene>
+```
 
 ### XMLParser
 
@@ -75,9 +117,11 @@ interface XMLParseResult {
   root: ParsedElement;                   // Root element
 }
 ```
+
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
+
 ## Examples
 
 ### Basic XML Parsing
@@ -123,4 +167,5 @@ GAME.XMLValueParser.parse("1 2 3");        // [1, 2, 3]
 GAME.XMLValueParser.parse("0xff0000");     // 16711680
 GAME.XMLValueParser.parse("hello world");  // "hello world"
 ```
+
 <!-- /LLM:EXAMPLES -->

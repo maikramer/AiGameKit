@@ -2,6 +2,31 @@
 
 Spawn procedural declarativo com `<SpawnGroup>` no `index.html`, alinhado à altura do terreno e opcionalmente à **inclinação** (normal por diferenças finitas no heightmap).
 
+## Chão: estáticos vs criaturas (honestidade)
+
+### Estáticos (`StaticSpawner` / place / tree / foliage)
+
+1. `isGroundMutationPending` — defer até pad / lago / rio / `Road flatten`.
+2. `spawnTemplateAtTerrain` — mesh lattice + opcional `ground-align=aabb` + edge-sink.
+3. `TerrainSpawned` + resync / AABB catch-up.
+
+### Criaturas (`DynamicSpawner`, `role=enemy`)
+
+XML típico = `<Creature>` + `GLTFLoader`: kinematic + capsule + `CharacterController` (recipe em `physics/recipes.ts`). Rapier CCT planta Y no heightfield do chunk (mesma autoridade que o player). NavMesh com CCT = só `CharacterMovement.desiredVel` (não escreve `Transform` XZ). Spawn seeds `Transform.posY` uma vez na amostra de superfície — sem AABB lift, sem `TerrainSpawned`, sem snap no `creature.ts`. `goblin_collision.glb` em disco continua **não referenciado** (CCT usa capsule).
+
+| Perfil / role                            | Path de chão                                       |
+| ---------------------------------------- | -------------------------------------------------- |
+| `tree` / `foliage`                       | AABB + align + edge-sink estático (resync)         |
+| `creature` (`role=enemy\|npc\|creature`) | CCT no heightfield; NavMesh → desiredVel           |
+| `physics-box` / `gltf-crate`             | Offset fixo (`base-y-offset`), `ground-align=none` |
+
+**Anti-padrões (não reintroduzir):**
+
+- Snap de Y no script (`applyTerrainSpawnedY`, BVH, `settleOnGround`) a fingir física.
+- Footprint-max / lifts AABB em agents sem Rigidbody.
+- `role=enemy` → `physics-box`.
+- Cozer `sinkOffsetForSlope` em `yOffset` de dinâmicos.
+
 ## `<GameObject place="…">` — posicionamento determinístico (recomendado)
 
 Para colocar props, NPCs, partículas ou qualquer recipe num **ponto fixo** sem adivinhar `Y` manualmente, use **`<GameObject place="at: x z; …">`**. O atributo `place` é uma string com pares `chave: valor` separados por `;` (estilo semelhante ao `transform`). O motor amostra a superfície do terreno nesse XZ, posiciona a **entidade raiz**, aplica `base-y-offset` / `y-offset`, alinhamento à normal (`align-to-terrain`) e, para GLBs com URL nos filhos, `ground-align="aabb"` (base do modelo no chão). Os **filhos** (`GLTFLoader`, `ParticleSystem`, `<NPC>` com `merge`, etc.) ficam na hierarquia ECS sob essa raiz.
@@ -42,15 +67,18 @@ NPC com merge no pai:
 </GameObject>
 ```
 
+`<NPC>` vem do plugin `ai-yuka` (DefaultPlugins). Guia: [`docs/AI.md`](../../../docs/AI.md).
+
 ## Layout
 
 - `plugin.ts` — `SpawnerPlugin` (recipe, parser, system, defaults)
 - `parser.ts` — lê atributos e filhos como templates de recipe (`SpawnGroup`)
 - `entity-parser.ts` — lê `place` em `<GameObject>` e regista `PlacementSpec`
-- `systems.ts` — `TerrainSpawnSystem` (após `TransformHierarchySystem`)
+- `systems.ts` — `TerrainSpawnSystem` (**setup**, depois pad/lake/river/road — ver abaixo)
 - `place-system.ts` — `TerrainPlaceSystem` (posiciona raiz e/ou instancia templates legados de spec)
+- `surface.ts` — `sampleTerrainSurface`, `isGroundMutationPending`, normais/declive
+- `occupancy.ts` — footprints + `SpawnExclusion`
 - `spawn-template.ts` — `spawnTemplateAtTerrain` (spawn único no solo; suporta template `<GameObject>` com filhos)
-- `surface.ts` — `sampleTerrainSurface`, `isNormalWithinSlopeLimit`, `normalFromHeightSampler`
 - `transform-merge.ts` — parse/merge de `transform` e `composeSpawnRotation` (quaternions)
 - `context.ts` — `WeakMap` State → spec por entidade (`SpawnGroup`)
 - `place-context.ts` — idem para colocação determinística (`entity` com `place`)
@@ -65,11 +93,26 @@ Atributo **`profile`** no `<SpawnGroup>` (e opcionalmente no **filho**) preenche
 | profile           | Descrição                                            | Defaults (se omitido no XML)                                                                                                                                         |
 | ----------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `none` ou omitido | Legado                                               | `align-to-terrain=0`, `base-y-offset=0`, `ground-align=none`, `random-yaw=0`, `scale-min/max=1`, `surface-epsilon=0.75`, `max-slope-deg=45`, `max-slope-attempts=32` |
-| `tree`            | Vegetação GLB                                        | `align-to-terrain=1`, `ground-align=aabb`, `base-y-offset=0.02`, yaw aleatório, `scale-min=1.6` / `scale-max=2.2`, limites de declive como acima                     |
-| `foliage`         | Vegetação mais baixa                                 | Como `tree`, com `scale-min=0.9` / `scale-max=1.3`                                                                                                                   |
-| `physics-box`     | `dynamic-part` no chão                               | sem alinhamento ao declive, `base-y-offset≈0.425`, yaw aleatório, escala 1                                                                                           |
-| `gltf-crate`      | `GLTFDynamic`                                        | sem alinhamento ao declive, `base-y-offset=0.35`, yaw aleatório, leve jitter de escala                                                                               |
+| `tree`            | Vegetação GLB                                        | `align-to-terrain=1`, `ground-align=aabb`, `base-y-offset=0.02`, yaw aleatório, `scale-min≈0.7` / `scale-max≈1.4`, jitter por eixo, `max-distance≈160`               |
+| `foliage`         | Vegetação mais baixa                                 | Como `tree`, escalas maiores típicas de carpet (`scale-min≈1.4` / `scale-max≈2.8`), `max-distance≈120`                                                               |
+| `creature`        | Inimigos / NPCs / actores skinned                    | `ground-align=none`, `base-y-offset=0`, upright; **sem** TerrainSpawned; escala 1; `avoid-overlaps=0`; `max-distance≈100`                                            |
+| `physics-box`     | `dynamic-part` no chão                               | sem alinhamento ao declive, `ground-align=none`, `base-y-offset≈0.425`, yaw aleatório, escala 1                                                                      |
+| `gltf-crate`      | `GLTFDynamic`                                        | sem alinhamento ao declive, `ground-align=none`, `base-y-offset=0.35`, yaw aleatório                                                                                 |
 | `place`           | Usado internamente por `place="…"` em `<GameObject>` | `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90`                                                                           |
+
+### `role` → perfil do grupo (`roleToProfile`)
+
+Se o `<SpawnGroup>` / `<DynamicSpawner>` **omite** `profile` (ou usa `none`), o parser olha o `role` do **primeiro** filho com role conhecido e aplica o perfil correspondente:
+
+| `role` no filho                  | Perfil do grupo |
+| -------------------------------- | --------------- |
+| `enemy`, `npc`, `creature`       | `creature`      |
+| `tree`                           | `tree`          |
+| `dynamic`, `pickup`, `kinematic` | `physics-box`   |
+| `prop`, `static`, `visual`       | `gltf-crate`    |
+| `building`                       | `none`          |
+
+Atributos explícitos no XML **sempre** sobrescrevem o perfil. Inimigos: `role="enemy"` → `creature` (sem lift). Não usar `profile="physics-box"` em skinned.
 
 ### Filho `profile="..."` (template)
 
@@ -90,13 +133,17 @@ O spawn instancia **qualquer recipe** declarada como filha. A distinção é a *
 | Plataforma / cinemática                                     | `<kinematic-part>` | Velocidade ou movimento scriptado.                 |
 | GLB empurrável (collider no AABB: caixa, esfera ou cápsula) | `<GLTFDynamic>`    | Ver plugin `gltf-xml` / atributo `collider-shape`. |
 
-### Atributo opcional `role` (metadado)
+### Atributo opcional `role`
 
-Nos filhos do `<SpawnGroup>` pode usar **`role="visual" | "dynamic" | "static" | "kinematic"`** para documentação, ferramentas ou validação futura. O valor é guardado no spec do template e **não altera** posicionamento nem física — o comportamento continua definido pela recipe (`GLTFLoader`, `dynamic-part`, etc.).
+Nos filhos do `<SpawnGroup>`: **`role="enemy" | "npc" | "creature" | "visual" | "dynamic" | …`**.
+
+- Guarda metadado no template (ferramentas / scripts de jogo).
+- Se o **grupo** não tem `profile` explícito, `role` mapeia via `roleToProfile` — `role="enemy"` → `creature` (sem fake ground).
+- A recipe do filho (`GLTFLoader`, `dynamic-part`, …) continua a definir física/visual; o perfil só preenche attrs de spawn omitidos.
 
 ## Tag `<SpawnGroup>`
 
-- **profile**: `none` | `tree` | `foliage` | `physics-box` | `gltf-crate` — defaults do grupo (ver tabela acima).
+- **profile**: `none` | `tree` | `foliage` | `creature` | `physics-box` | `gltf-crate` — defaults do grupo (ver tabela acima).
 - **Contagem** (uma das opções):
   - **count** — número fixo de instâncias (`≥ 1`).
   - **density-per-km2** — densidade na projeção horizontal **XZ** (unidades mundo = **metros**): `instâncias ≈ arredondar(densidade × área_km²)`, com `área_km² = (maxX−minX)×(maxZ−minZ) / 10⁶`. Não uses `count` ao mesmo tempo.
@@ -116,18 +163,49 @@ Nos filhos do `<SpawnGroup>` pode usar **`role="visual" | "dynamic" | "static" |
 - **max-slope-deg** (padrão `45`): inclinação máxima aceite — ângulo entre a **normal do terreno** e **+Y**. A normal é calculada a partir do **heightmap bruto** (sem o mesmo smoothing do shader), para não subestimar encostas íngremes. Se a amostra for mais íngreme, o spawner escolhe **outra posição aleatória** na mesma região e tenta de novo.
 - **max-slope-attempts** (padrão `32`): tentativas por instância. Se **nenhuma** amostra cumprir o declive e `max-slope-deg` for **menor que 90°**, essa instância **não é criada** (o `count` pode ficar abaixo do pedido em regiões muito íngremes). Com `max-slope-deg` ≥ 90° aceita-se qualquer inclinação.
 - **avoid-water** / **in-water** / **near-water**: `avoid-water` rejeita carve (água+barranco); `in-water` só superfície de lago (Y = waterY); `near-water` só anel de barranco/praia (pedras de margem). Não combines `in-water` com `near-water`.
-- **avoid-overlaps** (padrão `1`): rejeita candidatos cujo **footprint** (disco XZ) colide com algo já registado no **registo de ocupação** — instâncias deste e de outros grupos, entidades `place` com collider (ex.: paredes da cabana) e zonas `<SpawnExclusion>`. A rejeição re-amostra dentro de `max-slope-attempts`; se esgotar, a instância é omitida. Independente de ordem: cada caminho de spawn **regista e consulta**, então quem spawna depois desvia de quem veio antes (ex.: árvores instanciadas carregam async e desviam das rochas já spawnadas).
+- **avoid-overlaps** (padrão `1`): rejeita candidatos cujo **footprint** (disco XZ) colide com algo já registado no **registo de ocupação** — instâncias deste e de outros grupos e entidades `place` com collider. A rejeição re-amostra dentro de `max-slope-attempts`; se esgotar, a instância é omitida. Independente de ordem: cada caminho de spawn **regista e consulta**, então quem spawna depois desvia de quem veio antes (ex.: árvores instanciadas carregam async e desviam das rochas já spawnadas).
+- **`<SpawnExclusion>` sempre honrado** — mesmo com `avoid-overlaps="0"` (carpet denso). Só overlaps entre props/grupos é que se desliga.
 - **footprint-radius** (padrão `0` = automático): raio XZ por instância **antes da escala**. Automático = meia-largura do AABB do GLB do template (fallback `0.8` para templates `<GameObject>` sem `url`). O teste usa `raio × scale-max` (conservador); o registo usa a escala real quando conhecida.
 - **`<SpawnExclusion at="16 8" radius="7">`**: disco explícito de não-spawn no registo de ocupação (água, praças, caminhos). Entidades `place` com collider registam o footprint automaticamente (raio = meia-diagonal XZ do collider, no centro com `pos-offset`).
 - **pick-strategy**: `random` (padrão) ou `round-robin` entre os filhos.
-- **ground-align** (perfis `tree` / `foliage`): `aabb` usa o AABB local do GLB (`url`) para deslocar a origem e assentar o modelo no solo; com `align-to-terrain=1` o deslocamento segue a **normal**; com `0`, só **+Y** mundial.
+- **ground-align** (perfis `tree` / `foliage`): `aabb` assenta a base do GLB; com `align-to-terrain=1` o lift segue a **normal**. `creature` usa `none`. Bounds async → catch-up em estáticos.
+- **cluster-count** / **cluster-radius**: quando `cluster-count > 0`, amostras agrupam em hubs aleatórios (tufts) em vez de XZ uniforme.
+- **`clusterCenters`** (API `SpawnGroupSpec`, não XML directo): hubs pré-computados `[x,z][]`. Se não vazio, `TerrainSpawnSystem` **usa estes** e **não** regenera hubs a partir de `cluster-count`. Usado pelo smart `<Vegetation>` para partilhar hubs grass→plant→flower.
+
+## Ordem vs mutações do solo
+
+`TerrainSpawnSystem` corre em **`setup`**, `after: [TerrainPadApplySystem, LakeApplySystem, RiverApplySystem, RoadApplySystem]`.
+
+Antes de amostrar posições:
+
+1. Regista todos os `<SpawnExclusion>` no occupancy.
+2. Se `isTerrainHeightmapPending` **ou** `isGroundMutationPending` → defer (pad / lago / rio / `Road flatten=1` ainda não stampados).
+3. Após spawn, `registerGroundMutationCallback` + reload do heightmap → `resyncTerrainSpawnedHeights` (Y das entidades `TerrainSpawned` — árvores **e** criaturas).
+
+Aprendizados:
+
+- Spawn em `simulation` sem esperar road flatten → props flutuam/enterram no anel da cidade. Gate + ordem `setup` evitam a corrida.
+- Inimigos a flutuar/afundar ao andar: **esperado** sem CCT — NavMesh só mexe XZ. Não “corrigir” com snap de sampler; ligar física ou aceitar Y de spawn.
 
 Filhos: um ou mais elementos com **recipe** registrada. O parser não usa o fluxo automático de filhos; grava atributos por template (incluindo `role` e **`profile`** no filho — este último só influencia defaults do template).
 
+## Clusters e vegetação
+
+```
+clusterCount > 0, sem clusterCenters  →  spawner gera N hubs aleatórios
+clusterCenters.length > 0             →  spawner usa hubs fornecidos (ignora geração)
+```
+
+Smart carpet: [`../vegetation/context.md`](../vegetation/context.md). Variação visual (hue/sat): [`../spawn-variation/context.md`](../spawn-variation/context.md).
+
 ## Amostragem do terreno (`surface.ts`)
 
-- **`worldY`**: altura no ponto `(wx, wz)` usando o mesmo pipeline que o visual (heightmap + `heightSmoothing` / spread do terreno quando aplicável). Serve para **posicionar** o spawn na superfície que o jogador vê.
-- **Normal para declive e rotação**: derivada por diferenças centrais com um sampler de altura **`heightSmoothing = 0`** (heightmap “bruto”). Assim o teste de `max-slope-deg` e a normal passada ao spawn **refletem o relevo real**, em vez de uma encosta quase plana causada pelo smoothing visual.
+- **`worldY`**: `sampleMeshSurfaceHeight` — interpola o heightmap no **lattice do mesh** (não o bilinear analítico fino). Evita props a flutuar em cristas que só existem entre vértices LOD.
+- **Resolução do lattice**: `meshSurfaceResolutionForPoint` (terrain `lod-select.ts`). Usa o **mesmo** `maxBoostOverAabb` do leaf LOD mais profundo que o chunk visual (não só `boostAt` no ponto — tile quieto ao lado de duna/pad no mesmo leaf fazia float em “algumas” árvores). Sem boost no leaf → `Terrain.resolution` (~31 m em world 2000). Com boost → lattice ~ leaf densificado (~4 m).
+- **Normal para declive e rotação**: diferenças centrais no heightmap **analítico** (`sampleHeightAt`). O teste `max-slope-deg` e o alinhamento usam o relevo real, não o smoothing do shader.
+- **APIs**: `sampleTerrainSurface` / `sampleTerrainSurfaceMatrix` (spawner + place); `getGroundHeight` no terrain usa o mesmo contrato density-aware.
+
+Testes: `tests/unit/spawner/mesh-surface-height.test.ts`, `tests/unit/terrain/mesh-surface-resolution.test.ts`.
 
 ## Rotação e alinhamento (`transform-merge.ts`)
 
@@ -149,6 +227,8 @@ Esta ordem evita inclinar o modelo de forma errada ao misturar yaw e normal. Com
 
 ## Extensões fora do spawner
 
+- **`<Vegetation>`**: recipe de carpet (roles + wind + smart layers) que emite um ou mais `SpawnGroupSpec` — ver [`../vegetation/context.md`](../vegetation/context.md).
+- **spawn-variation**: presets `tree` / `foliage` / `rock` aplicados por instância — ver [`../spawn-variation/context.md`](../spawn-variation/context.md).
 - **NPCs / IA**: recipes e sistemas de jogo; o spawner só instancia o template.
 - **Baked light / lightmaps**: pipeline de rendering e materiais; quando suportado, use atributos no template ou recipe dedicada.
 
@@ -168,6 +248,31 @@ Esta ordem evita inclinar o modelo de forma errada ao misturar yaw e normal. Com
   ></GLTFLoader>
 </SpawnGroup>
 ```
+
+## Exemplo — inimigos (perfil `creature`, sem física de chão ainda)
+
+```xml
+<DynamicSpawner
+  profile="creature"
+  count="6"
+  seed="101"
+  region-min="-75 0 45"
+  region-max="75 0 150"
+  align-to-terrain="true"
+  ground-align="aabb"
+>
+  <GameObject role="enemy" script="creature.ts">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/wolf_lod0.glb"
+      lod1-url="/assets/meshes/wolf_lod1.glb"
+      lod2-url="/assets/meshes/wolf_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+</DynamicSpawner>
+```
+
+Omitir `profile` e deixar só `role="enemy"` também resolve para `creature` via `roleToProfile`.
 
 ## Exemplo — caixas físicas (primitiva)
 

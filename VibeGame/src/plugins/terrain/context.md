@@ -2,7 +2,7 @@
 
 <!-- LLM:OVERVIEW -->
 
-ECS-native terrain with heightmap displacement, quadtree LOD, per-chunk Rapier heightfield colliders, and async heightmap loading. Each chunk is a separate ECS entity for visual LOD and physics; colliders are built per active chunk, not as one terrain-wide heightfield.
+ECS-native terrain with heightmap displacement, quadtree LOD, per-chunk Rapier heightfield colliders, and async heightmap loading. Each chunk is a separate ECS entity for visual LOD and physics; colliders are built per active chunk, not as one terrain-wide heightfield. Ground appearance: biome splat layers, lake/river sand shores, height/slope tint, and procedural **noise sand** overlays (world-XZ fBm) to break up uniform grass.
 <!-- /LLM:OVERVIEW -->
 
 ## Layout
@@ -12,20 +12,25 @@ terrain/
 ├── context.md            # This file
 ├── index.ts              # Public exports
 ├── plugin.ts             # Plugin definition + config defaults/adapters
-├── components.ts         # Terrain + TerrainChunk + TerrainDebugInfo ECS components
+├── components.ts         # Terrain + TerrainChunk + TerrainPad + TerrainDebugInfo
 ├── systems.ts            # Bootstrap, LOD select, mesh, physics, debug systems + query helpers
-├── recipes.ts            # <Terrain> recipe
+├── pad-systems.ts        # <TerrainPad> flatten + density override (setup)
+├── flatten.ts            # Rounded-rect flatten helper
+├── height-brush.ts       # rebuildTerrainDerivatives + ground-mutation callbacks
+├── density-map.ts        # Per-tile mesh density boost (featured regions)
+├── brush-registry.ts     # Ground brushes (pad/lake/river/road footprints)
+├── recipes.ts            # <Terrain> + <TerrainPad> recipes
 ├── utils.ts              # Context, mesh/collider registries, URL setters, height resampling
-├── height-sampler.ts     # CPU height sampler (flat or heightmap-backed), bilinear interpolation
+├── height-sampler.ts     # CPU height sampler + getGroundHeight (density-aware lattice)
 ├── chunk-geometry.ts     # BufferGeometry builder from sampler per chunk
-├── lod-select.ts         # Pure-function quadtree LOD selection
+├── lod-select.ts         # Quadtree LOD + effectiveResolution + meshSurfaceResolutionForPoint
 ├── terrain-data-loader.ts # Terrain3D JSON data loader + lake/river water spawning
 ```
 
 ## Scope
 
-- **In-scope**: Heightmap-based terrain, quadtree LOD rendering, per-chunk Rapier heightfield physics, async heightmap loading, runtime wireframe toggle, height queries, debug stats, hot-reload
-- **Out-of-scope**: Procedural generation, erosion, vegetation, water rendering
+- **In-scope**: Heightmap-based terrain, quadtree LOD rendering, per-chunk Rapier heightfield physics, async heightmap loading, settlement pads (`<TerrainPad>`), ground appearance (splat / shore sand / height tint / noise-sand overlay), runtime wireframe toggle, height queries, debug stats, hot-reload
+- **Out-of-scope**: Full procedural heightmap generation, erosion, vegetation, water rendering (carve lives in `water` / `road` plugins that mutate the same sampler)
 
 ## Entry Points
 
@@ -76,6 +81,31 @@ terrain/
 - noiseSandHeightMin: f32 (0.02) — normalised height band start for sand patches
 - noiseSandHeightMax: f32 (0.48) — normalised height band end for sand patches
 
+### Noise sand overlay (first procedural detail layer)
+
+Breaks up flat grass without spending a 5th biome splat channel. Shader path in `systems.ts` (`noiseSandMask` → merged into `sandMask` with lake/river shores).
+
+| XML attr                | Component field      | Default | Meaning                                        |
+| ----------------------- | -------------------- | ------- | ---------------------------------------------- |
+| `noise-sand-strength`   | `noiseSandStrength`  | `0.4`   | Mix strength (`0` = off)                       |
+| `noise-sand-scale`      | `noiseSandScale`     | `0.014` | World-XZ fBm frequency (↑ = smaller patches)   |
+| `noise-sand-threshold`  | `noiseSandThreshold` | `0.58`  | fBm cutoff (↑ = sparser)                       |
+| `noise-sand-height-min` | `noiseSandHeightMin` | `0.02`  | Normalised height band start (`y / maxHeight`) |
+| `noise-sand-height-max` | `noiseSandHeightMax` | `0.48`  | Normalised height band end                     |
+
+**Behaviour**
+
+- fBm = 2-octave value-noise on `vWorldXZ` (`hash21` / `valueNoise` / `fbm2` in the fragment shader — reusable for future layers: gravel, moss, …).
+- Gated by altitude band + flatness (same slope knobs as rock tint) so cliffs/peaks stay grassy/rocky.
+- Reuses the procedural shore sand albedo/NAR; **independent** of `uSandBlend` (lakes/rivers).
+- Uniforms synced by `TerrainHeightColorSyncSystem` (same dirty-gate path as height tint).
+
+**Learnings**
+
+- GLSL reserved word: never name a local `patch` (tessellation keyword) — use `sandPatch`.
+- Do not bake this into the biome splat: shore sand already fills the “extra surface” budget; noise overlays keep splat for biomes.
+- Next layers: same pattern — mask from `fbm2`, gate by height/slope, blend a detail albedo, expose 1–2 strength/scale attrs with soft defaults.
+
 #### TerrainChunk (N entities — dynamically spawned/despawned)
 
 - field: ui32 — parent Terrain field entity
@@ -123,20 +153,64 @@ terrain/
 
 ### Public Query Helpers
 
-- `getGroundHeight(state, worldX, worldZ)` — mesh LOD + footprint sample (preferred for placement/spawning)
+- `getGroundHeight(state, worldX, worldZ)` — mesh lattice + small footprint max (preferred for placement/spawning); resolution follows `meshSurfaceResolutionForPoint`
 - `getTerrainHeightAt(state, worldX, worldZ)` — analytic bilinear sample from HeightSampler (single point)
+- `meshSurfaceResolutionForPoint(baseRes, levels, density, localX, localZ)` — lattice res matching rendered leaf (`maxBoostOverAabb` on deepest leaf AABB, same as chunk mesh)
+- `deepestLeafAabb(worldSize, levels, localX, localZ)` — field-local AABB of that leaf
+- `effectiveResolution(baseRes, level, boost)` — LOD res × density factor (capped at base)
 - `findNearestTerrainEntity(state, worldX, worldZ)` — nearest field entity
 - `setTerrainWireframe(state, entity, enabled)` — toggle wireframe on all chunks
 - `reloadTerrainHeightmap(state, entity, url)` — async load new heightmap, rebuild meshes + physics collider
 - `getTerrainStats(state, entity)` — live chunk/collider counts
 
+### Density map (featured mesh)
+
+`DensityMap` scores height variance per tile; water/road/pad apply `applyOverride(..., 255)` so leaf chunks refine carves and skirts. Without boost, every LOD level keeps a ~`worldSize/baseResolution` lattice (≈31 m at 2000/64) — features narrower than that never appear on the mesh.
+
+| Source                              | When boost is stamped                         |
+| ----------------------------------- | --------------------------------------------- |
+| Height variance (`buildDensityMap`) | After heightmap load                          |
+| `<Lake>` / `<River>`                | Before carve (`applyWaterShape`)              |
+| `<Road flatten>`                    | Before corridor carve                         |
+| `<TerrainPad>`                      | After flatten, over core **and** falloff AABB |
+
+Spawn/place must sample with `meshSurfaceResolutionForPoint` (wired into `getGroundHeight` + spawner `surface.ts`). Classic bugs: (1) city gate pad/road density → fine skirt, coarse spawn; (2) point-only `boostAt` while chunk uses leaf `maxBoostOverAabb` → sparse floats on dune variance tiles.
+
 ### Recipes
 
-- terrain — components: ['terrain', 'transform']; adapters: `heightmap`, `texture`, `base-color`, `color-high`, `color-mid`, `color-low`, `color-rock`
+- `terrain` — components: ['terrain', 'transform']; adapters: `heightmap`, `texture`, `base-color`, …
+- `TerrainPad` — settlement flatten (see below)
+
+### `<TerrainPad>` — settlement flatten
+
+Levels a rounded rectangle into the shared height sampler so buildings sit flush without a hard cliff at the edge.
+
+```xml
+<TerrainPad
+  at="0 0"
+  size="96 96"
+  falloff="16"
+  corner-radius="14"
+></TerrainPad>
+```
+
+| Attribute       | Meaning                                                                |
+| --------------- | ---------------------------------------------------------------------- |
+| `at`            | Centre XZ (also sets `Transform`)                                      |
+| `size`          | Full width × depth (metres); stored as half-extents                    |
+| `falloff`       | Blend distance outside the core (larger = softer, less artificial pad) |
+| `corner-radius` | Rounded corners                                                        |
+| `height`        | Optional absolute Y; omit → sample terrain height at pad centre        |
+
+**Order:** `TerrainPadApplySystem` (`setup`) stamps **before** lake/river carve (`after: [TerrainPadApplySystem]` on water). Spawner waits via `isGroundMutationPending` and runs after pad/water/road.
+
+**Density:** pad stamps `applyOverride` on core+falloff (255) + `refreshChunkResolutions` — same contract as road/river. Skirt blend then shows on leaf meshes; spawners that ignore density still float (see Density map above).
+
+`registerGroundMutationCallback` fires from `rebuildTerrainDerivatives` so already-spawned props can resync Y.
 
 ### Spawner e declive (normal vs visual)
 
-O **plugin spawner** posiciona instâncias com a altura do sampler e calcula **normais** via diferenças finais sem smoothing. Ver `spawner/surface.ts`.
+O **plugin spawner** posiciona com lattice density-aware (`sampleTerrainSurface`) e calcula **normais** no heightmap analítico. Ver [`../spawner/context.md`](../spawner/context.md) § Amostragem.
 
 <!-- /LLM:REFERENCE -->
 
@@ -151,6 +225,12 @@ O **plugin spawner** posiciona instâncias com a altura do sampler e calcula **n
   heightmap="/assets/heightmap.png" texture="/assets/terrain_diffuse.jpg"></Terrain>
 ```
 
+### Settlement pad (city / village)
+
+```xml
+<TerrainPad at="0 0" size="96 96" falloff="16" corner-radius="14"></TerrainPad>
+```
+
 ### XML Terrain with Custom Colors
 
 ```xml
@@ -158,6 +238,22 @@ O **plugin spawner** posiciona instâncias com a altura do sampler e calcula **n
   collision-resolution="128" base-color="#3d6b32" color-high="#ffffff"
   color-mid="#7a9a4a" color-low="#4a6a2a" color-rock="#808080"></Terrain>
 ```
+
+### Noise sand patches (procedural detail)
+
+```xml
+<Terrain
+  heightmap="/assets/terrain/heightmap.png"
+  texture="/assets/textures/vale_grass.png"
+  noise-sand-strength="0.45"
+  noise-sand-scale="0.012"
+  noise-sand-threshold="0.56"
+  noise-sand-height-min="0.02"
+  noise-sand-height-max="0.50"
+></Terrain>
+```
+
+Omit the attrs to use plugin defaults; set `noise-sand-strength="0"` to disable.
 
 ### JavaScript API
 

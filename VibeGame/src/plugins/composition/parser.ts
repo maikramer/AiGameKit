@@ -84,7 +84,12 @@ function setupPlace(
   PlacePending.spawned[entity] = 0;
 }
 
-export const compositionParser: Parser = ({ entity, element, state }) => {
+export const compositionParser: Parser = ({
+  entity,
+  element,
+  state,
+  context,
+}) => {
   const specs: PrimitiveSpec[] = [];
 
   for (const child of element.children) {
@@ -104,6 +109,16 @@ export const compositionParser: Parser = ({ entity, element, state }) => {
         child.attributes
       );
       state.addComponent(childEntity, Parent, { entity });
+      // `createFromRecipe` only applies component defaults + declared attribute
+      // mappings; a recipe's own parser is invoked by the core element walker,
+      // which never sees these children because Composition declares
+      // `parserOwnsChildren`. Skipping it silently dropped every attribute a
+      // parser owns — `<DialogueNPC dialogue-id>` inside a `<Composition>` fell
+      // back to quest index 0, so every quest NPC offered the same quest.
+      const childParser = state.getParser(child.tagName);
+      if (childParser) {
+        childParser({ entity: childEntity, element: child, state, context });
+      }
       continue;
     }
 

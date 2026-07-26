@@ -78,7 +78,7 @@ treated as not a MonoBehaviour and a warning is logged.
 | `awake(ctx)`                   | simulation (setup pass) | Once, the first frame the module is loaded and the entity is enabled. Runs before `onEnable` and `start`.                                                                                  |
 | `onEnable(ctx)`                | simulation              | When `enabled` flips to 1. Also called once during setup if the entity starts enabled.                                                                                                     |
 | `start(ctx)`                   | simulation (setup pass) | Once, after `awake`/`onEnable`. May be async (`Promise<void>`); the setup chain `await`s it. If the entity has a pending GLB (`gltf-pending`), setup waits until the GLB finishes loading. |
-| `update(ctx)`                  | simulation              | Every simulation frame while `enabled === 1`. Skipped when `DistanceCull.culled` (ground Y owned by spawner, not by keeping distant scripts awake).                                        |
+| `update(ctx)`                  | simulation              | Every simulation frame while `enabled === 1`. Skipped when `DistanceCull.culled` (see _DistanceCull vs ground_ below).                                                                     |
 | `fixedUpdate(ctx)`             | fixed                   | Every physics tick while enabled. Runs in the `fixed` group, before `simulation`.                                                                                                          |
 | `lateUpdate(ctx)`              | late                    | Every frame in the `late` group, after `simulation`. Use for camera/HUD follow-up.                                                                                                         |
 | `onDisable(ctx)`               | simulation              | When `enabled` flips to 0. Also called once on destroy if the entity is enabled at that moment.                                                                                            |
@@ -175,6 +175,23 @@ export function update(ctx: MonoBehaviourContext): void {
 A creature factory returning `{ start, update, onDestroy }` (from
 `simple-rpg/src/scripts/creature.ts`) shows `start` + `update` + `onDestroy`
 together, loading an animated GLB in `start` and cleaning up in `onDestroy`.
+
+## DistanceCull vs ground placement
+
+`max-distance` on spawners attaches `DistanceCull`. When `culled === 1`,
+`EntityScriptSystem` still runs **setup** (`awake` / `start`) once, but skips
+hot **`update`** — distant AI/anim would waste CPU.
+
+**Ground feet Y is owned by the spawner** (`TerrainSpawned` + AABB + resync), not
+by keeping scripts awake. Do not reintroduce `MonoBehaviour.settled`, settle
+loading gates, or BVH boot snaps in game scripts so distant enemies “touch
+ground when the player approaches.” If actors float at boot, fix
+`profile="creature"` / `ground-align="aabb"` / mutation defer — see
+[`../spawner/context.md`](../spawner/context.md).
+
+Optional slope follow while **awake**: re-sample with the same
+`sampleTerrainSurface` (+ stored `TerrainSpawned.yOffset`), never a parallel
+physics ray for boot placement.
 
 ## Known Limitations
 

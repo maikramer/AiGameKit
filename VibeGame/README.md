@@ -80,6 +80,20 @@ pipeline workdirs, `public/assets/` blobs, caches, `.git`, …) so chokidar does
 not hit Linux `ENOSPC` (inotify watcher limit). Prefer that product default over
 raising `fs.inotify.max_user_watches`.
 
+### `vibegame analyze`
+
+Offline world compile — expand `<Include>` + CityGrid, then report broken includes,
+missing `/assets/…`, and solid XZ overlaps (no browser / WebGL).
+
+```bash
+vibegame analyze examples/simple-rpg/index.html
+vibegame analyze --public-dir examples/simple-rpg/public --json
+vibegame analyze --fail-on warn
+```
+
+Exit `1` on errors (or warnings with `--fail-on warn`). Details:
+[`src/cli/context.md`](src/cli/context.md).
+
 ### `vibegame --version`
 
 Show the installed VibeGame version.
@@ -101,13 +115,18 @@ Component types available: `f32`, `ui8`, `ui32`, `eid` (entity reference), `i8`,
 
 ### World XML
 
-Scene content is defined declaratively in `index.html` using custom XML elements inside `<Scene>`. The engine parses these elements at startup and creates the corresponding ECS entities with components.
+Scene content is defined declaratively in `index.html` using custom XML elements inside `<Scene>`. The engine expands `<Include src="…">` fragments first, then parses and creates the corresponding ECS entities with components.
 
 ```html
 <Scene canvas="#game-canvas" sky="#87ceeb">
-  <!-- All entities defined here -->
+  <Include src="/world/environment.xml"></Include>
+  <Include src="/world/cities/discordia.xml"></Include>
+  <!-- or inline recipes -->
 </Scene>
 ```
+
+- **`<Include src>`** — recursive fragment expand (`MAX_INCLUDE_DEPTH=8`, cycle-safe). Browser: `fetch`; headless/analyze: disk under `--public-dir`. See [`src/core/xml/context.md`](src/core/xml/context.md).
+- Large maps (e.g. simple-rpg): keep districts under `public/world/` and edit those files — not a monolithic `index.html`.
 
 > **Important:** Content under `<Scene>` is injected as `innerHTML`. The native HTML `<script>` tag does NOT work for engine TypeScript modules — use the `script` attribute on recipes or a custom element name that doesn't collide with HTML.
 
@@ -154,39 +173,42 @@ System execution groups (in order): `setup` → `fixed` (physics tick) → `simu
 
 Only recipes that exist in source are listed. See the [Plugin Reference](#plugin-reference) below and [`docs/PLUGINS.md`](docs/PLUGINS.md) for the full inventory.
 
-| Element               | Description                               | Key Attributes                                  |
-| --------------------- | ----------------------------------------- | ----------------------------------------------- |
-| `<Scene>`             | Root container for all entities           | `canvas`, `sky`                                 |
-| `<static-part>`       | Static physics body with renderer         | `pos`, `shape`, `size`, `color`, `body`         |
-| `<dynamic-part>`      | Dynamic physics body with renderer        | `pos`, `shape`, `size`, `color`, `body`         |
-| `<kinematic-part>`    | Kinematic physics body with renderer      | `pos`, `shape`, `size`, `color`, `body`         |
-| `<GameObject>`        | Generic entity with component mapping     | `transform`, `body`, `renderer`, `collider`     |
-| `<Composition>`       | Group of children with a shared transform | `pos`, `children`                               |
-| `<GLTFLoader>`        | Load a static GLB/GLTF model              | `url`, `pos`, `scale`, `rotation`               |
-| `<GLTFDynamic>`       | Load a dynamic (physics) GLB/GLTF model   | `url`, `pos`, `scale`, `rotation`               |
-| `<Player>`            | Capsule player controller                 | `speed`, `jump`                                 |
-| `<PlayerGLTF>`        | Animated player character (WASD + camera) | `pos`, `model-url`, `speed`, `jump`             |
-| `<OrbitCamera>`       | Orbital camera with zoom                  | `distance`, `angle`                             |
-| `<ThirdPersonCamera>` | Third-person follow camera                | `target`, `distance`, `height`                  |
-| `<EquirectSky>`       | Equirectangular sky (PMREM IBL)           | `url`, `rotation-deg`, `set-background`         |
-| `<Terrain>`           | Terrain with LOD from heightmap           | `heightmap-url`, `size`, `collision-resolution` |
-| `<BiomeRegion>`       | Biome region marker for terrain spawning  | `biome`, `bounds`                               |
-| `<AudioSource>`       | Audio emitter (Howler)                    | `src`, `loop`, `volume`, `spatial`              |
-| `<SpawnGroup>`        | Batch-spawn entities on terrain           | `profile`, `count`, `density-per-km2`           |
-| `<StaticSpawner>`     | Spawn static props on terrain             | `profile`, `count`, `density-per-km2`           |
-| `<DynamicSpawner>`    | Spawn dynamic objects on terrain          | `profile`, `count`, `density-per-km2`           |
-| `<SpawnGate>`         | Gated spawner trigger                     | `profile`, `trigger`                            |
-| `<ParticleSystem>`    | Particle emitter                          | `preset`                                        |
-| `<ParticleBurst>`     | One-shot particle burst                   | `preset`                                        |
-| `<NavMesh>`           | Navigation mesh surface for AI            | `url`                                           |
-| `<NavMeshWalkable>`   | Walkable area definition                  | `bounds`                                        |
-| `<NavMeshAgent>`      | AI navigation agent                       | `target`                                        |
-| `<HudPanel>`          | On-screen HUD overlay (world-space)       | `position`, `size`                              |
-| `<HudScreenLayer>`    | Screen-space HUD layer container          | `anchor`                                        |
-| `<Minimap>`           | Minimap HUD widget                        | `range`, `size`, `anchor`                       |
-| `<DialogueNPC>`       | NPC with a dialogue tree                  | `dialogue`, `name`                              |
-| `<ResourceNode>`      | Harvestable resource node                 | `resource`, `yield`                             |
-| `<MonoBehaviour>`     | Per-entity script (Unity-style)           | `script`                                        |
+| Element               | Description                               | Key Attributes                                                    |
+| --------------------- | ----------------------------------------- | ----------------------------------------------------------------- |
+| `<Scene>`             | Root container for all entities           | `canvas`, `sky`                                                   |
+| `<Include>`           | Inline fragment from URL / public path    | `src`                                                             |
+| `<CityGrid>`          | Cell-grid city block (streets, walls, …)  | `cell`, `origin`, `align-to-terrain`                              |
+| `<static-part>`       | Static physics body with renderer         | `pos`, `shape`, `size`, `color`, `body`                           |
+| `<dynamic-part>`      | Dynamic physics body with renderer        | `pos`, `shape`, `size`, `color`, `body`                           |
+| `<kinematic-part>`    | Kinematic physics body with renderer      | `pos`, `shape`, `size`, `color`, `body`                           |
+| `<GameObject>`        | Generic entity with component mapping     | `transform`, `body`, `renderer`, `collider`                       |
+| `<Composition>`       | Group of children with a shared transform | `pos`, `children`                                                 |
+| `<GLTFLoader>`        | Load a static GLB/GLTF model              | `url`, `pos`, `scale`, `rotation`                                 |
+| `<GLTFDynamic>`       | Load a dynamic (physics) GLB/GLTF model   | `url`, `pos`, `scale`, `rotation`                                 |
+| `<Player>`            | Capsule player controller                 | `speed`, `jump`                                                   |
+| `<PlayerGLTF>`        | Animated player character (WASD + camera) | `pos`, `model-url`, `speed`, `jump`                               |
+| `<OrbitCamera>`       | Orbital camera with zoom                  | `distance`, `angle`                                               |
+| `<ThirdPersonCamera>` | Third-person follow camera                | `target`, `distance`, `height`                                    |
+| `<EquirectSky>`       | Equirectangular sky (PMREM IBL)           | `url`, `rotation-deg`, `set-background`                           |
+| `<Terrain>`           | Terrain with LOD from heightmap           | `heightmap`, `world-size`, `collision-resolution`, `noise-sand-*` |
+| `<BiomeRegion>`       | Biome region marker for terrain spawning  | `biome`, `bounds`                                                 |
+| `<AudioSource>`       | Audio emitter (Howler)                    | `src`, `loop`, `volume`, `spatial`                                |
+| `<SpawnGroup>`        | Batch-spawn entities on terrain           | `profile`, `count`, `density-per-km2`                             |
+| `<StaticSpawner>`     | Spawn static props on terrain             | `profile`, `count`, `density-per-km2`                             |
+| `<DynamicSpawner>`    | Spawn dynamic objects on terrain          | `profile`, `count`, `density-per-km2`                             |
+| `<Vegetation>`        | Smart ground carpet (grass/plant/flower)  | `meshes`, `smart`, `density-per-km2`, `wind`                      |
+| `<SpawnGate>`         | Gated spawner trigger                     | `profile`, `trigger`                                              |
+| `<ParticleSystem>`    | Particle emitter                          | `preset`                                                          |
+| `<ParticleBurst>`     | One-shot particle burst                   | `preset`                                                          |
+| `<NavMesh>`           | Navigation mesh surface for AI            | `url`                                                             |
+| `<NavMeshWalkable>`   | Walkable area definition                  | `bounds`                                                          |
+| `<NavMeshAgent>`      | AI navigation agent                       | `target`                                                          |
+| `<HudPanel>`          | On-screen HUD overlay (world-space)       | `position`, `size`                                                |
+| `<HudScreenLayer>`    | Screen-space HUD layer container          | `anchor`                                                          |
+| `<Minimap>`           | Minimap HUD widget                        | `range`, `size`, `anchor`                                         |
+| `<DialogueNPC>`       | NPC with a dialogue tree                  | `dialogue`, `name`                                                |
+| `<ResourceNode>`      | Harvestable resource node                 | `resource`, `yield`                                               |
+| `<MonoBehaviour>`     | Per-entity script (Unity-style)           | `script`                                                          |
 
 ### Example Scene
 
@@ -488,11 +510,13 @@ VibeGame includes 45 plugins (29 registered by default, 16 opt-in) organized by 
 
 ### Environment
 
-| Plugin    | Description                                                    |
-| --------- | -------------------------------------------------------------- |
-| `sky`     | Equirectangular sky + IBL (PMREM) via `<EquirectSky>`          |
-| `terrain` | Terrain with LOD from heightmaps via `<Terrain>`               |
-| `biomes`  | Biome regions driving terrain-aware spawning (`<BiomeRegion>`) |
+| Plugin        | Description                                                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `sky`         | Equirectangular sky + IBL (PMREM) via `<EquirectSky>`                                                                       |
+| `terrain`     | Terrain with LOD from heightmaps via `<Terrain>`                                                                            |
+| `biomes`      | Biome regions driving terrain-aware spawning (`<BiomeRegion>`)                                                              |
+| `vegetation`  | Smart ground carpet (`<Vegetation>`) — roles, shared hubs, wind; [`context.md`](src/plugins/vegetation/context.md)          |
+| `city-layout` | Declarative city on a cell grid (`<CityGrid>`, streets/walls/buildings); [`context.md`](src/plugins/city-layout/context.md) |
 
 ### Post-Processing
 
@@ -504,42 +528,42 @@ VibeGame includes 45 plugins (29 registered by default, 16 opt-in) organized by 
 
 Registered by default.
 
-| Plugin          | Description                                                                                           |
-| --------------- | ----------------------------------------------------------------------------------------------------- |
-| `tweening`      | Smooth interpolation (tweens) via GSAP (`<Tween>`)                                                    |
-| `spawner`       | `<SpawnGroup>`, `<StaticSpawner>`, `<DynamicSpawner>` for batch-spawning entities on terrain          |
-| `audio`         | Spatial audio via Howler — `<AudioSource>`, `playAudioEmitter` (see [`docs/AUDIO.md`](docs/AUDIO.md)) |
-| `hud`           | On-screen HUD panels and widgets (`<HudPanel>`, `<Minimap>`, HealthBar, XpBar, etc.)                  |
-| `raycast`       | Raycasting for interaction (`<RaycastSource>`)                                                        |
-| `navmesh`       | Navigation mesh and agents (`<NavMesh>`, `<NavMeshWalkable>`, `<NavMeshAgent>`)                       |
-| `ai-yuka`       | Autonomous NPC steering via Yuka (`<NPC>`, flock/pursuit/seek)                                        |
-| `particles`     | Particle systems and bursts (three.quarks)                                                            |
-| `floating-text` | Floating damage / combat text overlays                                                                |
-| `destructible`  | Destructible props and breakable objects                                                              |
-| `quests`        | Dialogue and quests (`<DialogueNPC>`, `<QuestsTab>`, `<DialogueBalloon>`)                             |
+| Plugin          | Description                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| `tweening`      | Smooth interpolation (tweens) via GSAP (`<Tween>`)                                              |
+| `spawner`       | `<SpawnGroup>`, `<StaticSpawner>`, `<DynamicSpawner>` for batch-spawning entities on terrain    |
+| `audio`         | Sound bank + spatial cull + `<AudioSource>` — [`docs/AUDIO.md`](docs/AUDIO.md)                  |
+| `hud`           | On-screen HUD panels and widgets (`<HudPanel>`, `<Minimap>`, HealthBar, XpBar, etc.)            |
+| `raycast`       | Raycasting for interaction (`<RaycastSource>`)                                                  |
+| `navmesh`       | Navigation mesh and agents (`<NavMesh>`, `<NavMeshWalkable>`, `<NavMeshAgent>`)                 |
+| `ai-yuka`       | Autonomous NPC steering via Yuka (`<NPC>`, flock/pursuit/seek — see [`docs/AI.md`](docs/AI.md)) |
+| `particles`     | Particle systems and bursts (three.quarks)                                                      |
+| `floating-text` | Floating damage / combat text overlays                                                          |
+| `destructible`  | Destructible props and breakable objects                                                        |
+| `quests`        | Dialogue and quests (`<DialogueNPC>`, `<QuestsTab>`, `<DialogueBalloon>`)                       |
 
 ### Opt-in (register with `withPlugin`)
 
 Not in `DefaultPlugins`. Add via the [builder API](#builder-api).
 
-| Plugin              | Description                                                           |
-| ------------------- | --------------------------------------------------------------------- |
-| `save-load`         | Save/load game state to localStorage (msgpackr)                       |
-| `i18n`              | Internationalization with locale auto-detection (`<I18nText>`)        |
-| `loading`           | Loading screen and asset progress tracking                            |
-| `debug`             | Debug overlays (wireframes, stats, post-FX toggle)                    |
-| `profiler`          | Hierarchical frame profiler (per-system timings, `P` / `?profiler=1`) |
-| `combat`            | Combat system (factions, projectiles)                                 |
-| `spawn-gate`        | Gated spawner triggers (`<SpawnGate>`)                                |
-| `rpg-core`          | RPG data containers and loot tables (`<RpgData>`, `<LootTable>`)      |
-| `rpg-ai`            | RPG enemy AI (`<MeleeAi>`)                                            |
-| `rpg-economy`       | Shops and price tables (`<PriceTable>`)                               |
-| `rpg-inventory`     | Inventory system (`<Inventory>`)                                      |
-| `rpg-pause`         | Pause coordination (`<PauseCoordinator>`)                             |
-| `rpg-progression`   | XP and leveling (`<Progression>`)                                     |
-| `rpg-resource-node` | Harvestable resources (`<ResourceNode>`)                              |
-| `rpg-status`        | Status effects (poison, heal-over-time, buffs)                        |
-| `rpg-vault`         | Persistent item storage (`<Vault>`)                                   |
+| Plugin              | Description                                                              |
+| ------------------- | ------------------------------------------------------------------------ |
+| `save-load`         | Save/load game state to localStorage (msgpackr)                          |
+| `i18n`              | Internationalization with locale auto-detection (`<I18nText>`)           |
+| `loading`           | Loading screen and asset progress tracking                               |
+| `debug`             | Debug overlays (wireframes, stats, post-FX toggle)                       |
+| `profiler`          | Frame profiler + Audio tab (`P` / `Shift+P`, `?profiler=1\|deep\|audio`) |
+| `combat`            | Combat system (factions, projectiles)                                    |
+| `spawn-gate`        | Gated spawner triggers (`<SpawnGate>`)                                   |
+| `rpg-core`          | RPG data containers and loot tables (`<RpgData>`, `<LootTable>`)         |
+| `rpg-ai`            | RPG enemy AI (`<MeleeAi>`)                                               |
+| `rpg-economy`       | Shops and price tables (`<PriceTable>`)                                  |
+| `rpg-inventory`     | Inventory system (`<Inventory>`)                                         |
+| `rpg-pause`         | Pause coordination (`<PauseCoordinator>`)                                |
+| `rpg-progression`   | XP and leveling (`<Progression>`)                                        |
+| `rpg-resource-node` | Harvestable resources (`<ResourceNode>`)                                 |
+| `rpg-status`        | Status effects (poison, heal-over-time, buffs)                           |
+| `rpg-vault`         | Persistent item storage (`<Vault>`)                                      |
 
 ### Planned (not yet implemented)
 
@@ -572,29 +596,35 @@ VibeGame provides a spatial audio system built on [Howler.js](https://howlerjs.c
 
 - **`AudioListener`** — Attached to the main camera for 3D positional audio
 - **`<AudioSource>`** — Declarative audio emitters in XML (BGM, ambient, SFX)
-- **`playAudioEmitter(name)`** — Trigger named sound effects from code
-- **`resumeAudioContextOnFirstUserGesture()`** — Handle browser autoplay restrictions
+- **Sound bank** — `defineSoundBank` / `playSound` / `playSoundAt` (+ spatial cull)
+- **`preloadSounds`** — Warm Howl caches; in the browser **defers** until a user gesture
+- **`resumeAudioContextOnFirstUserGesture()`** — Flush preload + resume `AudioContext` (also via `<Scene resume-audio-on-user-gesture>`)
 
 ```html
-<!-- Background music -->
-<AudioSource src="/assets/audio/bgm.mp3" loop volume="0.3"></AudioSource>
-
-<!-- Resume audio on user gesture (for autoplay policy) -->
+<Scene resume-audio-on-user-gesture="true">
+  <!-- Background music emitter (optional; games often use bank BGM after unlock) -->
+  <AudioSource url="/assets/audio/bgm.mp3" loop volume="0.3"></AudioSource>
+</Scene>
 ```
 
 ```ts
-import { playAudioEmitter, resumeAudioContextOnFirstUserGesture } from 'vibegame';
+import {
+  defineSoundBank,
+  preloadSounds,
+  playSound,
+  resumeAudioContextOnFirstUserGesture,
+} from 'vibegame';
 
-resumeAudioContextOnFirstUserGesture();
+defineSoundBank({ jump: { url: '/assets/audio/jump.ogg', volume: 0.5 } });
+preloadSounds(['jump']); // queued until gesture in the browser
+resumeAudioContextOnFirstUserGesture(); // or Scene attribute above
 
-// Trigger SFX by registered name
-playAudioEmitter('jump');
-playAudioEmitter('save');
+playSound('jump');
 ```
 
 Audio files are typically generated by [Text2Sound](../Text2Sound/) and placed in `public/assets/audio/` via the `gameassets handoff` command.
 
-See [`docs/AUDIO.md`](docs/AUDIO.md) for full documentation.
+See [`docs/AUDIO.md`](docs/AUDIO.md) for full documentation (autoplay gate, profiler Audio tab, melee impact timing).
 
 ---
 
@@ -666,6 +696,15 @@ bun run example
 # Run tests (unit + integration + e2e)
 bun test tests/unit tests/integration tests/e2e
 
+# Coverage floor (pure helpers: XML, spawn, sky-env, audio bank, …)
+bun test tests/coverage-100.test.ts
+
+# One plugin (canonical + legacy paths)
+bun test tests/unit/<plugin> tests/unit/plugins/<plugin>
+
+# Vite tooling plugins only
+bun test tests/unit/vite
+
 # TypeScript type check
 bun run check    # tsc --noEmit
 
@@ -696,6 +735,12 @@ make fmt-check-vibegame # Prettier --check
 make build-vibegame     # Vite build
 ```
 
+Root CI job `vibegame` (`.github/workflows/ci.yml`) runs the same surface: `check` +
+`lint` + `format:check` + `test` + `build`. Keep `tsconfig.json` `paths` aligned with
+package subpath exports (`vibegame/terrain`, …). Tests must not leave shared
+`INPUT_CONFIG` / bitecs SoA defaults mutated — see monorepo
+[`docs/TESTING.md`](../docs/TESTING.md) (CI pitfalls).
+
 ### Peer Dependencies
 
 VibeGame requires `bitecs >= 0.3.40` and `three >= 0.183.0` as peer dependencies.
@@ -708,7 +753,7 @@ VibeGame requires `bitecs >= 0.3.40` and `three >= 0.183.0` as peer dependencies
 VibeGame/
 ├── src/
 │   ├── core/              — ECS core (State, World, System, Component, query)
-│   ├── plugins/           — Plugin implementations (44)
+│   ├── plugins/           — Plugin implementations (~53; see docs/PLUGINS.md)
 │   │   ├── rendering/     — Three.js renderer, cameras, scenes
 │   │   ├── physics/       — Rapier physics + colliders
 │   │   ├── player/        — Player controller (PlayerGLTF recipe)
@@ -718,6 +763,8 @@ VibeGame/
 │   │   ├── sky/           — Equirect sky + IBL (PMREM)
 │   │   ├── audio/         — Howler-based spatial audio
 │   │   ├── spawner/       — Batch entity spawning on terrain
+│   │   ├── vegetation/    — Smart ground carpet (`<Vegetation>`)
+│   │   ├── spawn-variation/ — Per-instance hue/sat variation helpers
 │   │   ├── particles/     — Particle system (three.quarks)
 │   │   └── ...            — 30+ more plugins
 │   ├── extras/            — GLTF bridge, sky-env, animator, loading progress
@@ -747,7 +794,8 @@ VibeGame/
 │   ├── SHARED.md          — Shared module documentation
 │   ├── EFFECT-REGISTRY.md — Post-processing effect system
 │   ├── ASSET-PIPELINE.md  — GameAssets → VibeGame pipeline
-│   └── AUDIO.md           — Audio system documentation
+│   ├── AUDIO.md           — Audio system documentation
+│   └── AI.md              — Yuka steering / `<NPC>` / decide layer
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
@@ -809,17 +857,23 @@ See [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md) and [`docs/MONOREPO_GAME_
 
 ## Documentation
 
-| Document                                                                 | Description                                      |
-| ------------------------------------------------------------------------ | ------------------------------------------------ |
-| [`docs/PLUGINS.md`](docs/PLUGINS.md)                                     | Complete plugin list with details                |
-| [`docs/SHARED.md`](docs/SHARED.md)                                       | Shared module (types, math, validation)          |
-| [`docs/EFFECT-REGISTRY.md`](docs/EFFECT-REGISTRY.md)                     | Post-processing effect system                    |
-| [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md)                       | GameAssets Python → VibeGame pipeline            |
-| [`docs/AUDIO.md`](docs/AUDIO.md)                                         | Audio system (Howler, XML, autoplay)             |
-| [`src/plugins/README.md`](src/plugins/README.md)                         | Plugin architecture + template                   |
-| [`../AGENTS.md`](../AGENTS.md)                                           | Monorepo agent guide (CLI commands, conventions) |
-| [`../docs/MONOREPO_GAME_PIPELINE.md`](../docs/MONOREPO_GAME_PIPELINE.md) | Full monorepo pipeline layout                    |
-| [`../docs/ZERO_TO_GAME_AI.md`](../docs/ZERO_TO_GAME_AI.md)               | AI-centric workflow and `dream` command          |
+| Document                                                                   | Description                                                  |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`docs/PLUGINS.md`](docs/PLUGINS.md)                                       | Complete plugin list with details                            |
+| [`docs/TESTING.md`](docs/TESTING.md)                                       | Unit / integration / Playwright; plugin coverage + isolation |
+| [`docs/SHARED.md`](docs/SHARED.md)                                         | Shared module (types, math, validation)                      |
+| [`docs/EFFECT-REGISTRY.md`](docs/EFFECT-REGISTRY.md)                       | Post-processing effect system                                |
+| [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md)                         | GameAssets Python → VibeGame pipeline                        |
+| [`docs/AUDIO.md`](docs/AUDIO.md)                                           | Bank, spatial cull, profiler Audio, melee impact timing      |
+| [`docs/AI.md`](docs/AI.md)                                                 | Yuka AI steering (`<NPC>`, decide, navmesh bridge)           |
+| [`src/core/xml/context.md`](src/core/xml/context.md)                       | XML parse + `<Include src>` expand                           |
+| [`src/cli/context.md`](src/cli/context.md)                                 | Headless CLI + `vibegame analyze`                            |
+| [`src/plugins/city-layout/context.md`](src/plugins/city-layout/context.md) | CityGrid recipes / prefabs                                   |
+| [`src/plugins/README.md`](src/plugins/README.md)                           | Plugin architecture + template                               |
+| [`tests/context.md`](tests/context.md)                                     | Test tree layout (unit / integration / Playwright)           |
+| [`../AGENTS.md`](../AGENTS.md)                                             | Monorepo agent guide (CLI commands, conventions)             |
+| [`../docs/MONOREPO_GAME_PIPELINE.md`](../docs/MONOREPO_GAME_PIPELINE.md)   | Full monorepo pipeline layout                                |
+| [`../docs/ZERO_TO_GAME_AI.md`](../docs/ZERO_TO_GAME_AI.md)                 | AI-centric workflow and `dream` command                      |
 
 ---
 

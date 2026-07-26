@@ -44,6 +44,31 @@ must be reproduced on load so indices round-trip across save/load.
   emitted on the EventBus, and rewards are applied (gold via vault, xp via
   progression, items via inventory — each guarded by component presence).
 
+### Objetivo `visit` (chegar a um marco)
+
+`kill`/`collect` são **push** (o jogo reporta o evento); "vai ver este sítio"
+não tem nada que o reporte, por isso `QuestVisitSystem` (grupo `simulation`)
+**puxa**: a cada tick mede a distância do jogador aos alvos das quests `visit`
+activas.
+
+```json
+"objective": {
+  "type": "visit",
+  "target": "peaks-cairn-1 peaks-cairn-2 peaks-cairn-3",
+  "count": 3,
+  "radius": 9
+}
+```
+
+- `target` = **`name=` das entidades** na XML da cena, separados por espaços;
+  resolvidos com `state.getEntityByName`. Um alvo que ainda não existe é
+  ignorado (sem erro) — o mundo carrega por partes.
+- Cada nome conta **uma vez**, por muito que o jogador volte a passar lá.
+- `radius` em metros, default 8.
+
+Sem isto, uma quest apontada a um ponto de interesse nunca podia completar e os
+marcos do mapa só podiam ser cenário.
+
 ## HUD
 
 - `<DialogueBalloon>` — single overlay instance in `<Scene>`.

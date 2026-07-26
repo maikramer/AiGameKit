@@ -1,7 +1,14 @@
 import { logger } from '../../core/utils/logger';
+import type { State } from '../../core';
 import * as THREE from 'three';
 
-import { createGLTFLoader } from '../../extras/gltf-bridge';
+import {
+  ensureKTX2LoaderReady,
+  loadGltfMaster,
+} from '../../extras/gltf-bridge';
+
+/** Cap parallel AABB prefetches so boot scene loads / KTX2 workers are not starved. */
+const PREFETCH_MAX_INFLIGHT = 3;
 
 /** Chave = URL normalizada (trim); valores em espaço local do root do GLB (Y up). */
 const boundsByUrl = new Map<
@@ -18,12 +25,17 @@ const boundsByUrl = new Map<
 
 const warnedMissing = new Set<string>();
 const prefetchInflight = new Set<string>();
+/** Queued until KTX2/renderer is ready (parse-time prefetch often runs too early). */
+const prefetchQueued = new Set<string>();
+const prefetchFailed = new Set<string>();
 
 /** Clear URL-scoped bounds/warning state on scene/plugin teardown. */
 export function clearGltfBoundsCache(): void {
   boundsByUrl.clear();
   warnedMissing.clear();
   prefetchInflight.clear();
+  prefetchQueued.clear();
+  prefetchFailed.clear();
 }
 
 export function normalizeGltfUrlKey(url: string): string {
@@ -50,6 +62,9 @@ export function registerGltfLocalYBounds(
     maxY: box.max.y,
     maxZ: box.max.z,
   });
+  prefetchQueued.delete(key);
+  prefetchInflight.delete(key);
+  prefetchFailed.delete(key);
 }
 
 export function getGltfLocalYBounds(
@@ -72,42 +87,65 @@ export function getGltfLocalAABB(url: string): {
 
 export function isGltfBoundsPrefetchInflight(url: string): boolean {
   const key = normalizeGltfUrlKey(url);
-  return prefetchInflight.has(key);
+  return prefetchInflight.has(key) || prefetchQueued.has(key);
 }
 
-export function warnMissingGltfBoundsOnce(url: string): void {
-  const key = normalizeGltfUrlKey(url);
-  if (warnedMissing.has(key)) return;
-  warnedMissing.add(key);
-  logger.warn(
-    `[spawn-group] AABB ainda não disponível para "${key}". ` +
-      `Coloque um <gltf-load url="..."> antes do spawn ou aguarde o carregamento; ` +
-      `até lá usa-se só base-y-offset.`
-  );
+function startPrefetchFetch(state: State, key: string): void {
+  if (boundsByUrl.has(key) || prefetchInflight.has(key)) return;
+  prefetchQueued.delete(key);
+  prefetchInflight.add(key);
+  // Share the master GLB cache with scene/instance loads (no second KTX2 parse).
+  // Not trackGltfLoad — AABB must not hold the boot `assets` gate.
+  void loadGltfMaster(state, key)
+    .then((gltf) => {
+      registerGltfLocalYBounds(key, gltf.scene);
+    })
+    .catch((err: unknown) => {
+      prefetchInflight.delete(key);
+      prefetchFailed.add(key);
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!warnedMissing.has(key)) {
+        warnedMissing.add(key);
+        logger.warn(
+          `[spawn-group] AABB prefetch falhou para "${key}": ${msg}. ` +
+            `Catch-up aplica lift quando o GLB carregar na cena.`
+        );
+      }
+    })
+    .finally(() => {
+      prefetchInflight.delete(key);
+      pumpPrefetchQueue(state);
+    });
+}
+
+function pumpPrefetchQueue(state: State): void {
+  while (
+    prefetchInflight.size < PREFETCH_MAX_INFLIGHT &&
+    prefetchQueued.size > 0
+  ) {
+    const key = prefetchQueued.values().next().value as string | undefined;
+    if (!key) break;
+    startPrefetchFetch(state, key);
+  }
 }
 
 /**
- * Carrega o GLB em segundo plano (sem adicionar à cena), só para registar minY/maxY.
- * Chamado ao fazer parse de `<spawn-group>` para reduzir corridas com o primeiro spawn.
+ * Queue a background AABB prefetch. Safe at XML parse time (before renderer /
+ * KTX2 exist). Call {@link flushGltfBoundsPrefetch} once rendering can init KTX2.
  */
 export function prefetchGltfLocalYBounds(url: string): void {
   const key = normalizeGltfUrlKey(url);
-  if (!key || boundsByUrl.has(key) || prefetchInflight.has(key)) return;
-  if (typeof fetch !== 'function') return;
+  if (!key || boundsByUrl.has(key)) return;
+  if (prefetchInflight.has(key) || prefetchQueued.has(key)) return;
+  prefetchQueued.add(key);
+}
 
-  prefetchInflight.add(key);
-  const loader = createGLTFLoader();
-  fetch(key)
-    .then((r) => {
-      if (!r.ok) throw new Error(String(r.status));
-      return r.arrayBuffer();
-    })
-    .then((buf) => loader.parseAsync(buf, key))
-    .then((gltf) => {
-      registerGltfLocalYBounds(key, gltf.scene);
-      prefetchInflight.delete(key);
-    })
-    .catch(() => {
-      prefetchInflight.delete(key);
-    });
+/**
+ * Start queued prefetches once KTX2/meshopt loaders are available.
+ * Caps concurrency; uses shared {@link loadGltfMaster} cache.
+ */
+export function flushGltfBoundsPrefetch(state: State): void {
+  if (prefetchQueued.size === 0 && prefetchInflight.size === 0) return;
+  if (!ensureKTX2LoaderReady(state)) return;
+  pumpPrefetchQueue(state);
 }

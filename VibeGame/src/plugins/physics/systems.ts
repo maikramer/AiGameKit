@@ -634,6 +634,11 @@ export const CharacterMovementSystem: System = defineSystem({
   group: 'fixed',
   after: [PhysicsCleanupSystem],
   update: (state) => {
+    // Same hold as PhysicsStepSystem. Integrating gravity while the world is
+    // still loading builds up hundreds of m/s of fall speed on characters that
+    // cannot move yet; the moment the hold lifts they punch through the terrain.
+    if (isPhysicsHeld(state)) return;
+
     const context = getPhysicsContext(state);
     if (!context.physicsWorld || context.worldEntity === null) return;
 

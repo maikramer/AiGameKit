@@ -49,10 +49,10 @@ describe('spawner matrix: normalizeGroupProfileId', () => {
 describe('spawner matrix: roleToProfile', () => {
   const map: Array<[string, SpawnGroupProfileId | null]> = [
     ['tree', 'tree'],
-    ['enemy', 'physics-box'],
+    ['enemy', 'creature'],
     ['dynamic', 'physics-box'],
     ['pickup', 'physics-box'],
-    ['npc', 'physics-box'],
+    ['npc', 'creature'],
     ['prop', 'gltf-crate'],
     ['static', 'gltf-crate'],
     ['visual', 'gltf-crate'],
@@ -71,6 +71,7 @@ describe('spawner matrix: known profiles', () => {
     'none',
     'tree',
     'foliage',
+    'creature',
     'physics-box',
     'gltf-crate',
     'place',

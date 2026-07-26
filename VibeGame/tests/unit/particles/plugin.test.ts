@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { ParticlesPlugin } from 'vibegame';
 import type { Recipe } from 'vibegame';
+import {
+  PRESET_NAMES,
+  presetIndex,
+} from '../../../src/plugins/particles/presets';
 
 describe('ParticlesPlugin recipes', () => {
   const recipes = ParticlesPlugin.recipes ?? [];
@@ -47,10 +51,34 @@ describe('ParticlesPlugin preset enum', () => {
     expect(presetEnum!.fireflies).toBe(8);
   });
 
-  it('índices são todos distintos', () => {
-    const values = Object.values(presetEnum ?? {});
-    const unique = new Set(values);
-    expect(unique.size).toBe(values.length);
+  it('índices canónicos são distintos e contíguos desde 0', () => {
+    const canonical = PRESET_NAMES.map((name) => presetEnum![name]);
+    expect(new Set(canonical).size).toBe(PRESET_NAMES.length);
+    expect([...canonical].sort((a, b) => a - b)).toEqual(
+      PRESET_NAMES.map((_, i) => i)
+    );
+  });
+
+  it('aceita os aliases e resolve-os para o índice canónico', () => {
+    // O enum do XML e presetIndex() têm de aceitar exactamente o mesmo
+    // conjunto: quando divergiam, `preset="sparkle"` passava em presetIndex()
+    // mas era rejeitado pelo validador de atributos — e um enum rejeitado
+    // aborta o parse do mundo inteiro, não só aquele emissor.
+    for (const [alias, canonicalName] of [
+      ['sparkle', 'magic'],
+      ['sparkles', 'magic'],
+      ['sand-dust', 'ground-dust'],
+      ['sanddust', 'ground-dust'],
+    ] as const) {
+      expect(presetEnum![alias]).toBe(presetEnum![canonicalName]);
+      expect(presetEnum![alias]).toBe(presetIndex(alias));
+    }
+  });
+
+  it('cada chave do enum bate com presetIndex()', () => {
+    for (const [name, index] of Object.entries(presetEnum ?? {})) {
+      expect(presetIndex(name)).toBe(index);
+    }
   });
 });
 

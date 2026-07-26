@@ -143,5 +143,8 @@ damageHealth(npcEid, 20);
 - `rpg-ai` plugin (target acquisition, melee FSM that consumes `damageHealth` / `isHostile`).
 - `rpg-core` (`events`, `registry`) for the EventBus contract and data registry.
 - `examples/simple-rpg/src/main.ts` registers `CombatPlugin` via `withPlugin`.
+- Hero melee SFX/damage timing (not projectile): `examples/simple-rpg/src/game/melee.ts` +
+  PlayerGLTF `ATTACK_IMPACT_FRACTION` (**0.35**) — [`docs/AUDIO.md`](../../../docs/AUDIO.md),
+  [`docs/findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md`](../../../../docs/findings/VIBEGAME_AUDIO_COMBAT_FINDINGS.md).
 
 <!-- /LLM:EXAMPLES -->

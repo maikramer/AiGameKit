@@ -153,6 +153,13 @@ function applyPixelRatioLever(state: State, eid: number, tier: number): void {
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);
+    const ctx = getRenderingContext(state);
+    if (
+      ctx.postProcessing &&
+      typeof ctx.postProcessing.setSize === 'function'
+    ) {
+      ctx.postProcessing.setSize(w, h);
+    }
   }
 }
 

@@ -41,6 +41,9 @@ WeakMap queried by `findBiomeRegionAt`.
 the region; omit or `-1` to inherit the global Weather / cycle baseline.
 `rain` already drives precipitation the same way.
 
+SOA field `BiomeRegion.clouds` defaults to `-1` (plugin `defaults` + parser).
+Do not use `0` as “unset” — `0` means clear skies inside the biome.
+
 ## System — BiomeDetectionSystem (group `late`)
 
 Per frame, after player movement:
@@ -55,6 +58,9 @@ Per frame, after player movement:
 4. Advance `blend += dt / 0.5` (clamped 1) and write lerped fog/ambient.
    When `blend` reaches 1, `current = target`. **Visual writes only happen
    while a blend is in progress** — no per-frame mutation when settled.
+5. Every frame while applying visuals: lerp rain → `setEnvironmentRain`;
+   lerp clouds (inherit side uses Weather `cloudsTarget` as baseline) →
+   `setEnvironmentClouds` (`-1` when neither side has an override).
 
 ## Integration points (other plugins)
 
@@ -67,6 +73,10 @@ Per frame, after player movement:
   one-shot warning if absent.
 - **audio / mixer** — `crossfadeMusicLayers(state, fromLayer, toLayer, dur)`.
   `bgmLayer` is passed straight to the mixer (0=explore, 1=battle, 2..4 custom).
+- **weather** — biome `rain` / `clouds` → `setEnvironmentRain` /
+  `setEnvironmentClouds` (see [`../weather/context.md`](../weather/context.md)).
+  Rain composes with `max(api, biome)`; clouds **replace** the cycle while
+  override ≥ 0 so desert can thin coverage and forest can thicken it.
 
 The scene's pre-biome fog/ambient values are captured once (lazily, before the
 first biome write) as the "vale baseline" so blending back out of a region
@@ -85,3 +95,5 @@ to `NO_BIOME` for back-compat with old saves.
 - `tests/unit/plugins/biomes/detection.test.ts` — `findBiomeRegionAt` (AABB
   true positive/negative, inside-polygon vs outside-polygon) and `advanceBlend`
   (dt increments, clamps at 1).
+- `tests/unit/weather/weather-state.test.ts` — `BiomeRegion` `clouds` /
+  `rain` parse via recipe; default `clouds === -1` when omitted.

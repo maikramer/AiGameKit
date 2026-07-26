@@ -1,5 +1,6 @@
+import { logger } from '../../core/utils/logger';
 import { getLoadingProgress, isWorldReady, type State } from '../../core';
-import { warmupSceneShaders } from '../rendering/shader-warmup';
+import { describeGltfAssetsPending } from '../gltf-xml/ready-gate';
 
 export interface LoadingScreenText {
   title: string;
@@ -109,7 +110,12 @@ function createUI(): LoadingUI {
   return { root, bar, status, titleEl, subtitleEl, firstShown: 0, done: false };
 }
 
-function humanizePending(pending: string[]): string {
+/** First time `assets` appeared pending (perf clock); for stall logs. */
+let assetsPendingSince = 0;
+let lastAssetsStallLog = 0;
+const ASSETS_STALL_LOG_MS = 5_000;
+
+function humanizePending(state: State, pending: string[]): string {
   if (pending.length === 0) return 'Finishing…';
   const labels: Record<string, string> = {
     terrain: 'Building terrain',
@@ -117,7 +123,44 @@ function humanizePending(pending: string[]): string {
     assets: 'Loading assets',
     shaders: 'Warming shaders',
   };
-  return pending.map((p) => labels[p] ?? p).join(' · ') + '…';
+  const parts = pending.map((p) => {
+    if (p !== 'assets') return labels[p] ?? p;
+    const d = describeGltfAssetsPending(state);
+    // Instanced pools mark GltfPending.loaded early — critical count is the real hold.
+    if (d.critical > 0 || d.pendingEntities > 0) {
+      return `Loading assets (${d.critical} critical, ${d.pendingEntities} pending)`;
+    }
+    return labels.assets;
+  });
+  return parts.join(' · ') + '…';
+}
+
+function maybeLogAssetsStall(
+  state: State,
+  pending: string[],
+  now: number
+): void {
+  if (!pending.includes('assets')) {
+    assetsPendingSince = 0;
+    return;
+  }
+  if (assetsPendingSince === 0) assetsPendingSince = now;
+  if (now - assetsPendingSince < ASSETS_STALL_LOG_MS) return;
+  if (now - lastAssetsStallLog < ASSETS_STALL_LOG_MS) return;
+  lastAssetsStallLog = now;
+  const d = describeGltfAssetsPending(state);
+  const crit =
+    d.criticalUrls.length > 0
+      ? ` criticalUrls=[${d.criticalUrls.slice(0, 8).join(', ')}]`
+      : '';
+  const samples =
+    d.sampleUrls.length > 0 ? ` pendingKick=[${d.sampleUrls.join(', ')}]` : '';
+  logger.warn(
+    `[loading] assets gate still held after ${Math.round(
+      (now - assetsPendingSince) / 1000
+    )}s — critical=${d.critical} active=${d.active} ` +
+      `pendingKick=${d.pendingEntities}${crit}${samples}`
+  );
 }
 
 /** Per-frame driver, called by {@link LoadingScreenSystem}. */
@@ -133,21 +176,20 @@ export function updateLoadingScreen(state: State): void {
     typeof performance !== 'undefined' ? performance.now() : Date.now();
   if (ui.firstShown === 0) ui.firstShown = now;
 
+  // The `shaders` gate is driven by ShaderWarmupSystem (rendering plugin), not
+  // from here: this driver stops the moment the overlay fades, so anything it
+  // owned would be left half-done.
   const progress = getLoadingProgress(state);
-  // Warm only after sibling gates pass — shaders latch is one-shot and must
-  // compile the fully populated scene, not an empty boot frame.
-  const pendingOthers = progress.pending.filter((p) => p !== 'shaders');
-  if (pendingOthers.length === 0) {
-    warmupSceneShaders(state);
-  }
-
   const ready = isWorldReady(state);
   const pct =
     progress.total === 0
       ? 100
       : Math.round((progress.ready / progress.total) * 100);
   ui.bar.style.width = `${pct}%`;
-  ui.status.textContent = ready ? 'Ready' : humanizePending(progress.pending);
+  if (!ready) maybeLogAssetsStall(state, progress.pending, now);
+  ui.status.textContent = ready
+    ? 'Ready'
+    : humanizePending(state, progress.pending);
 
   if (ready && now - ui.firstShown >= MIN_VISIBLE_MS) {
     ui.done = true;

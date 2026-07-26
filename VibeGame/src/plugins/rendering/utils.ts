@@ -418,7 +418,9 @@ export function initializeContext(): RenderingContext {
   scene.add(ambient);
 
   const directional = new THREE.DirectionalLight(0xffffff, 1.8);
-  directional.castShadow = true;
+  // Shadows stay off until LightSync sees cast-shadow:1 — avoids a 0×0 /
+  // unused shadow FBO during boot/warmup when the scene opts out.
+  directional.castShadow = false;
   directional.shadow.mapSize.width = 2048;
   directional.shadow.mapSize.height = 2048;
   scene.add(directional);

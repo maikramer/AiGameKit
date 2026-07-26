@@ -27,6 +27,13 @@ import {
 } from '../audio/debug-log';
 import { isBusMuted, setBusMuted, stopAllBankPlays } from '../audio/bank';
 import { syncProfilerTabToUrl, type ProfilerTabId } from './url';
+import {
+  bindWorldDebugState,
+  DEFAULT_NEARBY_RADIUS,
+  getWorldDebugSnapshot,
+  renderWorldTab,
+  type WorldDebugSnapshot,
+} from './world-debug';
 
 const PANEL_ID = 'vibegame-profiler-panel';
 const REFRESH_FRAMES = 10;
@@ -52,6 +59,8 @@ export interface ProfilerPanelRuntime {
   systemsPane: HTMLDivElement;
   audioPane: HTMLDivElement;
   audioBodyEl: HTMLPreElement;
+  worldPane: HTMLDivElement;
+  worldBodyEl: HTMLPreElement;
   tabButtons: Record<ProfilerTabId, HTMLButtonElement>;
   tab: ProfilerTabId;
   visible: boolean;
@@ -60,6 +69,8 @@ export interface ProfilerPanelRuntime {
   sortMode: SortMode;
   /** Hide systems below this average (ms). 0 = show all. */
   minAvgMs: number;
+  nearbyRadius: number;
+  lastWorldSnap: WorldDebugSnapshot | null;
   lastRefreshFrame: number;
   systemNames: string[];
   onTabChange?: (tab: ProfilerTabId) => void;
@@ -473,7 +484,8 @@ export function setProfilerPanelTab(
   runtime.tab = tab;
   runtime.systemsPane.style.display = tab === 'systems' ? 'block' : 'none';
   runtime.audioPane.style.display = tab === 'audio' ? 'block' : 'none';
-  for (const id of ['systems', 'audio'] as const) {
+  runtime.worldPane.style.display = tab === 'world' ? 'block' : 'none';
+  for (const id of ['systems', 'audio', 'world'] as const) {
     styleTabBtn(runtime.tabButtons[id], id === tab);
   }
   if (tab === 'audio') armAudioDebug(true);
@@ -502,16 +514,21 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   const audioTabBtn = document.createElement('button');
   audioTabBtn.type = 'button';
   audioTabBtn.textContent = 'Audio';
+  const worldTabBtn = document.createElement('button');
+  worldTabBtn.type = 'button';
+  worldTabBtn.textContent = 'World';
 
   const statusEl = document.createElement('span');
   statusEl.style.opacity = '0.8';
   statusEl.style.marginLeft = '8px';
 
-  tabBar.append(title, systemsTabBtn, audioTabBtn, statusEl);
+  tabBar.append(title, systemsTabBtn, audioTabBtn, worldTabBtn, statusEl);
 
   const systemsPane = document.createElement('div');
   const audioPane = document.createElement('div');
   audioPane.style.display = 'none';
+  const worldPane = document.createElement('div');
+  worldPane.style.display = 'none';
 
   const header = document.createElement('div');
   header.style.display = 'flex';
@@ -708,13 +725,46 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
 
   audioPane.append(audioToolbar, audioBodyEl);
 
+  const worldToolbar = document.createElement('div');
+  worldToolbar.style.display = 'flex';
+  worldToolbar.style.flexWrap = 'wrap';
+  worldToolbar.style.gap = '4px';
+  worldToolbar.style.marginBottom = '8px';
+  worldToolbar.style.alignItems = 'center';
+
+  const radiusSelect = document.createElement('select');
+  styleSelect(radiusSelect);
+  for (const r of [15, 30, 50, 80, 120] as const) {
+    const opt = document.createElement('option');
+    opt.value = String(r);
+    opt.textContent = `nearby: ${r}m`;
+    if (r === DEFAULT_NEARBY_RADIUS) opt.selected = true;
+    radiusSelect.appendChild(opt);
+  }
+
+  const copyWorldBtn = document.createElement('button');
+  copyWorldBtn.type = 'button';
+  copyWorldBtn.textContent = 'Copy JSON';
+  styleButton(copyWorldBtn);
+
+  worldToolbar.append(radiusSelect, copyWorldBtn);
+
+  const worldBodyEl = document.createElement('pre');
+  worldBodyEl.style.margin = '0';
+  worldBodyEl.style.whiteSpace = 'pre';
+  worldBodyEl.style.overflowX = 'auto';
+  worldBodyEl.style.maxHeight = '70vh';
+  worldBodyEl.style.overflowY = 'auto';
+
+  worldPane.append(worldToolbar, worldBodyEl);
+
   const hint = document.createElement('div');
   hint.style.marginTop = '8px';
   hint.style.opacity = '0.55';
   hint.textContent =
-    '[P] toggle  [Shift+P] sample↔deep  [Pause] freeze  · ?profiler=audio  · ?profilerTab=systems|audio';
+    '[P] toggle  [Shift+P] sample↔deep  [Pause] freeze  · ?profiler=audio|world  · ?profilerTab=systems|audio|world';
 
-  root.append(tabBar, systemsPane, audioPane, hint);
+  root.append(tabBar, systemsPane, audioPane, worldPane, hint);
 
   const runtime: ProfilerPanelRuntime = {
     root,
@@ -730,25 +780,50 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
     systemsPane,
     audioPane,
     audioBodyEl,
-    tabButtons: { systems: systemsTabBtn, audio: audioTabBtn },
+    worldPane,
+    worldBodyEl,
+    tabButtons: {
+      systems: systemsTabBtn,
+      audio: audioTabBtn,
+      world: worldTabBtn,
+    },
     tab: 'systems',
     visible: false,
     filter: '',
     groupFilter: 'all',
     sortMode: 'avg',
     minAvgMs: 0.05,
+    nearbyRadius: DEFAULT_NEARBY_RADIUS,
+    lastWorldSnap: null,
     lastRefreshFrame: 0,
     systemNames: [],
   };
 
   styleTabBtn(systemsTabBtn, true);
   styleTabBtn(audioTabBtn, false);
+  styleTabBtn(worldTabBtn, false);
 
   systemsTabBtn.addEventListener('click', () => {
     setProfilerPanelTab(runtime, 'systems');
   });
   audioTabBtn.addEventListener('click', () => {
     setProfilerPanelTab(runtime, 'audio');
+  });
+  worldTabBtn.addEventListener('click', () => {
+    setProfilerPanelTab(runtime, 'world');
+  });
+  radiusSelect.addEventListener('change', () => {
+    const n = Number(radiusSelect.value);
+    if (Number.isFinite(n) && n > 0) runtime.nearbyRadius = n;
+  });
+  copyWorldBtn.addEventListener('click', () => {
+    const snap = runtime.lastWorldSnap;
+    if (!snap) {
+      runtime.statusEl.textContent = ' no world snapshot yet';
+      return;
+    }
+    void navigator.clipboard?.writeText(JSON.stringify(snap, null, 2));
+    runtime.statusEl.textContent = ' copied world JSON';
   });
 
   filterInput.addEventListener('input', () => {
@@ -848,6 +923,7 @@ export function refreshProfilerPanel(
   runtime: ProfilerPanelRuntime
 ): void {
   if (!runtime.visible) return;
+  bindWorldDebugState(state);
   if (state.time.frameCount - runtime.lastRefreshFrame < REFRESH_FRAMES) {
     return;
   }
@@ -857,6 +933,21 @@ export function refreshProfilerPanel(
     const audioSnap = getAudioDebugSnapshot();
     runtime.statusEl.textContent = ` ${getProfilerMode()} · audio${isProfilerFrozen() ? ' · frozen' : ''} · active=${audioSnap.active.length} · log=${audioSnap.events.length}`;
     runtime.audioBodyEl.textContent = renderAudioTab(audioSnap);
+    return;
+  }
+
+  if (runtime.tab === 'world') {
+    const worldSnap = getWorldDebugSnapshot(state, {
+      nearbyRadius: runtime.nearbyRadius,
+    });
+    runtime.lastWorldSnap = worldSnap;
+    const p = worldSnap.player;
+    runtime.statusEl.textContent = ` ${getProfilerMode()} · world${isProfilerFrozen() ? ' · frozen' : ''}${
+      p
+        ? ` · ${p.name} (${p.pos.x.toFixed(1)}, ${p.pos.y.toFixed(1)}, ${p.pos.z.toFixed(1)})`
+        : ''
+    } · near=${worldSnap.nearby.length}`;
+    runtime.worldBodyEl.textContent = renderWorldTab(worldSnap);
     return;
   }
 

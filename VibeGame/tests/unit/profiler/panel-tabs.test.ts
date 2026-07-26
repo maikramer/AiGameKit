@@ -45,18 +45,26 @@ describe('profiler panel tabs', () => {
     } as unknown as Navigator;
   });
 
-  it('creates Systems and Audio tabs and switches panes', () => {
+  it('creates Systems, Audio, and World tabs and switches panes', () => {
     const panel = createProfilerPanel();
     expect(panel.root.id).toBe('vibegame-profiler-panel');
     expect(panel.tab).toBe('systems');
     expect(panel.systemsPane.style.display).not.toBe('none');
     expect(panel.audioPane.style.display).toBe('none');
+    expect(panel.worldPane.style.display).toBe('none');
 
     setProfilerPanelTab(panel, 'audio', { syncUrl: false });
     expect(panel.tab).toBe('audio');
     expect(panel.systemsPane.style.display).toBe('none');
     expect(panel.audioPane.style.display).toBe('block');
+    expect(panel.worldPane.style.display).toBe('none');
     expect(isAudioDebugArmed()).toBe(true);
+
+    setProfilerPanelTab(panel, 'world', { syncUrl: false });
+    expect(panel.tab).toBe('world');
+    expect(panel.worldPane.style.display).toBe('block');
+    expect(panel.audioPane.style.display).toBe('none');
+    expect(panel.systemsPane.style.display).toBe('none');
 
     setProfilerPanelTab(panel, 'systems', { syncUrl: false });
     expect(panel.tab).toBe('systems');

@@ -9,6 +9,7 @@ export type { GameRuntime } from './runtime';
 export {
   applyDefaultShadowFlags,
   clearGltfMasterCache,
+  disposeGltfBridge,
   createGLTFLoader,
   disposeObject3DResources,
   evictGltfMaster,
@@ -223,6 +224,9 @@ export {
   isGroundMutationPending,
   sampleMeshSurfaceHeight,
   sampleTerrainSurface,
+  applyTerrainSpawnedY,
+  terrainSpawnedWorldY,
+  templateVisualUrl,
   setPlacementSpec,
   spawnGroupRecipe,
   spawnTemplateAtTerrain,
@@ -269,6 +273,7 @@ export type {
 } from './plugins/spawner';
 export type { TerrainEntityData } from './plugins/terrain';
 export {
+  describeGltfAssetsPending,
   getGltfLocalYBounds,
   getGltfRootGroup,
   prefetchGltfLocalYBounds,
@@ -300,6 +305,10 @@ export {
   navMeshAgentRecipe,
   NavMeshInitSystem,
   NavMeshAgentSystem,
+  applyCrowdAgentToEntity,
+  needsCrowdResync,
+  CCT_RESYNC_XZ,
+  CCT_RESYNC_Y,
   collectNavmeshGeometry,
   prefetchNavmeshObstacles,
   bakeSoloNavMeshBytes,
@@ -315,6 +324,7 @@ export type {
   NavMeshGeometry,
   AgentConfig,
   NavMeshBakeConfig,
+  CrowdAgentPoseSample,
 } from './plugins/navmesh';
 
 export { HudPlugin, HudPanel } from './plugins/hud';
@@ -447,6 +457,7 @@ export {
 export type { LoadingScreenText } from './plugins/loading';
 export {
   getActiveGltfLoadCount,
+  getCriticalGltfInflightUrls,
   getCriticalGltfLoadCount,
   hasAnyGltfLoadStarted,
   loadGltfMasterTracked,
@@ -899,7 +910,9 @@ export { threeCameras } from './plugins/rendering';
 /** Silent first-look shader compile used by the loading overlay / physics hold. */
 export {
   isSceneShadersWarmed,
+  pumpShaderWarmup,
   resetShaderWarmup,
+  ShaderWarmupSystem,
   warmupSceneShaders,
 } from './plugins/rendering';
 

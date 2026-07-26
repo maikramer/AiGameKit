@@ -37,7 +37,7 @@ describe('VIBEGAME_SERVER_WATCH_IGNORED', () => {
   });
 
   it('vibegame() plugin installs ignored list on config', () => {
-    const [plugin] = vibegame();
+    const plugin = vibegame().find((p) => p.name === 'vibegame')!;
     expect(plugin.config).toBeTypeOf('function');
     const config: {
       resolve?: { alias?: Record<string, string> };

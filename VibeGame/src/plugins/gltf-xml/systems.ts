@@ -2,7 +2,7 @@ import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { defineSystem, defineQuery, type System } from '../../core';
 import {
-  clearGltfMasterCache,
+  disposeGltfBridge,
   loadGltfLodToSceneForEntity,
   loadGltfToSceneForEntity,
 } from '../../extras/gltf-bridge';
@@ -174,7 +174,7 @@ export const GltfXmlLoadSystem: System = defineSystem({
     // runs after this dispose must see the new generation and bail, never
     // re-populating the just-cleared cache nor attaching to the retired scene.
     bumpSceneGeneration(state);
-    clearGltfMasterCache();
+    disposeGltfBridge();
     clearGltfBoundsCache();
   },
 });

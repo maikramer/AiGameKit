@@ -192,25 +192,32 @@ export { MeuSystem } from './systems';
 
 ## Plugins Existentes
 
-| Plugin              | Descrição                                                                                | Complexidade |
-| ------------------- | ---------------------------------------------------------------------------------------- | ------------ |
-| `transforms`        | Posição/rotação/escala 3D                                                                | Baixa        |
-| `physics`           | Física (Rapier) + colliders                                                              | Alta         |
-| `rendering`         | Three.js renderer, câmeras, cenas                                                        | Alta         |
-| `player`            | Controle de jogador (movimento, pulo, câmera)                                            | Média        |
-| `input`             | Teclado/mouse/gamepad                                                                    | Média        |
-| `orbit-camera`      | Câmera orbital com zoom                                                                  | Média        |
-| `player-controller` | Câmera em terceira pessoa (ThirdPersonCamera)                                            | Média        |
-| `fog`               | Neblina volumétrica + fog exp/linear                                                     | Média        |
-| `water`             | Água com física, nado, reflexos                                                          | Alta         |
-| `terrain`           | Terreno procedural com heightmaps                                                        | Alta         |
-| `gltf-xml`          | Carregamento de modelos GLB/GLTF                                                         | Alta         |
-| `animation`         | Sistema de animação                                                                      | Média        |
-| `tweening`          | Interpolações suaves (tweens)                                                            | Baixa        |
-| `spawner`           | `<SpawnGroup>`, `<GameObject place="…">` no terreno — [context.md](./spawner/context.md) | Média        |
-| `startup`           | Execução deferida pós-inicialização                                                      | Baixa        |
-| `debug`             | Debug overlays (wireframes, etc.)                                                        | Baixa        |
-| `profiler`          | Profiler hierárquico (systems/grupos, painel `P`, `?profiler=1`) — opt-in                | Baixa        |
-| `sky`               | Skybox equirectangular + IBL (PMREM)                                                     | Média        |
-| `audio`             | Áudio espacial (Howler, `<AudioSource>`) — [`docs/AUDIO.md`](../../docs/AUDIO.md)        | Média        |
-| `postprocessing`    | Bloom, SMAA, dithering, tonemapping (registry)                                           | Alta         |
+| Plugin              | Descrição                                                                                  | Complexidade |
+| ------------------- | ------------------------------------------------------------------------------------------ | ------------ |
+| `transforms`        | Posição/rotação/escala 3D                                                                  | Baixa        |
+| `physics`           | Física (Rapier) + colliders                                                                | Alta         |
+| `rendering`         | Three.js renderer, câmeras, cenas                                                          | Alta         |
+| `player`            | Controle de jogador (movimento, pulo, câmera)                                              | Média        |
+| `input`             | Teclado/mouse/gamepad                                                                      | Média        |
+| `orbit-camera`      | Câmera orbital com zoom                                                                    | Média        |
+| `player-controller` | Câmera em terceira pessoa (ThirdPersonCamera)                                              | Média        |
+| `fog`               | Neblina volumétrica + fog exp/linear                                                       | Média        |
+| `water`             | Água com física, nado, reflexos                                                            | Alta         |
+| `terrain`           | Heightmap LOD + `<TerrainPad>` — [context.md](./terrain/context.md)                        | Alta         |
+| `gltf-xml`          | Carregamento de modelos GLB/GLTF                                                           | Alta         |
+| `animation`         | Sistema de animação                                                                        | Média        |
+| `tweening`          | Interpolações suaves (tweens)                                                              | Baixa        |
+| `spawner`           | `<SpawnGroup>`, `<SpawnExclusion>`, `place="…"` — [context.md](./spawner/context.md)       | Média        |
+| `vegetation`        | Carpet smart `<Vegetation>` (roles, hubs, wind) — [context.md](./vegetation/context.md)    | Média        |
+| `startup`           | Execução deferida pós-inicialização                                                        | Baixa        |
+| `debug`             | Debug overlays (wireframes, etc.)                                                          | Baixa        |
+| `profiler`          | Systems + **Audio** tabs (`P`, `?profiler=1\|audio`) — [context.md](./profiler/context.md) | Baixa        |
+| `sky`               | Skybox equirectangular + IBL (PMREM)                                                       | Média        |
+| `audio`             | Bank + cull espacial + bridge — [`docs/AUDIO.md`](../../docs/AUDIO.md)                     | Média        |
+| `postprocessing`    | Bloom, SMAA, dithering, tonemapping (registry)                                             | Alta         |
+
+Lista completa (DefaultPlugins + opt-in): [`docs/PLUGINS.md`](../../docs/PLUGINS.md).
+
+## Testes
+
+Cada plugin em `src/plugins/` tem cobertura unitária sob `tests/unit/<nome>/` (e/ou `tests/unit/plugins/<nome>/`). Meta: ≥100 `it()` a passar no path do plugin; a suíte `bun test tests/unit` tem de ficar verde (sem poluir `performance`/DOM). Guia: [`docs/TESTING.md`](../../docs/TESTING.md).

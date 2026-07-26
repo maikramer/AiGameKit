@@ -22,7 +22,7 @@ rpg-ai/
 ## Scope
 
 - **In-scope**: Melee FSM tick, target acquisition, navmesh-aware steering with direct-Transform fallback, lunge attack with windup/burst/recovery, leash to spawn origin, optional strafe / low-HP kite / enrage, preset storage, boss roar composition.
-- **Out-of-scope**: The `MonoBehaviour` script wrappers `MeleeAiBehaviour` / `TurretAiBehaviour` (those live in `extras/melee-ai-base.ts` and `extras/turret-ai-base.ts`), projectile attacks (see `combat`), pathfinding internals (see `navmesh`).
+- **Out-of-scope**: Pack locomotion / flocking / utility-AI masks (see `ai-yuka`), the `MonoBehaviour` script wrappers `MeleeAiBehaviour` / `TurretAiBehaviour` (those live in `extras/melee-ai-base.ts` and `extras/turret-ai-base.ts`), projectile attacks (see `combat`), pathfinding internals (see `navmesh`). Compose with `ai-yuka` when creatures need pack approach before the lunge.
 
 ## Entry Points
 
@@ -131,6 +131,7 @@ const BossScript = createBossAi(meleeConfig, { duration: 1.5, sound: 'roar' });
 
 ### See Also
 
+- `ai-yuka` plugin (`YukaAgentComponent`, `decide`, `<NPC>` — pack locomotion; see `docs/AI.md`).
 - `combat` plugin (`damageHealth`, `isHostile`, `Health`, `FactionComponent`).
 - `navmesh` plugin (`setAgentTarget`, `NavMeshAgent`, `isNavMeshReady`).
 - `extras/melee-ai-base.ts` (`MeleeAiBehaviour`, `createMeleeAi`, `meleeAiScriptRecipe`) and `extras/turret-ai-base.ts` (`TurretAiBehaviour`, `createTurretAi`, `turretAiScriptRecipe`).

@@ -33,6 +33,26 @@ import {
 
 export const DEFAULT_GRAVITY = -60;
 
+/**
+ * Free-fall is capped at `|gravity| * TERMINAL_FALL_SECONDS`. Without a cap a
+ * character that stays airborne (or whose simulation is paused mid-air) builds
+ * a per-step translation larger than the ground collider is thick, and the CCT
+ * sweep punches straight through the terrain instead of landing on it.
+ */
+const TERMINAL_FALL_SECONDS = 1.5;
+
+/** Airborne vertical velocity for the next step, capped at terminal speed. */
+export function integrateFallVelocity(
+  velocityY: number,
+  effectiveGravity: number,
+  deltaTime: number
+): number {
+  const next = velocityY + effectiveGravity * deltaTime;
+  if (effectiveGravity === 0) return next;
+  const terminal = -Math.abs(effectiveGravity) * TERMINAL_FALL_SECONDS;
+  return next < terminal ? terminal : next;
+}
+
 let rapierEngineInitialized = false;
 
 export async function initializePhysics(): Promise<void> {
@@ -589,8 +609,11 @@ export function applyCharacterMovement(
   // slopes, which is stable frame-to-frame (a velocity "stick" jittered against
   // the collider). A positive velocityY (an active jump) is left untouched.
   if (!wasGrounded) {
-    CharacterMovement.velocityY[entity] =
-      (CharacterMovement.velocityY[entity] || 0) + effectiveGravity * deltaTime;
+    CharacterMovement.velocityY[entity] = integrateFallVelocity(
+      CharacterMovement.velocityY[entity] || 0,
+      effectiveGravity,
+      deltaTime
+    );
   } else if (CharacterMovement.velocityY[entity] <= 0) {
     CharacterMovement.velocityY[entity] = 0;
   }

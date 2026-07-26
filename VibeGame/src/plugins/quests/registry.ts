@@ -2,12 +2,20 @@ import type { State } from '../../core';
 import { getDataRegistry } from '../rpg-core';
 import { MAX_QUESTS, QuestState } from './components';
 
-export type QuestObjectiveType = 'kill' | 'collect' | 'talk';
+export type QuestObjectiveType = 'kill' | 'collect' | 'talk' | 'visit';
 
 export interface QuestObjective {
   readonly type: QuestObjectiveType;
+  /**
+   * `kill` → enemy id · `collect` → resource kind · `talk` → NPC name.
+   *
+   * `visit` → whitespace-separated **entity names** of the landmarks to reach
+   * (`name=` in the scene XML). Each distinct name counts once.
+   */
   readonly target: string;
   readonly count: number;
+  /** `visit` only: how close the player must get, in metres. Default 8. */
+  readonly radius?: number;
 }
 
 export interface QuestRewards {

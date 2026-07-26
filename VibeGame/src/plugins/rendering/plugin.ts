@@ -10,6 +10,7 @@ import {
   SpotLight,
 } from './components';
 import { pointLightRecipe, rendererRecipe, spotLightRecipe } from './recipes';
+import { ShaderWarmupSystem } from './shader-warmup';
 import {
   CameraSyncSystem,
   DistanceCullSystem,
@@ -33,6 +34,7 @@ export const RenderingPlugin: Plugin = {
     LightSyncSystem,
     PointSpotLightSyncSystem,
     CameraSyncSystem,
+    ShaderWarmupSystem,
     SceneRenderSystem,
     TextureRecipeCleanupSystem,
   ],

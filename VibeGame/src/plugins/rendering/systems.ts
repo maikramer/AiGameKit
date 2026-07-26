@@ -84,6 +84,96 @@ function getPointLightMap(state: State): Map<number, THREE.PointLight> {
   return map;
 }
 
+/** THREE.PointLight objects currently unassigned, kept in the scene at zero
+ * intensity. Reusing them (instead of add/remove) keeps the renderer's light
+ * count stable — changing it invalidates every program in the material cache. */
+const freePointLightsByState = new WeakMap<State, THREE.PointLight[]>();
+
+function getFreePointLights(state: State): THREE.PointLight[] {
+  let pool = freePointLightsByState.get(state);
+  if (!pool) {
+    pool = [];
+    freePointLightsByState.set(state, pool);
+  }
+  return pool;
+}
+
+/**
+ * Picks which `PointLight` entities get one of the `MAX_POINT_LIGHTS` slots.
+ *
+ * Slots used to be first-come-first-served, which is wrong for an open world:
+ * a dozen lanterns near the origin claimed every slot at boot and every torch,
+ * brazier and shrine the player later walked up to stayed dark — while logging
+ * a "limit reached" warning *per entity, per frame* (30k lines in two minutes
+ * of simple-rpg). Now the nearest lights to the camera win.
+ *
+ * Current holders get a 25% distance advantage so a light doesn't flicker
+ * on/off while the player walks along the boundary between two clusters.
+ */
+function selectActivePointLights(
+  state: State,
+  entities: ArrayLike<number>,
+  holders: Map<number, THREE.PointLight>
+): Set<number> {
+  if (entities.length <= MAX_POINT_LIGHTS) {
+    return new Set(Array.from(entities));
+  }
+
+  const camEntities = mainCameraQuery(state.world);
+  const camera =
+    camEntities.length > 0 ? threeCameras.get(camEntities[0]) : undefined;
+  // No camera yet (first frames): keep whatever is already assigned rather
+  // than reshuffling on an arbitrary order.
+  if (!camera) {
+    return new Set(Array.from(entities).slice(0, MAX_POINT_LIGHTS));
+  }
+
+  return pickNearestLightSlots(
+    entities,
+    holders,
+    camera.position.x,
+    camera.position.y,
+    camera.position.z,
+    MAX_POINT_LIGHTS
+  );
+}
+
+/** Hysteresis for {@link pickNearestLightSlots}: a holder is scored as if it
+ * were 20% closer ((0.8·d)² = 0.64·d²) so lights don't blink on and off while
+ * the player walks the boundary between two clusters. */
+const LIGHT_SLOT_HOLDER_BIAS = 0.64;
+
+/**
+ * Nearest-`max` light slot assignment, split out from the ECS plumbing so the
+ * ranking rules are unit-testable. Reads positions from `WorldTransform`.
+ */
+export function pickNearestLightSlots(
+  entities: ArrayLike<number>,
+  holders: ReadonlySet<number> | Map<number, unknown>,
+  cx: number,
+  cy: number,
+  cz: number,
+  max: number
+): Set<number> {
+  const scored: { eid: number; score: number }[] = [];
+  for (let i = 0; i < entities.length; i++) {
+    const eid = entities[i];
+    const dx = WorldTransform.posX[eid] - cx;
+    const dy = WorldTransform.posY[eid] - cy;
+    const dz = WorldTransform.posZ[eid] - cz;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    scored.push({
+      eid,
+      score: holders.has(eid) ? d2 * LIGHT_SLOT_HOLDER_BIAS : d2,
+    });
+  }
+  scored.sort((a, b) => a.score - b.score);
+
+  const active = new Set<number>();
+  for (let i = 0; i < max && i < scored.length; i++) active.add(scored[i].eid);
+  return active;
+}
+
 function getSpotLightMap(state: State): Map<number, THREE.SpotLight> {
   let map = entityToSpotLightByState.get(state);
   if (!map) {
@@ -185,6 +275,8 @@ const spotLightCache = new WeakMap<THREE.SpotLight, SpotLightCache>();
 // of the 12 are expected to just light, not cast, since a cube-map shadow
 // pass per caster adds up fast (see POINT_SHADOW_MAP_SIZE below).
 const MAX_POINT_LIGHTS = 12;
+/** Entities already warned about the point-light cap (warn once, not per frame). */
+const pointLightLimitWarned = new Set<number>();
 const MAX_SPOT_LIGHTS = 2;
 /** Small on purpose — point-light shadows render 6 faces per caster per
  * frame, so this is the per-face size, not a single 2D map like the sun. */
@@ -537,7 +629,10 @@ function updateCsmDirectionalLight(
 
   const cascades = Math.max(1, DirectionalLight.csmCascades[entity]);
   const maxFar = DirectionalLight.csmMaxFar[entity];
-  const shadowMapSize = DirectionalLight.shadowMapSize[entity];
+  const shadowMapSize = Math.max(
+    1,
+    DirectionalLight.shadowMapSize[entity] || 2048
+  );
   const color = DirectionalLight.color[entity];
   const intensity = DirectionalLight.intensity[entity];
 
@@ -733,7 +828,6 @@ export const LightSyncSystem: System = defineSystem({
           scene.add(light);
           scene.add(light.target);
         }
-        light.castShadow = true;
         entityToDirectionalLight.set(entity, light);
       }
 
@@ -778,7 +872,11 @@ export const LightSyncSystem: System = defineSystem({
       if (DirectionalLight.castShadow[entity] === 1) {
         light.castShadow = true;
 
-        const mapSize = DirectionalLight.shadowMapSize[entity];
+        // Uint32 default 0 → WebGL "DEPTH_ATTACHMENT: Attachment has no width".
+        const mapSize = Math.max(
+          1,
+          DirectionalLight.shadowMapSize[entity] || 2048
+        );
         const bias = -0.0001;
         const normalBias = 0.02;
         // Blur radius for VSMShadowMap soft edges (texel-space, not world units).
@@ -863,6 +961,11 @@ export const LightSyncSystem: System = defineSystem({
         }
       } else {
         light.castShadow = false;
+        const shadowMap = light.shadow.map;
+        if (shadowMap) {
+          shadowMap.dispose();
+          light.shadow.map = null;
+        }
       }
     }
     // No entity currently wants CSM this frame — release it (it owns its own
@@ -884,13 +987,17 @@ export const PointSpotLightSyncSystem: System = defineSystem({
     const entityToPointLight = getPointLightMap(state);
     const entityToSpotLight = getSpotLightMap(state);
 
+    const freePointLights = getFreePointLights(state);
+
     for (const [eid, light] of entityToPointLight) {
       if (!state.exists(eid)) {
-        scene.remove(light);
-        light.dispose();
+        // Back to the pool instead of scene.remove + dispose: the light count
+        // is baked into every compiled program, so shrinking it would stall
+        // the frame recompiling the whole scene's materials.
+        light.intensity = 0;
+        pointLightCache.delete(light);
         entityToPointLight.delete(eid);
-        const idx = context.lights.pointLights.indexOf(light);
-        if (idx !== -1) context.lights.pointLights.splice(idx, 1);
+        freePointLights.push(light);
       }
     }
 
@@ -906,19 +1013,45 @@ export const PointSpotLightSyncSystem: System = defineSystem({
     }
 
     const pointEntities = pointLightQuery(state.world);
-    for (const eid of pointEntities) {
+    const activePointEntities = selectActivePointLights(
+      state,
+      pointEntities,
+      entityToPointLight
+    );
+
+    // Hand back the slots of entities that lost the proximity contest.
+    for (const [eid, light] of entityToPointLight) {
+      if (activePointEntities.has(eid)) continue;
+      light.intensity = 0;
+      pointLightCache.delete(light);
+      entityToPointLight.delete(eid);
+      freePointLights.push(light);
+    }
+
+    for (const eid of activePointEntities) {
       let light = entityToPointLight.get(eid);
       if (!light) {
+        light = freePointLights.pop();
+      }
+      if (!light) {
         if (context.lights.pointLights.length >= MAX_POINT_LIGHTS) {
-          logger.warn(
-            `PointLight limit (${MAX_POINT_LIGHTS}) reached — skipping entity ${eid}`
-          );
+          // Unreachable while the selection above caps at MAX_POINT_LIGHTS —
+          // kept as a guard, and warned once per entity so a stuck state can't
+          // flood the console at frame rate.
+          if (!pointLightLimitWarned.has(eid)) {
+            pointLightLimitWarned.add(eid);
+            logger.warn(
+              `PointLight limit (${MAX_POINT_LIGHTS}) reached — skipping entity ${eid}`
+            );
+          }
           continue;
         }
         light = new THREE.PointLight();
         scene.add(light);
-        entityToPointLight.set(eid, light);
         context.lights.pointLights.push(light);
+      }
+      if (entityToPointLight.get(eid) !== light) {
+        entityToPointLight.set(eid, light);
       }
 
       const color = PointLight.color[eid];
@@ -1225,6 +1358,13 @@ export const SceneRenderSystem: System = defineSystem({
     }
     if (context.renderer) {
       context.renderer.setAnimationLoop(null);
+      // Drop the GL context before dispose — soft HMR without this leaves
+      // Firefox holding zombie contexts until the browser process is killed.
+      try {
+        context.renderer.forceContextLoss();
+      } catch (e) {
+        logger.warn('forceContextLoss failed', e);
+      }
       context.renderer.dispose();
       context.renderer = undefined;
       context.canvas = undefined;

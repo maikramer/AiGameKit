@@ -13,6 +13,27 @@ function createOrderingError(
   return error;
 }
 
+/**
+ * Resolves a `before`/`after` entry to a registered system.
+ *
+ * Entries may be the system object or its `name` — the name form lets a system
+ * order itself against one it cannot import (plugin ↔ systems cycles). Both
+ * forms resolve to `undefined` when the target is not registered, which callers
+ * treat as "no constraint", the long-standing behaviour for object entries.
+ *
+ * Comparison is by object identity, so a raw string used to match nothing and
+ * the constraint was dropped in silence.
+ */
+function resolveDependency(
+  dep: System | string,
+  systems: readonly System[]
+): System | undefined {
+  if (typeof dep === 'string') {
+    return systems.find((candidate) => candidate.name === dep);
+  }
+  return systems.includes(dep) ? dep : undefined;
+}
+
 export function validateSystemConstraints(system: System): void {
   if (system.first && system.last) {
     throw createOrderingError(
@@ -29,8 +50,9 @@ export function validateGroupConstraints(
   const systemGroup = system.group ?? 'simulation';
 
   if (system.before) {
-    for (const beforeSystem of system.before) {
-      if (!allSystems.includes(beforeSystem)) continue;
+    for (const dep of system.before) {
+      const beforeSystem = resolveDependency(dep, allSystems);
+      if (!beforeSystem) continue;
       const beforeGroup = beforeSystem.group ?? 'simulation';
       if (beforeGroup !== systemGroup) {
         throw createOrderingError(
@@ -42,8 +64,9 @@ export function validateGroupConstraints(
   }
 
   if (system.after) {
-    for (const afterSystem of system.after) {
-      if (!allSystems.includes(afterSystem)) continue;
+    for (const dep of system.after) {
+      const afterSystem = resolveDependency(dep, allSystems);
+      if (!afterSystem) continue;
       const afterGroup = afterSystem.group ?? 'simulation';
       if (afterGroup !== systemGroup) {
         throw createOrderingError(
@@ -64,8 +87,9 @@ function buildDependencyGraph(systems: System[]): Map<System, Set<System>> {
     }
 
     if (system.before) {
-      for (const beforeTarget of system.before) {
-        if (!systems.includes(beforeTarget)) continue;
+      for (const dep of system.before) {
+        const beforeTarget = resolveDependency(dep, systems);
+        if (!beforeTarget) continue;
         if (!graph.has(beforeTarget)) {
           graph.set(beforeTarget, new Set());
         }
@@ -74,8 +98,9 @@ function buildDependencyGraph(systems: System[]): Map<System, Set<System>> {
     }
 
     if (system.after) {
-      for (const afterTarget of system.after) {
-        if (!systems.includes(afterTarget)) continue;
+      for (const dep of system.after) {
+        const afterTarget = resolveDependency(dep, systems);
+        if (!afterTarget) continue;
         if (!graph.has(afterTarget)) {
           graph.set(afterTarget, new Set());
         }

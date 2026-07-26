@@ -53,17 +53,27 @@ scene.add(debugMesh);
 
 ## Components
 
-| Component          | Fields                                                                           | Description                                    |
-| ------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `nav-mesh-surface` | `enabled`, `generated`                                                           | Flag: presence triggers navmesh build          |
+| Component          | Fields                                                                                           | Description                                                                                                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nav-mesh-surface` | `enabled`, `generated`                                                                           | Flag: presence triggers navmesh build                                                                                                                                                  |
 | `nav-mesh-agent`   | `agentIndex`, `speed`, `radius`, `height`, `targetX/Y/Z`, `hasTarget`, `enabled`, `faceVelocity` | Agent data; `agentIndex=-1` means unregistered. `faceVelocity=1` (default) writes yaw from crowd velocity via `setTransformFacingXZ` (degrees). Set `0` when presentation owns facing. |
 
 ## Systems
 
-| System               | Group        | Description                                                                        |
-| -------------------- | ------------ | ---------------------------------------------------------------------------------- |
-| `NavMeshInitSystem`  | `setup`      | Early WASM init + prefetch; bakes off-thread (no loading gate)                     |
-| `NavMeshAgentSystem` | `simulation` | Creates/removes Crowd agents, applies targets, syncs XZ position; optional yaw from velocity (`faceVelocity`) |
+| System               | Group        | Description                                                                                                                                                                                                                                                                     |
+| -------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NavMeshInitSystem`  | `setup`      | Early WASM init + prefetch; bakes off-thread (no loading gate)                                                                                                                                                                                                                  |
+| `NavMeshAgentSystem` | `simulation` | Creates/removes Crowd agents, applies targets. Without CCT: syncs Transform XZ. With `CharacterController`: crowd steers, `CharacterMovement.desiredVel` moves the body (CCT owns pose), agent resynced to Transform only on drift. Optional yaw from velocity (`faceVelocity`) |
+
+### Facing must write Rigidbody, not only Transform
+
+`copyRigidbodyToTransforms` overwrites Transform rotation from the kinematic body every fixed step. Scripts / navmesh that only call `setTransformFacingXZ(Transform, …)` get their yaw snapped back next physics tick — characters blink while walking. Push the same euler/quat into `Rigidbody` and set `poseDirty=1` (player movement already does this; CCT bridge + creature presentation do too).
+
+### CCT agents: never teleport every frame
+
+`agent.teleport` resets the agent corridor **and** its move request. Calling it once per frame to keep the crowd agent glued to the physics pose leaves the agent permanently pathless: it produces no velocity, so `desiredVel` stays zero, so the CCT never moves, so the pose never diverges — enemies stand still forever in `chase`.
+
+The system therefore only teleports when `needsCrowdResync(dx, dy, dz)` reports real drift (`CCT_RESYNC_XZ` = 0.5 m horizontally, `CCT_RESYNC_Y` = 1.5 m vertically), which happens when the body is blocked by geometry or pushed by another agent. After a teleport the last requested target (`NavMeshRuntime.agentTargets`) is re-issued, since the teleport dropped it.
 
 ## Recipes
 

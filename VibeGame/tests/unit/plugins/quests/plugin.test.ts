@@ -11,14 +11,16 @@ import {
 import {
   QuestProgressSystem,
   QuestTriggerSystem,
+  QuestVisitSystem,
 } from '../../../../src/plugins/quests/systems';
 import { QuestsPlugin } from '../../../../src/plugins/quests/plugin';
 
 describe('QuestsPlugin shape', () => {
-  it('registers trigger then progress systems', () => {
+  it('registers trigger, progress and visit systems', () => {
     expect(QuestsPlugin.systems).toEqual([
       QuestTriggerSystem,
       QuestProgressSystem,
+      QuestVisitSystem,
     ]);
   });
 

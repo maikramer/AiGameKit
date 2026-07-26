@@ -24,6 +24,13 @@ export {
   navMeshRecipe,
   navMeshWalkableRecipe,
 } from './recipes';
+export {
+  applyCrowdAgentToEntity,
+  CCT_RESYNC_XZ,
+  CCT_RESYNC_Y,
+  needsCrowdResync,
+} from './cct-bridge';
+export type { CrowdAgentPoseSample } from './cct-bridge';
 export { NavMeshAgentSystem, NavMeshInitSystem } from './systems';
 export type { NavMeshRuntime } from './systems';
 

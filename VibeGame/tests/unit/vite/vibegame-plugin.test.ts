@@ -8,8 +8,9 @@ import {
 
 function getVibegamePlugin(): Plugin {
   const plugins = vibegame();
-  expect(plugins.length).toBeGreaterThan(0);
-  return plugins[0]!;
+  const named = plugins.find((p) => p.name === 'vibegame');
+  expect(named).toBeDefined();
+  return named!;
 }
 
 function applyConfig(
@@ -31,11 +32,13 @@ describe('vibegame() plugin structure', () => {
     expect(Array.isArray(vibegame())).toBe(true);
   });
 
-  it('returns exactly one plugin', () => {
-    expect(vibegame().length).toBe(1);
+  it('includes core vibegame + full-reload helpers', () => {
+    const names = vibegame().map((p) => p.name);
+    expect(names).toContain('vibegame');
+    expect(names).toContain('vibegame-force-full-reload');
   });
 
-  it('names the plugin vibegame', () => {
+  it('names the config plugin vibegame', () => {
     expect(getVibegamePlugin().name).toBe('vibegame');
   });
 

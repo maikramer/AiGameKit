@@ -35,6 +35,7 @@ export {
   QUEST_COMPLETED,
   QuestProgressSystem,
   QuestTriggerSystem,
+  QuestVisitSystem,
   notifyEnemyKilled,
   notifyResourceHarvested,
 } from './systems';

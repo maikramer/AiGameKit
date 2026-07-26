@@ -1,25 +1,35 @@
 # Physics Plugin
 
 <!-- LLM:OVERVIEW -->
+
 3D physics simulation with Rapier including rigid bodies, collisions, and character controllers.
 <!-- /LLM:OVERVIEW -->
 
 ## Physics Behavior
 
 ### Transform Synchronization
+
 - **Rigidbody position is authoritative**: For entities with a Rigidbody component, the physics position/rotation overwrites Transform values
 - **One-way sync**: Rigidbody → Transform (never Transform → Rigidbody except via teleportation)
 - **Scale inheritance**: Collider dimensions are multiplied by Transform scale at creation time
 - **Initialization delay**: Rapier bodies aren't created until the next fixed update after entity creation
 
 ### Fixed Timestep Execution
+
 - **Fixed update rate**: Physics runs at 50Hz (1/50 second intervals), not every frame
 - **Variable execution**: May run 0-N times per frame depending on performance
   - High FPS (144Hz): Multiple frames between physics updates
   - Low FPS (30Hz): Multiple physics updates per frame
 - **Interpolation**: InterpolatedTransform smooths visual movement between physics steps
 
+### Loading Hold and Falling
+
+- **Held while loading**: `PhysicsStepSystem` and `CharacterMovementSystem` both bail out on `isPhysicsHeld(state)`. Body and collider creation keeps running in the other `fixed` systems, so the world is fully built when the hold lifts.
+- **Gravity must not accumulate while held**: characters cannot move during the hold, so integrating gravity anyway builds hundreds of m/s of fall speed that punches every enemy through the terrain on the first simulated step.
+- **Terminal velocity**: airborne characters cap at `|gravity| * 1.5` (`integrateFallVelocity`). This keeps the per-step translation smaller than the ground collider so the CCT sweep lands instead of tunnelling.
+
 ### Platform Movement
+
 - **Platform sticking**: Characters automatically stick to moving and rotating platforms
 - **Velocity inheritance**: Characters inherit both linear and angular velocity from platforms
 - **Tangential velocity**: Rotation creates tangential velocity based on distance from platform center (v = ω × r)
@@ -27,6 +37,7 @@
 - **Velocity-based only**: Only velocity-based kinematic platforms support character movement
 
 ### Example Timing
+
 ```
 144 FPS: Frame--Frame--[Physics]--Frame--Frame--[Physics]
  50 FPS: Frame--[Physics][Physics]--Frame--[Physics][Physics]
@@ -62,19 +73,23 @@ physics/
 - **External**: @dimforge/rapier3d-compat (WASM physics engine)
 
 <!-- LLM:REFERENCE -->
+
 ### Constants
 
 - DEFAULT_GRAVITY: -60
+- TERMINAL_FALL_SECONDS: 1.5 (internal; terminal fall speed = `|gravity| * 1.5`)
 
 ### Enums
 
 #### BodyType
+
 - Dynamic = 0 - Affected by forces
 - Fixed = 1 - Immovable static
 - KinematicPositionBased = 2 - Script position
 - KinematicVelocityBased = 3 - Script velocity
 
 #### ColliderShape
+
 - Box = 0
 - Sphere = 1
 - Capsule = 2
@@ -84,11 +99,13 @@ physics/
 ### Components
 
 #### PhysicsWorld
+
 - gravityX: f32 (0)
 - gravityY: f32 (-60)
 - gravityZ: f32 (0)
 
 #### Rigidbody
+
 - type: ui8 - BodyType enum (Fixed)
 - mass: f32 (1)
 - linearDamping: f32 (0)
@@ -105,6 +122,7 @@ physics/
 - rotVelX, rotVelY, rotVelZ: f32
 
 #### Collider
+
 - shape: ui8 - ColliderShape enum (Box)
 - sizeX, sizeY, sizeZ: f32 (1)
 - radius: f32 (0.5)
@@ -132,6 +150,7 @@ download finishes (see `mesh-collider.ts`):
 ```
 
 #### CharacterController
+
 - offset: f32 (0.08)
 - maxSlope: f32 (45°)
 - maxSlide: f32 (30°)
@@ -146,17 +165,20 @@ download finishes (see `mesh-collider.ts`):
 - platformVelX, platformVelY, platformVelZ: f32 - Inherited velocity from platform
 
 #### CharacterMovement
+
 - desiredVelX, desiredVelY, desiredVelZ: f32
 - velocityY: f32
 - actualMoveX, actualMoveY, actualMoveZ: f32
 
 #### InterpolatedTransform
+
 - prevPosX, prevPosY, prevPosZ: f32
 - prevRotX, prevRotY, prevRotZ, prevRotW: f32
 - posX, posY, posZ: f32
 - rotX, rotY, rotZ, rotW: f32
 
 #### Force/Impulse Components
+
 - ApplyForce: x, y, z (f32)
 - ApplyTorque: x, y, z (f32)
 - ApplyImpulse: x, y, z (f32)
@@ -168,6 +190,7 @@ download finishes (see `mesh-collider.ts`):
 - KinematicAngularVelocity: x, y, z (f32)
 
 #### Collision Events
+
 - CollisionEvents: activeEvents (ui8)
 - TouchedEvent: other, handle1, handle2 (ui32)
 - TouchEndedEvent: other, handle1, handle2 (ui32)
@@ -177,7 +200,7 @@ download finishes (see `mesh-collider.ts`):
 - PhysicsWorldSystem - Initializes physics world
 - PhysicsInitializationSystem - Creates bodies and colliders
 - PhysicsCleanupSystem - Removes physics on entity destroy
-- CharacterMovementSystem - Character controller with full velocity inheritance (linear + angular)
+- CharacterMovementSystem - Character controller with full velocity inheritance (linear + angular); held while `isPhysicsHeld`
 - CollisionEventCleanupSystem - Clears collision events
 - ApplyForcesSystem - Applies forces
 - ApplyTorquesSystem - Applies torques
@@ -193,6 +216,7 @@ download finishes (see `mesh-collider.ts`):
 ### Functions
 
 #### initializePhysics(): Promise<void>
+
 Initializes Rapier WASM physics engine
 
 ### Recipes
@@ -200,9 +224,12 @@ Initializes Rapier WASM physics engine
 - static-part - Immovable physics objects
 - dynamic-part - Gravity-affected objects
 - kinematic-part - Script-controlled objects
+- Creature - Kinematic capsule + CharacterController for AI agents (no PlayerController). Pair with NavMeshAgent: crowd steers `CharacterMovement.desiredVel`, CCT owns Transform XYZ on terrain heightfields.
+
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
+
 ## Examples
 
 ### Basic Usage
@@ -210,6 +237,7 @@ Initializes Rapier WASM physics engine
 #### XML Recipes
 
 ##### Static Floor
+
 ```xml
 <static-part
   pos="0 -0.5 0"
@@ -220,6 +248,7 @@ Initializes Rapier WASM physics engine
 ```
 
 ##### Dynamic Ball
+
 ```xml
 <dynamic-part
   pos="0 5 0"
@@ -232,6 +261,7 @@ Initializes Rapier WASM physics engine
 ```
 
 ##### Moving Platform
+
 ```xml
 <kinematic-part
   pos="0 2 0"
@@ -251,6 +281,7 @@ Initializes Rapier WASM physics engine
 ```
 
 ##### Character with Controller
+
 ```xml
 <entity
   pos="0 1 0"
@@ -266,6 +297,7 @@ Initializes Rapier WASM physics engine
 #### JavaScript API
 
 ##### Create Physics Entity
+
 ```typescript
 import * as GAME from 'vibegame';
 import { Rigidbody, Collider, BodyType, ColliderShape } from 'vibegame/physics';
@@ -323,6 +355,7 @@ if (Rigidbody.type[entity] === BodyType.KinematicVelocityBased) {
 ```
 
 ##### Apply Forces
+
 ```typescript
 import * as GAME from 'vibegame';
 import { ApplyImpulse, ApplyForce, SetLinearVelocity } from 'vibegame/physics';
@@ -344,6 +377,7 @@ state.addComponent(entity, SetLinearVelocity, {
 ```
 
 ##### Handle Collisions
+
 ```typescript
 import * as GAME from 'vibegame';
 import { TouchedEvent, ApplyImpulse } from 'vibegame/physics';
@@ -366,6 +400,7 @@ const CollisionSystem: GAME.System = {
 ```
 
 ##### Character Movement
+
 ```typescript
 import * as GAME from 'vibegame';
 import { CharacterMovement, CharacterController } from 'vibegame/physics';
@@ -388,6 +423,7 @@ const PlayerMovementSystem: GAME.System = {
 ```
 
 ##### Custom Plugin Integration
+
 ```typescript
 import * as GAME from 'vibegame';
 
@@ -399,4 +435,5 @@ GAME
   .withPlugin(GAME.PhysicsPlugin)
   .run();
 ```
+
 <!-- /LLM:EXAMPLES -->

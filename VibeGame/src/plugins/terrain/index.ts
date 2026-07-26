@@ -43,6 +43,7 @@ export {
   chunkKey,
   resolutionForLevel,
   effectiveResolution,
+  deepestLeafAabb,
   meshSurfaceResolutionForPoint,
 } from './lod-select';
 export type { ChunkDesc } from './lod-select';

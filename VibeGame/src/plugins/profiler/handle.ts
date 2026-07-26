@@ -22,6 +22,10 @@ import {
   type AudioDebugSnapshot,
 } from '../audio/debug-log';
 import type { ProfilerTabId } from './url';
+import {
+  getBoundWorldDebugSnapshot,
+  type WorldDebugSnapshot,
+} from './world-debug';
 
 export interface ProfilerTabBridge {
   getTab(): ProfilerTabId;
@@ -46,6 +50,7 @@ export interface VibeGameProfilerHandle {
   getTab(): ProfilerTabId;
   setTab(tab: ProfilerTabId): void;
   audioSnapshot(): AudioDebugSnapshot;
+  worldSnapshot(): WorldDebugSnapshot | null;
 }
 
 let tabBridge: ProfilerTabBridge | null = null;
@@ -102,6 +107,9 @@ export function createProfilerHandle(): VibeGameProfilerHandle {
     },
     audioSnapshot() {
       return getAudioDebugSnapshot();
+    },
+    worldSnapshot() {
+      return getBoundWorldDebugSnapshot();
     },
   };
 }

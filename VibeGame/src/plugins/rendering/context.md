@@ -1,6 +1,7 @@
 # Rendering Plugin
 
 <!-- LLM:OVERVIEW -->
+
 Lightweight Three.js rendering wrapper with meshes, lights, and cameras.
 <!-- /LLM:OVERVIEW -->
 
@@ -27,12 +28,38 @@ rendering/
 
 Renderer and camera use `canvas.clientWidth/clientHeight` for sizing and aspect ratio, respecting CSS dimensions. Multiple canvases per page require separate State instances (one State per canvas).
 
+**Shader warmup / postprocessing:** EffectComposer can start with 0×0 depth
+(Firefox: `DEPTH_ATTACHMENT…`). `syncComposerSize` re-syncs after construct.
+Warmup **must not** block the loading `shaders` gate on a single huge frame:
+compile + one raw `renderer.render` (no composer), latch immediately, then
+finish yaw×pitch orbit across later frames. Waiting on camera/drawing-buffer
+logs and force-latches after a frame budget. Directional boot light starts with
+`castShadow=false`; `shadowMapSize` clamped to ≥1 when shadows are enabled.
+
 ## Performance
 
 - **Dynamic instance pooling**: Starts at 1000 instances per shape, automatically doubles when full
 - **Performance warning**: Console warning at 10,000 total instances
 - **Hard limit**: 50,000 total instances (throws error)
 - **Roblox-like scaling**: Graceful growth with developer-friendly warnings
+
+### Slots de PointLight (12)
+
+`MAX_POINT_LIGHTS = 12` é o tecto de luzes pontuais simultâneas. Os slots são
+atribuídos **às mais próximas da câmera** (`pickNearestLightSlots`), não por
+ordem de criação:
+
+- Antes era primeiro-a-chegar: num mundo aberto, uma dúzia de lanternas junto à
+  origem ficava com todos os slots no boot e **todas** as tochas/braseiros que o
+  jogador visitasse depois nasciam apagadas — com um aviso por entidade **por
+  frame** (30k linhas em dois minutos no simple-rpg).
+- Quem tem slot leva 25% de vantagem de distância (histerese) para a luz não
+  piscar quando o jogador anda na fronteira entre dois grupos.
+- Ao perder o slot a luz volta a um pool com `intensity = 0` **dentro da cena**:
+  tirá-la mudaria a contagem de luzes, que está compilada em todos os programas
+  do material cache e obrigaria a recompilar a cena inteira. Pela mesma razão a
+  destruição de uma entidade devolve a luz ao pool em vez de a dispor.
+- O aviso do tecto é emitido **uma vez por entidade**.
 
 ## Entry Points
 
@@ -46,9 +73,11 @@ Renderer and camera use `canvas.clientWidth/clientHeight` for sizing and aspect 
 - **External**: Three.js
 
 <!-- LLM:REFERENCE -->
+
 ### Components
 
 #### Renderer
+
 - shape: ui8 - 0=box, 1=sphere
 - sizeX, sizeY, sizeZ: f32 (1)
 - color: ui32 (0xffffff)
@@ -56,20 +85,24 @@ Renderer and camera use `canvas.clientWidth/clientHeight` for sizing and aspect 
 - unlit: ui8 (0) - Use unlit material (ignores lighting)
 
 #### RenderContext
+
 - clearColor: ui32 (0x000000)
 - hasCanvas: ui8
 
 #### MainCamera
+
 - projection: ui8 (0) - 0=perspective, 1=orthographic
 - fov: f32 (75) - Field of view in degrees (perspective only)
 - orthoSize: f32 (10) - Vertical size in world units (orthographic only)
 
 #### AmbientLight
+
 - skyColor: ui32 (0x87ceeb)
 - groundColor: ui32 (0x4a4a4a)
 - intensity: f32 (0.6)
 
 #### DirectionalLight
+
 - color: ui32 (0xffffff)
 - intensity: f32 (1)
 - castShadow: ui8 (1)
@@ -82,28 +115,34 @@ Renderer and camera use `canvas.clientWidth/clientHeight` for sizing and aspect 
 ### Systems
 
 #### MeshInstanceSystem
+
 - Group: draw
 - Synchronizes transforms with Three.js meshes
 
 #### LightSyncSystem
+
 - Group: draw
 - Updates Three.js lights
 
 #### CameraSyncSystem
+
 - Group: draw
 - Synchronizes camera position and rotation from WorldTransform
 
 #### WebGLRenderSystem
+
 - Group: draw (last)
 - Renders scene directly via WebGLRenderer (or through EffectComposer if postprocessing plugin is active)
 
 ### Functions
 
 #### setCanvasElement(entity, canvas): void
+
 Associates canvas with RenderContext
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
+
 ## Examples
 
 ### Basic Rendering Setup

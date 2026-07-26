@@ -1,5 +1,47 @@
 import type { Recipe } from '../../core';
-import { BodyType } from './components';
+import { BodyType, ColliderShape } from './components';
+
+/** Capsule sized to NavMeshAgent defaults (radius 0.4, height 1.0). */
+const CREATURE_COLLIDER_DEFAULTS = {
+  shape: ColliderShape.Capsule,
+  radius: 0.4,
+  /** Cylinder segment so total capsule height = height + 2·radius = 1.0. */
+  height: 0.2,
+  friction: 0,
+  posOffsetY: 0.5,
+} as const;
+
+/**
+ * Kinematic CCT stack for AI creatures (enemies). Same ground authority as
+ * Player, without input / PlayerController / respawn.
+ */
+export const creatureRecipe: Recipe = {
+  name: 'Creature',
+  components: [
+    'transform',
+    'rigidbody',
+    'collider',
+    'character-controller',
+    'character-movement',
+  ],
+  merge: true,
+  /** Same as GameObject: `place` is owned by the spawner entity-parser. */
+  parserAttributes: ['place'],
+  overrides: {
+    'rigidbody.type': BodyType.KinematicPositionBased,
+    'rigidbody.mass': 1,
+    'rigidbody.gravity-scale': 1,
+    'rigidbody.ccd': 1,
+    'rigidbody.lock-rot-x': 1,
+    'rigidbody.lock-rot-z': 1,
+    'character-controller.snap-dist': 0,
+    'collider.shape': CREATURE_COLLIDER_DEFAULTS.shape,
+    'collider.radius': CREATURE_COLLIDER_DEFAULTS.radius,
+    'collider.height': CREATURE_COLLIDER_DEFAULTS.height,
+    'collider.friction': CREATURE_COLLIDER_DEFAULTS.friction,
+    'collider.pos-offset-y': CREATURE_COLLIDER_DEFAULTS.posOffsetY,
+  },
+};
 
 const physicsPartRecipe: Recipe = {
   name: 'physics-part',

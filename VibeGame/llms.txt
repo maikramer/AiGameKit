@@ -753,13 +753,13 @@ const health = Health.current[entity];
 - **Dialog trees** - No branching conversation system built-in (implementable with UI / custom data)
 - **Custom shaders** - Fixed Three.js materials; no user shader graph
 
-**Built-in today (do not claim missing):** `audio` (Howler + `<AudioSource>`), `save-load`, `particles`, `terrain`, `navmesh`, `ai-yuka` (`<NPC>`), declarative `sky`, GLTF animation — see `docs/PLUGINS.md` and `docs/AUDIO.md`.
+**Built-in today (do not claim missing):** `audio` (Howler + `<AudioSource>`), `save-load`, `particles`, `terrain`, `navmesh`, `ai-yuka` (`<NPC>`, decide/flock/pursuit), declarative `sky`, GLTF animation — see `docs/PLUGINS.md`, `docs/AUDIO.md`, and `docs/AI.md`. The old `ai-steering` plugin is **gone**; do not mention `AiSteeringPlugin` / `SteeringAgent`.
 
 ### Recommended Approaches
 - **Complex UI** → HTML/CSS overlays (this is actually superior to most game engines)
 - **Animations** → GSAP for smooth transitions and effects
 - **Level progression** → Reload with different XML or hide/show worlds
-- **Enemy behavior** → Tweened movement patterns
+- **Enemy locomotion** → `YukaAiPlugin` (`<NPC>` / `YukaAgentComponent` + `decide`); melee lunges → `RpgAiPlugin`; pathing → `navmesh` crowd
 - **Interactions** → Collision detection in custom systems
 
 ## Common Mistakes to Avoid

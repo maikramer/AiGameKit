@@ -13,6 +13,11 @@ export { entityParser } from './entity-parser';
 export { TerrainPlaceSystem } from './place-system';
 export { TerrainSpawnBoundsCatchUpSystem, TerrainSpawnSystem } from './systems';
 export { spawnTemplateAtTerrain } from './spawn-template';
+export { templateVisualUrl } from './template-url';
+export {
+  applyTerrainSpawnedY,
+  terrainSpawnedWorldY,
+} from './terrain-spawned-y';
 export {
   SpawnExclusion,
   registerSpawnFootprint,

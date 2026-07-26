@@ -21,6 +21,10 @@ export const PRESET_TEXTURE_FILE = {
   woodchips: 'woodchip.png',
   rockshards: 'rockshard.png',
   leaves: 'leaf.png',
+  // 'ground-dust' foi acrescentado aos PRESET_NAMES sem entrada aqui, e o
+  // lençol de poeira do deserto ficava sem sprite (o teste "maps every preset
+  // to a sprite filename" apanhava-o). Partilha o sprite do 'dust'.
+  'ground-dust': 'dust.png',
 } as const;
 
 export type ParticleTexturePreset = keyof typeof PRESET_TEXTURE_FILE;

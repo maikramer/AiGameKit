@@ -106,6 +106,7 @@ kite vs body-block, separate vs flock).
 
 ### See Also
 
+- User-facing guide: [`docs/AI.md`](../../../docs/AI.md).
 - `navmesh` (`setAgentTarget`, `NavMeshAgent`, `isNavMeshReady`).
 - `bvh` (`castBvhRay`, `getBvhSurfaceHeight`).
 - `rpg-ai` (`runMeleeAiFrame` — the melee lunge FSM; compose with this plugin).

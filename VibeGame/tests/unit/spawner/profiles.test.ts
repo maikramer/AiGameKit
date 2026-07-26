@@ -23,11 +23,11 @@ describe('spawn profiles', () => {
     expect(d.scaleAxisMax).toBe(1.1);
   });
 
-  it('creature partilha path de chão das árvores (aabb) sem jitter de escala', () => {
+  it('creature: sem lift/AABB — física de chão ainda não existe nos enemies', () => {
     const d = getGroupSpawnDefaults('creature');
-    expect(d.alignToTerrain).toBe(true);
-    expect(d.groundAlign).toBe('aabb');
-    expect(d.baseYOffset).toBe(0.02);
+    expect(d.alignToTerrain).toBe(false);
+    expect(d.groundAlign).toBe('none');
+    expect(d.baseYOffset).toBe(0);
     expect(d.scaleMin).toBe(1);
     expect(d.scaleMax).toBe(1);
     expect(roleToProfile('enemy')).toBe('creature');

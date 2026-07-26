@@ -14,10 +14,12 @@ export {
   setInstancedLodThreshold,
 } from './auto-instance';
 export {
+  clearGltfBoundsCache,
+  flushGltfBoundsPrefetch,
   getGltfLocalAABB,
   getGltfLocalYBounds,
   prefetchGltfLocalYBounds,
   registerGltfLocalYBounds,
 } from './gltf-bounds-cache';
-export { gltfAssetsReady } from './ready-gate';
+export { describeGltfAssetsPending, gltfAssetsReady } from './ready-gate';
 export { getGltfRootGroup } from './group-registry';

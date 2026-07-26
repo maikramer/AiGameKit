@@ -20,7 +20,9 @@ export { RenderingPlugin } from './plugin';
 export { rendererRecipe, pointLightRecipe, spotLightRecipe } from './recipes';
 export {
   isSceneShadersWarmed,
+  pumpShaderWarmup,
   resetShaderWarmup,
+  ShaderWarmupSystem,
   warmupSceneShaders,
 } from './shader-warmup';
 export {

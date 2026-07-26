@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import {
   applyOverride,
+  boostAt,
   buildDensityMap,
 } from '../../../src/plugins/terrain/density-map';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';
 import { sampleHeightAt } from '../../../src/plugins/terrain/height-sampler';
 import {
+  deepestLeafAabb,
   effectiveResolution,
   meshSurfaceResolutionForPoint,
 } from '../../../src/plugins/terrain/lod-select';
@@ -53,10 +55,43 @@ describe('meshSurfaceResolutionForPoint', () => {
 
     const base = 64;
     const levels = 4;
+    const maxLeafLevel = levels - 1;
     const res = meshSurfaceResolutionForPoint(base, levels, density, 0, 0);
-    const leafRes = effectiveResolution(base, levels, 255);
-    expect(res).toBe(leafRes * 2 ** levels);
+    const leafRes = effectiveResolution(base, maxLeafLevel, 255);
+    expect(res).toBe(leafRes * 2 ** maxLeafLevel);
     expect(res).toBeGreaterThan(base);
+  });
+
+  it('uses maxBoostOverAabb of the deepest leaf, not only boostAt(point)', () => {
+    // Quiet tile next to a featured neighbour inside the same LOD leaf —
+    // chunks adopt maxBoostOverAabb; point-only boost left spawn coarse.
+    const sampler = flatSampler();
+    const density = buildDensityMap(sampler, 64);
+    const levels = 4;
+    const quietX = 40;
+    const quietZ = 40;
+    const leaf = deepestLeafAabb(density.worldSize, levels, quietX, quietZ);
+    // Stamp boost in the far corner of the same leaf, away from the quiet point.
+    applyOverride(
+      density,
+      {
+        minX: leaf.maxX - 5,
+        maxX: leaf.maxX - 1,
+        minZ: leaf.maxZ - 5,
+        maxZ: leaf.maxZ - 1,
+      },
+      255
+    );
+
+    expect(boostAt(density, quietX, quietZ)).toBe(0);
+    const res = meshSurfaceResolutionForPoint(
+      64,
+      levels,
+      density,
+      quietX,
+      quietZ
+    );
+    expect(res).toBeGreaterThan(64);
   });
 
   it('anchors spawn height to the carved dip when boost is active (no float)', () => {
@@ -87,5 +122,17 @@ describe('meshSurfaceResolutionForPoint', () => {
     // Density-aware lattice tracks the visible carve surface.
     expect(fine).toBeLessThan(coarse - 5);
     expect(fine).toBeCloseTo(analytic, 0);
+  });
+});
+
+describe('deepestLeafAabb', () => {
+  it('partitions the field into power-of-two leaves matching selectChunks', () => {
+    const leaf = deepestLeafAabb(2000, 4, 10, -10);
+    expect(leaf.maxX - leaf.minX).toBeCloseTo(250, 5);
+    expect(leaf.maxZ - leaf.minZ).toBeCloseTo(250, 5);
+    expect(10).toBeGreaterThanOrEqual(leaf.minX);
+    expect(10).toBeLessThan(leaf.maxX);
+    expect(-10).toBeGreaterThanOrEqual(leaf.minZ);
+    expect(-10).toBeLessThan(leaf.maxZ);
   });
 });

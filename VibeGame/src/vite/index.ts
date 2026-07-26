@@ -1,4 +1,5 @@
 ﻿import type { Plugin } from 'vite';
+import { vibegameForceFullReload } from './force-full-reload';
 import { vibegamePublicLiveServe } from './public-live-serve';
 import { silenceTyprOpentypeNoise } from './silence-typr';
 import { mergeWatchIgnored } from './watch-ignored';
@@ -38,10 +39,16 @@ export function vibegame(): Plugin[] {
         config.optimizeDeps.exclude = [...exclude];
       },
     },
+    // Last: suppress soft HMR for engine/example TS (WebGL/WASM leak in Firefox).
+    vibegameForceFullReload(),
   ];
 }
 
 export { consoleForwarding } from './console-plugin';
+export {
+  shouldForceFullReload,
+  vibegameForceFullReload,
+} from './force-full-reload';
 export { vibegameAssetHotReload } from './hot-reload';
 export { vibegamePublicLiveServe } from './public-live-serve';
 export { silenceTyprOpentypeNoise } from './silence-typr';

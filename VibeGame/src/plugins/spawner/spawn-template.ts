@@ -17,7 +17,7 @@ import {
   getGltfLocalAABB,
   getGltfLocalYBounds,
   isGltfBoundsPrefetchInflight,
-  warnMissingGltfBoundsOnce,
+  prefetchGltfLocalYBounds,
 } from '../gltf-xml/gltf-bounds-cache';
 import { DistanceCull } from '../rendering/components';
 import { Rigidbody } from '../physics/components';
@@ -31,6 +31,7 @@ import {
 } from '../spawn-variation';
 import { TerrainSpawned } from './components';
 import { setAabbPendingUrl } from './bounds-context';
+import { templateVisualUrl } from './template-url';
 
 const upNormal = new THREE.Vector3(0, 1, 0);
 
@@ -94,7 +95,11 @@ export function spawnTemplateAtTerrain(
     | 'surfaceEpsilon'
     | 'surfaceEpsilonAuto'
     | 'maxDistance'
-  > & { variation?: VariationVisualSpec },
+  > & {
+    /** Omit / `static` → edge-sink allowed; `dynamic` → never (creatures). */
+    mode?: SpawnGroupSpec['mode'];
+    variation?: VariationVisualSpec;
+  },
   rand: () => number,
   wx: number,
   wy: number,
@@ -156,33 +161,38 @@ export function spawnTemplateAtTerrain(
   );
   base.euler = [euler.x, euler.y, euler.z];
 
-  const urlRaw = template.attributes.url;
-  const url = typeof urlRaw === 'string' ? urlRaw.trim() : '';
+  const url = templateVisualUrl(template);
   const scaleY = Math.max(
     sample.scaleUniform * sample.axisY * parts.scale[1],
     1e-6
   );
   const scaleXZ = sample.scaleUniform * Math.max(sample.axisX, sample.axisZ);
 
+  const isDynamic = spec.mode === 'dynamic';
   const aabb = getGltfLocalAABB(url);
   const halfWidth = aabb
     ? Math.max(aabb.maxX - aabb.minX, aabb.maxZ - aabb.minZ) / 2
     : 0.5;
-  const sink = surface
-    ? sinkOffsetForSlope(
-        surface.slopeAngleRad,
-        halfWidth * scaleXZ,
-        spec.alignToTerrain ? surface.slopeAngleRad : 0
-      )
-    : 0;
+  const scaledHalf = halfWidth * scaleXZ;
+  // Edge-sink: static upright props only. Dynamics: no TerrainSpawned / lift /
+  // sink — Creature CCT + terrain heightfield own runtime Y.
+  const sink =
+    !isDynamic && surface
+      ? sinkOffsetForSlope(
+          surface.slopeAngleRad,
+          scaledHalf,
+          spec.alignToTerrain ? surface.slopeAngleRad : 0
+        )
+      : 0;
 
   const foot = new THREE.Vector3();
   foot.set(0, 0, 0);
-  // True when ground-align="aabb" wanted a lift but the GLB bounds weren't
-  // cached yet (prefetch still in flight). The catch-up system reapplies the
-  // lift in Y once the bounds arrive, so the prop doesn't stay floating.
+  // AABB lift / catch-up: statics with ground-align=aabb only.
+  // Missing bounds (queued/in-flight/failed prefetch, or race before KTX2) →
+  // plant with base-y-offset only and let TerrainSpawnBoundsCatchUpSystem
+  // apply the lift once registerGltfLocalYBounds fills the cache.
   let needsBoundsCatchUp = false;
-  if (spec.groundAlign === 'aabb' && url) {
+  if (!isDynamic && spec.groundAlign === 'aabb' && url) {
     const b = getGltfLocalYBounds(url);
     if (b) {
       const lift = -b.minY * scaleY;
@@ -192,72 +202,75 @@ export function spawnTemplateAtTerrain(
         foot.set(0, lift, 0);
       }
     } else {
-      if (isGltfBoundsPrefetchInflight(url)) {
-        needsBoundsCatchUp = true;
-      } else {
-        warnMissingGltfBoundsOnce(url);
+      needsBoundsCatchUp = true;
+      if (!isGltfBoundsPrefetchInflight(url)) {
+        prefetchGltfLocalYBounds(url);
       }
     }
   }
 
+  const footOffset = isDynamic ? 0 : spec.baseYOffset + foot.y;
+
   base.pos = [
     wx + parts.pos[0] + foot.x,
-    wy + parts.pos[1] + spec.baseYOffset + foot.y - sink,
+    wy + parts.pos[1] + footOffset - sink,
     wz + parts.pos[2] + foot.z,
   ];
 
   const transformStr = formatTransformAttr(base);
   const attrs = mergeTemplateAttributes(template, transformStr);
 
-  if (template.tagName.toLowerCase() === 'gameobject') {
+  const spawnedMeta = isDynamic
+    ? null
+    : {
+        footOffset,
+        surfaceEpsilon: spec.surfaceEpsilon,
+        halfWidth: scaledHalf,
+        alignToTerrain: spec.alignToTerrain,
+        needsBoundsCatchUp,
+        url,
+        scaleY,
+        normalY: effectiveNormal.y,
+      };
+
+  const tagLower = template.tagName.toLowerCase();
+  const recipeName =
+    tagLower === 'gameobject'
+      ? 'GameObject'
+      : tagLower === 'creature'
+        ? 'Creature'
+        : template.tagName;
+
+  if (tagLower === 'gameobject' || tagLower === 'creature') {
     delete attrs.place;
-    const eid = createEntityFromRecipe(state, 'GameObject', attrs);
-    const ch = template.entityChildren;
-    if (ch?.length) {
-      const context = new ParseContext(state);
-      processRecipeChildElements(state, eid, 'GameObject', ch, context);
-    }
-    if (spec.maxDistance > 0) {
-      state.addComponent(eid, DistanceCull);
-      DistanceCull.maxDistance[eid] = spec.maxDistance;
-    }
-    writeSpawnVariation(state, eid, sample);
-    mirrorPoseToRigidbody(state, eid);
-    registerTerrainSpawned(state, eid, wy, spec.surfaceEpsilon, {
-      needsBoundsCatchUp,
-      url,
-      scaleY,
-      normalY: effectiveNormal.y,
-    });
-    return;
   }
 
-  const eid = createEntityFromRecipe(state, template.tagName, attrs);
+  const eid = createEntityFromRecipe(state, recipeName, attrs);
+  const ch = template.entityChildren;
+  if (ch?.length) {
+    const context = new ParseContext(state);
+    processRecipeChildElements(state, eid, recipeName, ch, context);
+  }
   if (spec.maxDistance > 0) {
     state.addComponent(eid, DistanceCull);
     DistanceCull.maxDistance[eid] = spec.maxDistance;
   }
   writeSpawnVariation(state, eid, sample);
   mirrorPoseToRigidbody(state, eid);
-  registerTerrainSpawned(state, eid, wy, spec.surfaceEpsilon, {
-    needsBoundsCatchUp,
-    url,
-    scaleY,
-    normalY: effectiveNormal.y,
-  });
+  if (spawnedMeta) registerTerrainSpawned(state, eid, spawnedMeta);
 }
 
 /**
- * Attach `TerrainSpawned` with the hot-reload offset plus, when the AABB lift
- * was skipped because the GLB bounds hadn't cached yet, the data the catch-up
- * system needs to reapply that lift in Y once the bounds arrive.
+ * Attach `TerrainSpawned` for static/place props (not DynamicSpawner agents).
  */
 function registerTerrainSpawned(
   state: State,
   eid: number,
-  surfaceWorldY: number,
-  surfaceEpsilon: number,
-  aabb: {
+  meta: {
+    footOffset: number;
+    surfaceEpsilon: number;
+    halfWidth: number;
+    alignToTerrain: boolean;
     needsBoundsCatchUp: boolean;
     url: string;
     scaleY: number;
@@ -265,12 +278,14 @@ function registerTerrainSpawned(
   }
 ): void {
   state.addComponent(eid, TerrainSpawned);
-  TerrainSpawned.yOffset[eid] = Transform.posY[eid] - surfaceWorldY;
-  TerrainSpawned.surfaceEpsilon[eid] = surfaceEpsilon;
-  if (aabb.needsBoundsCatchUp && aabb.url) {
+  TerrainSpawned.yOffset[eid] = meta.footOffset;
+  TerrainSpawned.surfaceEpsilon[eid] = meta.surfaceEpsilon;
+  TerrainSpawned.halfWidth[eid] = meta.halfWidth;
+  TerrainSpawned.alignToTerrain[eid] = meta.alignToTerrain ? 1 : 0;
+  if (meta.needsBoundsCatchUp && meta.url) {
     TerrainSpawned.aabbPending[eid] = 1;
-    TerrainSpawned.scaleY[eid] = aabb.scaleY;
-    TerrainSpawned.normalY[eid] = aabb.normalY;
-    setAabbPendingUrl(state, eid, aabb.url);
+    TerrainSpawned.scaleY[eid] = meta.scaleY;
+    TerrainSpawned.normalY[eid] = meta.normalY;
+    setAabbPendingUrl(state, eid, meta.url);
   }
 }

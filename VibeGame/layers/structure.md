@@ -18,7 +18,9 @@ VibeGame - A vibe coding game engine using ECS architecture with bitECS, featuri
 - Example: `bun run example` (build and run demo application)
 - Type Check: `bun run check` (TypeScript validation)
 - Lint: `bun run lint --fix` (ESLint code analysis and formatting)
-- Test: `bun test` (Unit and integration tests)
+- Test: `bun test tests/unit` (full unit suite — must stay green); see [`docs/TESTING.md`](../docs/TESTING.md)
+- Test one plugin: `bun test tests/unit/<plugin> tests/unit/plugins/<plugin>`
+- Playwright: `bun run test:playwright`
 
 ## AI Context
 
@@ -78,9 +80,10 @@ vibegame/
 |   └── llms-template.md # Template for llms.txt
 ├── dist/  # Built output
 ├── tests/
-│   ├── unit/  # Unit tests
+│   ├── context.md  # Test tree overview
+│   ├── unit/  # Unit tests (per-plugin dirs + vite/ + core/)
 │   ├── integration/  # Integration tests
-│   ├── e2e/  # End-to-end tests
+│   ├── e2e/  # End-to-end tests (bun)
 │   └── playwright/  # Playwright E2E with debug bridge introspection
 │       ├── helpers/  # GameInspector, visual, interaction helpers
 │       ├── fixtures/  # Custom Playwright fixtures
@@ -121,59 +124,61 @@ Bundles (not individual `plugin.ts` folders):
 - **defaults.ts** — `DefaultPlugins` (standard engine stack; tree-shake via `withoutPlugins`)
 - **rpg-bundle.ts** — `RpgPlugins` (opt-in RPG stack for games like simple-rpg)
 
-All plugins under `src/plugins/*/plugin.ts` (51):
+All plugins under `src/plugins/*/plugin.ts` (see registry). Related modules without a top-level `*Plugin` export (e.g. `spawn-variation`) are helpers used by spawner/vegetation.
 
-| #   | Folder            | Export                                              |
-| --- | ----------------- | --------------------------------------------------- |
-| 1   | adaptive-quality  | AdaptiveQualityPlugin                               |
-| 2   | ai-yuka           | YukaAiPlugin                                        |
-| 3   | animation         | AnimationPlugin                                     |
-| 4   | audio             | AudioPlugin                                         |
-| 5   | biomes            | BiomesPlugin                                        |
-| 6   | bvh               | BvhPlugin                                           |
-| 7   | combat            | CombatPlugin                                        |
-| 8   | composition       | CompositionPlugin                                   |
-| 9   | debug             | DebugPlugin                                         |
-| 10  | destructible      | DestructiblePlugin                                  |
-| 11  | entity-script     | EntityScriptPlugin                                  |
-| 12  | floating-text     | FloatingTextPlugin                                  |
-| 13  | gltf-anim         | GltfAnimPlugin                                      |
-| 14  | gltf-xml          | GltfXmlPlugin                                       |
-| 15  | group             | GroupPlugin                                         |
-| 16  | hud               | HudPlugin (+ `HudRpgPlugin` in `hud/rpg-plugin.ts`) |
-| 17  | i18n              | I18nPlugin                                          |
-| 18  | input             | InputPlugin                                         |
-| 19  | loading           | LoadingPlugin                                       |
-| 20  | navmesh           | NavMeshPlugin                                       |
-| 21  | orbit-camera      | OrbitCameraPlugin                                   |
-| 22  | particles         | ParticlesPlugin                                     |
-| 23  | physics           | PhysicsPlugin                                       |
-| 24  | player            | PlayerPlugin                                        |
-| 25  | player-controller | ThirdPersonCameraPlugin                             |
-| 26  | postprocessing    | PostprocessingPlugin                                |
-| 27  | quests            | QuestsPlugin                                        |
-| 28  | raycast           | RaycastPlugin                                       |
-| 29  | rendering         | RenderingPlugin                                     |
-| 30  | road              | RoadPlugin                                          |
-| 31  | rpg-ai            | RpgAiPlugin                                         |
-| 32  | rpg-core          | RpgCorePlugin, RpgCoreEventsPlugin                  |
-| 33  | rpg-economy       | EconomyPlugin                                       |
-| 34  | rpg-inventory     | InventoryPlugin                                     |
-| 35  | rpg-pause         | PauseCoordinatorPlugin                              |
-| 36  | rpg-progression   | ProgressionPlugin                                   |
-| 37  | rpg-resource-node | ResourceNodePlugin                                  |
-| 38  | rpg-status        | StatusEffectsPlugin                                 |
-| 39  | rpg-vault         | RpgVaultPlugin                                      |
-| 40  | save-load         | SaveLoadPlugin                                      |
-| 41  | sky               | EquirectSkyPlugin                                   |
-| 42  | spawn-gate        | SpawnGatePlugin                                     |
-| 43  | spawner           | SpawnerPlugin                                       |
-| 44  | startup           | StartupPlugin                                       |
-| 45  | terrain           | TerrainPlugin                                       |
-| 46  | transforms        | TransformsPlugin                                    |
-| 47  | tweening          | TweeningPlugin                                      |
-| 48  | water             | WaterPlugin                                         |
-| 49  | weather           | WeatherPlugin                                       |
+| #   | Folder            | Export                                                                   |
+| --- | ----------------- | ------------------------------------------------------------------------ |
+| 1   | adaptive-quality  | AdaptiveQualityPlugin                                                    |
+| 2   | ai-yuka           | YukaAiPlugin                                                             |
+| 3   | animation         | AnimationPlugin                                                          |
+| 4   | audio             | AudioPlugin                                                              |
+| 5   | biomes            | BiomesPlugin                                                             |
+| 6   | bvh               | BvhPlugin                                                                |
+| 7   | combat            | CombatPlugin                                                             |
+| 8   | composition       | CompositionPlugin                                                        |
+| 9   | debug             | DebugPlugin                                                              |
+| 10  | destructible      | DestructiblePlugin                                                       |
+| 11  | entity-script     | EntityScriptPlugin                                                       |
+| 12  | floating-text     | FloatingTextPlugin                                                       |
+| 13  | gltf-anim         | GltfAnimPlugin                                                           |
+| 14  | gltf-xml          | GltfXmlPlugin                                                            |
+| 15  | group             | GroupPlugin                                                              |
+| 16  | hud               | HudPlugin (+ `HudRpgPlugin` in `hud/rpg-plugin.ts`)                      |
+| 17  | i18n              | I18nPlugin                                                               |
+| 18  | input             | InputPlugin                                                              |
+| 19  | loading           | LoadingPlugin                                                            |
+| 20  | navmesh           | NavMeshPlugin                                                            |
+| 21  | orbit-camera      | OrbitCameraPlugin                                                        |
+| 22  | particles         | ParticlesPlugin                                                          |
+| 23  | physics           | PhysicsPlugin                                                            |
+| 24  | player            | PlayerPlugin                                                             |
+| 25  | player-controller | ThirdPersonCameraPlugin                                                  |
+| 26  | postprocessing    | PostprocessingPlugin                                                     |
+| 27  | quests            | QuestsPlugin                                                             |
+| 28  | raycast           | RaycastPlugin                                                            |
+| 29  | rendering         | RenderingPlugin                                                          |
+| 30  | road              | RoadPlugin                                                               |
+| 31  | rpg-ai            | RpgAiPlugin                                                              |
+| 32  | rpg-core          | RpgCorePlugin, RpgCoreEventsPlugin                                       |
+| 33  | rpg-economy       | EconomyPlugin                                                            |
+| 34  | rpg-inventory     | InventoryPlugin                                                          |
+| 35  | rpg-pause         | PauseCoordinatorPlugin                                                   |
+| 36  | rpg-progression   | ProgressionPlugin                                                        |
+| 37  | rpg-resource-node | ResourceNodePlugin                                                       |
+| 38  | rpg-status        | StatusEffectsPlugin                                                      |
+| 39  | rpg-vault         | RpgVaultPlugin                                                           |
+| 40  | save-load         | SaveLoadPlugin                                                           |
+| 41  | sky               | EquirectSkyPlugin                                                        |
+| 42  | spawn-gate        | SpawnGatePlugin                                                          |
+| 43  | spawn-variation   | helpers (`resolveVariationSpec`, presets) — used by spawner / vegetation |
+| 44  | spawner           | SpawnerPlugin                                                            |
+| 45  | startup           | StartupPlugin                                                            |
+| 46  | terrain           | TerrainPlugin                                                            |
+| 47  | transforms        | TransformsPlugin                                                         |
+| 48  | tweening          | TweeningPlugin                                                           |
+| 49  | vegetation        | VegetationPlugin (`<Vegetation>` smart carpet)                           |
+| 50  | water             | WaterPlugin                                                              |
+| 51  | weather           | WeatherPlugin                                                            |
 
 **Note**: XML recipes and core ECS live under `src/core/recipes/` — not a plugin. Individual plugins define their own recipes in `recipes.ts`.
 

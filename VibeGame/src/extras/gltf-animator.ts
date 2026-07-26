@@ -111,6 +111,9 @@ export class GltfAnimator {
   private additiveWeight = 0;
   private additiveTarget = 0;
 
+  /** Clip names already warned as missing (avoid per-frame spam). */
+  private missingClipWarned = new Set<string>();
+
   constructor(gltf: GLTF, options: GltfAnimatorOptions = {}) {
     this.mixer = new AnimationMixer(options.root ?? gltf.scene);
     this.crossfadeDuration = options.crossfadeDuration ?? 0.25;
@@ -169,9 +172,14 @@ export class GltfAnimator {
 
     const resolved = this.resolveClipName(clipName);
     if (!resolved) {
-      logger.warn(
-        `[GltfAnimator] Clip "${clipName}" not found. Available: ${this.clipNames.join(', ')}`
-      );
+      // Empty Available usually means animator built on a master without
+      // animations (rigged-only / failed load) — warn once per instance.
+      if (!this.missingClipWarned.has(clipName)) {
+        this.missingClipWarned.add(clipName);
+        logger.warn(
+          `[GltfAnimator] Clip "${clipName}" not found. Available: ${this.clipNames.join(', ') || '(none)'}`
+        );
+      }
       return null;
     }
     clipName = resolved;

@@ -11,7 +11,11 @@ import {
 // 'dialogue-balloon' HUD widget factory as a side effect.
 import { dialogueBalloonFactory } from './hud/dialogue-balloon';
 import { DialogueData, QuestGiver } from './components';
-import { QuestProgressSystem, QuestTriggerSystem } from './systems';
+import {
+  QuestProgressSystem,
+  QuestTriggerSystem,
+  QuestVisitSystem,
+} from './systems';
 import {
   applyQuestStateSnapshot,
   serializeQuestState,
@@ -22,7 +26,7 @@ import {
 function questsTabParser(): void {}
 
 export const QuestsPlugin: Plugin = {
-  systems: [QuestTriggerSystem, QuestProgressSystem],
+  systems: [QuestTriggerSystem, QuestProgressSystem, QuestVisitSystem],
   recipes: [dialogueNpcRecipe, questsTabRecipe, dialogueBalloonRecipe],
   components: {
     'quest-giver': QuestGiver,

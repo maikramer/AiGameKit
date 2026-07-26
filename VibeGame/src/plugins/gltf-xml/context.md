@@ -2,7 +2,9 @@
 
 <!-- LLM:OVERVIEW -->
 
-Declarative `<GLTFLoader>` and `<GLTFDynamic>` XML tags for loading GLB models. Static props use `GLTFLoader`; `GLTFDynamic` adds a **dynamic** Rapier body with a collider fitted to the model AABB after load (see `GltfDynamicPhysicsSystem` and `fitColliderFromAabb` in `GLTFDynamic-collider-fit.ts`). Shape is configurable: **box** (default), **sphere** (bounding sphere of the AABB), or **capsule** (Y-axis; `radius`/`height` are in world units — the physics pipeline does not scale these by `Transform` like box sizes). After the rigid body moves the ECS `Transform`, **`GltfSceneSyncSystem`** copies position/rotation/scale back to the loaded Three.js `Group` so the mesh stays aligned with physics (otherwise the collider moves but the GLB can appear stuck at the spawn pose). No GLB animation in these tags. For animated player models, use `<PlayerGLTF>`.
+Declarative `<GLTFLoader>` and `<GLTFDynamic>` XML tags for loading GLB models. Static props use `GLTFLoader`; `GLTFDynamic` adds a **dynamic** Rapier body with a collider fitted to the model AABB after load (see `GltfDynamicPhysicsSystem` and `fitColliderFromAabb` in `GLTFDynamic-collider-fit.ts`). Shape is configurable: **box** (default), **sphere** (bounding sphere of the AABB), or **capsule** (Y-axis; `radius`/`height` are in world units — the physics pipeline does not scale these by `Transform` like box sizes). After the rigid body moves the ECS `Transform`, **`GltfSceneSyncSystem`** copies position/rotation/scale back to the loaded Three.js `Group` so the mesh stays aligned with physics (otherwise the collider moves but the GLB can appear stuck at the spawn pose).
+
+**Animation:** these tags do **not** play clips by themselves. For a skinned LOD triple under a scripted entity (e.g. simple-rpg enemies): put `<GLTFLoader url=*_lod0 lod1-url lod2-url>` as a **child** of the `GameObject`, then attach `GltfAnimator` with `{ root: lodChild }` (clips from `loadGltfMasterTracked`). Player: `<PlayerGLTF>` (typically lod0 only). Root group: `getGltfRootGroup(state, eid)`.
 <!-- /LLM:OVERVIEW -->
 
 ## Layout
@@ -31,13 +33,19 @@ gltf-xml/
   (skinned) NÃO usam a cache. Atenção: mutar um material partilhado afeta
   todos os clones.
 - **`<GLTFLoader instanced="true">`** (`auto-instance.ts`): todas as entidades
-  com a mesma URL renderizam por **um `InstancedMesh` por primitiva do GLB** —
+  com a mesma URL renderizam por **um `InstancedMesh2` por primitiva do GLB** —
   um draw call para o conjunto inteiro. Slots dinâmicos: destruir a entidade
-  faz swap-remove do slot (props destrutíveis OK); `DistanceCull` colapsa a
-  instância para escala zero; matrizes só re-escrevem quando o Transform muda.
-  Não cobre `lod-urls` (usar SpawnGroup `instanced`/vegetação) nem
-  `GLTFDynamic`. Entidades instanciadas não têm grupo próprio na cena (sem
-  registo no group-registry → fora do BVH de meshes estáticos).
+  faz swap-remove do slot (props destrutíveis OK); `DistanceCull` →
+  `setVisibilityAt`; matrizes só re-escrevem quando o Transform muda.
+  LOD via `lod1-url` / `lod2-url` + `addLOD` na mesma pool. Entidades
+  instanciadas não têm grupo próprio na cena (sem registo no group-registry →
+  fora do BVH de meshes estáticos).
+- **Spawn variation**: antes de `new InstancedMesh2` / `addLOD`, chamar
+  `maybePatchInstanceVariationMaterial` + depois
+  `initUniformsPerInstance(INSTANCE_VARIATION_UNIFORM_SCHEMA)`. Ver
+  [`../spawn-variation/context.md`](../spawn-variation/context.md).
+- **Profiler**: `getInstancePoolStats(state)` → `{ poolCount, slotCount, pendingCount }`
+  (painel Counters: `gltfInstances: …`).
 
 ## Scope
 
@@ -76,6 +84,7 @@ gltf-xml/
 - Marks `loaded = 1`
 - In-flight tracking prevents double-loading the same entity
 - Boot readiness: `gltfAssetsReady(state)` — critical load count === 0 and every `GltfPending.loaded === 1`
+- Once a URL's master parse **succeeds**, later requests for it never count toward the gate again (cache hit). Without this a per-frame caller — e.g. an entity script re-requesting a clip-less master to attach an animator — re-arms the gate every frame and the loading screen never fades. A _failed_ load does not mark the URL settled, so a genuine retry can still hold the gate.
 
 ### Recipe
 

@@ -16,8 +16,15 @@ export interface System {
   readonly group?: 'setup' | 'simulation' | 'fixed' | 'late' | 'draw';
   readonly first?: boolean;
   readonly last?: boolean;
-  readonly before?: readonly System[];
-  readonly after?: readonly System[];
+  /**
+   * Ordering constraints, by system object or by `name`.
+   *
+   * The name form exists for systems that would otherwise have to import each
+   * other (plugin ↔ systems import cycles). An entry naming a system that is
+   * not registered is ignored, exactly like an unregistered object entry.
+   */
+  readonly before?: readonly (System | string)[];
+  readonly after?: readonly (System | string)[];
 }
 
 export interface ParserParams {

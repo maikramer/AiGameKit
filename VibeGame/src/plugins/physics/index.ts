@@ -20,6 +20,7 @@ export {
   TouchEndedEvent,
 } from './components';
 export { PhysicsPlugin } from './plugin';
+export { creatureRecipe } from './recipes';
 export {
   getBodyForEntity,
   getRapierWorld,

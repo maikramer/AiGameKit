@@ -13,13 +13,14 @@ import {
 } from 'recast-navigation';
 import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
+import { CharacterController } from '../physics/components';
 import { Transform } from '../transforms/components';
-import { setTransformFacingXZ } from '../transforms/utils';
 import { Terrain, TerrainPad } from '../terrain/components';
 import { getTerrainContext, isTerrainDynamicsBlocking } from '../terrain/utils';
 import { Road } from '../road/components';
 import { Lake, River } from '../water/components';
 import { bakeSoloNavMeshBytes } from './bake-worker';
+import { applyCrowdAgentToEntity, needsCrowdResync } from './cct-bridge';
 import { NavMeshAgent, NavMeshSurface } from './components';
 import {
   collectNavmeshGeometry,
@@ -101,6 +102,8 @@ export interface NavMeshRuntime {
   navMeshQuery: NavMeshQuery | null;
   crowd: Crowd | null;
   agents: Map<number, CrowdAgent>;
+  /** Last move target requested per agent, replayed after a drift resync. */
+  agentTargets: Map<number, { x: number; y: number; z: number }>;
 }
 
 const stateToRuntime = new WeakMap<State, NavMeshRuntime>();
@@ -119,6 +122,7 @@ export function getNavMeshRuntime(state: State): NavMeshRuntime {
       navMeshQuery: null,
       crowd: null,
       agents: new Map(),
+      agentTargets: new Map(),
     };
     stateToRuntime.set(state, rt);
     activeRuntime = rt;
@@ -302,16 +306,19 @@ export const NavMeshAgentSystem: System = defineSystem({
         if (NavMeshAgent.agentIndex[eid] === -1) {
           crowd.removeAgent(existing);
           rt.agents.delete(eid);
+          rt.agentTargets.delete(eid);
           continue;
         }
         if (NavMeshAgent.enabled[eid] === 0) continue;
         if (NavMeshAgent.suspended[eid] === 1) continue;
         if (NavMeshAgent.hasTarget[eid] === 1) {
-          existing.requestMoveTarget({
+          const target = {
             x: NavMeshAgent.targetX[eid],
             y: NavMeshAgent.targetY[eid],
             z: NavMeshAgent.targetZ[eid],
-          });
+          };
+          existing.requestMoveTarget(target);
+          rt.agentTargets.set(eid, target);
           NavMeshAgent.hasTarget[eid] = 0;
         }
         continue;
@@ -346,6 +353,7 @@ export const NavMeshAgentSystem: System = defineSystem({
         const r = stateToRuntime.get(state);
         if (!r || !r.crowd) return;
         const a = r.agents.get(eid);
+        r.agentTargets.delete(eid);
         if (a) {
           r.crowd.removeAgent(a);
           r.agents.delete(eid);
@@ -355,40 +363,46 @@ export const NavMeshAgentSystem: System = defineSystem({
 
     if (rt.agents.size === 0) return;
 
+    // CCT-owned agents: the crowd steers, Rapier moves the body. Pull the agent
+    // back onto the physics pose only once it has actually drifted (blocked by a
+    // wall, pushed by another body); a teleport every frame would wipe the move
+    // request before the agent ever produced a velocity.
+    for (const [eid, agent] of rt.agents) {
+      if (!state.exists(eid)) continue;
+      if (!state.hasComponent(eid, CharacterController)) continue;
+      const p = agent.position();
+      const dx = Transform.posX[eid] - p.x;
+      const dy = Transform.posY[eid] - p.y;
+      const dz = Transform.posZ[eid] - p.z;
+      if (!needsCrowdResync(dx, dy, dz)) continue;
+      agent.teleport({
+        x: Transform.posX[eid],
+        y: Transform.posY[eid],
+        z: Transform.posZ[eid],
+      });
+      const target = rt.agentTargets.get(eid);
+      if (target) agent.requestMoveTarget(target);
+    }
+
     crowd.update(Math.min(state.time.deltaTime, 1 / 30));
 
     for (const [eid, agent] of rt.agents) {
       if (!state.exists(eid)) {
         crowd.removeAgent(agent);
         rt.agents.delete(eid);
+        rt.agentTargets.delete(eid);
         continue;
       }
-      // A suspended agent (e.g. mid-lunge) is frozen: leave its crowd agent in
-      // place but do NOT overwrite Transform from its position, so the owning
-      // logic can move the entity directly without fighting the readback.
-      if (NavMeshAgent.suspended[eid] === 1) continue;
       const p = agent.position();
-      const prevX = Transform.posX[eid];
-      const prevZ = Transform.posZ[eid];
-      Transform.posX[eid] = p.x;
-      Transform.posZ[eid] = p.z;
-
       const v = agent.velocity();
-      const speed = Math.hypot(v.x, v.z);
-      // eulerY is degrees; never write atan2 radians here — hierarchy sync
-      // would treat them as ~±3° and agents look sideways / moonwalk.
-      if (NavMeshAgent.faceVelocity[eid] === 1 && speed > 0.05) {
-        setTransformFacingXZ(Transform, eid, v.x, v.z);
-      }
-
-      // Skip dirty when parked — avoids cascading WorldTransform recomputes.
-      if (
-        Math.abs(p.x - prevX) > 1e-4 ||
-        Math.abs(p.z - prevZ) > 1e-4 ||
-        speed > 0.05
-      ) {
-        Transform.dirty[eid] = 1;
-      }
+      applyCrowdAgentToEntity(state, eid, {
+        posX: p.x,
+        posY: p.y,
+        posZ: p.z,
+        velX: v.x,
+        velY: v.y,
+        velZ: v.z,
+      });
     }
   },
   dispose(state: State) {
@@ -401,6 +415,7 @@ export const NavMeshAgentSystem: System = defineSystem({
     rt.navMesh = null;
     rt.navMeshQuery = null;
     rt.agents.clear();
+    rt.agentTargets.clear();
     rt.ready = false;
     rt.initStarted = false;
     if (activeRuntime === rt) activeRuntime = null;

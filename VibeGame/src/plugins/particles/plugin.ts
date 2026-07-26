@@ -1,6 +1,7 @@
 import type { Adapter, Plugin, State } from '../../core';
 import { ParticleEmitter } from './components';
 import { ParticleUpdateSystem } from './systems';
+import { presetEnumValues } from './presets';
 import { particleSystemRecipe, particleBurstRecipe } from './recipes';
 
 function colorAdapter(
@@ -48,22 +49,8 @@ export const ParticlesPlugin: Plugin = {
     },
     enums: {
       'particle-emitter': {
-        preset: {
-          fire: 0,
-          rain: 1,
-          snow: 2,
-          smoke: 3,
-          dust: 4,
-          explosion: 5,
-          sparks: 6,
-          magic: 7,
-          fireflies: 8,
-          splash: 9,
-          woodchips: 10,
-          rockshards: 11,
-          leaves: 12,
-          'ground-dust': 13,
-        },
+        // Canónicos + aliases, a partir da mesma fonte que presetIndex().
+        preset: presetEnumValues(),
         'render-mode': {
           billboard: 0,
           stretched: 1,

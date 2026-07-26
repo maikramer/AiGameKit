@@ -6,7 +6,7 @@
  * spawning / despawning ECS entities to match.
  */
 
-import { boostAt, type DensityMap } from './density-map';
+import { maxBoostOverAabb, type DensityMap } from './density-map';
 
 export interface ChunkDesc {
   originX: number;
@@ -221,15 +221,46 @@ export function effectiveResolution(
 }
 
 /**
+ * Field-local AABB of the deepest LOD leaf that contains `(localX, localZ)`.
+ *
+ * Matches `selectChunks` partition: root centred at 0 with `worldSize`,
+ * deepest leaf level = `levels - 1` (traverse splits while `level < levels - 1`).
+ */
+export function deepestLeafAabb(
+  worldSize: number,
+  levels: number,
+  localX: number,
+  localZ: number
+): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  const maxLeafLevel = Math.max(0, Math.floor(levels) - 1);
+  const tiles = 2 ** maxLeafLevel;
+  const size = worldSize / tiles;
+  const half = worldSize / 2;
+  const ix = Math.min(
+    tiles - 1,
+    Math.max(0, Math.floor((localX + half) / size))
+  );
+  const iz = Math.min(
+    tiles - 1,
+    Math.max(0, Math.floor((localZ + half) / size))
+  );
+  const minX = -half + ix * size;
+  const minZ = -half + iz * size;
+  return { minX, maxX: minX + size, minZ, maxZ: minZ + size };
+}
+
+/**
  * Lattice resolution for spawn/ground sampling that matches the *rendered*
  * mesh near featured regions (density boost).
  *
- * `sampleMeshSurfaceHeight` uses `step = worldSize / resolution`. Leaf chunks
- * under a river/pad boost render at
- * `step = (worldSize / 2^levels) / effectiveResolution(...)`. Without this
- * bridge, spawners sit on the coarse base lattice (~31 m in simple-rpg) while
- * the visible surface follows the carve/falloff at ~4 m — trees and grass
- * float above the west-exit river bank and city pad skirt.
+ * Chunks pick resolution via {@link maxBoostOverAabb} over the whole leaf.
+ * Sampling only `boostAt(point)` left props on the coarse lattice when the
+ * point sat on a quiet tile next to a featured neighbour inside the same
+ * leaf — classic “few floating trees” on dune / pad-skirt variance maps.
+ *
+ * `sampleMeshSurfaceHeight` uses `step = worldSize / resolution`. A boosted
+ * leaf renders at `step = leafSize / effectiveResolution(...)`. This helper
+ * returns the equivalent world lattice resolution.
  */
 export function meshSurfaceResolutionForPoint(
   baseResolution: number,
@@ -240,12 +271,13 @@ export function meshSurfaceResolutionForPoint(
 ): number {
   const base = Math.max(1, Math.floor(baseResolution) || 1);
   if (!density) return base;
-  const boost = boostAt(density, localX, localZ);
+  const maxLeafLevel = Math.max(0, Math.floor(levels) - 1);
+  const leaf = deepestLeafAabb(density.worldSize, levels, localX, localZ);
+  const boost = maxBoostOverAabb(density, leaf);
   if (boost <= 0) return base;
-  const depth = Math.max(0, Math.floor(levels) || 0);
-  const leafRes = effectiveResolution(base, depth, boost);
+  const leafRes = effectiveResolution(base, maxLeafLevel, boost);
   // Equate leaf step to sampleMeshSurfaceHeight's worldSize/res step:
-  // res = leafRes * 2^depth.
-  const equiv = leafRes * 2 ** depth;
+  // res = leafRes * 2^maxLeafLevel.
+  const equiv = leafRes * 2 ** maxLeafLevel;
   return Math.max(base, Math.floor(equiv));
 }

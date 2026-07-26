@@ -141,9 +141,11 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
    * pads/roads. No tree-style scale jitter.
    */
   creature: {
-    alignToTerrain: true,
-    groundAlign: 'aabb',
-    baseYOffset: 0.02,
+    // No fake ground: enemies have no Rigidbody/CCT. Spawn places at surface Y
+    // with zero lift/offset; movement must not snap Y via TerrainSpawned.
+    alignToTerrain: false,
+    groundAlign: 'none',
+    baseYOffset: 0,
     randomYaw: true,
     scaleMin: 1,
     scaleMax: 1,

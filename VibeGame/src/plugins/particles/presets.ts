@@ -51,6 +51,26 @@ const PRESET_ALIASES: Record<string, PresetName> = {
 };
 
 /**
+ * `preset` values the XML parser accepts → `ParticleEmitter.preset` index.
+ *
+ * Derived from PRESET_NAMES *and* PRESET_ALIASES on purpose: the plugin used
+ * to hand-copy only the canonical names into `config.enums`, so an alias that
+ * `presetIndex` resolved happily (`preset="sparkle"`) was rejected by the
+ * attribute validator — and a rejected enum aborts the whole world parse, not
+ * just that one emitter.
+ */
+export function presetEnumValues(): Record<string, number> {
+  const out: Record<string, number> = {};
+  PRESET_NAMES.forEach((name, index) => {
+    out[name] = index;
+  });
+  for (const [alias, target] of Object.entries(PRESET_ALIASES)) {
+    out[alias] = PRESET_NAMES.indexOf(target);
+  }
+  return out;
+}
+
+/**
  * ConeEmitter shoots along local +Z. These presets need emitter.rotation.x =
  * -PI/2 so the cone points world +Y (up).
  */

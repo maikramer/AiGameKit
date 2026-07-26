@@ -25,29 +25,29 @@ espremida, seja qual for a largura ou o traçado.
 
 ## Atributos
 
-| Atributo            | Default | Descrição                                                       |
-| ------------------- | ------- | --------------------------------------------------------------- |
-| `path`              | —       | Lista plana `x0 z0 x1 z1 ...` (mundo). ≥ 2 pontos.              |
-| `width`             | `5`     | Largura total da faixa (m).                                      |
-| `texture-scale`     | `16`    | Metros de mundo por tile de textura (u e v).                     |
-| `edge-feather`      | `1.1`   | Fade lateral borda→núcleo (m).                                   |
-| `edge-noise`        | `0.45`  | Ruído que corrói a borda para dentro (m). Determinístico.        |
-| `end-feather-start` | `2`     | Fade na ponta inicial (m). `0` = sólida (enterrar sob uma praça).|
-| `end-feather-end`   | `2`     | Fade na ponta final (m).                                         |
-| `y-offset`          | `0.12`  | Elevação acima da superfície (m).                                |
-| `station-spacing`   | `1.5`   | Espaçamento das estações do ribbon (m).                          |
-| `smoothing`         | `2`     | Iterações Chaikin (0 = cantos vivos).                            |
-| `flatten`           | `true`  | Aplaina um corredor no terreno (corte+aterro) ao longo do path; `flatten="0"` desliga. |
-| `flatten-falloff`   | `6`     | Blend lateral do corredor de volta ao relevo natural (m).        |
-| `flatten-window`    | `24`    | Janela da média móvel do perfil longitudinal (m). Tem de ser ≥ ao lattice do mesh base (worldSize/resolution) para as cordas dos LODs coincidirem com o perfil. |
-| `opacity`           | `1`     | Opacidade global.                                                |
-| `roughness`/`metalness` | `1`/`0` | PBR do material.                                           |
-| `texture-url` / `normal-map-url` / `roughness-map-url` | — | Texturas (cache por URL). |
+| Atributo                                               | Default | Descrição                                                                                                                                                       |
+| ------------------------------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`                                                 | —       | Lista plana `x0 z0 x1 z1 ...` (mundo). ≥ 2 pontos.                                                                                                              |
+| `width`                                                | `5`     | Largura total da faixa (m).                                                                                                                                     |
+| `texture-scale`                                        | `16`    | Metros de mundo por tile de textura (u e v).                                                                                                                    |
+| `edge-feather`                                         | `1.1`   | Fade lateral borda→núcleo (m).                                                                                                                                  |
+| `edge-noise`                                           | `0.45`  | Ruído que corrói a borda para dentro (m). Determinístico.                                                                                                       |
+| `end-feather-start`                                    | `2`     | Fade na ponta inicial (m). `0` = sólida (enterrar sob uma praça).                                                                                               |
+| `end-feather-end`                                      | `2`     | Fade na ponta final (m).                                                                                                                                        |
+| `y-offset`                                             | `0.12`  | Elevação acima da superfície (m).                                                                                                                               |
+| `station-spacing`                                      | `1.5`   | Espaçamento das estações do ribbon (m).                                                                                                                         |
+| `smoothing`                                            | `2`     | Iterações Chaikin (0 = cantos vivos).                                                                                                                           |
+| `flatten`                                              | `true`  | Aplaina um corredor no terreno (corte+aterro) ao longo do path; `flatten="0"` desliga.                                                                          |
+| `flatten-falloff`                                      | `6`     | Blend lateral do corredor de volta ao relevo natural (m).                                                                                                       |
+| `flatten-window`                                       | `24`    | Janela da média móvel do perfil longitudinal (m). Tem de ser ≥ ao lattice do mesh base (worldSize/resolution) para as cordas dos LODs coincidirem com o perfil. |
+| `opacity`                                              | `1`     | Opacidade global.                                                                                                                                               |
+| `roughness`/`metalness`                                | `1`/`0` | PBR do material.                                                                                                                                                |
+| `texture-url` / `normal-map-url` / `roughness-map-url` | —       | Texturas (cache por URL).                                                                                                                                       |
 
 ## Como funciona
 
 - **Curvas**: o path é suavizado por Chaikin e reamostrado a `station-spacing`;
-  cada estação usa a normal *miter* (média das normais dos segmentos vizinhos)
+  cada estação usa a normal _miter_ (média das normais dos segmentos vizinhos)
   para o offset lateral — curvas sem gaps nem vincos, e a textura acompanha
   porque o UV.v é o arco acumulado (mesma técnica do river do plugin water).
 - **Bordas**: 4 vértices por estação (borda, núcleo, núcleo, borda) com alpha
@@ -93,11 +93,14 @@ estrada plana.
   entre `width` e `width + 2×flatten-falloff` há um smoothstep de volta ao
   relevo natural — transição sem degrau.
 - **Density boost obrigatório**: o carve sozinho é INVISÍVEL — os vértices do
-  mesh base distam `worldSize/resolution` (~15 m no simple-rpg) e um corredor
-  de ~10 m cai entre eles. O sistema aplica boost 255 no DensityMap por
+  mesh base distam `worldSize/resolution` (~31 m no simple-rpg a 2000/64) e um
+  corredor de ~10 m cai entre eles. O sistema aplica boost 255 no DensityMap por
   segmento do path + `refreshChunkResolutions` (mesmo mecanismo dos
-  lagos/rios); com o corredor esculpido os chunks próximos convergem para a
-  superfície analítica do sampler.
+  lagos/rios/pads); com o corredor esculpido os chunks próximos convergem para a
+  superfície analítica do sampler. Spawners/place têm de amostrar Y com
+  `meshSurfaceResolutionForPoint` — senão props flutuam nas saídas cardeais
+  (west/east) onde a estrada densifica o mesh e o lattice grosso ainda “vê”
+  o planalto do pad.
 - **Amostragem do ribbon**: com `flatten`, o ribbon amostra a superfície
   ANALÍTICA (`sampleHeightAt` + base Y), não o lattice base — é para o
   analítico que os chunks boosted convergem. Validação: clearance analítico

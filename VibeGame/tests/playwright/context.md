@@ -1,6 +1,7 @@
 # Playwright Tests
 
 <!-- LLM:OVERVIEW -->
+
 E2E test infrastructure for VibeGame using Playwright with Chromium. Provides a GameInspector class for state introspection via the `window.__VIBEGAME__` debug bridge, WebGL error capture, visual regression helpers, and custom fixtures that auto-wait for bridge initialization. Tests run against the `simple-rpg` example served by Vite.
 <!-- /LLM:OVERVIEW -->
 
@@ -9,9 +10,10 @@ E2E test infrastructure for VibeGame using Playwright with Chromium. Provides a 
 ```
 tests/playwright/
 ├── context.md                # This file
-├── debug-cycle.spec.ts       # 8 tests: state introspection via debug bridge
-├── visual-regression.spec.ts # 4 tests: water/terrain verification
-├── simple-rpg-smoke.spec.ts  # 2 tests: basic page load + terrain shader checks
+├── debug-cycle.spec.ts       # state introspection via debug bridge
+├── visual-regression.spec.ts # water/terrain verification
+├── simple-rpg-smoke.spec.ts  # basic page load + terrain shader checks
+├── audio-spatial.spec.ts     # far cull + idle without rogue world SFX
 ├── helpers/
 │   ├── game-inspector.ts     # GameInspector class, console/WebGL capture utilities
 │   ├── visual-helpers.ts     # Canvas screenshot, pixel probe, dimension helpers
@@ -30,6 +32,7 @@ tests/playwright/
 - **debug-cycle.spec.ts**: Core AI debug cycle — bridge availability, entity inspection, state snapshots, screenshot baselines
 - **visual-regression.spec.ts**: Water/terrain specific verification — water entity components, snapshot content validation
 - **simple-rpg-smoke.spec.ts**: Basic page load validation
+- **audio-spatial.spec.ts**: `__VIBEGAME__.audio` — far spatial cull + no idle world SFX leaks
 
 ## Dependencies
 
@@ -54,6 +57,7 @@ npx playwright test --debug        # step-through debugger
 - CDP mode: set `PLAYWRIGHT_CDP_WS` or `PLAYWRIGHT_CDP_URL` env vars to connect to running browser
 
 <!-- LLM:REFERENCE -->
+
 ### GameInspector
 
 ```typescript
@@ -76,24 +80,31 @@ class GameInspector {
 ### Helper Functions
 
 #### installConsoleCapture(page): void
+
 Forwards browser console errors to `window.__VIBEGAME_CONSOLE_ERRORS` for retrieval
 
 #### injectWebGLErrorCapture(page): Promise<void>
+
 Monkey-patches `HTMLCanvasElement.prototype.getContext` to intercept shader compile and program link errors, stored in `window.__VIBEGAME_WEBGL_ERRORS`
 
 #### screenshotCanvas(page, selector?): Promise<Buffer>
+
 Full-page or element-specific screenshot
 
 #### probeCanvasPixel(page, x, y, selector?): Promise<{ r, g, b, a }>
+
 Read a single pixel from the WebGL/2D canvas
 
 #### pressKey(page, key, duration?): Promise<void>
+
 Key down/up with configurable hold duration
 
 ### Fixtures
 
 #### vibegamePage: Page
+
 Extended Playwright page that:
+
 1. Installs console capture
 2. Navigates to `/`
 3. Waits for `#game-canvas` visible (30s timeout)
@@ -101,10 +112,12 @@ Extended Playwright page that:
 5. Waits for `__VIBEGAME__` bridge (15s timeout)
 
 #### gameInspector: GameInspector
+
 Auto-created from vibegamePage, ready for immediate use
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
+
 ## Examples
 
 ### Basic State Introspection
@@ -142,4 +155,5 @@ chromium --remote-debugging-port=9222
 # Run tests against it
 PLAYWRIGHT_CDP_URL=http://127.0.0.1:9222 npx playwright test
 ```
+
 <!-- /LLM:EXAMPLES -->

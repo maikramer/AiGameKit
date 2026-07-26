@@ -1,12 +1,14 @@
 # Destructible Plugin
 
 <!-- LLM:OVERVIEW -->
+
 Player-breakable props. Add `destructible="…"` to an entity: swinging the
 primary attack (left click / mapped key) within range commits a hit that lands
-near the end of the attack clip (synced to the swing animation); on the final
-hit the prop bursts into particles, optionally shows a floating popup, fires
-`onDestructibleDestroyed` (loot/inventory hook) and destroys the entity.
-Builds on the particles and floating-text plugins.
+near the **strike peak** of the attack clip (default `impactFraction` **0.35**,
+synced with PlayerGLTF melee); on the final hit the prop bursts into particles,
+optionally shows a floating popup, fires `onDestructibleDestroyed`
+(loot/inventory hook) and destroys the entity. Builds on the particles and
+floating-text plugins.
 <!-- /LLM:OVERVIEW -->
 
 ## Layout
@@ -21,13 +23,16 @@ destructible/
 ```
 
 <!-- LLM:REFERENCE -->
+
 ### Component
 
 #### destructible
+
 - hits: ui8 (1) — swings needed to break
 - hitsTaken: ui8
 - range: f32 (3.5) — attack reach in meters
-- impactFraction: f32 (0.75) — fraction of the attack clip when the blow lands
+- impactFraction: f32 (0.35) — fraction of the attack clip when the blow lands
+  (Quaternius-style ~1.5s packs peak the cut ~25–40%; 0.7+ lands in recovery)
 - pendingImpact: f32 — internal countdown; 0 = idle
 - preset: ui8 (explosion) — particle preset for the break burst
 - burstCount: f32 (60)
@@ -51,6 +56,10 @@ destructible/
   `text3d split-at-height`), `fall` uses those real halves and ignores
   clipping; `cutHeight` is only used for legacy single-mesh trees.
   Vertical `split` still uses clipping planes.
+- **Collider for `fall` trees:** use `*_stump_collision.glb` (stump hull only).
+  Full-tree `*_collision.glb` leaves a wrong standing hull after the top falls.
+  Visual stays `*_lod0` with `Stump`+`Top`. Pipeline:
+  [`docs/findings/MESH_PIPELINE_FINDINGS.md`](../../../../docs/findings/MESH_PIPELINE_FINDINGS.md).
 - popupColorR/G/B: f32 (1) — set via `popup-color: #d4c9a8`
 - popupSize: f32 (0.4)
 
@@ -61,13 +70,15 @@ Adapters: `popup-text` (string sidecar — popup only shows when set),
 ### System
 
 #### DestructibleSystem
+
 - Group: `simulation`
 - Swing input: `InputState.primaryAction` on the `PlayerController` entity
   (buffered; left click or any key bound via `addInputMapping`)
 - One swing per 0.4s, committed to the nearest destructible within its range
 - Impact delay derives from the player's attack clip duration
   (`PlayerGltfConfig.animatorRegistryIndex` → animator) × `impactFraction`,
-  falling back to 0.5s without an animator
+  falling back when duration unknown (keep in sync with
+  `ATTACK_IMPACT_FRACTION` in `player/gltf-systems.ts`, currently **0.35**)
 
 ### API
 
@@ -76,7 +87,9 @@ game hook for loot/inventory/SFX.
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
+
 ## Examples
+
 ```xml
 <GameObject
   place="at: 8 -6; align-to-terrain: 0"
@@ -88,6 +101,19 @@ game hook for loot/inventory/SFX.
 </GameObject>
 ```
 
+Fellable tree (`break-style: fall`) — visual split mesh + stump collider:
+
+```xml
+<GameObject
+  place="at: 12 4; align-to-terrain: 0"
+  destructible="popup-text: Wood; preset: leaves; hits: 3; break-style: fall; cut-height: 0.7; crack-style: vertical"
+  rigidbody="type: fixed; mass: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader url="/assets/meshes/tree_oak_lod0.glb" />
+</GameObject>
+```
+
 ```ts
 import { onDestructibleDestroyed } from 'vibegame';
 
@@ -95,4 +121,5 @@ onDestructibleDestroyed(state, (eid, x, y, z) => {
   addStone(1, x, y, z); // inventory, SFX, quest counters…
 });
 ```
+
 <!-- /LLM:EXAMPLES -->

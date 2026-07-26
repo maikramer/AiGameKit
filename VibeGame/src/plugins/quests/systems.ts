@@ -192,4 +192,78 @@ export const QuestProgressSystem: System = defineSystem({
   },
 });
 
+const DEFAULT_VISIT_RADIUS = 8;
+/** Landmark names already reached, per quest id — a `visit` objective counts
+ * each target once, no matter how often the player walks back through it. */
+const stateToVisited = new WeakMap<State, Map<string, Set<string>>>();
+
+function visitedSet(state: State, questId: string): Set<string> {
+  let byQuest = stateToVisited.get(state);
+  if (!byQuest) {
+    byQuest = new Map();
+    stateToVisited.set(state, byQuest);
+  }
+  let seen = byQuest.get(questId);
+  if (!seen) {
+    seen = new Set();
+    byQuest.set(questId, seen);
+  }
+  return seen;
+}
+
+/**
+ * Advances `visit` objectives: the player reaching a named landmark.
+ *
+ * `kill`/`collect` are push-based (game scripts report events), but "go and
+ * see this place" has nothing to report it — without this, a quest pointing at
+ * a point of interest could never complete, so map landmarks could only ever
+ * be scenery. Targets are resolved by entity name, so the quest data refers to
+ * the same `name=` the scene XML already declares.
+ */
+export const QuestVisitSystem: System = defineSystem({
+  name: 'QuestVisitSystem',
+  group: 'simulation',
+  update(state: State): void {
+    const player = resolvePlayer(state);
+    if (player === 0) return;
+    const px = Transform.posX[player];
+    const pz = Transform.posZ[player];
+
+    for (const def of getAllQuestDefs(state)) {
+      if (def.objective.type !== 'visit') continue;
+      const idx = getQuestIndex(state, def.id);
+      if (idx < 0) continue;
+      if (QuestState.active[idx] !== 1 || QuestState.completed[idx] === 1) {
+        continue;
+      }
+
+      const radius = def.objective.radius ?? DEFAULT_VISIT_RADIUS;
+      const radiusSq = radius * radius;
+      const seen = visitedSet(state, def.id);
+      const goal = Math.max(1, def.objective.count);
+
+      for (const name of def.objective.target.split(/\s+/)) {
+        if (!name || seen.has(name)) continue;
+        const target = state.getEntityByName(name);
+        if (target === null) continue;
+        const dx = Transform.posX[target] - px;
+        const dz = Transform.posZ[target] - pz;
+        if (dx * dx + dz * dz > radiusSq) continue;
+
+        seen.add(name);
+        const next = Math.min(goal, QuestState.progress[idx] + 1);
+        QuestState.progress[idx] = next;
+        if (next >= goal) {
+          QuestState.completed[idx] = 1;
+          QuestState.active[idx] = 0;
+          markGiverCompleted(state, def.id);
+          emitEvent(state, QUEST_COMPLETED, { questId: def.id, def });
+          applyQuestRewards(state, def);
+          break;
+        }
+      }
+    }
+  },
+});
+
 export { QUEST_STATE_AVAILABLE, QUEST_STATE_TAKEN, QUEST_STATE_COMPLETED };

@@ -25,6 +25,7 @@ import {
   TouchEndedEvent,
 } from './components';
 import {
+  creatureRecipe,
   dynamicPartRecipe,
   kinematicPartRecipe,
   staticPartRecipe,
@@ -69,7 +70,12 @@ export const PhysicsPlugin: Plugin = {
     PhysicsRapierSyncAfterStep,
     PhysicsInterpolationSystem,
   ],
-  recipes: [staticPartRecipe, dynamicPartRecipe, kinematicPartRecipe],
+  recipes: [
+    staticPartRecipe,
+    dynamicPartRecipe,
+    kinematicPartRecipe,
+    creatureRecipe,
+  ],
   components: {
     PhysicsWorld,
     Rigidbody,
