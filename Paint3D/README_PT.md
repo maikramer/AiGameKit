@@ -29,6 +29,14 @@ pip install -e ".[upscale]"   # + upscale IA (spandrel)
 
 O instalador oficial trata do **nvdiffrast** (`--no-build-isolation`); em instalação manual segue os comentários em `pyproject.toml`.
 
+## Prep de mesh / inpaint
+
+- Preferir mesh **`_clean`** (pós `text3d topology-fix`), não `_shape` cru — o
+  GameAssets chama `ensure_clean_for_paint` no batch.
+- `paint_prep.restrict_inpaint`: evita inpaint em ilhas UV **nunca baked**
+  (interiores deformados em edifícios ocos). Detalhe:
+  [`docs/findings/PAINT_PART_FINDINGS.md`](../docs/findings/PAINT_PART_FINDINGS.md).
+
 ## CLI
 
 ```bash

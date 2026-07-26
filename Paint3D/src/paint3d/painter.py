@@ -652,22 +652,19 @@ def _apply_translation(objects: list, offset: np.ndarray) -> None:
 
 def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Path, *, verbose: bool = False) -> None:
     """Encaixa o AABB do GLB de saída no AABB do GLB de referência (input), em
-    espaço glTF (Y-up), preservando texturas/materiais.
+    espaço glTF (Y-up), preservando texturas/materiais/normais.
 
-    Determinístico, **sem heurística e sem rotação**: o paint preserva a orientação
-    do mesh (verificado: extents por-eixo coincidem), apenas re-normaliza posição e
-    escala. Operar diretamente sobre os ficheiros glTF evita a ambiguidade de eixos
-    Y-up/Z-up do roundtrip por bpy (onde um offset em Y mapeava para -Z). Aplica
-    escala uniforme + translação ao grafo da cena.
+    Determinístico, **sem heurística**: lê rotação do node-transform do input,
+    calcula escala+translação por AABB (trimesh só para métricas), aplica a
+    matriz 4×4 em bpy e re-exporta com NORMAL+TANGENT via ``save_glb``.
     """
     import trimesh
+
+    from paint3d.utils.mesh_io import load_mesh_bpy, save_glb
 
     ref = trimesh.load(str(reference_path), force="scene")
     out_scene = trimesh.load(str(output_path), force="scene")
 
-    # Rotação do input lida do node-transform do seu nó de geometria (o paint normaliza
-    # a geometria para o seu frame canónico e descarta esse node-transform). Copiamos
-    # exatamente essa rotação — não a adivinhamos por rácios de AABB.
     rot = np.eye(3)
     nodes = list(ref.graph.nodes_geometry)
     if nodes:
@@ -675,22 +672,28 @@ def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Pa
         r = np.asarray(node_t, float)[:3, :3]
         norms = np.linalg.norm(r, axis=0)
         norms[norms < 1e-9] = 1.0
-        rot = r / norms  # remove escala, mantém só a orientação
+        rot = r / norms
 
-    mesh = out_scene.dump(concatenate=True)  # painted baked nos vértices (frame canónico)
-    center0 = mesh.bounds.mean(axis=0)
+    mesh = out_scene.dump(concatenate=True)
+    center0 = np.asarray(mesh.bounds.mean(axis=0), float)
     rot4 = np.eye(4)
     rot4[:3, :3] = rot
-    # roda em torno do centro do painted para não introduzir translação espúria
-    mesh.apply_transform(
-        trimesh.transformations.translation_matrix(center0)
-        @ rot4
-        @ trimesh.transformations.translation_matrix(-center0)
-    )
+    t_center = np.eye(4)
+    t_center[:3, 3] = center0
+    t_neg = np.eye(4)
+    t_neg[:3, 3] = -center0
+    pre = t_center @ rot4 @ t_neg
 
-    # Encaixa o AABB (world) no AABB world do input: escala uniforme + translação.
+    # Bounds após rotação (sem mutar o mesh de export — só métrica).
+    corners = np.asarray(mesh.bounds, float)
+    # 8 cantos do AABB
+    mins, maxs = corners[0], corners[1]
+    box = np.array([[x, y, z] for x in (mins[0], maxs[0]) for y in (mins[1], maxs[1]) for z in (mins[2], maxs[2])])
+    ones = np.ones((len(box), 1))
+    rotated = (pre @ np.hstack([box, ones]).T).T[:, :3]
+    omin, omax = rotated.min(axis=0), rotated.max(axis=0)
+
     rmin, rmax = np.asarray(ref.bounds[0], float), np.asarray(ref.bounds[1], float)
-    omin, omax = mesh.bounds[0], mesh.bounds[1]
     rext, oext = rmax - rmin, omax - omin
     safe = np.where(oext > 1e-9, oext, 1.0)
     scale = float(np.median(rext / safe))
@@ -699,13 +702,25 @@ def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Pa
     fit = np.eye(4)
     fit[:3, :3] *= scale
     fit[:3, 3] = ref_center - scale * out_center
-    mesh.apply_transform(fit)
+    mat = fit @ pre
 
-    mesh.export(str(output_path))
+    objs = load_mesh_bpy(output_path)
+    for obj in objs:
+        if getattr(obj, "type", None) != "MESH":
+            continue
+        co = np.empty(len(obj.data.vertices) * 3, dtype=np.float64)
+        obj.data.vertices.foreach_get("co", co)
+        pts = co.reshape(-1, 3)
+        h = np.hstack([pts, np.ones((len(pts), 1))])
+        pts2 = (mat @ h.T).T[:, :3]
+        obj.data.vertices.foreach_set("co", pts2.ravel())
+        obj.data.update()
+
+    save_glb(objs, output_path)
 
     if verbose:
         ang = float(np.degrees(np.arccos(np.clip((np.trace(rot) - 1.0) / 2.0, -1.0, 1.0))))
-        _logger.info(f"placement preservado (glTF): rot_input={ang:.1f}° scale={scale:.4f}")
+        _logger.info(f"placement preservado (glTF/bpy): rot_input={ang:.1f}° scale={scale:.4f}")
 
 
 def _apply_uniform_scale(objects: list, center: np.ndarray, scale: float) -> None:

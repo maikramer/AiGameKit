@@ -46,6 +46,14 @@ The official installer handles **nvdiffrast** (`--no-build-isolation`); for manu
 
 > **Requirement:** CUDA GPU (NVIDIA). See [docs/PAINT_SETUP.md](docs/PAINT_SETUP.md) for rasterizer setup.
 
+## Mesh prep / inpaint
+
+- Prefer a **`_clean`** mesh (after `text3d topology-fix`), not raw `_shape` —
+  GameAssets batch calls `ensure_clean_for_paint`.
+- `paint_prep.restrict_inpaint`: skips inpaint on UV islands that were **never
+  baked** (warped interiors on hollow buildings). Details:
+  [`docs/findings/PAINT_PART_FINDINGS.md`](../docs/findings/PAINT_PART_FINDINGS.md).
+
 ## Commands
 
 Entry points: `paint3d` (CLI) or `python -m paint3d`.
@@ -220,6 +228,8 @@ Use `--quality <tier>` with `paint3d texture` to auto-configure rendering parame
 | `PAINT3D_GPU_KILL_OTHERS` | Terminate competing GPU processes (`0`/`1`) |
 | `PYTORCH_CUDA_ALLOC_CONF` | PyTorch CUDA memory config (auto-set by CLI) |
 | `TORCHDYNAMO_DISABLE` | Disable `torch.compile` (auto-set to `1` by CLI) |
+
+With mem-eff/SDNQ, UNet `--compile` fails (`QConv2d.weight` / Dynamo) — leave compile off. Details: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 > **Deprecation:** `PAINT3D_MULTI_GPU` is deprecated. Use `--gpu-ids 0,1` instead.
 

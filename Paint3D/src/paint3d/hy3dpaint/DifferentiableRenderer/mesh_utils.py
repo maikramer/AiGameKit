@@ -332,20 +332,27 @@ def _save_glb_mesh_bpy(
             bsdf.inputs["Roughness"].default_value = 1.0
         mesh.materials.append(mat)
 
-        # 6. Link + export
+        # 6. Link + export canónico do monorepo (igual Text3D/Rigging):
+        # smooth_shade_scene + gamedev_shared.bpy_mesh.save_glb (NORMAL+TANGENT).
+        mesh.update()
         obj = bpy.data.objects.new("Mesh", mesh)
         bpy.context.scene.collection.objects.link(obj)
         obj.select_set(True)
         bpy.context.view_layer.objects.active = obj
 
+        from gamedev_shared.bpy_mesh import save_glb as _shared_save_glb
+        from gamedev_shared.bpy_mesh import smooth_shade_scene
+
+        smooth_shade_scene([obj], degrees=180.0)
+
         _log.info("exporting %d verts, %d faces → %s", len(vtx_pos), num_faces, mesh_path)
-        with contextlib.redirect_stdout(StringIO()):
-            bpy.ops.export_scene.gltf(
-                filepath=mesh_path,
-                use_active_scene=True,
-                export_normals=False,
-                export_image_format="JPEG",
-            )
+        _shared_save_glb(
+            [obj],
+            mesh_path,
+            export_normals=True,
+            export_tangents=True,
+            export_image_format="JPEG",
+        )
         _log.info("done (%.1fs) — %d bytes", _time.time() - _t0, os.path.getsize(mesh_path))
 
         # 7. Cleanup scene
