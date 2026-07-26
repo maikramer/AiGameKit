@@ -1,0 +1,72 @@
+<!--
+  Chefes de bioma. Loaded via Include.
+  Estavam misturados na vegetação; um chefe é conteúdo de criaturas, não
+  cenário. name="boss" é contrato com src/main.ts (<BossBar target-entity>).
+-->
+<Group name="creatures.bosses" pos="0 0 0">
+  <!-- Norte — Bruxa da Floresta (clareira, -10/135). -->
+  <GameObject
+    name="boss-witch"
+    place="at: 8 145; align-to-terrain: false"
+    script="bosses/witch.ts"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/witch_boss_lod0.glb"
+      lod1-url="/assets/meshes/witch_boss_lod1.glb"
+      lod2-url="/assets/meshes/witch_boss_lod2.glb"
+      lod-threshold-near="18"
+      lod-threshold-mid="55"
+    ></GLTFLoader>
+  </GameObject>
+
+  <!-- Leste — Verme das Areias (fundo do deserto). -->
+  <GameObject
+    name="boss-sandworm"
+    place="at: 145 -6; align-to-terrain: false"
+    script="bosses/sand-worm.ts"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/sand_worm_lod0.glb"
+      lod1-url="/assets/meshes/sand_worm_lod1.glb"
+      lod2-url="/assets/meshes/sand_worm_lod2.glb"
+      lod-threshold-near="18"
+      lod-threshold-mid="55"
+    ></GLTFLoader>
+  </GameObject>
+
+  <!-- Sul — Bog Warden (fundo do pântano). -->
+  <GameObject
+    name="boss-bogwarden"
+    place="at: -6 -145; align-to-terrain: false"
+    script="bosses/bog-warden.ts"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/bog_warden_boss_lod0.glb"
+      lod1-url="/assets/meshes/bog_warden_boss_lod1.glb"
+      lod2-url="/assets/meshes/bog_warden_boss_lod2.glb"
+      lod-threshold-near="18"
+      lod-threshold-mid="55"
+    ></GLTFLoader>
+  </GameObject>
+
+  <!-- Oeste — Ogro da Montanha: chefe FINAL, gated (aparece quando os
+       inimigos normais morrem). name="boss" alimenta a <BossBar>. -->
+  <GameObject
+    name="boss"
+    place="at: -145 6; align-to-terrain: false"
+    script="boss.ts"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/boss_ogre_lod0.glb"
+      lod1-url="/assets/meshes/boss_ogre_lod1.glb"
+      lod2-url="/assets/meshes/boss_ogre_lod2.glb"
+      lod-threshold-near="18"
+      lod-threshold-mid="55"
+    ></GLTFLoader>
+  </GameObject>
+</Group>
+<!-- FIM creatures.bosses -->

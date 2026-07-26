@@ -1,52 +1,123 @@
 <!--
-  Ambient particle FX (ground dust, fireflies). Loaded via Include from index.html.
-  Positions sit in biome wedges outside the city pad (±28).
+  Partículas de ambiente por bioma. Loaded via Include.
+
+  ⚠️ `transform="pos: x y z"` num <ParticleSystem> é posição de MUNDO, e o chão
+  deste mapa está aos ~23–63 m — a versão anterior punha tudo a y=0.25–1.5, ou
+  seja ~35 m enterrado, e nenhuma destas partículas se via. Usar sempre
+  <GameObject place="at: x z"> (amostra o terreno) com o emissor como filho a
+  uma altura LOCAL. Ver VibeGame/src/plugins/spawner/context.md.
+
+  Sem luzes novas aqui (o budget de PointLight vive nos landmarks).
+  Presets: sparkle(s), sand-dust, fire, rain, snow, smoke, dust, explosion,
+  sparks, magic, fireflies, splash, woodchips, rockshards, leaves, ground-dust
+  — ver VibeGame/src/plugins/particles/presets.ts.
 -->
 <Group name="atmosphere.ambient" pos="0 0 0">
-  <!-- Deserto E — poeira rasteira na areia -->
-  <ParticleSystem
-    preset="ground-dust"
-    transform="pos: 85 0.25 0"
-  ></ParticleSystem>
-  <ParticleSystem
-    preset="ground-dust"
-    transform="pos: 110 0.25 35"
-  ></ParticleSystem>
-  <ParticleSystem
-    preset="ground-dust"
-    transform="pos: 105 0.25 -40"
-  ></ParticleSystem>
-  <ParticleSystem
-    preset="ground-dust"
-    transform="pos: 130 0.25 10"
-  ></ParticleSystem>
-  <ParticleSystem
-    preset="ground-dust"
-    transform="pos: 95 0.25 -20"
-  ></ParticleSystem>
-  <ParticleSystem
-    preset="ground-dust"
-    transform="pos: 145 0.25 -15"
-  ></ParticleSystem>
+  <!-- ============================================================
+       DESERTO — poeira rasteira sobre as dunas
+       ('ground-dust' é o lençol de ambiente; 'dust' é FX de quebra)
+       ============================================================ -->
+  <GameObject place="at: 85 0"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 110 35"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 105 -40"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 130 10"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 95 -20"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 145 -15"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 160 45"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 125 -65"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 118 20"><ParticleSystem preset="sand-dust" transform="pos: 0 2.4 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 150 -30"><ParticleSystem preset="sand-dust" transform="pos: 0 2.4 0"></ParticleSystem></GameObject>
 
-  <!-- Floresta Sombria N — fireflies em clearings -->
-  <ParticleSystem
-    preset="fireflies"
-    transform="pos: 0 1.2 90"
-  ></ParticleSystem>
-  <ParticleSystem
-    preset="fireflies"
-    transform="pos: -25 1.2 115"
-  ></ParticleSystem>
-  <ParticleSystem
-    preset="fireflies"
-    transform="pos: 22 1.2 105"
-  ></ParticleSystem>
+  <!-- ============================================================
+       FLORESTA SOMBRIA — vaga-lumes nas clareiras + folha a cair
+       ============================================================ -->
+  <GameObject place="at: 0 90"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -25 115"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 22 105"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -50 78"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 40 150"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -14 165"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 6 96">
+    <ParticleSystem
+      preset="leaves"
+      transform="pos: 0 6.5 0"
+      particle-emitter="preset: leaves; emission-rate: 5; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -38 120">
+    <ParticleSystem
+      preset="leaves"
+      transform="pos: 0 6.5 0"
+      particle-emitter="preset: leaves; emission-rate: 4; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <!-- Fumo baixo na clareira da bruxa -->
+  <GameObject place="at: -8 135">
+    <ParticleSystem
+      preset="smoke"
+      transform="pos: 0 1.5 0"
+      particle-emitter="preset: smoke; emission-rate: 8; start-life-min: 2; start-life-max: 4; start-speed-min: 0.4; start-speed-max: 1.0; start-size-min: 0.4; start-size-max: 0.9; start-color: #888888; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
 
-  <!-- Bruxa — fumo baixo na clareira (landmark já em crystal-vale) -->
-  <ParticleSystem
-    preset="smoke"
-    transform="pos: -8 1.5 135"
-    particle-emitter="preset: smoke; emission-rate: 8; start-life-min: 2; start-life-max: 4; start-speed-min: 0.4; start-speed-max: 1.0; start-size-min: 0.4; start-size-max: 0.9; start-color: #888888; looping: 1; world-space: 1"
-  ></ParticleSystem>
+  <!-- ============================================================
+       PÂNTANO — névoa rasteira na bacia
+       ============================================================ -->
+  <GameObject place="at: 0 -85">
+    <ParticleSystem
+      preset="smoke"
+      transform="pos: 0 0.8 0"
+      particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.4; start-color: #93a596; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -30 -120">
+    <ParticleSystem
+      preset="smoke"
+      transform="pos: 0 0.8 0"
+      particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.4; start-color: #93a596; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: 34 -105">
+    <ParticleSystem
+      preset="smoke"
+      transform="pos: 0 0.8 0"
+      particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.0; start-color: #93a596; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: 4 -155">
+    <ParticleSystem
+      preset="smoke"
+      transform="pos: 0 0.8 0"
+      particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.0; start-color: #93a596; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- ============================================================
+       PICOS GELADOS — neve fina no corredor
+       (emission-rate baixo: 'snow' no default 50/s vira nevão que tapa a
+       encosta toda a 40 m de distância)
+       ============================================================ -->
+  <GameObject place="at: -85 0">
+    <ParticleSystem
+      preset="snow"
+      transform="pos: 0 9 0"
+      particle-emitter="preset: snow; emission-rate: 10; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -115 4">
+    <ParticleSystem
+      preset="snow"
+      transform="pos: 0 9 0"
+      particle-emitter="preset: snow; emission-rate: 10; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -145 6">
+    <ParticleSystem
+      preset="snow"
+      transform="pos: 0 9 0"
+      particle-emitter="preset: snow; emission-rate: 12; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -95 13"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
 </Group>
+<!-- FIM atmosphere.ambient -->

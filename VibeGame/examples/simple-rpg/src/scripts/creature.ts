@@ -36,8 +36,7 @@ import {
   setTransformYawRadians,
   spawnProjectileFromTemplate,
   hasLineOfSight,
-  sampleTerrainSurface,
-  TerrainSpawned,
+  Rigidbody,
 } from 'vibegame';
 import type { MeleeAiConfig } from 'vibegame';
 import {
@@ -48,13 +47,13 @@ import {
 
 /**
  * Beyond detect range (+ margin) creatures sleep: no AI, no animator.
- * Boot ground Y is owned by the shared spawner path (same as trees):
- * AABB + sampleTerrainSurface + TerrainSpawned resync — not this script.
+ *
+ * Grounding: `<Creature>` brings kinematic RB + capsule + CharacterController.
+ * Rapier CCT owns Transform XYZ on the terrain heightfield. NavMesh steers
+ * desiredVel only. Spawn seeds initial posY — no AABB lift / terrain snap here.
  */
 const SLEEP_RANGE_MARGIN = 8;
 const SLEEP_CHECK_INTERVAL = 20;
-/** Idle terrain Y refresh cadence (frames) while awake but not in combat. */
-const IDLE_GROUND_INTERVAL = 12;
 
 // AI tuning not expressed in CreatureConfig — defaults from the original
 // creature prototype, fed into the engine MeleeAiConfig.
@@ -239,6 +238,12 @@ interface PresentationState {
   animator: GltfAnimator | null;
   /** Per-LOD animators (index = lod level); kept in sync for seamless switches. */
   lodAnimators: (GltfAnimator | null)[];
+  /**
+   * Levels already attempted (attached, clip-less master, or failed fetch).
+   * Without this a clip-less master would be re-requested every frame, which
+   * keeps re-arming the boot `assets` gate and the loading screen never fades.
+   */
+  lodAttempted: boolean[];
   /** Visual owned by child GLTFLoader — do not scene-position the group. */
   xmlVisual: boolean;
   playing: string;
@@ -261,8 +266,6 @@ interface PresentationState {
   xmlWaitFrames: number;
   /** True while beyond sleep range — AI/nav/anim paused. */
   sleeping: boolean;
-  /** Last frame we refreshed terrain Y while idle. */
-  lastGroundFrame: number;
   /** Seconds remaining before the next ranged shot (ranged creatures only). */
   rangedCdTimer: number;
 }
@@ -271,24 +274,6 @@ const playerQuery = defineQuery([PlayerController]);
 const xmlVisualQuery = defineQuery([Parent, GltfPending]);
 /** Planar speed (m/s) above which chase/idle facing follows displacement. */
 const MOVE_FACE_SPEED = 0.3;
-
-/**
- * Same Y formula as `resyncTerrainSpawnedHeights` / trees: mesh surface +
- * spawn-time AABB yOffset. Used while awake on slopes — not a boot snap.
- */
-function applySharedTerrainY(state: State, eid: number): void {
-  if (!state.hasComponent(eid, TerrainSpawned)) return;
-  const eps = TerrainSpawned.surfaceEpsilon[eid] || 0.75;
-  const s = sampleTerrainSurface(
-    state,
-    Transform.posX[eid],
-    Transform.posZ[eid],
-    eps
-  );
-  if (!s) return;
-  Transform.posY[eid] = s.worldY + TerrainSpawned.yOffset[eid];
-  Transform.dirty[eid] = 1;
-}
 
 function deriveLodUrls(modelUrl: string): [string, string, string] | null {
   const m = modelUrl.match(/^(.*)_lod([012])\.glb$/i);
@@ -588,8 +573,16 @@ export function createCreatureBehaviours(
     clip: string,
     opts?: { loop?: boolean }
   ): boolean {
-    const targets = s.lodAnimators.filter((a): a is GltfAnimator => !!a);
-    if (s.animator && !targets.includes(s.animator)) targets.push(s.animator);
+    const targets = s.lodAnimators.filter(
+      (a): a is GltfAnimator => !!a && a.clipNames.length > 0
+    );
+    if (
+      s.animator &&
+      s.animator.clipNames.length > 0 &&
+      !targets.includes(s.animator)
+    ) {
+      targets.push(s.animator);
+    }
     if (targets.length === 0) return false;
     let acted = false;
     for (const anim of targets) {
@@ -609,10 +602,26 @@ export function createCreatureBehaviours(
     return false;
   }
 
-  function applyHeadingToTransform(eid: number, headingRad: number): void {
+  function applyHeadingToTransform(
+    state: State,
+    eid: number,
+    headingRad: number
+  ): void {
     // Transform.eulerY is degrees; setTransformYawRadians keeps quat in sync
     // for TransformHierarchySystem / GltfSceneSync (WorldTransform path).
     setTransformYawRadians(Transform, eid, headingRad);
+    // Physics owns Transform after each fixed step (`copyRigidbodyToTransforms`).
+    // Player movement writes yaw to Rigidbody; creatures must do the same or
+    // facing snaps back every physics tick → mesh blinks while walking.
+    if (!state.hasComponent(eid, Rigidbody)) return;
+    Rigidbody.eulerX[eid] = Transform.eulerX[eid];
+    Rigidbody.eulerY[eid] = Transform.eulerY[eid];
+    Rigidbody.eulerZ[eid] = Transform.eulerZ[eid];
+    Rigidbody.rotX[eid] = Transform.rotX[eid];
+    Rigidbody.rotY[eid] = Transform.rotY[eid];
+    Rigidbody.rotZ[eid] = Transform.rotZ[eid];
+    Rigidbody.rotW[eid] = Transform.rotW[eid];
+    Rigidbody.poseDirty[eid] = 1;
   }
 
   function claimFacingOwnership(state: State, eid: number): void {
@@ -643,16 +652,20 @@ export function createCreatureBehaviours(
     if (!s.group) return;
     for (const child of s.group.children) {
       const level = (child.userData.lodLevel as number | undefined) ?? 0;
-      if (s.lodAnimators[level]) continue;
+      if (s.lodAnimators[level] || s.lodAttempted[level]) continue;
       const url = urls[level];
       if (!url) continue;
+      s.lodAttempted[level] = true;
       try {
-        const master = await loadGltfMasterTracked(
-          state,
-          url,
-          level === 0 ? 'critical' : 'background'
-        );
+        // Always background: the XML visual already holds the boot gate for
+        // this mesh; the animator is presentation polish on top of it.
+        const master = await loadGltfMasterTracked(state, url, 'background');
         if (!s.group) return;
+        if (!master.animations?.length) {
+          // Master without clips (rigged-only / bad handoff) — skip so we
+          // never spam "Clip idle not found. Available:".
+          continue;
+        }
         const anim = new GltfAnimator(master, {
           root: child,
           crossfadeDuration: 0.25,
@@ -714,6 +727,7 @@ export function createCreatureBehaviours(
       group: null,
       animator: null,
       lodAnimators: [null, null, null],
+      lodAttempted: [false, false, false],
       xmlVisual: false,
       playing: '',
       heading: Math.random() * Math.PI * 2,
@@ -729,7 +743,6 @@ export function createCreatureBehaviours(
       roarTimer: 0,
       xmlWaitFrames: preferXml ? 0 : 999,
       sleeping: false,
-      lastGroundFrame: -999,
       rangedCdTimer: 0,
     };
     presentationMap(ctx.state).set(eid, s);
@@ -804,7 +817,7 @@ export function createCreatureBehaviours(
       const urls = deriveLodUrls(cfg.modelUrl);
       if (
         urls &&
-        s.group.children.length > s.lodAnimators.filter(Boolean).length
+        s.group.children.length > s.lodAttempted.filter(Boolean).length
       ) {
         void attachLodAnimators(ctx.state, s, urls);
       }
@@ -850,7 +863,6 @@ export function createCreatureBehaviours(
       if (cfg.clips.roar && s.playing !== cfg.clips.roar) {
         playClip(s, cfg.clips.roar, { loop: false });
       }
-      applySharedTerrainY(ctx.state, eid);
       if (!s.xmlVisual) {
         s.group.position.set(
           Transform.posX[eid],
@@ -867,7 +879,7 @@ export function createCreatureBehaviours(
     // Agent may be attached on first AI tick — reclaim yaw ownership.
     claimFacingOwnership(ctx.state, eid);
 
-    // Presentation: visuals, clips, terrain-Y, hit-flash, death FX + loot.
+    // Presentation: visuals, clips, hit-flash, death FX + loot.
     if (!s.group) return;
     for (const anim of s.lodAnimators) anim?.update(ctx.deltaTime);
     if (s.animator && !s.lodAnimators.includes(s.animator)) {
@@ -961,20 +973,9 @@ export function createCreatureBehaviours(
     }
     s.lastHp = hp;
 
-    // FSM owns XZ; terrain Y uses the same sampler/offset as trees
-    // (sampleTerrainSurface + TerrainSpawned.yOffset), only while awake.
+    // FSM / NavMesh own XZ. Y stays at spawn Transform (no physics ground, no snap).
     const x = Transform.posX[eid];
     const z = Transform.posZ[eid];
-    const frame = ctx.state.time.frameCount;
-    const planarStep = Math.hypot(x - s.prevX, z - s.prevZ);
-    const needGround =
-      inCombat ||
-      planarStep > 0.02 ||
-      frame - s.lastGroundFrame >= IDLE_GROUND_INTERVAL;
-    if (needGround) {
-      applySharedTerrainY(ctx.state, eid);
-      s.lastGroundFrame = frame;
-    }
     const visualY = Transform.posY[eid];
 
     // Facing policy (single writer — navmesh faceVelocity is off):
@@ -997,10 +998,12 @@ export function createCreatureBehaviours(
     s.prevZ = z;
 
     if (s.xmlVisual) {
-      applyHeadingToTransform(eid, s.heading);
+      applyHeadingToTransform(ctx.state, eid, s.heading);
     } else {
       s.group.position.set(x, visualY, z);
       s.group.rotation.set(0, s.heading, 0);
+      // Keep Rapier pose in sync when the script owns the scene graph directly.
+      applyHeadingToTransform(ctx.state, eid, s.heading);
     }
 
     if (inCombat) aggroEntities.add(eid);

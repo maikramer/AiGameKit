@@ -1,0 +1,240 @@
+<!--
+  Trilhos dos biomas. Loaded via Include.
+
+  As estradas empedradas de Discordia (cities/discordia/roads.xml) morrem logo
+  a seguir aos portões — a partir daí não havia leitura nenhuma de para onde
+  ir. Estes trilhos de terra continuam cada eixo cardeal até ao chefe do
+  bioma e ramificam para os landmarks (landmarks/*.xml).
+
+  Custo: as ARTÉRIAS usam flatten="true" — carvam um corredor no sampler e
+  garantem percurso pisável através do relevo novo, ao preço de um boost de
+  densidade nos chunks. Os RAMOS usam flatten="0": decal puro sobre a
+  superfície, sem mutação de terreno nem custo de malha.
+  Ver VibeGame/src/plugins/road/context.md.
+-->
+<Group name="paths.trails" pos="0 0 0">
+  <!-- ============================================================
+       NORTE — Floresta Sombria
+       ============================================================ -->
+  <Road
+    path="-1.5 62  2 78  8 92  12 104  6 118  -4 128"
+    width="4.2"
+    flatten="true"
+    flatten-falloff="5"
+    texture-scale="14"
+    edge-feather="1.3"
+    edge-noise="0.7"
+    end-feather-start="0"
+    end-feather-end="5"
+    texture-url="/assets/textures/forest_floor.png"
+    normal-map-url="/assets/textures/pbr_forest_floor/forest_floor_normal.png"
+  ></Road>
+  <!-- ramo → posto avançado (-46, 88) -->
+  <Road
+    path="2 78  -16 80  -34 86  -44 88"
+    width="2.8"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.0"
+    edge-noise="0.6"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/forest_floor.png"
+    normal-map-url="/assets/textures/pbr_forest_floor/forest_floor_normal.png"
+  ></Road>
+  <!-- ramo → círculo de menires (52, 118) -->
+  <Road
+    path="12 104  28 110  44 116  50 118"
+    width="2.8"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.0"
+    edge-noise="0.6"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/forest_floor.png"
+    normal-map-url="/assets/textures/pbr_forest_floor/forest_floor_normal.png"
+  ></Road>
+  <!-- ramo → acampamento de lenhador (-30, 64) -->
+  <Road
+    path="-1.5 66  -14 64  -26 64"
+    width="2.8"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.0"
+    edge-noise="0.6"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/forest_floor.png"
+    normal-map-url="/assets/textures/pbr_forest_floor/forest_floor_normal.png"
+  ></Road>
+
+  <!-- ============================================================
+       LESTE — Deserto
+       ============================================================ -->
+  <Road
+    path="62 1  78 4  96 10  114 10  128 8  140 -2  145 -6"
+    width="4.2"
+    flatten="true"
+    flatten-falloff="5"
+    texture-scale="14"
+    edge-feather="1.4"
+    edge-noise="0.8"
+    end-feather-start="0"
+    end-feather-end="6"
+    texture-url="/assets/textures/desert_sand.png"
+    normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png"
+  ></Road>
+  <!-- ramo → oásis (70, 46) -->
+  <Road
+    path="78 4  74 26  71 40"
+    width="2.8"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.1"
+    edge-noise="0.7"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/desert_sand.png"
+    normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png"
+  ></Road>
+  <!-- ramo → acampamento de bandidos (85, -35) e cisterna (78, -58) -->
+  <Road
+    path="96 10  92 -14  88 -30  82 -46  78 -55"
+    width="2.8"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.1"
+    edge-noise="0.7"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/desert_sand.png"
+    normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png"
+  ></Road>
+  <!-- ramo → obelisco (120, 40) -->
+  <Road
+    path="114 10  118 26  120 36"
+    width="2.8"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.1"
+    edge-noise="0.7"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/desert_sand.png"
+    normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png"
+  ></Road>
+  <!-- ramo → caravana destruída (108, -18) -->
+  <Road
+    path="100 4  105 -12  107 -16"
+    width="2.4"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.0"
+    edge-noise="0.7"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/desert_sand.png"
+    normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png"
+  ></Road>
+
+  <!-- ============================================================
+       SUL — Pântano (o passadiço de tábuas continua em landmarks)
+       ============================================================ -->
+  <Road
+    path="0 -92  6 -100  9 -110  10 -122  6 -134  -6 -143"
+    width="4.0"
+    flatten="true"
+    flatten-falloff="5"
+    texture-scale="14"
+    edge-feather="1.4"
+    edge-noise="0.8"
+    end-feather-start="0"
+    end-feather-end="5"
+    texture-url="/assets/textures/swamp_mud.png"
+    normal-map-url="/assets/textures/pbr_swamp_mud/swamp_mud_normal.png"
+  ></Road>
+  <!-- ramo → cemitério (-28, -108) e altar de ossos (-48, -132) -->
+  <Road
+    path="6 -100  -8 -104  -24 -107  -38 -122  -46 -130"
+    width="2.8"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.1"
+    edge-noise="0.7"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/swamp_mud.png"
+    normal-map-url="/assets/textures/pbr_swamp_mud/swamp_mud_normal.png"
+  ></Road>
+  <!-- ramo → barca encalhada (26, -92) -->
+  <Road
+    path="9 -110  22 -100  26 -94"
+    width="2.6"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.0"
+    edge-noise="0.7"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/swamp_mud.png"
+    normal-map-url="/assets/textures/pbr_swamp_mud/swamp_mud_normal.png"
+  ></Road>
+
+  <!-- ============================================================
+       OESTE — Picos Gelados (corredor entre os flancos)
+       ============================================================ -->
+  <Road
+    path="-95 -2  -104 1  -116 -3  -128 -5  -140 2  -146 6"
+    width="4.2"
+    flatten="true"
+    flatten-falloff="6"
+    texture-scale="14"
+    edge-feather="1.3"
+    edge-noise="0.6"
+    end-feather-start="0"
+    end-feather-end="6"
+    texture-url="/assets/textures/mountain_stone.png"
+    normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+  ></Road>
+  <!-- ramo → mina de cristal (-108, 30) -->
+  <Road
+    path="-100 1  -104 16  -107 27"
+    width="2.8"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.0"
+    edge-noise="0.5"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/mountain_stone.png"
+    normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+  ></Road>
+  <!-- ramo → lago gelado (-92, -34) -->
+  <Road
+    path="-96 -4  -93 -20  -92 -29"
+    width="2.8"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.0"
+    edge-noise="0.5"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/mountain_stone.png"
+    normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+  ></Road>
+  <!-- ramo → posto goblin (-86, 22) -->
+  <Road
+    path="-96 2  -90 13  -87 19"
+    width="2.4"
+    flatten="0"
+    texture-scale="12"
+    edge-feather="1.0"
+    edge-noise="0.5"
+    end-feather-start="1.5"
+    end-feather-end="3"
+    texture-url="/assets/textures/mountain_stone.png"
+    normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
+  ></Road>
+</Group>
+<!-- FIM paths.trails -->

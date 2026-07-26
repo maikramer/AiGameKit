@@ -1,0 +1,38 @@
+assets:
+- id: form_cliff_20
+  idea: cartoon fantasy wide mountain cliff wall, layered grey stone strata with snow,
+    solid closed base, deep rock mass, game terrain prop
+  kind: environment
+  category: terrain
+  text3d:
+    octree_resolution: 288
+    voxel_merge: 0.75
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 2.1
+    - 3.0
+    - 2.16
+- id: form_outcrop_2
+  seed: 71402
+  idea: cartoon fantasy low mossy riverside rock outcrop, two chunky grey boulders
+    fused at base, wet stone, solid closed underside, game terrain prop
+  kind: environment
+  category: terrain
+  text3d:
+    octree_resolution: 288
+    voxel_merge: 1.5
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 2.4
+    - 1.6
+    - 1.8

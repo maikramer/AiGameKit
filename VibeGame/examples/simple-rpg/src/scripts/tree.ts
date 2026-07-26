@@ -13,7 +13,10 @@ export function isWoodEntity(eid: number): boolean {
 export function start(ctx: MonoBehaviourContext): void {
   woodEntities.add(ctx.entity);
   // "[J] Chop" prompt when the player is in harvest range.
-  registerInteractionTarget(ctx.state, ctx.entity, { label: 'Chop', key: 'J' });
+  registerInteractionTarget(ctx.state, ctx.entity, {
+    label: 'Cortar',
+    key: 'J',
+  });
 }
 
 export function onDestroy(ctx: MonoBehaviourContext): void {

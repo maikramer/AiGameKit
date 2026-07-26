@@ -14,7 +14,11 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/chapel_lod2.glb"
+              url="/assets/meshes/chapel_lod0.glb"
+              lod1-url="/assets/meshes/chapel_lod1.glb"
+              lod2-url="/assets/meshes/chapel_lod2.glb"
+              lod-threshold-near="70"
+              lod-threshold-mid="160"
             ></GLTFLoader>
           </GameObject>
 
@@ -66,4 +70,19 @@
             <Sphere pos="0 0.28 -0.1" size="0.12" color="#c45a7a"></Sphere>
             <Sphere pos="0.7 0.28 0" size="0.14" color="#7ab040"></Sphere>
           </Composition>
-        </Group>
+                  <!-- Curandeira no adro da capela. -->
+          <GameObject
+            name="npc_healer"
+            place="at: 3 18; align-to-terrain: 1"
+            transform="rotation: 0 -20 0"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/npc_healer_lod0.glb"
+              lod1-url="/assets/meshes/npc_healer_lod1.glb"
+              lod2-url="/assets/meshes/npc_healer_lod2.glb"
+              lod-threshold-near="22"
+              lod-threshold-mid="60"
+            ></GLTFLoader>
+          </GameObject>
+</Group>

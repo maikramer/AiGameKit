@@ -1,0 +1,304 @@
+<!--
+  Vegetação da FLORESTA SOMBRIA (Norte, z ≳ 58). Loaded via Include.
+
+  Regra de custo: um spawner "scenery" (só <GLTFLoader>) é instanciado — um
+  draw call por URL — e aguenta centenas de instâncias. Um spawner
+  "harvestable" traz collider trimesh + script + <ResourceNode> por instância
+  e alimenta o bake do NavMesh, por isso fica na ordem das dezenas.
+  Ver VibeGame/src/plugins/spawner/context.md.
+-->
+<Group name="biome.forest.vegetation" pos="0 0 0">
+  <!-- Tapete: erva → plantas → flores sob o dossel (hubs partilhados). -->
+  <Vegetation
+    meshes="/assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/flower_yellowA.glb"
+    density-per-km2="38000"
+    seed="601"
+    region-min="-95 0 58"
+    region-max="95 0 190"
+    scale-min="1.4"
+    scale-max="2.8"
+    max-slope-deg="38"
+    avoid-water="1"
+    avoid-overlaps="0"
+    max-distance="110"
+    cluster-count="64"
+    cluster-radius="4.4"
+    flower-near-radius="2.4"
+    flower-density-ratio="0.32"
+    plant-density-ratio="0.42"
+    smart="1"
+    wind="1"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="foliage"
+  ></Vegetation>
+
+  <!-- §1 Dossel — pinheiro escuro (pine_dark é o mesh próprio deste bioma;
+       o tree_pine claro fica reservado aos Picos). Só visual: é isto que
+       transforma a cunha norte em floresta em vez de campo com árvores. -->
+  <StaticSpawner
+    profile="tree"
+    count="190"
+    seed="6101"
+    region-min="-92 0 58"
+    region-max="92 0 178"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="40"
+    scale-min="0.8"
+    scale-max="1.45"
+    avoid-overlaps="1"
+    footprint-radius="1.9"
+    cluster-count="14"
+    cluster-radius="26"
+    max-distance="230"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="tree"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/pine_dark_lod0.glb"
+        lod1-url="/assets/meshes/pine_dark_lod1.glb"
+        lod2-url="/assets/meshes/pine_dark_lod2.glb"
+        lod-threshold-near="34"
+        lod-threshold-mid="95"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- Mata alta e rala no fundo do bioma (silhueta contra a serra da borda). -->
+  <StaticSpawner
+    profile="tree"
+    count="120"
+    seed="6102"
+    region-min="-125 0 165"
+    region-max="125 0 245"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="42"
+    scale-min="0.9"
+    scale-max="1.6"
+    avoid-overlaps="1"
+    footprint-radius="2.1"
+    cluster-count="10"
+    cluster-radius="30"
+    max-distance="260"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="tree"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/pine_dark_lod1.glb"
+        lod1-url="/assets/meshes/pine_dark_lod1.glb"
+        lod2-url="/assets/meshes/pine_dark_lod2.glb"
+        lod-threshold-near="60"
+        lod-threshold-mid="130"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- Árvores mortas — quebram a monotonia do dossel e marcam clareiras. -->
+  <StaticSpawner
+    profile="tree"
+    count="46"
+    seed="6103"
+    region-min="-90 0 62"
+    region-max="90 0 200"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="44"
+    scale-min="0.8"
+    scale-max="1.3"
+    avoid-overlaps="1"
+    footprint-radius="1.4"
+    cluster-count="9"
+    cluster-radius="18"
+    max-distance="200"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="tree"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/dead_tree_lod1.glb"
+        lod1-url="/assets/meshes/dead_tree_lod1.glb"
+        lod2-url="/assets/meshes/dead_tree_lod2.glb"
+        lod-threshold-near="45"
+        lod-threshold-mid="110"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- §2 Árvores colhíveis (collider + ResourceNode + tree.ts). Ficam na
+       faixa junto aos caminhos: é onde o jogador corta madeira. -->
+  <StaticSpawner
+    profile="tree"
+    count="22"
+    seed="301"
+    region-min="-58 0 60"
+    region-max="58 0 140"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="34"
+    scale-min="0.9"
+    scale-max="1.35"
+    avoid-overlaps="1"
+    footprint-radius="2.2"
+    max-distance="150"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="tree"
+  >
+    <GameObject
+      role="static"
+      destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7"
+      script="tree.ts"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: trimesh; mesh-url: /assets/meshes/pine_dark_stump_collision.glb; mesh-anchor: base"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/pine_dark_lod0.glb"
+        lod1-url="/assets/meshes/pine_dark_lod1.glb"
+        lod2-url="/assets/meshes/pine_dark_lod2.glb"
+        lod-threshold-near="36"
+        lod-threshold-mid="110"
+      ></GLTFLoader>
+      <ResourceNode
+        kind="wood"
+        yield="3"
+        transform="pos: 0 0 0"
+      ></ResourceNode>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- §3 Sub-bosque: cogumelos em tufos densos (chão de floresta húmida). -->
+  <StaticSpawner
+    profile="foliage"
+    count="70"
+    seed="6104"
+    region-min="-88 0 60"
+    region-max="88 0 200"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="38"
+    scale-min="0.7"
+    scale-max="1.2"
+    avoid-overlaps="1"
+    cluster-count="18"
+    cluster-radius="5"
+    max-distance="90"
+    random-yaw="true"
+    variation="foliage"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/mushroom_red_lod1.glb"
+        lod1-url="/assets/meshes/mushroom_red_lod2.glb"
+        lod2-url="/assets/meshes/mushroom_red_lod2.glb"
+        lod-threshold-near="26"
+        lod-threshold-mid="60"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- §4 Pedregulhos musgosos entre as raízes (só visual). -->
+  <StaticSpawner
+    profile="tree"
+    count="80"
+    seed="6105"
+    region-min="-95 0 60"
+    region-max="95 0 210"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="55"
+    scale-min="0.9"
+    scale-max="2.6"
+    avoid-overlaps="1"
+    pick-strategy="random"
+    footprint-radius="1.4"
+    cluster-count="16"
+    cluster-radius="15"
+    max-distance="180"
+    scale-axis-min="0.85"
+    scale-axis-max="1.15"
+    random-yaw="true"
+    variation="rock"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/moss_rock_lod1.glb"
+        lod1-url="/assets/meshes/moss_rock_lod1.glb"
+        lod2-url="/assets/meshes/moss_rock_lod2.glb"
+        lod-threshold-near="34"
+        lod-threshold-mid="90"
+      ></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/rock_mossy_lod1.glb"
+        lod1-url="/assets/meshes/rock_mossy_lod1.glb"
+        lod2-url="/assets/meshes/rock_mossy_lod2.glb"
+        lod-threshold-near="34"
+        lod-threshold-mid="90"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- Penedos grandes com colisão (obstáculos reais; poucos, por causa do
+       NavMesh, que assa obstáculos a partir dos colliders de física). -->
+  <StaticSpawner
+    profile="tree"
+    count="12"
+    seed="6106"
+    region-min="-85 0 66"
+    region-max="85 0 175"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="45"
+    scale-min="0.9"
+    scale-max="1.25"
+    avoid-overlaps="1"
+    footprint-radius="4.5"
+    max-distance="200"
+    random-yaw="true"
+    variation="rock"
+  >
+    <GameObject
+      role="static"
+      transform="scale: 3 3 3"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/rock_mossy_lod0.glb"
+        lod1-url="/assets/meshes/rock_mossy_lod1.glb"
+        lod2-url="/assets/meshes/rock_mossy_lod2.glb"
+        lod-threshold-near="45"
+        lod-threshold-mid="120"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+</Group>
+<!-- FIM biome.forest.vegetation -->

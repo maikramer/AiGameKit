@@ -200,5 +200,84 @@
           <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#3a4a6a"></Box>
           <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
         </Composition>
+        <!-- ============================================================
+           §10b BATEDORES — um por bioma, junto ao portão. Dão quests de
+           objetivo `visit`: percorrer os marcos do bioma (landmarks/*.xml).
+           São eles que transformam os POIs em destinos em vez de cenário.
+           O `target` da quest é o `name=` do landmark — ao renomear um
+           marco, atualizar também src/data/quests/*.json.
+           ============================================================ -->
+        <GameObject
+          name="npc_forest_survey"
+          place="at: 16 40; align-to-terrain: 1"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_scout_lod0.glb"
+            lod1-url="/assets/meshes/npc_scout_lod1.glb"
+            lod2-url="/assets/meshes/npc_scout_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
+          <DialogueNPC
+            dialogue-id="forest_survey"
+            portrait-url=""
+            voice-sfx=""
+          ></DialogueNPC>
+        </GameObject>
+        <GameObject
+          name="npc_desert_survey"
+          place="at: 40 -16; align-to-terrain: 1"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_scout_lod0.glb"
+            lod1-url="/assets/meshes/npc_scout_lod1.glb"
+            lod2-url="/assets/meshes/npc_scout_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
+          <DialogueNPC
+            dialogue-id="desert_survey"
+            portrait-url=""
+            voice-sfx=""
+          ></DialogueNPC>
+        </GameObject>
+        <GameObject
+          name="npc_swamp_survey"
+          place="at: -16 -40; align-to-terrain: 1"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_scout_lod0.glb"
+            lod1-url="/assets/meshes/npc_scout_lod1.glb"
+            lod2-url="/assets/meshes/npc_scout_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
+          <DialogueNPC
+            dialogue-id="swamp_survey"
+            portrait-url=""
+            voice-sfx=""
+          ></DialogueNPC>
+        </GameObject>
+        <GameObject
+          name="npc_peaks_survey"
+          place="at: -40 16; align-to-terrain: 1"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_scout_lod0.glb"
+            lod1-url="/assets/meshes/npc_scout_lod1.glb"
+            lod2-url="/assets/meshes/npc_scout_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
+          <DialogueNPC
+            dialogue-id="peaks_survey"
+            portrait-url=""
+            voice-sfx=""
+          ></DialogueNPC>
+        </GameObject>
       </Group>
       <!-- FIM quest-npcs -->

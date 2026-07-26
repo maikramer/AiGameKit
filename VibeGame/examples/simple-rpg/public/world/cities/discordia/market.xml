@@ -27,7 +27,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/market_stall_lod2.glb"
+              url="/assets/meshes/market_stall_lod0.glb"
+            lod1-url="/assets/meshes/market_stall_lod1.glb"
+            lod2-url="/assets/meshes/market_stall_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Carroça de mercadorias (caixas empilhadas + eixos) -->
@@ -121,7 +123,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/market_stall_lod2.glb"
+              url="/assets/meshes/market_stall_lod0.glb"
+            lod1-url="/assets/meshes/market_stall_lod1.glb"
+            lod2-url="/assets/meshes/market_stall_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
@@ -132,7 +136,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/market_stall_lod2.glb"
+              url="/assets/meshes/market_stall_lod0.glb"
+            lod1-url="/assets/meshes/market_stall_lod1.glb"
+            lod2-url="/assets/meshes/market_stall_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Barris junto às bancas -->
@@ -143,7 +149,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_barrel_lod2.glb"
+              url="/assets/meshes/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
+            lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
@@ -153,7 +161,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_barrel_lod2.glb"
+              url="/assets/meshes/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
+            lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Pilha de caixas de mercadoria encostada à muralha Este -->
@@ -164,7 +174,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_crate_lod2.glb"
+              url="/assets/meshes/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/wooden_crate_lod1.glb"
+            lod2-url="/assets/meshes/wooden_crate_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
@@ -175,7 +187,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_crate_lod2.glb"
+              url="/assets/meshes/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/wooden_crate_lod1.glb"
+            lod2-url="/assets/meshes/wooden_crate_lod2.glb"
             ></GLTFLoader>
           </GameObject>
 

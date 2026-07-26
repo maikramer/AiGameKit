@@ -3,15 +3,15 @@
     "id": "swamp_boglings",
     "npc": "npc_swamp_boglings",
     "biome": "swamp",
-    "title": "Eremita do Pântano",
+    "title": "Ferre, o eremita",
     "portrait": "",
     "voice": "",
     "lines_intro": [
-      "Boglins devoram tudo que planto na margem.",
-      "Mate 5 e te preparo poções de musgo."
+      "Boglins devoram tudo que eu planto na margem.",
+      "Mate 5 e eu te preparo poções de musgo."
     ],
     "lines_progress": ["Ainda faltam {remaining} boglins."],
-    "lines_complete": ["A margem está em paz. Leve as poções."],
+    "lines_complete": ["A margem está em paz. Leva as poções."],
     "objective": {
       "type": "kill",
       "target": "bogling",
@@ -28,14 +28,14 @@
     "id": "swamp_bogwarden",
     "npc": "npc_swamp_bogwarden",
     "biome": "swamp",
-    "title": "Pescador do Lago",
+    "title": "Onno, pescador do lago",
     "portrait": "",
     "voice": "",
     "lines_intro": [
       "Algo antigo dorme no fundo do lago do pântano.",
-      "Prove seu valor abatendo 5 boglins e lhe forjo uma vara abençoada."
+      "Prove seu valor abatendo 5 boglins e eu te forjo uma vara abençoada."
     ],
-    "lines_progress": ["Restam {remaining} provas de força."],
+    "lines_progress": ["Ainda faltam {remaining} provas de força."],
     "lines_complete": ["Você é forte. Esta vara abençoada é sua."],
     "objective": {
       "type": "kill",
@@ -52,12 +52,12 @@
     "id": "swamp_bogmoss",
     "npc": "npc_swamp_bogmoss",
     "biome": "swamp",
-    "title": "Druida",
+    "title": "Aldiz, a druida",
     "portrait": "",
     "voice": "",
     "lines_intro": [
       "O musgo-do-pântano cresce nas pedras úmidas.",
-      "Colete 10 tufos e te entrego um amuleto da natureza."
+      "Colete 10 tufos e eu te entrego um amuleto da natureza."
     ],
     "lines_progress": ["Faltam {remaining} tufos de musgo-do-pântano."],
     "lines_complete": ["A natureza agradece. Use este amuleto."],
@@ -70,6 +70,31 @@
       "gold": 280,
       "xp": 200,
       "items": ["nature_amulet:1"]
+    }
+  },
+  {
+    "id": "swamp_survey",
+    "npc": "npc_swamp_survey",
+    "biome": "swamp",
+    "title": "A Que Conta os Barcos",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "O pântano leva tudo: barcos, mortos, gente.",
+      "Vá à barca encalhada, ao cemitério afundado e ao altar de ossos."
+    ],
+    "lines_progress": ["Faltam {remaining} lugares pra ver."],
+    "lines_complete": ["Você voltou. Poucos voltam. O ouro é seu."],
+    "objective": {
+      "type": "visit",
+      "target": "swamp-wrecked-boat swamp-sunken-graves swamp-bone-altar",
+      "count": 3,
+      "radius": 11
+    },
+    "rewards": {
+      "gold": 240,
+      "xp": 190,
+      "items": ["antidote:2"]
     }
   }
 ]

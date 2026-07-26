@@ -64,6 +64,148 @@ assets:
         - 0.65
         - 1.5
         - 0.5
+  - id: npc_scout
+    # Batedores dos 4 biomas (public/world/ai/npcs.xml). Mesmos parâmetros do
+    # npc_merchant: A-pose com mãos abertas, senão o rig sai com a axila fundida.
+    idea:
+      lean cartoon scout NPC wearing hooded green cloak over leather jerkin, map case on belt, short boots,
+      alert friendly expression, standing upright in relaxed A-pose with arms angled down at 45 degrees away
+      from the body, visible gap between arms and torso, open hands with spread fingers, hands empty, no
+      weapons, no props, full body visible, front-facing, fantasy ranger cartographer
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.6
+        - 1.55
+        - 0.45
+  - id: npc_blacksmith
+    # Forja da cidade (cities/discordia/forge.xml).
+    idea:
+      burly cartoon blacksmith NPC wearing thick leather apron over sleeveless tunic, broad shoulders,
+      bushy beard, soot smudges, sturdy boots, standing upright in relaxed A-pose with arms angled down at
+      45 degrees away from the body, visible gap between arms and torso, open hands with spread fingers,
+      hands empty, no weapons, no props, full body visible, front-facing, fantasy village smith
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.75
+        - 1.6
+        - 0.55
+  - id: npc_healer
+    # Capela (cities/discordia/chapel.xml).
+    idea:
+      kind cartoon healer NPC wearing pale blue robe with white sash, simple headscarf, gentle smile,
+      soft slippers, standing upright in relaxed A-pose with arms angled down at 45 degrees away from the
+      body, visible gap between arms and torso, open hands with spread fingers, hands empty, no weapons,
+      no props, full body visible, front-facing, fantasy temple cleric
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.6
+        - 1.55
+        - 0.45
+  - id: npc_guard
+    # Portões e torre de vigia (cities/discordia/walls.xml, watch.xml).
+    idea:
+      cartoon town guard NPC wearing padded gambeson with chainmail collar and blue tabard, no helmet,
+      short cropped hair, stern friendly face, boots with greaves, standing upright in relaxed A-pose with
+      arms angled down at 45 degrees away from the body, visible gap between arms and torso, open hands
+      with spread fingers, hands empty, no weapons, no props, full body visible, front-facing, fantasy
+      city watchman
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.7
+        - 1.6
+        - 0.5
+  - id: npc_elder
+    # Longhouse / hub de quests (cities/discordia/longhouse.xml).
+    idea:
+      old cartoon village elder NPC wearing long brown robe with fur collar, long white beard, slight
+      stoop, wooden sandals, warm wise expression, standing upright in relaxed A-pose with arms angled
+      down at 45 degrees away from the body, visible gap between arms and torso, open hands with spread
+      fingers, hands empty, no weapons, no props, full body visible, front-facing, fantasy village elder
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.6
+        - 1.5
+        - 0.45
   - id: goblin
     idea:
       small wiry cartoon goblin with big pointy ears, crooked teeth, tattered loincloth, green skin,
@@ -93,6 +235,7 @@ assets:
         - 0.35
   - id: slime
     # Re-roll 33771 → cone/chapéu (PNG). Forçar esfera baixa: H < L=W; anti-cone/tower.
+    # Animate: Quaternius humanoid (anão/chibi) — slime bípede pequeno, não pack creature.
     seed: 55190
     idea:
       cute blue jelly slime as a wide squat SPHERE of goo sitting on the floor, like a water
@@ -110,17 +253,13 @@ assets:
       - collision
     lod_levels: 2
     animate:
-      preset: creature
-      clips: idle,walk,run,jump,attack,death,roar
-      procedural: true
+      preset: humanoid
       force_preset: true
-    # Profundidade (Y-up Z = W) a 2/3: 1.0 → 0.67. L/H iguais.
+      clips: idle,walk,run,jump,attack,hit,death
+    # Cabeça/corpo squat: A-pose dwarf como goblin. Bbox mantém volume baixo.
     omni:
-      control_type: bbox
-      bbox:
-        - 1.0
-        - 0.7
-        - 0.67
+      control_type: pose
+      pose_preset: quaternius-apose-dwarf
       size_m:
         - 1.0
         - 0.7
@@ -207,6 +346,7 @@ assets:
   - id: wolf
     # Round regen: imagem anterior saiu antropomórfica (lobisomem bípede) e o Omni
     # reproduziu-a fielmente. Quadrupede em primeiro + framing positivo (FLUX ignora negações).
+    # octree: auto (volume-eq + soft-floor).
     idea:
       cartoon feral grey wolf walking on all fours, side view, four legs on the ground,
       horizontal animal body, low head, bushy tail, grey-black fur, yellow glowing eyes, snarling
@@ -223,7 +363,7 @@ assets:
     lod_levels: 1
     animate:
       preset: creature
-      clips: idle,walk,run,jump,attack,death,roar
+      clips: idle,walk,run,jump,attack,hit,death,roar
       procedural: true
       force_preset: true
     omni:
@@ -347,6 +487,9 @@ assets:
   - id: scorpion_nest
     # Round regen: category/bbox building (alto) esticou o monte para tenda cónica.
     # Ninho = ground lump baixo: terrain + bbox explícito = aspecto size_m.
+    # octree: auto deu 224 — +32 override (detalhe insuficiente).
+    text3d:
+      octree_resolution: 256
     idea:
       low wide cartoon desert sand mound burrow with a small dark tunnel entrance hole,
       packed sand termite-hill lump hugging the ground, scattered bones around the entrance,
@@ -384,7 +527,7 @@ assets:
     lod_levels: 1
     animate:
       preset: creature
-      clips: idle,walk,run,jump,attack,death,roar
+      clips: idle,walk,run,jump,attack,hit,death,roar
       procedural: true
       force_preset: true
     # Bbox explícito: cauda alta + corpo largo (quadruped mamífero era baixo demais).
@@ -448,15 +591,16 @@ assets:
       clips: idle,walk,run,jump,attack,death,roar
       procedural: true
       force_preset: true
-    # Mais longo em Z (H); footprint aniso.
+    # size_m/bbox = [L,H,W] metros/aspect Omni; L = X WebGL/glTF (não Blender local).
+    # +30% L (X) vs run anterior: L 2.0→2.6, bbox L 0.38→0.494 (H/W iguais).
     omni:
       control_type: bbox
       bbox:
-        - 0.38
+        - 0.494
         - 1.0
         - 0.32
       size_m:
-        - 2.0
+        - 2.6
         - 5.4
         - 1.5
   - id: dead_willow
@@ -1005,7 +1149,9 @@ assets:
     kind: environment
     category: terrain
     text3d:
-      voxel_merge: 0.375
+      # auto 224 → 256 ainda fraco → +32 outra vez
+      octree_resolution: 288
+      voxel_merge: 0.75
     pipeline:
       - 3d
       - paint
@@ -1079,7 +1225,9 @@ assets:
     kind: environment
     category: terrain
     text3d:
-      voxel_merge: 0.75
+      # auto 224 → 256 ainda fraco → +32 outra vez
+      octree_resolution: 288
+      voxel_merge: 1.5
     pipeline:
       - 3d
       - paint

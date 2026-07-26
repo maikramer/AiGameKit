@@ -155,4 +155,19 @@
               particle-emitter="preset: fire; emission-rate: 24; start-life-min: 0.45; start-life-max: 1.2; start-speed-min: 1.4; start-speed-max: 3.2; start-size-min: 0.3; start-size-max: 0.65; start-color: #ff6600; looping: 1; world-space: 1"
             ></ParticleSystem>
           </Composition>
-        </Group>
+                  <!-- Ferreiro à porta da forja (mesh do pipeline, params do npc_merchant). -->
+          <GameObject
+            name="npc_blacksmith"
+            place="at: -21 -30; align-to-terrain: 1"
+            transform="rotation: 0 135 0"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/npc_blacksmith_lod0.glb"
+              lod1-url="/assets/meshes/npc_blacksmith_lod1.glb"
+              lod2-url="/assets/meshes/npc_blacksmith_lod2.glb"
+              lod-threshold-near="22"
+              lod-threshold-mid="60"
+            ></GLTFLoader>
+          </GameObject>
+</Group>

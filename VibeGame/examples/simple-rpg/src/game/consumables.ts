@@ -37,7 +37,7 @@ const SLOTS: readonly Slot[] = [
     keyCode: 'Digit1',
     icon: '/assets/icons/potion_health.png',
     color: '#7ad27a',
-    label: 'Potion — restore HP',
+    label: 'Poção — restaurar HP',
   },
   {
     id: 'antidote',
@@ -45,7 +45,7 @@ const SLOTS: readonly Slot[] = [
     keyCode: 'Digit2',
     icon: '/assets/icons/item_antidote.png',
     color: '#c08af0',
-    label: 'Antidote — cure + heal',
+    label: 'Antídoto — curar + restaurar',
   },
   {
     id: 'bomb',
@@ -53,7 +53,7 @@ const SLOTS: readonly Slot[] = [
     keyCode: 'KeyB',
     icon: '/assets/icons/item_bomb.png',
     color: '#ff8a6a',
-    label: 'Bomb — hold [B] to throw',
+    label: 'Bomba — segure [B] para arremessar',
   },
 ];
 

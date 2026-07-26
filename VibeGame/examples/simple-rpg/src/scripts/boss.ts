@@ -32,7 +32,7 @@ const behaviours = createCreatureBehaviours({
   runTimeScale: 1.5,
   lootGoldMin: 100,
   lootGoldMax: 150,
-  defeatedText: 'BOSS DEFEATED!',
+  defeatedText: 'ORN FOI DESFEITO!',
   roarSound: 'boss-roar',
   // Gate: appear only after every enemy in the frozen-peaks biome is dead.
   gateUntil: () => everSpawned() && aliveInBiome('frozen-peaks') === 0,

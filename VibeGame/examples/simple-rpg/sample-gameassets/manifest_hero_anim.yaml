@@ -1,0 +1,32 @@
+assets:
+- id: hero
+  text3d:
+    steps: 40
+    octree_resolution: 384
+    mc_level: 0
+  idea: young cartoon fantasy adventurer wearing leather tunic with rolled-up sleeves,
+    cloth bandana, simple belt with pouch, cheerful determined expression, short boots,
+    no helmet no armor, standing upright in relaxed A-pose with arms angled down at
+    45 degrees away from the body, open hands with spread fingers, hands empty, no
+    weapons, no props, full body visible, front-facing, RPG hero boy
+  kind: character
+  category: humanoid
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.55
+    - 1.55
+    - 0.4
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,sprint,jump,attack,hit,death,sword,axe,spear,chop,swordidle,axeidle,spearidle,chopidle,mine,gather,interact,punch,roar,roll

@@ -22,6 +22,7 @@ import {
   playSound,
   setCombatTarget,
   setPlayerFaceTarget,
+  spawnFloatingText,
   spawnParticleBurst,
 } from 'vibegame';
 import type { State } from 'vibegame';
@@ -38,6 +39,11 @@ const LOCK_RANGE_SQ = (MELEE_RANGE + 0.6) * (MELEE_RANGE + 0.6);
 const MELEE_ARC_DOT = Math.cos((90 * Math.PI) / 180);
 const MELEE_VERTICAL = 2.5;
 const SWING_COOLDOWN = 0.42;
+/** Chance of a critical on any swing; a hit from behind is always critical. */
+const CRIT_CHANCE = 0.15;
+const CRIT_MULTIPLIER = 2;
+/** cos(70°) — how far around the target's back the bonus still applies. */
+const BACKSTAB_DOT = Math.cos((70 * Math.PI) / 180);
 const FACE_HOLD = 0.45;
 /** Strike peak ≈27% on hero sword/attack; slightly after for whoosh/hit feel. */
 const SWING_IMPACT_FRACTION = 0.35;
@@ -45,6 +51,7 @@ const FALLBACK_IMPACT_DELAY = 0.22;
 
 const healthQuery = defineQuery([Health, Transform]);
 const _fwd = { x: 0, z: 0 };
+const _targetFwd = { x: 0, z: 0 };
 let swingTimer = 0;
 let jPressed = false;
 let faceHoldTimer = 0;
@@ -117,6 +124,30 @@ function swingImpactDelay(state: State, hero: number): number {
     : FALLBACK_IMPACT_DELAY;
 }
 
+/** Forward vector (XZ) of any entity, from its world quaternion. */
+function facingOf(eid: number, out: { x: number; z: number }): void {
+  const x = WorldTransform.rotX[eid];
+  const y = WorldTransform.rotY[eid];
+  const z = WorldTransform.rotZ[eid];
+  const w = WorldTransform.rotW[eid];
+  const fx = 2 * (x * z + w * y);
+  const fz = 1 - 2 * (x * x + y * y);
+  const len = Math.hypot(fx, fz) || 1;
+  out.x = fx / len;
+  out.z = fz / len;
+}
+
+/**
+ * Backstab test: the blow lands on the target's back when the hero approaches
+ * along the direction the target is already facing. `apX/apZ` is the normalised
+ * hero→target vector, so agreeing with the target's own forward means we are
+ * behind it.
+ */
+function isBackstab(target: number, apX: number, apZ: number): boolean {
+  facingOf(target, _targetFwd);
+  return _targetFwd.x * apX + _targetFwd.z * apZ >= BACKSTAB_DOT;
+}
+
 function landSwing(state: State, swing: PendingSwing): void {
   playSound('swing', { originEid: swing.hero });
 
@@ -132,16 +163,36 @@ function landSwing(state: State, swing: PendingSwing): void {
     const d2 = dx * dx + dz * dz;
     if (d2 > MELEE_RANGE_SQ || Math.abs(dy) > MELEE_VERTICAL) continue;
     const dist = Math.sqrt(d2) || 1;
-    if ((swing.aimX * dx + swing.aimZ * dz) / dist < MELEE_ARC_DOT) continue;
-    damageHealth(e, swing.dmg);
+    const apX = dx / dist;
+    const apZ = dz / dist;
+    if (swing.aimX * apX + swing.aimZ * apZ < MELEE_ARC_DOT) continue;
+
+    // Crit: a flat roll, or guaranteed when the hit comes from behind. Flat
+    // damage every swing read as "hitting a wall"; the roll plus the positional
+    // guarantee gives the fight a reason to circle instead of standing still.
+    const back = isBackstab(e, apX, apZ);
+    const crit = back || Math.random() < CRIT_CHANCE;
+    const dmg = crit ? Math.round(swing.dmg * CRIT_MULTIPLIER) : swing.dmg;
+
+    damageHealth(e, dmg);
     setCombatTarget(e, { label: labelFor(state, e) });
+    if (crit) {
+      playSound('swing', { originEid: e });
+      spawnFloatingText(state, back ? 'PELAS COSTAS!' : 'CRÍTICO!', {
+        x: Transform.posX[e],
+        y: Transform.posY[e] + 2.6,
+        z: Transform.posZ[e],
+        color: back ? '#ffd24a' : '#ff8a33',
+        duration: 0.9,
+      });
+    }
     spawnParticleBurst(state, {
       x: Transform.posX[e],
       y: Transform.posY[e] + 1.0,
       z: Transform.posZ[e],
       preset: 'sparks',
-      count: 6,
-      duration: 0.35,
+      count: crit ? 16 : 6,
+      duration: crit ? 0.55 : 0.35,
     });
   }
 }

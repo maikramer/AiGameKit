@@ -10,10 +10,10 @@ const mushroom = createMysticObject({
   emissiveColor: 0xff5a6a,
   toastColor: '#ffb0a0',
   readRangeSq: 4.6 * 4.6,
-  promptLabel: 'Eat mushroom',
+  promptLabel: 'Comer cogumelo',
   emissiveBase: 0.25,
   emissivePulse: 0.3,
-  message: `"You crush the cap — warmth spreads through tired limbs."  (+${HEAL} HP)`,
+  message: `"Você esmaga o chapéu — o calor se espalha pelos membros cansados."  (+${HEAL} HP)`,
   onRead: (_state, player) => healHealth(player, HEAL),
 });
 

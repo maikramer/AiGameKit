@@ -331,7 +331,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_barrel_lod2.glb"
+              url="/assets/meshes/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
+            lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Horta da casa B: canteiro + legumes -->

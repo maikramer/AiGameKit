@@ -12,7 +12,11 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/watchtower_lod2.glb"
+              url="/assets/meshes/watchtower_lod0.glb"
+              lod1-url="/assets/meshes/watchtower_lod1.glb"
+              lod2-url="/assets/meshes/watchtower_lod2.glb"
+              lod-threshold-near="60"
+              lod-threshold-mid="140"
             ></GLTFLoader>
           </GameObject>
 
@@ -41,4 +45,19 @@
             <Sphere pos="0 7.6 0" size="0.12" color="#d4b84a"></Sphere>
             <Box pos="0.4 6.8 0" size="0.05 0.9 0.6" color="#3a5a8a"></Box>
           </Composition>
-        </Group>
+                  <!-- Guarda ao pé da torre de vigia. -->
+          <GameObject
+            name="npc_guard"
+            place="at: 24 23; align-to-terrain: 1"
+            transform="rotation: 0 200 0"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/npc_guard_lod0.glb"
+              lod1-url="/assets/meshes/npc_guard_lod1.glb"
+              lod2-url="/assets/meshes/npc_guard_lod2.glb"
+              lod-threshold-near="22"
+              lod-threshold-mid="60"
+            ></GLTFLoader>
+          </GameObject>
+</Group>

@@ -155,7 +155,7 @@
         <!-- Vitórias-régias no laguinho (-40,52 r=8). -->
         <StaticSpawner
           profile="tree"
-          count="3"
+          count="10"
           seed="326"
           region-min="-47 0 45"
           region-max="-33 0 59"
@@ -179,7 +179,7 @@
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="9"
+          count="30"
           seed="7"
           region-min="-58 0 -58"
           region-max="58 0 58"
@@ -217,7 +217,7 @@
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="7"
+          count="22"
           seed="99"
           region-min="-58 0 -58"
           region-max="58 0 58"
@@ -250,11 +250,11 @@
           </GameObject>
         </StaticSpawner>
 
-        <!-- §4.x Pedras de margem do rio — form_outcrop no anel de barranco
-           (near-water). Região larga; o filtro só aceita carve sem água. -->
+        <!-- §4.x Pedras de margem do rio no anel de barranco (near-water).
+           Região larga; o filtro só aceita carve sem água. -->
         <StaticSpawner
           profile="tree"
-          count="14"
+          count="48"
           seed="401"
           region-min="-200 0 -100"
           region-max="220 0 200"
@@ -277,13 +277,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_2_lod2.glb"
-              lod1-url="/assets/meshes/form_outcrop_2_lod2.glb"
-              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
+              url="/assets/meshes/rock_mossy_lod1.glb"
+              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -291,13 +291,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_5_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/moss_rock_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_5_lod2.glb"
-              lod1-url="/assets/meshes/form_outcrop_5_lod2.glb"
-              lod2-url="/assets/meshes/form_outcrop_5_lod2.glb"
+              url="/assets/meshes/moss_rock_lod1.glb"
+              lod1-url="/assets/meshes/moss_rock_lod1.glb"
+              lod2-url="/assets/meshes/moss_rock_lod1.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -305,13 +305,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_8_lod2.glb"
-              lod1-url="/assets/meshes/form_outcrop_8_lod2.glb"
-              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
+              url="/assets/meshes/rock_mossy_lod1.glb"
+              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -319,13 +319,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_2_lod2.glb"
-              lod1-url="/assets/meshes/form_outcrop_2_lod2.glb"
-              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
+              url="/assets/meshes/rock_mossy_lod1.glb"
+              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -333,13 +333,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_8_lod2.glb"
-              lod1-url="/assets/meshes/form_outcrop_8_lod2.glb"
-              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
+              url="/assets/meshes/rock_mossy_lod1.glb"
+              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -348,7 +348,7 @@
         <!-- Outcrops cénicos no vale (fora da cidade) — não colheitáveis. -->
         <StaticSpawner
           profile="tree"
-          count="6"
+          count="20"
           seed="402"
           region-min="-55 0 -55"
           region-max="55 0 55"
@@ -370,13 +370,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_2_lod2.glb"
-              lod1-url="/assets/meshes/form_outcrop_2_lod2.glb"
-              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
+              url="/assets/meshes/rock_mossy_lod1.glb"
+              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -384,13 +384,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_stack_6_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_stack_6_lod2.glb"
-              lod1-url="/assets/meshes/form_stack_6_lod2.glb"
-              lod2-url="/assets/meshes/form_stack_6_lod2.glb"
+              url="/assets/meshes/stone_pillar_lod1.glb"
+              lod1-url="/assets/meshes/stone_pillar_lod1.glb"
+              lod2-url="/assets/meshes/stone_pillar_lod1.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -398,13 +398,13 @@
           <GameObject
             role="static"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/form_outcrop_8_lod2.glb"
-              lod1-url="/assets/meshes/form_outcrop_8_lod2.glb"
-              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
+              url="/assets/meshes/rock_mossy_lod1.glb"
+              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -417,19 +417,19 @@
            para não ficar em cima do ponto de respawn do portão norte
            (0,28): com detectRange=18 os goblins nasciam a ~3.6 m do herói
            e matavam-no logo ao renascer. -->
+        <!-- Enemies: Creature CCT on terrain heightfield; NavMesh steers desiredVel. -->
         <DynamicSpawner
           avoid-water="1"
           count="3"
           seed="11"
           region-min="-26 0 40"
           region-max="26 0 52"
-          align-to-terrain="false"
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="40"
           max-distance="100"
         >
-          <GameObject role="enemy" script="goblin-wander.ts">
+          <Creature role="enemy" script="goblin-wander.ts">
             <GLTFLoader
               role="visual"
               url="/assets/meshes/goblin_lod2.glb"
@@ -438,7 +438,7 @@
               lod-threshold-near="18"
               lod-threshold-mid="55"
             ></GLTFLoader>
-          </GameObject>
+          </Creature>
         </DynamicSpawner>
       </Group>
       <!-- FIM valley-outskirts -->

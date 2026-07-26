@@ -1,74 +1,74 @@
 [
   {
     "id": "vale",
-    "title": "Crystal Vale",
+    "title": "Discordia",
     "category": "Lore",
     "icon": "◆",
     "order": 1,
-    "body": "Crystal Vale is a crossroads of four wild biomes around a walled city.\n\nMerchants trade wood, stone and rare relics. Adventurers hunt, harvest and answer quests that keep the gates safe.\n\nPress Q anytime to open this menu — inventory, skill tree, system, wiki and quests."
+    "body": "Discordia é a cidade murada no centro do Acordo — o único lugar onde as quatro versões do mundo ainda se tocam.\n\nMercadores trocam madeira, pedra e relíquias. Anotadores saem pelos portões, medem marcos e respondem às missões que mantêm o vale seguro.\n\nAperte Q a qualquer momento para abrir este menu — inventário, habilidades, sistema, wiki e missões."
   },
   {
     "id": "controls",
-    "title": "Controls",
-    "category": "Basics",
+    "title": "Controles",
+    "category": "Básico",
     "icon": "⌨",
     "order": 2,
-    "body": "Move: WASD\nJump: Space · Sprint: Shift\nAttack / Harvest: J · Interact: F · Trade: K\nBomb: B (hold to aim) · Cycle weapon: V\nPotion: 1 · Antidote: 2\nDash: C · Heal: E · Power Strike: R\nPause menu: Q"
+    "body": "Mover: WASD\nPular: Espaço · Correr: Shift\nAtacar / Coletar: J · Interagir: F · Comerciar: K\nBomba: B (segure para mirar) · Trocar arma: V\nPoção: 1 · Antídoto: 2\nInvestida: C · Cura: E · Golpe Forte: R\nMenu de pausa: Q"
   },
   {
     "id": "combat",
-    "title": "Combat",
-    "category": "Basics",
+    "title": "Combate",
+    "category": "Básico",
     "icon": "⚔",
     "order": 3,
-    "body": "Melee swings hit creatures and also chop trees or mine rocks when you face them.\n\nBombs deal area damage — hold B to aim, release to throw.\n\nSpend skill points in the Skills tab: Vitality/Fortitude raise HP, Strength/Power raise attack, Agility/Swift/Windwalker raise speed. Titan needs Fortitude and Power first."
+    "body": "Golpes corpo a corpo atingem criaturas e também cortam árvores ou mineram pedras quando você as encara.\n\nBombas causam dano em área — segure B para mirar, solte para lançar.\n\nGaste pontos de habilidade na aba Habilidades: Vitalidade/Fortitude sobem HP, Força/Poder sobem ataque, Agilidade/Ímpeto/Andarilho sobem velocidade. Titã exige Fortitude e Poder antes."
   },
   {
     "id": "inventory",
-    "title": "Inventory & Craft",
-    "category": "Basics",
+    "title": "Inventário",
+    "category": "Básico",
     "icon": "🎒",
     "order": 4,
-    "body": "Harvested wood and stone land in your bag and resource chips.\n\nPotions heal; antidotes clear poison. Bombs stack high — buy more from the merchant.\n\nQuest rewards (pelts, fiber, relics…) also stack. Select a slot in Inventory to read the item description."
+    "body": "Madeira e pedra coletadas vão pra mochila e pros chips de recurso.\n\nPoções curam; antídotos removem veneno. Bombas empilham alto — compre mais com o mercador.\n\nRecompensas de missão (peles, fibra, relíquias…) também empilham. Selecione um espaço no Inventário para ler a descrição."
   },
   {
     "id": "biomes",
-    "title": "Four Biomes",
-    "category": "World",
+    "title": "Quatro biomas",
+    "category": "Mundo",
     "icon": "🗺",
     "order": 10,
-    "body": "North — Dark Forest: wolves, timber, shadowed paths.\nEast — Desert: cactus fiber, heat and sand creatures.\nSouth — Swamp: silk, moss potions, slow ground.\nWest — Mountain Peaks: iron, ancient relics, thin air.\n\nThe city plaza (0,0) is the safest respawn. Gates sit just outside the walls."
+    "body": "Norte — Floresta Sombria: lobos, madeira-escura, caminhos sombreados.\nLeste — Deserto: fibra de cacto, calor e criaturas da areia.\nSul — Pântano: musgo, poções e chão lento.\nOeste — Picos Gelados: cristal, mojões e ar rarefeito.\n\nA praça da cidade (0,0) é o respawn mais seguro. Os portões ficam logo fora das muralhas."
   },
   {
     "id": "quests",
-    "title": "Quests",
-    "category": "World",
+    "title": "Missões",
+    "category": "Mundo",
     "icon": "📜",
     "order": 11,
-    "body": "Talk to Dialogue NPCs with F to start or turn in quests.\n\nThe Quests tab lists active progress, completed and failed jobs.\n\nObjectives usually ask for kills, harvests or deliveries. Rewards may include gold, items and skill points."
+    "body": "Fale com NPCs de diálogo com F para aceitar ou entregar missões.\n\nA aba Missões lista progresso ativo, completas e fracassadas.\n\nObjetivos pedem abates, coleta ou visitas a marcos. Recompensas podem incluir ouro, itens e experiência."
   },
   {
     "id": "economy",
-    "title": "Merchant",
-    "category": "World",
+    "title": "Mercador",
+    "category": "Mundo",
     "icon": "🪙",
     "order": 12,
-    "body": "Press K near the merchant to trade.\n\nBuy bombs, potions and gear upgrades (sword levels, speed ring).\n\nSell surplus materials when your bag fills. Gold also tracks on the HUD chip."
+    "body": "Aperte K perto do Osric para comerciar.\n\nCompre bombas, poções e melhorias (níveis de espada, anel de velocidade).\n\nVenda materiais sobrando quando a mochila encher. O ouro também aparece no chip do HUD."
   },
   {
     "id": "progression",
-    "title": "Level & Skills",
-    "category": "Progression",
+    "title": "Nível e habilidades",
+    "category": "Progressão",
     "icon": "✦",
     "order": 20,
-    "body": "Defeat enemies and finish quests to gain XP. Each level grants skill points.\n\nThe rune pillar in the city can grant extra points.\n\nSkill tree tiers unlock after prerequisites: roots (Vitality / Strength / Agility) → mid (Fortitude / Power / Swift) → apex (Titan / Windwalker)."
+    "body": "Derrote inimigos e conclua missões para ganhar XP. Cada nível dá pontos de habilidade.\n\nO pilar rúnico na cidade pode dar pontos extras.\n\nA árvore de habilidades desbloqueia por pré-requisitos: raízes (Vitalidade / Força / Agilidade) → meio (Fortitude / Poder / Ímpeto) → ápice (Titã / Andarilho)."
   },
   {
     "id": "save",
-    "title": "Save & Load",
-    "category": "System",
+    "title": "Salvar e carregar",
+    "category": "Sistema",
     "icon": "💾",
     "order": 30,
-    "body": "Open System (Q → System) and use Save Game / Load Game.\n\nProgress stores locally in the browser: inventory, XP, skills, quests and merchant upgrades.\n\nMusic and SFX sliders apply immediately."
+    "body": "Abra Opções (Q → Opções) e use Salvar jogo / Carregar jogo.\n\nO progresso fica no navegador: inventário, XP, habilidades, missões e melhorias do mercador.\n\nOs controles de volume de música e efeitos aplicam na hora."
   }
 ]

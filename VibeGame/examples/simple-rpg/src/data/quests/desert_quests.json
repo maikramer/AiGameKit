@@ -3,15 +3,15 @@
     "id": "desert_scorpions",
     "npc": "npc_desert_scorpions",
     "biome": "desert",
-    "title": "Nômade do Deserto",
+    "title": "Nayr, o nômade",
     "portrait": "",
     "voice": "",
     "lines_intro": [
       "Escorpiões guardam as areias perto do acampamento.",
-      "Elimine 4 e te pago em ouro e fibra de cacto."
+      "Elimine 4 e eu te pago com ouro e fibra de cacto."
     ],
     "lines_progress": ["Ainda faltam {remaining} escorpiões."],
-    "lines_complete": ["As areias estão mais seguras. Tome sua recompensa."],
+    "lines_complete": ["As areias estão mais seguras. Toma sua recompensa."],
     "objective": {
       "type": "kill",
       "target": "scorpion",
@@ -27,15 +27,15 @@
     "id": "desert_bandits",
     "npc": "npc_desert_bandits",
     "biome": "desert",
-    "title": "Mercador Nômade",
+    "title": "Ilba, mercadora de rota",
     "portrait": "",
     "voice": "",
     "lines_intro": [
       "Bandidos assaltam minhas caravanas na rota leste.",
-      "Lide com 3 deles e te darei seda fina."
+      "Cuide de 3 deles e eu te dou seda fina."
     ],
-    "lines_progress": ["Restam {remaining} bandidos na rota."],
-    "lines_complete": ["A rota está livre! Esta seda é sua."],
+    "lines_progress": ["Ainda faltam {remaining} bandidos na rota."],
+    "lines_complete": ["A rota está livre. Esta seda é sua."],
     "objective": {
       "type": "kill",
       "target": "bandit",
@@ -51,15 +51,15 @@
     "id": "desert_ruins",
     "npc": "npc_desert_ruins",
     "biome": "desert",
-    "title": "Arqueólogo",
+    "title": "Terec, o desenterrador",
     "portrait": "",
     "voice": "",
     "lines_intro": [
       "As ruínas guardam pedra rúnica sob os escombros.",
-      "Extraia 6 pedras e te revelo um relicário."
+      "Extraia 6 pedras e eu te mostro um relicário."
     ],
     "lines_progress": ["Faltam {remaining} pedras rúnicas."],
-    "lines_complete": ["Excelente! Leve esta relíquia antiga."],
+    "lines_complete": ["Excelente. Leva esta relíquia antiga."],
     "objective": {
       "type": "collect",
       "target": "stone",
@@ -69,6 +69,31 @@
       "gold": 400,
       "xp": 280,
       "items": ["ancient_relic:1"]
+    }
+  },
+  {
+    "id": "desert_survey",
+    "npc": "npc_desert_survey",
+    "biome": "desert",
+    "title": "Vela das Caravanas",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "As caravanas pararam de chegar e ninguém sabe onde ficaram.",
+      "Siga a estrada: o arco, os destroços e o obelisco. Me diga o que sobrou."
+    ],
+    "lines_progress": ["Ainda faltam {remaining} pontos da rota."],
+    "lines_complete": ["Então foi assim que acabou. Toma — você mereceu."],
+    "objective": {
+      "type": "visit",
+      "target": "desert-arch desert-caravan-wreck desert-sun-obelisk",
+      "count": 3,
+      "radius": 12
+    },
+    "rewards": {
+      "gold": 220,
+      "xp": 170,
+      "items": ["potion:2"]
     }
   }
 ]

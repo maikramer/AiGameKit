@@ -74,7 +74,7 @@ function showToast(message: string): void {
 export function start(ctx: MonoBehaviourContext): void {
   findPlayer(ctx);
   registerInteractionTarget(ctx.state, ctx.entity, {
-    label: 'Open chest',
+    label: 'Abrir baú',
     key: 'F',
   });
   if (loadStarted) return;

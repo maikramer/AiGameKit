@@ -28,7 +28,7 @@ const behaviours = createCreatureBehaviours({
   runTimeScale: 1.5,
   lootGoldMin: 90,
   lootGoldMax: 130,
-  defeatedText: 'SAND WORM DERROTADO!',
+  defeatedText: 'SARRA FOI DESFEITA!',
   enemyType: 'boss_sandworm',
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });

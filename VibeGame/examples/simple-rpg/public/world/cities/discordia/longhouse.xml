@@ -14,7 +14,11 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/village_longhouse_lod2.glb"
+              url="/assets/meshes/village_longhouse_lod0.glb"
+              lod1-url="/assets/meshes/village_longhouse_lod1.glb"
+              lod2-url="/assets/meshes/village_longhouse_lod2.glb"
+              lod-threshold-near="70"
+              lod-threshold-mid="160"
             ></GLTFLoader>
           </GameObject>
 
@@ -49,4 +53,19 @@
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/treasure_chest_collision.glb; mesh-anchor: base"
           ></GameObject>
-        </Group>
+                  <!-- Ancião à entrada da longhouse. -->
+          <GameObject
+            name="npc_elder"
+            place="at: 15 -17; align-to-terrain: 1"
+            transform="rotation: 0 45 0"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/npc_elder_lod0.glb"
+              lod1-url="/assets/meshes/npc_elder_lod1.glb"
+              lod2-url="/assets/meshes/npc_elder_lod2.glb"
+              lod-threshold-near="22"
+              lod-threshold-mid="60"
+            ></GLTFLoader>
+          </GameObject>
+</Group>

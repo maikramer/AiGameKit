@@ -1,0 +1,235 @@
+<!--
+  Vegetação do DESERTO (Leste, x ≳ 58). Loaded via Include.
+  Mesh próprio do bioma: cactus (o dead_bush passa a ser arbusto seco, não
+  "cacto"), a par do collider cactus_stump_collision que já era o pretendido.
+  Densidade alta só em spawners scenery — ver nota em vegetation/forest.xml.
+-->
+<Group name="biome.desert.vegetation" pos="0 0 0">
+  <!-- Tapete seco: erva rala e poucas flores. -->
+  <Vegetation
+    meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_yellowA.glb"
+    density-per-km2="22000"
+    seed="702"
+    region-min="58 0 -95"
+    region-max="185 0 95"
+    scale-min="1.4"
+    scale-max="2.8"
+    max-slope-deg="32"
+    avoid-water="1"
+    avoid-overlaps="0"
+    max-distance="110"
+    cluster-count="34"
+    cluster-radius="2.8"
+    flower-near-radius="1.8"
+    flower-density-ratio="0.16"
+    plant-density-ratio="0.28"
+    smart="1"
+    wind="1"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="foliage"
+  ></Vegetation>
+
+  <!-- §1 Cactos — a assinatura do bioma. Em grupos, como cresce a saguaro. -->
+  <StaticSpawner
+    profile="tree"
+    count="140"
+    seed="7101"
+    region-min="60 0 -92"
+    region-max="200 0 92"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="34"
+    scale-min="0.8"
+    scale-max="1.7"
+    avoid-overlaps="1"
+    footprint-radius="1.1"
+    cluster-count="24"
+    cluster-radius="14"
+    max-distance="220"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="tree"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/cactus_lod0.glb"
+        lod1-url="/assets/meshes/cactus_lod1.glb"
+        lod2-url="/assets/meshes/cactus_lod2.glb"
+        lod-threshold-near="30"
+        lod-threshold-mid="85"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- §2 Cactos colhíveis (collider + ResourceNode). -->
+  <StaticSpawner
+    profile="tree"
+    count="18"
+    seed="302"
+    region-min="62 0 -60"
+    region-max="150 0 60"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="30"
+    scale-min="1.0"
+    scale-max="1.5"
+    avoid-overlaps="1"
+    footprint-radius="1.6"
+    max-distance="150"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="tree"
+  >
+    <GameObject
+      role="static"
+      destructible="popup-text: Cactus; popup-color: #6a9a3a; preset: dust; hits: 2; spark-on-hit: 1; hit-preset: leaves; hit-burst-count: 14; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.4"
+      script="tree.ts"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: trimesh; mesh-url: /assets/meshes/cactus_stump_collision.glb; mesh-anchor: base"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/cactus_lod0.glb"
+        lod1-url="/assets/meshes/cactus_lod1.glb"
+        lod2-url="/assets/meshes/cactus_lod2.glb"
+        lod-threshold-near="36"
+        lod-threshold-mid="110"
+      ></GLTFLoader>
+      <ResourceNode
+        kind="wood"
+        yield="2"
+        transform="pos: 0 0 0"
+      ></ResourceNode>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- §3 Arbustos secos rolando pela areia — muitos, baratos, dão escala. -->
+  <StaticSpawner
+    profile="foliage"
+    count="190"
+    seed="7102"
+    region-min="58 0 -95"
+    region-max="215 0 95"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="42"
+    scale-min="0.8"
+    scale-max="1.8"
+    avoid-overlaps="1"
+    cluster-count="30"
+    cluster-radius="12"
+    max-distance="150"
+    random-yaw="true"
+    variation="foliage"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/dead_bush_lod1.glb"
+        lod1-url="/assets/meshes/dead_bush_lod1.glb"
+        lod2-url="/assets/meshes/dead_bush_lod2.glb"
+        lod-threshold-near="28"
+        lod-threshold-mid="70"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- §4 Campos de pedra sobre as dunas (só visual). -->
+  <StaticSpawner
+    profile="tree"
+    count="95"
+    seed="7103"
+    region-min="58 0 -100"
+    region-max="225 0 100"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="58"
+    scale-min="0.9"
+    scale-max="2.8"
+    avoid-overlaps="1"
+    pick-strategy="random"
+    footprint-radius="1.5"
+    cluster-count="14"
+    cluster-radius="20"
+    max-distance="200"
+    scale-axis-min="0.85"
+    scale-axis-max="1.15"
+    random-yaw="true"
+    variation="rock"
+    saturation-min="0.10"
+    saturation-max="0.30"
+    brightness-min="1.00"
+    brightness-max="1.18"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/rock_mossy_lod1.glb"
+        lod1-url="/assets/meshes/rock_mossy_lod1.glb"
+        lod2-url="/assets/meshes/rock_mossy_lod2.glb"
+        lod-threshold-near="34"
+        lod-threshold-mid="90"
+      ></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/moss_rock_lod1.glb"
+        lod1-url="/assets/meshes/moss_rock_lod1.glb"
+        lod2-url="/assets/meshes/moss_rock_lod2.glb"
+        lod-threshold-near="34"
+        lod-threshold-mid="90"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- §5 Penedos de arenito com colisão — cobertura e obstáculos no combate. -->
+  <StaticSpawner
+    profile="tree"
+    count="14"
+    seed="7104"
+    region-min="64 0 -78"
+    region-max="185 0 78"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="45"
+    scale-min="0.9"
+    scale-max="1.3"
+    avoid-overlaps="1"
+    footprint-radius="5.0"
+    max-distance="220"
+    random-yaw="true"
+    variation="rock"
+    saturation-min="0.10"
+    saturation-max="0.30"
+    brightness-min="1.00"
+    brightness-max="1.18"
+  >
+    <GameObject
+      role="static"
+      transform="scale: 3.4 3.4 3.4"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: trimesh; mesh-url: /assets/meshes/moss_rock_collision.glb; mesh-anchor: base"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/moss_rock_lod0.glb"
+        lod1-url="/assets/meshes/moss_rock_lod1.glb"
+        lod2-url="/assets/meshes/moss_rock_lod2.glb"
+        lod-threshold-near="50"
+        lod-threshold-mid="130"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+</Group>
+<!-- FIM biome.desert.vegetation -->

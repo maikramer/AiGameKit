@@ -7,7 +7,10 @@ import {
 // Harvestable rock: the engine DestructiblePlugin handles the hits/break; this
 // script only shows the "[J] Mine" prompt while the player is in range.
 export function start(ctx: MonoBehaviourContext): void {
-  registerInteractionTarget(ctx.state, ctx.entity, { label: 'Mine', key: 'J' });
+  registerInteractionTarget(ctx.state, ctx.entity, {
+    label: 'Minerar',
+    key: 'J',
+  });
 }
 
 export function onDestroy(ctx: MonoBehaviourContext): void {

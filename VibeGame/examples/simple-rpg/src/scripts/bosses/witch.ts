@@ -29,7 +29,7 @@ const behaviours = createCreatureBehaviours({
   runTimeScale: 1.5,
   lootGoldMin: 70,
   lootGoldMax: 110,
-  defeatedText: 'BRUXA DERROTADA!',
+  defeatedText: 'VÉSPER FOI DESFEITA!',
   enemyType: 'boss_witch',
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });

@@ -17,7 +17,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/medieval_well_lod2.glb"
+              url="/assets/meshes/medieval_well_lod0.glb"
+            lod1-url="/assets/meshes/medieval_well_lod1.glb"
+            lod2-url="/assets/meshes/medieval_well_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Fogueira comunitária -->
@@ -70,7 +72,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_bench_lod2.glb"
+              url="/assets/meshes/wooden_bench_lod0.glb"
+            lod1-url="/assets/meshes/wooden_bench_lod1.glb"
+            lod2-url="/assets/meshes/wooden_bench_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
@@ -81,7 +85,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_bench_lod2.glb"
+              url="/assets/meshes/wooden_bench_lod0.glb"
+            lod1-url="/assets/meshes/wooden_bench_lod1.glb"
+            lod2-url="/assets/meshes/wooden_bench_lod2.glb"
             ></GLTFLoader>
           </GameObject>
 

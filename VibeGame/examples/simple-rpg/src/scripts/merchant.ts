@@ -109,7 +109,10 @@ function findPlayer(ctx: MonoBehaviourContext): number {
 
 function showTradePrompt(state: typeof shopState): void {
   if (promptShown || !merchantEid || !state) return;
-  registerInteractionTarget(state, merchantEid, { label: 'Trade', key: 'K' });
+  registerInteractionTarget(state, merchantEid, {
+    label: 'Comerciar',
+    key: 'K',
+  });
   promptShown = true;
 }
 
@@ -218,7 +221,7 @@ function createShopPanel(): void {
   header.style.cssText =
     'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;';
   const title = document.createElement('div');
-  title.textContent = '\u2694 Merchant Shop';
+  title.textContent = '\u2694 Loja do Osric';
   title.style.cssText =
     'font-size:20px;font-weight:bold;color:#c8a04a;letter-spacing:1px;';
   const closeBtn = document.createElement('button');
@@ -236,57 +239,57 @@ function createShopPanel(): void {
     'background:rgba(0,0,0,0.35);border-radius:4px;border-left:3px solid #c8a04a;';
   panel.appendChild(statsLabel);
 
-  panel.appendChild(sectionHead('\u2014 Buy \u2014'));
+  panel.appendChild(sectionHead('\u2014 Comprar \u2014'));
   shopButtons = [];
   shopButtons.push(
     makeButton(
-      `Buy Health Potion (${POTION_PRICE}g) \u2014 +${POTION_HEAL} HP`,
+      `Comprar poção (${POTION_PRICE}g) \u2014 +${POTION_HEAL} HP`,
       'potion',
       buyHealthPotion
     )
   );
   shopButtons.push(
     makeButton(
-      `Buy Sword Upgrade (${SWORD_PRICE}g) \u2014 Lv.${heroStats.swordLevel + 1}`,
+      `Melhorar espada (${SWORD_PRICE}g) \u2014 Nv.${heroStats.swordLevel + 1}`,
       'sword',
       buySwordUpgrade
     )
   );
   shopButtons.push(
     makeButton(
-      `Buy Antidote (${ANTIDOTE_PRICE}g) \u2014 cure +${ANTIDOTE_HEAL} HP`,
+      `Comprar antídoto (${ANTIDOTE_PRICE}g) \u2014 cura +${ANTIDOTE_HEAL} HP`,
       'antidote',
       buyAntidote
     )
   );
   shopButtons.push(
     makeButton(
-      `Buy Magic Ring (${RING_PRICE}g) \u2014 +15% speed`,
+      `Comprar anel mágico (${RING_PRICE}g) \u2014 +15% velocidade`,
       'ring',
       buyRing
     )
   );
   shopButtons.push(
     makeButton(
-      `Buy Bomb (${BOMB_PRICE}g) \u2014 throw with [B]`,
+      `Comprar bomba (${BOMB_PRICE}g) \u2014 arremessar com [B]`,
       'bomb',
       buyBomb
     )
   );
 
-  panel.appendChild(sectionHead('\u2014 Sell \u2014'));
+  panel.appendChild(sectionHead('\u2014 Vender \u2014'));
   shopButtons.push(
-    makeButton(`Sell 1 Stone (${STONE1_PRICE}g)`, 'stone1', () =>
+    makeButton(`Vender 1 pedra (${STONE1_PRICE}g)`, 'stone1', () =>
       sellStones(1, STONE1_PRICE)
     )
   );
   shopButtons.push(
-    makeButton(`Sell 5 Stones (${STONE5_PRICE}g)`, 'stone5', () =>
+    makeButton(`Vender 5 pedras (${STONE5_PRICE}g)`, 'stone5', () =>
       sellStones(5, STONE5_PRICE)
     )
   );
   shopButtons.push(
-    makeButton(`Sell 1 Wood (${WOOD1_PRICE}g)`, 'wood1', () =>
+    makeButton(`Vender 1 madeira (${WOOD1_PRICE}g)`, 'wood1', () =>
       sellWood(1, WOOD1_PRICE)
     )
   );
@@ -300,7 +303,8 @@ function createShopPanel(): void {
   panel.appendChild(errorLabel);
 
   const footer = document.createElement('div');
-  footer.textContent = 'W/S navigate \u00b7 Enter select \u00b7 L/ESC close';
+  footer.textContent =
+    'W/S navegar \u00b7 Enter selecionar \u00b7 L/ESC fechar';
   footer.style.cssText =
     'margin-top:12px;padding-top:10px;border-top:1px solid rgba(200,160,74,0.3);' +
     'font-size:12px;color:#8a7a5a;text-align:center;';
@@ -335,30 +339,27 @@ function refreshShopDisplay(): void {
   const ownedBomb = shopState ? getItemQty(shopState, player, 'bomb') : 0;
 
   if (statsLabel) {
-    statsLabel.textContent = `Gold: ${gold}   |   HP: ${hp}/${hpMax}   |   Stones: ${stones}   |   Wood: ${wood}`;
+    statsLabel.textContent = `Ouro: ${gold}   |   HP: ${hp}/${hpMax}   |   Pedras: ${stones}   |   Madeira: ${wood}`;
   }
 
   for (const btn of shopButtons) {
     switch (btn.dataset.action) {
       case 'potion':
         btn.disabled = gold < POTION_PRICE;
-        setButtonLabel(
-          btn,
-          `Health Potion — ${POTION_PRICE}g  (have ${ownedPotion})`
-        );
+        setButtonLabel(btn, `Poção — ${POTION_PRICE}g  (tem ${ownedPotion})`);
         break;
       case 'sword':
         btn.disabled = gold < SWORD_PRICE;
         setButtonLabel(
           btn,
-          `Buy Sword Upgrade (${SWORD_PRICE}g) \u2014 Lv.${heroStats.swordLevel + 1}`
+          `Melhorar espada (${SWORD_PRICE}g) \u2014 Nv.${heroStats.swordLevel + 1}`
         );
         break;
       case 'antidote':
         btn.disabled = gold < ANTIDOTE_PRICE;
         setButtonLabel(
           btn,
-          `Antidote — ${ANTIDOTE_PRICE}g  (have ${ownedAntidote})`
+          `Antídoto — ${ANTIDOTE_PRICE}g  (tem ${ownedAntidote})`
         );
         break;
       case 'ring':
@@ -366,13 +367,13 @@ function refreshShopDisplay(): void {
         setButtonLabel(
           btn,
           heroStats.ringOwned
-            ? 'Magic Ring \u2014 owned (+15% speed)'
-            : `Buy Magic Ring (${RING_PRICE}g) \u2014 +15% speed`
+            ? 'Anel mágico \u2014 já tem (+15% velocidade)'
+            : `Comprar anel mágico (${RING_PRICE}g) \u2014 +15% velocidade`
         );
         break;
       case 'bomb':
         btn.disabled = gold < BOMB_PRICE;
-        setButtonLabel(btn, `Bomb — ${BOMB_PRICE}g  (have ${ownedBomb})`);
+        setButtonLabel(btn, `Bomba — ${BOMB_PRICE}g  (tem ${ownedBomb})`);
         break;
       case 'stone1':
         btn.disabled = stones < 1;
@@ -391,7 +392,7 @@ function refreshShopDisplay(): void {
 
 function buyHealthPotion(): void {
   if (!spendGold(POTION_PRICE)) {
-    showShopError('Not enough gold!');
+    showShopError('Ouro insuficiente!');
     return;
   }
   // Potions go into the bag; use later with [1] (see game/consumables.ts).
@@ -402,7 +403,7 @@ function buyHealthPotion(): void {
 
 function buySwordUpgrade(): void {
   if (!spendGold(SWORD_PRICE)) {
-    showShopError('Not enough gold!');
+    showShopError('Ouro insuficiente!');
     return;
   }
   // Sword upgrades raise the hero's attack damage: HeroStatsSystem folds
@@ -414,7 +415,7 @@ function buySwordUpgrade(): void {
 
 function buyAntidote(): void {
   if (!spendGold(ANTIDOTE_PRICE)) {
-    showShopError('Not enough gold!');
+    showShopError('Ouro insuficiente!');
     return;
   }
   // Antidote goes into the bag; use later with [2] (see game/consumables.ts).
@@ -425,11 +426,11 @@ function buyAntidote(): void {
 
 function buyRing(): void {
   if (heroStats.ringOwned) {
-    showShopError('Already owned!');
+    showShopError('Você já tem este item!');
     return;
   }
   if (!spendGold(RING_PRICE)) {
-    showShopError('Not enough gold!');
+    showShopError('Ouro insuficiente!');
     return;
   }
   // Flag only — HeroStatsSystem applies RING_SPEED_MULT to
@@ -443,7 +444,7 @@ function buyRing(): void {
 
 function buyBomb(): void {
   if (!spendGold(BOMB_PRICE)) {
-    showShopError('Not enough gold!');
+    showShopError('Ouro insuficiente!');
     return;
   }
   // Bomb goes into the bag; throw it later with [B] (see BombSystem).
@@ -454,7 +455,7 @@ function buyBomb(): void {
 
 function sellStones(amount: number, goldGain: number): void {
   if (!removeStone(amount)) {
-    showShopError('Not enough stones!');
+    showShopError('Pedras insuficientes!');
     return;
   }
   addGold(goldGain);
@@ -463,7 +464,7 @@ function sellStones(amount: number, goldGain: number): void {
 
 function sellWood(amount: number, goldGain: number): void {
   if (!removeWood(amount)) {
-    showShopError('Not enough wood!');
+    showShopError('Madeira insuficiente!');
     return;
   }
   addGold(goldGain);

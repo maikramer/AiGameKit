@@ -35,7 +35,8 @@ text3d:
   split_at_height: true
   # Octree: omitido de propósito — Text3D ``bbox_tune`` sobe por size_m/category
   # (ex. longhouse 10 m → ~448 em 6 GB+offload). Override só se precisares
-  # forçar: manifest ``text3d.octree_resolution``. Não entra no fingerprint Omni.
+  # forçar: manifest ``text3d.octree_resolution``. Grava-se no sidecar omni.json;
+  # só o override explícito invalida no resume (autotune VRAM fica informativo).
   # Peak VRAM UMS (shape wave) — ~6 GB: uint8 recusa (~7.3 GiB); int4 cabe.
   sdnq_preset: sdnq-int4
   memory_efficient: true

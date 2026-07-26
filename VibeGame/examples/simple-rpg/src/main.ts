@@ -169,33 +169,38 @@ function heroWalkableSurfaceY(
   return Number.isFinite(bvh) ? (bvh as number) : null;
 }
 
+/**
+ * Boot / void failsafe only — not a per-frame ground solver. After Rapier CCT
+ * has a real hit underfoot (`heroGroundSnapped`), physics owns standing;
+ * this system only re-arms if the hero drops far below the heightmap (cheap
+ * sample). Do NOT call BVH every tick here — that was ~3ms/frame in the
+ * profiler (`rpg/hero-ground-snap`) while the hero was already grounded.
+ */
 const HeroGroundSnapSystem: System = {
   name: 'HeroGroundSnapSystem',
   group: 'fixed',
   after: [PhysicsStepSystem],
   update(state: State) {
-    return withSpan('rpg/hero-ground-snap', () => {
-      const heroEid = state.getEntityByName('hero');
-      if (heroEid === null || !state.hasComponent(heroEid, Transform)) return;
+    const heroEid = state.getEntityByName('hero');
+    if (heroEid === null || !state.hasComponent(heroEid, Transform)) return;
 
-      // Void-recovery failsafe: kinematic CCT can fall through if snap was
-      // released before a real Rapier hit existed underfoot, or if a respawn
-      // landed over not-yet-built ground. Re-arm instead of looping the void.
-      if (heroGroundSnapped) {
-        if (!terrainReady(state)) return;
-        const gx = Transform.posX[heroEid];
-        const gz = Transform.posZ[heroEid];
-        const surfaceY = heroWalkableSurfaceY(state, gx, gz);
-        if (
-          Number.isFinite(surfaceY) &&
-          Transform.posY[heroEid] < (surfaceY as number) - VOID_FALL_MARGIN
-        ) {
-          heroGroundSnapped = false;
-        } else {
-          return;
-        }
+    // Hot path: already seated. Heightmap-only void check (no BVH ray).
+    if (heroGroundSnapped) {
+      if (!terrainReady(state)) return;
+      const gx = Transform.posX[heroEid];
+      const gz = Transform.posZ[heroEid];
+      const terrainH = getTerrainHeightAt(state, gx, gz);
+      if (
+        Number.isFinite(terrainH) &&
+        Transform.posY[heroEid] < terrainH - VOID_FALL_MARGIN
+      ) {
+        heroGroundSnapped = false;
+      } else {
+        return;
       }
+    }
 
+    return withSpan('rpg/hero-ground-snap', () => {
       const body = getBodyForEntity(state, heroEid);
       if (!body) return;
 
@@ -216,6 +221,7 @@ const HeroGroundSnapSystem: System = {
         return;
       }
 
+      // Seat once: heightmap + BVH (roads/cobble) then wait for Rapier hit.
       const groundY = heroWalkableSurfaceY(state, x, z);
       if (!Number.isFinite(groundY)) return;
       const snapY = getBodyYForFeetAt(
@@ -590,7 +596,7 @@ const dictEN: Record<string, string> = {
     'Dash: C   Heal: E   Power Strike: R\n' +
     'Pause menu: Q\n' +
     'Profiler: P (Shift+P deep)   Debug overlay: ?   GPU stats: G',
-  'hud.title': 'Crystal Vale',
+  'hud.title': 'Discordia',
   'hud.saved': 'Game saved!',
   'hud.loaded': 'Save restored.',
 };
@@ -613,11 +619,11 @@ const dictPT: Record<string, string> = {
   'modal.wikiGeneral': 'Geral',
   'quests.active': 'Ativas',
   'quests.completed': 'Completas',
-  'quests.failed': 'Falhadas',
+  'quests.failed': 'Fracassadas',
   'options.music': 'Música',
   'options.sfx': 'Efeitos',
-  'options.save': '💾 Salvar Jogo',
-  'options.load': '📂 Carregar Jogo',
+  'options.save': '💾 Salvar jogo',
+  'options.load': '📂 Carregar jogo',
   'options.controls':
     'Mover: WASD   Pular: Espaço   Correr: Shift\n' +
     'Atacar / Coletar: J   Interagir: F   Comércio: K\n' +
@@ -626,8 +632,8 @@ const dictPT: Record<string, string> = {
     'Investida: C   Cura: E   Golpe Forte: R\n' +
     'Menu de pausa: Q\n' +
     'Profiler: P (Shift+P deep)   Overlay debug: ?   GPU: G',
-  'hud.title': 'Vale do Cristal',
-  'hud.saved': 'Jogo gravado!',
+  'hud.title': 'Discordia',
+  'hud.saved': 'Jogo salvo!',
   'hud.loaded': 'Progresso restaurado.',
 };
 
@@ -997,9 +1003,9 @@ function loadQuests(raw: unknown): readonly QuestDef[] {
 async function bootstrap(): Promise<void> {
   const bootLang = navigator.language.startsWith('pt') ? 'pt' : 'en';
   mountLoadingScreen({
-    title: bootLang === 'pt' ? 'Vale do Cristal' : 'Crystal Vale',
+    title: 'Discordia',
     subtitle:
-      bootLang === 'pt' ? 'A preparar o mundo…' : 'Preparing the world…',
+      bootLang === 'pt' ? 'Preparando o mundo…' : 'Preparing the world…',
   });
 
   registerGameSounds();
@@ -1041,7 +1047,7 @@ async function bootstrap(): Promise<void> {
 
   // City exclusion zone — registered directly in the occupancy registry before
   // any StaticSpawner samples positions. Central walled city is at the origin
-  // (matches the <SpawnExclusion at="0 0" radius="42"> in index.html).
+  // (matches <SpawnExclusion at="0 0" radius="42"> in public/world/cities/discordia.xml).
   const villageZones: Array<[number, number, number]> = [[0, 0, 42]];
   for (const [x, z, r] of villageZones) {
     registerSpawnFootprint(state, x, z, r);
@@ -1097,93 +1103,93 @@ async function bootstrap(): Promise<void> {
   for (const [id, name, icon, description, tags] of [
     [
       'bomb',
-      'Bomb',
+      'Bomba',
       '/assets/icons/item_bomb.png',
-      'Throwable explosive. Hold B to aim, release to throw.',
+      'Explosivo arremessável. Segure B para mirar, solte para lançar.',
       ['combat', 'consumable'],
     ],
     [
       'wood',
-      'Wood',
+      'Madeira',
       '/assets/icons/hud_wood.png',
-      'Chopped timber from Crystal Vale forests. Trade or craft.',
+      'Madeira cortada das florestas do vale. Serve pra vender ou craft.',
       ['material'],
     ],
     [
       'stone',
-      'Stone',
+      'Pedra',
       '/assets/icons/hud_stone.png',
-      'Mined rock. Useful for trade and construction goods.',
+      'Rocha minerada. Útil pra comércio e construção.',
       ['material'],
     ],
     [
       'potion',
-      'Potion',
+      'Poção',
       '/assets/icons/potion_health.png',
-      'Restores health. Hotkey: 1.',
+      'Restaura vida. Atalho: 1.',
       ['consumable', 'heal'],
     ],
     [
       'antidote',
-      'Antidote',
+      'Antídoto',
       '/assets/icons/item_antidote.png',
-      'Clears poison. Hotkey: 2.',
+      'Remove veneno. Atalho: 2.',
       ['consumable'],
     ],
     [
       'wolf_pelt',
-      'Wolf Pelt',
+      'Pele de lobo',
       '/assets/icons/wolf_pelt.png',
-      'Thick fur from Dark Forest wolves. Quest trophy.',
+      'Pele grossa dos lobos da Floresta Sombria. Troféu de missão.',
       ['quest', 'loot'],
     ],
     [
       'cactus_fiber',
-      'Cactus Fiber',
+      'Fibra de cacto',
       '/assets/icons/cactus_fiber.png',
-      'Tough desert fiber. Used in eastern trade routes.',
+      'Fibra resistente do deserto. Usada nas rotas do leste.',
       ['quest', 'material'],
     ],
     [
       'silk_cloth',
-      'Silk Cloth',
+      'Tecido de seda',
       '/assets/icons/silk_cloth.png',
-      'Fine cloth spun in the swamp marshes.',
+      'Pano fino das caravanas do leste.',
       ['quest', 'material'],
     ],
     [
       'ancient_relic',
-      'Ancient Relic',
+      'Relíquia antiga',
       '/assets/icons/ancient_relic.png',
-      'Weathered artifact from the mountain peaks.',
+      'Artefato gasto das ruínas do deserto.',
       ['quest', 'relic'],
     ],
     [
       'moss_potion',
-      'Moss Potion',
+      'Poção de musgo',
       '/assets/icons/moss_potion.png',
-      'Swamp brew with a sharp herbal bite.',
+      'Bebida do pântano com gosto forte de erva.',
       ['quest', 'consumable'],
     ],
     [
       'iron_axe',
-      'Iron Axe',
+      'Machado de ferro',
       '/assets/icons/iron_axe.png',
-      'Sturdy axe forged for mountain work.',
+      'Machado resistente forjado pra trabalho pesado.',
       ['quest', 'tool'],
     ],
     [
       'blessed_rod',
-      'Blessed Rod',
+      'Vara abençoada',
       '/assets/icons/blessed_rod.png',
-      'A staff marked with vale runes.',
+      'Cajado marcado com runas do vale.',
       ['quest', 'relic'],
     ],
     [
       'nature_amulet',
-      'Nature Amulet',
+      'Amuleto da natureza',
       '/assets/icons/nature_amulet.png',
-      'Charm woven from living vines.',
+      'Amuleto tecido de cipós vivos.',
       ['quest', 'relic'],
     ],
   ] as const) {
@@ -1451,8 +1457,10 @@ async function bootstrap(): Promise<void> {
 
 void bootstrap();
 
-// HMR teardown: dispose the runtime (WebGL/Rapier/recast) before Vite reloads.
+// Soft HMR of this graph leaks WebGL/KTX2/Rapier in Firefox — decline so Vite
+// always full-reloads. dispose() still runs before the document is torn down.
 if (import.meta.hot) {
+  import.meta.hot.decline();
   import.meta.hot.dispose(() => {
     try {
       clearBombs();

@@ -1,0 +1,136 @@
+# Subconjunto: NPCs novos, modelados no npc_merchant (mesma pipeline,
+# lod_levels, preset de animação e omni control_type=pose/quaternius-apose).
+# O batch corre por manifest inteiro (não há --only), por isso os subsets
+# vivem em ficheiros próprios — ver manifest_wolf_only.yaml e afins.
+assets:
+- id: npc_scout
+  idea: lean cartoon scout NPC wearing hooded green cloak over leather jerkin, map case on belt, short
+    boots, alert friendly expression, standing upright in relaxed A-pose with arms angled down at 45 degrees
+    away from the body, visible gap between arms and torso, open hands with spread fingers, hands empty,
+    no weapons, no props, full body visible, front-facing, fantasy ranger cartographer
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.6
+    - 1.55
+    - 0.45
+- id: npc_blacksmith
+  idea: burly cartoon blacksmith NPC wearing thick leather apron over sleeveless tunic, broad shoulders,
+    bushy beard, soot smudges, sturdy boots, standing upright in relaxed A-pose with arms angled down
+    at 45 degrees away from the body, visible gap between arms and torso, open hands with spread fingers,
+    hands empty, no weapons, no props, full body visible, front-facing, fantasy village smith
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.75
+    - 1.6
+    - 0.55
+- id: npc_healer
+  idea: kind cartoon healer NPC wearing pale blue robe with white sash, simple headscarf, gentle smile,
+    soft slippers, standing upright in relaxed A-pose with arms angled down at 45 degrees away from the
+    body, visible gap between arms and torso, open hands with spread fingers, hands empty, no weapons,
+    no props, full body visible, front-facing, fantasy temple cleric
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.6
+    - 1.55
+    - 0.45
+- id: npc_guard
+  idea: cartoon town guard NPC wearing padded gambeson with chainmail collar and blue tabard, no helmet,
+    short cropped hair, stern friendly face, boots with greaves, standing upright in relaxed A-pose with
+    arms angled down at 45 degrees away from the body, visible gap between arms and torso, open hands
+    with spread fingers, hands empty, no weapons, no props, full body visible, front-facing, fantasy city
+    watchman
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.7
+    - 1.6
+    - 0.5
+- id: npc_elder
+  idea: old cartoon village elder NPC wearing long brown robe with fur collar, long white beard, slight
+    stoop, wooden sandals, warm wise expression, standing upright in relaxed A-pose with arms angled down
+    at 45 degrees away from the body, visible gap between arms and torso, open hands with spread fingers,
+    hands empty, no weapons, no props, full body visible, front-facing, fantasy village elder
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.6
+    - 1.5
+    - 0.45

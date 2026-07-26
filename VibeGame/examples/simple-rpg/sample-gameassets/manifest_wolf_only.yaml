@@ -1,0 +1,27 @@
+assets:
+- id: wolf
+  idea: cartoon feral grey wolf walking on all fours, side view, four legs on the
+    ground, horizontal animal body, low head, bushy tail, grey-black fur, yellow glowing
+    eyes, snarling fangs, wild quadruped forest predator animal
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: creature
+    clips: idle,walk,run,jump,attack,hit,death,roar
+    procedural: true
+    force_preset: true
+  omni:
+    control_type: bbox
+    bbox_preset: quadruped
+    size_m:
+    - 1.4
+    - 0.75
+    - 0.45

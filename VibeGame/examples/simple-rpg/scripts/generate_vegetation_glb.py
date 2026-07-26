@@ -10,6 +10,9 @@ Outputs overwrite public/assets/meshes/vegetation/*.glb.
 
 Author in Blender Z-up (+Z = height, feet at z≈0). Export uses export_yup=True so
 glTF/Three.js receive Y-up (height on +Y) for wind and ground-align.
+
+Docs: README_VEGETATION.md (this folder); engine recipe:
+VibeGame/src/plugins/vegetation/context.md.
 """
 
 from __future__ import annotations

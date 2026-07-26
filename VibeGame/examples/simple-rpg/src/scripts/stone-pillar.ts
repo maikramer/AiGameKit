@@ -10,8 +10,8 @@ const pillar = createMysticObject({
   emissiveColor: 0x8a5cff,
   toastColor: '#c9a6ff',
   readRangeSq: 4.6 * 4.6,
-  promptLabel: 'Receive power',
-  message: `"The runes drink your gaze and answer in light — power stirs within you."  (+${SKILL_POINTS} skill points)`,
+  promptLabel: 'Receber poder',
+  message: `"As runas bebem o seu olhar e respondem em luz — o poder se mexe em você."  (+${SKILL_POINTS} pontos de habilidade)`,
   onRead: () => addSkillPoints(SKILL_POINTS),
 });
 

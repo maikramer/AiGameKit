@@ -10,8 +10,8 @@ const shrine = createMysticObject({
   emissiveColor: 0x3fd0ff,
   toastColor: '#9fe8ff',
   readRangeSq: 4.6 * 4.6,
-  promptLabel: 'Attune to crystal',
-  message: `"The crystal sings, and its song becomes memory — you grow wiser."  (+${XP_REWARD} XP)`,
+  promptLabel: 'Sintonizar com o cristal',
+  message: `"O cristal canta, e o canto vira memória — você fica mais sábio."  (+${XP_REWARD} XP)`,
   onRead: (state, player) => addXp(state, player, XP_REWARD),
 });
 

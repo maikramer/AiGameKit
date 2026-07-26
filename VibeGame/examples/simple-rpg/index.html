@@ -52,45 +52,47 @@
          VALE DO CRISTAL — MAPA DO MUNDO
          ------------------------------------------------------------------
 
-                              N (+Z) FLORESTA SOMBRIA
-                              pinheiros · lobos · sombras
-                              clareira da bruxa (chefe)
-                                        │
-         O (-X) PICOS GELADOS ──── CIDADE MURADA ──── L (+X) DESERTO
-         rochedos · goblins          (muralha ±32)    cactos · escorpiões
-         cristais · OGRO (final)                      ruínas · VERME
-                                        │
-                              S (-Z) PÂNTANO
-                              salgueiros · boglings
-                              choça · BOG WARDEN (chefe)
+                    N (+Z) FLORESTA SOMBRIA  (colinas, 36→63 m)
+                    pine_dark · lobos · sombras
+                    posto avançado · menires · lenhador
+                    clareira da bruxa (chefe)
+                                   │
+     O (-X) PICOS GELADOS ──── CIDADE MURADA ──── L (+X) DESERTO
+     corredor 49 m entre         (muralha ±32)    dunas 36→57 m
+     encostas de 130 m                            cactus · escorpiões
+     mina · lago gelado                           arco · obelisco
+     mojões · OGRO (final)                        caravana · VERME
+                                   │
+                    S (-Z) PÂNTANO  (bacia, 36→23 m)
+                    dead_willow · boglings
+                    cemitério · barca · altar de ossos
+                    choça · BOG WARDEN (chefe)
 
-         ÍNDICE DA CENA
-           §0  Céu, luz, pós-processamento, áudio
-           §1  Biomas (4 cunhas cardeais)
-           §2  Terreno + NavMesh
-           §3  Herói
-           §4  Cidade murada (muralha, praça, casas, mercado, props)
-           §5  Anel do vale (recursos) + goblins de aviso
-           §6  Norte  — Floresta Sombria
-           §7  Leste  — Deserto
-           §8  Sul    — Pântano
-           §9  Oeste  — Picos Gelados
-           §10 NPCs de quest (3 por bioma)
-           §11 Câmera, HUD e UI
-           §12 Town demo → public/world/cities/town-demo.xml
+         Diagonais = cristas (90 m a r=160, 165 m a r=300) que separam as
+         cunhas; borda do mundo fecha a 200 m. frontier/ridges.xml veste-as.
+
+         RELEVO — o heightmap do Terrain3D é praticamente plano na zona
+         jogável, por isso é reesculpido offline por
+         scripts/sculpt_terrain.py (vale central intocado, maciço a oeste
+         com corredor até à arena, bacia a sul, dunas a leste, colinas a
+         norte, cristas nas diagonais e serra na borda). O original fica em
+         public/assets/terrain/heightmap.base.png; --restore repõe-o.
 
          GRUPOS SEMÂNTICOS (<Group name="..."> — contentores na origem):
-           environment       §0+§1  céu, luz, pós-proc, áudio, clima, biomas
-           world-base        §2+§3  terreno (heightfield+NavMesh) + herói
-           city              §4     cidade murada (sub-grupos: walls/plaza/roads/houses/…)
-           valley-outskirts  §5     anel de recursos + goblins de aviso
-           biome.forest      §6     Norte — Floresta Sombria
-           biome.desert      §7     Leste — Deserto
-           biome.swamp       §8     Sul — Pântano
-           biome.peaks       §9     Oeste — Picos Gelados
-           quest-npcs        §10    NPCs de quest + especiais (merchant/boss/chest)
-           ui                §11    câmera, HUD, prompts, menu tabbed
-           town              §12    DEMO — aldeia isolada (420,420) com sub-grupos
+           environment              céu, luz, pós-proc, áudio, clima, biomas
+           world-base               terreno (heightfield+NavMesh)
+           city                     cidade murada (walls/plaza/roads/houses/…)
+           valley-outskirts         anel de recursos + goblins de aviso
+           paths.trails             trilhos dos biomas (cardeais + ramos)
+           biome.<b>.vegetation     tapete, dossel, rochas por bioma
+           biome.<b>.landmarks      destinos: postos, ruínas, minas, arena
+           frontier.ridges          cristas diagonais entre cunhas
+           creatures                inimigos por bioma
+           creatures.bosses         4 chefes (name="boss" = final, BossBar)
+           quest-npcs               NPCs de quest + especiais (merchant/chest)
+           atmosphere.ambient       partículas de ambiente
+           ui                       câmera, HUD, prompts, menu tabbed
+           town                     DEMO — aldeia isolada (420,420)
 
          INVARIANTE: todos os groups top-level ficam em pos="0 0 0" (identidade)
          para não deslocar o mundo. Mover um group desloca todos os filhos via
@@ -99,10 +101,13 @@
          entidade-terreno.
 
 
-         MAPAS MODULARES (public/world/):
+         MAPAS MODULARES (public/world/ — ver context.md lá):
            environment.xml · cities/discordia.xml · cities/town-demo.xml
-           spawn/ring.xml · vegetation/crystal-vale.xml
-           creatures/enemies.xml · ai/npcs.xml
+           spawn/ring.xml · paths/trails.xml · frontier/ridges.xml
+           vegetation/{forest,desert,swamp,peaks}.xml
+           landmarks/{forest,desert,swamp,peaks}.xml
+           creatures/enemies.xml · creatures/bosses.xml · ai/npcs.xml
+           atmosphere/ambient-fx.xml
            Editar o XML do domínio — index.html é só shell + Includes.
 
          CONTRATOS COM src/main.ts (não alterar sem sincronizar):
@@ -148,7 +153,7 @@
       <PlayerGLTF
         name="hero"
         pos="0 40 0"
-        model-url="/assets/meshes/hero_lod2.glb"
+        model-url="/assets/meshes/hero_lod0.glb"
       >
       </PlayerGLTF>
 
@@ -181,9 +186,9 @@
           texture="/assets/textures/vale_grass.png"
           ao-strength="0.9"
           height-blend-strength="0.40"
-          snow-height="0.82"
-          slope-threshold="0.58"
-          slope-softness="0.14"
+          snow-height="0.50"
+          slope-threshold="0.78"
+          slope-softness="0.10"
           color-low="#3a5a2a"
           color-mid="#8cb866"
           color-high="#e8f0ff"
@@ -201,10 +206,23 @@
 
       <Include src="/world/cities/discordia.xml"></Include>
       <Include src="/world/spawn/ring.xml"></Include>
-      <Include src="/world/vegetation/crystal-vale.xml"></Include>
-      <Include src="/world/clutter/crystal-vale.xml"></Include>
+      <Include src="/world/paths/trails.xml"></Include>
+
+      <!-- Biomas: vegetação (tapete + dossel) e landmarks (destinos) em
+           ficheiros separados por cunha cardeal. -->
+      <Include src="/world/vegetation/forest.xml"></Include>
+      <Include src="/world/vegetation/desert.xml"></Include>
+      <Include src="/world/vegetation/swamp.xml"></Include>
+      <Include src="/world/vegetation/peaks.xml"></Include>
+      <Include src="/world/landmarks/forest.xml"></Include>
+      <Include src="/world/landmarks/desert.xml"></Include>
+      <Include src="/world/landmarks/swamp.xml"></Include>
+      <Include src="/world/landmarks/peaks.xml"></Include>
+
+      <Include src="/world/frontier/ridges.xml"></Include>
       <Include src="/world/atmosphere/ambient-fx.xml"></Include>
       <Include src="/world/creatures/enemies.xml"></Include>
+      <Include src="/world/creatures/bosses.xml"></Include>
       <Include src="/world/ai/npcs.xml"></Include>
 
       <!-- Câmera 3ª pessoa. Fora de qualquer <Group> porque
@@ -217,7 +235,7 @@
         pitch="0.32"
         fov="64"
         near="0.12"
-        far="130"
+        far="420"
         follow-lag="0.18"
         turn-lag="0.38"
         mouse-sensitivity="0.003"

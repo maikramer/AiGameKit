@@ -28,7 +28,7 @@ const behaviours = createCreatureBehaviours({
   runTimeScale: 1.5,
   lootGoldMin: 80,
   lootGoldMax: 120,
-  defeatedText: 'BOG WARDEN DERROTADO!',
+  defeatedText: 'O CONTADOR FOI DESFEITO!',
   enemyType: 'boss_bogwarden',
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });
