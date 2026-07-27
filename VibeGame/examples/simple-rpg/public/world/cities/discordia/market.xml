@@ -196,7 +196,7 @@
           <!-- Comerciante atrás da banca principal, voltado para a praça. [K] -->
           <GameObject
             name="merchant"
-            place="at: 13 -12; align-to-terrain: 0"
+            place="at: 13 -12; align-to-terrain: 0; y-offset: 0.2"
             script="merchant.ts"
           ></GameObject>
         </Group>

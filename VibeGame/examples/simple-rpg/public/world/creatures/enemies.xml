@@ -114,7 +114,10 @@
     </Creature>
   </DynamicSpawner>
 
-  <!-- Arqueiro (ranged): mantém distância e dispara <ProjectileTemplate>. -->
+  <!-- Extra plains bandits (was archer.ts + enemy-arrow). Same bandit mesh
+       with rangedTemplate looked like melee from afar then whiffed up close
+       — attack clip in ATTACK mode, lunge suppressed. Melee until a real
+       archer asset exists. -->
   <DynamicSpawner
     avoid-water="1"
     count="3"
@@ -126,7 +129,7 @@
     max-slope-deg="40"
     max-distance="100"
   >
-    <Creature role="enemy" script="archer.ts">
+    <Creature role="enemy" script="enemies/bandit.ts">
       <GLTFLoader
         role="visual"
         url="/assets/meshes/bandit_lod0.glb"

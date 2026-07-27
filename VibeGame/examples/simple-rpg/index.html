@@ -156,6 +156,8 @@
         model-url="/assets/meshes/hero_lod0.glb"
       >
       </PlayerGLTF>
+      <!-- Hold hero until heightmap + heightfield ready, then seat once (CCT). -->
+      <SpawnGate target-entity="hero" y-fallback="40"></SpawnGate>
 
       <!-- GRUPO "world-base": terreno (heightfield + NavMesh). O <Terrain>
            é merge:true — o Group TEM de ficar em pos="0 0 0". -->

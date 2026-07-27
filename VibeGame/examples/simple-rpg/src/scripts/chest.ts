@@ -9,8 +9,6 @@ import type { MonoBehaviourContext } from 'vibegame';
 import {
   Transform,
   PlayerController,
-  getTerrainHeightAt,
-  getBvhSurfaceHeight,
   isKeyDown,
   healHealth,
   registerInteractionTarget,
@@ -23,7 +21,6 @@ import { addGold } from '../game/economy.ts';
 // the merchant shop loop. Commerce-focused — no inventory item, just currency.
 
 const MODEL_URL = '/assets/meshes/treasure_chest_lod2.glb';
-const TERRAIN_LAYER = 0x0001;
 const OPEN_RANGE_SQ = 4.6 * 4.6;
 const GOLD_REWARD = 60;
 const HEAL_REWARD = 25;
@@ -34,8 +31,6 @@ const playerQuery = defineQuery([PlayerController]);
 let cachedPlayer = 0;
 
 let group: THREE.Group | null = null;
-let footOffset = 0;
-let baseY = 0;
 let loadStarted = false;
 let opened = false;
 let openProgress = 0; // 0..1 lid-open animation
@@ -43,7 +38,6 @@ let glow = 0; // emissive flash, decays after opening
 let fPressed = false;
 let toast: HTMLDivElement | null = null;
 let toastTimeout: ReturnType<typeof setTimeout> | null = null;
-const _box = new THREE.Box3();
 const emissiveMats: THREE.MeshStandardMaterial[] = [];
 
 function findPlayer(ctx: MonoBehaviourContext): number {
@@ -81,9 +75,6 @@ export function start(ctx: MonoBehaviourContext): void {
   loadStarted = true;
   void loadGltfToSceneWithAnimator(ctx.state, MODEL_URL).then((result) => {
     group = result.group;
-    group.updateWorldMatrix(true, true);
-    _box.setFromObject(group);
-    footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;
     group.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -103,17 +94,14 @@ export function update(ctx: MonoBehaviourContext): void {
   const dt = ctx.deltaTime;
 
   const x = Transform.posX[eid];
+  const y = Transform.posY[eid];
   const z = Transform.posZ[eid];
-  const gy =
-    getBvhSurfaceHeight(ctx.state, x, 500, z, 2000, TERRAIN_LAYER) ??
-    getTerrainHeightAt(ctx.state, x, z);
-  baseY = gy + footOffset;
 
   if (opened) {
     // Lid-open tween + a small lift, then the gold glow decays out.
     openProgress = Math.min(1, openProgress + dt / OPEN_ANIM_SECONDS);
     const ease = 1 - (1 - openProgress) * (1 - openProgress);
-    group.position.set(x, baseY + 0.15 * ease, z);
+    group.position.set(x, y + 0.15 * ease, z);
     group.rotation.x = LID_OPEN_ANGLE * ease;
     if (glow > 0) {
       glow = Math.max(0, glow - dt * 1.5);
@@ -122,7 +110,7 @@ export function update(ctx: MonoBehaviourContext): void {
     return;
   }
 
-  group.position.set(x, baseY, z);
+  group.position.set(x, y, z);
 
   const player = findPlayer(ctx);
   if (!player) return;

@@ -72,18 +72,19 @@
   <!-- ============================================================
        LESTE — Deserto
        ============================================================ -->
+  <!-- Artéria deserto: prep leito mínimo → cobble no terreno planado. -->
   <Road
-    path="62 1  78 4  96 10  114 10  128 8  140 -2  145 -6"
+    path="62 1  70 5  78 2  88 8  98 6  108 12  118 9  128 11  136 4  142 -1  145 -6"
     width="4.2"
     flatten="true"
-    flatten-falloff="5"
+    station-spacing="0.3"
     texture-scale="14"
-    edge-feather="1.4"
-    edge-noise="0.8"
+    edge-feather="0.45"
+    edge-noise="0.15"
     end-feather-start="0"
-    end-feather-end="6"
-    texture-url="/assets/textures/desert_sand.png"
-    normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png"
+    end-feather-end="0"
+    texture-url="/assets/textures/cobblestone_road.png"
+    normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
   ></Road>
   <!-- ramo → oásis (70, 46) -->
   <Road

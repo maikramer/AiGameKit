@@ -34,7 +34,7 @@ examples/
 
 Use **`<GameObject place="at: x z; …">`** (not a separate wrapper tag): one root entity is anchored to the terrain at XZ; optional keys match the internal `place` profile (`base-y-offset`, `y-offset`, `ground-align`, `align-to-terrain`, …). Child recipes (`GLTFLoader`, `ParticleSystem`, `NPC` with merge, etc.) hang under that root. See [Spawner plugin context](../src/plugins/spawner/context.md).
 
-**Spawned actors (enemies / NPCs):** same ground API as trees — group profile `creature` (or `role="enemy"` → `roleToProfile`), `ground-align="aabb"`, defer on ground mutations, `TerrainSpawned` resync. Scripts do AI/presentation, not boot feet snaps.
+**Spawned actors (enemies / NPCs):** profile `creature` (or `role="enemy"` → `roleToProfile`) — spawn seeds surface Y; `<Creature>` CCT owns runtime Y. No AABB / `TerrainSpawned` / script foot snaps.
 
 ## Running Examples
 

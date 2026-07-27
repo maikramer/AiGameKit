@@ -79,18 +79,15 @@ import {
   getBvhSurfaceHeight,
   getTerrainHeightAt,
   getBodyYForFeetAt,
-  getRapierWorld,
   terrainReady,
   getTerrainContext,
   isTerrainDynamicsBlocking,
-  PhysicsStepSystem,
   GROUND_CONTACT_SKIN,
   threeCameras,
   ThirdPersonCamera,
   getScene,
   registerSpawnFootprint,
 } from 'vibegame';
-import * as RAPIER from '@dimforge/rapier3d-compat';
 import {
   Euler,
   Vector3,
@@ -139,166 +136,6 @@ const CHECKPOINT_X = 0;
 const CHECKPOINT_Y = 50;
 const CHECKPOINT_Z = 0;
 const RESPAWN_DELAY = 2.0;
-
-let heroGroundSnapped = false;
-let heroSpawnY: number | null = null;
-
-// How far below the terrain surface the hero must drop before we treat it as a
-// fall-through and re-seat. Generous enough to ignore slopes/steps/CCT skin.
-const VOID_FALL_MARGIN = 8;
-// BVH can hit roofs/props above the walkable floor; only trust it when it sits
-// near the heightmap sample (cobble/road mesh slightly above dirt).
-const BVH_TERRAIN_AGREE_M = 2.5;
-
-function heroWalkableSurfaceY(
-  state: State,
-  x: number,
-  z: number
-): number | null {
-  const terrainH = getTerrainHeightAt(state, x, z);
-  const bvh = getBvhSurfaceHeight(state, x, 500, z);
-  if (Number.isFinite(terrainH)) {
-    if (
-      Number.isFinite(bvh) &&
-      Math.abs((bvh as number) - terrainH) <= BVH_TERRAIN_AGREE_M
-    ) {
-      return Math.max(bvh as number, terrainH);
-    }
-    return terrainH;
-  }
-  return Number.isFinite(bvh) ? (bvh as number) : null;
-}
-
-/**
- * Boot / void failsafe only — not a per-frame ground solver. After Rapier CCT
- * has a real hit underfoot (`heroGroundSnapped`), physics owns standing;
- * this system only re-arms if the hero drops far below the heightmap (cheap
- * sample). Do NOT call BVH every tick here — that was ~3ms/frame in the
- * profiler (`rpg/hero-ground-snap`) while the hero was already grounded.
- */
-const HeroGroundSnapSystem: System = {
-  name: 'HeroGroundSnapSystem',
-  group: 'fixed',
-  after: [PhysicsStepSystem],
-  update(state: State) {
-    const heroEid = state.getEntityByName('hero');
-    if (heroEid === null || !state.hasComponent(heroEid, Transform)) return;
-
-    // Hot path: already seated. Heightmap-only void check (no BVH ray).
-    if (heroGroundSnapped) {
-      if (!terrainReady(state)) return;
-      const gx = Transform.posX[heroEid];
-      const gz = Transform.posZ[heroEid];
-      const terrainH = getTerrainHeightAt(state, gx, gz);
-      if (
-        Number.isFinite(terrainH) &&
-        Transform.posY[heroEid] < terrainH - VOID_FALL_MARGIN
-      ) {
-        heroGroundSnapped = false;
-      } else {
-        return;
-      }
-    }
-
-    return withSpan('rpg/hero-ground-snap', () => {
-      const body = getBodyForEntity(state, heroEid);
-      if (!body) return;
-
-      const x = Transform.posX[heroEid];
-      const z = Transform.posZ[heroEid];
-
-      if (!terrainReady(state)) {
-        if (heroSpawnY === null) heroSpawnY = Transform.posY[heroEid];
-        Transform.posY[heroEid] = heroSpawnY;
-        Transform.dirty[heroEid] = 1;
-        Rigidbody.velX[heroEid] = 0;
-        Rigidbody.velY[heroEid] = 0;
-        Rigidbody.velZ[heroEid] = 0;
-        body.setTranslation({ x, y: heroSpawnY, z }, true);
-        body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
-        const CM = state.getComponent('character-movement');
-        if (CM && state.hasComponent(heroEid, CM)) CM.velocityY[heroEid] = 0;
-        return;
-      }
-
-      // Seat once: heightmap + BVH (roads/cobble) then wait for Rapier hit.
-      const groundY = heroWalkableSurfaceY(state, x, z);
-      if (!Number.isFinite(groundY)) return;
-      const snapY = getBodyYForFeetAt(
-        state,
-        heroEid,
-        (groundY as number) + GROUND_CONTACT_SKIN
-      );
-
-      Transform.posX[heroEid] = x;
-      Transform.posY[heroEid] = snapY;
-      Transform.posZ[heroEid] = z;
-      Transform.dirty[heroEid] = 1;
-
-      Rigidbody.posX[heroEid] = x;
-      Rigidbody.posY[heroEid] = snapY;
-      Rigidbody.posZ[heroEid] = z;
-      Rigidbody.velX[heroEid] = 0;
-      Rigidbody.velY[heroEid] = 0;
-      Rigidbody.velZ[heroEid] = 0;
-
-      body.setTranslation({ x, y: snapY, z }, true);
-      body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
-      body.wakeUp();
-
-      const CM = state.getComponent('character-movement');
-      if (CM && state.hasComponent(heroEid, CM)) {
-        // Hold vertical only — keep horizontal input so the hero isn't frozen
-        // while Rapier heightfields finish streaming in.
-        CM.velocityY[heroEid] = 0;
-      }
-
-      // Release ONLY on a real shape cast under the capsule. AABB coverage
-      // (isTerrainColliderAt) was too early: snap released → gravity → void →
-      // re-snap → visible "falling from the sky" loop when the heightfield
-      // wasn't under the feet yet.
-      if (physicsGroundBelow(state, body, x, snapY, z)) {
-        heroGroundSnapped = true;
-      }
-    });
-  },
-};
-
-const _downDir = { x: 0, y: -1, z: 0 };
-
-function physicsGroundBelow(
-  state: State,
-  body: RAPIER.RigidBody,
-  x: number,
-  y: number,
-  z: number
-): boolean {
-  const world = getRapierWorld(state);
-  if (!world || body.numColliders() === 0) return false;
-  const collider = body.collider(0);
-  const cp = collider.translation();
-  const bp = body.translation();
-  const origin = {
-    x: x + (cp.x - bp.x),
-    y: y + (cp.y - bp.y),
-    z: z + (cp.z - bp.z),
-  };
-  const hit = world.castShape(
-    origin,
-    collider.rotation(),
-    _downDir,
-    collider.shape,
-    0,
-    1.5,
-    true,
-    RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-    undefined,
-    undefined,
-    undefined,
-    (other: RAPIER.Collider) => other.handle !== collider.handle
-  );
-  return hit !== null;
-}
 
 // ── Hero ECS setup: add the engine components the gameplay/HUD read. ─────────
 let heroInit = false;
@@ -418,12 +255,18 @@ const RespawnSystem: System = {
       // fall-through into the void whenever that chunk's collider wasn't ready).
       let respawnY = CHECKPOINT_Y;
       if (terrainReady(state)) {
-        const groundY = heroWalkableSurfaceY(state, respawnX, respawnZ);
-        if (Number.isFinite(groundY)) {
+        const terrainH = getTerrainHeightAt(state, respawnX, respawnZ);
+        const bvh = getBvhSurfaceHeight(state, respawnX, 500, respawnZ);
+        const groundY = Number.isFinite(terrainH)
+          ? terrainH
+          : Number.isFinite(bvh)
+            ? (bvh as number)
+            : null;
+        if (groundY !== null) {
           respawnY = getBodyYForFeetAt(
             state,
             hero,
-            (groundY as number) + GROUND_CONTACT_SKIN
+            groundY + GROUND_CONTACT_SKIN
           );
         }
       }
@@ -436,12 +279,9 @@ const RespawnSystem: System = {
       Rigidbody.velZ[hero] = 0;
       if (body) {
         body.setTranslation({ x: respawnX, y: respawnY, z: respawnZ }, true);
-        body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
         body.wakeUp();
       }
-      // Still re-arm the snap so it confirms ground with physics and the
-      // void-recovery failsafe owns the case where the collider is late.
-      heroGroundSnapped = false;
       deathShown = false;
     }
   },
@@ -1023,7 +863,6 @@ async function bootstrap(): Promise<void> {
   withPlugin(ProfilerPlugin);
 
   withSystem(HeroSetupSystem);
-  withSystem(HeroGroundSnapSystem);
   withSystem(HeroStatsSystem);
   withSystem(RespawnSystem);
   withSystem(CombatFeedbackSystem);
@@ -1332,35 +1171,21 @@ async function bootstrap(): Promise<void> {
   registerDebugVar(state, 'diagDynamicsBlocking', () =>
     isTerrainDynamicsBlocking(state)
   );
-  registerDebugVar(state, 'diagHeroSnapped', () => heroGroundSnapped);
-  registerDebugVar(state, 'diagHeroSpawnY', () => heroSpawnY);
-  registerDebugVar(state, 'diagSnapProbe', () => {
+  registerDebugVar(state, 'diagHeroFeet', () => {
     const heroEid = state.getEntityByName('hero');
     if (heroEid === null) return { err: 'no hero' };
     const x = Transform.posX[heroEid];
     const z = Transform.posZ[heroEid];
+    const terrainH = getTerrainHeightAt(state, x, z);
     const bvh = getBvhSurfaceHeight(state, x, 500, z);
-    const tH = getTerrainHeightAt(state, x, z);
-    const groundY = heroWalkableSurfaceY(state, x, z);
-    const snapY = getBodyYForFeetAt(
-      state,
-      heroEid,
-      (groundY ?? 0) + GROUND_CONTACT_SKIN
-    );
     const body = getBodyForEntity(state, heroEid);
-    const ground = body
-      ? physicsGroundBelow(state, body, x, snapY, z)
-      : 'no body';
     return {
       x,
       z,
+      posY: Transform.posY[heroEid],
+      terrainH,
       bvh,
-      terrainH: tH,
-      groundY,
-      snapY,
-      bodyPresent: !!body,
       bodyY: body?.translation().y ?? null,
-      physicsGroundBelow: ground,
     };
   });
   registerDebugVar(state, 'diagTerrainCtx', () => {

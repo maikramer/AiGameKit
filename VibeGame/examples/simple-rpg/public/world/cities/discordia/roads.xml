@@ -67,16 +67,17 @@
             normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
           ></Road>
 
-          <!-- Estrada ESTE (→ Deserto) -->
+          <!-- Estrada ESTE (→ Deserto): prep leito (defaults mínimos) → cobble. -->
           <Road
-            path="3 0  36 0  50 3  62 1"
+            path="3 0  18 2  32 -1  42 3  52 1  58 4  62 1"
             width="5.4"
             flatten="true"
+            station-spacing="0.3"
             texture-scale="16"
-            edge-feather="1.1"
-            edge-noise="0.45"
-            end-feather-start="2"
-            end-feather-end="4"
+            edge-feather="0.45"
+            edge-noise="0.15"
+            end-feather-start="0"
+            end-feather-end="0"
             texture-url="/assets/textures/cobblestone_road.png"
             normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
           ></Road>

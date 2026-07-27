@@ -11,14 +11,11 @@ import type { MonoBehaviourContext, State } from 'vibegame';
 import {
   Transform,
   PlayerController,
-  getTerrainHeightAt,
-  getBvhSurfaceHeight,
   isKeyDown,
   registerInteractionTarget,
   unregisterInteractionTarget,
 } from 'vibegame';
 
-const TERRAIN_LAYER = 0x0001;
 const playerQuery = defineQuery([PlayerController]);
 
 let toast: HTMLDivElement | null = null;
@@ -62,8 +59,6 @@ export interface MysticConfig {
   message: string;
   /** Button-prompt label shown when the player is in range (e.g. "Read"). */
   promptLabel: string;
-  /** Extra lift above the terrain surface (metres). */
-  yOffset?: number;
   /** Uniform visual scale (default 1) — pipeline GLBs are ~2 units tall. */
   modelScale?: number;
   /** One-time reward applied when the player reads the object. */
@@ -80,17 +75,14 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
   const baseI = cfg.emissiveBase ?? 0.4;
   const pulseI = cfg.emissivePulse ?? 0.45;
   const toastColor = cfg.toastColor ?? '#c9a6ff';
-  const yOffset = cfg.yOffset ?? 0;
 
   let group: THREE.Group | null = null;
-  let footOffset = 0;
   let loadStarted = false;
   let read = false;
   let fPressed = false;
   let cachedPlayer = 0;
   let entityId = 0;
   const emissiveMats: THREE.MeshStandardMaterial[] = [];
-  const _box = new THREE.Box3();
 
   function findPlayer(ctx: MonoBehaviourContext): number {
     if (cachedPlayer && Transform.posX[cachedPlayer] !== undefined)
@@ -114,9 +106,6 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
       group = result.group;
       const scale = cfg.modelScale ?? 1;
       if (scale !== 1) group.scale.setScalar(scale);
-      group.updateWorldMatrix(true, true);
-      _box.setFromObject(group);
-      footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;
       const col = new THREE.Color(cfg.emissiveColor);
       group.traverse((o) => {
         const mesh = o as THREE.Mesh;
@@ -138,11 +127,9 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
     if (!group) return;
     const eid = ctx.entity;
     const x = Transform.posX[eid];
+    const y = Transform.posY[eid];
     const z = Transform.posZ[eid];
-    const gy =
-      getBvhSurfaceHeight(ctx.state, x, 500, z, 2000, TERRAIN_LAYER) ??
-      getTerrainHeightAt(ctx.state, x, z);
-    group.position.set(x, gy + footOffset + yOffset, z);
+    group.position.set(x, y, z);
 
     if (read) return;
 

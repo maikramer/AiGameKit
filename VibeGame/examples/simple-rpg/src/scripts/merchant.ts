@@ -3,8 +3,6 @@ import { defineQuery, loadGltfToSceneWithAnimator, playSound } from 'vibegame';
 import type { GltfAnimator, MonoBehaviourContext } from 'vibegame';
 import { Transform, PlayerController } from 'vibegame';
 import {
-  getTerrainHeightAt,
-  getBvhSurfaceHeight,
   isKeyDown,
   setInputMovementSuppressed,
   Health,
@@ -20,8 +18,6 @@ import { getWoodCount, removeWood } from './wood.ts';
 import { heroStats, RING_SPEED_MULT } from '../game/skills';
 
 const TURN_SPEED = 6;
-const TERRAIN_LAYER = 0x0001;
-const HUT_FLOOR_TOP = 0.2;
 const MODEL_URL = '/assets/meshes/npc_merchant_lod2.glb';
 const IDLE_CLIP = 'idle';
 
@@ -62,10 +58,8 @@ let shopState: MonoBehaviourContext['state'] | null = null;
 
 let group: THREE.Group | null = null;
 let animator: GltfAnimator | null = null;
-let footOffset = 0;
 let yaw = 0;
 let loadStarted = false;
-const _box = new THREE.Box3();
 
 let shopOpen = false;
 let activePlayer = 0;
@@ -135,9 +129,6 @@ export function start(ctx: MonoBehaviourContext): void {
     }).then((result) => {
       group = result.group;
       animator = result.animator;
-      group.updateWorldMatrix(true, true);
-      _box.setFromObject(group);
-      footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;
       animator?.play(IDLE_CLIP);
     });
   }
@@ -551,10 +542,8 @@ export function update(ctx: MonoBehaviourContext): void {
   animator?.update(ctx.deltaTime);
 
   const x = Transform.posX[eid];
+  const y = Transform.posY[eid];
   const z = Transform.posZ[eid];
-  const gy =
-    getBvhSurfaceHeight(ctx.state, x, 500, z, 2000, TERRAIN_LAYER) ??
-    getTerrainHeightAt(ctx.state, x, z);
 
   const player = findPlayer(ctx);
   const dx = player ? Transform.posX[player] - x : 0;
@@ -567,7 +556,8 @@ export function update(ctx: MonoBehaviourContext): void {
   const maxTurn = TURN_SPEED * ctx.deltaTime;
   yaw += Math.min(maxTurn, Math.max(-maxTurn, err));
 
-  group.position.set(x, gy + HUT_FLOOR_TOP + footOffset, z);
+  // Entity place owns world Y (incl. hut floor y-offset).
+  group.position.set(x, y, z);
   group.rotation.set(0, yaw, 0);
 
   if (shopOpen) {

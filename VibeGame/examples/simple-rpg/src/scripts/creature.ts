@@ -48,9 +48,8 @@ import {
 /**
  * Beyond detect range (+ margin) creatures sleep: no AI, no animator.
  *
- * Grounding: `<Creature>` brings kinematic RB + capsule + CharacterController.
- * Rapier CCT owns Transform XYZ on the terrain heightfield. NavMesh steers
- * desiredVel only. Spawn seeds initial posY — no AABB lift / terrain snap here.
+ * Grounding: `<Creature>` CCT + heightfield. GLB must ship feet at origin
+ * (pipeline `export_origin: feet`). No script Y lift / snap.
  */
 const SLEEP_RANGE_MARGIN = 8;
 const SLEEP_CHECK_INTERVAL = 20;
@@ -562,7 +561,13 @@ export function createCreatureBehaviours(
     // otherwise idle so the rig doesn't freeze on the lunge's clamped last frame.
     if (mode === AI_MODE_LUNGE) return cfg.clips.lunge;
     if (mode === AI_MODE_CHASE) return cfg.clips.run;
-    if (mode === AI_MODE_ATTACK) return cfg.clips.attack ?? cfg.clips.idle;
+    if (mode === AI_MODE_ATTACK) {
+      // Ranged units sit in ATTACK at long stand-off; looping the melee
+      // `attack` clip looks like close swings that never deal damage (lunge
+      // suppressed). Attack anim plays only when a projectile actually fires.
+      if (isRanged) return moving ? cfg.clips.run : cfg.clips.idle;
+      return cfg.clips.attack ?? cfg.clips.idle;
+    }
     return moving ? cfg.clips.walk : cfg.clips.idle;
   }
 
@@ -640,7 +645,6 @@ export function createCreatureBehaviours(
     s.xmlVisual = xmlVisual;
     const scale = cfg.modelScale ?? 1;
     if (scale !== 1) group.scale.setScalar(scale);
-    // Foot/Y placement is the shared spawner AABB path (same as trees).
     if (!s.activated) group.visible = false;
   }
 
@@ -874,6 +878,22 @@ export function createCreatureBehaviours(
     }
 
     // ── AI (engine FSM): perception, FSM, navmesh steering, attack damage.
+    // Ranged: hold a long stand-off for arrows, but when the hero closes to
+    // melee distance re-enable the lunge so they aren't stuck playing fake
+    // swings with cooldown ≈ ∞ (bandit-mesh archer bug).
+    if (isRanged && cachedPlayer > 0) {
+      const rdx = Transform.posX[cachedPlayer] - Transform.posX[eid];
+      const rdz = Transform.posZ[cachedPlayer] - Transform.posZ[eid];
+      const rdist = Math.hypot(rdx, rdz);
+      if (rdist <= AI_DEFAULTS.attackRange) {
+        meleeConfig.attackRange = AI_DEFAULTS.attackRange;
+        meleeConfig.attackCooldown =
+          cfg.attackCooldown ?? AI_DEFAULTS.attackCooldown;
+      } else {
+        meleeConfig.attackRange = cfg.attackRange ?? 9;
+        meleeConfig.attackCooldown = 9999;
+      }
+    }
     const inst = getOrCreateAiInstanceState(ctx.state, eid);
     runMeleeAiFrame(ctx.state, eid, meleeConfig, inst);
     // Agent may be attached on first AI tick — reclaim yaw ownership.
@@ -973,7 +993,7 @@ export function createCreatureBehaviours(
     }
     s.lastHp = hp;
 
-    // FSM / NavMesh own XZ. Y stays at spawn Transform (no physics ground, no snap).
+    // FSM / NavMesh own XZ; CCT owns Y. Script never plants / lifts.
     const x = Transform.posX[eid];
     const z = Transform.posZ[eid];
     const visualY = Transform.posY[eid];

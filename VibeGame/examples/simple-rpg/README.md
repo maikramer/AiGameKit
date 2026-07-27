@@ -83,7 +83,7 @@ Canonical paths: `/assets/meshes/{id}_lod0.glb` (not `_rigged_animated` for runt
 | Save / Load        | `SaveLoadPlugin`            | Options tab Save/Load buttons (localStorage + msgpackr); merchant progress serializer                                                                                        |
 | i18n               | `I18nPlugin`                | Auto-detect PT/EN; HUD, modal, and controls text localized                                                                                                                   |
 | Audio              | Engine audio                | Bank + spatial cull; boot `preloadSounds` deferred until `resume-audio-on-user-gesture`; `originEid` on combat SFX; `<AudioMixer>` / biome `<MusicLayer>`; `?profiler=audio` |
-| Spawners           | `spawner` plugin            | `<StaticSpawner>` / `<DynamicSpawner>`; trees + enemies share AABB + `TerrainSpawned` resync after pads/roads                                                                |
+| Spawners           | `spawner` plugin            | `<StaticSpawner>` / `<DynamicSpawner>`; trees = AABB + `TerrainSpawned` resync; enemies = `<Creature>` CCT                                                                   |
 | Particles          | Engine particles            | Destructible bursts (`dust`/`leaves`/…) + ambient `ground-dust` sheet / fireflies                                                                                            |
 | Weather            | `weather` plugin            | `<Weather>` drifting clouds; biome `clouds`/`rain` via `setEnvironmentClouds` / `setEnvironmentRain`                                                                         |
 | Terrain            | `terrain` plugin            | Heightmap with quadtree LOD, per-chunk Rapier heightfield, biome splat + **noise-sand** fBm overlay                                                                          |
@@ -331,7 +331,7 @@ everything else documents what already ships in this example.
 - [docs/gdd/README.md](docs/gdd/README.md): GDD base (pitch, pillars, fractal index)
 - [public/world/context.md](public/world/context.md): modular map fragments + city contracts
 - [scripts/README_VEGETATION.md](scripts/README_VEGETATION.md): generate grass/flower GLBs
-- Engine: [vegetation](../../src/plugins/vegetation/context.md), [spawner](../../src/plugins/spawner/context.md) (path único de chão: árvores = inimigos), [terrain](../../src/plugins/terrain/context.md) (`TerrainPad`, noise-sand), [spawn-variation](../../src/plugins/spawn-variation/context.md), [loading](../../src/plugins/loading/context.md)
+- Engine: [vegetation](../../src/plugins/vegetation/context.md), [spawner](../../src/plugins/spawner/context.md) (estáticos AABB; creatures CCT), [terrain](../../src/plugins/terrain/context.md) (`TerrainPad`, noise-sand), [spawn-variation](../../src/plugins/spawn-variation/context.md), [loading](../../src/plugins/loading/context.md)
 - [MONOREPO_GAME_PIPELINE.md](../../../docs/MONOREPO_GAME_PIPELINE.md): folder layout and handoff contract
 - [ZERO_TO_GAME_AI.md](../../../docs/ZERO_TO_GAME_AI.md): AI-centric workflow and the `dream` command
 - [GameAssets README](../../../GameAssets/README.md): batch, handoff, presets
