@@ -95,9 +95,24 @@ export default [
       '@typescript-eslint/no-require-imports': 'off',
       'no-case-declarations': 'off',
       'no-console': 'off',
+      // `no-undef` cannot see TS type-only identifiers (`Document`, `Window`,
+      // `Navigator` in casts) and duplicates what `tsc --noEmit` already
+      // enforces for values — typescript-eslint recommends disabling it on TS.
+      'no-undef': 'off',
       'import/no-namespace': [
         'error',
-        { ignore: ['three', '@dimforge/rapier3d-compat'] },
+        {
+          ignore: [
+            'three',
+            '@dimforge/rapier3d-compat',
+            // Node builtins have no useful named-export surface to enumerate;
+            // `import * as path` is the idiomatic form.
+            'node:fs',
+            'node:path',
+            'fs',
+            'path',
+          ],
+        },
       ],
       'import/export': 'error',
     },

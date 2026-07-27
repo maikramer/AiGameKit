@@ -24,8 +24,8 @@ describe('computePlayerFootAnchor', () => {
 
     const anchor = computePlayerFootAnchor(root);
     expect(anchor.soleY).toBeCloseTo(0.01, 3);
-    // yOffset = -soleY - SOLE_PLANT_SINK(0.08)
-    expect(anchor.yOffset).toBeCloseTo(-0.09, 3);
+    // yOffset = -soleY (no plant sink fudge)
+    expect(anchor.yOffset).toBeCloseTo(-0.01, 3);
   });
 
   it('falls back to mesh minY when no foot bones', () => {
@@ -37,6 +37,6 @@ describe('computePlayerFootAnchor', () => {
 
     const anchor = computePlayerFootAnchor(root);
     expect(anchor.soleY).toBeCloseTo(0, 2);
-    expect(anchor.yOffset).toBeCloseTo(-0.08, 2);
+    expect(anchor.yOffset).toBeCloseTo(0, 2);
   });
 });

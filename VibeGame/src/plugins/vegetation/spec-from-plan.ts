@@ -43,7 +43,7 @@ export function spawnSpecFromLayer(
     regionMin: [...plan.regionMin] as [number, number, number],
     regionMax: [...plan.regionMax] as [number, number, number],
     alignToTerrain: true,
-    baseYOffset: 0.02,
+    baseYOffset: 0,
     groundAlign: 'aabb',
     randomYaw: true,
     scaleDistribution: 'linear',

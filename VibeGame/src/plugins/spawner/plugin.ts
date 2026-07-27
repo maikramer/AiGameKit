@@ -54,7 +54,6 @@ export const SpawnerPlugin: Plugin = {
       terrainSpawned: {
         yOffset: 0,
         surfaceEpsilon: 0.75,
-        halfWidth: 0,
         alignToTerrain: 0,
         aabbPending: 0,
         scaleY: 1,

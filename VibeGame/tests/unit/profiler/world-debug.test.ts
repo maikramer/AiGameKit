@@ -74,7 +74,6 @@ describe('getWorldDebugSnapshot', () => {
     Health.max[tree] = 10;
     state.addComponent(tree, TerrainSpawned);
     TerrainSpawned.yOffset[tree] = 0.5;
-    TerrainSpawned.halfWidth[tree] = 1.2;
     setGltfUrl(state, tree, '/assets/meshes/cactus_lod0.glb');
 
     const snap = getWorldDebugSnapshot(state, {
@@ -173,7 +172,6 @@ describe('renderWorldTab', () => {
             destructible: null,
             terrainSpawned: {
               yOffset: 0.02,
-              halfWidth: 0,
               alignToTerrain: false,
               aabbPending: false,
               surfaceEpsilon: 0.75,

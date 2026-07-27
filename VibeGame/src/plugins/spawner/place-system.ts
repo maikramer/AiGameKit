@@ -233,7 +233,6 @@ export const TerrainPlaceSystem: System = defineSystem({
         state.addComponent(eid, TerrainSpawned);
         TerrainSpawned.yOffset[eid] = Transform.posY[eid] - wy;
         TerrainSpawned.surfaceEpsilon[eid] = spec.spawn.surfaceEpsilon;
-        TerrainSpawned.halfWidth[eid] = 0;
         TerrainSpawned.alignToTerrain[eid] = spec.spawn.alignToTerrain ? 1 : 0;
       } else {
         for (const template of spec.templates) {

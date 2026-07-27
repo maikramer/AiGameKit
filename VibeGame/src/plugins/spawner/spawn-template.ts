@@ -5,7 +5,7 @@ import {
   createEntityFromRecipe,
   processRecipeChildElements,
 } from '../../core/recipes/parser';
-import { sampleTerrainSurfaceMatrix, sinkOffsetForSlope } from './surface';
+import { sampleTerrainSurfaceMatrix } from './surface';
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import {
   composeSpawnRotation,
@@ -14,7 +14,6 @@ import {
   parseTransformAttr,
 } from './transform-merge';
 import {
-  getGltfLocalAABB,
   getGltfLocalYBounds,
   isGltfBoundsPrefetchInflight,
   prefetchGltfLocalYBounds,
@@ -96,7 +95,7 @@ export function spawnTemplateAtTerrain(
     | 'surfaceEpsilonAuto'
     | 'maxDistance'
   > & {
-    /** Omit / `static` → edge-sink allowed; `dynamic` → never (creatures). */
+    /** Omit / `static` → TerrainSpawned + AABB plant; `dynamic` → CCT path. */
     mode?: SpawnGroupSpec['mode'];
     variation?: VariationVisualSpec;
   },
@@ -166,31 +165,12 @@ export function spawnTemplateAtTerrain(
     sample.scaleUniform * sample.axisY * parts.scale[1],
     1e-6
   );
-  const scaleXZ = sample.scaleUniform * Math.max(sample.axisX, sample.axisZ);
 
   const isDynamic = spec.mode === 'dynamic';
-  const aabb = getGltfLocalAABB(url);
-  const halfWidth = aabb
-    ? Math.max(aabb.maxX - aabb.minX, aabb.maxZ - aabb.minZ) / 2
-    : 0.5;
-  const scaledHalf = halfWidth * scaleXZ;
-  // Edge-sink: static upright props only. Dynamics: no TerrainSpawned / lift /
-  // sink — Creature CCT + terrain heightfield own runtime Y.
-  const sink =
-    !isDynamic && surface
-      ? sinkOffsetForSlope(
-          surface.slopeAngleRad,
-          scaledHalf,
-          spec.alignToTerrain ? surface.slopeAngleRad : 0
-        )
-      : 0;
-
+  // Dynamics: no TerrainSpawned / AABB lift — Creature CCT + heightfield own Y.
+  // Statics: AABB foot plant when ground-align=aabb (catch-up if bounds pending).
   const foot = new THREE.Vector3();
   foot.set(0, 0, 0);
-  // AABB lift / catch-up: statics with ground-align=aabb only.
-  // Missing bounds (queued/in-flight/failed prefetch, or race before KTX2) →
-  // plant with base-y-offset only and let TerrainSpawnBoundsCatchUpSystem
-  // apply the lift once registerGltfLocalYBounds fills the cache.
   let needsBoundsCatchUp = false;
   if (!isDynamic && spec.groundAlign === 'aabb' && url) {
     const b = getGltfLocalYBounds(url);
@@ -213,7 +193,7 @@ export function spawnTemplateAtTerrain(
 
   base.pos = [
     wx + parts.pos[0] + foot.x,
-    wy + parts.pos[1] + footOffset - sink,
+    wy + parts.pos[1] + footOffset,
     wz + parts.pos[2] + foot.z,
   ];
 
@@ -225,7 +205,6 @@ export function spawnTemplateAtTerrain(
     : {
         footOffset,
         surfaceEpsilon: spec.surfaceEpsilon,
-        halfWidth: scaledHalf,
         alignToTerrain: spec.alignToTerrain,
         needsBoundsCatchUp,
         url,
@@ -269,7 +248,6 @@ function registerTerrainSpawned(
   meta: {
     footOffset: number;
     surfaceEpsilon: number;
-    halfWidth: number;
     alignToTerrain: boolean;
     needsBoundsCatchUp: boolean;
     url: string;
@@ -280,7 +258,6 @@ function registerTerrainSpawned(
   state.addComponent(eid, TerrainSpawned);
   TerrainSpawned.yOffset[eid] = meta.footOffset;
   TerrainSpawned.surfaceEpsilon[eid] = meta.surfaceEpsilon;
-  TerrainSpawned.halfWidth[eid] = meta.halfWidth;
   TerrainSpawned.alignToTerrain[eid] = meta.alignToTerrain ? 1 : 0;
   if (meta.needsBoundsCatchUp && meta.url) {
     TerrainSpawned.aabbPending[eid] = 1;

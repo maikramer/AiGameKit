@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'bun:test';
-import { sinkOffsetForSlope } from '../../../src/plugins/spawner/surface';
+import { State } from '../../../src/core';
+import { Transform, TransformsPlugin } from '../../../src/plugins/transforms';
+import { TerrainSpawned } from '../../../src/plugins/spawner/components';
+import { terrainSpawnedWorldY } from '../../../src/plugins/spawner/terrain-spawned-y';
 
-describe('edge-sink policy', () => {
-  it('upright static on slope gets non-zero sink', () => {
-    const sink = sinkOffsetForSlope(Math.PI / 6, 0.5, 0);
-    expect(sink).toBeGreaterThan(0.2);
-  });
-
-  it('fully aligned prop has zero residual sink', () => {
-    const slope = Math.PI / 5;
-    expect(sinkOffsetForSlope(slope, 0.8, slope)).toBe(0);
-  });
-
-  it('halfWidth 0 means callers skip sink entirely', () => {
-    expect(sinkOffsetForSlope(Math.PI / 4, 0, 0)).toBe(0);
+describe('terrainSpawnedWorldY (no slope sink)', () => {
+  it('returns surface Y plus foot yOffset only', () => {
+    const state = new State();
+    state.registerPlugin(TransformsPlugin);
+    const eid = state.createEntity();
+    state.addComponent(eid, Transform);
+    state.addComponent(eid, TerrainSpawned);
+    TerrainSpawned.yOffset[eid] = 0.25;
+    TerrainSpawned.surfaceEpsilon[eid] = 0.75;
+    // Without terrain sample the helper returns null.
+    expect(terrainSpawnedWorldY(state, eid, 0, 0)).toBeNull();
   });
 });

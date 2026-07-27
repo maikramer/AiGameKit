@@ -1,4 +1,4 @@
-import type { ParsedElement } from '../../core';
+import type { ParsedElement, XMLValue } from '../../core';
 import {
   expandBlock,
   expandBuilding,
@@ -41,6 +41,23 @@ const CHILD_EXPANDERS: Record<string, Expander> = {
   gate: expandGate,
 };
 
+/** Parse `origin=` into `[x, z]`, or record the parse issue and return null. */
+function readOrigin(
+  attr: XMLValue | undefined,
+  issues: AnalyzeIssue[]
+): [number, number] | null {
+  try {
+    return parseOrigin(attr);
+  } catch (e) {
+    issues.push({
+      severity: 'error',
+      code: 'parse',
+      message: e instanceof Error ? e.message : String(e),
+    });
+    return null;
+  }
+}
+
 /**
  * Recursively expand `<CityGrid>` children to Composition/Road/GameObject
  * so footprint walk sees the same world as runtime.
@@ -67,18 +84,11 @@ export function expandCityGridsInTree(
     return { ...element, children: [] };
   }
 
-  let originX = 0;
-  let originZ = 0;
-  try {
-    [originX, originZ] = parseOrigin(element.attributes.origin);
-  } catch (e) {
-    issues.push({
-      severity: 'error',
-      code: 'parse',
-      message: e instanceof Error ? e.message : String(e),
-    });
+  const origin = readOrigin(element.attributes.origin, issues);
+  if (!origin) {
     return { ...element, children: [] };
   }
+  const [originX, originZ] = origin;
 
   const align = attrString(element.attributes['align-to-terrain']) ?? '0';
   const g: GridCtx = { cell, originX, originZ, align };

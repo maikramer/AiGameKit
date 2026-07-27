@@ -51,6 +51,6 @@ describe('Creature recipe', () => {
     expect(Collider.height[eid]).toBeCloseTo(0.2);
     expect(Collider.posOffsetY[eid]).toBeCloseTo(0.5);
 
-    expect(CharacterController.snapDist[eid]).toBeCloseTo(0);
+    expect(CharacterController.snapDist[eid]).toBeCloseTo(0.5);
   });
 });

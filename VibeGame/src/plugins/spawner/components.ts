@@ -16,21 +16,15 @@ export const PlacePending = {
  * deferred AABB lift once the template's GLB bounds finish loading.
  *
  * Y contract (see `terrain-spawned-y.ts`) — **static / place props only**.
- * DynamicSpawner agents (enemies) do not get this component: Rapier is not
- * wired for them (no Rigidbody/CCT); fake TerrainSpawned snaps are not used.
+ * `<Creature>` agents skip this component; CCT / heightfield owns runtime Y.
  *
- * - `yOffset` = foot plant (`baseYOffset` + AABB lift). Never slope sink.
- * - `halfWidth` > 0 → upright edge-sink recomputed at current XZ.
+ * - `yOffset` = foot plant (`baseYOffset` + AABB lift).
  */
 export const TerrainSpawned = {
   /** Foot offset above the mesh surface (base-y-offset + AABB lift). */
   yOffset: new Float32Array(MAX_ENTITIES),
   surfaceEpsilon: new Float32Array(MAX_ENTITIES),
-  /**
-   * Scaled XZ half-extent for edge-sink. 0 disables sink.
-   */
-  halfWidth: new Float32Array(MAX_ENTITIES),
-  /** 1 when the instance leans with terrain (`align-to-terrain`); drives sink residual. */
+  /** 1 when the instance leans with terrain (`align-to-terrain`). */
   alignToTerrain: new Uint8Array(MAX_ENTITIES),
   /**
    * 1 while the entity spawned with `ground-align="aabb"` but its GLB bounds

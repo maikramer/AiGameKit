@@ -26,7 +26,6 @@ import {
 } from '../../../src/plugins/spawner/transform-merge';
 import {
   partialAlignEuler,
-  sinkOffsetForSlope,
   slopeAngleRad,
 } from '../../../src/plugins/spawner/surface';
 import * as THREE from 'three';
@@ -196,11 +195,6 @@ describe('spawner matrix: slope helpers', () => {
   it('vertical wall has large slope', () => {
     const n = new THREE.Vector3(1, 0, 0);
     expect(slopeAngleRad(n)).toBeGreaterThan(1.5);
-  });
-  it('sinkOffsetForSlope increases with angle', () => {
-    const flat = sinkOffsetForSlope(0, 0.5);
-    const steep = sinkOffsetForSlope(Math.PI / 4, 0.5);
-    expect(steep).toBeGreaterThan(flat);
   });
   it('partialAlignEuler returns euler tuple', () => {
     const n = new THREE.Vector3(0, 1, 0);

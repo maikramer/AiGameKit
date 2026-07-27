@@ -444,7 +444,7 @@ export const TerrainSpawnSystem: System = defineSystem({
         }
 
         // Slightly above the surface so the mesh never z-fights the water disc.
-        const wy = waterSurfaceY !== null ? waterSurfaceY + 0.02 : s!.worldY;
+        const wy = waterSurfaceY !== null ? waterSurfaceY : s!.worldY;
 
         let template: SpawnTemplateSpec;
         if (spec.pickStrategy === 'round-robin') {

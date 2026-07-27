@@ -34,7 +34,9 @@ export const creatureRecipe: Recipe = {
     'rigidbody.ccd': 1,
     'rigidbody.lock-rot-x': 1,
     'rigidbody.lock-rot-z': 1,
-    'character-controller.snap-dist': 0,
+    // Same snap as player defaults — 0 let CCT fall through HF gaps (roads/pads)
+    // after collider refit and stay buried under the sampler surface.
+    'character-controller.snap-dist': 0.5,
     'collider.shape': CREATURE_COLLIDER_DEFAULTS.shape,
     'collider.radius': CREATURE_COLLIDER_DEFAULTS.radius,
     'collider.height': CREATURE_COLLIDER_DEFAULTS.height,

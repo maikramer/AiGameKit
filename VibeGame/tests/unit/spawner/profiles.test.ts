@@ -15,7 +15,7 @@ describe('spawn profiles', () => {
     const d = getGroupSpawnDefaults('tree');
     expect(d.alignToTerrain).toBe(true);
     expect(d.groundAlign).toBe('aabb');
-    expect(d.baseYOffset).toBe(0.02);
+    expect(d.baseYOffset).toBe(0);
     expect(d.randomYaw).toBe(true);
     expect(d.scaleMin).toBe(0.7);
     expect(d.scaleMax).toBe(1.4);
@@ -23,7 +23,7 @@ describe('spawn profiles', () => {
     expect(d.scaleAxisMax).toBe(1.1);
   });
 
-  it('creature: sem lift/AABB — física de chão ainda não existe nos enemies', () => {
+  it('creature: sem lift/AABB — CCT owns Y after spawn', () => {
     const d = getGroupSpawnDefaults('creature');
     expect(d.alignToTerrain).toBe(false);
     expect(d.groundAlign).toBe('none');
@@ -38,7 +38,7 @@ describe('spawn profiles', () => {
     const r = resolveGroupSpawnFields({}, 'tree');
     expect(r.alignToTerrain).toBe(true);
     expect(r.groundAlign).toBe('aabb');
-    expect(r.baseYOffset).toBe(0.02);
+    expect(r.baseYOffset).toBe(0);
     expect(r.scaleMin).toBe(0.7);
     expect(r.scaleAxisMin).toBe(0.9);
     expect(r.maxSlopeDeg).toBe(45);

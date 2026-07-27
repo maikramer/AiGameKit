@@ -39,6 +39,10 @@ describe('spatial play cull + howl cache', () => {
     bank._resetSoundBank();
     debug._resetAudioDebugLog();
     bank.setAudioEnabled(true);
+    // Another suite may have installed a jsdom `document` on the shared bun
+    // process, which leaves preloads gated behind a user gesture. Unlock
+    // explicitly so this suite behaves the same either way.
+    bank.allowSoundPreload();
     howlInstances.length = 0;
     nextId = 1;
     bank.defineSoundBank({

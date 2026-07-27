@@ -14,10 +14,18 @@ import { getTerrainContext } from '../terrain/utils';
 import { Transform, WorldTransform } from '../transforms/components';
 import { carveRoadCorridor } from './carve';
 import { deleteRoadData, getRoadData, Road } from './components';
-import { makeRoadGeometry, resampleRoadPath, smoothPath } from './geometry';
+import {
+  densifyPathByHeight,
+  makeRoadGeometry,
+  resampleRoadPath,
+  smoothPath,
+} from './geometry';
 
 const roadQuery = defineQuery([Road]);
 const terrainQuery = defineQuery([Terrain]);
+
+/** Extra metres of full-weight graded bed beyond painted `width` (both sides). */
+const ROADBED_OVERHANG = 1.5;
 
 // Y base do field do terreno (igual ao helper privado do spawner/surface).
 function terrainBaseY(state: State, terrainEntity: number): number {
@@ -46,6 +54,26 @@ function loadRoadTexture(url: string, srgb: boolean): THREE.Texture {
   return tex;
 }
 
+/**
+ * Max height over a small XZ neighborhood. Ribbon chords between stations sit
+ * under convex mesh peaks when LOD refines; sampling the max (not the center)
+ * parks verts on local crests so sand does not poke through the decal.
+ */
+export function maxNeighborhoodHeight(
+  sample: (x: number, z: number) => number,
+  x: number,
+  z: number,
+  reach: number
+): number {
+  return Math.max(
+    sample(x, z),
+    sample(x + reach, z),
+    sample(x - reach, z),
+    sample(x, z + reach),
+    sample(x, z - reach)
+  );
+}
+
 interface RoadSidecar {
   mesh: THREE.Mesh;
   material: THREE.MeshStandardMaterial;
@@ -71,6 +99,33 @@ function disposeRoad(state: State, eid: number): void {
   car.material.dispose(); // texturas são cache partilhado — não descartar
   cars!.delete(eid);
   deleteRoadData(state, eid);
+}
+
+/**
+ * Ribbon Y = walk surface after roadbed prep (CCT / heightfield).
+ * Flatten roads: exact `sampleHeightAt` on the prepared sampler.
+ * Non-flatten: mesh surface at the same point (decal on raw terrain).
+ */
+export function buildRoadHeightAt(
+  state: State,
+  eid: number,
+  _spacing: number,
+  _width: number
+): (x: number, z: number) => number {
+  if (Road.flatten[eid] === 1) {
+    for (const [fe, fd] of getTerrainContext(state)) {
+      if (!fd.initialized || !fd.sampler.data) continue;
+      const baseY = terrainBaseY(state, fe);
+      const ox = fd.worldOffset.x;
+      const oz = fd.worldOffset.z;
+      return (x, z) => baseY + sampleHeightAt(fd.sampler, x - ox, z - oz);
+    }
+  }
+
+  return (x, z) => {
+    const y = sampleTerrainSurface(state, x, z, 0.5)?.worldY;
+    return y !== undefined && Number.isFinite(y) ? y : 0;
+  };
 }
 
 /**
@@ -110,41 +165,21 @@ export const RoadApplySystem: System = defineSystem({
         }
       }
       const width = Road.width[eid] || 5;
-      const spacing = Road.stationSpacing[eid] || 1.5;
+      const spacing = Road.stationSpacing[eid] || 0.35;
 
       let heightAt: (x: number, z: number) => number;
       if (samplerReady) {
-        const surfaceY = (x: number, z: number) =>
-          sampleTerrainSurface(state, x, z, 0.5)?.worldY ?? 0;
-        // O ribbon é plano entre vértices; a superfície do terreno é
-        // piecewise-planar com triângulos muito maiores (worldSize/res,
-        // ~15 m). Num cume convexo entre estações a interpolação linear do
-        // ribbon atalha POR BAIXO da crista e a estrada some dentro do
-        // morro. Amostrar a vizinhança (meio-passo em cada eixo) e ficar
-        // com o MÁXIMO assenta a estrada sobre cristas — flutuar uns cm
-        // nas bordas (que já têm feather) é invisível; enterrar não é.
-        const reach = Math.max(spacing, width / 3) / 2;
-        heightAt = (x, z) =>
-          Math.max(
-            surfaceY(x, z),
-            surfaceY(x + reach, z),
-            surfaceY(x - reach, z),
-            surfaceY(x, z + reach),
-            surfaceY(x, z - reach)
-          );
+        heightAt = buildRoadHeightAt(state, eid, spacing, width);
       } else {
         const terrainExists = terrainQuery(state.world).length > 0;
         if (terrainExists || state.time.elapsed < 2) continue;
         heightAt = () => 0;
       }
       const iterations = Road.smoothing[eid];
-      const path = resampleRoadPath(smoothPath(data.path, iterations), spacing);
+      let path = resampleRoadPath(smoothPath(data.path, iterations), spacing);
 
-      // Carve opcional: aplaina um corredor no terreno ao longo do path (corte
-      // + aterro) ANTES de o ribbon amostrar a superfície — assim o ribbon
-      // assenta no perfil nivelado e nenhum "morrinho" do LOD grosseiro corta
-      // a estrada por cima. Mutar o sampler mantém chunks/física/BVH/spawners
-      // coerentes (mesmo contrato dos TerrainPads). Opt-in via flatten="1".
+      // Phase A — prepare roadbed (real-world grading). Mutate sampler first
+      // so mesh/CCT/BVH/ribbon share one surface. Phase B pavements below.
       if (Road.flatten[eid] === 1) {
         for (const [fe, fd] of getTerrainContext(state)) {
           if (!fd.initialized || !fd.sampler.data) continue;
@@ -153,28 +188,26 @@ export const RoadApplySystem: System = defineSystem({
             localPath[i] = path[i]! - fd.worldOffset.x;
             localPath[i + 1] = path[i + 1]! - fd.worldOffset.z;
           }
+          const falloff = Road.flattenFalloff[eid] || 5;
+          const window = Road.flattenWindow[eid] || 16;
+          const maxGrade = Number.isFinite(Road.flattenMaxGrade[eid])
+            ? Road.flattenMaxGrade[eid]
+            : 0.22;
+          // Bed slightly wider than the painted ribbon (platform + shoulders).
+          const bedWidth = width + ROADBED_OVERHANG;
           const changed = carveRoadCorridor(fd.sampler, {
             path: localPath,
-            width,
-            falloff: Road.flattenFalloff[eid] || 6,
-            window: Road.flattenWindow[eid] || 24,
+            width: bedWidth,
+            falloff,
+            window,
+            maxGrade,
           });
-          // Com o corredor esculpido + density boost, os chunks perto do
-          // jogador convergem para a superfície ANALÍTICA do sampler — o
-          // ribbon tem de amostrar essa (não o lattice base, que faz corda
-          // sobre o corredor e desalinha lateralmente em encostas).
-          const baseY = terrainBaseY(state, fe);
-          const ox = fd.worldOffset.x;
-          const oz = fd.worldOffset.z;
-          heightAt = (x, z) =>
-            baseY + sampleHeightAt(fd.sampler, x - ox, z - oz);
-          // Density boost por segmento: SEM isto o carve fica invisível — os
-          // vértices do mesh base distam worldSize/resolution (~15 m) e um
-          // corredor de ~10 m cai ENTRE eles, por isso o mesh renderizado nem
-          // amostrava o corredor esculpido (a estrada aparecia enterrada
-          // apesar do sampler estar correto). Mesmo mecanismo dos lagos/rios.
+          // Phase B height source = prepared analytic bed (same as CCT).
+          heightAt = buildRoadHeightAt(state, eid, spacing, width);
+          // Density boost: without it the carved bed is invisible — base mesh
+          // verts are ~worldSize/resolution apart and miss a ~width corridor.
           if (fd.density) {
-            const reach = width / 2 + (Road.flattenFalloff[eid] || 6);
+            const reach = bedWidth / 2 + falloff;
             for (let i = 0; i + 3 < localPath.length; i += 2) {
               applyOverride(
                 fd.density,
@@ -195,7 +228,7 @@ export const RoadApplySystem: System = defineSystem({
           let maxX = -Infinity;
           let minZ = Infinity;
           let maxZ = -Infinity;
-          const reach = width / 2 + (Road.flattenFalloff[eid] || 6);
+          const reach = bedWidth / 2 + falloff;
           for (let i = 0; i < localPath.length; i += 2) {
             const px = localPath[i]!;
             const pz = localPath[i + 1]!;
@@ -211,12 +244,22 @@ export const RoadApplySystem: System = defineSystem({
             minZ,
             maxZ,
             path: localPath.slice(),
-            halfWidth: width / 2,
+            halfWidth: bedWidth / 2,
           });
           break; // só o primeiro field ready (mesmo limite dos pads)
         }
       }
 
+      // After carve, densify so chords hug the walk sampler (kills sand
+      // wedges) without lifting verts above CCT height.
+      if (samplerReady) {
+        heightAt = buildRoadHeightAt(state, eid, spacing, width);
+        path = densifyPathByHeight(path, heightAt, 0.02, 5);
+      }
+
+      const yOffset = Number.isFinite(Road.yOffset[eid])
+        ? Road.yOffset[eid]
+        : 0;
       const geometry = makeRoadGeometry(path, {
         width,
         textureScale: Road.textureScale[eid] || 16,
@@ -224,22 +267,25 @@ export const RoadApplySystem: System = defineSystem({
         edgeNoise: Road.edgeNoise[eid],
         endFeatherStart: Road.endFeatherStart[eid],
         endFeatherEnd: Road.endFeatherEnd[eid],
+        yOffset,
         heightAt,
-        yOffset: Road.yOffset[eid] || 0.12,
       });
 
-      // White base only when a map multiplies it; bare roads use stone tint
-      // so missing texture-url does not flash as a glowing white pad.
+      // Opaque + alphaTest (not transparent): transparent pass sorted poorly
+      // vs terrain and lost near-camera z-fights even with depthWrite.
+      // Feather still works — fragments below alphaTest are discarded.
       const material = new THREE.MeshStandardMaterial({
         color: data.textureUrl ? 0xffffff : 0x8a7a68,
         roughness: Road.roughness[eid] || 1,
         metalness: Road.metalness[eid],
         vertexColors: true,
-        transparent: true,
+        transparent: false,
         opacity: Road.opacity[eid] || 1,
-        depthWrite: false,
+        alphaTest: 0.35,
+        depthWrite: true,
+        depthTest: true,
         polygonOffset: true,
-        polygonOffsetFactor: -1,
+        polygonOffsetFactor: -2,
         polygonOffsetUnits: -2,
       });
       if (data.textureUrl)
@@ -254,6 +300,7 @@ export const RoadApplySystem: System = defineSystem({
       const mesh = new THREE.Mesh(geometry, material);
       mesh.castShadow = false;
       mesh.receiveShadow = true;
+      mesh.renderOrder = 1;
       scene.add(mesh);
       setupCsmMaterials(state, mesh);
 
@@ -266,5 +313,18 @@ export const RoadApplySystem: System = defineSystem({
     const cars = ROAD_SIDECARS.get(state);
     if (!cars) return;
     for (const eid of [...cars.keys()]) disposeRoad(state, eid);
+  },
+});
+
+/**
+ * Retarget removed: flatten ribbons sample the same analytic heightfield as
+ * CCT/chunk meshes. Periodic rebuild was a no-op (or fought depth) and burned
+ * CPU. Kept as a no-op export so older imports/tests don't break.
+ */
+export const RoadRetargetSystem: System = defineSystem({
+  name: 'RoadRetargetSystem',
+  group: 'simulation',
+  update() {
+    /* intentionally empty — see comment above */
   },
 });

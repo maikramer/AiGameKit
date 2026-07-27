@@ -209,13 +209,27 @@ function findComponentInChildren(
   eid: number,
   name: string
 ): Component | null {
-  const onSelf = resolveComponent(state, eid, name);
-  if (onSelf) return onSelf;
+  const component = state.getComponent(name);
+  if (!component) return null;
+  if (state.hasComponent(eid, component)) return component;
 
-  for (const candidate of parentQuery(state.world)) {
-    if (Parent.entity[candidate] !== eid) continue;
-    const found = findComponentInChildren(state, candidate, name);
-    if (found) return found;
+  // Snapshot the query once. `parentQuery` returns a per-query scratch array
+  // that the next call overwrites, so recursing (the previous shape) walked a
+  // buffer a deeper frame had already re-filled. The copy also makes the
+  // descendant walk immune to entities being destroyed mid-walk, and the
+  // `seen` set stops a malformed Parent cycle from hanging the frame.
+  const withParent = parentQuery(state.world).slice();
+  const frontier: number[] = [eid];
+  const seen = new Set<number>([eid]);
+  while (frontier.length > 0) {
+    const parent = frontier.pop() as number;
+    for (let i = 0; i < withParent.length; i++) {
+      const child = withParent[i] as number;
+      if (Parent.entity[child] !== parent || seen.has(child)) continue;
+      if (state.hasComponent(child, component)) return component;
+      seen.add(child);
+      frontier.push(child);
+    }
   }
   return null;
 }
@@ -225,13 +239,22 @@ function findComponentInParent(
   eid: number,
   name: string
 ): Component | null {
-  const onSelf = resolveComponent(state, eid, name);
-  if (onSelf) return onSelf;
+  const component = state.getComponent(name);
+  if (!component) return null;
 
-  if (!state.hasComponent(eid, Parent)) return null;
-  const parentEid = Parent.entity[eid];
-  if (parentEid === 0) return null;
-  return findComponentInParent(state, parentEid, name);
+  // Iterative walk with a cycle guard: a Parent loop used to recurse until the
+  // stack blew up.
+  let current = eid;
+  const seen = new Set<number>();
+  while (!seen.has(current)) {
+    if (state.hasComponent(current, component)) return component;
+    seen.add(current);
+    if (!state.hasComponent(current, Parent)) return null;
+    const parentEid = Parent.entity[current];
+    if (parentEid === 0) return null;
+    current = parentEid;
+  }
+  return null;
 }
 
 function shouldWaitForGltf(state: State, eid: number): boolean {

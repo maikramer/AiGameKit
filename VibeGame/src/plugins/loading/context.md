@@ -43,7 +43,7 @@ The gate registry (`core/loading-gate.ts`) is inert unless a loading screen enab
 3. `registerReadyGate(state, 'shaders', () => isSceneShadersWarmed(state))`: blocks physics latch + fade until the shaders latch opens. Warmup itself is owned by `ShaderWarmupSystem` (rendering plugin) — the overlay driver stops the moment it fades, so it must not own the compile/orbit pump.
 4. `mountLoadingScreen()`: paints the overlay (idempotent; also re-mounted on first update as a fallback).
 
-**Ground Y is not a loading gate.** Trees and enemies share the spawner path (`sampleTerrainSurface` + AABB + `TerrainSpawned` + `resyncTerrainSpawnedHeights`). Spawn already defers on `isGroundMutationPending` (pads/roads/rivers). Do **not** add a `settle` gate or keep distant MonoBehaviour scripts awake only to snap feet — see [`../spawner/context.md`](../spawner/context.md) (_Path único de chão_).
+**Ground Y is not a loading gate.** Statics use AABB + `TerrainSpawned` resync; creatures use CCT after spawn seed. Spawn already defers on `isGroundMutationPending` (pads/roads/rivers). Do **not** add a `settle` gate or keep distant scripts awake only to snap feet — see [`../spawner/context.md`](../spawner/context.md).
 
 `isWorldReady(state)` is true when every registered gate passes (vacuously true with none). `getLoadingProgress(state)` returns `{ ready, total, pending }` which the bar and status line consume.
 

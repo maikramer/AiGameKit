@@ -2,7 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import {
   Road,
   RoadPlugin,
+  densifyPathByHeight,
   makeRoadGeometry,
+  maxNeighborhoodHeight,
   resampleRoadPath,
   roadRecipe,
   smoothPath,
@@ -122,6 +124,22 @@ describe('road: makeRoadGeometry', () => {
     expect(p.getY(last)).toBeCloseTo(10 * 2 + 0.1);
   });
 
+  it('cross-section uses centerline Y (ignores lateral height spikes)', () => {
+    const path = resampleRoadPath([0, 0, 10, 0], 5);
+    const geo = makeRoadGeometry(
+      path,
+      opts({
+        width: 6,
+        // Dune walls beside the road — must NOT lift ribbon edges.
+        heightAt: (_x, z) => (Math.abs(z) > 1 ? 40 : 2),
+      })
+    );
+    const p = geo.getAttribute('position');
+    for (let i = 0; i < p.count; i++) {
+      expect(p.getY(i)).toBeCloseTo(2, 5);
+    }
+  });
+
   it('edge-noise corrói para dentro e é determinístico', () => {
     const path = resampleRoadPath([0, 0, 30, 0], 1.5);
     const a = makeRoadGeometry(path, opts({ edgeNoise: 0.5, width: 6 }));
@@ -155,18 +173,52 @@ describe('road: makeRoadGeometry', () => {
   });
 });
 
+describe('road: maxNeighborhoodHeight', () => {
+  it('picks the crest in the neighborhood, not the center', () => {
+    const sample = (x: number, z: number) => x + z * 0.1;
+    expect(maxNeighborhoodHeight(sample, 0, 0, 2)).toBeCloseTo(2, 5);
+  });
+});
+
+describe('road: densifyPathByHeight', () => {
+  it('inserts midpoints under a convex hump without leaving the segment', () => {
+    const heightAt = (x: number, _z: number) => 1 - (x - 5) ** 2 / 25;
+    const path = [0, 0, 10, 0];
+    const dense = densifyPathByHeight(path, heightAt, 0.05, 4);
+    expect(dense.length).toBeGreaterThan(path.length);
+    expect(dense[0]).toBe(0);
+    expect(dense[dense.length - 2]).toBe(10);
+  });
+
+  it('is a no-op on a planar slope', () => {
+    const heightAt = (x: number, _z: number) => x * 0.1;
+    const path = [0, 0, 5, 0, 10, 0];
+    const dense = densifyPathByHeight(path, heightAt, 0.02, 3);
+    expect(dense.length).toBe(path.length);
+  });
+});
+
 describe('road: plugin/recipe', () => {
   it('regista recipe, componente e parser', () => {
     expect(roadRecipe.name).toBe('Road');
     expect(roadRecipe.components).toContain('road');
     expect(RoadPlugin.components?.road).toBe(Road);
     expect(RoadPlugin.config?.parsers?.Road).toBeTypeOf('function');
+    expect(RoadPlugin.systems?.some((s) => s.name === 'RoadApplySystem')).toBe(
+      true
+    );
   });
 
-  it('defaults cobrem largura/feather/scale', () => {
+  it('defaults cobrem largura/feather/scale + prep leito mínimo', () => {
     const d = RoadPlugin.config?.defaults?.road as Record<string, number>;
     expect(d.width).toBe(5);
     expect(d.textureScale).toBe(16);
     expect(d.edgeFeather).toBeCloseTo(1.1);
+    expect(d.stationSpacing).toBeCloseTo(0.35);
+    expect(d.endFeatherEnd).toBe(0);
+    expect(d.flatten).toBe(1);
+    expect(d.flattenFalloff).toBeCloseTo(5);
+    expect(d.flattenWindow).toBeCloseTo(16);
+    expect(d.flattenMaxGrade).toBeCloseTo(0.22);
   });
 });

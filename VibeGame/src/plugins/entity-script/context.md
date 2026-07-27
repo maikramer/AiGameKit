@@ -182,16 +182,11 @@ together, loading an animated GLB in `start` and cleaning up in `onDestroy`.
 `EntityScriptSystem` still runs **setup** (`awake` / `start`) once, but skips
 hot **`update`** — distant AI/anim would waste CPU.
 
-**Ground feet Y is owned by the spawner** (`TerrainSpawned` + AABB + resync), not
-by keeping scripts awake. Do not reintroduce `MonoBehaviour.settled`, settle
-loading gates, or BVH boot snaps in game scripts so distant enemies “touch
-ground when the player approaches.” If actors float at boot, fix
-`profile="creature"` / `ground-align="aabb"` / mutation defer — see
+**Ground feet Y:** statics = spawner (`TerrainSpawned` + AABB + resync);
+creatures = CCT on the heightfield after spawn seed. Do not reintroduce
+`MonoBehaviour.settled`, settle loading gates, BVH boot snaps, or script
+visual lifts so distant enemies “touch ground when close.” See
 [`../spawner/context.md`](../spawner/context.md).
-
-Optional slope follow while **awake**: re-sample with the same
-`sampleTerrainSurface` (+ stored `TerrainSpawned.yOffset`), never a parallel
-physics ray for boot placement.
 
 ## Known Limitations
 

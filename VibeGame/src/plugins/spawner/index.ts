@@ -33,7 +33,6 @@ export {
   sampleMeshSurfaceHeight,
   sampleTerrainSurface,
   sampleTerrainSurfaceMatrix,
-  sinkOffsetForSlope,
   slopeAngleRad,
   partialAlignEuler,
 } from './surface';

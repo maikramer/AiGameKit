@@ -92,7 +92,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
   tree: {
     alignToTerrain: true,
     groundAlign: 'aabb',
-    baseYOffset: 0.02,
+    baseYOffset: 0,
     randomYaw: true,
     // Authored GLBs are world-sized; mild uniform + per-axis proportion jitter.
     scaleMin: 0.7,
@@ -115,7 +115,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
   foliage: {
     alignToTerrain: true,
     groundAlign: 'aabb',
-    baseYOffset: 0.02,
+    baseYOffset: 0,
     randomYaw: true,
     // Grass/flowers read larger than authored GLB; same axis jitter as trees.
     scaleMin: 1.4,
@@ -136,13 +136,10 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxDistance: 120,
   },
   /**
-   * Skinned/scripted actors (enemies, NPCs). Same ground path as trees:
-   * mesh-surface sample + AABB foot lift + TerrainSpawned resync after city
-   * pads/roads. No tree-style scale jitter.
+   * Skinned/scripted actors (enemies, NPCs). CCT owns Y after spawn; no AABB
+   * lift / baseYOffset fudge. GLB feet at origin (`export_origin: feet`).
    */
   creature: {
-    // No fake ground: enemies have no Rigidbody/CCT. Spawn places at surface Y
-    // with zero lift/offset; movement must not snap Y via TerrainSpawned.
     alignToTerrain: false,
     groundAlign: 'none',
     baseYOffset: 0,
@@ -166,8 +163,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
   },
   'physics-box': {
     alignToTerrain: false,
-    groundAlign: 'none',
-    baseYOffset: 0.425,
+    groundAlign: 'aabb',
+    baseYOffset: 0,
     randomYaw: true,
     scaleMin: 1,
     scaleMax: 1,
@@ -188,8 +185,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
   },
   'gltf-crate': {
     alignToTerrain: false,
-    groundAlign: 'none',
-    baseYOffset: 0.35,
+    groundAlign: 'aabb',
+    baseYOffset: 0,
     randomYaw: true,
     scaleMin: 1,
     scaleMax: 1,

@@ -16,6 +16,7 @@ import {
   RpgAiPlugin,
   State,
   Transform,
+  Rigidbody,
   XMLParser,
   bindCombatState,
   createMeleeAi,
@@ -277,6 +278,43 @@ describe('MeleeAiBehaviour — lunge does not stick when target leaves melee', (
         AiStateComponent.mode[CREATURE_EID] as 0 | 1 | 2 | 3
       )
     ).toBe(true);
+  });
+
+  it('pushes lunge XZ into Rigidbody so CCT sync cannot wipe the dash', () => {
+    const state = makeStubState();
+    state.hasComponent = (_eid, component) => component === Rigidbody;
+    bindCombatState(state as unknown as State);
+    resetAi(CREATURE_EID);
+    resetHealth(CREATURE_EID, 50);
+    resetHealth(HERO_EID, 100);
+    place(CREATURE_EID, 2.5, 0);
+    place(HERO_EID, 0, 0);
+    Rigidbody.posX[CREATURE_EID] = 2.5;
+    Rigidbody.posY[CREATURE_EID] = 0;
+    Rigidbody.posZ[CREATURE_EID] = 0;
+    Rigidbody.poseDirty[CREATURE_EID] = 0;
+
+    const ai = new (createMeleeAi(
+      makeConfig({
+        attackRange: 3,
+        attackCooldown: 0,
+        lungeWindup: 0,
+        lungeDuration: 0.2,
+        lungeRecovery: 0.05,
+        lungeStandoff: 0.8,
+      })
+    ))();
+
+    // Drive through windup into the lunge burst (not recovery/steer).
+    for (let i = 0; i < 8; i++)
+      ai.update(state as unknown as State, CREATURE_EID);
+
+    expect(Rigidbody.poseDirty[CREATURE_EID]).toBe(1);
+    expect(Rigidbody.posX[CREATURE_EID]).toBeLessThan(2.5);
+    expect(Rigidbody.posX[CREATURE_EID]).toBeCloseTo(
+      Transform.posX[CREATURE_EID],
+      4
+    );
   });
 });
 

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';
 import { sampleHeightAt } from '../../../src/plugins/terrain/height-sampler';
-import { carveRoadCorridor } from '../../../src/plugins/road/carve';
+import {
+  carveRoadCorridor,
+  designRoadProfile,
+  limitProfileGrade,
+} from '../../../src/plugins/road/carve';
 
 /** Flat sampler at a constant normalized height; high-res by default to avoid bilinear bleed. */
 function flatSampler(
@@ -212,5 +216,69 @@ describe('carveRoadCorridor', () => {
     expect(sampleHeightAt(s, 0, 0)).toBeLessThan(70);
     // Outside reach (x=40): untouched (was 50, still 50).
     expect(sampleHeightAt(s, 40, 0)).toBeCloseTo(50, 2);
+  });
+
+  it('levels the roadbed laterally (prepared platform across width)', () => {
+    const s = bumpSampler(0.5, 0.25, 3, 0, 8);
+    carveRoadCorridor(s, {
+      path: densePath(0, -30, 0, 30),
+      width: 6,
+      falloff: 2,
+      window: 8,
+      maxGrade: 0.18,
+    });
+    const c = sampleHeightAt(s, 0, 0);
+    const l = sampleHeightAt(s, -2.5, 0);
+    const r = sampleHeightAt(s, 2.5, 0);
+    expect(Math.abs(l - c)).toBeLessThan(0.35);
+    expect(Math.abs(r - c)).toBeLessThan(0.35);
+  });
+
+  it('gentle natural grade barely changes (minimum intervention)', () => {
+    // Constant 10% slope along Z — under default 18% max grade → almost no cut.
+    const s = flatSampler(0.4, 512, 200);
+    if (!s.data) throw new Error('expected data');
+    const half = 100;
+    const step = 200 / (512 - 1);
+    for (let zi = 0; zi < 512; zi++) {
+      const wz = zi * step - half;
+      const h = 0.4 + (wz / 200) * 0.1; // ~10% grade in normalized*maxHeight space
+      // maxHeight=100 → world slope ≈ (0.1*100)/200 = 0.05 = 5%
+      for (let xi = 0; xi < 512; xi++) {
+        s.data[zi * 512 + xi] = h;
+      }
+    }
+    const before = sampleHeightAt(s, 0, 0);
+    carveRoadCorridor(s, {
+      path: densePath(0, -40, 0, 40),
+      width: 5,
+      falloff: 2.5,
+      window: 8,
+      maxGrade: 0.18,
+    });
+    const after = sampleHeightAt(s, 0, 0);
+    expect(Math.abs(after - before)).toBeLessThan(0.5);
+  });
+});
+
+describe('limitProfileGrade / designRoadProfile', () => {
+  it('clamps a spike so successive grades stay within maxSlope', () => {
+    const arcs = [0, 10, 20, 30];
+    const heights = [0, 0, 20, 0]; // 200% then -200%
+    const out = limitProfileGrade(arcs, heights, 0.2);
+    for (let i = 1; i < out.length; i++) {
+      const ds = arcs[i]! - arcs[i - 1]!;
+      expect(Math.abs(out[i]! - out[i - 1]!)).toBeLessThanOrEqual(
+        0.2 * ds + 1e-6
+      );
+    }
+  });
+
+  it('designRoadProfile = light smooth then grade limit', () => {
+    const arcs = [0, 5, 10, 15, 20];
+    const heights = [10, 10, 40, 10, 10];
+    const designed = designRoadProfile(arcs, heights, 6, 0.15);
+    expect(designed[2]!).toBeLessThan(40);
+    expect(designed[2]!).toBeGreaterThan(10);
   });
 });

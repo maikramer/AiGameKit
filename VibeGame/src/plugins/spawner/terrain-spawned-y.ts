@@ -1,21 +1,14 @@
 import type { State } from '../../core';
 import { Transform } from '../transforms/components';
 import { TerrainSpawned } from './components';
-import {
-  sampleTerrainSurface,
-  sinkOffsetForSlope,
-  slopeAngleRad,
-} from './surface';
+import { sampleTerrainSurface } from './surface';
 
 /**
  * World Y for a `TerrainSpawned` entity at its current XZ.
  *
- * Contract (statics / place only — not DynamicSpawner agents):
- * - `yOffset` = foot plant (`baseYOffset` + optional AABB lift). Never edge-sink.
- * - Edge-sink recomputed when `halfWidth > 0`.
- *
- * Dynamic enemies do **not** use this path: no Rigidbody/CCT → Rapier never
- * grounds them; attaching TerrainSpawned + per-frame snap was a fake ground.
+ * Contract (statics / place only):
+ * - `yOffset` = foot plant (`baseYOffset` + optional AABB lift).
+ * Creatures skip `TerrainSpawned`; CCT / heightfield owns runtime Y.
  */
 export function terrainSpawnedWorldY(
   state: State,
@@ -26,16 +19,7 @@ export function terrainSpawnedWorldY(
   const eps = TerrainSpawned.surfaceEpsilon[eid] || 0.75;
   const s = sampleTerrainSurface(state, wx, wz, eps);
   if (!s) return null;
-
-  const halfWidth = TerrainSpawned.halfWidth[eid] || 0;
-  let sink = 0;
-  if (halfWidth > 0) {
-    const slope = slopeAngleRad(s.normal);
-    const aligned = TerrainSpawned.alignToTerrain[eid] === 1;
-    sink = sinkOffsetForSlope(slope, halfWidth, aligned ? slope : 0);
-  }
-
-  return s.worldY + TerrainSpawned.yOffset[eid] - sink;
+  return s.worldY + TerrainSpawned.yOffset[eid];
 }
 
 /** Write `Transform.posY` from {@link terrainSpawnedWorldY}. */

@@ -73,7 +73,7 @@ export function smoothPath(path: number[], iterations: number): number[] {
 
 /** Reamostra a polyline a intervalos ~spacing, preservando os nós originais. */
 export function resampleRoadPath(path: number[], spacing: number): number[] {
-  const step = Math.max(0.25, spacing);
+  const step = Math.max(0.2, spacing);
   const out: number[] = [path[0]!, path[1]!];
   for (let i = 0; i + 3 < path.length; i += 2) {
     const ax = path[i]!;
@@ -88,6 +88,46 @@ export function resampleRoadPath(path: number[], spacing: number): number[] {
     }
   }
   return out;
+}
+
+/**
+ * Insert midpoints where walk-surface height at the segment mid differs from
+ * the linear chord by more than `maxErr`. Ribbon stays on `heightAt` (CCT /
+ * heightfield) — never lifts above it — while killing sand wedges under
+ * coarse chords between stations.
+ */
+export function densifyPathByHeight(
+  path: number[],
+  heightAt: (x: number, z: number) => number,
+  maxErr = 0.02,
+  maxPasses = 5
+): number[] {
+  if (path.length < 4) return path;
+  let pts = path;
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const out: number[] = [pts[0]!, pts[1]!];
+    let inserted = 0;
+    for (let i = 0; i + 3 < pts.length; i += 2) {
+      const ax = pts[i]!;
+      const az = pts[i + 1]!;
+      const bx = pts[i + 2]!;
+      const bz = pts[i + 3]!;
+      const mx = (ax + bx) * 0.5;
+      const mz = (az + bz) * 0.5;
+      const ha = heightAt(ax, az);
+      const hb = heightAt(bx, bz);
+      const hm = heightAt(mx, mz);
+      const chord = (ha + hb) * 0.5;
+      if (Math.abs(hm - chord) > maxErr) {
+        out.push(mx, mz);
+        inserted++;
+      }
+      out.push(bx, bz);
+    }
+    pts = out;
+    if (inserted === 0) break;
+  }
+  return pts;
 }
 
 const smooth01 = (a: number): number => a * a * (3 - 2 * a);
@@ -188,13 +228,18 @@ export function makeRoadGeometry(
       endFactor *= smooth01(Math.min((totalLen - arc) / opts.endFeatherEnd, 1));
     }
 
+    // Cross-section shares the centerline height. Sampling heightAt at each
+    // lateral lets falloff/dune sides lift the ribbon edges into the sand mesh
+    // → coplanar z-fight (rectangular sand LOD tiles when close). CCT walks
+    // the corridor centerline; the decal must too.
+    const y = heightAt(x, z) + yOffset;
     const laterals = [outerL, coreL, coreR, outerR];
     const alphas = [0, endFactor, endFactor, 0];
     for (let k = 0; k < 4; k++) {
       const lat = laterals[k]!;
       const vx = x + nx * lat;
       const vz = z + nz * lat;
-      positions.push(vx, heightAt(vx, vz) + yOffset, vz);
+      positions.push(vx, y, vz);
       uvs.push((lat + half) / scale, arc / scale);
       colors.push(1, 1, 1, alphas[k]!);
     }

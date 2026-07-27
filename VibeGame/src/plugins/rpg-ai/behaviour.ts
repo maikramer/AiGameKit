@@ -15,6 +15,8 @@ import {
   removeAgent,
 } from '../navmesh';
 import { NavMeshAgent } from '../navmesh/components';
+import { Rigidbody } from '../physics/components';
+import { markRigidbodyPoseDirty } from '../physics/utils';
 import {
   AI_MODE_ATTACK,
   AI_MODE_CHASE,
@@ -32,7 +34,15 @@ const hostilesQuery = defineQuery([Health, FactionComponent]);
 
 /** Brief telegraph before idle→chase so packs don't instantly rush. */
 const DETECT_GRACE = 0.28;
-const LUNGE_HIT_FACTOR = 1.5;
+/**
+ * Multiplier on {@link MeleeAiConfig.attackRange} for the end-of-lunge damage
+ * window. A little forgiveness (>1.0) stops melee from whiffing when the hero
+ * steps back a hair during the burst, but values near 1.5 make the first swing
+ * land from well outside the attackRange that triggered it ("hit from far").
+ * Kept tight (1.2) because {@link applyLungeMovement} now re-aims every frame
+ * and clamps the burst inside this ring, so repeat hits connect regardless.
+ */
+const LUNGE_HIT_FACTOR = 1.2;
 const LUNGE_BURST_SPEED = 6.0;
 // Face-to-face combat ring: the creature approaches to RING_DESIRED and backs
 // off if the target presses inside RING_MIN_GAP, so it holds ~1m instead of
@@ -59,7 +69,13 @@ function entityAlive(state: State, eid: number): boolean {
 /**
  * Find the nearest hostile target for `eid`. Uses an explicit `config.targetEid`
  * when set; otherwise scans entities with Health + FactionComponent and picks
- * the nearest one that is hostile (via `isHostile`) and alive.
+ * the nearest one that is hostile (via `isHostile`) and alive, within
+ * `config.detectRange`.
+ *
+ * The range cut is not a behaviour change: `runMeleeAiFrame` drops any target
+ * beyond `detectRange` on the next branch (mode → IDLE, target → 0). Scanning
+ * past it only burned `isHostile` checks and — with `requireLineOfSight` — one
+ * BVH raycast per idle creature per frame, aimed across the whole map.
  */
 export function acquireTarget(
   state: State,
@@ -73,16 +89,18 @@ export function acquireTarget(
   const ox = Transform.posX[eid];
   const oz = Transform.posZ[eid];
   const requireLos = config.requireLineOfSight === true;
+  const maxDist = config.detectRange > 0 ? config.detectRange : Infinity;
   let bestEid = 0;
   let bestDist = Infinity;
   for (const candidate of hostilesQuery(state.world)) {
     if (candidate === eid) continue;
     if (!entityAlive(state, candidate)) continue;
-    if (!isHostile(state, eid, candidate)) continue;
     const cx = Transform.posX[candidate];
     const cz = Transform.posZ[candidate];
     const d = distanceXZ(ox, oz, cx, cz);
-    if (d >= bestDist) continue;
+    // Cheap rejects (array reads) before the faction lookup and the raycast.
+    if (d > maxDist || d >= bestDist) continue;
+    if (!isHostile(state, eid, candidate)) continue;
     // LOS gate: skip candidates hidden behind terrain/props. The explicit
     // targetEid path above bypasses this so a locked target stays locked even
     // if a pillar briefly breaks sight mid-fight. hasLineOfSight is permissive
@@ -130,6 +148,7 @@ function moveToward(
 }
 
 function applyLungeMovement(
+  state: State,
   eid: number,
   inst: AiInstanceState,
   config: MeleeAiConfig,
@@ -138,22 +157,58 @@ function applyLungeMovement(
 ): void {
   const x = Transform.posX[eid];
   const z = Transform.posZ[eid];
+  // Re-aim the burst each frame toward the target's *current* position. The
+  // direction was captured once at windup start (tickAttack); without a re-aim
+  // a strafing/struck target (or the creature's own orbit) leaves the lunge
+  // travelling along a stale tangent, so the burst overshoots and the damage
+  // step at the end misses. This keeps the dash pointing at the hero.
+  if (targetEid > 0) {
+    const tdx = Transform.posX[targetEid] - x;
+    const tdz = Transform.posZ[targetEid] - z;
+    const tlen = Math.hypot(tdx, tdz);
+    if (tlen > 1e-3) {
+      inst.lungeDirX = tdx / tlen;
+      inst.lungeDirZ = tdz / tlen;
+    }
+  }
   let nx = x + inst.lungeDirX * LUNGE_BURST_SPEED * dt;
   let nz = z + inst.lungeDirZ * LUNGE_BURST_SPEED * dt;
   if (targetEid > 0) {
     const pdx = nx - Transform.posX[targetEid];
     const pdz = nz - Transform.posZ[targetEid];
     const pd = Math.sqrt(pdx * pdx + pdz * pdz);
+    // Too-close clamp (unchanged): never press inside the standoff.
     if (pd < config.lungeStandoff) {
       const ux = pd > 1e-3 ? pdx / pd : -inst.lungeDirX;
       const uz = pd > 1e-3 ? pdz / pd : -inst.lungeDirZ;
       nx = Transform.posX[targetEid] + ux * config.lungeStandoff;
       nz = Transform.posZ[targetEid] + uz * config.lungeStandoff;
+    } else {
+      // Too-far clamp: pin inside damage window so end-of-lunge hit connects.
+      const maxReach = Math.max(
+        config.lungeStandoff,
+        config.attackRange * LUNGE_HIT_FACTOR
+      );
+      if (pd > maxReach) {
+        const ux = pdx / pd;
+        const uz = pdz / pd;
+        nx = Transform.posX[targetEid] + ux * maxReach;
+        nz = Transform.posZ[targetEid] + uz * maxReach;
+      }
     }
   }
   Transform.posX[eid] = nx;
   Transform.posZ[eid] = nz;
   Transform.dirty[eid] = 1;
+  // `<Creature>` owns XZ via kinematic CCT: PhysicsRapierSync overwrites
+  // Transform from the body each fixed step. Transform-only dashes were a
+  // one-frame lie — first swing could "hit from far", then the body stayed
+  // put and later swings whiffed. Push XZ into Rigidbody + teleport flag.
+  if (state.hasComponent(eid, Rigidbody)) {
+    Rigidbody.posX[eid] = nx;
+    Rigidbody.posZ[eid] = nz;
+    markRigidbodyPoseDirty(eid);
+  }
 }
 
 /** Re-enable nav after an aborted/finished lunge so steering can resume. */
@@ -519,7 +574,7 @@ function tickAttack(
   if (inst.lungePhase === 'lunge') {
     comp.mode[eid] = AI_MODE_LUNGE;
     inst.lungeTimer -= dt;
-    applyLungeMovement(eid, inst, config, targetEid, dt);
+    applyLungeMovement(state, eid, inst, config, targetEid, dt);
     if (inst.lungeTimer <= 0) {
       const hitRange = config.attackRange * LUNGE_HIT_FACTOR;
       const dx = Transform.posX[targetEid] - Transform.posX[eid];

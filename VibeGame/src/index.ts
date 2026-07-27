@@ -799,7 +799,12 @@ export type {
  */
 export { Rigidbody, Collider, CollisionEvents } from './plugins/physics';
 export { getRapierWorld } from './plugins/physics';
-export { getBodyForEntity, PhysicsStepSystem } from './plugins/physics/systems';
+export {
+  getBodyForEntity,
+  invalidateCollider,
+  PhysicsStepSystem,
+} from './plugins/physics/systems';
+export { markRigidbodyPoseDirty } from './plugins/physics/utils';
 
 /**
  * Character ground-snap helpers for placing a body so its feet rest on a surface.

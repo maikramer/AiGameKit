@@ -1,5 +1,6 @@
 import {
   Box3,
+  Matrix4,
   type Bone,
   type Mesh,
   type Object3D,
@@ -8,19 +9,23 @@ import {
 } from 'three';
 
 export interface PlayerFootAnchor {
-  /** Lift applied to the visual root so soles sit at entity Y=0. */
+  /** Lift so soles sit at entity/root Y=0 (root-local). */
   yOffset: number;
-  /** World-space AABB of the posed mesh (before yOffset). */
+  /** Root-local AABB of the posed mesh (before yOffset). */
   box: {
     min: { x: number; y: number; z: number };
     max: { x: number; y: number; z: number };
   };
-  /** Lowest sole Y in root space (bone ball/toe preferred, else mesh min). */
+  /** Lowest sole Y in root-local space. */
   soleY: number;
 }
 
 const _solePos = new Vector3();
 const _box = new Box3();
+const _localBox = new Box3();
+const _invRoot = /*@__PURE__*/ new Matrix4();
+const _corner = /*@__PURE__*/ new Vector3();
+const _rootWorld = /*@__PURE__*/ new Vector3();
 
 function isSoleBone(name: string): boolean {
   const n = name.toLowerCase();
@@ -46,13 +51,33 @@ function isFootBone(name: string): boolean {
   );
 }
 
+function worldBoxToRootLocal(world: Box3, invRoot: Matrix4, out: Box3): void {
+  out.makeEmpty();
+  const { min, max } = world;
+  for (let ix = 0; ix < 2; ix++) {
+    for (let iy = 0; iy < 2; iy++) {
+      for (let iz = 0; iz < 2; iz++) {
+        _corner.set(
+          ix === 0 ? min.x : max.x,
+          iy === 0 ? min.y : max.y,
+          iz === 0 ? min.z : max.z
+        );
+        _corner.applyMatrix4(invRoot);
+        out.expandByPoint(_corner);
+      }
+    }
+  }
+}
+
 /**
- * Anchor the player so the **soles** sit on the entity origin (Y=0), not the
- * pelvis/waist. Skinned avatars often have the armature root near the hips;
- * mesh AABB alone can miss that — prefer ball/toe bone world Y when present.
+ * Anchor so **soles** sit on the entity/root origin (Y=0), not the pelvis.
+ * Results are always in **root-local** space — safe whether `root` is still at
+ * the origin (PlayerGLTF load) or already planted in the world (Creature XML).
  */
 export function computePlayerFootAnchor(root: Object3D): PlayerFootAnchor {
   root.updateMatrixWorld(true);
+  _invRoot.copy(root.matrixWorld).invert();
+  root.getWorldPosition(_rootWorld);
 
   root.traverse((obj) => {
     const skinned = obj as SkinnedMesh;
@@ -82,39 +107,41 @@ export function computePlayerFootAnchor(root: Object3D): PlayerFootAnchor {
     _box.setFromObject(root);
   }
 
-  let soleY = Infinity;
-  let ankleY = Infinity;
+  let soleYWorld = Infinity;
+  let ankleYWorld = Infinity;
   root.traverse((obj) => {
     const bone = obj as Bone;
     if (!bone.isBone) return;
     bone.getWorldPosition(_solePos);
     if (isSoleBone(bone.name)) {
-      soleY = Math.min(soleY, _solePos.y);
+      soleYWorld = Math.min(soleYWorld, _solePos.y);
     } else if (isFootBone(bone.name)) {
-      // Ankle sits slightly above the sole — bias down a little when no ball bone.
-      ankleY = Math.min(ankleY, _solePos.y - 0.03);
+      ankleYWorld = Math.min(ankleYWorld, _solePos.y);
     }
   });
 
-  const meshMinY = Number.isFinite(_box.min.y) ? _box.min.y : 0;
-  const boneSole = Number.isFinite(soleY)
-    ? soleY
-    : Number.isFinite(ankleY)
-      ? ankleY
-      : meshMinY;
-  // Prefer the lower of bone sole and mesh — catches shoe geometry below the bone.
-  const groundY = Math.min(boneSole, meshMinY);
-  // Idle/combat poses lift the balls a few cm vs bind pose; sink slightly so
-  // soles read as planted instead of hovering above cobble.
-  const SOLE_PLANT_SINK = 0.08;
-  const yOffset = Number.isFinite(groundY) ? -groundY - SOLE_PLANT_SINK : 0;
+  const meshMinYWorld = Number.isFinite(_box.min.y) ? _box.min.y : _rootWorld.y;
+  const boneSoleWorld = Number.isFinite(soleYWorld)
+    ? soleYWorld
+    : Number.isFinite(ankleYWorld)
+      ? ankleYWorld
+      : meshMinYWorld;
+  const groundYWorld = Math.min(boneSoleWorld, meshMinYWorld);
+
+  worldBoxToRootLocal(_box, _invRoot, _localBox);
+  // Root-local sole: world sole → subtract root world Y under upright plant
+  // (full inverse on a point if the root has pitch/roll).
+  _solePos.set(_rootWorld.x, groundYWorld, _rootWorld.z);
+  _solePos.applyMatrix4(_invRoot);
+  const soleY = Number.isFinite(_solePos.y) ? _solePos.y : _localBox.min.y;
+  const yOffset = Number.isFinite(soleY) ? -soleY : 0;
 
   return {
     yOffset,
-    soleY: groundY,
+    soleY,
     box: {
-      min: { x: _box.min.x, y: _box.min.y, z: _box.min.z },
-      max: { x: _box.max.x, y: _box.max.y, z: _box.max.z },
+      min: { x: _localBox.min.x, y: _localBox.min.y, z: _localBox.min.z },
+      max: { x: _localBox.max.x, y: _localBox.max.y, z: _localBox.max.z },
     },
   };
 }

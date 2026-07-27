@@ -160,7 +160,6 @@ export interface WorldDebugNearbyDetail {
   } | null;
   terrainSpawned: {
     yOffset: number;
-    halfWidth: number;
     alignToTerrain: boolean;
     aabbPending: boolean;
     surfaceEpsilon: number;
@@ -537,7 +536,6 @@ function buildNearbyDetail(
     terrainSpawned: state.hasComponent(eid, TerrainSpawned)
       ? {
           yOffset: TerrainSpawned.yOffset[eid],
-          halfWidth: TerrainSpawned.halfWidth[eid],
           alignToTerrain: TerrainSpawned.alignToTerrain[eid] === 1,
           aabbPending: TerrainSpawned.aabbPending[eid] === 1,
           surfaceEpsilon: TerrainSpawned.surfaceEpsilon[eid],

@@ -129,25 +129,6 @@ export function slopeAngleRad(normal: THREE.Vector3): number {
   return Math.acos(Math.min(1, Math.max(-1, normal.y)));
 }
 
-/**
- * Compute a sink offset that slightly buries the object to compensate for
- * one edge floating on sloped terrain. When `actualTiltRad` is provided the
- * sink is scaled down by how much the object already leans toward the surface
- * — a fully-aligned object needs almost no sink, while an upright one on a
- * steep slope sinks deeper to hide the floating edge.
- */
-export function sinkOffsetForSlope(
-  slopeRad: number,
-  objectHalfWidth: number,
-  actualTiltRad?: number
-): number {
-  const residualSlope =
-    actualTiltRad !== undefined
-      ? Math.max(0, slopeRad - actualTiltRad)
-      : slopeRad;
-  return Math.sin(residualSlope) * objectHalfWidth;
-}
-
 const _alignUp = /*@__PURE__*/ new THREE.Vector3(0, 1, 0);
 const _alignNormal = /*@__PURE__*/ new THREE.Vector3();
 const _tiltAxis = /*@__PURE__*/ new THREE.Vector3();

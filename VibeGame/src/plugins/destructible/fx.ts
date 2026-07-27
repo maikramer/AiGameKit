@@ -511,8 +511,16 @@ export function startTreeFall(
   const halves = prepareTreeFallHalves(source, cutHeight);
   if (!halves) return false;
 
-  const { stump, top, cutPoint, groundY, topLength, topPlane, materials, topMaterials } =
-    halves;
+  const {
+    stump,
+    top,
+    cutPoint,
+    groundY,
+    topLength,
+    topPlane,
+    materials,
+    topMaterials,
+  } = halves;
 
   const pivot = new THREE.Object3D();
   pivot.position.copy(cutPoint);

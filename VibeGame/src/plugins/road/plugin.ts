@@ -5,10 +5,8 @@ import { RoadApplySystem } from './systems';
 
 /**
  * `<Road path="0 4 0 24 6 40" width="5.4" texture-url="/assets/x.png">` —
- * estrada pintada sobre o terreno ao longo do path (coordenadas de mundo,
- * lista plana `x0 z0 x1 z1 ...`). A textura orienta-se e curva com a estrada;
- * bordas com feather + ruído orgânico; pontas com end-feather (0 = sólida,
- * para enterrar sob praças/pads).
+ * 1) prepara o leito no heightfield (carve mínimo), 2) pinta o ribbon no
+ * terreno já planado. Path em coords de mundo (`x0 z0 x1 z1 ...`).
  */
 export const roadRecipe: Recipe = {
   name: 'Road',
@@ -66,19 +64,27 @@ export const RoadPlugin: Plugin = {
         textureScale: 16,
         edgeFeather: 1.1,
         edgeNoise: 0.45,
-        endFeatherStart: 2,
-        endFeatherEnd: 2,
-        yOffset: 0.12,
-        stationSpacing: 1.5,
+        // Solid tips by default: faded tip + flatten trough = “feet sink”.
+        endFeatherStart: 0,
+        endFeatherEnd: 0,
+        // Decal sits on the heightfield (CCT). polygonOffset handles z-fight —
+        // do not float the ribbon above the walk surface.
+        yOffset: 0,
+        // Dense base + densifyPathByHeight; never lift above sampler.
+        stationSpacing: 0.35,
         smoothing: 2,
         opacity: 1,
         roughness: 1,
         metalness: 0,
-        // Default ON: estradas sobre terreno precisam do corredor esculpido
-        // (+ density boost) para o mesh LOD acompanhar; flatten="0" desliga.
+        // Default ON: preparar leito → ribbon no sampler planado.
+        // flatten="0" = só decal sobre o relevo cru (sem prep).
         flatten: 1,
-        flattenFalloff: 6,
-        flattenWindow: 24,
+        // Shoulder blend back to natural relief (m).
+        flattenFalloff: 5,
+        // Longitudinal profile smooth (m) — follows hills but kills bumps.
+        flattenWindow: 16,
+        // Max |Δh/Δs| on design profile (~22% — a bit more cut/fill OK).
+        flattenMaxGrade: 0.22,
         applied: 0,
       },
     },

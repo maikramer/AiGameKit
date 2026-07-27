@@ -4,9 +4,8 @@ import type { SpawnTemplateSpec } from './types';
  * Visual GLB URL for a spawn template: direct `url` on the template, or the
  * first `GLTFLoader` / `GLTFDynamic` child (GameObject wrappers).
  *
- * Without the child walk, `ground-align=aabb` and footprint radii silently
- * miss every enemy/NPC that puts the mesh on a child — halfWidth falls back
- * to 0.5 and AABB lift never runs.
+ * Without the child walk, `ground-align=aabb` silently misses every
+ * GameObject that puts the mesh on a child — AABB lift never runs.
  */
 export function templateVisualUrl(tpl: SpawnTemplateSpec): string {
   const direct = tpl.attributes.url;

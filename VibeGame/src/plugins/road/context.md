@@ -25,24 +25,25 @@ espremida, seja qual for a largura ou o traçado.
 
 ## Atributos
 
-| Atributo                                               | Default | Descrição                                                                                                                                                       |
-| ------------------------------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`                                                 | —       | Lista plana `x0 z0 x1 z1 ...` (mundo). ≥ 2 pontos.                                                                                                              |
-| `width`                                                | `5`     | Largura total da faixa (m).                                                                                                                                     |
-| `texture-scale`                                        | `16`    | Metros de mundo por tile de textura (u e v).                                                                                                                    |
-| `edge-feather`                                         | `1.1`   | Fade lateral borda→núcleo (m).                                                                                                                                  |
-| `edge-noise`                                           | `0.45`  | Ruído que corrói a borda para dentro (m). Determinístico.                                                                                                       |
-| `end-feather-start`                                    | `2`     | Fade na ponta inicial (m). `0` = sólida (enterrar sob uma praça).                                                                                               |
-| `end-feather-end`                                      | `2`     | Fade na ponta final (m).                                                                                                                                        |
-| `y-offset`                                             | `0.12`  | Elevação acima da superfície (m).                                                                                                                               |
-| `station-spacing`                                      | `1.5`   | Espaçamento das estações do ribbon (m).                                                                                                                         |
-| `smoothing`                                            | `2`     | Iterações Chaikin (0 = cantos vivos).                                                                                                                           |
-| `flatten`                                              | `true`  | Aplaina um corredor no terreno (corte+aterro) ao longo do path; `flatten="0"` desliga.                                                                          |
-| `flatten-falloff`                                      | `6`     | Blend lateral do corredor de volta ao relevo natural (m).                                                                                                       |
-| `flatten-window`                                       | `24`    | Janela da média móvel do perfil longitudinal (m). Tem de ser ≥ ao lattice do mesh base (worldSize/resolution) para as cordas dos LODs coincidirem com o perfil. |
-| `opacity`                                              | `1`     | Opacidade global.                                                                                                                                               |
-| `roughness`/`metalness`                                | `1`/`0` | PBR do material.                                                                                                                                                |
-| `texture-url` / `normal-map-url` / `roughness-map-url` | —       | Texturas (cache por URL).                                                                                                                                       |
+| Atributo                                               | Default | Descrição                                                                                          |
+| ------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------- |
+| `path`                                                 | —       | Lista plana `x0 z0 x1 z1 ...` (mundo). ≥ 2 pontos.                                                 |
+| `width`                                                | `5`     | Largura total da faixa (m).                                                                        |
+| `texture-scale`                                        | `16`    | Metros de mundo por tile de textura (u e v).                                                       |
+| `edge-feather`                                         | `1.1`   | Fade lateral borda→núcleo (m).                                                                     |
+| `edge-noise`                                           | `0.45`  | Ruído que corrói a borda para dentro (m). Determinístico.                                          |
+| `end-feather-start`                                    | `0`     | Fade na ponta inicial (m). Default sólido — fade+flatten = trincheira (pés).                       |
+| `end-feather-end`                                      | `0`     | Fade na ponta final (m). Usar só sob pads/praças (`>0`).                                           |
+| `y-offset`                                             | `0`     | Elevação acima do heightfield (m). Default 0 — CCT anda no sampler; `polygonOffset` evita z-fight. |
+| `station-spacing`                                      | `0.35`  | Espaçamento base (m). + `densifyPathByHeight` onde o acorde erra o sampler.                        |
+| `smoothing`                                            | `2`     | Iterações Chaikin (0 = cantos vivos).                                                              |
+| `flatten`                                              | `true`  | Prepara o leito no heightfield (corte+aterro mínimo) antes do ribbon; `flatten="0"` = só decal.    |
+| `flatten-falloff`                                      | `5`     | Ombro: blend lateral leito→relevo (m).                                                             |
+| `flatten-window`                                       | `16`    | Suavização do perfil longitudinal (m).                                                             |
+| `flatten-max-grade`                                    | `0.22`  | Max \|Δh/Δs\| do perfil de projecto (~22%). `0` = sem limite.                                      |
+| `opacity`                                              | `1`     | Opacidade global.                                                                                  |
+| `roughness`/`metalness`                                | `1`/`0` | PBR do material.                                                                                   |
+| `texture-url` / `normal-map-url` / `roughness-map-url` | —       | Texturas (cache por URL).                                                                          |
 
 ## Como funciona
 
@@ -54,44 +55,33 @@ espremida, seja qual for a largura ou o traçado.
   `[0,1,1,0]` no atributo `color` RGBA (vertex alpha nativo do three — **sem
   onBeforeCompile**, sobrevive ao patch de CSM). `edge-noise` corrói a borda
   para dentro com value-noise 1D ao longo do arco, lados independentes.
-- **Terreno**: constrói depois de `TerrainPadApplySystem`, quando o heightmap
-  está decodificado (`initialized && sampler.data` — antes disso o sampler é
-  flat e a estrada ficaria enterrada) — cada vértice amostra a superfície LOD
-  renderizada (`sampleMeshSurfaceHeight`), não a analítica. A altura por
-  vértice é o **máximo** de uma vizinhança de meio-passo: o ribbon é plano
-  entre estações e os triângulos do terreno têm ~15 m — sem isto, cristas
-  convexas ("morrinhos") entre estações cortavam a estrada por cima
-  (descontinuidade). Sem `<Terrain>` no mundo, constrói plano a y=0.
+- **Terreno**: depois de `TerrainPadApplySystem` + heightmap pronto. Com
+  `flatten`, fase A prepara o leito no sampler; fase B o ribbon amostra
+  `sampleHeightAt` (igual CCT). Sem `<Terrain>`, plano a y=0.
 - **Junções**: `end-feather-*="0"` deixa a ponta sólida — estender o path até
   DENTRO do núcleo opaco de uma praça/`<Pad>` liga os dois sem costura
   translúcida.
-- Decal puro: sem colisor, `castShadow=false`, `depthWrite=false`,
-  `polygonOffset`. Cleanup por sidecar + `state.onDestroy` (eids reciclados).
+- Decal puro: sem colisor, `castShadow=false`, `alphaTest` + `depthWrite`,
+  `polygonOffset`. Cross-section usa Y da linha de centro (não height lateral).
+  Cleanup por sidecar + `state.onDestroy` (eids reciclados).
 
-## Carve (corredor)
+## Prep → pave (ordem real)
 
-`flatten="true"` aplaina um corredor no terreno ao longo do path, em ambas
-as direções (corta morros e aterra vales), como estradas reais — corte e
-aterro. O carve corre **dentro** do `RoadApplySystem`, **antes** do ribbon
-amostrar a superfície: muta o `HeightSampler` do terreno (a fonte analítica
-que todos consomem) e reconstrói as derivadas (chunks dirty, colliders,
-BVH). O ribbon já amostra as alturas pós-carve no mesmo frame, porque
-`sampleTerrainSurface` lê o sampler diretamente (não o mesh remeshed — o
-remesh acontece no grupo `'draw'`, mais tarde no frame, mas é irrelevante
-porque ninguém nesta cadeia lê o mesh, só o sampler).
+Como na vida real: **1) preparar o leito**, **2) pavimentar em cima**.
 
-Sem o carve, os chunks LOD grosseiros do terreno (~15 m por triângulo) fazem
-"corda" por cima das depressões e nenhum offset fixo do ribbon cobre todos
-os LODs — o "morrinho" que corta a estrada por cima. O carve resolve na
-fonte: o corredor fica nivelado no sampler, todos os LODs renderizam a
-estrada plana.
+1. **`carveRoadCorridor`** (se `flatten=1`): muta o `HeightSampler` — leito
+   da `width+1.5` (plataforma além da faixa) + ombro (`flatten-falloff`).
+   Rebuild chunks / heightfields Rapier / BVH. Density boost no corredor
+   (senão o mesh base nem amostra o leito).
+2. **Ribbon**: `sampleHeightAt` no sampler **já planado** (mesmo que CCT).
+   Cross-section partilha Y da linha de centro. Sem `y-offset` mágico.
 
-- **Perfil longitudinal**: média móvel triangular das alturas originais ao
-  longo do arco do path, com janela `flatten-window` (default 24 m). Suaviza
-  cristas/depressões pontuais sem achatar todo o relevo.
-- **Falloff lateral**: dentro da `width` o terreno fica ao nível do perfil;
-  entre `width` e `width + 2×flatten-falloff` há um smoothstep de volta ao
-  relevo natural — transição sem degrau.
+Sem prep, LODs grosseiros fazem “corda” sobre depressões e o decal perde
+para a areia / morrinhos.
+
+- **Perfil**: smooth `flatten-window` 16 m + `flatten-max-grade` 0.22.
+- **Leito**: faixa pintada + **1.5 m** de plataforma (`ROADBED_OVERHANG`);
+  peso 1 no leito; smoothstep no ombro (`flatten-falloff` 5 m).
 - **Density boost obrigatório**: o carve sozinho é INVISÍVEL — os vértices do
   mesh base distam `worldSize/resolution` (~31 m no simple-rpg a 2000/64) e um
   corredor de ~10 m cai entre eles. O sistema aplica boost 255 no DensityMap por
@@ -101,12 +91,11 @@ estrada plana.
   `meshSurfaceResolutionForPoint` — senão props flutuam nas saídas cardeais
   (west/east) onde a estrada densifica o mesh e o lattice grosso ainda “vê”
   o planalto do pad.
-- **Amostragem do ribbon**: com `flatten`, o ribbon amostra a superfície
-  ANALÍTICA (`sampleHeightAt` + base Y), não o lattice base — é para o
-  analítico que os chunks boosted convergem. Validação: clearance analítico
-  ≥ +0.10 m em todas as estradas do simple-rpg, 0 vértices enterrados;
-  segmentos distantes sob LOD grosseiro podem mergulhar temporariamente até
-  o chunk refinar (mesmo trade-off da água).
+- **Amostragem**: `sampleHeightAt` exacto (= mesh chunk = CCT). Densify por
+  erro de acorde. **Nunca** `max(mesh)` (pés afundam).
+- **Depth**: opaco + `alphaTest` + `depthWrite` (não `transparent`). Y da
+  cross-section = centerline — height lateral nas dunas → z-fight/areia LOD.
+  Tips: `end-feather=0` por defeito.
 - `flatten` é `1` (ON) por defeito. Com `flatten="0"`, a estrada é um decal
   puro sobre a superfície original (comportamento anterior).
 - Mesmo contrato dos `<Pad>`/lagos/rios: muta o `sampler.data` in place,

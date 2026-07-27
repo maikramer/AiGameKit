@@ -6,3 +6,8 @@ package-lock.json
 bun.lockb
 layers/context-template.md
 **/context.md
+# Generated asset-pipeline output (manifests, sidecars, work logs) — machine
+# written, reformatting them creates churn and breaks byte-compare with the
+# gameassets tooling.
+examples/**/public/assets/
+examples/**/sample-gameassets/

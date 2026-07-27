@@ -3,26 +3,35 @@ import type { HeightSampler } from '../terrain/height-sampler';
 import { sampleHeightAt } from '../terrain/height-sampler';
 
 /**
- * Corredor de estrada: suaviza o terreno ao longo do path (perfil longitudinal
- * = média móvel das alturas originais) e assenta a faixa nesse perfil, com
- * falloff lateral de volta ao relevo natural — corte e aterro, como estradas
- * reais. Mutar o sampler mantém TODOS os consumidores coerentes (chunks de
- * qualquer LOD, física, BVH, spawners) — é isto que elimina o "morrinho" a
- * cortar a estrada: sem o carve, os chunks LOD grosseiros fazem corda por
- * cima das depressões e nenhum offset fixo do ribbon cobre todos os LODs.
+ * Roadbed preparation (real-world order):
+ * 1. Survey centerline heights.
+ * 2. Light longitudinal smooth (kill texel noise) + grade limit (walkable).
+ * 3. Grade a platform of `width` with a short shoulder falloff.
+ *
+ * Mutating the sampler keeps mesh LOD, Rapier heightfields, BVH, spawners and
+ * the road ribbon on the **same** prepared surface. The ribbon must run
+ * *after* this carve and sample `sampleHeightAt` — never lift above it.
  */
 export interface RoadCorridorOpts {
-  /** Polyline `[x0,z0,...]` em coordenadas FIELD-LOCAL, já suavizada. */
+  /** Polyline `[x0,z0,...]` in field-local coords, already smoothed/resampled. */
   path: number[];
-  /** Largura da faixa nivelada (m). */
+  /** Full roadbed width (m) — full weight to the design profile. */
   width: number;
-  /** Blend lateral de volta ao terreno original (m). */
+  /** Shoulder blend back to natural relief (m). Keep short (min necessary). */
   falloff: number;
-  /** Janela da média móvel do perfil longitudinal (m). */
+  /** Light moving-average window along arc (m). Not a highway cut. */
   window: number;
+  /**
+   * Max |Δh/Δs| on the design profile after the light smooth.
+   * Caps cut/fill to what walking needs; omit / `0` = no grade clamp.
+   */
+  maxGrade?: number;
 }
 
-/** Alturas por estação + arco acumulado (perfil longitudinal cru). */
+/** Default design grade (~22%). Steeper natural slopes get cut/fill. */
+export const DEFAULT_ROAD_MAX_GRADE = 0.22;
+
+/** Per-station heights + cumulative arc (raw longitudinal profile). */
 function stationProfile(
   sampler: HeightSampler,
   path: number[]
@@ -45,8 +54,8 @@ function stationProfile(
   return { arcs, heights };
 }
 
-/** Média móvel triangular do perfil, janela em metros de arco. */
-function smoothProfile(
+/** Triangular moving average of the profile, window in metres of arc. */
+export function smoothProfile(
   arcs: number[],
   heights: number[],
   window: number
@@ -69,9 +78,47 @@ function smoothProfile(
 }
 
 /**
- * Escreve o corredor no sampler (in place). Devolve true se alterou texels.
- * Ambas as direções (corta morros, aterra vales), como o flattenRect dos
- * TerrainPads.
+ * Two-pass grade clamp: keep natural heights where slope is OK; only pull
+ * toward neighbours when |Δh/Δs| exceeds `maxSlope`. Minimum necessary cut/fill.
+ */
+export function limitProfileGrade(
+  arcs: number[],
+  heights: number[],
+  maxSlope: number
+): number[] {
+  if (!(maxSlope > 0) || heights.length < 2) return heights.slice();
+  const out = heights.slice();
+  for (let i = 1; i < out.length; i++) {
+    const ds = Math.max(arcs[i]! - arcs[i - 1]!, 1e-6);
+    const maxD = maxSlope * ds;
+    const lo = out[i - 1]! - maxD;
+    const hi = out[i - 1]! + maxD;
+    out[i] = Math.min(hi, Math.max(lo, out[i]!));
+  }
+  for (let i = out.length - 2; i >= 0; i--) {
+    const ds = Math.max(arcs[i + 1]! - arcs[i]!, 1e-6);
+    const maxD = maxSlope * ds;
+    const lo = out[i + 1]! - maxD;
+    const hi = out[i + 1]! + maxD;
+    out[i] = Math.min(hi, Math.max(lo, out[i]!));
+  }
+  return out;
+}
+
+/** Design profile: light smooth then optional grade limit. */
+export function designRoadProfile(
+  arcs: number[],
+  heights: number[],
+  window: number,
+  maxGrade: number
+): number[] {
+  const smoothed = smoothProfile(arcs, heights, window);
+  return limitProfileGrade(arcs, smoothed, maxGrade);
+}
+
+/**
+ * Writes the prepared roadbed into the sampler (in place). Returns true if
+ * any texel changed. Cut and fill — same contract as TerrainPad flattenRect.
  */
 export function carveRoadCorridor(
   sampler: HeightSampler,
@@ -81,13 +128,15 @@ export function carveRoadCorridor(
   if (path.length < 4) return false;
 
   const halfWidth = Math.max(opts.width, 0.1) / 2;
-  // Falloff clamped à resolução do sampler — pincéis mais estreitos que o
-  // texel alias-am até não escrever nada (o "carve que não ocorre").
+  // Falloff clamped to sampler resolution — narrower than a texel aliases to
+  // zero writes ("carve that never happens").
   const fall = minEffectiveFalloff(sampler, Math.max(opts.falloff, 0.01));
   const reach = halfWidth + fall;
 
   const { arcs, heights } = stationProfile(sampler, path);
-  const profile = smoothProfile(arcs, heights, opts.window);
+  const maxGrade =
+    opts.maxGrade === undefined ? DEFAULT_ROAD_MAX_GRADE : opts.maxGrade;
+  const profile = designRoadProfile(arcs, heights, opts.window, maxGrade);
 
   let minX = Infinity;
   let minZ = Infinity;
@@ -107,7 +156,6 @@ export function carveRoadCorridor(
     minZ: minZ - reach,
     maxZ: maxZ + reach,
     evalAt(wx, wz) {
-      // Ponto mais próximo no path: distância lateral + segmento interpolado.
       let bestD = Infinity;
       let bestSeg = 0;
       let bestT = 0;
@@ -132,12 +180,11 @@ export function carveRoadCorridor(
       }
       if (bestD >= reach) return null;
 
-      // Alvo: perfil suavizado interpolado no arco do ponto mais próximo.
       const p0 = profile[bestSeg]!;
       const p1 = profile[bestSeg + 1]!;
       const targetY = p0 + (p1 - p0) * bestT;
 
-      // Peso: 1 dentro da faixa, smoothstep até 0 no fim do falloff.
+      // Full weight on the bed; smoothstep only on the short shoulder.
       let weight = 1;
       if (bestD > halfWidth) {
         const t = (bestD - halfWidth) / fall;
