@@ -69,6 +69,76 @@ RepairProfileName = Literal["topology_clean", "pre_decimate_uv", "part_decode", 
 # A resolução auto de morph-close (Text3D/bbox_tune) usa-o para não propor
 # distâncias que a grelha não consegue resolver (fecho sub-voxel = no-op caro).
 MORPH_MAX_GRID_AXIS = 800
+MORPH_MIN_GRID_AXIS = 64
+# OpenVDB + overhead bpy por célula (cubo denso, pior caso). 800³×48 ≈ 23 GiB
+# teóricos — sem adaptação o topology-fix em edifícios MC mata o processo.
+MORPH_BYTES_PER_GRID_CELL = 48
+# Fração da RAM *disponível* reservada ao volume; resto = solidify/cópias/OS.
+MORPH_RAM_FRACTION = 0.20
+# Solidify duplica topologia antes do remesh — input HI (1–4M faces) é OOM
+# mesmo com grelha já clamped. Morph remesha à resolução do voxel; faces
+# acima deste tecto não ajudam o fecho.
+MORPH_INPUT_FACE_CAP = 400_000
+
+
+def available_ram_bytes() -> int | None:
+    """RAM disponível do sistema (``MemAvailable`` / psutil). ``None`` se unknown."""
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("MemAvailable:"):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        return int(parts[1]) * 1024
+    except (OSError, ValueError):
+        pass
+    try:
+        import psutil
+
+        return int(psutil.virtual_memory().available)
+    except Exception:
+        return None
+
+
+def adapt_morph_max_grid_axis(
+    available_bytes: int | None,
+    *,
+    requested: int = MORPH_MAX_GRID_AXIS,
+    bytes_per_cell: int = MORPH_BYTES_PER_GRID_CELL,
+    fraction: float = MORPH_RAM_FRACTION,
+    min_axis: int = MORPH_MIN_GRID_AXIS,
+) -> int:
+    """Cap de grelha morph que cabe na RAM disponível (anti-OOM).
+
+    Premissa do monorepo: OOM não é tolerado — o pipeline desce resolução
+    sozinho. Mesma ideia que :func:`gamedev_shared.vram_budget.budget_units`
+    para activação GPU, mas para o cubo OpenVDB do voxel remesh.
+
+    Sem sinal de RAM: tecto conservador 400 (histórico OOM em buildings ~10 m
+    com grelha 800).
+    """
+    req = max(int(min_axis), int(requested))
+    lo = max(8, int(min_axis))
+    if available_bytes is None or available_bytes <= 0:
+        return min(req, 400)
+    bpp = max(1, int(bytes_per_cell))
+    frac = min(1.0, max(0.01, float(fraction)))
+    max_cells = int(available_bytes * frac) // bpp
+    if max_cells < 1:
+        return lo
+    grid = int(math.floor(max_cells ** (1.0 / 3.0)))
+    return max(lo, min(req, grid))
+
+
+def morph_input_face_cap(max_grid_axis: int) -> int:
+    """Tecto de faces *antes* do solidify/voxel — escala com a grelha efectiva.
+
+    Superfície ~O(G²); manter mais faces que o remesh resolve só inflaciona
+    o solidify (×2) sem melhorar o fecho.
+    """
+    g = max(MORPH_MIN_GRID_AXIS, int(max_grid_axis))
+    surface = 4 * g * g
+    return int(min(MORPH_INPUT_FACE_CAP, max(80_000, surface)))
 
 
 # ---------------------------------------------------------------------------
@@ -1048,9 +1118,12 @@ def morphological_close(
         gap_mask: Ponderar o fecho pelo vão frontal (protege elementos abertos).
         gap_open_dist: Vão a partir do qual o peso é 0 (elemento "aberto").
             ``None`` → ``2.5 * distance``.
-        max_grid_axis: Cap de grelha do voxel remesh por eixo (default 800).
-            Assets grandes com ``distance`` milimétrica batem neste cap — o
-            fecho efetivo passa então a ser o da grelha (ver warning em log).
+        max_grid_axis: Cap *pedido* de grelha por eixo (default 800). O valor
+            efectivo desce automaticamente com :func:`adapt_morph_max_grid_axis`
+            (RAM disponível) e o input é pré-decimado a
+            :func:`morph_input_face_cap` — OOM do solidify/OpenVDB não é
+            aceitável. Assets grandes com ``distance`` milimétrica batem no
+            cap — fecho efectivo = escala da grelha (warning em log).
 
     Returns:
         Estatísticas: faces antes/depois, voxel_size usado.
@@ -1061,6 +1134,55 @@ def morphological_close(
     faces_before = len(obj.data.polygons)
     if faces_before == 0 or distance <= 0:
         return {"faces_before": faces_before, "faces_after": faces_before, "voxel_size": 0.0}
+
+    # Anti-OOM: descer grelha pela RAM disponível *antes* do solidify/OpenVDB.
+    requested_grid = max(MORPH_MIN_GRID_AXIS, int(max_grid_axis))
+    max_grid_axis = adapt_morph_max_grid_axis(
+        available_ram_bytes(),
+        requested=requested_grid,
+    )
+    if max_grid_axis < requested_grid:
+        log.warning(
+            "morphological_close: grelha %d→%d (RAM adapt; MemAvailable anti-OOM)",
+            requested_grid,
+            max_grid_axis,
+        )
+
+    # Input HI (edifício MC 1–4M faces): solidify ×2 rebenta RAM. Remesh
+    # resolve à escala do voxel — pré-decimar até tecto da grelha.
+    face_cap = morph_input_face_cap(max_grid_axis)
+    faces_pre = faces_before
+    if faces_before > face_cap:
+        from gamedev_shared.mesh_repair_arrays import (
+            extract_arrays,
+            replace_mesh_arrays,
+            simplify_faces_arrays,
+        )
+
+        co, tris = extract_arrays(obj)
+        out = simplify_faces_arrays(co, tris, face_cap)
+        if out is not None:
+            replace_mesh_arrays(obj, out[0], out[1])
+            faces_before = len(obj.data.polygons)
+            log.warning(
+                "morphological_close: pré-decimate %d→%d faces (cap=%d, anti-OOM solidify)",
+                faces_pre,
+                faces_before,
+                face_cap,
+            )
+        else:
+            mod = obj.modifiers.new("MorphPreDecimate", "DECIMATE")
+            mod.decimate_type = "COLLAPSE"
+            mod.ratio = max(face_cap / float(faces_before), 1e-4)
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.modifier_apply(modifier=mod.name)
+            faces_before = len(obj.data.polygons)
+            log.warning(
+                "morphological_close: pré-decimate (bpy) %d→%d faces (cap=%d)",
+                faces_pre,
+                faces_before,
+                face_cap,
+            )
 
     # Piso do remesh: nunca maior que distance/2 (senão distance≈0.005 vira grelha 1cm).
     vox_floor = min(0.01, max(distance / 2.0, 0.001))
@@ -1102,11 +1224,40 @@ def morphological_close(
         bpy.ops.object.modifier_apply(modifier=mod_name)
 
     def _voxel() -> None:
-        mod = obj.modifiers.new("MorphVoxel", "REMESH")
-        mod.mode = "VOXEL"
-        mod.voxel_size = vox
-        mod.use_smooth_shade = True
-        _apply(mod.name)
+        nonlocal vox, max_grid_axis, wall, dist_eff, grid_clamped
+        attempts = 0
+        while True:
+            mod = obj.modifiers.new("MorphVoxel", "REMESH")
+            mod.mode = "VOXEL"
+            mod.voxel_size = vox
+            mod.use_smooth_shade = True
+            try:
+                _apply(mod.name)
+                return
+            except Exception as exc:
+                # Remover modifier pendente se apply falhou a meio.
+                if mod.name in obj.modifiers:
+                    obj.modifiers.remove(mod)
+                msg = str(exc).lower()
+                memish = isinstance(exc, MemoryError) or "memory" in msg or "alloc" in msg
+                if not memish or attempts >= 3 or max_grid_axis <= MORPH_MIN_GRID_AXIS:
+                    raise
+                attempts += 1
+                new_grid = max(MORPH_MIN_GRID_AXIS, max_grid_axis // 2)
+                log.warning(
+                    "morphological_close: voxel remesh falhou (%s) — retry grelha %d→%d",
+                    type(exc).__name__,
+                    max_grid_axis,
+                    new_grid,
+                )
+                max_grid_axis = new_grid
+                if max_dim > 0:
+                    vox = max(vox, max_dim / float(max_grid_axis))
+                grid_clamped = vox > float(distance) / 2.0
+                if grid_clamped:
+                    dist_eff = max(float(distance), vox)
+                    if wall_thickness is None:
+                        wall = max(2.2 * vox, 0.001)
 
     def _set_group_weights(name: str, weights: np.ndarray) -> str:
         if name in obj.vertex_groups:

@@ -12,6 +12,9 @@ Derivacao do alvo:
 
 Vértices soldados típicos ~ ``0.55 x faces`` (malha triangular welded).
 Após UV unwrap o Paint3D explode verts por canto - o knobs relevante é faces.
+
+O lado do atlas também escala com o tamanho mundo (``char_m``): um balde
+não precisa do mesmo 2k/4k que uma casa — paint mais rústico, ``_to_paint`` menor.
 """
 
 from __future__ import annotations
@@ -21,8 +24,8 @@ PAINT_UV_PACKING = 0.55
 # Texels por triângulo: 10 = orçamento dobrado face ao sweet-spot antigo (20);
 # paint em 80k mostrou-se soft — mais faces = melhor projeção multi-vista.
 PAINT_TEXELS_PER_FACE = 10.0
-# Piso: props pequenos / LOD-like ainda unwrapam bem.
-PAINT_FACES_MIN = 12_000
+# Piso: props pequenos / LOD-like ainda unwrapam bem (atlas 512 → ~14k raw).
+PAINT_FACES_MIN = 6_000
 # Tecto: xatlas + raster multi-vista (~36 candidatos + N views). Acima disto
 # o tempo explode com ganho mínimo no UNet (independente de faces).
 # Hunyuan upstream remesh default = 40k; 160k (2x80k) para qualidade de paint
@@ -30,6 +33,36 @@ PAINT_FACES_MIN = 12_000
 PAINT_FACES_MAX = 160_000
 # V/F típico em malha triangular welded (antes do UV split).
 PAINT_VERTS_PER_FACE = 0.55
+
+# Ladder de atlas por diâmetro equivalente de volume (metros).
+_PAINT_TEX_CHAR_BUCKET_M = 0.5
+_PAINT_TEX_CHAR_PROP_M = 1.2
+_PAINT_TEX_CHAR_MID_M = 3.5
+
+
+def paint_texture_for_char(char_m: float, *, quality_cap: int) -> int:
+    """Lado do atlas (power-of-2) para o tamanho mundo, nunca acima do tier.
+
+    Args:
+        char_m: Diâmetro equivalente ``(L·H·W)^(1/3)`` em metros.
+        quality_cap: Tecto do tier QualityEngine / profile (ex. medium=2048).
+
+    Returns:
+        512 (balde) / 1024 (prop) / 2048 / 4096 (casa+), clampado a ``quality_cap``.
+    """
+    cap = max(256, int(quality_cap))
+    c = float(char_m)
+    if c <= 0:
+        return cap
+    if c <= _PAINT_TEX_CHAR_BUCKET_M:
+        ladder = 512
+    elif c <= _PAINT_TEX_CHAR_PROP_M:
+        ladder = 1024
+    elif c <= _PAINT_TEX_CHAR_MID_M:
+        ladder = 2048
+    else:
+        ladder = 4096
+    return int(min(ladder, cap))
 
 
 def paint_target_faces(texture_size: int) -> int:

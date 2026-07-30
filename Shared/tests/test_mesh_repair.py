@@ -918,3 +918,43 @@ class TestCapBoundaryDiameterGuard:
         capped2 = cap_boundary_loops(obj, max_loop_edges=32, planar_tol=0.15)
         assert capped2 >= 1
         clear_scene()
+
+
+class TestMorphRamAdapt:
+    """Anti-OOM do morphological_close — puro, sem bpy."""
+
+    def test_adapt_grid_scales_with_ram(self) -> None:
+        from gamedev_shared.mesh_repair import adapt_morph_max_grid_axis
+
+        # ~8 GiB available → fraction 0.2 → ~1.6 GiB → ~48 B/cell → grid ~330
+        g = adapt_morph_max_grid_axis(8 * 1024**3, requested=800)
+        assert 64 <= g <= 400
+        # 800³×48 / 0.2 ≈ 115 GiB MemAvailable para libertar o tecto pedido
+        g_hi = adapt_morph_max_grid_axis(128 * 1024**3, requested=800)
+        assert g_hi == 800
+        assert g_hi > g
+        # Sem sinal: tecto conservador 400
+        assert adapt_morph_max_grid_axis(None, requested=800) == 400
+        # Quase sem RAM: piso
+        assert adapt_morph_max_grid_axis(1024, requested=800) == 64
+
+    def test_adapt_never_above_requested(self) -> None:
+        from gamedev_shared.mesh_repair import adapt_morph_max_grid_axis
+
+        assert adapt_morph_max_grid_axis(64 * 1024**3, requested=200) == 200
+
+    def test_face_cap_scales_with_grid(self) -> None:
+        from gamedev_shared.mesh_repair import MORPH_INPUT_FACE_CAP, morph_input_face_cap
+
+        assert morph_input_face_cap(64) == 80_000  # soft floor
+        assert morph_input_face_cap(200) == 4 * 200 * 200
+        assert morph_input_face_cap(800) == MORPH_INPUT_FACE_CAP
+
+    def test_building_hi_faces_would_pre_decimate(self) -> None:
+        """Regressão longhouse: 3.6M faces com grelha adaptada → cap ≪ input."""
+        from gamedev_shared.mesh_repair import adapt_morph_max_grid_axis, morph_input_face_cap
+
+        grid = adapt_morph_max_grid_axis(38 * 1024**3, requested=800)
+        cap = morph_input_face_cap(grid)
+        assert cap < 3_600_000
+        assert cap <= 400_000
