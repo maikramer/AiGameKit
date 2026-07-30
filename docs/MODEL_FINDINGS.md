@@ -8,6 +8,8 @@ UMS, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 | [`KERNEL_OPTS_BENCH.md`](KERNEL_OPTS_BENCH.md) | Tabela cold/hot (compile, CL, flashvdm) — RTX 4050 6 GB |
 | [`findings/KERNEL_OPTS_FINDINGS.md`](findings/KERNEL_OPTS_FINDINGS.md) | Guia operacional: flags, defaults UMS/batch, checklist |
 | [`OMNI_SHAPE_FINDINGS.md`](OMNI_SHAPE_FINDINGS.md) | Hunyuan3D-Omni: bbox max, presets, decode, falhas de batch |
+| [`MANIFEST_AUTHORING.md`](MANIFEST_AUTHORING.md) | Manual `manifest.yaml`: size_m, Omni, octree (quando override) |
+| [`findings/OCTREE_FACES_FINDINGS.md`](findings/OCTREE_FACES_FINDINGS.md) | Empírico: faces ≈ 8×10⁴·char_m²; κ·octree² (κ≈5.5) |
 | [`findings/UMS_VRAM_FINDINGS.md`](findings/UMS_VRAM_FINDINGS.md) | Admit, peak, retry VRAM, waves, `gpu_ids` UMS, WAL, **NVML**, idle CUDA context |
 | [`Shared/README.md`](../Shared/README.md) (sec. GPU/NVML) | `query_gpu_free_mib`, snapshots, apps; dep `nvidia-ml-py` |
 | [`findings/PAINT_PART_FINDINGS.md`](findings/PAINT_PART_FINDINGS.md) | Paint bake/SDNQ; `restrict_inpaint` + `_clean`; Part3D **faces**/p3sam/fine-parts/`label_fuse` |
@@ -115,17 +117,27 @@ Kill-switch paint: `PAINT3D_AUTO_VRAM_BUDGET=0`.
 
 ## 4. Paint budget (malha `_to_paint`)
 
-Paint escala com **faces**, não com texels UNet.
+Paint escala com **faces**, não com texels UNet. Atlas também escala com
+``char_m`` (``paint_texture_for_char``): balde → 512; prop → 1024; casa →
+2048/4096 ∩ quality cap.
 
 | Constante | Valor |
 |-----------|------:|
 | UV packing | 0.55 |
 | Texels/face alvo | 10 |
-| Faces | **12k…160k** (clamp) |
+| Faces | **6k…160k** (clamp) |
 | Fórmula | `faces ≈ texture_size² × packing / texels_per_face` |
+| Atlas por tamanho | `char≤0.5→512`, `≤1.2→1024`, `≤3.5→2048`, else 4096 ∩ tier |
 
 **Do:** `text3d simplify` / Decimate para face budget.  
 **Don't:** `remesh` voxel como substituto de simplify pré-paint.
+
+Octree MC (faces do shape): piso **128**; soft-boost `+32·e^(-char/2.5)` + tecto
+faces `√(3·8e4·char²/5.5)` para char&lt;2 m (props → 128–160). Ver
+[`findings/OCTREE_FACES_FINDINGS.md`](findings/OCTREE_FACES_FINDINGS.md) §9.
+
+**LOD deliverable:** faces = `category × clamp((char/2)², 0.12, 1)` (piso 800);
+atlas lod0 = buckets paint + snap64; lod1/2 = /2 /4. Ver findings §10.
 
 ---
 
@@ -167,11 +179,15 @@ Detalhe completo: [`OMNI_SHAPE_FINDINGS.md`](OMNI_SHAPE_FINDINGS.md).
 
 **Hard rules:**
 
-1. **Dois espaços:** bbox Omni = aspect (eixo maior = 1.0); MC ≈ ±1.08.
+1. **Três espaços:** Hunyuan raw **+Z up** → export X+90° → WebGL/glTF **Y+ up**;
+   Omni `size_m`/`bbox` = `[L,H,W]` → `[X,Y,Z]` pós-export (L=largura, W=profundidade).
+   Bbox Omni = aspect (eixo maior = 1.0); MC ≈ ±1.08. Detalhe: [`OMNI_SHAPE_FINDINGS.md`](OMNI_SHAPE_FINDINGS.md) §1.
 2. **`OMNI_BBOX_AXIS_MAX` deve ser 1.0** — valor 2.0 = clip planar + GLBs enormes.
 3. Exactamente **um** `control_type` por forward (`bbox` \| `pose` \| …).
-4. **`size_m` não injecta bbox** com `control_type=pose` (engorda).
-5. Humanoids → `pose_preset` T-pose; props → `bbox_preset` correcto (não `tree` em mushroom).
+4. **`size_m` + pose:** não injecta bbox (engorda). **`size_m` aniso + bbox:**
+   injecta molde e **prevalece sobre `bbox_preset`** (ex. portão 10×5.5×2.2 vs `building`).
+5. Humanoids → `pose_preset` A-pose (default); props → `bbox_preset` / `size_m` coerente
+   (não `tree` em mushroom).
 
 Smoke pose: [`bench_omni/`](bench_omni/) — ~3.1 GB VRAM c/ SDNQ int4 + flashvdm.
 
@@ -277,7 +293,7 @@ Ver `Text3D/AGENTS.md`, `gamedev_shared.mesh_repair`,
 [ ] hw-auto ligado (default); sem --low-vram / --memory-efficient na CLI
 [ ] Payloads UMS com sdnq_preset / memory_efficient (via hw-auto / with_ums_peak_opts)
 [ ] Text3D: flashvdm + int4; Omni bbox_axis_max=1.0
-[ ] Paint: face budget 12k–160k; sem compile+SDNQ
+[ ] Paint: face budget 6k–160k + atlas por size_m; sem compile+SDNQ
 [ ] Batch GameAssets: UMS up; prioridade batch; waves shape/paint + opcionais; não kill mid-queue
 [ ] Debug: ums debug / stats + `~/.cache/gamedev/logs/ums-*.log` — não nvidia-smi pkill
 [ ] Kernel: ver findings/KERNEL_OPTS_FINDINGS.md (batch/UMS defaults)

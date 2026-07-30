@@ -23,20 +23,58 @@ do batch `simple-rpg` (2026-07). Complementa a tabela de flags em
 | Manifest `omni:` → CLI | `GameAssets/src/gameassets/omni_ctrl.py` |
 | Assets bone/GLB | `Text3D/src/text3d/data/omni/` |
 
+**Manual manifesto (authoring):** [`MANIFEST_AUTHORING.md`](MANIFEST_AUTHORING.md) —
+`category` + `size_m`, quando (não) override `octree_resolution`.
+
+**Octree × faces (empírico simple-rpg):** [`findings/OCTREE_FACES_FINDINGS.md`](findings/OCTREE_FACES_FINDINGS.md)
+— `faces ≈ 8×10⁴ · char_m²`; `faces ≈ κ · octree²` (κ mediana ≈ 5.5).
+
 ---
 
-## 1. Dois espaços de coordenadas (não confundir)
+## 1. Três espaços de coordenadas (não confundir)
 
 ```
-Omni bbox (docs):   aspect [L,H,W] com eixo maior = 1.0
-                    cantos = ± half → tipicamente ±0.5 no eixo longo
+Hunyuan raw:        +Z up (marching cubes / Omni forward)
 
+Export Text3D:      X+90° → WebGL / glTF / Three.js / VibeGame exhibit
+                    Y+ up  (confirmado no exhibit e em sword_hero_shape)
+
+Omni bbox / size_m: aspect ou metros [L, H, W]
 Marching cubes:     volume ~[-box_v, +box_v]  (default box_v ≈ 1.08)
                     grid isotrópico em células; bounds anisotrópicos
                     redistribuem resolução por eixo (decode_tune)
 ```
 
+### Mapa canónico `size_m` / bbox → WebGL (após export)
+
+| Índice | Nome Omni | Eixo WebGL | Vista de frente (câmara em −Z) |
+|--------|-----------|------------|--------------------------------|
+| 0 | **L** | **X** | esquerda ↔ direita (largura da fachada / vão) |
+| 1 | **H** | **Y** | baixo ↔ cima (**Y+ up**) |
+| 2 | **W** | **Z** | perto ↔ longe (profundidade / espessura) |
+
+Prova empírica (`sword_hero_shape.glb`): `size_m=[0.12, 1.0, 0.04]` → extents
+XYZ ≈ `[0.13, 1.0, 0.05]`. Porta/arco finos = **W pequeno** (Z), não L.
+
+**Armadilha de naming:** comentários antigos chamavam L de “length/profundidade”.
+Em WebGL, **profundidade = W (Z)**. L é a largura lateral (X).
+
+Exemplos de authoring:
+
+```yaml
+# Portão largo 10 m, alto 5.5 m, fino 2.2 m (vão na fachada)
+size_m: [10.0, 5.5, 2.2]   # [L=X, H=Y, W=Z]
+
+# Casa mais profunda que larga (entra pela porta)
+size_m: [5.0, 4.2, 7.0]    # largura 5, altura 4.2, profundidade 7
+```
+
 - **Bbox Omni = aspect ratio**, não metros mundo.
+- **`size_m` anisotrópico em modo bbox** → molde Omni (`size_m_to_bbox`);
+  **prevalece sobre `bbox_preset`** (senão `building` 0.86×1×0.64 engole um
+  arco 10×5.5×2.2 — visto em `city_gate_arch_shape`).
+- **Escala pós-mesh** = uniforme no eixo maior (`max(size_m)`); não estica
+  L/H/W por separado. O aspect tem de vir do molde Omni.
 - **MC = volume de decode**. Se a geometria (ou cantos do controlo) enchem até aos
   planos do MC → **clip planar** (faces cortadas a régua).
 - Imagem de referência + prompt/`idea` guiam semântica; o controlo geométrico só
@@ -73,7 +111,7 @@ eixo longo residual, semântica, ou buracos SDF.
 | `pose_file` | `--pose-file` | bone.txt custom (51×6) |
 | `bbox_preset` | `--bbox-preset` | ver tabela abaixo |
 | `bbox` / `size` | `--bbox` / `--size` | aspect L,H,W (3) ou AABB (6) |
-| `size_m` | `--size-m` / `omni.size_m` | **metros mundo** (escala + fingerprint + soft tune). **Não** injecta bbox se `control_type=pose` |
+| `size_m` | `--size-m` / `omni.size_m` | **metros mundo** `[L,H,W]`→`[X,Y,Z]` Y+up. Com **pose**: só escala (não injecta bbox). Com **bbox** + size_m **aniso**: molde Omni (`size_m_to_bbox`), prevalece sobre `bbox_preset`. Escala pós-mesh = uniforme no eixo maior. |
 | `height_m` + `footprint_m` | `--height-m` / `--footprint-m` / manifest | Authoring: altura (+ footprint L=W). Expande `size_m`. Em **modo bbox** o aspect vira **molde Omni** (modelo enche) — não é só escala pós-mesh |
 | `point_cloud` / `point_from` | CLI / manifest | âncora de forma; `point_from` = sibling asset id |
 | `voxel_mesh` | CLI | âncora de volume/blockout |
@@ -119,8 +157,8 @@ Definidos em `BBOX_PRESETS` (`omni_presets.py`). Eixo maior = 1.0.
 | `tree` | 0.55, 1, 0.55 | tronco cilíndrico L=W | `0.35` antigo → papel fino de perfil + galhos fio |
 | `column` / `cactus` | 0.4, 1, 0.4 | coluna / saguaro (mais fino que tree) | copa larga |
 | `flat` / `flying` | 1, 0.4375, 1 | lily pad, insecto voador | `tree` |
-| `building` / `chapel` | 0.86, 1, 0.64 | casas / capela | props pequenos |
-| `sword` | 0.12, 1, 0.06 | armas/ferramentas longas | |
+| `building` / `chapel` | 0.86, 1, 0.64 | casas: L=largura fachada (X), W=profundidade (Z) | props pequenos |
+| `sword` | 0.12, 1, 0.04 | armas/ferramentas: W=espessura (Z) | |
 | `cube` / `crate` | 1,1,1 | caixas; **perigoso** em organic | slime, shade, mosquito |
 | `chest`, `barrel`, `furniture`, `door`, `shield` | … | props tipados | |
 
@@ -132,7 +170,10 @@ explícito obrigatório.
 
 **Regra dura vista no batch:**  
 `mushroom` / `lily_pad` / `dead_bush` como `tree` → aspect errado + clip/achatar.  
-`slime` com aspect L≠W → «carro»; blob isótropo (1,1,1). `tree` 0.35 → papel fino.
+`slime` com aspect L≠W → «carro»; blob isótropo (1,1,1). `tree` 0.35 → papel fino.  
+`city_gate` com `bbox_preset: building` + `size_m` aniso → preset ganhava o molde
+(arco saía “largo/gordo” em vez de vão largo × fino em Z) — corrigido:
+`size_m` aniso prevalece.
 
 ### Pose presets
 
@@ -147,13 +188,16 @@ explícito obrigatório.
 
 ## 5. `size_m` / `height_m` vs bbox Omni
 
+**Eixos (repetir até ficar automático):** após export WebGL, `size_m=[L,H,W]` ≡
+`[X, Y, Z]` com **Y+ up**. Largura de fachada = L (X); profundidade = W (Z).
+
 | | `size_m` / `height_m` | `bbox` / `bbox_preset` |
 |--|----------|-------------------------|
 | Unidade | metros mundo | aspect 0–1 |
-| Controlo Omni | **não** (com pose) | **sim** — o modelo **enche** este volume |
+| Controlo Omni | **sim** se `control_type=bbox` e size_m **aniso** (molde via `size_m_to_bbox`); **não** com pose | **sim** — o modelo **enche** este volume |
 | Resume | sim (fingerprint via `size_m`) | sim |
 | Soft tune | octree/steps (`bbox_tune`) | — |
-| Escala pós-mesh | `apply_scale` (só mapa unidades→m) | — |
+| Escala pós-mesh | uniforme no **eixo maior** (`max(size_m)`) | — |
 
 **Omni não gera “em metros”.** Não há knob métrico no forward: a rede condiciona
 por imagem + pose/bbox/point/voxel. A bbox é um **molde de aspect** (soft) —
@@ -161,6 +205,14 @@ conteúdo tende a preencher a caixa; caixa demasiado fina → papel/esticado;
 caixa larga demais → blob gordo. Escala pós-mesh **não** corrige proporções
 erradas (só o tamanho mundial).
 
+**Prioridade do molde (bbox mode):**
+
+1. `bbox` / `--size` explícito (aspect cru)
+2. `size_m` **anisotrópico** ou `height_m`+`footprint_m` → `size_m_to_bbox`
+3. `bbox_preset` (ex. `building`) — **só** se size_m ausente ou quase cúbico
+
+`city_gate_arch` com `size_m=[10,5.5,2.2]` + `bbox_preset: building` sem a regra 2
+ficava com molde `[0.86,1,0.64]` e extents ~`[8.6, 6.5, 10]` (gordo em Z).
 ### Authoring preferido (props / vegetação / animados em bbox)
 
 ```yaml
@@ -176,11 +228,13 @@ Com `pose` (humanoides): `height_m` só → `size_m` mundo; esqueleto manda na f
 
 Armadilha antiga: tratar `size_m` como “explicit geom” → bloqueava soft-fill de
 pose e injectava bbox → personagens engordavam a preencher a caixa.  
-Hoje: `size_m` sozinho **não** conta como geometria Omni em `merge_omni_controls`.
+Hoje: `size_m` sozinho **não** bloqueia soft-fill de pose em `merge_omni_controls`
+(`has_geom`). Em **modo bbox**, size_m **aniso** (ou height+footprint) **sim**
+vira molde via `size_m_to_bbox` e limpa `bbox_preset` — não confundir as duas regras.
 
 Excepções bbox: `height_m`+`footprint_m` em modo bbox → molde do aspect;
-`cube`+`size_m` não-cúbico → aspect de `size_m`; se falta bbox e há `size_m` →
-`size_m_to_bbox`.
+`cube`+`size_m` não-cúbico → aspect de `size_m`; size_m aniso + qualquer
+`bbox_preset` → aspect de `size_m`.
 
 ---
 
@@ -252,11 +306,12 @@ pós-shape (`topology-fix`) vs regen.
 2. Preset aspect coerente com silhueta (não `tree` em squat; não `cube` em blob).
 3. Humanoid musculado/gordo → considerar `quaternius-apose`.
 4. Quadruped / serpente / ninho → não confiar só em T-pose + idea vaga.
-5. `size_m` = escala mundo; não esperar que “force” a bbox sob pose.
+5. Eixos: `size_m=[L,H,W]` → WebGL `[X,Y,Z]` Y+up (L=largura, W=profundidade).
+   Pose: `size_m` = só metros. Bbox + size_m **aniso**: molde Omni (ganha ao preset).
 6. Após mudar `OMNI_BBOX_AXIS_MAX` / presets / decode knobs fingerprintados →
    shapes antigos stale (ok).
 7. Validar visual: 3 views (`front,three_quarter,right`) + bounds; plano a régua
-   no eixo longo = suspeito.
+   no eixo longo = suspeito. `_shape` com altura em Z (não Y) = rotação de export em falta.
 8. Só depois: paint / rig / animate (LOD0 = estágio terminal correcto).
 
 ---
@@ -296,6 +351,9 @@ omni:
 omni:
   control_type: bbox
   bbox_preset: quadruped
+  # L=comprimento corpo no eixo X pós-export; H=altura; W=largura transversal (Z).
+  # Se o jogo faz a criatura olhar −Z, pode ser preciso yaw 90° no spawn — o molde
+  # Omni não rodopia com a facing do NPC.
   size_m: [1.4, 0.8, 0.6]
 ```
 
