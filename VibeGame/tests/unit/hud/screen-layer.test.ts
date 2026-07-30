@@ -199,6 +199,26 @@ describe('registerHudWidget — lifecycle', () => {
     expect(HudScreenUpdateSystem.group).toBe('late');
   });
 
+  // Widgets mount from the XML parser: a throwing mount used to abort the
+  // whole world parse, so a single broken HUD element left the player with an
+  // empty scene.
+  it('a throwing mount is contained and does not register the widget', () => {
+    const broken: HudWidget = {
+      id: 'broken',
+      mount: () => {
+        throw new Error('no 2d context');
+      },
+    };
+    expect(() => registerHudWidget(state, broken)).not.toThrow();
+
+    const mock = makeMockWidget('after-broken');
+    registerHudWidget(state, mock.widget);
+    state.step(0.016);
+    // The surviving widget still updates; the broken one is simply absent.
+    expect(mock.counts.updates).toBe(1);
+    expect(() => unregisterHudWidget(state, 'broken')).not.toThrow();
+  });
+
   it('full step() cycle: step state → update fires', () => {
     const mock = makeMockWidget('xp');
     registerHudWidget(state, mock.widget);

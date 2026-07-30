@@ -12,10 +12,17 @@ export const QUEST_STATE_FAILED = 3;
 /**
  * Attached to an NPC entity. `questId` stores the quest index (allocated by
  * {@link registerQuest}); `state` is the per-NPC dialogue/state-machine slot.
+ *
+ * `acknowledged` flips once the player has heard the completion lines, which
+ * is what retires the "come back to me" head badge — quest completion alone
+ * can't, because it fires out in the field where the NPC isn't.
+ * `markerHeight` is the badge's height above the entity origin (0 = default).
  */
 export const QuestGiver = {
   questId: new Uint32Array(MAX_ENTITIES),
   state: new Uint8Array(MAX_ENTITIES),
+  acknowledged: new Uint8Array(MAX_ENTITIES),
+  markerHeight: new Float32Array(MAX_ENTITIES),
 } as const;
 
 /**

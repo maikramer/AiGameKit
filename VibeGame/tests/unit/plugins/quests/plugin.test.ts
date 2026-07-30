@@ -13,14 +13,20 @@ import {
   QuestTriggerSystem,
   QuestVisitSystem,
 } from '../../../../src/plugins/quests/systems';
+import { QuestBeaconSystem } from '../../../../src/plugins/quests/beacon';
+import { QuestGiverFacingSystem } from '../../../../src/plugins/quests/facing';
+import { QuestMarkerSystem } from '../../../../src/plugins/quests/markers';
 import { QuestsPlugin } from '../../../../src/plugins/quests/plugin';
 
 describe('QuestsPlugin shape', () => {
-  it('registers trigger, progress and visit systems', () => {
+  it('registers trigger, progress, visit, facing, beacon and marker systems', () => {
     expect(QuestsPlugin.systems).toEqual([
       QuestTriggerSystem,
       QuestProgressSystem,
       QuestVisitSystem,
+      QuestGiverFacingSystem,
+      QuestBeaconSystem,
+      QuestMarkerSystem,
     ]);
   });
 

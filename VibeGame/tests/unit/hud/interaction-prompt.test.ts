@@ -150,6 +150,61 @@ describe('InteractionPrompt — nearest-in-range gating', () => {
     expect(keyOf(root)).toBe('F');
   });
 
+  it('lets a target widen the range for itself', () => {
+    // A landmark you can annotate from 10 m must light its prompt at 10 m —
+    // a hint that only appears at the widget default reads as unresponsive.
+    const landmark = state.createEntity();
+    place(landmark, 9, 0);
+    registerInteractionTarget(state, landmark, {
+      label: 'Medir e assinar',
+      range: 10,
+    });
+
+    const root = mountPrompt(state, {
+      range: '4.5',
+      'player-eid': String(player),
+    });
+    tick(state);
+
+    expect(root.dataset.visible).toBe('true');
+    expect(labelOf(root)).toBe('Medir e assinar');
+  });
+
+  it('still hides a wide target beyond its own range', () => {
+    const landmark = state.createEntity();
+    place(landmark, 12, 0);
+    registerInteractionTarget(state, landmark, {
+      label: 'Medir e assinar',
+      range: 10,
+    });
+
+    const root = mountPrompt(state, {
+      range: '4.5',
+      'player-eid': String(player),
+    });
+    tick(state);
+
+    expect(root.dataset.visible).toBe('false');
+  });
+
+  it('prefers the nearest target even when another has a wider range', () => {
+    const wide = state.createEntity();
+    place(wide, 8, 0);
+    registerInteractionTarget(state, wide, { label: 'Wide', range: 10 });
+
+    const close = state.createEntity();
+    place(close, 2, 0);
+    registerInteractionTarget(state, close, { label: 'Close' });
+
+    const root = mountPrompt(state, {
+      range: '4.5',
+      'player-eid': String(player),
+    });
+    tick(state);
+
+    expect(labelOf(root)).toBe('Close');
+  });
+
   it('shows only the nearest target — not all in-range interactables', () => {
     const far = state.createEntity();
     place(far, 3, 0);

@@ -39,6 +39,7 @@ export type {
   MinimapDot,
   MinimapOptions,
   MinimapPlayerMarker,
+  MinimapWaypointBlip,
 } from './widgets/minimap';
 export {
   DEFAULT_MINIMAP_COLORS,
@@ -68,14 +69,43 @@ export {
   cardinalAzimuths,
   compassParser,
   createCompassWidget,
+  COMPASS_PIP_MAX_DISTANCE,
   markTransform,
+  selectCompassPips,
+  waypointAzimuth,
   wrapAngle,
 } from './widgets/compass';
 export type {
   CardinalMark,
   CompassConfig,
+  CompassPip,
   MarkTransform,
 } from './widgets/compass';
+export {
+  WAYPOINT_STYLES,
+  clearWaypoints,
+  formatWaypointDistance,
+  getTrackedWaypoint,
+  getTrackedWaypointId,
+  getWaypoint,
+  getWaypoints,
+  refreshWaypointPositions,
+  removeWaypoint,
+  setTrackedWaypointId,
+  setWaypoint,
+  waypointColor,
+  waypointDistance,
+  waypointGlyph,
+} from './waypoints';
+export type { Waypoint, WaypointKind, WaypointStyle } from './waypoints';
+export {
+  DEFAULT_ARROW_MARGIN,
+  computeArrowPlacement,
+  waypointArrowFactory,
+  waypointArrowParser,
+  waypointArrowRecipe,
+} from './widgets/waypoint-arrow';
+export type { ArrowPlacement } from './widgets/waypoint-arrow';
 export {
   bossBarFactory,
   BOSS_BAR_TAG,

@@ -6,6 +6,7 @@ import { readAttr } from '../hud/widgets/shared';
 import { QuestGiver, DialogueData, QUEST_STATE_AVAILABLE } from './components';
 import { getQuestIndex } from './registry';
 import { dialogueBalloonFactory } from './hud/dialogue-balloon';
+import { questTrackerFactory } from './hud/quest-tracker';
 
 /** dialogue-ids already reported as unresolved (warn once, not per NPC). */
 const warnedDialogueIds = new Set<string>();
@@ -18,7 +19,12 @@ export const dialogueNpcRecipe: Recipe = {
   name: 'DialogueNPC',
   merge: true,
   components: ['transform', 'quest-giver', 'dialogue-data'],
-  parserAttributes: ['dialogue-id', 'portrait-url', 'voice-sfx'],
+  parserAttributes: [
+    'dialogue-id',
+    'portrait-url',
+    'voice-sfx',
+    'marker-height',
+  ],
 };
 
 export function dialogueNpcParser({
@@ -46,6 +52,11 @@ export function dialogueNpcParser({
   }
   QuestGiver.questId[entity] = idx < 0 ? 0 : idx;
   QuestGiver.state[entity] = QUEST_STATE_AVAILABLE;
+  QuestGiver.acknowledged[entity] = 0;
+  const markerHeight = Number(readAttr(element.attributes, 'marker-height'));
+  QuestGiver.markerHeight[entity] = Number.isFinite(markerHeight)
+    ? markerHeight
+    : 0;
 
   DialogueData.portraitId[entity] = portraitUrl
     ? internString(state, portraitUrl)
@@ -60,6 +71,18 @@ export const questsTabRecipe: Recipe = {
   components: [],
   parserOwnsChildren: false,
 };
+
+/** `<QuestTracker anchor="top-right" max-rows="4"/>` HUD corner. */
+export const questTrackerRecipe: Recipe = {
+  name: 'QuestTracker',
+  components: [],
+  parserAttributes: ['anchor', 'max-rows'],
+  parserOwnsChildren: false,
+};
+
+export function questTrackerParser({ element, state }: ParserParams): void {
+  registerHudWidget(state, questTrackerFactory(element.attributes, state));
+}
 
 /** Marker recipe for the DialogueBalloon HUD overlay. */
 export const dialogueBalloonRecipe: Recipe = {

@@ -35,6 +35,14 @@ export interface InteractionTarget {
   i18nKey?: string;
   kind?: string;
   key?: string;
+  /**
+   * Range in metres for this target only, overriding the widget default.
+   *
+   * Needed whenever one object's action reaches further than the rest: a hint
+   * that only appears at 4.5 m for something you can already do at 10 m reads
+   * as an unresponsive object, and the player walks away before it lights up.
+   */
+  range?: number;
 }
 
 interface PromptConfig {
@@ -213,13 +221,14 @@ export function interactionPromptWidgetFactory(
 
           const px = Transform.posX[playerEid];
           const pz = Transform.posZ[playerEid];
-          const rangeSq = cfg.range * cfg.range;
 
           let bestDist = Infinity;
           let bestTarget: InteractionTarget | null = null;
 
           for (const [eid, info] of targetMap(state)) {
             if (!state.exists(eid)) continue;
+            const range = info.range ?? cfg.range;
+            const rangeSq = range * range;
             const dx = Transform.posX[eid] - px;
             const dz = Transform.posZ[eid] - pz;
             const d = dx * dx + dz * dz;

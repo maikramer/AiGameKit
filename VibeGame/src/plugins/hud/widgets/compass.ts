@@ -1,6 +1,18 @@
 import { Vector3 } from 'three';
+import { defineQuery } from '../../../core';
 import type { ParserParams, State, XMLValue } from '../../../core';
+import { PlayerController } from '../../player';
 import { threeCameras } from '../../rendering/utils';
+import { Transform } from '../../transforms';
+import {
+  type Waypoint,
+  formatWaypointDistance,
+  getTrackedWaypointId,
+  getWaypoints,
+  waypointColor,
+  waypointDistance,
+  waypointGlyph,
+} from '../waypoints';
 import {
   type HudWidget,
   type WidgetHandle,
@@ -49,7 +61,18 @@ will-change:transform,opacity;transform:translateX(-50%);opacity:0;}
 .vibe-compass-tick{position:absolute;top:0;left:50%;width:2px;height:28px;
 margin-left:-1px;background:linear-gradient(${COMPASS_TICK_COLOR},rgba(255,210,74,0));
 pointer-events:none;}
+.vibe-compass-pip{position:absolute;top:1px;left:50%;display:flex;flex-direction:column;
+align-items:center;line-height:1;transform:translateX(-50%);opacity:0;
+will-change:transform,opacity;pointer-events:none;}
+.vibe-compass-pip-glyph{font:800 12px 'Trebuchet MS',system-ui,sans-serif;
+text-shadow:0 1px 2px rgba(0,0,0,0.8);}
+.vibe-compass-pip-dist{font:700 8px system-ui,sans-serif;color:#cdd8ee;
+text-shadow:0 1px 2px rgba(0,0,0,0.8);}
 `.trim();
+
+/** Waypoint pips are drawn in front of the cardinal strip, capped so a busy
+ * quest log can't turn the compass into an unreadable wall of glyphs. */
+const COMPASS_MAX_PIPS = 6;
 
 export interface CardinalMark {
   label: string;
@@ -78,6 +101,14 @@ interface MountedMark {
   az: number;
   label: string;
 }
+
+interface MountedPip {
+  el: HTMLDivElement;
+  glyphEl: HTMLSpanElement;
+  distEl: HTMLSpanElement;
+}
+
+const compassPlayerQuery = defineQuery([PlayerController, Transform]);
 
 /** Place the eight cardinal marks around `north` at π/4 intervals. */
 export function cardinalAzimuths(north: number): CardinalMark[] {
@@ -121,6 +152,71 @@ export function markTransform(
   const translateX = (off / fov) * halfWidth;
   const fade = 1 - absOff / fov;
   return { translateX, opacity: 0.25 + fade * 0.75, visible: true };
+}
+
+/**
+ * World azimuth of a target as seen from a point — same `atan2(x, z)`
+ * convention as {@link cameraAzimuth}, so a pip lines up with the camera
+ * heading using the very same {@link markTransform}.
+ */
+export function waypointAzimuth(
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number
+): number {
+  return Math.atan2(toX - fromX, toZ - fromZ);
+}
+
+/**
+ * Markers further than this (metres) are dropped from the strip — the tracked
+ * one excepted. A quest giver on the far side of the map contributes nothing
+ * but a duplicate glyph at whatever bearing it happens to sit.
+ */
+export const COMPASS_PIP_MAX_DISTANCE = 160;
+
+export interface CompassPip {
+  readonly id: string;
+  readonly az: number;
+  readonly distance: number;
+  readonly color: string;
+  readonly glyph: string;
+  readonly tracked: boolean;
+}
+
+/**
+ * Resolve the waypoints to show on the strip: within
+ * {@link COMPASS_PIP_MAX_DISTANCE} (plus the tracked one at any range),
+ * nearest first, capped at `limit`. Pure — the runtime draw and the tests
+ * share it.
+ */
+export function selectCompassPips(
+  state: State,
+  fromX: number,
+  fromZ: number,
+  limit: number = COMPASS_MAX_PIPS,
+  maxDistance: number = COMPASS_PIP_MAX_DISTANCE
+): CompassPip[] {
+  const trackedId = getTrackedWaypointId(state);
+  const pips: CompassPip[] = [];
+  for (const wp of getWaypoints(state).values()) {
+    const tracked = wp.id === trackedId;
+    const distance = waypointDistance(wp as Waypoint, fromX, fromZ);
+    if (!tracked && distance > maxDistance) continue;
+    pips.push({
+      id: wp.id,
+      az: waypointAzimuth(fromX, fromZ, wp.x, wp.z),
+      distance,
+      color: waypointColor(wp as Waypoint),
+      glyph: waypointGlyph(wp as Waypoint),
+      tracked,
+    });
+  }
+  // Tracked first, then nearest — the pinned marker must survive the cap.
+  pips.sort(
+    (a, b) => Number(b.tracked) - Number(a.tracked) || a.distance - b.distance
+  );
+  return pips.slice(0, Math.max(0, limit));
 }
 
 function parseFov(value: XMLValue | undefined): number {
@@ -203,6 +299,22 @@ export function createCompassWidget(
         marks.push({ el, az: cardinal.az, label: cardinal.label });
       }
 
+      // Fixed pip pool: pips come and go as quests are accepted/handed in, and
+      // recreating the elements each frame would thrash the DOM on a widget
+      // that redraws at 30 Hz.
+      const pipSlots: MountedPip[] = [];
+      for (let i = 0; i < COMPASS_MAX_PIPS; i++) {
+        const el = document.createElement('div');
+        el.className = 'vibe-compass-pip';
+        const glyphEl = document.createElement('span');
+        glyphEl.className = 'vibe-compass-pip-glyph';
+        const distEl = document.createElement('span');
+        distEl.className = 'vibe-compass-pip-dist';
+        el.append(glyphEl, distEl);
+        root.appendChild(el);
+        pipSlots.push({ el, glyphEl, distEl });
+      }
+
       layer.appendChild(root);
 
       let lastUpdateAt = -Infinity;
@@ -230,7 +342,43 @@ export function createCompassWidget(
           mark.el.style.transform = `translateX(calc(-50% + ${t.translateX}px))`;
           mark.el.style.opacity = String(t.opacity);
         }
+        drawPips(state, camAz, halfWidth);
       };
+
+      function drawPips(state: State, camAz: number, halfWidth: number): void {
+        const players = compassPlayerQuery(state.world);
+        const player = players[0];
+        const pips =
+          player === undefined
+            ? []
+            : selectCompassPips(
+                state,
+                Transform.posX[player],
+                Transform.posZ[player]
+              );
+        for (let i = 0; i < pipSlots.length; i++) {
+          const slot = pipSlots[i];
+          const pip = pips[i];
+          if (!pip) {
+            slot.el.style.opacity = '0';
+            continue;
+          }
+          const t = markTransform(pip.az, camAz, config.fov, halfWidth);
+          if (!t.visible) {
+            slot.el.style.opacity = '0';
+            continue;
+          }
+          slot.glyphEl.textContent = pip.glyph;
+          slot.glyphEl.style.color = pip.color;
+          slot.glyphEl.style.fontSize = pip.tracked ? '14px' : '12px';
+          slot.distEl.textContent = formatWaypointDistance(pip.distance);
+          slot.el.style.transform = `translateX(calc(-50% + ${t.translateX}px))`;
+          // Pips must stay legible at the edges where cardinals fade out.
+          slot.el.style.opacity = String(
+            pip.tracked ? 1 : Math.max(0.55, t.opacity)
+          );
+        }
+      }
 
       return {
         root,

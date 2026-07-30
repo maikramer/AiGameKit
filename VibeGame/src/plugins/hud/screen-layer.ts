@@ -1,6 +1,7 @@
 import { logger } from '../../core/utils/logger';
 import type { ParserParams, State, System, XMLValue } from '../../core';
 import { defineSystem } from '../../core';
+import { clearWaypoints, refreshWaypointPositions } from './waypoints';
 
 const HUD_SCREEN_LAYER_CLASS = 'vibe-hud-screen-layer';
 const HUD_SCREEN_LAYER_STYLE =
@@ -68,7 +69,17 @@ export function registerHudWidget(state: State, widget: HudWidget): void {
   const layer = getHudScreenLayer(state);
   const widgets = stateToWidgets.get(state) ?? [];
   if (widgets.some((m) => m.widget.id === widget.id)) return;
-  const handle = widget.mount(layer, state);
+  // Widgets mount from the XML parser. A throwing mount (e.g. a 2D context the
+  // browser refuses to hand out) used to escape all the way up and abort the
+  // whole world parse — one broken HUD element left the player with no world.
+  // Log and skip the widget instead, matching update/unmount below.
+  let handle: WidgetHandle;
+  try {
+    handle = widget.mount(layer, state);
+  } catch (err) {
+    logger.error(`[VibeGame] HudWidget "${widget.id}" mount error:`, err);
+    return;
+  }
   widgets.push({ widget, handle });
   stateToWidgets.set(state, widgets);
 }
@@ -90,6 +101,10 @@ export const HudScreenUpdateSystem: System = defineSystem({
   name: 'HudScreenUpdateSystem',
   group: 'late',
   update(state: State): void {
+    // Entity-anchored markers are re-synced once here rather than inside each
+    // widget, so the minimap, the compass and the arrow can never disagree
+    // about where a moving objective is within a single frame.
+    refreshWaypointPositions(state);
     const widgets = stateToWidgets.get(state);
     if (!widgets || widgets.length === 0) return;
     for (const m of widgets) {
@@ -113,6 +128,7 @@ export const HudScreenUpdateSystem: System = defineSystem({
       }
     }
     stateToWidgets.delete(state);
+    clearWaypoints(state);
     const layer = stateToLayer.get(state);
     if (layer && layer.parentNode) {
       layer.parentNode.removeChild(layer);

@@ -14,6 +14,11 @@ import {
 } from '../../../src/plugins/hud/widgets/minimap';
 import type { MinimapOptions } from '../../../src/plugins/hud/widgets/minimap';
 import { createHudScreenLayer } from '../../../src/plugins/hud/screen-layer';
+import {
+  setTrackedWaypointId,
+  setWaypoint,
+  WAYPOINT_STYLES,
+} from '../../../src/plugins/hud/waypoints';
 import { Transform } from '../../../src/plugins/transforms';
 import { PlayerController } from '../../../src/plugins/player';
 import { FactionComponent, Health } from '../../../src/plugins/combat';
@@ -215,6 +220,42 @@ describe('collectMinimapDots', () => {
     const result = collectMinimapDots(state, defaultOptions());
     expect(result.player).toBeNull();
     expect(result.dots).toHaveLength(0);
+    expect(result.waypoints).toHaveLength(0);
+  });
+
+  it('keeps quest markers inside range and drops the rest', () => {
+    place(state, [0, 0, 0], [PlayerController]);
+    setWaypoint(state, {
+      id: 'near',
+      x: 20,
+      y: 0,
+      z: 0,
+      kind: 'quest-available',
+    });
+    setWaypoint(state, {
+      id: 'far',
+      x: 400,
+      y: 0,
+      z: 0,
+      kind: 'quest-available',
+    });
+
+    const result = collectMinimapDots(state, defaultOptions({ range: 60 }));
+    expect(result.waypoints.map((w) => w.id)).toEqual(['near']);
+    expect(result.waypoints[0].color).toBe(
+      WAYPOINT_STYLES['quest-available'].color
+    );
+    expect(result.waypoints[0].tracked).toBe(false);
+  });
+
+  it('keeps the tracked marker on the rim however far it is', () => {
+    place(state, [0, 0, 0], [PlayerController]);
+    setWaypoint(state, { id: 'goal', x: 900, y: 0, z: 0, kind: 'objective' });
+    setTrackedWaypointId(state, 'goal');
+
+    const result = collectMinimapDots(state, defaultOptions({ range: 60 }));
+    expect(result.waypoints.map((w) => w.id)).toEqual(['goal']);
+    expect(result.waypoints[0].tracked).toBe(true);
   });
 
   it('collects the player marker at origin and dots within range', () => {
@@ -340,6 +381,7 @@ describe('drawMinimap', () => {
         { x: 10, z: 0, category: 'enemy' as const },
         { x: 40, z: 0, category: 'boss' as const },
       ],
+      waypoints: [],
     };
     const { ctx } = makeContext(size);
     expect(() => drawMinimap(ctx, collection, opts)).not.toThrow();
@@ -351,6 +393,7 @@ describe('drawMinimap', () => {
     const collection = {
       player: { x: 0, z: 0, heading: 0 },
       dots: [],
+      waypoints: [],
     };
     const { ctx } = makeContext(size);
     expect(() => drawMinimap(ctx, collection, opts)).not.toThrow();
@@ -361,7 +404,7 @@ describe('drawMinimap', () => {
     const opts = defaultOptions({ size });
     const { ctx } = makeContext(size);
     expect(() =>
-      drawMinimap(ctx, { player: null, dots: [] }, opts)
+      drawMinimap(ctx, { player: null, dots: [], waypoints: [] }, opts)
     ).not.toThrow();
   });
 });

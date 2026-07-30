@@ -25,7 +25,9 @@ import {
 
 export const QUEST_COMPLETED = 'quest:completed';
 
-const DIALOGUE_RANGE = 4;
+// Matches the InteractionPrompt widget's default range: a prompt that appears
+// half a metre before F actually works reads as an unresponsive NPC.
+const DIALOGUE_RANGE = 4.5;
 const DIALOGUE_RANGE_SQ = DIALOGUE_RANGE * DIALOGUE_RANGE;
 const INTERACT_KEY = 'KeyF';
 
@@ -197,6 +199,32 @@ const DEFAULT_VISIT_RADIUS = 8;
  * each target once, no matter how often the player walks back through it. */
 const stateToVisited = new WeakMap<State, Map<string, Set<string>>>();
 
+/** Landmarks already reached for a quest — read by the map/beacon layer so a
+ * visited stop stops being advertised as somewhere still to go. */
+export function getVisitedTargets(
+  state: State,
+  questId: string
+): ReadonlySet<string> {
+  return stateToVisited.get(state)?.get(questId) ?? EMPTY_VISITED;
+}
+
+const EMPTY_VISITED: ReadonlySet<string> = new Set<string>();
+
+/**
+ * Restore which landmarks a quest already counted. Needed on load: the
+ * progress *number* round-trips with QuestState, but without the names a
+ * reloaded save would let the player re-credit a stop they already made.
+ */
+export function setVisitedTargets(
+  state: State,
+  questId: string,
+  names: Iterable<string>
+): void {
+  const seen = visitedSet(state, questId);
+  seen.clear();
+  for (const name of names) seen.add(name);
+}
+
 function visitedSet(state: State, questId: string): Set<string> {
   let byQuest = stateToVisited.get(state);
   if (!byQuest) {
@@ -212,6 +240,72 @@ function visitedSet(state: State, questId: string): Set<string> {
 }
 
 /**
+ * How a `visit` objective decides that a landmark was reached.
+ *
+ * - `proximity` (default): walking inside `radius` counts it. Cheapest, and
+ *   right for games where landmarks are just places on a route.
+ * - `interact`: only an explicit {@link notifyLandmarkVisited} counts, so the
+ *   game can put an action behind it (a survey, a prayer, planting a flag).
+ *   Auto-counting would make that action decorative — the objective would
+ *   already be ticked by the time the player pressed the key.
+ */
+export type QuestVisitMode = 'proximity' | 'interact';
+
+const stateToVisitMode = new WeakMap<State, QuestVisitMode>();
+
+export function setQuestVisitMode(state: State, mode: QuestVisitMode): void {
+  stateToVisitMode.set(state, mode);
+}
+
+export function getQuestVisitMode(state: State): QuestVisitMode {
+  return stateToVisitMode.get(state) ?? 'proximity';
+}
+
+const stateToVisitQueue = new WeakMap<State, string[]>();
+
+/**
+ * Report that the player registered a named landmark. Drives `visit`
+ * objectives in `interact` mode, and is harmless in `proximity` mode (the
+ * queue is drained the same way).
+ */
+export function notifyLandmarkVisited(state: State, name: string): void {
+  let q = stateToVisitQueue.get(state);
+  if (!q) {
+    q = [];
+    stateToVisitQueue.set(state, q);
+  }
+  q.push(name);
+}
+
+/** Count `name` towards every active `visit` quest that lists it. */
+function creditVisit(state: State, name: string): void {
+  for (const def of getAllQuestDefs(state)) {
+    if (def.objective.type !== 'visit') continue;
+    const idx = getQuestIndex(state, def.id);
+    if (idx < 0) continue;
+    if (QuestState.active[idx] !== 1 || QuestState.completed[idx] === 1) {
+      continue;
+    }
+    if (!def.objective.target.split(/\s+/).includes(name)) continue;
+
+    const seen = visitedSet(state, def.id);
+    if (seen.has(name)) continue;
+    seen.add(name);
+
+    const goal = Math.max(1, def.objective.count);
+    const next = Math.min(goal, QuestState.progress[idx] + 1);
+    QuestState.progress[idx] = next;
+    if (next >= goal) {
+      QuestState.completed[idx] = 1;
+      QuestState.active[idx] = 0;
+      markGiverCompleted(state, def.id);
+      emitEvent(state, QUEST_COMPLETED, { questId: def.id, def });
+      applyQuestRewards(state, def);
+    }
+  }
+}
+
+/**
  * Advances `visit` objectives: the player reaching a named landmark.
  *
  * `kill`/`collect` are push-based (game scripts report events), but "go and
@@ -219,11 +313,23 @@ function visitedSet(state: State, questId: string): Set<string> {
  * a point of interest could never complete, so map landmarks could only ever
  * be scenery. Targets are resolved by entity name, so the quest data refers to
  * the same `name=` the scene XML already declares.
+ *
+ * In `interact` mode the proximity sweep is skipped entirely and only reported
+ * visits count (see {@link setQuestVisitMode}).
  */
 export const QuestVisitSystem: System = defineSystem({
   name: 'QuestVisitSystem',
   group: 'simulation',
   update(state: State): void {
+    const queue = stateToVisitQueue.get(state);
+    if (queue && queue.length > 0) {
+      for (const name of queue.splice(0, queue.length)) {
+        creditVisit(state, name);
+      }
+    }
+
+    if (getQuestVisitMode(state) === 'interact') return;
+
     const player = resolvePlayer(state);
     if (player === 0) return;
     const px = Transform.posX[player];
@@ -240,7 +346,6 @@ export const QuestVisitSystem: System = defineSystem({
       const radius = def.objective.radius ?? DEFAULT_VISIT_RADIUS;
       const radiusSq = radius * radius;
       const seen = visitedSet(state, def.id);
-      const goal = Math.max(1, def.objective.count);
 
       for (const name of def.objective.target.split(/\s+/)) {
         if (!name || seen.has(name)) continue;
@@ -250,17 +355,8 @@ export const QuestVisitSystem: System = defineSystem({
         const dz = Transform.posZ[target] - pz;
         if (dx * dx + dz * dz > radiusSq) continue;
 
-        seen.add(name);
-        const next = Math.min(goal, QuestState.progress[idx] + 1);
-        QuestState.progress[idx] = next;
-        if (next >= goal) {
-          QuestState.completed[idx] = 1;
-          QuestState.active[idx] = 0;
-          markGiverCompleted(state, def.id);
-          emitEvent(state, QUEST_COMPLETED, { questId: def.id, def });
-          applyQuestRewards(state, def);
-          break;
-        }
+        creditVisit(state, name);
+        if (QuestState.completed[idx] === 1) break;
       }
     }
   },

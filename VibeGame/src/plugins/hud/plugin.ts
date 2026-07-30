@@ -30,6 +30,10 @@ import {
   coreWidgetRecipes,
   registerCoreHudWidgetFactories,
 } from './widgets/core-widgets';
+import {
+  waypointArrowParser,
+  waypointArrowRecipe,
+} from './widgets/waypoint-arrow';
 
 const minimapRecipe: Recipe = {
   name: 'Minimap',
@@ -76,6 +80,7 @@ export const HudPlugin: Plugin = {
     interactionPromptRecipe,
     tabbedModalRecipe,
     minimapRecipe,
+    waypointArrowRecipe,
     ...coreWidgetRecipes,
   ],
   components: {
@@ -113,6 +118,7 @@ export const HudPlugin: Plugin = {
       Compass: compassParser,
       Minimap: minimapParser,
       InteractionPrompt: interactionPromptParser,
+      WaypointArrow: waypointArrowParser,
       TabbedModal: tabbedModalParser,
       ...coreWidgetParsers,
     },

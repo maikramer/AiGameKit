@@ -20,6 +20,11 @@ const stateToActiveDialogue = new WeakMap<State, ActiveDialogue | null>();
 
 export function showDialogue(state: State, payload: ActiveDialogue): void {
   stateToActiveDialogue.set(state, payload);
+  // Hearing the completion lines is the turn-in: it retires the giver's head
+  // badge and its map marker, so a finished quest stops shouting for attention.
+  if (payload.phase === 'complete') {
+    QuestGiver.acknowledged[payload.speakerEid] = 1;
+  }
   pushModal(state, DIALOGUE_MODAL);
 }
 
@@ -44,6 +49,7 @@ export function acceptQuest(
   def: QuestDef
 ): void {
   QuestGiver.state[speakerEid] = QUEST_STATE_TAKEN;
+  QuestGiver.acknowledged[speakerEid] = 0;
   const idx = getQuestIndex(state, def.id);
   if (idx >= 0) {
     QuestState.active[idx] = 1;

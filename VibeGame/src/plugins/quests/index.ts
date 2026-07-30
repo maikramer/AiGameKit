@@ -36,17 +36,53 @@ export {
   QuestProgressSystem,
   QuestTriggerSystem,
   QuestVisitSystem,
+  getQuestVisitMode,
+  getVisitedTargets,
   notifyEnemyKilled,
+  notifyLandmarkVisited,
   notifyResourceHarvested,
+  setQuestVisitMode,
+  setVisitedTargets,
+  type QuestVisitMode,
 } from './systems';
+export {
+  QUEST_WAYPOINT_PREFIX,
+  QuestBeaconSystem,
+  getAllActiveQuestDefs,
+  getTrackedQuest,
+  questPromptKey,
+  setTrackedQuest,
+} from './beacon';
+export {
+  QuestGiverFacingSystem,
+  shortestAngleDelta,
+  stepTowardYaw,
+} from './facing';
+export {
+  DEFAULT_MARKER_HEIGHT,
+  QUEST_MARKER_MAX_DISTANCE,
+  QUEST_MARKER_STYLES,
+  QuestMarkerSystem,
+  disposeQuestMarkerTextures,
+  resolveQuestMarkerKind,
+} from './markers';
+export type { QuestMarkerKind, QuestMarkerStyle } from './markers';
 export {
   dialogueBalloonParser,
   dialogueBalloonRecipe,
   dialogueNpcParser,
   dialogueNpcRecipe,
+  questTrackerParser,
+  questTrackerRecipe,
   questsTabRecipe,
 } from './recipes';
 export { createQuestsTab } from './hud/quests-tab';
 export type { QuestsTabConfig } from './hud/quests-tab';
 export { dialogueBalloonFactory } from './hud/dialogue-balloon';
+export {
+  QUEST_TRACKER_MAX_ROWS,
+  collectQuestTrackerEntries,
+  questTrackerFactory,
+} from './hud/quest-tracker';
+export type { QuestTrackerEntry } from './hud/quest-tracker';
 export { QuestsPlugin } from './plugin';

@@ -16,6 +16,12 @@ import {
   registerHudWidget,
   registerHudWidgetFactory,
 } from '../screen-layer';
+import {
+  getTrackedWaypointId,
+  getWaypoints,
+  waypointColor,
+  waypointGlyph,
+} from '../waypoints';
 
 /**
  * Minimap categories. Each maps to a default color and a dot radius (px).
@@ -73,10 +79,29 @@ export interface MinimapPlayerMarker {
   readonly heading: number;
 }
 
+/**
+ * A quest/objective marker on the minimap.
+ *
+ * Markers inside `range` are drawn where they are. Beyond it only the tracked
+ * one survives, clamped to the rim as an arrowhead: a world with sixteen quest
+ * givers otherwise pins sixteen identical `!` badges around the edge of the
+ * disc, which tells the player nothing at all.
+ */
+export interface MinimapWaypointBlip {
+  readonly id: string;
+  readonly x: number;
+  readonly z: number;
+  readonly color: string;
+  readonly glyph: string;
+  /** The pinned marker — kept even when out of range, and drawn larger. */
+  readonly tracked: boolean;
+}
+
 /** Canvas-free result of {@link collectMinimapDots}: drives the runtime draw and unit tests. */
 export interface MinimapCollection {
   readonly player: MinimapPlayerMarker | null;
   readonly dots: readonly MinimapDot[];
+  readonly waypoints: readonly MinimapWaypointBlip[];
 }
 
 export interface MinimapOptions {
@@ -183,7 +208,24 @@ export function collectMinimapDots(
   for (const eid of factionQuery(state.world)) consider(eid);
   for (const eid of resourceQuery(state.world)) consider(eid);
 
-  return { player, dots };
+  const trackedId = getTrackedWaypointId(state);
+  const waypoints: MinimapWaypointBlip[] = [];
+  for (const wp of getWaypoints(state).values()) {
+    const tracked = wp.id === trackedId;
+    const dx = wp.x - originX;
+    const dz = wp.z - originZ;
+    if (!tracked && dx * dx + dz * dz > range2) continue;
+    waypoints.push({
+      id: wp.id,
+      x: wp.x,
+      z: wp.z,
+      color: waypointColor(wp),
+      glyph: waypointGlyph(wp),
+      tracked,
+    });
+  }
+
+  return { player, dots, waypoints };
 }
 
 /**
@@ -239,6 +281,49 @@ export function drawMinimap(
     ctx.globalAlpha = edge ? 0.5 : 1;
     ctx.fill();
     ctx.globalAlpha = 1;
+  }
+
+  for (const wp of collection.waypoints) {
+    const rx = (wp.x - originX) * scale;
+    const rz = -(wp.z - originZ) * scale;
+    const dist = Math.hypot(rx, rz);
+    const clamped = dist > maxPix - 4;
+    const k = clamped ? (maxPix - 4) / Math.max(dist, 1e-6) : 1;
+    const mx = cx + rx * k;
+    const my = cy + rz * k;
+
+    ctx.save();
+    ctx.translate(mx, my);
+    if (clamped) {
+      // Off-range markers become an arrowhead aimed outward, so the rim tells
+      // the player which way to walk rather than just "somewhere out there".
+      ctx.rotate(Math.atan2(rx, -rz));
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(4.5, 4);
+      ctx.lineTo(-4.5, 4);
+      ctx.closePath();
+      ctx.fillStyle = wp.color;
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 1;
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      const r = wp.tracked ? 7.5 : 6;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fillStyle = wp.color;
+      ctx.strokeStyle = wp.tracked ? '#ffffff' : 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = wp.tracked ? 2 : 1.2;
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#181206';
+      ctx.font = `800 ${wp.tracked ? 11 : 9}px system-ui,sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(wp.glyph, 0, 0.5);
+    }
+    ctx.restore();
   }
 
   if (collection.player) {
