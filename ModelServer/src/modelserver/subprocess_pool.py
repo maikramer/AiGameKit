@@ -22,7 +22,9 @@ requeue do job (ver :meth:`SubprocessWorkerPool.send_generate`).
 from __future__ import annotations
 
 import contextlib
+import io
 import os
+import select
 import subprocess
 import threading
 import time
@@ -49,11 +51,69 @@ from gamedev_shared.worker_protocol import (
 
 _logger = Logger()
 
-# Tempo máximo de esperar por um evento específico no stdout do worker.
-DEFAULT_EVENT_TIMEOUT_SEC = 600.0  # 10 min — generate pode ser longo
-DEFAULT_ABORT_TIMEOUT_SEC = 30.0  # abort cooperativo → SIGTERM se sem done
+# Idle entre eventos de progresso (reset a cada progress). Hunyuan pode
+# demorar muitos minutos no total — NÃO é wall-clock do generate inteiro.
+DEFAULT_EVENT_TIMEOUT_SEC = 600.0  # 10 min sem progress → force abort
+# Após progress pct≥1.0 / msg "done": o adapter já acabou o GPU work — só
+# falta ``EVENT_DONE``. NÃO renovar o idle de 600s (era o hang de ~7–10 min
+# com UI a 100% done e ``completed=0``). Grace curto para scrub+emit.
+DEFAULT_POST_DONE_TIMEOUT_SEC = 90.0
+# Após CMD_ABORT: se worker não emitir done/error, SIGTERM (antes: ficava
+# preso até EVENT_TIMEOUT — text3d a 10% engolia cancel --all / text2d).
+DEFAULT_ABORT_TIMEOUT_SEC = 15.0
 DEFAULT_LOAD_TIMEOUT_SEC = 300.0  # 5 min para carregar modelo
 DEFAULT_PING_TIMEOUT_SEC = 5.0
+
+
+def _readline_nonblocking(stdout: Any, fd: int | None) -> str:
+    """Lê 1 linha se já estiver em buffer user-space; senão ``\"\"`` sem bloquear.
+
+    ``select`` no fileno **não** vê linhas que o ``TextIOWrapper`` já puxou
+    do kernel no ``readline`` anterior (progress+done no mesmo ``read``). Com
+    o write-end aberto (worker vivo), ``select`` nunca acorda e o job trava a
+    100% ``done``. ``O_NONBLOCK`` + ``readline`` drena esse buffer; vazio → ``\"\"``.
+    """
+    if fd is None:
+        # Fakes de teste (sem fileno): readline já é não-bloqueante.
+        line = stdout.readline()
+        if isinstance(line, bytes):
+            return line.decode("utf-8", errors="replace")
+        return line or ""
+    import fcntl
+
+    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+    try:
+        fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        try:
+            line = stdout.readline()
+        except BlockingIOError:
+            return ""
+    finally:
+        with contextlib.suppress(Exception):
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags)
+    if isinstance(line, bytes):
+        return line.decode("utf-8", errors="replace")
+    return line or ""
+
+
+def _progress_is_terminal(pct: Any, msg: Any) -> bool:
+    """Progress que significa "GPU work acabou; espera-se EVENT_DONE já"."""
+    try:
+        if pct is not None and float(pct) >= 1.0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return isinstance(msg, str) and msg.strip().lower() == "done"
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
 
 
 SpawnFn = Callable[[list[str], Any, Any, Any], subprocess.Popen]
@@ -123,16 +183,30 @@ class SubprocessWorkerPool:
         spawn_fn: SpawnFn = _default_spawn,
         log_path_fn: LogPathFn = _default_log_path,
         load_timeout_sec: float = DEFAULT_LOAD_TIMEOUT_SEC,
-        event_timeout_sec: float = DEFAULT_EVENT_TIMEOUT_SEC,
-        abort_timeout_sec: float = DEFAULT_ABORT_TIMEOUT_SEC,
+        event_timeout_sec: float | None = None,
+        abort_timeout_sec: float | None = None,
+        post_done_timeout_sec: float | None = None,
         ping_timeout_sec: float = DEFAULT_PING_TIMEOUT_SEC,
         python_override: dict[str, str] | None = None,
     ) -> None:
         self._spawn_fn = spawn_fn
         self._log_path_fn = log_path_fn
         self._load_timeout = float(load_timeout_sec)
-        self._event_timeout = float(event_timeout_sec)
-        self._abort_timeout = float(abort_timeout_sec)
+        self._event_timeout = float(
+            event_timeout_sec
+            if event_timeout_sec is not None
+            else _env_float("GAMEDEV_UMS_EVENT_TIMEOUT_SEC", DEFAULT_EVENT_TIMEOUT_SEC)
+        )
+        self._abort_timeout = float(
+            abort_timeout_sec
+            if abort_timeout_sec is not None
+            else _env_float("GAMEDEV_UMS_ABORT_TIMEOUT_SEC", DEFAULT_ABORT_TIMEOUT_SEC)
+        )
+        self._post_done_timeout = float(
+            post_done_timeout_sec
+            if post_done_timeout_sec is not None
+            else _env_float("GAMEDEV_UMS_POST_DONE_TIMEOUT_SEC", DEFAULT_POST_DONE_TIMEOUT_SEC)
+        )
         self._ping_timeout = float(ping_timeout_sec)
         # Override do interpretador python por backend (testes / ambientes exóticos).
         self._python_override: dict[str, str] = dict(python_override or {})
@@ -223,27 +297,53 @@ class SubprocessWorkerPool:
             # estado interno (state["abort"] + emissor de progress).
             serializable_request = {k: v for k, v in request.items() if not k.startswith("_") and not callable(v)}
             send_cmd(state.proc.stdin, CMD_GENERATE, request=serializable_request)
-            deadline = time.monotonic() + self._event_timeout
+            # Idle timeout: renovado a cada progress (generate longo OK).
+            idle_deadline = time.monotonic() + self._event_timeout
             abort_sent = False
+            abort_deadline: float | None = None
             while True:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    # Timeout: abort + SIGTERM se persistir.
+                now = time.monotonic()
+                if now >= idle_deadline:
                     self._force_abort(state, backend)
-                    raise SubprocessWorkerError(f"{backend}: timeout no generate")
+                    raise SubprocessWorkerError(
+                        f"{backend}: timeout idle ({self._event_timeout:.0f}s sem progress) no generate"
+                    )
                 # Poll cooperativo: se o caller pediu abort, enviar ao worker.
                 if not abort_sent and should_abort and should_abort():
                     send_cmd(state.proc.stdin, CMD_ABORT)
                     abort_sent = True
-                event = self._read_event_with_timeout(state, timeout=min(remaining, 1.0))
+                    abort_deadline = now + self._abort_timeout
+                    _logger.info(
+                        f"[UMS] worker {backend}: abort pedido — SIGTERM se sem done em {self._abort_timeout:.0f}s"
+                    )
+                # Escalação: abort cooperativo ignorado (text3d mid image_to_3d).
+                if abort_sent and abort_deadline is not None and now >= abort_deadline:
+                    self._force_abort(state, backend)
+                    raise SubprocessWorkerError(
+                        f"{backend}: abort timeout ({self._abort_timeout:.0f}s) — worker forçado (SIGTERM)"
+                    )
+                wait = min(idle_deadline - now, 1.0)
+                if abort_deadline is not None:
+                    wait = min(wait, max(0.05, abort_deadline - now))
+                event = self._read_event_with_timeout(state, timeout=wait)
                 if event is None:
-                    # Worker morreu mid-job.
-                    state.loaded = False
-                    raise SubprocessWorkerError(f"{backend}: worker fechou stdout mid-generate")
+                    # Silêncio ≠ morte: só falha se o processo já saiu.
+                    if state.proc is None or state.proc.poll() is not None:
+                        state.loaded = False
+                        raise SubprocessWorkerError(f"{backend}: worker fechou stdout mid-generate")
+                    continue
                 ev = event["event"]
-                if ev == "progress" and on_progress:
-                    with contextlib.suppress(Exception):
-                        on_progress(event.get("pct"), event.get("msg"))
+                if ev == "progress":
+                    pct, msg = event.get("pct"), event.get("msg")
+                    # Progress terminal NÃO renova os 600s — senão um DONE
+                    # perdido/atrasado segura inflight ~10 min com UI a 100%.
+                    if _progress_is_terminal(pct, msg):
+                        idle_deadline = time.monotonic() + self._post_done_timeout
+                    else:
+                        idle_deadline = time.monotonic() + self._event_timeout
+                    if on_progress:
+                        with contextlib.suppress(Exception):
+                            on_progress(pct, msg)
                     continue
                 if ev == "vram_budget":
                     state.vram_mib = event.get("vram_mib", state.vram_mib)
@@ -375,21 +475,58 @@ class SubprocessWorkerPool:
         state.loaded = False
 
     def _read_event_with_timeout(self, state: _WorkerState, *, timeout: float) -> dict[str, Any] | None:
-        """Lê 1 linha do stdout do worker com timeout aproximado (poll 0.2s)."""
+        """Lê 1 linha do stdout do worker com timeout real.
+
+        ``subprocess.PIPE.readline()`` bloqueia para sempre sem dados — o poll
+        antigo com ``sleep`` nunca corria (cancel/abort/SIGTERM mortos). Usa
+        ``select`` no fd real; fakes de teste (sem fileno) fazem readline não
+        bloqueante + sleep.
+
+        **Crítico:** drenar linhas já no buffer do ``TextIOWrapper`` *antes*
+        de ``select`` (via ``O_NONBLOCK``) — senão ``EVENT_DONE`` atrás de
+        ``progress`` no mesmo ``read`` do kernel fica preso para sempre.
+        """
         if state.proc is None or state.proc.stdout is None:
             return None
         deadline = time.monotonic() + max(0.0, timeout)
+        stdout = state.proc.stdout
+        fd: int | None
+        try:
+            fd = stdout.fileno()
+        except (AttributeError, io.UnsupportedOperation, ValueError, OSError):
+            fd = None
+
         while time.monotonic() < deadline:
             if state.proc.poll() is not None:
                 return None
-            line = state.proc.stdout.readline()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            # 1) Drenar buffer user-space (select não o vê).
+            line = _readline_nonblocking(stdout, fd)
             if line:
                 try:
                     return decode(line)
                 except ValueError as e:
                     _logger.warn(f"[UMS] worker {state.backend}: linha inválida: {e}")
                     continue
-            time.sleep(0.05)
+            # 2) Nada buffered — esperar dados novos no fd.
+            if fd is not None:
+                ready, _, _ = select.select([fd], [], [], min(remaining, 0.5))
+                if not ready:
+                    continue
+                line = stdout.readline()
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8", errors="replace")
+                if line:
+                    try:
+                        return decode(line)
+                    except ValueError as e:
+                        _logger.warn(f"[UMS] worker {state.backend}: linha inválida: {e}")
+                        continue
+            else:
+                # Fake stdout: readline vazio = sem dados ainda.
+                time.sleep(min(0.05, remaining))
         return None
 
     def _wait_event(
@@ -406,7 +543,10 @@ class SubprocessWorkerPool:
             remaining = deadline - time.monotonic()
             event = self._read_event_with_timeout(state, timeout=min(remaining, 1.0))
             if event is None:
-                return None
+                # Silêncio com proc vivo ≠ EOF — continua até deadline.
+                if state.proc is None or state.proc.poll() is not None:
+                    return None
+                continue
             ev = event["event"]
             if ev == "progress" and on_progress:
                 with contextlib.suppress(Exception):

@@ -833,11 +833,25 @@ class BackendManager:
         # Copiar para não mutar o dict do Job; manter _progress para o adapter.
         req = dict(request)
         progress_cb = req.get("_progress")
+        abort_cb = req.get("_abort")
         load_kwargs = {k: v for k, v in req.items() if k in _LOAD_KWARG_KEYS}
         try:
+            if callable(abort_cb) and abort_cb():
+                return {
+                    "status": "error",
+                    "error": "cancelled before load",
+                    "error_code": P.ERR_CANCELLED,
+                }
             # _pin=True: ref_count sobe atomicamente com o ensure — fecha a
             # janela onde outro actor via ref=0 e evictava o model recém-obtido.
             model = self.ensure_loaded(name, _pin=True, **load_kwargs)
+            # Load pode demorar minutos — cancel durante load só aplica aqui.
+            if callable(abort_cb) and abort_cb():
+                return {
+                    "status": "error",
+                    "error": "cancelled after load",
+                    "error_code": P.ERR_CANCELLED,
+                }
         except InsufficientVramError as e:
             self.stats.record_error(name, str(e))
             return {

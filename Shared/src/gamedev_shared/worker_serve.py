@@ -266,7 +266,18 @@ def run_worker_loop(
                 continue
             # Limpar hooks antes de enviar o result (não devem serializar).
             result = _scrub_result(result)
-            emit_event(EVENT_DONE, result=result, backend=backend_name)
+            try:
+                emit_event(EVENT_DONE, result=result, backend=backend_name)
+            except Exception as exc:
+                # Result não-JSON → sem EVENT_DONE o UMS ficava a 100% até idle.
+                tb = traceback.format_exc()
+                emit_event(
+                    EVENT_ERROR,
+                    error=f"emit done: {exc}",
+                    error_code=ERR_GENERATE_FAILED,
+                    backend=backend_name,
+                    traceback=tb,
+                )
             continue
 
         # Comando desconhecido.

@@ -8,6 +8,7 @@ abort sem nunca spawnar um subprocesso.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import subprocess
 from typing import Any
@@ -17,6 +18,8 @@ import pytest
 from modelserver.subprocess_pool import (
     SubprocessWorkerError,
     SubprocessWorkerPool,
+    _progress_is_terminal,
+    _readline_nonblocking,
     _shape_mismatch,
 )
 
@@ -106,15 +109,16 @@ def _make_pool(fake_popen: FakePopen, **overrides: Any) -> SubprocessWorkerPool:
         # inteiros PIPE passados pelo _spawn.
         return fake_popen
 
-    return SubprocessWorkerPool(
-        spawn_fn=fake_spawn,
-        load_timeout_sec=1.0,
-        event_timeout_sec=1.0,
-        abort_timeout_sec=1.0,
-        ping_timeout_sec=1.0,
-        python_override={"paint3d": "/fake/paint3d/.venv/bin/python"},
-        **overrides,
-    )
+    kwargs: dict[str, Any] = {
+        "spawn_fn": fake_spawn,
+        "load_timeout_sec": 1.0,
+        "event_timeout_sec": 1.0,
+        "abort_timeout_sec": 1.0,
+        "ping_timeout_sec": 1.0,
+        "python_override": {"paint3d": "/fake/paint3d/.venv/bin/python"},
+    }
+    kwargs.update(overrides)
+    return SubprocessWorkerPool(**kwargs)
 
 
 class TestSpawn:
@@ -224,6 +228,39 @@ class TestAbort:
         cmds = fake.read_cmds()
         assert {"cmd": "abort"} in cmds
 
+    def test_abort_ignored_escalates_to_sigterm(self) -> None:
+        """Worker ignora CMD_ABORT → após abort_timeout, SIGTERM (não esperar 10 min)."""
+        fake = FakePopen()
+        pool = _make_pool(fake, event_timeout_sec=30.0, abort_timeout_sec=0.25)
+        fake.push_events('{"event": "ready", "vram_mib": 1300}')
+        pool.load("paint3d", "paint3d", {})
+        # Sem done/error — só silêncio (como text3d mid image_to_3d).
+        with pytest.raises(SubprocessWorkerError, match="abort timeout"):
+            pool.generate("paint3d", {}, should_abort=lambda: True)
+        assert fake._terminated or fake._killed
+        cmds = fake.read_cmds()
+        assert {"cmd": "abort"} in cmds
+
+    def test_silence_while_alive_does_not_mean_worker_dead(self) -> None:
+        """readline vazio com proc vivo → continua; done chega depois."""
+        fake = FakePopen()
+        pool = _make_pool(fake, event_timeout_sec=2.0, abort_timeout_sec=5.0)
+        fake.push_events('{"event": "ready", "vram_mib": 1300}')
+        pool.load("paint3d", "paint3d", {})
+
+        import threading
+        import time
+
+        def feeder() -> None:
+            time.sleep(0.35)  # silêncio > poll 1x; proc ainda vivo
+            fake.push_events('{"event": "done", "result": {"status": "ok"}}')
+
+        t = threading.Thread(target=feeder, daemon=True)
+        t.start()
+        result = pool.generate("paint3d", {})
+        t.join(timeout=3.0)
+        assert result.get("status") == "ok"
+
 
 class TestUnloadShutdown:
     def test_unload_emits_unload_cmd(self) -> None:
@@ -316,3 +353,111 @@ class TestShapeMismatch:
     def test_no_mismatch_on_irrelevant_keys(self) -> None:
         # prompt/output podem mudar entre jobs sem reload.
         assert not _shape_mismatch({"output": "/a.glb"}, {"output": "/b.glb"})
+
+
+class TestProgressTerminal:
+    def test_pct_one_is_terminal(self) -> None:
+        assert _progress_is_terminal(1.0, "painting")
+        assert _progress_is_terminal(1, None)
+        assert _progress_is_terminal("1.0", "x")
+
+    def test_msg_done_is_terminal(self) -> None:
+        assert _progress_is_terminal(0.99, "done")
+        assert _progress_is_terminal(None, "DONE")
+
+    def test_mid_progress_not_terminal(self) -> None:
+        assert not _progress_is_terminal(0.5, "painting")
+        assert not _progress_is_terminal(None, "image_to_3d")
+
+
+class TestBufferedStdoutLine:
+    def test_nonblocking_readline_drains_user_buffer(self) -> None:
+        """Após 1º readline, DONE fica no TextIO; select no fd fica vazio; O_NONBLOCK drena."""
+        import os
+        import select
+
+        r_fd, w_fd = os.pipe()
+        try:
+            payload = b'{"event":"progress","pct":1.0,"msg":"done"}\n{"event":"done","result":{"status":"ok"}}\n'
+            os.write(w_fd, payload)
+            # NÃO fechar w_fd — hang real = worker vivo, pipe aberto.
+            stdout = os.fdopen(r_fd, "r", encoding="utf-8", buffering=4096)
+            r_fd = -1
+            first = stdout.readline()
+            assert '"progress"' in first
+            fd = stdout.fileno()
+            ready, _, _ = select.select([fd], [], [], 0.0)
+            assert not ready, "select não deve ver linha já no TextIO buffer"
+            second = _readline_nonblocking(stdout, fd)
+            assert '"done"' in second
+            assert _readline_nonblocking(stdout, fd) == ""
+            stdout.close()
+        finally:
+            if w_fd >= 0:
+                os.close(w_fd)
+            if r_fd >= 0:
+                os.close(r_fd)
+
+    def test_generate_drains_done_buffered_after_terminal_progress(self) -> None:
+        """Regression: progress+done no mesmo chunk, write-end aberto → sem hang."""
+        import os
+
+        from modelserver.subprocess_pool import _WorkerState
+
+        r_fd, w_fd = os.pipe()
+        try:
+            # Um único write: progress + done (mesmo read do kernel).
+            # Write-end fica ABERTO (worker vivo) — select sozinho nunca acorda.
+            os.write(
+                w_fd,
+                b'{"event":"progress","pct":1.0,"msg":"done"}\n{"event":"done","result":{"status":"ok"}}\n',
+            )
+            stdout = os.fdopen(r_fd, "r", encoding="utf-8", buffering=4096)
+            r_fd = -1
+
+            class _PipeProc:
+                def __init__(self) -> None:
+                    self.stdout = stdout
+                    self.stdin = io.StringIO()
+                    self._rc: int | None = None
+
+                def poll(self) -> int | None:
+                    return self._rc
+
+            pool = SubprocessWorkerPool(
+                event_timeout_sec=30.0,
+                post_done_timeout_sec=2.0,
+                abort_timeout_sec=1.0,
+                load_timeout_sec=1.0,
+            )
+            state = _WorkerState(backend="text3d", proc=_PipeProc())  # type: ignore[arg-type]
+            p1 = pool._read_event_with_timeout(state, timeout=1.0)
+            assert p1 is not None and p1["event"] == "progress"
+            # Sem drain do _decoded_chars, select no fd falharia (~timeout 1s).
+            p2 = pool._read_event_with_timeout(state, timeout=1.0)
+            assert p2 is not None and p2["event"] == "done"
+            assert p2["result"]["status"] == "ok"
+            stdout.close()
+        finally:
+            if w_fd >= 0:
+                with contextlib.suppress(OSError):
+                    os.close(w_fd)
+            if r_fd >= 0:
+                with contextlib.suppress(OSError):
+                    os.close(r_fd)
+
+    def test_terminal_progress_uses_short_idle_not_full_event_timeout(self) -> None:
+        """Após progress done, silêncio → idle curto (post_done), não 600s."""
+        fake = FakePopen()
+        pool = _make_pool(fake, event_timeout_sec=30.0, post_done_timeout_sec=0.35)
+        fake.push_events('{"event": "ready", "vram_mib": 1300}')
+        pool.load("paint3d", "paint3d", {})
+        fake.push_events('{"event": "progress", "pct": 1.0, "msg": "done"}')
+        # Sem EVENT_DONE — deve falhar em ~post_done, não esperar 30s.
+        import time
+
+        t0 = time.monotonic()
+        with pytest.raises(SubprocessWorkerError, match="timeout idle"):
+            pool.generate("paint3d", {})
+        elapsed = time.monotonic() - t0
+        assert elapsed < 5.0, f"esperava post_done curto, demorou {elapsed:.1f}s"

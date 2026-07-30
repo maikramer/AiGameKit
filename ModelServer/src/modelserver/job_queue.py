@@ -590,13 +590,16 @@ class JobQueue:
                 self._purge_finished_jobs()
                 self._cond.notify_all()
                 return {"status": P.STATUS_OK, "job_id": job_id, "state": P.JOB_CANCELLED}
-            # running
+            # running — cooperativo já; pool faz SIGTERM após GAMEDEV_UMS_ABORT_TIMEOUT_SEC
             job.cancel_requested = True
             return {
                 "status": P.STATUS_OK,
                 "job_id": job_id,
                 "state": P.JOB_RUNNING,
-                "message": "cancel requested (best-effort; aguarda fim do generate)",
+                "message": (
+                    "cancel requested — abort cooperativo; "
+                    "SIGTERM se worker não parar (~15s, GAMEDEV_UMS_ABORT_TIMEOUT_SEC)"
+                ),
             }
 
     def cancel_all(self, *, include_running: bool = True) -> dict[str, Any]:
