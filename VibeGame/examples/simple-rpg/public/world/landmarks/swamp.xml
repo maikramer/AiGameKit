@@ -9,8 +9,8 @@
        §1 LAGOAS (8,-95) e (-34,-78) — landmarks existentes
        ============================================================ -->
   <Lake
-    at="8 -95"
-    radius="12"
+    at="16 -190"
+    radius="24"
     depth="2.6"
     water-offset="0.5"
     color="#2f5a4a"
@@ -18,8 +18,8 @@
     ripple="0.7"
   ></Lake>
   <Lake
-    at="-34 -78"
-    radius="7"
+    at="-68 -156"
+    radius="14"
     depth="2.1"
     water-offset="0.5"
     color="#2f5a4a"
@@ -28,8 +28,8 @@
   ></Lake>
   <!-- Lagoa nova a leste, para o brejo não ser só duas poças no eixo. -->
   <Lake
-    at="42 -118"
-    radius="9"
+    at="84 -236"
+    radius="18"
     depth="2.3"
     water-offset="0.5"
     color="#2f5a4a"
@@ -42,97 +42,84 @@
        Casco partido na margem norte da lagoa grande. Serve de
        abrigo e de referência para chegar ao passadiço.
        ============================================================ -->
-  <Composition
-    name="swamp-wrecked-boat"
-    place="at: 26 -92; align-to-terrain: 1"
-    body="fixed"
-    collider="auto"
-  >
-    <!-- casco adernado -->
-    <Box pos="0 0.55 0" size="2.4 1.0 7.2" rotation="0.34 0.4 0" color="#59452c"></Box>
-    <Box pos="0 1.15 -1.2" size="2.0 0.14 4.4" rotation="0.34 0.4 0" color="#6b5436"></Box>
-    <!-- mastro partido -->
-    <Box pos="0.3 2.1 0.6" size="0.18 3.4 0.18" rotation="0.5 0.4 0.24" color="#4a3a24"></Box>
-    <Box pos="1.4 0.6 2.6" size="0.16 2.2 0.16" rotation="1.3 0.2 0.4" color="#4a3a24"></Box>
-    <!-- vela em farrapos -->
-    <Box pos="0.9 1.9 0.9" size="0.05 1.8 2.0" rotation="0.4 0.4 0.2" color="#9a9480"></Box>
-  </Composition>
   <GameObject
-    place="at: 29 -89; align-to-terrain: 1"
+    name="swamp-wrecked-boat"
+    place="at: 52 -184; align-to-terrain: 1"
+    transform="rotation: 0 24 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/wrecked_boat_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/wrecked_boat_lod0.glb"
+      lod1-url="/assets/meshes/wrecked_boat_lod1.glb"
+      lod2-url="/assets/meshes/wrecked_boat_lod2.glb"
+      lod-threshold-near="35"
+      lod-threshold-mid="95"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: 58 -178; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod1.glb" lod1-url="/assets/meshes/wooden_barrel_lod2.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
-    place="at: 21 -87; align-to-terrain: 1"
+    place="at: 42 -174; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod1.glb" lod1-url="/assets/meshes/wooden_crate_lod2.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="26 -92" radius="8"></SpawnExclusion>
+  <SpawnExclusion at="52 -184" radius="16"></SpawnExclusion>
 
   <!-- ============================================================
        §3 CEMITÉRIO AFUNDADO (-28, -108)
        Lápides tortas a meio caminho da choça — o sítio onde os
        boglings se juntam.
        ============================================================ -->
-  <Composition
-    name="swamp-sunken-graves"
-    place="at: -28 -108; align-to-terrain: 1"
-    body="fixed"
-    collider="none"
-  >
-    <Box pos="-4.2 0.55 1.6" size="0.8 1.1 0.16" rotation="0.16 0.3 0.1" color="#8e9088"></Box>
-    <Box pos="-2.0 0.48 -0.4" size="0.7 0.95 0.16" rotation="-0.12 -0.5 -0.14" color="#7f8179"></Box>
-    <Box pos="0.4 0.62 2.2" size="0.85 1.25 0.16" rotation="0.1 0.9 0.08" color="#8e9088"></Box>
-    <Box pos="2.6 0.4 -1.4" size="0.65 0.8 0.16" rotation="-0.2 0.2 0.18" color="#767870"></Box>
-    <Box pos="4.4 0.56 0.8" size="0.75 1.15 0.16" rotation="0.14 -0.7 -0.1" color="#8e9088"></Box>
-    <Box pos="1.2 0.34 -3.2" size="0.6 0.7 0.16" rotation="0.24 0.4 0.22" color="#767870"></Box>
-    <!-- muro baixo em ruína -->
-    <Box pos="0 0.28 4.6" size="11.0 0.55 0.4" rotation="0 0.06 0" color="#6f716a"></Box>
-    <Box pos="-5.6 0.3 1.2" size="0.4 0.6 6.8" rotation="0 0.06 0" color="#6f716a"></Box>
-  </Composition>
-  <!-- Cruzes de pedra maiores (menires meio afundados) -->
-  <GameObject place="at: -31 -112; align-to-terrain: 0" transform="rotation: 0 18 0; scale: 0.85 0.85 0.85"
+  <!-- Cemitério: menires GLB (sem lápides Box). -->
+  <GameObject place="at: -62 -224; align-to-terrain: 0" transform="rotation: 0 18 0; scale: 0.85 0.85 0.85"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/stone_pillar_lod0.glb" lod1-url="/assets/meshes/stone_pillar_lod1.glb" lod2-url="/assets/meshes/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -24 -105; align-to-terrain: 0" transform="rotation: 0 -40 0; scale: 0.7 0.7 0.7"
+  <GameObject place="at: -48 -210; align-to-terrain: 0" transform="rotation: 0 -40 0; scale: 0.7 0.7 0.7"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/stone_pillar_lod0.glb" lod1-url="/assets/meshes/stone_pillar_lod1.glb" lod2-url="/assets/meshes/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -28 -108">
+  <GameObject place="at: -56 -216">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 0.6 0"
       particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 3.0; start-life-max: 5.0; start-speed-min: 0.15; start-speed-max: 0.4; start-size-min: 0.9; start-size-max: 2.0; start-color: #7d8f80; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <SpawnExclusion at="-28 -108" radius="9"></SpawnExclusion>
+  <SpawnExclusion at="-56 -216" radius="18"></SpawnExclusion>
 
   <!-- ============================================================
        §4 ALTAR DE OSSOS (-48, -132)
        Fogueira verde e ossadas no fundo oeste do brejo. Recompensa
        mística ([F]).
        ============================================================ -->
-  <Composition
+  <GameObject
     name="swamp-bone-altar"
-    place="at: -48 -132; align-to-terrain: 1"
-    body="fixed"
-    collider="auto"
+    place="at: -96 -264; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/bone_altar_collision.glb; mesh-anchor: base"
   >
-    <Cylinder pos="0 0.3 0" size="3.4 3.4 0.6" color="#5e6154"></Cylinder>
-    <Box pos="0 0.95 0" size="1.6 0.7 1.6" rotation="0 0.5 0" color="#6f7263"></Box>
-    <!-- costelas espetadas -->
-    <Box pos="-2.0 1.1 0.6" size="0.14 2.2 0.14" rotation="0.2 0 0.24" color="#ded6c4"></Box>
-    <Box pos="-1.4 1.2 -1.3" size="0.14 2.4 0.14" rotation="-0.18 0 -0.2" color="#e6dfcf"></Box>
-    <Box pos="1.6 1.15 1.2" size="0.14 2.3 0.14" rotation="0.14 0 -0.26" color="#ded6c4"></Box>
-    <Box pos="2.1 1.0 -0.7" size="0.14 2.0 0.14" rotation="-0.22 0 0.18" color="#e6dfcf"></Box>
-    <Sphere pos="0 1.55 0" size="0.34" color="#8cff9a"></Sphere>
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/bone_altar_lod0.glb"
+      lod1-url="/assets/meshes/bone_altar_lod1.glb"
+      lod2-url="/assets/meshes/bone_altar_lod2.glb"
+      lod-threshold-near="30"
+      lod-threshold-mid="80"
+    ></GLTFLoader>
+  </GameObject>
+  <Composition place="at: -96 -264; align-to-terrain: 1" body="none" collider="none">
     <PointLight
       pos="0 1.8 0"
       point-light="color: 0x66e878; intensity: 2.4; distance: 16; decay: 2"
@@ -140,69 +127,47 @@
   </Composition>
   <GameObject
     name="swamp-bog-idol"
-    place="at: -44 -134; align-to-terrain: 1"
+    place="at: -88 -268; align-to-terrain: 1"
     script="poi/bog-idol.ts"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
   ></GameObject>
-  <SpawnExclusion at="-48 -132" radius="9"></SpawnExclusion>
+  <SpawnExclusion at="-96 -264" radius="18"></SpawnExclusion>
 
   <!-- ============================================================
        §5 RUÍNA SUBMERSA (34, -120)
        Pilares meio afundados na lagoa leste.
        ============================================================ -->
-  <GameObject place="at: 36 -124; align-to-terrain: 0" transform="rotation: 0 22 0"
+  <GameObject place="at: 72 -248; align-to-terrain: 0" transform="rotation: 0 22 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: 31 -126.5; align-to-terrain: 0" transform="rotation: 0 -35 0; scale: 0.85 0.85 0.85"
+  <GameObject place="at: 62 -253; align-to-terrain: 0" transform="rotation: 0 -35 0; scale: 0.85 0.85 0.85"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="34 -124" radius="8"></SpawnExclusion>
+  <SpawnExclusion at="68 -248" radius="16"></SpawnExclusion>
 
-  <!-- ============================================================
-       §6 FOGOS-FÁTUOS — landmarks existentes, agora mais espalhados
-       ============================================================ -->
-  <Composition place="at: -30 -90; align-to-terrain: 1" body="none" collider="none">
-    <Sphere pos="0 1.6 0" size="0.14" color="#a8ffb0"></Sphere>
-    <Sphere pos="0.8 2.1 0.5" size="0.1" color="#c0ffc8"></Sphere>
+  <!-- Fogos-fátuos: só luz (sem esferas low-poly). -->
+  <Composition place="at: -60 -180; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.8 0" point-light="color: 0x7dff8a; intensity: 1.2; distance: 8; decay: 2"></PointLight>
   </Composition>
-  <Composition place="at: 26 -72; align-to-terrain: 1" body="none" collider="none">
-    <Sphere pos="0 1.4 0" size="0.12" color="#a8ffb0"></Sphere>
+  <Composition place="at: 52 -144; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.6 0" point-light="color: 0x7dff8a; intensity: 1.1; distance: 8; decay: 2"></PointLight>
   </Composition>
-  <Composition place="at: -14 -122; align-to-terrain: 1" body="none" collider="none">
-    <Sphere pos="0 1.5 0" size="0.13" color="#a8ffb0"></Sphere>
-    <Sphere pos="-0.6 2.0 0.4" size="0.09" color="#c0ffc8"></Sphere>
+  <Composition place="at: -28 -244; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.7 0" point-light="color: 0x7dff8a; intensity: 1.2; distance: 9; decay: 2"></PointLight>
   </Composition>
-  <Composition place="at: 48 -96; align-to-terrain: 1" body="none" collider="none">
-    <Sphere pos="0 1.45 0" size="0.12" color="#a8ffb0"></Sphere>
+  <Composition place="at: 96 -192; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.65 0" point-light="color: 0x7dff8a; intensity: 1.1; distance: 8; decay: 2"></PointLight>
   </Composition>
 
-  <!-- ============================================================
-       §7 PASSADIÇO E CHOÇA (10, -130) — landmarks existentes
-       ============================================================ -->
-  <Composition place="at: 8 -104; align-to-terrain: 1" body="none" collider="none">
-    <Box pos="0 0.06 0" size="1.1 0.08 2.6" rotation="0 0.12 0" color="#5a4a34"></Box>
-  </Composition>
-  <Composition place="at: 9 -110; align-to-terrain: 1" body="none" collider="none">
-    <Box pos="0 0.06 0" size="1.1 0.08 2.6" rotation="0 -0.1 0" color="#54452f"></Box>
-  </Composition>
-  <Composition place="at: 9.5 -116; align-to-terrain: 1" body="none" collider="none">
-    <Box pos="0 0.06 0" size="1.1 0.08 2.6" rotation="0 0.08 0" color="#5a4a34"></Box>
-  </Composition>
-  <Composition place="at: 10 -122; align-to-terrain: 1" body="none" collider="none">
-    <Box pos="0 0.06 0" size="1.1 0.08 2.6" rotation="0 -0.06 0" color="#54452f"></Box>
-  </Composition>
+  <!-- Choça do pântano (GLB). Passadiço Composition removido. -->
   <GameObject
     name="swamp-shack"
-    place="at: 10 -130; align-to-terrain: 1"
+    place="at: 20 -260; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/swamp_shack_collision.glb; mesh-anchor: base"
   >
@@ -215,6 +180,6 @@
       lod-threshold-mid="120"
     ></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="10 -130" radius="9"></SpawnExclusion>
+  <SpawnExclusion at="20 -260" radius="18"></SpawnExclusion>
 </Group>
 <!-- FIM biome.swamp.landmarks -->

@@ -12,27 +12,33 @@
        Montes de pedra que marcam o caminho na neblina — a leitura
        "é por aqui" sem HUD.
        ============================================================ -->
-  <Composition name="peaks-cairn-1" place="at: -78 -4; align-to-terrain: 1" body="fixed" collider="auto">
-    <Cylinder pos="0 0.35 0" size="1.6 1.6 0.7" color="#7b7a72"></Cylinder>
-    <Cylinder pos="0 0.85 0" size="1.1 1.1 0.4" color="#8a897f"></Cylinder>
-    <Cylinder pos="0 1.2 0" size="0.7 0.7 0.35" color="#95948a"></Cylinder>
-    <Box pos="0 1.7 0" size="0.22 0.9 0.22" color="#5a5850"></Box>
-    <Box pos="0 2.1 0" size="0.7 0.12 0.12" color="#5a5850"></Box>
-  </Composition>
-  <Composition name="peaks-cairn-2" place="at: -100 3; align-to-terrain: 1" body="fixed" collider="auto">
-    <Cylinder pos="0 0.35 0" size="1.6 1.6 0.7" color="#7b7a72"></Cylinder>
-    <Cylinder pos="0 0.85 0" size="1.1 1.1 0.4" color="#8a897f"></Cylinder>
-    <Cylinder pos="0 1.2 0" size="0.7 0.7 0.35" color="#95948a"></Cylinder>
-    <Box pos="0 1.7 0" size="0.22 0.9 0.22" color="#5a5850"></Box>
-    <Box pos="0 2.1 0" size="0.7 0.12 0.12" color="#5a5850"></Box>
-  </Composition>
-  <Composition name="peaks-cairn-3" place="at: -122 -6; align-to-terrain: 1" body="fixed" collider="auto">
-    <Cylinder pos="0 0.35 0" size="1.6 1.6 0.7" color="#7b7a72"></Cylinder>
-    <Cylinder pos="0 0.85 0" size="1.1 1.1 0.4" color="#8a897f"></Cylinder>
-    <Cylinder pos="0 1.2 0" size="0.7 0.7 0.35" color="#95948a"></Cylinder>
-    <Box pos="0 1.7 0" size="0.22 0.9 0.22" color="#5a5850"></Box>
-    <Box pos="0 2.1 0" size="0.7 0.12 0.12" color="#5a5850"></Box>
-  </Composition>
+  <GameObject
+    name="peaks-cairn-1"
+    place="at: -156 -8; align-to-terrain: 1"
+    transform="scale: 1.6 1.6 1.6"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/stone_cairn_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/stone_cairn_lod0.glb" lod1-url="/assets/meshes/stone_cairn_lod1.glb" lod2-url="/assets/meshes/stone_cairn_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="peaks-cairn-2"
+    place="at: -200 6; align-to-terrain: 1"
+    transform="rotation: 0 40 0; scale: 1.6 1.6 1.6"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/stone_cairn_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/stone_cairn_lod0.glb" lod1-url="/assets/meshes/stone_cairn_lod1.glb" lod2-url="/assets/meshes/stone_cairn_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="peaks-cairn-3"
+    place="at: -244 -12; align-to-terrain: 1"
+    transform="rotation: 0 -25 0; scale: 1.6 1.6 1.6"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/stone_cairn_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/stone_cairn_lod0.glb" lod1-url="/assets/meshes/stone_cairn_lod1.glb" lod2-url="/assets/meshes/stone_cairn_lod2.glb"></GLTFLoader>
+  </GameObject>
 
   <!-- ============================================================
        §2 POSTO GOBLIN (-86, 22)
@@ -41,7 +47,7 @@
        ============================================================ -->
   <GameObject
     name="peaks-goblin-outpost"
-    place="at: -86 22; align-to-terrain: 0"
+    place="at: -172 44; align-to-terrain: 0"
     transform="rotation: 0 -40 0; scale: 0.85 0.85 0.85"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/watchtower_collision.glb; mesh-anchor: base"
@@ -55,76 +61,100 @@
       lod-threshold-mid="140"
     ></GLTFLoader>
   </GameObject>
-  <Composition place="at: -86 18; align-to-terrain: 1" body="fixed" collider="none">
-    <!-- espetos e estandartes toscos -->
-    <Box pos="-3.4 1.0 0" size="0.16 2.0 0.16" rotation="0.12 0 0.14" color="#43331f"></Box>
-    <Box pos="-3.4 1.9 0.25" size="0.05 0.9 0.7" rotation="0.12 0 0.14" color="#7d3a2a"></Box>
-    <Box pos="3.0 1.05 -0.6" size="0.16 2.1 0.16" rotation="-0.1 0 -0.12" color="#43331f"></Box>
-    <Box pos="3.0 1.95 -0.35" size="0.05 0.85 0.65" rotation="-0.1 0 -0.12" color="#6d3326"></Box>
-    <!-- fogueira acesa -->
-    <Cylinder pos="0 0.12 1.8" size="0.8 0.9 0.24" color="#5e5b54"></Cylinder>
-    <Sphere pos="0 0.5 1.8" size="0.3" color="#ff8a33"></Sphere>
-    <PointLight pos="0 0.9 1.8" point-light="color: 0xff8a33; intensity: 2.2; distance: 12; decay: 2"></PointLight>
-  </Composition>
-  <GameObject place="at: -86 16.2"><ParticleSystem preset="fire" transform="pos: 0 0.7 0"></ParticleSystem></GameObject>
   <GameObject
-    place="at: -89 20; align-to-terrain: 1"
+    place="at: -172 38; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/iron_brazier_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/iron_brazier_lod0.glb" lod1-url="/assets/meshes/iron_brazier_lod1.glb" lod2-url="/assets/meshes/iron_brazier_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <Composition place="at: -172 38; align-to-terrain: 1" body="none" collider="none">
+    <PointLight pos="0 0.9 0" point-light="color: 0xff8a33; intensity: 2.2; distance: 12; decay: 2"></PointLight>
+  </Composition>
+  <!-- Chama do braseiro. Estava em "at: -86 16.2" — 2.8 m ao lado do braseiro
+       (que está em -86 19.0), a arder no ar em cima do nada. E a y=0.7, quando
+       o iron_brazier tem 1.10 m e o bordo da taça é o topo: a chama nascia
+       enterrada no metal. Agora coincide em XZ e assenta a y=1.00, dentro da
+       taça (raio interior ≈0.30). -->
+  <GameObject place="at: -172 38; align-to-terrain: 1">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 1.00 0"
+      particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject
+    place="at: -178 40; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod1.glb" lod1-url="/assets/meshes/wooden_crate_lod2.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="-86 21" radius="10"></SpawnExclusion>
+  <!-- Afloramento na encosta norte, atrás do posto — ancora a torre à montanha. -->
+  <GameObject
+    place="at: -166 54; align-to-terrain: 1"
+    transform="rotation: 0 -15 0; scale: 1.4 1.4 1.4"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/form_cliff_1_lod0.glb" lod1-url="/assets/meshes/form_cliff_1_lod1.glb" lod2-url="/assets/meshes/form_cliff_1_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <SpawnExclusion at="-172 42" radius="20"></SpawnExclusion>
 
   <!-- ============================================================
        §3 MINA DE CRISTAL (-108, 30)
        Boca de mina na encosta: moldura de pilares, veio a brilhar e
        carga abandonada. Fonte do "Vale do Cristal".
        ============================================================ -->
-  <Composition
+  <GameObject
     name="peaks-crystal-mine"
-    place="at: -108 30; align-to-terrain: 0"
+    place="at: -216 60; align-to-terrain: 0"
     transform="rotation: 0 -55 0"
-    body="fixed"
-    collider="auto"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/crystal_mine_entrance_collision.glb; mesh-anchor: base"
   >
-    <!-- moldura da entrada -->
-    <Box pos="-2.2 1.7 0" size="0.6 3.4 0.7" color="#4e3d27"></Box>
-    <Box pos="2.2 1.7 0" size="0.6 3.4 0.7" color="#4e3d27"></Box>
-    <Box pos="0 3.6 0" size="5.4 0.6 0.9" color="#5c4830"></Box>
-    <Box pos="0 4.1 -0.1" size="6.2 0.4 0.7" rotation="0 0 0.04" color="#4a3a24"></Box>
-    <!-- boca escura -->
-    <Box pos="0 1.6 -0.9" size="3.6 3.2 0.4" color="#14120f"></Box>
-    <!-- escoras laterais -->
-    <Box pos="-3.2 1.1 1.1" size="0.3 2.2 0.3" rotation="0.16 0 0.2" color="#43341f"></Box>
-    <Box pos="3.2 1.1 1.1" size="0.3 2.2 0.3" rotation="0.16 0 -0.2" color="#43341f"></Box>
-  </Composition>
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/crystal_mine_entrance_lod0.glb"
+      lod1-url="/assets/meshes/crystal_mine_entrance_lod1.glb"
+      lod2-url="/assets/meshes/crystal_mine_entrance_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <!-- Afloramentos que ancoram a boca de mina à encosta. -->
+  <GameObject
+    place="at: -230 68; align-to-terrain: 1"
+    transform="rotation: 0 20 0; scale: 1.6 1.6 1.6"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_20_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/form_cliff_20_lod0.glb" lod1-url="/assets/meshes/form_cliff_20_lod1.glb" lod2-url="/assets/meshes/form_cliff_20_lod2.glb"></GLTFLoader>
+  </GameObject>
   <!-- veio exposto ao lado da boca -->
-  <GameObject place="at: -111 27.5; align-to-terrain: 1" transform="scale: 3.2 3.2 3.2">
+  <GameObject place="at: -222 55; align-to-terrain: 1" transform="scale: 3.2 3.2 3.2">
     <GLTFLoader role="visual" url="/assets/meshes/crystal_blue_lod0.glb" lod1-url="/assets/meshes/crystal_blue_lod1.glb" lod2-url="/assets/meshes/crystal_blue_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -105.5 27; align-to-terrain: 1" transform="scale: 2.4 2.4 2.4">
+  <GameObject place="at: -211 54; align-to-terrain: 1" transform="scale: 2.4 2.4 2.4">
     <GLTFLoader role="visual" url="/assets/meshes/crystal_blue_lod0.glb" lod1-url="/assets/meshes/crystal_blue_lod1.glb" lod2-url="/assets/meshes/crystal_blue_lod2.glb"></GLTFLoader>
   </GameObject>
-  <Composition place="at: -108 28; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -216 56; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.6 0" point-light="color: 0x5ab0ff; intensity: 2.4; distance: 20; decay: 2"></PointLight>
   </Composition>
-  <GameObject place="at: -108 28"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -216 56"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
   <GameObject
-    place="at: -104 32; align-to-terrain: 1"
+    place="at: -208 64; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod1.glb" lod1-url="/assets/meshes/wooden_crate_lod2.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
-    place="at: -105.5 34; align-to-terrain: 1"
+    place="at: -211 68; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod1.glb" lod1-url="/assets/meshes/wooden_barrel_lod2.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="-108 30" radius="11"></SpawnExclusion>
+  <SpawnExclusion at="-216 60" radius="22"></SpawnExclusion>
 
   <!-- ============================================================
        §4 LAGO GELADO (-92, -34)
@@ -132,8 +162,8 @@
        cairn de gelo. Recompensa mística ([F]).
        ============================================================ -->
   <Lake
-    at="-92 -34"
-    radius="11"
+    at="-184 -68"
+    radius="22"
     depth="2.2"
     water-offset="0.4"
     color="#8fc7dd"
@@ -144,8 +174,8 @@
     profile="tree"
     count="14"
     seed="9201"
-    region-min="-106 0 -48"
-    region-max="-78 0 -20"
+    region-min="-212 0 -96"
+    region-max="-156 0 -40"
     near-water="1"
     avoid-water="0"
     align-to-terrain="1"
@@ -155,7 +185,7 @@
     scale-min="1.0"
     scale-max="2.2"
     avoid-overlaps="1"
-    footprint-radius="1.3"
+    footprint-radius="2.6"
     max-distance="140"
     random-yaw="true"
     variation="rock"
@@ -166,26 +196,26 @@
   </StaticSpawner>
   <GameObject
     name="peaks-frost-cairn"
-    place="at: -88 -30; align-to-terrain: 1"
+    place="at: -176 -60; align-to-terrain: 1"
     script="poi/frost-cairn.ts"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
   ></GameObject>
-  <SpawnExclusion at="-92 -34" radius="13"></SpawnExclusion>
+  <SpawnExclusion at="-184 -68" radius="26"></SpawnExclusion>
 
   <!-- ============================================================
        §5 JAZIDA DE CRISTAIS (-95, 13) — landmark existente
        ============================================================ -->
-  <GameObject place="at: -95 12; align-to-terrain: 1" transform="scale: 2.6 2.6 2.6">
+  <GameObject place="at: -190 24; align-to-terrain: 1" transform="scale: 2.6 2.6 2.6">
     <GLTFLoader role="visual" url="/assets/meshes/crystal_blue_lod0.glb" lod1-url="/assets/meshes/crystal_blue_lod1.glb" lod2-url="/assets/meshes/crystal_blue_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -97 14.5; align-to-terrain: 1" transform="scale: 2.0 2.0 2.0">
+  <GameObject place="at: -194 29; align-to-terrain: 1" transform="scale: 2.0 2.0 2.0">
     <GLTFLoader role="visual" url="/assets/meshes/crystal_blue_lod0.glb" lod1-url="/assets/meshes/crystal_blue_lod1.glb" lod2-url="/assets/meshes/crystal_blue_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -93.5 15; align-to-terrain: 1" transform="scale: 2.3 2.3 2.3">
+  <GameObject place="at: -187 30; align-to-terrain: 1" transform="scale: 2.3 2.3 2.3">
     <GLTFLoader role="visual" url="/assets/meshes/crystal_blue_lod0.glb" lod1-url="/assets/meshes/crystal_blue_lod1.glb" lod2-url="/assets/meshes/crystal_blue_lod2.glb"></GLTFLoader>
   </GameObject>
-  <Composition place="at: -95 13.5; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -190 27; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.6 0" point-light="color: 0x5ab0ff; intensity: 1.8; distance: 14; decay: 2"></PointLight>
   </Composition>
 
@@ -193,48 +223,70 @@
        §6 ARENA DO OGRO (-145, 6) — landmark existente, agora com
        plataforma e mais pilares (o chefe final merece um palco).
        ============================================================ -->
-  <Composition place="at: -145 6; align-to-terrain: 1" body="fixed" collider="none">
-    <Cylinder pos="0 0.09 0" size="34 34 0.18" color="#6f6b62"></Cylinder>
-    <Cylinder pos="0 0.2 0" size="24 24 0.16" color="#7d786d"></Cylinder>
-  </Composition>
-  <GameObject place="at: -150 14; align-to-terrain: 0"
+  <!-- Arena do ogro: pilares + braseiros GLB (plataforma Cylinder removida). -->
+  <GameObject place="at: -300 28; align-to-terrain: 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -152 -2; align-to-terrain: 0" transform="rotation: 0 30 0"
+  <GameObject place="at: -304 -4; align-to-terrain: 0" transform="rotation: 0 30 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -140 16; align-to-terrain: 0" transform="rotation: 0 -25 0"
+  <GameObject place="at: -280 32; align-to-terrain: 0" transform="rotation: 0 -25 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -138 -4; align-to-terrain: 0" transform="rotation: 0 55 0"
+  <GameObject place="at: -276 -8; align-to-terrain: 0" transform="rotation: 0 55 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -156 6; align-to-terrain: 0" transform="rotation: 0 90 0; scale: 1.2 1.2 1.2"
+  <GameObject place="at: -312 12; align-to-terrain: 0" transform="rotation: 0 90 0; scale: 1.2 1.2 1.2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <!-- Braseiros -->
-  <Composition place="at: -138 6; align-to-terrain: 1" body="fixed" collider="none">
-    <Cylinder pos="0 0.3 0" size="0.5 0.6 0.6" color="#4a4a50"></Cylinder>
-    <Sphere pos="0 0.75 0" size="0.3" color="#ff7722"></Sphere>
+  <GameObject
+    place="at: -276 12; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/iron_brazier_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/iron_brazier_lod0.glb" lod1-url="/assets/meshes/iron_brazier_lod1.glb" lod2-url="/assets/meshes/iron_brazier_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <Composition place="at: -276 12; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.0 0" point-light="color: 0xff8a33; intensity: 2.4; distance: 14; decay: 2"></PointLight>
   </Composition>
-  <Composition place="at: -152 6; align-to-terrain: 1" body="fixed" collider="none">
-    <Cylinder pos="0 0.3 0" size="0.5 0.6 0.6" color="#4a4a50"></Cylinder>
-    <Sphere pos="0 0.75 0" size="0.3" color="#ff7722"></Sphere>
+  <GameObject
+    place="at: -304 12; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/iron_brazier_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/iron_brazier_lod0.glb" lod1-url="/assets/meshes/iron_brazier_lod1.glb" lod2-url="/assets/meshes/iron_brazier_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <Composition place="at: -304 12; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.0 0" point-light="color: 0xff8a33; intensity: 2.4; distance: 14; decay: 2"></PointLight>
   </Composition>
-  <GameObject place="at: -138 6"><ParticleSystem preset="fire" transform="pos: 0 0.9 0"></ParticleSystem></GameObject>
-  <GameObject place="at: -152 6"><ParticleSystem preset="fire" transform="pos: 0 0.9 0"></ParticleSystem></GameObject>
-  <SpawnExclusion at="-145 6" radius="20"></SpawnExclusion>
+  <!-- Chamas assentes no bordo da taça (y=1.00), não a y=0.9 dentro do metal;
+       `align-to-terrain: 1` igual aos braseiros para as duas entidades
+       partilharem exactamente a mesma pose. -->
+  <GameObject place="at: -276 12; align-to-terrain: 1">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 1.00 0"
+      particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -304 12; align-to-terrain: 1">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 1.00 0"
+      particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <SpawnExclusion at="-290 12" radius="40"></SpawnExclusion>
 </Group>
 <!-- FIM biome.peaks.landmarks -->

@@ -1,14 +1,13 @@
 <!--
   Discordia district fragment. Loaded via Include from cities/discordia.xml.
-  Edit this file for this district only. Cell coords: space-separated (at="2 1").
+  Edit this file for this district only. Cell coords: space-separated (at="4 2").
 -->
 <Group name="city.chapel" pos="0 0 0">
-          <!-- §4.4e CAPELA (GLB Omni bbox chapel + escala bake ~7 m).
-           Eixo N sagrado, entre praça e portão norte; frente a sudoeste. -->
+          <!-- Capela GLB + curandeira. Sem jardim/banco Composition. -->
           <GameObject
             name="chapel"
             transform="rotation: 0 -135 0"
-            place="at: 8 22; align-to-terrain: 0"
+            place="at: 16 44; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/chapel_collision.glb; mesh-anchor: base"
           >
@@ -21,59 +20,9 @@
               lod-threshold-mid="160"
             ></GLTFLoader>
           </GameObject>
-
-          <!-- Silhueta Composition da capela desligada (GLB activo). -->
-          <!-- Lanterna de pedra no adro da capela -->
-          <Composition
-            place="at: 3.5 16; align-to-terrain: 0"
-            body="fixed"
-            collider="auto"
-          >
-            <Cylinder
-              pos="0 0.4 0"
-              size="0.35 0.35 0.8"
-              texture-url="/assets/textures/mountain_stone.png"
-              texture-repeat="1 1"
-              normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
-            ></Cylinder>
-            <Sphere pos="0 0.9 0" size="0.14" color="#ffaa44"></Sphere>
-          </Composition>
-
-          <!-- Banco no caminho capela → torre -->
-          <Composition
-            place="at: 18 24; align-to-terrain: 0"
-            body="fixed"
-            collider="none"
-          >
-            <Box pos="0 0.28 0" size="1.5 0.12 0.45" color="#6b4a2b"></Box>
-            <Box pos="-0.6 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
-            <Box pos="0.6 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
-          </Composition>
-          <!-- Jardim do adro (canteiros simétricos). -->
-          <Composition
-            place="at: 4 15.5; align-to-terrain: 0"
-            body="fixed"
-            collider="none"
-          >
-            <Box pos="0 0.1 0" size="2.4 0.18 1.0" color="#4a3424"></Box>
-            <Sphere pos="-0.7 0.28 0" size="0.14" color="#c45a7a"></Sphere>
-            <Sphere pos="0 0.28 0.15" size="0.12" color="#e8d080"></Sphere>
-            <Sphere pos="0.7 0.28 -0.1" size="0.14" color="#c45a7a"></Sphere>
-          </Composition>
-          <Composition
-            place="at: 11 15.5; align-to-terrain: 0"
-            body="fixed"
-            collider="none"
-          >
-            <Box pos="0 0.1 0" size="2.4 0.18 1.0" color="#4a3424"></Box>
-            <Sphere pos="-0.7 0.28 0.1" size="0.14" color="#7ab040"></Sphere>
-            <Sphere pos="0 0.28 -0.1" size="0.12" color="#c45a7a"></Sphere>
-            <Sphere pos="0.7 0.28 0" size="0.14" color="#7ab040"></Sphere>
-          </Composition>
-                  <!-- Curandeira no adro da capela. -->
           <GameObject
             name="npc_healer"
-            place="at: 3 18; align-to-terrain: 1"
+            place="at: 6 36; align-to-terrain: 1"
             transform="rotation: 0 -20 0"
           >
             <GLTFLoader

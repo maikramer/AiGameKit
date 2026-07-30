@@ -120,3 +120,1983 @@ portraits:
     - portrait_hermit
     - portrait_fisherman
     - portrait_druid
+
+# ============================================================
+# CANÓNICO: perfil + assets neste único ficheiro (game.yaml).
+#   gameassets resume --profile game.yaml --manifest game.yaml
+#   (ou --manifest manifest → resolve para game.yaml se não houver manifest.yaml)
+# size_m [L,H,W] = WebGL [X,Y,Z] Y+up — docs/OMNI_SHAPE_FINDINGS.md §1
+# ============================================================
+
+assets:
+- id: hero
+  text3d:
+    steps: 40
+    octree_resolution: 384
+    mc_level: 0
+  idea: young cartoon fantasy adventurer wearing leather tunic with rolled-up sleeves,
+    cloth bandana, simple belt with pouch, cheerful determined expression, short boots,
+    no helmet no armor, standing upright in relaxed A-pose with arms angled down at
+    45 degrees away from the body, open hands with spread fingers, hands empty, no
+    weapons, no props, full body visible, front-facing, RPG hero boy
+  kind: character
+  category: humanoid
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.55
+    - 1.55
+    - 0.4
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,sprint,jump,attack,hit,death,sword,axe,spear,chop,swordidle,axeidle,spearidle,chopidle,mine,gather,interact,punch,roar,roll
+- id: npc_merchant
+  idea: friendly cartoon merchant NPC wearing brown apron over green tunic, round
+    belly, warm smile, short chubby proportions, standing upright in relaxed A-pose
+    with arms angled down at 45 degrees away from the body, visible gap between arms
+    and torso, open hands with spread fingers, hands empty, no weapons, no props,
+    full body visible, front-facing, fantasy shopkeeper
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.65
+    - 1.5
+    - 0.5
+- id: npc_scout
+  idea: lean cartoon scout NPC wearing hooded green cloak over leather jerkin, map
+    case on belt, short boots, alert friendly expression, standing upright in relaxed
+    A-pose with arms angled down at 45 degrees away from the body, visible gap between
+    arms and torso, open hands with spread fingers, hands empty, no weapons, no props,
+    full body visible, front-facing, fantasy ranger cartographer
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.6
+    - 1.55
+    - 0.45
+- id: npc_blacksmith
+  idea: burly cartoon blacksmith NPC wearing thick leather apron over sleeveless tunic,
+    broad shoulders, bushy beard, soot smudges, sturdy boots, standing upright in
+    relaxed A-pose with arms angled down at 45 degrees away from the body, visible
+    gap between arms and torso, open hands with spread fingers, hands empty, no weapons,
+    no props, full body visible, front-facing, fantasy village smith
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.75
+    - 1.6
+    - 0.55
+- id: npc_healer
+  idea: kind cartoon healer NPC wearing pale blue robe with white sash, simple headscarf,
+    gentle smile, soft slippers, standing upright in relaxed A-pose with arms angled
+    down at 45 degrees away from the body, visible gap between arms and torso, open
+    hands with spread fingers, hands empty, no weapons, no props, full body visible,
+    front-facing, fantasy temple cleric
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.6
+    - 1.55
+    - 0.45
+- id: npc_guard
+  idea: cartoon town guard NPC wearing padded gambeson with chainmail collar and blue
+    tabard, no helmet, short cropped hair, stern friendly face, boots with greaves,
+    standing upright in relaxed A-pose with arms angled down at 45 degrees away from
+    the body, visible gap between arms and torso, open hands with spread fingers,
+    hands empty, no weapons, no props, full body visible, front-facing, fantasy city
+    watchman
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.7
+    - 1.6
+    - 0.5
+- id: npc_elder
+  idea: old cartoon village elder NPC wearing long brown robe with fur collar, long
+    white beard, slight stoop, wooden sandals, warm wise expression, standing upright
+    in relaxed A-pose with arms angled down at 45 degrees away from the body, visible
+    gap between arms and torso, open hands with spread fingers, hands empty, no weapons,
+    no props, full body visible, front-facing, fantasy village elder
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.6
+    - 1.5
+    - 0.45
+- id: goblin
+  idea: small wiry cartoon goblin with big pointy ears, crooked teeth, tattered loincloth,
+    green skin, standing upright in relaxed A-pose with arms angled down at 45 degrees
+    away from the body, open hands with spread fingers, hands empty, no weapons, no
+    props, full body visible, front-facing, fantasy enemy creature
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 2
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose-dwarf
+    size_m:
+    - 0.45
+    - 1.15
+    - 0.35
+- id: slime
+  seed: 55192
+  idea: cute blue jelly slime dwarf humanoid standing upright in relaxed A-pose,
+    short stout gelatin body, stubby arms angled down at 45 degrees away from the body,
+    open blobby hands with spread fingers, short thick legs and feet planted on the
+    ground, two sparkly eyes and smile on the front, glossy translucent blue slime
+    skin, no weapons no props, full body visible, front-facing, white background
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 2
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose-dwarf
+    size_m:
+    - 0.7
+    - 1.0
+    - 0.55
+- id: pine_dark
+  idea: tall cartoon dark pine tree with dense layered triangle foliage in deep forest
+    green, narrow brown trunk, slightly gloomy stylized shape, dark fantasy forest
+    tree
+  kind: environment
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  lod_levels: 2
+  omni:
+    control_type: bbox
+    bbox_preset: tree
+    size_m:
+    - 2.0
+    - 9.0
+    - 2.0
+- id: dead_tree
+  seed: 44119
+  idea: bare cartoon dead tree wide silhouette in front view, broad gnarled trunk
+    and branches spanning left-right, shallow depth front-to-back not a deep volume,
+    natural thick twisted leafless branches, pale grey bark, spooky dark fantasy forest
+    tree, full body visible, three-quarter front view
+  kind: environment
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  lod_levels: 2
+  omni:
+    control_type: bbox
+    size_m:
+    - 2.5
+    - 7.0
+    - 1.7
+- id: mushroom_glow
+  idea: cartoon tall glowing blue mushroom with slender vertical stalk and round cap,
+    bioluminescent fantasy fungi, soft cyan light, upright prop on dark forest floor,
+    narrow footprint
+  kind: prop
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  # Cogumelo baixo (0.55 m): split global cut_height=0.6 falha; não é árvore.
+  text3d:
+    split_at_height: false
+  omni:
+    control_type: bbox
+    height_m: 0.55
+    footprint_m: 0.35
+- id: witch_hut
+  idea: crooked cartoon witch hut with angled leaning walls, thatched roof, small
+    glowing window, wooden door, dark fantasy forest dwelling
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox:
+    - 1.0
+    - 0.9
+    - 1.0
+    size_m:
+    - 5.0
+    - 4.5
+    - 5.0
+- id: wolf
+  idea: cartoon feral grey wolf walking on all fours, side view, four legs on the
+    ground, horizontal animal body, low head, bushy tail, grey-black fur, yellow glowing
+    eyes, snarling fangs, wild quadruped forest predator animal
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: creature
+    clips: idle,walk,run,jump,attack,hit,death,roar
+    procedural: true
+    force_preset: true
+  omni:
+    control_type: bbox
+    bbox_preset: quadruped
+    size_m:
+    - 1.4
+    - 0.75
+    - 0.45
+- id: shade
+  idea: cartoon shadow shade creature, floating dark ghostly wraith with glowing purple
+    eyes, tattered cloak, ethereal smoky body, standing upright in relaxed A-pose
+    with arms angled down at 45 degrees away from the body, open hands with spread
+    fingers, hands empty, no weapons, no props, full body visible, front-facing, fantasy
+    undead spirit
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.6
+    - 1.6
+    - 0.4
+- id: witch_boss
+  idea: menacing cartoon witch boss with long hooked nose, pointed black hat, tattered
+    dark purple robe, glowing green hands, sinister grin, standing upright in relaxed
+    A-pose with arms angled down at 45 degrees away from the body, open hands with
+    spread fingers, hands empty, no weapons, no props, full body visible, front-facing,
+    dark fantasy forest witch, game asset
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  generation: high
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.7
+    - 1.8
+    - 0.5
+- id: cactus
+  idea: cartoon desert saguaro cactus tall column with wider left-right silhouette,
+    three green arms spreading sideways, ribbed texture, small spines, stylized fantasy
+    desert plant, vertical trunk
+  kind: environment
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  lod_levels: 2
+  omni:
+    control_type: bbox
+    size_m:
+    - 1.8
+    - 3.5
+    - 0.71
+- id: dead_bush
+  idea: cartoon dry desert tumbleweed bush with twisted brown branches, sparse leaves,
+    arid climate plant, fantasy desert prop
+  kind: prop
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: blob
+    size_m:
+    - 1.5
+    - 1.0
+    - 1.5
+- id: ruin_pillar
+  idea: ancient cartoon sandstone ruin pillar with cracked carved hieroglyphs, weathered
+    top, broken base, fantasy desert monument
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: building
+    size_m:
+    - 1.2
+    - 4.0
+    - 1.2
+- id: scorpion_nest
+  text3d:
+    octree_resolution: 256
+  idea: low wide cartoon desert sand mound burrow with a small dark tunnel entrance
+    hole, packed sand termite-hill lump hugging the ground, scattered bones around
+    the entrance, flat wide base, fantasy creature lair
+  kind: environment
+  category: terrain
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox:
+    - 1.0
+    - 0.48
+    - 1.0
+    size_m:
+    - 2.5
+    - 1.2
+    - 2.5
+- id: scorpion
+  idea: cartoon desert scorpion with segmented tan-orange tail ending in glowing red
+    stinger, large pincers, eight legs, armored carapace, fantasy desert predator
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: creature
+    clips: idle,walk,run,jump,attack,hit,death,roar
+    procedural: true
+    force_preset: true
+  omni:
+    control_type: bbox
+    bbox:
+    - 1.0
+    - 0.55
+    - 0.75
+    size_m:
+    - 1.2
+    - 0.66
+    - 0.9
+- id: bandit
+  idea: cartoon desert bandit with tan hood and face mask, leather armor scraps, dark
+    eyes visible, standing upright in relaxed A-pose with arms angled down at 45 degrees
+    away from the body, open hands with spread fingers, hands empty, no weapons, no
+    props, full body visible, front-facing, fantasy rogue enemy
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 0.55
+    - 1.65
+    - 0.4
+- id: sand_worm
+  idea: cartoon dune sandworm, tall limbless segmented tubular worm body in S-curve,
+    no legs no arms no wings no claws no feet, circular gaping maw with rings of teeth
+    on top, tiny side eyes, sandy armored rings, single continuous worm mesh, white
+    background, no base disk no pedestal no platform no rubble no ground plate no
+    miniature stand
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  generation: high
+  seed: 89133
+  animate:
+    preset: creature
+    clips: idle,walk,run,jump,attack,death,roar
+    procedural: true
+    force_preset: true
+  omni:
+    control_type: bbox
+    bbox:
+    - 0.494
+    - 1.0
+    - 0.32
+    size_m:
+    - 2.6
+    - 5.4
+    - 1.5
+- id: dead_willow
+  idea: cartoon dead willow tree with wide drooping leafless branches spanning left-right,
+    twisted dark grey trunk, moss-covered roots in murky water, spooky fantasy swamp
+    tree, broad canopy silhouette
+  kind: environment
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  lod_levels: 2
+  omni:
+    control_type: bbox
+    size_m:
+    - 3.9
+    - 6.0
+    - 3.0
+- id: lily_pad
+  idea: cartoon large green lily pad with small pink lily flower, floating on dark
+    water surface, fantasy swamp vegetation prop
+  kind: prop
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: flat
+    size_m:
+    - 1.2
+    - 0.15
+    - 1.2
+- id: moss_rock
+  idea: cartoon dark grey angular swamp boulder with faceted rocky silhouette, patches
+    of bright green moss on the top and sides, small mushrooms at the base, wet stone
+    surface clearly visible, fantasy swamp terrain rock
+  kind: prop
+  category: terrain
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 1.5
+    - 1.0
+    - 1.2
+- id: swamp_shack
+  idea: cartoon dilapidated wooden swamp shack on stilts above murky water, mossy
+    plank walls, sagging thatched roof, small lantern, fantasy swamp dwelling
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: building
+    size_m:
+    - 5.0
+    - 4.0
+    - 5.0
+- id: bogling
+  idea: small cartoon swamp bogling creature with round green-brown body, big yellow
+    eyes, webbed feet, dripping moss on back, standing upright in relaxed A-pose with
+    arms angled down at 45 degrees away from the body, open hands with spread fingers,
+    hands empty, no weapons, no props, full body visible, front-facing, mischievous
+    fantasy amphibian monster
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose-dwarf
+    size_m:
+    - 0.5
+    - 1.1
+    - 0.4
+- id: bog_warden_boss
+  idea: large cartoon bog warden elemental boss made of swamp mud, vines, and glowing
+    green eyes, mossy stone core, dripping water, standing upright in relaxed A-pose
+    with arms angled down at 45 degrees away from the body, open hands with spread
+    fingers, hands empty, no weapons, no props, full body visible, front-facing, intimidating
+    fantasy swamp boss, game asset
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  generation: high
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 1.4
+    - 2.6
+    - 1.0
+- id: village_longhouse
+  seed: 90210
+  idea: large medieval wooden longhouse mead-hall with carved timber beams, shingled
+    steep roof, grand double doors, glowing warm windows, stone foundation, elder
+    meeting hall
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: building
+    size_m:
+    - 5.5
+    - 5.5
+    - 10.0
+- id: watchtower
+  idea: 'very tall narrow medieval stone watchtower nine meters high, square 3 by
+    3 meter base, slender vertical shaft much taller than wide, squared heavy stone
+    base flush to ground with sharp block edges and no flared footings, crisp crenellated
+    battlements on top, thin straight wooden ladder with clear separate rungs, continuous
+    thin flagpole with attached waving flag (no gaps), observation platform, clean
+    hard architectural silhouettes, game-ready prop, not a short cube keep
+
+    '
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  generation: high
+  omni:
+    control_type: bbox
+    height_m: 9.0
+    footprint_m: 3.0
+- id: chapel
+  idea: small medieval stone chapel with tall bell tower, arched stained-glass window,
+    peaked slate roof, wooden door, cozy village temple, house of worship, eye-level
+    three-quarter view from front-right, camera slightly above eye height, solid stone
+    foundation closed at the base sitting flush as if on the ground, exterior only
+    opaque walls, no worm's-eye or underside view
+  kind: environment
+  category: building
+  omni:
+    control_type: bbox
+    bbox_preset: chapel
+    size_m:
+    - 6.0
+    - 7.0
+    - 4.5
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+- id: market_stall
+  idea: bustling medieval market stall with striped canvas awning, wooden counter,
+    hanging fruits and vegetables, sacks of grain, cheerful merchant booth
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: building
+    size_m:
+    - 3.0
+    - 2.5
+    - 2.0
+- id: medieval_well
+  idea: round medieval stone well with wooden bucket on rope, iron crank handle, mossy
+    stonework, fantasy village water source
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: crate
+    size_m:
+    - 1.4
+    - 1.6
+    - 1.4
+- id: wooden_barrel
+  idea: wooden barrel with iron bands, oak staves, tap handle, fantasy tavern storage
+    barrel, game prop
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: barrel
+    size_m:
+    - 0.6
+    - 0.9
+    - 0.6
+- id: wooden_bench
+  idea: simple wooden bench with rough oak planks and sturdy legs, medieval village
+    seating, game prop
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: crate
+    size_m:
+    - 1.6
+    - 0.5
+    - 0.45
+- id: sword_hero
+  seed: 44102
+  idea: cartoon fantasy broadsword standing perfectly upright vertical on its pommel,
+    tip pointing straight up, thin flat steel blade, golden crossguard, blue gem pommel
+    at bottom on ground, front view, not tilted not diagonal not lying on side, hero
+    weapon, clean simple design
+  kind: prop
+  category: weapon
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 0.12
+    - 1.0
+    - 0.04
+- id: axe
+  seed: 77419
+  idea: cartoon fantasy battle axe perfectly straight vertical like a plumb line,
+    wooden handle butt on ground, steel axe head centered at very top, wide thin flat
+    blade, leather wrap, orthographic front view, zero tilt zero lean, not diagonal
+    not sideways, white background, hero weapon
+  kind: prop
+  category: weapon
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 0.35
+    - 0.9
+    - 0.05
+- id: spear
+  idea: cartoon fantasy spear with thin leaf-shaped steel tip, long slender wooden
+    shaft, leather grip, hero weapon, clean simple design, not a thick pole
+  kind: prop
+  category: weapon
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 0.08
+    - 1.8
+    - 0.05
+- id: felling_axe
+  seed: 90612
+  idea: cartoon woodcutting felling axe standing perfectly upright vertical, long
+    wooden handle butt on ground, large curved steel chopping blade head at top like
+    a lumberjack axe not a knife not a dagger, flat thin blade profile, orthographic
+    front view, zero tilt, white background, logging tool
+  kind: prop
+  category: tool
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 0.35
+    - 0.85
+    - 0.05
+- id: pickaxe
+  idea: cartoon mining pickaxe with slender double-pointed iron head, worn wooden
+    handle, simple prospecting tool, thin head not chunky
+  kind: prop
+  category: tool
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 0.4
+    - 0.9
+    - 0.06
+- id: bomb
+  idea: round black cartoon bomb with lit fuse spark, shiny sphere, cartoon explosive,
+    game item
+  kind: prop
+  category: item
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 0.25
+    - 0.3
+    - 0.25
+- id: treasure_chest
+  idea: cartoon fantasy treasure chest with golden metal bands and big brass lock,
+    arched lid, warm brown wood, RPG loot container
+  kind: prop
+  category: chest
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: chest
+    size_m:
+    - 1.0
+    - 0.65
+    - 0.65
+- id: crystal_blue
+  idea: glowing blue cartoon crystal cluster floating above small rock base, magical
+    gem collectible, bright luminescent facets, fantasy loot
+  kind: prop
+  category: item
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 0.35
+    - 0.6
+    - 0.35
+- id: rock_mossy
+  idea: round cartoon mossy boulder with firm angular rocky silhouette, mostly bare
+    grey stone visible, bright green moss patches and small mushrooms growing on top,
+    fantasy terrain rock
+  kind: prop
+  category: terrain
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 1.4
+    - 1.0
+    - 1.2
+- id: mushroom_red
+  idea: big cartoon red mushroom with white polka dots on cap, thick white stalk,
+    fantasy forest mushroom, whimsical look
+  kind: prop
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox:
+    - 0.714
+    - 1.0
+    - 0.714
+    size_m:
+    - 0.5
+    - 0.7
+    - 0.5
+- id: stone_pillar
+  seed: 77291
+  idea: tall slender ancient cartoon stone column with cracked grey surface and faint
+    glowing blue rune carvings, sparse mossy vines, upright fantasy landmark pillar,
+    cylindrical shaft not a short block
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    height_m: 3.5
+    footprint_m: 1.0
+- id: wooden_crate
+  idea: cartoon wooden crate with iron bands, weathered oak planks, sturdy box prop,
+    simple lowpoly game asset
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: crate
+    size_m:
+    - 0.8
+    - 0.8
+    - 0.8
+- id: tree_oak
+  idea: cartoon oak tree with big round puffy green canopy on thick brown trunk, stylized
+    fantasy forest tree, bright cheerful foliage
+  kind: environment
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox:
+    - 0.5
+    - 1.0
+    - 0.5
+    size_m:
+    - 4.0
+    - 8.0
+    - 4.0
+- id: tree_pine
+  idea: tall cartoon pine tree with layered triangle foliage in rich green, narrow
+    brown trunk, stylized Christmas tree shape, fantasy forest
+  kind: environment
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: tree
+    size_m:
+    - 2.0
+    - 9.0
+    - 2.0
+- id: form_cliff_1
+  idea: cartoon fantasy jagged mountain cliff, grey stone with snow patches, steep
+    rocky face, deeper front-to-back rock mass, solid closed base, game terrain prop
+  kind: environment
+  category: terrain
+  text3d:
+    voxel_merge: 0.375
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 2.1
+    - 3.0
+    - 2.15
+- id: form_cliff_20
+  idea: cartoon fantasy wide mountain cliff wall, layered grey stone strata with snow,
+    solid closed base, deep rock mass, game terrain prop
+  kind: environment
+  category: terrain
+  text3d:
+    octree_resolution: 288
+    voxel_merge: 0.75
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 2.1
+    - 3.0
+    - 2.16
+- id: form_arch_3
+  idea: cartoon fantasy natural stone arch, walkable grey rock bridge with open tunnel
+    underneath, weathered mountain pass, solid feet on both sides, game terrain prop
+  kind: environment
+  category: terrain
+  text3d:
+    voxel_merge: 0.375
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 3.2
+    - 2.8
+    - 1.6
+- id: form_stack_6
+  idea: cartoon fantasy stacked cairn of three rounded grey boulders balanced vertically,
+    trail marker, solid base, game terrain prop
+  kind: environment
+  category: terrain
+  text3d:
+    voxel_merge: 0.375
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 1.4
+    - 2.4
+    - 1.4
+- id: form_stack_11
+  idea: cartoon fantasy tall thin stacked stone spire, five flat slate slabs piled
+    unevenly, cairn landmark, solid base, game terrain prop
+  kind: environment
+  category: terrain
+  text3d:
+    voxel_merge: 0.375
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 1.1
+    - 3.2
+    - 1.1
+- id: form_outcrop_2
+  seed: 71402
+  idea: cartoon fantasy low mossy riverside rock outcrop, two chunky grey boulders
+    fused at base, wet stone, solid closed underside, game terrain prop
+  kind: environment
+  category: terrain
+  text3d:
+    octree_resolution: 288
+    voxel_merge: 1.5
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 2.4
+    - 1.6
+    - 1.8
+- id: form_outcrop_5
+  idea: cartoon fantasy angular cracked desert rock outcrop, warm grey-tan stone with
+    sharp facets, single blocky mass, solid base, game terrain prop
+  kind: environment
+  category: terrain
+  text3d:
+    voxel_merge: 0.375
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 2.0
+    - 2.2
+    - 1.7
+- id: form_outcrop_8
+  idea: cartoon fantasy sprawling clustered rock outcrop, five mossy grey stones of
+    mixed sizes hugging ground, solid closed bases, game terrain prop
+  kind: environment
+  category: terrain
+  text3d:
+    voxel_merge: 0.375
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 2.8
+    - 1.8
+    - 2.2
+- id: boss_ogre
+  idea: menacing large fantasy RPG boss monster, muscular green ogre troll with sharp
+    teeth and small tusks, hunched powerful build, thick dark armor scraps, standing
+    upright in relaxed A-pose with massive arms angled down at 45 degrees away from
+    the body, visible gap between arms and torso, open hands with spread fingers,
+    hands empty, no weapons, no props, full body visible, front-facing, cartoon stylized
+    but bigger and scarier than a goblin, game asset
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 2
+  generation: fast
+  animate:
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death,punch,roar
+  omni:
+    control_type: pose
+    pose_preset: quaternius-apose
+    size_m:
+    - 1.2
+    - 2.8
+    - 0.9
+- id: bgm_battle
+  idea: intense fantasy battle music, driving orchestral combat theme, dramatic action
+    rhythm
+  kind: prop
+  category: music
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: battle
+- id: bgm_explore
+  idea: peaceful fantasy village exploration music, gentle acoustic guitar and flute,
+    warm ambient adventure melody, calm countryside
+  kind: prop
+  category: music
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: exploration
+- id: sfx_hit
+  idea: sharp metal sword clash, bright metallic ring, short combat hit impact
+  kind: prop
+  category: combat
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: sword-clash
+- id: sfx_swing
+  idea: whoosh sword swing through air, quick blade swish, fast weapon swing
+  kind: prop
+  category: combat
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_chop_hit
+  idea: sharp axe chop into wood tree trunk, heavy blade impact on timber
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_chop_break
+  idea: large tree falling crashing down, timber cracking and splintering
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_mine_hit
+  idea: pickaxe striking stone rock, hard mineral impact, mining chisel hit on ore,
+    sharp crack
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_mine_break
+  idea: rock crumbling apart, stone debris falling, boulder breaking into fragments
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_levelup
+  idea: triumphant level up fanfare, bright ascending victory chime, cheerful RPG
+    success jingle
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: victory
+- id: sfx_player_hurt
+  idea: painful grunt, male warrior taking damage, sharp exhale of pain, short hurt
+    vocalization
+  kind: prop
+  category: voice
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_enemy_hurt
+  idea: creature taking damage yelp, short monster pain cry, wounded beast whimper
+  kind: prop
+  category: voice
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_enemy_death
+  idea: creature death wail, fading monster cry, dying beast collapse, long final
+    groan
+  kind: prop
+  category: voice
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_boss_roar
+  idea: massive boss monster roar, deep terrifying beast bellow, giant creature threatening
+    growl, powerful boss entrance
+  kind: prop
+  category: voice
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: creature-roar
+- id: sfx_heal
+  idea: warm healing magic spell, gentle restoration chime, soft glowing energy swell,
+    soothing recovery aura
+  kind: prop
+  category: magic
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: heal
+- id: sfx_shop_open
+  idea: friendly shop door opening chime, welcoming merchant bell, cozy tavern door
+    creak, warm marketplace greeting
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_buy
+  idea: satisfying purchase confirmation, coin transaction chime, merchant deal struck,
+    bright purchase success tone
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_error
+  idea: negative error buzz, declining tone, low rejected action sound, descending
+    failure blip, interface denial
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_coin
+  idea: sparkling coin pickup chime, bright golden coin collect, rewarding currency
+    jingle, short treasure acquire
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: coin-pickup
+- id: sfx_item_drop
+  idea: item dropping on ground, object landing on stone floor, dull thud with bounce,
+    inventory item fall
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_bomb_drop
+  idea: bomb fuse igniting, sizzling explosive timer, crackling fuse burn, tense countdown
+    hiss
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_save
+  idea: quick save confirmation chime, short success blip, game saved jingle, bright
+    digital confirm
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: ui-confirm
+- id: sfx_load
+  idea: game load whoosh, data loading shimmer, short magical loading sparkle, transition
+    swirl
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+- id: village_forge
+  idea: cartoon medieval village blacksmith forge workshop open front facing camera,
+    brick and plaster walls, peaked terracotta tile roof, tall brick chimney with
+    chimney rain hood, dark forge hearth inside back wall, solid stone foundation
+    flush to ground, eye-level three-quarter view from front-right, exterior only,
+    cozy fantasy smithy building, static architecture no smoke no flames no particles,
+    no characters
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 6.0
+    - 5.5
+    - 5.0
+- id: village_house
+  idea: small cartoon medieval village cottage with plaster walls, timber beams, peaked
+    shingle roof, wooden front door, two small shuttered windows, stone foundation
+    flush to ground, cozy fantasy house, eye-level three-quarter view from front-right,
+    exterior only opaque walls, no characters
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 5.0
+    - 4.2
+    - 6.0
+- id: shepherd_cottage
+  idea: cartoon medieval shepherd cottage with mossy green thatch roof, rough plaster
+    walls, wooden door, hay loft hatch, small vegetable garden pots by door, stone
+    foundation flush to ground, rustic fantasy farmhouse, eye-level three-quarter
+    view, exterior only, no characters
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 5.5
+    - 4.0
+    - 7.5
+- id: village_barn
+  idea: cartoon medieval raised wooden barn on short stone pillars, thatched roof,
+    large sliding barn doors, ladder to loft, grain sacks silhouette, rustic fantasy
+    farm building, solid base flush to ground, eye-level three-quarter view, exterior
+    only, no animals no characters
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 8.0
+    - 6.0
+    - 11.0
+- id: city_gate_arch
+  # Collision: mode envelope (inflate+voxel) — especial p/ arcos côncavos c/ vão.
+  # size L=10 encaixa vão ±5; H≈muro+merlons; W≈muro. Arco redondo + abutments prismáticos.
+  idea: medieval stone city gate arch portal for tiling with curtain wall, classic round
+    semicircular arched opening about eight meters wide between two pillars, left and
+    right abutment pillars are constant-width rectangular stone prisms from ground to
+    top with perfectly flat vertical outer side faces same thickness all the way up,
+    no pedestal no plinth no flared base no wider footing no overhanging cornice no
+    cantilever top corner no stepped buttress, straight outer profile flush for wall
+    join, heavy stone arch voussoirs forming the round opening, simple square merlon
+    battlements on top of lintel above the arch, warm grey stone blocks, no doors no
+    portcullis, bottom flush with ground plane, front view game-ready prop
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  collision:
+    mode: envelope
+    max_faces: 256
+    voxel_size: 0.08
+    inflate: 0.1
+  omni:
+    control_type: bbox
+    size_m:
+    - 10.0
+    - 5.5
+    - 1.2
+# Muralha Discordia — segmentos tileáveis (~4× = 26 m entre portão e torre).
+# Lab shapes em sample-gameassets/_wall_lab/ (2026-07-29). size_m = [L,H,W]=[X,Y,Z].
+- id: city_wall_seg_a
+  idea: modular medieval stone curtain wall segment, straight thin masonry panel,
+    crenellated merlons along top, warm grey stone blocks, flat vertical ends for
+    tiling, solid footing flush to ground, freestanding wall piece, no towers no
+    gates no doors, game-ready prop
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  collision:
+    mode: envelope
+    max_faces: 256
+    voxel_size: 0.08
+    inflate: 0.08
+  omni:
+    control_type: bbox
+    size_m:
+    - 6.5
+    - 5.0
+    - 0.9
+- id: city_wall_seg_b
+  idea: thin freestanding stone curtain wall panel only, battlement merlons, hollow
+    feel not a solid hut, no building volume inside bbox, flat tileable ends, fantasy
+    village wall, front view
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  collision:
+    mode: envelope
+    max_faces: 256
+    voxel_size: 0.08
+    inflate: 0.08
+  omni:
+    control_type: bbox
+    size_m:
+    - 6.5
+    - 5.0
+    - 0.9
+- id: city_wall_seg_c
+  idea: modular medieval stone curtain wall segment, straight thin masonry panel,
+    crenellated merlons along top, warm grey stone blocks, flat vertical ends for
+    tiling, solid footing flush to ground, freestanding wall piece, no towers no
+    gates no doors, game-ready prop
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  collision:
+    mode: envelope
+    max_faces: 256
+    voxel_size: 0.08
+    inflate: 0.08
+  omni:
+    control_type: bbox
+    size_m:
+    - 6.5
+    - 5.0
+    - 1.2
+- id: city_wall_corner
+  idea: square straight medieval stone corner watchtower, prismatic box silhouette,
+    perfectly vertical flat walls on all four sides for tiling with curtain wall
+    segments, square footprint, simple flat-top with square merlon battlements, warm
+    grey stone blocks, solid footing flush to ground, no round tower no cone roof no
+    doors no windows low, game-ready modular prop
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  collision:
+    mode: envelope
+    max_faces: 256
+    voxel_size: 0.08
+    inflate: 0.08
+  omni:
+    control_type: bbox
+    size_m:
+    - 2.4
+    - 6.0
+    - 2.4
+# Pontes rio Discordia — 2 passagens (S: s_bank↔s_resume, W: w_bank↔w_resume).
+# Rio: width=8 + bank 3.2×2 = carve 14.4 m; span 18 = +~1.8 m/lado; deck 3.6 (estrada 2).
+# H baixa (~2.5): deck perto do chão + rampas nas cabeceiras (senão não se sobe).
+# size_m [L,H,W]=span×altura×largura_deck. Placement: W yaw=0 (span∥X); S yaw=90 (span∥Z).
+- id: river_bridge_wood
+  idea: low wooden plank river bridge eighteen meters long, orthographic side profile,
+    flat walkable deck about one meter above ground, gentle approach ramps on BOTH ends
+    meeting the ground plane for walk-on access, continuous surface ground-ramp-deck-ramp-ground,
+    four timber posts SYNMMETRIC two-by-two under midspan, low handrails, warm brown boards,
+    freestanding, game-ready
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  collision:
+    mode: envelope
+    max_faces: 256
+    voxel_size: 0.1
+    inflate: 0.08
+  omni:
+    control_type: bbox
+    size_m:
+    - 18.0
+    - 2.5
+    - 3.6
+- id: river_bridge_stone
+  idea: low stone slab river bridge eighteen meters long, orthographic side profile,
+    flat walkable grey stone deck about one meter above ground, gentle stone approach
+    ramps on BOTH ends meeting the ground plane for walk-on access, continuous surface
+    ground-ramp-deck-ramp-ground, four square stone piers SYNMMETRIC under midspan, low
+    parapets, freestanding, game-ready
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  collision:
+    mode: envelope
+    max_faces: 256
+    voxel_size: 0.1
+    inflate: 0.08
+  omni:
+    control_type: bbox
+    size_m:
+    - 18.0
+    - 2.5
+    - 3.6
+- id: anvil
+  idea: classic cartoon blacksmith anvil on short wooden stump base, heavy dark iron
+    horn and face, fantasy forge prop standing upright, clean silhouette, game-ready
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: crate
+    size_m:
+    - 0.7
+    - 0.9
+    - 0.45
+- id: weapon_rack
+  idea: wooden cartoon weapon rack with vertical posts and crossbars holding two hanging
+    hammers and one blank sword silhouette, fantasy blacksmith tool rack prop, freestanding,
+    clean simple design
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 1.2
+    - 1.6
+    - 0.4
+- id: forge_bellows
+  idea: cartoon medieval blacksmith leather bellows with wooden handles and iron nozzle,
+    large accordion air pump prop for forge, fantasy workshop tool sitting on ground,
+    clean silhouette
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: crate
+    size_m:
+    - 1.0
+    - 0.7
+    - 0.55
+- id: quench_trough
+  idea: long wooden cartoon quench trough filled with dark water, iron bands, blacksmith
+    cooling bath prop, fantasy forge yard water tub sitting flush on ground
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 1.4
+    - 0.55
+    - 0.6
+- id: horseshoe_pile
+  idea: small pile of cartoon iron horseshoes stacked on ground, rusty metal fantasy
+    blacksmith scrap prop, compact low heap, clean simple silhouette
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 0.45
+    - 0.25
+    - 0.45
+- id: campfire_pit
+  idea: cartoon stone ring campfire pit with stacked grey rocks and dark charcoal
+    center, fantasy village fire circle prop, low wide silhouette flush to ground,
+    no flames mesh
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 1.4
+    - 0.35
+    - 1.4
+- id: notice_board
+  idea: wooden cartoon notice board on two posts with pinned parchment papers and
+    nails, fantasy village bulletin board prop, upright freestanding, clean readable
+    silhouette
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 1.6
+    - 2.0
+    - 0.22
+- id: torch_post
+  idea: tall cartoon wooden torch post with iron bracket and wrapped cloth torch head,
+    fantasy village street torch prop standing upright, clean vertical silhouette,
+    no flame mesh
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    height_m: 2.2
+    footprint_m: 0.25
+- id: iron_brazier
+  idea: standing cartoon iron brazier bowl on tripod legs with dark charcoal inside,
+    fantasy mountain camp fire bowl prop, upright, no flame mesh
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: crate
+    size_m:
+    - 0.7
+    - 1.1
+    - 0.7
+- id: stone_cairn
+  idea: stacked cartoon stone cairn trail marker of uneven grey rocks piled into a
+    small tower, fantasy mountain path marker prop, solid stacked silhouette flush
+    to ground
+  kind: prop
+  category: terrain
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 0.9
+    - 1.4
+    - 0.9
+- id: chopping_block
+  idea: thick cartoon wooden chopping block stump with axe cut marks on top, fantasy
+    lumberjack yard prop, short wide cylinder flush to ground
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 0.7
+    - 0.55
+    - 0.7
+- id: log_pile
+  idea: neat pile of cartoon cut wooden logs stacked in a row, bark and sawn ends
+    visible, fantasy lumber camp prop, low wide silhouette
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 1.8
+    - 0.8
+    - 0.9
+- id: wrecked_boat
+  idea: broken cartoon wooden boat hull half-buried, cracked planks and missing stern,
+    fantasy swamp wreck prop sitting flush to ground, exterior only, no characters
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 3.5
+    - 1.2
+    - 1.4
+- id: bone_altar
+  idea: eerie cartoon swamp bone altar made of stacked skulls and femurs on a flat
+    stone slab, fantasy bog ritual prop, low wide silhouette, stylized not gory
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: crate
+    size_m:
+    - 1.6
+    - 1.0
+    - 1.2
+- id: druid_stone_altar
+  idea: flat cartoon ancient stone altar slab on short rough pillars, moss patches
+    and faint carved runes, fantasy druid circle center prop, low wide silhouette
+    flush to ground
+  kind: prop
+  category: terrain
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: crate
+    size_m:
+    - 1.8
+    - 0.9
+    - 1.2
+- id: desert_obelisk
+  idea: tall slender cartoon sandstone desert obelisk with carved sun symbol near
+    top, warm orange stone, square tapered shaft on small stepped base flush to ground,
+    fantasy landmark needle, upright
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    height_m: 8.0
+    footprint_m: 1.4
+- id: sandstone_arch
+  idea: monumental cartoon sandstone desert arch ten meters tall, thick weathered
+    pillars and curved top, warm orange stone with erosion cracks, fantasy canyon
+    gate freestanding flush to ground, front view, clean architectural silhouette,
+    no characters
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 8.0
+    - 10.0
+    - 2.5
+- id: crystal_mine_entrance
+  idea: cartoon rocky mountain mine entrance with timber frame posts and crossbeam,
+    dark tunnel mouth, sparse blue crystal shards on ground, fantasy peaks mine portal
+    flush to ground, exterior only
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 4.0
+    - 3.5
+    - 3.0

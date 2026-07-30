@@ -2,16 +2,26 @@
   Vegetação do DESERTO (Leste, x ≳ 58). Loaded via Include.
   Mesh próprio do bioma: cactus (o dead_bush passa a ser arbusto seco, não
   "cacto"), a par do collider cactus_stump_collision que já era o pretendido.
+  §1/§2 cactus já GLTFLoader (lod0-2 + collision) — confirmado em
+  public/world/ASSETS_REGISTRY.md, nada a migrar aqui.
+  O tapete `<Vegetation>` (topo) referencia o kit Quaternius em
+  /assets/meshes/vegetation/*.glb — pasta ausente no bundle atual; não
+  trocar/reparar aqui (ver "GLBs em falta" no ASSETS_REGISTRY.md).
   Densidade alta só em spawners scenery — ver nota em vegetation/forest.xml.
 -->
 <Group name="biome.desert.vegetation" pos="0 0 0">
-  <!-- Tapete seco: erva rala e poucas flores. -->
+  <!-- NOTE (2026-07-29): tapete erva/planta/flor Quaternius desligado — pasta
+       /assets/meshes/vegetation/ não existe no disco (kit nunca chegou a ser
+       gerado; ver ASSETS_REGISTRY.md §"GLBs em falta"). Referenciar estes
+       caminhos faz `vibegame analyze` falhar. Reativar só quando os GLBs
+       existirem: regenerar via gameassets/Rocks3D ou trocar por meshes reais
+       da raiz de /assets/meshes (não há grass/flower/plant lá hoje).
   <Vegetation
     meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_yellowA.glb"
     density-per-km2="22000"
     seed="702"
-    region-min="58 0 -95"
-    region-max="185 0 95"
+    region-min="116 0 -190"
+    region-max="370 0 190"
     scale-min="1.4"
     scale-max="2.8"
     max-slope-deg="32"
@@ -19,8 +29,8 @@
     avoid-overlaps="0"
     max-distance="110"
     cluster-count="34"
-    cluster-radius="2.8"
-    flower-near-radius="1.8"
+    cluster-radius="5.6"
+    flower-near-radius="3.6"
     flower-density-ratio="0.16"
     plant-density-ratio="0.28"
     smart="1"
@@ -30,14 +40,15 @@
     random-yaw="true"
     variation="foliage"
   ></Vegetation>
+  -->
 
   <!-- §1 Cactos — a assinatura do bioma. Em grupos, como cresce a saguaro. -->
   <StaticSpawner
     profile="tree"
     count="140"
     seed="7101"
-    region-min="60 0 -92"
-    region-max="200 0 92"
+    region-min="120 0 -184"
+    region-max="400 0 184"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -45,9 +56,9 @@
     scale-min="0.8"
     scale-max="1.7"
     avoid-overlaps="1"
-    footprint-radius="1.1"
+    footprint-radius="2.2"
     cluster-count="24"
-    cluster-radius="14"
+    cluster-radius="28"
     max-distance="220"
     scale-axis-min="0.9"
     scale-axis-max="1.1"
@@ -71,8 +82,8 @@
     profile="tree"
     count="18"
     seed="302"
-    region-min="62 0 -60"
-    region-max="150 0 60"
+    region-min="124 0 -120"
+    region-max="300 0 120"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -80,7 +91,7 @@
     scale-min="1.0"
     scale-max="1.5"
     avoid-overlaps="1"
-    footprint-radius="1.6"
+    footprint-radius="3.2"
     max-distance="150"
     scale-axis-min="0.9"
     scale-axis-max="1.1"
@@ -115,8 +126,8 @@
     profile="foliage"
     count="190"
     seed="7102"
-    region-min="58 0 -95"
-    region-max="215 0 95"
+    region-min="116 0 -190"
+    region-max="430 0 190"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -125,7 +136,7 @@
     scale-max="1.8"
     avoid-overlaps="1"
     cluster-count="30"
-    cluster-radius="12"
+    cluster-radius="24"
     max-distance="150"
     random-yaw="true"
     variation="foliage"
@@ -147,8 +158,8 @@
     profile="tree"
     count="95"
     seed="7103"
-    region-min="58 0 -100"
-    region-max="225 0 100"
+    region-min="116 0 -200"
+    region-max="450 0 200"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -157,9 +168,9 @@
     scale-max="2.8"
     avoid-overlaps="1"
     pick-strategy="random"
-    footprint-radius="1.5"
+    footprint-radius="3"
     cluster-count="14"
-    cluster-radius="20"
+    cluster-radius="40"
     max-distance="200"
     scale-axis-min="0.85"
     scale-axis-max="1.15"
@@ -197,8 +208,8 @@
     profile="tree"
     count="14"
     seed="7104"
-    region-min="64 0 -78"
-    region-max="185 0 78"
+    region-min="128 0 -156"
+    region-max="370 0 156"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -206,7 +217,7 @@
     scale-min="0.9"
     scale-max="1.3"
     avoid-overlaps="1"
-    footprint-radius="5.0"
+    footprint-radius="10"
     max-distance="220"
     random-yaw="true"
     variation="rock"

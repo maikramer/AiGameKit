@@ -24,7 +24,6 @@
     }
   },
   {
-    "_comment": "Phase 1: kill target is bogling (count 5) so the quest is completable now. Phase 3: replace with bog_warden boss when its spawn exists.",
     "id": "swamp_bogwarden",
     "npc": "npc_swamp_bogwarden",
     "biome": "swamp",
@@ -32,15 +31,15 @@
     "portrait": "",
     "voice": "",
     "lines_intro": [
-      "Algo antigo dorme no fundo do lago do pântano.",
-      "Prove seu valor abatendo 5 boglins e eu te forjo uma vara abençoada."
+      "O lago leva. Barco, rede, gente — leva e nunca devolve nada.",
+      "O que conta os afogados está no fundo, ao sul. Traz-me o silêncio dele e forjo-te uma vara abençoada."
     ],
-    "lines_progress": ["Ainda faltam {remaining} provas de força."],
-    "lines_complete": ["Você é forte. Esta vara abençoada é sua."],
+    "lines_progress": ["Ainda está lá em baixo. Falta {remaining}."],
+    "lines_complete": ["O lago devolveu uma coisa, então. Fica com a vara."],
     "objective": {
       "type": "kill",
-      "target": "bogling",
-      "count": 5
+      "target": "boss_bogwarden",
+      "count": 1
     },
     "rewards": {
       "gold": 500,

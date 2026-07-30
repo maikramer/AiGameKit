@@ -10,7 +10,8 @@ Scene fragments loaded via `<Include src="/world/…">` from `index.html`.
 | `cities/discordia/*.xml`    | Districts: `houses`, `utilities`, `walls`, `roads`, `skirts`, … |
 | `cities/town-demo.xml`      | Demo town @ (420,420) — `CityGrid` + prefabs                    |
 | `spawn/ring.xml`            | Valley resource ring ±58, river, bridges, peri-urban carpet     |
-| `paths/trails.xml`          | Dirt trails: cardinal arteries + branches to landmarks          |
+| `paths/network.xml`         | Cobble `<RoadNetwork>` cruz + anel periurbano + 4 biomes (~2 m) |
+| `paths/trails.xml`          | Dirt/sand spur `<Road flatten="0">` to landmarks                |
 | `vegetation/<biome>.xml`    | Carpet + canopy + rocks, one file per cardinal wedge            |
 | `landmarks/<biome>.xml`     | Destinations: outposts, ruins, mine, arena, boss glades         |
 | `frontier/ridges.xml`       | Diagonal ridges between the wedges                              |
@@ -67,15 +68,15 @@ Subir contagens de colhíveis/inimigos custa; subir scenery quase não custa.
 
 ## Richness layers
 
-| Layer         | File                        | What to put there                                 |
-| ------------- | --------------------------- | ------------------------------------------------- |
-| Ground carpet | `vegetation/<biome>.xml`    | `<Vegetation>` density, plant/flower ratios       |
-| Canopy/rocks  | `vegetation/<biome>.xml`    | `<StaticSpawner>` scenery + colhíveis             |
-| Destinations  | `landmarks/<biome>.xml`     | POIs, ruins, lakes, boss stages, `SpawnExclusion` |
-| Routes        | `paths/trails.xml`          | `<Road>` arteries/branches                        |
-| Skyline       | `frontier/ridges.xml`       | Diagonal ridge dressing                           |
-| Ambient FX    | `atmosphere/ambient-fx.xml` | Particles (no new lights)                         |
-| Biome mood    | `environment.xml`           | `BiomeRegion` fog/ambient/`clouds`/`rain`         |
+| Layer         | File                               | What to put there                                 |
+| ------------- | ---------------------------------- | ------------------------------------------------- |
+| Ground carpet | `vegetation/<biome>.xml`           | `<Vegetation>` density, plant/flower ratios       |
+| Canopy/rocks  | `vegetation/<biome>.xml`           | `<StaticSpawner>` scenery + colhíveis             |
+| Destinations  | `landmarks/<biome>.xml`            | POIs, ruins, lakes, boss stages, `SpawnExclusion` |
+| Routes        | `paths/network.xml` + `trails.xml` | cobble network + spur trails                      |
+| Skyline       | `frontier/ridges.xml`              | Diagonal ridge dressing                           |
+| Ambient FX    | `atmosphere/ambient-fx.xml`        | Particles (no new lights)                         |
+| Biome mood    | `environment.xml`                  | `BiomeRegion` fog/ambient/`clouds`/`rain`         |
 
 **Learnings (enrichment)**
 
@@ -108,13 +109,13 @@ Subir contagens de colhíveis/inimigos custa; subir scenery quase não custa.
 Estes GLB são referenciados pelo pipeline mas o bundle só traz a colisão —
 não deixar `url=` a apontar para eles, o analyze falha:
 
-| Asset                | Estado                             | Substituto em uso                       |
-| -------------------- | ---------------------------------- | --------------------------------------- |
-| `form_arch_3`        | só `_collision.glb`                | arco em `<Composition>` (desert §1)     |
-| `form_cliff_1/20`    | só `_collision.glb`                | relevo do terreno + `moss_rock`         |
-| `form_outcrop_2/5/8` | só `_collision.glb`                | `rock_mossy` / `moss_rock` (com escala) |
-| `form_stack_6/11`    | só `_collision.glb`                | `stone_pillar`                          |
-| `shade_*`            | não existe (só `enemies/shade.ts`) | `bogling` a 1.4×                        |
+| Asset                | Estado                             | Substituto em uso                                                 |
+| -------------------- | ---------------------------------- | ----------------------------------------------------------------- |
+| `form_arch_3`        | GLB completo, não ligado           | desert §1 usa `sandstone_arch` (dedicado); form_arch_3 fica livre |
+| `form_cliff_1/20`    | só `_collision.glb`                | relevo do terreno + `moss_rock`                                   |
+| `form_outcrop_2/5/8` | só `_collision.glb`                | `rock_mossy` / `moss_rock` (com escala)                           |
+| `form_stack_6/11`    | só `_collision.glb`                | `stone_pillar`                                                    |
+| `shade_*`            | não existe (só `enemies/shade.ts`) | `bogling` a 1.4×                                                  |
 
 Regenerar: as `form_*` vêm do `rocks3d formation` (ver `Rocks3D/README.md`);
 `shade` vem do pipeline `gameassets batch`. Depois de regenerar, repor os URLs.
@@ -149,12 +150,13 @@ walls ±32  →  SpawnExclusion r=42  →  TerrainPad ~96×96 (falloff 16)
 - Lake NW of walls must sit **east** of the west river carve (not over the ravine).
 - **Enemies: `<Creature>` CCT** grounds Y on terrain heightfield; NavMesh steers `desiredVel` (no Transform XZ write). Spawn seeds Y once. `goblin_collision.glb` unused (capsule).
 
-## Trilhos (`paths/trails.xml`)
+## Estradas (`paths/network.xml` + `trails.xml`)
 
-`<Road flatten="true">` carva um corredor no sampler e faz _density boost_ nos
-chunks — usar só nas **artérias** (uma por bioma), que também garantem
-percurso pisável através do relevo novo. Os **ramos** usam `flatten="0"`:
-decal puro, sem mutação de terreno nem custo de malha.
+Artéria cobble = um `<RoadNetwork>` (~2 m) em `network.xml`:
+cruz praça → `mid_*` (muralha ±28) → portões/biomas, **mais anel periurbano**
+(`mid_n`↔`ring_ne`↔`mid_e`↔…↔`mid_n`) para não ficar só um `+`.
+Gaps rio: `s_bank`↛`s_resume`, `w_bank`↛`w_resume`.
+Ramos de terra/areia = `<Road flatten="0">` em `trails.xml` (sem carve; docks nos `via=`).
 Ver [`VibeGame/src/plugins/road/context.md`](../../../src/plugins/road/context.md).
 
 ## POIs com recompensa (`src/scripts/poi/`)

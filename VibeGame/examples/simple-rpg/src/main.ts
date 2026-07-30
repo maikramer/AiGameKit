@@ -26,6 +26,7 @@ import {
   ParticlesPlugin,
   // HUD / loading
   mountLoadingScreen,
+  setLoadingScreenLocale,
   // i18n
   loadDictionary,
   loadEngineDefaultDictionary,
@@ -115,11 +116,21 @@ import {
   clearBombs,
 } from './game/bombs';
 import { bindEngine } from './game/engine-bridge';
+import {
+  BIOME_IDS,
+  NotaSystem,
+  biomeProgress,
+  clearNota,
+  initNota,
+  notaSnapshot,
+  restoreNota,
+  type NotaSnapshot,
+} from './game/nota';
 import { isWoodEntity } from './scripts/tree';
 import { addStone } from './scripts/inventory';
 import { addWood } from './scripts/wood';
 import { anyCreatureAggro } from './scripts/creature';
-import { getEnemyLabel } from './scripts/enemy-registry';
+import { biomeAtPosition, getEnemyLabel } from './scripts/enemy-registry';
 import { setupAggroChain } from './scripts/aggro-chain';
 
 import darkForestQuestsData from './data/quests/dark_forest_quests.json';
@@ -208,14 +219,14 @@ const HeroStatsSystem: System = {
 // ── Respawn: on death, after a delay, return the hero to the nearest checkpoint
 //    — the city centre or just outside whichever cardinal gate is closest to
 //    where they fell. Beats always trekking back from the city centre after
-//    dying deep in a biome. Each point is just outside the wall (z/x ±39),
+//    dying deep in a biome. Each point is just outside the wall (z/x ±78),
 //    short of the biome enemy bands (~45+), so respawns aren't instant re-deaths.
 const RESPAWN_POINTS: ReadonlyArray<readonly [number, number]> = [
   [0, 0], // city plaza
-  [0, 39], // north gate (forest)
-  [0, -39], // south gate (swamp)
-  [39, 0], // east gate (desert)
-  [-39, 0], // west gate (peaks)
+  [0, 78], // north gate (forest) — wall ±64 + margin
+  [0, -78], // south gate (swamp)
+  [78, 0], // east gate (desert)
+  [-78, 0], // west gate (peaks)
 ];
 let deathShown = false;
 let respawnAtTime = 0;
@@ -303,6 +314,23 @@ const prevPending = new Map<number, number>();
 /** Stack key shared by all feedback spawned at one prop position. */
 function harvestStackKey(x: number, z: number): string {
   return `harvest@${Math.round(x)},${Math.round(z)}`;
+}
+
+/**
+ * Biome-flavoured name for a harvest, or `null` when the generic kind is all
+ * there is. Quest objectives name the local material ("madeira-escura",
+ * "musgo-do-pântano"), so reporting only `wood`/`stone` left those quests
+ * permanently stuck at 0 — and sent the player nowhere in particular.
+ */
+function biomeHarvestKind(
+  kind: 'wood' | 'stone',
+  x: number,
+  z: number
+): string | null {
+  const biome = biomeAtPosition(x, z);
+  if (kind === 'wood' && biome === 'dark-forest') return 'dark-wood';
+  if (kind === 'stone' && biome === 'swamp') return 'bog-moss';
+  return null;
 }
 
 const CombatFeedbackSystem: System = {
@@ -424,6 +452,12 @@ const dictEN: Record<string, string> = {
   'quests.active': 'Active',
   'quests.completed': 'Completed',
   'quests.failed': 'Failed',
+  'quests.tracker.title': 'Quests',
+  'quests.track': 'Track',
+  'quests.tracking': 'Tracking',
+  'quests.prompt.talk': 'Talk',
+  'quests.prompt.progress': 'Ask about the task',
+  'quests.prompt.turnin': 'Hand in quest',
   'options.music': 'Music',
   'options.sfx': 'Sound FX',
   'options.save': '💾 Save Game',
@@ -460,6 +494,12 @@ const dictPT: Record<string, string> = {
   'quests.active': 'Ativas',
   'quests.completed': 'Completas',
   'quests.failed': 'Fracassadas',
+  'quests.tracker.title': 'Missões',
+  'quests.track': 'Rastrear',
+  'quests.tracking': 'Rastreando',
+  'quests.prompt.talk': 'Falar',
+  'quests.prompt.progress': 'Perguntar sobre a missão',
+  'quests.prompt.turnin': 'Entregar missão',
   'options.music': 'Música',
   'options.sfx': 'Efeitos',
   'options.save': '💾 Salvar jogo',
@@ -497,14 +537,14 @@ const MESH_BASE = '/assets/meshes/';
 // existing hero sword.) Missing GLBs just leave the hand empty (load fails
 // silently) until generated.
 const HELD_MODEL: Record<string, string> = {
-  sword: MESH_BASE + 'sword_hero.glb',
-  axe: MESH_BASE + 'axe.glb',
-  spear: MESH_BASE + 'spear.glb',
-  chop: MESH_BASE + 'felling_axe.glb',
-  mine: MESH_BASE + 'pickaxe.glb',
-  bomb: MESH_BASE + 'bomb.glb',
+  sword: MESH_BASE + 'sword_hero_lod0.glb',
+  axe: MESH_BASE + 'axe_lod0.glb',
+  spear: MESH_BASE + 'spear_lod0.glb',
+  chop: MESH_BASE + 'felling_axe_lod0.glb',
+  mine: MESH_BASE + 'pickaxe_lod0.glb',
+  bomb: MESH_BASE + 'bomb_lod0.glb',
 };
-const BOMB_MODEL = MESH_BASE + 'bomb.glb';
+const BOMB_MODEL = MESH_BASE + 'bomb_lod0.glb';
 let GRIPS: HeldItemGripRegistry = {};
 // Debug: force-hold a weapon (or null) regardless of proximity, for grip tuning.
 let forcedHold: string | null = null;
@@ -842,6 +882,7 @@ function loadQuests(raw: unknown): readonly QuestDef[] {
 
 async function bootstrap(): Promise<void> {
   const bootLang = navigator.language.startsWith('pt') ? 'pt' : 'en';
+  setLoadingScreenLocale(bootLang);
   mountLoadingScreen({
     title: 'Discordia',
     subtitle:
@@ -870,6 +911,7 @@ async function bootstrap(): Promise<void> {
   withSystem(BombSystem);
   withSystem(BombAimSpineSystem);
   withSystem(BgmSystem);
+  withSystem(NotaSystem);
 
   configure({ canvas: '#game-canvas' });
 
@@ -886,8 +928,8 @@ async function bootstrap(): Promise<void> {
 
   // City exclusion zone — registered directly in the occupancy registry before
   // any StaticSpawner samples positions. Central walled city is at the origin
-  // (matches <SpawnExclusion at="0 0" radius="42"> in public/world/cities/discordia.xml).
-  const villageZones: Array<[number, number, number]> = [[0, 0, 42]];
+  // (matches <SpawnExclusion at="0 0" radius="84"> in public/world/cities/discordia.xml).
+  const villageZones: Array<[number, number, number]> = [[0, 0, 84]];
   for (const [x, z, r] of villageZones) {
     registerSpawnFootprint(state, x, z, r);
   }
@@ -916,6 +958,23 @@ async function bootstrap(): Promise<void> {
     }
   }
   console.info(`[simple-rpg] Loaded ${questCount} quests`);
+
+  // A Nota (GDD F1): quests de traçado passam a contar por [F] no marco, não
+  // por proximidade — o gesto é o sistema-assinatura do jogo.
+  initNota(state);
+
+  // Estado da Nota: marcos anotados + biomas fixados. É estado de *mundo*, não
+  // do jogador, mas viaja no mesmo save (contratos-de-dados.md §Estado de A Nota).
+  registerSaveSerializer(state, 'simple-rpg-nota', {
+    serialize: (s, eid) => {
+      if (s.getEntityByName('hero') !== eid) return null;
+      return notaSnapshot();
+    },
+    deserialize: (s, eid, data) => {
+      if (s.getEntityByName('hero') !== eid) return;
+      restoreNota(s, (data ?? {}) as Partial<NotaSnapshot>);
+    },
+  });
 
   // Persist merchant progress that lives outside ECS (heroStats.ringOwned /
   // swordLevel) so re-loading can't re-grant the ring (speed compounding) or
@@ -1070,6 +1129,13 @@ async function bootstrap(): Promise<void> {
     if (h) addItem(state, h, id, n);
   });
   registerDebugAction(state, 'gold', (n = 100) => addGold(n));
+  // A Nota: __VIBEGAME__.debug.getVar('nota') → { marked, fixed, signed }
+  registerDebugVar(state, 'nota', () => ({
+    ...notaSnapshot(),
+    progress: Object.fromEntries(
+      BIOME_IDS.map((b) => [b, `${biomeProgress(b)}/3`])
+    ),
+  }));
 
   // Load data-driven RPG presets (boss/goblin/slime) into the DataRegistry
   // before runtime.start() parses the scene.
@@ -1099,6 +1165,8 @@ async function bootstrap(): Promise<void> {
       addWood(1);
       addItem(state, hero, 'wood', 1);
       notifyResourceHarvested(state, 'wood');
+      const flavour = biomeHarvestKind('wood', x, z);
+      if (flavour) notifyResourceHarvested(state, flavour);
       spawnFloatingText(state, '+1 Wood', {
         x,
         y: y + 1.5,
@@ -1116,6 +1184,8 @@ async function bootstrap(): Promise<void> {
       addStone(1);
       addItem(state, hero, 'stone', 1);
       notifyResourceHarvested(state, 'stone');
+      const flavour = biomeHarvestKind('stone', x, z);
+      if (flavour) notifyResourceHarvested(state, flavour);
       spawnFloatingText(state, '+1 Stone', {
         x,
         y: y + 1.2,
@@ -1292,6 +1362,7 @@ if (import.meta.hot) {
       clearAbilityBar();
       clearHotbar();
       clearMelee();
+      clearNota();
       disposeAllRuntimes();
     } catch (e) {
       console.error('[VibeGame] HMR dispose failed:', e);

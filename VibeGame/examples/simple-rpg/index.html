@@ -103,7 +103,7 @@
 
          MAPAS MODULARES (public/world/ — ver context.md lá):
            environment.xml · cities/discordia.xml · cities/town-demo.xml
-           spawn/ring.xml · paths/trails.xml · frontier/ridges.xml
+           spawn/ring.xml · paths/network.xml · paths/trails.xml · frontier/ridges.xml
            vegetation/{forest,desert,swamp,peaks}.xml
            landmarks/{forest,desert,swamp,peaks}.xml
            creatures/enemies.xml · creatures/bosses.xml · ai/npcs.xml
@@ -112,9 +112,9 @@
 
          CONTRATOS COM src/main.ts (não alterar sem sincronizar):
            · name="hero" / name="boss" / name="merchant"
-           · SpawnExclusion at="0 0" radius="42" (espelha villageZones)
-           · Portões cardeais na muralha ±32 (RESPAWN_POINTS usa ±39)
-           · Banda de goblins do norte começa em z>=40 (segurança do respawn)
+           · SpawnExclusion at="0 0" radius="84" (espelha villageZones)
+           · Portões cardeais na muralha ±64 (RESPAWN_POINTS usa ±78)
+           · Banda de goblins do norte começa em z>=80 (segurança do respawn)
            · dialogue-id de cada NPC == id nos JSON em src/data/quests/
          ================================================================== -->
     <Scene
@@ -170,7 +170,7 @@
            ============================================================ -->
         <Terrain
           pos="0 0 0"
-          world-size="2000"
+          world-size="4000"
           max-height="200"
           levels="4"
           resolution="64"
@@ -208,6 +208,7 @@
 
       <Include src="/world/cities/discordia.xml"></Include>
       <Include src="/world/spawn/ring.xml"></Include>
+      <Include src="/world/paths/network.xml"></Include>
       <Include src="/world/paths/trails.xml"></Include>
 
       <!-- Biomas: vegetação (tapete + dossel) e landmarks (destinos) em
@@ -237,7 +238,7 @@
         pitch="0.32"
         fov="64"
         near="0.12"
-        far="420"
+        far="840"
         follow-lag="0.18"
         turn-lag="0.38"
         mouse-sensitivity="0.003"
@@ -283,6 +284,13 @@
           range="4.5"
           position="bottom-center"
         ></InteractionPrompt>
+
+        <!-- Navegação de missão: seta screen-space para o marcador rastreado
+           (fora do ecrã encosta à borda e aponta) + canto com as missões
+           ativas. Os pontos no minimapa/bússola vêm do mesmo registo de
+           waypoints (QuestBeaconSystem). -->
+        <WaypointArrow margin="64"></WaypointArrow>
+        <QuestTracker anchor="top-right" max-rows="4"></QuestTracker>
 
         <!-- Diálogo (instância única). QuestTriggerSystem abre ao [F] perto
            de um <DialogueNPC>; QuestsTab lista as quests ativas. -->

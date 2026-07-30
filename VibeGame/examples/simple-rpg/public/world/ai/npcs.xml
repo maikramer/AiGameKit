@@ -1,7 +1,7 @@
 <!--
   World fragment loaded via Include src= (see index.html shell).
   Edit this file — do not paste into index.html.
-  Cell coords for CityGrid: space-separated (at="2 1").
+  Cell coords for CityGrid: space-separated (at="4 2").
 -->
 <!-- NPCs Scene (name=/dialogue-id). JSON quests ficam em src/data/quests/. -->
       <!-- GRUPO "quest-npcs": NPCs de quest (3 por bioma) + NPCs especiais
@@ -9,197 +9,217 @@
       <Group name="quest-npcs" pos="0 0 0">
         <!-- ============================================================
            §10 NPCs DE QUEST — 3 por bioma, perto de cada portão. Cada
-           um = <Composition> com torso colorido por bioma +
+           um = <GameObject> com <GLTFLoader> (modelo de aldeão rigado) +
            <DialogueNPC>. dialogue-id == quest id (JSON em
            src/data/quests/). [F] abre o diálogo.
+
+           NÃO pôr script= nestes GameObjects: o gltf-xml só liga o idle
+           automático em entidades sem MonoBehaviour, e o virar-se para o
+           jogador já é do motor (QuestGiverFacingSystem). Com script eles
+           voltariam a ficar em pose fixa.
+
+           marker-height = altura do balão !/?/✓ acima da origem (pés).
            ============================================================ -->
         <!-- Floresta (norte) -->
-        <Composition
-          name="npc_forest_wolves"
-          place="at: -8 30; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        <GameObject name="npc_forest_wolves" place="at: -16 60; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_guard_lod0.glb"
+            lod1-url="/assets/meshes/npc_guard_lod1.glb"
+            lod2-url="/assets/meshes/npc_guard_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="forest_wolves"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#5a3a20"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#3a6a3a"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#ddccbb"></Sphere>
-        </Composition>
-        <Composition
-          name="npc_forest_shades"
-          place="at: 8 34; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        </GameObject>
+        <GameObject name="npc_forest_shades" place="at: 16 68; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_healer_lod0.glb"
+            lod1-url="/assets/meshes/npc_healer_lod1.glb"
+            lod2-url="/assets/meshes/npc_healer_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="forest_shades"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#5a3a20"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#6a3a8a"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#ddccbb"></Sphere>
-        </Composition>
-        <Composition
-          name="npc_forest_darkwood"
-          place="at: 0 50; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        </GameObject>
+        <GameObject name="npc_forest_darkwood" place="at: 0 100; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_blacksmith_lod0.glb"
+            lod1-url="/assets/meshes/npc_blacksmith_lod1.glb"
+            lod2-url="/assets/meshes/npc_blacksmith_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="forest_darkwood"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#5a3a20"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#7a5230"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#ddccbb"></Sphere>
-        </Composition>
+        </GameObject>
 
         <!-- Deserto (leste) -->
-        <Composition
-          name="npc_desert_scorpions"
-          place="at: 30 -8; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        <GameObject name="npc_desert_scorpions" place="at: 60 -16; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_guard_lod0.glb"
+            lod1-url="/assets/meshes/npc_guard_lod1.glb"
+            lod2-url="/assets/meshes/npc_guard_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="desert_scorpions"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a5a30"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#d98a2a"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#e8d8b0"></Sphere>
-        </Composition>
-        <Composition
-          name="npc_desert_bandits"
-          place="at: 34 8; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        </GameObject>
+        <GameObject name="npc_desert_bandits" place="at: 68 16; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_blacksmith_lod0.glb"
+            lod1-url="/assets/meshes/npc_blacksmith_lod1.glb"
+            lod2-url="/assets/meshes/npc_blacksmith_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="desert_bandits"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a5a30"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#c46a1a"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#e8d8b0"></Sphere>
-        </Composition>
-        <Composition
-          name="npc_desert_ruins"
-          place="at: 50 0; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        </GameObject>
+        <!-- Junto às Ruínas do Templo (landmarks/desert §5) — nunca na artéria. -->
+        <GameObject name="npc_desert_ruins" place="at: 284 104; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_elder_lod0.glb"
+            lod1-url="/assets/meshes/npc_elder_lod1.glb"
+            lod2-url="/assets/meshes/npc_elder_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="desert_ruins"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a5a30"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#e0a040"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#e8d8b0"></Sphere>
-        </Composition>
+        </GameObject>
 
         <!-- Pântano (sul) -->
-        <Composition
-          name="npc_swamp_boglings"
-          place="at: -8 -30; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        <GameObject name="npc_swamp_boglings" place="at: -16 -60; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_healer_lod0.glb"
+            lod1-url="/assets/meshes/npc_healer_lod1.glb"
+            lod2-url="/assets/meshes/npc_healer_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="swamp_boglings"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#4a4a3a"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#5a7a4a"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#b0c0a0"></Sphere>
-        </Composition>
-        <Composition
-          name="npc_swamp_bogwarden"
-          place="at: 8 -34; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        </GameObject>
+        <GameObject name="npc_swamp_bogwarden" place="at: 16 -68; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_guard_lod0.glb"
+            lod1-url="/assets/meshes/npc_guard_lod1.glb"
+            lod2-url="/assets/meshes/npc_guard_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="swamp_bogwarden"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#4a4a3a"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#3a5a4a"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#b0c0a0"></Sphere>
-        </Composition>
-        <Composition
-          name="npc_swamp_bogmoss"
-          place="at: 0 -50; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        </GameObject>
+        <GameObject name="npc_swamp_bogmoss" place="at: 0 -100; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_elder_lod0.glb"
+            lod1-url="/assets/meshes/npc_elder_lod1.glb"
+            lod2-url="/assets/meshes/npc_elder_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="swamp_bogmoss"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#4a4a3a"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#6a8a5a"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#b0c0a0"></Sphere>
-        </Composition>
+        </GameObject>
 
         <!-- Picos Gelados (oeste) -->
-        <Composition
-          name="npc_peaks_goblins"
-          place="at: -30 -8; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        <GameObject name="npc_peaks_goblins" place="at: -60 -16; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_guard_lod0.glb"
+            lod1-url="/assets/meshes/npc_guard_lod1.glb"
+            lod2-url="/assets/meshes/npc_guard_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="peaks_goblins"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a8290"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#4a6a8a"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
-        </Composition>
-        <Composition
-          name="npc_peaks_frost"
-          place="at: -34 8; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        </GameObject>
+        <GameObject name="npc_peaks_frost" place="at: -68 16; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_healer_lod0.glb"
+            lod1-url="/assets/meshes/npc_healer_lod1.glb"
+            lod2-url="/assets/meshes/npc_healer_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="peaks_frost"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a8290"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#5a8ab0"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
-        </Composition>
-        <Composition
-          name="npc_peaks_ogre"
-          place="at: -50 0; align-to-terrain: 1"
-          body="none"
-          collider="none"
-        >
+        </GameObject>
+        <GameObject name="npc_peaks_ogre" place="at: -100 0; align-to-terrain: 1">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/npc_blacksmith_lod0.glb"
+            lod1-url="/assets/meshes/npc_blacksmith_lod1.glb"
+            lod2-url="/assets/meshes/npc_blacksmith_lod2.glb"
+            lod-threshold-near="22"
+            lod-threshold-mid="60"
+          ></GLTFLoader>
           <DialogueNPC
             dialogue-id="peaks_ogre"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
-          <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a8290"></Box>
-          <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#3a4a6a"></Box>
-          <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
-        </Composition>
+        </GameObject>
         <!-- ============================================================
            §10b BATEDORES — um por bioma, junto ao portão. Dão quests de
            objetivo `visit`: percorrer os marcos do bioma (landmarks/*.xml).
@@ -209,7 +229,7 @@
            ============================================================ -->
         <GameObject
           name="npc_forest_survey"
-          place="at: 16 40; align-to-terrain: 1"
+          place="at: 32 80; align-to-terrain: 1"
         >
           <GLTFLoader
             role="visual"
@@ -223,11 +243,12 @@
             dialogue-id="forest_survey"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
         </GameObject>
         <GameObject
           name="npc_desert_survey"
-          place="at: 40 -16; align-to-terrain: 1"
+          place="at: 80 -32; align-to-terrain: 1"
         >
           <GLTFLoader
             role="visual"
@@ -241,11 +262,12 @@
             dialogue-id="desert_survey"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
         </GameObject>
         <GameObject
           name="npc_swamp_survey"
-          place="at: -16 -40; align-to-terrain: 1"
+          place="at: -32 -80; align-to-terrain: 1"
         >
           <GLTFLoader
             role="visual"
@@ -259,11 +281,12 @@
             dialogue-id="swamp_survey"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
         </GameObject>
         <GameObject
           name="npc_peaks_survey"
-          place="at: -40 16; align-to-terrain: 1"
+          place="at: -80 32; align-to-terrain: 1"
         >
           <GLTFLoader
             role="visual"
@@ -277,6 +300,7 @@
             dialogue-id="peaks_survey"
             portrait-url=""
             voice-sfx=""
+            marker-height="2.5"
           ></DialogueNPC>
         </GameObject>
       </Group>

@@ -1,17 +1,17 @@
 <!--
   Discordia (walled city) — shell. District Compositions live under cities/discordia/*.xml.
-  Contracts: SpawnExclusion r=42, gates ±32 (sync main.ts RESPAWN_POINTS).
+  Contracts: SpawnExclusion r=84, gates ±64 (sync main.ts RESPAWN_POINTS). World 2×.
   Edit houses → discordia/houses.xml; plaza/landmarks → discordia/utilities.xml; etc.
 -->
 <!-- GRUPO "city": contentor. Includes = distritos. place=at continua em coords mundo. -->
 <Group name="city" pos="0 0 0">
-  <!-- §4 CIDADE MURADA (VALE) — muralha ±32; praça; vias; distritos. -->
-  <SpawnExclusion at="0 0" radius="42"></SpawnExclusion>
+  <!-- §4 CIDADE MURADA (VALE) — muralha ±64; praça; vias; distritos. -->
+  <SpawnExclusion at="0 0" radius="84"></SpawnExclusion>
   <TerrainPad
     at="0 0"
-    size="96 96"
-    falloff="16"
-    corner-radius="14"
+    size="192 192"
+    falloff="32"
+    corner-radius="28"
   ></TerrainPad>
 
   <Include src="/world/cities/discordia/walls.xml"></Include>

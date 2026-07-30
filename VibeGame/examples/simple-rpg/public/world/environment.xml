@@ -1,7 +1,7 @@
 <!--
   World fragment loaded via Include src= (see index.html shell).
   Edit this file — do not paste into index.html.
-  Cell coords for CityGrid: space-separated (at="2 1").
+  Cell coords for CityGrid: space-separated (at="4 2").
 -->
       <Group name="environment" pos="0 0 0">
         <!-- ============================================================
@@ -71,7 +71,7 @@
         <BiomeRegion
           id="dark-forest"
           type="1"
-          polygon="[-28,28;28,28;520,520;-520,520]"
+          polygon="[-56,56;56,56;1040,1040;-1040,1040]"
           tint="#1a3320"
           fog-color="#16241c"
           fog-density="0.012"
@@ -86,7 +86,7 @@
         <BiomeRegion
           id="desert"
           type="2"
-          polygon="[28,-28;28,28;520,520;520,-520]"
+          polygon="[56,-56;56,56;1040,1040;1040,-1040]"
           tint="#c2a878"
           fog-color="#d8c89a"
           fog-density="0.006"
@@ -101,7 +101,7 @@
         <BiomeRegion
           id="swamp"
           type="3"
-          polygon="[-28,-28;28,-28;520,-520;-520,-520]"
+          polygon="[-56,-56;56,-56;1040,-1040;-1040,-1040]"
           tint="#3a4a30"
           fog-color="#16241a"
           fog-density="0.016"
@@ -115,7 +115,7 @@
         <BiomeRegion
           id="frozen-peaks"
           type="4"
-          polygon="[-28,-28;-28,28;-520,520;-520,-520]"
+          polygon="[-56,-56;-56,56;-1040,1040;-1040,-1040]"
           tint="#cdd9e6"
           fog-color="#dfe8f2"
           fog-density="0.005"

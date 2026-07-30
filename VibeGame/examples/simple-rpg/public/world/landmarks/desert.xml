@@ -1,37 +1,54 @@
 <!--
   Landmarks do DESERTO (Leste). Loaded via Include.
-  O arco monumental e o obelisco são <Composition> de primitivas: as
-  formações rocks3d (form_arch_3 …) só têm GLB de colisão no bundle de
-  assets, sem visual — ver public/world/context.md.
+  Arco (§1, sandstone_arch) e obelisco solar (§3, desert_obelisk) migrados
+  de <Composition> de primitivas para GLB real (lod0-2 + collision) —
+  confirmado em public/world/ASSETS_REGISTRY.md. form_arch_3 (rocks3d,
+  arco natural mais pequeno, ~3.2×2.2×1.6 m) não substitui nenhum dos
+  dois: sandstone_arch/desert_obelisk já são os assets dedicados a este
+  landmark. cactus, scorpion_nest e ruin_pillar já vinham GLTFLoader.
   Coordenadas espelhadas em FLAT_ZONES de scripts/sculpt_terrain.py.
 -->
 <Group name="biome.desert.landmarks" pos="0 0 0">
   <!-- ============================================================
        §1 ARCO MONUMENTAL (95, 32)
-       Portal de arenito de ~10 m — o marco que se vê da estrada
-       leste e diz "há alguma coisa lá à frente".
+       Portal de arenito de ~10 m (sandstone_arch, GLB real) — o marco
+       que se vê da estrada leste e diz "há alguma coisa lá à frente".
        ============================================================ -->
-  <Composition
+  <!-- ⚠️ `sandstone_arch_collision.glb` NÃO serve de collider: é um casco
+       decimado que preenche 82 % da bbox — o portal estava tapado de y=0 a
+       y=10 e não se passava por baixo. O mesh visual tem os pilares em
+       x ≈ ±2.85 (largura 1.34) e o vão livre em x ∈ [-2.18, 2.18] (4.36 m).
+       Colisão = duas caixas-pilar, rodadas com o arco. -->
+  <GameObject
     name="desert-arch"
-    place="at: 95 32; align-to-terrain: 0"
+    place="at: 190 64; align-to-terrain: 0"
     transform="rotation: 0 35 0"
-    body="fixed"
-    collider="auto"
   >
-    <!-- pés -->
-    <Box pos="-5.2 3.4 0" size="2.4 6.8 2.6" color="#c2a06a"></Box>
-    <Box pos="5.2 3.4 0" size="2.4 6.8 2.6" color="#b8965f"></Box>
-    <!-- ombros inclinados -->
-    <Box pos="-3.6 6.9 0" size="2.0 1.6 2.4" rotation="0 0 -0.28" color="#c2a06a"></Box>
-    <Box pos="3.6 6.9 0" size="2.0 1.6 2.4" rotation="0 0 0.28" color="#b8965f"></Box>
-    <!-- lintel -->
-    <Box pos="0 8.2 0" size="12.4 1.7 2.8" color="#cbaa74"></Box>
-    <Box pos="0 9.3 0" size="10.2 0.8 2.4" color="#b8965f"></Box>
-    <!-- blocos caídos na base -->
-    <Box pos="-7.4 0.5 1.8" size="1.8 1.0 1.6" rotation="0.1 0.4 0.06" color="#a88a58"></Box>
-    <Box pos="7.0 0.42 -2.1" size="1.5 0.85 1.4" rotation="-0.08 -0.6 0.1" color="#a88a58"></Box>
-  </Composition>
-  <SpawnExclusion at="95 32" radius="12"></SpawnExclusion>
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/sandstone_arch_lod0.glb"
+      lod1-url="/assets/meshes/sandstone_arch_lod1.glb"
+      lod2-url="/assets/meshes/sandstone_arch_lod2.glb"
+      lod-threshold-near="55"
+      lod-threshold-mid="150"
+    ></GLTFLoader>
+  </GameObject>
+  <!-- Pilares: local (±2.85, 0) rodado 35° → offset mundo (±2.34, ∓1.64). -->
+  <GameObject
+    name="desert-arch-pillar-a"
+    place="at: 194.68 60.74; align-to-terrain: 0"
+    transform="rotation: 0 35 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 1.5 7.0 2.8; pos-offset-y: 3.5"
+  ></GameObject>
+  <GameObject
+    name="desert-arch-pillar-b"
+    place="at: 185.32 67.26; align-to-terrain: 0"
+    transform="rotation: 0 35 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 1.5 7.0 2.8; pos-offset-y: 3.5"
+  ></GameObject>
+  <SpawnExclusion at="190 64" radius="24"></SpawnExclusion>
 
   <!-- ============================================================
        §2 CARAVANA DESTRUÍDA (108, -18)
@@ -40,7 +57,7 @@
        ============================================================ -->
   <GameObject
     name="desert-caravan-wreck"
-    place="at: 108 -18; align-to-terrain: 0"
+    place="at: 216 -36; align-to-terrain: 0"
     transform="rotation: 0 -24 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/market_stall_collision.glb; mesh-anchor: base"
@@ -54,69 +71,57 @@
       lod-threshold-mid="120"
     ></GLTFLoader>
   </GameObject>
-  <Composition
-    place="at: 111 -20; align-to-terrain: 1"
-    body="fixed"
-    collider="none"
-  >
-    <!-- roda partida + eixo -->
-    <Cylinder pos="0 0.75 0" size="1.5 1.5 0.18" rotation="0 0 0.18" color="#6b4c2e"></Cylinder>
-    <Box pos="-1.4 0.2 0.2" size="2.6 0.16 0.16" rotation="0 0.3 0" color="#5a4026"></Box>
-    <!-- lona rasgada -->
-    <Box pos="1.6 0.35 -1.2" size="3.0 0.06 2.2" rotation="0.12 0.5 0.1" color="#b09468"></Box>
-    <!-- ossadas -->
-    <Box pos="-2.2 0.12 -1.8" size="1.1 0.12 0.12" rotation="0 0.9 0" color="#ded6c4"></Box>
-    <Box pos="-1.8 0.12 -2.2" size="0.9 0.12 0.12" rotation="0 -0.4 0" color="#ded6c4"></Box>
-    <Sphere pos="-2.6 0.18 -2.1" size="0.2" color="#e6dfcf"></Sphere>
-  </Composition>
   <GameObject
-    place="at: 105.5 -16; align-to-terrain: 1"
+    place="at: 211 -32; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod1.glb" lod1-url="/assets/meshes/wooden_crate_lod2.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
-    place="at: 110 -14.5; align-to-terrain: 1"
+    place="at: 220 -29; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod1.glb" lod1-url="/assets/meshes/wooden_barrel_lod2.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="108 -18" radius="9"></SpawnExclusion>
+  <SpawnExclusion at="216 -36" radius="18"></SpawnExclusion>
 
   <!-- ============================================================
        §3 OBELISCO SOLAR (120, 40)
-       Agulha de 12 m sobre plataforma, anel de pedras. Recompensa
+       Agulha de arenito ~8 m (desert_obelisk, GLB real). Recompensa
        mística ([F]) para quem faz o desvio.
        ============================================================ -->
-  <Composition
+  <GameObject
     name="desert-sun-obelisk"
-    place="at: 120 40; align-to-terrain: 0"
-    body="fixed"
-    collider="auto"
+    place="at: 240 80; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/desert_obelisk_collision.glb; mesh-anchor: base"
   >
-    <Box pos="0 0.3 0" size="7.0 0.6 7.0" color="#b59a68"></Box>
-    <Box pos="0 0.85 0" size="5.2 0.6 5.2" color="#c6ab78"></Box>
-    <Box pos="0 6.4 0" size="1.5 10.6 1.5" color="#d0b585"></Box>
-    <Box pos="0 12.1 0" size="0.95 1.3 0.95" rotation="0 0.78 0" color="#e0c896"></Box>
-    <Sphere pos="0 13.1 0" size="0.42" color="#ffd98a"></Sphere>
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/desert_obelisk_lod0.glb"
+      lod1-url="/assets/meshes/desert_obelisk_lod1.glb"
+      lod2-url="/assets/meshes/desert_obelisk_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <Composition place="at: 240 80; align-to-terrain: 0" body="none" collider="none">
     <PointLight
-      pos="0 13.1 0"
+      pos="0 8.1 0"
       point-light="color: 0xffc766; intensity: 1.6; distance: 22; decay: 2"
     ></PointLight>
   </Composition>
   <GameObject
     name="desert-sun-relic"
-    place="at: 124 37; align-to-terrain: 1"
+    place="at: 248 74; align-to-terrain: 1"
     script="poi/sun-relic.ts"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
   ></GameObject>
-  <GameObject place="at: 120 40">
-    <ParticleSystem preset="sparkle" transform="pos: 0 13.4 0"></ParticleSystem>
+  <GameObject place="at: 240 80">
+    <ParticleSystem preset="sparkle" transform="pos: 0 8.4 0"></ParticleSystem>
   </GameObject>
-  <SpawnExclusion at="120 40" radius="10"></SpawnExclusion>
+  <SpawnExclusion at="240 80" radius="20"></SpawnExclusion>
 
   <!-- ============================================================
        §4 CISTERNA SECA (78, -58)
@@ -124,7 +129,7 @@
        ============================================================ -->
   <GameObject
     name="desert-dry-cistern"
-    place="at: 78 -58; align-to-terrain: 1"
+    place="at: 156 -116; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/medieval_well_collision.glb; mesh-anchor: base"
   >
@@ -135,61 +140,45 @@
       lod2-url="/assets/meshes/medieval_well_lod2.glb"
     ></GLTFLoader>
   </GameObject>
-  <Composition
-    place="at: 78 -58; align-to-terrain: 1"
-    body="none"
-    collider="none"
-  >
-    <!-- bacia rachada à volta do poço -->
-    <Box pos="3.4 0.06 0.8" size="3.6 0.1 2.4" rotation="0 0.2 0" color="#b6a077"></Box>
-    <Box pos="-3.0 0.06 -1.2" size="3.0 0.1 2.0" rotation="0 -0.3 0" color="#ab966f"></Box>
-  </Composition>
-  <GameObject place="at: 80.5 -60.5; align-to-terrain: 1">
+  <GameObject place="at: 161 -121; align-to-terrain: 1">
     <GLTFLoader role="visual" url="/assets/meshes/wooden_bench_lod1.glb" lod1-url="/assets/meshes/wooden_bench_lod2.glb" lod2-url="/assets/meshes/wooden_bench_lod2.glb"></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="78 -58" radius="7"></SpawnExclusion>
+  <SpawnExclusion at="156 -116" radius="14"></SpawnExclusion>
 
   <!-- ============================================================
        §5 RUÍNAS DO TEMPLO (150, 60)
        Fileira de pilares meio soterrados no fundo nordeste do
        deserto — silhueta contra a serra da borda.
        ============================================================ -->
-  <GameObject place="at: 144 56; align-to-terrain: 0" transform="rotation: 0 12 0"
+  <GameObject place="at: 288 112; align-to-terrain: 0" transform="rotation: 0 12 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: 150 58; align-to-terrain: 0" transform="rotation: 0 -20 0; scale: 1.25 1.25 1.25"
+  <GameObject place="at: 300 116; align-to-terrain: 0" transform="rotation: 0 -20 0; scale: 1.25 1.25 1.25"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: 156 62; align-to-terrain: 0" transform="rotation: 0 40 0"
+  <GameObject place="at: 312 124; align-to-terrain: 0" transform="rotation: 0 40 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: 152 67; align-to-terrain: 0" transform="rotation: 0 -8 0; scale: 0.9 0.9 0.9"
+  <GameObject place="at: 304 134; align-to-terrain: 0" transform="rotation: 0 -8 0; scale: 0.9 0.9 0.9"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <Composition
-    place="at: 150 62; align-to-terrain: 1"
-    body="none"
-    collider="none"
-  >
-    <Box pos="0 0.08 0" size="14 0.14 9" rotation="0 0.15 0" color="#bda684"></Box>
-  </Composition>
-  <SpawnExclusion at="150 61" radius="11"></SpawnExclusion>
+  <SpawnExclusion at="300 122" radius="22"></SpawnExclusion>
 
   <!-- ============================================================
        §6 OÁSIS (70, 46) — landmark existente
        <Lake> carva a bacia no terreno e enche de água animada.
        ============================================================ -->
   <Lake
-    at="70 46"
-    radius="7"
+    at="140 92"
+    radius="14"
     depth="2.4"
     water-offset="0.45"
     color="#3a9ab5"
@@ -199,8 +188,8 @@
     profile="tree"
     count="12"
     seed="7201"
-    region-min="60 0 36"
-    region-max="80 0 56"
+    region-min="120 0 72"
+    region-max="160 0 112"
     near-water="1"
     avoid-water="0"
     align-to-terrain="1"
@@ -211,7 +200,7 @@
     scale-max="1.9"
     avoid-overlaps="1"
     pick-strategy="random"
-    footprint-radius="1.1"
+    footprint-radius="2.2"
     max-distance="120"
     random-yaw="true"
     variation="rock"
@@ -227,8 +216,8 @@
     profile="tree"
     count="9"
     seed="327"
-    region-min="64 0 40"
-    region-max="76 0 52"
+    region-min="128 0 80"
+    region-max="152 0 104"
     in-water="1"
     align-to-terrain="0"
     max-slope-attempts="128"
@@ -243,43 +232,39 @@
       <GLTFLoader role="visual" url="/assets/meshes/lily_pad_lod1.glb" lod1-url="/assets/meshes/lily_pad_lod2.glb" lod2-url="/assets/meshes/lily_pad_lod2.glb"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
-  <!-- Palmeiras improvisadas: cactos altos não servem — juncos na margem. -->
+
+  <!-- Acampamento de bandidos: campfire_pit GLB + chama/luz + caixa. -->
+  <GameObject
+    place="at: 170.8 -73.2; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/campfire_pit_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/campfire_pit_lod0.glb"
+      lod1-url="/assets/meshes/campfire_pit_lod1.glb"
+      lod2-url="/assets/meshes/campfire_pit_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 170.8 -73.2; align-to-terrain: 1">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 0.30 0"
+      particle-emitter="preset: fire; emission-rate: 42; shape-radius: 0.32; start-life-min: 0.45; start-life-max: 1.25; start-speed-min: 1.2; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
   <Composition
-    place="at: 70 46; align-to-terrain: 1"
+    place="at: 170.8 -73.2; align-to-terrain: 1"
     body="none"
     collider="none"
   >
-    <Box pos="-5.4 0.5 1.2" size="0.08 1.0 0.08" rotation="0.1 0 0.08" color="#6a8a3a"></Box>
-    <Box pos="-5.1 0.55 1.6" size="0.08 1.1 0.08" rotation="-0.08 0 -0.1" color="#7a9a4a"></Box>
-    <Box pos="5.3 0.5 -1.0" size="0.08 1.0 0.08" rotation="0.06 0 0.12" color="#6a8a3a"></Box>
-    <Box pos="4.9 0.52 -1.5" size="0.08 1.05 0.08" rotation="-0.06 0 -0.09" color="#7a9a4a"></Box>
-  </Composition>
-
-  <!-- ============================================================
-       §7 ACAMPAMENTO DE BANDIDOS (85, -35) — landmark existente
-       ============================================================ -->
-  <Composition
-    place="at: 85 -35; align-to-terrain: 1"
-    body="fixed"
-    collider="none"
-  >
-    <Box pos="-2.6 0.9 0" size="2.6 0.08 2.4" rotation="0 0 0.8" color="#a8875a"></Box>
-    <Box pos="-1.0 0.9 0" size="2.6 0.08 2.4" rotation="0 0 -0.8" color="#987a4e"></Box>
-    <Box pos="-1.8 1.4 0" size="0.1 0.1 2.5" color="#5a3a20"></Box>
-    <Box pos="2.2 0.8 1.4" size="2.2 0.08 2.0" rotation="0 0.6 0.8" color="#a8875a"></Box>
-    <Box pos="3.4 0.8 0.6" size="2.2 0.08 2.0" rotation="0 0.6 -0.8" color="#987a4e"></Box>
-    <Cylinder pos="0.4 0.1 -1.6" size="0.7 0.8 0.2" color="#6f6a63"></Cylinder>
-    <Sphere pos="0.4 0.45 -1.6" size="0.32" color="#ff7722"></Sphere>
     <PointLight
-      pos="0.4 0.8 -1.6"
+      pos="0 0.7 0"
       point-light="color: 0xff8a33; intensity: 2.2; distance: 9; decay: 2"
     ></PointLight>
   </Composition>
-  <GameObject place="at: 85.4 -36.6">
-    <ParticleSystem preset="fire" transform="pos: 0 0.7 0"></ParticleSystem>
-  </GameObject>
   <GameObject
-    place="at: 88 -32; align-to-terrain: 1"
+    place="at: 176 -64; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
   >
@@ -290,14 +275,14 @@
       lod2-url="/assets/meshes/wooden_crate_lod2.glb"
     ></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="85 -35" radius="9"></SpawnExclusion>
+  <SpawnExclusion at="170 -70" radius="18"></SpawnExclusion>
 
   <!-- ============================================================
        §8 NINHO DE ESCORPIÕES (130, 8) — landmark existente
        ============================================================ -->
   <GameObject
     name="scorpion-nest"
-    place="at: 130 8; align-to-terrain: 1"
+    place="at: 260 16; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/scorpion_nest_collision.glb; mesh-anchor: base"
   >
@@ -308,9 +293,9 @@
       lod2-url="/assets/meshes/scorpion_nest_lod2.glb"
     ></GLTFLoader>
   </GameObject>
-  <GameObject place="at: 130 8">
+  <GameObject place="at: 260 16">
     <ParticleSystem preset="ground-dust" transform="pos: 0 0.3 0"></ParticleSystem>
   </GameObject>
-  <SpawnExclusion at="130 8" radius="7"></SpawnExclusion>
+  <SpawnExclusion at="260 16" radius="14"></SpawnExclusion>
 </Group>
 <!-- FIM biome.desert.landmarks -->

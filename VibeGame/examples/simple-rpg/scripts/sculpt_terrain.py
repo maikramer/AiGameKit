@@ -47,84 +47,84 @@ OUT_PNG = TERRAIN_DIR / "heightmap.png"
 TERRAIN_JSON = TERRAIN_DIR / "terrain.json"
 
 # --- contratos com o mundo (index.html / public/world) ------------------------
-CITY_KEEP_R = 72.0  # vale intocado: pad 96x96 + falloff 16 + folga
-CITY_BLEND_R = 116.0  # a partir daqui o relevo esculpido manda
+CITY_KEEP_R = 144.0  # vale intocado: pad 192x192 + falloff 32 + folga (world 2×)
+CITY_BLEND_R = 232.0  # a partir daqui o relevo esculpido manda
 VALLEY_Y = 36.0  # cota do vale central no heightmap original
 
 # Landmarks que precisam de chão plano (x, z, raio_núcleo, raio_falloff).
 # Coordenadas vindas de public/world/**.xml — manter sincronizado.
 FLAT_ZONES: list[tuple[float, float, float, float]] = [
     # --- Picos Gelados (landmarks/peaks.xml) ---
-    (-145.0, 6.0, 26.0, 22.0),  # arena do ogro
-    (-95.0, 13.5, 12.0, 14.0),  # jazida de cristais
-    (-108.0, 30.0, 14.0, 14.0),  # mina de cristal
-    (-86.0, 21.0, 12.0, 14.0),  # posto goblin
-    (-92.0, -34.0, 16.0, 16.0),  # lago gelado
-    (-78.0, -4.0, 7.0, 10.0),  # mojão 1
-    (-100.0, 3.0, 7.0, 10.0),  # mojão 2
-    (-122.0, -6.0, 7.0, 10.0),  # mojão 3
+    (-290.0, 12.0, 52.0, 44.0),  # arena do ogro
+    (-190.0, 27.0, 24.0, 28.0),  # jazida de cristais
+    (-216.0, 60.0, 28.0, 28.0),  # mina de cristal
+    (-172.0, 42.0, 24.0, 28.0),  # posto goblin
+    (-184.0, -68.0, 32.0, 32.0),  # lago gelado
+    (-156.0, -8.0, 14.0, 20.0),  # mojão 1
+    (-200.0, 6.0, 14.0, 20.0),  # mojão 2
+    (-244.0, -12.0, 14.0, 20.0),  # mojão 3
     # --- Floresta Sombria (landmarks/forest.xml) ---
-    (-8.0, 133.0, 20.0, 20.0),  # clareira da bruxa
-    (8.0, 145.0, 14.0, 16.0),  # chefe bruxa
-    (18.0, 72.0, 10.0, 12.0),  # bosque encantado
-    (-46.0, 87.0, 14.0, 16.0),  # posto avançado arruinado
-    (52.0, 118.0, 13.0, 15.0),  # círculo de menires
-    (-30.0, 64.0, 14.0, 14.0),  # acampamento de lenhador
-    (14.0, 96.0, 9.0, 12.0),  # poço da encruzilhada
+    (-16.0, 266.0, 40.0, 40.0),  # clareira da bruxa
+    (16.0, 290.0, 28.0, 32.0),  # chefe bruxa
+    (36.0, 144.0, 20.0, 24.0),  # bosque encantado
+    (-92.0, 174.0, 28.0, 32.0),  # posto avançado arruinado
+    (104.0, 236.0, 26.0, 30.0),  # círculo de menires
+    (-60.0, 128.0, 28.0, 28.0),  # acampamento de lenhador
+    (28.0, 192.0, 18.0, 24.0),  # poço da encruzilhada
     # --- Deserto (landmarks/desert.xml) ---
-    (95.0, 32.0, 16.0, 18.0),  # arco monumental
-    (70.0, 46.0, 16.0, 16.0),  # oásis
-    (85.0, -35.0, 14.0, 16.0),  # acampamento de bandidos
-    (130.0, 8.0, 12.0, 14.0),  # ninho de escorpiões
-    (145.0, -6.0, 20.0, 20.0),  # chefe verme
-    (108.0, -18.0, 13.0, 14.0),  # caravana destruída
-    (120.0, 40.0, 13.0, 15.0),  # obelisco solar
-    (78.0, -58.0, 11.0, 13.0),  # cisterna seca
-    (150.0, 61.0, 15.0, 16.0),  # ruínas do templo
+    (190.0, 64.0, 32.0, 36.0),  # arco monumental
+    (140.0, 92.0, 32.0, 32.0),  # oásis
+    (170.0, -70.0, 28.0, 32.0),  # acampamento de bandidos
+    (260.0, 16.0, 24.0, 28.0),  # ninho de escorpiões
+    (290.0, -12.0, 40.0, 40.0),  # chefe verme
+    (216.0, -36.0, 26.0, 28.0),  # caravana destruída
+    (240.0, 80.0, 26.0, 30.0),  # obelisco solar
+    (156.0, -116.0, 22.0, 26.0),  # cisterna seca
+    (300.0, 122.0, 30.0, 32.0),  # ruínas do templo
     # --- Pântano (landmarks/swamp.xml) ---
-    (8.0, -95.0, 20.0, 18.0),  # lagoa grande
-    (-34.0, -78.0, 14.0, 14.0),  # lagoa oeste
-    (42.0, -118.0, 14.0, 14.0),  # lagoa leste
-    (9.0, -113.0, 12.0, 16.0),  # passadiço
-    (10.0, -130.0, 16.0, 18.0),  # choça
-    (-6.0, -145.0, 16.0, 18.0),  # chefe bog warden
-    (26.0, -92.0, 12.0, 13.0),  # barca encalhada
-    (-28.0, -108.0, 13.0, 14.0),  # cemitério afundado
-    (-48.0, -132.0, 13.0, 14.0),  # altar de ossos
-    (34.0, -124.0, 12.0, 13.0),  # ruína submersa
+    (16.0, -190.0, 40.0, 36.0),  # lagoa grande
+    (-68.0, -156.0, 28.0, 28.0),  # lagoa oeste
+    (84.0, -236.0, 28.0, 28.0),  # lagoa leste
+    (18.0, -226.0, 24.0, 32.0),  # passadiço
+    (20.0, -260.0, 32.0, 36.0),  # choça
+    (-12.0, -290.0, 32.0, 36.0),  # chefe bog warden
+    (52.0, -184.0, 24.0, 26.0),  # barca encalhada
+    (-56.0, -216.0, 26.0, 28.0),  # cemitério afundado
+    (-96.0, -264.0, 26.0, 28.0),  # altar de ossos
+    (68.0, -248.0, 24.0, 26.0),  # ruína submersa
     # --- Vale — laguinho NW e cabeceiras das pontes ---
-    (-40.0, 52.0, 14.0, 14.0),
-    (2.0, -58.0, 16.0, 18.0),
-    (-54.0, -1.0, 16.0, 18.0),
+    (-80.0, 104.0, 28.0, 28.0),
+    (4.0, -116.0, 32.0, 36.0),
+    (-108.0, -2.0, 32.0, 36.0),
 ]
 
 # Path do <River> em spawn/ring.xml (x z x z …). O corredor fluvial é aplanado
 # num perfil descendente para a água não ter de subir as cristas novas.
 RIVER_PATH: list[tuple[float, float]] = [
-    (205, -62),
-    (170, -55),
-    (140, -45),
-    (110, -38),
-    (82, -40),
-    (48, -58),
-    (12, -62),
-    (-20, -62),
-    (-45, -66),
-    (-58, -58),
-    (-58, -20),
-    (-58, 5),
-    (-62, 22),
-    (-75, 32),
-    (-90, 48),
-    (-110, 62),
-    (-130, 80),
-    (-155, 105),
-    (-180, 135),
-    (-210, 165),
-    (-241, 192),
+    (410, -124),
+    (340, -110),
+    (280, -90),
+    (220, -76),
+    (164, -80),
+    (96, -116),
+    (24, -124),
+    (-40, -124),
+    (-90, -132),
+    (-116, -116),
+    (-116, -40),
+    (-116, 10),
+    (-124, 44),
+    (-150, 64),
+    (-180, 96),
+    (-220, 124),
+    (-260, 160),
+    (-310, 210),
+    (-360, 270),
+    (-420, 330),
+    (-482, 384),
 ]
-RIVER_CORRIDOR_W = 15.0  # meia-largura do leito aplanado (m)
-RIVER_CORRIDOR_FALLOFF = 26.0  # blend de volta ao relevo (m)
+RIVER_CORRIDOR_W = 30.0  # meia-largura do leito aplanado (m) — world 2×
+RIVER_CORRIDOR_FALLOFF = 52.0  # blend de volta ao relevo (m)
 
 
 def smoothstep(edge0: float, edge1: float, x: np.ndarray) -> np.ndarray:
@@ -169,7 +169,7 @@ def build_grid(n: int, world: float) -> tuple[np.ndarray, np.ndarray]:
 
 def wedge_weights(x: np.ndarray, z: np.ndarray) -> dict[str, np.ndarray]:
     """Peso suave de cada cunha cardeal + diagonais (soma ≈ 1)."""
-    taper = 26.0
+    taper = 52.0
     ax, az = np.abs(x), np.abs(z)
     north = smoothstep(0.0, taper, z - ax)
     south = smoothstep(0.0, taper, -z - ax)

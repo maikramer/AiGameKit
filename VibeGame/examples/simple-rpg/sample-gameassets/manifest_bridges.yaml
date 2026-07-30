@@ -1,0 +1,52 @@
+# Filtro pontes rio — defs canónicas em game.yaml.
+# Regenerar: gameassets resume --profile game.yaml --manifest this
+# Rio: width=8 + bank 3.2×2 = carve 14.4; size_m span 18×2.5×3.6.
+assets:
+- id: river_bridge_wood
+  idea: low wooden plank river bridge eighteen meters long, orthographic side profile,
+    flat walkable deck about one meter above ground, gentle approach ramps on BOTH
+    ends meeting the ground plane for walk-on access, continuous surface ground-ramp-deck-ramp-ground,
+    four timber posts SYNMMETRIC two-by-two under midspan, low handrails, warm brown
+    boards, freestanding, game-ready
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  collision:
+    mode: envelope
+    max_faces: 256
+    voxel_size: 0.1
+    inflate: 0.08
+  omni:
+    control_type: bbox
+    size_m:
+    - 18.0
+    - 2.5
+    - 3.6
+- id: river_bridge_stone
+  idea: low stone slab river bridge eighteen meters long, orthographic side profile,
+    flat walkable grey stone deck about one meter above ground, gentle stone approach
+    ramps on BOTH ends meeting the ground plane for walk-on access, continuous surface
+    ground-ramp-deck-ramp-ground, four square stone piers SYNMMETRIC under midspan,
+    low parapets, freestanding, game-ready
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  collision:
+    mode: envelope
+    max_faces: 256
+    voxel_size: 0.1
+    inflate: 0.08
+  omni:
+    control_type: bbox
+    size_m:
+    - 18.0
+    - 2.5
+    - 3.6

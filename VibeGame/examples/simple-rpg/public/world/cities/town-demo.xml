@@ -1,29 +1,5 @@
 <!--
-  World fragment: demo town at (420, 420). CityGrid + prefabs.
-  Sub-names: town.marketplace / town.bank / town.houses for getNamedEntities.
+  town-demo CityGrid removido — expandia para Box/Composition.
+  Stub mantido pelo Include em index.html. Foco: assets GLB.
 -->
-<Group name="town" pos="420 0 420">
-  <CityGrid cell="4" origin="0 0" align-to-terrain="0" name="town.grid">
-    <Street
-      from="0 0"
-      to="4 0"
-      width="1"
-      texture-url="/assets/textures/cobblestone_road.png"
-    ></Street>
-    <Street
-      from="2 0"
-      to="2 3"
-      width="1"
-      texture-url="/assets/textures/cobblestone_road.png"
-    ></Street>
-    <Building at="0 1" prefab="market-stall" name="town.merchant"></Building>
-    <Building at="3 -2" prefab="house" name="town.banker" rot="0"></Building>
-    <Building at="-3 2" prefab="house" name="town.house.a"></Building>
-    <Building at="-1 2" prefab="house" name="town.house.b"></Building>
-    <Slot at="1 1" role="well" name="town.well"></Slot>
-  </CityGrid>
-  <!-- Keep semantic groups empty for name prefix demos (optional anchors) -->
-  <Group name="town.marketplace" pos="0 0 0"></Group>
-  <Group name="town.bank" pos="14 0 -8"></Group>
-  <Group name="town.houses" pos="-12 0 10"></Group>
-</Group>
+<Group name="town" pos="840 0 840"></Group>

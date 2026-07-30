@@ -17,34 +17,34 @@
        DESERTO — poeira rasteira sobre as dunas
        ('ground-dust' é o lençol de ambiente; 'dust' é FX de quebra)
        ============================================================ -->
-  <GameObject place="at: 85 0"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 110 35"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 105 -40"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 130 10"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 95 -20"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 145 -15"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 160 45"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 125 -65"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 118 20"><ParticleSystem preset="sand-dust" transform="pos: 0 2.4 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 150 -30"><ParticleSystem preset="sand-dust" transform="pos: 0 2.4 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 170 0"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 220 70"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 210 -80"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 260 20"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 190 -40"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 290 -30"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 320 90"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 250 -130"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 236 40"><ParticleSystem preset="sand-dust" transform="pos: 0 2.4 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 300 -60"><ParticleSystem preset="sand-dust" transform="pos: 0 2.4 0"></ParticleSystem></GameObject>
 
   <!-- ============================================================
        FLORESTA SOMBRIA — vaga-lumes nas clareiras + folha a cair
        ============================================================ -->
-  <GameObject place="at: 0 90"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
-  <GameObject place="at: -25 115"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 22 105"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
-  <GameObject place="at: -50 78"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 40 150"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
-  <GameObject place="at: -14 165"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
-  <GameObject place="at: 6 96">
+  <GameObject place="at: 0 180"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -50 230"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 44 210"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -100 156"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 80 300"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -28 330"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 12 192">
     <ParticleSystem
       preset="leaves"
       transform="pos: 0 6.5 0"
       particle-emitter="preset: leaves; emission-rate: 5; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: -38 120">
+  <GameObject place="at: -76 240">
     <ParticleSystem
       preset="leaves"
       transform="pos: 0 6.5 0"
@@ -52,7 +52,7 @@
     ></ParticleSystem>
   </GameObject>
   <!-- Fumo baixo na clareira da bruxa -->
-  <GameObject place="at: -8 135">
+  <GameObject place="at: -16 270">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 1.5 0"
@@ -63,28 +63,28 @@
   <!-- ============================================================
        PÂNTANO — névoa rasteira na bacia
        ============================================================ -->
-  <GameObject place="at: 0 -85">
+  <GameObject place="at: 0 -170">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 0.8 0"
       particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.4; start-color: #93a596; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: -30 -120">
+  <GameObject place="at: -60 -240">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 0.8 0"
       particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.4; start-color: #93a596; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: 34 -105">
+  <GameObject place="at: 68 -210">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 0.8 0"
       particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.0; start-color: #93a596; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: 4 -155">
+  <GameObject place="at: 8 -310">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 0.8 0"
@@ -97,27 +97,27 @@
        (emission-rate baixo: 'snow' no default 50/s vira nevão que tapa a
        encosta toda a 40 m de distância)
        ============================================================ -->
-  <GameObject place="at: -85 0">
+  <GameObject place="at: -170 0">
     <ParticleSystem
       preset="snow"
       transform="pos: 0 9 0"
       particle-emitter="preset: snow; emission-rate: 10; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: -115 4">
+  <GameObject place="at: -230 8">
     <ParticleSystem
       preset="snow"
       transform="pos: 0 9 0"
       particle-emitter="preset: snow; emission-rate: 10; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: -145 6">
+  <GameObject place="at: -290 12">
     <ParticleSystem
       preset="snow"
       transform="pos: 0 9 0"
       particle-emitter="preset: snow; emission-rate: 12; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: -95 13"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -190 26"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
 </Group>
 <!-- FIM atmosphere.ambient -->

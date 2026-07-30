@@ -193,7 +193,7 @@ function doDash(state: State, hero: number): void {
   const nx = Transform.posX[hero] + _fwd.x * dist;
   const nz = Transform.posZ[hero] + _fwd.z * dist;
   const gy =
-    getBvhSurfaceHeight(state, nx, 500, nz, 2000, TERRAIN_LAYER) ??
+    getBvhSurfaceHeight(state, nx, 500, nz, 4000, TERRAIN_LAYER) ??
     getTerrainHeightAt(state, nx, nz) ??
     Transform.posY[hero];
   // Move both the ECS transform and the kinematic body so the controller keeps it.

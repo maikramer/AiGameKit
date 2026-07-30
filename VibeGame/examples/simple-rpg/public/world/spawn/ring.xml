@@ -1,7 +1,7 @@
 <!--
   World fragment loaded via Include src= (see index.html shell).
   Edit this file — do not paste into index.html.
-  Cell coords for CityGrid: space-separated (at="2 1").
+  Cell coords for CityGrid: space-separated (at="4 2").
 -->
 <!-- Anel de recursos + exclusões periurbanas. -->
       <!-- GRUPO "valley-outskirts": anel de recursos à volta da cidade
@@ -13,152 +13,147 @@
            dentro de ~±58). Exclusion r=42 limpa o interior; vegetação e
            árvores ficam no anel imediato, não num carpete até ±90.
            ============================================================ -->
-        <!-- Erva / plantas / flores só no anel periurbano. -->
-        <Vegetation
-          meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb"
-          density-per-km2="55000"
-          seed="41"
-          region-min="-58 0 -58"
-          region-max="58 0 58"
-          scale-min="1.4"
-          scale-max="2.8"
-          max-slope-deg="35"
-          avoid-water="1"
-          avoid-overlaps="0"
-          max-distance="100"
-          cluster-count="40"
-          cluster-radius="3.4"
-          flower-near-radius="2.4"
-          flower-density-ratio="0.34"
-          plant-density-ratio="0.45"
-          smart="1"
-          wind="1"
-          scale-axis-min="0.9"
-          scale-axis-max="1.1"
-          random-yaw="true"
-          variation="foliage"
-        ></Vegetation>
+        <!-- Erva / plantas / flores no anel periurbano.
+           O kit Quaternius (/assets/meshes/vegetation/*.glb) está ausente do
+           disco (ver ASSETS_REGISTRY.md — "GLBs em falta"); a tag <Vegetation>
+           foi removida daqui para não referenciar URLs partidos
+           (`vibegame analyze` reportava 9 ERROR "missing asset" nesta zona).
+           O tapete verde do anel vem da textura `vale_grass` do terreno; a
+           árvore/rocha colhível (ResourceNode) abaixo já usa GLBs válidos. -->
         <!-- Laguinho NW da muralha mas ESTE do rio (antes -50,42 sobrepunha
            o carve em x≈-58 → disco a flutuar sobre a ravina). -->
         <Lake
-          at="-40 52"
-          radius="8"
+          at="-80 104"
+          radius="16"
           depth="5.0"
           water-offset="0.55"
           color="#2a6685"
           opacity="0.72"
         ></Lake>
+        <!-- Aproches das pontes: TerrainPad pina as 2 margens à mesma altura
+           (antes do River — pads fora do carve ~±7.2 m do eixo). height = Y
+           heightmap na margem cidade. Bridge fica nivelado (sem pitch). -->
+        <TerrainPad
+          at="4 -101"
+          size="20 14"
+          falloff="10"
+          corner-radius="5"
+          height="34.9"
+        ></TerrainPad>
+        <TerrainPad
+          at="4 -145"
+          size="20 14"
+          falloff="10"
+          corner-radius="5"
+          height="34.9"
+        ></TerrainPad>
+        <TerrainPad
+          at="-97 -3"
+          size="14 20"
+          falloff="10"
+          corner-radius="5"
+          height="33.7"
+        ></TerrainPad>
+        <TerrainPad
+          at="-141 -3"
+          size="16 20"
+          falloff="12"
+          corner-radius="5"
+          height="33.7"
+        ></TerrainPad>
         <!-- Rio: sul → oeste (x≲-58) → NW sem passar no laguinho.
            path = [x0 z0 ...] nascente primeiro. -->
         <!-- width = lâmina; carve total = width + 2·bank-width (+ feather). -->
         <River
-          path="205 -62 170 -55 140 -45 110 -38 82 -40 48 -58 12 -62 -20 -62 -45 -66 -58 -58 -58 -20 -58 5 -62 22 -75 32 -90 48 -110 62 -130 80 -155 105 -180 135 -210 165 -241 192"
-          width="8"
+          path="410 -124 340 -110 280 -90 220 -76 164 -80 96 -116 24 -124 -40 -124 -90 -132 -116 -116 -116 -40 -116 10 -124 44 -150 64 -180 96 -220 124 -260 160 -310 210 -360 270 -420 330 -482 384"
+          width="16"
           depth="3.7"
           water-offset="1.2"
-          bank-width="3.2"
+          bank-width="6.4"
           bank-height="0.85"
           color="#2a6685"
           opacity="0.88"
         ></River>
-        <!-- Ponte de madeira sobre o rio, na saída sul da cidade. ANCORADA
-             NO BARRANCO NORTE (fora do carve do rio, z=-52.5) — o place
-             amostra a altura do terreno no ponto âncora, e ancorar no meio
-             do canal punha o deck ao nível do LEITO (ponte submersa). O
-             deck estende-se em z local negativo e cruza o canal inteiro
-             (centro do rio ~z=-61.5 em x=2, alinhado com a estrada sul).
-             Rampas nas duas margens, guarda-corpo fino e pilares no leito.
-             collider auto dá piso sólido e bloqueia queda lateral. -->
-        <Composition
-          place="at: 2 -52.5; align-to-terrain: 0"
-          body="fixed"
-          collider="auto"
+        <!-- Pontes GLB (gaps network: s_bank↔s_resume, w_bank↔w_resume).
+           Span 18 m. Pads nivelam margens → rotation só yaw. Mesh centrado Y;
+           base-y-offset sobe do leito até plano do pad (~depth). W: mid um
+           pouco mais a oeste (longe da muralha) p/ rampa não enterrar. -->
+        <GameObject
+          name="bridge_south"
+          place="at: 4 -123; align-to-terrain: 0; ground-align: none; base-y-offset: 1.5; max-slope-deg: 90"
+          transform="rotation: 0 90 0; scale: 2 1 2"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/river_bridge_wood_collision.glb; mesh-anchor: base"
         >
-          <!-- Rampa norte (sobe da estrada para o tabuleiro) -->
-          <Box
-            pos="0 0.37 -1.7"
-            size="3.4 0.22 3.7"
-            rotation="0.21 0 0"
-            color="#7a5a38"
-          ></Box>
-          <!-- Tabuleiro plano sobre o canal -->
-          <Box
-            pos="0 0.75 -9"
-            size="3.4 0.26 11.2"
-            texture-url="/assets/textures/wood_planks.png"
-            texture-repeat="3 9"
-            normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
-          ></Box>
-          <!-- Rampa sul (desce para a margem do pântano) -->
-          <Box
-            pos="0 0.37 -16.3"
-            size="3.4 0.22 3.7"
-            rotation="-0.21 0 0"
-            color="#7a5a38"
-          ></Box>
-          <!-- Guarda-corpos finos (balaústre + corrimão), só no vão -->
-          <Box pos="-1.62 1.15 -9" size="0.1 0.55 11.2" color="#6a4a2c"></Box>
-          <Box pos="1.62 1.15 -9" size="0.1 0.55 11.2" color="#6a4a2c"></Box>
-          <Box pos="-1.62 1.5 -9" size="0.16 0.12 11.5" color="#5a4026"></Box>
-          <Box pos="1.62 1.5 -9" size="0.16 0.12 11.5" color="#5a4026"></Box>
-          <!-- Postes do corrimão nas cabeceiras -->
-          <Box pos="-1.62 1.0 -3.6" size="0.2 1.3 0.2" color="#5a4026"></Box>
-          <Box pos="1.62 1.0 -3.6" size="0.2 1.3 0.2" color="#5a4026"></Box>
-          <Box pos="-1.62 1.0 -14.4" size="0.2 1.3 0.2" color="#5a4026"></Box>
-          <Box pos="1.62 1.0 -14.4" size="0.2 1.3 0.2" color="#5a4026"></Box>
-          <!-- Pilares que descem ao leito do rio -->
-          <Box pos="-1.3 -1.3 -6.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
-          <Box pos="1.3 -1.3 -6.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
-          <Box pos="-1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
-          <Box pos="1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
-        </Composition>
-        <!-- Ponte OESTE: mesma blueprint, yaw 90° (local −Z → mundo −X).
-           Âncora na margem ESTE (fora do carve, x≈-50); canal ~x=-58 em z≈-1. -->
-        <Composition
-          transform="rotation: 0 90 0"
-          place="at: -50 -1; align-to-terrain: 0"
-          body="fixed"
-          collider="auto"
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/river_bridge_wood_lod0.glb"
+            lod1-url="/assets/meshes/river_bridge_wood_lod1.glb"
+            lod2-url="/assets/meshes/river_bridge_wood_lod2.glb"
+            lod-threshold-near="70"
+            lod-threshold-mid="160"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          name="bridge_west"
+          place="at: -121 -3; align-to-terrain: 0; ground-align: none; base-y-offset: 1.35; max-slope-deg: 90"
+          transform="scale: 2 1 2"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/river_bridge_stone_collision.glb; mesh-anchor: base"
         >
-          <Box
-            pos="0 0.37 -1.7"
-            size="3.4 0.22 3.7"
-            rotation="0.21 0 0"
-            color="#7a5a38"
-          ></Box>
-          <Box
-            pos="0 0.75 -9"
-            size="3.4 0.26 11.2"
-            texture-url="/assets/textures/wood_planks.png"
-            texture-repeat="3 9"
-            normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
-          ></Box>
-          <Box
-            pos="0 0.37 -16.3"
-            size="3.4 0.22 3.7"
-            rotation="-0.21 0 0"
-            color="#7a5a38"
-          ></Box>
-          <Box pos="-1.62 1.15 -9" size="0.1 0.55 11.2" color="#6a4a2c"></Box>
-          <Box pos="1.62 1.15 -9" size="0.1 0.55 11.2" color="#6a4a2c"></Box>
-          <Box pos="-1.62 1.5 -9" size="0.16 0.12 11.5" color="#5a4026"></Box>
-          <Box pos="1.62 1.5 -9" size="0.16 0.12 11.5" color="#5a4026"></Box>
-          <Box pos="-1.62 1.0 -3.6" size="0.2 1.3 0.2" color="#5a4026"></Box>
-          <Box pos="1.62 1.0 -3.6" size="0.2 1.3 0.2" color="#5a4026"></Box>
-          <Box pos="-1.62 1.0 -14.4" size="0.2 1.3 0.2" color="#5a4026"></Box>
-          <Box pos="1.62 1.0 -14.4" size="0.2 1.3 0.2" color="#5a4026"></Box>
-          <Box pos="-1.3 -1.3 -6.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
-          <Box pos="1.3 -1.3 -6.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
-          <Box pos="-1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
-          <Box pos="1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
-        </Composition>
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/river_bridge_stone_lod0.glb"
+            lod1-url="/assets/meshes/river_bridge_stone_lod1.glb"
+            lod2-url="/assets/meshes/river_bridge_stone_lod2.glb"
+            lod-threshold-near="70"
+            lod-threshold-mid="160"
+          ></GLTFLoader>
+        </GameObject>
+        <!-- Posto de descanso na margem este (x≈-45): crate/barrel/bench. -->
+        <GameObject
+          place="at: -90.8 -4.4; align-to-terrain: 1"
+          transform="rotation: 0 20 0"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/wooden_crate_lod1.glb"
+            lod1-url="/assets/meshes/wooden_crate_lod2.glb"
+            lod2-url="/assets/meshes/wooden_crate_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: -93.2 -6.8; align-to-terrain: 1"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/wooden_barrel_lod1.glb"
+            lod1-url="/assets/meshes/wooden_barrel_lod2.glb"
+            lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: -89.2 -8; align-to-terrain: 1"
+          transform="rotation: 0 -70 0"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/wooden_bench_lod1.glb"
+            lod1-url="/assets/meshes/wooden_bench_lod2.glb"
+            lod2-url="/assets/meshes/wooden_bench_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
         <!-- Vitórias-régias no laguinho (-40,52 r=8). -->
         <StaticSpawner
           profile="tree"
           count="10"
           seed="326"
-          region-min="-47 0 45"
-          region-max="-33 0 59"
+          region-min="-94 0 90"
+          region-max="-66 0 118"
           in-water="1"
           align-to-terrain="0"
           max-slope-attempts="128"
@@ -181,8 +176,8 @@
           profile="tree"
           count="30"
           seed="7"
-          region-min="-58 0 -58"
-          region-max="58 0 58"
+          region-min="-116 0 -116"
+          region-max="116 0 116"
           align-to-terrain="1"
           ground-align="auto"
           scale-min="0.7"
@@ -219,8 +214,8 @@
           profile="tree"
           count="22"
           seed="99"
-          region-min="-58 0 -58"
-          region-max="58 0 58"
+          region-min="-116 0 -116"
+          region-max="116 0 116"
           align-to-terrain="1"
           ground-align="auto"
           scale-min="0.7"
@@ -256,8 +251,8 @@
           profile="tree"
           count="48"
           seed="401"
-          region-min="-200 0 -100"
-          region-max="220 0 200"
+          region-min="-400 0 -200"
+          region-max="440 0 400"
           near-water="1"
           avoid-water="0"
           align-to-terrain="1"
@@ -268,7 +263,7 @@
           scale-max="1.4"
           avoid-overlaps="1"
           pick-strategy="random"
-          footprint-radius="1.4"
+          footprint-radius="2.8"
           scale-axis-min="0.9"
           scale-axis-max="1.1"
           random-yaw="true"
@@ -350,8 +345,8 @@
           profile="tree"
           count="20"
           seed="402"
-          region-min="-55 0 -55"
-          region-max="55 0 55"
+          region-min="-110 0 -110"
+          region-max="110 0 110"
           avoid-water="1"
           align-to-terrain="1"
           ground-align="auto"
@@ -359,9 +354,9 @@
           scale-max="1.4"
           avoid-overlaps="1"
           pick-strategy="random"
-          footprint-radius="1.6"
+          footprint-radius="3.2"
           cluster-count="2"
-          cluster-radius="10"
+          cluster-radius="20"
           scale-axis-min="0.9"
           scale-axis-max="1.1"
           random-yaw="true"
@@ -422,8 +417,8 @@
           avoid-water="1"
           count="3"
           seed="11"
-          region-min="-26 0 40"
-          region-max="26 0 52"
+          region-min="-52 0 80"
+          region-max="52 0 104"
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="40"

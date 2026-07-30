@@ -1,0 +1,76 @@
+<!--
+  Rede cobble interligada (não só cruz +).
+  - Cruz praça → mid_* (grau 4) → portões / biomas
+  - Anel periurbano mid_n→ne→mid_e→se→mid_s→sw→mid_w→nw→mid_n
+    (T nos mid_* = cruzamentos programáticos)
+  - Gaps rio: s_bank↛s_resume, w_bank↛w_resume (trails/pontes)
+  - via= nos Segments longos (docks de trails.xml)
+-->
+<Group name="paths.network" pos="0 0 0">
+  <RoadNetwork
+    default-profile="artery"
+    default-width="4"
+    crossing-flare="true"
+    flatten="true"
+    flatten-falloff="16"
+    flatten-window="112"
+    flatten-max-grade="0.22"
+    texture-url="/assets/textures/cobblestone_road.png"
+    normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+  >
+    <!-- Praça + docks do anel (muralha ±32) -->
+    <Way id="plaza" xz="0 0" width="4.8"></Way>
+    <Way id="mid_n" xz="0 56"></Way>
+    <Way id="mid_e" xz="56 0"></Way>
+    <Way id="mid_s" xz="0 -56"></Way>
+    <Way id="mid_w" xz="-56 0"></Way>
+
+    <!-- Cantos do anel -->
+    <Way id="ring_ne" xz="48 48"></Way>
+    <Way id="ring_se" xz="48 -48"></Way>
+    <Way id="ring_sw" xz="-48 -48"></Way>
+    <Way id="ring_nw" xz="-48 48"></Way>
+
+    <!-- Norte (floresta) -->
+    <Way id="n_gate" xz="-3 128"></Way>
+    <Way id="n_end" xz="-8 256"></Way>
+    <!-- Sul (gap rio) -->
+    <Way id="s_bank" xz="4 -104"></Way>
+    <Way id="s_resume" xz="4 -142"></Way>
+    <Way id="s_end" xz="-12 -286"></Way>
+    <!-- Este (deserto) -->
+    <Way id="gate_e" xz="124 2"></Way>
+    <Way id="desert_end" xz="290 -4"></Way>
+    <!-- Oeste (gap rio) -->
+    <Way id="w_bank" xz="-96 -2"></Way>
+    <Way id="w_resume" xz="-140 -4"></Way>
+    <Way id="w_end" xz="-292 12"></Way>
+
+    <!-- Cruzamento praça → mid (grau 4 em cada mid com anel) -->
+    <Segment a="plaza" b="mid_n" via="0 6 0 32" profile="plaza"></Segment>
+    <Segment a="plaza" b="mid_s" via="0 -6 0 -32" profile="plaza"></Segment>
+    <Segment a="plaza" b="mid_e" via="6 0 32 0" profile="plaza"></Segment>
+    <Segment a="plaza" b="mid_w" via="-6 0 -32 0" profile="plaza"></Segment>
+
+    <!-- Artérias além do anel -->
+    <Segment a="mid_n" b="n_gate" via="0 84 -2 108"></Segment>
+    <Segment a="n_gate" b="n_end" via="4 156 24 208"></Segment>
+    <Segment a="mid_s" b="s_bank" via="0 -76 2 -92"></Segment>
+    <Segment a="s_resume" b="s_end" via="0 -184 18 -220"></Segment>
+    <Segment a="mid_e" b="gate_e" via="80 0 104 2"></Segment>
+    <Segment a="gate_e" b="desert_end" via="160 6 200 10 240 8"></Segment>
+    <Segment a="mid_w" b="w_bank" via="-72 0 -84 -2"></Segment>
+    <Segment a="w_resume" b="w_end" via="-208 2"></Segment>
+
+    <!-- Anel periurbano (liga os quatro mid_*) -->
+    <Segment a="mid_n" b="ring_ne" via="20 56 36 52"></Segment>
+    <Segment a="ring_ne" b="mid_e" via="52 36 56 20"></Segment>
+    <Segment a="mid_e" b="ring_se" via="56 -20 52 -36"></Segment>
+    <Segment a="ring_se" b="mid_s" via="36 -52 20 -56"></Segment>
+    <Segment a="mid_s" b="ring_sw" via="-20 -56 -36 -52"></Segment>
+    <Segment a="ring_sw" b="mid_w" via="-52 -36 -56 -20"></Segment>
+    <Segment a="mid_w" b="ring_nw" via="-56 20 -52 36"></Segment>
+    <Segment a="ring_nw" b="mid_n" via="-36 52 -20 56"></Segment>
+  </RoadNetwork>
+</Group>
+<!-- FIM paths.network -->
