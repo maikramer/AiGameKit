@@ -140,9 +140,22 @@ export async function injectWebGLErrorCapture(page: Page): Promise<void> {
     w.__VIBEGAME_WEBGL_ERRORS = [];
 
     const proto = HTMLCanvasElement.prototype as any;
-    const origGetContext = proto.getContext.bind(proto);
-    proto.getContext = function (contextId: string, ...args: unknown[]) {
-      const ctx = origGetContext(
+    // NOT `.bind(proto)`: the native getContext must run with the canvas
+    // *instance* as `this`. Binding the prototype made every getContext call in
+    // the page throw `TypeError: Illegal invocation`, so the renderer never
+    // initialised and the whole world parse aborted under this helper.
+    const origGetContext = proto.getContext as (
+      this: HTMLCanvasElement,
+      contextId: string,
+      ...args: unknown[]
+    ) => unknown;
+    proto.getContext = function (
+      this: HTMLCanvasElement,
+      contextId: string,
+      ...args: unknown[]
+    ) {
+      const ctx = origGetContext.call(
+        this,
         contextId,
         ...args
       ) as WebGL2RenderingContext | null;

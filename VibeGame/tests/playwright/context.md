@@ -85,7 +85,9 @@ Forwards browser console errors to `window.__VIBEGAME_CONSOLE_ERRORS` for retrie
 
 #### injectWebGLErrorCapture(page): Promise<void>
 
-Monkey-patches `HTMLCanvasElement.prototype.getContext` to intercept shader compile and program link errors, stored in `window.__VIBEGAME_WEBGL_ERRORS`
+Monkey-patches `HTMLCanvasElement.prototype.getContext` to intercept shader compile and program link errors, stored in `window.__VIBEGAME_WEBGL_ERRORS`. The saved original must be invoked with `.call(this, ...)` — binding it to the prototype makes every `getContext` in the page throw `TypeError: Illegal invocation`, which silently kills the renderer and aborts world parsing for the whole suite.
+
+The `vibegamePage` fixture clicks the canvas after the bridge latches: the input plugin only routes keys once a `focusin` reached the canvas, so a page that was never clicked has a dead keyboard (and a locked audio context).
 
 #### screenshotCanvas(page, selector?): Promise<Buffer>
 

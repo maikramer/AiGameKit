@@ -47,6 +47,8 @@ The gate registry (`core/loading-gate.ts`) is inert unless a loading screen enab
 
 `isWorldReady(state)` is true when every registered gate passes (vacuously true with none). `getLoadingProgress(state)` returns `{ ready, total, pending }` which the bar and status line consume.
 
+**Stall WARN is stuck-only.** `maybeLogAssetsStall` warns only when the critical URL set is unchanged for ≥5s. A normal boot that drains 50→0 masters over ~20s stays silent — progress is not a hang.
+
 <!-- LLM:REFERENCE -->
 
 ### Component
@@ -64,8 +66,9 @@ None. The overlay is a module-scoped singleton in `context.ts` (one per page), k
 ### Overlay (context.ts)
 
 - `mountLoadingScreen(opts?)`: creates the `#vibegame-loading` fixed overlay (title, subtitle, progress bar, status line) if absent; applies `setLoadingScreenText` live. Call this as the first line of bootstrap for the earliest paint.
-- `updateLoadingScreen(state)`: per-frame driver. Reads `getLoadingProgress`; sets `bar.style.width` to `ready/total`; sets status to a humanized pending list (`terrain` -> "Building terrain", `spawn` -> "Placing world objects", `assets` -> "Loading assets", `shaders` -> "Compiling shaders") or "Ready". Fades out (opacity transition) once `isWorldReady` is true AND at least `MIN_VISIBLE_MS` (350ms) elapsed since first show; after `FADE_MS` (450ms) the node is removed.
+- `updateLoadingScreen(state)`: per-frame driver. Reads `getLoadingProgress`; fills the bar with gate progress **plus** asset/spawn sub-fractions (so long GLB boots move the bar instead of sitting on a coarse step). Status prefers the active phase (`assets` → `terrain` → `spawn` → `shaders`) with honest counts: models show `done/total · N remaining` from `getCriticalGltfLoadProgress` (not the old “pending kick” counter that stayed at 0 once downloads started). Detail line lists sample GLB basenames and `Steps ready/total`. Copy is EN/PT via `setLoadingScreenLocale` (defaults to `navigator.language`). Fades out once `isWorldReady` and `MIN_VISIBLE_MS` (350ms) elapsed; after `FADE_MS` (450ms) the node is removed. Fade flips `pointer-events: none` immediately so the overlay cannot swallow the first click (canvas focus + audio unlock).
 - `setLoadingScreenText({ title?, subtitle? })` / `getLoadingScreenText()`: copy control.
+- `setLoadingScreenLocale('en'|'pt')` / `getLoadingScreenLocale()`: status/detail language.
 - `cancelLoadingFade()`: clears the pending fade `setTimeout` and removes the overlay. Call from `runtime.destroy()` so the deferred callback never fires on a detached node.
 
 ### Recipe
@@ -86,6 +89,8 @@ mountLoadingScreen({
   title: 'Crystal Vale',
   subtitle: 'Preparing the world...',
 });
+// Optional: force status language (defaults to navigator.language → en|pt)
+// setLoadingScreenLocale('pt');
 
 withPlugin(LoadingPlugin);
 // ...other plugins...

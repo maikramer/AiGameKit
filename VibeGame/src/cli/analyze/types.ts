@@ -1,6 +1,7 @@
 export type AnalyzeSeverity = 'error' | 'warn' | 'info';
 
-export type AnalyzeCode = 'include' | 'parse' | 'asset' | 'overlap' | 'bounds';
+export type AnalyzeCode =
+  'include' | 'parse' | 'asset' | 'overlap' | 'bounds' | 'road';
 
 export interface AnalyzeIssue {
   severity: AnalyzeSeverity;

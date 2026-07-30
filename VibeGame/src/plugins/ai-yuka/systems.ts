@@ -45,6 +45,9 @@ function isFocusAlive(state: State, focusEid: number): boolean {
  *   6. Runs `vehicle.update(dt)` and forwards the goal to the navmesh crowd,
  *      or writes planar `Transform` when no crowd agent is driving the entity.
  */
+/** Reused per-frame scratch for {@link YukaAgentSystem} (see usage below). */
+const _proxyByEid = new Map<number, TargetProxy>();
+
 export const YukaAgentSystem: System = defineSystem({
   name: 'YukaAgentSystem',
   group: 'simulation',
@@ -70,7 +73,10 @@ export const YukaAgentSystem: System = defineSystem({
     // The "focus" target for an agent is YukaAgentComponent.targetEid; when it
     // points at the hero we bind the same proxy for every agent that frame.
     // We keep one proxy per (State, targetEid) to avoid per-agent allocation.
-    const proxyByEid = new Map<number, TargetProxy>();
+    // The map itself is reused across frames — it is scoped to this loop and
+    // never escapes, so clearing beats allocating a Map every frame.
+    const proxyByEid = _proxyByEid;
+    proxyByEid.clear();
 
     for (let i = 0; i < agents.length; i++) {
       const eid = agents[i];

@@ -24,12 +24,18 @@ describe('GltfAnimationState component', () => {
     expect(GltfAnimationState.crossfadeDuration.length).toBe(MAX_ENTITIES);
   });
 
-  it('expõe exatamente os 4 campos esperados (nem mais nem menos)', () => {
+  it('expõe rootMotion como Uint8Array com tamanho MAX_ENTITIES', () => {
+    expect(GltfAnimationState.rootMotion).toBeInstanceOf(Uint8Array);
+    expect(GltfAnimationState.rootMotion.length).toBe(MAX_ENTITIES);
+  });
+
+  it('expõe exatamente os 5 campos esperados (nem mais nem menos)', () => {
     expect(Object.keys(GltfAnimationState).sort()).toEqual([
       'activeClipIndex',
       'crossfadeDuration',
       'isPlaying',
       'registryIndex',
+      'rootMotion',
     ]);
   });
 
@@ -38,6 +44,7 @@ describe('GltfAnimationState component', () => {
     expect(GltfAnimationState.activeClipIndex[0]).toBe(0);
     expect(GltfAnimationState.isPlaying[0]).toBe(0);
     expect(GltfAnimationState.crossfadeDuration[0]).toBe(0);
+    expect(GltfAnimationState.rootMotion[0]).toBe(0);
   });
 
   it('faz round-trip de escrita/leitura em cada campo tipado', () => {

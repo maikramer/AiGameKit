@@ -199,6 +199,7 @@ describe('spawnSpecFromLayer clusterCenters', () => {
       plantDensityRatio: 0.25,
       wind: true,
       avoidWater: true,
+      avoidRoad: true,
       avoidOverlaps: false,
       maxSlopeDeg: 35,
       maxDistance: 100,

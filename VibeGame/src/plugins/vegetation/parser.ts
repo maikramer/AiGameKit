@@ -71,6 +71,7 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
   if (attrs['max-distance'] === undefined) attrs['max-distance'] = '110';
   if (attrs['align-to-terrain'] === undefined) attrs['align-to-terrain'] = '1';
   if (attrs['avoid-water'] === undefined) attrs['avoid-water'] = '1';
+  if (attrs['avoid-road'] === undefined) attrs['avoid-road'] = '1';
   if (attrs['max-slope-deg'] === undefined) attrs['max-slope-deg'] = '35';
   if (attrs['random-yaw'] === undefined) attrs['random-yaw'] = '1';
   if (attrs['ground-align'] === undefined) attrs['ground-align'] = 'aabb';
@@ -140,6 +141,7 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
     ),
     wind: toBoolAttr(element.attributes.wind, true),
     avoidWater: resolved.avoidWater,
+    avoidRoad: resolved.avoidRoad,
     avoidOverlaps: resolved.avoidOverlaps,
     maxSlopeDeg: resolved.maxSlopeDeg,
     maxDistance: resolved.maxDistance,

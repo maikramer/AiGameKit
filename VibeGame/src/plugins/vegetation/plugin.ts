@@ -35,6 +35,7 @@ export const vegetationRecipe: Recipe = {
     'variation-spatial',
     'max-slope-deg',
     'avoid-water',
+    'avoid-road',
     'avoid-overlaps',
     'max-distance',
     'footprint-radius',

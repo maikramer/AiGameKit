@@ -140,7 +140,10 @@ physics/
 
 Mesh collider example — `mesh-url` is a string handled by an adapter (sidecar map,
 not a SOA field); the GLB is fetched lazily and the collider is created once the
-download finishes (see `mesh-collider.ts`):
+download finishes (see `mesh-collider.ts`). Meshopt-compressed collision GLBs go
+through `createGeometryGLTFLoader` (not `createGLTFLoader`): textures are never
+fetched, so a KTX2 collider costs no basis transcode and no longer fails the whole
+load with `setKTX2Loader must be called...` when no KTX2Loader is attached yet:
 
 ```xml
 <GameObject

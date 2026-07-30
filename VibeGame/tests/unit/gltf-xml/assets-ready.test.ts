@@ -45,6 +45,25 @@ describe('gltf boot assets gate', () => {
     expect(getCriticalGltfLoadCount()).toBe(0);
   });
 
+  it('critical request promotes a URL already tracked as background', async () => {
+    let resolve!: () => void;
+    const shared = new Promise<void>((r) => {
+      resolve = r;
+    });
+    void _trackGltfLoadForTests(shared, 'background', '/prop_lod1.glb');
+    expect(getCriticalGltfLoadCount()).toBe(0);
+    expect(getActiveGltfLoadCount()).toBe(1);
+
+    void _trackGltfLoadForTests(shared, 'critical', '/prop_lod1.glb');
+    expect(getCriticalGltfLoadCount()).toBe(1);
+    expect(getActiveGltfLoadCount()).toBe(1);
+
+    resolve();
+    await shared;
+    expect(getCriticalGltfLoadCount()).toBe(0);
+    expect(getActiveGltfLoadCount()).toBe(0);
+  });
+
   it('background loads do not bump the critical counter', async () => {
     expect(getCriticalGltfLoadCount()).toBe(0);
     expect(getActiveGltfLoadCount()).toBe(0);
@@ -121,10 +140,16 @@ describe('gltf boot assets gate', () => {
     expect(getCriticalGltfLoadCount()).toBe(1);
     expect(gltfAssetsReady(state)).toBe(false);
     expect(describeGltfAssetsPending(state).critical).toBe(1);
+    expect(describeGltfAssetsPending(state).remaining).toBe(1);
+    expect(describeGltfAssetsPending(state).total).toBe(1);
+    expect(describeGltfAssetsPending(state).done).toBe(0);
 
     resolve();
     await p;
     expect(getCriticalGltfLoadCount()).toBe(0);
     expect(gltfAssetsReady(state)).toBe(true);
+    expect(describeGltfAssetsPending(state).done).toBe(1);
+    expect(describeGltfAssetsPending(state).total).toBe(1);
+    expect(describeGltfAssetsPending(state).remaining).toBe(0);
   });
 });

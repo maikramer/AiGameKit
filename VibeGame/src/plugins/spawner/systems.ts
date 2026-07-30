@@ -28,6 +28,7 @@ import {
   isPointOnWaterBank,
   waterBodyAt,
 } from '../water/registry';
+import { isPointOnRoad } from '../terrain/brush-registry';
 import {
   SpawnExclusion,
   isSpawnAreaFree,
@@ -326,6 +327,7 @@ export const TerrainSpawnSystem: System = defineSystem({
           // Keep cluster hubs out of exclusions / earlier props.
           if (!isSpawnAreaFree(state, cx0, cz0, 0.5)) continue;
           if (spec.avoidWater && isPointNearWater(state, cx0, cz0)) continue;
+          if (spec.avoidRoad && isPointOnRoad(state, cx0, cz0)) continue;
           if (spec.nearWater && !isPointOnWaterBank(state, cx0, cz0)) continue;
           clusterCenters.push([cx0, cz0]);
         }
@@ -403,6 +405,10 @@ export const TerrainSpawnSystem: System = defineSystem({
             // `avoid-water` excludes the FULL carve footprint (water + carved
             // banks/beach), not just the wet surface — otherwise props land on
             // the bank slope with their trunks leaning into the channel.
+            continue;
+          }
+          if (spec.avoidRoad && isPointOnRoad(state, wx, wz)) {
+            // Flatten-road corridor + plaza pad core — no trees/rocks on cobble.
             continue;
           }
           // Always honour SpawnExclusion (+ footprints from earlier groups).

@@ -39,6 +39,8 @@ export interface GroupSpawnDefaults {
   maxSlopePlacementAttempts: number;
   /** Re-amostra posições que cairiam sob planos de água (lagos). */
   avoidWater: boolean;
+  /** Skip flatten-road corridor + plaza pad core (paved). */
+  avoidRoad: boolean;
   /**
    * Inverso de avoid-water: só aceita pontos DENTRO da linha de água de um
    * lago e ancora o Y à superfície (plantas aquáticas, boias). Opcional nos
@@ -78,6 +80,7 @@ const LEGACY: GroupSpawnDefaults = {
   maxSlopeDeg: 45,
   maxSlopePlacementAttempts: 32,
   avoidWater: false,
+  avoidRoad: false,
   avoidOverlaps: true,
   footprintRadius: 0,
   scaleDistribution: 'linear',
@@ -104,6 +107,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 48,
     avoidWater: true,
+    avoidRoad: true,
     avoidOverlaps: true,
     footprintRadius: 0,
     scaleDistribution: 'linear',
@@ -127,6 +131,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 48,
     avoidWater: true,
+    avoidRoad: true,
     avoidOverlaps: true,
     footprintRadius: 0,
     scaleDistribution: 'linear',
@@ -153,6 +158,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 40,
     maxSlopePlacementAttempts: 48,
     avoidWater: true,
+    avoidRoad: true,
     avoidOverlaps: false,
     footprintRadius: 0,
     scaleDistribution: 'linear',
@@ -174,7 +180,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     surfaceEpsilonAuto: false,
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
-    avoidWater: false,
+    avoidWater: true,
+    avoidRoad: true,
     avoidOverlaps: true,
     footprintRadius: 0,
     scaleDistribution: 'linear',
@@ -196,7 +203,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     surfaceEpsilonAuto: false,
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
-    avoidWater: false,
+    avoidWater: true,
+    avoidRoad: true,
     avoidOverlaps: true,
     footprintRadius: 0,
     scaleDistribution: 'linear',
@@ -219,6 +227,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 90,
     maxSlopePlacementAttempts: 1,
     avoidWater: false,
+    avoidRoad: false,
     avoidOverlaps: true,
     footprintRadius: 0,
     scaleDistribution: 'linear',
@@ -481,6 +490,7 @@ export function resolveGroupSpawnFields(
       )
     ),
     avoidWater: optBool(attrs['avoid-water'], p.avoidWater),
+    avoidRoad: optBool(attrs['avoid-road'], p.avoidRoad),
     inWater: optBool(attrs['in-water'], p.inWater ?? false),
     nearWater: optBool(attrs['near-water'], p.nearWater ?? false),
     avoidOverlaps: optBool(attrs['avoid-overlaps'], p.avoidOverlaps),

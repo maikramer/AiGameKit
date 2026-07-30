@@ -1,5 +1,5 @@
 import { logger } from '../../core/utils/logger';
-import { createGLTFLoader } from '../../extras/gltf-bridge';
+import { createGeometryGLTFLoader } from '../../extras/gltf-bridge';
 import * as THREE from 'three';
 import type { State } from '../../core';
 
@@ -157,14 +157,15 @@ function hasMeshoptExtension(buffer: ArrayBuffer): boolean {
 
 /**
  * Decode a meshopt-compressed GLB via THREE.GLTFLoader (configured with
- * MeshoptDecoder by createGLTFLoader), then extract world-space POSITION +
- * index data without adding anything to the live scene.
+ * MeshoptDecoder by createGeometryGLTFLoader), then extract world-space
+ * POSITION + index data without adding anything to the live scene. Textures are
+ * never fetched — a collider only needs vertices.
  */
 async function parseGlbCollisionMeshViaLoader(
   buffer: ArrayBuffer,
   url: string
 ): Promise<ColliderMeshData> {
-  const loader = createGLTFLoader();
+  const loader = createGeometryGLTFLoader();
   const gltf = await loader.parseAsync(buffer, url);
 
   const positions: number[] = [];

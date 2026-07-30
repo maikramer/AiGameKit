@@ -14,6 +14,7 @@ export const GltfAnimPlugin: Plugin = {
         activeClipIndex: 0,
         isPlaying: 0,
         crossfadeDuration: 0.25,
+        rootMotion: 0,
       },
     },
   },

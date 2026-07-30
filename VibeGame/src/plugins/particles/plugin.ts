@@ -43,8 +43,11 @@ export const ParticlesPlugin: Plugin = {
         looping: 1,
         burst: 0,
         burstCount: 20,
-        shapeRadius: 0.5,
-        shapeAngle: 0.5,
+        // 0 = "keep the preset's emitter shape". These are overrides, not
+        // values: a non-zero default would silently widen every preset's
+        // emitter (fire's cone is radius 0.12, not 0.5).
+        shapeRadius: 0,
+        shapeAngle: 0,
       },
     },
     enums: {

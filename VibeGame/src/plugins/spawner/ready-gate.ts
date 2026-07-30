@@ -26,6 +26,25 @@ function spawnReady(state: State): boolean {
   return true;
 }
 
+/** Snapshot for the loading overlay while the `spawn` gate is held. */
+export function describeSpawnPending(state: State): {
+  pending: number;
+  total: number;
+  done: number;
+} {
+  let pending = 0;
+  let total = 0;
+  for (const eid of spawnerQuery(state.world)) {
+    total++;
+    if (!SpawnerPending.spawned[eid]) pending++;
+  }
+  for (const eid of placeQuery(state.world)) {
+    total++;
+    if (!PlacePending.spawned[eid]) pending++;
+  }
+  return { pending, total, done: Math.max(0, total - pending) };
+}
+
 export const SpawnReadyGateSystem: System = defineSystem({
   name: 'SpawnReadyGateSystem',
   group: 'setup',

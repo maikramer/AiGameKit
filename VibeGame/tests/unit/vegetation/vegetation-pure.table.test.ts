@@ -158,6 +158,7 @@ describe('buildVegetationPlan smart layering', () => {
     plantDensityRatio: 0.3,
     wind: true,
     avoidWater: true,
+    avoidRoad: true,
     avoidOverlaps: false,
     maxSlopeDeg: 30,
     maxDistance: 100,

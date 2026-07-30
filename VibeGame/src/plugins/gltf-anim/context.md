@@ -66,11 +66,13 @@ animatorRegistry: Map<number, GltfAnimator>        // module-global handle → a
 - **Per entity with `GltfAnimationState` where `registryIndex !== 0`**:
   1. Looks up the `GltfAnimator` via `animatorRegistry.get(registryIndex)`. Skips if missing (orphan guard — e.g. entity destroyed mid-frame, or handle stale).
   2. Calls `animator.update(deltaTime)` to advance the `AnimationMixer` (crossfades, additive overlays, clip time).
-  3. If the entity has `WorldTransform`, copies the animator **root** `Object3D` position/quaternion into `WorldTransform`, re-derives Euler angles, and — when `Transform` is also present — sets `Transform.dirty = 1` so downstream hierarchy systems recompute.
+  3. **Only when `rootMotion === 1`** and the entity has `WorldTransform`: copies the animator **root** `Object3D` position/quaternion into `WorldTransform`, re-derives Euler angles, and — when `Transform` is also present — sets `Transform.dirty = 1` so downstream hierarchy systems recompute.
+
+> **`rootMotion` is opt-in, and must stay that way.** The write-back is only correct when the animator's root *is* the entity's world-space object. The common case is the opposite: `maybeAutoPlayIdle` (in `gltf-xml`) builds an animator whose root is the `lod0` child of a group the loader already positioned, so that root's local transform is the identity. With the write-back unconditional, every auto-idled NPC had its `WorldTransform` stomped to `(0,0,0)` each `draw` and its `Transform` re-dirtied, so `TransformHierarchySystem` recomposed the right pose in `simulation` and lost it again the same frame — the entire NPC cast rendered stacked on the world origin while their ECS `Transform` read correctly. Regression test: `tests/unit/gltf-anim/root-motion.test.ts`.
 
 ### Plugin: `GltfAnimPlugin`
 
-Registers `GltfAnimationUpdateSystem`, the `GltfAnimationState` component, and component defaults (`registryIndex=0`, `activeClipIndex=0`, `isPlaying=0`, `crossfadeDuration=0.25`). Registered in `DefaultPlugins`.
+Registers `GltfAnimationUpdateSystem`, the `GltfAnimationState` component, and component defaults (`registryIndex=0`, `activeClipIndex=0`, `isPlaying=0`, `crossfadeDuration=0.25`, `rootMotion=0`). Registered in `DefaultPlugins`.
 
 ## Lifecycle & disposal
 

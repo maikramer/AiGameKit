@@ -27,9 +27,11 @@ vibegame analyze --public-dir examples/simple-rpg/public --json
 vibegame analyze --fail-on warn
 ```
 
-Reports: broken Includes, comma cell coords, missing `/assets/…`, solid XZ overlaps
-(Composition boxes / GameObject colliders / GLB hulls). Pads/Roads are ground — not
-solid overlaps. Exit `1` on errors (or warns with `--fail-on warn`).
+Reports: broken Includes, comma cell coords, missing `/assets/…` (GLB **and**
+images — `url`/`model-url`/`lod*-url`/`mesh-url`/`meshes`, plus
+`heightmap`/`texture`/`terrain-texture`/`icon`/`texture-url`/PBR maps), solid XZ
+overlaps (Composition boxes / GameObject colliders / GLB hulls). Pads/Roads are
+ground — not solid overlaps. Exit `1` on errors (or warns with `--fail-on warn`).
 
 API: `analyzeWorld({ entry, publicDir })` from `vibegame/cli`.
 

@@ -79,3 +79,4 @@ export type {
   VariationSample,
   VariationVisualSpec,
 } from '../spawn-variation';
+export { describeSpawnPending } from './ready-gate';

@@ -10,6 +10,7 @@ import {
   checkCityChildrenOutsideGrid,
   checkCommaCellCoords,
 } from './parse-checks';
+import { checkRoadNetworks } from './roads';
 import type { AnalyzeOptions, AnalyzeResult, AnalyzeIssue } from './types';
 
 let domReady = false;
@@ -109,6 +110,7 @@ export async function analyzeWorld(
   }
 
   issues.push(...checkCityChildrenOutsideGrid(root));
+  issues.push(...checkRoadNetworks(root));
 
   const expandedTree = expandCityGridsInTree(root, issues);
   issues.push(...checkAssetUrls(expandedTree, publicDir));

@@ -1,11 +1,15 @@
 import { logger } from '../../core/utils/logger';
 import { getLoadingProgress, isWorldReady, type State } from '../../core';
 import { describeGltfAssetsPending } from '../gltf-xml/ready-gate';
+import { describeSpawnPending } from '../spawner/ready-gate';
+import { describeTerrainPending } from '../terrain/ready-gate';
 
 export interface LoadingScreenText {
   title: string;
   subtitle: string;
 }
+
+export type LoadingScreenLocale = 'en' | 'pt';
 
 /** Minimum time the screen stays up so fast loads don't flash. */
 const MIN_VISIBLE_MS = 350;
@@ -16,22 +20,98 @@ interface LoadingUI {
   root: HTMLDivElement;
   bar: HTMLDivElement;
   status: HTMLDivElement;
+  detail: HTMLDivElement;
   titleEl: HTMLDivElement;
   subtitleEl: HTMLDivElement;
   firstShown: number;
   done: boolean;
 }
 
+interface LoadingCopy {
+  finishing: string;
+  ready: string;
+  terrainInit: string;
+  terrainDecode: string;
+  terrainCollision: string;
+  terrain: string;
+  spawn: (done: number, total: number) => string;
+  assets: (done: number, total: number, remaining: number) => string;
+  assetsKick: (n: number) => string;
+  assetsGeneric: string;
+  shaders: string;
+  gates: (ready: number, total: number) => string;
+  fields: (n: number) => string;
+}
+
+const COPY: Record<LoadingScreenLocale, LoadingCopy> = {
+  en: {
+    finishing: 'Finishing…',
+    ready: 'Ready',
+    terrainInit: 'Preparing terrain…',
+    terrainDecode: 'Decoding heightmap…',
+    terrainCollision: 'Building terrain collision…',
+    terrain: 'Building terrain…',
+    spawn: (done, total) =>
+      total > 0
+        ? `Placing world objects (${done}/${total})…`
+        : 'Placing world objects…',
+    assets: (done, total, remaining) =>
+      `Loading models ${done}/${total} · ${remaining} remaining`,
+    assetsKick: (n) =>
+      n === 1 ? 'Starting 1 asset download…' : `Starting ${n} asset downloads…`,
+    assetsGeneric: 'Loading models…',
+    shaders: 'Warming shaders…',
+    gates: (ready, total) => `Steps ${ready}/${total}`,
+    fields: (n) => (n === 1 ? '1 terrain field' : `${n} terrain fields`),
+  },
+  pt: {
+    finishing: 'A terminar…',
+    ready: 'Pronto',
+    terrainInit: 'A preparar o terreno…',
+    terrainDecode: 'A descodificar o mapa de alturas…',
+    terrainCollision: 'A construir colisão do terreno…',
+    terrain: 'A construir o terreno…',
+    spawn: (done, total) =>
+      total > 0
+        ? `A colocar objetos (${done}/${total})…`
+        : 'A colocar objetos…',
+    assets: (done, total, remaining) =>
+      `A carregar modelos ${done}/${total} · ${remaining} restantes`,
+    assetsKick: (n) =>
+      n === 1
+        ? 'A iniciar 1 descarga de asset…'
+        : `A iniciar ${n} descargas de assets…`,
+    assetsGeneric: 'A carregar modelos…',
+    shaders: 'A aquecer shaders…',
+    gates: (ready, total) => `Etapas ${ready}/${total}`,
+    fields: (n) => (n === 1 ? '1 campo de terreno' : `${n} campos de terreno`),
+  },
+};
+
 // Singleton: there is one loading screen per page. Kept at module scope (not
 // per-State) so it can be mounted before any runtime/State exists — the whole
 // point is to paint it as early as possible.
 let text: LoadingScreenText = { title: 'Loading…', subtitle: '' };
+let locale: LoadingScreenLocale = detectLocale();
 let ui: LoadingUI | null = null;
 // Pending fade-out timer (see updateLoadingScreen). Tracked so it can be
 // cancelled if the runtime is torn down during the fade window; otherwise the
 // callback fires on a detached node. runtime.destroy() should call
 // cancelLoadingFade().
 let fadeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function detectLocale(): LoadingScreenLocale {
+  if (typeof navigator === 'undefined') return 'en';
+  try {
+    return navigator.language.toLowerCase().startsWith('pt') ? 'pt' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
+function copy(): LoadingCopy {
+  return COPY[locale] ?? COPY.en;
+}
 
 function applyText(): void {
   if (!ui) return;
@@ -48,6 +128,15 @@ export function setLoadingScreenText(t: Partial<LoadingScreenText>): void {
 
 export function getLoadingScreenText(): LoadingScreenText {
   return text;
+}
+
+/** Force EN/PT status strings (defaults to navigator.language). */
+export function setLoadingScreenLocale(lang: LoadingScreenLocale): void {
+  locale = lang;
+}
+
+export function getLoadingScreenLocale(): LoadingScreenLocale {
+  return locale;
 }
 
 /**
@@ -71,7 +160,7 @@ function createUI(): LoadingUI {
   root.id = 'vibegame-loading';
   root.style.cssText =
     'position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;' +
-    'align-items:center;justify-content:center;gap:22px;' +
+    'align-items:center;justify-content:center;gap:18px;' +
     'background:radial-gradient(ellipse at 50% 35%,#16213a 0%,#0a0e1a 70%,#05070d 100%);' +
     'font-family:system-ui,Segoe UI,sans-serif;color:#e8eef8;' +
     `opacity:1;transition:opacity ${FADE_MS}ms ease-out;pointer-events:auto;`;
@@ -83,56 +172,158 @@ function createUI(): LoadingUI {
 
   const subtitleEl = document.createElement('div');
   subtitleEl.style.cssText =
-    'font-size:14px;color:#9fb2d6;letter-spacing:0.3px;margin-top:-10px;';
+    'font-size:14px;color:#9fb2d6;letter-spacing:0.3px;margin-top:-6px;';
 
   const barOuter = document.createElement('div');
   barOuter.style.cssText =
-    'width:min(360px,72vw);height:8px;border-radius:6px;overflow:hidden;' +
+    'width:min(420px,78vw);height:8px;border-radius:6px;overflow:hidden;' +
     'background:rgba(120,150,210,0.18);border:1px solid rgba(120,150,210,0.18);';
 
   const bar = document.createElement('div');
   bar.style.cssText =
     'width:0%;height:100%;border-radius:6px;' +
     'background:linear-gradient(90deg,#4a7bd6,#7fd0ff);' +
-    'transition:width 0.25s ease-out;';
+    'transition:width 0.2s ease-out;';
   barOuter.appendChild(bar);
 
   const status = document.createElement('div');
   status.style.cssText =
-    'font-size:12px;color:#8a9ab8;letter-spacing:0.4px;min-height:16px;';
+    'font-size:13px;color:#a8b8d4;letter-spacing:0.3px;min-height:18px;' +
+    'text-align:center;max-width:min(520px,88vw);';
+
+  const detail = document.createElement('div');
+  detail.style.cssText =
+    'font-size:11px;color:#6e7f9c;letter-spacing:0.2px;min-height:14px;' +
+    'text-align:center;max-width:min(520px,88vw);opacity:0.95;';
 
   root.appendChild(titleEl);
   root.appendChild(subtitleEl);
   root.appendChild(barOuter);
   root.appendChild(status);
+  root.appendChild(detail);
   document.body.appendChild(root);
 
-  return { root, bar, status, titleEl, subtitleEl, firstShown: 0, done: false };
+  return {
+    root,
+    bar,
+    status,
+    detail,
+    titleEl,
+    subtitleEl,
+    firstShown: 0,
+    done: false,
+  };
 }
 
-/** First time `assets` appeared pending (perf clock); for stall logs. */
-let assetsPendingSince = 0;
+/**
+ * Stall warn only when the critical set is frozen. Normal boot drains dozens of
+ * GLBs over 10–30s — logging every 5s while counts fall is noise, not a hang.
+ */
+let assetsStallFingerprint = '';
+let assetsStuckSince = 0;
 let lastAssetsStallLog = 0;
 const ASSETS_STALL_LOG_MS = 5_000;
 
-function humanizePending(state: State, pending: string[]): string {
-  if (pending.length === 0) return 'Finishing…';
-  const labels: Record<string, string> = {
-    terrain: 'Building terrain',
-    spawn: 'Placing world objects',
-    assets: 'Loading assets',
-    shaders: 'Warming shaders',
-  };
-  const parts = pending.map((p) => {
-    if (p !== 'assets') return labels[p] ?? p;
+function basenameUrl(url: string): string {
+  const clean = url.split('?')[0] ?? url;
+  const slash = Math.max(clean.lastIndexOf('/'), clean.lastIndexOf('\\'));
+  return slash >= 0 ? clean.slice(slash + 1) : clean;
+}
+
+function formatAssetNames(urls: string[], limit = 3): string {
+  if (urls.length === 0) return '';
+  const names = urls.slice(0, limit).map(basenameUrl);
+  const extra = urls.length - names.length;
+  return extra > 0 ? `${names.join(', ')} +${extra}` : names.join(', ');
+}
+
+function humanizePending(
+  state: State,
+  pending: string[]
+): { status: string; detail: string } {
+  const c = copy();
+  if (pending.length === 0) return { status: c.finishing, detail: '' };
+
+  // Prefer the most specific / slow phase first so the player sees useful work.
+  const order = ['assets', 'terrain', 'spawn', 'shaders'] as const;
+  const primary =
+    order.find((name) => pending.includes(name)) ?? pending[0] ?? 'assets';
+
+  if (primary === 'assets') {
     const d = describeGltfAssetsPending(state);
-    // Instanced pools mark GltfPending.loaded early — critical count is the real hold.
-    if (d.critical > 0 || d.pendingEntities > 0) {
-      return `Loading assets (${d.critical} critical, ${d.pendingEntities} pending)`;
+    if (d.total > 0 && (d.remaining > 0 || d.done > 0)) {
+      return {
+        status: c.assets(d.done, d.total, d.remaining),
+        detail: formatAssetNames(d.criticalUrls),
+      };
     }
-    return labels.assets;
-  });
-  return parts.join(' · ') + '…';
+    if (d.pendingEntities > 0) {
+      return { status: c.assetsKick(d.pendingEntities), detail: '' };
+    }
+    return { status: c.assetsGeneric, detail: '' };
+  }
+
+  if (primary === 'terrain') {
+    const t = describeTerrainPending(state);
+    const status =
+      t.phase === 'decode'
+        ? c.terrainDecode
+        : t.phase === 'collision'
+          ? c.terrainCollision
+          : t.phase === 'init'
+            ? c.terrainInit
+            : c.terrain;
+    return {
+      status,
+      detail: t.fields > 1 ? c.fields(t.fields) : '',
+    };
+  }
+
+  if (primary === 'spawn') {
+    const s = describeSpawnPending(state);
+    return { status: c.spawn(s.done, s.total), detail: '' };
+  }
+
+  if (primary === 'shaders') {
+    return { status: c.shaders, detail: '' };
+  }
+
+  return { status: `${primary}…`, detail: '' };
+}
+
+/** Gate bar with asset sub-progress so the fill moves during long GLB boots. */
+function computeProgressPercent(
+  state: State,
+  progress: { ready: number; total: number; pending: string[] }
+): number {
+  if (progress.total === 0) return 100;
+  const pending = new Set(progress.pending);
+  // Each gate is 1 unit. Pending assets/spawn contribute a done/total fraction.
+  const gateWeight = 1;
+  const readyUnits = progress.ready * gateWeight;
+  let pendingUnits = 0;
+  for (const name of pending) {
+    if (name === 'assets') {
+      const d = describeGltfAssetsPending(state);
+      pendingUnits +=
+        d.total > 0 ? gateWeight * Math.min(1, d.done / d.total) : 0;
+    } else if (name === 'spawn') {
+      const s = describeSpawnPending(state);
+      pendingUnits +=
+        s.total > 0 ? gateWeight * Math.min(1, s.done / s.total) : 0;
+    }
+    // terrain/shaders stay at 0 until they pass (no reliable sub-meter).
+  }
+  const score = readyUnits + pendingUnits;
+  return Math.max(0, Math.min(100, Math.round((score / progress.total) * 100)));
+}
+
+function assetsStallKey(
+  d: ReturnType<typeof describeGltfAssetsPending>
+): string {
+  // Sort so set membership (not insertion order) defines "same hold".
+  const urls = d.criticalUrls.slice().sort().join(',');
+  return `${d.critical}|${d.pendingEntities}|${urls}`;
 }
 
 function maybeLogAssetsStall(
@@ -141,14 +332,22 @@ function maybeLogAssetsStall(
   now: number
 ): void {
   if (!pending.includes('assets')) {
-    assetsPendingSince = 0;
+    assetsStallFingerprint = '';
+    assetsStuckSince = 0;
     return;
   }
-  if (assetsPendingSince === 0) assetsPendingSince = now;
-  if (now - assetsPendingSince < ASSETS_STALL_LOG_MS) return;
+  const d = describeGltfAssetsPending(state);
+  const fingerprint = assetsStallKey(d);
+  if (fingerprint !== assetsStallFingerprint) {
+    // Gate still draining — keep quiet; restart the stuck clock.
+    assetsStallFingerprint = fingerprint;
+    assetsStuckSince = now;
+    return;
+  }
+  if (assetsStuckSince === 0) assetsStuckSince = now;
+  if (now - assetsStuckSince < ASSETS_STALL_LOG_MS) return;
   if (now - lastAssetsStallLog < ASSETS_STALL_LOG_MS) return;
   lastAssetsStallLog = now;
-  const d = describeGltfAssetsPending(state);
   const crit =
     d.criticalUrls.length > 0
       ? ` criticalUrls=[${d.criticalUrls.slice(0, 8).join(', ')}]`
@@ -156,10 +355,10 @@ function maybeLogAssetsStall(
   const samples =
     d.sampleUrls.length > 0 ? ` pendingKick=[${d.sampleUrls.join(', ')}]` : '';
   logger.warn(
-    `[loading] assets gate still held after ${Math.round(
-      (now - assetsPendingSince) / 1000
+    `[loading] assets gate stuck for ${Math.round(
+      (now - assetsStuckSince) / 1000
     )}s — critical=${d.critical} active=${d.active} ` +
-      `pendingKick=${d.pendingEntities}${crit}${samples}`
+      `done=${d.done}/${d.total} pendingKick=${d.pendingEntities}${crit}${samples}`
   );
 }
 
@@ -181,20 +380,31 @@ export function updateLoadingScreen(state: State): void {
   // owned would be left half-done.
   const progress = getLoadingProgress(state);
   const ready = isWorldReady(state);
-  const pct =
-    progress.total === 0
-      ? 100
-      : Math.round((progress.ready / progress.total) * 100);
+  const pct = ready ? 100 : computeProgressPercent(state, progress);
+  const c = copy();
   ui.bar.style.width = `${pct}%`;
   if (!ready) maybeLogAssetsStall(state, progress.pending, now);
-  ui.status.textContent = ready
-    ? 'Ready'
-    : humanizePending(state, progress.pending);
+
+  if (ready) {
+    ui.status.textContent = c.ready;
+    ui.detail.textContent = c.gates(progress.ready, progress.total);
+  } else {
+    const line = humanizePending(state, progress.pending);
+    ui.status.textContent = line.status;
+    const gateHint =
+      progress.total > 1 ? c.gates(progress.ready, progress.total) : '';
+    ui.detail.textContent = [line.detail, gateHint].filter(Boolean).join(' · ');
+  }
 
   if (ready && now - ui.firstShown >= MIN_VISIBLE_MS) {
     ui.done = true;
     const root = ui.root;
     root.style.opacity = '0';
+    // Drop pointer capture as the fade starts: for the whole FADE_MS the
+    // overlay is invisible but still on top, and it used to swallow the first
+    // click — which in this engine is also the click that focuses the canvas
+    // (keyboard routing) and unlocks the audio context.
+    root.style.pointerEvents = 'none';
     fadeTimer = setTimeout(() => {
       fadeTimer = null;
       root.remove();

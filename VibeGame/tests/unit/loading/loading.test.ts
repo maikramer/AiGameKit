@@ -3,7 +3,9 @@ import {
   type LoadingScreenText,
   LoadingPlugin,
   LoadingScreenSystem,
+  getLoadingScreenLocale,
   getLoadingScreenText,
+  setLoadingScreenLocale,
   setLoadingScreenText,
 } from 'vibegame';
 
@@ -14,6 +16,7 @@ function resetLoadingText(): void {
     title: DEFAULT_TEXT.title,
     subtitle: DEFAULT_TEXT.subtitle,
   });
+  setLoadingScreenLocale('en');
 }
 
 describe('loading: getLoadingScreenText default', () => {
@@ -57,6 +60,17 @@ describe('loading: setLoadingScreenText merge', () => {
     const text = getLoadingScreenText();
     expect(typeof text.title).toBe('string');
     expect(typeof text.subtitle).toBe('string');
+  });
+});
+
+describe('loading: locale', () => {
+  afterEach(resetLoadingText);
+
+  it('aceita en e pt', () => {
+    setLoadingScreenLocale('pt');
+    expect(getLoadingScreenLocale()).toBe('pt');
+    setLoadingScreenLocale('en');
+    expect(getLoadingScreenLocale()).toBe('en');
   });
 });
 

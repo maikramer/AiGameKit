@@ -41,12 +41,35 @@ const _settledMasters = new Set<string>();
 let _criticalAnon = 0;
 let _backgroundAnon = 0;
 let _anyGltfLoadStarted = false;
+/**
+ * Boot progress for the loading UI: how many unique critical masters have been
+ * requested this session vs how many have settled. Peak grows as new URLs join
+ * the critical set; `remaining` is the live in-flight count.
+ */
+let _criticalEver = 0;
+let _criticalSettled = 0;
 
 export type GltfLoadPriority = 'critical' | 'background';
 
 /** In-flight critical GLTF loads — the loading `assets` gate waits on these. */
 export function getCriticalGltfLoadCount(): number {
   return _criticalUrls.size + _criticalAnon;
+}
+
+/**
+ * Cumulative critical-load progress for the loading overlay.
+ * `total` = unique critical masters seen this boot; `done` = settled;
+ * `remaining` = currently in flight.
+ */
+export function getCriticalGltfLoadProgress(): {
+  remaining: number;
+  done: number;
+  total: number;
+} {
+  const remaining = getCriticalGltfLoadCount();
+  const total = Math.max(_criticalEver, remaining + _criticalSettled);
+  const done = Math.max(0, total - remaining);
+  return { remaining, done, total };
 }
 
 /** Total in-flight GLTF loads (critical + background). Debug / HUD. */
@@ -74,6 +97,16 @@ export function _resetGltfLoadTrackingForTests(): void {
   _criticalAnon = 0;
   _backgroundAnon = 0;
   _anyGltfLoadStarted = false;
+  _criticalEver = 0;
+  _criticalSettled = 0;
+}
+
+function noteCriticalCredit(): void {
+  _criticalEver += 1;
+}
+
+function noteCriticalSettled(): void {
+  _criticalSettled += 1;
 }
 
 /**
@@ -89,29 +122,53 @@ function trackGltfLoad<T>(
   const key = url?.trim() || '';
   if (key && _settledMasters.has(key)) return p;
   if (key) {
-    const set = priority === 'critical' ? _criticalUrls : _backgroundUrls;
-    if (set.has(key)) return p;
-    set.add(key);
+    // Critical wins over background: a lod1 streamed as background must join
+    // the boot gate when another entity uses that same URL as its primary mesh.
+    if (priority === 'critical') {
+      if (_criticalUrls.has(key)) return p;
+      _backgroundUrls.delete(key);
+      _criticalUrls.add(key);
+      noteCriticalCredit();
+    } else {
+      if (_criticalUrls.has(key) || _backgroundUrls.has(key)) return p;
+      _backgroundUrls.add(key);
+    }
     return p.then(
       (v) => {
+        const wasCritical = _criticalUrls.has(key);
         _settledMasters.add(key);
-        set.delete(key);
+        _criticalUrls.delete(key);
+        _backgroundUrls.delete(key);
+        if (wasCritical) noteCriticalSettled();
         return v;
       },
       (e: unknown) => {
-        set.delete(key);
+        // Failures drop the credit without counting as "done" — a retry can
+        // re-open the same URL and still hold the boot gate honestly.
+        _criticalUrls.delete(key);
+        _backgroundUrls.delete(key);
         throw e;
       }
     );
   }
-  if (priority === 'critical') _criticalAnon++;
-  else _backgroundAnon++;
+  if (priority === 'critical') {
+    _criticalAnon++;
+    noteCriticalCredit();
+    return p.then(
+      (v) => {
+        _criticalAnon = Math.max(0, _criticalAnon - 1);
+        noteCriticalSettled();
+        return v;
+      },
+      (e: unknown) => {
+        _criticalAnon = Math.max(0, _criticalAnon - 1);
+        throw e;
+      }
+    );
+  }
+  _backgroundAnon++;
   return p.finally(() => {
-    if (priority === 'critical') {
-      _criticalAnon = Math.max(0, _criticalAnon - 1);
-    } else {
-      _backgroundAnon = Math.max(0, _backgroundAnon - 1);
-    }
+    _backgroundAnon = Math.max(0, _backgroundAnon - 1);
   });
 }
 
@@ -234,6 +291,31 @@ export function createGLTFLoader(manager?: THREE.LoadingManager): GLTFLoader {
   if (_ktx2Loader) {
     loader.setKTX2Loader(_ktx2Loader);
   }
+  return loader;
+}
+
+/**
+ * Like {@link createGLTFLoader}, but never fetches or decodes textures.
+ *
+ * A plugin short-circuits `loadMaterial` with one throwaway material, so the
+ * parser never resolves a `texture` dependency. For geometry-only consumers
+ * (collision hulls) that skips a full basis/KTX2 transcode per GLB — work whose
+ * only outcome was being disposed a few lines later — and, more importantly,
+ * removes their dependency on a KTX2Loader existing: a collider GLB with KTX2
+ * textures used to fail the whole load with "setKTX2Loader must be called
+ * before loading KTX2 textures", leaving the prop with no collider at all.
+ */
+export function createGeometryGLTFLoader(
+  manager?: THREE.LoadingManager
+): GLTFLoader {
+  const loader = createGLTFLoader(manager);
+  // One material per loader (never shared across parses, so a caller disposing
+  // the result cannot poison another load).
+  const placeholder = new THREE.MeshBasicMaterial();
+  loader.register(() => ({
+    name: 'VIBEGAME_geometry_only',
+    loadMaterial: () => Promise.resolve(placeholder),
+  }));
   return loader;
 }
 

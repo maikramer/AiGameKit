@@ -39,6 +39,28 @@ function getParticleSystems(state: State): Map<number, ParticleSystem> {
   return map;
 }
 
+/**
+ * Apply the emitter's `shape-radius` / `shape-angle` overrides onto the preset's
+ * emitter shape. Both fields default to 0, meaning "keep the preset's value" —
+ * before this, they were parsed, defaulted and documented but never read, so a
+ * campfire and a torch were stuck with the same 0.12 m fire cone.
+ *
+ * The preset factory builds a fresh emitter per call, so mutating in place is
+ * safe — no shape instance is shared between particle systems.
+ */
+function applyShapeOverrides(
+  shape: ParticleSystemParameters['shape'],
+  entity: number
+): ParticleSystemParameters['shape'] {
+  if (!shape) return shape;
+  const radius = ParticleEmitter.shapeRadius[entity];
+  const angle = ParticleEmitter.shapeAngle[entity];
+  const target = shape as unknown as { radius?: number; angle?: number };
+  if (radius > 0 && typeof target.radius === 'number') target.radius = radius;
+  if (angle > 0 && typeof target.angle === 'number') target.angle = angle;
+  return shape;
+}
+
 function createParticleSystem(
   state: State,
   entity: number
@@ -112,7 +134,7 @@ function createParticleSystem(
       ? new ConstantValue(ParticleEmitter.emissionRate[entity])
       : (presetParams.emissionOverTime ??
         new ConstantValue(ParticleEmitter.emissionRate[entity])),
-    shape: presetParams.shape,
+    shape: applyShapeOverrides(presetParams.shape, entity),
     material: presetParams.material!,
     worldSpace:
       typeof presetParams.worldSpace === 'boolean'

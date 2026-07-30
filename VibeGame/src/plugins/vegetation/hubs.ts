@@ -1,5 +1,6 @@
 import type { State } from '../../core';
 import { isSpawnAreaFree } from '../spawner/occupancy';
+import { isPointOnRoad } from '../terrain/brush-registry';
 import { isPointNearWater, isPointOnWaterBank } from '../water/registry';
 
 export type HubXZ = [number, number];
@@ -57,6 +58,7 @@ export interface GenerateHubsOptions {
   regionMinZ: number;
   regionMaxZ: number;
   avoidWater: boolean;
+  avoidRoad?: boolean;
   nearWater?: boolean;
 }
 
@@ -80,6 +82,7 @@ export function generateVegetationHubs(
     const cz0 = minZ + rand() * (maxZ - minZ);
     if (!isSpawnAreaFree(state, cx0, cz0, 0.5)) continue;
     if (opts.avoidWater && isPointNearWater(state, cx0, cz0)) continue;
+    if (opts.avoidRoad && isPointOnRoad(state, cx0, cz0)) continue;
     if (opts.nearWater && !isPointOnWaterBank(state, cx0, cz0)) continue;
     hubs.push([cx0, cz0]);
   }

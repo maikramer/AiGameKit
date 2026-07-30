@@ -56,6 +56,30 @@ Presets de ambiente em ciclo (`snow`, `rain`) precisam de `emission-rate`
 explícito: o default de 50/s vira nevão/aguaceiro que tapa a paisagem toda a
 poucas dezenas de metros. ~10/s chega para leitura de bioma.
 
+### Dimensionar a chama ao suporte (`shape-radius` / `shape-angle`)
+
+Ambos **default a 0 = "usa a forma do preset"**; qualquer valor > 0 sobrepõe-se
+ao emissor do preset (`ConeEmitter.radius` / `.angle`, `SphereEmitter.radius`…).
+É o que permite a mesma preset `fire` servir uma fogueira e uma tocha:
+
+```html
+<!-- fogueira: aro de pedra r≈0.5 -->
+<ParticleSystem preset="fire"
+  particle-emitter="preset: fire; shape-radius: 0.32"></ParticleSystem>
+<!-- tocha: haste de 0.23 m -->
+<ParticleSystem preset="fire"
+  particle-emitter="preset: fire; shape-radius: 0.06"></ParticleSystem>
+```
+
+⚠️ Estes dois campos existiam, tinham default e apareciam nos docs, mas
+`createParticleSystem` fazia `shape: presetParams.shape` — **nunca eram lidos**.
+Pior: o default era `0.5`, portanto se alguém os ligasse à bruta passava a
+alargar todos os emissores (o cone do `fire` é `radius: 0.12`, não 0.5). Por
+isso o default passou a `0` e o override vive em `applyShapeOverrides`.
+Ao acrescentar um campo tunável ao SOA, confirmar que há mesmo um sítio em
+`createParticleSystem` a consumi-lo — um campo parseado e ignorado é pior que
+um campo inexistente, porque o XML dá a impressão de estar a afinar alguma coisa.
+
 ## Textures
 
 Each preset uses a sprite map from `/assets/particles/` (configurable via

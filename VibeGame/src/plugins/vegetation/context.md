@@ -80,6 +80,7 @@ flowchart TD
 | `scale-axis-min` / `scale-axis-max` | perfil foliage             | Escala não-uniforme (spawner)                              |
 | `max-slope-deg`                     | `35`                       | Foliage default no parser                                  |
 | `avoid-water`                       | `1`                        |                                                            |
+| `avoid-road`                        | `1`                        | Skip flatten-road + plaza pad core                         |
 | `avoid-overlaps`                    | `0`                        | Carpet denso: overlaps off por omissão                     |
 | `max-distance`                      | `110`                      | Cull render                                                |
 | `footprint-radius`                  | `0.2`                      |                                                            |

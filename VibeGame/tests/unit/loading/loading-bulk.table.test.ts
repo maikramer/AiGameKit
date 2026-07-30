@@ -14,20 +14,28 @@ import {
   State,
   getLoadingScreenText,
   mountLoadingScreen,
+  registerReadyGate,
+  setLoadingScreenLocale,
   setLoadingScreenText,
+  _resetGltfLoadTrackingForTests,
+  _trackGltfLoadForTests,
 } from 'vibegame';
 import {
   cancelLoadingFade,
   getLoadingScreenText as getTextDirect,
   mountLoadingScreen as mountDirect,
+  setLoadingScreenLocale as setLocaleDirect,
   setLoadingScreenText as setTextDirect,
+  updateLoadingScreen as updateDirect,
 } from '../../../src/plugins/loading/context';
 
 const DEFAULT = { title: 'Loading…', subtitle: '' };
 
 function resetText(): void {
   setLoadingScreenText({ title: DEFAULT.title, subtitle: DEFAULT.subtitle });
+  setLoadingScreenLocale('en');
   cancelLoadingFade();
+  _resetGltfLoadTrackingForTests();
 }
 
 const prevDocument = globalThis.document;
@@ -89,6 +97,90 @@ describe('cancelLoadingFade removes overlay', () => {
       expect(document.getElementById('vibegame-loading')).toBeNull();
     });
   }
+});
+
+describe('overlay stops eating clicks as soon as it fades', () => {
+  it('sets pointer-events:none when the fade starts', async () => {
+    mountDirect({ title: 'fade' });
+    const el = document.getElementById('vibegame-loading') as HTMLElement;
+    expect(el.style.pointerEvents).toBe('auto');
+
+    const state = new State();
+    // First call latches `firstShown`; the fade only starts after
+    // MIN_VISIBLE_MS (350ms) has elapsed since then.
+    updateDirect(state);
+    expect(el.style.pointerEvents).toBe('auto');
+
+    await new Promise((r) => setTimeout(r, 400));
+    updateDirect(state);
+
+    expect(el.style.opacity).toBe('0');
+    // Invisible but still on top for FADE_MS — it must not swallow the click
+    // that focuses the canvas / unlocks audio.
+    expect(el.style.pointerEvents).toBe('none');
+  });
+});
+
+describe('status shows remaining critical models (not stuck at 0)', () => {
+  it('EN: done/total · N remaining while assets gate held', async () => {
+    setLocaleDirect('en');
+    mountDirect({ title: 'assets' });
+    const state = new State();
+    let resolveA!: () => void;
+    let resolveB!: () => void;
+    const a = _trackGltfLoadForTests(
+      new Promise<void>((r) => {
+        resolveA = r;
+      }),
+      'critical',
+      '/models/hero.glb'
+    );
+    const b = _trackGltfLoadForTests(
+      new Promise<void>((r) => {
+        resolveB = r;
+      }),
+      'critical',
+      '/models/tree.glb'
+    );
+    registerReadyGate(state, 'assets', () => false);
+    updateDirect(state);
+    const root = document.getElementById('vibegame-loading')!;
+    const status = root.children[3] as HTMLElement;
+    expect(status.textContent).toContain('remaining');
+    expect(status.textContent).toMatch(/0\/2/);
+    expect(status.textContent).not.toMatch(/0 pending/);
+
+    resolveA();
+    await a;
+    updateDirect(state);
+    expect(status.textContent).toMatch(/1\/2/);
+    expect(status.textContent).toContain('1 remaining');
+
+    resolveB();
+    await b;
+  });
+
+  it('PT: usa restantes em vez de pending', async () => {
+    setLocaleDirect('pt');
+    mountDirect({ title: 'assets-pt' });
+    const state = new State();
+    let resolve!: () => void;
+    const p = _trackGltfLoadForTests(
+      new Promise<void>((r) => {
+        resolve = r;
+      }),
+      'critical',
+      '/m/castle.glb'
+    );
+    registerReadyGate(state, 'assets', () => false);
+    updateDirect(state);
+    const root = document.getElementById('vibegame-loading')!;
+    const status = root.children[3] as HTMLElement;
+    expect(status.textContent).toContain('restantes');
+    expect(status.textContent).toContain('A carregar modelos');
+    resolve();
+    await p;
+  });
 });
 
 describe('LoadingScreenSystem setup on State', () => {

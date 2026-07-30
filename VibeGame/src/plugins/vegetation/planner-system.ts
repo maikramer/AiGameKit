@@ -70,6 +70,7 @@ export const VegetationPlannerSystem: System = defineSystem({
         regionMinZ: plan.regionMin[2],
         regionMaxZ: plan.regionMax[2],
         avoidWater: plan.avoidWater,
+        avoidRoad: plan.avoidRoad,
       });
       setVegetationHubs(state, eid, hubs);
 

@@ -44,6 +44,7 @@ describe('spawn profiles', () => {
     expect(r.maxSlopeDeg).toBe(45);
     expect(r.maxSlopePlacementAttempts).toBe(48);
     expect(r.avoidWater).toBe(true);
+    expect(r.avoidRoad).toBe(true);
     expect(r.scaleDistribution).toBe('linear');
     expect(r.yawDistribution).toBe('linear');
     expect(r.scaleDiscreteValues.length).toBe(0);

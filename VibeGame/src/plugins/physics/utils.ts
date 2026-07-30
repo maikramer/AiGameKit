@@ -803,15 +803,12 @@ export function interpolateTransforms(state: State, alpha: number): void {
         `[interpolateTransforms] Entity ${entity} does not have the required components`
       );
 
-    Transform.posX[entity] =
-      InterpolatedTransform.prevPosX[entity] * (1 - alpha) +
-      InterpolatedTransform.posX[entity] * alpha;
-    Transform.posY[entity] =
-      InterpolatedTransform.prevPosY[entity] * (1 - alpha) +
-      InterpolatedTransform.posY[entity] * alpha;
-    Transform.posZ[entity] =
-      InterpolatedTransform.prevPosZ[entity] * (1 - alpha) +
-      InterpolatedTransform.posZ[entity] * alpha;
+    const prevPosX = InterpolatedTransform.prevPosX[entity];
+    const prevPosY = InterpolatedTransform.prevPosY[entity];
+    const prevPosZ = InterpolatedTransform.prevPosZ[entity];
+    const currPosX = InterpolatedTransform.posX[entity];
+    const currPosY = InterpolatedTransform.posY[entity];
+    const currPosZ = InterpolatedTransform.posZ[entity];
 
     const prevW = InterpolatedTransform.prevRotW[entity];
     const prevX = InterpolatedTransform.prevRotX[entity];
@@ -823,7 +820,35 @@ export function interpolateTransforms(state: State, alpha: number): void {
     const currY = InterpolatedTransform.rotY[entity];
     const currZ = InterpolatedTransform.rotZ[entity];
 
-    let dot = prevW * currW + prevX * currX + prevY * currY + prevZ * currZ;
+    // Resting body (Rapier reported the same pose two fixed steps in a row):
+    // the blend is the identity, so copy and skip the lerp + normalize sqrt.
+    // Most props in an open world sit still, and this runs for every body on
+    // every rendered frame.
+    if (
+      prevPosX === currPosX &&
+      prevPosY === currPosY &&
+      prevPosZ === currPosZ &&
+      prevW === currW &&
+      prevX === currX &&
+      prevY === currY &&
+      prevZ === currZ
+    ) {
+      Transform.posX[entity] = currPosX;
+      Transform.posY[entity] = currPosY;
+      Transform.posZ[entity] = currPosZ;
+      Transform.rotW[entity] = currW;
+      Transform.rotX[entity] = currX;
+      Transform.rotY[entity] = currY;
+      Transform.rotZ[entity] = currZ;
+      // Rotation did not change, so the euler sync below would be skipped too.
+      continue;
+    }
+
+    Transform.posX[entity] = prevPosX * (1 - alpha) + currPosX * alpha;
+    Transform.posY[entity] = prevPosY * (1 - alpha) + currPosY * alpha;
+    Transform.posZ[entity] = prevPosZ * (1 - alpha) + currPosZ * alpha;
+
+    const dot = prevW * currW + prevX * currX + prevY * currY + prevZ * currZ;
     const invAlpha = 1 - alpha;
 
     if (dot < 0) {

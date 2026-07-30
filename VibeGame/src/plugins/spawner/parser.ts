@@ -326,6 +326,7 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     maxSlopePlacementAttempts: resolvedSpawn.maxSlopePlacementAttempts,
     pickStrategy,
     avoidWater: resolvedSpawn.avoidWater,
+    avoidRoad: resolvedSpawn.avoidRoad,
     inWater: resolvedSpawn.inWater ?? false,
     nearWater: resolvedSpawn.nearWater ?? false,
     avoidOverlaps: resolvedSpawn.avoidOverlaps,

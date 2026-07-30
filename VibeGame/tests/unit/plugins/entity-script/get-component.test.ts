@@ -186,5 +186,31 @@ describe('EntityScriptContext getComponent methods', () => {
       expect(result).toBe(OtherMarker);
       expect(OtherMarker.flag[grandchild]).toBe(1);
     });
+
+    // A malformed hierarchy (a → b → a) used to recurse until the stack blew.
+    it('terminates on a Parent cycle instead of hanging', () => {
+      const a = state.createEntity();
+      const b = state.createEntity();
+      state.addComponent(a, Parent, { entity: b });
+      state.addComponent(b, Parent, { entity: a });
+
+      const ctx = buildContext(state, a);
+
+      expect(ctx.getComponentInChildren('test-marker')).toBeNull();
+      expect(ctx.getComponentInParent('test-marker')).toBeNull();
+    });
+
+    it('still finds the component when a Parent cycle exists', () => {
+      const a = state.createEntity();
+      const b = state.createEntity();
+      state.addComponent(a, Parent, { entity: b });
+      state.addComponent(b, Parent, { entity: a });
+      state.addComponent(b, TestMarker, { value: 3 });
+
+      const ctx = buildContext(state, a);
+
+      expect(ctx.getComponentInChildren('test-marker')).toBe(TestMarker);
+      expect(ctx.getComponentInParent('test-marker')).toBe(TestMarker);
+    });
   });
 });

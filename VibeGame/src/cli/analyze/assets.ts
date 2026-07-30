@@ -3,8 +3,14 @@ import * as path from 'node:path';
 import type { ParsedElement, XMLValue } from '../../core';
 import type { AnalyzeIssue } from './types';
 
+/**
+ * Site-root asset attrs used across recipes (GLB + images/textures).
+ * Keep in sync with plugins that accept `/…` file paths (terrain, HUD,
+ * PlayerGLTF, vegetation hubs, road/PBR maps).
+ */
 const URL_ATTRS = [
   'url',
+  'model-url',
   'lod1-url',
   'lod2-url',
   'texture-url',
@@ -12,7 +18,17 @@ const URL_ATTRS = [
   'normal-map-url',
   'roughness-map-url',
   'mesh-url',
+  // Images / maps (were silently skipped — only GLB attrs were checked)
+  'heightmap',
+  'heightmap-url',
+  'texture',
+  'terrain-texture',
+  'icon',
+  'src',
 ] as const;
+
+/** Space-separated lists of `/assets/…` paths (vegetation `meshes="… …"`). */
+const URL_LIST_ATTRS = ['meshes'] as const;
 
 function attrStr(v: XMLValue | undefined): string | null {
   if (typeof v === 'string' && v.trim() !== '') return v.trim();
@@ -24,6 +40,13 @@ function urlsFromCollider(collider: string): string[] {
   const m = collider.match(/mesh-url\s*:\s*([^;]+)/i);
   if (m) out.push(m[1]!.trim());
   return out;
+}
+
+function urlsFromList(raw: string): string[] {
+  return raw
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith('/'));
 }
 
 function isLodSecondary(attr: string): boolean {
@@ -60,6 +83,13 @@ export function checkAssetUrls(
     for (const attr of URL_ATTRS) {
       const url = attrStr(el.attributes[attr]);
       if (url) checkUrl(url, attr, tag);
+    }
+    for (const attr of URL_LIST_ATTRS) {
+      const raw = attrStr(el.attributes[attr]);
+      if (!raw) continue;
+      for (const url of urlsFromList(raw)) {
+        checkUrl(url, attr, tag);
+      }
     }
     const collider = attrStr(el.attributes.collider);
     if (collider) {

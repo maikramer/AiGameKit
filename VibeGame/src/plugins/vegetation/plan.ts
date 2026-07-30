@@ -34,6 +34,7 @@ export interface VegetationPatchPlan {
   flowerNearRadius: number;
   wind: boolean;
   avoidWater: boolean;
+  avoidRoad: boolean;
   avoidOverlaps: boolean;
   maxSlopeDeg: number;
   maxDistance: number;
@@ -64,6 +65,7 @@ export interface BuildVegetationPlanInput {
   plantDensityRatio: number;
   wind: boolean;
   avoidWater: boolean;
+  avoidRoad: boolean;
   avoidOverlaps: boolean;
   maxSlopeDeg: number;
   maxDistance: number;
@@ -238,6 +240,7 @@ export function buildVegetationPlan(
     flowerNearRadius: input.flowerNearRadius,
     wind: input.wind,
     avoidWater: input.avoidWater,
+    avoidRoad: input.avoidRoad,
     avoidOverlaps: input.avoidOverlaps,
     maxSlopeDeg: input.maxSlopeDeg,
     maxDistance: input.maxDistance,

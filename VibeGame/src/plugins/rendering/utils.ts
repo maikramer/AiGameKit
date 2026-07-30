@@ -79,6 +79,13 @@ function createThreeCamera(
   }
 
   threeCameras.set(entity, camera);
+  // `threeCameras` is keyed by entity id and outlives the entity otherwise:
+  // a destroyed camera kept its THREE.Camera alive, and once the id was
+  // recycled the next camera entity inherited that stale object (including its
+  // projection type, which `syncCameraSettings` cannot switch).
+  state.onDestroy(entity, () => {
+    threeCameras.delete(entity);
+  });
   return camera;
 }
 

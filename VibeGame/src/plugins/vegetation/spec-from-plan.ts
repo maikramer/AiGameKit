@@ -61,6 +61,7 @@ export function spawnSpecFromLayer(
     maxSlopePlacementAttempts: 48,
     pickStrategy: 'random',
     avoidWater: plan.avoidWater,
+    avoidRoad: plan.avoidRoad,
     inWater: false,
     nearWater: false,
     avoidOverlaps: plan.avoidOverlaps,

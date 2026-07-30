@@ -3,6 +3,7 @@ import {
   getActiveGltfLoadCount,
   getCriticalGltfInflightUrls,
   getCriticalGltfLoadCount,
+  getCriticalGltfLoadProgress,
 } from '../../extras/gltf-bridge';
 import { GltfPending } from './components';
 import { getGltfLodUrls, getGltfUrl, isGltfInFlight } from './context';
@@ -36,6 +37,12 @@ export function describeGltfAssetsPending(state: State): {
   critical: number;
   active: number;
   pendingEntities: number;
+  /** Unique critical masters settled this boot. */
+  done: number;
+  /** Unique critical masters requested this boot (grows as loads start). */
+  total: number;
+  /** Alias of `critical` — in-flight critical remaining. */
+  remaining: number;
   sampleUrls: string[];
   criticalUrls: string[];
 } {
@@ -52,10 +59,14 @@ export function describeGltfAssetsPending(state: State): {
     else sampleUrls.push(`eid:${eid}`);
   }
   const criticalUrls = getCriticalGltfInflightUrls();
+  const progress = getCriticalGltfLoadProgress();
   return {
-    critical: getCriticalGltfLoadCount(),
+    critical: progress.remaining,
     active: getActiveGltfLoadCount(),
     pendingEntities,
+    done: progress.done,
+    total: progress.total,
+    remaining: progress.remaining,
     sampleUrls: sampleUrls.length > 0 ? sampleUrls : criticalUrls.slice(0, 6),
     criticalUrls,
   };

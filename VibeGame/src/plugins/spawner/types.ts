@@ -87,6 +87,11 @@ export interface SpawnGroupSpec {
   /** Re-sample XZ when terrain would sit under a Water plane (lakes). */
   avoidWater: boolean;
   /**
+   * Re-sample XZ when the point sits on a flatten-road corridor or plaza pad
+   * core (paved ground). Keeps trees/rocks/foliage off cobble.
+   */
+  avoidRoad: boolean;
+  /**
    * Inverse of avoid-water: accept only points INSIDE a lake's waterline and
    * anchor Y to the water surface (aquatic plants, buoys). Slope/terrain
    * sampling is skipped for these instances.

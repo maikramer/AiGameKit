@@ -85,6 +85,13 @@ export const GltfAnimationUpdateSystem: System = defineSystem({
       if (!state.hasComponent(eid, WorldTransform)) {
         continue;
       }
+      // Only a root-motion animator owns the entity's world pose. For every
+      // other rig the root is a child of the group the loader already placed,
+      // so its (identity) local transform is not where the entity is — writing
+      // it back parked the whole NPC cast on the world origin.
+      if (GltfAnimationState.rootMotion[eid] !== 1) {
+        continue;
+      }
 
       const root = animator.root;
       const px = root.position.x;
