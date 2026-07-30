@@ -1,16 +1,23 @@
-import { applyHeightBrush, minEffectiveFalloff } from '../terrain/height-brush';
+import {
+  applyHeightBrush,
+  minEffectiveFalloff,
+  minEffectiveWidth,
+} from '../terrain/height-brush';
+import { corridorAabb, nearestOnPolyline } from '../terrain/corridor';
 import type { HeightSampler } from '../terrain/height-sampler';
 import { sampleHeightAt } from '../terrain/height-sampler';
 
 /**
- * Roadbed preparation (real-world order):
- * 1. Survey centerline heights.
- * 2. Light longitudinal smooth (kill texel noise) + grade limit (walkable).
- * 3. Grade a platform of `width` with a short shoulder falloff.
+ * Roadbed preparation — design profile → stamp sampler (shared height-brush).
  *
- * Mutating the sampler keeps mesh LOD, Rapier heightfields, BVH, spawners and
- * the road ribbon on the **same** prepared surface. The ribbon must run
- * *after* this carve and sample `sampleHeightAt` — never lift above it.
+ * 1. Survey centerline heights.
+ * 2. Terrace profile (multi-pass smooth + grade limit).
+ * 3. Grade a platform of `width` with shoulder falloff; optional sink so the
+ *    cut reads as an embankment from the side.
+ *
+ * Density + remesh/collider are the caller's job via the shared ground-mutation
+ * phases (see `terrain/ground-mutation.ts`). Ribbon samples analytic
+ * `sampleHeightAt` after carve — never mesh-catchup.
  */
 export interface RoadCorridorOpts {
   /** Polyline `[x0,z0,...]` in field-local coords, already smoothed/resampled. */
@@ -19,17 +26,28 @@ export interface RoadCorridorOpts {
   width: number;
   /** Shoulder blend back to natural relief (m). Keep short (min necessary). */
   falloff: number;
-  /** Light moving-average window along arc (m). Not a highway cut. */
+  /** Longitudinal smooth window (m). Larger → flatter terrace. */
   window: number;
   /**
-   * Max |Δh/Δs| on the design profile after the light smooth.
-   * Caps cut/fill to what walking needs; omit / `0` = no grade clamp.
+   * Max |Δh/Δs| on the design profile after the terrace smooth.
+   * Caps cut/fill; omit / `0` = no grade clamp.
    */
   maxGrade?: number;
+  /**
+   * How far the bed sits below the terrace profile (m). Small positive cut so
+   * shoulders read as a bank; 0 = flush with profile.
+   */
+  platformSink?: number;
 }
 
 /** Default design grade (~22%). Steeper natural slopes get cut/fill. */
 export const DEFAULT_ROAD_MAX_GRADE = 0.22;
+
+/** Default bed sink below terrace (m) — soft bank, not a trench. */
+export const DEFAULT_ROAD_PLATFORM_SINK = 0.12;
+
+/** Multi-pass smooth iterations for the terrace profile. */
+export const ROAD_PROFILE_SMOOTH_PASSES = 3;
 
 /** Per-station heights + cumulative arc (raw longitudinal profile). */
 function stationProfile(
@@ -105,15 +123,23 @@ export function limitProfileGrade(
   return out;
 }
 
-/** Design profile: light smooth then optional grade limit. */
+/**
+ * Terrace design profile: multi-pass longitudinal smooth then optional grade
+ * limit. Soft default — one light smooth left dune-scale bumps on the bed.
+ */
 export function designRoadProfile(
   arcs: number[],
   heights: number[],
   window: number,
-  maxGrade: number
+  maxGrade: number,
+  passes = ROAD_PROFILE_SMOOTH_PASSES
 ): number[] {
-  const smoothed = smoothProfile(arcs, heights, window);
-  return limitProfileGrade(arcs, smoothed, maxGrade);
+  let h = heights.slice();
+  const w = Math.max(window, 0.01);
+  for (let p = 0; p < Math.max(1, passes); p++) {
+    h = smoothProfile(arcs, h, w);
+  }
+  return limitProfileGrade(arcs, h, maxGrade);
 }
 
 /**
@@ -127,9 +153,11 @@ export function carveRoadCorridor(
   const path = opts.path;
   if (path.length < 4) return false;
 
-  const halfWidth = Math.max(opts.width, 0.1) / 2;
-  // Falloff clamped to sampler resolution — narrower than a texel aliases to
-  // zero writes ("carve that never happens").
+  // Bed width must span the heightmap lattice. Authored ribbon width (~5–9 m)
+  // is far below a 2000/64 texel (~32 m); without this the full-weight corridor
+  // never hits a texel centre and the terrain looks untouched.
+  const halfWidth =
+    minEffectiveWidth(sampler, Math.max(opts.width, 0.1), 1.5) / 2;
   const fall = minEffectiveFalloff(sampler, Math.max(opts.falloff, 0.01));
   const reach = halfWidth + fall;
 
@@ -137,57 +165,30 @@ export function carveRoadCorridor(
   const maxGrade =
     opts.maxGrade === undefined ? DEFAULT_ROAD_MAX_GRADE : opts.maxGrade;
   const profile = designRoadProfile(arcs, heights, opts.window, maxGrade);
+  const sink =
+    opts.platformSink === undefined
+      ? DEFAULT_ROAD_PLATFORM_SINK
+      : Math.max(0, opts.platformSink);
 
-  let minX = Infinity;
-  let minZ = Infinity;
-  let maxX = -Infinity;
-  let maxZ = -Infinity;
-  for (let i = 0; i < path.length; i += 2) {
-    minX = Math.min(minX, path[i]!);
-    maxX = Math.max(maxX, path[i]!);
-    minZ = Math.min(minZ, path[i + 1]!);
-    maxZ = Math.max(maxZ, path[i + 1]!);
-  }
+  const aabb = corridorAabb(path, reach);
+  if (!aabb) return false;
 
-  const segCount = path.length / 2 - 1;
   return applyHeightBrush(sampler, {
-    minX: minX - reach,
-    maxX: maxX + reach,
-    minZ: minZ - reach,
-    maxZ: maxZ + reach,
+    minX: aabb.minX,
+    maxX: aabb.maxX,
+    minZ: aabb.minZ,
+    maxZ: aabb.maxZ,
     evalAt(wx, wz) {
-      let bestD = Infinity;
-      let bestSeg = 0;
-      let bestT = 0;
-      for (let s = 0; s < segCount; s++) {
-        const ax = path[s * 2]!;
-        const az = path[s * 2 + 1]!;
-        const bx = path[(s + 1) * 2]!;
-        const bz = path[(s + 1) * 2 + 1]!;
-        const dx = bx - ax;
-        const dz = bz - az;
-        const lenSq = dx * dx + dz * dz;
-        let t = lenSq > 0 ? ((wx - ax) * dx + (wz - az) * dz) / lenSq : 0;
-        t = t < 0 ? 0 : t > 1 ? 1 : t;
-        const cx = ax + t * dx;
-        const cz = az + t * dz;
-        const d = Math.hypot(wx - cx, wz - cz);
-        if (d < bestD) {
-          bestD = d;
-          bestSeg = s;
-          bestT = t;
-        }
-      }
-      if (bestD >= reach) return null;
+      const n = nearestOnPolyline(path, wx, wz);
+      if (!n || n.dist >= reach) return null;
 
-      const p0 = profile[bestSeg]!;
-      const p1 = profile[bestSeg + 1]!;
-      const targetY = p0 + (p1 - p0) * bestT;
+      const p0 = profile[n.seg]!;
+      const p1 = profile[n.seg + 1]!;
+      const targetY = p0 + (p1 - p0) * n.t - sink;
 
-      // Full weight on the bed; smoothstep only on the short shoulder.
       let weight = 1;
-      if (bestD > halfWidth) {
-        const t = (bestD - halfWidth) / fall;
+      if (n.dist > halfWidth) {
+        const t = (n.dist - halfWidth) / fall;
         weight = 1 - t * t * (3 - 2 * t);
       }
       return { targetY, weight };

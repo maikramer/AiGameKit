@@ -4,13 +4,18 @@ import type { WorldAabb } from '../terrain/density-map';
 import { getTerrainContext } from '../terrain/utils';
 import { rebuildTerrainDerivatives } from '../terrain/height-brush';
 import {
+  applyCorridorDensity,
+  applyFeatureDensity,
+  densityLeafPad,
+} from '../terrain/ground-mutation';
+import {
   registerGroundBrush,
   unregisterGroundBrush,
   type GroundBrush,
 } from '../terrain/brush-registry';
 import { getRenderingContext } from '../rendering';
-import { applyOverride } from '../terrain/density-map';
 import { refreshChunkResolutions } from '../terrain/systems';
+import { Terrain } from '../terrain/components';
 import { registerWaterBody, unregisterWaterBody } from './registry';
 import { logger } from '../../core/utils/logger';
 import type { WaterBody } from './registry';
@@ -132,25 +137,18 @@ export function applyWaterShape(
   if (!field) return false;
   const { data } = field;
 
-  // 1. Density boost + refresh chunk resolutions. Shapes com path (rios)
-  // marcam por segmento; shapes compactos (lagos) usam o AABB global.
+  // 1. Density stamp (shared ground-mutation) + refresh chunk resolutions.
+  // Corridors get leafPad so chunk borders share boost (no T-junction stripes).
   if (data.density) {
+    const levels = Math.max(1, Terrain.levels[field.entity] || 1);
+    const worldSize = Terrain.worldSize[field.entity] || data.sampler.worldSize;
+    const leafPad = densityLeafPad(worldSize, levels);
+    const boost = shape.densityBoost();
     const seg = shape.densityPath?.();
     if (seg && seg.path.length >= 4) {
-      for (let i = 0; i + 3 < seg.path.length; i += 2) {
-        applyOverride(
-          data.density,
-          {
-            minX: Math.min(seg.path[i]!, seg.path[i + 2]!) - seg.reach,
-            maxX: Math.max(seg.path[i]!, seg.path[i + 2]!) + seg.reach,
-            minZ: Math.min(seg.path[i + 1]!, seg.path[i + 3]!) - seg.reach,
-            maxZ: Math.max(seg.path[i + 1]!, seg.path[i + 3]!) + seg.reach,
-          },
-          shape.densityBoost()
-        );
-      }
+      applyCorridorDensity(data.density, seg.path, seg.reach, boost, leafPad);
     } else {
-      applyOverride(data.density, shape.computeAabb(), shape.densityBoost());
+      applyFeatureDensity(data.density, shape.computeAabb(), boost, leafPad);
     }
     refreshChunkResolutions(state, field.entity, data);
   }

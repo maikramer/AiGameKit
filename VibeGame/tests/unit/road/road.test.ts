@@ -3,12 +3,19 @@ import {
   Road,
   RoadPlugin,
   densifyPathByHeight,
+  detectRoadJunctions,
+  distanceToPolyline,
+  extendPathEnds,
+  makeJunctionGeometry,
   makeRoadGeometry,
+  makeWidthAtFromVertexWidths,
   maxNeighborhoodHeight,
   resampleRoadPath,
   roadRecipe,
   smoothPath,
+  stitchEndToEndChains,
   type RoadGeometryOptions,
+  type RoadJunctionInput,
 } from 'vibegame/road';
 
 function opts(
@@ -112,6 +119,29 @@ describe('road: makeRoadGeometry', () => {
     expect(uv.getX(3)).toBeCloseTo(0.5, 1);
   });
 
+  it('flat ribbon normals point +Y (not into the ground)', () => {
+    const path = resampleRoadPath([0, 0, 10, 0], 2);
+    const geo = makeRoadGeometry(path, opts());
+    const n = geo.getAttribute('normal');
+    for (let i = 0; i < n.count; i++) {
+      expect(n.getY(i)).toBeGreaterThan(0.9);
+    }
+  });
+
+  it('junction disc normals point +Y (not into the ground)', () => {
+    const geo = makeJunctionGeometry(0, 0, {
+      radius: 4,
+      feather: 1,
+      textureScale: 16,
+      heightAt: () => 0,
+    });
+    const n = geo.getAttribute('normal');
+    expect(n.count).toBeGreaterThan(10);
+    for (let i = 0; i < n.count; i++) {
+      expect(n.getY(i)).toBeGreaterThan(0.9);
+    }
+  });
+
   it('segue heightAt + yOffset', () => {
     const path = resampleRoadPath([0, 0, 10, 0], 5);
     const geo = makeRoadGeometry(
@@ -171,12 +201,115 @@ describe('road: makeRoadGeometry', () => {
     expect(bb.max.x).toBeGreaterThan(18);
     expect(bb.max.z).toBeGreaterThan(18);
   });
+
+  it('curva mantém a largura perpendicular (miter join, sem pinch)', () => {
+    // Hard 90° corner: without the miter scale the bisector offset narrows the
+    // ribbon to width·cos(45°) ≈ 0.71 there, which reads as a broken road.
+    const path = [0, 0, 10, 0, 10, 10];
+    const geo = makeRoadGeometry(resampleRoadPath(path, 1), opts({ width: 6 }));
+    const pos = geo.getAttribute('position');
+    let narrowest = Infinity;
+    for (let i = 0; i + 3 < pos.count; i += 4) {
+      const dx = pos.getX(i + 3) - pos.getX(i);
+      const dz = pos.getZ(i + 3) - pos.getZ(i);
+      narrowest = Math.min(narrowest, Math.hypot(dx, dz));
+    }
+    expect(narrowest).toBeGreaterThan(6 - 1e-6);
+  });
+});
+
+describe('road: distanceToPolyline / extendPathEnds', () => {
+  it('mede a distância ao segmento mais próximo, não aos nós', () => {
+    const path = [0, 0, 10, 0];
+    expect(distanceToPolyline(path, 5, 3)).toBeCloseTo(3, 6);
+    expect(distanceToPolyline(path, -4, 0)).toBeCloseTo(4, 6);
+  });
+
+  it('prolonga as pontas ao longo das tangentes dos extremos', () => {
+    const path = [0, 0, 10, 0, 10, 10];
+    const out = extendPathEnds(path, 2, 3);
+    expect(out.slice(0, 2)).toEqual([-2, 0]);
+    expect(out.slice(-2)).toEqual([10, 13]);
+    expect(extendPathEnds(path, 0, 0)).toEqual(path);
+  });
 });
 
 describe('road: maxNeighborhoodHeight', () => {
   it('picks the crest in the neighborhood, not the center', () => {
     const sample = (x: number, z: number) => x + z * 0.1;
     expect(maxNeighborhoodHeight(sample, 0, 0, 2)).toBeCloseTo(2, 5);
+  });
+});
+
+describe('road: fusion (junctions)', () => {
+  const cityEast: RoadJunctionInput = {
+    eid: 1,
+    path: [3, 0, 32, -1, 52, 1, 62, 1],
+    width: 5.4,
+    edgeFeather: 0.45,
+    textureUrl: '/cobble.png',
+    normalMapUrl: null,
+    textureScale: 16,
+  };
+  const desertArtery: RoadJunctionInput = {
+    eid: 2,
+    path: [62, 1, 70, 5, 88, 8, 145, -6],
+    width: 4.2,
+    edgeFeather: 0.45,
+    textureUrl: '/cobble.png',
+    normalMapUrl: null,
+    textureScale: 14,
+  };
+
+  it('detecta end-to-end cidade↔deserto', () => {
+    const junc = detectRoadJunctions([cityEast, desertArtery]);
+    expect(junc.length).toBe(1);
+    expect(junc[0]!.maxWidth).toBeCloseTo(5.4, 5);
+    expect(junc[0]!.arms).toHaveLength(2);
+  });
+
+  it('stitch: um path contínuo cidade→deserto com width lerp', () => {
+    const junc = detectRoadJunctions([cityEast, desertArtery]);
+    const chains = stitchEndToEndChains([cityEast, desertArtery], junc);
+    expect(chains).toHaveLength(1);
+    const c = chains[0]!;
+    expect([...c.memberEids].sort()).toEqual([1, 2]);
+    expect(c.leaderEid).toBe(1);
+    expect(c.path[0]).toBe(3);
+    expect(c.path[c.path.length - 2]).toBe(145);
+    let joinHits = 0;
+    for (let i = 0; i < c.path.length; i += 2) {
+      if (Math.hypot(c.path[i]! - 62, c.path[i + 1]! - 1) < 0.01) joinHits++;
+    }
+    expect(joinHits).toBe(1);
+
+    const widthAt = makeWidthAtFromVertexWidths(c.path, c.widths, 8);
+    expect(widthAt(0, 200)).toBeCloseTo(5.4, 5);
+    expect(widthAt(200, 200)).toBeCloseTo(4.2, 5);
+  });
+
+  it('T-junction: sem stitch end-to-end', () => {
+    const trunk: RoadJunctionInput = {
+      eid: 10,
+      path: [0, 0, 40, 0],
+      width: 5,
+      edgeFeather: 1,
+      textureUrl: null,
+      normalMapUrl: null,
+      textureScale: 16,
+    };
+    const spur: RoadJunctionInput = {
+      eid: 11,
+      path: [20, 0, 20, 30],
+      width: 3,
+      edgeFeather: 1,
+      textureUrl: null,
+      normalMapUrl: null,
+      textureScale: 16,
+    };
+    const junc = detectRoadJunctions([trunk, spur]);
+    expect(junc.length).toBeGreaterThanOrEqual(1);
+    expect(stitchEndToEndChains([trunk, spur], junc)).toHaveLength(0);
   });
 });
 
@@ -209,16 +342,16 @@ describe('road: plugin/recipe', () => {
     );
   });
 
-  it('defaults cobrem largura/feather/scale + prep leito mínimo', () => {
+  it('defaults cobrem largura/feather/scale + prep leito', () => {
     const d = RoadPlugin.config?.defaults?.road as Record<string, number>;
-    expect(d.width).toBe(5);
+    expect(d.width).toBe(2);
     expect(d.textureScale).toBe(16);
     expect(d.edgeFeather).toBeCloseTo(1.1);
     expect(d.stationSpacing).toBeCloseTo(0.35);
     expect(d.endFeatherEnd).toBe(0);
     expect(d.flatten).toBe(1);
-    expect(d.flattenFalloff).toBeCloseTo(5);
-    expect(d.flattenWindow).toBeCloseTo(16);
+    expect(d.flattenFalloff).toBeCloseTo(8);
+    expect(d.flattenWindow).toBeCloseTo(56);
     expect(d.flattenMaxGrade).toBeCloseTo(0.22);
   });
 });

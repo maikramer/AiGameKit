@@ -16,7 +16,9 @@ terrain/
 ├── systems.ts            # Bootstrap, LOD select, mesh, physics, debug systems + query helpers
 ├── pad-systems.ts        # <TerrainPad> flatten + density override (setup)
 ├── flatten.ts            # Rounded-rect flatten helper
-├── height-brush.ts       # rebuildTerrainDerivatives + ground-mutation callbacks
+├── height-brush.ts       # Shared texel stamp + rebuildTerrainDerivatives
+├── corridor.ts           # Polyline nearest/AABB (road + river share)
+├── ground-mutation.ts    # Density leaf-pad + corridor/feature density stamps
 ├── density-map.ts        # Per-tile mesh density boost (featured regions)
 ├── brush-registry.ts     # Ground brushes (pad/lake/river/road footprints)
 ├── recipes.ts            # <Terrain> + <TerrainPad> recipes
@@ -59,8 +61,16 @@ terrain/
 - roughness: f32 (0.85) — material roughness
 - metalness: f32 (0.0) — material metalness
 - normalStrength: f32 (1.0) — normal intensity
-- skirtDepth: f32 (1.0) — seam skirt depth
+- skirtDepth: f32 (1.0) — seam skirt depth (apron under residual geometric gaps)
 - skirtWidth: f32 (0.015625) — seam skirt UV width
+- **Frontier normals** (`chunk-geometry.ts`): lighting seams need **identical
+  frontier normals** on both chunks — border verts sample the shared heightfield
+  with a field-constant world-space ε (never own-chunk stencils). No height
+  morph / overlap push / relief seal.
+- **Density-forced LOD split** (`lod-select.ts`): road/river/pad boost that
+  cannot refine lattice step without subdividing forces deepest leaves (else
+  coarse chords cut above carved beds → sand shows through transparent road
+  decals at chunk edges). Ribbon clears centerline mesh ±2 coarser LODs.
 - heightSmoothing: f32 (0.35) — displacement smoothing blend
 - heightSmoothingSpread: f32 (1.25) — smoothing texel spread
 - baseColor: ui32 (0x4a7a3a) — albedo tint
@@ -163,16 +173,27 @@ Breaks up flat grass without spending a 5th biome splat channel. Shader path in 
 - `reloadTerrainHeightmap(state, entity, url)` — async load new heightmap, rebuild meshes + physics collider
 - `getTerrainStats(state, entity)` — live chunk/collider counts
 
+### Ground-mutation pipeline (pads / lakes / rivers / roads)
+
+One shared stack — feature plugins own only the **design profile**, then call terrain helpers:
+
+1. **Design profile** — terrace (`road/carve`), bowl/bank (`water/carve`), pad plane (`flatten`).
+2. **Density stamp** — `applyCorridorDensity` / `applyFeatureDensity` (+ `densityLeafPad` = half deepest leaf so chunk borders share boost).
+3. **Stamp sampler** — `applyHeightBrush` or segmented `forEachTexelInAabb` (±1 texel margin always).
+4. **Remesh / collider** — `rebuildTerrainDerivatives` (meshDirty + Rapier + BVH + callbacks).
+
+Ribbon/water meshes sample **analytic** `sampleHeightAt` after carve — never mesh-catchup onto LOD geometry. Polyline nearest/AABB live in `corridor.ts`.
+
 ### Density map (featured mesh)
 
-`DensityMap` scores height variance per tile; water/road/pad apply `applyOverride(..., 255)` so leaf chunks refine carves and skirts. Without boost, every LOD level keeps a ~`worldSize/baseResolution` lattice (≈31 m at 2000/64) — features narrower than that never appear on the mesh.
+`DensityMap` scores height variance per tile; features stamp boost 255 via the helpers above so leaf chunks refine carves and skirts. Without boost, every LOD level keeps a ~`worldSize/baseResolution` lattice (≈31 m at 2000/64) — features narrower than that never appear on the mesh.
 
-| Source                              | When boost is stamped                         |
-| ----------------------------------- | --------------------------------------------- |
-| Height variance (`buildDensityMap`) | After heightmap load                          |
-| `<Lake>` / `<River>`                | Before carve (`applyWaterShape`)              |
-| `<Road flatten>`                    | Before corridor carve                         |
-| `<TerrainPad>`                      | After flatten, over core **and** falloff AABB |
+| Source                              | When boost is stamped                      |
+| ----------------------------------- | ------------------------------------------ |
+| Height variance (`buildDensityMap`) | After heightmap load                       |
+| `<Lake>` / `<River>`                | Before carve (`applyWaterShape`) + leafPad |
+| `<Road flatten>`                    | Before corridor carve + leafPad            |
+| `<TerrainPad>`                      | After flatten, core+falloff AABB + leafPad |
 
 Spawn/place must sample with `meshSurfaceResolutionForPoint` (wired into `getGroundHeight` + spawner `surface.ts`). Classic bugs: (1) city gate pad/road density → fine skirt, coarse spawn; (2) point-only `boostAt` while chunk uses leaf `maxBoostOverAabb` → sparse floats on dune variance tiles.
 

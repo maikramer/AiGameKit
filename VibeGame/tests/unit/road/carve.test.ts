@@ -110,7 +110,7 @@ describe('carveRoadCorridor', () => {
     expect(changed).toBe(false);
   });
 
-  it('cuts a bump: the corridor centre drops toward the smoothed profile', () => {
+  it('cuts a bump: terrace profile crushes the crest into a platform', () => {
     // Bump at origin, terrain base 50 m (0.5 norm), bump +20 m (0.2 norm).
     const s = bumpSampler(0.5, 0.2, 0, 0, 10);
     // Dense path along Z through the bump so the profile sees the bump.
@@ -119,17 +119,17 @@ describe('carveRoadCorridor', () => {
       width: 6,
       falloff: 2,
       window: 8,
+      platformSink: 0.12,
     });
     expect(changed).toBe(true);
-    // Centre was 70 m before (0.5 + 0.2 = 0.7 → 70). After carve it must be
-    // strictly lower than the bump peak (the profile smooths it toward the
-    // surrounding 50 m) but above 50 (smoothing window keeps some of the bump).
+    // Centre was 70 m. Multi-pass terrace + sink must cut hard toward ~50
+    // (may dip slightly below surrounding due to platformSink).
     const h = sampleHeightAt(s, 0, 0);
-    expect(h).toBeLessThan(70);
-    expect(h).toBeGreaterThan(50);
+    expect(h).toBeLessThan(60);
+    expect(h).toBeGreaterThan(45);
   });
 
-  it('fills a valley: the corridor centre rises toward the smoothed profile', () => {
+  it('fills a valley: the corridor centre rises toward the terrace profile', () => {
     // Depression at origin: base 50 m, bump -20 m (0.2 → 0.3 norm = 30 m at centre).
     const s = bumpSampler(0.5, -0.2, 0, 0, 10);
     const changed = carveRoadCorridor(s, {
@@ -137,12 +137,12 @@ describe('carveRoadCorridor', () => {
       width: 6,
       falloff: 2,
       window: 8,
+      platformSink: 0,
     });
     expect(changed).toBe(true);
-    // Centre was 30 m before; after carve it must be higher (filled toward 50)
-    // but below 50 (smoothing window keeps some of the depression).
+    // Centre was 30 m; terrace fills toward ~50 (no sink so stay below base).
     const h = sampleHeightAt(s, 0, 0);
-    expect(h).toBeGreaterThan(30);
+    expect(h).toBeGreaterThan(35);
     expect(h).toBeLessThan(50);
   });
 
@@ -176,16 +176,34 @@ describe('carveRoadCorridor', () => {
     expect(after).toBeLessThan(before);
   });
 
-  it('is a no-op on a perfectly flat sampler (profile == terrain, nothing to blend)', () => {
+  it('is a no-op on flat terrain when platformSink is 0', () => {
     const s = flatSampler(0.5);
     const changed = carveRoadCorridor(s, {
       path: densePath(0, -40, 0, 40),
       width: 6,
       falloff: 2,
       window: 8,
+      platformSink: 0,
     });
-    // Flat terrain → profile is flat at 0.5 → target == data everywhere → no change.
+    // Flat → terrace == terrain; sink 0 → no texel change.
     expect(changed).toBe(false);
+  });
+
+  it('platformSink lowers a flat bed below the surrounding grade', () => {
+    const s = flatSampler(0.5);
+    const before = sampleHeightAt(s, 0, 0);
+    const changed = carveRoadCorridor(s, {
+      path: densePath(0, -40, 0, 40),
+      width: 6,
+      falloff: 2,
+      window: 8,
+      platformSink: 0.12,
+    });
+    expect(changed).toBe(true);
+    const after = sampleHeightAt(s, 0, 0);
+    expect(after).toBeLessThan(before - 0.05);
+    // Outside the corridor: untouched.
+    expect(sampleHeightAt(s, 40, 0)).toBeCloseTo(before, 2);
   });
 
   it('smooths the longitudinal profile: a single-station spike is averaged down', () => {
@@ -234,16 +252,15 @@ describe('carveRoadCorridor', () => {
     expect(Math.abs(r - c)).toBeLessThan(0.35);
   });
 
-  it('gentle natural grade barely changes (minimum intervention)', () => {
-    // Constant 10% slope along Z — under default 18% max grade → almost no cut.
+  it('uniform gentle grade keeps slope; only platformSink shifts absolute height', () => {
+    // Constant ~5% world grade — under 18% max grade → terrace follows slope.
     const s = flatSampler(0.4, 512, 200);
     if (!s.data) throw new Error('expected data');
     const half = 100;
     const step = 200 / (512 - 1);
     for (let zi = 0; zi < 512; zi++) {
       const wz = zi * step - half;
-      const h = 0.4 + (wz / 200) * 0.1; // ~10% grade in normalized*maxHeight space
-      // maxHeight=100 → world slope ≈ (0.1*100)/200 = 0.05 = 5%
+      const h = 0.4 + (wz / 200) * 0.1;
       for (let xi = 0; xi < 512; xi++) {
         s.data[zi * 512 + xi] = h;
       }
@@ -255,9 +272,11 @@ describe('carveRoadCorridor', () => {
       falloff: 2.5,
       window: 8,
       maxGrade: 0.18,
+      platformSink: 0.12,
     });
     const after = sampleHeightAt(s, 0, 0);
-    expect(Math.abs(after - before)).toBeLessThan(0.5);
+    // Sink alone (~0.12 m); no dune-busting cut on a uniform grade.
+    expect(Math.abs(after - (before - 0.12))).toBeLessThan(0.35);
   });
 });
 
@@ -274,11 +293,12 @@ describe('limitProfileGrade / designRoadProfile', () => {
     }
   });
 
-  it('designRoadProfile = light smooth then grade limit', () => {
+  it('designRoadProfile = multi-pass terrace smooth then grade limit', () => {
     const arcs = [0, 5, 10, 15, 20];
     const heights = [10, 10, 40, 10, 10];
     const designed = designRoadProfile(arcs, heights, 6, 0.15);
-    expect(designed[2]!).toBeLessThan(40);
+    // Multi-pass crush mid spike harder than a single light smooth.
+    expect(designed[2]!).toBeLessThan(28);
     expect(designed[2]!).toBeGreaterThan(10);
   });
 });

@@ -50,6 +50,12 @@ export const Road = {
 export interface RoadData {
   /** Polyline `[x0,z0,x1,z1,...]` em coordenadas de mundo. */
   path: number[];
+  /**
+   * Optional per-vertex widths (m), one float per path point.
+   * When set, ribbon/carve use `makeWidthAtFromVertexWidths` instead of scalar
+   * `Road.width`. Length must match `path.length / 2`.
+   */
+  widths?: number[];
   textureUrl: string | null;
   normalMapUrl: string | null;
   roughnessMapUrl: string | null;

@@ -32,6 +32,27 @@ export function terrainReady(state: State): boolean {
   return !isTerrainDynamicsBlocking(state);
 }
 
+/** Snapshot for the loading overlay while the `terrain` gate is held. */
+export function describeTerrainPending(state: State): {
+  phase: 'none' | 'init' | 'decode' | 'collision' | 'ready';
+  fields: number;
+} {
+  const fields = terrainQuery(state.world).length;
+  if (fields === 0) return { phase: 'none', fields: 0 };
+
+  let anyInitialized = false;
+  let waitingDecode = false;
+  for (const [, data] of getTerrainContext(state)) {
+    if (!data.initialized) continue;
+    anyInitialized = true;
+    if (data.heightmapUrl && !data.sampler.data) waitingDecode = true;
+  }
+  if (!anyInitialized) return { phase: 'init', fields };
+  if (waitingDecode) return { phase: 'decode', fields };
+  if (isTerrainDynamicsBlocking(state)) return { phase: 'collision', fields };
+  return { phase: 'ready', fields };
+}
+
 export const TerrainReadyGateSystem: System = defineSystem({
   name: 'TerrainReadyGateSystem',
   group: 'setup',

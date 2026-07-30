@@ -2,21 +2,40 @@ import * as THREE from 'three';
 import { sampleHeightAt, type HeightSampler } from './height-sampler';
 
 /**
+ * Write a unit normal from central differences (dh/dx, 1, dh/dz).
+ */
+function writeNormal(
+  normals: Float32Array,
+  i: number,
+  hL: number,
+  hR: number,
+  hD: number,
+  hU: number,
+  spanX: number,
+  spanZ: number
+): void {
+  let nx = (hL - hR) / spanX;
+  let ny = 1;
+  let nz = (hD - hU) / spanZ;
+  const inv = 1 / Math.hypot(nx, ny, nz);
+  normals[i * 3] = nx * inv;
+  normals[i * 3 + 1] = ny * inv;
+  normals[i * 3 + 2] = nz * inv;
+}
+
+/**
  * Build a chunk surface as a grid of `resolution` quads spanning `size`,
- * centered on the field-local (originX, originZ). Vertex Y is displaced by the
- * sampler, so a flat sampler yields a flat plane and a heightmap-backed sampler
- * yields terrain — the same code path across phases.
+ * centered on the field-local (originX, originZ).
  *
- * Normals: interior verts use central differences over already-sampled grid
- * neighbours (1 height sample/vert). Border verts keep a fixed world-space
- * epsilon sample so shared edges across LOD chunks stay lighting-continuous.
- * A vertical skirt of `skirtDepth` plugs the geometric T-junction gaps.
+ * Seam lighting: frontier verts on shared chunk edges must be identical in
+ * direction and sense on both neighbours. Per-chunk finite differences only
+ * see that chunk's verts and crease shading. Border verts therefore sample the
+ * shared heightfield with a field-constant world-space epsilon. No height
+ * morph, overlap push, or relief seal — those read as edge fades and fight
+ * the normal equalisation.
  *
- * UVs are world-space when `textureTileSize > 0`: `uv = fieldLocalXZ / tile`,
- * continuous across chunk borders and with constant texel density on every
- * LOD level. The legacy per-chunk 0..1 UV (tileSize = 0) made the texture
- * density depend on the chunk *size*, so every LOD boundary showed a visible
- * seam where the pattern scale jumped and restarted.
+ * UVs are world-space when `textureTileSize > 0`: `uv = fieldLocalXZ / tile`.
+ * A vertical skirt of `skirtDepth` plugs residual geometric T-junction gaps.
  */
 export function buildChunkGeometry(
   sampler: HeightSampler,
@@ -36,8 +55,7 @@ export function buildChunkGeometry(
 
   const gridCount = verts * verts;
   const hasSkirt = skirtDepth > 0;
-  const skirtCount = hasSkirt ? verts * 4 : 0;
-  const total = gridCount + skirtCount;
+  const total = gridCount + (hasSkirt ? verts * 4 : 0);
   const positions = new Float32Array(total * 3);
   const normals = new Float32Array(total * 3);
   const uvs = new Float32Array(total * 2);
@@ -46,7 +64,6 @@ export function buildChunkGeometry(
   const indices = new Uint32Array(surfaceIndexCount + skirtIndexCount);
   let indexWrite = 0;
 
-  // Pass 1: heights + UVs (one sample per grid vertex).
   for (let z = 0; z < verts; z++) {
     for (let x = 0; x < verts; x++) {
       const i = z * verts + x;
@@ -67,7 +84,8 @@ export function buildChunkGeometry(
     }
   }
 
-  // Pass 2: normals — grid neighbours interior; epsilon samples on border.
+  // Frontier normals from the shared heightfield (same ε → identical on both
+  // neighbours). Interior uses already-sampled grid neighbours.
   for (let z = 0; z < verts; z++) {
     for (let x = 0; x < verts; x++) {
       const i = z * verts + x;
@@ -75,35 +93,29 @@ export function buildChunkGeometry(
       const localZ = originZ - half + z * step;
       const onBorder = x === 0 || x === segments || z === 0 || z === segments;
 
-      let hL: number;
-      let hR: number;
-      let hD: number;
-      let hU: number;
-      let span: number;
       if (onBorder) {
-        hL = sampleHeightAt(sampler, localX - e, localZ);
-        hR = sampleHeightAt(sampler, localX + e, localZ);
-        hD = sampleHeightAt(sampler, localX, localZ - e);
-        hU = sampleHeightAt(sampler, localX, localZ + e);
-        span = 2 * e;
+        writeNormal(
+          normals,
+          i,
+          sampleHeightAt(sampler, localX - e, localZ),
+          sampleHeightAt(sampler, localX + e, localZ),
+          sampleHeightAt(sampler, localX, localZ - e),
+          sampleHeightAt(sampler, localX, localZ + e),
+          2 * e,
+          2 * e
+        );
       } else {
-        hL = positions[(z * verts + (x - 1)) * 3 + 1]!;
-        hR = positions[(z * verts + (x + 1)) * 3 + 1]!;
-        hD = positions[((z - 1) * verts + x) * 3 + 1]!;
-        hU = positions[((z + 1) * verts + x) * 3 + 1]!;
-        span = 2 * step;
+        writeNormal(
+          normals,
+          i,
+          positions[(z * verts + (x - 1)) * 3 + 1]!,
+          positions[(z * verts + (x + 1)) * 3 + 1]!,
+          positions[((z - 1) * verts + x) * 3 + 1]!,
+          positions[((z + 1) * verts + x) * 3 + 1]!,
+          2 * step,
+          2 * step
+        );
       }
-
-      let nx = hL - hR;
-      let ny = span;
-      let nz = hD - hU;
-      const inv = 1 / Math.hypot(nx, ny, nz);
-      nx *= inv;
-      ny *= inv;
-      nz *= inv;
-      normals[i * 3] = nx;
-      normals[i * 3 + 1] = ny;
-      normals[i * 3 + 2] = nz;
     }
   }
 

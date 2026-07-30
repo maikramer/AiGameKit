@@ -1,10 +1,10 @@
 import { defineSystem, defineQuery } from '../../core';
 import type { Parser, State, System } from '../../core';
 import { Transform } from '../transforms/components';
-import { TerrainPad } from './components';
+import { Terrain, TerrainPad } from './components';
 import { registerGroundBrush } from './brush-registry';
-import { applyOverride } from './density-map';
 import { flattenRect } from './flatten';
+import { applyFeatureDensity, densityLeafPad } from './ground-mutation';
 import { rebuildTerrainDerivatives } from './height-brush';
 import { sampleHeightAt } from './height-sampler';
 import { refreshChunkResolutions } from './systems';
@@ -68,14 +68,14 @@ export const TerrainPadApplySystem: System = defineSystem({
         cornerRadius,
       });
 
-      // Density boost over the pad+falloff so leaf chunks resolve the skirt
-      // blend (same contract as road/river). Without it the mesh stays on the
-      // coarse lattice and spawners float above the visible falloff slope —
-      // the west city exit is the classic case.
+      // Density boost over the pad+falloff (shared ground-mutation + leafPad).
       const reachX = halfX + falloff;
       const reachZ = halfZ + falloff;
       if (data.density) {
-        applyOverride(
+        const levels = Math.max(1, Terrain.levels[field.entity] || 1);
+        const worldSize =
+          Terrain.worldSize[field.entity] || data.sampler.worldSize;
+        applyFeatureDensity(
           data.density,
           {
             minX: lx - reachX,
@@ -83,7 +83,8 @@ export const TerrainPadApplySystem: System = defineSystem({
             minZ: lz - reachZ,
             maxZ: lz + reachZ,
           },
-          255
+          255,
+          densityLeafPad(worldSize, levels)
         );
         refreshChunkResolutions(state, field.entity, data);
       }

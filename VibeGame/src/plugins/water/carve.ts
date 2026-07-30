@@ -1,4 +1,9 @@
-import { applyHeightBrush } from '../terrain/height-brush';
+import { applyHeightBrush, forEachTexelInAabb } from '../terrain/height-brush';
+import {
+  forEachCorridorSegment,
+  nearestOnPolyline,
+  segmentAabb,
+} from '../terrain/corridor';
 import type { HeightSampler } from '../terrain/height-sampler';
 import { sampleHeightAt } from '../terrain/height-sampler';
 import { pathAabb } from './path-utils';
@@ -197,37 +202,13 @@ export function carveChannel(
     maxZ: aabb.maxZ,
     mode: 'lower',
     evalAt(wx, wz) {
-      // nearest segment: track distance AND the parametric `t` (for axis lookup).
-      let best = Infinity;
-      let bestSeg = 0;
-      let bestT = 0;
-      for (let i = 0; i + 3 < path.length; i += 2) {
-        const ax = path[i]!;
-        const az = path[i + 1]!;
-        const bx = path[i + 2]!;
-        const bz = path[i + 3]!;
-        const dx = bx - ax;
-        const dz = bz - az;
-        const lenSq = dx * dx + dz * dz;
-        let t = lenSq === 0 ? 0 : ((wx - ax) * dx + (wz - az) * dz) / lenSq;
-        t = t < 0 ? 0 : t > 1 ? 1 : t;
-        const cx = ax + t * dx;
-        const cz = az + t * dz;
-        const d = Math.hypot(wx - cx, wz - cz);
-        if (d < best) {
-          best = d;
-          bestSeg = i;
-          bestT = t;
-        }
-      }
-      const tLat = best / halfWidth;
+      const n = nearestOnPolyline(path, wx, wz);
+      if (!n) return null;
+      const tLat = n.dist / halfWidth;
       if (tLat >= 1) return null;
-      // Axis height: interpolate between the two nodes of the nearest segment
-      // using the pre-sampled (stable) axis heights, or fall back to the rim.
-      const nodeIdx = bestSeg / 2;
       const axisY = useAxis
-        ? axisHeights[nodeIdx]! +
-          bestT * (axisHeights[nodeIdx + 1]! - axisHeights[nodeIdx]!)
+        ? axisHeights[n.seg]! +
+          n.t * (axisHeights[n.seg + 1]! - axisHeights[n.seg]!)
         : _rimY;
       const floorY =
         axisY - depth * Math.pow(1 - tLat * tLat, BOWL_PROFILE_EXPONENT);
@@ -285,14 +266,11 @@ export function carveRiverChannel(
   surface: number[],
   opts: RiverCarveOpts
 ): boolean {
-  const { data, width: gw, height: gh, worldSize, maxHeight } = sampler;
-  if (!data || gw < 2 || gh < 2 || maxHeight <= 0) return false;
+  const { data, maxHeight } = sampler;
+  if (!data || maxHeight <= 0) return false;
   const nodeCount = stations.length / 2;
   if (nodeCount < 2 || surface.length < nodeCount) return false;
 
-  const half = worldSize / 2;
-  const stepX = worldSize / (gw - 1);
-  const stepZ = worldSize / (gh - 1);
   const halfW = opts.width / 2;
   const bankW = Math.max(0.01, opts.bankWidth);
   const halfCarve = halfW + bankW;
@@ -300,51 +278,42 @@ export function carveRiverChannel(
 
   let changed = false;
 
+  /**
+   * Per-segment stamp through the shared texel iterator (±1 margin — same
+   * lattice contract as {@link applyHeightBrush}). Long rivers stay O(segments
+   * × local texels), not O(global AABB × all segments).
+   */
   const eachSegmentTexel = (
     reach: number,
     visit: (idx: number, lateral: number, surfY: number) => number | null
   ): void => {
-    for (let i = 0; i + 1 < nodeCount; i++) {
-      const ax = stations[i * 2]!;
-      const az = stations[i * 2 + 1]!;
-      const bx = stations[i * 2 + 2]!;
-      const bz = stations[i * 2 + 3]!;
+    forEachCorridorSegment(stations, (ax, az, bx, bz, i) => {
       const sa = surface[i]!;
       const sb = surface[i + 1]!;
-      const minX = Math.min(ax, bx) - reach;
-      const maxX = Math.max(ax, bx) + reach;
-      const minZ = Math.min(az, bz) - reach;
-      const maxZ = Math.max(az, bz) + reach;
-      const x0 = Math.max(0, Math.floor((minX + half) / stepX));
-      const x1 = Math.min(gw - 1, Math.ceil((maxX + half) / stepX));
-      const z0 = Math.max(0, Math.floor((minZ + half) / stepZ));
-      const z1 = Math.min(gh - 1, Math.ceil((maxZ + half) / stepZ));
       const dx = bx - ax;
       const dz = bz - az;
       const lenSq = dx * dx + dz * dz;
-      for (let zi = z0; zi <= z1; zi++) {
-        const wz = zi * stepZ - half;
-        for (let xi = x0; xi <= x1; xi++) {
-          const wx = xi * stepX - half;
+      forEachTexelInAabb(
+        sampler,
+        segmentAabb(ax, az, bx, bz, reach),
+        (idx, wx, wz) => {
           let t = lenSq === 0 ? 0 : ((wx - ax) * dx + (wz - az) * dz) / lenSq;
           t = t < 0 ? 0 : t > 1 ? 1 : t;
           const cx = ax + t * dx;
           const cz = az + t * dz;
           const d = Math.hypot(wx - cx, wz - cz);
-          if (d >= reach) continue;
-          const idx = zi * gw + xi;
+          if (d >= reach) return;
           const next = visit(idx, d, sa + t * (sb - sa));
           if (next !== null) {
             data[idx] = next;
             changed = true;
           }
         }
-      }
-    }
+      );
+    });
   };
 
-  // Height of the bank/feather profile above the water surface at lateral d.
-  // Bank zone rises 0 → bankHeight (smoothstep); feather falls back to 0.
+  // Bank/feather rise above the water surface at lateral d.
   const bankRise = (d: number): number => {
     if (d <= halfW) return 0;
     if (d <= halfCarve) {
@@ -355,21 +324,17 @@ export function carveRiverChannel(
     return opts.bankHeight * (f * f * (3 - 2 * f));
   };
 
-  // Pass 1 — banks + feather (raise, capped): low terrain outside the
-  // waterline is lifted to the bank profile so the water is contained and
-  // sits below a visible lip. Big deficits are skipped (waterfall/cliff).
+  // Pass 1 — banks + feather (raise, capped).
   eachSegmentTexel(outer, (idx, d, surfY) => {
     if (d <= halfW) return null;
     const cur = data[idx]! * maxHeight;
     const targetY = surfY + bankRise(d);
     if (cur >= targetY) return null;
-    if (targetY - cur > opts.maxBankRaise) return null; // waterfall/cliff zone
+    if (targetY - cur > opts.maxBankRaise) return null;
     return Math.min(1, Math.max(0, targetY / maxHeight));
   });
 
-  // Pass 2 — water bowl + bank cut (lower only): high terrain is carved down
-  // to the bowl inside the waterline and to the rising bank profile outside
-  // it, exposing an earth bank between the water and the natural terrain.
+  // Pass 2 — water bowl + bank cut (lower only).
   eachSegmentTexel(halfCarve, (idx, d, surfY) => {
     let floorY: number;
     if (d <= halfW) {

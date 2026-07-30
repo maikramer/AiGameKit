@@ -12,6 +12,11 @@ import * as THREE from 'three';
 export interface RoadGeometryOptions {
   /** Largura total da faixa (m). */
   width: number;
+  /**
+   * Optional per-station width (m) for junction fusion tapers. Receives arc
+   * length from the start and total path length. Defaults to constant `width`.
+   */
+  widthAt?: (arc: number, totalLen: number) => number;
   /** Metros de mundo por tile de textura. */
   textureScale: number;
   /** Fade lateral borda→núcleo (m). */
@@ -69,6 +74,61 @@ export function smoothPath(path: number[], iterations: number): number[] {
     pts = out;
   }
   return pts;
+}
+
+/** Shortest XZ distance from `(x, z)` to a polyline `[x0,z0,...]`. */
+export function distanceToPolyline(
+  path: number[],
+  x: number,
+  z: number
+): number {
+  let best = Infinity;
+  for (let i = 0; i + 3 < path.length; i += 2) {
+    const ax = path[i]!;
+    const az = path[i + 1]!;
+    const dx = path[i + 2]! - ax;
+    const dz = path[i + 3]! - az;
+    const lenSq = dx * dx + dz * dz;
+    let t = lenSq > 0 ? ((x - ax) * dx + (z - az) * dz) / lenSq : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const d = Math.hypot(x - (ax + t * dx), z - (az + t * dz));
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+/**
+ * Extrapolate the polyline past its ends along the end tangents. Used at
+ * junctions: a ribbon that stops exactly on its neighbour's centerline leaves a
+ * wedge of bare ground on the outer corner, since neither ribbon covers it.
+ */
+export function extendPathEnds(
+  path: number[],
+  startAmount: number,
+  endAmount: number
+): number[] {
+  if (path.length < 4) return path;
+  const out = path.slice();
+  if (startAmount > 0) {
+    const dx = out[0]! - out[2]!;
+    const dz = out[1]! - out[3]!;
+    const len = Math.hypot(dx, dz) || 1;
+    out.unshift(
+      out[0]! + (dx / len) * startAmount,
+      out[1]! + (dz / len) * startAmount
+    );
+  }
+  if (endAmount > 0) {
+    const n = out.length;
+    const dx = out[n - 2]! - out[n - 4]!;
+    const dz = out[n - 1]! - out[n - 3]!;
+    const len = Math.hypot(dx, dz) || 1;
+    out.push(
+      out[n - 2]! + (dx / len) * endAmount,
+      out[n - 1]! + (dz / len) * endAmount
+    );
+  }
+  return out;
 }
 
 /** Reamostra a polyline a intervalos ~spacing, preservando os nós originais. */
@@ -133,6 +193,12 @@ export function densifyPathByHeight(
 const smooth01 = (a: number): number => a * a * (3 - 2 * a);
 
 /**
+ * Cap on the miter scale at a corner. Without a limit a hairpin would shoot the
+ * outer edge to infinity; 3 keeps 90° joins square-ish and clamps tighter ones.
+ */
+export const ROAD_MITER_LIMIT = 3;
+
+/**
  * Constrói o ribbon da estrada. 4 vértices por estação
  * (bordaEsq, núcleoEsq, núcleoDir, bordaDir) com alpha [0,1,1,0] no atributo
  * `color` (RGBA — o renderer ativa vertex alpha com itemSize 4). A borda de
@@ -149,13 +215,14 @@ export function makeRoadGeometry(
     throw new Error('makeRoadGeometry: path precisa de ≥ 2 pontos (4 números)');
   }
   const nodeCount = path.length / 2;
-  const half = Math.max(opts.width, 0.1) / 2;
+  const baseHalf = Math.max(opts.width, 0.1) / 2;
   const feather = Math.max(opts.edgeFeather, 0);
   const noiseAmp = Math.max(opts.edgeNoise, 0);
   const scale = Math.max(opts.textureScale, 0.01);
   const yOffset = opts.yOffset ?? 0;
   const heightAt = opts.heightAt ?? (() => 0);
   const seed = opts.seed ?? path[0]! * 13.13 + path[1]! * 7.77;
+  const widthAt = opts.widthAt;
 
   // Comprimento total (para o feather da ponta final).
   let totalLen = 0;
@@ -175,28 +242,44 @@ export function makeRoadGeometry(
   for (let i = 0; i < nodeCount; i++) {
     const x = path[i * 2]!;
     const z = path[i * 2 + 1]!;
+    const half = widthAt ? Math.max(widthAt(arc, totalLen), 0.1) / 2 : baseHalf;
 
     // Normal miter: média das normais dos segmentos vizinhos (curvas sem
     // gaps; mesma abordagem do river-geometry).
     let nx = 0;
     let nz = 0;
+    let segNx = 0;
+    let segNz = 0;
     if (i > 0) {
       const dx = x - path[(i - 1) * 2]!;
       const dz = z - path[(i - 1) * 2 + 1]!;
       const len = Math.hypot(dx, dz) || 1;
-      nx += -dz / len;
-      nz += dx / len;
+      segNx = -dz / len;
+      segNz = dx / len;
+      nx += segNx;
+      nz += segNz;
     }
     if (i < nodeCount - 1) {
       const dx = path[(i + 1) * 2]! - x;
       const dz = path[(i + 1) * 2 + 1]! - z;
       const len = Math.hypot(dx, dz) || 1;
+      if (i === 0) {
+        segNx = -dz / len;
+        segNz = dx / len;
+      }
       nx += -dz / len;
       nz += dx / len;
     }
     const nlen = Math.hypot(nx, nz) || 1;
     nx /= nlen;
     nz /= nlen;
+
+    // Miter scale: offsetting by `half` along the bisector narrows the ribbon
+    // to `half·cos(θ/2)` measured perpendicular to each segment, so corners
+    // pinch and the road looks like it breaks where it bends. Dividing by
+    // cos(θ/2) (= bisector · segment normal) restores a constant width.
+    const cosHalf = Math.abs(nx * segNx + nz * segNz);
+    const miter = Math.min(ROAD_MITER_LIMIT, cosHalf > 1e-3 ? 1 / cosHalf : 1);
 
     // Erosão orgânica da borda, por lado (wavelengths ~2.2 m e ~0.8 m).
     const noiseL =
@@ -237,8 +320,8 @@ export function makeRoadGeometry(
     const alphas = [0, endFactor, endFactor, 0];
     for (let k = 0; k < 4; k++) {
       const lat = laterals[k]!;
-      const vx = x + nx * lat;
-      const vz = z + nz * lat;
+      const vx = x + nx * lat * miter;
+      const vz = z + nz * lat * miter;
       positions.push(vx, y, vz);
       uvs.push((lat + half) / scale, arc / scale);
       colors.push(1, 1, 1, alphas[k]!);
@@ -249,12 +332,15 @@ export function makeRoadGeometry(
     }
   }
 
-  // 3 quads por par de estações (CCW visto de +Y, como no river).
+  // 3 quads per station pair. Keep camera-facing winding (FrontSide cull uses
+  // winding, not the normal attribute). Lighting normals are set below from
+  // the heightfield — flipping winding to “fix” computeVertexNormals culled
+  // the whole ribbon and the road vanished.
   for (let i = 0; i < nodeCount - 1; i++) {
     const a = i * 4;
     const b = (i + 1) * 4;
     for (let k = 0; k < 3; k++) {
-      indices.push(a + k, a + k + 1, b + k, b + k, a + k + 1, b + k + 1);
+      indices.push(a + k, a + k + 1, b + k, a + k + 1, b + k + 1, b + k);
     }
   }
 
@@ -263,6 +349,33 @@ export function makeRoadGeometry(
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
   geo.setIndex(indices);
-  geo.computeVertexNormals();
+
+  // Normals from the shared heightfield (same idea as terrain frontier verts),
+  // not computeVertexNormals — densify/LOD Y kinks were creasing the ribbon
+  // into dark bands exactly where chunk edges cross the road.
+  const normals = new Float32Array(positions.length);
+  const e = 0.35;
+  for (let i = 0; i < nodeCount; i++) {
+    const x = path[i * 2]!;
+    const z = path[i * 2 + 1]!;
+    const hL = heightAt(x - e, z);
+    const hR = heightAt(x + e, z);
+    const hD = heightAt(x, z - e);
+    const hU = heightAt(x, z + e);
+    let nx = (hL - hR) / (2 * e);
+    let ny = 1;
+    let nz = (hD - hU) / (2 * e);
+    const inv = 1 / Math.hypot(nx, ny, nz);
+    nx *= inv;
+    ny *= inv;
+    nz *= inv;
+    for (let k = 0; k < 4; k++) {
+      const vi = (i * 4 + k) * 3;
+      normals[vi] = nx;
+      normals[vi + 1] = ny;
+      normals[vi + 2] = nz;
+    }
+  }
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   return geo;
 }

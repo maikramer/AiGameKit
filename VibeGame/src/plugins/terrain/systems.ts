@@ -1265,7 +1265,9 @@ export const TerrainLodSelectSystem: System = defineSystem({
         ratio,
         hysteresis,
         localCamX,
-        localCamZ
+        localCamZ,
+        data.density,
+        baseResolution
       );
 
       const desiredKeys = _desiredKeysScratch;
@@ -1453,6 +1455,14 @@ export const TerrainMeshSystem: System = defineSystem({
       );
 
       TerrainChunk.meshDirty[chunk] = 0;
+      // Morph/res change → drop stale heightfield so physics rebuilds to match.
+      const staleBody = data.chunkColliders.get(chunk);
+      if (staleBody) {
+        if (!data.chunkBodyPool) data.chunkBodyPool = [];
+        const rw = getRapierWorld(state);
+        if (rw) recycleChunkBody(rw, staleBody, data.chunkBodyPool);
+        data.chunkColliders.delete(chunk);
+      }
       meshesBuilt++;
     }
 
@@ -1508,14 +1518,23 @@ function buildChunkHeightfield(
   const ncols = nrows;
   const rows = nrows + 1;
   const cols = ncols + 1;
-  const heights = new Float32Array(rows * cols);
   const half = size / 2;
 
+  // Row-major sample matching buildChunkGeometry, then pack column-major for
+  // Rapier.
+  const grid = new Float32Array(rows * cols);
+  for (let row = 0; row < rows; row++) {
+    const localZ = originZ - half + (row / nrows) * size;
+    for (let col = 0; col < cols; col++) {
+      const localX = originX - half + (col / ncols) * size;
+      grid[row * cols + col] = sampleHeightAt(sampler, localX, localZ);
+    }
+  }
+
+  const heights = new Float32Array(rows * cols);
   for (let col = 0; col < cols; col++) {
-    const localX = originX - half + (col / ncols) * size;
     for (let row = 0; row < rows; row++) {
-      const localZ = originZ - half + (row / nrows) * size;
-      heights[col * rows + row] = sampleHeightAt(sampler, localX, localZ);
+      heights[col * rows + row] = grid[row * cols + col]!;
     }
   }
 

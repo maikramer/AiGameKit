@@ -68,4 +68,52 @@ describe('LOD + density integration', () => {
       );
     }
   });
+
+  it('density boost forces deepest leaves even when camera is far', () => {
+    const worldSize = 256;
+    const levels = 6;
+    const base = 64;
+    const density = buildDensityMap(
+      {
+        width: 2,
+        height: 2,
+        data: new Float32Array([0.5, 0.5, 0.5, 0.5]),
+        worldSize,
+        maxHeight: 10,
+      },
+      16
+    );
+    // Corridor stamp across the origin — same contract as road flatten.
+    applyOverride(density, { minX: -8, minZ: -8, maxX: 8, maxZ: 8 }, 255);
+
+    // Camera far away so camera-LOD alone would keep a single root leaf.
+    // selectChunks returns a scratch buffer — snapshot before the next call.
+    const far = selectChunks(worldSize, levels, 2.0, 1.2, 5000, 5000).map(
+      (c) => ({ ...c })
+    );
+    expect(far).toHaveLength(1);
+    expect(far[0]!.level).toBe(0);
+
+    const forced = selectChunks(
+      worldSize,
+      levels,
+      2.0,
+      1.2,
+      5000,
+      5000,
+      density,
+      base
+    );
+    expect(Math.max(...forced.map((c) => c.level))).toBe(levels - 1);
+    expect(forced.length).toBeGreaterThan(far.length);
+
+    // Boosted region is covered by deepest leaves.
+    const originLeaves = forced.filter(
+      (c) =>
+        c.level === levels - 1 &&
+        Math.abs(c.originX) < 20 &&
+        Math.abs(c.originZ) < 20
+    );
+    expect(originLeaves.length).toBeGreaterThan(0);
+  });
 });

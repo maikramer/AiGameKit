@@ -1,25 +1,79 @@
 import type { Parser, Plugin, Recipe } from '../../core';
+import { processRecipeChildElements } from '../../core/recipes/parser';
 import { Transform } from '../transforms/components';
 import { Road, setRoadData } from './components';
+import {
+  buildRoadNetworkGraph,
+  expandRoadNetworkToRoads,
+  parseRoadNetworkElement,
+} from './network';
+import { setRoadNetworkGraph } from './queries';
 import { RoadApplySystem } from './systems';
 
 /**
- * `<Road path="0 4 0 24 6 40" width="5.4" texture-url="/assets/x.png">` —
- * 1) prepara o leito no heightfield (carve mínimo), 2) pinta o ribbon no
- * terreno já planado. Path em coords de mundo (`x0 z0 x1 z1 ...`).
+ * `<Road path="0 4 0 24 6 40" width="2" texture-url="/assets/x.png">` —
+ * 1) prepara o leito no heightfield, 2) pinta o ribbon no terreno planado.
+ * Path em coords de mundo (`x0 z0 x1 z1 ...`). Optional `widths="w0 w1 ..."`.
  */
 export const roadRecipe: Recipe = {
   name: 'Road',
   components: ['transform', 'road'],
   parserAttributes: [
     'path',
+    'widths',
     'texture-url',
     'normal-map-url',
     'roughness-map-url',
   ],
 };
 
-function parseFlatPath(raw: unknown): number[] {
+/**
+ * `<RoadNetwork default-width="2" texture-url="...">` with `<Way>` / `<Segment>`
+ * children — expands to one `<Road>` per segment (programmatic junctions).
+ */
+export const roadNetworkRecipe: Recipe = {
+  name: 'RoadNetwork',
+  components: ['transform'],
+  parserOwnsChildren: true,
+  parserAttributes: [
+    'default-width',
+    'default-profile',
+    'crossing-flare',
+    'flatten',
+    'flatten-falloff',
+    'flatten-window',
+    'flatten-max-grade',
+    'texture-url',
+    'normal-map-url',
+    'roughness-map-url',
+    'texture-scale',
+    'edge-feather',
+    'edge-noise',
+    'station-spacing',
+  ],
+};
+
+export const wayRecipe: Recipe = {
+  name: 'Way',
+  parserOnlyAsChild: true,
+  parserAttributes: ['id', 'xz', 'pos', 'x', 'z', 'width'],
+};
+
+export const segmentRecipe: Recipe = {
+  name: 'Segment',
+  parserOnlyAsChild: true,
+  parserAttributes: [
+    'a',
+    'b',
+    'via',
+    'width',
+    'profile',
+    'texture-url',
+    'normal-map-url',
+  ],
+};
+
+function parseFlatNumbers(raw: unknown): number[] {
   if (Array.isArray(raw)) {
     return raw.map(Number).filter((n) => Number.isFinite(n));
   }
@@ -39,28 +93,62 @@ function strAttr(raw: unknown): string | null {
 
 const roadParser: Parser = ({ state, entity, element }) => {
   const attrs = element.attributes;
-  const path = parseFlatPath(attrs.path);
+  const path = parseFlatNumbers(attrs.path);
   if (path.length >= 4) {
     Transform.posX[entity] = path[0]!;
     Transform.posZ[entity] = path[1]!;
     Transform.dirty[entity] = 1;
   }
+  const pointCount = Math.floor(path.length / 2);
+  let widths: number[] | undefined;
+  if (attrs.widths !== undefined && attrs.widths !== null) {
+    const parsed = parseFlatNumbers(attrs.widths);
+    if (parsed.length === pointCount && pointCount >= 2) {
+      widths = parsed.map((w) => Math.max(0.2, w));
+    } else if (parsed.length > 0) {
+      throw new Error(
+        `[Road] widths= has ${parsed.length} values but path has ${pointCount} points`
+      );
+    }
+  }
   setRoadData(state, entity, {
     path,
+    widths,
     textureUrl: strAttr(attrs['texture-url']),
     normalMapUrl: strAttr(attrs['normal-map-url']),
     roughnessMapUrl: strAttr(attrs['roughness-map-url']),
   });
+  // Scalar width fallback = max of per-vertex widths when authored.
+  if (widths && widths.length > 0) {
+    Road.width[entity] = widths.reduce((a, b) => Math.max(a, b), 0);
+  }
+};
+
+function requireInsideRoadNetwork(tag: string): Parser {
+  return () => {
+    throw new Error(
+      `[${tag}] must be a child of <RoadNetwork> (not used as a top-level recipe)`
+    );
+  };
+}
+
+const roadNetworkParser: Parser = ({ entity, element, state, context }) => {
+  const def = parseRoadNetworkElement(element);
+  setRoadNetworkGraph(state, entity, buildRoadNetworkGraph(def));
+  const roads = expandRoadNetworkToRoads(def);
+  if (roads.length > 0) {
+    processRecipeChildElements(state, entity, 'RoadNetwork', roads, context);
+  }
 };
 
 export const RoadPlugin: Plugin = {
   systems: [RoadApplySystem],
-  recipes: [roadRecipe],
+  recipes: [roadRecipe, roadNetworkRecipe, wayRecipe, segmentRecipe],
   components: { road: Road },
   config: {
     defaults: {
       road: {
-        width: 5,
+        width: 2,
         textureScale: 16,
         edgeFeather: 1.1,
         edgeNoise: 0.45,
@@ -80,16 +168,19 @@ export const RoadPlugin: Plugin = {
         // flatten="0" = só decal sobre o relevo cru (sem prep).
         flatten: 1,
         // Shoulder blend back to natural relief (m).
-        flattenFalloff: 5,
-        // Longitudinal profile smooth (m) — follows hills but kills bumps.
-        flattenWindow: 16,
-        // Max |Δh/Δs| on design profile (~22% — a bit more cut/fill OK).
+        flattenFalloff: 8,
+        // Terrace smooth window (m); multi-pass in designRoadProfile.
+        flattenWindow: 56,
+        // Max |Δh/Δs| on terrace profile (~22%).
         flattenMaxGrade: 0.22,
         applied: 0,
       },
     },
     parsers: {
       Road: roadParser,
+      RoadNetwork: roadNetworkParser,
+      Way: requireInsideRoadNetwork('Way'),
+      Segment: requireInsideRoadNetwork('Segment'),
     },
   },
 };

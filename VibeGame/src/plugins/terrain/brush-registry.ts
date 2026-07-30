@@ -80,6 +80,51 @@ export function pointInPadCore(
   return d <= 0;
 }
 
+/** Shortest XZ distance from a point to a road/river polyline brush path. */
+function distanceToBrushPath(path: number[], x: number, z: number): number {
+  let best = Infinity;
+  for (let i = 0; i + 3 < path.length; i += 2) {
+    const ax = path[i]!;
+    const az = path[i + 1]!;
+    const dx = path[i + 2]! - ax;
+    const dz = path[i + 3]! - az;
+    const lenSq = dx * dx + dz * dz;
+    let t = lenSq > 0 ? ((x - ax) * dx + (z - az) * dz) / lenSq : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const d = Math.hypot(x - (ax + t * dx), z - (az + t * dz));
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+/**
+ * True when (x,z) lies on a roadbed corridor (distance to path ≤ halfWidth).
+ * Uses the graded bed width registered by `<Road flatten>` — props stay off
+ * the carriageway and its shoulders.
+ */
+export function pointInRoadCorridor(
+  brush: GroundBrush,
+  x: number,
+  z: number
+): boolean {
+  if (brush.kind !== 'road') return false;
+  const half = brush.halfWidth ?? 0;
+  if (half <= 0 || !brush.path || brush.path.length < 4) return false;
+  return distanceToBrushPath(brush.path, x, z) <= half;
+}
+
+/**
+ * Paved ground the spawner should skip: flatten-road corridor **or** plaza
+ * pad core. Backs `avoid-road` on `<SpawnGroup>` / `<Vegetation>`.
+ */
+export function isPointOnRoad(state: State, x: number, z: number): boolean {
+  for (const brush of getGroundBrushes(state)) {
+    if (brush.kind === 'road' && pointInRoadCorridor(brush, x, z)) return true;
+    if (brush.kind === 'pad' && pointInPadCore(brush, x, z)) return true;
+  }
+  return false;
+}
+
 /** True when AABB intersects the square bake window |x|,|z| ≤ bounds. */
 export function brushIntersectsBounds(
   brush: GroundBrush,

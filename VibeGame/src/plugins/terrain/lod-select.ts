@@ -16,6 +16,41 @@ export interface ChunkDesc {
 }
 
 /**
+ * True when density boost on this node still leaves a coarser lattice than the
+ * deepest leaf (res is capped at `baseResolution`). Road/river corridors stamp
+ * boost 255 — without a forced split, a large far chunk keeps step ≫ bed width
+ * and its triangles cut above the carved bed; the transparent road decal then
+ * fails the depth test and sand shows through as an orange “fade” band on the
+ * chunk edge.
+ */
+function densityNeedsDeeperSplit(
+  density: DensityMap,
+  baseResolution: number,
+  cx: number,
+  cz: number,
+  size: number,
+  level: number,
+  maxLevels: number
+): boolean {
+  if (level >= maxLevels - 1) return false;
+  const half = size * 0.5;
+  const boost = maxBoostOverAabb(density, {
+    minX: cx - half,
+    maxX: cx + half,
+    minZ: cz - half,
+    maxZ: cz + half,
+  });
+  if (boost <= 0) return false;
+  const resHere = effectiveResolution(baseResolution, level, boost);
+  const stepHere = size / Math.max(1, resHere);
+  const maxLeafLevel = maxLevels - 1;
+  const leafSize = density.worldSize / 2 ** maxLeafLevel;
+  const resLeaf = effectiveResolution(baseResolution, maxLeafLevel, boost);
+  const stepLeaf = leafSize / Math.max(1, resLeaf);
+  return stepHere > stepLeaf * 1.25;
+}
+
+/**
  * Recursively traverse a virtual quadtree and collect all leaf nodes
  * that should be rendered this frame.
  *
@@ -31,6 +66,9 @@ export interface ChunkDesc {
  * @param camX     Camera world X
  * @param camZ     Camera world world Z
  * @param out      Accumulator for leaf ChunkDescs
+ * @param density  Optional feature density — forces deeper splits when boost
+ *   cannot refine the lattice without subdividing
+ * @param baseResolution Terrain.resolution (needed for density split check)
  */
 function traverse(
   cx: number,
@@ -42,7 +80,9 @@ function traverse(
   hysteresis: number,
   camX: number,
   camZ: number,
-  out: ChunkDesc[]
+  out: ChunkDesc[],
+  density?: DensityMap,
+  baseResolution?: number
 ): void {
   const halfSize = size * 0.5;
   const dx = camX - cx;
@@ -54,7 +94,20 @@ function traverse(
   const hyst = Math.max(hysteresis, 1);
   const splitDist = (size * ratio) / hyst;
 
-  if (level < maxLevels - 1 && dist < splitDist) {
+  const forceDensitySplit =
+    !!density &&
+    !!baseResolution &&
+    densityNeedsDeeperSplit(
+      density,
+      baseResolution,
+      cx,
+      cz,
+      size,
+      level,
+      maxLevels
+    );
+
+  if (level < maxLevels - 1 && (dist < splitDist || forceDensitySplit)) {
     const quarter = halfSize * 0.5;
     traverse(
       cx - quarter,
@@ -66,7 +119,9 @@ function traverse(
       hysteresis,
       camX,
       camZ,
-      out
+      out,
+      density,
+      baseResolution
     );
     traverse(
       cx + quarter,
@@ -78,7 +133,9 @@ function traverse(
       hysteresis,
       camX,
       camZ,
-      out
+      out,
+      density,
+      baseResolution
     );
     traverse(
       cx - quarter,
@@ -90,7 +147,9 @@ function traverse(
       hysteresis,
       camX,
       camZ,
-      out
+      out,
+      density,
+      baseResolution
     );
     traverse(
       cx + quarter,
@@ -102,7 +161,9 @@ function traverse(
       hysteresis,
       camX,
       camZ,
-      out
+      out,
+      density,
+      baseResolution
     );
     return;
   }
@@ -141,6 +202,9 @@ function acquireChunkDesc(): ChunkDesc {
  * @param hysteresis lodHysteresis
  * @param camX       Camera X in world space
  * @param camZ       Camera Z in world space
+ * @param density    Optional feature density map (road/river/pad stamps)
+ * @param baseResolution Terrain.resolution — with `density`, forces splits
+ *   until the lattice step matches the deepest leaf under boosted regions
  * @returns Array of ChunkDesc for all active leaf nodes (scratch — do not
  *   retain across calls)
  */
@@ -150,7 +214,9 @@ export function selectChunks(
   ratio: number,
   hysteresis: number,
   camX: number,
-  camZ: number
+  camZ: number,
+  density?: DensityMap,
+  baseResolution?: number
 ): ChunkDesc[] {
   _chunkDescPoolUsed = 0;
   _selectResult.length = 0;
@@ -164,7 +230,9 @@ export function selectChunks(
     hysteresis,
     camX,
     camZ,
-    _selectResult
+    _selectResult,
+    density,
+    baseResolution
   );
   return _selectResult;
 }

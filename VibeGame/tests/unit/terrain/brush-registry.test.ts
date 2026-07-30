@@ -3,7 +3,9 @@ import { State } from '../../../src/core/ecs/state';
 import {
   clearGroundBrushes,
   getGroundBrushes,
+  isPointOnRoad,
   pointInPadCore,
+  pointInRoadCorridor,
   registerGroundBrush,
   unregisterGroundBrush,
   type GroundBrush,
@@ -77,5 +79,48 @@ describe('brush-registry', () => {
     // Outside core halfX but still inside AABB falloff ring
     expect(pointInPadCore(brush, 12, 0)).toBe(false);
     expect(pointInPadCore(brush, 20, 0)).toBe(false);
+  });
+
+  it('pointInRoadCorridor follows halfWidth along the path', () => {
+    const brush: GroundBrush = {
+      kind: 'road',
+      minX: 0,
+      maxX: 20,
+      minZ: -3,
+      maxZ: 3,
+      halfWidth: 2.5,
+      path: [0, 0, 20, 0],
+    };
+    expect(pointInRoadCorridor(brush, 10, 0)).toBe(true);
+    expect(pointInRoadCorridor(brush, 10, 2)).toBe(true);
+    expect(pointInRoadCorridor(brush, 10, 3)).toBe(false);
+  });
+
+  it('isPointOnRoad covers flatten-road corridor and plaza pad core', () => {
+    const state = new State();
+    registerGroundBrush(state, {
+      kind: 'road',
+      minX: 0,
+      maxX: 20,
+      minZ: -2,
+      maxZ: 2,
+      halfWidth: 2,
+      path: [0, 0, 20, 0],
+    });
+    registerGroundBrush(state, {
+      kind: 'pad',
+      minX: -20,
+      maxX: -10,
+      minZ: -5,
+      maxZ: 5,
+      halfX: 4,
+      halfZ: 4,
+      cornerRadius: 0,
+      targetY: 1,
+    });
+    expect(isPointOnRoad(state, 10, 0)).toBe(true);
+    expect(isPointOnRoad(state, 10, 3)).toBe(false);
+    expect(isPointOnRoad(state, -15, 0)).toBe(true);
+    expect(isPointOnRoad(state, -15, 8)).toBe(false);
   });
 });

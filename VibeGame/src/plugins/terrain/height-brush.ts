@@ -44,6 +44,20 @@ export function minEffectiveFalloff(
   return Math.max(falloff, samplerTexelStep(sampler) * minTexels);
 }
 
+/**
+ * Full-weight brush width ≥ `minTexels` sampler steps. A `<Road>` bed of ~9 m
+ * on a 2000/64 heightmap (texel ≈ 32 m) never covers a texel centre — carve
+ * "runs" but the terrain does not move. Expand the **prep** corridor to the
+ * sampler lattice; the painted ribbon stays at authored width.
+ */
+export function minEffectiveWidth(
+  sampler: HeightSampler,
+  width: number,
+  minTexels = 1.5
+): number {
+  return Math.max(width, samplerTexelStep(sampler) * minTexels);
+}
+
 /** Resultado do pincel num ponto: alvo em METROS + peso 0..1. */
 export interface BrushSample {
   targetY: number;
@@ -69,6 +83,61 @@ export interface HeightBrush {
   mode?: BrushMode;
 }
 
+export interface TexelAabb {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/**
+ * Inclusive texel index range for an AABB, expanded by 1 texel so brush
+ * corners never fall outside by floor/ceil rounding. Shared by
+ * {@link applyHeightBrush} and segmented corridor stamps (rivers).
+ */
+export function texelIndexRange(
+  sampler: HeightSampler,
+  aabb: TexelAabb
+): { x0: number; x1: number; z0: number; z1: number } | null {
+  const { width, height, worldSize } = sampler;
+  if (width < 2 || height < 2) return null;
+  const half = worldSize / 2;
+  const stepX = worldSize / (width - 1);
+  const stepZ = worldSize / (height - 1);
+  return {
+    x0: Math.max(0, Math.floor((aabb.minX + half) / stepX) - 1),
+    x1: Math.min(width - 1, Math.ceil((aabb.maxX + half) / stepX) + 1),
+    z0: Math.max(0, Math.floor((aabb.minZ + half) / stepZ) - 1),
+    z1: Math.min(height - 1, Math.ceil((aabb.maxZ + half) / stepZ) + 1),
+  };
+}
+
+/**
+ * Visit every texel centre inside `aabb` (+1 texel margin). Returns false
+ * when the sampler has no writable data. Used by long corridor multi-pass
+ * stamps that cannot go through a single {@link HeightBrush}.
+ */
+export function forEachTexelInAabb(
+  sampler: HeightSampler,
+  aabb: TexelAabb,
+  visit: (idx: number, wx: number, wz: number) => void
+): boolean {
+  const { data, width, height, worldSize } = sampler;
+  if (!data || width < 2 || height < 2) return false;
+  const range = texelIndexRange(sampler, aabb);
+  if (!range) return false;
+  const half = worldSize / 2;
+  const stepX = worldSize / (width - 1);
+  const stepZ = worldSize / (height - 1);
+  for (let zi = range.z0; zi <= range.z1; zi++) {
+    const wz = zi * stepZ - half;
+    for (let xi = range.x0; xi <= range.x1; xi++) {
+      visit(zi * width + xi, xi * stepX - half, wz);
+    }
+  }
+  return true;
+}
+
 /**
  * Aplica um pincel de altura ao sampler (in place). Devolve true se alterou
  * pelo menos um texel. O AABB é expandido em 1 texel para os cantos/orlas
@@ -78,41 +147,26 @@ export function applyHeightBrush(
   sampler: HeightSampler,
   brush: HeightBrush
 ): boolean {
-  const { data, width, height, worldSize, maxHeight } = sampler;
-  if (!data || width < 2 || height < 2 || maxHeight <= 0) return false;
-
-  const half = worldSize / 2;
-  const stepX = worldSize / (width - 1);
-  const stepZ = worldSize / (height - 1);
-
-  // +1 texel de margem: cantos do pincel nunca caem fora por floor/ceil.
-  const x0 = Math.max(0, Math.floor((brush.minX + half) / stepX) - 1);
-  const x1 = Math.min(width - 1, Math.ceil((brush.maxX + half) / stepX) + 1);
-  const z0 = Math.max(0, Math.floor((brush.minZ + half) / stepZ) - 1);
-  const z1 = Math.min(height - 1, Math.ceil((brush.maxZ + half) / stepZ) + 1);
+  const { data, maxHeight } = sampler;
+  if (!data || maxHeight <= 0) return false;
 
   const mode = brush.mode ?? 'blend';
   let changed = false;
-  for (let zi = z0; zi <= z1; zi++) {
-    const wz = zi * stepZ - half;
-    for (let xi = x0; xi <= x1; xi++) {
-      const wx = xi * stepX - half;
-      const s = brush.evalAt(wx, wz);
-      if (!s || s.weight <= 0) continue;
-      const w = Math.min(1, s.weight);
-      const target = Math.min(1, Math.max(0, s.targetY / maxHeight));
-      const i = zi * width + xi;
-      const cur = data[i]!;
-      const next = cur + (target - cur) * w;
-      if (mode === 'lower' && next >= cur) continue;
-      if (mode === 'raise' && next <= cur) continue;
-      if (next !== cur) {
-        data[i] = next;
-        changed = true;
-      }
+  const ok = forEachTexelInAabb(sampler, brush, (idx, wx, wz) => {
+    const s = brush.evalAt(wx, wz);
+    if (!s || s.weight <= 0) return;
+    const w = Math.min(1, s.weight);
+    const target = Math.min(1, Math.max(0, s.targetY / maxHeight));
+    const cur = data[idx]!;
+    const next = cur + (target - cur) * w;
+    if (mode === 'lower' && next >= cur) return;
+    if (mode === 'raise' && next <= cur) return;
+    if (next !== cur) {
+      data[idx] = next;
+      changed = true;
     }
-  }
-  return changed;
+  });
+  return ok && changed;
 }
 
 /**
