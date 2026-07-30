@@ -12,6 +12,8 @@ mesh code itself.
 | Batch execution | `batch_cmd.py` | Per-row 2D/3D/audio; UMS waves + `MasterDeferQueue` |
 | UMS batch waves | `ums_coord.py`, `ums_batch.py` | `run_gpu_wave` (window≤16, `preload=False`); hw_auto peak |
 | Omni soft-fill / stale | `omni_ctrl.py` | `softfill_omni_from_category`; fallback `_CATEGORY_OMNI_DEFAULTS_FALLBACK` when Text3D missing (CI); `prepare_shape_for_generation`; `shape_omni_stale` |
+| **Manifest authoring** | [`docs/MANIFEST_AUTHORING.md`](../docs/MANIFEST_AUTHORING.md) | `category`/`size_m`/Omni/`text3d:` — happy path + octree×faces |
+| Octree × faces (empírico) | [`docs/findings/OCTREE_FACES_FINDINGS.md`](../docs/findings/OCTREE_FACES_FINDINGS.md) | κ, char_m², simple-rpg n=67 |
 | UMS batch guide | [`docs/GAMEASSETS_UMS_BATCH.md`](../docs/GAMEASSETS_UMS_BATCH.md) | Operator happy path |
 | Model / mesh findings | `docs/MODEL_FINDINGS.md`, `docs/findings/` | VRAM, Omni, Round 3 DAG |
 | Smart resume | `resume_cmd.py` | Checkpoint; looks in `_intermediate/` |

@@ -23,7 +23,6 @@ from gamedev_shared.profiler.session import ProfilerSession
 from gamedev_shared.subprocess_utils import run_cmd_streaming
 
 from .batch_guard import batch_directory_lock, detect_gpu_ids, query_gpu_free_mib, subprocess_gpu_env
-from .categories import get_target_faces
 from .cli_rich import click
 from .helpers import (
     _append_gpu_kill_flag,
@@ -59,7 +58,6 @@ from .helpers import (
     _texture2d_material_maps_path_manifest,
     _texture2d_profile_effective,
     _timing_append,
-    effective_face_ratio,
 )
 from .manifest import ManifestRow, apply_row_text3d_overrides, effective_image_source, row_mc_level
 from .omni_ctrl import omni_to_batch_item, prepare_shape_for_generation
@@ -84,7 +82,10 @@ from .paths import (
 from .pipeline import (
     _animator3d_game_pack_argv,
     _post_text3d_mesh_extras,
+    _quality_paint_texture_cap,
     _resolve_animator3d_bin,
+    _resolve_lod_target_faces,
+    _resolve_paint_texture_size,
     _rigging3d_pipeline_argv,
     _simplify_to_target,
     _text3d_argv,
@@ -1871,8 +1872,7 @@ def batch_cmd(
                                 item_d.update(omni_to_batch_item(omni_d))
                                 t3 = profile.text3d
                                 if t3 and should_optimize_text3d(t3) and row.category:
-                                    fr = effective_face_ratio(profile, row)
-                                    target = get_target_faces(row.category, face_ratio=fr)
+                                    target = _resolve_lod_target_faces(profile, row)
                                     opts = optimize_text3d_for_target(target)
                                     item_d["steps"] = opts.steps
                                     item_d["octree_resolution"] = opts.octree_resolution
@@ -2125,6 +2125,7 @@ def batch_cmd(
                                                 "mesh": str(mesh_paint),
                                                 "image": str(img_f),
                                                 "output": str(mesh_painted),
+                                                "texture_size": _resolve_paint_texture_size(profile, row),
                                             }
                                         )
                                         paint_idx_map_d[row.id] = idx
@@ -2140,6 +2141,7 @@ def batch_cmd(
                                             "no_ums": no_ums,
                                             "ums_stream": ums_stream,
                                             "gpu_ids": gpu_ids,
+                                            "texture_size": _quality_paint_texture_cap(profile),
                                         }
                                         if p3:
                                             if p3.max_views is not None:
@@ -2184,8 +2186,6 @@ def batch_cmd(
                                                     batch_args.extend(["--view-resolution", str(p3.view_resolution)])
                                                 if p3.render_size is not None:
                                                     batch_args.extend(["--render-size", str(p3.render_size)])
-                                                if p3.texture_size is not None:
-                                                    batch_args.extend(["--texture-size", str(p3.texture_size)])
                                                 if p3.bake_exp is not None:
                                                     batch_args.extend(["--bake-exp", str(p3.bake_exp)])
                                                 if not p3.preserve_origin:
@@ -3333,8 +3333,7 @@ def batch_cmd(
                                 # Per-item params when dynamic optimization is active
                                 t3 = profile.text3d
                                 if t3 and should_optimize_text3d(t3) and row.category:
-                                    fr = effective_face_ratio(profile, row)
-                                    target = get_target_faces(row.category, face_ratio=fr)
+                                    target = _resolve_lod_target_faces(profile, row)
                                     opts = optimize_text3d_for_target(target)
                                     item["steps"] = opts.steps
                                     item["octree_resolution"] = opts.octree_resolution
@@ -3625,6 +3624,7 @@ def batch_cmd(
                                             "mesh": str(mesh_paint),
                                             "image": str(img_final),
                                             "output": str(mesh_painted),
+                                            "texture_size": _resolve_paint_texture_size(profile, row),
                                         }
                                     )
                                     paint_idx_map[row.id] = idx
@@ -3639,6 +3639,7 @@ def batch_cmd(
                                         "no_ums": no_ums,
                                         "ums_stream": ums_stream,
                                         "gpu_ids": gpu_ids,
+                                        "texture_size": _quality_paint_texture_cap(profile),
                                     }
                                     if p3:
                                         if p3.max_views is not None:
@@ -3682,8 +3683,6 @@ def batch_cmd(
                                                 batch_args.extend(["--view-resolution", str(p3.view_resolution)])
                                             if p3.render_size is not None:
                                                 batch_args.extend(["--render-size", str(p3.render_size)])
-                                            if p3.texture_size is not None:
-                                                batch_args.extend(["--texture-size", str(p3.texture_size)])
                                             if p3.bake_exp is not None:
                                                 batch_args.extend(["--bake-exp", str(p3.bake_exp)])
                                             if not p3.preserve_origin:

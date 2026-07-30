@@ -1159,9 +1159,80 @@ def generate(
                 mesh_path = save_mesh(result, output, format=output_format, origin_mode=export_origin)
                 emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=100)
                 mp = Path(mesh_path).resolve()
+                elapsed = time.time() - start_time
                 try:
-                    from .omni_presets import write_omni_fingerprint
+                    from datetime import UTC, datetime
 
+                    from text3d.bbox_tune import morph_close_voxels_for
+
+                    from .omni_presets import (
+                        build_generate_debug,
+                        mesh_stats_for_debug,
+                        write_omni_fingerprint,
+                    )
+
+                    _decode_stats = dict(getattr(generator, "last_decode_stats", None) or {})
+                    _morph_n = morph_close_voxels_for(category)
+                    _dbg = build_generate_debug(
+                        seconds=elapsed,
+                        started_at=datetime.fromtimestamp(start_time, tz=UTC).isoformat(),
+                        finished_at=datetime.now(UTC).isoformat(),
+                        bbox_tune=_bbox_tune,
+                        morph_close_voxels=_morph_n,
+                        morph_source="bbox_tune" if _bbox_tune is not None else None,
+                        decode={
+                            "octree_resolution": octree_resolution,
+                            "steps": steps,
+                            "guidance": guidance,
+                            "num_chunks": num_chunks,
+                            "auto_num_chunks": not _user_set_chunks,
+                            "mc_level": mc_level,
+                            "bounds_mode": bounds_mode,
+                            "volume_decoder": volume_decoder,
+                            "mc_algo": mc_algo,
+                            "last_decode_stats": _decode_stats,
+                        },
+                        generation={
+                            "quality": quality,
+                            "category": category,
+                            "preset": preset,
+                            "seed_rng": seed,
+                            "seed_fingerprint": seed_fingerprint,
+                            "topology_fix_inline": not no_topology_fix,
+                            "origin_mode": export_origin,
+                            "remove_bg": not no_remove_bg,
+                            "optimize_prompt": not no_prompt_optimize,
+                            "from_image": bool(from_image),
+                            "prompt": prompt if not from_image else None,
+                            "t2d_width": image_width,
+                            "t2d_height": image_height,
+                            "t2d_steps": t2d_steps,
+                            "t2d_guidance": t2d_guidance,
+                            "text2d_model_id": text2d_model_id,
+                            "t2d_full_gpu": t2d_full_gpu,
+                        },
+                        omni_resolved=_omni,
+                        hardware={
+                            "summary": hwp.summary() if hwp is not None else None,
+                            "total_vram_gib": getattr(hwp, "total_vram_gib", None) if hwp else None,
+                            "gpu_ids": parsed_gpu_ids,
+                            "sdnq_preset": sdnq_preset,
+                        },
+                        accel={
+                            "volume_decoder": volume_decoder,
+                            "mc_algo": mc_algo,
+                            "torch_compile": compile_models,
+                            "torch_compile_mode": compile_mode,
+                            "channels_last": channels_last,
+                            "allow_group_offload": allow_group_offload,
+                            "fp8_layerwise": fp8_layerwise,
+                            "sdnq_quantized_matmul": sdnq_matmul,
+                            "sage_attention": sage_attention,
+                            "offload": offload,
+                        },
+                        mesh=mesh_stats_for_debug(result, path=mp),
+                        extra={"path": "cli_generate"},
+                    )
                     write_omni_fingerprint(
                         mp,
                         {
@@ -1176,7 +1247,9 @@ def generate(
                             "mc_level": mc_level,
                             "size_m": size_m_vals,
                             "seed": seed_fingerprint,
+                            "octree_resolution": octree_resolution,
                         },
+                        debug=_dbg,
                     )
                 except OSError:
                     pass
@@ -1187,7 +1260,6 @@ def generate(
                 console.print(Rule("[bold green]Resultado", style="green"))
                 console.print(f"[bold green]✓[/bold green] Mesh: [cyan]{mp}[/cyan] [dim]({sz})[/dim]")
 
-                elapsed = time.time() - start_time
                 console.print(f"\n[dim]Tempo total: {elapsed:.1f}s[/dim]")
                 console.print("[bold green]Sucesso.[/bold green]")
 
@@ -1674,6 +1746,16 @@ def topology_fix_cmd(
     if remove_internal_shells is None and hollow:
         remove_internal_shells = True
 
+    # Octree do sidecar de generate (se --octree omitido) → morph alinhado ao tune.
+    if octree_for_morph is None:
+        from .omni_presets import read_omni_fingerprint
+
+        _fp = read_omni_fingerprint(input_mesh)
+        if isinstance(_fp, dict) and _fp.get("octree_resolution") is not None:
+            with contextlib.suppress(TypeError, ValueError):
+                octree_for_morph = int(_fp["octree_resolution"])
+
+    t_topo = time.perf_counter()
     morph_eff = resolve_morph_close(
         explicit=morph_close,
         size_m=size_m_vals,
@@ -1682,10 +1764,10 @@ def topology_fix_cmd(
         octree=octree_for_morph,
         morph_close_voxels=morph_close_voxels,
     )
-    if morph_eff is not None and morph_close is None:
-        from text3d.bbox_tune import morph_close_voxels_for
+    from text3d.bbox_tune import morph_close_voxels_for
 
-        n_vox = morph_close_voxels_for(category, explicit=morph_close_voxels)
+    n_vox = morph_close_voxels_for(category, explicit=morph_close_voxels)
+    if morph_eff is not None and morph_close is None:
         console.print(f"[dim]auto morph-close={morph_eff:.4f}m (voxel-merge N={n_vox:g}, escala física)[/dim]")
 
     if export_rotation_x_deg is not None:
@@ -1718,6 +1800,8 @@ def topology_fix_cmd(
         if export_rotation_x_deg is not None:
             _defaults.set_export_rotation_x_rad_override(None)
 
+    verts = 0
+    tris = 0
     # Recusar clean vazio (resume tratava 228 B como "clean existe" e skipava).
     try:
         from gamedev_shared.glb_verify import extract_glb_meta
@@ -1739,11 +1823,43 @@ def topology_fix_cmd(
     except Exception as exc:
         console.print(f"[yellow]aviso: não consegui validar clean: {exc}[/yellow]")
 
+    topo_secs = time.perf_counter() - t_topo
+    with contextlib.suppress(OSError):
+        from .omni_presets import patch_omni_debug
+
+        # Grava no sidecar do shape de input (e no clean se path diferente).
+        _topo_dbg = {
+            "topology_fix": {
+                "seconds": round(topo_secs, 3),
+                "morph_close_m": morph_eff,
+                "morph_close_voxels": n_vox,
+                "morph_explicit_m": morph_close,
+                "octree": octree_for_morph,
+                "engine": engine,
+                "category": cat_eff or category,
+                "bbox_preset": bbox_preset,
+                "size_m": size_m_vals,
+                "fill_holes_sides": fill_holes_sides,
+                "watertight": watertight,
+                "remove_internal_shells": remove_internal_shells,
+                "export_origin": export_origin,
+                "input": str(input_mesh),
+                "output": str(out_path),
+                "verts": verts,
+                "tris": tris,
+            }
+        }
+        patch_omni_debug(input_mesh, _topo_dbg)
+        if Path(out_path).resolve() != Path(input_mesh).resolve():
+            patch_omni_debug(out_path, _topo_dbg)
+
     try:
         sz = format_bytes(out_path.stat().st_size)
     except OSError:
         sz = "?"
-    console.print(f"[bold green]✓[/bold green] topology-fix → [cyan]{out_path}[/cyan] [dim]({sz})[/dim]")
+    console.print(
+        f"[bold green]✓[/bold green] topology-fix → [cyan]{out_path}[/cyan] [dim]({sz}, {topo_secs:.1f}s)[/dim]"
+    )
 
 
 @cli.command("gpu-processes")
@@ -1875,10 +1991,20 @@ def gpu_processes_cmd() -> None:
     help="GLB texturizado para LOD com texturas. LOD0=painted, LOD1 textura/2, LOD2 textura/4.",
 )
 @click.option(
+    "--texture-size",
+    type=int,
+    default=2048,
+    show_default=True,
+    help=(
+        "Lado do atlas lod0 (snap 64px). lod1=/2, lod2=/4. Nunca upscale acima "
+        "da textura source. Path geométrico (rigged) também downscale."
+    ),
+)
+@click.option(
     "--target-faces",
     type=int,
     default=None,
-    help="Face target para LOD0 (com --painted-mesh). LOD1=target/2, LOD2=target/4.",
+    help="Face target para LOD0. Com --painted-mesh: LOD1≈/2, LOD2≈/3. Sem painted: decima lod0.",
 )
 @click.option(
     "--finish/--no-finish",
@@ -1930,6 +2056,7 @@ def lod_cmd(
     min_faces_lod2: int,
     meshfix: bool,
     painted_mesh: Path | None,
+    texture_size: int,
     target_faces: int | None,
     finish: bool,
     finish_lod0: bool,
@@ -1941,8 +2068,8 @@ def lod_cmd(
 
     Com ``--painted-mesh``: ``remesh_textured_glb`` (perfil ``pre_decimate_uv``
     + Decimate COLLAPSE + piso heurístico de faces). Sem painted: decimate
-    geométrico. ``--meshfix`` só fecha buracos pequenos no caminho geométrico
-    (não é o topology-fix completo).
+    geométrico + downscale de textura por nível. ``--meshfix`` só fecha buracos
+    pequenos no caminho geométrico (não é o topology-fix completo).
     """
     stem = basename_opt if basename_opt else input_mesh.stem
     try:
@@ -1957,6 +2084,7 @@ def lod_cmd(
                 lod2_ratio=lod2_ratio,
                 min_faces_lod1=min_faces_lod1,
                 min_faces_lod2=min_faces_lod2,
+                texture_size_lod0=texture_size,
                 target_faces=target_faces,
                 apply_finish=finish,
                 finish_lod0=finish_lod0,
@@ -1974,6 +2102,8 @@ def lod_cmd(
                 min_faces_lod1=min_faces_lod1,
                 min_faces_lod2=min_faces_lod2,
                 meshfix=meshfix,
+                texture_size_lod0=texture_size,
+                target_faces=target_faces,
             )
             # Non-painted path has no finish step — apply meshopt post-hoc to
             # each LOD output so compressed LODs are the default.
@@ -1989,6 +2119,12 @@ def lod_cmd(
         raise click.ClickException(str(e)) from e
     except ValueError as e:
         raise click.ClickException(str(e)) from e
+
+    missing = [p for p in paths if not Path(p).is_file() or Path(p).stat().st_size < 64]
+    if missing:
+        raise click.ClickException(
+            "LOD ladder incompleta (ficheiro ausente/vazio): " + ", ".join(Path(p).name for p in missing)
+        )
 
     console.print(
         Panel(
@@ -2373,23 +2509,62 @@ def finish_cmd(
 @click.option("--output", "-o", type=click.Path(path_type=Path), required=True, help="Output collision GLB")
 @click.option("--max-faces", type=int, default=300, show_default=True, help="Target face count for collision mesh")
 @click.option(
+    "--mode",
+    type=click.Choice(["hull", "envelope", "mesh"], case_sensitive=False),
+    default=None,
+    help=(
+        "hull=convex+decimate (default); envelope=inflate+voxel remesh+decimate; "
+        "mesh=inflate+decimate source (mais preciso p/ arcos). Omitido → --convex-hull."
+    ),
+)
+@click.option(
+    "--voxel-size",
+    type=float,
+    default=None,
+    help="Envelope only: voxel remesh size in metres (default ≈ char_m/48).",
+)
+@click.option(
+    "--inflate",
+    type=float,
+    default=None,
+    help="Outward offset in metres before remesh/decimate (envelope/mesh default ≈ max(char·0.008, 0.04)).",
+)
+@click.option(
     "--convex-hull/--no-convex-hull",
     default=True,
-    help="Compute convex hull before simplification (default: yes)",
+    help="Legacy: True→hull, False→mesh when --mode omitted (default: yes)",
 )
-def collision_cmd(input_mesh: Path, output: Path, max_faces: int, convex_hull: bool) -> None:
+def collision_cmd(
+    input_mesh: Path,
+    output: Path,
+    max_faces: int,
+    mode: str | None,
+    voxel_size: float | None,
+    inflate: float | None,
+    convex_hull: bool,
+) -> None:
     """Generate a simplified collision mesh from any GLB/OBJ/PLY.
 
     Produces a low-poly mesh suitable for physics collision in Unity/Godot/Unreal.
     Default: convex hull + quadric decimation to 300 faces.
+    For arches/gates: ``--mode mesh`` (surface-accurate) or ``--mode envelope``.
 
     \b
     text3d collision modelo.glb -o collision.glb
+    text3d collision arco.glb -o coll.glb --mode mesh --max-faces 256 --inflate 0.08
     text3d collision modelo.glb -o coll.glb --max-faces 500 --no-convex-hull
     """
     from .utils.collision import generate_collision_mesh
 
-    out = generate_collision_mesh(input_mesh, output, max_faces=max_faces, convex_hull=convex_hull)
+    out = generate_collision_mesh(
+        input_mesh,
+        output,
+        max_faces=max_faces,
+        mode=mode,
+        voxel_size=voxel_size,
+        inflate=inflate,
+        convex_hull=None if mode is not None else convex_hull,
+    )
     console.print(Rule(f"[bold green]collision[/bold green] → {out}", style="green"))
 
 
@@ -2761,7 +2936,13 @@ def generate_batch(
                 item_mc_level = item.get("mc_level", mc_level)
 
                 from .bbox_tune import apply_bbox_tune, size_m_from_mapping
-                from .omni_presets import merge_omni_controls, write_omni_fingerprint
+                from .omni_presets import (
+                    bbox_tune_to_debug,
+                    build_generate_debug,
+                    merge_omni_controls,
+                    mesh_stats_for_debug,
+                    write_omni_fingerprint,
+                )
 
                 try:
                     _item_size_m = size_m_from_mapping(item.get("size_m"))
@@ -2783,6 +2964,7 @@ def generate_batch(
                 # Soft: CLI --steps/--octree/--chunks explícitos ganham; item optimize
                 # (steps no JSON) serve de base e ainda recebe escala size_m.
                 # Opt-out: ``"bbox_tune": false`` no item do manifest.
+                _bt = None
                 if item.get("bbox_tune", True) is not False:
                     item_steps, item_octree, item_chunks, _bt = apply_bbox_tune(
                         steps=int(item_steps),
@@ -2858,6 +3040,10 @@ def generate_batch(
                     sdnq_preset=sdnq_preset,
                     memory_efficient=bool(batch_offload or allow_group_offload)
                     or (sdnq_preset not in (None, "none", "")),
+                    extra={
+                        "bbox_tune_snapshot": bbox_tune_to_debug(_bt),
+                        "seed_fingerprint": item.get("seed_fingerprint"),
+                    },
                 )
 
                 if try_ums_delegation(
@@ -2916,7 +3102,57 @@ def generate_batch(
 
                 emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=0)
                 save_mesh(mesh, str(out_path), format="glb", origin_mode=export_origin)
+                elapsed = time.time() - t0
                 with contextlib.suppress(OSError):
+                    from datetime import UTC, datetime
+
+                    from text3d.bbox_tune import morph_close_voxels_for
+
+                    _cat = item.get("category", category)
+                    _dbg = build_generate_debug(
+                        seconds=elapsed,
+                        started_at=datetime.fromtimestamp(t0, tz=UTC).isoformat(),
+                        finished_at=datetime.now(UTC).isoformat(),
+                        bbox_tune=_bt,
+                        morph_close_voxels=morph_close_voxels_for(_cat),
+                        morph_source="bbox_tune" if _bt is not None else None,
+                        decode={
+                            "octree_resolution": item_octree,
+                            "steps": item_steps,
+                            "guidance": guidance,
+                            "num_chunks": item_chunks,
+                            "mc_level": item_mc_level,
+                            "bounds_mode": bounds_mode,
+                            "volume_decoder": volume_decoder,
+                            "mc_algo": mc_algo,
+                            "last_decode_stats": dict(getattr(_batch_generator, "last_decode_stats", None) or {}),
+                        },
+                        generation={
+                            "quality": item.get("quality", quality),
+                            "category": _cat,
+                            "seed_rng": item_seed,
+                            "seed_fingerprint": item.get("seed_fingerprint"),
+                            "topology_fix_inline": not no_topology_fix,
+                            "origin_mode": export_origin,
+                            "from_image": True,
+                        },
+                        omni_resolved=_omni,
+                        hardware={
+                            "summary": hwp.summary() if hwp is not None else None,
+                            "total_vram_gib": getattr(hwp, "total_vram_gib", None) if hwp else None,
+                            "gpu_ids": parsed_gpu_ids,
+                            "sdnq_preset": sdnq_preset,
+                        },
+                        accel={
+                            "volume_decoder": volume_decoder,
+                            "mc_algo": mc_algo,
+                            "torch_compile": compile_models,
+                            "channels_last": channels_last,
+                            "allow_group_offload": allow_group_offload,
+                        },
+                        mesh=mesh_stats_for_debug(mesh, path=out_path),
+                        extra={"path": "cli_generate_batch"},
+                    )
                     write_omni_fingerprint(
                         out_path,
                         {
@@ -2925,10 +3161,11 @@ def generate_batch(
                             "mc_level": item_mc_level,
                             "size_m": _item_size_m,
                             "seed": item.get("seed_fingerprint"),
+                            "octree_resolution": item_octree,
                         },
+                        debug=_dbg,
                     )
                 emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=100)
-                elapsed = time.time() - t0
 
                 emit_result(
                     item_id,

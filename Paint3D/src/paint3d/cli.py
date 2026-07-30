@@ -764,6 +764,12 @@ def texture_batch(
                 # UMS primeiro (admit + pico honestos). VRAM_INSUFFICIENT → ClickException.
                 from .ums_payload import build_texture_request
 
+                item_tex = item.get("texture_size", texture_size)
+                if item_tex is not None:
+                    try:
+                        item_tex = int(item_tex)
+                    except (TypeError, ValueError):
+                        item_tex = texture_size
                 if try_ums_delegation(
                     "paint3d",
                     build_texture_request(
@@ -773,7 +779,7 @@ def texture_batch(
                         max_num_view=max_views,
                         view_resolution=view_resolution,
                         render_size=render_size,
-                        texture_size=texture_size,
+                        texture_size=item_tex,
                         bake_exp=bake_exp,
                         verbose=verbose,
                         preserve_origin=preserve_origin,

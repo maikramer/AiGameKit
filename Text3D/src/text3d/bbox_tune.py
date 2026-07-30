@@ -26,16 +26,45 @@ _TARGET_VOXEL_M = 0.025
 # Escala relativa ao base do tier (evita OOM / tempos absurdos).
 _MAX_SCALE = 3.0
 _MIN_SCALE = 0.75
-# Octree: calcular → se <160 → 160; senão degraus de 32 até 512.
-_OCTREE_FLOOR = 160
+# Octree: calcular → se <128 → 128; senão degraus de 32 até 512.
+_OCTREE_FLOOR = 128
 _OCTREE_CEILING = 512
 _OCTREE_STEP = 32
 # Soft-floor não-linear: sobe o piso efectivo nos assets **pequenos**
-# (wolf/nest/props caíam sempre em 160 → pinholes) e decai a ~0 nos grandes
-# (chapel mantém a curva). ``floor_eff = 160 + MAX * e^(-char/τ)``.
+# (anti-pinholes leve) e decai a ~0 nos grandes. ``floor_eff = 128 + MAX * e^(-char/τ)``.
+# MAX era 128 → props ~224–256 e faces ~9× o orçamento físico (OCTREE_FACES_FINDINGS);
+# 32 mantém margem mínima acima do piso sem explodir κ·octree².
 # ``char`` = diâmetro equivalente por volume ``(L·H·W)^(1/3)``.
-_OCTREE_SMALL_BOOST_MAX = 128.0
+_OCTREE_SMALL_BOOST_MAX = 32.0
 _OCTREE_SMALL_BOOST_TAU_M = 2.5
+# Orçamento físico de faces (OCTREE_FACES_FINDINGS): faces ≈ 8e4·char² ≈ κ·octree².
+_FACE_BUDGET_COEF = 8.0e4
+_FACE_BUDGET_KAPPA = 5.5  # mediana global; categories finas em _CATEGORY_FACE_KAPPA
+_FACE_BUDGET_SLACK = 3.0  # tecto props: ≤ slack × phys (anti soft-boost 224+)
+_FACE_BUDGET_CHAR_MAX_M = 2.0
+# κ mediana por category (findings §4). terrain/rock usam 5.5 (mais octree)
+# — approach 2 m fazia voxel grosso e auto caía a 128 → buracos; manifesto
+# forçava 256/288 (+32). Alvo físico elimina esse override.
+_CATEGORY_FACE_KAPPA: dict[str, float] = {
+    "building": 20.0,
+    "prop": 8.0,
+    "vegetation": 8.0,
+    "terrain": 5.5,
+    "rock": 5.5,
+    "environment": 5.5,
+    "chest": 4.5,
+    "humanoid": 3.5,
+    "item": 3.0,
+    "furniture": 2.5,
+    "creature": 2.5,
+    "weapon": 1.5,
+    "tool": 1.0,
+}
+# Categories onde buracos MC / detalhe fino pediam +32 manual sobre o auto.
+_HOLE_PRONE_CATEGORIES = frozenset({"terrain", "rock", "environment"})
+# Margem sobre o alvo físico (~um degrau de ladder a 256) — cobria o
+# «auto 224 → 256 ainda fraco → +32» do manifesto.
+_PHYSICS_FLOOR_MARGIN = 1.125
 
 # Morph-close / «voxel merge»: N x voxel_m MC. Default ~0.18 voxel — margem
 # leve sobre 0.15 para fechar rachas MC sem chegar perto de 1 vox (que
@@ -171,7 +200,7 @@ _PRESET_CHAR_M: dict[str, float] = {
     "cube": 1.0,
 }
 
-# Ladder 160..512 step 32 (ver ``_snap_octree``).
+# Ladder 128..512 step 32 (ver ``_snap_octree``).
 _OCTREE_LADDER = tuple(range(_OCTREE_FLOOR, _OCTREE_CEILING + 1, _OCTREE_STEP))
 
 # Tecto INFORMATIVO do latent (≠ tecto VRAM): acima disto o field do VAE não
@@ -354,7 +383,7 @@ def max_octree_for_vram(
 
 
 def _snap_octree(value: int, *, lo: int = _OCTREE_FLOOR, hi: int = _OCTREE_CEILING) -> int:
-    """Piso 160; acima disso, degrau de 32 até 512 (ou ``hi``/``lo`` mais apertados)."""
+    """Piso 128; acima disso, degrau de 32 até 512 (ou ``hi``/``lo`` mais apertados)."""
     floor = max(_OCTREE_FLOOR, int(lo))
     ceil = min(_OCTREE_CEILING, int(hi))
     if ceil < floor:
@@ -370,13 +399,51 @@ def _snap_octree(value: int, *, lo: int = _OCTREE_FLOOR, hi: int = _OCTREE_CEILI
 def small_asset_octree_boost(char_m: float) -> float:
     """Boost de octree (unidades) que só afecta o início da curva tamanho→octree.
 
-    ``MAX * exp(-char_m / τ)``: ~95 a 0.78 m (wolf volume-eq), ~47 a 2 m
-    (nest), ~2 a 10 m (chapel) — o final da curva fica intacto.
+    ``MAX * exp(-char_m / τ)`` com MAX=32: ~24 a 0.78 m, ~12 a 2 m, ~1 a 10 m
+    (chapel) — anti-pinhole leve; o tecto de faces (:func:`octree_face_budget_cap`)
+    impede props pequenos de subirem a 224+.
     """
     if char_m <= 0:
         return 0.0
 
     return float(_OCTREE_SMALL_BOOST_MAX) * math.exp(-float(char_m) / float(_OCTREE_SMALL_BOOST_TAU_M))
+
+
+def category_face_kappa(category: str | None = None) -> float:
+    """κ (faces / octree²) típico da category — findings §4."""
+    key = (category or "").strip().lower()
+    return float(_CATEGORY_FACE_KAPPA.get(key, _FACE_BUDGET_KAPPA))
+
+
+def physics_target_octree(char_m: float, category: str | None = None) -> float:
+    """Octree alvo via ``octree ≈ √(8e4 · char² / κ)``.
+
+    Melhor preditor empírico de faces (R≈0.87 em char²). κ por category.
+    """
+    c = float(char_m)
+    if c <= 0.0:
+        return float(_OCTREE_FLOOR)
+    kappa = category_face_kappa(category)
+    return math.sqrt(_FACE_BUDGET_COEF * (c * c) / kappa)
+
+
+def octree_face_budget_cap(char_m: float, category: str | None = None) -> int | None:
+    """Tecto de octree para assets pequenos via orçamento físico de faces.
+
+    ``octree ≤ √(slack · 8e4 · char² / κ)``. ``None`` acima de 2 m ou em
+    categories hole-prone (terrain/rock — aí o físico é **piso**, não tecto).
+    """
+    c = float(char_m)
+    cat = (category or "").strip().lower()
+    if c <= 0.0 or c >= _FACE_BUDGET_CHAR_MAX_M:
+        return None
+    if cat in _HOLE_PRONE_CATEGORIES:
+        return None
+    max_faces = _FACE_BUDGET_COEF * (c * c) * _FACE_BUDGET_SLACK
+    if max_faces <= 0.0:
+        return None
+    raw = math.sqrt(max_faces / category_face_kappa(category))
+    return max(_OCTREE_FLOOR, int(round(raw)))
 
 
 def tune_hunyuan_for_bbox(
@@ -401,7 +468,7 @@ def tune_hunyuan_for_bbox(
         size_m: ``[L,H,W]`` em metros (preferido).
         category / bbox_preset: prior de tamanho típico (não muda a fórmula).
         total_vram_gib: tecto de octree.
-        min_octree: piso efectivo (≥160).
+        min_octree: piso efectivo (≥128).
         volume_decoder: ignorado no piso (flashvdm abaixo de 256 → decode denso).
         group_offload: tecto mais alto (pesos em stream → VRAM para MC).
         target_voxel_m: voxel-mundo alvo explícito; ``None`` → percetual via
@@ -448,13 +515,24 @@ def tune_hunyuan_for_bbox(
         tv = target_voxel_for(category, bbox_preset, quality)
     desired_abs = round(float(char_m) / tv)
     desired_scale = round(base_o * scale)
-    # Média geométrica tamanhoxtier; snap: <160→160, senão ±32 até 512/hi.
+    # Média geométrica tamanhoxtier; snap: <128→128, senão ±32 até 512/hi.
     desired = round((desired_abs * desired_scale) ** 0.5)
     # Soft-floor não-linear: puxa o desired para cima só em char_m pequeno
     # (sem tocar chapel/longhouse). ``max`` e não soma — evita empurrar o
     # topo da curva quando desired já está alto.
     soft_floor = float(_OCTREE_FLOOR) + small_asset_octree_boost(float(char_m))
     desired = max(desired, round(soft_floor))
+    cat_key = (category or "").strip().lower()
+    phys = physics_target_octree(float(char_m), category)
+    if cat_key in _HOLE_PRONE_CATEGORIES:
+        # Terrain/rock: approach voxel grosso → geom ~128 → buracos MC.
+        # Manifesto forçava 256/288; piso = alvo físico × margem (~+1 ladder).
+        desired = max(desired, round(phys * _PHYSICS_FLOOR_MARGIN))
+    else:
+        # Props pequenos: tecto ~3× phys (κ category) — evita 0.5M faces.
+        face_cap = octree_face_budget_cap(float(char_m), category)
+        if face_cap is not None:
+            desired = min(desired, int(face_cap))
     octree = _snap_octree(desired, lo=lo, hi=hi)
 
     # Steps sobem mais suave que o octree (custo tempo linear-ish).

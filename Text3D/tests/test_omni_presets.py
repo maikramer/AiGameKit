@@ -119,6 +119,27 @@ class TestMergeOmniControls:
         assert out["bbox_preset"] is None
         assert out["bbox"] == pytest.approx([1.0, 0.55 / 0.7, 1.0])
 
+    def test_aniso_size_m_overrides_building_preset(self) -> None:
+        # city_gate: size_m fino em Z; building preset engolia o molde (bug).
+        out = merge_omni_controls(
+            control_type="bbox",
+            bbox_preset="building",
+            size_m=[10.0, 5.5, 2.2],
+        )
+        assert out["control_type"] == "bbox"
+        assert out["bbox_preset"] is None
+        assert out["bbox"] == pytest.approx(size_m_to_bbox([10.0, 5.5, 2.2]))
+        assert out["bbox"][2] < out["bbox"][0]  # W(Z) << L(X) = arco fino
+
+    def test_cubic_size_m_keeps_building_preset(self) -> None:
+        out = merge_omni_controls(
+            control_type="bbox",
+            bbox_preset="building",
+            size_m=[5.0, 5.0, 5.0],
+        )
+        assert out["bbox_preset"] == "building"
+        assert out["bbox"] == list(BBOX_PRESETS["building"])
+
     def test_blob_preset(self) -> None:
         out = merge_omni_controls(bbox_preset="blob")
         assert out["control_type"] == "bbox"
@@ -311,3 +332,76 @@ class TestFingerprintMcLevelZero:
         write_omni_fingerprint(shape, base)
         assert omni_fingerprint_matches(shape, base)
         assert omni_fingerprint_matches(shape, {**base, "mc_level": 0}) is False
+
+
+class TestGenerateDebugSidecar:
+    def test_debug_written_ignored_by_fingerprint(self, tmp_path: Path) -> None:
+        from text3d.omni_presets import build_generate_debug, read_omni_fingerprint
+
+        shape = tmp_path / "prop_shape.glb"
+        shape.write_bytes(b"glTF")
+        base = {
+            "control_type": "bbox",
+            "bbox_preset": "building",
+            "size_m": [10.0, 5.0, 6.0],
+            "octree_resolution": 448,
+        }
+        dbg = build_generate_debug(
+            seconds=12.345,
+            bbox_tune={
+                "steps": 40,
+                "octree": 448,
+                "chunks": 20000,
+                "char_m": 6.69,
+                "scale": 1.2,
+                "source": "size_m",
+                "applied": True,
+                "voxel_m": 0.015,
+                "morph_close": 0.0027,
+            },
+            morph_close_voxels=0.18,
+            decode={"octree_resolution": 448, "steps": 40, "mc_level": "auto"},
+            generation={"category": "building", "quality": "medium"},
+            mesh={"faces": 120000, "vertices": 60000},
+        )
+        write_omni_fingerprint(shape, base, debug=dbg)
+        raw = read_omni_fingerprint(shape)
+        assert raw is not None
+        assert "debug" in raw
+        assert raw["debug"]["seconds"] == pytest.approx(12.345)
+        assert raw["debug"]["morph"]["close_m"] == pytest.approx(0.0027)
+        assert raw["debug"]["morph"]["close_voxels"] == pytest.approx(0.18)
+        assert raw["debug"]["bbox_tune"]["octree"] == 448
+        assert raw["debug"]["decode"]["octree_resolution"] == 448
+        # Resume: debug não invalida fingerprint.
+        assert omni_fingerprint_matches(shape, base)
+        assert "debug" not in omni_fingerprint(raw)
+
+    def test_patch_topology_debug(self, tmp_path: Path) -> None:
+        from text3d.omni_presets import build_generate_debug, patch_omni_debug, read_omni_fingerprint
+
+        shape = tmp_path / "rock_shape.glb"
+        shape.write_bytes(b"glTF")
+        base = {"control_type": "bbox", "bbox_preset": "rock"}
+        write_omni_fingerprint(
+            shape,
+            base,
+            debug=build_generate_debug(seconds=1.0, generation={"category": "rock"}),
+        )
+        patch_omni_debug(
+            shape,
+            {
+                "topology_fix": {
+                    "seconds": 2.5,
+                    "morph_close_m": 0.01,
+                    "morph_close_voxels": 0.54,
+                    "engine": "arrays",
+                }
+            },
+        )
+        raw = read_omni_fingerprint(shape)
+        assert raw is not None
+        assert raw["debug"]["generation"]["category"] == "rock"
+        assert raw["debug"]["topology_fix"]["morph_close_m"] == pytest.approx(0.01)
+        assert raw["debug"]["topology_fix"]["engine"] == "arrays"
+        assert omni_fingerprint_matches(shape, base)

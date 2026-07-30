@@ -91,7 +91,9 @@ text3d generate -i goblin.png --pose-preset quaternius-tpose-dwarf -o goblin_sha
 # Omni bbox aspect (sword tall / thin)
 text3d generate -i sword.png --bbox-preset sword -o sword_shape.glb
 
-# Explicit size L,H,W (normalized 0–1) or meters via GameAssets size_m
+# Explicit size L,H,W (normalized 0–1) or meters via GameAssets size_m.
+# After export: [L,H,W] → WebGL [X,Y,Z] with Y+ up (L=width/X, H=height/Y, W=depth/Z).
+# See docs/OMNI_SHAPE_FINDINGS.md §1.
 text3d generate -i crate.png --size 1,1,1 -o crate_shape.glb
 
 # Point / voxel anchors (keep geometry, change appearance)

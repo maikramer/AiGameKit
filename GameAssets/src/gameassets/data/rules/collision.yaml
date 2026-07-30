@@ -1,9 +1,10 @@
 # Collision GLB — geometria mínima, sem texturas, sem skin.
+# Envelope/mesh côncavo (arcos) precisa de margem vs hull trivial.
 mesh_totals:
   face_count:
-    max: 256
+    max: 512
   vertex_count:
     min: 4
-    max: 256
+    max: 768
 
 meshes_min: 1

@@ -14,7 +14,6 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeEl
 from rich.table import Table
 
 from .batch_guard import subprocess_gpu_env
-from .categories import get_target_faces
 from .cli_rich import click
 from .helpers import (
     _append_text2d_profile_args,
@@ -29,7 +28,6 @@ from .helpers import (
     _seed_for_manifest_row,
     _texture2d_material_maps_path_manifest,
     _texture2d_profile_effective,
-    effective_face_ratio,
 )
 from .manifest import apply_row_text3d_overrides, effective_image_source, row_mc_level
 from .omni_ctrl import omni_to_batch_item, prepare_shape_for_generation, shape_omni_stale
@@ -52,7 +50,10 @@ from .paths import (
 )
 from .pipeline import (
     _post_text3d_mesh_extras,
+    _quality_paint_texture_cap,
     _resolve_animator3d_bin,
+    _resolve_lod_target_faces,
+    _resolve_paint_texture_size,
     _simplify_to_target,
     _texture_subprocess_argv,
     _try_paint3d_bin,
@@ -463,7 +464,9 @@ def resume_cmd(
             animator3d_bin=animator3d_bin,
             has_rigging_profile=has_rigging_profile,
             gpu_ids=gpu_ids,
-            with_lod=bool(row_m.generate_lod),
+            # Sempre pedir LOD ao master: generate_lod=False só omite a
+            # exigência de lod1/2 no classify; lod0 continua entregável.
+            with_lod=True,
             with_collision=bool(row_m.generate_collision),
             on_progress_line=on_progress_line,
         )
@@ -785,8 +788,7 @@ def resume_cmd(
                     _omni_d = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
                     item_d.update(omni_to_batch_item(_omni_d))
                     if t3_opts and should_optimize_text3d(t3_opts) and row.category:
-                        fr = effective_face_ratio(profile, row)
-                        target = get_target_faces(row.category, face_ratio=fr)
+                        target = _resolve_lod_target_faces(profile, row)
                         opts = optimize_text3d_for_target(target)
                         item_d["steps"] = opts.steps
                         item_d["octree_resolution"] = opts.octree_resolution
@@ -1008,6 +1010,7 @@ def resume_cmd(
                                 "mesh": str(mesh_paint),
                                 "image": str(it["img_final"]),
                                 "output": str(_painted_path(it["mesh_final"])),
+                                "texture_size": _resolve_paint_texture_size(profile, row),
                             }
                         )
                         paint_item_map[row.id] = i
@@ -1020,6 +1023,7 @@ def resume_cmd(
                             "no_ums": no_ums,
                             "ums_stream": ums_stream,
                             "gpu_ids": gpu_ids,
+                            "texture_size": _quality_paint_texture_cap(profile),
                         }
                         if p3:
                             if p3.max_views is not None:
@@ -1063,8 +1067,6 @@ def resume_cmd(
                                     batch_args.extend(["--view-resolution", str(p3.view_resolution)])
                                 if p3.render_size is not None:
                                     batch_args.extend(["--render-size", str(p3.render_size)])
-                                if p3.texture_size is not None:
-                                    batch_args.extend(["--texture-size", str(p3.texture_size)])
                                 if p3.bake_exp is not None:
                                     batch_args.extend(["--bake-exp", str(p3.bake_exp)])
                                 if not p3.preserve_origin:
@@ -1180,7 +1182,7 @@ def resume_cmd(
                             animator3d_bin=animator3d_bin,
                             has_rigging_profile=has_rigging_profile,
                             gpu_ids=gpu_ids,
-                            with_lod=bool(row.generate_lod),
+                            with_lod=True,
                             with_collision=bool(row.generate_collision),
                             on_progress_line=dash.feed_line,
                         )
@@ -1219,7 +1221,7 @@ def resume_cmd(
                         animator3d_bin=animator3d_bin,
                         has_rigging_profile=has_rigging_profile,
                         gpu_ids=gpu_ids,
-                        with_lod=bool(row.generate_lod),
+                        with_lod=True,
                         with_collision=bool(row.generate_collision),
                         on_progress_line=dash.feed_line,
                     )
@@ -1266,7 +1268,7 @@ def resume_cmd(
                         animator3d_bin=animator3d_bin,
                         has_rigging_profile=has_rigging_profile,
                         gpu_ids=gpu_ids,
-                        with_lod=bool(row.generate_lod),
+                        with_lod=True,
                         with_collision=bool(row.generate_collision),
                         on_progress_line=dash.feed_line,
                     )
@@ -1528,8 +1530,7 @@ def resume_cmd(
                     _omni_item = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
                     item.update(omni_to_batch_item(_omni_item))
                     if t3_opts and should_optimize_text3d(t3_opts) and row.category:
-                        fr = effective_face_ratio(profile, row)
-                        target = get_target_faces(row.category, face_ratio=fr)
+                        target = _resolve_lod_target_faces(profile, row)
                         opts = optimize_text3d_for_target(target)
                         item["steps"] = opts.steps
                         item["octree_resolution"] = opts.octree_resolution
@@ -1755,6 +1756,7 @@ def resume_cmd(
                                 "mesh": str(mesh_paint),
                                 "image": str(it["img_final"]),
                                 "output": str(_painted_path(it["mesh_final"])),
+                                "texture_size": _resolve_paint_texture_size(profile, row),
                             }
                         )
                         paint_item_map[row.id] = i
@@ -1767,6 +1769,7 @@ def resume_cmd(
                             "no_ums": no_ums,
                             "ums_stream": ums_stream,
                             "gpu_ids": gpu_ids,
+                            "texture_size": _quality_paint_texture_cap(profile),
                         }
                         if p3:
                             if p3.max_views is not None:
@@ -1806,8 +1809,6 @@ def resume_cmd(
                                     batch_args.extend(["--view-resolution", str(p3.view_resolution)])
                                 if p3.render_size is not None:
                                     batch_args.extend(["--render-size", str(p3.render_size)])
-                                if p3.texture_size is not None:
-                                    batch_args.extend(["--texture-size", str(p3.texture_size)])
                                 if p3.bake_exp is not None:
                                     batch_args.extend(["--bake-exp", str(p3.bake_exp)])
                                 if not p3.preserve_origin:
@@ -1974,7 +1975,7 @@ def resume_cmd(
                         animator3d_bin=animator3d_bin,
                         has_rigging_profile=has_rigging_profile,
                         gpu_ids=gpu_ids,
-                        with_lod=bool(row.generate_lod),
+                        with_lod=True,
                         with_collision=bool(row.generate_collision),
                     )
                     if rig_failed:
@@ -2022,7 +2023,7 @@ def resume_cmd(
                         animator3d_bin=animator3d_bin,
                         has_rigging_profile=has_rigging_profile,
                         gpu_ids=gpu_ids,
-                        with_lod=bool(row.generate_lod),
+                        with_lod=True,
                         with_collision=bool(row.generate_collision),
                     )
                     if anim_failed:

@@ -170,10 +170,18 @@ class LODProfile:
 
 @dataclass
 class CollisionProfile:
-    """Mesh de colisão via ``text3d collision`` (convex hull simplificado)."""
+    """Mesh de colisão via ``text3d collision``.
+
+    ``mode``: ``hull`` (convex+decimate), ``envelope`` (inflate+voxel remesh),
+    ``mesh`` (inflate+decimate source — mais preciso). ``convex_hull`` é alias
+    legacy quando ``mode`` é omitido no YAML.
+    """
 
     max_faces: int = 300
+    mode: str = "hull"
     convex_hull: bool = True
+    voxel_size: float | None = None
+    inflate: float | None = None
 
 
 @dataclass
@@ -728,15 +736,46 @@ class GameProfile:
         if isinstance(raw_coll, dict):
             mf = raw_coll.get("max_faces")
             ch = raw_coll.get("convex_hull")
+            mode_raw = raw_coll.get("mode")
+            vs_raw = raw_coll.get("voxel_size")
+            inf_raw = raw_coll.get("inflate")
             try:
                 mf_i = int(mf) if mf is not None else 300
             except (TypeError, ValueError) as e:
                 raise ValueError("collision.max_faces deve ser um número inteiro") from e
             if mf_i < 4:
                 raise ValueError("collision.max_faces deve ser ≥ 4")
+            mode_s: str
+            if mode_raw is not None:
+                mode_s = str(mode_raw).strip().lower()
+                if mode_s not in ("hull", "envelope", "mesh"):
+                    raise ValueError("collision.mode deve ser hull|envelope|mesh")
+            elif ch is not None:
+                mode_s = "hull" if bool(ch) else "mesh"
+            else:
+                mode_s = "hull"
+            vs_f: float | None = None
+            if vs_raw is not None:
+                try:
+                    vs_f = float(vs_raw)
+                except (TypeError, ValueError) as e:
+                    raise ValueError("collision.voxel_size deve ser um número") from e
+                if vs_f <= 0:
+                    raise ValueError("collision.voxel_size deve ser > 0")
+            inf_f: float | None = None
+            if inf_raw is not None:
+                try:
+                    inf_f = float(inf_raw)
+                except (TypeError, ValueError) as e:
+                    raise ValueError("collision.inflate deve ser um número") from e
+                if inf_f < 0:
+                    raise ValueError("collision.inflate deve ser ≥ 0")
             coll = CollisionProfile(
                 max_faces=mf_i,
-                convex_hull=bool(ch) if ch is not None else True,
+                mode=mode_s,
+                convex_hull=mode_s == "hull",
+                voxel_size=vs_f,
+                inflate=inf_f,
             )
         ter: Terrain3DProfile | None = None
         raw_ter = data.get("terrain3d")
@@ -857,7 +896,11 @@ class GameProfile:
 def load_profile(path: Path) -> GameProfile:
     with path.open("r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
-    return GameProfile.from_dict(raw or {})
+    data = raw or {}
+    # Unified game.yaml may also hold ``assets:`` (manifest). Ignore for profile.
+    if isinstance(data, dict):
+        data = {k: v for k, v in data.items() if k not in ("assets",)}
+    return GameProfile.from_dict(data)
 
 
 def apply_generation_profile(profile: GameProfile, generation_name: str) -> GameProfile:
@@ -912,7 +955,9 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
         max_views=p3d.max_views if p3d.max_views is not None else gp.paint_max_views,
         view_resolution=p3d.view_resolution if p3d.view_resolution is not None else gp.paint_view_resolution,
         render_size=p3d.render_size if p3d.render_size is not None else gp.paint_render_size,
-        texture_size=p3d.texture_size if p3d.texture_size is not None else gp.paint_texture_size,
+        # texture_size: None = autotune por size_m ∩ quality cap (pipeline);
+        # só game.yaml explícito fica preenchido (override ganha).
+        texture_size=p3d.texture_size,
         bake_exp=p3d.bake_exp if p3d.bake_exp is not None else gp.paint_bake_exp,
         smooth=p3d.smooth if p3d.smooth else gp.paint_smooth,
         smooth_passes=p3d.smooth_passes if p3d.smooth_passes is not None else gp.paint_smooth_passes,

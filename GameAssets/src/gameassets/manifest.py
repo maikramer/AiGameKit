@@ -29,11 +29,89 @@ class RowText3D:
     mc_level: float | str | None = None
     morph_close: float | None = None
     morph_close_voxels: float | None = None
+    # Override do profile ``text3d.split_at_height`` (cogumelos baixos, etc.)
+    split_at_height: bool | None = None
 
 
 _ROW_TEXT3D_KEYS = frozenset(
-    {"steps", "octree_resolution", "mc_level", "morph_close", "morph_close_voxels", "voxel_merge"}
+    {
+        "steps",
+        "octree_resolution",
+        "mc_level",
+        "morph_close",
+        "morph_close_voxels",
+        "voxel_merge",
+        "split_at_height",
+    }
 )
+
+
+@dataclass(frozen=True)
+class RowCollision:
+    """Overrides de collision por asset (bloco ``collision:`` no manifest)."""
+
+    mode: str | None = None
+    max_faces: int | None = None
+    voxel_size: float | None = None
+    inflate: float | None = None
+    convex_hull: bool | None = None
+
+
+_ROW_COLLISION_KEYS = frozenset({"mode", "max_faces", "voxel_size", "inflate", "convex_hull"})
+
+
+def _row_collision_from_dict(raw: Any, asset_id: str) -> RowCollision | None:
+    """Parse bloco ``collision:`` por asset; ``None`` se ausente."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"asset {asset_id!r}: collision deve ser um mapeamento")
+    unknown = set(raw) - _ROW_COLLISION_KEYS
+    if unknown:
+        raise ValueError(
+            f"asset {asset_id!r} collision: chaves desconhecidas {sorted(unknown)} "
+            f"(válidas: {sorted(_ROW_COLLISION_KEYS)})"
+        )
+    mode_raw = raw.get("mode")
+    mf = raw.get("max_faces")
+    vs = raw.get("voxel_size")
+    inf = raw.get("inflate")
+    ch = raw.get("convex_hull")
+    mode_s: str | None = None
+    if mode_raw is not None:
+        mode_s = str(mode_raw).strip().lower()
+        if mode_s not in ("hull", "envelope", "mesh"):
+            raise ValueError(f"asset {asset_id!r} collision.mode deve ser hull|envelope|mesh")
+    mf_i: int | None = None
+    if mf is not None:
+        try:
+            mf_i = int(mf)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"asset {asset_id!r} collision.max_faces inválido") from e
+        if mf_i < 4:
+            raise ValueError(f"asset {asset_id!r} collision.max_faces deve ser ≥ 4")
+    vs_f: float | None = None
+    if vs is not None:
+        try:
+            vs_f = float(vs)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"asset {asset_id!r} collision.voxel_size inválido") from e
+        if vs_f <= 0:
+            raise ValueError(f"asset {asset_id!r} collision.voxel_size deve ser > 0")
+    inf_f: float | None = None
+    if inf is not None:
+        try:
+            inf_f = float(inf)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"asset {asset_id!r} collision.inflate inválido") from e
+        if inf_f < 0:
+            raise ValueError(f"asset {asset_id!r} collision.inflate deve ser ≥ 0")
+    ch_b: bool | None = None
+    if ch is not None:
+        if not isinstance(ch, bool):
+            raise ValueError(f"asset {asset_id!r} collision.convex_hull deve ser bool")
+        ch_b = ch
+    return RowCollision(mode=mode_s, max_faces=mf_i, voxel_size=vs_f, inflate=inf_f, convex_hull=ch_b)
 
 
 def _row_text3d_from_dict(raw: Any, asset_id: str) -> RowText3D | None:
@@ -53,6 +131,7 @@ def _row_text3d_from_dict(raw: Any, asset_id: str) -> RowText3D | None:
     mc_m = raw.get("morph_close")
     # voxel_merge = alias authoring de morph_close_voxels
     mcv = raw.get("morph_close_voxels", raw.get("voxel_merge"))
+    sah = raw.get("split_at_height")
     try:
         steps_i = int(steps) if steps is not None else None
         octree_i = int(octree) if octree is not None else None
@@ -61,12 +140,18 @@ def _row_text3d_from_dict(raw: Any, asset_id: str) -> RowText3D | None:
         morph_n = float(mcv) if mcv is not None else None
     except (TypeError, ValueError) as e:
         raise ValueError(f"asset {asset_id!r} text3d: valores inválidos ({e})") from None
+    sah_b: bool | None = None
+    if sah is not None:
+        if not isinstance(sah, bool):
+            raise ValueError(f"asset {asset_id!r} text3d.split_at_height deve ser bool")
+        sah_b = sah
     return RowText3D(
         steps=steps_i,
         octree_resolution=octree_i,
         mc_level=mc_v,
         morph_close=morph_m,
         morph_close_voxels=morph_n,
+        split_at_height=sah_b,
     )
 
 
@@ -113,6 +198,8 @@ class ManifestRow:
     seed: int | None = None
     # Overrides Text3D por asset (bloco ``text3d:`` — ver RowText3D).
     text3d: RowText3D | None = None
+    # Overrides collision por asset (bloco ``collision:`` — ver RowCollision).
+    collision: RowCollision | None = None
 
 
 def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
@@ -147,6 +234,30 @@ def row_mc_level(row: ManifestRow, profile_mc_level: float | str | None) -> floa
     if rt3 is not None and rt3.mc_level is not None:
         return rt3.mc_level
     return profile_mc_level
+
+
+def effective_collision_args(profile: GameProfile, row: ManifestRow) -> dict[str, Any]:
+    """Resolve argv knobs de ``text3d collision``: perfil global + override por asset."""
+    from .profile import CollisionProfile
+
+    cp = profile.collision or CollisionProfile()
+    rc = row.collision
+    mode = cp.mode
+    max_faces = cp.max_faces
+    voxel_size = cp.voxel_size
+    inflate = cp.inflate
+    if rc is not None:
+        if rc.mode is not None:
+            mode = rc.mode
+        elif rc.convex_hull is not None:
+            mode = "hull" if rc.convex_hull else "mesh"
+        if rc.max_faces is not None:
+            max_faces = rc.max_faces
+        if rc.voxel_size is not None:
+            voxel_size = rc.voxel_size
+        if rc.inflate is not None:
+            inflate = rc.inflate
+    return {"mode": mode, "max_faces": max_faces, "voxel_size": voxel_size, "inflate": inflate}
 
 
 def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
@@ -184,6 +295,7 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
                 raise ValueError(f"asset {entry.get('id')!r}: seed inválido ({raw_seed!r}) — esperado int") from None
 
         row_text3d = _row_text3d_from_dict(entry.get("text3d"), str(entry.get("id")))
+        row_collision = _row_collision_from_dict(entry.get("collision"), str(entry.get("id")))
 
         rows.append(
             ManifestRow(
@@ -214,6 +326,7 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
                 omni=row_omni,
                 seed=row_seed,
                 text3d=row_text3d,
+                collision=row_collision,
             )
         )
     if not rows:

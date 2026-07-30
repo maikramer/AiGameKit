@@ -236,10 +236,14 @@ def is_tree_like_asset(row: ManifestRow) -> bool:
 def wants_split_at_height(profile: GameProfile, row: ManifestRow) -> bool:
     """True quando o asset deve correr ``text3d split-at-height``.
 
-    ``split_at_height: false`` desliga. ``true`` ou default (omitido) só activa
-    assets tree-like (vegetation/tree + bbox_preset tree ou nome típico) —
-    rocks/props nunca, mesmo com flag global true.
+    Override por asset (``text3d.split_at_height`` no manifest) ganha do profile.
+    ``false`` desliga. ``true`` ou default (omitido) só activa assets tree-like
+    (vegetation/tree + bbox_preset tree ou nome típico) — rocks/props nunca,
+    mesmo com flag global true.
     """
+    rt3 = row.text3d
+    if rt3 is not None and rt3.split_at_height is not None:
+        return bool(rt3.split_at_height)
     t3 = profile.text3d
     if t3 is not None and t3.split_at_height is False:
         return False
@@ -540,6 +544,7 @@ def _paint3d_texture_argv(
     *,
     quality: str | None = None,
     category: str | None = None,
+    texture_size: int | None = None,
 ) -> list[str]:
     """Subcomando ``paint3d texture`` (Hunyuan3D-Paint 2.1; saída GLB com material PBR)."""
     args = [
@@ -556,6 +561,8 @@ def _paint3d_texture_argv(
     if category:
         args.extend(["--category", category])
     if p3 is None:
+        if texture_size is not None and int(texture_size) > 0:
+            args.extend(["--texture-size", str(int(texture_size))])
         return args
     if p3.max_views is not None:
         args.extend(["--max-views", str(p3.max_views)])
@@ -563,8 +570,9 @@ def _paint3d_texture_argv(
         args.extend(["--view-resolution", str(p3.view_resolution)])
     if p3.render_size is not None:
         args.extend(["--render-size", str(p3.render_size)])
-    if p3.texture_size is not None:
-        args.extend(["--texture-size", str(p3.texture_size)])
+    tex = texture_size if texture_size is not None else p3.texture_size
+    if tex is not None and int(tex) > 0:
+        args.extend(["--texture-size", str(int(tex))])
     if p3.bake_exp is not None:
         args.extend(["--bake-exp", str(p3.bake_exp)])
     if p3.preserve_origin:
@@ -605,8 +613,7 @@ def _texture_subprocess_argv(
         and p3.view_resolution is None
         and p3.texture_size is None
     ):
-        fr = effective_face_ratio(profile, row)
-        target = get_target_faces(row.category, face_ratio=fr)
+        target = _resolve_lod_target_faces(profile, row)
         paint_opts = optimize_paint_for_target(target)
         if paint_opts.style:
             effective_style = paint_opts.style
@@ -623,6 +630,7 @@ def _texture_subprocess_argv(
         hw_auto=profile.hw_auto,
         quality=profile.generation,
         category=row.category if row else None,
+        texture_size=_resolve_paint_texture_size(profile, row),
     )
 
 
@@ -644,7 +652,7 @@ def _remesh_shape_to_target(
     """
     if not row.category:
         return False
-    target = get_target_faces(row.category)
+    target = get_target_faces(row.category)  # sem profile/char — legado shape remesh
     if target <= 0:
         return False
     current_faces = _count_faces_glb(mesh_path)
@@ -699,8 +707,10 @@ def _remesh_textured_to_target(
     """
     if not row.category:
         return False
-    fr = effective_face_ratio(profile, row) if profile else 1.0
-    target = get_target_faces(row.category, face_ratio=fr)
+    if profile is not None:
+        target = _resolve_lod_target_faces(profile, row)
+    else:
+        target = get_target_faces(row.category)
     if target <= 0:
         return False
     current_faces = _count_faces_glb(mesh_path)
@@ -762,8 +772,10 @@ def _simplify_to_target(
         return False
     if not row.category:
         return False
-    fr = effective_face_ratio(profile, row) if profile else 1.0
-    target = get_target_faces(row.category, face_ratio=fr)
+    if profile is not None:
+        target = _resolve_lod_target_faces(profile, row)
+    else:
+        target = get_target_faces(row.category)
     if target <= 0:
         return False
     current_faces = _count_faces_glb(mesh_path)
@@ -865,8 +877,7 @@ def _text3d_argv(
         return args
 
     if should_optimize_text3d(t3) and row is not None and row.category:
-        fr = effective_face_ratio(profile, row)
-        target = get_target_faces(row.category, face_ratio=fr)
+        target = _resolve_lod_target_faces(profile, row)
         opts = optimize_text3d_for_target(target)
         args.extend(["--steps", str(opts.steps)])
         args.extend(["--num-chunks", str(opts.num_chunks)])
@@ -1114,22 +1125,94 @@ def ensure_clean_for_paint(
     return clean_p
 
 
-def _resolve_paint_texture_size(profile: GameProfile) -> int:
-    """Atlas size efectivo para orçamento ``_to_paint`` (default medium=2048)."""
+def _quality_paint_texture_cap(profile: GameProfile) -> int:
+    """Tecto de atlas do tier de geração (QualityEngine / generation_profiles)."""
+    from .generation_profiles import get_profile
+
+    gen = (profile.generation or "medium").strip().lower() or "medium"
+    try:
+        return int(get_profile(gen).paint_texture_size)
+    except Exception:
+        return 2048
+
+
+def _char_m_for_budget(profile: GameProfile, row: ManifestRow | None) -> float | None:
+    """Diâmetro equivalente de volume para orçamento paint/LOD (size_m / prior)."""
+    if row is None:
+        return None
+    from .omni_ctrl import expand_omni_world_size
+
+    cat = getattr(row, "category", None) or getattr(row, "kind", None) or None
+    omni = expand_omni_world_size(resolve_row_omni(profile, row), category=cat)
+    size_m = list(omni.size_m) if omni.size_m is not None else None
+    try:
+        from text3d.bbox_tune import characteristic_meters
+
+        char, _src = characteristic_meters(
+            size_m,
+            category=cat,
+            bbox_preset=omni.bbox_preset,
+        )
+        return float(char) if char is not None and char > 0 else None
+    except ImportError:
+        if size_m is not None and len(size_m) == 3 and all(float(v) > 0 for v in size_m):
+            return float((float(size_m[0]) * float(size_m[1]) * float(size_m[2])) ** (1.0 / 3.0))
+        return None
+
+
+# Alias legado — paint e LOD partilham o mesmo char_m.
+_char_m_for_paint = _char_m_for_budget
+
+
+def _resolve_lod_target_faces(profile: GameProfile, row: ManifestRow) -> int:
+    """``get_target_faces`` com ``face_ratio`` + escala por ``char_m``."""
+    fr = effective_face_ratio(profile, row)
+    char = _char_m_for_budget(profile, row)
+    if row.category:
+        return get_target_faces(row.category, face_ratio=fr, char_m=char)
+    return get_target_faces("", default=8000, face_ratio=fr, char_m=char)
+
+
+def _resolve_lod0_texture_size(profile: GameProfile, row: ManifestRow | None = None) -> int:
+    """Atlas lod0 por volume ∩ quality cap (snap64). Nunca acima do paint budget."""
+    from gamedev_shared.lod_budget import lod_texture_size_for_char, snap_tex_64
+
+    quality_cap = _quality_paint_texture_cap(profile)
+    # Paint override no profile também limita o LOD (não upscale além do bake).
+    paint_cap = _resolve_paint_texture_size(profile, row)
+    cap = min(quality_cap, paint_cap)
+    char = _char_m_for_budget(profile, row)
+    if char is not None:
+        return lod_texture_size_for_char(char, quality_cap=cap)
+    return snap_tex_64(cap, cap=cap)
+
+
+def _resolve_paint_texture_size(profile: GameProfile, row: ManifestRow | None = None) -> int:
+    """Atlas size efectivo: override game.yaml, senão size_m ∩ quality cap.
+
+    ``paint3d.texture_size`` explícito no perfil ganha. Sem override: ladder por
+    ``char_m`` (balde 512 … casa 4096) nunca acima do cap do tier de geração.
+    """
     p3 = profile.paint3d
     if p3 is not None and p3.texture_size is not None and int(p3.texture_size) > 0:
         return int(p3.texture_size)
-    return 2048
+    quality_cap = _quality_paint_texture_cap(profile)
+    char = _char_m_for_budget(profile, row)
+    if char is not None:
+        from gamedev_shared.paint_budget import paint_texture_for_char
+
+        return paint_texture_for_char(char, quality_cap=quality_cap)
+    return quality_cap
 
 
-def _resolve_to_paint_faces(profile: GameProfile) -> int:
+def _resolve_to_paint_faces(profile: GameProfile, row: ManifestRow | None = None) -> int:
     """Faces alvo do ``_to_paint``: override profile ou fórmula ~ texture_size."""
     p3 = profile.paint3d
     if p3 is not None and p3.to_paint_faces is not None and int(p3.to_paint_faces) >= 4:
         return int(p3.to_paint_faces)
     from gamedev_shared.paint_budget import paint_target_faces
 
-    return paint_target_faces(_resolve_paint_texture_size(profile))
+    return paint_target_faces(_resolve_paint_texture_size(profile, row))
 
 
 def ensure_to_paint_for_paint(
@@ -1159,8 +1242,8 @@ def ensure_to_paint_for_paint(
         force=force,
         row=row,
     )
-    target = _resolve_to_paint_faces(profile)
-    tex_size = _resolve_paint_texture_size(profile)
+    target = _resolve_to_paint_faces(profile, row)
+    tex_size = _resolve_paint_texture_size(profile, row)
     current = _count_faces_glb(clean_p)
     if current < 0:
         log.warning("to_paint: não consegui contar faces de %s - paint no clean", clean_p)
@@ -1640,15 +1723,14 @@ def _run_static_lod_stages(
     bake_normals: bool,  # reservado para futuras variantes HI/LO bake
     text3d_bin: str,
     with_rig: bool,
+    texture_size_lod0: int | None = None,
 ) -> None:
     """Caminho estático (sem rig): ladder LOD0/1/2 via ``text3d lod``.
 
     LOD0 = 1.2x ``target_faces`` (decimado do painted com preservação de UV),
     LOD1 = target/2, LOD2 = target/4. ``--finish-lod0`` aplica tangents +
-    KTX2 + meshopt ao LOD0 (alinha com regras lod0.yaml). Se um lod0 promovido
-    (rig/animated de outra run) existir, nada e clobberado. O finish corre
-    dentro do proprio ``text3d lod`` — depois desta fase nenhum stage le os
-    entregaveis via bpy (collision usa o painted).
+    KTX2 + meshopt ao LOD0. ``--texture-size`` = atlas lod0 (volume); lod1/2
+    = /2 /4. Se um lod0 promovido existir, nada e clobberado.
     """
     lod0_p = _lod_path(mesh_final, 0)
     lod1_p = _lod_path(mesh_final, 1)
@@ -1682,59 +1764,89 @@ def _run_static_lod_stages(
         )
     res.lod0_path = lod0_p
 
-    # Stage 5 - Ladder completa (LOD0/1/2) a partir do PAINTED.
+    # Stage 5 - Ladder a partir do PAINTED.
     # text3d lod com --target-faces decima LOD0=1.2x target, LOD1=target/2,
     # LOD2=target/4. --finish-lod0 aplica tangents+KTX2+meshopt ao LOD0.
     # Skip só se lod0 promoted OU ladder já válida.
-    if with_lod:
-        lod1_faces = _count_faces_glb(lod1_p) if lod1_p.is_file() else -1
-        lod2_faces = _count_faces_glb(lod2_p) if lod2_p.is_file() else -1
-        lod_ladder_ok = (
-            lod1_p.is_file()
-            and lod2_p.is_file()
-            and _glb_has_materials(lod1_p)
-            and _glb_has_materials(lod2_p)
-            and painted_faces > 0
-            and lod1_faces >= int(painted_faces * 0.25)
-            and lod2_faces >= int(painted_faces * 0.08)
-            and lod2_faces < lod1_faces
+    # ``with_lod=False`` (pipeline sem 'lod'): mesmo assim emitir lod0 — é o
+    # entregável Round 3. Sem isto bake-master "deferred to lod" + skip lod
+    # deixava weapons/terrain forms sem *_lod0.glb para sempre.
+    lod1_faces = _count_faces_glb(lod1_p) if lod1_p.is_file() else -1
+    lod2_faces = _count_faces_glb(lod2_p) if lod2_p.is_file() else -1
+    lod_ladder_ok = (
+        lod1_p.is_file()
+        and lod2_p.is_file()
+        and _glb_has_materials(lod1_p)
+        and _glb_has_materials(lod2_p)
+        and painted_faces > 0
+        and lod1_faces >= int(painted_faces * 0.25)
+        and lod2_faces >= int(painted_faces * 0.08)
+        and lod2_faces < lod1_faces
+    )
+    if lod0_is_promoted:
+        res.stages.append(
+            StageResult("lod", True, 0.0, "skipped (lod0 already promoted)", lod1_p if with_lod else lod0_p)
         )
-        if lod0_is_promoted:
-            res.stages.append(StageResult("lod", True, 0.0, "skipped (lod0 already promoted)", lod1_p))
-        elif lod_ladder_ok and lod0_matches_painted:
-            res.stages.append(StageResult("lod", True, 0.0, "skipped (lod1/lod2 ok)", lod1_p))
-        else:
-            # LOD0 budget = 1.2x category target_faces (alinha com lod0.yaml
-            # max_per_category). Piso 8 para evitar degeneração em categorias
-            # pequenas (ex.: effects target=2000).
-            lod0_target = max(8, int(target_faces * 1.2))
-            lod_min1 = max(target_faces // 2, 500)
-            # Piso LOD2 = target/3 (alinha com text3d lod //3; edifícios grandes).
-            lod_min2 = max(target_faces // 3, 150)
-            lod_argv = [
-                text3d_bin,
-                "lod",
-                str(painted_p),
-                "-o",
-                str(mesh_final.parent),
-                "--basename",
-                base,
-                "--painted-mesh",
-                str(painted_p),
-                "--target-faces",
-                str(lod0_target),
-                "--finish-lod0",
-                "--lod1-ratio",
-                "0.40",
-                "--lod2-ratio",
-                "0.22",
-                "--min-faces-lod1",
-                str(lod_min1),
-                "--min-faces-lod2",
-                str(lod_min2),
-            ]
-            s = run_stage("lod", lod_argv, None)
-            res.stages.append(s)
+    elif with_lod and lod_ladder_ok and lod0_matches_painted:
+        res.stages.append(StageResult("lod", True, 0.0, "skipped (lod1/lod2 ok)", lod1_p))
+    elif not with_lod and lod0_p.is_file() and _glb_has_materials(lod0_p) and lod0_faces > 0:
+        res.stages.append(StageResult("lod", True, 0.0, "skipped (lod0 ok, no ladder)", lod0_p))
+    else:
+        # LOD0 budget = 1.2x category target_faces (alinha com lod0.yaml
+        # max_per_category). Piso 8 para evitar degeneração em categorias
+        # pequenas (ex.: effects target=2000).
+        lod0_target = max(8, int(target_faces * 1.2))
+        lod_min1 = max(target_faces // 2, 500)
+        # Piso LOD2 = target/3 (alinha com text3d lod //3; edifícios grandes).
+        lod_min2 = max(target_faces // 3, 150)
+        out_dir = mesh_final.parent.resolve()
+        lod_argv = [
+            text3d_bin,
+            "lod",
+            str(painted_p.resolve()),
+            "-o",
+            str(out_dir),
+            "--basename",
+            base,
+            "--painted-mesh",
+            str(painted_p.resolve()),
+            "--target-faces",
+            str(lod0_target),
+            "--finish-lod0",
+            "--lod1-ratio",
+            "0.40",
+            "--lod2-ratio",
+            "0.22",
+            "--min-faces-lod1",
+            str(lod_min1),
+            "--min-faces-lod2",
+            str(lod_min2),
+        ]
+        if texture_size_lod0 is not None and int(texture_size_lod0) > 0:
+            lod_argv.extend(["--texture-size", str(int(texture_size_lod0))])
+        # Gate: com ladder exige lod0+1+2; sem 'lod' no pipeline só lod0.
+        s = run_stage("lod", lod_argv, lod0_p)
+        if s.ok:
+            if with_lod and not (lod0_p.is_file() and lod1_p.is_file() and lod2_p.is_file()):
+                missing = [p.name for p in (lod0_p, lod1_p, lod2_p) if not p.is_file() or p.stat().st_size < 64]
+                s = StageResult(
+                    "lod",
+                    False,
+                    s.elapsed_s,
+                    f"ladder incompleta após text3d lod: {', '.join(missing)}",
+                    lod0_p,
+                )
+            elif not with_lod and not (lod0_p.is_file() and lod0_p.stat().st_size >= 64):
+                s = StageResult(
+                    "lod",
+                    False,
+                    s.elapsed_s,
+                    f"lod0 ausente após text3d lod: {lod0_p.name}",
+                    lod0_p,
+                )
+        if not s.ok:
+            res.ok = False
+        res.stages.append(s)
 
 
 def _run_split_lod_stages(
@@ -1748,6 +1860,7 @@ def _run_split_lod_stages(
     with_lod: bool,
     text3d_bin: str,
     profile: GameProfile,
+    row: ManifestRow | None = None,
 ) -> None:
     """Caminho split-antes-de-LOD para árvores (Stump+Top em cada LOD).
 
@@ -1842,6 +1955,7 @@ def _run_split_lod_stages(
 
         # LOD stump/top SEM finish (KTX2): bpy 5.2 não importa KHR_texture_basisu
         # no compose. Finish (UASTC+meshopt) corre no lod composto abaixo.
+        split_tex = _resolve_lod0_texture_size(profile, row)
         stump_lod_argv = [
             text3d_bin,
             "lod",
@@ -1854,6 +1968,8 @@ def _run_split_lod_stages(
             str(stump_painted),
             "--target-faces",
             str(stump_target),
+            "--texture-size",
+            str(int(split_tex)),
             "--no-finish",
             "--lod1-ratio",
             "0.40",
@@ -1880,6 +1996,8 @@ def _run_split_lod_stages(
             str(top_painted),
             "--target-faces",
             str(top_target),
+            "--texture-size",
+            str(int(split_tex)),
             "--no-finish",
             "--lod1-ratio",
             "0.40",
@@ -2075,11 +2193,11 @@ def run_master_pipeline(
         res.stages.append(StageResult("bake-master", False, 0.0, f"painted ausente: {painted_p}"))
         return res
 
-    fr = effective_face_ratio(profile, row)
-    # target_faces = orçamento base; LOD0 = 1.2xtarget, LOD1 = target/2, LOD2 = target/4.
-    target_faces = get_target_faces(row.category or "", face_ratio=fr) if row.category else 0
+    # target_faces = orçamento base (categoria × volume); LOD0 = 1.2xtarget.
+    target_faces = _resolve_lod_target_faces(profile, row)
     if target_faces <= 0:
         target_faces = 8000
+    lod0_tex = _resolve_lod0_texture_size(profile, row)
     lod0_p = _lod_path(mesh_final, 0)
     lod1_p = _lod_path(mesh_final, 1)
     lod2_p = _lod_path(mesh_final, 2)
@@ -2231,7 +2349,11 @@ def run_master_pipeline(
                 "--min-faces-lod2",
                 str(lod_min2),
                 "--no-meshopt",
+                "--texture-size",
+                str(int(lod0_tex)),
             ]
+            if target_faces > 0:
+                lod_argv.extend(["--target-faces", str(max(8, int(target_faces * 1.2)))])
             s = _run("lod", lod_argv)
             res.stages.append(s)
             # Finish (KTX2+meshopt+tangents) por ficheiro, DEPOIS da ladder
@@ -2261,6 +2383,7 @@ def run_master_pipeline(
             with_lod=with_lod,
             text3d_bin=text3d_bin,
             profile=profile,
+            row=row,
         )
     else:
         _run_static_lod_stages(
@@ -2274,6 +2397,7 @@ def run_master_pipeline(
             bake_normals=bool(bake_normals),
             text3d_bin=text3d_bin,
             with_rig=with_rig,
+            texture_size_lod0=lod0_tex,
         )
 
     # Stage 6 - collision a partir do PAINTED (geometria estática idêntica ao
@@ -2286,13 +2410,24 @@ def run_master_pipeline(
             res.stages.append(StageResult("collision", True, 0.0, "skipped (collision existente)", coll_p))
         else:
             coll_src = painted_p if painted_p.is_file() else lod0_p
+            from .manifest import effective_collision_args
+
+            coll_opts = effective_collision_args(profile, row)
             coll_argv = [
                 text3d_bin,
                 "collision",
                 str(coll_src),
                 "-o",
                 str(coll_p),
+                "--max-faces",
+                str(coll_opts["max_faces"]),
+                "--mode",
+                str(coll_opts["mode"]),
             ]
+            if coll_opts.get("voxel_size") is not None:
+                coll_argv.extend(["--voxel-size", str(coll_opts["voxel_size"])])
+            if coll_opts.get("inflate") is not None:
+                coll_argv.extend(["--inflate", str(coll_opts["inflate"])])
             s = _run("collision", coll_argv, coll_p)
             res.stages.append(s)
             # Round 2 - finalizar collision: dedup+prune (sem KTX2/meshopt/tangents).

@@ -662,12 +662,28 @@ Level-of-detail triplet generation via `text3d lod`.
 
 #### `collision` — CollisionProfile
 
-Collision mesh generation via `text3d collision` (convex hull).
+Collision mesh via `text3d collision`. Modes: `hull` (default convex), `envelope`
+(voxel remesh concave — stone arches), `mesh` (decimate only).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `max_faces` | `int` | `300` | Maximum faces for collision mesh (≥ 4) |
-| `convex_hull` | `bool` | `true` | Use convex hull decomposition |
+| `mode` | `str` | `hull` | `hull` \| `envelope` (inflate+voxel) \| `mesh` (inflate+decimate source) |
+| `voxel_size` | `float` | auto | Envelope only: remesh voxel size in metres (default ≈ char_m/48) |
+| `inflate` | `float` | auto | Outward offset (m) before remesh/decimate; envelope/mesh default ≈ max(char·0.008, 0.04) |
+| `convex_hull` | `bool` | `true` | Legacy alias when `mode` omitted (True→hull, False→mesh) |
+
+Per-asset override on the asset entry:
+
+```yaml
+- id: city_gate_arch
+  pipeline: [3d, paint, lod, collision]
+  collision:
+    mode: envelope
+    max_faces: 256
+    voxel_size: 0.08
+    inflate: 0.1
+```
 
 ## Fellable trees (`split-at-height`)
 

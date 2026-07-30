@@ -27,6 +27,37 @@ def test_classify_master_need_image(tmp_path: Path) -> None:
     assert state == _ROW_NEED_IMAGE
 
 
+def test_classify_master_need_image_even_with_orphan_shape(tmp_path: Path) -> None:
+    """PNG apagado + shape órfão → text2d, não saltar para need_shape."""
+    from gameassets.paths import _ROW_NEED_IMAGE, _classify_row_state_master, _shape_path
+
+    img = tmp_path / "img.png"
+    mesh = tmp_path / "mesh.glb"
+    _touch(_shape_path(mesh))
+    state = _classify_row_state_master(
+        img_final=img, mesh_final=mesh, want_texture=True, wants_rig=False, wants_animate=False
+    )
+    assert state == _ROW_NEED_IMAGE
+
+
+def test_classify_master_need_image_even_with_orphan_clean(tmp_path: Path) -> None:
+    from gameassets.paths import (
+        _ROW_NEED_IMAGE,
+        _classify_row_state_master,
+        _clean_path,
+        _shape_path,
+    )
+
+    img = tmp_path / "img.png"
+    mesh = tmp_path / "mesh.glb"
+    _touch(_shape_path(mesh))
+    _touch(_clean_path(mesh))
+    state = _classify_row_state_master(
+        img_final=img, mesh_final=mesh, want_texture=True, wants_rig=False, wants_animate=False
+    )
+    assert state == _ROW_NEED_IMAGE
+
+
 def test_classify_master_need_topology_fix(tmp_path: Path) -> None:
     from gameassets.paths import _ROW_NEED_TOPOLOGY_FIX, _classify_row_state_master, _shape_path
 

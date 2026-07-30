@@ -146,12 +146,14 @@ CATEGORIES: dict[str, AssetCategory] = {
             "camera slightly above horizon looking down at facade, "
             "solid closed foundation flush with imaginary ground, "
             "full exterior walls opaque, architectural detail readable, "
+            "static architecture only, empty chimney flue, cold dark forge hearth, "
             "white void background"
         ),
         hint_3d=(
             "isolated building model, solid closed base, "
             "no open underside or hollow shell, "
-            "no terrain slab, clean exterior structural geometry"
+            "no terrain slab, clean exterior structural geometry, "
+            "no volumetric smoke, no fire plume geometry, no particle blobs"
         ),
         hint_rig="",
         hint_texture="smlstxtr, stone brick wall surface, seamless texture",
@@ -164,6 +166,15 @@ CATEGORIES: dict[str, AssetCategory] = {
             "hollow plastic shell",
             "interior seen from below",
             "floating above ground",
+            "smoke plume",
+            "chimney smoke",
+            "billowing smoke",
+            "volumetric smoke",
+            "fire particles",
+            "flame mesh",
+            "particle effects",
+            "sparks flying",
+            "open flames",
         ),
     ),
     "furniture": AssetCategory(
@@ -519,12 +530,29 @@ def infer_category(idea: str, kind: str) -> str:
     return ""
 
 
-def get_target_faces(category: str, default: int = 3000, face_ratio: float = 1.0) -> int:
+def get_target_faces(
+    category: str,
+    default: int = 3000,
+    face_ratio: float = 1.0,
+    char_m: float | None = None,
+) -> int:
+    """Faces LOD alvo: bias de categoria × ``face_ratio`` × escala por volume.
+
+    Com ``char_m`` (diâmetro equivalente ``(L·H·W)^(1/3)``): multiplica por
+    ``lod_face_scale`` e aplica piso absoluto. Sem ``char_m``: comportamento
+    legado (só categoria × ratio).
+    """
     cat = CATEGORIES.get(category)
     base = cat.target_faces if cat else default
     if face_ratio <= 0:
         return 0
-    return max(4, int(base * face_ratio))
+    faces = int(base * face_ratio)
+    if char_m is not None and float(char_m) > 0:
+        from gamedev_shared.lod_budget import LOD_FACES_ABS_MIN, lod_face_scale
+
+        faces = int(faces * lod_face_scale(float(char_m)))
+        return max(LOD_FACES_ABS_MIN, faces)
+    return max(4, faces)
 
 
 # Round 2: categorias que beneficiam de bake-normals high→low por defeito.

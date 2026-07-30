@@ -29,6 +29,23 @@ def _require_bpy():
         raise ImportError("bpy is required for LOD generation. Install with: pip install bpy") from None
 
 
+def _scale_object_textures(mesh_obj, texture_size: int) -> None:
+    """Downscale todas as ``TEX_IMAGE`` do mesh para ``texture_size``×``texture_size``."""
+    if texture_size is None or int(texture_size) <= 0:
+        return
+    from text3d.utils.mesh_remesh_textured import downscale_image_replace
+
+    size = int(texture_size)
+    for mat_slot in mesh_obj.material_slots:
+        mat = mat_slot.material
+        if not mat or not mat.use_nodes:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type != "TEX_IMAGE" or not node.image:
+                continue
+            downscale_image_replace(node, size)
+
+
 def _shade_smooth(mesh_obj) -> None:
     """Marca faces como smooth-shaded, mantendo arestas duras só acima de 60°.
 
@@ -563,12 +580,18 @@ def generate_lod_glb_triplet(
     min_faces_lod1: int = 500,
     min_faces_lod2: int = 150,
     meshfix: bool = False,
+    texture_size_lod0: int | None = None,
+    target_faces: int | None = None,
 ) -> list[Path]:
     """Gera três GLB: ``{basename}_lod0.glb`` … ``{basename}_lod2.glb``.
 
     Pipeline completo via bpy que preserva armatures, skin weights e
     animações em todos os níveis. Se bpy não estiver disponível,
     devolve lista vazia com warning.
+
+    ``texture_size_lod0``: downscale atlas (lod1=/2, lod2=/4, snap64).
+    ``target_faces``: se dado, LOD0 decima a este alvo; LOD1/2 usam ratios
+    sobre o LOD0 (com mínimos).
     """
     if not 0 < lod2_ratio < lod1_ratio <= 1.0:
         raise ValueError("Esperado 0 < lod2_ratio < lod1_ratio <= 1.0")
@@ -586,6 +609,8 @@ def generate_lod_glb_triplet(
             min_faces_lod1,
             min_faces_lod2,
             meshfix,
+            texture_size_lod0,
+            target_faces,
         )
     except ImportError:
         logging.getLogger(__name__).warning("bpy indisponível — generate_lod_glb_triplet ignorado")
@@ -601,7 +626,10 @@ def _generate_lod_glb_triplet_impl(
     min_faces_lod1,
     min_faces_lod2,
     meshfix,
+    texture_size_lod0,
+    target_faces,
 ):
+    from gamedev_shared.lod_budget import lod_texture_ladder
     from gamedev_shared.mesh_repair import remove_doubles
 
     mesh_obj, arm_objs = _load_glb_with_armatures(input_path)
@@ -617,6 +645,13 @@ def _generate_lod_glb_triplet_impl(
         log.info("LOD geometry: welded %d duplicate verts (input V/Tri≈3)", welded)
     _shade_smooth(mesh_obj)
     n = len(mesh_obj.data.polygons)
+    if target_faces is not None and int(target_faces) > 0 and int(target_faces) < n:
+        _decimate_to_target(mesh_obj, int(target_faces))
+        n = len(mesh_obj.data.polygons)
+    tex_ladder: tuple[int, int, int] | None = None
+    if texture_size_lod0 is not None and int(texture_size_lod0) > 0:
+        tex_ladder = lod_texture_ladder(int(texture_size_lod0))
+        _scale_object_textures(mesh_obj, tex_ladder[0])
     lod0_path = output_dir / f"{basename}_lod0.glb"
     _export_glb(lod0_path, mesh_obj, arm_objs)
     out_paths: list[Path] = [lod0_path]
@@ -627,6 +662,8 @@ def _generate_lod_glb_triplet_impl(
         _decimate_to_target(mesh_obj_l, target)
         if meshfix:
             _fill_holes_bpy(mesh_obj_l, sides=30)
+        if tex_ladder is not None:
+            _scale_object_textures(mesh_obj_l, tex_ladder[level])
         path = output_dir / f"{basename}_lod{level}.glb"
         _export_glb(path, mesh_obj_l, arm_objs_l)
         out_paths.append(path)
@@ -664,6 +701,7 @@ def generate_lod_textured_glb_triplet(
     ``animation_source``: GLB com clips quando ``skin_source`` não tem animações
     (ex.: ``rigged_hi`` + ``*_animated.glb``).
     """
+    from gamedev_shared.lod_budget import lod_texture_ladder
     from text3d.utils.mesh_remesh_textured import _clamp_decimate_target, remesh_textured_glb
 
     painted = Path(painted_path)
@@ -682,17 +720,14 @@ def generate_lod_textured_glb_triplet(
     model = max(mesh_objs, key=lambda o: len(o.data.polygons))
     n = len(model.data.polygons)
 
-    tex_base = texture_size_lod0
+    img_size = int(texture_size_lod0)
     if model.data.materials and model.data.materials[0].use_nodes:
         for node in model.data.materials[0].node_tree.nodes:
             if node.type == "TEX_IMAGE" and node.image:
-                # Respeitar texture_size_lod0 explícito (default 2048) em vez
-                # de herdar o tamanho da imagem do paint3d (que pode ser 3072).
-                # Só usar o tamanho da imagem se for menor que o pedido (upscale
-                # nunca é desejável; downscale para o pedido é o objetivo).
-                img_size = max(node.image.size[0], node.image.size[1])
-                tex_base = min(texture_size_lod0, img_size)
+                # Nunca upscale acima do painted; downscale para o pedido.
+                img_size = min(int(texture_size_lod0), max(node.image.size[0], node.image.size[1]))
                 break
+    tex0, tex1, tex2 = lod_texture_ladder(img_size)
     clear_scene()
 
     if target_faces and target_faces > 0:
@@ -708,27 +743,23 @@ def generate_lod_textured_glb_triplet(
     out_paths: list[Path] = []
 
     lod0_path = output_dir / f"{basename}_lod0.glb"
-    if lod0_target < n:
-        remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=tex_base)
-    else:
-        # painted já é LOD0 (mesmo path, hardlink ou inode partilhado) —
-        # skip copy; resolve()!=samefile em hardlinks.
-        import shutil
-
-        same = False
-        with contextlib.suppress(OSError):
-            same = lod0_path.exists() and Path(painted).samefile(lod0_path)
-        if not same and Path(painted).resolve() != lod0_path.resolve():
-            shutil.copy2(painted, lod0_path)
+    # Sempre passar por remesh_textured (mesmo sem decimate) para forçar
+    # downscale de atlas — copy2 do painted deixava lod0/1/2 com a mesma tex.
+    remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=tex0)
     out_paths.append(lod0_path)
 
     for level, target, tex_size in (
-        (1, lod1_target, max(64, tex_base // 2)),
-        (2, lod2_target, max(32, tex_base // 4)),
+        (1, lod1_target, tex1),
+        (2, lod2_target, tex2),
     ):
         path = output_dir / f"{basename}_lod{level}.glb"
         remesh_textured_glb(painted, path, target_faces=target, texture_size=tex_size)
         out_paths.append(path)
+
+    missing = [p for p in out_paths if not p.is_file() or p.stat().st_size < 64]
+    if missing:
+        names = ", ".join(p.name for p in missing)
+        raise RuntimeError(f"LOD ladder incompleta após remesh (ausente/vazio): {names}")
 
     if apply_finish:
         from .gltf_finish import gltf_transform_finish

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from gameassets.manifest import ManifestRow, effective_image_source, load_manifest
+from gameassets.manifest import ManifestRow, effective_collision_args, effective_image_source, load_manifest
 from gameassets.profile import load_profile
 
 
@@ -237,3 +237,48 @@ def test_apply_row_text3d_overrides_and_mc_level() -> None:
     # Sem override: item intacto
     item2: dict = {"steps": 20}
     assert apply_row_text3d_overrides(item2, row_plain) == {"steps": 20}
+
+
+def test_row_collision_and_effective_args() -> None:
+    content = yaml.dump(
+        {
+            "assets": [
+                {
+                    "id": "city_gate_arch",
+                    "idea": "arch",
+                    "pipeline": ["3d", "collision"],
+                    "collision": {
+                        "mode": "envelope",
+                        "max_faces": 256,
+                        "voxel_size": 0.08,
+                        "inflate": 0.1,
+                    },
+                }
+            ]
+        }
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        rows = load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+    row = rows[0]
+    assert row.collision is not None
+    assert row.collision.mode == "envelope"
+    assert row.collision.inflate == 0.1
+    from gameassets.profile import GameProfile
+
+    gp = GameProfile.from_dict(
+        {
+            "title": "t",
+            "genre": "g",
+            "tone": "x",
+            "style_preset": "lowpoly",
+            "output_dir": "/tmp",
+            "collision": {"mode": "hull", "max_faces": 64},
+        }
+    )
+    args = effective_collision_args(gp, row)
+    assert args == {"mode": "envelope", "max_faces": 256, "voxel_size": 0.08, "inflate": 0.1}

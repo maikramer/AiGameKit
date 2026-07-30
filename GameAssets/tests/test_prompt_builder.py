@@ -55,3 +55,21 @@ def test_for_3d_adds_hint(preset_lowpoly: dict) -> None:
     p2 = build_prompt(profile, preset_lowpoly, row, for_3d=False)
     p3 = build_prompt(profile, preset_lowpoly, row, for_3d=True)
     assert p2 != p3 or "watertight" in p3.lower()
+
+
+def test_generate_3d_bans_baked_vfx(preset_lowpoly: dict) -> None:
+    profile = GameProfile(title="A", genre="B", tone="C", style_preset="lowpoly")
+    row = ManifestRow(
+        id="forge",
+        idea="village forge with chimney",
+        kind="environment",
+        category="building",
+        generate_3d=True,
+    )
+    p2 = build_prompt(profile, preset_lowpoly, row, for_3d=False)
+    p3 = build_prompt(profile, preset_lowpoly, row, for_3d=True)
+    assert "smoke plume" in p2.lower() or "without smoke" in p2.lower()
+    assert "particle" in p2.lower() or "smoke" in p2.lower()
+    assert "static solid" in p3.lower() or "volumetric smoke" in p3.lower()
+    assert "Avoid:" in p2
+    assert "chimney smoke" in p2.lower() or "smoke plume" in p2.lower()

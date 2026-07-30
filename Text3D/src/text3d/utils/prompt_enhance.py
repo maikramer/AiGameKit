@@ -47,6 +47,39 @@ TOXIC_TERMS: tuple[str, ...] = (
     "backlit",
     "side lit",
     "chiaroscuro",
+    # VFX baked into mesh (smoke/fire/particles) — engine ParticleSystem owns FX.
+    "billowing smoke",
+    "volumetric smoke",
+    "smoke plume",
+    "smoke rising",
+    "smoke coming out",
+    "chimney smoke",
+    "emitting smoke",
+    "puffing smoke",
+    "smoke trail",
+    "smoke cloud",
+    "wisps of smoke",
+    "with smoke",
+    "and smoke",
+    "particle effects",
+    "particle system",
+    "fire particles",
+    "ember particles",
+    "sparks flying",
+    "fire plume",
+    "open flames",
+    "with flames",
+    "flames coming",
+    "active fire",
+    "burning fire",
+)
+
+# Frases arquitectónicas que o modelo lê como fumo → reescrever antes do strip.
+_VFX_REWRITES: tuple[tuple[str, str], ...] = (
+    ("smoke cap", "chimney rain hood"),
+    ("smoke hood", "chimney rain hood"),
+    ("smoking chimney", "empty chimney"),
+    ("chimney smoking", "empty chimney"),
 )
 
 # ---------------------------------------------------------------------------
@@ -74,10 +107,13 @@ _RENDER_SUFFIX = (
     "matte surface finish, "
     "full 3D volume visible from all angles, "
     "white background visible beneath and around the object, "
-    "clean silhouette, game asset quality"
+    "clean silhouette, game asset quality, "
+    "static solid geometry only, "
+    "empty chimneys and cold hearths without smoke or fire plumes, "
+    "no particle blobs or volumetric effects"
 )
 
-_RENDER_SUFFIX_LIGHT = "flat lit, clean render, game asset"
+_RENDER_SUFFIX_LIGHT = "flat lit, clean render, game asset, static mesh only, no smoke no flames no particles"
 
 # Bipedais / humanoides: gap leve entre pernas na imagem 2D (Hunyuan lê
 # silhueta — coxas coladas → webbing no mesh). Só quando o prompt sugere personagem.
@@ -132,8 +168,12 @@ def _has_clean_markers(prompt_lower: str) -> bool:
 
 
 def sanitize_prompt(prompt: str) -> str:
-    """Remove termos que causam sombras/chão na imagem 2D."""
+    """Remove termos que causam sombras/chão/VFX na imagem 2D."""
     result = prompt
+
+    # Reescrever frases ambíguas (ex. "smoke cap" = capelo, não fumo) antes do strip.
+    for src, dst in sorted(_VFX_REWRITES, key=lambda p: len(p[0]), reverse=True):
+        result = re.compile(re.escape(src), re.IGNORECASE).sub(dst, result)
 
     # Processar termos mais longos primeiro para evitar remoções parciais
     for term in sorted(TOXIC_TERMS, key=len, reverse=True):

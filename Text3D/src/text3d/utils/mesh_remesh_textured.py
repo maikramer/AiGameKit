@@ -24,6 +24,44 @@ from gamedev_shared.mesh_simplify import clamp_decimate_target, protect_boundary
 log = logging.getLogger(__name__)
 
 
+def downscale_image_replace(node, size: int) -> bool:
+    """Downscale ``node.image`` para ``size``² via datablock novo packed.
+
+    ``image.scale`` + ``pack`` no mesmo Image por vezes re-empacota o JPEG
+    original — o exporter glTF ficava com o mesmo atlas em lod0/1/2.
+    """
+    import bpy
+
+    img = node.image
+    if img is None or int(size) <= 0:
+        return False
+    want = int(size)
+    w0, h0 = int(img.size[0]), int(img.size[1])
+    if max(w0, h0) <= want:
+        return False
+    img.scale(want, want)
+    w, h = int(img.size[0]), int(img.size[1])
+    if max(w, h) > want:
+        log.warning("image.scale failed %dx%d → %dx%d (want %d)", w0, h0, w, h, want)
+        return False
+    pixels = list(img.pixels)
+    new = bpy.data.images.new(f"{img.name}_s{want}", width=w, height=h, alpha=False)
+    new.pixels = pixels
+    new.file_format = "PNG"
+    new.alpha_mode = "NONE"
+    new.pack()
+    node.image = new
+    log.info(
+        "texture downscale %dx%d → %dx%d (packed %d)",
+        w0,
+        h0,
+        w,
+        h,
+        len(new.packed_file.data) if new.packed_file else 0,
+    )
+    return True
+
+
 def _clamp_decimate_target(n_faces: int, requested: int) -> int:
     """Compat: reexport de ``gamedev_shared.mesh_simplify.clamp_decimate_target``."""
     return clamp_decimate_target(n_faces, requested)
@@ -720,7 +758,9 @@ def remesh_with_texture_reprojection(
     source_faces = source_data.faces
 
     src_h, src_w = source_tex.shape[:2]
-    effective_size = max(src_h, src_w) if texture_size == 2048 else texture_size
+    # Pedido explícito ganha; nunca upscale acima da source.
+    src_max = max(src_h, src_w)
+    effective_size = min(int(texture_size), src_max) if texture_size and int(texture_size) > 0 else src_max
 
     n = len(source_faces)
     log.info(
@@ -981,10 +1021,10 @@ def remesh_textured_glb(
 
     mesh = obj.data
 
-    # Scale ALL texture images across all materials (not just the first).
-    # image.scale() may convert RGB→RGBA; set alpha_mode to avoid
-    # the GLTF exporter switching from JPEG to PNG for no-opaque alpha.
+    # Scale ALL texture images (never upscale). Replace datablock — scale+pack
+    # no mesmo Image por vezes re-empacota o JPEG original no exporter glTF.
     if texture_size:
+        want = int(texture_size)
         for mat_slot in obj.material_slots:
             mat = mat_slot.material
             if not mat or not mat.use_nodes:
@@ -992,10 +1032,13 @@ def remesh_textured_glb(
             for node in mat.node_tree.nodes:
                 if node.type != "TEX_IMAGE" or not node.image:
                     continue
-                w, h = node.image.size[0], node.image.size[1]
-                if max(w, h) != texture_size:
-                    node.image.scale(texture_size, texture_size)
-                    node.image.alpha_mode = "NONE"
+                if not downscale_image_replace(node, want):
+                    log.info(
+                        "remesh texture keep %dx%d (want=%d)",
+                        int(node.image.size[0]),
+                        int(node.image.size[1]),
+                        want,
+                    )
 
     n_final = len(obj.data.polygons)
     bpy.ops.object.select_all(action="DESELECT")
@@ -1018,8 +1061,20 @@ def remesh_textured_glb(
         with contextlib.suppress(Exception):
             mesh.calc_tangents()
 
+    if n_final < 4:
+        if temp_png:
+            Path(temp_png).unlink(missing_ok=True)
+        clear_scene()
+        raise RuntimeError(f"remesh_textured: mesh inválida antes do export ({n_final} faces) → {path_out.name}")
+
+    path_out = Path(path_out)
+    # Export para temp + replace: bpy às vezes loga "Finished export" sem criar
+    # o path pedido (mesh "not valid") — lod1/2 sumiam e o pipeline seguia OK.
+    tmp_out = path_out.with_name(f".{path_out.stem}.export_tmp{path_out.suffix}")
+    with contextlib.suppress(OSError):
+        tmp_out.unlink()
     bpy.ops.export_scene.gltf(
-        filepath=str(path_out),
+        filepath=str(tmp_out),
         export_format="GLB",
         use_selection=True,
         export_apply=True,
@@ -1035,5 +1090,13 @@ def remesh_textured_glb(
     if temp_png:
         Path(temp_png).unlink(missing_ok=True)
     clear_scene()
-    log.info("Resultado: %s (%d faces)", path_out, n_final)
+
+    if not tmp_out.is_file() or tmp_out.stat().st_size < 64:
+        with contextlib.suppress(OSError):
+            tmp_out.unlink()
+        raise RuntimeError(
+            f"remesh_textured: export GLB falhou (ausente/vazio) → {path_out} (faces_pre_export={n_final})"
+        )
+    tmp_out.replace(path_out)
+    log.info("Resultado: %s (%d faces, %d bytes)", path_out, n_final, path_out.stat().st_size)
     return path_out

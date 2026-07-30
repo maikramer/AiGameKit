@@ -144,7 +144,7 @@ def resolve_fast_decode(volume_decoder: str, octree_resolution: int) -> bool:
     """Decide ``fast_decode`` (flashvdm) para o octree efectivo.
 
     flashvdm exige ≥ :data:`FLASHVDM_MIN_OCTREE`. Abaixo disso (ex. piso
-    bbox_tune 160) cai para decode denso — não sobe o octree.
+    bbox_tune 128) cai para decode denso — não sobe o octree.
     """
     o = int(octree_resolution)
     if o < FLASHVDM_MIN_OCTREE:

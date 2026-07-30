@@ -7,6 +7,7 @@ Assets vivem em ``text3d/data/omni/`` (package-data). Runtime usa
 from __future__ import annotations
 
 import atexit
+import contextlib
 from contextlib import ExitStack
 from importlib import resources
 from pathlib import Path
@@ -35,8 +36,12 @@ POSE_PRESETS: dict[str, str] = {
     "chibi-apose": "quaternius_apose_dwarf_bone.txt",
 }
 
-# [length, height, width] — eixo maior = 1.0 (docs Omni 0-1).
-# Cantos em ±0.5; grid MC ±1.01 → margem. NÃO escalar a 2.0 (enche e clipa).
+# [L, H, W] = aspect Omni → após export Y-up WebGL/Three.js mapeia para [X, Y, Z].
+#   L → X  (esquerda/direita na vista de frente, −Z)
+#   H → Y  (cima; Y+ up no exhibit / VibeGame)
+#   W → Z  (profundidade, afastamento da câmara)
+# Eixo maior = 1.0 (docs Omni 0-1). Cantos ±0.5; grid MC ±1.01 → margem.
+# NÃO escalar a 2.0 (enche e clipa). NÃO chamar L de “profundidade”.
 BBOX_PRESETS: dict[str, tuple[float, float, float]] = {
     "cube": (1.0, 1.0, 1.0),
     "humanoid": (0.45, 1.0, 0.35),
@@ -50,10 +55,11 @@ BBOX_PRESETS: dict[str, tuple[float, float, float]] = {
     # Insecto / voador achatado (L≈W >> H).
     "flat": (1.0, 0.4375, 1.0),
     "flying": (1.0, 0.4375, 1.0),
-    # Lâmina fina em W (profundidade). 0.06 + decode floor antigo = bastão grosso.
+    # Lâmina: L=largura da lâmina (X), H=altura (Y), W=espessura (Z).
     "sword": (0.12, 1.0, 0.04),
     "shield": (0.7, 1.0, 0.15),
     "crate": (1.0, 1.0, 1.0),
+    # Porta: L=largura folha (X), H=altura, W=espessura (Z).
     "door": (0.55, 1.0, 0.12),
     "barrel": (0.7, 1.0, 0.7),
     # Árvore: H dominante mas L=W gordos o bastante p/ tronco cilíndrico.
@@ -64,7 +70,8 @@ BBOX_PRESETS: dict[str, tuple[float, float, float]] = {
     "cactus": (0.4, 1.0, 0.4),
     "chest": (1.0, 0.61, 0.61),
     "furniture": (1.0, 0.85, 0.7),
-    # Capela / casa de culto pequena: ~6 m profundidade x 7 m altura x 4.5 m largura.
+    # Casa/capela: L=largura fachada (X), H=altura (Y), W=profundidade (Z).
+    # Ex. ~6 m largura × 7 m altura × 4.5 m profundidade → aspect ≈ (0.86, 1, 0.64).
     "building": (0.86, 1.0, 0.64),
     "chapel": (0.86, 1.0, 0.64),
 }
@@ -230,9 +237,11 @@ def merge_omni_controls(
     não é só escala pós-mesh. Com pose, só ``size_m`` mundo (esqueleto manda).
     """
     ct = (control_type or "none").strip().lower()
-    # size_m / height_m = metros mundo — NÃO contam como controlo Omni.
-    # Contar size_m como "explicit" bloqueava soft-fill de pose e injectava bbox
-    # (personagens "engordavam" a preencher a caixa).
+    # size_m / height_m = metros mundo.
+    # - Com pose: NÃO contam como controlo geométrico (não bloqueiam soft-fill;
+    #   não injectam bbox — senão personagens engordam a encher a caixa).
+    # - Com bbox + size_m aniso: MAIS ABAIXO viram molde Omni (size_m_to_bbox),
+    #   prevalecendo sobre bbox_preset — ver bloco author_mold / aniso.
     has_geom = (
         ct != "none"
         or bbox is not None
@@ -286,13 +295,17 @@ def merge_omni_controls(
         )
 
     # Molde do modelo (bbox Omni): Hunyuan enche este aspect. Escala pós-mesh
-    # só mapeia unidades→metros. Nunca em pose; nunca se user passou bbox/--size.
+    # só mapeia unidades→metros (uniforme no eixo maior). Nunca em pose; nunca se
+    # user passou bbox/--size explícito.
     # - height+footprint → aspect size_m prevalece sobre preset
+    # - size_m anisotrópico → prevalece sobre bbox_preset (gate 10×5.5×2.2 vs
+    #   building 0.86×1×0.64 — senão o preset engole o authoring)
     # - cube + size_m não-cúbico (slime/shade/mosquito)
     # - bbox ainda None + size_m
     author_mold = height_m is not None and footprint_m is not None
     if ct == "bbox" and size_m is not None and not user_bbox:
-        if author_mold or ((bbox_preset or "").strip().lower() == "cube" and not size_m_near_cube(size_m)):
+        aniso = not size_m_near_cube(size_m)
+        if author_mold or aniso:
             bbox = size_m_to_bbox(size_m)
             bbox_preset = None
         elif bbox is None:
@@ -416,13 +429,187 @@ def shape_omni_sidecar_path(shape_glb: str | Path) -> Path:
     return Path(str(shape_glb) + ".omni.json")
 
 
-def write_omni_fingerprint(shape_glb: str | Path, controls: dict[str, Any]) -> Path:
-    """Grava sidecar JSON junto do shape (resume / invalidação)."""
+# Schema do bloco ``debug`` no sidecar — bump quando a forma mudar de forma
+# incompatível (só documentação; leitores devem tolerar chaves extra).
+OMNI_DEBUG_SCHEMA = 1
+
+
+def json_safe(obj: Any) -> Any:
+    """Converte valores para JSON (Path→str, dataclass→dict, numpy→python)."""
+    if obj is None or isinstance(obj, (bool, int, float, str)):
+        if isinstance(obj, float) and (obj != obj or obj in (float("inf"), float("-inf"))):
+            return None
+        return obj
+    if isinstance(obj, Path):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {str(k): json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [json_safe(v) for v in obj]
+    if hasattr(obj, "_asdict"):
+        return json_safe(obj._asdict())
+    if hasattr(obj, "__dataclass_fields__"):
+        from dataclasses import asdict
+
+        return json_safe(asdict(obj))
+    # numpy / torch scalars
+    item = getattr(obj, "item", None)
+    if callable(item):
+        try:
+            return json_safe(item())
+        except Exception:
+            pass
+    tolist = getattr(obj, "tolist", None)
+    if callable(tolist):
+        try:
+            return json_safe(tolist())
+        except Exception:
+            pass
+    return str(obj)
+
+
+def bbox_tune_to_debug(bt: Any) -> dict[str, Any] | None:
+    """Serializa ``BBoxTuneResult`` (ou dict) para o bloco debug."""
+    if bt is None:
+        return None
+    if hasattr(bt, "__dataclass_fields__"):
+        from dataclasses import asdict
+
+        raw = asdict(bt)
+    elif isinstance(bt, dict):
+        raw = dict(bt)
+    else:
+        return None
+    return json_safe(raw)
+
+
+def build_generate_debug(
+    *,
+    seconds: float | None = None,
+    started_at: str | None = None,
+    finished_at: str | None = None,
+    bbox_tune: Any = None,
+    morph_close_m: float | None = None,
+    morph_close_voxels: float | None = None,
+    morph_source: str | None = None,
+    decode: dict[str, Any] | None = None,
+    generation: dict[str, Any] | None = None,
+    omni_resolved: dict[str, Any] | None = None,
+    hardware: dict[str, Any] | None = None,
+    accel: dict[str, Any] | None = None,
+    mesh: dict[str, Any] | None = None,
+    request: dict[str, Any] | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Monta bloco ``debug`` completo do sidecar ``*.omni.json``.
+
+    Tudo é opcional — callers passam o que tiverem. Tamanho sem limite
+    (QA/reprodução). Não entra no fingerprint de resume.
+    """
+    from datetime import UTC, datetime
+
+    bt_dbg = bbox_tune_to_debug(bbox_tune)
+    morph: dict[str, Any] | None = None
+    close_m = morph_close_m
+    if close_m is None and bt_dbg is not None:
+        close_m = bt_dbg.get("morph_close")
+    voxel_m = bt_dbg.get("voxel_m") if bt_dbg else None
+    char_m = bt_dbg.get("char_m") if bt_dbg else None
+    octree = bt_dbg.get("octree") if bt_dbg else None
+    if close_m is not None or morph_close_voxels is not None or voxel_m:
+        morph = {
+            "close_m": close_m,
+            "close_voxels": morph_close_voxels,
+            "voxel_m": voxel_m,
+            "char_m": char_m,
+            "octree": octree,
+            "source": morph_source or ("bbox_tune" if bt_dbg and bt_dbg.get("morph_close") is not None else None),
+        }
+
+    out: dict[str, Any] = {
+        "schema": OMNI_DEBUG_SCHEMA,
+        "written_at": datetime.now(UTC).isoformat(),
+        "tool": "text3d",
+        "seconds": round(float(seconds), 3) if seconds is not None else None,
+        "timing": {
+            "total_s": round(float(seconds), 3) if seconds is not None else None,
+            "started_at": started_at,
+            "finished_at": finished_at or datetime.now(UTC).isoformat(),
+        },
+        "bbox_tune": bt_dbg,
+        "morph": morph,
+        "decode": json_safe(decode) if decode else None,
+        "generation": json_safe(generation) if generation else None,
+        "omni_resolved": json_safe(omni_resolved) if omni_resolved else None,
+        "hardware": json_safe(hardware) if hardware else None,
+        "accel": json_safe(accel) if accel else None,
+        "mesh": json_safe(mesh) if mesh else None,
+        "request": json_safe(request) if request else None,
+    }
+    if extra:
+        for k, v in extra.items():
+            if k not in out or out[k] is None:
+                out[k] = json_safe(v)
+    # Drop Nones de topo (bloco interno pode ter nulls — ok para debug).
+    return {k: v for k, v in out.items() if v is not None}
+
+
+def mesh_stats_for_debug(mesh: Any, *, path: Path | str | None = None) -> dict[str, Any]:
+    """Faces/verts/extents/bytes a partir de trimesh ou path GLB."""
+    stats: dict[str, Any] = {}
+    if mesh is not None:
+        faces = getattr(mesh, "faces", None)
+        verts = getattr(mesh, "vertices", None)
+        try:
+            stats["faces"] = len(faces) if faces is not None else None
+        except TypeError:
+            stats["faces"] = None
+        try:
+            stats["vertices"] = len(verts) if verts is not None else None
+        except TypeError:
+            stats["vertices"] = None
+        extents = getattr(mesh, "extents", None)
+        if extents is not None:
+            with contextlib.suppress(TypeError, ValueError):
+                stats["extents"] = [round(float(v), 6) for v in extents]
+        bounds = getattr(mesh, "bounds", None)
+        if bounds is not None:
+            with contextlib.suppress(Exception):
+                stats["bounds"] = json_safe(bounds)
+    if path is not None:
+        p = Path(path)
+        stats["path"] = str(p)
+        with contextlib.suppress(OSError):
+            stats["bytes"] = int(p.stat().st_size)
+    return {k: v for k, v in stats.items() if v is not None}
+
+
+def write_omni_fingerprint(
+    shape_glb: str | Path,
+    controls: dict[str, Any],
+    *,
+    debug: dict[str, Any] | None = None,
+) -> Path:
+    """Grava sidecar JSON junto do shape (resume + debug completo).
+
+    Chaves de fingerprint (resume) ficam no topo. ``debug`` (opcional) é
+    ignorado por :func:`omni_fingerprint` / stale-check — pode ser grande.
+    """
     import json
 
     path = shape_omni_sidecar_path(shape_glb)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(omni_fingerprint(controls), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    payload = omni_fingerprint(controls)
+    if debug:
+        # Preserve topology_fix de um patch anterior se o caller regravar
+        # só o bloco de generate (raro; patch_omni_debug é o caminho normal).
+        existing = read_omni_fingerprint(shape_glb)
+        prev_dbg = existing.get("debug") if isinstance(existing, dict) else None
+        merged_dbg = dict(debug)
+        if isinstance(prev_dbg, dict) and "topology_fix" in prev_dbg and "topology_fix" not in merged_dbg:
+            merged_dbg["topology_fix"] = prev_dbg["topology_fix"]
+        payload["debug"] = json_safe(merged_dbg)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
 
@@ -438,6 +625,34 @@ def read_omni_fingerprint(shape_glb: str | Path) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def patch_omni_debug(shape_glb: str | Path, patch: dict[str, Any]) -> Path | None:
+    """Merge raso em ``debug`` do sidecar existente (ex.: topology-fix).
+
+    Se não houver sidecar, cria um mínimo só com ``debug`` (sem fingerprint
+    geométrico — resume trata ausência de chaves Omni como «não stale»).
+    """
+    import json
+    from datetime import UTC, datetime
+
+    path = shape_omni_sidecar_path(shape_glb)
+    existing = read_omni_fingerprint(shape_glb) or {}
+    dbg = existing.get("debug")
+    if not isinstance(dbg, dict):
+        dbg = {"schema": OMNI_DEBUG_SCHEMA, "tool": "text3d"}
+    for k, v in json_safe(patch).items():
+        if isinstance(v, dict) and isinstance(dbg.get(k), dict):
+            merged = dict(dbg[k])
+            merged.update(v)
+            dbg[k] = merged
+        else:
+            dbg[k] = v
+    dbg["patched_at"] = datetime.now(UTC).isoformat()
+    existing["debug"] = dbg
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
 
 
 def omni_fingerprint_matches(shape_glb: str | Path, controls: dict[str, Any]) -> bool:

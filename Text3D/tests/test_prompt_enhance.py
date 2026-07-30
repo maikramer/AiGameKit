@@ -70,6 +70,17 @@ class TestSanitizePrompt:
         for term in pe.TOXIC_TERMS:
             assert pe.sanitize_prompt(term) == ""
 
+    def test_strips_smoke_plume_vfx(self) -> None:
+        result = pe.sanitize_prompt("forge with smoke plume and sparks flying")
+        assert "smoke" not in result.lower()
+        assert "sparks" not in result.lower()
+        assert "forge" in result.lower()
+
+    def test_rewrites_smoke_cap_to_chimney_hood(self) -> None:
+        result = pe.sanitize_prompt("tall brick chimney with smoke cap")
+        assert "smoke" not in result.lower()
+        assert "chimney rain hood" in result.lower()
+
 
 class TestEnhancePromptForCleanBase:
     def test_skip_when_clean_marker_present(self) -> None:
@@ -83,6 +94,11 @@ class TestEnhancePromptForCleanBase:
     def test_aggressive_wraps_with_full_prefix_suffix(self) -> None:
         result = pe.enhance_prompt_for_clean_base("a dragon")
         assert result == f"{pe._RENDER_PREFIX}, a dragon, {pe._RENDER_SUFFIX}"
+
+    def test_aggressive_suffix_bans_baked_vfx(self) -> None:
+        result = pe.enhance_prompt_for_clean_base("a forge")
+        assert "static solid geometry" in result.lower()
+        assert "without smoke" in result.lower() or "no particle" in result.lower()
 
     def test_light_wraps_with_short_prefix_suffix(self) -> None:
         result = pe.enhance_prompt_for_clean_base("a dragon", aggressive=False)

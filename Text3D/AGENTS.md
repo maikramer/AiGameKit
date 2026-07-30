@@ -22,10 +22,13 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 | Alignment | `utils/mesh_align_hunyuan.py` (142 lines) | +Z face normal to ground |
 | Base plane | `utils/mesh_base_plane.py` (288 lines) | Base plane detection/removal |
 | Background removal | `utils/bg_removal.py` (98 lines) | BiRefNet |
-| Collision mesh | `utils/collision.py` (82 lines) | Convex hull + quadric decimation |
+| Collision mesh | `utils/collision.py` | Modes: `hull` / `envelope` (voxel remesh côncavo) / `mesh` |
 | Split at height | `utils/mesh_split.py` | Thin wrapper → `gamedev_shared.mesh_split` (stump+top) |
 | Defaults | `defaults.py` (111 lines) | Constants, presets, export rotation/origin |
 | Omni controls / presets | `utils/omni_controls.py`, `omni_presets.py` | bbox max=1.0; pose Quaternius |
+| Octree soft-tune por size_m | `bbox_tune.py` | `char_m=(L·H·W)^(1/3)`; não passar `octree_resolution` salvo override |
+| Manifest authoring | [`docs/MANIFEST_AUTHORING.md`](../docs/MANIFEST_AUTHORING.md) | Como configurar Omni/size no GameAssets |
+| Octree × faces | [`docs/findings/OCTREE_FACES_FINDINGS.md`](../docs/findings/OCTREE_FACES_FINDINGS.md) | Empírico κ / char_m² |
 | UMS payload builder | `ums_payload.py` | Shared with GameAssets batch waves |
 | Findings hub | `docs/MODEL_FINDINGS.md`, `docs/OMNI_SHAPE_FINDINGS.md` | VRAM / Omni / flashvdm |
 
@@ -46,11 +49,19 @@ Stage 3 — `bake-master`: LOD0 production mesh. Decimation + normal bake from h
 
 Stage 4 — `lod`: LOD triplet (LOD0/1/2) with textured or geometry-only paths. Preserves armatures and animations intact.
 
-Stage 5 — `collision`: Convex hull + quadric decimation for physics mesh.
+Stage 5 — `collision`: `hull` (default), `envelope` (voxel remesh côncavo para arcos), ou `mesh` (só decimate).
 
 ## CRITICAL CONVENTIONS
 
-**Export rotation:** Hunyuan3D outputs face +Z upward. Apply X+90° rotation to stand upright in OpenGL Y-up convention. This rotation must propagate through every subsequent stage. If the mesh appears "belly-up" starting from `_shape`, the rotation was dropped.
+**Export rotation:** Hunyuan3D outputs face **+Z upward**. Apply **X+90°** to stand
+upright in OpenGL/WebGL **Y+ up**. This rotation must propagate through every
+subsequent stage. If the mesh appears "belly-up" or **height lives on Z** starting
+from `_shape`, the rotation was dropped.
+
+**`size_m` / bbox axes (após export Y+ up):** `[L,H,W]` → `[X,Y,Z]` —
+L=largura (X), H=altura (Y), W=profundidade (Z). Full map:
+[`docs/OMNI_SHAPE_FINDINGS.md`](../docs/OMNI_SHAPE_FINDINGS.md) §1 ·
+[`docs/MANIFEST_AUTHORING.md`](../docs/MANIFEST_AUTHORING.md) §3.
 
 **Export origin:** `--export-origin feet` is the default for game assets (y=0 at soles). `center` for pivots at mesh center. `none` leaves raw Hunyuan origin.
 

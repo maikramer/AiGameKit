@@ -6,14 +6,18 @@ from text3d.bbox_tune import _OCTREE_CEILING, _OCTREE_FLOOR, _OCTREE_STEP, _snap
 
 
 class TestSnapOctree:
-    def test_below_floor_clamps_to_160(self) -> None:
-        assert _snap_octree(0) == 160
-        assert _snap_octree(128) == 160
-        assert _snap_octree(159) == 160
+    def test_below_floor_clamps_to_128(self) -> None:
+        assert _snap_octree(0) == 128
+        assert _snap_octree(96) == 128
+        assert _snap_octree(127) == 128
+        assert _snap_octree(128) == 128
 
     def test_steps_of_32_up_to_512(self) -> None:
+        # Snap = floor + round((v-floor)/step)*step (half-even).
+        assert _snap_octree(144) == 128  # (144-128)/32 = 0.5 → 0
+        assert _snap_octree(145) == 160
         assert _snap_octree(160) == 160
-        assert _snap_octree(176) == 160  # nearer 160 than 192
+        assert _snap_octree(176) == 192  # (176-128)/32 = 1.5 → 2
         assert _snap_octree(177) == 192
         assert _snap_octree(256) == 256
         assert _snap_octree(500) == 512
@@ -48,8 +52,8 @@ class TestTuneHunyuanForBbox:
         assert char is not None
         assert char < max(size)  # volume-eq < altura
 
-    def test_small_humanoid_gets_soft_floor_boost(self) -> None:
-        """Bandit-scale: soft-floor não-linear sobe acima do piso 160."""
+    def test_small_humanoid_respects_face_budget_cap(self) -> None:
+        """Bandit-scale: face-budget cap impede soft-boost de subir a 224+."""
         r = tune_hunyuan_for_bbox(
             base_steps=30,
             base_octree=256,
@@ -63,8 +67,8 @@ class TestTuneHunyuanForBbox:
         )
         # char = (0.55·1.65·0.4)^(1/3) ≈ 0.71 — não o eixo 1.65.
         assert 0.6 < r.char_m < 0.8
-        assert r.octree > _OCTREE_FLOOR
-        assert r.octree >= 224
+        assert r.octree >= _OCTREE_FLOOR
+        assert r.octree <= 192
         assert (r.octree - _OCTREE_FLOOR) % _OCTREE_STEP == 0
 
     def test_large_building_steps_up_unchanged_by_soft_floor(self) -> None:
@@ -83,6 +87,100 @@ class TestTuneHunyuanForBbox:
         assert r.octree > 256
         assert r.octree <= _OCTREE_CEILING
         assert (r.octree - _OCTREE_FLOOR) % _OCTREE_STEP == 0
+
+    def test_bucket_vs_house_octree_anchor(self) -> None:
+        """Âncoras: balde no piso/160; casa ≥256 e acima do balde."""
+        bucket = tune_hunyuan_for_bbox(
+            base_steps=30,
+            base_octree=256,
+            base_chunks=4,
+            size_m=[0.35, 0.4, 0.35],
+            category="prop",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
+        )
+        house = tune_hunyuan_for_bbox(
+            base_steps=30,
+            base_octree=256,
+            base_chunks=4,
+            size_m=[5.0, 4.2, 6.0],
+            category="building",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
+        )
+        assert 0.3 < bucket.char_m < 0.45
+        assert bucket.octree in {128, 160}
+        assert 4.5 < house.char_m < 5.5
+        assert house.octree >= 256
+        assert house.octree > bucket.octree
+
+    def test_new_prop_batch_face_budget(self) -> None:
+        """Props simple-rpg 2026-07-28: horseshoe/anvil não voltam a 256."""
+        from text3d.bbox_tune import octree_face_budget_cap
+
+        horseshoe = tune_hunyuan_for_bbox(
+            base_steps=30,
+            base_octree=256,
+            base_chunks=4,
+            size_m=[0.45, 0.25, 0.45],
+            category="prop",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
+        )
+        anvil = tune_hunyuan_for_bbox(
+            base_steps=30,
+            base_octree=256,
+            base_chunks=4,
+            size_m=[0.7, 0.9, 0.45],
+            category="prop",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
+        )
+        assert horseshoe.octree <= 160
+        assert anvil.octree <= 160
+        assert octree_face_budget_cap(horseshoe.char_m, "prop") is not None
+        assert octree_face_budget_cap(5.0) is None  # building: sem cap
+
+    def test_terrain_hole_prone_matches_former_manual_overrides(self) -> None:
+        """Nest/cliff/outcrop: auto ≥ overrides manuais (256/288) sem manifesto."""
+        nest = tune_hunyuan_for_bbox(
+            base_steps=30,
+            base_octree=256,
+            base_chunks=4,
+            size_m=[2.5, 1.2, 2.5],
+            category="terrain",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
+        )
+        cliff = tune_hunyuan_for_bbox(
+            base_steps=30,
+            base_octree=256,
+            base_chunks=4,
+            size_m=[2.1, 3.0, 2.16],
+            category="terrain",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
+        )
+        outcrop = tune_hunyuan_for_bbox(
+            base_steps=30,
+            base_octree=256,
+            base_chunks=4,
+            size_m=[2.4, 1.6, 1.8],
+            category="terrain",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
+        )
+        # manuais: nest 256, cliff/outcrop 288
+        assert nest.octree >= 256
+        assert cliff.octree >= 288
+        assert outcrop.octree >= 256
 
     def test_no_size_signal_keeps_base(self) -> None:
         r = tune_hunyuan_for_bbox(

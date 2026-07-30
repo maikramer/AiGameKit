@@ -389,7 +389,13 @@ def _row_wants_animate(row: ManifestRow, with_rig: bool, has_rigging_profile: bo
 
 
 def _resolve_manifest_path(raw: str | Path) -> Path:
-    """Resolve manifest path: if no extension, try .yaml, .yml."""
+    """Resolve manifest path: if no extension, try .yaml, .yml.
+
+    Unified authoring: when the default bare name ``manifest`` has no
+    ``manifest.yaml``/``.yml`` beside it, fall back to ``game.yaml`` in the
+    same directory if that file declares an ``assets:`` list (perfil+assets
+    num único ficheiro).
+    """
     p = Path(raw)
     if p.suffix.lower() in (".yaml", ".yml"):
         return p
@@ -397,6 +403,18 @@ def _resolve_manifest_path(raw: str | Path) -> Path:
         candidate = p.parent / (p.name + ext)
         if candidate.is_file():
             return candidate
+    # Default CLI ``--manifest manifest`` → prefer unified game.yaml
+    if p.name == "manifest":
+        game_yaml = p.parent / "game.yaml"
+        if game_yaml.is_file():
+            try:
+                import yaml
+
+                doc = yaml.safe_load(game_yaml.read_text(encoding="utf-8")) or {}
+                if isinstance(doc, dict) and isinstance(doc.get("assets"), list) and doc["assets"]:
+                    return game_yaml
+            except Exception:
+                pass
     return p.parent / (p.name + ".yaml")
 
 

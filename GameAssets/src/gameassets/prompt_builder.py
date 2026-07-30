@@ -49,10 +49,31 @@ _I2M_EXTRA_NEGATIVES: tuple[str, ...] = (
     "spotlight",
     "rim light",
     "volumetric light",
+    # VFX → ParticleSystem no motor; nunca baked na ref i2m / mesh.
+    "smoke plume",
+    "chimney smoke",
+    "billowing smoke",
+    "volumetric smoke",
+    "fire particles",
+    "flame mesh",
+    "particle effects",
+    "sparks flying",
+    "open flames",
+    "fire plume",
 )
 
 _MESH_HINT_NO_FAKE_GROUND = (
     "Watertight mesh only; no spurious ground disc, pedestal ring, or base slab from shadow-like shading"
+)
+
+_MESH_HINT_NO_BAKED_VFX = (
+    "Static solid geometry only; empty chimneys and cold hearths; "
+    "no volumetric smoke, fire plumes, sparks, or particle blobs"
+)
+
+_I2M_REF_NO_BAKED_VFX = (
+    "static solid geometry only, empty chimneys without smoke, "
+    "cold hearths and torch heads without flame, no particle blobs"
 )
 
 # Variante A-pose do hint_rig: usada quando o asset tem pose_preset A-pose
@@ -168,8 +189,10 @@ def build_prompt(
     if row.generate_3d:
         if for_3d:
             chunks.append(_MESH_HINT_NO_FAKE_GROUND + ".")
+            chunks.append(_MESH_HINT_NO_BAKED_VFX + ".")
         else:
             chunks.append(_I2M_REF_LIGHTING + ".")
+            chunks.append(_I2M_REF_NO_BAKED_VFX + ".")
 
     main = " ".join(chunks)
     main = re.sub(r"\s+", " ", main).strip()

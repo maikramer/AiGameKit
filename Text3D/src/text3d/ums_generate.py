@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -26,7 +27,13 @@ def run_generate(
     Hooks opcionais vêm do ``BackendAdapter`` (abort / progress / budget).
     Sem hooks = caminho in-process simples.
     """
-    from text3d.omni_presets import merge_omni_controls, write_omni_fingerprint
+    from text3d.bbox_tune import morph_close_voxels_for
+    from text3d.omni_presets import (
+        build_generate_debug,
+        merge_omni_controls,
+        mesh_stats_for_debug,
+        write_omni_fingerprint,
+    )
 
     def _abort() -> bool:
         return bool(should_abort()) if should_abort else False
@@ -48,7 +55,11 @@ def run_generate(
 
     _progress(0.0, "started")
     t_start = time.perf_counter()
+    started_at = datetime.now(UTC).isoformat()
     from_image = request.get("from_image")
+    _bt: Any = request.get("bbox_tune_snapshot")
+    scale_factor: float | None = None
+    pre_budget: dict[str, Any] | None = None
 
     try:
         _omni = merge_omni_controls(
@@ -204,6 +215,7 @@ def run_generate(
         if extents is not None:
             _sf = scale_factor_to_meters(float(max(extents)), size_m_vals)
             if _sf is not None:
+                scale_factor = float(_sf)
                 mesh.apply_scale(_sf)
 
     topology_fix = bool(request.get("topology_fix", True))
@@ -214,6 +226,80 @@ def run_generate(
 
     origin_mode = request.get("origin_mode")
     saved = save_mesh(mesh, output, origin_mode=origin_mode)
+
+    elapsed = time.perf_counter() - t_start
+    finished_at = datetime.now(UTC).isoformat()
+    decode_stats = dict(getattr(model, "last_decode_stats", None) or {})
+    category = request.get("category")
+    morph_n = morph_close_voxels_for(
+        category,
+        explicit=request.get("morph_close_voxels"),
+    )
+    dbg = build_generate_debug(
+        seconds=elapsed,
+        started_at=started_at,
+        finished_at=finished_at,
+        bbox_tune=_bt,
+        morph_close_voxels=morph_n,
+        morph_source="bbox_tune" if _bt is not None else None,
+        decode={
+            "octree_resolution": octree,
+            "steps": steps,
+            "guidance": guidance,
+            "num_chunks": chunks,
+            "num_chunks_requested": request.get("num_chunks"),
+            "auto_num_chunks": auto_chunks,
+            "mc_level": mc_level,
+            "bounds_mode": bounds_mode,
+            "volume_decoder": request.get("volume_decoder") or getattr(model, "volume_decoder", None),
+            "mc_algo": request.get("mc_algo") or getattr(model, "mc_algo", None),
+            "last_decode_stats": decode_stats,
+            "runtime_budget_pre": pre_budget,
+        },
+        generation={
+            "quality": request.get("quality"),
+            "category": category,
+            "preset": request.get("preset"),
+            "seed_rng": seed,
+            "seed_fingerprint": request.get("seed_fingerprint"),
+            "topology_fix_inline": topology_fix,
+            "origin_mode": origin_mode,
+            "remove_bg": remove_bg,
+            "optimize_prompt": request.get("optimize_prompt"),
+            "from_image": bool(from_image),
+            "prompt": request.get("prompt"),
+            "t2d_width": request.get("t2d_width"),
+            "t2d_height": request.get("t2d_height"),
+            "t2d_steps": request.get("t2d_steps"),
+            "t2d_guidance": request.get("t2d_guidance"),
+            "text2d_model_id": request.get("text2d_model_id"),
+            "t2d_full_gpu": request.get("t2d_full_gpu"),
+            "bbox_tune_enabled": request.get("bbox_tune", True) is not False,
+            "scale_factor_to_meters": scale_factor,
+        },
+        omni_resolved=_omni,
+        hardware={
+            "total_vram_gib": request.get("total_vram_gib"),
+            "gpu_ids": request.get("gpu_ids"),
+            "sdnq_preset": request.get("sdnq_preset"),
+            "memory_efficient": request.get("memory_efficient"),
+        },
+        accel={
+            "volume_decoder": request.get("volume_decoder"),
+            "mc_algo": request.get("mc_algo"),
+            "torch_compile": request.get("torch_compile"),
+            "torch_compile_mode": request.get("torch_compile_mode"),
+            "channels_last": request.get("channels_last"),
+            "allow_group_offload": request.get("allow_group_offload"),
+            "fp8_layerwise": request.get("fp8_layerwise"),
+            "sdnq_quantized_matmul": request.get("sdnq_quantized_matmul"),
+            "sage_attention": request.get("sage_attention"),
+            "offload": request.get("offload"),
+        },
+        mesh={**mesh_stats_for_debug(mesh, path=saved), "scale_factor": scale_factor},
+        request=dict(request),
+        extra={"path": "ums_generate"},
+    )
     with contextlib.suppress(OSError):
         write_omni_fingerprint(
             saved,
@@ -228,9 +314,9 @@ def run_generate(
                 # Octree efectivo (autotune ou override) — QA/debug no sidecar.
                 "octree_resolution": octree,
             },
+            debug=dbg,
         )
 
-    elapsed = time.perf_counter() - t_start
     _progress(1.0, "done")
     out: dict[str, Any] = {
         "status": "ok",
@@ -243,7 +329,6 @@ def run_generate(
         "octree_resolution": octree,
         "steps": steps,
     }
-    decode_stats = getattr(model, "last_decode_stats", None) or {}
     if "num_chunks" in decode_stats:
         out["runtime_budget"] = {
             "num_chunks": decode_stats.get("num_chunks"),

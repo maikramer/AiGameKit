@@ -599,6 +599,8 @@ def _classify_row_state(
 ) -> str:
     shape = _shape_path(mesh_final)
     painted = _painted_path(mesh_final)
+    if not _valid_file(img_final):
+        return _ROW_NEED_IMAGE
     final_exists = (_valid_file(painted) or _valid_file(mesh_final)) if want_texture else _valid_file(shape)
 
     if final_exists:
@@ -613,9 +615,7 @@ def _classify_row_state(
         return _ROW_DONE
     if _valid_file(shape):
         return _ROW_NEED_PAINT if want_texture else _ROW_DONE
-    if _valid_file(img_final):
-        return _ROW_NEED_SHAPE
-    return _ROW_NEED_IMAGE
+    return _ROW_NEED_SHAPE
 
 
 def _classify_row_state_master(
@@ -645,7 +645,10 @@ def _classify_row_state_master(
     lod1 = _lod_path(mesh_final, 1)
     lod2 = _lod_path(mesh_final, 2)
 
-    if not _valid_file(img_final) and shape_any is None and clean_any is None:
+    # PNG/textura é Stage 0 do DAG (text2d → i2m + paint). Em falta → sempre
+    # ``need_image``, mesmo com shape/clean órfãos: senão resume saltava para
+    # need_shape/topology e nunca agendava text2d (GLBs faltantes sim, PNGs não).
+    if not _valid_file(img_final):
         return _ROW_NEED_IMAGE
     # Omni mudou ou shape ausente → regenerar. Clean órfão (sem shape) NÃO
     # salta Stage 1 — senão resume avança paint sobre mesh gorda/stale.
