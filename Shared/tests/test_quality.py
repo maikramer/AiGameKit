@@ -1,10 +1,10 @@
-"""Tests for gamedev_shared.quality — QualityEngine."""
+"""Tests for aigamekit_shared.quality — QualityEngine."""
 
 from __future__ import annotations
 
 import pytest
 
-from gamedev_shared.quality import QualityEngine, QualityResolution
+from aigamekit_shared.quality import QualityEngine, QualityResolution
 
 
 @pytest.fixture()

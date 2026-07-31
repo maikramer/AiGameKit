@@ -52,7 +52,7 @@ def _apply_vertex_colors(obj: Any, rgb: np.ndarray) -> None:
 
 def _get_combined_bounds(objects: list) -> tuple[np.ndarray, np.ndarray]:
     """AABB combinado ``(min_corner, max_corner)`` de uma lista de objectos bpy."""
-    from gamedev_shared.bpy_mesh import get_bounds
+    from aigamekit_shared.bpy_mesh import get_bounds
 
     all_mins = []
     all_maxs = []

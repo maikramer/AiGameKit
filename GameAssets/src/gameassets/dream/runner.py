@@ -136,7 +136,7 @@ def run_dream(
         *batch_flags,
     ]
     dream_env = dict(os.environ)
-    dream_env.setdefault("GAMEDEV_UMS_PRIORITY", "batch")
+    dream_env.setdefault("AIGAMEKIT_UMS_PRIORITY", "batch")
     console.print(f"[dim]$ {' '.join(batch_argv)}[/dim]")
     rc = subprocess.call(batch_argv, cwd=str(batch_dir), env=dream_env)
     ok = rc == 0
@@ -211,7 +211,7 @@ def run_dream(
             text2icon_bin = None
 
         if text2icon_bin:
-            from gamedev_shared.path_utils import safe_filename as _icon_slug
+            from aigamekit_shared.path_utils import safe_filename as _icon_slug
 
             try:
                 from ..helpers import _append_text2icon_profile_args, _text2icon_profile_effective

@@ -2,35 +2,35 @@
 
 Hub: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).  
 Canónico: [`ModelServer/README.md`](../../ModelServer/README.md),
-`Shared/src/gamedev_shared/model_server.py`,
+`Shared/src/aigamekit_shared/model_server.py`,
 `GameAssets/src/gameassets/ums_batch.py` / `ums_coord.py`.
 
 ---
 
 ## Modelo mental
 
-- **Um processo**, um socket (`~/.cache/gamedev/model-server.sock`), backends GPU
+- **Um processo**, um socket (`~/.cache/aigamekit/model-server.sock`), backends GPU
   com carga/evict, fila prioridade + afinidade VRAM, `MAX_INFLIGHT` (tip. 1).
 - CLIs chamam `try_ums_delegation` **antes** de prep GPU in-process.
-- Alias: `ums` ≡ `gamedev-model-server`.
+- Alias: `ums` ≡ `aigamekit-model-server`.
 - **Autoridade VRAM pública:** UMS + **hw-auto** (por tool). Não expor
   `--low-vram` / `--memory-efficient` ao operador — esses sinais vão no
   **payload** (`with_ums_peak_opts` / `ums_batch.resolve_*_vram_opts`).
 - `prepare_gpu_exclusive` / kill / `ensure_vram` agressivo: **só** após UMS
-  falhar ou `--no-ums`. Legacy per-tool: `GAMEDEV_ALLOW_LEGACY_SERVER=1`.
+  falhar ou `--no-ums`. Legacy per-tool: `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
 
 ---
 
 ## Pico de admit (o que falhou na prática)
 
 ```
-peak ≈ weights(quant) + inference_activation + GAMEDEV_UMS_VRAM_SAFETY_MIB (384)
+peak ≈ weights(quant) + inference_activation + AIGAMEKIT_UMS_VRAM_SAFETY_MIB (384)
 ```
 
 | Situação | Comportamento correcto |
 |----------|------------------------|
 | peak > VRAM total GPU | **Hard refuse** — tip `sdnq-int4` / quality fast / mem-eff |
-| peak ≤ total mas free < peak | **Transitória**: evict + backoff + **requeue** até `GAMEDEV_UMS_MAX_VRAM_RETRIES` (8); poll admit `GAMEDEV_UMS_VRAM_ADMIT_WAIT_SEC` |
+| peak ≤ total mas free < peak | **Transitória**: evict + backoff + **requeue** até `AIGAMEKIT_UMS_MAX_VRAM_RETRIES` (8); poll admit `AIGAMEKIT_UMS_VRAM_ADMIT_WAIT_SEC` |
 | Cliente omite quant | UMS assume **fp16** → text3d/paint “não cabem” em 6 GB mesmo com SDNQ real |
 
 **Descoberta batch Omni:** paint/text3d **devem** ter `sdnq_preset` e/ou
@@ -66,7 +66,7 @@ Master CPU: `MasterDeferQueue` até fim da wave (não misturar com GPU thrash).
 
 ## Medir VRAM (NVML)
 
-Fonte canónica no monorepo: `gamedev_shared.gpu` + dep `nvidia-ml-py`.
+Fonte canónica no monorepo: `aigamekit_shared.gpu` + dep `nvidia-ml-py`.
 
 | API | Uso |
 |-----|-----|
@@ -92,23 +92,23 @@ estima LLM/KV-cache; admit usa `FOOTPRINTS` + `vram_planner` + safety.
 
 | Var | Papel |
 |-----|--------|
-| `GAMEDEV_UMS_AUTO_START` | Auto-start supervisor (0 = off) |
-| `GAMEDEV_UMS_PRIORITY` | `batch` nos subprocessos GameAssets |
-| `GAMEDEV_UMS_STREAM` | `1` = CLIs imprimem NDJSON (equiv. `--ums-stream`) |
-| `GAMEDEV_UMS_DEBUG` | Dump `ums_debug` nas CLIs |
-| `GAMEDEV_UMS_MAX_VRAM_RETRIES` | Requeues VRAM transitória (default 8) |
-| `GAMEDEV_UMS_VRAM_ADMIT_WAIT_SEC` | Poll free antes de refuse |
-| `GAMEDEV_UMS_VRAM_SAFETY_MIB` | Folga no peak |
-| `GAMEDEV_UMS_MAX_AFFINITY_CUTS` | Saltos de afinidade (≤3 tip.) |
-| `GAMEDEV_UMS_MAX_QUEUE_DEPTH` | Cap fila |
-| `GAMEDEV_UMS_MAX_INFLIGHT` | Paralelismo VRAM |
-| `GAMEDEV_MODEL_SERVER_SOCKET` | Path socket |
-| `GAMEDEV_ALLOW_LEGACY_SERVER` | Opt-in servers per-tool + `ensure_vram` legacy |
-| `GAMEDEV_UMS_SUBPROCESS` | `0` = workers in-process (rollback); default subprocess |
-| `GAMEDEV_UMS_DEAD_VRAM_MIB` | Residual CUDA “morto” com `loaded=[]` (default 256) |
-| `GAMEDEV_UMS_DEAD_VRAM_EXIT_SEC` | IdleEvictor self-exit se residual persiste (default 20 s) |
+| `AIGAMEKIT_UMS_AUTO_START` | Auto-start supervisor (0 = off) |
+| `AIGAMEKIT_UMS_PRIORITY` | `batch` nos subprocessos GameAssets |
+| `AIGAMEKIT_UMS_STREAM` | `1` = CLIs imprimem NDJSON (equiv. `--ums-stream`) |
+| `AIGAMEKIT_UMS_DEBUG` | Dump `ums_debug` nas CLIs |
+| `AIGAMEKIT_UMS_MAX_VRAM_RETRIES` | Requeues VRAM transitória (default 8) |
+| `AIGAMEKIT_UMS_VRAM_ADMIT_WAIT_SEC` | Poll free antes de refuse |
+| `AIGAMEKIT_UMS_VRAM_SAFETY_MIB` | Folga no peak |
+| `AIGAMEKIT_UMS_MAX_AFFINITY_CUTS` | Saltos de afinidade (≤3 tip.) |
+| `AIGAMEKIT_UMS_MAX_QUEUE_DEPTH` | Cap fila |
+| `AIGAMEKIT_UMS_MAX_INFLIGHT` | Paralelismo VRAM |
+| `AIGAMEKIT_MODEL_SERVER_SOCKET` | Path socket |
+| `AIGAMEKIT_ALLOW_LEGACY_SERVER` | Opt-in servers per-tool + `ensure_vram` legacy |
+| `AIGAMEKIT_UMS_SUBPROCESS` | `0` = workers in-process (rollback); default subprocess |
+| `AIGAMEKIT_UMS_DEAD_VRAM_MIB` | Residual CUDA “morto” com `loaded=[]` (default 256) |
+| `AIGAMEKIT_UMS_DEAD_VRAM_EXIT_SEC` | IdleEvictor self-exit se residual persiste (default 20 s) |
 
-Runtime pós-load: `gamedev_shared.vram_budget` — Text3D `num_chunks`, Paint
+Runtime pós-load: `aigamekit_shared.vram_budget` — Text3D `num_chunks`, Paint
 views/tiles. Desligar Paint auto: `PAINT3D_AUTO_VRAM_BUDGET=0`.
 
 ---
@@ -130,7 +130,7 @@ ums respawn                 # todos
 Com `loaded=[]`, o PID UMS pode ainda segurar ~1 GiB (contexto CUDA).
 `ums evict` / `evict_all` fazem scrub; status expõe `process_vram_mib` /
 `dead_vram_suspect`. IdleEvictor pode pedir self-exit quando residual ≥
-`GAMEDEV_UMS_DEAD_VRAM_MIB` persiste ≥ `GAMEDEV_UMS_DEAD_VRAM_EXIT_SEC` com
+`AIGAMEKIT_UMS_DEAD_VRAM_MIB` persiste ≥ `AIGAMEKIT_UMS_DEAD_VRAM_EXIT_SEC` com
 fila vazia — próximo auto-start nasce limpo.
 
 ---
@@ -155,7 +155,7 @@ Cada tool GPU tem builder de request partilhado CLI ↔ GameAssets wave:
 | paint3d | `Paint3D/src/paint3d/ums_payload.py` |
 | text2d / text2icon / texture2d / skymap2d / text2sound / terrain3d | `<pkg>/src/<pkg>/ums_payload.py` |
 
-Usar `with_ums_peak_opts` / `with_ums_load_opts` (`gamedev_shared.cli_helpers`) —
+Usar `with_ums_peak_opts` / `with_ums_load_opts` (`aigamekit_shared.cli_helpers`) —
 não montar dicts peak à mão.
 
 ### Peak VRAM no batch: hw_auto → admit-safe
@@ -172,7 +172,7 @@ não montar dicts peak à mão.
 
 ## Persistência de fila (WAL)
 
-- Ficheiro: `~/.cache/gamedev/ums-jobs.jsonl` (`P.WAL_FILENAME`).
+- Ficheiro: `~/.cache/aigamekit/ums-jobs.jsonl` (`P.WAL_FILENAME`).
 - Restart: jobs `queued` rejogam; `running` sem `finished` → requeue.
 - **Não** reconstitui modelos em VRAM — só o inventário de pedidos.
 
@@ -186,7 +186,7 @@ não montar dicts peak à mão.
 4. Confirmar payload tem quant + `gpu_ids` correctos para o backend.
 5. Livre < peak com UMS idle (0 backends, contexto CUDA): `ums stop` + `ums start`.
 6. Só `--no-ums` se bypass intencional; kill continua recusado se UMS busy.
-7. Legacy per-tool / `ensure_vram` cego: só com `GAMEDEV_ALLOW_LEGACY_SERVER=1`.
+7. Legacy per-tool / `ensure_vram` cego: só com `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
 
 ---
 
@@ -194,9 +194,9 @@ não montar dicts peak à mão.
 
 | Armadilha | Efeito | Fix nos testes |
 |-----------|--------|----------------|
-| `patch("gamedev_shared.gpu.os.kill")` | `gpu.os` **é** o módulo stdlib `os` → captura **todo** `os.kill`, incl. `discover_server_pids` / `is_ums_running` (`kill(pid, 0)`) | Mock também `is_ums_running=False` + `discover_server_pids=set()` (ver `Text3D/tests/test_gpu_kill_aggressive.py`) |
+| `patch("aigamekit_shared.gpu.os.kill")` | `gpu.os` **é** o módulo stdlib `os` → captura **todo** `os.kill`, incl. `discover_server_pids` / `is_ums_running` (`kill(pid, 0)`) | Mock também `is_ums_running=False` + `discover_server_pids=set()` (ver `Text3D/tests/test_gpu_kill_aggressive.py`) |
 | CLI Click com UMS a correr | Teste “unitário” enfileira job real → VRAM refuse / SystemExit | `--no-ums` **e** mock `prepare_gpu_exclusive` / `warn_if_vram_occupied` (ex. Skymap `test_hw_auto_does_not_clamp_explicit_resolution`) |
-| `make test-shared` sem `Shared/.venv` | Cai em `python3` do PATH (ex. 3.14 sem torch) → dezenas de fails falsos | Correr com venv que tem `gamedev-shared[gpu]` (ex. `GameAssets/.venv/bin/python -m pytest` em `Shared/`) |
+| `make test-shared` sem `Shared/.venv` | Cai em `python3` do PATH (ex. 3.14 sem torch) → dezenas de fails falsos | Correr com venv que tem `aigamekit-shared[gpu]` (ex. `GameAssets/.venv/bin/python -m pytest` em `Shared/`) |
 | ModelServer sem `.venv` | Idem — preferir venv canónico `ModelServer/.venv` ou sibling com deps | Ver `ModelServer/README.md` (venv supervisor) |
 
 ---

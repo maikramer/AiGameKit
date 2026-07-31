@@ -8,7 +8,7 @@ import { logger } from '../core/utils/logger';
  * focused set of structural + spec checks on the parsed glTF JSON (via
  * `PlatformIO.binaryToJSON`) and folds in `@gltf-transform/functions`' `inspect` advisory
  * warnings, mapping everything to a uniform {@link GltfValidationReport} with stable issue
- * codes and JSON pointer paths. For exhaustive Khronos spec validation, run `gamedev-lab check
+ * codes and JSON pointer paths. For exhaustive Khronos spec validation, run `aigamekit-lab check
  * glb` or the `gltf-validator` CLI on the asset.
  *
  * The glTF-transform modules are imported lazily so users who never validate pay no bundle cost.

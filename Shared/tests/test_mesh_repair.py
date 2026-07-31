@@ -1,4 +1,4 @@
-"""Tests for gamedev_shared.mesh_repair (unified bpy mesh-repair primitives)."""
+"""Tests for aigamekit_shared.mesh_repair (unified bpy mesh-repair primitives)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ class TestDropNonfiniteFaces:
     """Pure-numpy — runs without bpy."""
 
     def test_all_finite_passthrough(self) -> None:
-        from gamedev_shared.mesh_repair import drop_nonfinite_faces
+        from aigamekit_shared.mesh_repair import drop_nonfinite_faces
 
         verts = np.zeros((4, 3))
         faces = np.array([[0, 1, 2], [1, 2, 3]])
@@ -19,7 +19,7 @@ class TestDropNonfiniteFaces:
         assert f.shape == (2, 3)
 
     def test_nan_vertex_drops_incident_faces(self) -> None:
-        from gamedev_shared.mesh_repair import drop_nonfinite_faces
+        from aigamekit_shared.mesh_repair import drop_nonfinite_faces
 
         verts = np.zeros((4, 3))
         verts[3, 1] = np.nan
@@ -29,7 +29,7 @@ class TestDropNonfiniteFaces:
         np.testing.assert_array_equal(f, [[0, 1, 2]])
 
     def test_inf_vertex_drops_incident_faces(self) -> None:
-        from gamedev_shared.mesh_repair import drop_nonfinite_faces
+        from aigamekit_shared.mesh_repair import drop_nonfinite_faces
 
         verts = np.zeros((3, 3))
         verts[0, 0] = np.inf
@@ -48,7 +48,7 @@ class TestFixMesh:
     def test_removes_tiny_floater(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.mesh_repair import fix_mesh
+        from aigamekit_shared.mesh_repair import fix_mesh
 
         main = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide().subdivide()
         floater = trimesh.creation.box(extents=[0.01, 0.01, 0.01])
@@ -62,7 +62,7 @@ class TestFixMesh:
     def test_preserves_simple_box(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.mesh_repair import fix_mesh
+        from aigamekit_shared.mesh_repair import fix_mesh
 
         out = fix_mesh(trimesh.creation.box(extents=[1.0, 1.0, 1.0]))
         assert len(out.faces) >= 8
@@ -71,7 +71,7 @@ class TestFixMesh:
     def test_empty_passthrough(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.mesh_repair import fix_mesh
+        from aigamekit_shared.mesh_repair import fix_mesh
 
         empty = trimesh.Trimesh(vertices=np.zeros((0, 3)), faces=np.zeros((0, 3), dtype=np.int64), process=False)
         assert len(fix_mesh(empty).vertices) == 0
@@ -79,7 +79,7 @@ class TestFixMesh:
     def test_nan_fan_removed(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.mesh_repair import fix_mesh
+        from aigamekit_shared.mesh_repair import fix_mesh
 
         box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
         verts = np.vstack([box.vertices, [[np.nan, np.nan, np.nan]]])
@@ -103,7 +103,7 @@ class TestCapBoundaryHoles:
     def test_caps_small_planar_loop(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.mesh_repair import cap_boundary_holes
+        from aigamekit_shared.mesh_repair import cap_boundary_holes
 
         box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
         # Remove top half → open shell with a planar square boundary loop.
@@ -117,7 +117,7 @@ class TestCapBoundaryHoles:
     def test_giant_loop_skipped(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.mesh_repair import cap_boundary_holes
+        from aigamekit_shared.mesh_repair import cap_boundary_holes
 
         box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
         keep = box.triangles_center[:, 2] < 0
@@ -131,8 +131,8 @@ class TestCapBoundaryHoles:
 
 class TestSanitizeNonfinite:
     def test_removes_nan_verts_inplace(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import sanitize_nonfinite
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import sanitize_nonfinite
 
         verts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [np.nan, np.nan, np.nan]])
         faces = np.array([[0, 1, 2], [1, 2, 3]])
@@ -149,8 +149,8 @@ class TestRepairGlb:
     def test_roundtrip_preserves_uv_material_and_rig(self, _bpy, tmp_path) -> None:
         import bpy
 
-        from gamedev_shared.bpy_mesh import clear_scene, save_glb
-        from gamedev_shared.mesh_repair import repair_glb
+        from aigamekit_shared.bpy_mesh import clear_scene, save_glb
+        from aigamekit_shared.mesh_repair import repair_glb
 
         clear_scene()
         # Cubo com UV + material + armature de 1 bone + vertex group.
@@ -195,8 +195,8 @@ class TestRepairGlb:
     def test_shape_keys_skip_destructive(self, _bpy, tmp_path) -> None:
         import bpy
 
-        from gamedev_shared.bpy_mesh import clear_scene
-        from gamedev_shared.mesh_repair import repair_mesh_object
+        from aigamekit_shared.bpy_mesh import clear_scene
+        from aigamekit_shared.mesh_repair import repair_mesh_object
 
         clear_scene()
         bpy.ops.mesh.primitive_cube_add()
@@ -212,8 +212,8 @@ class TestRepairGlb:
 
 class TestPrimitives:
     def test_remove_doubles_counts(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import remove_doubles
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import remove_doubles
 
         verts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 0.00001]])
         faces = np.array([[0, 1, 2], [3, 1, 2]])
@@ -226,8 +226,8 @@ class TestPrimitives:
     def test_remove_loose_debris_keeps_largest(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import remove_loose_debris
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import remove_loose_debris
 
         # main grande o suficiente para tiny (12 faces) cair abaixo de
         # max(min_faces, face_ratio * total): 204 faces → threshold 20.
@@ -248,8 +248,8 @@ class TestMakeWatertight:
     def test_open_bottom_box_closed(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import count_boundary_edges, make_watertight
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import count_boundary_edges, make_watertight
 
         box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
         keep = np.abs(box.triangles_center[:, 2] + 0.5) > 1e-6  # remove fundo
@@ -267,8 +267,8 @@ class TestMakeWatertight:
     def test_base_cap_via_base_path(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import cap_boundary_loops, count_boundary_edges
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import cap_boundary_loops, count_boundary_edges
 
         box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
         keep = np.abs(box.triangles_center[:, 2] + 0.5) > 1e-6
@@ -289,8 +289,8 @@ class TestMakeWatertight:
     def test_watertight_mesh_untouched(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import make_watertight
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import make_watertight
 
         box = trimesh.creation.box(extents=[1.0, 1.0, 1.0])
         clear_scene()
@@ -306,7 +306,7 @@ class TestRepairProfiles:
     """Perfis nomeados — unificação topology / LOD / Part3D."""
 
     def test_dynamic_weld_distance_tiers(self) -> None:
-        from gamedev_shared.mesh_repair import dynamic_weld_distance
+        from aigamekit_shared.mesh_repair import dynamic_weld_distance
 
         assert dynamic_weld_distance(200_000) == 0.003
         assert dynamic_weld_distance(120_000) == 0.005
@@ -314,14 +314,14 @@ class TestRepairProfiles:
         assert dynamic_weld_distance(10_000) == 0.01
 
     def test_unknown_profile_raises(self) -> None:
-        from gamedev_shared.mesh_repair import get_repair_profile
+        from aigamekit_shared.mesh_repair import get_repair_profile
 
         with pytest.raises(ValueError, match="desconhecido"):
             get_repair_profile("nope")
 
     def test_topology_clean_selective_watertight_flags(self) -> None:
         """Watertight seletivo: fecha rachas MC, sem shells/base/flare/Taubin."""
-        from gamedev_shared.mesh_repair import get_repair_profile
+        from aigamekit_shared.mesh_repair import get_repair_profile
 
         p = get_repair_profile("topology_clean")
         assert p.watertight is True
@@ -335,7 +335,7 @@ class TestRepairProfiles:
         assert p.weld_mode == "vert_density"
 
     def test_pre_decimate_uv_no_watertight(self) -> None:
-        from gamedev_shared.mesh_repair import get_repair_profile
+        from aigamekit_shared.mesh_repair import get_repair_profile
 
         p = get_repair_profile("pre_decimate_uv")
         assert p.watertight is False
@@ -345,7 +345,7 @@ class TestRepairProfiles:
         assert p.fill_holes_sides == 12
 
     def test_part_decode_aggressive_debris(self) -> None:
-        from gamedev_shared.mesh_repair import get_repair_profile
+        from aigamekit_shared.mesh_repair import get_repair_profile
 
         p = get_repair_profile("part_decode")
         assert p.debris_face_ratio == 0.1
@@ -355,8 +355,8 @@ class TestRepairProfiles:
     def test_pre_decimate_profile_runs_without_watertight(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
 
         box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
         keep = np.abs(box.triangles_center[:, 2] + 0.5) > 1e-6
@@ -375,8 +375,8 @@ class TestRepairProfiles:
     def test_topology_clean_opt_in_watertight_closes_open_shell(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
 
         box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
         keep = np.abs(box.triangles_center[:, 2] + 0.5) > 1e-6
@@ -393,8 +393,8 @@ class TestRepairProfiles:
     def test_post_decimate_profile(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import get_repair_profile, repair_mesh_object_with_profile
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import get_repair_profile, repair_mesh_object_with_profile
 
         p = get_repair_profile("post_decimate")
         assert p.use_post_decimate_cleanup is True
@@ -408,7 +408,7 @@ class TestRepairProfiles:
         clear_scene()
 
     def test_topology_clean_does_reweld_flag(self) -> None:
-        from gamedev_shared.mesh_repair import get_repair_profile
+        from aigamekit_shared.mesh_repair import get_repair_profile
 
         assert get_repair_profile("topology_clean").do_reweld_coincident is True
         assert get_repair_profile("pre_decimate_uv").do_reweld_coincident is False
@@ -485,8 +485,8 @@ class TestRepairWatertightRoundtrip:
         return int((counts == 1).sum())
 
     def test_procedural_open_box_has_boundary_before_repair(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import count_boundary_edges
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import count_boundary_edges
 
         verts, faces = self._procedural_open_box()
         clear_scene()
@@ -496,8 +496,8 @@ class TestRepairWatertightRoundtrip:
         clear_scene()
 
     def test_make_watertight_closes_procedural_open_box(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import count_boundary_edges, make_watertight
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import count_boundary_edges, make_watertight
 
         verts, faces = self._procedural_open_box()
         clear_scene()
@@ -513,8 +513,8 @@ class TestRepairWatertightRoundtrip:
         clear_scene()
 
     def test_topology_clean_opt_in_watertight_closes_procedural_open_box(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
 
         verts, faces = self._procedural_open_box()
         clear_scene()
@@ -527,8 +527,8 @@ class TestRepairWatertightRoundtrip:
         clear_scene()
 
     def test_topology_clean_opt_in_watertight_closes_subdivided_open_shell(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
 
         verts, faces = self._procedural_open_box_subdivided()
         clear_scene()
@@ -543,8 +543,8 @@ class TestRepairWatertightRoundtrip:
 
     def test_topology_clean_runs_selective_watertight(self, _bpy) -> None:
         """Watertight seletivo corre no topology_clean (stats de boundary presentes)."""
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
 
         verts, faces = self._procedural_open_box_subdivided()
         clear_scene()
@@ -556,8 +556,8 @@ class TestRepairWatertightRoundtrip:
         clear_scene()
 
     def test_repair_mesh_object_watertight_closes(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import count_boundary_edges, repair_mesh_object
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import count_boundary_edges, repair_mesh_object
 
         verts, faces = self._procedural_open_box_subdivided()
         clear_scene()
@@ -569,8 +569,8 @@ class TestRepairWatertightRoundtrip:
         clear_scene()
 
     def test_repair_glb_watertight_survives_roundtrip(self, _bpy, tmp_path) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays, save_glb
-        from gamedev_shared.mesh_repair import count_boundary_edges, repair_glb
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays, save_glb
+        from aigamekit_shared.mesh_repair import count_boundary_edges, repair_glb
 
         verts, faces = self._procedural_open_box_subdivided()
         clear_scene()
@@ -597,7 +597,7 @@ class TestRepairWatertightRoundtrip:
     def test_fix_mesh_watertight_closes_open_shell(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.mesh_repair import fix_mesh
+        from aigamekit_shared.mesh_repair import fix_mesh
 
         verts, faces = self._procedural_open_box_subdivided()
         shell = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
@@ -608,7 +608,7 @@ class TestRepairWatertightRoundtrip:
     def test_fix_mesh_watertight_false_preserves_opening(self, _bpy) -> None:
         import trimesh
 
-        from gamedev_shared.mesh_repair import fix_mesh
+        from aigamekit_shared.mesh_repair import fix_mesh
 
         verts, faces = self._procedural_open_box()
         shell = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
@@ -617,8 +617,8 @@ class TestRepairWatertightRoundtrip:
 
     def test_pre_decimate_uv_does_not_force_watertight(self, _bpy) -> None:
         """Perfil LOD: pode fechar loops ≤12, mas não corre make_watertight."""
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
 
         # Caixa aberta simples: loop de 4 arestas — fill_holes(12) pode tapar,
         # mas stats não devem ter boundary_before/after do make_watertight.
@@ -634,7 +634,7 @@ class TestRepairWatertightRoundtrip:
 class TestClampBaseFlareAndTaubin:
     def test_topology_clean_no_destructive_steps(self) -> None:
         """Sem shells/flare/Taubin (destruíam edifícios casca-plástico)."""
-        from gamedev_shared.mesh_repair import get_repair_profile
+        from aigamekit_shared.mesh_repair import get_repair_profile
 
         p = get_repair_profile("topology_clean")
         assert p.fill_holes_sides == 96
@@ -671,8 +671,8 @@ class TestClampBaseFlareAndTaubin:
         return verts_arr.astype(np.float64), np.asarray(faces, dtype=np.int64)
 
     def test_clamp_base_flare_pulls_elephant_feet(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import clamp_base_flare
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import clamp_base_flare
 
         v_body, f_body = self._cylinder_y(0.30, 0.20, 2.0, rings=10)
         v_foot, f_foot = self._cylinder_y(0.55, 0.0, 0.15, rings=3)
@@ -694,8 +694,8 @@ class TestClampBaseFlareAndTaubin:
         clear_scene()
 
     def test_taubin_smooth_runs(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import taubin_smooth
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import taubin_smooth
 
         # Malha densa o suficiente (taubin exige ≥8 verts).
         verts, faces = self._cylinder_y(0.5, -0.5, 0.5, sections=12, rings=4)
@@ -708,8 +708,8 @@ class TestClampBaseFlareAndTaubin:
 
 class TestRemoveInternalShellFaces:
     def test_solid_box_untouched(self, _bpy) -> None:
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import normals_consistent, remove_internal_shell_faces
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import normals_consistent, remove_internal_shell_faces
 
         verts = np.array(
             [
@@ -752,8 +752,8 @@ class TestRemoveInternalShellFaces:
 
     def test_double_shell_removes_inner(self, _bpy) -> None:
         """Outer box + inner box (normais para o oco) → remove faces da casca interna."""
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import remove_internal_shell_faces
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import remove_internal_shell_faces
 
         def _box(lo: float, hi: float, *, flip: bool) -> tuple[np.ndarray, np.ndarray]:
             verts = np.array(
@@ -813,8 +813,8 @@ class TestRemoveInternalShellFaces:
 
     def test_prop_inside_hollow_room_untouched(self, _bpy) -> None:
         """Objecto no oco (sino) — gap longo, NÃO sanduíche fino → 0 removidos."""
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import remove_internal_shell_faces
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import remove_internal_shell_faces
 
         def _box(lo: float, hi: float, *, flip: bool) -> tuple[np.ndarray, np.ndarray]:
             verts = np.array(
@@ -875,8 +875,8 @@ class TestRemoveInternalShellFaces:
 class TestCapBoundaryDiameterGuard:
     def test_large_opening_not_capped(self, _bpy) -> None:
         """Abertura grande (porta): max_loop_diameter_ratio bloqueia o cap."""
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import cap_boundary_loops, count_boundary_edges
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import cap_boundary_loops, count_boundary_edges
 
         # Caixa sem topo — loop de 4 arestas, diâmetro ~√2 na face 1x1.
         verts = np.array(
@@ -924,7 +924,7 @@ class TestMorphRamAdapt:
     """Anti-OOM do morphological_close — puro, sem bpy."""
 
     def test_adapt_grid_scales_with_ram(self) -> None:
-        from gamedev_shared.mesh_repair import adapt_morph_max_grid_axis
+        from aigamekit_shared.mesh_repair import adapt_morph_max_grid_axis
 
         # ~8 GiB available → fraction 0.2 → ~1.6 GiB → ~48 B/cell → grid ~330
         g = adapt_morph_max_grid_axis(8 * 1024**3, requested=800)
@@ -939,12 +939,12 @@ class TestMorphRamAdapt:
         assert adapt_morph_max_grid_axis(1024, requested=800) == 64
 
     def test_adapt_never_above_requested(self) -> None:
-        from gamedev_shared.mesh_repair import adapt_morph_max_grid_axis
+        from aigamekit_shared.mesh_repair import adapt_morph_max_grid_axis
 
         assert adapt_morph_max_grid_axis(64 * 1024**3, requested=200) == 200
 
     def test_face_cap_scales_with_grid(self) -> None:
-        from gamedev_shared.mesh_repair import MORPH_INPUT_FACE_CAP, morph_input_face_cap
+        from aigamekit_shared.mesh_repair import MORPH_INPUT_FACE_CAP, morph_input_face_cap
 
         assert morph_input_face_cap(64) == 80_000  # soft floor
         assert morph_input_face_cap(200) == 4 * 200 * 200
@@ -952,7 +952,7 @@ class TestMorphRamAdapt:
 
     def test_building_hi_faces_would_pre_decimate(self) -> None:
         """Regressão longhouse: 3.6M faces com grelha adaptada → cap ≪ input."""
-        from gamedev_shared.mesh_repair import adapt_morph_max_grid_axis, morph_input_face_cap
+        from aigamekit_shared.mesh_repair import adapt_morph_max_grid_axis, morph_input_face_cap
 
         grid = adapt_morph_max_grid_axis(38 * 1024**3, requested=800)
         cap = morph_input_face_cap(grid)

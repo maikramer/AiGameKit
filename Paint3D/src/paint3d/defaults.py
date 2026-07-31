@@ -16,7 +16,7 @@ Configuracao por defeito (6 views @ 640px, single GPU 12GB):
 - torch.compile: desabilitado via TORCHDYNAMO_DISABLE=1 (opt-in: ``--compile``)
 
 Modo memory-efficient (``memory_efficient=True``):
-- UNet: SDNQ uint8 (pos-load) via gamedev_shared.sdnq
+- UNet: SDNQ uint8 (pos-load) via aigamekit_shared.sdnq
 - render_size=1024, texture_size=2048, max_views=4, view_resolution=384
 - CFG chunking: forwards uncond/ref/full sequenciais (pico de ativações /3,
   matemática idêntica). Env: PAINT3D_CFG_CHUNKING=0 desliga.

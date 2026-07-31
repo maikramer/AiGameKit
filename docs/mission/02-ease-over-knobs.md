@@ -65,6 +65,6 @@ Knobs are a privilege earned after the happy path works.
 
 ## Pointers in this repo
 
-- QualityEngine: `Shared/src/gamedev_shared/quality/`, [`docs/superpowers/specs/2026-04-30-quality-presets-design.md`](../superpowers/specs/2026-04-30-quality-presets-design.md)
+- QualityEngine: `Shared/src/aigamekit_shared/quality/`, [`docs/superpowers/specs/2026-04-30-quality-presets-design.md`](../superpowers/specs/2026-04-30-quality-presets-design.md)
 - Batch / dream: `GameAssets/src/gameassets/` · [`GAMEASSETS_UMS_BATCH.md`](../GAMEASSETS_UMS_BATCH.md)
 - Tool CLIs: each package’s `cli.py`

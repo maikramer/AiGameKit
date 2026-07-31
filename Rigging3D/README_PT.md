@@ -8,14 +8,14 @@ CLI de **auto-rigging 3D** baseado no [UniRig](https://github.com/VAST-AI-Resear
 
 ### Oficial (monorepo)
 
-Na **raiz** do repositório GameDev:
+Na **raiz** do repositório AiGameKit:
 
 ```bash
-cd /caminho/para/GameDev
+cd /caminho/para/AiGameKit
 ./install.sh rigging3d
 ```
 
-Este comando **instala sempre** a stack de inferência completa (PyTorch CUDA, `bpy`, Open3D, spconv, PyG, etc.) — mesmo comportamento que `gamedev_shared.installer.unified`. Guia: [docs/INSTALLING_PT.md](../docs/INSTALLING_PT.md) · [EN](../docs/INSTALLING.md)
+Este comando **instala sempre** a stack de inferência completa (PyTorch CUDA, `bpy`, Open3D, spconv, PyG, etc.) — mesmo comportamento que `aigamekit_shared.installer.unified`. Guia: [docs/INSTALLING_PT.md](../docs/INSTALLING_PT.md) · [EN](../docs/INSTALLING.md)
 
 ### Manual / desenvolvimento (`scripts/setup.sh`)
 
@@ -70,7 +70,7 @@ pip install cumm-cu121 spconv-cu121
 
 ### Pesos do modelo
 
-Os pesos HF são descarregados automaticamente na 1.ª execução: [VAST-AI/UniRig](https://huggingface.co/VAST-AI/UniRig). Confirma termos no card (ver [GameDev/README_PT](../README_PT.md)).
+Os pesos HF são descarregados automaticamente na 1.ª execução: [VAST-AI/UniRig](https://huggingface.co/VAST-AI/UniRig). Confirma termos no card (ver [AiGameKit/README_PT](../README_PT.md)).
 
 ## Requisitos
 

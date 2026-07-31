@@ -23,17 +23,17 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import (
+from aigamekit_shared.cli_helpers import (
     add_ums_options,
     prepare_gpu_exclusive,
     try_ums_delegation,
     with_ums_load_opts,
     with_ums_peak_opts,
 )
-from gamedev_shared.hf import hf_home_display_rich
-from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT3D, emit_progress, emit_result
-from gamedev_shared.quality import VALID_QUALITIES
-from gamedev_shared.skill_install import install_my_skill
+from aigamekit_shared.hf import hf_home_display_rich
+from aigamekit_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT3D, emit_progress, emit_result
+from aigamekit_shared.quality import VALID_QUALITIES
+from aigamekit_shared.skill_install import install_my_skill
 
 from . import defaults as _defaults
 from .cli_rich import click
@@ -566,7 +566,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--profile",
     "prof_profile",
     is_flag=True,
-    help="Medir tempos, CPU, RAM e VRAM (JSONL: GAMEDEV_PROFILE_LOG; SQLite automático).",
+    help="Medir tempos, CPU, RAM e VRAM (JSONL: AIGAMEKIT_PROFILE_LOG; SQLite automático).",
 )
 @click.option(
     "--gpu-ids",
@@ -678,8 +678,8 @@ def generate(
     """Gera 3D: PROMPT (Text2D → Omni) ou --from-image (só Hunyuan3D-Omni)."""
     _ = model_subfolder  # deprecated / ignored (Omni flat repo)
     mc_level = _parse_mc_level_flag(mc_level)
-    from gamedev_shared.profiler import ProfilerSession
-    from gamedev_shared.profiler.env import env_profile_log_path
+    from aigamekit_shared.profiler import ProfilerSession
+    from aigamekit_shared.profiler.env import env_profile_log_path
 
     verbose = bool(ctx.obj.get("VERBOSE")) or generate_verbose
 
@@ -691,7 +691,7 @@ def generate(
     _user_set_octree = ctx.get_parameter_source("octree_resolution") not in (_src.DEFAULT,)
     _user_set_chunks = ctx.get_parameter_source("num_chunks") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("text3d", quality=quality, category=category)
@@ -1346,7 +1346,7 @@ def doctor():
     try:
         import bpy as _bpy
 
-        from gamedev_shared.bpy_mesh import meshopt_runtime_available
+        from aigamekit_shared.bpy_mesh import meshopt_runtime_available
 
         extra.add_row("bpy", f"OK ({_bpy.app.version_string})")
         if meshopt_runtime_available():
@@ -1804,7 +1804,7 @@ def topology_fix_cmd(
     tris = 0
     # Recusar clean vazio (resume tratava 228 B como "clean existe" e skipava).
     try:
-        from gamedev_shared.glb_verify import extract_glb_meta
+        from aigamekit_shared.glb_verify import extract_glb_meta
 
         meta = extract_glb_meta(out_path)
         verts = int(meta.get("vertex_count_total") or 0)
@@ -1865,7 +1865,7 @@ def topology_fix_cmd(
 @cli.command("gpu-processes")
 def gpu_processes_cmd() -> None:
     """Lista GPUs e processos compute (NVML → nvidia-smi) — útil quando VRAM exclusiva falha."""
-    from gamedev_shared.gpu import list_gpu_snapshots, list_nvidia_compute_apps, nvml_available
+    from aigamekit_shared.gpu import list_gpu_snapshots, list_nvidia_compute_apps, nvml_available
 
     snaps = list_gpu_snapshots()
     apps = list_nvidia_compute_apps()
@@ -2037,7 +2037,7 @@ def gpu_processes_cmd() -> None:
     default=None,
     help=(
         "GLB rigged (weights+skeleton). Após LOD texturizado, rebind via "
-        "gamedev_shared.skin_transfer (KDTree + armature + anims)."
+        "aigamekit_shared.skin_transfer (KDTree + armature + anims)."
     ),
 )
 @click.option(
@@ -2172,7 +2172,7 @@ def simplify_cmd(
     \b
         text3d simplify clean.glb -o to_paint.glb --target-faces 80000
     """
-    from gamedev_shared.mesh_simplify import simplify_glb
+    from aigamekit_shared.mesh_simplify import simplify_glb
 
     if target_faces < 4:
         raise click.ClickException("--target-faces deve ser >= 4")
@@ -2806,7 +2806,7 @@ def generate_batch(
     _user_set_chunks = ctx.get_parameter_source("num_chunks") not in (_src.DEFAULT,)
     _user_set_quality = ctx.get_parameter_source("quality") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("text3d", quality=quality, category=category)
@@ -3362,7 +3362,7 @@ def serve(ums_worker: bool) -> None:
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico
-    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter text3d
+    :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter text3d
     local (:mod:`text3d.worker_serve_adapter`).
     """
     if not ums_worker:
@@ -3370,7 +3370,7 @@ def serve(ums_worker: bool) -> None:
         console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
         return
 
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
     from text3d.worker_serve_adapter import Adapter
 
     run_worker_loop(Adapter, backend_name="text3d")

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gamedev_shared import model_download
+from aigamekit_shared import model_download
 
 
 @pytest.fixture

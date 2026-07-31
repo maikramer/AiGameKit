@@ -877,7 +877,7 @@ git commit -m "feat(terrain3d): add postprocess CLI flags with QualityEngine int
 ### Task 7: Update quality profiles
 
 **Files:**
-- Modify: `Shared/src/gamedev_shared/data/quality-profiles.yaml`
+- Modify: `Shared/src/aigamekit_shared/data/quality-profiles.yaml`
 
 - [ ] **Step 1: Add postprocess params to each terrain3d section**
 
@@ -956,7 +956,7 @@ For each tier in `quality-profiles.yaml`, add the postprocess parameters to the 
 - [ ] **Step 2: Commit**
 
 ```bash
-git add Shared/src/gamedev_shared/data/quality-profiles.yaml
+git add Shared/src/aigamekit_shared/data/quality-profiles.yaml
 git commit -m "feat(terrain3d): add postprocess params to quality profiles"
 ```
 

@@ -10,7 +10,7 @@ from click.testing import CliRunner
 
 
 def _gib(n: float) -> int:
-    from gamedev_shared.hardware import GIB
+    from aigamekit_shared.hardware import GIB
 
     return int(n * GIB)
 

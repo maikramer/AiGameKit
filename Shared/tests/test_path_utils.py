@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gamedev_shared.path_utils import ensure_directory, safe_filename
+from aigamekit_shared.path_utils import ensure_directory, safe_filename
 
 
 def test_ensure_directory_creates(tmp_path: Path):

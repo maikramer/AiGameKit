@@ -6,7 +6,7 @@ Uma **CLI em Rust** que gera mapas PBR (renderização fisicamente baseada) a pa
 
 Inspirada no [Materialize](https://github.com/BoundingBoxSoftware/Materialize) original da Bounding Box Software (Unity/Windows). Esta é uma reimplementação do zero em Rust que preserva o mesmo conceito — transformar uma única imagem difusa num conjunto completo de mapas PBR.
 
-**Monorepo GameDev:** o **Hunyuan3D-Paint 2.1** (`paint3d texture`) já produz **GLB PBR**. Esta CLI serve para **mapas PBR a partir de uma imagem difusa** (ex.: **Texture2D** + `texture2d.materialize` no GameAssets). Ver [`Text3D/docs/PBR_MATERIALIZE.md`](../Text3D/docs/PBR_MATERIALIZE.md).
+**Monorepo AiGameKit:** o **Hunyuan3D-Paint 2.1** (`paint3d texture`) já produz **GLB PBR**. Esta CLI serve para **mapas PBR a partir de uma imagem difusa** (ex.: **Texture2D** + `texture2d.materialize` no GameAssets). Ver [`Text3D/docs/PBR_MATERIALIZE.md`](../Text3D/docs/PBR_MATERIALIZE.md).
 
 ---
 
@@ -37,7 +37,7 @@ A partir de uma única textura difusa/albedo, o Materialize produz até sete map
 
 ## Instalação
 
-### Monorepo GameDev (recomendado)
+### Monorepo AiGameKit (recomendado)
 
 A partir da raiz do repositório:
 
@@ -232,7 +232,7 @@ A partir de um input `texture.png`, o Materialize gera até sete ficheiros no di
 
 ## Integração em pipeline
 
-O Materialize corre **depois** do Texture2D ou Paint3D para gerar mapas PBR a partir de texturas difusas. Está integrado no pipeline do monorepo GameDev em vários pontos:
+O Materialize corre **depois** do Texture2D ou Paint3D para gerar mapas PBR a partir de texturas difusas. Está integrado no pipeline do monorepo AiGameKit em vários pontos:
 
 - **GameAssets batch** — via `materialize: true` no bloco `texture2d` do `game.yaml`
 - **Paint3D** — o comando `vertex-pbr` usa o Materialize para gerar mapas

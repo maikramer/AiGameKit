@@ -12,7 +12,7 @@ Texture2D/
 │       ├── __main__.py               # python -m texture2d
 │       ├── _validate_cli.py          # Comando validate-tileable
 │       ├── cli.py                    # CLI principal (Click + Rich)
-│       ├── cli_rich.py               # rich-click via gamedev_shared
+│       ├── cli_rich.py               # rich-click via aigamekit_shared
 │       ├── client.py                 # Cliente do model server
 │       ├── cursor_skill/
 │       │   └── SKILL.md              # Agent Skill do Cursor

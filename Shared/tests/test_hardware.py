@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from gamedev_shared import hardware
+from aigamekit_shared import hardware
 
 
 def test_hw_auto_enabled_default_and_kill_switch(monkeypatch) -> None:
@@ -53,7 +53,7 @@ def test_cuda_gpu_specs_shapes(monkeypatch) -> None:
 def test_hardware_profile_base_fields() -> None:
     from dataclasses import fields
 
-    from gamedev_shared.hardware import HardwareProfileBase
+    from aigamekit_shared.hardware import HardwareProfileBase
 
     names = [f.name for f in fields(HardwareProfileBase)]
     assert names == ["name", "device", "gpu_ids", "total_vram_gib"]
@@ -62,7 +62,7 @@ def test_hardware_profile_base_fields() -> None:
 def test_hardware_profile_base_frozen_and_eq() -> None:
     from dataclasses import FrozenInstanceError
 
-    from gamedev_shared.hardware import HardwareProfileBase
+    from aigamekit_shared.hardware import HardwareProfileBase
 
     p = HardwareProfileBase(name="cuda-1x6g", device="cuda", gpu_ids=None, total_vram_gib=6.0)
     with pytest.raises(FrozenInstanceError):
@@ -75,7 +75,7 @@ def test_hardware_profile_base_subclass_extends() -> None:
     """Padrão das tools: herdar a base e acrescentar campos do planner."""
     from dataclasses import dataclass, fields
 
-    from gamedev_shared.hardware import HardwareProfileBase
+    from aigamekit_shared.hardware import HardwareProfileBase
 
     @dataclass(frozen=True)
     class _FakeProfile(HardwareProfileBase):
@@ -89,7 +89,7 @@ def test_hardware_profile_base_subclass_extends() -> None:
 
 
 def test_detect_profile_delegates_to_profile_from_specs(monkeypatch) -> None:
-    from gamedev_shared.hardware import detect_profile
+    from aigamekit_shared.hardware import detect_profile
 
     captured: dict[str, object] = {}
 
@@ -97,13 +97,13 @@ def test_detect_profile_delegates_to_profile_from_specs(monkeypatch) -> None:
         captured["gpus"] = gpus
         return "profile-ok"
 
-    monkeypatch.setattr("gamedev_shared.hardware.cuda_gpu_specs", lambda: [(0, 6 * hardware.GIB)])
+    monkeypatch.setattr("aigamekit_shared.hardware.cuda_gpu_specs", lambda: [(0, 6 * hardware.GIB)])
     assert detect_profile(_fake_from_specs) == "profile-ok"
     assert captured["gpus"] == [(0, 6 * hardware.GIB)]
 
 
 def test_detect_profile_empty_specs(monkeypatch) -> None:
-    from gamedev_shared.hardware import detect_profile
+    from aigamekit_shared.hardware import detect_profile
 
-    monkeypatch.setattr("gamedev_shared.hardware.cuda_gpu_specs", lambda: [])
+    monkeypatch.setattr("aigamekit_shared.hardware.cuda_gpu_specs", lambda: [])
     assert detect_profile(lambda gpus: len(gpus)) == 0

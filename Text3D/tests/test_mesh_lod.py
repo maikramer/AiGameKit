@@ -11,7 +11,7 @@ pytest.importorskip("bpy")
 import bpy
 import numpy as np
 
-from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays, face_count, save_glb
+from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays, face_count, save_glb
 from text3d.utils.mesh_lod import generate_lod_glb_triplet, prepare_mesh_topology, simplify_to_face_count
 
 
@@ -40,7 +40,7 @@ def _save_arrays_glb(path: Path, verts: np.ndarray, faces: np.ndarray) -> Path:
 
 
 def _load_face_count(path: Path) -> int:
-    from gamedev_shared.bpy_mesh import load_glb
+    from aigamekit_shared.bpy_mesh import load_glb
 
     objs = load_glb(path)
     return sum(face_count(o) for o in objs)

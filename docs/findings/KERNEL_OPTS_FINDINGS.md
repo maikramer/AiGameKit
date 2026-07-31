@@ -12,10 +12,10 @@ Hardware de referência: **RTX 4050 Laptop 6 GB** (2026-07).
 
 | Flag | Efeito | Env |
 |------|--------|-----|
-| `--compile` / `--no-compile` | `torch.compile` no transformer/UNet/DiT | `GAMEDEV_TORCH_COMPILE=1` |
+| `--compile` / `--no-compile` | `torch.compile` no transformer/UNet/DiT | `AIGAMEKIT_TORCH_COMPILE=1` |
 | `--compile-mode` | `default` \| `reduce-overhead` \| `max-autotune` | — |
 | `--channels-last` | Memory format NHWC (Ampere+ conv) | — |
-| `--step-cache` | FirstBlock/TaylorSeer (só full-GPU) | `GAMEDEV_STEP_CACHE` |
+| `--step-cache` | FirstBlock/TaylorSeer (só full-GPU) | `AIGAMEKIT_STEP_CACHE` |
 
 **Regras Inductor (Shared):**
 
@@ -24,7 +24,7 @@ Hardware de referência: **RTX 4050 Laptop 6 GB** (2026-07).
 - Com `model_cpu` / `sequential_cpu` → **skip** compile (ping-pong de device).
 - Step-cache só com `offload=none`.
 
-Helpers: `gamedev_shared.quantization.apply_torch_compile` /
+Helpers: `aigamekit_shared.quantization.apply_torch_compile` /
 `apply_channels_last` / `resolve_torch_compile_mode`;
 `DiffusionGeneratorBase._maybe_compile_transformer` (também `unet` SD1.5).
 

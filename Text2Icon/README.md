@@ -2,7 +2,7 @@
 
 CLI text-to-icon com **Sana** ([NVlabs/Sana](https://github.com/NVlabs/Sana)) — gera ícones de UI para jogos (20 passos, pipeline 512px). `hw_auto` escolhe automaticamente o transformer e a quantização SDNQ conforme a VRAM disponível (ver [Modelos](#modelos)). Suporta fundo transparente (RGBA via `rembg`).
 
-Parte do monorepo **GameDev**. Veja [`../AGENTS.md`](../AGENTS.md) para o guia geral.
+Parte do monorepo **AiGameKit**. Veja [`../AGENTS.md`](../AGENTS.md) para o guia geral.
 
 ## Instalação
 
@@ -65,11 +65,11 @@ Kernel opts: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_O
 
 ## Unified Model Server (UMS)
 
-Preferir `gamedev-model-server` (supervisor do monorepo). `text2icon generate`
-delega automaticamente (auto-start salvo `GAMEDEV_UMS_AUTO_START=0`).
+Preferir `aigamekit-model-server` (supervisor do monorepo). `text2icon generate`
+delega automaticamente (auto-start salvo `AIGAMEKIT_UMS_AUTO_START=0`).
 
 ```bash
-gamedev-model-server start
+aigamekit-model-server start
 text2icon generate "sword icon" -o sword.png --ums-stream
 text2icon server   # deprecated — fallback per-tool apenas
 ```

@@ -52,7 +52,7 @@ text2d -v generate "teste"
 - **Primeira execução:** download de pesos — pode parecer “parado” durante rede/disco.
 - Pesos **GGUF** são para fluxos tipo ComfyUI-GGUF, **não** este CLI Diffusers.
 - **Guidance** padrão **1.0** para o checkpoint SDNQ Disty0 (valores maiores são ignorados pelo modelo distilled).
-- **Licenças:** o default SDNQ (Disty0) declara no Hub termos tipo **non-commercial**; o BF16 oficial BFL é **Apache 2.0** — ver `Text2D/README.md` e `GameDev/README.md`.
+- **Licenças:** o default SDNQ (Disty0) declara no Hub termos tipo **non-commercial**; o BF16 oficial BFL é **Apache 2.0** — ver `Text2D/README.md` e `AiGameKit/README.md`.
 - Em **GameAssets**, resolução 2D elevada + outras apps na mesma GPU (ex.: **Godot** + editor 3D) aumenta risco de **OOM**; reduzir `width`/`height` no bloco `text2d` do `game.yaml` ou libertar VRAM.
 
 ## Prompt — boas práticas para imagens limpas (especialmente para 3D)

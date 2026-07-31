@@ -1,6 +1,6 @@
-"""Memória, GPU e gestão de processos — delegate para gamedev_shared.gpu."""
+"""Memória, GPU e gestão de processos — delegate para aigamekit_shared.gpu."""
 
-from gamedev_shared.gpu import (
+from aigamekit_shared.gpu import (
     DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT,
     check_gpu_compatibility,
     clear_cuda_memory,

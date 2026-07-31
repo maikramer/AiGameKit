@@ -1,11 +1,11 @@
-"""Tests for gamedev_shared.vram_monitor — VRAMStats aggregation and no-CUDA monitor paths."""
+"""Tests for aigamekit_shared.vram_monitor — VRAMStats aggregation and no-CUDA monitor paths."""
 
 from __future__ import annotations
 
 from contextlib import nullcontext
 from unittest.mock import patch
 
-from gamedev_shared.vram_monitor import VRAMMonitor, VRAMSnapshot, VRAMStats
+from aigamekit_shared.vram_monitor import VRAMMonitor, VRAMSnapshot, VRAMStats
 
 _HAS_TORCH = True
 try:

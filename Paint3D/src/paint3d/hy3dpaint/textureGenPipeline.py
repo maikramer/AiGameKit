@@ -19,7 +19,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-from gamedev_shared.bpy_mesh import load_glb
+from aigamekit_shared.bpy_mesh import load_glb
 
 from .DifferentiableRenderer.MeshRender import MeshRender
 from .utils.image_super_utils import imageSuperNet

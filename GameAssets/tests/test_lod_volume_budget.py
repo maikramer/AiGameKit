@@ -10,7 +10,7 @@ from gameassets.pipeline import (
     _resolve_lod_target_faces,
 )
 from gameassets.profile import GameProfile
-from gamedev_shared.lod_budget import lod_texture_ladder
+from aigamekit_shared.lod_budget import lod_texture_ladder
 
 
 def _row(*, rid: str, category: str, size_m: tuple[float, float, float]) -> ManifestRow:

@@ -9,7 +9,7 @@ from click.testing import CliRunner
 
 bpy = pytest.importorskip("bpy")
 
-from gamedev_shared.bpy_mesh import clear_scene, load_glb, save_glb  # noqa: E402
+from aigamekit_shared.bpy_mesh import clear_scene, load_glb, save_glb  # noqa: E402
 from text3d.cli import cli  # noqa: E402
 from text3d.utils.mesh_split import split_at_height_glb  # noqa: E402
 

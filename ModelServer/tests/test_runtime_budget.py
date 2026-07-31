@@ -218,7 +218,7 @@ class TestGroupOffloadPeak:
 
 
 class TestSuggestHelpers:
-    """Reexports canónicos de gamedev_shared.vram_budget (fórmulas puras)."""
+    """Reexports canónicos de aigamekit_shared.vram_budget (fórmulas puras)."""
 
     def test_suggest_text3d_chunks_with_free_bytes(self) -> None:
         out = suggest_text3d_chunks(free_bytes=4 * 1024**3)

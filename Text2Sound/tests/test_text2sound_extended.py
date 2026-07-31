@@ -21,7 +21,7 @@ def test_resolve_effective_seed_explicit() -> None:
 
 
 def test_resolve_effective_seed_random(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("gamedev_shared.seed_utils.secrets.randbelow", lambda n: 7)
+    monkeypatch.setattr("aigamekit_shared.seed_utils.secrets.randbelow", lambda n: 7)
     assert resolve_effective_seed(None) == 7
 
 
@@ -63,7 +63,7 @@ def test_format_duration_zero() -> None:
 
 
 def test_generate_output_path_suffix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("gamedev_shared.path_utils.time.time", lambda: 1_700_000_000)
+    monkeypatch.setattr("aigamekit_shared.path_utils.time.time", lambda: 1_700_000_000)
     p = generate_output_path("hello world", tmp_path, fmt="flac")
     assert p.suffix == ".flac"
     assert "hello" in p.name.lower() or "_" in p.name

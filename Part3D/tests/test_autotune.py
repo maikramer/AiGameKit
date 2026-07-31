@@ -18,7 +18,7 @@ from part3d.utils.autotune import (
     mesh_geometry_score,
 )
 
-from gamedev_shared.bpy_mesh import clear_scene
+from aigamekit_shared.bpy_mesh import clear_scene
 
 
 def _obj_to_mesh(obj: object) -> SimpleNamespace:

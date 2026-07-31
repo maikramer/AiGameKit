@@ -141,12 +141,12 @@
   "author": "dylanebert",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/maikramer/GameDev.git",
+    "url": "git+https://github.com/maikramer/AiGameKit.git",
     "directory": "VibeGame"
   },
-  "homepage": "https://github.com/maikramer/GameDev/tree/main/VibeGame",
+  "homepage": "https://github.com/maikramer/AiGameKit/tree/main/VibeGame",
   "bugs": {
-    "url": "https://github.com/maikramer/GameDev/issues"
+    "url": "https://github.com/maikramer/AiGameKit/issues"
   },
   "license": "MIT",
   "peerDependencies": {

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from gamedev_shared.diffusion_control import GenerationAborted
+from aigamekit_shared.diffusion_control import GenerationAborted
 
 from .base import BackendAdapter
 

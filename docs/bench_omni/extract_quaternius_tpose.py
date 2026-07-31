@@ -2,7 +2,7 @@
 """Extract Quaternius UAL ``A_TPose`` bones → Omni pose ``.txt`` / ``.json``.
 
 Requires ``bpy`` (Animator3D / Text3D / Rigging3D venv) and cached Quaternius pack
-(``gamedev_shared.quaternius_fetch.fetch_quaternius_pack``).
+(``aigamekit_shared.quaternius_fetch.fetch_quaternius_pack``).
 
 Usage::
 
@@ -65,7 +65,7 @@ def _z_up_to_y_up(p: np.ndarray) -> np.ndarray:
 def main() -> int:
     import bpy
 
-    from gamedev_shared.quaternius_fetch import fetch_quaternius_pack
+    from aigamekit_shared.quaternius_fetch import fetch_quaternius_pack
 
     pack = fetch_quaternius_pack(on_status=print)
     glb = pack.glb

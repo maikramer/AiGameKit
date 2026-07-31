@@ -6,13 +6,13 @@ O worker é **persistente**: carrega o modelo no arranque (``load``) e mantém-s
 vivo entre jobs (``generate``); evict = ``unload`` (descarrega pesos); idle
 timeout = ``shutdown``.
 
-Comunicação via stdin/stdout JSONL (ver :mod:`gamedev_shared.worker_protocol`):
+Comunicação via stdin/stdout JSONL (ver :mod:`aigamekit_shared.worker_protocol`):
 
 - UMS → Worker (stdin): ``{"cmd":"load","kwargs":{...}}``, ``{"cmd":"generate",...}``,
   ``{"cmd":"unload"}``, ``{"cmd":"abort"}``, ``{"cmd":"shutdown"}``.
 - Worker → UMS (stdout): ``{"event":"ready","vram_mib":...}``, ``{"event":"progress",...}``,
   ``{"event":"done","result":{...}}``, etc.
-- stderr → ficheiro de log por backend (``~/.cache/gamedev/ums-worker-<backend>.log``).
+- stderr → ficheiro de log por backend (``~/.cache/aigamekit/ums-worker-<backend>.log``).
 
 Abort cooperativo (``{"cmd":"abort"}`` no stdin); SIGTERM como fallback após
 ``abort_timeout_sec`` sem ``done``. Worker morto inesperadamente → re-spawn +
@@ -33,8 +33,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from gamedev_shared.logging import Logger
-from gamedev_shared.worker_protocol import (
+from aigamekit_shared.logging import Logger
+from aigamekit_shared.worker_protocol import (
     CMD_ABORT,
     CMD_GENERATE,
     CMD_LOAD,
@@ -121,7 +121,7 @@ LogPathFn = Callable[[str], Path]
 
 
 def _default_log_path(backend: str) -> Path:
-    cache = Path(os.environ.get("GAMEDEV_CACHE_DIR") or (Path.home() / ".cache" / "gamedev"))
+    cache = Path(os.environ.get("AIGAMEKIT_CACHE_DIR") or (Path.home() / ".cache" / "aigamekit"))
     return cache / f"ums-worker-{backend}.log"
 
 
@@ -136,7 +136,7 @@ def _default_spawn(
     A sessão própria isola o worker do Ctrl+C do terminal do UMS (o abort é
     cooperativo, via ``{"cmd":"abort"}``). Para o worker não sobreviver à morte
     do supervisor há duas redes: EOF no stdin e o watchdog de PPID em
-    :func:`gamedev_shared.worker_serve.start_parent_watchdog`. Não se usa
+    :func:`aigamekit_shared.worker_serve.start_parent_watchdog`. Não se usa
     ``PR_SET_PDEATHSIG`` porque no Linux dispara com a morte da *thread* que
     criou o processo — e o spawn acontece nas threads do ``WorkerPool``.
     """
@@ -195,17 +195,17 @@ class SubprocessWorkerPool:
         self._event_timeout = float(
             event_timeout_sec
             if event_timeout_sec is not None
-            else _env_float("GAMEDEV_UMS_EVENT_TIMEOUT_SEC", DEFAULT_EVENT_TIMEOUT_SEC)
+            else _env_float("AIGAMEKIT_UMS_EVENT_TIMEOUT_SEC", DEFAULT_EVENT_TIMEOUT_SEC)
         )
         self._abort_timeout = float(
             abort_timeout_sec
             if abort_timeout_sec is not None
-            else _env_float("GAMEDEV_UMS_ABORT_TIMEOUT_SEC", DEFAULT_ABORT_TIMEOUT_SEC)
+            else _env_float("AIGAMEKIT_UMS_ABORT_TIMEOUT_SEC", DEFAULT_ABORT_TIMEOUT_SEC)
         )
         self._post_done_timeout = float(
             post_done_timeout_sec
             if post_done_timeout_sec is not None
-            else _env_float("GAMEDEV_UMS_POST_DONE_TIMEOUT_SEC", DEFAULT_POST_DONE_TIMEOUT_SEC)
+            else _env_float("AIGAMEKIT_UMS_POST_DONE_TIMEOUT_SEC", DEFAULT_POST_DONE_TIMEOUT_SEC)
         )
         self._ping_timeout = float(ping_timeout_sec)
         # Override do interpretador python por backend (testes / ambientes exóticos).
@@ -252,7 +252,7 @@ class SubprocessWorkerPool:
                 self._spawn(backend, tool, state)
 
             # Enviar load.
-            from gamedev_shared.worker_protocol import send_cmd
+            from aigamekit_shared.worker_protocol import send_cmd
 
             send_cmd(state.proc.stdin, CMD_LOAD, kwargs=kwargs)
             event = self._wait_event(
@@ -290,7 +290,7 @@ class SubprocessWorkerPool:
             raise SubprocessWorkerError(f"{backend}: worker não está vivo — faz load primeiro")
 
         with state.lock:
-            from gamedev_shared.worker_protocol import send_cmd
+            from aigamekit_shared.worker_protocol import send_cmd
 
             # Strip hooks in-process antes de serializar para JSONL — o worker
             # recebe-os via request e reconstrói os seus próprios a partir do
@@ -364,7 +364,7 @@ class SubprocessWorkerPool:
         if state is None or state.proc is None or state.proc.poll() is not None:
             return False
         with state.lock:
-            from gamedev_shared.worker_protocol import send_cmd
+            from aigamekit_shared.worker_protocol import send_cmd
 
             send_cmd(state.proc.stdin, CMD_UNLOAD)
             event = self._wait_event(state, expected={EVENT_UNLOADED, EVENT_ERROR}, timeout=60.0)
@@ -379,7 +379,7 @@ class SubprocessWorkerPool:
             return False
         with state.lock:
             try:
-                from gamedev_shared.worker_protocol import send_cmd
+                from aigamekit_shared.worker_protocol import send_cmd
 
                 send_cmd(state.proc.stdin, CMD_SHUTDOWN)
             except Exception:
@@ -440,7 +440,7 @@ class SubprocessWorkerPool:
         if state is None or state.proc is None or state.proc.poll() is not None:
             return False
         with state.lock:
-            from gamedev_shared.worker_protocol import send_cmd
+            from aigamekit_shared.worker_protocol import send_cmd
 
             send_cmd(state.proc.stdin, CMD_PING)
             event = self._wait_event(state, expected={EVENT_PONG, EVENT_ERROR}, timeout=self._ping_timeout)
@@ -583,7 +583,7 @@ class SubprocessWorkerPool:
 
 def _resolve_tool_python(tool: str) -> str | None:
     """Descobre o ``python`` do venv da tool no monorepo."""
-    from gamedev_shared.env import discover_monorepo_tool_python
+    from aigamekit_shared.env import discover_monorepo_tool_python
 
     return discover_monorepo_tool_python(tool)
 

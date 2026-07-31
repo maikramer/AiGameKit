@@ -31,8 +31,8 @@ import torch
 import trimesh
 from tqdm import tqdm
 
-from gamedev_shared.logging import Logger
-from gamedev_shared.profiler import profile_span
+from aigamekit_shared.logging import Logger
+from aigamekit_shared.profiler import profile_span
 
 from . import defaults as _d
 from .utils.autotune import (
@@ -342,7 +342,7 @@ class Part3DPipeline:
         if self._model_dir is not None:
             return self._model_dir
 
-        from gamedev_shared.model_download import ensure_model
+        from aigamekit_shared.model_download import ensure_model
 
         self._log(f"A descarregar modelo de {self.model_path}...")
         self._model_dir = str(ensure_model(self.model_path, on_status=self._log))
@@ -437,7 +437,7 @@ class Part3DPipeline:
             if preset is not None:
                 self._log(f"A aplicar quantização SDNQ ({preset}) ao DiT...")
                 try:
-                    from gamedev_shared.sdnq import quantize_model
+                    from aigamekit_shared.sdnq import quantize_model
 
                     self._model = quantize_model(self._model, preset=preset, dequantize_fp32=False)
                     self._dit_quantized = True
@@ -513,7 +513,7 @@ class Part3DPipeline:
         import sys
 
         auto_mask_module = sys.modules.get(type(self._bbox_predictor).__module__)
-        configure_mask_quality = getattr(auto_mask_module, "configure_gamedev_mask_quality", None)
+        configure_mask_quality = getattr(auto_mask_module, "configure_aigamekit_mask_quality", None)
         if callable(configure_mask_quality):
             configure_mask_quality(
                 mask_nms_iou=self.mask_nms_iou,
@@ -725,7 +725,7 @@ class Part3DPipeline:
             - face_ids: array (F,) com ID da parte para cada face
             - cleaned_mesh: mesh limpa pelo P3-SAM
         """
-        from gamedev_shared.seed_utils import resolve_effective_seed
+        from aigamekit_shared.seed_utils import resolve_effective_seed
 
         seed = resolve_effective_seed(seed)
         mesh = mesh.copy()
@@ -876,7 +876,7 @@ class Part3DPipeline:
         **segment_kwargs: Any,
     ) -> tuple[np.ndarray, np.ndarray, trimesh.Trimesh]:
         """Segment a file, optionally using an aligned low-poly proxy."""
-        from gamedev_shared.bpy_mesh import load_mesh_as_trimesh
+        from aigamekit_shared.bpy_mesh import load_mesh_as_trimesh
 
         target_mesh = load_mesh_as_trimesh(mesh_path)
         if segmentation_proxy_path is None:
@@ -1261,13 +1261,13 @@ class Part3DPipeline:
 
         import pytorch_lightning as pl
 
-        from gamedev_shared.seed_utils import resolve_effective_seed
+        from aigamekit_shared.seed_utils import resolve_effective_seed
 
         seed = resolve_effective_seed(seed)
         pl.seed_everything(seed, workers=True)
 
         mesh_path = str(mesh_path)
-        from gamedev_shared.bpy_mesh import load_mesh_as_trimesh
+        from aigamekit_shared.bpy_mesh import load_mesh_as_trimesh
 
         mesh = load_mesh_as_trimesh(mesh_path)
 
@@ -1508,7 +1508,7 @@ class Part3DPipeline:
             (parts_scene, face_ids, segmented_mesh)
         """
         with profile_span("part3d_decompose", sync_cuda=True):
-            from gamedev_shared.seed_utils import resolve_effective_seed
+            from aigamekit_shared.seed_utils import resolve_effective_seed
 
             seed = resolve_effective_seed(seed)
             aabb, face_ids, clean_mesh = self.segment_file(
@@ -1697,15 +1697,15 @@ def _setup_xpart_imports(model_dir: str) -> None:
 
 
 _BPY_MESH_UTILS_TAIL = """\
-# GAMEDEV_BPY_MESH_PATCH — repair via bpy (part3d.utils.mesh_bpy); no pymeshlab.
+# AIGAMEKIT_BPY_MESH_PATCH — repair via bpy (part3d.utils.mesh_bpy); no pymeshlab.
 
 
 def pymeshlab2trimesh(mesh):
-    raise RuntimeError("pymeshlab disabled in GameDev Part3D; use part3d.utils.mesh_bpy.fix_mesh")
+    raise RuntimeError("pymeshlab disabled in AiGameKit Part3D; use part3d.utils.mesh_bpy.fix_mesh")
 
 
 def trimesh2pymeshlab(mesh):
-    raise RuntimeError("pymeshlab disabled in GameDev Part3D; use part3d.utils.mesh_bpy.fix_mesh")
+    raise RuntimeError("pymeshlab disabled in AiGameKit Part3D; use part3d.utils.mesh_bpy.fix_mesh")
 
 
 def remove_overlength_edge(mesh, max_length: float):
@@ -1737,13 +1737,13 @@ def _patch_mesh_utils_bpy(space_dir: str) -> None:
     with open(path, encoding="utf-8") as f:
         content = f.read()
 
-    if "GAMEDEV_BPY_MESH_PATCH" in content:
+    if "AIGAMEKIT_BPY_MESH_PATCH" in content:
         return
 
     if "import pymeshlab" not in content and "def fix_mesh" not in content:
         return
 
-    content = content.replace("import pymeshlab\n", "# import pymeshlab  # GAMEDEV: removed\n")
+    content = content.replace("import pymeshlab\n", "# import pymeshlab  # AIGAMEKIT: removed\n")
 
     marker = "def pymeshlab2trimesh"
     idx = content.find(marker)

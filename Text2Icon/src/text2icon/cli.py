@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import (
+from aigamekit_shared.cli_helpers import (
     add_ums_options,
     legacy_server_allowed,
     needed_mib_for_backend,
@@ -24,10 +24,10 @@ from gamedev_shared.cli_helpers import (
     with_ums_load_opts,
     with_ums_peak_opts,
 )
-from gamedev_shared.gpu import get_system_info
-from gamedev_shared.hf import hf_home_display_rich
-from gamedev_shared.path_utils import safe_filename
-from gamedev_shared.quality import VALID_QUALITIES
+from aigamekit_shared.gpu import get_system_info
+from aigamekit_shared.hf import hf_home_display_rich
+from aigamekit_shared.path_utils import safe_filename
+from aigamekit_shared.quality import VALID_QUALITIES
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
 from .generator import SanaIconGenerator, default_model_id
@@ -69,7 +69,7 @@ def skill_group() -> None:
 @click.option("--force", is_flag=True, help="Sobrescrever SKILL.md existente")
 def skill_install_cmd(target: Path, force: bool) -> None:
     """Copia SKILL.md para .cursor/skills/text2icon/."""
-    from gamedev_shared.skill_install import install_my_skill
+    from aigamekit_shared.skill_install import install_my_skill
 
     try:
         dest = install_my_skill(vars(), target, force=force)
@@ -181,7 +181,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help=(
         "torch.compile no transformer (Inductor). Cold-start lento; compensa em "
         "batch/server. Com offload model_cpu é ignorado; com group_stream usa mode=default. "
-        "Env: GAMEDEV_TORCH_COMPILE=1."
+        "Env: AIGAMEKIT_TORCH_COMPILE=1."
     ),
 )
 @click.option(
@@ -198,7 +198,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     type=click.Choice(["off", "auto", "first_block", "taylorseer"]),
     default="off",
     show_default=True,
-    help="Step cache (FirstBlock/TaylorSeer). Só full-GPU. Env: GAMEDEV_STEP_CACHE.",
+    help="Step cache (FirstBlock/TaylorSeer). Só full-GPU. Env: AIGAMEKIT_STEP_CACHE.",
 )
 @click.option(
     "--channels-last/--no-channels-last",
@@ -237,7 +237,7 @@ def generate_cmd(
     ums_stream: bool,
 ) -> None:
     """Gera um ícone a partir do PROMPT."""
-    from gamedev_shared.gpu import warn_if_vram_occupied
+    from aigamekit_shared.gpu import warn_if_vram_occupied
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
 
@@ -250,7 +250,7 @@ def generate_cmd(
     _user_set_model = ctx.get_parameter_source("model_id") not in (_src.DEFAULT,)
     _user_set_quant_transformer = ctx.get_parameter_source("transformer_quant_preset") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("text2icon", quality=quality)
@@ -343,7 +343,7 @@ def generate_cmd(
     ):
         return
 
-    # Fallback: per-tool legacy server — só com GAMEDEV_ALLOW_LEGACY_SERVER=1.
+    # Fallback: per-tool legacy server — só com AIGAMEKIT_ALLOW_LEGACY_SERVER=1.
     if not cpu and output is not None and legacy_server_allowed():
         from . import client
 
@@ -576,7 +576,7 @@ def batch_cmd(
     _user_set_model = ctx.get_parameter_source("model_id") not in (_src.DEFAULT,)
     _user_set_quant_transformer = ctx.get_parameter_source("transformer_quant_preset") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("text2icon", quality=quality)
@@ -781,7 +781,7 @@ def info_cmd() -> None:
     "socket_path",
     type=click.Path(),
     default=None,
-    help="Path do Unix socket (default: ~/.cache/gamedev/text2icon-server.sock)",
+    help="Path do Unix socket (default: ~/.cache/aigamekit/text2icon-server.sock)",
 )
 @click.option(
     "--idle-timeout",
@@ -815,27 +815,27 @@ def server_cmd(
     quant_preset: str,
     transformer_quant_preset: str,
 ) -> None:
-    """[DEPRECATED] Server per-tool. Preferir ``gamedev-model-server start`` (UMS).
+    """[DEPRECATED] Server per-tool. Preferir ``aigamekit-model-server start`` (UMS).
 
-    Requer ``GAMEDEV_ALLOW_LEGACY_SERVER=1``.
+    Requer ``AIGAMEKIT_ALLOW_LEGACY_SERVER=1``.
     """
     import os
 
-    from gamedev_shared.model_server import server_socket_path
+    from aigamekit_shared.model_server import server_socket_path
 
     from . import server
 
-    allow = os.environ.get("GAMEDEV_ALLOW_LEGACY_SERVER", "").strip().lower()
+    allow = os.environ.get("AIGAMEKIT_ALLOW_LEGACY_SERVER", "").strip().lower()
     if allow not in ("1", "true", "yes", "on"):
         console.print(
             "[bold red]Legacy server bloqueado.[/bold red] Usa "
-            "[cyan]gamedev-model-server start[/cyan] (UMS).\n"
-            "[dim]Override: GAMEDEV_ALLOW_LEGACY_SERVER=1[/dim]"
+            "[cyan]aigamekit-model-server start[/cyan] (UMS).\n"
+            "[dim]Override: AIGAMEKIT_ALLOW_LEGACY_SERVER=1[/dim]"
         )
         sys.exit(1)
 
     console.print(
-        "[yellow]Deprecated:[/yellow] use [cyan]gamedev-model-server start[/cyan] "
+        "[yellow]Deprecated:[/yellow] use [cyan]aigamekit-model-server start[/cyan] "
         "(Unified Model Server). Este server per-tool fica só como fallback."
     )
     _default_sock = server_socket_path("text2icon")
@@ -884,7 +884,7 @@ def server_cmd(
 @cli.command("server-status")
 def server_status_cmd() -> None:
     """Mostra o estado do model server."""
-    from gamedev_shared.model_server import server_socket_path
+    from aigamekit_shared.model_server import server_socket_path
 
     from . import server
 
@@ -909,7 +909,7 @@ def server_status_cmd() -> None:
 @cli.command("server-stop")
 def server_stop_cmd() -> None:
     """Para o model server (graceful shutdown)."""
-    from gamedev_shared.model_server import _pid_path, server_socket_path
+    from aigamekit_shared.model_server import _pid_path, server_socket_path
 
     from . import server
 
@@ -945,7 +945,7 @@ def serve(ums_worker: bool) -> None:
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico
-    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter text2icon
+    :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter text2icon
     local (:mod:`text2icon.worker_serve_adapter`).
     """
     if not ums_worker:
@@ -953,7 +953,7 @@ def serve(ums_worker: bool) -> None:
         console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
         return
 
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
     from text2icon.worker_serve_adapter import Adapter
 
     run_worker_loop(Adapter, backend_name="text2icon")

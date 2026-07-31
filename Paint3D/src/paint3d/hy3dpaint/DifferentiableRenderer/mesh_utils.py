@@ -333,15 +333,15 @@ def _save_glb_mesh_bpy(
         mesh.materials.append(mat)
 
         # 6. Link + export canónico do monorepo (igual Text3D/Rigging):
-        # smooth_shade_scene + gamedev_shared.bpy_mesh.save_glb (NORMAL+TANGENT).
+        # smooth_shade_scene + aigamekit_shared.bpy_mesh.save_glb (NORMAL+TANGENT).
         mesh.update()
         obj = bpy.data.objects.new("Mesh", mesh)
         bpy.context.scene.collection.objects.link(obj)
         obj.select_set(True)
         bpy.context.view_layer.objects.active = obj
 
-        from gamedev_shared.bpy_mesh import save_glb as _shared_save_glb
-        from gamedev_shared.bpy_mesh import smooth_shade_scene
+        from aigamekit_shared.bpy_mesh import save_glb as _shared_save_glb
+        from aigamekit_shared.bpy_mesh import smooth_shade_scene
 
         smooth_shade_scene([obj], degrees=180.0)
 

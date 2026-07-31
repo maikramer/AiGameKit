@@ -21,9 +21,9 @@ from typing import Any
 import yaml
 
 # Mesma convenção do QualityEngine (quality.py:24): data files ao lado do módulo
-# em Shared/src/gamedev_shared/data/. Resolvido em runtime para funcionar tanto
+# em Shared/src/aigamekit_shared/data/. Resolvido em runtime para funcionar tanto
 # em editable install como empacotado.
-_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "Shared" / "src" / "gamedev_shared" / "data"
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "Shared" / "src" / "aigamekit_shared" / "data"
 _DESCRIBERS_FALLBACK_PATH = _DATA_DIR / "audio-descriptors.yaml"
 
 # Mapa estável audio_kind → sound_type (1:1, não vale a pena pôr no YAML).

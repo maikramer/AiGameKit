@@ -11,7 +11,7 @@ pytest.importorskip("bpy")
 import bpy
 import numpy as np
 
-from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays, save_glb
+from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays, save_glb
 from text3d.utils.mesh_remesh_textured import remesh_textured_glb
 
 

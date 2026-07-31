@@ -1,4 +1,4 @@
-"""Testes para gamedev_shared.gpu (funções sem dependência de GPU real)."""
+"""Testes para aigamekit_shared.gpu (funções sem dependência de GPU real)."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import gamedev_shared.gpu as gpu_module
-from gamedev_shared.gpu import (
+import aigamekit_shared.gpu as gpu_module
+from aigamekit_shared.gpu import (
     _parse_nvidia_version_token,
     check_nvidia_driver_match,
     estimate_vram_requirement,

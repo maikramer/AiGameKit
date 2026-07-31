@@ -1,4 +1,4 @@
-"""Tests for gamedev_shared.multi_gpu (DevicePlan, ModelArchitectureRegistry, MultiGPUPlanner).
+"""Tests for aigamekit_shared.multi_gpu (DevicePlan, ModelArchitectureRegistry, MultiGPUPlanner).
 
 All tests use mocked torch.cuda — no real GPU required.
 """
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gamedev_shared.multi_gpu import DevicePlan, ModelArchitectureRegistry, MultiGPUPlanner
+from aigamekit_shared.multi_gpu import DevicePlan, ModelArchitectureRegistry, MultiGPUPlanner
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -200,7 +200,7 @@ class TestMultiGPUPlannerBuilder:
 
 
 class TestMultiGPUPlannerFallback:
-    @patch("gamedev_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu._torch")
     def test_cpu_only_when_no_cuda(self, mock_torch_fn: MagicMock):
         mock_torch_fn.return_value = _make_mock_torch(cuda_available=False)
         p = MultiGPUPlanner().for_model(_simple_model())
@@ -209,7 +209,7 @@ class TestMultiGPUPlannerFallback:
         assert plan.primary_device == "cpu"
         assert any("No CUDA" in w for w in plan.warnings)
 
-    @patch("gamedev_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu._torch")
     def test_single_gpu_fallback(self, mock_torch_fn: MagicMock):
         mock_torch_fn.return_value = _make_mock_torch(cuda_available=True, device_count=1)
         p = MultiGPUPlanner().for_model(_simple_model())
@@ -218,9 +218,9 @@ class TestMultiGPUPlannerFallback:
         assert plan.primary_device == 0
         assert any("Fewer than 2" in w for w in plan.warnings)
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_multi_gpu_with_two_gpus(
         self,
         mock_probe: MagicMock,
@@ -236,7 +236,7 @@ class TestMultiGPUPlannerFallback:
         assert plan.status == "multi_gpu"
         assert plan.device_map == {"layer.0": 0, "layer.1": 1}
 
-    @patch("gamedev_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu._torch")
     def test_cpu_only_logs_warning(self, mock_torch_fn: MagicMock):
         mock_torch_fn.return_value = _make_mock_torch(cuda_available=False)
         p = MultiGPUPlanner().for_model(_simple_model())
@@ -244,7 +244,7 @@ class TestMultiGPUPlannerFallback:
         assert len(plan.warnings) >= 1
         assert "CPU only" in plan.warnings[0]
 
-    @patch("gamedev_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu._torch")
     def test_single_gpu_logs_warning(self, mock_torch_fn: MagicMock):
         mock_torch_fn.return_value = _make_mock_torch(cuda_available=True, device_count=1)
         p = MultiGPUPlanner().for_model(_simple_model())
@@ -258,9 +258,9 @@ class TestMultiGPUPlannerFallback:
 
 
 class TestMultiGPUPlannerPlan:
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_plan_returns_correct_device_map(
         self,
         mock_probe: MagicMock,
@@ -275,9 +275,9 @@ class TestMultiGPUPlannerPlan:
         plan = MultiGPUPlanner().for_model(_simple_model()).with_gpus([0, 1]).plan()
         assert plan.device_map == expected_map
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_plan_primary_device_is_max_device(
         self,
         mock_probe: MagicMock,
@@ -292,9 +292,9 @@ class TestMultiGPUPlannerPlan:
         plan = MultiGPUPlanner().for_model(_simple_model()).with_gpus([0, 1]).plan()
         assert plan.primary_device == 1
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_plan_with_user_max_memory_skips_probe(
         self,
         mock_probe: MagicMock,
@@ -307,9 +307,9 @@ class TestMultiGPUPlannerPlan:
         (MultiGPUPlanner().for_model(_simple_model()).with_gpus([0, 1]).max_memory({0: "20GiB", 1: "12GiB"}).plan())
         mock_probe.assert_not_called()
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_plan_accelerate_failure_falls_back(
         self,
         mock_probe: MagicMock,
@@ -327,9 +327,9 @@ class TestMultiGPUPlannerPlan:
         assert plan.primary_device == 0
         assert any("accelerate planning failed" in w for w in plan.warnings)
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_plan_with_no_split_classes(
         self,
         mock_probe: MagicMock,
@@ -349,9 +349,9 @@ class TestMultiGPUPlannerPlan:
         assert "no_split_module_classes" in call_kwargs[1]
         assert call_kwargs[1]["no_split_module_classes"] == ["DiTBlock"]
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_plan_with_dtype(
         self,
         mock_probe: MagicMock,
@@ -383,7 +383,7 @@ class TestMultiGPUPlannerApply:
         with pytest.raises(RuntimeError, match="Call plan\\(\\) before apply\\(\\)"):
             p.apply()
 
-    @patch("gamedev_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu._torch")
     def test_apply_returns_model_on_single_gpu(self, mock_torch_fn: MagicMock):
         mock_torch_fn.return_value = _make_mock_torch(cuda_available=True, device_count=1)
         model = _simple_model()
@@ -392,7 +392,7 @@ class TestMultiGPUPlannerApply:
         result = p.apply()
         assert result is model
 
-    @patch("gamedev_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu._torch")
     def test_apply_returns_model_on_cpu_only(self, mock_torch_fn: MagicMock):
         mock_torch_fn.return_value = _make_mock_torch(cuda_available=False)
         model = _simple_model()
@@ -401,9 +401,9 @@ class TestMultiGPUPlannerApply:
         result = p.apply()
         assert result is model
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_apply_calls_dispatch_model_on_multi_gpu(
         self,
         mock_probe: MagicMock,
@@ -435,9 +435,9 @@ class TestMultiGPUPlannerApply:
 
 
 class TestMultiGPUPlannerWithQuantization:
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_plan_with_quantized_model(
         self,
         mock_probe: MagicMock,
@@ -457,9 +457,9 @@ class TestMultiGPUPlannerWithQuantization:
         assert plan.status == "multi_gpu"
         assert "quantized_block" in plan.device_map
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_apply_with_quantized_model(
         self,
         mock_probe: MagicMock,

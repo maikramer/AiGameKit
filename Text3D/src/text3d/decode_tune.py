@@ -24,13 +24,13 @@ Três problemas atacados:
 
 from __future__ import annotations
 
-from gamedev_shared.vram_budget import (
+from aigamekit_shared.vram_budget import (
     DEFAULT_VRAM_FRACTION as CHUNKS_VRAM_FRACTION,
 )
-from gamedev_shared.vram_budget import (
+from aigamekit_shared.vram_budget import (
     TEXT3D_CHUNKS_HI as MAX_NUM_CHUNKS,
 )
-from gamedev_shared.vram_budget import (
+from aigamekit_shared.vram_budget import (
     TEXT3D_CHUNKS_LO as MIN_NUM_CHUNKS,
 )
 
@@ -156,7 +156,7 @@ def resolve_fast_decode(volume_decoder: str, octree_resolution: int) -> bool:
 
 def bytes_per_query_default() -> int:
     """Custo por query (env ``TEXT3D_DECODE_BYTES_PER_QUERY`` > default)."""
-    from gamedev_shared.vram_budget import text3d_bytes_per_query
+    from aigamekit_shared.vram_budget import text3d_bytes_per_query
 
     return text3d_bytes_per_query()
 
@@ -173,9 +173,9 @@ def auto_num_chunks(
 
     ``None`` sem sinal de VRAM (CPU / mem_get_info indisponível) — caller
     mantém o ``num_chunks`` estático do tier. Implementação canónica:
-    :func:`gamedev_shared.vram_budget.text3d_num_chunks`.
+    :func:`aigamekit_shared.vram_budget.text3d_num_chunks`.
     """
-    from gamedev_shared.vram_budget import text3d_num_chunks
+    from aigamekit_shared.vram_budget import text3d_num_chunks
 
     return text3d_num_chunks(
         free_vram_bytes,

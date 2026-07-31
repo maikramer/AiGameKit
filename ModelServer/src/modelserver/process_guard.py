@@ -36,14 +36,14 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from gamedev_shared.logging import Logger
+from aigamekit_shared.logging import Logger
 
 _logger = Logger()
 
 LOCK_FILENAME = "model-server.lock"
 
 # Assinaturas de cmdline da família UMS.
-_SUPERVISOR_TOKENS = ("modelserver", "gamedev-model-server", "gamedev_model_server")
+_SUPERVISOR_TOKENS = ("modelserver", "aigamekit-model-server", "aigamekit_model_server")
 _WORKER_FLAG = "--ums-worker"
 
 KIND_SUPERVISOR = "supervisor"
@@ -165,7 +165,7 @@ def classify_cmdline(parts: Sequence[str]) -> tuple[str, str | None] | None:
     """Classifica um cmdline como ``(kind, backend)`` da família UMS, ou ``None``.
 
     Worker: ``<python> -m <tool> serve --ums-worker`` → ``("worker", tool)``.
-    Supervisor: ``-m modelserver start`` / ``gamedev-model-server start`` / ``ums start``.
+    Supervisor: ``-m modelserver start`` / ``aigamekit-model-server start`` / ``ums start``.
     """
     if not parts:
         return None
@@ -181,13 +181,13 @@ def classify_cmdline(parts: Sequence[str]) -> tuple[str, str | None] | None:
         return None
     if "-m" in parts:
         idx = parts.index("-m")
-        if idx + 1 < len(parts) and parts[idx + 1] in ("modelserver", "gamedev_model_server"):
+        if idx + 1 < len(parts) and parts[idx + 1] in ("modelserver", "aigamekit_model_server"):
             return KIND_SUPERVISOR, None
     exe = Path(parts[0]).name
-    if exe in ("gamedev-model-server", "ums"):
+    if exe in ("aigamekit-model-server", "ums"):
         return KIND_SUPERVISOR, None
     if any(tok in joined for tok in _SUPERVISOR_TOKENS) and exe.startswith("python"):
-        # ex.: python /path/gamedev-model-server start
+        # ex.: python /path/aigamekit-model-server start
         return KIND_SUPERVISOR, None
     return None
 
@@ -284,7 +284,7 @@ def find_strays(
 def gpu_vram_by_pid() -> dict[int, int]:
     """``{pid: MiB}`` dos processos compute na GPU (NVML → nvidia-smi)."""
     try:
-        from gamedev_shared.gpu import list_nvidia_compute_apps
+        from aigamekit_shared.gpu import list_nvidia_compute_apps
 
         apps = list_nvidia_compute_apps()
     except Exception:

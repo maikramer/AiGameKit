@@ -1,6 +1,6 @@
 {
   "version": "simple-rpg-assets-v3",
-  "url": "https://github.com/maikramer/GameDev/releases/download/simple-rpg-assets-v3/simple-rpg-assets-v3.tar.gz",
+  "url": "https://github.com/maikramer/AiGameKit/releases/download/simple-rpg-assets-v3/simple-rpg-assets-v3.tar.gz",
   "sha256": "b3b06ff99c645ba3e62f0496cf1d3323f277e8d95716987225c2f17f23a91332",
   "extractTo": "public"
 }

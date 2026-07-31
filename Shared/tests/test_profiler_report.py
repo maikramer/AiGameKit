@@ -1,4 +1,4 @@
-"""Tests for gamedev_shared.profiler.report and gamedev_shared.profiler.cuda."""
+"""Tests for aigamekit_shared.profiler.report and aigamekit_shared.profiler.cuda."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from unittest.mock import patch
 
 import pytest
 
-from gamedev_shared.profiler.cuda import (
+from aigamekit_shared.profiler.cuda import (
     CudaMemorySnapshot,
     cuda_memory_snapshot,
     cuda_memory_snapshot_all,
     cuda_synchronize,
 )
-from gamedev_shared.profiler.report import (
+from aigamekit_shared.profiler.report import (
     append_jsonl,
     print_gpu_summary,
     print_summary_table,

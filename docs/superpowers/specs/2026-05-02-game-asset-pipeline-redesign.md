@@ -2,7 +2,7 @@
 
 **Status:** Draft → Implementation
 **Date:** 2026-05-02
-**Owners:** GameAssets, Text3D, Paint3D, Rigging3D, Animator3D, GameDevLab
+**Owners:** GameAssets, Text3D, Paint3D, Rigging3D, Animator3D, AiGameKitLab
 
 ## Contexto
 
@@ -78,7 +78,7 @@ graph TD
     Transfer --> RiggedLODs[id_lodN_rigged.glb]
     RiggedLODs --> Anim[animator3d game-pack]
     Anim --> Animated[id_lodN_animated.glb]
-    LOD0 --> Validate[gamedev-lab check glb]
+    LOD0 --> Validate[aigamekit-lab check glb]
     LOD1 --> Validate
     LOD2 --> Validate
     CollGLB --> Validate
@@ -138,7 +138,7 @@ Inputs: `--painted`, `--high-poly` (clean), `--target-faces N`, `--bake-normals`
    adicionado como `normalTexture`.
 3. Recalcular tangents (MikkTSpace) e exportar com `export_tangents=True`.
 4. Pós: `npx @gltf-transform/cli uastc` + `npx @gltf-transform/cli meshopt`.
-5. Validação inline: `gamedev-lab check glb`. Falha aborta o asset.
+5. Validação inline: `aigamekit-lab check glb`. Falha aborta o asset.
 
 Output: `assets/meshes/id_lod0.glb`.
 
@@ -169,9 +169,9 @@ Output: `assets/meshes/id_lod{0,1,2}_rigged.glb`.
 
 Aplicado a cada `id_lod{0,1,2}_rigged.glb` → `id_lod{0,1,2}_animated.glb`.
 
-### Stage 10. Validação (`gamedev-lab check glb`)
+### Stage 10. Validação (`aigamekit-lab check glb`)
 
-Estende [GameDevLab/src/gamedev_lab/cli.py](../../GameDevLab/src/gamedev_lab/cli.py)
+Estende [AiGameKitLab/src/aigamekit_lab/cli.py](../../AiGameKitLab/src/aigamekit_lab/cli.py)
 com regras novas:
 
 ```yaml

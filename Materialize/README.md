@@ -33,7 +33,7 @@ Materialize takes a single diffuse/albedo texture and produces up to seven PBR m
 
 ## Installation
 
-### GameDev monorepo (recommended)
+### AiGameKit monorepo (recommended)
 
 From the repository root:
 
@@ -235,7 +235,7 @@ the output directory (extension follows `--format`):
 
 ## Pipeline Integration
 
-Materialize runs **after** Texture2D or Paint3D to generate PBR maps from diffuse textures. It is integrated into the GameDev monorepo pipeline at several points:
+Materialize runs **after** Texture2D or Paint3D to generate PBR maps from diffuse textures. It is integrated into the AiGameKit monorepo pipeline at several points:
 
 - **GameAssets batch** — via `materialize: true` in the `texture2d` block of `game.yaml`
 - **Paint3D** — `vertex-pbr` command uses Materialize for map generation

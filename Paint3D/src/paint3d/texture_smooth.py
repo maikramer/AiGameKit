@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from gamedev_shared.logging import Logger
+from aigamekit_shared.logging import Logger
 
 _logger = Logger()
 

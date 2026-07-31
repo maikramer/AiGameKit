@@ -5,8 +5,8 @@
 # canónico (load/generate/unload) que o BackendManager invoca.
 #
 # vram_mib: estimativa estática (MiB) — fallback se footprint_key falhar.
-# footprint_key: chave gamedev_shared.lowvram.FOOTPRINTS. O UMS admite jobs com
-#   peak = pesos(quant) + activation_gib + GAMEDEV_UMS_VRAM_SAFETY_MIB — NÃO só
+# footprint_key: chave aigamekit_shared.lowvram.FOOTPRINTS. O UMS admite jobs com
+#   peak = pesos(quant) + activation_gib + AIGAMEKIT_UMS_VRAM_SAFETY_MIB — NÃO só
 #   pesos. GPUs ~6 GB recusam text3d fp16 full; usam sdnq-int4.
 # priority: prioridade de evicção. Valores MAIORES = mais pesado/urgente de MANTER
 #   carregado (menos provável de ser evicted). Backends leves (priority baixa)
@@ -18,9 +18,9 @@
 # tool: nome da tool monorepo (ex.: text3d, paint3d) — modo subprocess-per-backend.
 #   Quando definido, o BackendManager despacha para um SubprocessWorkerPool que
 #   arranca um worker persistente no venv da tool (ex.: Text3D/.venv) a falar
-#   JSONL via stdin/stdout (ver gamedev_shared.worker_serve + worker_protocol).
+#   JSONL via stdin/stdout (ver aigamekit_shared.worker_serve + worker_protocol).
 #   Sem 'tool:' = backend in-process (legado; adapter importado no processo UMS).
-#   Env GAMEDEV_UMS_SUBPROCESS=0 desliga globalmente (rollback rápido).
+#   Env AIGAMEKIT_UMS_SUBPROCESS=0 desliga globalmente (rollback rápido).
 
 backends:
   - name: text2icon

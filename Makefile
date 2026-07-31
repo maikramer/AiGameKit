@@ -1,11 +1,11 @@
-# GameDev monorepo — common tasks for Python packages (ruff, pytest, mypy), Rust (Materialize), and VibeGame (Bun).
+# AiGameKit monorepo — common tasks for Python packages (ruff, pytest, mypy), Rust (Materialize), and VibeGame (Bun).
 # Requires GNU Make; on Windows, use Git Bash / MSYS2 / WSL so shell recipes and `find` work as expected.
 
-PYTHON_PROJECTS := Shared ModelServer Text2D Text2Icon Text3D Paint3D Part3D GameAssets Texture2D Text2Sound GameDevLab Terrain3D Rocks3D
+PYTHON_PROJECTS := Shared ModelServer Text2D Text2Icon Text3D Paint3D Part3D GameAssets Texture2D Text2Sound AiGameKitLab Terrain3D Rocks3D
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-modelserver test-text2d test-text2icon test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-text2sound test-gamedevlab test-terrain3d test-rocks3d test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-modelserver test-text2d test-text2icon test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-text2sound test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
 
 # Prefer .venv only if pytest is installed there; else python3, then python.
 define run-pytest
@@ -17,7 +17,7 @@ define run-mypy-shared
 endef
 
 help: ## List all targets (default)
-	@echo "GameDev monorepo targets:"
+	@echo "AiGameKit monorepo targets:"
 	@echo ""
 	@echo "Full Python/Rust CI (no VibeGame): make check"
 	@echo "VibeGame (Bun): make test-vibegame | make check-vibegame | make lint-vibegame | make build-vibegame"
@@ -78,8 +78,8 @@ test-skymap2d: ## pytest only in Skymap2D/
 test-text2sound: ## pytest only in Text2Sound/
 	$(call run-pytest,Text2Sound)
 
-test-gamedevlab: ## pytest only in GameDevLab/
-	$(call run-pytest,GameDevLab)
+test-aigamekitlab: ## pytest only in AiGameKitLab/
+	$(call run-pytest,AiGameKitLab)
 
 test-rigging3d: ## pytest only in Rigging3D/
 	$(call run-pytest,Rigging3D)

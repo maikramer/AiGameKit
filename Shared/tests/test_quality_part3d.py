@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gamedev_shared.quality import QualityEngine
+from aigamekit_shared.quality import QualityEngine
 
 
 def test_part3d_quality_tiers_have_steps_octree_chunks() -> None:

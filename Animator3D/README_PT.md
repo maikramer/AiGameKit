@@ -13,14 +13,14 @@ CLI de **animação 3D** com [Blender Python API](https://docs.blender.org/api/c
 
 ### Oficial (monorepo)
 
-Na **raiz** do repositório GameDev (pasta com `install.sh` e `Shared/`):
+Na **raiz** do repositório AiGameKit (pasta com `install.sh` e `Shared/`):
 
 ```bash
-cd /caminho/para/GameDev
+cd /caminho/para/AiGameKit
 ./install.sh animator3d
 ```
 
-Equivalente: `gamedev-install animator3d`. Documentação geral: [docs/INSTALLING_PT.md](../docs/INSTALLING_PT.md) · [EN](../docs/INSTALLING.md)
+Equivalente: `aigamekit-install animator3d`. Documentação geral: [docs/INSTALLING_PT.md](../docs/INSTALLING_PT.md) · [EN](../docs/INSTALLING.md)
 
 ### Manual / desenvolvimento
 
@@ -84,7 +84,7 @@ Quaternius (±90° → origem salta para a cintura ao play). Location só no
 [`docs/findings/ANIMATOR_RETARGET_FINDINGS.md`](../docs/findings/ANIMATOR_RETARGET_FINDINGS.md).
 
 Usa `--clips` (ex. `idle,walk,run`) para filtrar o perfil/preset. O venv precisa
-de `gamedev-shared` instalado editável (`pip install -e ../Shared`).
+de `aigamekit-shared` instalado editável (`pip install -e ../Shared`).
 
 ```bash
 animator3d game-pack rigged.glb animated.glb --preset humanoid

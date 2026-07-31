@@ -23,7 +23,7 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 | Base plane | `utils/mesh_base_plane.py` (288 lines) | Base plane detection/removal |
 | Background removal | `utils/bg_removal.py` (98 lines) | BiRefNet |
 | Collision mesh | `utils/collision.py` | Modes: `hull` / `envelope` (voxel remesh côncavo) / `mesh` |
-| Split at height | `utils/mesh_split.py` | Thin wrapper → `gamedev_shared.mesh_split` (stump+top) |
+| Split at height | `utils/mesh_split.py` | Thin wrapper → `aigamekit_shared.mesh_split` (stump+top) |
 | Defaults | `defaults.py` (111 lines) | Constants, presets, export rotation/origin |
 | Omni controls / presets | `utils/omni_controls.py`, `omni_presets.py` | bbox max=1.0; pose Quaternius |
 | Octree soft-tune por size_m | `bbox_tune.py` | `char_m=(L·H·W)^(1/3)`; não passar `octree_resolution` salvo override |
@@ -100,7 +100,7 @@ Preserves armatures/animations. Manual rebind: `rigging3d transfer-weights` (for
 
 **DO NOT modify vendored code** under `src/text3d/hy3dshape/` excepto patches mínimos documentados (Tencent Hunyuan3D-Omni, upstream license).
 
-**`simplify`:** Decimate COLLAPSE via `gamedev_shared.mesh_simplify` (stepwise ≤50%; default no pre-merge / no boundary protect). Use for `_to_paint` — **not** `remesh` (voxel).
+**`simplify`:** Decimate COLLAPSE via `aigamekit_shared.mesh_simplify` (stepwise ≤50%; default no pre-merge / no boundary protect). Use for `_to_paint` — **not** `remesh` (voxel).
 
 **`simplify-textured`:** `remesh_textured_glb` (texture/UV); no `pre_decimate_uv` before COLLAPSE.
 
@@ -111,7 +111,7 @@ Preserves armatures/animations. Manual rebind: `rigging3d transfer-weights` (for
 open cut plane; `--cap` is legacy/experimental (seal caused artifacts).
 `--split-files` writes `{stem}_stump.glb` / `{stem}_top.glb`. GameAssets runs
 this **before** LOD for tree-like vegetation (`wants_split_at_height`), then LODs
-each half and composes `Stump`+`Top`. Review: `gamedev-lab debug cut-review`.
+each half and composes `Stump`+`Top`. Review: `aigamekit-lab debug cut-review`.
 See [`docs/findings/MESH_PIPELINE_FINDINGS.md`](../docs/findings/MESH_PIPELINE_FINDINGS.md).
 
 ## TESTS

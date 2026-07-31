@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-from gamedev_shared.cli_rich import setup_rich_click_module
+from aigamekit_shared.cli_rich import setup_rich_click_module
 
 _HEADER: Final = "[bold cyan]Part3D[/bold cyan] — decomposição semântica (Hunyuan3D-Part)"
 _FOOTER: Final = "[dim]README · docs/ · PART3D_ROOT[/dim]"

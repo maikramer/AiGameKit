@@ -41,7 +41,7 @@ rigged GLB that Animator3D can animate with clip commands (`run`, `jump`, `fall`
 ### Official installer (monorepo)
 
 ```bash
-cd /path/to/GameDev
+cd /path/to/AiGameKit
 ./install.sh rigging3d
 ```
 
@@ -148,7 +148,7 @@ rigging3d transfer-weights -s character_rigged_hi.glb -t character_lod0.glb -t c
 
 ## Quality Presets
 
-Rigging3D integrates with the monorepo's [QualityEngine](../Shared/src/gamedev_shared/quality/)
+Rigging3D integrates with the monorepo's [QualityEngine](../Shared/src/aigamekit_shared/quality/)
 for soft parameter resolution. The `--quality` flag on `pipeline` fills
 `--groups-per-vertex` when the user hasn't explicitly set it.
 

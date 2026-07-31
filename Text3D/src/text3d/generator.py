@@ -22,7 +22,7 @@ import torch
 import trimesh
 from PIL import Image
 
-from gamedev_shared.logging import Logger
+from aigamekit_shared.logging import Logger
 from text2d.generator import KleinFluxGenerator
 
 from . import defaults as _defaults
@@ -60,7 +60,7 @@ def _as_trimesh(mesh_or_nested: Any) -> trimesh.Trimesh:
     if not isinstance(m, trimesh.Trimesh):
         raise TypeError(f"Esperado trimesh.Trimesh, obtido {type(m)}")
 
-    from gamedev_shared.mesh_repair import drop_nonfinite_faces
+    from aigamekit_shared.mesh_repair import drop_nonfinite_faces
 
     verts, faces, n_bad = drop_nonfinite_faces(
         np.asarray(m.vertices, dtype=np.float64), np.asarray(m.faces, dtype=np.int64)
@@ -254,8 +254,8 @@ class HunyuanTextTo3DGenerator:
 
         if wants_quant:
             self._log(f"A quantizar DiT com SDNQ preset={self.sdnq_preset} (post-load)...")
-            from gamedev_shared.sdnq import is_available as _sdnq_ok
-            from gamedev_shared.sdnq import quantize_model
+            from aigamekit_shared.sdnq import is_available as _sdnq_ok
+            from aigamekit_shared.sdnq import quantize_model
 
             if _sdnq_ok():
                 pipe.model = quantize_model(
@@ -272,8 +272,8 @@ class HunyuanTextTo3DGenerator:
 
         if hunyuan_device == "cuda":
             _clear_cuda_cache()
-            from gamedev_shared.hardware import cuda_gpu_free_specs
-            from gamedev_shared.lowvram import get_footprint, place_pipeline
+            from aigamekit_shared.hardware import cuda_gpu_free_specs
+            from aigamekit_shared.lowvram import get_footprint, place_pipeline
 
             specs = cuda_gpu_free_specs()
             if self._gpu_ids:
@@ -282,7 +282,7 @@ class HunyuanTextTo3DGenerator:
             allow_multi = self._gpu_ids is None or len(self._gpu_ids) >= 2
             # Omni ~10 GiB fp16; com SDNQ int4 ~3 GiB pesos + activações.
             if wants_quant:
-                from gamedev_shared.lowvram import ModelFootprint
+                from aigamekit_shared.lowvram import ModelFootprint
 
                 footprint = ModelFootprint(
                     fp16_weights_gib=3.0,
@@ -335,7 +335,7 @@ class HunyuanTextTo3DGenerator:
                 forced_model_cpu = True
 
             if self.fp8_layerwise:
-                from gamedev_shared.group_offload import try_layerwise_casting
+                from aigamekit_shared.group_offload import try_layerwise_casting
 
                 try_layerwise_casting(
                     pipe,
@@ -344,7 +344,7 @@ class HunyuanTextTo3DGenerator:
                 )
 
             if self.channels_last:
-                from gamedev_shared.quantization import apply_channels_last
+                from aigamekit_shared.quantization import apply_channels_last
 
                 for attr in ("vae", "model", "cond_encoder"):
                     mod = getattr(pipe, attr, None)
@@ -390,7 +390,7 @@ class HunyuanTextTo3DGenerator:
         Best-effort: se falhar, devolve o model id e deixa ``from_pretrained`` tratar.
         """
         try:
-            from gamedev_shared.model_download import ensure_model
+            from aigamekit_shared.model_download import ensure_model
 
             path = ensure_model(
                 self.hunyuan_model_id,
@@ -435,7 +435,7 @@ class HunyuanTextTo3DGenerator:
 
         if self.compile_models:
             offload = getattr(self._offload_plan, "offload", "none") if self._offload_plan else "none"
-            from gamedev_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
+            from aigamekit_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
 
             mode = resolve_torch_compile_mode(
                 self.compile_mode,
@@ -766,7 +766,7 @@ class HunyuanTextTo3DGenerator:
         manda) mas usa o cache como seed se a medição falhar. Devolve ``None``
         sem sinal de VRAM.
         """
-        from gamedev_shared.vram_budget import free_vram_bytes, text3d_num_chunks
+        from aigamekit_shared.vram_budget import free_vram_bytes, text3d_num_chunks
 
         free_b = free_vram_bytes()
         n = text3d_num_chunks(free_b)

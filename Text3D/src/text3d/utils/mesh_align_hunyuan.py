@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from gamedev_shared.bpy_mesh import load_glb, save_glb
+from aigamekit_shared.bpy_mesh import load_glb, save_glb
 
 from .mesh_base_plane import (
     _apply_transform_matrix,

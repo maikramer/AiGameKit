@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-AUDIO_DIR = Path("/home/maikeu/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/audio")
+AUDIO_DIR = Path("/home/maikeu/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/audio")
 T2S = [".venv/bin/python", "-m", "text2sound", "generate"]
 
 

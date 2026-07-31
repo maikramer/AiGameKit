@@ -97,11 +97,11 @@ Propagados a filhos GPU (`UMS_CHILD_ENV_KEYS` + `apply_ums_child_env`):
 
 | Var / flag | Papel |
 |------------|--------|
-| `GAMEDEV_UMS_PRIORITY=batch` | Batch cede a interactive |
-| `--ums-stream` / `GAMEDEV_UMS_STREAM=1` | NDJSON progresso |
+| `AIGAMEKIT_UMS_PRIORITY=batch` | Batch cede a interactive |
+| `--ums-stream` / `AIGAMEKIT_UMS_STREAM=1` | NDJSON progresso |
 | `--no-ums` | Bypass supervisor (avançado) |
-| `GAMEDEV_UMS_DEBUG` | Dump debug nas CLIs |
-| `GAMEDEV_UMS_MAX_*` | depth / inflight / affinity |
+| `AIGAMEKIT_UMS_DEBUG` | Dump debug nas CLIs |
+| `AIGAMEKIT_UMS_MAX_*` | depth / inflight / affinity |
 
 Após editar código de uma tool: `ums respawn <backend>` (não precisa restart
 do supervisor). Ver [`ModelServer/README.md`](../ModelServer/README.md).

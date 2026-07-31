@@ -9,7 +9,7 @@ Hub: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 - Gera referência 2D para Omni (`--from-image`) e assets 2D.
 - Resolução default passou a **1024** (não 2048) — VRAM/tempo.
 - Quant SDNQ + `--quality`; UMS precisa do preset no request.
-- Matmul quantizado: `gamedev_shared.sdnq.apply_quantized_matmul` (não helper
+- Matmul quantizado: `aigamekit_shared.sdnq.apply_quantized_matmul` (não helper
   privado em `text2d.generator` — removido).
 - Payload wave/CLI: `text2d/ums_payload.py`.
 - **Kernel:** `--compile` + `--channels-last` (~−10% hot). Default **ON** em
@@ -90,8 +90,8 @@ Com UMS a correr, `CliRunner` + `generate` sem isolamento → job real +
 - CLI: `--compile` / `--channels-last` no DiT/VAE; benches short SFX sem ganho
   hot (compile só aumenta cold).
 - `text2sound.utils.safe_filename` / `generate_output_path` → re-export /
-  delegação a `gamedev_shared.path_utils` (monkeypatch de `time` nos testes:
-  `gamedev_shared.path_utils.time.time`, não `text2sound.utils.time`).
+  delegação a `aigamekit_shared.path_utils` (monkeypatch de `time` nos testes:
+  `aigamekit_shared.path_utils.time.time`, não `text2sound.utils.time`).
 - **Mastering (`pedalboard` + pyloudnorm):** em runners CI a wheel pode
   **SIGILL** e matar o processo pytest inteiro. Nunca `import pedalboard` no
   topo dos testes — usar `Text2Sound/tests/_heavy_deps.py`

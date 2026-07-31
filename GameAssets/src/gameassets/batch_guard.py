@@ -10,8 +10,8 @@ from pathlib import Path
 
 import click
 
-from gamedev_shared.env import subprocess_gpu_env  # noqa: F401
-from gamedev_shared.gpu import detect_gpu_ids, query_gpu_free_mib  # noqa: F401
+from aigamekit_shared.env import subprocess_gpu_env  # noqa: F401
+from aigamekit_shared.gpu import detect_gpu_ids, query_gpu_free_mib  # noqa: F401
 
 
 def _pid_alive(pid: int) -> bool:

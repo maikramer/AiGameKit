@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import (
+from aigamekit_shared.cli_helpers import (
     add_ums_options,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
@@ -23,9 +23,9 @@ from gamedev_shared.cli_helpers import (
     with_ums_load_opts,
     with_ums_peak_opts,
 )
-from gamedev_shared.hf import hf_home_display_rich
-from gamedev_shared.path_utils import safe_filename
-from gamedev_shared.quality import VALID_QUALITIES
+from aigamekit_shared.hf import hf_home_display_rich
+from aigamekit_shared.path_utils import safe_filename
+from aigamekit_shared.quality import VALID_QUALITIES
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
 from .generator import SkymapGenerator, default_base_model_id, default_model_id
@@ -68,7 +68,7 @@ def skill_group() -> None:
 @click.option("--force", is_flag=True, help="Sobrescrever SKILL.md existente")
 def skill_install_cmd(target: Path, force: bool) -> None:
     """Copia SKILL.md para .cursor/skills/skymap2d/."""
-    from gamedev_shared.skill_install import install_my_skill
+    from aigamekit_shared.skill_install import install_my_skill
 
     try:
         dest = install_my_skill(vars(), target, force=force)
@@ -176,7 +176,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help=(
         "torch.compile no transformer (Inductor). Cold lento; útil em batch/server. "
         "Com offload model_cpu é ignorado; com group_stream usa mode=default. "
-        "Env: GAMEDEV_TORCH_COMPILE=1."
+        "Env: AIGAMEKIT_TORCH_COMPILE=1."
     ),
 )
 @click.option(
@@ -193,7 +193,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     type=click.Choice(["off", "auto", "first_block", "taylorseer"]),
     default="off",
     show_default=True,
-    help="Step cache (FirstBlock/TaylorSeer). Só full-GPU. Env: GAMEDEV_STEP_CACHE.",
+    help="Step cache (FirstBlock/TaylorSeer). Só full-GPU. Env: AIGAMEKIT_STEP_CACHE.",
 )
 @click.option(
     "--channels-last/--no-channels-last",
@@ -234,7 +234,7 @@ def generate_cmd(
     ums_stream: bool,
 ) -> None:
     """Gera um skymap equirectangular 360° a partir do PROMPT."""
-    from gamedev_shared.gpu import warn_if_vram_occupied
+    from aigamekit_shared.gpu import warn_if_vram_occupied
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
 
@@ -245,7 +245,7 @@ def generate_cmd(
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
     _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("skymap2d", quality=quality)
@@ -559,7 +559,7 @@ def batch_cmd(
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
     _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("skymap2d", quality=quality)
@@ -654,7 +654,7 @@ def batch_cmd(
 
     if pending:
         if not cpu:
-            from gamedev_shared.gpu import warn_if_vram_occupied
+            from aigamekit_shared.gpu import warn_if_vram_occupied
 
             warn_if_vram_occupied()
             prepare_gpu_exclusive(
@@ -712,7 +712,7 @@ def batch_cmd(
 @cli.command("info")
 def info_cmd() -> None:
     """Informações de configuração e ambiente."""
-    from gamedev_shared.gpu import get_system_info
+    from aigamekit_shared.gpu import get_system_info
 
     console.print(
         Panel.fit(
@@ -767,7 +767,7 @@ def serve(ums_worker: bool) -> None:
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico
-    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter skymap2d
+    :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter skymap2d
     local (:mod:`skymap2d.worker_serve_adapter`).
     """
     if not ums_worker:
@@ -775,7 +775,7 @@ def serve(ums_worker: bool) -> None:
         console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
         return
 
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
     from skymap2d.worker_serve_adapter import Adapter
 
     run_worker_loop(Adapter, backend_name="skymap2d")

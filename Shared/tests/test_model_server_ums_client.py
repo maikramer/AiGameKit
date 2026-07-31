@@ -1,4 +1,4 @@
-"""Testes das APIs cliente UMS em gamedev_shared.model_server."""
+"""Testes das APIs cliente UMS em aigamekit_shared.model_server."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from gamedev_shared import model_server as ms
+from aigamekit_shared import model_server as ms
 
 
 class TestResolveUmsPriority:
@@ -20,15 +20,15 @@ class TestResolveUmsPriority:
         assert ms.resolve_ums_priority("INTERACTIVE") == "interactive"
 
     def test_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_PRIORITY", "batch")
+        monkeypatch.setenv("AIGAMEKIT_UMS_PRIORITY", "batch")
         assert ms.resolve_ums_priority(None) == "batch"
 
     def test_invalid_env_defaults_interactive(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_PRIORITY", "turbo")
+        monkeypatch.setenv("AIGAMEKIT_UMS_PRIORITY", "turbo")
         assert ms.resolve_ums_priority(None) == "interactive"
 
     def test_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("GAMEDEV_UMS_PRIORITY", raising=False)
+        monkeypatch.delenv("AIGAMEKIT_UMS_PRIORITY", raising=False)
         assert ms.resolve_ums_priority(None) == "interactive"
 
 
@@ -58,7 +58,7 @@ class TestUmsHoldingHelpers:
 
 class TestUmsClientDown:
     def test_submit_none_when_ums_down(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_AUTO_START", "0")
+        monkeypatch.setenv("AIGAMEKIT_UMS_AUTO_START", "0")
         with patch.object(ms, "ensure_ums_running", return_value=False):
             assert ms.submit_to_ums("text2icon", {"prompt": "x"}) is None
 

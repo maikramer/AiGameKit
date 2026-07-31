@@ -84,7 +84,7 @@ def fix_bone_orientation(
         BoneRepairResult com a lista de bones corrigidos.
     """
     import bpy
-    from gamedev_shared.bpy_mesh import clear_scene, smooth_shade_scene
+    from aigamekit_shared.bpy_mesh import clear_scene, smooth_shade_scene
 
     input_glb = Path(input_glb)
     output_glb = Path(output_glb)

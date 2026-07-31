@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gamedev_shared.lowvram import (
+from aigamekit_shared.lowvram import (
     FOOTPRINTS,
     GIB,
     OFFLOAD_GROUP_STREAM,

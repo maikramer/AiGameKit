@@ -1,4 +1,4 @@
-"""Testes para gamedev_shared.logging."""
+"""Testes para aigamekit_shared.logging."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from gamedev_shared.logging import (
+from aigamekit_shared.logging import (
     Logger,
     configure_logging,
     detect_tool_name,
@@ -20,11 +20,11 @@ from gamedev_shared.logging import (
 @pytest.fixture(autouse=True)
 def _clean_file_logging(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Cada teste: dir temporário + enable explícito + reset sink."""
-    monkeypatch.setenv("GAMEDEV_FILE_LOG", "1")
-    monkeypatch.setenv("GAMEDEV_LOG_DIR", str(tmp_path / "logs"))
-    monkeypatch.delenv("GAMEDEV_LOG_FILE", raising=False)
-    monkeypatch.delenv("GAMEDEV_LOG_TOOL", raising=False)
-    monkeypatch.delenv("GAMEDEV_NO_FILE_LOG", raising=False)
+    monkeypatch.setenv("AIGAMEKIT_FILE_LOG", "1")
+    monkeypatch.setenv("AIGAMEKIT_LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.delenv("AIGAMEKIT_LOG_FILE", raising=False)
+    monkeypatch.delenv("AIGAMEKIT_LOG_TOOL", raising=False)
+    monkeypatch.delenv("AIGAMEKIT_NO_FILE_LOG", raising=False)
     reset_file_logging_for_tests()
     yield
     reset_file_logging_for_tests()
@@ -118,7 +118,7 @@ class TestFileLogging:
         assert file_logging_enabled() is True
 
     def test_disabled_by_no_file_log(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("GAMEDEV_NO_FILE_LOG", "1")
+        monkeypatch.setenv("AIGAMEKIT_NO_FILE_LOG", "1")
         assert file_logging_enabled() is False
 
     def test_configure_and_write(self, tmp_path: Path):
@@ -151,11 +151,11 @@ class TestFileLogging:
         assert "gameassets.pipeline" in text
 
     def test_detect_tool_ums_alias(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr("sys.argv", ["gamedev-model-server", "start"])
-        monkeypatch.delenv("GAMEDEV_LOG_TOOL", raising=False)
+        monkeypatch.setattr("sys.argv", ["aigamekit-model-server", "start"])
+        monkeypatch.delenv("AIGAMEKIT_LOG_TOOL", raising=False)
         assert detect_tool_name() == "ums"
 
     def test_resolve_log_file_override(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         target = tmp_path / "custom.log"
-        monkeypatch.setenv("GAMEDEV_LOG_FILE", str(target))
+        monkeypatch.setenv("AIGAMEKIT_LOG_FILE", str(target))
         assert resolve_log_path("ignored") == target

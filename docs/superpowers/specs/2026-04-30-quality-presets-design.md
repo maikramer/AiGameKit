@@ -39,7 +39,7 @@ game.yaml (user)         manifest.yaml (per-asset)
    └─────────────────────────────────────┘
           ↓
    ┌─────────────────────────────────────┐
-   │   QualityEngine (gamedev-shared)    │
+   │   QualityEngine (aigamekit-shared)    │
    │                                     │
    │  quality-profiles.yaml  ← 1 file    │
    │  asset-categories.yaml  ← 1 file    │
@@ -70,7 +70,7 @@ game.yaml (user)         manifest.yaml (per-asset)
 
 ## 3. Quality Profiles YAML
 
-Location: `Shared/src/gamedev_shared/data/quality-profiles.yaml`
+Location: `Shared/src/aigamekit_shared/data/quality-profiles.yaml`
 
 Five tiers map tool parameters for all tools:
 
@@ -97,7 +97,7 @@ Key Text2Sound improvements over current `GenerationProfile`:
 
 ## 4. Asset Categories & Audio Kinds
 
-Location: `Shared/src/gamedev_shared/data/asset-categories.yaml`
+Location: `Shared/src/aigamekit_shared/data/asset-categories.yaml`
 
 ### Categories (14)
 

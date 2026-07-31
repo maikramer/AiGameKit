@@ -23,7 +23,7 @@ import types
 import torch
 import torch.nn.functional as F
 
-_SHIM_MARKER = "_gamedev_sdpa_shim"
+_SHIM_MARKER = "_aigamekit_sdpa_shim"
 
 
 def flash_attn_varlen_qkvpacked_func(

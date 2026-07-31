@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from gamedev_shared.gpu import kill_gpu_compute_processes_aggressive
+from aigamekit_shared.gpu import kill_gpu_compute_processes_aggressive
 
 
 class TestKillRespectsUmsQueue:
@@ -16,10 +16,10 @@ class TestKillRespectsUmsQueue:
             "queued": [],
         }
         with (
-            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
-            patch("gamedev_shared.model_server.fetch_ums_queue_snapshot", return_value=snap),
-            patch("gamedev_shared.model_server.ums_is_busy", return_value=True),
-            patch("gamedev_shared.gpu.list_nvidia_compute_apps") as apps,
+            patch("aigamekit_shared.model_server.is_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.fetch_ums_queue_snapshot", return_value=snap),
+            patch("aigamekit_shared.model_server.ums_is_busy", return_value=True),
+            patch("aigamekit_shared.gpu.list_nvidia_compute_apps") as apps,
         ):
             logs = kill_gpu_compute_processes_aggressive(exclude_pid=1, respect_ums_queue=True)
         apps.assert_not_called()
@@ -28,14 +28,14 @@ class TestKillRespectsUmsQueue:
 
     def test_proceeds_when_ums_idle(self) -> None:
         with (
-            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.is_ums_running", return_value=True),
             patch(
-                "gamedev_shared.model_server.fetch_ums_queue_snapshot",
+                "aigamekit_shared.model_server.fetch_ums_queue_snapshot",
                 return_value={"inflight": 0, "queue_depth": 0, "running": [], "queued": []},
             ),
-            patch("gamedev_shared.model_server.ums_is_busy", return_value=False),
-            patch("gamedev_shared.model_server.discover_server_pids", return_value=set()),
-            patch("gamedev_shared.gpu.list_nvidia_compute_apps", return_value=[]),
+            patch("aigamekit_shared.model_server.ums_is_busy", return_value=False),
+            patch("aigamekit_shared.model_server.discover_server_pids", return_value=set()),
+            patch("aigamekit_shared.gpu.list_nvidia_compute_apps", return_value=[]),
         ):
             logs = kill_gpu_compute_processes_aggressive(exclude_pid=1, respect_ums_queue=True)
         assert any("Sem alvos" in line or "não listou" in line for line in logs)
@@ -43,9 +43,9 @@ class TestKillRespectsUmsQueue:
 
     def test_refuses_when_ums_up_but_snapshot_fails(self) -> None:
         with (
-            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
-            patch("gamedev_shared.model_server.fetch_ums_queue_snapshot", return_value=None),
-            patch("gamedev_shared.gpu.list_nvidia_compute_apps") as apps,
+            patch("aigamekit_shared.model_server.is_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.fetch_ums_queue_snapshot", return_value=None),
+            patch("aigamekit_shared.gpu.list_nvidia_compute_apps") as apps,
         ):
             logs = kill_gpu_compute_processes_aggressive(exclude_pid=1, respect_ums_queue=True)
         apps.assert_not_called()

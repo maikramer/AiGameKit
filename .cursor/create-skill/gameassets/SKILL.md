@@ -121,7 +121,7 @@ O sistema de prompt enhancement (v2) envolve automaticamente o prompt com enquad
 | OOM no Text2D | Reduzir resolução em `text2d` no perfil; fechar **Godot** ou outros processos na GPU (`nvidia-smi`). |
 | Qualidade 3D pior que no Text3D “isolado” | Mesmo `game.yaml` e mesmas flags; comparar preset/steps e VRAM livre. |
 
-## Ferramentas relacionadas (monorepo GameDev)
+## Ferramentas relacionadas (monorepo AiGameKit)
 
 | Ferramenta | Papel |
 |------------|--------|

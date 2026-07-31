@@ -19,7 +19,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import (
+from aigamekit_shared.cli_helpers import (
     add_ums_options,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
@@ -27,10 +27,10 @@ from gamedev_shared.cli_helpers import (
     with_ums_load_opts,
     with_ums_peak_opts,
 )
-from gamedev_shared.hf import hf_home_display_rich
-from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT2D, emit_progress, emit_result
-from gamedev_shared.quality import VALID_QUALITIES
-from gamedev_shared.skill_install import install_my_skill
+from aigamekit_shared.hf import hf_home_display_rich
+from aigamekit_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT2D, emit_progress, emit_result
+from aigamekit_shared.quality import VALID_QUALITIES
+from aigamekit_shared.skill_install import install_my_skill
 
 from .cli_rich import click
 from .generator import KleinFluxGenerator, _model_id, default_model_id, model_footprint_key
@@ -121,7 +121,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @click.option(
     "--profile",
     is_flag=True,
-    help="Medir tempos, CPU, RAM e VRAM (JSONL opcional: GAMEDEV_PROFILE_LOG).",
+    help="Medir tempos, CPU, RAM e VRAM (JSONL opcional: AIGAMEKIT_PROFILE_LOG).",
 )
 @click.option(
     "--gpu-ids",
@@ -155,7 +155,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help=(
         "torch.compile no transformer (Inductor). Cold-start lento; compensa em "
         "batch/server. Com offload model_cpu é ignorado; com group_stream usa mode=default. "
-        "Env: GAMEDEV_TORCH_COMPILE=1."
+        "Env: AIGAMEKIT_TORCH_COMPILE=1."
     ),
 )
 @click.option(
@@ -172,7 +172,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     type=click.Choice(["off", "auto", "first_block", "taylorseer"]),
     default="off",
     show_default=True,
-    help="Step cache (FirstBlock/TaylorSeer). Só full-GPU. Env: GAMEDEV_STEP_CACHE.",
+    help="Step cache (FirstBlock/TaylorSeer). Só full-GPU. Env: AIGAMEKIT_STEP_CACHE.",
 )
 @click.option(
     "--channels-last/--no-channels-last",
@@ -208,9 +208,9 @@ def generate_cmd(
     ums_stream: bool,
 ) -> None:
     """Gera uma imagem a partir do PROMPT."""
-    from gamedev_shared.gpu import warn_if_vram_occupied
-    from gamedev_shared.profiler import ProfilerSession
-    from gamedev_shared.profiler.env import env_profile_log_path
+    from aigamekit_shared.gpu import warn_if_vram_occupied
+    from aigamekit_shared.profiler import ProfilerSession
+    from aigamekit_shared.profiler.env import env_profile_log_path
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
 
@@ -221,7 +221,7 @@ def generate_cmd(
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
     _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("text2d", quality=quality)
@@ -562,7 +562,7 @@ def generate_batch_cmd(
     """Gera múltiplas imagens a partir de um manifesto JSON (JSONL em stdout)."""
     global _batch_gen
 
-    from gamedev_shared.gpu import warn_if_vram_occupied
+    from aigamekit_shared.gpu import warn_if_vram_occupied
 
     manifest_path = Path(manifest)
     out_root = Path(output_dir)
@@ -584,7 +584,7 @@ def generate_batch_cmd(
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
     _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("text2d", quality=quality)
@@ -790,7 +790,7 @@ def info_cmd() -> None:
 @cli.command("doctor")
 def doctor_cmd() -> None:
     """Verifica ambiente: PyTorch, CUDA, VRAM e cache HF."""
-    from gamedev_shared.gpu import (
+    from aigamekit_shared.gpu import (
         DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT,
         get_system_info,
         gpu_bytes_in_use,
@@ -881,7 +881,7 @@ def serve(ums_worker: bool) -> None:
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico
-    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter text2d
+    :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter text2d
     local (:mod:`text2d.worker_serve_adapter`).
     """
     if not ums_worker:
@@ -889,7 +889,7 @@ def serve(ums_worker: bool) -> None:
         console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
         return
 
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
     from text2d.worker_serve_adapter import Adapter
 
     run_worker_loop(Adapter, backend_name="text2d")

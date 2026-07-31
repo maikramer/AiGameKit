@@ -101,7 +101,7 @@ class TestProfileFromSpecs:
 
 class TestDetectHardwareProfile:
     def test_returns_profile_instance(self, monkeypatch):
-        monkeypatch.setattr("gamedev_shared.hardware.cuda_gpu_specs", lambda: [])
+        monkeypatch.setattr("aigamekit_shared.hardware.cuda_gpu_specs", lambda: [])
         p = detect_hardware_profile()
         assert isinstance(p, Part3DHardwareProfile)
         assert p.device == "cpu"

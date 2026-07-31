@@ -4,7 +4,7 @@ Uses bpy (Decimate modifier with collapse) which preserves topology,
 UVs, vertex groups, and animations natively — zero weight transfer needed.
 
 Run from Animator3D venv (or any venv with bpy installed):
-    cd GameDev/Animator3D && source .venv/bin/activate
+    cd AiGameKit/Animator3D && source .venv/bin/activate
     python -m pytest ../GameAssets/tests/test_simplify_rigged.py -v -s
 """
 

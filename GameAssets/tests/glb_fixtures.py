@@ -1,7 +1,7 @@
 """GLBs sintéticos para testes de resume/classificação.
 
 ``_glb_has_geometry`` (``gameassets.paths``) parseia o JSON chunk via
-``gamedev_shared.glb_verify.extract_glb_meta``, logo ficheiros dummy (``b"x"``)
+``aigamekit_shared.glb_verify.extract_glb_meta``, logo ficheiros dummy (``b"x"``)
 contam como colapsados. Estes helpers escrevem GLBs com JSON chunk válido —
 sem BIN chunk, porque só os metadados são lidos.
 """

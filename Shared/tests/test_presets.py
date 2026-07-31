@@ -1,4 +1,4 @@
-"""Testes dos accessors de presets partilhados (``gamedev_shared.presets``).
+"""Testes dos accessors de presets partilhados (``aigamekit_shared.presets``).
 
 As tools 2D (Texture2D/Skymap2D/Text2Sound) usam estes accessors sobre os
 seus dicts de conteúdo; aqui testa-se o contrato comum.
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from gamedev_shared.presets import (
+from aigamekit_shared.presets import (
     get_preset,
     get_preset_ci,
     get_preset_params,

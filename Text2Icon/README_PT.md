@@ -14,7 +14,7 @@ text2icon generate "poção de vida vermelha, jogo de fantasia" -o vida.png
 text2icon generate "ícone de espada, RPG medieval" -o espada.png --transparent
 
 # UMS (fila + modelo quente) — ver ModelServer/README.md
-gamedev-model-server start
+aigamekit-model-server start
 text2icon generate "espada" -o espada.png --ums-stream
 
 # Batch

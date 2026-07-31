@@ -17,8 +17,8 @@ from typing import Any
 
 from PIL import Image
 
-from gamedev_shared.base_generator import DiffusionGeneratorBase
-from gamedev_shared.logging import Logger
+from aigamekit_shared.base_generator import DiffusionGeneratorBase
+from aigamekit_shared.logging import Logger
 
 from .presets import get_preset_params, get_preset_prompt
 from .prompt_enhancer import (
@@ -273,7 +273,7 @@ class TextureGenerator(DiffusionGeneratorBase):
 
         generator = self._build_generator(resolved_seed)
 
-        from gamedev_shared.diffusion_control import attach_step_hooks
+        from aigamekit_shared.diffusion_control import attach_step_hooks
 
         self._clear_cache()
         self._log("Inferência (SD circular)...")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gamedev_shared.seed_utils import generate_seed, resolve_effective_seed, seed_everything
+from aigamekit_shared.seed_utils import generate_seed, resolve_effective_seed, seed_everything
 
 
 def test_generate_seed_range():

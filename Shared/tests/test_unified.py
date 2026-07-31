@@ -1,4 +1,4 @@
-"""Testes da ponte GameDev → Clified."""
+"""Testes da ponte AiGameKit → Clified."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from gamedev_shared.installer.unified import (
+from aigamekit_shared.installer.unified import (
     ensure_clified_env,
     install_tool,
     list_available_tools,
@@ -45,7 +45,7 @@ class TestListAvailableTools:
 
 class TestMain:
     @patch("clified.installer.bootstrap.run", return_value=0)
-    @patch("gamedev_shared.installer.unified.find_monorepo_root")
+    @patch("aigamekit_shared.installer.unified.find_monorepo_root")
     def test_delegates_to_clified(self, mock_root, mock_run, tmp_path: Path):
         (tmp_path / "tools.yaml").write_text("workspace:\n  root: .\n tools: {}\n")
         mock_root.return_value = tmp_path

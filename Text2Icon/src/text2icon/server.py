@@ -1,4 +1,4 @@
-"""Thin wrapper do text2icon sobre ``gamedev_shared.model_server``.
+"""Thin wrapper do text2icon sobre ``aigamekit_shared.model_server``.
 
 Regista o loader (cria ``SanaIconGenerator``) e o generator (chama ``gen.generate``
 + guarda a imagem) específicos do text2icon. Toda a lógica de socket, liveness,
@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from gamedev_shared.model_server import (
+from aigamekit_shared.model_server import (
     ModelServer,
     is_server_running,
     send_request,

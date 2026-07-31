@@ -1,7 +1,7 @@
 """Testes para texture2d.image_processor.
 
 ``image_processor.save_image`` é um thin wrapper sobre
-``gamedev_shared.image_utils.save_image_with_metadata`` com o formato PNG e o
+``aigamekit_shared.image_utils.save_image_with_metadata`` com o formato PNG e o
 default ``outputs/textures``. Estes testes cobrem a gravação da imagem, o
 sidecar JSON (chaves exactas), o merge de metadata extra, idempotência e o
 tratamento de imagens não-RGB — tudo em disco temporário (``tmp_path``).

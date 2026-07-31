@@ -175,14 +175,14 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
     try:
         import bpy
 
-        from gamedev_shared.bpy_mesh import clear_scene, smooth_shade_scene
+        from aigamekit_shared.bpy_mesh import clear_scene, smooth_shade_scene
     except ImportError:
         log.debug("gltf_finish: bpy ausente — tangents não recalculados")
         return False
 
     clear_scene()
     try:
-        from gamedev_shared.bpy_mesh import import_gltf
+        from aigamekit_shared.bpy_mesh import import_gltf
 
         import_gltf(glb_path)
     except Exception as exc:
@@ -225,7 +225,7 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
         "export_skins": bool(arm_objs),
     }
     try:
-        from gamedev_shared.bpy_mesh import gltf_export_supports_meshopt
+        from aigamekit_shared.bpy_mesh import gltf_export_supports_meshopt
 
         if gltf_export_supports_meshopt():
             props = bpy.ops.export_scene.gltf.get_rna_type().properties
@@ -250,7 +250,7 @@ def _apply_meshopt_bpy(glb_in: Path, glb_out: Path) -> tuple[bool, str]:
     try:
         import bpy
 
-        from gamedev_shared.bpy_mesh import (
+        from aigamekit_shared.bpy_mesh import (
             clear_scene,
             gltf_meshopt_export_kwargs,
             meshopt_runtime_available,
@@ -269,7 +269,7 @@ def _apply_meshopt_bpy(glb_in: Path, glb_out: Path) -> tuple[bool, str]:
 
     clear_scene()
     try:
-        from gamedev_shared.bpy_mesh import import_gltf
+        from aigamekit_shared.bpy_mesh import import_gltf
 
         import_gltf(glb_in)
     except Exception as exc:
@@ -280,7 +280,7 @@ def _apply_meshopt_bpy(glb_in: Path, glb_out: Path) -> tuple[bool, str]:
     if not mesh_objs:
         return False, "sem meshes"
 
-    from gamedev_shared.bpy_mesh import smooth_shade_scene
+    from aigamekit_shared.bpy_mesh import smooth_shade_scene
 
     smooth_shade_scene(mesh_objs)
     for m in mesh_objs:

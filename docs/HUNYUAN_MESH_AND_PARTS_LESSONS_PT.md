@@ -38,7 +38,7 @@ EN (resumo): [`HUNYUAN_MESH_AND_PARTS_LESSONS.md`](HUNYUAN_MESH_AND_PARTS_LESSON
 
 ## 2. Repair (`topology_clean` / `text3d topology-fix`)
 
-Perfil: `Shared/src/gamedev_shared/mesh_repair.py`. Entrada: `prepare_mesh_topology`.
+Perfil: `Shared/src/aigamekit_shared/mesh_repair.py`. Entrada: `prepare_mesh_topology`.
 Motor: `--engine arrays` (default) — ver [`TOPOLOGY_FIX_GPU_STUDY.md`](TOPOLOGY_FIX_GPU_STUDY.md).
 
 ### Perfil actual (lean + watertight seletivo)
@@ -136,7 +136,7 @@ Para props arquitetónicos com finos:
 2. Face-parts com N meshes legíveis (corpo + peels) > 2–3 blobs grossos.
 3. Comparar sempre **shape/clean** do mesmo seed antes de culpar Part3D.
 4. Edifícios: base fechada / sem worm’s-eye na ref; portas abertas após clean.
-5. Screenshots: `gamedev-lab debug screenshot` com nomes de vista (`front,three_quarter`), não `--views 4`.
+5. Screenshots: `aigamekit-lab debug screenshot` com nomes de vista (`front,three_quarter`), não `--views 4`.
 
 ## 5. Fluxo recomendado (props tipo watchtower / chapel)
 
@@ -160,8 +160,8 @@ paint3d texture _intermediate/id_clean.glb \
 
 | Peça | Path |
 |------|------|
-| Perfil repair | `Shared/src/gamedev_shared/mesh_repair.py` (`topology_clean`, `make_watertight`, `remove_internal_shell_faces`) |
-| Arrays engine | `Shared/src/gamedev_shared/mesh_repair_arrays.py` |
+| Perfil repair | `Shared/src/aigamekit_shared/mesh_repair.py` (`topology_clean`, `make_watertight`, `remove_internal_shell_faces`) |
+| Arrays engine | `Shared/src/aigamekit_shared/mesh_repair_arrays.py` |
 | Topology Text3D | `Text3D/src/text3d/utils/mesh_lod.py` (`prepare_mesh_topology`) |
 | Hints building / i2m | `GameAssets/src/gameassets/categories.py`, `prompt_builder.py` |
 | Clean antes paint | `GameAssets/src/gameassets/pipeline.py` (`ensure_clean_for_paint`) |

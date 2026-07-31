@@ -18,7 +18,7 @@ Testes GPU / bpy / integração continuam úteis; têm de fazer **skip** limpo s
 |--------|------|-------------|-------------------------------|
 | Shared | acessório (lib) | `make test-shared` | `tests/test_shared_coverage_100.py` |
 | ModelServer (UMS) | acessório | `make test-modelserver` | `tests/test_modelserver_coverage_100.py` |
-| GameDevLab | acessório | `make test-gamedevlab` | `tests/test_gamedevlab_coverage_suite.py`, `*_100b.py` |
+| AiGameKitLab | acessório | `make test-aigamekitlab` | `tests/test_aigamekitlab_coverage_suite.py`, `*_100b.py` |
 | Text2D | ferramenta | `make test-text2d` | `test_text2d_coverage_suite.py`, `*_100b.py` |
 | Text2Icon | ferramenta | `make test-text2icon` | `test_text2icon_coverage_suite.py`, `*_100b.py` |
 | Text3D | ferramenta | `make test-text3d` | `test_text3d_coverage_100.py` |
@@ -78,7 +78,7 @@ Jobs em push/PR a `main`:
 | Job | O quê |
 |-----|--------|
 | `lint` | `ruff check` + `ruff format --check` + `pre-commit run --all-files` (inclui **mypy** no Shared) |
-| `test-python` | matrix: Shared, GameAssets, Texture2D, Skymap2D, Rigging3D, Text2Sound, GameDevLab, Rocks3D, Animator3D — cada um `pip install -e Shared/.[dev]` depois pacote `.[dev]` + pytest |
+| `test-python` | matrix: Shared, GameAssets, Texture2D, Skymap2D, Rigging3D, Text2Sound, AiGameKitLab, Rocks3D, Animator3D — cada um `pip install -e Shared/.[dev]` depois pacote `.[dev]` + pytest |
 | `test-rust` | Materialize fmt/clippy/test (`continue-on-error`) |
 | `vibegame` | Bun install + `check` + `lint` + `format:check` + `test` + `build` |
 
@@ -109,7 +109,7 @@ Materialize: cargo test --bin materialize-cli
 VibeGame: bun test tests/coverage-100.test.ts
 ```
 
-`GAMEDEV_FILE_LOG=1` pode ser preciso sob pytest (ver [`LOGGING_PT.md`](LOGGING_PT.md)).
+`AIGAMEKIT_FILE_LOG=1` pode ser preciso sob pytest (ver [`LOGGING_PT.md`](LOGGING_PT.md)).
 
 ## Estender cobertura
 

@@ -32,7 +32,7 @@ Designing for agents makes the human path better too: clearer errors, fewer secr
 |----------|------|
 | `AGENTS.md` | Operating manual + mission + anti-patterns |
 | Package CLIs / `--help` | Executable truth of flags |
-| Env vars (`GAMEDEV_*`, tool bins, UMS socket) | Configuration without code edits |
+| Env vars (`AIGAMEKIT_*`, tool bins, UMS socket) | Configuration without code edits |
 | `game.yaml` + manifest | Intent for batch/dream |
 | Quality presets YAML | Soft default matrix |
 | UMS protocol / queue commands | GPU coordination language |

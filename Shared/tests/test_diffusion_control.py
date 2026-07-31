@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gamedev_shared.diffusion_control import GenerationAborted, attach_step_hooks
+from aigamekit_shared.diffusion_control import GenerationAborted, attach_step_hooks
 
 
 class TestAttachStepHooks:

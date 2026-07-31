@@ -118,8 +118,8 @@ def validate_row(
 
             # Poly count + texture check (via bpy)
             try:
-                from gamedev_shared.bpy_mesh import face_count as _face_count
-                from gamedev_shared.bpy_mesh import load_glb
+                from aigamekit_shared.bpy_mesh import face_count as _face_count
+                from aigamekit_shared.bpy_mesh import load_glb
 
                 mesh_objs = load_glb(mesh_path)
                 if not mesh_objs:

@@ -1,4 +1,4 @@
-# Constraints para `gamedev-install --all` / `./install.sh --all`.
+# Constraints para `aigamekit-install --all` / `./install.sh --all`.
 #
 # Activados só quando `CLIFIED_INSTALL_ALL=1` (definido automaticamente pelo instalador).
 # Objectivo: mesmo interpretador resolver `transformers` / `numpy` de forma igual em cada `.venv`,

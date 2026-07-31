@@ -1,10 +1,10 @@
-"""Testes para gamedev_shared.hf."""
+"""Testes para aigamekit_shared.hf."""
 
 import os
 from unittest.mock import patch
 
-from gamedev_shared.env import HF_HOME
-from gamedev_shared.hf import (
+from aigamekit_shared.env import HF_HOME
+from aigamekit_shared.hf import (
     HF_TOKEN,
     HUGGINGFACEHUB_API_TOKEN,
     get_hf_token,

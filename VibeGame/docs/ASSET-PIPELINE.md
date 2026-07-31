@@ -20,7 +20,7 @@ gameassets_manifest.json  ──────────►  loadSceneManifest()
 
 ## `gameassets_manifest.json`
 
-Gerado pelo pipeline Python (`Shared/src/gamedev_shared/pipeline/manifest.py`):
+Gerado pelo pipeline Python (`Shared/src/aigamekit_shared/pipeline/manifest.py`):
 
 ```json
 {

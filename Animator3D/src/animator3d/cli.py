@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_ANIMATOR3D, emit_progress, emit_result
+from aigamekit_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_ANIMATOR3D, emit_progress, emit_result
 from rich.console import Console
 from rich.json import JSON
 
@@ -1395,7 +1395,7 @@ def _quaternius_core_missing(arm_name: str, profile) -> list[str]:
 
 def _fetch_quaternius_source() -> Path:
     """Garante o pack Quaternius em cache e devolve o path do GLB."""
-    from gamedev_shared.quaternius_fetch import fetch_quaternius_pack
+    from aigamekit_shared.quaternius_fetch import fetch_quaternius_pack
 
     console.print("[cyan]Pack Quaternius:[/cyan] a garantir o cache...")
     pack = fetch_quaternius_pack(on_status=lambda m: console.print(f"  [dim]{m}[/dim]"))

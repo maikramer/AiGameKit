@@ -1,6 +1,6 @@
 # Regras de validação para o GLB LOD0 (master).
 # Aplicado pelo orquestrador via:
-#   gamedev-lab check glb id_lod0.glb rules/lod0.yaml --category <cat>
+#   aigamekit-lab check glb id_lod0.glb rules/lod0.yaml --category <cat>
 
 mesh_totals:
   v_per_tri:

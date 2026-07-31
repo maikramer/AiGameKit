@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from click.exceptions import ClickException
 
-from gamedev_shared.cli_helpers import format_ums_debug_line, raise_if_ums_queue_full
+from aigamekit_shared.cli_helpers import format_ums_debug_line, raise_if_ums_queue_full
 
 
 class TestFormatUmsDebugLine:
@@ -51,7 +51,7 @@ class TestRaiseIfUmsQueueFull:
                     "error_code": "QUEUE_FULL",
                     "queue_depth": 1,
                     "max_depth": 1,
-                    "hint": "aumenta GAMEDEV_UMS_MAX_QUEUE_DEPTH",
+                    "hint": "aumenta AIGAMEKIT_UMS_MAX_QUEUE_DEPTH",
                     "ums_debug": {"backend": "beta", "priority": "batch"},
                 }
             )

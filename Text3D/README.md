@@ -418,7 +418,7 @@ LOD / bake-master use profile `pre_decimate_uv` before Decimate (UV-safe weld `0
 
 ## Quality Presets
 
-Quality tiers map to generation presets via the [QualityEngine](../Shared/src/gamedev_shared/quality.py) (`quality-profiles.yaml`):
+Quality tiers map to generation presets via the [QualityEngine](../Shared/src/aigamekit_shared/quality.py) (`quality-profiles.yaml`):
 
 | Quality | Text3D Preset | Guidance | Notes |
 |---------|---------------|----------|-------|
@@ -443,7 +443,7 @@ The QualityEngine uses **soft resolution** — it only fills defaults when the u
 | `TEXT3D_EXPORT_ROTATION_X_DEG` | X rotation in degrees when exporting mesh |
 | `TEXT3D_EXPORT_ROTATION_X_RAD` | Alternative in radians |
 | `TEXT3D_EXPORT_ORIGIN` | Origin mode: `feet`, `center`, `none` |
-| `GAMEDEV_PROFILE_LOG` | Path for profiler JSONL output (used with `--profile`) |
+| `AIGAMEKIT_PROFILE_LOG` | Path for profiler JSONL output (used with `--profile`) |
 
 ## Output Layout
 

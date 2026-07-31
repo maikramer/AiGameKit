@@ -10,7 +10,7 @@ import contextlib
 import logging
 from pathlib import Path
 
-from gamedev_shared.bpy_mesh import clear_scene
+from aigamekit_shared.bpy_mesh import clear_scene
 
 log = logging.getLogger(__name__)
 
@@ -54,12 +54,12 @@ def _shade_smooth(mesh_obj) -> None:
     GLTF do Blender escrever normais por canto de face, duplicando vértices
     (V/Tri ≈ 3 — bug do goblin_shape).
 
-    Usa ``gamedev_shared.bpy_mesh.apply_smooth_by_angle`` (60°), que funciona no
+    Usa ``aigamekit_shared.bpy_mesh.apply_smooth_by_angle`` (60°), que funciona no
     bpy 5.x via ``shade_smooth_by_angle`` — o antigo ``use_auto_smooth`` foi
     removido no Blender 4.1 e era silenciosamente ignorado, deixando a malha
     totalmente lisa.
     """
-    from gamedev_shared.bpy_mesh import apply_smooth_by_angle
+    from aigamekit_shared.bpy_mesh import apply_smooth_by_angle
 
     mesh = mesh_obj.data
     with contextlib.suppress(Exception):
@@ -69,8 +69,8 @@ def _shade_smooth(mesh_obj) -> None:
 
 
 def _dynamic_weld_distance(vertex_count: int) -> float:
-    """Compat: delega em ``gamedev_shared.mesh_repair.dynamic_weld_distance``."""
-    from gamedev_shared.mesh_repair import dynamic_weld_distance
+    """Compat: delega em ``aigamekit_shared.mesh_repair.dynamic_weld_distance``."""
+    from aigamekit_shared.mesh_repair import dynamic_weld_distance
 
     return dynamic_weld_distance(vertex_count)
 
@@ -85,12 +85,12 @@ def _load_glb_with_armatures(path: Path) -> tuple:
     """
     import bpy
 
-    from gamedev_shared.skin_transfer import bpy_readable_glb
+    from aigamekit_shared.skin_transfer import bpy_readable_glb
 
     path = Path(path).expanduser().resolve()
     clear_scene()
     with bpy_readable_glb(path) as import_path:
-        from gamedev_shared.bpy_mesh import import_gltf
+        from aigamekit_shared.bpy_mesh import import_gltf
 
         import_gltf(import_path)
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
@@ -119,7 +119,7 @@ def _export_textured_glb(
     """
     import bpy
 
-    from gamedev_shared.bpy_mesh import smooth_shade_scene
+    from aigamekit_shared.bpy_mesh import smooth_shade_scene
 
     if export_normals:
         smooth_shade_scene([mesh_obj])
@@ -155,7 +155,7 @@ def _export_textured_glb(
         export_image_format="AUTO",
     )
     with contextlib.suppress(Exception):
-        from gamedev_shared.glb_verify import post_save_verify
+        from aigamekit_shared.glb_verify import post_save_verify
 
         post_save_verify(
             output_path,
@@ -166,8 +166,8 @@ def _export_textured_glb(
 _export_glb = _export_textured_glb
 
 
-# Primitivas de reparação unificadas em gamedev_shared.mesh_repair.
-from gamedev_shared.mesh_repair import fill_holes as _fill_holes_bpy  # noqa: E402
+# Primitivas de reparação unificadas em aigamekit_shared.mesh_repair.
+from aigamekit_shared.mesh_repair import fill_holes as _fill_holes_bpy  # noqa: E402
 
 # Categorias shell/oca: strip cascas internas por defeito (sem fecho de chão).
 _HOLLOW_SHELL_CATEGORIES = frozenset(
@@ -201,7 +201,7 @@ def _repair_topology_arrays_phase(
     a ver volume (casco exterior em vez de 2 shells preservadas).
     """
     log = logging.getLogger(__name__)
-    from gamedev_shared.mesh_repair_arrays import (
+    from aigamekit_shared.mesh_repair_arrays import (
         extract_arrays,
         repair_arrays_topology_clean,
         replace_mesh_arrays,
@@ -216,7 +216,7 @@ def _repair_topology_arrays_phase(
     replace_mesh_arrays(mesh_obj, co, tris)
 
     if morph_close is not None and morph_close > 0:
-        from gamedev_shared.mesh_repair import morphological_close
+        from aigamekit_shared.mesh_repair import morphological_close
 
         mc_stats = morphological_close(mesh_obj, distance=float(morph_close))
         log.info(
@@ -250,7 +250,7 @@ def _prepare_topology_bpy(
     Edifícios (``building``/``chapel``…): strip de cascas internas por defeito.
 
     ``engine``: ``arrays`` (default) / ``auto`` usam a fase vetorizada
-    (:mod:`gamedev_shared.mesh_repair_arrays`) quando o mesh é seguro (sem
+    (:mod:`aigamekit_shared.mesh_repair_arrays`) quando o mesh é seguro (sem
     UVs/weights/shape-keys/armature — ver :func:`arrays_engine_ok`); os passos
     topológicos (fill/caps/watertight/normais) correm sempre em bmesh.
     ``bpy`` força o caminho legado completo.
@@ -260,8 +260,8 @@ def _prepare_topology_bpy(
     n_faces_before = len(mesh_obj.data.polygons)
     n_verts_before = len(mesh_obj.data.vertices)
 
-    from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
-    from gamedev_shared.mesh_repair_arrays import arrays_engine_ok
+    from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
+    from aigamekit_shared.mesh_repair_arrays import arrays_engine_ok
 
     hollow = _is_hollow_shell_category(category)
     if remove_internal_shells is None:
@@ -279,7 +279,7 @@ def _prepare_topology_bpy(
         overrides["watertight"] = bool(watertight)
 
     if use_arrays:
-        from gamedev_shared.mesh_repair_arrays import extract_arrays, replace_mesh_arrays
+        from aigamekit_shared.mesh_repair_arrays import extract_arrays, replace_mesh_arrays
 
         backup_co, backup_tris = extract_arrays(mesh_obj)
         stats = _repair_topology_arrays_phase(
@@ -315,7 +315,7 @@ def _prepare_topology_bpy(
 
     if not use_arrays:
         if morph_close is not None and morph_close > 0:
-            from gamedev_shared.mesh_repair import morphological_close
+            from aigamekit_shared.mesh_repair import morphological_close
 
             mc_stats = morphological_close(mesh_obj, distance=float(morph_close))
             log.info(
@@ -375,8 +375,8 @@ def _decimate_to_target(mesh_obj, target_faces: int) -> int:
     já partidos no ficheiro — ``smooth_shade`` sozinho NÃO funde) fazem o
     Decimate colapsar triângulos isolados → LOD1/2 “moth-eaten”.
     """
-    from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
-    from gamedev_shared.mesh_simplify import simplify_mesh_object
+    from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
+    from aigamekit_shared.mesh_simplify import simplify_mesh_object
 
     # Sem pre_decimate_uv / weld pré-COLLAPSE — travam o rácio (~20k piso).
     # Post-clean depois do Decimate stepwise.
@@ -629,8 +629,8 @@ def _generate_lod_glb_triplet_impl(
     texture_size_lod0,
     target_faces,
 ):
-    from gamedev_shared.lod_budget import lod_texture_ladder
-    from gamedev_shared.mesh_repair import remove_doubles
+    from aigamekit_shared.lod_budget import lod_texture_ladder
+    from aigamekit_shared.mesh_repair import remove_doubles
 
     mesh_obj, arm_objs = _load_glb_with_armatures(input_path)
     n = len(mesh_obj.data.polygons)
@@ -697,11 +697,11 @@ def generate_lod_textured_glb_triplet(
     quantização POSITION SHORT via KHR_mesh_quantization — CLI gltf-transform 4.x).
 
     ``skin_source``: GLB rigged (weights + skeleton). Após cada LOD, rebind via
-    ``gamedev_shared.skin_transfer`` (KDTree weights + armature + anims).
+    ``aigamekit_shared.skin_transfer`` (KDTree weights + armature + anims).
     ``animation_source``: GLB com clips quando ``skin_source`` não tem animações
     (ex.: ``rigged_hi`` + ``*_animated.glb``).
     """
-    from gamedev_shared.lod_budget import lod_texture_ladder
+    from aigamekit_shared.lod_budget import lod_texture_ladder
     from text3d.utils.mesh_remesh_textured import _clamp_decimate_target, remesh_textured_glb
 
     painted = Path(painted_path)
@@ -710,10 +710,10 @@ def generate_lod_textured_glb_triplet(
 
     import bpy
 
-    from gamedev_shared.bpy_mesh import clear_scene
+    from aigamekit_shared.bpy_mesh import clear_scene
 
     clear_scene()
-    from gamedev_shared.bpy_mesh import import_gltf
+    from aigamekit_shared.bpy_mesh import import_gltf
 
     import_gltf(painted)
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
@@ -778,7 +778,7 @@ def generate_lod_textured_glb_triplet(
 
     # Rebind skin/skeleton/animations onto painted/decimated topology.
     if skin_source is not None and Path(skin_source).is_file():
-        from gamedev_shared.skin_transfer import transfer_skin_to_mesh
+        from aigamekit_shared.skin_transfer import transfer_skin_to_mesh
 
         skin_src = Path(skin_source)
         anim_src = Path(animation_source) if animation_source else None

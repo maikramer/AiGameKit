@@ -9,7 +9,7 @@ CLI para geração de áudio estéreo a 44.1 kHz a partir de prompts de texto, c
 | Música / ambientes longos | [Stable Audio Open 1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) | ~47 s | `--profile music` (padrão) |
 | Efeitos / SFX curtos | [Stable Audio Open Small](https://huggingface.co/stabilityai/stable-audio-open-small) | ~11 s | `--profile effects` |
 
-Ambos os repositórios podem ser **gated**: aceita os termos no Hub e define `HF_TOKEN`. **Stability AI Community License** (`LICENSE.md` em cada repo): pesquisa e uso não comercial; uso comercial com **teto de receita** (ver texto atual no repositório e [stability.ai/license](https://stability.ai/license)). Resumo: [GameDev/README_PT.md — Licenças](../README_PT.md).
+Ambos os repositórios podem ser **gated**: aceita os termos no Hub e define `HF_TOKEN`. **Stability AI Community License** (`LICENSE.md` em cada repo): pesquisa e uso não comercial; uso comercial com **teto de receita** (ver texto atual no repositório e [stability.ai/license](https://stability.ai/license)). Resumo: [AiGameKit/README_PT.md — Licenças](../README_PT.md).
 
 ## Funcionalidades
 
@@ -34,10 +34,10 @@ Ambos os repositórios podem ser **gated**: aceita os termos no Hub e define `HF
 
 ### Oficial (monorepo)
 
-Na **raiz** do repositório GameDev:
+Na **raiz** do repositório AiGameKit:
 
 ```bash
-cd /caminho/para/GameDev
+cd /caminho/para/AiGameKit
 ./install.sh text2sound
 ```
 

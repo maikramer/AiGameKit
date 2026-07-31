@@ -150,7 +150,7 @@ def generate_collision_mesh(
     """
     import bpy
 
-    from gamedev_shared.bpy_mesh import clear_scene
+    from aigamekit_shared.bpy_mesh import clear_scene
 
     resolved = resolve_collision_mode(mode=mode, convex_hull=convex_hull)
 

@@ -15,7 +15,7 @@ from gameassets.mesh_reorigin import (
     filter_excluded_paths,
     reorigin_glb_file,
 )
-from gamedev_shared.bpy_mesh import clear_scene, get_bounds, load_glb, save_glb
+from aigamekit_shared.bpy_mesh import clear_scene, get_bounds, load_glb, save_glb
 
 
 def _save_box_glb(path: Path, extents: tuple[float, ...] = (1.0, 2.0, 1.0)) -> Path:

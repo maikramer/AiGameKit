@@ -44,7 +44,7 @@ sudo apt install -y nvidia-driver-535 nvidia-cuda-toolkit
 ## Dependências de finish (KTX2 + meshopt)
 
 Necessárias para `text3d finish`, `bake-master` e LOD com compressão (entregáveis
-validados por `gamedev-lab check` com `texture_format: ktx2` / `compression: meshopt`).
+validados por `aigamekit-lab check` com `texture_format: ktx2` / `compression: meshopt`).
 
 | Dep | Papel | Instalação tip. |
 |-----|-------|-----------------|

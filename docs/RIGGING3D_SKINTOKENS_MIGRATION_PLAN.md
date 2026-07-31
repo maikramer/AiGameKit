@@ -288,8 +288,8 @@ bloqueantes (ou se houver mitigação clara: quantização, venv separada, etc).
 - Novo teste de integração (gated por GPU/checkpoint disponível, skip
   automático sem CUDA — mesmo padrão dos outros pacotes GPU-dependentes):
   gerar rig para `examples/giraffe.glb` (já existe no clone do SkinTokens,
-  pode ser copiado como fixture) e validar via `gamedev-lab check glb` /
-  `gamedev-lab debug compare` contra baseline UniRig.
+  pode ser copiado como fixture) e validar via `aigamekit-lab check glb` /
+  `aigamekit-lab debug compare` contra baseline UniRig.
 
 ### Fase 5 — Limpeza e documentação
 - Remover `Rigging3D/src/rigging3d/unirig/` (árvore vendored antiga) só
@@ -367,7 +367,7 @@ unirig" (sem coexistência de backend) + "transformers 5 otimizado".
   `num_train_vertex` (não existe equivalente no SkinTokens; Fase 0 já mostrou
   que não é necessário — 3.9GB pico numa 4050 6GB). Limiar de aviso ajustado de
   6.5GB para 4GB, refletindo o resultado medido em vez de uma estimativa.
-  `Shared/src/gamedev_shared/data/quality-profiles.yaml`: removidos
+  `Shared/src/aigamekit_shared/data/quality-profiles.yaml`: removidos
   `smooth_iterations`/`low_vram` dos 5 tiers de `rigging3d` (mantido só
   `groups_per_vertex`, que tem equivalente directo — `group_per_vertex` no
   `BpyParser.export`/`transfer_rigging`).

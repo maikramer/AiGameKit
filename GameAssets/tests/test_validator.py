@@ -168,13 +168,13 @@ class TestFlatLayout:
 
 @pytest.mark.skipif(not _BPY_AVAILABLE, reason="geometria controlada requer bpy_mesh (bpy)")
 class TestGeometryChecks:
-    """Poly-count e textura — requer patch de gamedev_shared.bpy_mesh (presente com bpy)."""
+    """Poly-count e textura — requer patch de aigamekit_shared.bpy_mesh (presente com bpy)."""
 
     def test_high_poly_count_is_error(self, tmp_path: Path) -> None:
         _write(tmp_path / "meshes" / "hero.glb")
         with (
-            patch("gamedev_shared.bpy_mesh.load_glb", return_value=_mock_textured_mesh(200000)),
-            patch("gamedev_shared.bpy_mesh.face_count", side_effect=lambda _o: 200000),
+            patch("aigamekit_shared.bpy_mesh.load_glb", return_value=_mock_textured_mesh(200000)),
+            patch("aigamekit_shared.bpy_mesh.face_count", side_effect=lambda _o: 200000),
         ):
             result = validate_row(_row("hero", generate_3d=True), _profile(), tmp_path, max_poly_count=100_000)
         assert result.ok is False
@@ -183,8 +183,8 @@ class TestGeometryChecks:
     def test_near_limit_poly_is_warning(self, tmp_path: Path) -> None:
         _write(tmp_path / "meshes" / "hero.glb")
         with (
-            patch("gamedev_shared.bpy_mesh.load_glb", return_value=_mock_textured_mesh(90000)),
-            patch("gamedev_shared.bpy_mesh.face_count", side_effect=lambda _o: 90000),
+            patch("aigamekit_shared.bpy_mesh.load_glb", return_value=_mock_textured_mesh(90000)),
+            patch("aigamekit_shared.bpy_mesh.face_count", side_effect=lambda _o: 90000),
         ):
             result = validate_row(_row("hero", generate_3d=True), _profile(), tmp_path, max_poly_count=100_000)
         assert result.ok is True
@@ -194,8 +194,8 @@ class TestGeometryChecks:
         _write(tmp_path / "meshes" / "hero.glb")
         empty_obj = [SimpleNamespace(material_slots=[])]
         with (
-            patch("gamedev_shared.bpy_mesh.load_glb", return_value=empty_obj),
-            patch("gamedev_shared.bpy_mesh.face_count", side_effect=lambda _o: 1000),
+            patch("aigamekit_shared.bpy_mesh.load_glb", return_value=empty_obj),
+            patch("aigamekit_shared.bpy_mesh.face_count", side_effect=lambda _o: 1000),
         ):
             result = validate_row(_row("hero", generate_3d=True), _profile(), tmp_path)
         assert result.ok is True
@@ -203,7 +203,7 @@ class TestGeometryChecks:
 
     def test_empty_geometry_is_error(self, tmp_path: Path) -> None:
         _write(tmp_path / "meshes" / "hero.glb")
-        with patch("gamedev_shared.bpy_mesh.load_glb", return_value=[]):
+        with patch("aigamekit_shared.bpy_mesh.load_glb", return_value=[]):
             result = validate_row(_row("hero", generate_3d=True), _profile(), tmp_path)
         assert result.ok is False
         assert any("geometria" in e for e in result.errors)

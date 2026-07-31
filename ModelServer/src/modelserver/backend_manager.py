@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from gamedev_shared.logging import Logger
+from aigamekit_shared.logging import Logger
 
 from . import protocol as P
 from .registry import Registry
@@ -202,9 +202,9 @@ class BackendManager:
     Args:
         registry: Registry de backends (descriptors + resolução lazy de adapters).
         query_free_mib: Callable que devolve MiB livres na GPU (injetado para
-            testabilidade; default usa ``gamedev_shared.gpu.query_gpu_free_mib``).
+            testabilidade; default usa ``aigamekit_shared.gpu.query_gpu_free_mib``).
         clear_vram: Callable que limpa cache CUDA após evicção (injetado; default
-            ``gamedev_shared.gpu.clear_cuda_memory``).
+            ``aigamekit_shared.gpu.clear_cuda_memory``).
     """
 
     def __init__(
@@ -236,11 +236,11 @@ class BackendManager:
     def _use_subprocess(self, name: str) -> bool:
         """True se ``name`` deve correr em subprocesso (desc.tool definido e pool activo).
 
-        Env ``GAMEDEV_UMS_SUBPROCESS=0`` desliga globalmente (rollback rápido).
+        Env ``AIGAMEKIT_UMS_SUBPROCESS=0`` desliga globalmente (rollback rápido).
         """
         if self._subprocess_pool is None:
             return False
-        if os.environ.get("GAMEDEV_UMS_SUBPROCESS", "1") == "0":
+        if os.environ.get("AIGAMEKIT_UMS_SUBPROCESS", "1") == "0":
             return False
         try:
             desc = self._registry.descriptor(name)
@@ -272,7 +272,7 @@ class BackendManager:
     def _free_mib(self) -> int | None:
         if self._query_free_mib is not None:
             return self._query_free_mib()
-        from gamedev_shared.gpu import query_gpu_free_mib
+        from aigamekit_shared.gpu import query_gpu_free_mib
 
         return query_gpu_free_mib()
 
@@ -302,7 +302,7 @@ class BackendManager:
         """Poll VRAM livre até caber ``peak`` ou timeout (processo externo a sair).
 
         Também tenta ``evict_all`` idle + clear cache a cada poll. Timeout via
-        ``GAMEDEV_UMS_VRAM_ADMIT_WAIT_SEC`` (0 = sem espera).
+        ``AIGAMEKIT_UMS_VRAM_ADMIT_WAIT_SEC`` (0 = sem espera).
         """
         wait_budget = max(0.0, float(P.VRAM_ADMIT_WAIT_SEC))
         if wait_budget <= 0:
@@ -333,7 +333,7 @@ class BackendManager:
             self._clear_vram()
             return
         try:
-            from gamedev_shared.gpu import clear_cuda_memory
+            from aigamekit_shared.gpu import clear_cuda_memory
 
             clear_cuda_memory()
         except Exception as e:
@@ -344,7 +344,7 @@ class BackendManager:
         if self._query_process_vram_mib is not None:
             return self._query_process_vram_mib()
         try:
-            from gamedev_shared.gpu import process_vram_mib, torch_reserved_mib
+            from aigamekit_shared.gpu import process_vram_mib, torch_reserved_mib
 
             proc = process_vram_mib()
             if proc is not None:
@@ -554,7 +554,7 @@ class BackendManager:
         activation: int | None = None
         if fp_key:
             try:
-                from gamedev_shared.lowvram import get_footprint
+                from aigamekit_shared.lowvram import get_footprint
 
                 fp = get_footprint(fp_key)
                 if group_offload:
@@ -575,7 +575,7 @@ class BackendManager:
             weights = max(0, peak - activation)
             if quant_mode != "none":
                 try:
-                    from gamedev_shared.lowvram import QUANT_WEIGHT_FACTOR
+                    from aigamekit_shared.lowvram import QUANT_WEIGHT_FACTOR
 
                     weights = int(weights * QUANT_WEIGHT_FACTOR.get(quant_mode, 1.0))
                 except Exception:
@@ -1076,7 +1076,7 @@ class BackendManager:
                     "mode": "in-process",
                     "was_alive": False,
                     "had_model": had_model,
-                    "reason": "backend sem worker subprocesso (desc.tool vazio ou GAMEDEV_UMS_SUBPROCESS=0)",
+                    "reason": "backend sem worker subprocesso (desc.tool vazio ou AIGAMEKIT_UMS_SUBPROCESS=0)",
                 }
 
             if self._subprocess_pool is None:

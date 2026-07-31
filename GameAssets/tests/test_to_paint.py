@@ -12,7 +12,7 @@ from gameassets.profile import GameProfile, Paint3DProfile
 
 class TestResolveToPaintFaces:
     def test_default_medium_2048(self) -> None:
-        from gamedev_shared.paint_budget import PAINT_FACES_MAX
+        from aigamekit_shared.paint_budget import PAINT_FACES_MAX
 
         p = GameProfile(title="t", genre="g", tone="t", style_preset="s", output_dir=".")
         assert _resolve_paint_texture_size(p) == 2048

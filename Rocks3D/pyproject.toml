@@ -9,7 +9,7 @@ description = "Rocks3D — procedural 3D rock generation"
 requires-python = ">=3.13,<3.14"
 license = "MIT"
 dependencies = [
-    "gamedev-shared @ file:../Shared",
+    "aigamekit-shared @ file:../Shared",
     "trimesh>=4.0.0",
     "scipy>=1.11.0",
     "numpy>=1.24.0",

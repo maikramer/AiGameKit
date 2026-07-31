@@ -15,7 +15,7 @@ from textual.reactive import reactive
 from textual.widgets import DataTable, Footer, Header, Label, ProgressBar, Static
 from textual.worker import get_current_worker
 
-from gamedev_shared.progress import (
+from aigamekit_shared.progress import (
     STATUS_ERROR,
     STATUS_OK,
     STATUS_PROGRESS,
@@ -234,7 +234,7 @@ class BatchDashboard(App):
     def _tick_ums(self) -> None:
         """Actualiza depth/eta/HOLDING da fila UMS no StatsBar (best-effort)."""
         try:
-            from gamedev_shared.model_server import (
+            from aigamekit_shared.model_server import (
                 fetch_ums_queue_snapshot,
                 format_ums_holding_summary,
                 is_ums_running,

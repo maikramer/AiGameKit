@@ -41,10 +41,10 @@ from typing import Any
 
 from PIL import Image
 
-from gamedev_shared.base_generator import DiffusionGeneratorBase
+from aigamekit_shared.base_generator import DiffusionGeneratorBase
 
 # Re-export para backward compat (testes/módulos antigos importam de text2icon.generator).
-from gamedev_shared.base_generator import torch_dtype_for as _torch_dtype_for  # noqa: F401
+from aigamekit_shared.base_generator import torch_dtype_for as _torch_dtype_for  # noqa: F401
 
 from .utils import validate_params, validate_prompt
 
@@ -149,7 +149,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         # Auto-quantização do Gemma encoder em GPUs modestas (< 8 GB).
         # ``quant_preset`` explícito ganha; ``"none"`` desliga; ``None`` = auto.
         if quant_preset in (None, "auto") and self.device != "cpu":
-            from gamedev_shared.gpu import gpu_total_mib
+            from aigamekit_shared.gpu import gpu_total_mib
 
             try:
                 vram_mib = gpu_total_mib(0)
@@ -170,7 +170,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         # o ternário já vem pré-comprimido a ~1.85 bits/weight no checkpoint).
         is_ternary = self.transformer_id == TERNARY_TRANSFORMER_ID
         if transformer_quant_preset in (None, "auto") and self.device != "cpu" and not is_ternary:
-            from gamedev_shared.gpu import gpu_total_mib
+            from aigamekit_shared.gpu import gpu_total_mib
 
             try:
                 vram_mib = gpu_total_mib(0)
@@ -199,9 +199,9 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         SDNQ int4 reduz para ~2.4 GB — decisivo em GPUs de 6-8 GB.
         """
         try:
-            from gamedev_shared.sdnq import is_available, quantize_model
+            from aigamekit_shared.sdnq import is_available, quantize_model
         except ImportError:
-            self._log("gamedev_shared.sdnq indisponível; encoder fica em fp16")
+            self._log("aigamekit_shared.sdnq indisponível; encoder fica em fp16")
             return
 
         if not is_available():
@@ -228,9 +228,9 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         guarda em ``__init__``.
         """
         try:
-            from gamedev_shared.sdnq import is_available, quantize_model
+            from aigamekit_shared.sdnq import is_available, quantize_model
         except ImportError:
-            self._log("gamedev_shared.sdnq indisponível; transformer fica em fp16/bf16")
+            self._log("aigamekit_shared.sdnq indisponível; transformer fica em fp16/bf16")
             return
 
         if not is_available():
@@ -255,7 +255,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
     def _preflight_download(self, repo_id: str) -> None:
         """Garante o checkpoint em disco antes do load (download com resume/progresso)."""
         try:
-            from gamedev_shared.model_download import ensure_model
+            from aigamekit_shared.model_download import ensure_model
 
             ensure_model(repo_id, cache_dir=self.cache_dir, on_status=self._status)
         except Exception as exc:
@@ -268,7 +268,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
 
         # Allocator com expandable_segments ANTES do 1º alloc CUDA — reduz fragmentação.
-        from gamedev_shared.quantization import set_memory_optimization_env
+        from aigamekit_shared.quantization import set_memory_optimization_env
 
         set_memory_optimization_env()
 
@@ -278,11 +278,11 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         self._preflight_download(self.pipeline_id)
 
         # Passo 1: transformer (standard fp16/bf16 ou ternário Clark Air, drop-in).
-        # O repo do transformer ternário é privado → precisa de HF_TOKEN (gamedev_shared).
+        # O repo do transformer ternário é privado → precisa de HF_TOKEN (aigamekit_shared).
         self._status(f"Passo 1/3 — transformer ({self.transformer_id})")
         self._log(f"Carregando transformer {self.transformer_id}...")
         try:
-            from gamedev_shared.hf import get_hf_token
+            from aigamekit_shared.hf import get_hf_token
 
             hf_token = get_hf_token()
         except Exception:
@@ -331,7 +331,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         self._reset_peak_mem_stats()
         self._status("Passo 3/3 — colocação via planner")
 
-        from gamedev_shared.lowvram import get_footprint
+        from aigamekit_shared.lowvram import get_footprint
 
         # Footprint: se SDNQ foi aplicado (quant_preset/transformer_quant_preset),
         # o modelo é menor. Usar allow_quant=("none",) para não duplicar redução.
@@ -339,7 +339,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         footprint = get_footprint("sana-sprint-600m")
         if quantized:
             # Modelo já quantizado (int4/uint8) — footprint real é menor.
-            from gamedev_shared.lowvram import ModelFootprint
+            from aigamekit_shared.lowvram import ModelFootprint
 
             footprint = ModelFootprint(
                 fp16_weights_gib=footprint.weights_gib("sdnq-int4"),
@@ -434,7 +434,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         if negative_prompt:
             pipe_kwargs["negative_prompt"] = negative_prompt
 
-        from gamedev_shared.diffusion_control import attach_step_hooks
+        from aigamekit_shared.diffusion_control import attach_step_hooks
 
         attach_step_hooks(
             pipe_kwargs,

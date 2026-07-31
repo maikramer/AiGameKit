@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from gamedev_shared.presets import (
+from aigamekit_shared.presets import (
     get_preset_ci as _get_preset_ci,
 )
-from gamedev_shared.presets import (
+from aigamekit_shared.presets import (
     list_presets as _list_presets,
 )
 

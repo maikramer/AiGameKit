@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from gamedev_shared.glb_verify import (
+from aigamekit_shared.glb_verify import (
     GlbVerifyError,
     extract_glb_meta,
     infer_stage_from_path,
@@ -117,8 +117,8 @@ class TestVerifyGlb:
         assert any(i.code == "NO_UV" for i in r.fails())
 
     def test_strict_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_GLB_VERIFY", "1")
-        monkeypatch.setenv("GAMEDEV_GLB_VERIFY_STRICT", "1")
+        monkeypatch.setenv("AIGAMEKIT_GLB_VERIFY", "1")
+        monkeypatch.setenv("AIGAMEKIT_GLB_VERIFY_STRICT", "1")
         p = tmp_path / "bad_shape.glb"
         p.write_bytes(_minimal_glb(attrs={"POSITION": 0}, vert_count=4, index_count=12))
         with pytest.raises(GlbVerifyError):

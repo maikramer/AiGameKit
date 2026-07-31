@@ -1,6 +1,6 @@
 """Adapter text2d para o modo subprocesso (``text2d serve --ums-worker``).
 
-Herdam de :class:`gamedev_shared.worker_serve_adapter_base.WorkerAdapter`
+Herdam de :class:`aigamekit_shared.worker_serve_adapter_base.WorkerAdapter`
 (standalone, sem depender do package modelserver). Mesma lógica do
 ``modelserver.adapters.text2d.Adapter`` mas vive no venv da tool.
 """
@@ -10,8 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from gamedev_shared.diffusion_control import GenerationAborted
-from gamedev_shared.worker_serve_adapter_base import WorkerAdapter
+from aigamekit_shared.diffusion_control import GenerationAborted
+from aigamekit_shared.worker_serve_adapter_base import WorkerAdapter
 
 
 class Adapter(WorkerAdapter):

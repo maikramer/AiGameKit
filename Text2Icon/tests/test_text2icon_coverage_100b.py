@@ -117,7 +117,7 @@ def test_ums_payload_dims_3() -> None:
 
 
 def _gib(n: float) -> int:
-    from gamedev_shared.hardware import GIB
+    from aigamekit_shared.hardware import GIB
 
     return int(n * GIB)
 

@@ -543,7 +543,7 @@ class JobQueue:
                 "status": P.STATUS_ERROR,
                 "error": err or f"job desconhecido: {job_id}",
                 "error_code": P.ERR_JOB_UNKNOWN,
-                "hint": "Lista jobs com gamedev-model-server queue; cancel --all limpa a fila",
+                "hint": "Lista jobs com aigamekit-model-server queue; cancel --all limpa a fila",
             }
         job_id = resolved
         with self._cond:
@@ -553,7 +553,7 @@ class JobQueue:
                     "status": P.STATUS_ERROR,
                     "error": f"job desconhecido: {job_id}",
                     "error_code": P.ERR_JOB_UNKNOWN,
-                    "hint": "Lista jobs com gamedev-model-server queue",
+                    "hint": "Lista jobs com aigamekit-model-server queue",
                 }
             if job.state in (P.JOB_DONE, P.JOB_FAILED, P.JOB_CANCELLED):
                 return {
@@ -590,7 +590,7 @@ class JobQueue:
                 self._purge_finished_jobs()
                 self._cond.notify_all()
                 return {"status": P.STATUS_OK, "job_id": job_id, "state": P.JOB_CANCELLED}
-            # running — cooperativo já; pool faz SIGTERM após GAMEDEV_UMS_ABORT_TIMEOUT_SEC
+            # running — cooperativo já; pool faz SIGTERM após AIGAMEKIT_UMS_ABORT_TIMEOUT_SEC
             job.cancel_requested = True
             return {
                 "status": P.STATUS_OK,
@@ -598,7 +598,7 @@ class JobQueue:
                 "state": P.JOB_RUNNING,
                 "message": (
                     "cancel requested — abort cooperativo; "
-                    "SIGTERM se worker não parar (~15s, GAMEDEV_UMS_ABORT_TIMEOUT_SEC)"
+                    "SIGTERM se worker não parar (~15s, AIGAMEKIT_UMS_ABORT_TIMEOUT_SEC)"
                 ),
             }
 

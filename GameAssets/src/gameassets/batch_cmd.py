@@ -18,9 +18,9 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
-from gamedev_shared.path_utils import safe_filename as _safe_slug
-from gamedev_shared.profiler.session import ProfilerSession
-from gamedev_shared.subprocess_utils import run_cmd_streaming
+from aigamekit_shared.path_utils import safe_filename as _safe_slug
+from aigamekit_shared.profiler.session import ProfilerSession
+from aigamekit_shared.subprocess_utils import run_cmd_streaming
 
 from .batch_guard import batch_directory_lock, detect_gpu_ids, query_gpu_free_mib, subprocess_gpu_env
 from .cli_rich import click
@@ -232,7 +232,7 @@ console = Console()
 @click.option(
     "--profile-tools",
     is_flag=True,
-    help="Activar profiling (CPU/RAM/GPU) em paint3d via GAMEDEV_PROFILE.",
+    help="Activar profiling (CPU/RAM/GPU) em paint3d via AIGAMEKIT_PROFILE.",
 )
 @click.option(
     "--profile-log",
@@ -262,7 +262,7 @@ console = Console()
     "--ums-stream",
     is_flag=True,
     default=False,
-    help="Propaga GAMEDEV_UMS_STREAM=1 aos subprocessos (eventos UMS; só com verbose/ruído OK).",
+    help="Propaga AIGAMEKIT_UMS_STREAM=1 aos subprocessos (eventos UMS; só com verbose/ruído OK).",
 )
 @click.option(
     "--no-ums",
@@ -540,7 +540,7 @@ def batch_cmd(
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.touch(exist_ok=True)
     with contextlib.suppress(Exception):
-        from gamedev_shared.pipeline_trace import default_log_path, session_id, trace_event
+        from aigamekit_shared.pipeline_trace import default_log_path, session_id, trace_event
 
         _trace_p = default_log_path()
         console.print(f"[dim]pipeline_trace[/dim] {_trace_p}  session={session_id()}  batch_log={log_path or '(off)'}")
@@ -555,7 +555,7 @@ def batch_cmd(
         )
     if log_path is not None:
         with contextlib.suppress(Exception):
-            from gamedev_shared.pipeline_trace import session_id as _sid
+            from aigamekit_shared.pipeline_trace import session_id as _sid
 
             with log_path.open("a", encoding="utf-8") as _lf:
                 _lf.write(
@@ -576,7 +576,7 @@ def batch_cmd(
         with log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         with contextlib.suppress(Exception):
-            from gamedev_shared.pipeline_trace import trace_event
+            from aigamekit_shared.pipeline_trace import trace_event
 
             trace_event("batch_record", **rec)
 
@@ -909,7 +909,7 @@ def batch_cmd(
     # Graceful: se falhar, continuar sem UMS (cada subprocess carrega do zero).
     if not skip_gpu_preflight:
         try:
-            from gamedev_shared.model_server import ensure_ums_running
+            from aigamekit_shared.model_server import ensure_ums_running
 
             ensure_ums_running()
         except Exception:
@@ -919,10 +919,10 @@ def batch_cmd(
     # Pedidos GPU via UMS ficam atrás de CLIs interactivas (afinidade/prioridade).
     apply_ums_child_env(child_env, ums_stream=ums_stream, no_ums=no_ums)
     if profile_tools:
-        child_env["GAMEDEV_PROFILE"] = "1"
-        child_env["GAMEDEV_PROFILE_TOOL"] = "gameassets"
+        child_env["AIGAMEKIT_PROFILE"] = "1"
+        child_env["AIGAMEKIT_PROFILE_TOOL"] = "gameassets"
         plog = profile_tools_log or (manifest_path.parent / "gameassets_profile.jsonl")
-        child_env["GAMEDEV_PROFILE_LOG"] = str(plog.resolve())
+        child_env["AIGAMEKIT_PROFILE_LOG"] = str(plog.resolve())
 
     _batch_params = {
         "rows": len(rows),

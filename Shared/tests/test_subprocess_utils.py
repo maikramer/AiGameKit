@@ -1,4 +1,4 @@
-"""Testes para gamedev_shared.subprocess_utils (resolve_binary + monorepo)."""
+"""Testes para aigamekit_shared.subprocess_utils (resolve_binary + monorepo)."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from unittest.mock import patch
 
 import pytest
 
-from gamedev_shared.env import (
+from aigamekit_shared.env import (
     TOOL_BINS,
     apply_monorepo_tool_bins,
     discover_monorepo_tool_bin,
     prefer_monorepo_tools,
 )
-from gamedev_shared.subprocess_utils import resolve_binary
+from aigamekit_shared.subprocess_utils import resolve_binary
 
 
 def _make_tool_venv(root: Path, folder: str, cli: str) -> Path:
@@ -34,7 +34,7 @@ class TestPreferMonorepoTools:
             assert prefer_monorepo_tools() is True
 
     def test_off(self):
-        with patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True):
+        with patch.dict(os.environ, {"AIGAMEKIT_PREFER_MONOREPO": "0"}, clear=True):
             assert prefer_monorepo_tools() is False
 
 
@@ -57,9 +57,9 @@ class TestApplyMonorepoToolBins:
     def test_fills_missing(self, tmp_path: Path):
         expected = _make_tool_venv(tmp_path, "Text3D", "text3d")
         with (
-            patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "1"}, clear=True),
+            patch.dict(os.environ, {"AIGAMEKIT_PREFER_MONOREPO": "1"}, clear=True),
             patch(
-                "gamedev_shared.monorepo.try_find_monorepo_root",
+                "aigamekit_shared.monorepo.try_find_monorepo_root",
                 return_value=tmp_path,
             ),
         ):
@@ -70,9 +70,9 @@ class TestApplyMonorepoToolBins:
     def test_does_not_override(self, tmp_path: Path):
         _make_tool_venv(tmp_path, "Text3D", "text3d")
         with (
-            patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "1"}, clear=True),
+            patch.dict(os.environ, {"AIGAMEKIT_PREFER_MONOREPO": "1"}, clear=True),
             patch(
-                "gamedev_shared.monorepo.try_find_monorepo_root",
+                "aigamekit_shared.monorepo.try_find_monorepo_root",
                 return_value=tmp_path,
             ),
         ):
@@ -82,7 +82,7 @@ class TestApplyMonorepoToolBins:
 
     def test_disabled(self, tmp_path: Path):
         _make_tool_venv(tmp_path, "Text3D", "text3d")
-        with patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True):
+        with patch.dict(os.environ, {"AIGAMEKIT_PREFER_MONOREPO": "0"}, clear=True):
             env: dict[str, str] = {}
             apply_monorepo_tool_bins(env)
             assert TOOL_BINS["text3d"] not in env
@@ -94,11 +94,11 @@ class TestResolveBinaryMonorepo:
         with (
             patch.dict(
                 os.environ,
-                {"TEXT3D_BIN": "/env/text3d", "GAMEDEV_PREFER_MONOREPO": "1"},
+                {"TEXT3D_BIN": "/env/text3d", "AIGAMEKIT_PREFER_MONOREPO": "1"},
                 clear=True,
             ),
             patch(
-                "gamedev_shared.monorepo.try_find_monorepo_root",
+                "aigamekit_shared.monorepo.try_find_monorepo_root",
                 return_value=tmp_path,
             ),
         ):
@@ -107,26 +107,26 @@ class TestResolveBinaryMonorepo:
     def test_prefers_monorepo_over_path(self, tmp_path: Path):
         expected = _make_tool_venv(tmp_path, "Text3D", "text3d")
         with (
-            patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "1"}, clear=True),
+            patch.dict(os.environ, {"AIGAMEKIT_PREFER_MONOREPO": "1"}, clear=True),
             patch(
-                "gamedev_shared.monorepo.try_find_monorepo_root",
+                "aigamekit_shared.monorepo.try_find_monorepo_root",
                 return_value=tmp_path,
             ),
-            patch("gamedev_shared.subprocess_utils.shutil.which", return_value="/usr/bin/text3d"),
+            patch("aigamekit_shared.subprocess_utils.shutil.which", return_value="/usr/bin/text3d"),
         ):
             assert resolve_binary("TEXT3D_BIN", "text3d") == str(expected.resolve())
 
     def test_falls_back_to_path_when_disabled(self):
         with (
-            patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True),
-            patch("gamedev_shared.subprocess_utils.shutil.which", return_value="/usr/bin/text3d"),
+            patch.dict(os.environ, {"AIGAMEKIT_PREFER_MONOREPO": "0"}, clear=True),
+            patch("aigamekit_shared.subprocess_utils.shutil.which", return_value="/usr/bin/text3d"),
         ):
             assert resolve_binary("TEXT3D_BIN", "text3d") == "/usr/bin/text3d"
 
     def test_raises_when_missing(self):
         with (
-            patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True),
-            patch("gamedev_shared.subprocess_utils.shutil.which", return_value=None),
+            patch.dict(os.environ, {"AIGAMEKIT_PREFER_MONOREPO": "0"}, clear=True),
+            patch("aigamekit_shared.subprocess_utils.shutil.which", return_value=None),
             pytest.raises(FileNotFoundError, match="text3d"),
         ):
             resolve_binary("TEXT3D_BIN", "text3d")

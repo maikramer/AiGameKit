@@ -35,7 +35,7 @@ class Hunyuan3DOmniSiTFlowMatchingPipeline:
     This pipeline is designed for generating 3D shapes using the Hunyuan3DOmni model with SiT flow matching.
     """
 
-    # accelerate / gamedev_shared.lowvram place_pipeline hooks (parity Hunyuan 2.1).
+    # accelerate / aigamekit_shared.lowvram place_pipeline hooks (parity Hunyuan 2.1).
     model_cpu_offload_seq = "cond_encoder->model->vae"
     _exclude_from_cpu_offload: list[str] = []
 
@@ -150,7 +150,7 @@ class Hunyuan3DOmniSiTFlowMatchingPipeline:
     def to(self, device=None, dtype=None):
         """Move nn.Module submodules + update ``self.device`` / ``self.dtype``.
 
-        Required by ``gamedev_shared.lowvram.apply_offload_plan`` (full-GPU path).
+        Required by ``aigamekit_shared.lowvram.apply_offload_plan`` (full-GPU path).
         Without this, ``place_pipeline`` logs a plan but leaves weights on CPU.
         """
         if dtype is not None:

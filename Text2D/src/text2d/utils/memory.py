@@ -1,6 +1,6 @@
-"""Memória, GPU e informações do sistema — delegate para gamedev_shared.gpu."""
+"""Memória, GPU e informações do sistema — delegate para aigamekit_shared.gpu."""
 
-from gamedev_shared.gpu import (
+from aigamekit_shared.gpu import (
     check_gpu_compatibility,
     format_bytes,
     get_gpu_info,

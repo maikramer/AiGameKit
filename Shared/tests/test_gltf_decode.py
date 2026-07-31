@@ -1,4 +1,4 @@
-"""Tests for gamedev_shared.gltf_decode (KTX2/meshopt pre-decode for bpy)."""
+"""Tests for aigamekit_shared.gltf_decode (KTX2/meshopt pre-decode for bpy)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import struct
 from pathlib import Path
 from unittest.mock import patch
 
-from gamedev_shared.gltf_decode import (
+from aigamekit_shared.gltf_decode import (
     EXT_BASISU,
     EXT_MESHOPT,
     bpy_decode_subcommand,
@@ -65,12 +65,12 @@ class TestBpyDecodeSubcommand:
 
     def test_meshopt_native_bpy_no_decode(self, tmp_path):
         path = make_glb(tmp_path, {"extensionsRequired": [EXT_MESHOPT]})
-        with patch("gamedev_shared.bpy_mesh.gltf_import_supports_meshopt", return_value=True):
+        with patch("aigamekit_shared.bpy_mesh.gltf_import_supports_meshopt", return_value=True):
             assert bpy_decode_subcommand(path) is None
 
     def test_meshopt_old_bpy_copy(self, tmp_path):
         path = make_glb(tmp_path, {"extensionsRequired": [EXT_MESHOPT]})
-        with patch("gamedev_shared.bpy_mesh.gltf_import_supports_meshopt", return_value=False):
+        with patch("aigamekit_shared.bpy_mesh.gltf_import_supports_meshopt", return_value=False):
             assert bpy_decode_subcommand(path) == "copy"
 
     def test_quantization_only_no_decode(self, tmp_path):
@@ -80,7 +80,7 @@ class TestBpyDecodeSubcommand:
 
 class TestRunGltfTransform:
     def test_npx_missing(self, tmp_path):
-        with patch("gamedev_shared.gltf_decode.shutil.which", return_value=None):
+        with patch("aigamekit_shared.gltf_decode.shutil.which", return_value=None):
             ok, err = run_gltf_transform("copy", tmp_path / "a.glb", tmp_path / "b.glb")
         assert not ok
         assert "npx" in err
@@ -95,7 +95,7 @@ class TestBpyReadableGlb:
     def test_falls_back_to_original_on_decode_failure(self, tmp_path):
         path = make_glb(tmp_path, {"extensionsRequired": [EXT_BASISU]})
         with (
-            patch("gamedev_shared.gltf_decode.run_gltf_transform", return_value=(False, "boom")),
+            patch("aigamekit_shared.gltf_decode.run_gltf_transform", return_value=(False, "boom")),
             bpy_readable_glb(path) as readable,
         ):
             assert readable == path.resolve()
@@ -108,7 +108,7 @@ class TestBpyReadableGlb:
             dst.write_bytes(b"decoded")
             return True, ""
 
-        with patch("gamedev_shared.gltf_decode.run_gltf_transform", side_effect=fake_transform):
+        with patch("aigamekit_shared.gltf_decode.run_gltf_transform", side_effect=fake_transform):
             with bpy_readable_glb(path) as readable:
                 assert readable != path.resolve()
                 assert readable.read_bytes() == b"decoded"

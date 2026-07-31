@@ -56,8 +56,8 @@ def test_job_states_distinct(job_state: str) -> None:
 
 @pytest.mark.parametrize("inflight_max", [1, 2, 4])
 def test_protocol_max_inflight_env_readable(inflight_max: int) -> None:
-    with patch.dict(os.environ, {"GAMEDEV_UMS_MAX_INFLIGHT": str(inflight_max)}, clear=False):
-        assert P._env_int("GAMEDEV_UMS_MAX_INFLIGHT", 1) == inflight_max
+    with patch.dict(os.environ, {"AIGAMEKIT_UMS_MAX_INFLIGHT": str(inflight_max)}, clear=False):
+        assert P._env_int("AIGAMEKIT_UMS_MAX_INFLIGHT", 1) == inflight_max
 
 
 @pytest.mark.parametrize("backend", ["text2d", "text2icon", "text3d", "paint3d", "part3d", "skymap2d", "texture2d"])
@@ -135,7 +135,7 @@ def test_inference_headroom_mib(activation: int, safety: int | None, expected: i
     ],
 )
 def test_vram_safety_mib_env(env_val: str, expected_min: int) -> None:
-    with patch.dict(os.environ, {"GAMEDEV_UMS_VRAM_SAFETY_MIB": env_val}, clear=False):
+    with patch.dict(os.environ, {"AIGAMEKIT_UMS_VRAM_SAFETY_MIB": env_val}, clear=False):
         got = vram_safety_mib()
         if env_val == "512":
             assert got == 512

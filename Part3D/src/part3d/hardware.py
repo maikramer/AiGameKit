@@ -24,8 +24,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, HardwareProfileBase, detect_profile
-from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
+from aigamekit_shared.hardware import GIB, HardwareProfileBase, detect_profile
+from aigamekit_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 HW_AUTO_ENV = "PART3D_HW_AUTO"
 

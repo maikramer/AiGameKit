@@ -9,10 +9,10 @@ import pytest
 
 class TestProtocolEnvOverrides:
     def test_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("GAMEDEV_UMS_MAX_AFFINITY_CUTS", raising=False)
-        monkeypatch.delenv("GAMEDEV_UMS_MAX_QUEUE_DEPTH", raising=False)
-        monkeypatch.delenv("GAMEDEV_UMS_MAX_INFLIGHT", raising=False)
-        monkeypatch.delenv("GAMEDEV_UMS_STARVATION_TIMEOUT_SEC", raising=False)
+        monkeypatch.delenv("AIGAMEKIT_UMS_MAX_AFFINITY_CUTS", raising=False)
+        monkeypatch.delenv("AIGAMEKIT_UMS_MAX_QUEUE_DEPTH", raising=False)
+        monkeypatch.delenv("AIGAMEKIT_UMS_MAX_INFLIGHT", raising=False)
+        monkeypatch.delenv("AIGAMEKIT_UMS_STARVATION_TIMEOUT_SEC", raising=False)
         import modelserver.protocol as proto
 
         importlib.reload(proto)
@@ -22,10 +22,10 @@ class TestProtocolEnvOverrides:
         assert proto.STARVATION_TIMEOUT_SEC == 0.0
 
     def test_valid_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_MAX_AFFINITY_CUTS", "5")
-        monkeypatch.setenv("GAMEDEV_UMS_MAX_QUEUE_DEPTH", "10")
-        monkeypatch.setenv("GAMEDEV_UMS_MAX_INFLIGHT", "2")
-        monkeypatch.setenv("GAMEDEV_UMS_STARVATION_TIMEOUT_SEC", "120")
+        monkeypatch.setenv("AIGAMEKIT_UMS_MAX_AFFINITY_CUTS", "5")
+        monkeypatch.setenv("AIGAMEKIT_UMS_MAX_QUEUE_DEPTH", "10")
+        monkeypatch.setenv("AIGAMEKIT_UMS_MAX_INFLIGHT", "2")
+        monkeypatch.setenv("AIGAMEKIT_UMS_STARVATION_TIMEOUT_SEC", "120")
         import modelserver.protocol as proto
 
         importlib.reload(proto)
@@ -35,7 +35,7 @@ class TestProtocolEnvOverrides:
         assert proto.STARVATION_TIMEOUT_SEC == 120.0
 
     def test_invalid_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_MAX_AFFINITY_CUTS", "abc")
+        monkeypatch.setenv("AIGAMEKIT_UMS_MAX_AFFINITY_CUTS", "abc")
         import modelserver.protocol as proto
 
         importlib.reload(proto)

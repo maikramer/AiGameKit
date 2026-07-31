@@ -1,6 +1,6 @@
 """Utilitários de processamento de imagem para Skymap2D.
 
-Image I/O and metadata helpers are imported from ``gamedev_shared.image_utils``.
+Image I/O and metadata helpers are imported from ``aigamekit_shared.image_utils``.
 This module re-exports them for backward compatibility and adds Skymap2D-specific
 defaults (EXR export, 2:1 thumbnail ratio).
 """
@@ -14,7 +14,7 @@ from typing import Any
 
 from PIL import Image
 
-from gamedev_shared.image_utils import save_image_with_metadata, write_metadata_sidecar
+from aigamekit_shared.image_utils import save_image_with_metadata, write_metadata_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,6 @@ def save_image(
 
 def create_thumbnail(image: Image.Image, size: tuple[int, int] = (512, 256)) -> Image.Image:
     """Cria um thumbnail da imagem (2:1 por defeito para skymaps)."""
-    from gamedev_shared.image_utils import create_thumbnail as _create_thumbnail
+    from aigamekit_shared.image_utils import create_thumbnail as _create_thumbnail
 
     return _create_thumbnail(image, size)

@@ -71,7 +71,7 @@ sem `NORMAL` → lod/finish import flat → V/Tri≈3 / edges vivos. Ver
 - Stack SDNQ; mem-eff em 6 GB; volume decode **flashvdm** + channels_last default.
 - Preferir **shape** (ou LOD limpo) como input — painted GLB pode hangar bpy
   `fix_mesh` / atrapalhar segmentação.
-- Repair pós-decode: perfil `part_decode` em `gamedev_shared.mesh_repair`.
+- Repair pós-decode: perfil `part_decode` em `aigamekit_shared.mesh_repair`.
 - UMS backend `part3d` — mesmo contrato peak/quant.
 - Lições finos / faces: [`../HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`](../HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 

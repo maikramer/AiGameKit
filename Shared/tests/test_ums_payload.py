@@ -1,4 +1,4 @@
-"""Testes do corpo de request UMS partilhado (``gamedev_shared.ums_payload``).
+"""Testes do corpo de request UMS partilhado (``aigamekit_shared.ums_payload``).
 
 Cobre a montagem por precedência (prompt/output → core → optional → extra).
 Os builders por-tool (que usam este módulo) são exercitados nas suites de
@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from gamedev_shared.ums_payload import build_request_body
+from aigamekit_shared.ums_payload import build_request_body
 
 
 class TestBuildRequestBody:

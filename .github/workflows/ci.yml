@@ -1,4 +1,4 @@
-# CI for the GameDev monorepo.
+# CI for the AiGameKit monorepo.
 # Text2D, Text3D, and Paint3D excluded: heavy PyTorch / diffusers deps, not viable on GPU-less runners.
 
 name: CI
@@ -56,8 +56,8 @@ jobs:
           # Torch on CPU
           - package: Text2Sound
             python-version: "3.13"
-          # GameDevLab
-          - package: GameDevLab
+          # AiGameKitLab
+          - package: AiGameKitLab
             python-version: "3.13"
           # Rocks3D
           - package: Rocks3D

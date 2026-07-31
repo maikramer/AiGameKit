@@ -1,0 +1,660 @@
+# AiGameKitLab — Debug, Benchmark & Performance
+
+> CLI toolkit for the AiGameKit monorepo: 3D visual debugging, GLB validation, GPU benchmarking, performance analytics, CPU profiling, and mesh quality inspection. Replaces the legacy `gameassets debug` (removed from GameAssets).
+
+## Overview
+
+AiGameKitLab is the unified debugging and quality-assurance tool for the entire AiGameKit pipeline. It provides:
+
+- **`check`** — Declarative GLB validation against YAML/JSON rules (CI-ready, exit 0/1)
+- **`debug`** — Visual debugging: multi-angle screenshots, metadata inspection, side-by-side comparison, agent bundles, rig inspection, material inspection, and turntable GIFs
+- **`bench`** — GPU benchmarks for Paint3D quantization, SDNQ sweeps, full pipeline optimization, and batch sweeps
+- **`perf`** — Performance analytics over an SQLite database (runs, VRAM analysis, config recommendations)
+- **`profile`** — CPU profiling via cProfile
+- **`mesh`** — Mesh quality inspection (topology, geometry, artifacts), visual QA, and topological diff
+
+Requires `aigamekit-shared` as a dependency. All rendering commands use **native bpy** (`pip install bpy`) — no `animator3d` dependency. Weight heatmaps, turntable GIFs, material inspection, and overlay diffs are all handled in-process.
+
+## Installation
+
+From the monorepo root:
+
+```bash
+cd Shared && pip install -e .
+cd AiGameKitLab && pip install -e .
+```
+
+For GPU benchmarks (Paint3D, SDNQ, Quanto):
+
+```bash
+cd AiGameKitLab && pip install -e ".[bench]"
+```
+
+Without `pip install`, using `PYTHONPATH`:
+
+```bash
+export PYTHONPATH="/path/to/AiGameKitLab/src:/path/to/Shared/src"
+python -m aigamekit_lab --help
+```
+
+## Commands
+
+Entry point: `aigamekit-lab` or `python -m aigamekit_lab`
+
+### check — GLB Validation
+
+Validate GLB files against declarative YAML/JSON rules. CI-ready (exits 0 on pass, 1 on failure).
+
+```bash
+aigamekit-lab check glb modelo.glb rules.yaml
+aigamekit-lab check glb modelo.glb rules.yaml --json-out report.json --quiet
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json-out` | path | None | Write JSON report to file (stdout if omitted with `--quiet`) |
+| `--quiet`, `-q` | flag | false | Only exit code; errors on stderr |
+
+Rule files support vertex/face limits, `world_bounds`, required bones, and more. See [`examples/glb_rules.example.yaml`](examples/glb_rules.example.yaml) and [`examples/glb_rules_permissive.yaml`](examples/glb_rules_permissive.yaml).
+
+---
+
+### debug — Visual Debug Tools
+
+All rendering commands use **native bpy** (no `animator3d` subprocess). Install bpy with `pip install bpy` (Python 3.13+, Blender 5.2 LTS).
+
+GLBs with `KHR_texture_basisu` (KTX2) or `EXT_meshopt_compression` — i.e. pipeline deliverables after `--finish-lod0`/bake-master — are decoded automatically before import via `aigamekit_shared.gltf_decode` (needs Node.js/`npx` for `@gltf-transform/cli`; without it the importer's own error surfaces).
+
+#### `debug screenshot GLB`
+
+Generate multi-angle screenshots using the native bpy renderer.
+
+```bash
+aigamekit-lab debug screenshot modelo.glb -o ./screenshots
+aigamekit-lab debug screenshot modelo.glb -o ./frames --frame-list 1,36,72
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output-dir` | path | `{stem}_debug` | Output directory |
+| `--views` | str | `front,three_quarter,right,back` | Comma-separated view names |
+| `-r, --resolution` | int | `512` | Render resolution in pixels |
+| `--show-bones` | flag | false | Show armature wireframe |
+| `--frame` | int | None | Single frame for all views |
+| `--frame-list` | str | None | Comma-separated frames (e.g. `1,36,72`) — files named `view_fNNNN.png` |
+| `--engine` | str | `workbench` | Render engine: `workbench` or `eevee` |
+| `--ortho` | flag | false | Orthographic camera |
+| `--no-transparent-film` | flag | false | Opaque background |
+
+#### `debug cut-review GLB`
+
+Zoom cameras on the horizontal cut band (tree stump/top after `text3d split-at-height`)
+plus JSON metrics — without regenerating the full LOD ladder.
+
+```bash
+aigamekit-lab debug cut-review stump.glb -o ./cut_review --cut-height 0.8
+text3d split-at-height painted.glb -o /tmp/split.glb --split-files --no-cap
+aigamekit-lab debug cut-review /tmp/split_stump.glb -o /tmp/cut/
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output-dir` | path | `{stem}_cut_review` | PNGs + `cut_review.json` |
+| `--cut-height` | float | auto `min(0.8,h/4)` from base | Cut plane height (m) |
+| `-r, --resolution` | int | `512` | Render resolution |
+| `--engine` | str | `workbench` | `workbench` or `eevee` |
+| `--band` | float | `0.12` | Half-band around cut for metrics (m) |
+
+JSON fields: `boundary_edges_near_cut`, `open_loops_near_cut`,
+`horizontal_faces_on_cut`, `uv_on_cut_faces`, `ok`. Weld-before-measure avoids
+false boundary from glTF UV/normal vertex splits. Exit `2` if `ok` is false.
+Pipeline notes: [`docs/findings/MESH_PIPELINE_FINDINGS.md`](../docs/findings/MESH_PIPELINE_FINDINGS.md).
+
+#### `debug bundle GLB`
+
+Full agent bundle: inspect JSON + multi-angle screenshots + `bundle.json`. The bundle includes extra views (`low_front`, `worm`) by default.
+
+```bash
+aigamekit-lab debug bundle modelo.glb -o ./out_bundle
+aigamekit-lab debug bundle modelo.glb -o ./out_bundle --include-rig --rig-weights spine
+```
+
+All screenshot flags apply, plus:
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--include-rig` | flag | false | Generate `rig/` subfolder with inspect-rig (bones + optional heatmap) |
+| `--rig-weights` | str | None | Bone name for heatmap (requires `--include-rig`) |
+
+The `bundle.json` tracks `tool: aigamekit_lab.debug.bundle`, version, input paths, inspect data, screenshots, world bounds, and optional rig report.
+
+#### `debug inspect GLB`
+
+Dump mesh/armature/animation metadata as JSON (native bpy, no rendering).
+
+```bash
+aigamekit-lab debug inspect modelo.glb
+aigamekit-lab debug inspect modelo.glb -o metadata.json
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output` | path | None | Save JSON to file (stdout if omitted) |
+
+#### `debug inspect-rig GLB`
+
+Rig inspection with bone wireframe and optional weight heatmap. **Native bpy** — renders bone overlay and Blue→Green→Red weight ramp in-process (no `animator3d`).
+
+```bash
+aigamekit-lab debug inspect-rig modelo.glb -o ./rig_debug --show-weights spine
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output-dir` | path | `{stem}_rig_debug` | Output directory |
+| `--show-weights` | str | None | Bone name for weight heatmap |
+| `--views` | str | `front,three_quarter,right,back` | Comma-separated view names |
+| `-r, --resolution` | int | `512` | Render resolution |
+| `--engine` | str | `workbench` | Render engine: `workbench` or `eevee` |
+| `--ortho` | flag | false | Orthographic camera |
+| `--no-transparent-film` | flag | false | Opaque background |
+
+#### `debug inspect-material GLB`
+
+Material/texture PBR inspection with EEVEE rendering. Dumps Principled BSDF inputs, image textures (resolution, colorspace, wrap mode), and renders views faithfully capturing PBR materials.
+
+```bash
+aigamekit-lab debug inspect-material modelo.glb -o ./mat_debug
+aigamekit-lab debug inspect-material modelo.glb --engine workbench
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output-dir` | path | `{stem}_material` | Output directory |
+| `--views` | str | `front,three_quarter,right` | Comma-separated view names |
+| `-r, --resolution` | int | `512` | Render resolution |
+| `--engine` | str | `eevee` | Render engine (`eevee` captures PBR; `workbench` is faster) |
+| `--ortho` | flag | false | Orthographic camera |
+| `--no-transparent-film` | flag | false | Opaque background |
+
+Output: `material_report.json` (with `materials` array) + `material_{view}.png` screenshots.
+
+#### `debug turntable GLB`
+
+360° turntable GIF animation. Orbits the camera around the model in N frames and combines them into a looping GIF via Pillow.
+
+```bash
+aigamekit-lab debug turntable modelo.glb -o ./turn.gif --frames 36
+aigamekit-lab debug turntable modelo.glb --engine eevee --show-bones
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output` | path | `{stem}_turntable.gif` | Output `.gif` path |
+| `--frames` | int | `24` | Number of rotation steps (≥4) |
+| `-r, --resolution` | int | `384` | Render resolution (square) |
+| `--engine` | str | `workbench` | Render engine |
+| `--ortho` | flag | false | Orthographic camera |
+| `--no-transparent-film` | flag | false | Opaque background |
+| `--show-bones` | flag | false | Show armature wireframe |
+| `--duration` | int | `120` | Per-frame duration in GIF (ms) |
+
+#### `debug viz GLB --mode MODE`
+
+Mesh-debug visualizations (native bpy render). Each mode writes per-view PNGs
+with an embedded legend/colorbar plus `viz_report.json` with mode metrics.
+
+```bash
+aigamekit-lab debug viz modelo.glb -m normals              # normal → RGB color scale
+aigamekit-lab debug viz modelo.glb -m normals-arrows       # sampled arrows along vertex normals
+aigamekit-lab debug viz modelo.glb -m orientation          # backfaces red / front faces blue (EEVEE)
+aigamekit-lab debug viz modelo.glb -m uv                   # UV_GRID checker (distortion/seams)
+aigamekit-lab debug viz modelo.glb -m edges --wireframe    # boundary red / non-manifold orange
+aigamekit-lab debug viz rigged.glb -m weights              # dominant bone per vertex + legend
+aigamekit-lab debug viz rigged.glb -m weights --weights-view count       # influences per vertex
+aigamekit-lab debug viz rigged.glb -m weights --weights-view unweighted  # weightless verts magenta
+aigamekit-lab debug viz rigged.glb -m weights --weights-view bone --bone Head  # single-bone heatmap + colorbar
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-m, --mode` | choice | required | `normals` \| `normals-arrows` \| `orientation` \| `uv` \| `edges` \| `weights` |
+| `-o, --output-dir` | path | `{stem}_viz/{mode}` | Output directory |
+| `--views` | str | `front,three_quarter,right,back` | Comma-separated views |
+| `-r, --resolution` | int | `512` | Render resolution |
+| `--engine` | str | `workbench` | Render engine (`orientation` forces eevee) |
+| `--sample` | int | `2000` | Max arrows (normals-arrows) |
+| `--arrow-length` | float | 3% bbox | Arrow length in meters |
+| `--bone` | str | None | Bone name for single-bone heatmap (weights) |
+| `--weights-view` | choice | `dominant` | `dominant` \| `count` \| `unweighted` \| `bone` |
+| `--wireframe` | flag | false | Black wireframe overlay on any mode |
+| `--world-space` | flag | false | World-space normals (normals mode) |
+
+Notes: KTX2/meshopt GLBs are decoded automatically before import. `edges` and
+the `orientation` flipped-face estimate weld glTF seam-splits first, so only
+real holes/inversions are reported. Arrows sample the armature-posed mesh.
+
+#### `debug compare A B`
+
+Side-by-side visual + structural comparison of two GLB models.
+
+```bash
+aigamekit-lab debug compare before.glb after.glb -o ./comparison --image-metrics
+aigamekit-lab debug compare before.glb after.glb -o ./ci --image-metrics --fail-below-ssim 0.85
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output-dir` | path | `{a}_vs_{b}` | Output directory |
+| `--views` | str | `front,three_quarter` | Comma-separated views to compare |
+| `-r, --resolution` | int | `512` | Render resolution |
+| `--with-inspect` | flag | false | Include full inspect JSON per model |
+| `--struct-diff` / `--no-struct-diff` | flag | `true` | Compute `inspect_diff` (vertex/face deltas per view) |
+| `--image-metrics` | flag | false | Compute MAE, RMSE, SSIM per view (numpy) |
+| `--fail-below-ssim` | float | None | Exit 1 if any view's SSIM falls below threshold (requires `--image-metrics`) |
+| `--overlay` | flag | false | Generate visual diff overlays (50% blend + absolute difference heatmap) |
+| `--engine` | str | `workbench` | Render engine: `workbench` or `eevee` |
+| `--ortho` | flag | false | Orthographic camera |
+
+Output: side-by-side PNGs per view (`compare_{view}.png`), optional overlay diffs (`overlay_{view}.png`), and `diff_report.json` with `inspect_diff` section and optional `image_metrics`/`overlay` arrays.
+
+---
+
+### bench — GPU Benchmarks
+
+GPU benchmarks require the `[bench]` extra: `pip install -e ".[bench]"`.
+
+#### `bench paint-vram`
+
+Paint3D quantization sweet-spot search with VRAM monitoring.
+
+```bash
+aigamekit-lab bench paint-vram --image reference.png --target-vram-mb 5500
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--image` | path | None | Reference image for apply_hunyuan_paint |
+| `--target-vram-mb` | float | `5500` | Target VRAM budget in MB |
+| `--output-json` | path | `quantization_vram_results.json` | Output JSON file |
+| `--project-dir` | path | `.` | Base for relative paths |
+
+#### `bench pre-quantize`
+
+Pre-quantize SDNQ UNet (Paint3D) models.
+
+```bash
+aigamekit-lab bench pre-quantize --modelo paint3d
+aigamekit-lab bench pre-quantize --modelo todos --dry-run
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--modelo` | str | `todos` | Target: `paint3d` or `todos` |
+| `--dry-run` | flag | false | Check SDNQ availability without quantizing |
+
+#### `bench sdnq-sweep`
+
+SDNQ configuration sweep for Paint3D — tests TinyVAE, attention slicing, and 4/8-bit quantization.
+
+```bash
+aigamekit-lab bench sdnq-sweep --mesh modelo.glb --image ref.png \
+  --target-vram-mb 5500 -o sweep_results
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--mesh` | path | **required** | Input mesh GLB |
+| `--image` | path | **required** | Reference image for texturing |
+| `-o, --output-dir` | path | `sdnq_sweep_results` | Output directory |
+| `--target-vram-mb` | float | `5500` | Maximum VRAM target in MB |
+| `--project-dir` | path | `.` | Base directory for relative paths |
+
+#### `bench pipeline-opt`
+
+Optimize the full Paint3D pipeline. Automatically iterates configs with fallback on OOM.
+
+```bash
+aigamekit-lab bench pipeline-opt --mesh input.glb --image ref.png \
+  --target-vram-mb 6000
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--mesh` | path | **required** | Input mesh GLB |
+| `--image` | path | **required** | Reference image for texturing |
+| `-o, --output-dir` | path | `pipeline_opt_results` | Output directory |
+| `--target-vram-mb` | float | `5500` | Maximum VRAM target in MB |
+| `--project-dir` | path | `.` | Base directory for relative paths |
+
+The optimizer tests stable Paint3D configs first (`paint3d-qint8-*`), then experimental SDNQ configs, monitors VRAM in real time, and falls back to lighter configs on OOM.
+
+#### `bench batch`
+
+GameAssets batch configuration sweep with quantization profiles.
+
+```bash
+aigamekit-lab bench batch --mode sweep --project-dir ./myproject --manifest manifest.csv
+aigamekit-lab bench batch --mode test --config baseline-fp16
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--mode` | str | `dry-run` | Mode: `sweep`, `test`, or `dry-run` |
+| `--config` | str | None | Config name (for `test` mode) |
+| `-o, --output-dir` | path | `test_results` | Results directory |
+| `--project-dir` | path | `.` | Example directory (cwd for tests) |
+| `--manifest` | path | `project-dir/manifest_3obj.csv` | Manifest CSV file |
+
+---
+
+### perf — Performance Analysis
+
+Performance analytics backed by an SQLite perf database (stored in the monorepo data directory).
+
+#### `perf list`
+
+List recent performance runs.
+
+```bash
+aigamekit-lab perf list --tool text2d -n 10
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--tool`, `-t` | str | None | Filter by tool name (e.g. `text2d`, `text3d`) |
+| `--limit`, `-n` | int | `20` | Number of runs to display |
+| `--db` | path | None | Path to `perf.db` |
+
+#### `perf show RUN_ID`
+
+Show detailed spans for a specific run.
+
+```bash
+aigamekit-lab perf show 42
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--db` | path | None | Path to `perf.db` |
+
+#### `perf summary`
+
+Aggregated performance summary grouped by tool and quantization mode.
+
+```bash
+aigamekit-lab perf summary --tool text3d --gpu 4090 --days 30
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--tool`, `-t` | str | None | Filter by tool name |
+| `--gpu` | str | None | Filter by GPU name (substring match) |
+| `--quant` | str | None | Filter by quantization mode |
+| `--days` | int | `30` | Time window in days |
+| `--db` | path | None | Path to `perf.db` |
+
+#### `perf vram`
+
+VRAM usage analysis by tool, quantization, and span.
+
+```bash
+aigamekit-lab perf vram --tool text3d --gpu 4090
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--tool`, `-t` | str | None | Filter by tool name |
+| `--gpu` | str | None | Filter by GPU name (substring match) |
+| `--days` | int | `30` | Time window in days |
+| `--db` | path | None | Path to `perf.db` |
+
+#### `perf recommend TOOL`
+
+Recommend the best quantization configuration for a tool given a VRAM budget.
+
+```bash
+aigamekit-lab perf recommend text2d --vram 8000
+aigamekit-lab perf recommend text3d --vram 6000 --gpu 4070 --days 90
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `TOOL` | arg | **required** | Tool name (e.g. `text2d`, `text3d`) |
+| `--vram` | float | **required** | Available VRAM in MB |
+| `--gpu` | str | None | Filter by GPU name (substring match) |
+| `--days` | int | `90` | Time window in days |
+| `--db` | path | None | Path to `perf.db` |
+
+#### `perf clean`
+
+Delete old performance runs from the database.
+
+```bash
+aigamekit-lab perf clean --days 30
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--days` | int | `90` | Delete runs older than N days |
+| `--db` | path | None | Path to `perf.db` |
+
+---
+
+### profile — CPU Profiling
+
+#### `profile cprofile SCRIPT`
+
+Run a Python script with `cProfile` instrumentation.
+
+```bash
+aigamekit-lab profile cprofile -o out.prof ./script.py -- --arg1 --arg2
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output` | path | `{stem}.prof` | Output `.prof` file |
+| `args` | args | None | Extra arguments after `--` (forwarded to script) |
+
+---
+
+### mesh — Mesh Quality
+
+Mesh topology, geometry, and artifact inspection. Rendering commands require `bpy`.
+
+#### `mesh inspect MESH`
+
+Analyze mesh quality: topology stats, geometry measurements, and artifact detection. Outputs a grade (A–F) and pass/fail verdict.
+
+```bash
+aigamekit-lab mesh inspect modelo.glb
+aigamekit-lab mesh inspect modelo.glb -v --json-out report.json
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json-out` | path | None | Save report as JSON |
+| `--verbose`, `-v` | flag | false | Show detailed Rich tables |
+
+#### `mesh qa MESH`
+
+Full QA pipeline: topology inspect + render views + optional reference image comparison (SSIM).
+
+```bash
+aigamekit-lab mesh qa modelo.glb -o ./qa_output --reference-image reference.png
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output-dir` | path | `{stem}_qa` | Output directory |
+| `--reference-image` | path | None | Reference image for visual comparison |
+| `--views` | str | `front,three_quarter,right,back,top,low_front` | Comma-separated views |
+| `-r, --resolution` | int | `512` | Render resolution |
+| `--engine` | str | `workbench` | Render engine: `workbench` or `eevee` |
+
+#### `mesh render-views MESH`
+
+Render multi-angle views of a GLB for visual inspection.
+
+```bash
+aigamekit-lab mesh render-views modelo.glb -o ./views --engine eevee
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output-dir` | path | `{stem}_views` | Output directory |
+| `--views` | str | `front,three_quarter,right,back,top,low_front` | Comma-separated views |
+| `-r, --resolution` | int | `512` | Render resolution |
+| `--engine` | str | `workbench` | Render engine: `workbench` or `eevee` |
+
+#### `mesh diff A B`
+
+Topological mesh comparison: vertices, faces, edges, holes, UV seams, Euler number, volume, and more.
+
+```bash
+aigamekit-lab mesh diff before.glb after.glb --json-out diff.json
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json-out` | path | None | Save diff report as JSON |
+
+Output: Rich table with delta analysis + optional JSON with full topology/geometry comparison.
+
+---
+
+## Mesh Comparison Workflow
+
+Use `debug screenshot` and `debug compare` for visual regression testing:
+
+```bash
+# 1. Capture baseline screenshots
+aigamekit-lab debug screenshot before.glb -o baseline/
+
+# 2. Capture new screenshots (after changes)
+aigamekit-lab debug screenshot after.glb -o after/
+
+# 3. Automated structural + visual comparison
+aigamekit-lab debug compare before.glb after.glb \
+  --image-metrics \
+  --fail-below-ssim 0.85 \
+  -o ./comparison
+```
+
+- `--struct-diff` (on by default) generates an `inspect_diff` section in `diff_report.json` with per-view vertex/face counts.
+- `--image-metrics` adds MAE, RMSE, and SSIM scores per view.
+- `--fail-below-ssim` exits with code 1 if any view falls below the threshold — useful in CI or pre-commit hooks.
+
+For pure topological comparison (no rendering), use `mesh diff`:
+
+```bash
+aigamekit-lab mesh diff original.glb remeshed.glb --json-out topo_diff.json
+```
+
+## SDNQ Quantization Reference
+
+### Stable Configurations (native Paint3D qint8)
+
+| Configuration | Quantization | TinyVAE | Views | Resolution | VRAM | Status |
+|-------------|-------------|---------|-------|-----------|------|--------|
+| `paint3d-qint8-balanced` | qint8 native | No | 6 | 384px | Medium | **Stable** |
+| `paint3d-qint8-stable` | qint8 native | No | 4 | 256px | Low | **Stable** |
+
+### SDNQ Configurations (experimental)
+
+| Configuration | Bits | TinyVAE | Views | Resolution | VRAM |
+|-------------|------|---------|-------|-----------|------|
+| `sdnq-uint8-full` | 8 | No | 6 | 512px | High |
+| `sdnq-uint8-tiny` | 8 | Yes | 4 | 384px | Medium |
+| `sdnq-uint8-minimal` | 8 | Yes | 2 | 256px | Low |
+| `sdnq-int4-full` | 4 | No | 6 | 512px | Medium |
+| `sdnq-int4-tiny` | 4 | Yes | 4 | 384px | Low |
+| `sdnq-int4-minimal` | 4 | Yes | 2 | 256px | Minimal |
+| `sdnq-fp8` | 8 (FP8) | No | 6 | 512px | High (RTX 40 series) |
+
+**Compatibility notes:**
+- **TinyVAE**: Incompatible with `HunyuanPaintPBR` (requires `latent_dist` not provided by TinyVAE).
+- **SDNQ in Paint3D**: The custom UNet `UNet2p5DConditionModel` may behave differently with SDNQ applied.
+
+### Backend Coverage (SDNQ >=0.2.1)
+
+SDNQ is pure PyTorch and runs on every backend:
+
+| Backend | Quantized matmul | Notes |
+|---------|-----------------|-------|
+| **CUDA** (Nvidia) | ✅ via Triton/Inductor | Default for GPU inference |
+| **ROCm** (AMD) | ✅ via Triton/Inductor | |
+| **XPU** (Intel) | ✅ via Triton/Inductor | |
+| **CPU** | ❌ (no Triton) | Quantization works (PyTorch eager); matmul is FP dequant |
+| **MPS** (Apple) | ❌ (no Triton) | Quantization works (PyTorch eager) |
+| **OpenVINO** (Intel) | ❌ | Via `torch.compile → Inductor → OpenVINO`; quantization works |
+
+On CPU/MPS, quantization still reduces memory (weights are stored quantized and
+dequantized per-forward in eager mode) but there is no accelerated quantized matmul.
+Use `detect_compute_backend()` from `aigamekit_shared.sdnq` to log which backend is
+active.
+
+### Available SDNQ Presets (`aigamekit_shared.sdnq.PRESETS`)
+
+| Preset | dtype | group_size | SVD | Use case |
+|--------|-------|-----------|-----|----------|
+| `sdnq-uint8` | uint8 | 0 | No | **Default** — best tested, all models |
+| `sdnq-int8` | int8 | 0 | No | Signed alternative to uint8 |
+| `sdnq-int4` | int4 | 32 | Yes (r=32) | Maximum compression for low VRAM |
+| `sdnq-uint4` | uint4 | 32 | Yes (r=32) | Matches Disty0 `uint4-svd-r32` checkpoints |
+| `sdnq-fp8` | fp8 | 0 | No | RTX 40 series (Ada Lovelace+) |
+
+### Optimization Techniques
+
+- **TinyVAE (TAESD)**: Reduces VAE VRAM by ~70% (incompatible with HunyuanPaintPBR).
+- **Attention Slicing**: Processes attention in slices to reduce peak VRAM.
+- **VAE Tiling**: Processes large images in tiles.
+- **torch.compile**: JIT compilation for faster inference (may cause instability).
+- **Automatic Fallback**: On OOM, automatically retries with a lighter configuration.
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `AIGAMEKIT_PROFILE` | Enable profiling when set to `1` |
+| `AIGAMEKIT_PROFILE_LOG` | Profiler log output path |
+| `AIGAMEKIT_ROOT` | Monorepo root directory (auto-detected if omitted) |
+
+> **Note:** Rendering commands require `bpy` installed in the active venv (`pip install bpy`, Python 3.13+ / Blender 5.2 LTS). There is no `ANIMATOR3D_BIN` dependency — all rendering is native.
+
+## Pipeline Integration
+
+AiGameKitLab is the debugging and validation layer for the entire AiGameKit pipeline:
+
+| Use Case | Command |
+|----------|---------|
+| CI validation | `aigamekit-lab check glb model.glb rules.yaml` |
+| Visual regression | `aigamekit-lab debug compare before.glb after.glb --image-metrics` |
+| Agent artifact audit | `aigamekit-lab debug bundle model.glb -o ./audit` |
+| Mesh quality gate | `aigamekit-lab mesh qa model.glb -o ./qa` |
+| GPU optimization | `aigamekit-lab bench pipeline-opt --mesh ... --image ...` |
+| Config recommendation | `aigamekit-lab perf recommend text2d --vram 8000` |
+| Performance tracking | `aigamekit-lab perf summary --tool text3d --days 30` |
+| CPU profiling | `aigamekit-lab profile cprofile -o out.prof ./script.py` |
+
+**Migration from GameAssets:** The legacy `gameassets debug` has been replaced by `aigamekit-lab debug`. The `bundle.json` field now uses `tool: aigamekit_lab.debug.bundle`.
+
+## Development
+
+```bash
+cd AiGameKitLab
+
+# Install in editable mode
+pip install -e ".[dev]"
+
+# Run tests
+pytest tests
+
+# Lint
+ruff check .
+
+# Format
+ruff format .
+```
+
+Requires `aigamekit-shared` installed first (see Installation).

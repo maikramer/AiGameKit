@@ -1,12 +1,12 @@
 """Teste de integração: SubprocessWorkerPool ↔ worker real via stdin/stdout JSONL.
 
 Spawna um subprocesso Python real (não mock) que corre
-``gamedev_shared.worker_serve.run_worker_loop`` com um adapter mock. O
+``aigamekit_shared.worker_serve.run_worker_loop`` com um adapter mock. O
 SubprocessWorkerPool fala com ele via stdin/stdout (JSONL), validando o
 protocolo end-to-end — cobrindo o caminho real do UMS para um worker paint3d,
 sem precisar de GPU.
 
-Este teste só corre no venv do ModelServer (precisa de gamedev_shared +
+Este teste só corre no venv do ModelServer (precisa de aigamekit_shared +
 modelserver no mesmo Python) — em ambientes sem esses packages é skipado.
 """
 
@@ -23,7 +23,7 @@ from modelserver.subprocess_pool import SubprocessWorkerError, SubprocessWorkerP
 # Script worker: imprime eventos JSONL no stdout, lê cmds do stdin.
 WORKER_SCRIPT = textwrap.dedent("""
     import sys
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
 
     class MockAdapter:
         name = "mock"
@@ -78,8 +78,8 @@ def _pool_for_real_subprocess(tmp_path: Path, **overrides) -> tuple[SubprocessWo
 
 
 @pytest.fixture(autouse=True)
-def _skip_if_no_gamedev_shared():
-    pytest.importorskip("gamedev_shared.worker_serve")
+def _skip_if_no_aigamekit_shared():
+    pytest.importorskip("aigamekit_shared.worker_serve")
 
 
 class TestRealSubprocessIntegration:

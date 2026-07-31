@@ -1,20 +1,20 @@
-# GameDev
+# AiGameKit
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
-[![CI](https://github.com/maikramer/GameDev/actions/workflows/ci.yml/badge.svg)](https://github.com/maikramer/GameDev/actions)
+[![CI](https://github.com/maikramer/AiGameKit/actions/workflows/ci.yml/badge.svg)](https://github.com/maikramer/AiGameKit/actions)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Rust](https://img.shields.io/badge/rust-1.75+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](Text2D/LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio**, **texturas seamless (GPU local)** e **skymaps** (API Hugging Face), **texturização PBR**, **rigging**, **animação** e **batch de assets**, partilhando a mesma base (`gamedev-shared`), instalador unificado e documentação.
+Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio**, **texturas seamless (GPU local)** e **skymaps** (API Hugging Face), **texturização PBR**, **rigging**, **animação** e **batch de assets**, partilhando a mesma base (`aigamekit-shared`), instalador unificado e documentação.
 
 ## Projetos
 
 | Pasta | Descrição |
 |-------|-----------|
-| [**Shared**](Shared/) | Biblioteca partilhada (`gamedev-shared`): logging, GPU, subprocess, instaladores, CLI. |
+| [**Shared**](Shared/) | Biblioteca partilhada (`aigamekit-shared`): logging, GPU, subprocess, instaladores, CLI. |
 | [**Text2D**](Text2D/) | CLI **text-to-image** com FLUX (quantização SDNQ), orientada a GPU modesta. |
 | [**Text3D**](Text3D/) | Pipeline **text-to-3D**: imagem 2D (via Text2D) → mesh GLB com Hunyuan3D-2.1 (SDNQ INT4). Textura via Paint3D (opcional). |
 | [**Paint3D**](Paint3D/) | **Texturização 3D**: Hunyuan3D-Paint 2.1 (PBR multivista) + Materialize PBR + Upscale IA (Real-ESRGAN). Standalone ou via Text3D. |
@@ -26,7 +26,7 @@ Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio
 | [**Rigging3D**](Rigging3D/) | **rigging3d** — auto-rigging 3D com [**UniRig**](https://github.com/VAST-AI-Research/UniRig) (skeleton + skinning + merge); GPU CUDA; Python **3.11**, **bpy** 5.0.x (Open3D). |
 | [**Animator3D**](Animator3D/) | **animator3d** — **bpy** 5.1; Python **3.13**; clips procedimentais, **`game-pack`** (presets humanoid/creature/flying), export GLB após rigging. |
 | [**Materialize**](Materialize/) | CLI **PBR maps** (Rust/wgpu): gera normal, AO, metallic, smoothness a partir de textura difusa. |
-| [**GameDevLab**](GameDevLab/) | **Lab CLI**: debug 3D, bancos de quantização, profiling, otimização de pipeline. |
+| [**AiGameKitLab**](AiGameKitLab/) | **Lab CLI**: debug 3D, bancos de quantização, profiling, otimização de pipeline. |
 | [**Terrain3D**](Terrain3D/) | **terrain3d** — Geração de terreno por IA via modelos de difusão (terrain-diffusion; CUDA GPU). |
 | [**VibeGame**](VibeGame/) | **vibegame** — motor 3D em TypeScript (ECS, Three.js, XML declarativo); **Bun** + **Vite**. Ver [VibeGame/README.md](VibeGame/README.md). |
 
@@ -35,8 +35,8 @@ Cada projeto tem o seu próprio `README`, `setup`, requisitos e licença.
 ## Arquitectura
 
 ```
-GameDev/
-  Shared/           ← gamedev-shared (pip): logging, GPU, subprocess, env, instaladores
+AiGameKit/
+  Shared/           ← aigamekit-shared (pip): logging, GPU, subprocess, env, instaladores
   Text2D/           ← text2d (pip) — depende de Shared
   Text3D/           ← text3d (pip) — depende de Shared + Text2D; textura via Paint3D (opcional)
   Paint3D/           ← paint3d (pip) — depende de Shared; Hunyuan3D-2.1 hy3dpaint + Materialize PBR + Upscale
@@ -47,7 +47,7 @@ GameDev/
   Text2Sound/        ← text2sound (pip) — depende de Shared; Stable Audio Open 1.0
   Rigging3D/         ← rigging3d (pip) — Shared; inferência Py 3.11 + bpy 5.0.x
   Animator3D/        ← animator3d (pip) — Shared; Py 3.13 + bpy 5.2 LTS (animação)
-  GameDevLab/        ← gamedev-lab (pip) — depende de Shared; debug 3D, benches, profiling
+  AiGameKitLab/        ← aigamekit-lab (pip) — depende de Shared; debug 3D, benches, profiling
   Terrain3D/        ← terrain3d (pip) — depende de Shared; geração de terreno por IA via difusão
   Materialize/       ← materialize-cli (cargo) — instalador Python usa Shared
   VibeGame/          ← vibegame (npm/Bun + Vite) — motor 3D no browser; standalone, não é pip
@@ -57,7 +57,7 @@ GameDev/
 
 - **Python**: a maioria das ferramentas pede **3.10+**; exceções: **Rigging3D** (3.11), **Animator3D** (3.13 + `bpy` 5.1). Ver README de cada pasta.
 - **VibeGame** usa **Bun** e ferramentas compatíveis com **Node** (ver `VibeGame/package.json`); na raiz do repositório, `make test-vibegame` após instalar o Bun.
-- **GPU** opcional no Text2D; no Text3D/Paint3D/Rigging3D, CUDA com VRAM suficiente é recomendado para tempos aceitáveis. **Texture2D** corre localmente em GPU CUDA (pattern-diffusion). **Skymap2D** não precisa de GPU local (API Hugging Face). **GameAssets** só exige GPU se o perfil/linha invocar ferramentas locais (ex. text2d, text3d). **Multi-GPU:** a maioria das ferramentas com GPU aceita `--gpu-ids 0,1` para dividir pesos do modelo entre várias GPUs NVIDIA via accelerate; detecção de GPUs / VRAM livre via **NVML** (`gamedev_shared.gpu`, dep `nvidia-ml-py`).
+- **GPU** opcional no Text2D; no Text3D/Paint3D/Rigging3D, CUDA com VRAM suficiente é recomendado para tempos aceitáveis. **Texture2D** corre localmente em GPU CUDA (pattern-diffusion). **Skymap2D** não precisa de GPU local (API Hugging Face). **GameAssets** só exige GPU se o perfil/linha invocar ferramentas locais (ex. text2d, text3d). **Multi-GPU:** a maioria das ferramentas com GPU aceita `--gpu-ids 0,1` para dividir pesos do modelo entre várias GPUs NVIDIA via accelerate; detecção de GPUs / VRAM livre via **NVML** (`aigamekit_shared.gpu`, dep `nvidia-ml-py`).
 - Os **pesos dos modelos** (Hugging Face, etc.) têm licenças próprias — consulta os model cards antes de distribuir ou usar em produção.
 
 ## Arranque rápido
@@ -76,7 +76,7 @@ Guia completo em português: **[docs/INSTALLING_PT.md](docs/INSTALLING_PT.md)**.
 
 **Missão / premissas** (facilidade, automação, agent-first, VRAM=infra): [docs/mission/](docs/mission/README.md) · resumo em [AGENTS.md](AGENTS.md).
 
-**Logging em ficheiro** (todas as tools Python + UMS → `~/.cache/gamedev/logs/`): [docs/LOGGING_PT.md](docs/LOGGING_PT.md) · [English](docs/LOGGING.md).
+**Logging em ficheiro** (todas as tools Python + UMS → `~/.cache/aigamekit/logs/`): [docs/LOGGING_PT.md](docs/LOGGING_PT.md) · [English](docs/LOGGING.md).
 
 **Testes** (piso ≥100/ferramenta, nomes das suites, regras CPU-first): [docs/TESTING_PT.md](docs/TESTING_PT.md) · [English](docs/TESTING.md).
 
@@ -86,10 +86,10 @@ Guia completo em português: **[docs/INSTALLING_PT.md](docs/INSTALLING_PT.md)**.
 
 | Forma | Quando usar |
 |-------|-------------|
-| **One-liner (Clified, sem clone)** | Máquina limpa — instala o motor Clified + ferramenta GameDev via [catálogo remoto](https://github.com/maikramer/clified-catalog). |
+| **One-liner (Clified, sem clone)** | Máquina limpa — instala o motor Clified + ferramenta AiGameKit via [catálogo remoto](https://github.com/maikramer/clified-catalog). |
 | **Scripts na raiz** (`./install.sh`, `.\install.ps1`, `install.bat`) | Com clone: [Clified](https://pypi.org/project/clified/) via PyPI + `tools.yaml` deste repo. |
-| **`gamedev-install`** | Depois de `pip install -e Shared/` (ou `PYTHONPATH` → `Shared/src`): mesmo registry que os scripts. |
-| **Instalador local** (`python scripts/installer.py` numa pasta de ferramenta) | Atalho dentro do projecto — **não** confundir com `GameDev/install.sh` da raiz. |
+| **`aigamekit-install`** | Depois de `pip install -e Shared/` (ou `PYTHONPATH` → `Shared/src`): mesmo registry que os scripts. |
+| **Instalador local** (`python scripts/installer.py` numa pasta de ferramenta) | Atalho dentro do projecto — **não** confundir com `AiGameKit/install.sh` da raiz. |
 | **Manual / pipelines** | `venv` + `pip install -e .` por pasta — debugging ou CI. |
 
 Variável útil: **`PYTHON_CMD`** (ou `--python` no instalador).
@@ -101,7 +101,7 @@ Variável útil: **`PYTHON_CMD`** (ou `--python` no instalador).
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get text2d
 curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get materialize
-curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get gamedev   # todas
+curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get aigamekit   # todas
 ```
 
 **Windows (PowerShell):**
@@ -130,7 +130,7 @@ O monorepo inclui um instalador unificado que instala qualquer ferramenta regist
 ./install.sh paint3d                    # Paint3D (textura + nvdiffrast)
 ./install.sh rigging3d                  # Rigging3D (UniRig empacotado + PyTorch/CUDA via instalador)
 ./install.sh animator3d                 # Animator3D (bpy / animação; sem PyTorch)
-./install.sh gamedevlab                 # GameDevLab (debug 3D, benches, profiling)
+./install.sh aigamekitlab                 # AiGameKitLab (debug 3D, benches, profiling)
 ./install.sh terrain3d                  # Terrain3D (terreno IA; CUDA GPU)
 ./install.sh rocks3d                    # Rocks3D (rochas procedurais)
 ./install.sh vibegame                   # VibeGame (Bun + motor 3D Vite)
@@ -148,7 +148,7 @@ O monorepo inclui um instalador unificado que instala qualquer ferramenta regist
 .\install.ps1 paint3d
 .\install.ps1 rigging3d
 .\install.ps1 animator3d
-.\install.ps1 gamedevlab
+.\install.ps1 aigamekitlab
 .\install.ps1 terrain3d
 .\install.ps1 rocks3d
 .\install.ps1 vibegame
@@ -158,7 +158,7 @@ O monorepo inclui um instalador unificado que instala qualquer ferramenta regist
 install.bat materialize
 ```
 
-Equivalente com o pacote Shared instalado: `gamedev-install text2d`, `gamedev-install all`, etc. (lista: `gamedev-install --list`).
+Equivalente com o pacote Shared instalado: `aigamekit-install text2d`, `aigamekit-install all`, etc. (lista: `aigamekit-install --list`).
 
 Opções do instalador unificado:
 
@@ -225,7 +225,7 @@ Instruções completas: [docs/INSTALLING_PT.md](docs/INSTALLING_PT.md), [docs/NE
 
 | Componente | Licença | Nota |
 |-----------|---------|------|
-| Código do monorepo (Text2D, Text3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, GameDevLab, Terrain3D, Shared) | MIT | Ver `LICENSE` em cada pasta |
+| Código do monorepo (Text2D, Text3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, AiGameKitLab, Terrain3D, Shared) | MIT | Ver `LICENSE` em cada pasta |
 | Materialize CLI (Rust) | MIT | [Materialize/LICENSE](Materialize/LICENSE) |
 | FLUX.2 Klein 4B (oficial, BF16) | Apache 2.0 | [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) — uso comercial permitido segundo o model card; mais VRAM que o SDNQ |
 | FLUX.2 Klein 4B SDNQ (default Text2D) | FLUX Non-Commercial (metadata HF) | [Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declara `flux-non-commercial-license`; **não** é o mesmo regime que o checkpoint oficial Apache 2.0. Para produto comercial, prefira `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` ou acordo com a BFL |
@@ -264,19 +264,19 @@ O monorepo usa variáveis de ambiente para localizar binários e configurar comp
 | `PAINT3D_MULTI_GPU` | Paint3D | **Obsoleto** — usar `--gpu-ids 0,1`. Variável de ambiente legada para dividir VAE entre GPUs |
 | `RIGGING3D_ROOT` | Rigging3D | Raiz da árvore de inferência (por defeito: pacote incluído) |
 | `RIGGING3D_PYTHON` | Rigging3D | Interpretador Python do ambiente de inferência |
-| `MODELSERVER_BIN` | Tools GPU | Path para `gamedev-model-server` (UMS) |
-| `GAMEDEV_UMS_AUTO_START` | Tools GPU | `0` desliga auto-start do UMS |
-| `GAMEDEV_UMS_PRIORITY` | Tools GPU / GameAssets | Prioridade na fila: `interactive` \| `batch` |
-| `GAMEDEV_ALLOW_LEGACY_SERVER` | Shared / tools | `1` = servers per-tool + `ensure_vram` legacy (default off) |
-| `GAMEDEV_PREFER_MONOREPO` | Shared / GameAssets | Default `1`: `resolve_binary` prefere `<Tool>/.venv/bin` a wrappers stale |
-| `GAMEDEV_LOG_DIR` | Todas as tools Python + UMS | Dir de logs diários (default `~/.cache/gamedev/logs`) |
-| `GAMEDEV_LOG_FILE` | Todas as tools Python + UMS | Path exacto do ficheiro de log |
-| `GAMEDEV_LOG_TOOL` | Todas as tools Python + UMS | Nome da tool no ficheiro (auto CLI / `ums`) |
-| `GAMEDEV_LOG_LEVEL` | Todas as tools Python + UMS | Nível mín.: `DEBUG` \| `INFO` \| `WARN` \| `ERROR` |
-| `GAMEDEV_FILE_LOG` | Todas as tools Python + UMS | `0` desliga; `1` força on (preciso sob pytest) |
-| `GAMEDEV_NO_FILE_LOG` | Todas as tools Python + UMS | `1` desliga logging em ficheiro |
+| `MODELSERVER_BIN` | Tools GPU | Path para `aigamekit-model-server` (UMS) |
+| `AIGAMEKIT_UMS_AUTO_START` | Tools GPU | `0` desliga auto-start do UMS |
+| `AIGAMEKIT_UMS_PRIORITY` | Tools GPU / GameAssets | Prioridade na fila: `interactive` \| `batch` |
+| `AIGAMEKIT_ALLOW_LEGACY_SERVER` | Shared / tools | `1` = servers per-tool + `ensure_vram` legacy (default off) |
+| `AIGAMEKIT_PREFER_MONOREPO` | Shared / GameAssets | Default `1`: `resolve_binary` prefere `<Tool>/.venv/bin` a wrappers stale |
+| `AIGAMEKIT_LOG_DIR` | Todas as tools Python + UMS | Dir de logs diários (default `~/.cache/aigamekit/logs`) |
+| `AIGAMEKIT_LOG_FILE` | Todas as tools Python + UMS | Path exacto do ficheiro de log |
+| `AIGAMEKIT_LOG_TOOL` | Todas as tools Python + UMS | Nome da tool no ficheiro (auto CLI / `ums`) |
+| `AIGAMEKIT_LOG_LEVEL` | Todas as tools Python + UMS | Nível mín.: `DEBUG` \| `INFO` \| `WARN` \| `ERROR` |
+| `AIGAMEKIT_FILE_LOG` | Todas as tools Python + UMS | `0` desliga; `1` força on (preciso sob pytest) |
+| `AIGAMEKIT_NO_FILE_LOG` | Todas as tools Python + UMS | `1` desliga logging em ficheiro |
 
-Logs: `~/.cache/gamedev/logs/<tool>-YYYY-MM-DD.log` (UMS → `ums-….log`). Guia: [docs/LOGGING_PT.md](docs/LOGGING_PT.md).
+Logs: `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` (UMS → `ums-….log`). Guia: [docs/LOGGING_PT.md](docs/LOGGING_PT.md).
 
 UMS: [`ModelServer/README.md`](ModelServer/README.md). CLIs: `--ums-priority`, `--no-ums`, `--ums-stream`. VRAM: **UMS + hw-auto** (sem `--low-vram` / `--memory-efficient` públicos). Dev editável: [`docs/INSTALLING_PT.md`](docs/INSTALLING_PT.md) — editar `*/src/`, `ums respawn <backend>` para workers.
 

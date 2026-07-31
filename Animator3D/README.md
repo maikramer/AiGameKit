@@ -5,7 +5,7 @@
 Procedural animation CLI powered by the [Blender Python API](https://docs.blender.org/api/current/) (`bpy 5.2 LTS`).
 Generates keyed animation clips for rigged GLB models — walk cycles, combat, flight, idle, and more —
 then exports a single animated GLB ready for game engines. Designed as the **final stage** after
-[Rigging3D](../Rigging3D/) in the GameDev asset pipeline.
+[Rigging3D](../Rigging3D/) in the AiGameKit asset pipeline.
 
 ## Overview
 
@@ -28,9 +28,9 @@ Auto-Rig Pro, etc.
 ### Monorepo (recommended)
 
 ```bash
-# From the GameDev repo root:
+# From the AiGameKit repo root:
 ./install.sh animator3d
-# Equivalent: python3 -m gamedev_shared.installer.unified animator3d
+# Equivalent: python3 -m aigamekit_shared.installer.unified animator3d
 ```
 
 ### Manual / development
@@ -46,7 +46,7 @@ source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
-**Requirements:** Python 3.13, `bpy>=5.2.0` (Blender 5.2 LTS wheel), `gamedev-shared`, `click`,
+**Requirements:** Python 3.13, `bpy>=5.2.0` (Blender 5.2 LTS wheel), `aigamekit-shared`, `click`,
 `rich`, `rich-click`. On Linux, `libmeshoptimizer-dev` enables native GLTF meshopt export.
 
 ## Commands
@@ -60,7 +60,7 @@ Generate all animation clips for a preset in one command. This is the primary co
 [GameAssets](../GameAssets/) batch processing.
 
 **Humanoid path:** retarget from the Quaternius Universal Animation Library (CC0),
-not the procedural clip list below. Requires `gamedev-shared` editable in the
+not the procedural clip list below. Requires `aigamekit-shared` editable in the
 Animator3D venv (Quaternius lock + fetch). Inventory + bone maps:
 [`docs/quaternius_inventory.md`](../docs/quaternius_inventory.md). Pivot / axis
 pitfalls (feet OK at rest → waist when a clip plays):
@@ -481,7 +481,7 @@ animator3d list-clips animated.glb
 
 ## Pipeline Integration
 
-Animator3D is the **final animation stage** in the GameDev asset pipeline:
+Animator3D is the **final animation stage** in the AiGameKit asset pipeline:
 
 ```text
 Text3D (mesh) → Paint3D (texture) → Rigging3D (armature) → Animator3D (clips) → VibeGame (browser)
@@ -498,13 +498,13 @@ Text3D (mesh) → Paint3D (texture) → Rigging3D (armature) → Animator3D (cli
 The manifest `animate` column and `game.yaml` profile blocks control which preset and clips are
 generated. Use `--no-animate` in GameAssets to skip this stage.
 
-### GameDevLab debugging
+### AiGameKitLab debugging
 
-Use [GameDevLab](../GameDevLab/) to verify animation quality:
+Use [AiGameKitLab](../AiGameKitLab/) to verify animation quality:
 
 ```bash
-gamedev-lab debug screenshot animated.glb -o review/
-gamedev-lab debug inspect animated.glb
+aigamekit-lab debug screenshot animated.glb -o review/
+aigamekit-lab debug inspect animated.glb
 ```
 
 ---

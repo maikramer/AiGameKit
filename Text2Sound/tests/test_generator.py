@@ -295,16 +295,16 @@ class TestShouldUseHalfExceptionPath:
 
 class TestHalfPrecisionDecoupled:
     # half agora vem do perfil hw-auto (text2sound.hardware); os specs são
-    # mockados na fonte (gamedev_shared.hardware) para o teste não depender
+    # mockados na fonte (aigamekit_shared.hardware) para o teste não depender
     # da GPU real da máquina.
     def test_fp16_fires_on_small_gpu(self):
-        with patch("gamedev_shared.hardware.cuda_gpu_specs", return_value=[(0, 6 * 1024**3)]):
+        with patch("aigamekit_shared.hardware.cuda_gpu_specs", return_value=[(0, 6 * 1024**3)]):
             gen = AudioGenerator(device="cuda")
         assert gen._half is True
         assert gen._chunked_vae is True
 
     def test_fp16_stays_off_on_large_gpu(self):
-        with patch("gamedev_shared.hardware.cuda_gpu_specs", return_value=[(0, 16 * 1024**3)]):
+        with patch("aigamekit_shared.hardware.cuda_gpu_specs", return_value=[(0, 16 * 1024**3)]):
             gen = AudioGenerator(device="cuda")
         assert gen._half is False
         assert gen._chunked_vae is False

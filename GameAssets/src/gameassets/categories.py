@@ -548,7 +548,7 @@ def get_target_faces(
         return 0
     faces = int(base * face_ratio)
     if char_m is not None and float(char_m) > 0:
-        from gamedev_shared.lod_budget import LOD_FACES_ABS_MIN, lod_face_scale
+        from aigamekit_shared.lod_budget import LOD_FACES_ABS_MIN, lod_face_scale
 
         faces = int(faces * lod_face_scale(float(char_m)))
         return max(LOD_FACES_ABS_MIN, faces)

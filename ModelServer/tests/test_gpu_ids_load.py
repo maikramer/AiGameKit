@@ -7,7 +7,7 @@ from typing import Any
 from modelserver.backend_manager import BackendManager
 from modelserver.registry import BackendDescriptor, Registry
 
-from gamedev_shared.cli_helpers import with_ums_load_opts
+from aigamekit_shared.cli_helpers import with_ums_load_opts
 
 from .conftest_helpers import MockAdapter
 

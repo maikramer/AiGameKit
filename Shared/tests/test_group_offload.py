@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from gamedev_shared.group_offload import (
+from aigamekit_shared.group_offload import (
     GroupOffloadConfig,
     is_group_offload_enabled,
     plan_group_offload,
     try_group_offloading,
 )
-from gamedev_shared.lowvram import ModelFootprint
+from aigamekit_shared.lowvram import ModelFootprint
 
 
 class TestIsGroupOffloadEnabled:
@@ -21,16 +21,16 @@ class TestIsGroupOffloadEnabled:
             assert is_group_offload_enabled() is True
 
     def test_global_disable(self) -> None:
-        with patch.dict("os.environ", {"GAMEDEV_GROUP_OFFLOAD": "0"}):
+        with patch.dict("os.environ", {"AIGAMEKIT_GROUP_OFFLOAD": "0"}):
             assert is_group_offload_enabled() is False
 
     def test_global_enable(self) -> None:
-        with patch.dict("os.environ", {"GAMEDEV_GROUP_OFFLOAD": "1"}):
+        with patch.dict("os.environ", {"AIGAMEKIT_GROUP_OFFLOAD": "1"}):
             assert is_group_offload_enabled() is True
 
     def test_tool_env_overrides_global(self) -> None:
         """Env var da tool tem precedência sobre o global."""
-        with patch.dict("os.environ", {"GAMEDEV_GROUP_OFFLOAD": "1", "TEXTURE2D_GROUP_OFFLOAD": "0"}):
+        with patch.dict("os.environ", {"AIGAMEKIT_GROUP_OFFLOAD": "1", "TEXTURE2D_GROUP_OFFLOAD": "0"}):
             assert is_group_offload_enabled(tool_env_var="TEXTURE2D_GROUP_OFFLOAD") is False
 
     def test_tool_env_false_variants(self) -> None:
@@ -44,7 +44,7 @@ class TestIsGroupOffloadEnabled:
                 assert is_group_offload_enabled(tool_env_var="TOOL_GO") is True
 
     def test_no_tool_env_uses_global(self) -> None:
-        with patch.dict("os.environ", {"GAMEDEV_GROUP_OFFLOAD": "0"}, clear=True):
+        with patch.dict("os.environ", {"AIGAMEKIT_GROUP_OFFLOAD": "0"}, clear=True):
             assert is_group_offload_enabled(tool_env_var="TOOL_GO") is False
 
 

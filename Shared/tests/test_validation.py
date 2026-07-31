@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gamedev_shared.validation import format_timestamp, validate_dimensions, validate_params, validate_prompt
+from aigamekit_shared.validation import format_timestamp, validate_dimensions, validate_params, validate_prompt
 
 
 class TestValidatePrompt:

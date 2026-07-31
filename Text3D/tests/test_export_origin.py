@@ -18,7 +18,7 @@ pytest.importorskip("bpy")
 import bpy
 import numpy as np
 
-from gamedev_shared.bpy_mesh import clear_scene, get_bounds
+from aigamekit_shared.bpy_mesh import clear_scene, get_bounds
 from text3d.utils.export import _apply_origin_trimesh
 
 

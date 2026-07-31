@@ -106,8 +106,8 @@ text2sound generate "forest ambience" --preset forest_ambience
 | `Text2Sound/src/text2sound/cli.py` | Passar `seamless_loop` e `crossfade_ms` do QualityEngine para o generator |
 | `Text2Sound/tests/test_audio_processor.py` | Testes para `apply_seamless_loop_crossfade` |
 | `Text2Sound/tests/test_generator.py` | Teste de integração (mock) para seamless loop |
-| `Shared/src/gamedev_shared/data/asset-categories.yaml` | Adicionar `crossfade_ms` a `music_loop` e `ambient_loop` |
-| `Shared/src/gamedev_shared/data/quality-profiles.yaml` | Adicionar `crossfade_ms` por tier na secção text2sound |
+| `Shared/src/aigamekit_shared/data/asset-categories.yaml` | Adicionar `crossfade_ms` a `music_loop` e `ambient_loop` |
+| `Shared/src/aigamekit_shared/data/quality-profiles.yaml` | Adicionar `crossfade_ms` por tier na secção text2sound |
 
 ### Testes
 

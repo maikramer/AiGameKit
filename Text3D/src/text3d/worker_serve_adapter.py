@@ -1,6 +1,6 @@
 """Adapter text3d para o modo subprocesso (``text3d serve --ums-worker``).
 
-Herdam de :class:`gamedev_shared.worker_serve_adapter_base.WorkerAdapter`
+Herdam de :class:`aigamekit_shared.worker_serve_adapter_base.WorkerAdapter`
 (standalone, sem depender do package modelserver). Mesma lógica do
 ``modelserver.adapters.text3d.Adapter`` mas vive no venv da tool.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from gamedev_shared.worker_serve_adapter_base import WorkerAdapter
+from aigamekit_shared.worker_serve_adapter_base import WorkerAdapter
 
 
 class Adapter(WorkerAdapter):

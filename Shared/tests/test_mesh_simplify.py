@@ -1,4 +1,4 @@
-"""Tests for gamedev_shared.mesh_simplify — unified Decimate COLLAPSE pipeline."""
+"""Tests for aigamekit_shared.mesh_simplify — unified Decimate COLLAPSE pipeline."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from gamedev_shared.mesh_simplify import (
+from aigamekit_shared.mesh_simplify import (
     _MIN_DECIMATE_FACES,
     _split_face_budget,
     clamp_decimate_target,
@@ -57,8 +57,8 @@ class TestSplitFaceBudget:
 
 bpy = pytest.importorskip("bpy")
 
-from gamedev_shared.bpy_mesh import clear_scene, load_glb, save_glb  # noqa: E402
-from gamedev_shared.mesh_simplify import (  # noqa: E402
+from aigamekit_shared.bpy_mesh import clear_scene, load_glb, save_glb  # noqa: E402
+from aigamekit_shared.mesh_simplify import (  # noqa: E402
     _boundary_edge_fraction,
     _weld_if_split_soup,
     decimate_mesh_object,

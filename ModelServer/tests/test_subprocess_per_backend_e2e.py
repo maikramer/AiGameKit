@@ -6,7 +6,7 @@ Cenário real (objectivo da Fase 3+4):
 - Backend mock_tool tem ``tool: mock_tool`` no registry → BackendManager
   despacha para SubprocessWorkerPool.
 - SubprocessWorkerPool spawna ``<venv>/python -m mock_tool.serve --ums-worker``
-  via spawn_fn injectada (aqui: um subprocesso Python que usa gamedev_shared
+  via spawn_fn injectada (aqui: um subprocesso Python que usa aigamekit_shared
   directamente — sem necessidade do package mock_tool real).
 - O ciclo completo (load → generate → done) acontece sem o UMS precisar de
   importar a tool.
@@ -29,10 +29,10 @@ from modelserver.registry import BackendDescriptor, Registry
 from modelserver.subprocess_pool import SubprocessWorkerPool
 
 # Script worker: simula o `serve --ums-worker` de uma tool real. Não precisa
-# de package instalado — corre gamedev_shared.worker_serve.run_worker_loop.
+# de package instalado — corre aigamekit_shared.worker_serve.run_worker_loop.
 WORKER_SCRIPT = textwrap.dedent("""
     import sys
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
 
     class Adapter:
         name = "mock_tool"
@@ -197,10 +197,10 @@ class TestSubprocessEndToEnd:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Com GAMEDEV_UMS_SUBPROCESS=0, o manager tenta o adapter in-process
+        """Com AIGAMEKIT_UMS_SUBPROCESS=0, o manager tenta o adapter in-process
         (que aqui falha com ImportError — provando que sem subprocesso o
         backend está inacessível)."""
-        monkeypatch.setenv("GAMEDEV_UMS_SUBPROCESS", "0")
+        monkeypatch.setenv("AIGAMEKIT_UMS_SUBPROCESS", "0")
         pool = _make_pool(worker_script_path, tmp_path)
         mgr = BackendManager(
             _make_registry(),

@@ -1,4 +1,4 @@
-# Pre-commit hooks for GameDev
+# Pre-commit hooks for AiGameKit
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit

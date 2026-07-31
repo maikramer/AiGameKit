@@ -1,4 +1,4 @@
-"""Tests for gamedev_shared.bpy_mesh — shared bpy mesh utilities."""
+"""Tests for aigamekit_shared.bpy_mesh — shared bpy mesh utilities."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 
 bpy = pytest.importorskip("bpy")
 
-from gamedev_shared.bpy_mesh import (  # noqa: E402
+from aigamekit_shared.bpy_mesh import (  # noqa: E402
     clear_scene,
     face_count,
     get_bounds,
@@ -151,7 +151,7 @@ def test_save_glb_no_vertex_duplication():
 
     import bpy
 
-    from gamedev_shared.bpy_mesh import clear_scene, load_glb, save_glb, vertex_count
+    from aigamekit_shared.bpy_mesh import clear_scene, load_glb, save_glb, vertex_count
 
     clear_scene()
     bpy.ops.mesh.primitive_cube_add(size=2.0)
@@ -170,7 +170,7 @@ def test_apply_smooth_by_angle():
 
     import bpy
 
-    from gamedev_shared.bpy_mesh import apply_smooth_by_angle, clear_scene
+    from aigamekit_shared.bpy_mesh import apply_smooth_by_angle, clear_scene
 
     clear_scene()
     bpy.ops.mesh.primitive_uv_sphere_add()
@@ -188,7 +188,7 @@ def test_needs_tangents_only_with_normal_map():
 
     import bpy
 
-    from gamedev_shared.bpy_mesh import _needs_tangents, clear_scene
+    from aigamekit_shared.bpy_mesh import _needs_tangents, clear_scene
 
     clear_scene()
     bpy.ops.mesh.primitive_cube_add()
@@ -202,7 +202,7 @@ def test_save_glb_axis_convention():
 
     import bpy
 
-    from gamedev_shared.bpy_mesh import clear_scene, get_bounds, load_glb, save_glb
+    from aigamekit_shared.bpy_mesh import clear_scene, get_bounds, load_glb, save_glb
 
     clear_scene()
     bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 1, 0))
@@ -223,7 +223,7 @@ def test_save_glb_roundtrip_preserves_faces():
 
     import bpy
 
-    from gamedev_shared.bpy_mesh import clear_scene, face_count, load_glb, save_glb
+    from aigamekit_shared.bpy_mesh import clear_scene, face_count, load_glb, save_glb
 
     clear_scene()
     bpy.ops.mesh.primitive_monkey_add()

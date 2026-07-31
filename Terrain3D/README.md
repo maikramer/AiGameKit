@@ -26,7 +26,7 @@ Uses a diffusion model trained on real-world elevation data (WorldClim + ETOPO) 
 
 ### Official (monorepo)
 
-From the **GameDev** repo root:
+From the **AiGameKit** repo root:
 
 ```bash
 cd Shared && pip install -e .
@@ -112,7 +112,7 @@ terrain3d --version     # Print version
 | `high` | 4096 | 512 m | 6 |
 | `highest` | 4096 | 1024 m | 8 |
 
-Values sourced from [`quality-profiles.yaml`](../Shared/src/gamedev_shared/data/quality-profiles.yaml).
+Values sourced from [`quality-profiles.yaml`](../Shared/src/aigamekit_shared/data/quality-profiles.yaml).
 
 ```bash
 # Use a preset — overrides size/world-size/coarse-window unless user specified them

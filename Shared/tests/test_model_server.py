@@ -1,4 +1,4 @@
-"""Tests for gamedev_shared.model_server — shared model server + VRAM coordination."""
+"""Tests for aigamekit_shared.model_server — shared model server + VRAM coordination."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from gamedev_shared.model_server import (
+from aigamekit_shared.model_server import (
     ModelServer,
     _resolve_ums_start_cmd,
     discover_active_sockets,
@@ -59,11 +59,11 @@ class TestResolveUmsStartCmd:
     def test_path_lookup_used_when_no_canonical(self) -> None:
         cmd, warning = _resolve_ums_start_cmd(
             canonical_python=None,
-            path_lookup=lambda name: "/usr/local/bin/gamedev-model-server" if name == "gamedev-model-server" else None,
+            path_lookup=lambda name: "/usr/local/bin/aigamekit-model-server" if name == "aigamekit-model-server" else None,
             import_probe=lambda: True,
             sys_executable="/wrong/python",
         )
-        assert cmd == ["/usr/local/bin/gamedev-model-server", "start"]
+        assert cmd == ["/usr/local/bin/aigamekit-model-server", "start"]
         assert warning == ""
 
     def test_sys_executable_is_last_resort_with_warning(self) -> None:
@@ -106,14 +106,14 @@ class TestSocketPath:
     def test_text2icon_socket_path(self) -> None:
         path = server_socket_path("text2icon")
         assert path.name == "text2icon-server.sock"
-        assert "gamedev" in str(path)
+        assert "aigamekit" in str(path)
 
     def test_text2d_socket_path(self) -> None:
         path = server_socket_path("text2d")
         assert path.name == "text2d-server.sock"
 
     def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_MODEL_SERVER_SOCKET", "/tmp/custom.sock")
+        monkeypatch.setenv("AIGAMEKIT_MODEL_SERVER_SOCKET", "/tmp/custom.sock")
         path = server_socket_path("text2icon")
         assert path == Path("/tmp/custom.sock")
 
@@ -139,7 +139,7 @@ class TestLiveness:
         assert get_server_pid(sock) is None
 
     def test_discover_empty_when_no_dir(self, tmp_path: Path) -> None:
-        with patch("gamedev_shared.model_server.DEFAULT_SERVER_DIR", tmp_path / "nonexistent"):
+        with patch("aigamekit_shared.model_server.DEFAULT_SERVER_DIR", tmp_path / "nonexistent"):
             assert discover_server_pids() == set()
             assert discover_active_sockets() == []
 
@@ -208,7 +208,7 @@ class TestModelServer:
             tool_name="test",
         )
         # Override DEFAULT_SERVER_DIR para que discover_* encontre este server
-        with patch("gamedev_shared.model_server.DEFAULT_SERVER_DIR", tmp_path):
+        with patch("aigamekit_shared.model_server.DEFAULT_SERVER_DIR", tmp_path):
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
 
@@ -223,7 +223,7 @@ class TestModelServer:
 
             # Cleanup
             server._running = False
-            with patch("gamedev_shared.model_server.DEFAULT_SERVER_DIR", tmp_path):
+            with patch("aigamekit_shared.model_server.DEFAULT_SERVER_DIR", tmp_path):
                 server._cleanup()
 
     def test_is_running_after_start(self, running_server: Path) -> None:
@@ -283,14 +283,14 @@ class TestModelServer:
 
 class TestEnsureVram:
     def test_returns_true_when_enough_vram(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("gamedev_shared.gpu.query_gpu_free_mib", lambda: 8000)
+        monkeypatch.setattr("aigamekit_shared.gpu.query_gpu_free_mib", lambda: 8000)
         assert ensure_vram_available(5000) is True
 
     def test_requests_release_when_low_vram(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         # Path legacy é opt-in (UMS é a autoridade por defeito).
-        monkeypatch.setenv("GAMEDEV_ALLOW_LEGACY_SERVER", "1")
+        monkeypatch.setenv("AIGAMEKIT_ALLOW_LEGACY_SERVER", "1")
         # Hermético: não falar com um UMS real a correr nesta máquina.
-        monkeypatch.setattr("gamedev_shared.model_server.is_ums_running", lambda: False)
+        monkeypatch.setattr("aigamekit_shared.model_server.is_ums_running", lambda: False)
         # Simular VRAM baixa
         call_count = {"release": 0}
 
@@ -304,17 +304,17 @@ class TestEnsureVram:
             call_count["release"] += 1
             return True
 
-        monkeypatch.setattr("gamedev_shared.gpu.query_gpu_free_mib", _mock_query_free)
-        monkeypatch.setattr("gamedev_shared.model_server.request_release", _mock_request_release)
-        monkeypatch.setattr("gamedev_shared.model_server.discover_active_sockets", lambda: [tmp_path / "fake.sock"])
+        monkeypatch.setattr("aigamekit_shared.gpu.query_gpu_free_mib", _mock_query_free)
+        monkeypatch.setattr("aigamekit_shared.model_server.request_release", _mock_request_release)
+        monkeypatch.setattr("aigamekit_shared.model_server.discover_active_sockets", lambda: [tmp_path / "fake.sock"])
 
         result = ensure_vram_available(5000, timeout_sec=5.0)
         assert result is True
         assert call_count["release"] >= 1
 
     def test_returns_true_when_cannot_check(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("gamedev_shared.gpu.query_gpu_free_mib", lambda: None)
+        monkeypatch.setattr("aigamekit_shared.gpu.query_gpu_free_mib", lambda: None)
         # Hermético: sem UMS real nesta máquina (senão o ensure-vram ia ao daemon).
-        monkeypatch.setattr("gamedev_shared.model_server.is_ums_running", lambda: False)
-        monkeypatch.setattr("gamedev_shared.model_server.discover_active_sockets", lambda: [])
+        monkeypatch.setattr("aigamekit_shared.model_server.is_ums_running", lambda: False)
+        monkeypatch.setattr("aigamekit_shared.model_server.discover_active_sockets", lambda: [])
         assert ensure_vram_available(5000) is True

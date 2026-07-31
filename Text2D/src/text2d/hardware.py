@@ -14,9 +14,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, HardwareProfileBase, detect_profile
-from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
-from gamedev_shared.lowvram import plan_offload
+from aigamekit_shared.hardware import GIB, HardwareProfileBase, detect_profile
+from aigamekit_shared.hardware import hw_auto_enabled as _hw_auto_enabled
+from aigamekit_shared.lowvram import plan_offload
 
 from .generator import HIGH_VRAM_MODEL_ID, LOW_VRAM_MODEL_ID, model_footprint
 

@@ -28,7 +28,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import (
+from aigamekit_shared.cli_helpers import (
     add_ums_options,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
@@ -36,9 +36,9 @@ from gamedev_shared.cli_helpers import (
     with_ums_load_opts,
     with_ums_peak_opts,
 )
-from gamedev_shared.hf import get_hf_token, hf_home_display_rich
-from gamedev_shared.profiler.session import ProfilerSession, profile_span
-from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_TEXT2SOUND, emit_progress, emit_result
+from aigamekit_shared.hf import get_hf_token, hf_home_display_rich
+from aigamekit_shared.profiler.session import ProfilerSession, profile_span
+from aigamekit_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_TEXT2SOUND, emit_progress, emit_result
 
 from .audio_processor import SUPPORTED_FORMATS, save_audio
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
@@ -166,7 +166,7 @@ def skill_group() -> None:
 def skill_install_cmd(target: Path, force: bool) -> None:
     """Copia SKILL.md para .cursor/skills/text2sound/."""
     try:
-        from gamedev_shared.skill_install import install_agent_skill
+        from aigamekit_shared.skill_install import install_agent_skill
 
         skill_dir = Path(__file__).parent / "cursor_skill"
         dest = install_agent_skill(
@@ -176,7 +176,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
             force=force,
         )
     except ImportError:
-        raise click.ClickException("gamedev-shared não encontrado — instale com pip install -e ../Shared") from None
+        raise click.ClickException("aigamekit-shared não encontrado — instale com pip install -e ../Shared") from None
     except FileNotFoundError as e:
         raise click.ClickException(str(e)) from e
     except FileExistsError as e:
@@ -442,7 +442,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help=(
         "torch.compile no DiT (Inductor). Cold lento; útil em batch/server. "
         "Com offload model_cpu é ignorado; com group_stream usa mode=default. "
-        "Env: GAMEDEV_TORCH_COMPILE=1."
+        "Env: AIGAMEKIT_TORCH_COMPILE=1."
     ),
 )
 @click.option(
@@ -534,7 +534,7 @@ def generate_cmd(
         chunked_vae = False
 
     try:
-        from gamedev_shared.gpu import warn_if_vram_occupied
+        from aigamekit_shared.gpu import warn_if_vram_occupied
 
         warn_if_vram_occupied()
     except ImportError:
@@ -574,7 +574,7 @@ def generate_cmd(
     kind_compressor_preset: str | None = None
 
     try:
-        from gamedev_shared.quality import QualityEngine
+        from aigamekit_shared.quality import QualityEngine
 
         qe = QualityEngine()
         resolved = qe.resolve(tool="text2sound", quality=quality, category=category)
@@ -1224,7 +1224,7 @@ def batch_cmd(
 
     if pending:
         try:
-            from gamedev_shared.gpu import warn_if_vram_occupied
+            from aigamekit_shared.gpu import warn_if_vram_occupied
 
             warn_if_vram_occupied()
         except ImportError:
@@ -1404,7 +1404,7 @@ def info_cmd() -> None:
 
         if torch.cuda.is_available():
             try:
-                from gamedev_shared.gpu import get_gpu_info
+                from aigamekit_shared.gpu import get_gpu_info
 
                 gpus = get_gpu_info()
                 for gpu in gpus:
@@ -1438,7 +1438,7 @@ def serve(ums_worker: bool) -> None:
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico
-    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter text2sound
+    :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter text2sound
     local (:mod:`text2sound.worker_serve_adapter`).
     """
     if not ums_worker:
@@ -1446,7 +1446,7 @@ def serve(ums_worker: bool) -> None:
         console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
         return
 
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
     from text2sound.worker_serve_adapter import Adapter
 
     run_worker_loop(Adapter, backend_name="text2sound")

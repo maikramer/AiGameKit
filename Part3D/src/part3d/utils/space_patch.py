@@ -20,35 +20,35 @@ from __future__ import annotations
 import os
 import re
 
-PERF_MARKER = "GAMEDEV_PERF_PATCH_V1"
-NMS_MARKER = "GAMEDEV_NMS_VECTORIZED"
-NMS_CONSENSUS_MARKER = "GAMEDEV_NMS_CONSENSUS"
-MULTIHEAD_MARKER = "GAMEDEV_MULTIHEAD"
-POOL_SORT_MARKER = "GAMEDEV_POOL_SORT"
-VOTE_ASSIGN_MARKER = "GAMEDEV_VOTE_ASSIGN"
-QUALITY_MARKER = "GAMEDEV_MASK_QUALITY_V3"
+PERF_MARKER = "AIGAMEKIT_PERF_PATCH_V1"
+NMS_MARKER = "AIGAMEKIT_NMS_VECTORIZED"
+NMS_CONSENSUS_MARKER = "AIGAMEKIT_NMS_CONSENSUS"
+MULTIHEAD_MARKER = "AIGAMEKIT_MULTIHEAD"
+POOL_SORT_MARKER = "AIGAMEKIT_POOL_SORT"
+VOTE_ASSIGN_MARKER = "AIGAMEKIT_VOTE_ASSIGN"
+QUALITY_MARKER = "AIGAMEKIT_MASK_QUALITY_V3"
 _OLD_QUALITY_PREFIXES = (
-    "\n\n# GAMEDEV_MASK_QUALITY_V2 —",
-    "\n\n# GAMEDEV_MASK_QUALITY_V3 —",
+    "\n\n# AIGAMEKIT_MASK_QUALITY_V2 —",
+    "\n\n# AIGAMEKIT_MASK_QUALITY_V3 —",
 )
 
 _QUALITY_TAIL = """
 
-# GAMEDEV_MASK_QUALITY_V3 — multi-head pool + consensus NMS + vote assign.
-GAMEDEV_MASK_NMS_IOU = {mask_nms_iou}
-GAMEDEV_SECONDARY_MASK_IOU = {secondary_mask_iou}
-GAMEDEV_MIN_CLUSTER_SUPPORT = {min_cluster_support}
-GAMEDEV_MIN_PREDICTED_IOU = {min_predicted_iou}
-GAMEDEV_PROMPT_BATCH_SIZE = {prompt_batch_size}
-GAMEDEV_BBOX_MERGE_IOU = {bbox_merge_iou}
-GAMEDEV_MULTI_HEAD = {multi_head}
-GAMEDEV_HEAD_MIN_SCORE = {head_min_score}
-GAMEDEV_HEAD_SCORE_RATIO = {head_score_ratio}
-GAMEDEV_CONSENSUS = {consensus}
-GAMEDEV_CONSENSUS_VOTE = {consensus_vote}
+# AIGAMEKIT_MASK_QUALITY_V3 — multi-head pool + consensus NMS + vote assign.
+AIGAMEKIT_MASK_NMS_IOU = {mask_nms_iou}
+AIGAMEKIT_SECONDARY_MASK_IOU = {secondary_mask_iou}
+AIGAMEKIT_MIN_CLUSTER_SUPPORT = {min_cluster_support}
+AIGAMEKIT_MIN_PREDICTED_IOU = {min_predicted_iou}
+AIGAMEKIT_PROMPT_BATCH_SIZE = {prompt_batch_size}
+AIGAMEKIT_BBOX_MERGE_IOU = {bbox_merge_iou}
+AIGAMEKIT_MULTI_HEAD = {multi_head}
+AIGAMEKIT_HEAD_MIN_SCORE = {head_min_score}
+AIGAMEKIT_HEAD_SCORE_RATIO = {head_score_ratio}
+AIGAMEKIT_CONSENSUS = {consensus}
+AIGAMEKIT_CONSENSUS_VOTE = {consensus_vote}
 
 
-def _gamedev_cluster_support(members, prompt_ids_sorted):
+def _aigamekit_cluster_support(members, prompt_ids_sorted):
     try:
         from part3d.utils.mask_consensus import distinct_prompt_support
         return distinct_prompt_support(members, prompt_ids_sorted)
@@ -56,7 +56,7 @@ def _gamedev_cluster_support(members, prompt_ids_sorted):
         return len(members)
 
 
-def configure_gamedev_mask_quality(
+def configure_aigamekit_mask_quality(
     *,
     mask_nms_iou=0.9,
     secondary_mask_iou=0.25,
@@ -70,28 +70,28 @@ def configure_gamedev_mask_quality(
     consensus=True,
     consensus_vote=0.5,
 ):
-    global GAMEDEV_MASK_NMS_IOU
-    global GAMEDEV_SECONDARY_MASK_IOU
-    global GAMEDEV_MIN_CLUSTER_SUPPORT
-    global GAMEDEV_MIN_PREDICTED_IOU
-    global GAMEDEV_PROMPT_BATCH_SIZE
-    global GAMEDEV_BBOX_MERGE_IOU
-    global GAMEDEV_MULTI_HEAD
-    global GAMEDEV_HEAD_MIN_SCORE
-    global GAMEDEV_HEAD_SCORE_RATIO
-    global GAMEDEV_CONSENSUS
-    global GAMEDEV_CONSENSUS_VOTE
-    GAMEDEV_MASK_NMS_IOU = float(mask_nms_iou)
-    GAMEDEV_SECONDARY_MASK_IOU = float(secondary_mask_iou)
-    GAMEDEV_MIN_CLUSTER_SUPPORT = max(1, int(min_cluster_support))
-    GAMEDEV_MIN_PREDICTED_IOU = float(min_predicted_iou)
-    GAMEDEV_PROMPT_BATCH_SIZE = max(1, int(prompt_batch_size))
-    GAMEDEV_BBOX_MERGE_IOU = float(bbox_merge_iou)
-    GAMEDEV_MULTI_HEAD = bool(multi_head)
-    GAMEDEV_HEAD_MIN_SCORE = float(head_min_score)
-    GAMEDEV_HEAD_SCORE_RATIO = float(head_score_ratio)
-    GAMEDEV_CONSENSUS = bool(consensus)
-    GAMEDEV_CONSENSUS_VOTE = float(consensus_vote)
+    global AIGAMEKIT_MASK_NMS_IOU
+    global AIGAMEKIT_SECONDARY_MASK_IOU
+    global AIGAMEKIT_MIN_CLUSTER_SUPPORT
+    global AIGAMEKIT_MIN_PREDICTED_IOU
+    global AIGAMEKIT_PROMPT_BATCH_SIZE
+    global AIGAMEKIT_BBOX_MERGE_IOU
+    global AIGAMEKIT_MULTI_HEAD
+    global AIGAMEKIT_HEAD_MIN_SCORE
+    global AIGAMEKIT_HEAD_SCORE_RATIO
+    global AIGAMEKIT_CONSENSUS
+    global AIGAMEKIT_CONSENSUS_VOTE
+    AIGAMEKIT_MASK_NMS_IOU = float(mask_nms_iou)
+    AIGAMEKIT_SECONDARY_MASK_IOU = float(secondary_mask_iou)
+    AIGAMEKIT_MIN_CLUSTER_SUPPORT = max(1, int(min_cluster_support))
+    AIGAMEKIT_MIN_PREDICTED_IOU = float(min_predicted_iou)
+    AIGAMEKIT_PROMPT_BATCH_SIZE = max(1, int(prompt_batch_size))
+    AIGAMEKIT_BBOX_MERGE_IOU = float(bbox_merge_iou)
+    AIGAMEKIT_MULTI_HEAD = bool(multi_head)
+    AIGAMEKIT_HEAD_MIN_SCORE = float(head_min_score)
+    AIGAMEKIT_HEAD_SCORE_RATIO = float(head_score_ratio)
+    AIGAMEKIT_CONSENSUS = bool(consensus)
+    AIGAMEKIT_CONSENSUS_VOTE = float(consensus_vote)
 """
 
 _NMS_ORIG = """\
@@ -114,7 +114,7 @@ _NMS_ORIG = """\
 
 _NMS_FAST = """\
     with Timer("NMS"):
-        # GAMEDEV_NMS_VECTORIZED — IoU par-a-par via matmul; mesma semântica greedy.
+        # AIGAMEKIT_NMS_VECTORIZED — IoU par-a-par via matmul; mesma semântica greedy.
         clusters = defaultdict(list)
         _gd_masks = np.stack(mask_sorted, axis=0).astype(np.float32)
         _gd_inter = _gd_masks @ _gd_masks.T
@@ -132,19 +132,19 @@ _NMS_FAST = """\
 
 _NMS_CONSENSUS = """\
     with Timer("NMS"):
-        # GAMEDEV_NMS_CONSENSUS — best-fit NMS + IoU-weighted cluster fuse.
+        # AIGAMEKIT_NMS_CONSENSUS — best-fit NMS + IoU-weighted cluster fuse.
         from part3d.utils.mask_consensus import (
             cluster_masks_bestfit,
             fuse_cluster_mask,
         )
-        if GAMEDEV_CONSENSUS:
-            clusters = cluster_masks_bestfit(mask_sorted, nms_iou=GAMEDEV_MASK_NMS_IOU)
+        if AIGAMEKIT_CONSENSUS:
+            clusters = cluster_masks_bestfit(mask_sorted, nms_iou=AIGAMEKIT_MASK_NMS_IOU)
             for _gd_rep, _gd_members in list(clusters.items()):
                 mask_sorted[_gd_rep] = fuse_cluster_mask(
                     mask_sorted,
                     iou_sorted,
                     _gd_members,
-                    vote=GAMEDEV_CONSENSUS_VOTE,
+                    vote=AIGAMEKIT_CONSENSUS_VOTE,
                 )
         else:
             clusters = defaultdict(list)
@@ -155,7 +155,7 @@ _NMS_CONSENSUS = """\
             _gd_iou = _gd_inter / np.maximum(_gd_union, 1e-9)
             for i in range(len(mask_sorted)):
                 for j in clusters.keys():
-                    if _gd_iou[i, j] > GAMEDEV_MASK_NMS_IOU:
+                    if _gd_iou[i, j] > AIGAMEKIT_MASK_NMS_IOU:
                         clusters[j].append(i)
                         break
                 else:
@@ -176,19 +176,19 @@ _MULTIHEAD_COLLECT = """\
             pred_mask = np.stack(
                 [pred_mask_1, pred_mask_2, pred_mask_3], axis=-1
             )  # [N, K, 3]
-            # GAMEDEV_MULTIHEAD — keep near-best heads instead of argmax-only.
+            # AIGAMEKIT_MULTIHEAD — keep near-best heads instead of argmax-only.
             from part3d.utils.mask_consensus import collect_batch_heads
             _gd_m, _gd_i, _gd_p = collect_batch_heads(
                 pred_mask,
                 pred_iou,
                 bs * i,
-                multi_head=GAMEDEV_MULTI_HEAD,
-                min_score=GAMEDEV_HEAD_MIN_SCORE,
-                score_ratio=GAMEDEV_HEAD_SCORE_RATIO,
+                multi_head=AIGAMEKIT_MULTI_HEAD,
+                min_score=AIGAMEKIT_HEAD_MIN_SCORE,
+                score_ratio=AIGAMEKIT_HEAD_SCORE_RATIO,
             )
             mask_res.extend(_gd_m)
             iou_res.extend(_gd_i)
-            gamedev_prompt_ids.extend(_gd_p)
+            aigamekit_prompt_ids.extend(_gd_p)
 """
 
 _POOL_SORT_ORIG = """\
@@ -202,18 +202,18 @@ _POOL_SORT_ORIG = """\
 
 _POOL_SORT_NEW = """\
     with Timer("根据IOU排序"):
-        # GAMEDEV_POOL_SORT — pool size may exceed prompt_num (multi-head).
+        # AIGAMEKIT_POOL_SORT — pool size may exceed prompt_num (multi-head).
         iou_res = np.array(iou_res).tolist()
         _gd_n = int(mask_res.shape[1]) if hasattr(mask_res, "shape") else len(mask_res)
-        if not gamedev_prompt_ids:
-            gamedev_prompt_ids.extend(list(range(_gd_n)))
+        if not aigamekit_prompt_ids:
+            aigamekit_prompt_ids.extend(list(range(_gd_n)))
         mask_iou = [
-            [mask_res[:, i], iou_res[i], gamedev_prompt_ids[i]] for i in range(_gd_n)
+            [mask_res[:, i], iou_res[i], aigamekit_prompt_ids[i]] for i in range(_gd_n)
         ]
         mask_iou_sorted = sorted(mask_iou, key=lambda x: x[1], reverse=True)
         mask_sorted = [mask_iou_sorted[i][0] for i in range(_gd_n)]
         iou_sorted = [mask_iou_sorted[i][1] for i in range(_gd_n)]
-        gamedev_prompt_ids_sorted = [mask_iou_sorted[i][2] for i in range(_gd_n)]
+        aigamekit_prompt_ids_sorted = [mask_iou_sorted[i][2] for i in range(_gd_n)]
 """
 
 _VOTE_ASSIGN_ORIG = """\
@@ -224,9 +224,9 @@ _VOTE_ASSIGN_ORIG = """\
 """
 
 _VOTE_ASSIGN_NEW = """\
-        # GAMEDEV_VOTE_ASSIGN — soft vote across final masks; smaller parts win ties.
+        # AIGAMEKIT_VOTE_ASSIGN — soft vote across final masks; smaller parts win ties.
         from part3d.utils.mask_consensus import assign_points_by_vote
-        if GAMEDEV_CONSENSUS and final_mask_sorted:
+        if AIGAMEKIT_CONSENSUS and final_mask_sorted:
             _gd_vote_masks = [mask_sorted[i] for i in final_mask_sorted]
             _gd_vote_ious = [iou_sorted[i] for i in final_mask_sorted]
             _gd_local = assign_points_by_vote(_gd_vote_masks, _gd_vote_ious, prefer_small=True)
@@ -244,13 +244,13 @@ _VOTE_ASSIGN_NEW = """\
 # de os sombrear a nível de módulo (mesh_sam resolve globals em call-time).
 _PERF_TAIL = """
 
-# GAMEDEV_PERF_PATCH_V1 — overrides rápidos (numba fix_label, scipy connected regions).
-_gamedev_fix_label_orig = fix_label
-_gamedev_get_connected_region_orig = get_connected_region
+# AIGAMEKIT_PERF_PATCH_V1 — overrides rápidos (numba fix_label, scipy connected regions).
+_aigamekit_fix_label_orig = fix_label
+_aigamekit_get_connected_region_orig = get_connected_region
 
 
 @njit
-def _gamedev_fix_label_kernel(face_ids, adjacent_faces):
+def _aigamekit_fix_label_kernel(face_ids, adjacent_faces):
     faces_max = adjacent_faces.shape[0]
     max_deg = adjacent_faces.shape[1]
     n = face_ids.shape[0]
@@ -299,19 +299,19 @@ def _gamedev_fix_label_kernel(face_ids, adjacent_faces):
 
 def fix_label(face_ids, adjacent_faces, use_aabb=False, mesh=None, show_info=False):
     if use_aabb:
-        return _gamedev_fix_label_orig(
+        return _aigamekit_fix_label_orig(
             face_ids, adjacent_faces, use_aabb=use_aabb, mesh=mesh, show_info=show_info
         )
     try:
         ids = np.ascontiguousarray(np.asarray(face_ids, dtype=np.int64))
         adj = np.ascontiguousarray(np.asarray(adjacent_faces, dtype=np.int64))
-        out = _gamedev_fix_label_kernel(ids, adj)
+        out = _aigamekit_fix_label_kernel(ids, adj)
         if isinstance(face_ids, np.ndarray) and out is not face_ids:
             face_ids[...] = out
             return face_ids
         return out
     except Exception:
-        return _gamedev_fix_label_orig(
+        return _aigamekit_fix_label_orig(
             face_ids, adjacent_faces, use_aabb=use_aabb, mesh=mesh, show_info=show_info
         )
 
@@ -350,7 +350,7 @@ def get_connected_region(face_ids, adjacent_faces, return_face_part_ids=False):
             return parts, comp.astype(np.int64)
         return parts
     except Exception:
-        return _gamedev_get_connected_region_orig(
+        return _aigamekit_get_connected_region_orig(
             face_ids, adjacent_faces, return_face_part_ids
         )
 """
@@ -410,10 +410,10 @@ def transform_auto_mask(
     # get_mask() com bs alto explode a VRAM em ~6 GB. Prompt count only
     # changes runtime/CPU mask storage, not this peak.
     for old_bs in ("        bs = 64\n", "        bs = 8\n"):
-        content = content.replace(old_bs, "        bs = GAMEDEV_PROMPT_BATCH_SIZE\n")
+        content = content.replace(old_bs, "        bs = AIGAMEKIT_PROMPT_BATCH_SIZE\n")
     content = re.sub(
         r"(?m)^        bs = (?:4|[0-9]+)$",
-        "        bs = GAMEDEV_PROMPT_BATCH_SIZE",
+        "        bs = AIGAMEKIT_PROMPT_BATCH_SIZE",
         content,
         count=1,
     )
@@ -457,10 +457,10 @@ def transform_auto_mask(
     # Multi-head collect replaces winner-take-all.
     if MULTIHEAD_MARKER not in content and _WINNER_TAKE_ALL in content:
         content = content.replace(_WINNER_TAKE_ALL, _MULTIHEAD_COLLECT, 1)
-    if "gamedev_prompt_ids = []" not in content:
+    if "aigamekit_prompt_ids = []" not in content:
         content = content.replace(
             "        mask_res = []\n        iou_res = []\n",
-            "        mask_res = []\n        iou_res = []\n        gamedev_prompt_ids = []\n",
+            "        mask_res = []\n        iou_res = []\n        aigamekit_prompt_ids = []\n",
             1,
         )
 
@@ -475,7 +475,7 @@ def transform_auto_mask(
         elif NMS_MARKER in content:
             content = re.sub(
                 r'    with Timer\("NMS"\):\n'
-                r"        # GAMEDEV_NMS_VECTORIZED.*?"
+                r"        # AIGAMEKIT_NMS_VECTORIZED.*?"
                 r"                clusters\[i\]\.append\(i\)\n",
                 _NMS_CONSENSUS,
                 content,
@@ -487,12 +487,12 @@ def transform_auto_mask(
     # parts are exactly the masks least likely to receive three FPS prompts.
     # Keep stable clusters, plus high-confidence singleton/duo predictions.
     support_filter = (
-        "if (_gamedev_cluster_support(clusters[i], gamedev_prompt_ids_sorted) "
-        ">= GAMEDEV_MIN_CLUSTER_SUPPORT or iou_sorted[i] >= GAMEDEV_MIN_PREDICTED_IOU):"
+        "if (_aigamekit_cluster_support(clusters[i], aigamekit_prompt_ids_sorted) "
+        ">= AIGAMEKIT_MIN_CLUSTER_SUPPORT or iou_sorted[i] >= AIGAMEKIT_MIN_PREDICTED_IOU):"
     )
     content = content.replace("if len(clusters[i]) > 2:", support_filter, 1)
     content = content.replace(
-        "if (len(clusters[i]) >= GAMEDEV_MIN_CLUSTER_SUPPORT or iou_sorted[i] >= GAMEDEV_MIN_PREDICTED_IOU):",
+        "if (len(clusters[i]) >= AIGAMEKIT_MIN_CLUSTER_SUPPORT or iou_sorted[i] >= AIGAMEKIT_MIN_PREDICTED_IOU):",
         support_filter,
         1,
     )
@@ -509,10 +509,10 @@ def transform_auto_mask(
         (
             "if (\n"
             "                    cal_iou(mask_sorted[tar_cluster], mask_sorted[cur_cluster])\n"
-            "                    > GAMEDEV_SECONDARY_MASK_IOU\n"
+            "                    > AIGAMEKIT_SECONDARY_MASK_IOU\n"
             "                    and cal_bbox_iou(\n"
             "                        _points, mask_sorted[tar_cluster], mask_sorted[cur_cluster]\n"
-            "                    ) > GAMEDEV_BBOX_MERGE_IOU\n"
+            "                    ) > AIGAMEKIT_BBOX_MERGE_IOU\n"
             "                ):"
         ),
         content,

@@ -17,15 +17,15 @@ def test_enforce_noop_when_allow_shared() -> None:
 
 
 def test_enforce_noop_when_mem_unknown() -> None:
-    with patch("gamedev_shared.gpu.gpu_bytes_in_use", return_value=None):
+    with patch("aigamekit_shared.gpu.gpu_bytes_in_use", return_value=None):
         enforce_exclusive_gpu(allow_shared=False, max_used_pct=0.01)
 
 
 def test_enforce_ok_when_under_limit() -> None:
     mib = _THRESHOLD_MIB - 50
     with (
-        patch("gamedev_shared.gpu.gpu_bytes_in_use", return_value=mib * 1024 * 1024),
-        patch("gamedev_shared.gpu.gpu_total_mib", return_value=_TOTAL_MIB),
+        patch("aigamekit_shared.gpu.gpu_bytes_in_use", return_value=mib * 1024 * 1024),
+        patch("aigamekit_shared.gpu.gpu_total_mib", return_value=_TOTAL_MIB),
     ):
         enforce_exclusive_gpu(allow_shared=False)
 
@@ -33,8 +33,8 @@ def test_enforce_ok_when_under_limit() -> None:
 def test_enforce_raises_when_over_limit() -> None:
     mib = _THRESHOLD_MIB + 50
     with (
-        patch("gamedev_shared.gpu.gpu_bytes_in_use", return_value=mib * 1024 * 1024),
-        patch("gamedev_shared.gpu.gpu_total_mib", return_value=_TOTAL_MIB),
+        patch("aigamekit_shared.gpu.gpu_bytes_in_use", return_value=mib * 1024 * 1024),
+        patch("aigamekit_shared.gpu.gpu_total_mib", return_value=_TOTAL_MIB),
         pytest.raises(RuntimeError, match="GPU com"),
     ):
         enforce_exclusive_gpu(allow_shared=False)

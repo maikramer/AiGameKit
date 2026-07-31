@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from gamedev_shared.model_download import enable_hf_fast_download, enable_hf_transfer
+from aigamekit_shared.model_download import enable_hf_fast_download, enable_hf_transfer
 
 
 class TestEnableHfFastDownload:

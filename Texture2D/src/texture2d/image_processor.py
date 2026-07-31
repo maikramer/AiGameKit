@@ -1,6 +1,6 @@
 """Utilitários de processamento de imagem para Texture2D.
 
-Image I/O and metadata helpers are imported from ``gamedev_shared.image_utils``.
+Image I/O and metadata helpers are imported from ``aigamekit_shared.image_utils``.
 This module re-exports them for backward compatibility and adds Texture2D-specific
 defaults.
 """
@@ -12,7 +12,7 @@ from typing import Any
 
 from PIL import Image
 
-from gamedev_shared.image_utils import (
+from aigamekit_shared.image_utils import (
     save_image_with_metadata,
 )
 

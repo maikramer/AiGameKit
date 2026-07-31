@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gamedev_shared.lod_budget import (
+from aigamekit_shared.lod_budget import (
     LOD_FACE_SCALE_CEIL,
     LOD_FACE_SCALE_FLOOR,
     LOD_FACES_ABS_MIN,

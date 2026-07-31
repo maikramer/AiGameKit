@@ -1,6 +1,6 @@
-# Contributing to GameDev
+# Contributing to AiGameKit
 
-Thank you for your interest in contributing to GameDev! This guide will help you set up your development environment and make your first contribution.
+Thank you for your interest in contributing to AiGameKit! This guide will help you set up your development environment and make your first contribution.
 
 ## Table of Contents
 
@@ -15,8 +15,8 @@ Thank you for your interest in contributing to GameDev! This guide will help you
 
 ```bash
 # Clone the repo
-git clone https://github.com/maikramer/GameDev.git
-cd GameDev
+git clone https://github.com/maikramer/AiGameKit.git
+cd AiGameKit
 
 # Install a package in dev mode
 cd Shared && pip install -e '.[dev]'
@@ -38,17 +38,17 @@ make test-shared
 
 `./install.sh <tool>` installs editable (`pip install -e` → `src/`). Edits under
 `*/src/` are live on the next CLI process. `resolve_binary` prefers
-`<Tool>/.venv/bin` when `GAMEDEV_PREFER_MONOREPO=1` (default).
+`<Tool>/.venv/bin` when `AIGAMEKIT_PREFER_MONOREPO=1` (default).
 
 | Change | Action |
 |--------|--------|
 | Normal Python under `*/src/` | Save → re-run CLI / batch |
 | Running UMS **tool worker** | `ums respawn <backend>` |
-| ModelServer / worker protocol | `gamedev-model-server stop` |
+| ModelServer / worker protocol | `aigamekit-model-server stop` |
 | New dep / entry point | `./install.sh <tool>` |
 
 VRAM: **UMS + hw-auto** — no public `--low-vram` / `--memory-efficient`. Legacy
-per-tool servers: `GAMEDEV_ALLOW_LEGACY_SERVER=1` only.
+per-tool servers: `AIGAMEKIT_ALLOW_LEGACY_SERVER=1` only.
 
 ### Setting Up a Package
 
@@ -270,7 +270,7 @@ Describe how you tested your changes.
 ## Package Structure
 
 ```
-GameDev/
+AiGameKit/
 ├── Shared/           # Shared utilities (logging, GPU, HF helpers)
 ├── Text2D/           # Text to 2D sprite generation
 ├── Text3D/           # Text to 3D model generation

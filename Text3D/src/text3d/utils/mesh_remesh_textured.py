@@ -18,8 +18,8 @@ from pathlib import Path
 
 import numpy as np
 
-from gamedev_shared.bpy_mesh import clear_scene, load_glb, save_glb
-from gamedev_shared.mesh_simplify import clamp_decimate_target, protect_boundary_vertices, simplify_mesh_object
+from aigamekit_shared.bpy_mesh import clear_scene, load_glb, save_glb
+from aigamekit_shared.mesh_simplify import clamp_decimate_target, protect_boundary_vertices, simplify_mesh_object
 
 log = logging.getLogger(__name__)
 
@@ -63,12 +63,12 @@ def downscale_image_replace(node, size: int) -> bool:
 
 
 def _clamp_decimate_target(n_faces: int, requested: int) -> int:
-    """Compat: reexport de ``gamedev_shared.mesh_simplify.clamp_decimate_target``."""
+    """Compat: reexport de ``aigamekit_shared.mesh_simplify.clamp_decimate_target``."""
     return clamp_decimate_target(n_faces, requested)
 
 
 def _protect_boundary_vertices(obj):
-    """Compat: reexport de ``gamedev_shared.mesh_simplify.protect_boundary_vertices``."""
+    """Compat: reexport de ``aigamekit_shared.mesh_simplify.protect_boundary_vertices``."""
     return protect_boundary_vertices(obj)
 
 
@@ -236,7 +236,7 @@ def _bpy_remesh(obj, target_faces: int) -> None:
 
 def _bpy_post_remesh_repair(obj) -> None:
     """Post-remesh repair: perfil Shared ``post_voxel``."""
-    from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+    from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
 
     repair_mesh_object_with_profile(obj, "post_voxel")
 
@@ -804,7 +804,7 @@ def remesh_with_texture_reprojection(
 
 def _pre_decimate_repair(obj) -> None:
     """Compat: delega no perfil ``pre_decimate_uv`` via Shared."""
-    from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+    from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
 
     stats = repair_mesh_object_with_profile(obj, "pre_decimate_uv")
     if stats.get("long_edge_faces") or stats.get("sliver_faces") or stats.get("debris_faces"):
@@ -860,8 +860,8 @@ def _rebuild_textured_lod(
     Returns:
         ``(novo_obj, temp_png_path)`` — caller apaga o PNG após exportar.
     """
-    from gamedev_shared.mesh_repair import remove_doubles
-    from gamedev_shared.mesh_simplify import decimate_mesh_object
+    from aigamekit_shared.mesh_repair import remove_doubles
+    from aigamekit_shared.mesh_simplify import decimate_mesh_object
 
     matrix = obj.matrix_world.copy()
     remove_doubles(obj, threshold=0.0001)
@@ -937,7 +937,7 @@ def remesh_textured_glb(
         log.info("Hardlink quebrado em %s (nlink>1)", path_out.name)
 
     clear_scene()
-    from gamedev_shared.bpy_mesh import import_gltf
+    from aigamekit_shared.bpy_mesh import import_gltf
 
     import_gltf(path_in)
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
@@ -969,13 +969,13 @@ def remesh_textured_glb(
             break
 
     if repair and not has_texture:
-        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+        from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
 
         repair_mesh_object_with_profile(obj, "pre_decimate_uv")
 
     simplify_mesh_object(obj, target_faces, repair=False)
     if repair:
-        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+        from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
 
         # Texturado: não apagar slivers (remove_sliver_faces abre buracos em
         # edifícios casca-fina / janelas). Só dissolve+weld exacto+tri.
@@ -995,7 +995,7 @@ def remesh_textured_glb(
         # Rede de segurança: COLLAPSE estagnou longe do alvo → reimportar
         # o original e reconstruir (o mesh decimado já está degradado).
         clear_scene()
-        from gamedev_shared.bpy_mesh import import_gltf
+        from aigamekit_shared.bpy_mesh import import_gltf
 
         import_gltf(path_in)
         obj = max(
@@ -1052,7 +1052,7 @@ def remesh_textured_glb(
 
     bpy.context.view_layer.objects.active = arm_objs[0] if has_armature else obj
 
-    from gamedev_shared.bpy_mesh import smooth_shade_scene
+    from aigamekit_shared.bpy_mesh import smooth_shade_scene
 
     # Anti V/Tri=3: painted chega sem NORMAL → import flat → exporter per-canto.
     smooth_shade_scene([obj])

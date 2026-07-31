@@ -4,7 +4,7 @@ O admit estático vive em :mod:`modelserver.vram_planner` (pesos+act+safety).
 Este módulo é o **pós-load**: orça chunks/views/tiles pela VRAM livre para
 nenhum backend cair em OOM→CPU por batch demasiado grande.
 
-Implementação canónica: :mod:`gamedev_shared.vram_budget`. Os adapters
+Implementação canónica: :mod:`aigamekit_shared.vram_budget`. Os adapters
 ``text3d`` / ``paint3d`` (e futuros) devem preferir estes helpers a
 reimplementar a fórmula.
 """
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from gamedev_shared.vram_budget import (
+from aigamekit_shared.vram_budget import (
     PaintRuntimeBudget,
     budget_units,
     free_vram_bytes,

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gamedev_shared.cli_helpers import (
+from aigamekit_shared.cli_helpers import (
     apply_quality_defaults,
     env_bool,
     legacy_server_allowed,
@@ -70,7 +70,7 @@ class TestApplyQualityDefaults:
         mock_qresolved = MagicMock()
         mock_qresolved.params = {"width": 1024, "steps": 28}
 
-        with patch("gamedev_shared.quality.QualityEngine") as mock_qe_class:
+        with patch("aigamekit_shared.quality.QualityEngine") as mock_qe_class:
             mock_qe_class.return_value.resolve.return_value = mock_qresolved
             resolved = apply_quality_defaults(
                 ctx,
@@ -93,8 +93,8 @@ class TestTryUmsDelegation:
         """Se o UMS não está ativo, delegate_to_ums retorna None → False + mensagem."""
         console = MagicMock()
         with (
-            patch("gamedev_shared.model_server.is_ums_running", return_value=False),
-            patch("gamedev_shared.cli_helpers.delegate_to_ums", return_value=None),
+            patch("aigamekit_shared.model_server.is_ums_running", return_value=False),
+            patch("aigamekit_shared.cli_helpers.delegate_to_ums", return_value=None),
         ):
             result = try_ums_delegation(
                 "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
@@ -112,7 +112,7 @@ class TestTryUmsDelegation:
 
         console = MagicMock()
         with patch(
-            "gamedev_shared.cli_helpers.delegate_to_ums",
+            "aigamekit_shared.cli_helpers.delegate_to_ums",
             return_value={"status": "ok", "output": str(fake_output), "seed": 42},
         ):
             result = try_ums_delegation(
@@ -126,11 +126,11 @@ class TestTryUmsDelegation:
         console = MagicMock()
         with (
             patch(
-                "gamedev_shared.cli_helpers.delegate_to_ums",
+                "aigamekit_shared.cli_helpers.delegate_to_ums",
                 return_value={"status": "error", "error": "backend down"},
             ),
-            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
-            patch("gamedev_shared.model_server.ums_is_busy", return_value=False),
+            patch("aigamekit_shared.model_server.is_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.ums_is_busy", return_value=False),
         ):
             result = try_ums_delegation(
                 "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
@@ -143,9 +143,9 @@ class TestTryUmsDelegation:
 
         console = MagicMock()
         with (
-            patch("gamedev_shared.cli_helpers.delegate_to_ums", return_value=None),
-            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
-            patch("gamedev_shared.model_server.fetch_ums_queue_snapshot", return_value=None),
+            patch("aigamekit_shared.cli_helpers.delegate_to_ums", return_value=None),
+            patch("aigamekit_shared.model_server.is_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.fetch_ums_queue_snapshot", return_value=None),
             pytest.raises(click.ClickException, match="sem resposta"),
         ):
             try_ums_delegation(
@@ -158,11 +158,11 @@ class TestTryUmsDelegation:
         console = MagicMock()
         with (
             patch(
-                "gamedev_shared.cli_helpers.delegate_to_ums",
+                "aigamekit_shared.cli_helpers.delegate_to_ums",
                 return_value={"status": "error", "error_code": "BACKEND_FAIL", "error": "boom"},
             ),
-            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
-            patch("gamedev_shared.model_server.ums_is_busy", return_value=True),
+            patch("aigamekit_shared.model_server.is_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.ums_is_busy", return_value=True),
             pytest.raises(click.ClickException, match="UMS ocupado"),
         ):
             try_ums_delegation(
@@ -173,9 +173,9 @@ class TestTryUmsDelegation:
         """VRAM_INSUFFICIENT sem fila busy → fallback in-process (caller decide)."""
         console = MagicMock()
         with (
-            patch("gamedev_shared.model_server.ums_is_busy", return_value=False),
+            patch("aigamekit_shared.model_server.ums_is_busy", return_value=False),
             patch(
-                "gamedev_shared.cli_helpers.delegate_to_ums",
+                "aigamekit_shared.cli_helpers.delegate_to_ums",
                 return_value={
                     "status": "error",
                     "error_code": "VRAM_INSUFFICIENT",
@@ -200,9 +200,9 @@ class TestTryUmsDelegation:
 
         console = MagicMock()
         with (
-            patch("gamedev_shared.model_server.ums_is_busy", return_value=True),
+            patch("aigamekit_shared.model_server.ums_is_busy", return_value=True),
             patch(
-                "gamedev_shared.cli_helpers.delegate_to_ums",
+                "aigamekit_shared.cli_helpers.delegate_to_ums",
                 return_value={
                     "status": "error",
                     "error_code": "VRAM_INSUFFICIENT",
@@ -222,7 +222,7 @@ class TestTryUmsDelegation:
 
     def test_returns_false_when_disabled(self) -> None:
         console = MagicMock()
-        with patch("gamedev_shared.cli_helpers.delegate_to_ums") as mock_delegate:
+        with patch("aigamekit_shared.cli_helpers.delegate_to_ums") as mock_delegate:
             result = try_ums_delegation(
                 "text2icon",
                 {"output": "/tmp/x.png"},
@@ -240,7 +240,7 @@ class TestTryUmsDelegation:
         console = MagicMock()
         with (
             patch(
-                "gamedev_shared.cli_helpers.delegate_to_ums",
+                "aigamekit_shared.cli_helpers.delegate_to_ums",
                 return_value={
                     "status": "queue_full",
                     "queue_depth": 8,
@@ -264,7 +264,7 @@ class TestTryUmsDelegation:
 
         console = MagicMock()
         with patch(
-            "gamedev_shared.cli_helpers.delegate_to_ums",
+            "aigamekit_shared.cli_helpers.delegate_to_ums",
             return_value={"status": "ok", "output": str(fake_output)},
         ) as mock_delegate:
             try_ums_delegation(
@@ -326,7 +326,7 @@ class TestLegacyServerAllowed:
             assert legacy_server_allowed() is False
 
     def test_opt_in(self) -> None:
-        with patch.dict("os.environ", {"GAMEDEV_ALLOW_LEGACY_SERVER": "1"}):
+        with patch.dict("os.environ", {"AIGAMEKIT_ALLOW_LEGACY_SERVER": "1"}):
             assert legacy_server_allowed() is True
 
 

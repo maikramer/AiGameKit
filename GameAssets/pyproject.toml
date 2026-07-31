@@ -7,7 +7,7 @@ name = "gameassets"
 version = "0.2.2"
 description = "CLI para batches de prompts e assets 2D/3D alinhados ao estilo do jogo"
 readme = "README.md"
-authors = [{ name = "GameDev" }]
+authors = [{ name = "AiGameKit" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "click>=8.0",
@@ -17,7 +17,7 @@ dependencies = [
     "rich-click>=1.8.0",
     "textual>=3.0",
     "Pillow>=10.0",
-    "gamedev-shared @ file:../Shared",
+    "aigamekit-shared @ file:../Shared",
     "modelserver @ file:../ModelServer",
     "bpy>=5.2.0",
 ]

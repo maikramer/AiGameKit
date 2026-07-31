@@ -461,7 +461,7 @@ class GameProfile:
             smax = raw_ts2.get("sigma_max")
             quality_raw = raw_ts2.get("quality")
             quality_s = str(quality_raw).strip().lower() if quality_raw not in (None, "") else "medium"
-            from gamedev_shared.quality import VALID_QUALITIES
+            from aigamekit_shared.quality import VALID_QUALITIES
 
             if quality_s not in VALID_QUALITIES:
                 raise ValueError(f"text2sound.quality deve ser um de: {', '.join(VALID_QUALITIES)}")

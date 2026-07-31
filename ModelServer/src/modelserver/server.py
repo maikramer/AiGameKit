@@ -7,7 +7,7 @@ worker pool com ``MAX_INFLIGHT`` (default 1).
 Protocolo: ver ``protocol.py``. Ciclo de vida: ver ``serve_forever``.
 
 Retrocompatibilidade: o socket único (``model-server.sock``) é descoberto por
-``gamedev_shared.model_server.discover_active_sockets`` como qualquer per-tool
+``aigamekit_shared.model_server.discover_active_sockets`` como qualquer per-tool
 legacy server. ``ensure_vram_available`` envia ``ensure-vram`` ao UMS quando
 disponível, caindo para o comportamento legacy caso contrário.
 """
@@ -24,8 +24,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from gamedev_shared.logging import Logger
-from gamedev_shared.model_server import _ensure_server_dir, _pid_path
+from aigamekit_shared.logging import Logger
+from aigamekit_shared.model_server import _ensure_server_dir, _pid_path
 
 from . import protocol as P
 from .backend_manager import BackendManager
@@ -235,8 +235,8 @@ class UnifiedModelServer:
                 "error": str(e),
                 "error_code": P.ERR_QUEUE_FULL,
                 "hint": (
-                    "Espera jobs terminarem, cancela com gamedev-model-server cancel <job_id>, "
-                    "ou aumenta GAMEDEV_UMS_MAX_QUEUE_DEPTH."
+                    "Espera jobs terminarem, cancela com aigamekit-model-server cancel <job_id>, "
+                    "ou aumenta AIGAMEKIT_UMS_MAX_QUEUE_DEPTH."
                 ),
                 "queue_depth": self.queue.depth,
                 "max_depth": self.queue.max_depth,
@@ -326,12 +326,12 @@ class UnifiedModelServer:
                 out.setdefault("hint", "Job cancelado (queued ou durante generate).")
             elif "timeout" in err_txt:
                 out.setdefault("error_code", P.ERR_TIMEOUT)
-                out.setdefault("hint", "Aumenta timeout do cliente ou inspecciona gamedev-model-server queue.")
+                out.setdefault("hint", "Aumenta timeout do cliente ou inspecciona aigamekit-model-server queue.")
             else:
                 out.setdefault("error_code", P.ERR_GENERATE_FAILED)
                 out.setdefault(
                     "hint",
-                    "Vê ums_debug + gamedev-model-server stats (last_error do backend). "
+                    "Vê ums_debug + aigamekit-model-server stats (last_error do backend). "
                     "Se OOM, evict outros backends ou usa --no-ums.",
                 )
 
@@ -535,7 +535,7 @@ class UnifiedModelServer:
                 return self._error(
                     f"falha ao pré-carregar {name}: {e}",
                     error_code=P.ERR_PRELOAD_FAILED,
-                    hint="Verifica deps do backend (gamedev-model-server doctor) e VRAM livre.",
+                    hint="Verifica deps do backend (aigamekit-model-server doctor) e VRAM livre.",
                     backend=name,
                 )
 
@@ -676,7 +676,7 @@ class UnifiedModelServer:
                 return self._error(
                     f"job desconhecido: {job_id}",
                     error_code=P.ERR_JOB_UNKNOWN,
-                    hint="Lista jobs com gamedev-model-server queue",
+                    hint="Lista jobs com aigamekit-model-server queue",
                 )
             payload = job.to_public_dict()
             payload["ums_debug"] = self._ums_debug_for_job(job)
@@ -708,7 +708,7 @@ class UnifiedModelServer:
                 return self._error(
                     err or f"job desconhecido: {job_id}",
                     error_code=P.ERR_JOB_UNKNOWN,
-                    hint="Lista jobs com gamedev-model-server queue",
+                    hint="Lista jobs com aigamekit-model-server queue",
                 )
             job_id = resolved
             timeout = self._request_timeout_sec(request)
@@ -717,13 +717,13 @@ class UnifiedModelServer:
                 return self._error(
                     f"job desconhecido: {job_id}",
                     error_code=P.ERR_JOB_UNKNOWN,
-                    hint="Lista jobs com gamedev-model-server queue",
+                    hint="Lista jobs com aigamekit-model-server queue",
                 )
             if not job.done_event.is_set():
                 return self._error(
                     "timeout à espera do job",
                     error_code=P.ERR_TIMEOUT,
-                    hint="Inspecciona gamedev-model-server queue / status",
+                    hint="Inspecciona aigamekit-model-server queue / status",
                     job_id=job_id,
                     ums_debug=self._ums_debug_for_job(job),
                 )
@@ -740,7 +740,7 @@ class UnifiedModelServer:
                 return self._error(
                     "timeout à espera do job na fila",
                     error_code=P.ERR_TIMEOUT,
-                    hint="Inspecciona gamedev-model-server queue / status",
+                    hint="Inspecciona aigamekit-model-server queue / status",
                     job_id=job.job_id,
                     ums_debug=self._ums_debug_for_job(job),
                 )
@@ -832,7 +832,7 @@ class UnifiedModelServer:
                     self._error(
                         "timeout à espera do job",
                         error_code=P.ERR_TIMEOUT,
-                        hint="Inspecciona gamedev-model-server queue / status",
+                        hint="Inspecciona aigamekit-model-server queue / status",
                         job_id=job.job_id,
                         ums_debug=self._ums_debug_for_job(job),
                     ),
@@ -897,7 +897,7 @@ class UnifiedModelServer:
                         self._error(
                             err or f"job desconhecido: {job_id}",
                             error_code=P.ERR_JOB_UNKNOWN,
-                            hint="Lista jobs com gamedev-model-server queue",
+                            hint="Lista jobs com aigamekit-model-server queue",
                         ),
                     )
                     return

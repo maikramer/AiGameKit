@@ -414,7 +414,7 @@ Happy path: [`../../docs/GLB_FINISH_COMPRESSION.md`](../../docs/GLB_FINISH_COMPR
 
 ### `finish` / bake-master sem KTX2 (fica PNG/JPEG)
 
-**Sintoma:** `text3d finish` reporta aviso KTX2; `gamedev-lab check` falha
+**Sintoma:** `text3d finish` reporta aviso KTX2; `aigamekit-lab check` falha
 `texture_format: ktx2`; probe JSON mostra `image/png` ou `image/jpeg`.
 
 **Causa típica:** CLI `ktx` (KTX-Software) ausente. `@gltf-transform/cli uastc`

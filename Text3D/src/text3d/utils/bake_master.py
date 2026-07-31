@@ -85,7 +85,7 @@ def _bake_master_bpy_session(
         return False, None
 
     try:
-        from gamedev_shared.bpy_mesh import clear_scene
+        from aigamekit_shared.bpy_mesh import clear_scene
     except ImportError:
         if decimated_glb != output_glb:
             shutil.copy2(decimated_glb, output_glb)

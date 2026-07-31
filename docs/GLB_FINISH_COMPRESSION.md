@@ -69,7 +69,7 @@ text3d lod painted.glb -o ./out --basename prop --painted-mesh painted.glb \
 | Rigged / animated | `lod --no-meshopt` (ladder sem compressão) → `_finish_lod_with_rollback` com **uastc+meshopt**; se perder skins/clips → restaura pré-finish |
 | Collision | dedup+prune only |
 
-Validação: `gamedev-lab check glb … --category lod0` exige `texture_format: ktx2` + `compression: meshopt`.
+Validação: `aigamekit-lab check glb … --category lod0` exige `texture_format: ktx2` + `compression: meshopt`.
 
 ## Runtime (VibeGame)
 

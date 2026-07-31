@@ -7,8 +7,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from gamedev_shared.cli_helpers import add_ums_options
-from gamedev_shared.quality import VALID_QUALITIES
+from aigamekit_shared.cli_helpers import add_ums_options
+from aigamekit_shared.quality import VALID_QUALITIES
 
 from . import defaults as _d
 from .cli_rich import click
@@ -373,14 +373,14 @@ def decompose(
     """
     from click.core import ParameterSource
 
-    from gamedev_shared.cli_helpers import (
+    from aigamekit_shared.cli_helpers import (
         apply_quality_defaults,
         prepare_gpu_exclusive,
         try_ums_delegation,
     )
-    from gamedev_shared.env import ensure_pytorch_cuda_alloc_conf
-    from gamedev_shared.quantization import format_quantization_info, get_quantization_config
-    from gamedev_shared.seed_utils import resolve_effective_seed
+    from aigamekit_shared.env import ensure_pytorch_cuda_alloc_conf
+    from aigamekit_shared.quantization import format_quantization_info, get_quantization_config
+    from aigamekit_shared.seed_utils import resolve_effective_seed
 
     from .hardware import detect_hardware_profile, hw_auto_enabled
     from .utils.sdnq_resolve import resolve_sdnq_preset
@@ -597,12 +597,12 @@ def decompose(
 
     import numpy as np
 
-    from gamedev_shared.bpy_mesh import (
+    from aigamekit_shared.bpy_mesh import (
         save_colored_mesh,
         save_empty_glb,
         save_scene_geometries,
     )
-    from gamedev_shared.cli_helpers import make_profiler
+    from aigamekit_shared.cli_helpers import make_profiler
 
     from .pipeline import Part3DPipeline
 
@@ -644,7 +644,7 @@ def decompose(
         sdnq_preset=effective_preset,
     )
 
-    from gamedev_shared.cli_helpers import needed_mib_for_backend
+    from aigamekit_shared.cli_helpers import needed_mib_for_backend
 
     if try_ums_delegation(
         "part3d",
@@ -829,7 +829,7 @@ def serve(ums_worker: bool) -> None:
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico
-    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter part3d
+    :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter part3d
     local (:mod:`part3d.worker_serve_adapter`).
     """
     if not ums_worker:
@@ -838,7 +838,7 @@ def serve(ums_worker: bool) -> None:
         Console().print("[yellow]part3d serve sem --ums-worker não faz nada.[/yellow]")
         return
 
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
     from part3d.worker_serve_adapter import Adapter
 
     run_worker_loop(Adapter, backend_name="part3d")

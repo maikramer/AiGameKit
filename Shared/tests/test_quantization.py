@@ -1,4 +1,4 @@
-"""Tests for gamedev_shared.quantization — quant config dispatcher and VRAM helpers."""
+"""Tests for aigamekit_shared.quantization — quant config dispatcher and VRAM helpers."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gamedev_shared.quantization import (
+from aigamekit_shared.quantization import (
     apply_torch_compile,
     enable_attention_optimizations,
     enable_model_cpu_offload_optimized,
@@ -65,7 +65,7 @@ class TestAvailabilityGuards:
         assert is_quanto_available() is True
 
     def test_sdnq_unavailable(self):
-        with patch("gamedev_shared.sdnq.is_available", return_value=False):
+        with patch("aigamekit_shared.sdnq.is_available", return_value=False):
             assert is_sdnq_available() is False
 
     def test_sdnq_available(self):
@@ -92,19 +92,19 @@ class TestGetGpuComputeCapability:
 
 
 class TestSupportsFp8:
-    @patch("gamedev_shared.quantization.get_gpu_compute_capability", return_value=(8, 9))
+    @patch("aigamekit_shared.quantization.get_gpu_compute_capability", return_value=(8, 9))
     def test_true_for_ada_lovelace(self, _mock):
         assert supports_fp8() is True
 
-    @patch("gamedev_shared.quantization.get_gpu_compute_capability", return_value=(9, 0))
+    @patch("aigamekit_shared.quantization.get_gpu_compute_capability", return_value=(9, 0))
     def test_true_for_hopper(self, _mock):
         assert supports_fp8() is True
 
-    @patch("gamedev_shared.quantization.get_gpu_compute_capability", return_value=(8, 6))
+    @patch("aigamekit_shared.quantization.get_gpu_compute_capability", return_value=(8, 6))
     def test_false_for_ampere(self, _mock):
         assert supports_fp8() is False
 
-    @patch("gamedev_shared.quantization.get_gpu_compute_capability", return_value=None)
+    @patch("aigamekit_shared.quantization.get_gpu_compute_capability", return_value=None)
     def test_false_when_no_gpu(self, _mock):
         assert supports_fp8() is False
 
@@ -113,26 +113,26 @@ class TestGetQuantizationConfig:
     def test_none_mode_returns_none(self):
         assert get_quantization_config("none") is None
 
-    @patch("gamedev_shared.quantization.is_bitsandbytes_available", return_value=False)
+    @patch("aigamekit_shared.quantization.is_bitsandbytes_available", return_value=False)
     def test_auto_bnb_unavailable_returns_none(self, _mock):
         assert get_quantization_config("auto") is None
 
-    @patch("gamedev_shared.quantization.supports_fp8", return_value=True)
+    @patch("aigamekit_shared.quantization.supports_fp8", return_value=True)
     def test_fp8_mode(self, _mock):
         assert get_quantization_config("fp8") == {"type": "fp8", "compute_dtype": "float16"}
 
-    @patch("gamedev_shared.quantization.supports_fp8", return_value=True)
+    @patch("aigamekit_shared.quantization.supports_fp8", return_value=True)
     def test_fp8_mode_custom_dtype(self, _mock):
         cfg = get_quantization_config("fp8", compute_dtype="bfloat16")
         assert cfg == {"type": "fp8", "compute_dtype": "bfloat16"}
 
-    @patch("gamedev_shared.quantization.supports_fp8", return_value=True)
+    @patch("aigamekit_shared.quantization.supports_fp8", return_value=True)
     def test_auto_resolves_fp8_when_supported(self, _mock):
         # "auto" devolve None cedo quando bitsandbytes está ausente.
         pytest.importorskip("bitsandbytes")
         assert get_quantization_config("auto") == {"type": "fp8", "compute_dtype": "float16"}
 
-    @patch("gamedev_shared.quantization.is_bitsandbytes_available", return_value=True)
+    @patch("aigamekit_shared.quantization.is_bitsandbytes_available", return_value=True)
     def test_int4_mode(self, _mock):
         pytest.importorskip("transformers")
         pytest.importorskip("torch")
@@ -140,59 +140,59 @@ class TestGetQuantizationConfig:
         assert cfg["type"] == "bitsandbytes-4bit"
         assert "config" in cfg
 
-    @patch("gamedev_shared.quantization.is_bitsandbytes_available", return_value=True)
+    @patch("aigamekit_shared.quantization.is_bitsandbytes_available", return_value=True)
     def test_4bit_alias(self, _mock):
         pytest.importorskip("transformers")
         pytest.importorskip("torch")
         cfg = get_quantization_config("4bit")
         assert cfg["type"] == "bitsandbytes-4bit"
 
-    @patch("gamedev_shared.quantization.is_bitsandbytes_available", return_value=True)
+    @patch("aigamekit_shared.quantization.is_bitsandbytes_available", return_value=True)
     def test_int8_mode(self, _mock):
         pytest.importorskip("transformers")
         cfg = get_quantization_config("int8")
         assert cfg["type"] == "bitsandbytes-8bit"
         assert "config" in cfg
 
-    @patch("gamedev_shared.quantization.is_bitsandbytes_available", return_value=True)
+    @patch("aigamekit_shared.quantization.is_bitsandbytes_available", return_value=True)
     def test_8bit_alias(self, _mock):
         pytest.importorskip("transformers")
         cfg = get_quantization_config("8bit")
         assert cfg["type"] == "bitsandbytes-8bit"
 
-    @patch("gamedev_shared.quantization.is_quanto_available", return_value=True)
+    @patch("aigamekit_shared.quantization.is_quanto_available", return_value=True)
     def test_quanto_int8(self, _mock):
         pytest.importorskip("optimum.quanto")
         cfg = get_quantization_config("quanto-int8")
         assert cfg["type"] == "quanto-int8"
         assert "config" in cfg
 
-    @patch("gamedev_shared.quantization.is_quanto_available", return_value=True)
+    @patch("aigamekit_shared.quantization.is_quanto_available", return_value=True)
     def test_quanto_int4(self, _mock):
         pytest.importorskip("optimum.quanto")
         cfg = get_quantization_config("quanto-int4")
         assert cfg["type"] == "quanto-int4"
         assert "config" in cfg
 
-    @patch("gamedev_shared.quantization.is_sdnq_available", return_value=True)
+    @patch("aigamekit_shared.quantization.is_sdnq_available", return_value=True)
     def test_sdnq_valid_preset(self, _mock):
         pytest.importorskip("sdnq")
         cfg = get_quantization_config("sdnq-uint8")
         assert cfg["type"] == "sdnq-uint8"
         assert "config" in cfg
 
-    @patch("gamedev_shared.quantization.is_sdnq_available", return_value=True)
+    @patch("aigamekit_shared.quantization.is_sdnq_available", return_value=True)
     def test_sdnq_unknown_preset_returns_none(self, _mock):
         assert get_quantization_config("sdnq-unknown") is None
 
-    @patch("gamedev_shared.quantization.is_sdnq_available", return_value=False)
+    @patch("aigamekit_shared.quantization.is_sdnq_available", return_value=False)
     def test_sdnq_unavailable_returns_none(self, _mock):
         assert get_quantization_config("sdnq-uint8") is None
 
     def test_invalid_mode_returns_none(self):
         assert get_quantization_config("totally-bogus") is None
 
-    @patch("gamedev_shared.quantization.supports_fp8", return_value=True)
+    @patch("aigamekit_shared.quantization.supports_fp8", return_value=True)
     def test_mode_normalized_lower_strip(self, _mock):
         assert get_quantization_config("  FP8 ") == {"type": "fp8", "compute_dtype": "float16"}
 
@@ -301,33 +301,33 @@ class TestSetMemoryOptimizationEnv:
 
 
 class TestGetSuggestedQuantizationForVram:
-    @patch("gamedev_shared.quantization.is_sdnq_available", return_value=False)
-    @patch("gamedev_shared.quantization.supports_fp8", return_value=False)
+    @patch("aigamekit_shared.quantization.is_sdnq_available", return_value=False)
+    @patch("aigamekit_shared.quantization.supports_fp8", return_value=False)
     def test_large_vram_returns_none(self, _fp8, _sdnq):
         assert get_suggested_quantization_for_vram(24) == "none"
 
-    @patch("gamedev_shared.quantization.is_sdnq_available", return_value=False)
-    @patch("gamedev_shared.quantization.supports_fp8", return_value=True)
+    @patch("aigamekit_shared.quantization.is_sdnq_available", return_value=False)
+    @patch("aigamekit_shared.quantization.supports_fp8", return_value=True)
     def test_mid_vram_fp8(self, _fp8, _sdnq):
         assert get_suggested_quantization_for_vram(2) == "fp8"
 
-    @patch("gamedev_shared.quantization.is_sdnq_available", return_value=False)
-    @patch("gamedev_shared.quantization.supports_fp8", return_value=False)
+    @patch("aigamekit_shared.quantization.is_sdnq_available", return_value=False)
+    @patch("aigamekit_shared.quantization.supports_fp8", return_value=False)
     def test_low_vram_int8(self, _fp8, _sdnq):
         assert get_suggested_quantization_for_vram(1.6) == "int8"
 
-    @patch("gamedev_shared.quantization.is_sdnq_available", return_value=False)
-    @patch("gamedev_shared.quantization.supports_fp8", return_value=False)
+    @patch("aigamekit_shared.quantization.is_sdnq_available", return_value=False)
+    @patch("aigamekit_shared.quantization.supports_fp8", return_value=False)
     def test_tiny_vram_int4(self, _fp8, _sdnq):
         assert get_suggested_quantization_for_vram(1) == "int4"
 
-    @patch("gamedev_shared.sdnq.suggest_preset_for_vram", return_value="sdnq-uint8")
-    @patch("gamedev_shared.quantization.is_sdnq_available", return_value=True)
+    @patch("aigamekit_shared.sdnq.suggest_preset_for_vram", return_value="sdnq-uint8")
+    @patch("aigamekit_shared.quantization.is_sdnq_available", return_value=True)
     def test_sdnq_available_delegates(self, _sdnq, _suggest):
         assert get_suggested_quantization_for_vram(2) == "sdnq-uint8"
 
-    @patch("gamedev_shared.quantization.is_sdnq_available", return_value=False)
-    @patch("gamedev_shared.quantization.supports_fp8", return_value=False)
+    @patch("aigamekit_shared.quantization.is_sdnq_available", return_value=False)
+    @patch("aigamekit_shared.quantization.supports_fp8", return_value=False)
     def test_large_model_raises_required_threshold(self, _fp8, _sdnq):
         assert get_suggested_quantization_for_vram(24, model_size_gb=16) == "none"
 

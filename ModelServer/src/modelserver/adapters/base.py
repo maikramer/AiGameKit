@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
-from gamedev_shared.diffusion_control import GenerationAborted
+from aigamekit_shared.diffusion_control import GenerationAborted
 
 from .. import protocol as P
 
@@ -122,7 +122,7 @@ class BackendAdapter(ABC):
         Contrato canónico: model objects que suportam re-orçamento pós-load
         (Paint3D ``PaintBatchProcessor``, Text3D ``HunyuanTextTo3DGenerator``, …)
         expõem ``refresh_runtime_budget(**hints)`` e devolvem o dict do budget
-        (:mod:`gamedev_shared.vram_budget`). O adapter chama isto antes da
+        (:mod:`aigamekit_shared.vram_budget`). O adapter chama isto antes da
         inferência; o BackendManager guarda o resultado em ``stats``.
 
         Args:

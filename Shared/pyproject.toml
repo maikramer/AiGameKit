@@ -3,12 +3,12 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gamedev-shared"
+name = "aigamekit-shared"
 version = "0.2.0"
-description = "Biblioteca partilhada do monorepo GameDev (logging, GPU, instaladores, CLI, subprocess)"
+description = "Biblioteca partilhada do monorepo AiGameKit (logging, GPU, instaladores, CLI, subprocess)"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
-authors = [{ name = "GameDev" }]
+authors = [{ name = "AiGameKit" }]
 license = "MIT"
 dependencies = [
     "click>=8.1.0",
@@ -48,13 +48,13 @@ dev = [
 ]
 
 [project.scripts]
-gamedev-install = "gamedev_shared.installer.unified:main"
+aigamekit-install = "aigamekit_shared.installer.unified:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-gamedev_shared = ["data/*.yaml"]
+aigamekit_shared = ["data/*.yaml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

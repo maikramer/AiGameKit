@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from gamedev_shared.worker_protocol import (
+from aigamekit_shared.worker_protocol import (
     CMD_GENERATE,
     CMD_LOAD,
     CMD_PING,
@@ -154,12 +154,12 @@ class TestProtocolConstants:
     """Garantir que comandos/eventos são strings canónicas estáveis."""
 
     def test_all_cmds_known(self) -> None:
-        from gamedev_shared.worker_protocol import ALL_CMDS
+        from aigamekit_shared.worker_protocol import ALL_CMDS
 
         assert {"load", "generate", "unload", "abort", "ping", "shutdown"} == ALL_CMDS
 
     def test_error_codes_aligned_with_protocol(self) -> None:
-        from gamedev_shared.worker_protocol import (
+        from aigamekit_shared.worker_protocol import (
             ERR_BACKEND_VENV_MISSING,
             ERR_CANCELLED,
             ERR_GENERATE_FAILED,

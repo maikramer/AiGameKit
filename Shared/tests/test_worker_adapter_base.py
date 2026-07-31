@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from gamedev_shared.worker_serve_adapter_base import WorkerAdapter
+from aigamekit_shared.worker_serve_adapter_base import WorkerAdapter
 
 
 class _ProbeAdapter(WorkerAdapter):

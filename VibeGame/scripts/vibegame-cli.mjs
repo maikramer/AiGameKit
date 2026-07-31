@@ -539,7 +539,7 @@ function runVibegameRun(engineRoot, opts) {
 }
 
 function help() {
-  console.log(`vibegame ${pkg.version} — VibeGame (GameDev monorepo)`);
+  console.log(`vibegame ${pkg.version} — VibeGame (AiGameKit monorepo)`);
   console.log('');
   console.log('  vibegame create <name>   Create a new project (scaffold)');
   console.log(

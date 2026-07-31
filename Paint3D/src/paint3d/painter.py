@@ -35,9 +35,9 @@ from diffusers.utils import logging as _diffusers_logging  # isort: skip  # noqa
 
 _diffusers_logging.set_verbosity(50)
 
-from gamedev_shared.gpu import clear_cuda_memory  # noqa: E402
-from gamedev_shared.logging import Logger  # noqa: E402
-from gamedev_shared.sdnq import is_available as _sdnq_available  # noqa: E402
+from aigamekit_shared.gpu import clear_cuda_memory  # noqa: E402
+from aigamekit_shared.logging import Logger  # noqa: E402
+from aigamekit_shared.sdnq import is_available as _sdnq_available  # noqa: E402
 
 from . import defaults as _defaults  # noqa: E402
 from .hy3d21_paths import (  # noqa: E402
@@ -71,7 +71,7 @@ def _auto_dino_device(memory_efficient: bool, gpu_ids: list[int] | None) -> str:
         return "cpu"
     if gpu_ids and len(gpu_ids) >= 2:
         return f"cuda:{gpu_ids[1]}"
-    from gamedev_shared.hardware import GIB, cuda_gpu_specs
+    from aigamekit_shared.hardware import GIB, cuda_gpu_specs
 
     largest = max((mem for _, mem in cuda_gpu_specs()), default=0)
     return "cuda" if largest / GIB >= _defaults.DINO_GPU_MIN_GIB else "cpu"
@@ -95,7 +95,7 @@ def _preflight_paint_model(model_repo: str, subfolder: str, *, verbose: bool = F
     do download on-demand como antes.
     """
     try:
-        from gamedev_shared.model_download import ensure_model
+        from aigamekit_shared.model_download import ensure_model
 
         ensure_model(
             model_repo,
@@ -175,7 +175,7 @@ def ensure_meshrender_vram_headroom(pipe: Any, *, verbose: bool = False) -> None
     Nunca deixar cair em cudaMalloc OOM silencioso — falha clara + tip UMS.
     Em GPUs folgadas (já ≥ mínimo) não mexe no dual-UNet.
     """
-    from gamedev_shared.vram_budget import PAINT_MESHRENDER_MIN_FREE_BYTES, free_vram_bytes
+    from aigamekit_shared.vram_budget import PAINT_MESHRENDER_MIN_FREE_BYTES, free_vram_bytes
 
     if not torch.cuda.is_available():
         return
@@ -209,7 +209,7 @@ def apply_runtime_vram_budget(
 ) -> dict[str, Any] | None:
     """Orça views/tiles/DINO pela VRAM livre **após** load/offload.
 
-    Canónico: :func:`gamedev_shared.vram_budget.paint_runtime_budget` (também
+    Canónico: :func:`aigamekit_shared.vram_budget.paint_runtime_budget` (também
     exposto no UMS via ``modelserver.runtime_budget``). Desligar:
     ``PAINT3D_AUTO_VRAM_BUDGET=0``.
 
@@ -221,8 +221,8 @@ def apply_runtime_vram_budget(
     if not torch.cuda.is_available() or str(getattr(config, "device", "")) == "cpu":
         return None
 
-    from gamedev_shared.quantization import enable_vae_optimizations
-    from gamedev_shared.vram_budget import free_vram_bytes, paint_runtime_budget
+    from aigamekit_shared.quantization import enable_vae_optimizations
+    from aigamekit_shared.vram_budget import free_vram_bytes, paint_runtime_budget
 
     force_dino = os.environ.get("PAINT3D_DINO_DEVICE", "").strip() or None
     parked = False
@@ -406,7 +406,7 @@ def _apply_paint_kernel_opts(
     """
     import os
 
-    from gamedev_shared.quantization import (
+    from aigamekit_shared.quantization import (
         apply_channels_last,
         apply_torch_compile,
         resolve_torch_compile_mode,
@@ -514,12 +514,12 @@ def _try_paint_group_offload(pipe: Any, *, verbose: bool = False) -> bool:
     # attention). Só activar se PAINT3D_GROUP_OFFLOAD=1 explicitamente.
     import os
 
-    from gamedev_shared.group_offload import (
+    from aigamekit_shared.group_offload import (
         plan_group_offload,
         try_group_offloading,
     )
-    from gamedev_shared.hardware import cuda_gpu_specs
-    from gamedev_shared.lowvram import GIB, get_footprint
+    from aigamekit_shared.hardware import cuda_gpu_specs
+    from aigamekit_shared.lowvram import GIB, get_footprint
 
     if os.environ.get("PAINT3D_GROUP_OFFLOAD", "0").strip().lower() not in ("1", "true", "yes", "on"):
         return False
@@ -631,7 +631,7 @@ def _apply_paint_multi_gpu(
 
 def _get_combined_bounds(objects: list) -> tuple[np.ndarray, np.ndarray]:
     """AABB combinado ``(min_corner, max_corner)`` de uma lista de objectos bpy."""
-    from gamedev_shared.bpy_mesh import get_bounds
+    from aigamekit_shared.bpy_mesh import get_bounds
 
     all_mins = [np.array(get_bounds(o)[0]) for o in objects]
     all_maxs = [np.array(get_bounds(o)[1]) for o in objects]
@@ -810,8 +810,8 @@ def apply_hunyuan_paint(
     original: o centroide do AABB da saída é alinhado ao do input, corrigindo qualquer
     renormalização interna do pipeline de pintura.
     """
-    from gamedev_shared.profiler import profile_span
-    from gamedev_shared.quantization import enable_vae_optimizations
+    from aigamekit_shared.profiler import profile_span
+    from aigamekit_shared.quantization import enable_vae_optimizations
 
     with profile_span("paint_check_env"):
         check_paint_rasterizer_available()
@@ -909,7 +909,7 @@ def apply_hunyuan_paint(
         with profile_span("paint_optimize_pipeline"):
             try:
                 if memory_efficient and _sdnq_available() and pipe.unet is not None:
-                    from gamedev_shared.sdnq import quantize_model
+                    from aigamekit_shared.sdnq import quantize_model
 
                     if verbose:
                         _logger.info("Modo memory-efficient: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
@@ -1050,7 +1050,7 @@ def paint_file_to_file(
         vres = view_resolution
     bexp = _defaults.DEFAULT_PAINT_BAKE_EXP if bake_exp is None else bake_exp
 
-    from gamedev_shared.profiler import profile_span
+    from aigamekit_shared.profiler import profile_span
 
     with profile_span("paint_load_mesh"):
         mesh = load_mesh_trimesh(mesh_path)
@@ -1147,8 +1147,8 @@ class PaintBatchProcessor:
         self._config: Any = None
 
     def __enter__(self) -> PaintBatchProcessor:
-        from gamedev_shared.profiler import profile_span
-        from gamedev_shared.quantization import enable_vae_optimizations
+        from aigamekit_shared.profiler import profile_span
+        from aigamekit_shared.quantization import enable_vae_optimizations
 
         with profile_span("paint_check_env"):
             check_paint_rasterizer_available()
@@ -1221,7 +1221,7 @@ class PaintBatchProcessor:
         with profile_span("paint_optimize_pipeline"):
             try:
                 if self._memory_efficient and _sdnq_available() and pipe.unet is not None:
-                    from gamedev_shared.sdnq import quantize_model
+                    from aigamekit_shared.sdnq import quantize_model
 
                     if self._verbose:
                         _logger.info(
@@ -1325,7 +1325,7 @@ class PaintBatchProcessor:
 
     def paint_mesh(self, mesh: Any, image: str | Path | Image.Image, *, step_callback=None) -> Any:
         """Pinta uma mesh usando o pipeline carregado. Mesh + imagem → objectos bpy texturizados."""
-        from gamedev_shared.profiler import profile_span
+        from aigamekit_shared.profiler import profile_span
 
         if self._pipe is None:
             raise RuntimeError("Pipeline não inicializado — use `with PaintBatchProcessor(...) as p:`")

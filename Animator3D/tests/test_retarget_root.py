@@ -28,7 +28,7 @@ class TestEnsureFeetRootBone:
     def test_bandit_gains_root_parenting_pelvis(self) -> None:
         # Rig SkinTokens cru (pelvis-as-root) — não o lod público já animado.
         glb = Path(
-            "/home/maikeu/GitClones/GameDev/VibeGame/examples/simple-rpg/"
+            "/home/maikeu/GitClones/AiGameKit/VibeGame/examples/simple-rpg/"
             "public/assets/meshes/_intermediate/bandit_lod0_rigged.glb"
         )
         if not glb.is_file():

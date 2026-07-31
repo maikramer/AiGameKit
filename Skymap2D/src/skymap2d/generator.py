@@ -15,11 +15,11 @@ from typing import Any
 
 from PIL import Image
 
-from gamedev_shared.base_generator import DiffusionGeneratorBase
+from aigamekit_shared.base_generator import DiffusionGeneratorBase
 
 # Re-export para backward compat (testes antigos podem importar de skymap2d.generator).
-from gamedev_shared.base_generator import torch_dtype_for as _torch_dtype_for  # noqa: F401
-from gamedev_shared.logging import Logger
+from aigamekit_shared.base_generator import torch_dtype_for as _torch_dtype_for  # noqa: F401
+from aigamekit_shared.logging import Logger
 
 from .presets import get_preset_params, get_preset_prompt
 from .utils import validate_params, validate_prompt
@@ -37,7 +37,7 @@ def _flux_dev_uint4_footprint() -> Any:
     Como o checkpoint já vem uint4 do hub, usamos ``allow_quant=("none",)`` na
     chamada ao planner para evitar quantização extra.
     """
-    from gamedev_shared.lowvram import get_footprint
+    from aigamekit_shared.lowvram import get_footprint
 
     return get_footprint("flux-dev-uint4")
 
@@ -237,7 +237,7 @@ class SkymapGenerator(DiffusionGeneratorBase):
         ou hub indisponível), deixa o ``from_pretrained``/``load_lora_weights`` tratar.
         """
         try:
-            from gamedev_shared.model_download import ensure_model
+            from aigamekit_shared.model_download import ensure_model
 
             ensure_model(self.base_model_id, cache_dir=self.cache_dir, on_status=self._status)
             ensure_model(self.model_id, cache_dir=self.cache_dir, on_status=self._status)
@@ -250,7 +250,7 @@ class SkymapGenerator(DiffusionGeneratorBase):
 
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
 
-        from gamedev_shared.sdnq import apply_quantized_matmul, register_sdnq
+        from aigamekit_shared.sdnq import apply_quantized_matmul, register_sdnq
 
         triton_is_available = register_sdnq(patch_lora=True)
 
@@ -379,7 +379,7 @@ class SkymapGenerator(DiffusionGeneratorBase):
 
         self._clear_cache()
 
-        from gamedev_shared.diffusion_control import attach_step_hooks
+        from aigamekit_shared.diffusion_control import attach_step_hooks
 
         self._log("Inferência...")
         call_kwargs: dict[str, Any] = {

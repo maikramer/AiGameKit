@@ -6,7 +6,7 @@ CLI para geração de skymaps equirectangular 360° via HF Inference API.
 
 Usa o modelo [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) para gerar panorâmicas 360° usáveis como skybox/skymap em engines de jogo — ideal para céus, ambientes exteriores e cenários de fundo.
 
-No monorepo [GameDev](../README_PT.md), o pacote depende de [**gamedev-shared**](../Shared/) (`gamedev_shared`): CLI Rich, instalação de skills Cursor e utilitários alinhados com Text2D/Texture2D/GameAssets.
+No monorepo [AiGameKit](../README_PT.md), o pacote depende de [**aigamekit-shared**](../Shared/) (`aigamekit_shared`): CLI Rich, instalação de skills Cursor e utilitários alinhados com Text2D/Texture2D/GameAssets.
 
 ## Características
 
@@ -42,10 +42,10 @@ skymap2d generate "clear blue sky" --format exr -o sky_clear.exr
 
 ### Oficial (monorepo)
 
-Na **raiz** do repositório GameDev:
+Na **raiz** do repositório AiGameKit:
 
 ```bash
-cd /caminho/para/GameDev
+cd /caminho/para/AiGameKit
 ./install.sh skymap2d
 # Windows: .\install.ps1 skymap2d
 ```
@@ -59,7 +59,7 @@ Cria `Skymap2D/.venv` se necessário, instala em modo editável e gera wrappers.
 source .venv/bin/activate
 ```
 
-O `setup.sh` instala `gamedev-shared` a partir de `../Shared` e o pacote `skymap2d` em modo editável.
+O `setup.sh` instala `aigamekit-shared` a partir de `../Shared` e o pacote `skymap2d` em modo editável.
 
 ### Atalho local
 
@@ -68,7 +68,7 @@ python3 scripts/installer.py --prefix ~/.local
 python3 scripts/installer.py --use-venv
 ```
 
-Sem PyTorch local — apenas `config/requirements.txt` e `gamedev-shared`.
+Sem PyTorch local — apenas `config/requirements.txt` e `aigamekit-shared`.
 
 ## Comandos
 
@@ -142,4 +142,4 @@ pytest tests/ -v
 
 - **Código:** MIT — [LICENSE](LICENSE).
 - **Pesos (default):** [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) — LoRA sobre [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) (licença **não comercial** BFL); inferência via [HF Inference API](https://huggingface.co/docs/api-inference/) — aplica-se também os [termos HF](https://huggingface.co/terms-of-service).
-- **Tabela completa:** [GameDev/README_PT.md](../README_PT.md) (secção Licenças).
+- **Tabela completa:** [AiGameKit/README_PT.md](../README_PT.md) (secção Licenças).

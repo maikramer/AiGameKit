@@ -128,7 +128,7 @@ console = Console()
     "--ums-stream",
     is_flag=True,
     default=False,
-    help="Propaga GAMEDEV_UMS_STREAM=1 aos subprocessos (eventos UMS; só com verbose/ruído OK).",
+    help="Propaga AIGAMEKIT_UMS_STREAM=1 aos subprocessos (eventos UMS; só com verbose/ruído OK).",
 )
 @click.option(
     "--no-ums",
@@ -221,11 +221,11 @@ def resume_cmd(
     child_env = dict(subprocess_gpu_env(gpu_ids=gpu_ids))
     apply_ums_child_env(child_env, ums_stream=ums_stream, no_ums=no_ums)
     if redo_split:
-        child_env["GAMEDEV_REDO_SPLIT"] = "1"
-        os.environ["GAMEDEV_REDO_SPLIT"] = "1"
+        child_env["AIGAMEKIT_REDO_SPLIT"] = "1"
+        os.environ["AIGAMEKIT_REDO_SPLIT"] = "1"
     if not no_ums:
         try:
-            from gamedev_shared.model_server import ensure_ums_running
+            from aigamekit_shared.model_server import ensure_ums_running
 
             ensure_ums_running()
         except Exception:
@@ -492,7 +492,7 @@ def resume_cmd(
 
     if not no_dashboard:
         # === Dashboard TUI path ===
-        from gamedev_shared.subprocess_utils import run_cmd_streaming
+        from aigamekit_shared.subprocess_utils import run_cmd_streaming
 
         from .dashboard import BatchDashboard
 

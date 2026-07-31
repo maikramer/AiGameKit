@@ -134,7 +134,7 @@ ou simplesmente reutilizar o mesmo bmesh entre iterações.
 
 ### Fase 1 — Fase de arrays vetorizada (CPU, sem deps novas) ⭐ recomendado
 
-Novo módulo em `gamedev_shared` (ex. `mesh_repair_arrays.py`) que executa todos
+Novo módulo em `aigamekit_shared` (ex. `mesh_repair_arrays.py`) que executa todos
 os passos de **filtro/seleção** sobre numpy arrays `(co, tris)` antes de tocar
 em bmesh:
 
@@ -161,7 +161,7 @@ ordens de vértices).
 ### Fase 2 — Acelerador GPU opcional (torch já presente)
 
 As mesmas kernels em torch CUDA quando `torch.cuda.is_available()`
-(detetar via `gamedev_shared.gpu`; override `GAMEDEV_TOPOFIX_DEVICE=cuda|cpu`):
+(detetar via `aigamekit_shared.gpu`; override `AIGAMEKIT_TOPOFIX_DEVICE=cuda|cpu`):
 
 - weld / boundary / slivers: mais 2–4× sobre numpy (já medido).
 - Taubin / smooth: ~2000× sobre o loop Python atual (0.074 s) — viabiliza
@@ -222,7 +222,7 @@ e cedeu a vetorização numpy/scipy + reordenação + bibliotecas C++ já presen
 
 | Mudança | Onde | Efeito |
 |---|---|---|
-| Fase vetorizada (weld exacto cKDTree+CC, slivers, long edges, debris scipy CSR, shells k-NN+Möller–Trumbore, boundary por unique, Taubin bincount) | `Shared/src/gamedev_shared/mesh_repair_arrays.py` (novo) | filtros 10-100x mais rápidos |
+| Fase vetorizada (weld exacto cKDTree+CC, slivers, long edges, debris scipy CSR, shells k-NN+Möller–Trumbore, boundary por unique, Taubin bincount) | `Shared/src/aigamekit_shared/mesh_repair_arrays.py` (novo) | filtros 10-100x mais rápidos |
 | `topology-fix --engine auto\|arrays\|bpy` (auto = arrays quando mesh sem UVs/weights/shape-keys/armature) | `Text3D/src/text3d/cli.py`, `Text3D/src/text3d/utils/mesh_lod.py` | adopção transparente no batch |
 | Weld **antes** do morph-close (ordem nova no engine arrays) | `mesh_lod._repair_topology_arrays_phase` | solidify deixa de criar paredes por-triângulo (11.7M faces inúteis); VDB passa a ver volume |
 | `count_boundary_edges_fast` (foreach_get + np.unique) nos loops do `make_watertight` | `mesh_repair.py` | boundary ~2x por chamada |

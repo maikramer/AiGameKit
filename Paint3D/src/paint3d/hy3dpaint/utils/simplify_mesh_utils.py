@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from gamedev_shared.bpy_mesh import load_glb, save_glb
+from aigamekit_shared.bpy_mesh import load_glb, save_glb
 
 
 def remesh_mesh(mesh_path: str, remesh_path: str) -> None:

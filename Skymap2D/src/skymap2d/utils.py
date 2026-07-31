@@ -1,6 +1,6 @@
-"""Funções utilitárias para Skymap2D — shims sobre ``gamedev_shared``.
+"""Funções utilitárias para Skymap2D — shims sobre ``aigamekit_shared``.
 
-As validações vivem em ``gamedev_shared.validation``; aqui ficam os defaults
+As validações vivem em ``aigamekit_shared.validation``; aqui ficam os defaults
 do Skymap2D (max_width 4096, ratio 2:1 com warning, guidance 6.0, steps 40,
 2048x1024) e os re-exports históricos.
 """
@@ -9,18 +9,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from gamedev_shared.gpu import format_bytes  # noqa: F401
-from gamedev_shared.logging import Logger as _Logger
-from gamedev_shared.path_utils import ensure_directory  # noqa: F401
-from gamedev_shared.seed_utils import generate_seed  # noqa: F401
-from gamedev_shared.validation import (
+from aigamekit_shared.gpu import format_bytes  # noqa: F401
+from aigamekit_shared.logging import Logger as _Logger
+from aigamekit_shared.path_utils import ensure_directory  # noqa: F401
+from aigamekit_shared.seed_utils import generate_seed  # noqa: F401
+from aigamekit_shared.validation import (
     format_timestamp,  # noqa: F401
     validate_prompt,  # noqa: F401
 )
-from gamedev_shared.validation import (
+from aigamekit_shared.validation import (
     validate_dimensions as _validate_dimensions,
 )
-from gamedev_shared.validation import (
+from aigamekit_shared.validation import (
     validate_params as _validate_params,
 )
 

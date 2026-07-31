@@ -29,16 +29,16 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import (
+from aigamekit_shared.cli_helpers import (
     add_ums_options,
     prepare_gpu_exclusive,
     try_ums_delegation,
 )
-from gamedev_shared.gpu import (
+from aigamekit_shared.gpu import (
     format_bytes,
 )
-from gamedev_shared.hf import hf_home_display_rich
-from gamedev_shared.progress import (
+from aigamekit_shared.hf import hf_home_display_rich
+from aigamekit_shared.progress import (
     STATUS_ERROR,
     STATUS_OK,
     STATUS_SKIPPED,
@@ -46,7 +46,7 @@ from gamedev_shared.progress import (
     emit_progress,
     emit_result,
 )
-from gamedev_shared.quality import VALID_QUALITIES
+from aigamekit_shared.quality import VALID_QUALITIES
 
 from . import defaults as _defaults
 from .cli_rich import click
@@ -306,7 +306,7 @@ def texture(
     _user_set_smooth = ctx.get_parameter_source("smooth") not in (_src.DEFAULT,)
     _user_set_smooth_passes = ctx.get_parameter_source("smooth_passes") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("paint3d", quality=quality, category=category)
@@ -406,8 +406,8 @@ def texture(
         except ValueError as exc:
             raise click.ClickException(f"--gpu-ids inválido: '{gpu_ids}'. Esperado: 0,1") from exc
 
-    from gamedev_shared.profiler import ProfilerSession
-    from gamedev_shared.profiler.env import env_profile_log_path
+    from aigamekit_shared.profiler import ProfilerSession
+    from aigamekit_shared.profiler.env import env_profile_log_path
 
     log_p = env_profile_log_path()
     prof_log = Path(log_p) if log_p else None
@@ -646,7 +646,7 @@ def texture_batch(
     _user_set_smooth = ctx.get_parameter_source("smooth") not in (_src.DEFAULT,)
     _user_set_smooth_passes = ctx.get_parameter_source("smooth_passes") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("paint3d", quality=quality, category=category)
@@ -1042,7 +1042,7 @@ def vertex_pbr_cmd(mesh_file, output_path, texture_size, materialize_bin, preset
 @cli.command("doctor")
 def doctor():
     """Verifica ambiente: PyTorch, CUDA, VRAM, modelos e rasterizador."""
-    from gamedev_shared.gpu import (
+    from aigamekit_shared.gpu import (
         DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT,
         get_system_info,
         gpu_bytes_in_use,
@@ -1107,7 +1107,7 @@ def doctor():
 @cli.command()
 def info():
     """Informações do sistema e GPU."""
-    from gamedev_shared.gpu import get_system_info
+    from aigamekit_shared.gpu import get_system_info
 
     console.print(Panel.fit("[bold]paint3d info[/bold]", border_style="blue"))
     info_data = get_system_info()
@@ -1147,7 +1147,7 @@ def serve(ums_worker: bool) -> None:
 
     Sem ``--ums-worker`` ainda não tem utilidade (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico
-    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter paint3d
+    :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter paint3d
     local (:mod:`paint3d.worker_serve_adapter`).
     """
     if not ums_worker:
@@ -1161,7 +1161,7 @@ def serve(ums_worker: bool) -> None:
         "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6",
     )
 
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
     from paint3d.worker_serve_adapter import Adapter
 
     run_worker_loop(Adapter, backend_name="paint3d")

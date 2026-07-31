@@ -15,7 +15,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-from gamedev_shared.logging import Logger
+from aigamekit_shared.logging import Logger
 
 _logger = Logger()
 

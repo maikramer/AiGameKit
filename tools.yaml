@@ -1,12 +1,12 @@
-# Registo Clified — monorepo GameDev
+# Registo Clified — monorepo AiGameKit
 # Usado por install.sh via CLIFIED_TOOLS (sem hardcode no Clified central).
 
 workspace:
   root: .
-  name: "GameDev"
+  name: "AiGameKit"
   shared_python:
     path: Shared
-    import_name: gamedev_shared
+    import_name: aigamekit_shared
     src_subpath: src
 
 tools:
@@ -14,7 +14,7 @@ tools:
     name: "ModelServer"
     kind: python
     folder: ModelServer
-    cli_name: gamedev-model-server
+    cli_name: aigamekit-model-server
     python_module: modelserver
     description: "Unified Model Server — supervisor único de VRAM para todas as ferramentas GPU"
     min_python: [3, 13]
@@ -59,7 +59,7 @@ tools:
     install_order: -1
     install_before: [text2d]
     cross_deps: [text2d]
-    post_install: gamedev_shared.installer.clified_hooks:text3d_post_install
+    post_install: aigamekit_shared.installer.clified_hooks:text3d_post_install
 
   gameassets:
     name: "GameAssets"
@@ -70,12 +70,12 @@ tools:
     description: "Batch de prompts/assets 2D/3D alinhados ao jogo"
     min_python: [3, 13]
 
-  gamedevlab:
-    name: "GameDevLab"
+  aigamekitlab:
+    name: "AiGameKitLab"
     kind: python
-    folder: GameDevLab
-    cli_name: gamedev-lab
-    python_module: gamedev_lab
+    folder: AiGameKitLab
+    cli_name: aigamekit-lab
+    python_module: aigamekit_lab
     description: "Laboratório: debug 3D, bancadas de quantização, profiling"
     min_python: [3, 13]
 
@@ -89,7 +89,7 @@ tools:
     min_python: [3, 13]
     extra_aliases: [text2sound-generate]
     needs_pytorch: true
-    custom_install: gamedev_shared.installer.clified_hooks:text2sound_custom_install
+    custom_install: aigamekit_shared.installer.clified_hooks:text2sound_custom_install
 
   texture2d:
     name: "Texture2D"
@@ -141,7 +141,7 @@ tools:
     description: "UniRig empacotado + CLI (auto-rigging 3D; PyTorch/CUDA; bpy 5.1+)"
     min_python: [3, 13]
     needs_pytorch: true
-    post_install: gamedev_shared.installer.clified_hooks:rigging3d_post_install
+    post_install: aigamekit_shared.installer.clified_hooks:rigging3d_post_install
 
   animator3d:
     name: "Animator3D"
@@ -161,7 +161,7 @@ tools:
     description: "Texturização 3D: Hunyuan3D-Paint 2.1 (PBR nativo) + Upscale IA"
     min_python: [3, 13]
     needs_pytorch: true
-    post_install: gamedev_shared.installer.clified_hooks:paint3d_post_install
+    post_install: aigamekit_shared.installer.clified_hooks:paint3d_post_install
 
   part3d:
     name: "Part3D"

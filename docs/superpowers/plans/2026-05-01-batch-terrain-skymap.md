@@ -14,7 +14,7 @@
 
 | Action | File | Responsibility |
 |--------|------|----------------|
-| Modify | `Shared/src/gamedev_shared/installer/registry.py:120` | Fix Texture2D `needs_pytorch` |
+| Modify | `Shared/src/aigamekit_shared/installer/registry.py:120` | Fix Texture2D `needs_pytorch` |
 | Modify | `GameAssets/src/gameassets/profile.py` | Add `Terrain3DProfile` dataclass + `from_dict()` parsing + add field to `GameProfile` + add `prompt` to `Skymap2DProfile` |
 | Modify | `GameAssets/src/gameassets/helpers.py` | Add terrain3d/skymap2d bin resolvers and arg builders |
 | Modify | `GameAssets/src/gameassets/batch_cmd.py` | Add terrain3d/skymap2d stages + CLI flags + plan display |
@@ -27,12 +27,12 @@
 ## Task 1: Fix Texture2D Registry (`needs_pytorch`)
 
 **Files:**
-- Modify: `Shared/src/gamedev_shared/installer/registry.py:120`
+- Modify: `Shared/src/aigamekit_shared/installer/registry.py:120`
 - Test: `GameAssets/tests/test_profile.py` (no new test needed — registry is tested implicitly)
 
 - [ ] **Step 1: Change `needs_pytorch` to `True`**
 
-In `Shared/src/gamedev_shared/installer/registry.py`, change line 120:
+In `Shared/src/aigamekit_shared/installer/registry.py`, change line 120:
 
 ```python
 # Before:
@@ -49,7 +49,7 @@ Expected: All pass.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add Shared/src/gamedev_shared/installer/registry.py
+git add Shared/src/aigamekit_shared/installer/registry.py
 git commit -m "fix: set Texture2D needs_pytorch=True (uses FLUX/torch locally)"
 ```
 
@@ -891,12 +891,12 @@ Expected: All pass.
 
 - [ ] **Step 2: Run lint + format check**
 
-Run: `cd /home/maikeu/GitClones/GameDev && ruff check GameAssets/ && ruff format --check GameAssets/`
+Run: `cd /home/maikeu/GitClones/AiGameKit && ruff check GameAssets/ && ruff format --check GameAssets/`
 Expected: Clean (no errors).
 
 - [ ] **Step 3: Verify Texture2D reinstall works**
 
-Run: `python3 -m gamedev_shared.installer.unified texture2d --force 2>&1 | tail -5`
+Run: `python3 -m aigamekit_shared.installer.unified texture2d --force 2>&1 | tail -5`
 Expected: Installation succeeds. Verify torch is installed: `Texture2D/.venv/bin/python -c "import torch; print(torch.__version__)"`
 
 - [ ] **Step 4: Commit (if any formatting fixes needed)**

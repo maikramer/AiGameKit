@@ -18,20 +18,20 @@ CLI para **batches de prompts e assets** alinhados ao estilo e à ideia do teu j
 
 ## Debug / laboratório
 
-Debug visual de GLB (screenshots, inspect, compare, bundle) está em **[GameDevLab](../GameDevLab)** (`gamedev-lab debug …`), não no `gameassets`.
+Debug visual de GLB (screenshots, inspect, compare, bundle) está em **[AiGameKitLab](../AiGameKitLab)** (`aigamekit-lab debug …`), não no `gameassets`.
 
 ## Debug / laboratório
 
-Debug visual de GLB (screenshots, inspect, compare, bundle) está em **[GameDevLab](../GameDevLab)** (`gamedev-lab debug …`), não no `gameassets`.
+Debug visual de GLB (screenshots, inspect, compare, bundle) está em **[AiGameKitLab](../AiGameKitLab)** (`aigamekit-lab debug …`), não no `gameassets`.
 
 ## Instalação
 
 ### Oficial (monorepo)
 
-Na **raiz** do repositório GameDev:
+Na **raiz** do repositório AiGameKit:
 
 ```bash
-cd /caminho/para/GameDev
+cd /caminho/para/AiGameKit
 ./install.sh gameassets
 ```
 
@@ -42,7 +42,7 @@ Guia geral: [docs/INSTALLING_PT.md](../docs/INSTALLING_PT.md) · [EN](../docs/IN
 O projeto mantém um **venv** local em `GameAssets/.venv`, como Text2D e Text3D.
 
 ```bash
-cd GameDev/GameAssets
+cd AiGameKit/GameAssets
 chmod +x scripts/setup.sh activate.sh
 ./scripts/setup.sh
 source .venv/bin/activate
@@ -60,7 +60,7 @@ Opções do script:
 **Ativar o ambiente** em cada terminal:
 
 ```bash
-source /caminho/para/GameDev/GameAssets/.venv/bin/activate
+source /caminho/para/AiGameKit/GameAssets/.venv/bin/activate
 ```
 
 O ficheiro `activate.sh` segue o padrão do Text2D: corre um comando já com o venv ativo, por exemplo:
@@ -140,7 +140,7 @@ gameassets batch --profile game.yaml --manifest manifest.yaml --gpu-ids 0,1
 - **VRAM:** antes da execução, se `nvidia-smi` existir e a VRAM livre for inferior a ~1,8 GiB, mostra-se um aviso. `--skip-gpu-preflight` desliga o aviso.
 - **CUDA:** os subprocessos `text2d`/`text3d` recebem `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` se a variável ainda não estiver definida no ambiente (reduz falhas por fragmentação).
 - **Multi-GPU:** `--gpu-ids 0,1` auto-deteta as GPUs disponíveis via `nvidia-smi` (ou aceita IDs explícitos separados por vírgula) e propaga `CUDA_VISIBLE_DEVICES` e `--gpu-ids` a todos os sub-tools (text2d, text3d, paint3d, …) — incluindo no payload UMS.
-- **UMS:** o batch garante o supervisor, exporta `GAMEDEV_UMS_PRIORITY=batch`, herda outras `GAMEDEV_UMS_*` do ambiente, e o dashboard (se activo) mostra `UMS q=… run=… eta=…`. Opt-in ruidoso: `--ums-stream` → `GAMEDEV_UMS_STREAM=1` nos filhos. O mesmo padrão de env aplica-se a `resume` e `dream`. **hw-auto** preenche o pico no payload (sem CLI `--low-vram` / `--memory-efficient`). **Waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + opcionais `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` / `terrain3d`. Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
+- **UMS:** o batch garante o supervisor, exporta `AIGAMEKIT_UMS_PRIORITY=batch`, herda outras `AIGAMEKIT_UMS_*` do ambiente, e o dashboard (se activo) mostra `UMS q=… run=… eta=…`. Opt-in ruidoso: `--ums-stream` → `AIGAMEKIT_UMS_STREAM=1` nos filhos. O mesmo padrão de env aplica-se a `resume` e `dream`. **hw-auto** preenche o pico no payload (sem CLI `--low-vram` / `--memory-efficient`). **Waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + opcionais `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` / `terrain3d`. Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
 
 ### Text2Sound (`generate_audio`)
 

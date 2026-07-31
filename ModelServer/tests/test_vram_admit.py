@@ -17,7 +17,7 @@ def _fast_admit_wait(monkeypatch: pytest.MonkeyPatch) -> None:
 
 class TestEnsureLoadedAdmitsPeak:
     def test_refuses_when_free_below_peak(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "384")
+        monkeypatch.setenv("AIGAMEKIT_UMS_VRAM_SAFETY_MIB", "384")
         registry = Registry()
         # 6GB livre — text3d fp16 peak ~8GB+
         mgr = BackendManager(registry, query_free_mib=lambda: 5657, clear_vram=lambda: None)
@@ -29,7 +29,7 @@ class TestEnsureLoadedAdmitsPeak:
         assert err.quant_mode == "none"
 
     def test_admit_waits_until_free_recovers(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "384")
+        monkeypatch.setenv("AIGAMEKIT_UMS_VRAM_SAFETY_MIB", "384")
         # Override autouse: aqui queremos espera activa.
         monkeypatch.setattr(P, "VRAM_ADMIT_WAIT_SEC", 2.0)
         monkeypatch.setattr(P, "VRAM_ADMIT_POLL_SEC", 0.05)
@@ -58,7 +58,7 @@ class TestEnsureLoadedAdmitsPeak:
         assert ticks["n"] >= 3
 
     def test_int4_admitted_on_6gb(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "384")
+        monkeypatch.setenv("AIGAMEKIT_UMS_VRAM_SAFETY_MIB", "384")
         registry = Registry()
         loaded: dict[str, object] = {}
 
@@ -78,7 +78,7 @@ class TestEnsureLoadedAdmitsPeak:
         assert loaded.get("ok") is True
 
     def test_ensure_vram_uses_backend_peak(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "384")
+        monkeypatch.setenv("AIGAMEKIT_UMS_VRAM_SAFETY_MIB", "384")
         registry = Registry()
         free = {"v": 5657}
         mgr = BackendManager(registry, query_free_mib=lambda: free["v"], clear_vram=lambda: None)
@@ -97,7 +97,7 @@ class TestPaint3dMemoryEfficientAdmit:
         assert BackendManager.resolve_quant_mode({"sdnq_preset": "sdnq-int4"}) == "sdnq-int4"
 
     def test_paint_mem_eff_admitted_on_6gb(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "384")
+        monkeypatch.setenv("AIGAMEKIT_UMS_VRAM_SAFETY_MIB", "384")
         registry = Registry()
         loaded: dict[str, object] = {}
 

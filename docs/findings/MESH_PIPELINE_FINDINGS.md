@@ -6,14 +6,14 @@ Pipeline layout: [`../MONOREPO_GAME_PIPELINE.md`](../MONOREPO_GAME_PIPELINE.md).
 Animate / Quaternius: [`ANIMATOR_RETARGET_FINDINGS.md`](ANIMATOR_RETARGET_FINDINGS.md).
 
 **Dono de mesh ops:** Text3D apenas. GameAssets orquestra `text3d` /
-`rigging3d` / `animator3d` / `gamedev-lab` — sem `bpy`/`trimesh` no GameAssets.
+`rigging3d` / `animator3d` / `aigamekit-lab` — sem `bpy`/`trimesh` no GameAssets.
 
 ---
 
 ## Saída Hunyuan / marching cubes (típico)
 
 - Paredes grossas / duplas, rachas minúsculas, field cheio se bbox má.
-- Reparo canónico: `gamedev_shared.mesh_repair` com perfis:
+- Reparo canónico: `aigamekit_shared.mesh_repair` com perfis:
 
 | Perfil | Uso |
 |--------|-----|
@@ -50,7 +50,7 @@ não “fechar chão”. Refs Text2D eye-level 3/4 via `categories.building` +
 5 animator3d game-pack ×1 → id_rigged_animated.glb
 6 text3d lod sobre animated/rigged → lod0/1/2 (+ finish KTX2/meshopt)
 7 collision a partir do painted
-8 gamedev-lab check glb --category …
+8 aigamekit-lab check glb --category …
 ```
 
 **`to_paint` (quando o clean precisa de decimate antes do paint):** ordem típica
@@ -120,8 +120,8 @@ fallback e falha se bpy não importar KTX2.
 python3 -c "
 from pathlib import Path
 import sys
-sys.path.insert(0,'GameDevLab/src')
-from gamedev_lab.glb_meta import glb_extract_meta
+sys.path.insert(0,'AiGameKitLab/src')
+from aigamekit_lab.glb_meta import glb_extract_meta
 m=glb_extract_meta(Path(sys.argv[1]))
 print(m['attributes_present'], 'v/t', m['v_per_tri'], 'T', m['has_tangents'], m['texture_mime_types'])
 " public/assets/meshes/wooden_crate_lod2.glb
@@ -167,8 +167,8 @@ Dois modos distintos — misturá-los gera fixes incompletos:
 python3 -c "
 from pathlib import Path
 import sys
-sys.path.insert(0,'GameDevLab/src')
-from gamedev_lab.glb_meta import glb_extract_meta
+sys.path.insert(0,'AiGameKitLab/src')
+from aigamekit_lab.glb_meta import glb_extract_meta
 p=Path(sys.argv[1]); m=glb_extract_meta(p)
 print(p.name, 'tris=', m['triangle_count_total'], 'verts=', m['vertex_count_total'],
       'v/tri=', m['v_per_tri'])
@@ -185,7 +185,7 @@ print(p.name, 'tris=', m['triangle_count_total'], 'verts=', m['vertex_count_tota
 
 ### Decimate / orçamento de faces (LOD texturado)
 
-`gamedev_shared.mesh_simplify.decimate_mesh_object` (2026-07-24):
+`aigamekit_shared.mesh_simplify.decimate_mesh_object` (2026-07-24):
 
 | Armadilha | Efeito | Fix |
 |-----------|--------|-----|
@@ -217,23 +217,23 @@ print(p.name, 'tris=', m['triangle_count_total'], 'verts=', m['vertex_count_tota
 - Re-comprimir / reparar N+T sem regenerar: `text3d finish asset.glb`.
 - Disk: UASTC pode **crescer** JPEG pequenos; PNG grandes tipicamente encolhem
   (simple-rpg 2026-07: 162 LODs −542 MiB). Valor principal = GPU upload/VRAM.
-- Sem deps: fallback gracioso; `gamedev-lab check` pode falhar
+- Sem deps: fallback gracioso; `aigamekit-lab check` pode falhar
   regras `texture_format: ktx2` / `compression: meshopt`.
 - Doctor: `text3d doctor`.
 
 ### Validação
 
-- `gamedev-lab check glb` + `glb_meta` (parser binário, sem bpy).
+- `aigamekit-lab check glb` + `glb_meta` (parser binário, sem bpy).
 - Categories: `lod0|lod1|lod2|rigged|collision` + YAML em
   `GameAssets/.../data/rules/`.
 - `--no-bpy-inspect` para CI leve.
 
-### Debug visual — `gamedev-lab debug viz` (2026-07)
+### Debug visual — `aigamekit-lab debug viz` (2026-07)
 
 Modos: `normals` (cor), `normals-arrows`, `orientation` (backface vermelho),
 `uv` (checker), `edges` (boundary/non-manifold), `weights`
 (dominant/count/unweighted/`--bone`); `--wireframe` transversal.
-PNGs com legenda Pillow + `viz_report.json`. Fonte: `GameDevLab/src/gamedev_lab/viz.py`.
+PNGs com legenda Pillow + `viz_report.json`. Fonte: `AiGameKitLab/src/aigamekit_lab/viz.py`.
 
 Armadilhas descobertas (valem para qualquer análise bmesh de GLBs da pipeline):
 
@@ -252,7 +252,7 @@ Armadilhas descobertas (valem para qualquer análise bmesh de GLBs da pipeline):
   (`evaluated_depsgraph_get()` → `obj.evaluated_get(deps).to_mesh()`), e
   duplicados de overlay têm de **manter** o modifier ARMATURE.
 - **KTX2/meshopt**: todo import de deliverable passa por
-  `gamedev_shared.gltf_decode.bpy_readable_glb` (decode automático via
+  `aigamekit_shared.gltf_decode.bpy_readable_glb` (decode automático via
   `@gltf-transform/cli`). `import_gltf` default = `bone_heuristic=TEMPERANCE`
   — evita materializar meshes de display dos bones (`Icosphere`). O default
   do `bpy.ops.import_scene.gltf` é `BLENDER`, que **cria** esses helpers e
@@ -360,7 +360,7 @@ id/idea match `tree|pine|oak|willow|cactus|fir|spruce|palm`). Rocks/props
 - Default: **só bisect** (`cap=False`, `use_fill=False`) — buraco no plano de
   corte fica aberto. Fechos (fill/raster/fuse/UV bark) geravam artefactos
   (tampões flutuantes, UV léak); código legado atrás de `--cap` / `cap=True`.
-- Fingerprint `SEAL_VERSION=cut-only-v1` em `gamedev_shared.mesh_split` —
+- Fingerprint `SEAL_VERSION=cut-only-v1` em `aigamekit_shared.mesh_split` —
   resume invalida stump/top/lod/collision se o seal antigo diferir.
 - Altura default do corte: `min(0.8 m, altura/4)` acima da base.
 
@@ -369,7 +369,7 @@ id/idea match `tree|pine|oak|willow|cactus|fir|spruce|palm`). Rocks/props
 ```bash
 # Apaga derivados do split; mantém *_painted.glb
 # (helper: invalidate_split_artifacts(mesh_final))
-gameassets resume … --redo-split   # ou GAMEDEV_REDO_SPLIT=1
+gameassets resume … --redo-split   # ou AIGAMEKIT_REDO_SPLIT=1
 ```
 
 Apaga: `*_stump_painted` / `*_top_painted`, dirs `*_stump_lod`/`*_top_lod`,
@@ -380,7 +380,7 @@ lods compostos, `*_stump_collision` / `*_top_collision` / `*_collision`.
 - Visual: `*_lod0.glb` com meshes `Stump` + `Top`.
 - Collider fall: `*_stump_collision.glb` (não o hull da árvore inteira).
 - Review rápido sem regenerar LOD:
-  `gamedev-lab debug cut-review stump.glb -o /tmp/cut/ [--cut-height 0.8]`
+  `aigamekit-lab debug cut-review stump.glb -o /tmp/cut/ [--cut-height 0.8]`
 
 ---
 
@@ -388,7 +388,7 @@ lods compostos, `*_stump_collision` / `*_top_collision` / `*_collision`.
 
 QA no **`_shape` fresco** (não GLBs antigos de `public/`):
 
-1. 3 views (`gamedev-lab debug screenshot` — `front,three_quarter,right`) —
+1. 3 views (`aigamekit-lab debug screenshot` — `front,three_quarter,right`) —
    cortes graves, planos a régua (clip MC/bbox), forma derretida/errada.
 2. Bounds / MB razoáveis (não 300 MB achatado / field cheio).
 3. Semântica OK vs `idea` (lobo≠raposa bípede).

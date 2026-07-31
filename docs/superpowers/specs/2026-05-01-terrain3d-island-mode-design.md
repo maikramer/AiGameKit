@@ -41,7 +41,7 @@ Diffusion → heightmap bruto
 |------|---------|
 | `src/terrain3d/generator.py` | New fields in `TerrainConfig`; postprocess chain in `generate_terrain()` |
 | `src/terrain3d/cli.py` | New CLI flags (`--mode`, `--island-*`, `--smooth-*`, `--elevation-*`) |
-| `Shared/src/gamedev_shared/data/quality-profiles.yaml` | Terrain3D section gains postprocess params per tier |
+| `Shared/src/aigamekit_shared/data/quality-profiles.yaml` | Terrain3D section gains postprocess params per tier |
 
 ## 1. Island Falloff — Organic Coastline
 
@@ -182,7 +182,7 @@ if h_max > h_min:
 
 ## 6. Quality Profiles
 
-`Shared/src/gamedev_shared/data/quality-profiles.yaml` — Terrain3D section gains:
+`Shared/src/aigamekit_shared/data/quality-profiles.yaml` — Terrain3D section gains:
 
 ```yaml
 terrain3d:

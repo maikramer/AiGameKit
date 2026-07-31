@@ -31,7 +31,7 @@ def _load_as_bpy(path: str | Path) -> list:
 
     Limpa a cena antes do import para evitar poluição de objectos.
     """
-    from gamedev_shared.bpy_mesh import load_any
+    from aigamekit_shared.bpy_mesh import load_any
 
     return load_any(path)
 
@@ -53,7 +53,7 @@ def _export_glb_bpy(
     «voxel merge» (morph-close) do topology-fix, e ``smooth_shade_scene`` já
     funde duplicados quando o V/Tri os denuncia.
     """
-    from gamedev_shared.bpy_mesh import save_glb, smooth_shade_scene
+    from aigamekit_shared.bpy_mesh import save_glb, smooth_shade_scene
 
     if objects is not None and not isinstance(objects, (list, tuple)):
         objects = [objects]
@@ -104,7 +104,7 @@ def _apply_origin_bpy(obj: Any, mode: str) -> Any:
     """
     if mode == "none":
         return obj
-    from gamedev_shared.bpy_mesh import get_bounds
+    from aigamekit_shared.bpy_mesh import get_bounds
 
     (bx0, by0, bz0), (bx1, by1, bz1) = get_bounds(obj)
     if mode == "feet":
@@ -179,7 +179,7 @@ def save_mesh(
     has_mesh_attrs = hasattr(mesh_input, "vertices") and hasattr(mesh_input, "faces")
     if has_mesh_attrs:
         try:
-            from gamedev_shared.bpy_mesh import clear_scene
+            from aigamekit_shared.bpy_mesh import clear_scene
 
             clear_scene()
             verts = np.asarray(mesh_input.vertices, dtype=np.float64)
@@ -379,7 +379,7 @@ def get_mesh_info(mesh_path: str | Path) -> dict:
     Returns:
         Dicionário com informações
     """
-    from gamedev_shared.bpy_mesh import face_count, get_bounds, vertex_count
+    from aigamekit_shared.bpy_mesh import face_count, get_bounds, vertex_count
 
     mesh_path = Path(mesh_path)
 

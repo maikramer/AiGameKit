@@ -33,7 +33,7 @@ Bevy-inspired modular architecture:
 
 ## Essential Knowledge
 
-### Monorepo asset bridge (GameDev)
+### Monorepo asset bridge (AiGameKit)
 - **GLB from disk (imperative):** `loadGltfToScene(state, url)` after `run()` — URL like `/assets/models/hero.glb`.
 - **GLB (declarative XML):** `<GLTFLoader url="/assets/models/hero.glb" transform="pos: 0 0 0"></GLTFLoader>` inside `<Scene>`.
 - **Equirect sky / IBL:** `<Skybox url="/assets/sky/env.png"></Skybox>` inside `<Scene>`, or `applyEquirectSkyEnvironment(state, url)` for dynamic URLs — PMREM on `Scene.environment` (optional background).

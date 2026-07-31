@@ -4,7 +4,7 @@ Data: 2026-07-21 · **Estado (2026-07-24): Fases 0–4 implementadas em produç�
 
 Este ficheiro permanece como desenho + protocolo. Operação viva:
 [`ModelServer/README.md`](../ModelServer/README.md) (`ums respawn`, workers,
-`GAMEDEV_UMS_SUBPROCESS=0` rollback). Batch: [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md).
+`AIGAMEKIT_UMS_SUBPROCESS=0` rollback). Batch: [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md).
 
 ## Contexto
 
@@ -46,14 +46,14 @@ do worker.
 - `{"event":"unloaded"}`
 - `{"event":"error","error":"...","error_code":"..."}`
 
-stderr do worker → `~/.cache/gamedev/ums-worker-<backend>.log`.
+stderr do worker → `~/.cache/aigamekit/ums-worker-<backend>.log`.
 Abort cooperativo via `{"cmd":"abort"}`; SIGTERM como fallback de força-bruta.
 
 ## Fases
 
 ### Fase 0 — Venv canónico e auto-start correto ✅
 
-- `Shared/src/gamedev_shared/model_server.py`: nova `_resolve_ums_start_cmd()` com
+- `Shared/src/aigamekit_shared/model_server.py`: nova `_resolve_ums_start_cmd()` com
   precedência correcta (MODELSERVER_BIN → ModelServer/.venv → PATH → sys.executable
   com warning). `ensure_ums_running` usa-a.
 - Testes: `TestResolveUmsStartCmd` (6 casos em `Shared/tests/test_model_server.py`).
@@ -63,15 +63,15 @@ Abort cooperativo via `{"cmd":"abort"}`; SIGTERM como fallback de força-bruta.
 
 - `ModelServer/src/modelserver/subprocess_pool.py` — `SubprocessWorkerPool` (spawn
   persistente, JSONL via stdin/stdout, watchdog/abort SIGTERM). Inspirado em
-  `Shared/src/gamedev_shared/subprocess_utils.py:119`.
-- `Shared/src/gamedev_shared/worker_protocol.py` — contrato JSONL partilhado
+  `Shared/src/aigamekit_shared/subprocess_utils.py:119`.
+- `Shared/src/aigamekit_shared/worker_protocol.py` — contrato JSONL partilhado
   (esquemas `cmd`/`event`, helpers `send_cmd`/`read_event`/`emit_event`).
 - `ModelServer/src/modelserver/data/backends.yaml` — cada backend ganha `tool: <name>`.
 - `ModelServer/src/modelserver/registry.py` — `BackendDescriptor.tool: str | None`.
 
 ### Fase 2 — `serve --ums-worker` em cada tool ✅
 
-- `Shared/src/gamedev_shared/worker_serve.py` — `run_worker_loop(adapter_class, backend_name)`.
+- `Shared/src/aigamekit_shared/worker_serve.py` — `run_worker_loop(adapter_class, backend_name)`.
 - Por tool: `<Tool>/src/<tool>/worker_serve_adapter.py` + subcomando `serve` no CLI.
 - Adapter local da tool espelha o adapter do UMS (mesmas lambdas), mas corre no
   venv da tool.
@@ -82,13 +82,13 @@ Abort cooperativo via `{"cmd":"abort"}`; SIGTERM como fallback de força-bruta.
 - `ensure_loaded` / `_evict_unlocked` / `generate` despacham para subprocesso
   quando `desc.tool` está definido.
 - `_admit_free_mib` soma VRAM de todos os PIDs filho via NVML.
-- Feature flag `GAMEDEV_UMS_SUBPROCESS=0` volta ao comportamento in-process.
+- Feature flag `AIGAMEKIT_UMS_SUBPROCESS=0` volta ao comportamento in-process.
 
 ### Fase 4 — Migração dos 9 backends + rollback ✅
 
 **Pós-fase (ops):** `ums respawn [backend] [--hot]` recarrega código do worker
 sem reiniciar o supervisor; `RESPAWN_BUSY` se fila/inflight. Dead VRAM residual:
-`GAMEDEV_UMS_DEAD_VRAM_MIB` / `GAMEDEV_UMS_DEAD_VRAM_EXIT_SEC` + IdleEvictor
+`AIGAMEKIT_UMS_DEAD_VRAM_MIB` / `AIGAMEKIT_UMS_DEAD_VRAM_EXIT_SEC` + IdleEvictor
 (ver `findings/UMS_VRAM_FINDINGS.md`).
 
 - Adicionar `tool:` em cada entrada do `backends.yaml`.
@@ -102,7 +102,7 @@ sem reiniciar o supervisor; `RESPAWN_BUSY` se fila/inflight. Dead VRAM residual:
 | Latência IPC JSONL | Negligenciável vs. inferência (segundos-minutos) |
 | Worker morre mid-job | Watchdog no pool: re-spawn + requeue com `WORKER_DIED` |
 | Venv em falta | `BACKEND_VENV_MISSING` explícito; `doctor` reporta |
-| Regressão dispersa (9 backends) | Feature flag `GAMEDEV_UMS_SUBPROCESS=0`; faseada um commit por backend |
+| Regressão dispersa (9 backends) | Feature flag `AIGAMEKIT_UMS_SUBPROCESS=0`; faseada um commit por backend |
 
 ## VRAM accounting no modelo subprocesso
 

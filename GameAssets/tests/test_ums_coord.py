@@ -31,29 +31,29 @@ class TestApplyUmsChildEnv:
     def test_sets_batch_priority(self) -> None:
         env: dict[str, str] = {}
         apply_ums_child_env(env, parent_environ={})
-        assert env["GAMEDEV_UMS_PRIORITY"] == "batch"
+        assert env["AIGAMEKIT_UMS_PRIORITY"] == "batch"
 
     def test_inherits_affinity_and_inflight(self) -> None:
         parent = {
-            "GAMEDEV_UMS_MAX_AFFINITY_CUTS": "5",
-            "GAMEDEV_UMS_MAX_INFLIGHT": "2",
-            "GAMEDEV_UMS_STARVATION_TIMEOUT_SEC": "120",
+            "AIGAMEKIT_UMS_MAX_AFFINITY_CUTS": "5",
+            "AIGAMEKIT_UMS_MAX_INFLIGHT": "2",
+            "AIGAMEKIT_UMS_STARVATION_TIMEOUT_SEC": "120",
         }
         env: dict[str, str] = {}
         apply_ums_child_env(env, parent_environ=parent)
-        assert env["GAMEDEV_UMS_MAX_AFFINITY_CUTS"] == "5"
-        assert env["GAMEDEV_UMS_MAX_INFLIGHT"] == "2"
-        assert env["GAMEDEV_UMS_STARVATION_TIMEOUT_SEC"] == "120"
+        assert env["AIGAMEKIT_UMS_MAX_AFFINITY_CUTS"] == "5"
+        assert env["AIGAMEKIT_UMS_MAX_INFLIGHT"] == "2"
+        assert env["AIGAMEKIT_UMS_STARVATION_TIMEOUT_SEC"] == "120"
 
     def test_ums_stream_and_no_ums(self) -> None:
         env: dict[str, str] = {}
         apply_ums_child_env(env, ums_stream=True, no_ums=True, parent_environ={})
-        assert env["GAMEDEV_UMS_STREAM"] == "1"
-        assert env["GAMEDEV_UMS_AUTO_START"] == "0"
+        assert env["AIGAMEKIT_UMS_STREAM"] == "1"
+        assert env["AIGAMEKIT_UMS_AUTO_START"] == "0"
 
     def test_keys_tuple_complete(self) -> None:
-        assert "GAMEDEV_UMS_MAX_AFFINITY_CUTS" in UMS_CHILD_ENV_KEYS
-        assert "GAMEDEV_UMS_MAX_INFLIGHT" in UMS_CHILD_ENV_KEYS
+        assert "AIGAMEKIT_UMS_MAX_AFFINITY_CUTS" in UMS_CHILD_ENV_KEYS
+        assert "AIGAMEKIT_UMS_MAX_INFLIGHT" in UMS_CHILD_ENV_KEYS
 
 
 class TestMasterDeferQueue:
@@ -81,8 +81,8 @@ class TestMasterDeferQueue:
 class TestPreloadBackend:
     def test_preload_sends_cmd(self) -> None:
         with (
-            patch("gamedev_shared.model_server.ensure_ums_running", return_value=True),
-            patch("gamedev_shared.model_server.send_to_ums") as send,
+            patch("aigamekit_shared.model_server.ensure_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.send_to_ums") as send,
         ):
             send.return_value = {"status": "ok"}
             out = preload_backend("text3d", load_opts={"gpu_ids": [0]})
@@ -93,7 +93,7 @@ class TestPreloadBackend:
             assert req["gpu_ids"] == [0]
 
     def test_preload_none_if_ums_down(self) -> None:
-        with patch("gamedev_shared.model_server.ensure_ums_running", return_value=False):
+        with patch("aigamekit_shared.model_server.ensure_ums_running", return_value=False):
             assert preload_backend("paint3d") is None
 
 
@@ -109,10 +109,10 @@ class TestRunGpuWave:
         out = tmp_path / "a.glb"
         specs = [UmsJobSpec(asset_id="a", payload={"output": str(out), "from_image": "i.png"}, output=str(out))]
         with (
-            patch("gamedev_shared.model_server.ensure_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.ensure_ums_running", return_value=True),
             patch("gameassets.ums_coord.preload_backend", return_value={"status": "ok"}),
-            patch("gamedev_shared.model_server.submit_to_ums") as sub,
-            patch("gamedev_shared.model_server.wait_ums_job") as wait,
+            patch("aigamekit_shared.model_server.submit_to_ums") as sub,
+            patch("aigamekit_shared.model_server.wait_ums_job") as wait,
         ):
             sub.return_value = {"status": "ok", "job_id": "j1"}
             wait.return_value = {"status": "ok", "output": str(out)}
@@ -130,9 +130,9 @@ class TestRunGpuWave:
         out.write_bytes(b"glb")
         specs = [UmsJobSpec(asset_id="e", payload={"output": str(out)}, output=str(out))]
         with (
-            patch("gamedev_shared.model_server.ensure_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.ensure_ums_running", return_value=True),
             patch("gameassets.ums_coord.preload_backend", return_value=None),
-            patch("gamedev_shared.model_server.submit_to_ums") as sub,
+            patch("aigamekit_shared.model_server.submit_to_ums") as sub,
         ):
             wave = run_gpu_wave("text3d", specs, preload=False)
             assert isinstance(wave, list)
@@ -145,10 +145,10 @@ class TestRunGpuWave:
             UmsJobSpec(asset_id="b", payload={"output": "/no/b.glb"}),
         ]
         with (
-            patch("gamedev_shared.model_server.ensure_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.ensure_ums_running", return_value=True),
             patch("gameassets.ums_coord.preload_backend", return_value=None),
-            patch("gamedev_shared.model_server.submit_to_ums") as sub,
-            patch("gamedev_shared.model_server.cancel_ums_job") as cancel,
+            patch("aigamekit_shared.model_server.submit_to_ums") as sub,
+            patch("aigamekit_shared.model_server.cancel_ums_job") as cancel,
         ):
             sub.side_effect = [{"status": "ok", "job_id": "j1"}, None]
             assert run_gpu_wave("text3d", specs, preload=False) is FALLBACK_SUBPROCESS
@@ -160,10 +160,10 @@ class TestRunGpuWave:
             UmsJobSpec(asset_id="b", payload={"output": "/no/b.glb"}),
         ]
         with (
-            patch("gamedev_shared.model_server.ensure_ums_running", return_value=True),
+            patch("aigamekit_shared.model_server.ensure_ums_running", return_value=True),
             patch("gameassets.ums_coord.preload_backend", return_value=None),
-            patch("gamedev_shared.model_server.submit_to_ums") as sub,
-            patch("gamedev_shared.model_server.wait_ums_job") as wait,
+            patch("aigamekit_shared.model_server.submit_to_ums") as sub,
+            patch("aigamekit_shared.model_server.wait_ums_job") as wait,
         ):
             sub.side_effect = [
                 {"status": "ok", "job_id": "j1"},

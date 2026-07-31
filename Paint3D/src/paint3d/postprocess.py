@@ -47,7 +47,7 @@ def apply_paint_postprocess(
         applied["smooth_passes"] = passes
 
     if upscale:
-        from gamedev_shared.gpu import clear_cuda_memory
+        from aigamekit_shared.gpu import clear_cuda_memory
         from paint3d.texture_upscale import upscale_trimesh_texture
         from paint3d.utils.mesh_io import load_mesh_trimesh, save_glb
 

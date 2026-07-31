@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gamedev_shared.paint_budget import (
+from aigamekit_shared.paint_budget import (
     PAINT_FACES_MAX,
     PAINT_FACES_MIN,
     paint_target_faces,

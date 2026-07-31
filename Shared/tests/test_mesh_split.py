@@ -10,8 +10,8 @@ import pytest
 
 bpy = pytest.importorskip("bpy")
 
-from gamedev_shared.bpy_mesh import clear_scene, face_count, get_bounds, load_glb, save_glb  # noqa: E402
-from gamedev_shared.mesh_split import (  # noqa: E402
+from aigamekit_shared.bpy_mesh import clear_scene, face_count, get_bounds, load_glb, save_glb  # noqa: E402
+from aigamekit_shared.mesh_split import (  # noqa: E402
     _bridge_cap_to_bark,
     _cleanup_cut_leak_geometry,
     _fuse_cut_band,

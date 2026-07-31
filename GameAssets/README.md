@@ -2,13 +2,13 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-Orchestrator for the entire GameDev pipeline. Coordinates **Text2D**, **Texture2D**, **Skymap2D**, **Text2Sound**, **Text3D**, **Paint3D**, **Rigging3D**, **Animator3D**, **Materialize**, and **Terrain3D** to generate complete game assets from a YAML manifest and profile.
+Orchestrator for the entire AiGameKit pipeline. Coordinates **Text2D**, **Texture2D**, **Skymap2D**, **Text2Sound**, **Text3D**, **Paint3D**, **Rigging3D**, **Animator3D**, **Materialize**, and **Terrain3D** to generate complete game assets from a YAML manifest and profile.
 
 Reads `game.yaml` (style + tool configuration) and `manifest.yaml` (asset list), then runs each sub-tool in the correct order, tracking progress, managing VRAM, and producing a structured output directory ready for handoff to Vite / VibeGame.
 
 ## Overview
 
-GameAssets is the central hub of the [GameDev monorepo](../). It does **not** generate images or meshes itself — it delegates to specialized packages and manages the workflow:
+GameAssets is the central hub of the [AiGameKit monorepo](../). It does **not** generate images or meshes itself — it delegates to specialized packages and manages the workflow:
 
 - **2D generation:** Text2D (FLUX, local GPU) or Texture2D (seamless textures, HF API) or Skymap2D (equirectangular 360° sky)
 - **3D shape:** Text3D (Hunyuan3D-2.1, image→geometry)
@@ -69,16 +69,16 @@ Pipeline stages (3D, rig, animate, lod, collision) are **auto-detected** from th
 
 ## Debug / lab tools
 
-Visual GLB debugging (screenshots, inspect, compare, bundle) lives in **[GameDevLab](../GameDevLab)** (`gamedev-lab debug …`), not in `gameassets`.
+Visual GLB debugging (screenshots, inspect, compare, bundle) lives in **[AiGameKitLab](../AiGameKitLab)** (`aigamekit-lab debug …`), not in `gameassets`.
 
 ## Installation
 
 ### Official (monorepo)
 
-At the **GameDev** repo root:
+At the **AiGameKit** repo root:
 
 ```bash
-cd /path/to/GameDev
+cd /path/to/AiGameKit
 ./install.sh gameassets
 ```
 
@@ -98,7 +98,7 @@ Dev extras (pytest, ruff, bpy):
 cd GameAssets && pip install -e ".[dev]"
 ```
 
-**Requirements:** Python 3.10+, `gamedev-shared`, click, rich, rich-click, textual, Pillow, PyYAML.
+**Requirements:** Python 3.10+, `aigamekit-shared`, click, rich, rich-click, textual, Pillow, PyYAML.
 
 ## Commands
 
@@ -167,18 +167,18 @@ Full pipeline execution. Generates 2D images, 3D meshes, textures, audio, riggin
 | `--no-animate` | Skip animation even for rigged models |
 | `--no-lod` | Skip LOD generation even if enabled |
 | `--no-collision` | Skip collision mesh generation even if enabled |
-| `--profile-tools` | Enable CPU/RAM/GPU profiling via `GAMEDEV_PROFILE` |
+| `--profile-tools` | Enable CPU/RAM/GPU profiling via `AIGAMEKIT_PROFILE` |
 | `--profile-log FILE.jsonl` | Profiler log output |
 | `--force` | Regenerate everything (ignore existing outputs) |
 | `--gpu-ids "0,1"` | Multi-GPU IDs (auto-detected via `nvidia-smi` if omitted) |
-| `--ums-stream` | Opt-in: set `GAMEDEV_UMS_STREAM=1` on children (UMS NDJSON; noisy) |
+| `--ums-stream` | Opt-in: set `AIGAMEKIT_UMS_STREAM=1` on children (UMS NDJSON; noisy) |
 | `--no-dashboard` | Simple progress bars instead of TUI dashboard |
 | `--plain` | Plain text output (no Rich/TUI, for scripts) |
 
 **Key behaviors:**
 
 - **Exclusive lock:** `.gameassets_batch.lock` (fcntl) prevents two batches in the same folder. `--skip-batch-lock` disables.
-- **VRAM / UMS:** GPU sub-tools delegate to **UMS** by default; batch sets `GAMEDEV_UMS_PRIORITY=batch` and inherits other `GAMEDEV_UMS_*` / `GAMEDEV_ALLOW_LEGACY_SERVER` from the parent env. **hw-auto** fills peak signals (`sdnq_preset` / `memory_efficient` on the payload) — no public `--low-vram` / `--memory-efficient` CLI. Batch **waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + optional `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` / `terrain3d` (`run_*_wave_or_fallback`). Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
+- **VRAM / UMS:** GPU sub-tools delegate to **UMS** by default; batch sets `AIGAMEKIT_UMS_PRIORITY=batch` and inherits other `AIGAMEKIT_UMS_*` / `AIGAMEKIT_ALLOW_LEGACY_SERVER` from the parent env. **hw-auto** fills peak signals (`sdnq_preset` / `memory_efficient` on the payload) — no public `--low-vram` / `--memory-efficient` CLI. Batch **waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + optional `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` / `terrain3d` (`run_*_wave_or_fallback`). Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
 - **VRAM preflight:** warns if free VRAM < ~1.8 GiB. `--skip-gpu-preflight` disables.
 - **CUDA:** sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` if unset.
 - **Multi-GPU:** `--gpu-ids 0,1` propagates `CUDA_VISIBLE_DEVICES` and `--gpu-ids` to all sub-tools (and into UMS payloads via each CLI’s `with_ums_load_opts`).
@@ -205,11 +205,11 @@ Smart resume: analyzes each asset's state on disk and runs only pending phases. 
 | `--fail-fast` | Stop on first error |
 | `--work-dir DIR` | Persistent work directory for shapes (default: `.gameassets_work/`) |
 | `--force` | Regenerate everything |
-| `--redo-split` | Clear tree stump/top split artefacts and re-split (`GAMEDEV_REDO_SPLIT=1`) |
+| `--redo-split` | Clear tree stump/top split artefacts and re-split (`AIGAMEKIT_REDO_SPLIT=1`) |
 | `--gpu-ids "0,1"` | Multi-GPU IDs |
 | `--no-dashboard` | Simple progress bars |
 
-Resume also ensures UMS is up and propagates `GAMEDEV_UMS_*` (+ `GAMEDEV_UMS_PRIORITY=batch`) to subprocesses, same as batch. `gameassets dream` inherits the parent env with `GAMEDEV_UMS_PRIORITY=batch` when invoking batch.
+Resume also ensures UMS is up and propagates `AIGAMEKIT_UMS_*` (+ `AIGAMEKIT_UMS_PRIORITY=batch`) to subprocesses, same as batch. `gameassets dream` inherits the parent env with `AIGAMEKIT_UMS_PRIORITY=batch` when invoking batch.
 
 **State detection per asset:**
 
@@ -418,7 +418,7 @@ gameassets debug bundle INPUT [--output-dir DIR] [--views VIEWS] \
 
 Full bundle for AI agents: inspect JSON + screenshots + `bundle.json` with metadata. Default views include `low_front` and `worm`.
 
-> **Note:** For advanced mesh comparison with image metrics (MAE, RMSE, SSIM), use [GameDevLab](../GameDevLab) (`gamedev-lab debug compare --image-metrics`).
+> **Note:** For advanced mesh comparison with image metrics (MAE, RMSE, SSIM), use [AiGameKitLab](../AiGameKitLab) (`aigamekit-lab debug compare --image-metrics`).
 
 ### `gameassets skill install`
 
@@ -692,9 +692,9 @@ run `text3d split-at-height --no-cap` **before** LOD: stump + top painted → LO
 composed `*_lodN.glb` (`Stump`+`Top` meshes) + `*_stump_collision.glb`.
 
 - Geometry is **cut-only** (open hole at the cut plane). Mesh `--cap` / fill seals are opt-in and not the default.
-- Version stamp: `_intermediate/{id}_split_seal.txt` = `gamedev_shared.mesh_split.SEAL_VERSION` (`cut-only-v1`). Resume regenerates when the stamp is missing or drifts.
-- Force rebuild: `gameassets resume … --redo-split` or `GAMEDEV_REDO_SPLIT=1`.
-- Quick QA without regenerating LODs: `gamedev-lab debug cut-review stump.glb -o ./cut_review --cut-height 0.8`.
+- Version stamp: `_intermediate/{id}_split_seal.txt` = `aigamekit_shared.mesh_split.SEAL_VERSION` (`cut-only-v1`). Resume regenerates when the stamp is missing or drifts.
+- Force rebuild: `gameassets resume … --redo-split` or `AIGAMEKIT_REDO_SPLIT=1`.
+- Quick QA without regenerating LODs: `aigamekit-lab debug cut-review stump.glb -o ./cut_review --cut-height 0.8`.
 
 Deep dive: [`docs/findings/MESH_PIPELINE_FINDINGS.md`](../docs/findings/MESH_PIPELINE_FINDINGS.md#árvores-derrubáveis--split-at-height-antes-do-lod).
 
@@ -788,8 +788,8 @@ Pass via `--presets-local presets-local.yaml`. Local presets merge with (and ove
 | `TERRAIN3D_BIN` | Terrain3D | Path to `terrain3d` executable (dream terrain only) |
 | `OPENAI_API_KEY` | Dream LLM | API key for OpenAI LLM provider |
 | `OPENAI_BASE_URL` | Dream LLM | OpenAI-compatible base URL |
-| `GAMEDEV_PROFILE` | Profiling | Enable CPU/RAM/GPU profiling (`--profile-tools`) |
-| `GAMEDEV_PROFILE_LOG` | Profiling | Profiler JSONL log path |
+| `AIGAMEKIT_PROFILE` | Profiling | Enable CPU/RAM/GPU profiling (`--profile-tools`) |
+| `AIGAMEKIT_PROFILE_LOG` | Profiling | Profiler JSONL log path |
 | `PYTORCH_CUDA_ALLOC_CONF` | CUDA | Auto-set to `expandable_segments:True` if empty (reduces fragmentation) |
 
 ## Output Layout

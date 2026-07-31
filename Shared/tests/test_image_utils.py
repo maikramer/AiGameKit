@@ -1,4 +1,4 @@
-"""Testes para gamedev_shared.image_utils."""
+"""Testes para aigamekit_shared.image_utils."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from gamedev_shared.image_utils import (
+from aigamekit_shared.image_utils import (
     create_thumbnail,
     create_zip,
     ensure_rgb,
@@ -217,7 +217,7 @@ class TestLoadImageMetadata:
 
 class TestWriteMetadataSidecar:
     def test_writes_sidecar_next_to_file(self, tmp_path) -> None:
-        from gamedev_shared.image_utils import write_metadata_sidecar
+        from aigamekit_shared.image_utils import write_metadata_sidecar
 
         target = tmp_path / "sky.exr"
         sidecar = write_metadata_sidecar(target, "a sky", {"seed": 1})
@@ -231,7 +231,7 @@ class TestWriteMetadataSidecar:
         assert data["filename"] == "sky.exr"
 
     def test_extra_metadata_wins(self, tmp_path) -> None:
-        from gamedev_shared.image_utils import write_metadata_sidecar
+        from aigamekit_shared.image_utils import write_metadata_sidecar
 
         target = tmp_path / "sky.exr"
         write_metadata_sidecar(
@@ -248,7 +248,7 @@ class TestWriteMetadataSidecar:
         assert data["prompt"] == "override"
 
     def test_no_sidecar_file_created_for_asset(self, tmp_path) -> None:
-        from gamedev_shared.image_utils import write_metadata_sidecar
+        from aigamekit_shared.image_utils import write_metadata_sidecar
 
         target = tmp_path / "a.png"
         write_metadata_sidecar(target, "p", {})

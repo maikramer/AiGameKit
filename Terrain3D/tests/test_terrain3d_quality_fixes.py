@@ -430,7 +430,7 @@ class TestQualityProfilesTerrain3d:
         import yaml
 
         data_path = (
-            Path(__file__).resolve().parents[2] / "Shared" / "src" / "gamedev_shared" / "data" / "quality-profiles.yaml"
+            Path(__file__).resolve().parents[2] / "Shared" / "src" / "aigamekit_shared" / "data" / "quality-profiles.yaml"
         )
         return yaml.safe_load(data_path.read_text(encoding="utf-8"))["profiles"]
 

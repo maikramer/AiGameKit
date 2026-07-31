@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from gamedev_shared.skill_install import install_my_skill
+from aigamekit_shared.skill_install import install_my_skill
 
 from . import __version__
 from .categories import get_target_faces
@@ -217,7 +217,7 @@ def info_cmd() -> None:
     row("materialize", "MATERIALIZE_BIN", "materialize")
     console.print(table)
 
-    from gamedev_shared.gpu import query_gpu_snapshot
+    from aigamekit_shared.gpu import query_gpu_snapshot
 
     snap = query_gpu_snapshot(0)
     if snap is not None:

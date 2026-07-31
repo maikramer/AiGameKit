@@ -101,7 +101,7 @@ class TestMaterializeNotFoundFallback:
         # Simulate the materialize binary being absent so the function
         # takes its not-found branch regardless of the host environment.
         with patch(
-            "gamedev_shared.subprocess_utils.resolve_binary",
+            "aigamekit_shared.subprocess_utils.resolve_binary",
             side_effect=FileNotFoundError("materialize"),
         ):
             result = generate_pbr_with_materialize(albedo_path, tmp_path)

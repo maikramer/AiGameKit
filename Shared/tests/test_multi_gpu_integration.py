@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gamedev_shared.multi_gpu import DevicePlan, ModelArchitectureRegistry, MultiGPUPlanner
+from aigamekit_shared.multi_gpu import DevicePlan, ModelArchitectureRegistry, MultiGPUPlanner
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -55,9 +55,9 @@ def _mock_accelerate(
 class TestMultiGPUPipelineIntegration:
     """Plan + apply with a realistic multi-component mock model."""
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_pipeline_multi_component_model(
         self,
         mock_probe: MagicMock,
@@ -90,9 +90,9 @@ class TestMultiGPUPipelineIntegration:
         assert result is dispatched
         mock_accel_fn.return_value.dispatch_model.assert_called_once()
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_plan_produces_correct_max_memory_structure(
         self,
         mock_probe: MagicMock,
@@ -108,9 +108,9 @@ class TestMultiGPUPipelineIntegration:
         plan = MultiGPUPlanner().for_model(MagicMock()).with_gpus([0, 1]).plan()
         assert plan.max_memory == mem
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_pipeline_user_max_memory_overrides_probe(
         self,
         mock_probe: MagicMock,
@@ -135,7 +135,7 @@ class TestMultiGPUPipelineIntegration:
 class TestFallbackChain:
     """Full fallback hierarchy: 0 GPUs → 1 GPU → 2 GPUs → accelerate fail."""
 
-    @patch("gamedev_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu._torch")
     def test_zero_gpus_cpu_only(self, mock_torch_fn: MagicMock) -> None:
         """0 GPUs → cpu_only with warning."""
         mock_torch_fn.return_value = _mock_torch(cuda_available=False)
@@ -144,7 +144,7 @@ class TestFallbackChain:
         assert plan.primary_device == "cpu"
         assert any("No CUDA" in w for w in plan.warnings)
 
-    @patch("gamedev_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu._torch")
     def test_one_gpu_single_gpu(self, mock_torch_fn: MagicMock) -> None:
         """1 GPU → single_gpu with warning."""
         mock_torch_fn.return_value = _mock_torch(cuda_available=True, device_count=1)
@@ -153,9 +153,9 @@ class TestFallbackChain:
         assert plan.primary_device == 0
         assert any("Fewer than 2" in w for w in plan.warnings)
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_two_gpus_multi_gpu(
         self,
         mock_probe: MagicMock,
@@ -171,9 +171,9 @@ class TestFallbackChain:
         assert plan.status == "multi_gpu"
         assert plan.device_map == {"a": 0, "b": 1}
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_two_gpus_accelerate_fails_single_gpu(
         self,
         mock_probe: MagicMock,
@@ -192,9 +192,9 @@ class TestFallbackChain:
         assert plan.primary_device == 0
         assert any("accelerate planning failed" in w for w in plan.warnings)
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_two_gpus_accelerate_import_fails_single_gpu(
         self,
         mock_probe: MagicMock,
@@ -219,9 +219,9 @@ class TestFallbackChain:
 class TestWithQuantization:
     """plan() and apply() work with models that have non-standard parameter types."""
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_plan_quantized_model(
         self,
         mock_probe: MagicMock,
@@ -239,9 +239,9 @@ class TestWithQuantization:
         assert plan.status == "multi_gpu"
         assert plan.device_map == {"block.a": 0, "block.b": 1}
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_apply_quantized_model(
         self,
         mock_probe: MagicMock,
@@ -263,9 +263,9 @@ class TestWithQuantization:
         result = p.apply()
         assert result is dispatched
 
-    @patch("gamedev_shared.multi_gpu._accelerate")
-    @patch("gamedev_shared.multi_gpu._torch")
-    @patch("gamedev_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
+    @patch("aigamekit_shared.multi_gpu._accelerate")
+    @patch("aigamekit_shared.multi_gpu._torch")
+    @patch("aigamekit_shared.multi_gpu.MultiGPUPlanner._probe_gpu_memory")
     def test_plan_quantized_with_custom_no_split(
         self,
         mock_probe: MagicMock,
@@ -294,7 +294,7 @@ class TestSubprocessGPUPropagation:
 
     def test_no_gpu_ids_no_cuda_visible(self) -> None:
         """No gpu_ids → CUDA_VISIBLE_DEVICES absent from env."""
-        from gamedev_shared.env import subprocess_gpu_env
+        from aigamekit_shared.env import subprocess_gpu_env
 
         # Isolate from outer env so the assert is deterministic
         with patch.dict(os.environ, {}, clear=False):
@@ -308,21 +308,21 @@ class TestSubprocessGPUPropagation:
 
     def test_gpu_ids_list_sets_cuda_visible(self) -> None:
         """gpu_ids=[0, 1] → CUDA_VISIBLE_DEVICES='0,1'."""
-        from gamedev_shared.env import subprocess_gpu_env
+        from aigamekit_shared.env import subprocess_gpu_env
 
         env = subprocess_gpu_env(gpu_ids=[0, 1])
         assert env["CUDA_VISIBLE_DEVICES"] == "0,1"
 
     def test_single_gpu_id(self) -> None:
         """gpu_ids=[1] → CUDA_VISIBLE_DEVICES='1'."""
-        from gamedev_shared.env import subprocess_gpu_env
+        from aigamekit_shared.env import subprocess_gpu_env
 
         env = subprocess_gpu_env(gpu_ids=[1])
         assert env["CUDA_VISIBLE_DEVICES"] == "1"
 
     def test_empty_list_no_cuda_visible(self) -> None:
         """gpu_ids=[] → CUDA_VISIBLE_DEVICES not set (empty list is falsy)."""
-        from gamedev_shared.env import subprocess_gpu_env
+        from aigamekit_shared.env import subprocess_gpu_env
 
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("CUDA_VISIBLE_DEVICES", None)
@@ -331,7 +331,7 @@ class TestSubprocessGPUPropagation:
 
     def test_gpu_ids_with_extra_env(self) -> None:
         """gpu_ids and extra env vars are both applied."""
-        from gamedev_shared.env import subprocess_gpu_env
+        from aigamekit_shared.env import subprocess_gpu_env
 
         env = subprocess_gpu_env(gpu_ids=[0], extra={"MY_VAR": "hello"})
         assert env["CUDA_VISIBLE_DEVICES"] == "0"
@@ -346,26 +346,26 @@ class TestSubprocessGPUPropagation:
 class TestClearMultiDevice:
     """Integration tests for clear_cuda_memory(devices=...)."""
 
-    @patch("gamedev_shared.gpu._torch")
+    @patch("aigamekit_shared.gpu._torch")
     def test_no_devices_calls_empty_cache_once(self, mock_torch_fn: MagicMock) -> None:
         """devices=None → torch.cuda.empty_cache() called (scrub: sync+empty+ipc+empty)."""
         mock_torch = _mock_torch(cuda_available=True)
         mock_torch_fn.return_value = mock_torch
 
-        from gamedev_shared.gpu import clear_cuda_memory
+        from aigamekit_shared.gpu import clear_cuda_memory
 
         clear_cuda_memory()
         # scrub_device chama empty_cache 2x (sync → empty_cache → ipc_collect → empty_cache).
         assert mock_torch.cuda.empty_cache.call_count >= 1
 
-    @patch("gamedev_shared.gpu._torch")
+    @patch("aigamekit_shared.gpu._torch")
     def test_devices_list_iterates_and_restores(self, mock_torch_fn: MagicMock) -> None:
         """devices=[0, 1] → set_device + empty_cache per device, restores original."""
         mock_torch = _mock_torch(cuda_available=True)
         mock_torch.cuda.current_device.return_value = 0
         mock_torch_fn.return_value = mock_torch
 
-        from gamedev_shared.gpu import clear_cuda_memory
+        from aigamekit_shared.gpu import clear_cuda_memory
 
         clear_cuda_memory(devices=[0, 1])
 
@@ -379,7 +379,7 @@ class TestClearMultiDevice:
         # empty_cache: scrub_device (2x) por dispositivo = 4 chamadas no total.
         assert mock_torch.cuda.empty_cache.call_count == 4
 
-    @patch("gamedev_shared.gpu._torch")
+    @patch("aigamekit_shared.gpu._torch")
     def test_empty_devices_same_as_none(self, mock_torch_fn: MagicMock) -> None:
         """devices=[] (empty list) → falls into the devices is None branch? No —
         empty list is truthy-falsy in Python but `if devices is None` checks identity.
@@ -391,19 +391,19 @@ class TestClearMultiDevice:
         mock_torch = _mock_torch(cuda_available=True)
         mock_torch_fn.return_value = mock_torch
 
-        from gamedev_shared.gpu import clear_cuda_memory
+        from aigamekit_shared.gpu import clear_cuda_memory
 
         clear_cuda_memory(devices=[])
         # Empty list → for-loop does nothing → no empty_cache calls
         mock_torch.cuda.empty_cache.assert_not_called()
 
-    @patch("gamedev_shared.gpu._torch")
+    @patch("aigamekit_shared.gpu._torch")
     def test_cuda_not_available_early_return(self, mock_torch_fn: MagicMock) -> None:
         """CUDA unavailable → returns after gc.collect, no empty_cache."""
         mock_torch = _mock_torch(cuda_available=False)
         mock_torch_fn.return_value = mock_torch
 
-        from gamedev_shared.gpu import clear_cuda_memory
+        from aigamekit_shared.gpu import clear_cuda_memory
 
         clear_cuda_memory(devices=[0, 1])
         mock_torch.cuda.empty_cache.assert_not_called()
@@ -418,16 +418,16 @@ class TestModuleImports:
     """Verify all public classes are importable from expected locations."""
 
     def test_from_multi_gpu_module(self) -> None:
-        """Direct import from gamedev_shared.multi_gpu."""
-        from gamedev_shared.multi_gpu import MultiGPUPlanner
+        """Direct import from aigamekit_shared.multi_gpu."""
+        from aigamekit_shared.multi_gpu import MultiGPUPlanner
 
         assert DevicePlan is not None
         assert ModelArchitectureRegistry is not None
         assert MultiGPUPlanner is not None
 
     def test_from_package_init(self) -> None:
-        """Lazy import from gamedev_shared top-level."""
-        from gamedev_shared import DevicePlan, ModelArchitectureRegistry, MultiGPUPlanner
+        """Lazy import from aigamekit_shared top-level."""
+        from aigamekit_shared import DevicePlan, ModelArchitectureRegistry, MultiGPUPlanner
 
         assert DevicePlan is not None
         assert ModelArchitectureRegistry is not None
@@ -435,8 +435,8 @@ class TestModuleImports:
 
     def test_classes_are_same(self) -> None:
         """Top-level and module-level imports resolve to the same class."""
-        from gamedev_shared import DevicePlan as DP_top
-        from gamedev_shared.multi_gpu import DevicePlan as DP_mod
+        from aigamekit_shared import DevicePlan as DP_top
+        from aigamekit_shared.multi_gpu import DevicePlan as DP_mod
 
         assert DP_top is DP_mod
 
@@ -447,37 +447,37 @@ class TestModuleImports:
 
 
 class TestExportFromPackage:
-    """Test gamedev_shared.__init__ lazy imports work correctly."""
+    """Test aigamekit_shared.__init__ lazy imports work correctly."""
 
     def test_import_does_not_trigger_torch(self) -> None:
-        """import gamedev_shared should not import torch."""
-        # If gamedev_shared is already loaded, just check torch isn't a submodule
-        import gamedev_shared
+        """import aigamekit_shared should not import torch."""
+        # If aigamekit_shared is already loaded, just check torch isn't a submodule
+        import aigamekit_shared
 
         # The lazy __getattr__ should not have imported torch at the module level
         # We verify by checking sys.modules for unexpected torch imports triggered
         # by the import statement itself (not by accessing attributes).
         # Since the module is already imported, we verify __all__ is defined.
-        assert hasattr(gamedev_shared, "__all__")
-        assert "MultiGPUPlanner" in gamedev_shared.__all__
+        assert hasattr(aigamekit_shared, "__all__")
+        assert "MultiGPUPlanner" in aigamekit_shared.__all__
 
     def test_lazy_getattr_resolves_correctly(self) -> None:
-        """gamedev_shared.MultiGPUPlanner resolves to the real class."""
-        from gamedev_shared import MultiGPUPlanner
-        from gamedev_shared.multi_gpu import MultiGPUPlanner as DirectPlanner
+        """aigamekit_shared.MultiGPUPlanner resolves to the real class."""
+        from aigamekit_shared import MultiGPUPlanner
+        from aigamekit_shared.multi_gpu import MultiGPUPlanner as DirectPlanner
 
         assert MultiGPUPlanner is DirectPlanner
 
     def test_lazy_getattr_raises_on_unknown(self) -> None:
         """Accessing a non-existent attribute raises AttributeError."""
-        import gamedev_shared
+        import aigamekit_shared
 
         with pytest.raises(AttributeError, match="has no attribute"):
-            _ = gamedev_shared.nonexistent_symbol
+            _ = aigamekit_shared.nonexistent_symbol
 
     def test_version_accessible(self) -> None:
         """__version__ is accessible at package level."""
-        import gamedev_shared
+        import aigamekit_shared
 
-        assert hasattr(gamedev_shared, "__version__")
-        assert isinstance(gamedev_shared.__version__, str)
+        assert hasattr(aigamekit_shared, "__version__")
+        assert isinstance(aigamekit_shared.__version__, str)

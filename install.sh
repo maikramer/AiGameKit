@@ -1,5 +1,5 @@
 #!/bin/bash
-# Instalação GameDev via Clified (PyPI)
+# Instalação AiGameKit via Clified (PyPI)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

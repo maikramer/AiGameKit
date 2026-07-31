@@ -10,10 +10,10 @@ O código **`hy3dpaint`** está incluído no Paint3D em `Paint3D/src/paint3d/hy3
 
 ### Oficial (monorepo)
 
-Na raiz do repositório **GameDev**:
+Na raiz do repositório **AiGameKit**:
 
 ```bash
-cd /caminho/para/GameDev
+cd /caminho/para/AiGameKit
 ./install.sh paint3d
 ```
 
@@ -89,7 +89,7 @@ textured = apply_hunyuan_paint(mesh, "reference.png", bake_exp=6)
 
 ## Dependências
 
-- **gamedev-shared** (monorepo GameDev — GPU, logging)
+- **aigamekit-shared** (monorepo AiGameKit — GPU, logging)
 - **Hunyuan3D-2.1 `hy3dpaint`** (incluído em `src/paint3d/hy3dpaint/`; pesos HF sob demanda)
 - **pymeshlab**, **xatlas**, **omegaconf**; Real-ESRGAN (RRDBNet + inferência) vendido em código (sem pacotes PyPI basicsr/realesrgan)
 - **nvdiffrast** (NVIDIA — shim do rasterizador)

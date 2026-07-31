@@ -32,7 +32,7 @@ Saturating the GPU by ignoring peaks is not success. Leaving the GPU idle “to 
 
 ## What UMS owns
 
-Canonical system: `ModelServer/` (CLI `ums` ≡ `gamedev-model-server`).
+Canonical system: `ModelServer/` (CLI `ums` ≡ `aigamekit-model-server`).
 
 Responsibilities:
 
@@ -58,7 +58,7 @@ Consequences:
 
 - Small cards may refuse full fp16 and require quant (`sdnq-int4`, etc.).
 - Peak signals (`sdnq_preset`, `memory_efficient=true`, …) ride the **UMS payload**, filled by **hw-auto** / `with_ums_peak_opts` — **not** public CLI flags (`--low-vram` / `--memory-efficient` removed). Omitting them makes UMS assume a larger peak and refuse — or worse, admit wrong.
-- `prepare_gpu_exclusive` / aggressive ensure-vram only after UMS fail or `--no-ums`. Legacy per-tool servers: `GAMEDEV_ALLOW_LEGACY_SERVER=1`.
+- `prepare_gpu_exclusive` / aggressive ensure-vram only after UMS fail or `--no-ums`. Legacy per-tool servers: `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
 - In-process `ensure_vram_available(N, backend=…)` should align with UMS peak logic (`max(N, peak)`), not a parallel folk formula.
 
 ## What may change when models grow
@@ -78,7 +78,7 @@ Not allowed to change:
 
 ## Agent protocol when GPU seems “stuck”
 
-1. `ums status` / `ums queue` / `ums doctor` — see **HOLDING** / who owns the device; free MiB via NVML (`gamedev_shared.gpu`).
+1. `ums status` / `ums queue` / `ums doctor` — see **HOLDING** / who owns the device; free MiB via NVML (`aigamekit_shared.gpu`).
 2. Wait (`ums wait <job_id>`, `--ums-stream`) or cancel deliberately (`ums cancel`).
 3. **Never** `kill` / GPU pkill / `--gpu-kill-others` while UMS has jobs.
 4. Idle UMS holding CUDA context with 0 backends and `free < peak`: `ums stop` + `ums start` (only when queue empty).
@@ -110,6 +110,6 @@ This checklist is part of the premise, not optional etiquette.
 ## Pointers in this repo
 
 - UMS: [`ModelServer/README.md`](../../ModelServer/README.md)
-- Client helpers: `Shared/src/gamedev_shared/model_server.py`
+- Client helpers: `Shared/src/aigamekit_shared/model_server.py`
 - Batch waves: [`GAMEASSETS_UMS_BATCH.md`](../GAMEASSETS_UMS_BATCH.md)
 - Findings: [`UMS_VRAM_FINDINGS.md`](../findings/UMS_VRAM_FINDINGS.md)

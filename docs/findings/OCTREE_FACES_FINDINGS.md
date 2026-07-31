@@ -11,7 +11,7 @@
 
 | Campo | Fonte |
 |-------|--------|
-| Faces | `gamedev_lab.glb_meta.glb_extract_meta` → `triangle_count_total` no `_shape.glb` |
+| Faces | `aigamekit_lab.glb_meta.glb_extract_meta` → `triangle_count_total` no `_shape.glb` |
 | `size_m` / bbox | sidecar `*.omni.json` (fallback manifest `omni:`) |
 | `category` | `manifest.yaml` |
 | Octree explícito | `manifest text3d.octree_resolution` (4) ou `omni.json` (14) → **18** |
@@ -227,7 +227,7 @@ dos GLBs (path geométrico sem resize; textured com default 2048 e copy skip).
 | Atlas lod0 | buckets paint (`paint_texture_for_char`) + **snap 64px** ∩ quality |
 | Atlas lod1/2 | lod0/2, lod0/4 (snap64, piso 64) |
 
-Código: `gamedev_shared.lod_budget`, `get_target_faces(..., char_m=)`,
+Código: `aigamekit_shared.lod_budget`, `get_target_faces(..., char_m=)`,
 `text3d lod --texture-size`, pipeline passa volume ao stage LOD.
 
 Horseshoe medido (pós-fix): faces **3456 / 1728 / 1152** · KTX2

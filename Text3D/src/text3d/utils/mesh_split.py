@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gamedev_shared.mesh_split import SplitResult, split_glb_at_height
+from aigamekit_shared.mesh_split import SplitResult, split_glb_at_height
 
 
 def split_at_height_glb(
@@ -23,7 +23,7 @@ def split_at_height_glb(
 ) -> SplitResult:
     """Parte GLB no eixo vertical; exporta composição multi-mesh Stump+Top.
 
-    Ver ``gamedev_shared.mesh_split.split_glb_at_height``.
+    Ver ``aigamekit_shared.mesh_split.split_glb_at_height``.
     """
     return split_glb_at_height(
         input_path,

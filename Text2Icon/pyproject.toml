@@ -26,7 +26,7 @@ dependencies = [
     "click>=8.1.0",
     "rich>=13.0.0",
     "rich-click>=1.8.0",
-    "gamedev-shared @ file:../Shared",
+    "aigamekit-shared @ file:../Shared",
 ]
 
 classifiers = [

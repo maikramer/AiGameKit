@@ -14,7 +14,7 @@ VRAM: **UMS + hw-auto** (no public `--low-vram`); editable monorepo bins: [INSTA
 | 2D / maps | Text2D, Texture2D, Materialize, Skymap2D | PNG, PBR map folders, equirectangular sky |
 | 3D | Text3D, Paint3D, Rigging3D | GLB (mesh + PBR; optional rig) |
 | Audio | Text2Sound | WAV/FLAC (see Text2Sound docs) |
-| QA | GameDevLab | GLB inspection (optional) |
+| QA | AiGameKitLab | GLB inspection (optional) |
 | Runtime | VibeGame | Interactive scene (ECS + Three.js) |
 
 ## 2. Recommended folder layout (handoff)
@@ -62,7 +62,7 @@ For the runtime to load content **without** a custom CMS:
 
 **LOD0 contract:** after master pipeline promote, `meshes/{id}_lod0.glb` is the playable deliverable (animated > rigged > painted). Resume must not overwrite a promoted lod0 with painted — see [findings/MESH_PIPELINE_FINDINGS.md](findings/MESH_PIPELINE_FINDINGS.md). Rigged ladder uses geometry `text3d lod` (must weld before Decimate — V/Tri≈3 → moth-eaten LODs). Runtime tip (simple-rpg): hero uses lod0 only; distant enemies may declare `lod1-url` / `lod2-url` on `<GLTFLoader>`.
 
-**Compression contract:** deliverable LODs should carry **KTX2** textures + **meshopt** geometry (`gamedev-lab check` rules). Pipeline finish defaults ON; re-compress with `text3d finish`. Needs `npx @gltf-transform/cli` **and** Khronos `ktx` — see [GLB_FINISH_COMPRESSION.md](GLB_FINISH_COMPRESSION.md). VibeGame `gltf-bridge` loads both via `KTX2Loader` + `MeshoptDecoder`.
+**Compression contract:** deliverable LODs should carry **KTX2** textures + **meshopt** geometry (`aigamekit-lab check` rules). Pipeline finish defaults ON; re-compress with `text3d finish`. Needs `npx @gltf-transform/cli` **and** Khronos `ktx` — see [GLB_FINISH_COMPRESSION.md](GLB_FINISH_COMPRESSION.md). VibeGame `gltf-bridge` loads both via `KTX2Loader` + `MeshoptDecoder`.
 
 **Fellable trees:** tree-like assets get `text3d split-at-height --no-cap` before LOD → composed `Stump`+`Top` lods + `*_stump_collision.glb` for `break-style: fall`. Cut plane left open (no seal). Bipedal enemies need `animate.preset: humanoid` + Quaternius clips — see [findings/ANIMATOR_RETARGET_FINDINGS.md](findings/ANIMATOR_RETARGET_FINDINGS.md).
 
@@ -72,7 +72,7 @@ For the runtime to load content **without** a custom CMS:
 
 ## 4.1 Quality Presets (QualityEngine)
 
-All generation tools support a unified `--quality` flag backed by **QualityEngine** in `gamedev-shared`:
+All generation tools support a unified `--quality` flag backed by **QualityEngine** in `aigamekit-shared`:
 
 ```bash
 text3d generate prompt -o out.glb --quality high --category humanoid
@@ -90,7 +90,7 @@ terrain3d generate --quality high
 | `high` | ~5min | High | High | Production polish |
 | `highest` | ~10min+ | Max | Full | Showcase / trailers |
 
-**Category** (optional) tailors quality to asset type — e.g., `--category humanoid` uses higher resolution than `--category weapon`. Defined in `Shared/src/gamedev_shared/data/asset-categories.yaml`.
+**Category** (optional) tailors quality to asset type — e.g., `--category humanoid` uses higher resolution than `--category weapon`. Defined in `Shared/src/aigamekit_shared/data/asset-categories.yaml`.
 
 **GameAssets integration:** set `generation: medium` in `game.yaml`. Per-row overrides: `generation: high` in `manifest.yaml`. The `generation:` key maps to `--quality` on all sub-tools.
 

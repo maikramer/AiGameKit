@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gamedev_shared.vram_budget import (
+from aigamekit_shared.vram_budget import (
     PAINT_MESHRENDER_MIN_FREE_BYTES,
     PAINT_VIEWS_LO,
     TEXT3D_CHUNKS_HI,

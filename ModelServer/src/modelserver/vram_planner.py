@@ -28,8 +28,8 @@ DEFAULT_VRAM_SAFETY_MIB = 384
 
 
 def vram_safety_mib() -> int:
-    """``GAMEDEV_UMS_VRAM_SAFETY_MIB`` ou default."""
-    raw = os.environ.get("GAMEDEV_UMS_VRAM_SAFETY_MIB", "").strip()
+    """``AIGAMEKIT_UMS_VRAM_SAFETY_MIB`` ou default."""
+    raw = os.environ.get("AIGAMEKIT_UMS_VRAM_SAFETY_MIB", "").strip()
     if not raw:
         return DEFAULT_VRAM_SAFETY_MIB
     try:

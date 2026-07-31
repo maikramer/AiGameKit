@@ -1,17 +1,17 @@
-# GameDev — Sistema de Instalação: Análise e Padronização
+# AiGameKit — Sistema de Instalação: Análise e Padronização
 
 ## Estrutura Atual
 
 ```
-Shared/src/gamedev_shared/installer/
+Shared/src/aigamekit_shared/installer/
 ├── __init__.py          # Exports principais
-├── __main__.py          # Entry point: python -m gamedev_shared.installer
+├── __main__.py          # Entry point: python -m aigamekit_shared.installer
 ├── base.py              # PythonProjectInstaller (base class)
 ├── registry.py          # TOOLS, ToolSpec, get_tool(), list_available_tools()
-├── unified.py           # UnifiedInstaller (CLI unificado gamedev-install)
+├── unified.py           # UnifiedInstaller (CLI unificado aigamekit-install)
 ├── python_installer.py  # Lógica de instalação Python
 ├── rust_installer.py    # Lógica de instalação Rust
-├── logging.py           # (se existir) logger installer; preferir gamedev_shared.logging + docs/LOGGING.md
+├── logging.py           # (se existir) logger installer; preferir aigamekit_shared.logging + docs/LOGGING.md
 ├── paint3d_extras.py   # Extras Paint3D
 ├── text3d_extras.py     # Extras Text3D
 └── text2sound_extras.py # Extras Text2Sound
@@ -57,7 +57,7 @@ GameAssets só precisa do base installer.
 """
 <ModuleName> — instalador system-wide.
 
-Usa gamedev_shared.installer.PythonProjectInstaller para a lógica base.
+Usa aigamekit_shared.installer.PythonProjectInstaller para a lógica base.
 """
 
 from __future__ import annotations
@@ -72,8 +72,8 @@ _shared_src = _project_root.parent / "Shared" / "src"
 if _shared_src.is_dir() and str(_shared_src) not in sys.path:
     sys.path.insert(0, str(_shared_src))
 
-from gamedev_shared.installer import PythonProjectInstaller
-from gamedev_shared.installer.base import default_python_command
+from aigamekit_shared.installer import PythonProjectInstaller
+from aigamekit_shared.installer.base import default_python_command
 
 
 class <ModuleName>Installer(PythonProjectInstaller):
@@ -127,8 +127,8 @@ if __name__ == "__main__":
 ### ✅ Completado
 
 1. **cli_rich.py unificado** (commit anterior `643f9e7`)
-   - Animator3D: refactored to delegate to gamedev_shared
-   - GameDevLab: added cli_rich.py (was importing directly)
+   - Animator3D: refactored to delegate to aigamekit_shared
+   - AiGameKitLab: added cli_rich.py (was importing directly)
 
 2. **Sistema de Instalação Padronizado** (commit `1a77db6`)
    - ✅ GameAssets: installer.py criado
@@ -145,8 +145,8 @@ if __name__ == "__main__":
 
 ```
 <modulo>/scripts/installer.py
-    └── delega para gamedev_shared.installer.PythonProjectInstaller
-            └── gamedev_shared.installer.<modulo>_extras (se necessário)
+    └── delega para aigamekit_shared.installer.PythonProjectInstaller
+            └── aigamekit_shared.installer.<modulo>_extras (se necessário)
 
 Exemplo Paint3D:
 installer.py → PythonProjectInstaller → paint3d_extras.py
@@ -155,7 +155,7 @@ installer.py → PythonProjectInstaller → paint3d_extras.py
 ### Comandos de Verificação
 
 ```bash
-cd ~/GitClones/GameDev
+cd ~/GitClones/AiGameKit
 
 # Verificar todos os installers
 for d in Text2D Text3D Texture2D Skymap2D Text2Sound Rigging3D GameAssets Paint3D Animator3D; do

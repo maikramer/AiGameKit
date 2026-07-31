@@ -26,7 +26,7 @@ def _decompress_meshopt_glb(src: Path) -> Path:
     Older bpy: ``gltf-transform copy`` to a tmpfile when ``npx`` is available.
     """
     try:
-        from gamedev_shared.bpy_mesh import gltf_import_supports_meshopt
+        from aigamekit_shared.bpy_mesh import gltf_import_supports_meshopt
 
         if gltf_import_supports_meshopt():
             return src
@@ -70,7 +70,7 @@ def import_asset(path: Path) -> list[str]:
         # bpy < 5.2: decompress meshopt via gltf-transform. 5.2+: native import.
         path = _decompress_meshopt_glb(path)
         try:
-            from gamedev_shared.bpy_mesh import import_gltf
+            from aigamekit_shared.bpy_mesh import import_gltf
 
             import_gltf(path)
         except Exception:
@@ -3025,7 +3025,7 @@ def _smooth_scene_meshes() -> None:
     faz o exporter glTF deduplicar loops sem tocar na topologia nem nos
     skin weights (remove_doubles podia fundir vértices weighted).
     """
-    from gamedev_shared.bpy_mesh import smooth_shade_scene
+    from aigamekit_shared.bpy_mesh import smooth_shade_scene
 
     smooth_shade_scene(_bpy().data.objects)
 
@@ -3062,7 +3062,7 @@ def export_glb(path: Path, *, draco: bool = False, meshopt: bool = False) -> Non
             export_kwargs["export_optimize_disable_viewport"] = True
     if meshopt:
         with contextlib.suppress(Exception):
-            from gamedev_shared.bpy_mesh import gltf_meshopt_export_kwargs, meshopt_runtime_available
+            from aigamekit_shared.bpy_mesh import gltf_meshopt_export_kwargs, meshopt_runtime_available
 
             if meshopt_runtime_available():
                 export_kwargs.update(gltf_meshopt_export_kwargs(enable=True))

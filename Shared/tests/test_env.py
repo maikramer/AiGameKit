@@ -1,9 +1,9 @@
-"""Testes para gamedev_shared.env."""
+"""Testes para aigamekit_shared.env."""
 
 import os
 from unittest.mock import patch
 
-from gamedev_shared.env import (
+from aigamekit_shared.env import (
     TOOL_BINS,
     detect_low_memory,
     ensure_pytorch_cuda_alloc_conf,
@@ -31,21 +31,21 @@ class TestEnsurePytorchCudaAllocConf:
 
 class TestSubprocessGpuEnv:
     def test_includes_alloc_conf(self):
-        with patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True):
+        with patch.dict(os.environ, {"AIGAMEKIT_PREFER_MONOREPO": "0"}, clear=True):
             env = subprocess_gpu_env()
             assert "PYTORCH_CUDA_ALLOC_CONF" in env
 
     def test_preserves_existing(self):
         with patch.dict(
             os.environ,
-            {"PYTORCH_CUDA_ALLOC_CONF": "custom", "GAMEDEV_PREFER_MONOREPO": "0"},
+            {"PYTORCH_CUDA_ALLOC_CONF": "custom", "AIGAMEKIT_PREFER_MONOREPO": "0"},
             clear=True,
         ):
             env = subprocess_gpu_env()
             assert env["PYTORCH_CUDA_ALLOC_CONF"] == "custom"
 
     def test_extra_env(self):
-        with patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": "0"}, clear=True):
+        with patch.dict(os.environ, {"AIGAMEKIT_PREFER_MONOREPO": "0"}, clear=True):
             env = subprocess_gpu_env({"MY_VAR": "123"})
             assert env["MY_VAR"] == "123"
 
@@ -60,10 +60,10 @@ class TestSubprocessGpuEnv:
         (tmp_path / "Shared").mkdir()
         (tmp_path / ".git").mkdir()
 
-        monkeypatch.setenv("GAMEDEV_PREFER_MONOREPO", "1")
+        monkeypatch.setenv("AIGAMEKIT_PREFER_MONOREPO", "1")
         monkeypatch.delenv("TEXT3D_BIN", raising=False)
         monkeypatch.setattr(
-            "gamedev_shared.monorepo.try_find_monorepo_root",
+            "aigamekit_shared.monorepo.try_find_monorepo_root",
             lambda start=None: Path(tmp_path),
         )
         env = subprocess_gpu_env()
@@ -86,32 +86,32 @@ class TestGetToolBin:
     def test_unknown_tool(self):
         assert get_tool_bin("naoexiste") is None
 
-    def test_skymap2d_rigging3d_gameassets_gamedevlab(self):
+    def test_skymap2d_rigging3d_gameassets_aigamekitlab(self):
         with patch.dict(
             os.environ,
             {
                 "SKYMAP2D_BIN": "/x/skymap2d",
                 "RIGGING3D_BIN": "/x/rigging3d",
                 "GAMEASSETS_BIN": "/x/gameassets",
-                "GAMEDEVLAB_BIN": "/x/gamedev-lab",
+                "AIGAMEKITLAB_BIN": "/x/aigamekit-lab",
             },
         ):
             assert get_tool_bin("skymap2d") == "/x/skymap2d"
             assert get_tool_bin("rigging3d") == "/x/rigging3d"
             assert get_tool_bin("gameassets") == "/x/gameassets"
-            assert get_tool_bin("gamedevlab") == "/x/gamedev-lab"
+            assert get_tool_bin("aigamekitlab") == "/x/aigamekit-lab"
 
 
 class TestDetectLowVram:
     def test_returns_false_when_no_snapshot(self, monkeypatch):
-        monkeypatch.setattr("gamedev_shared.gpu.query_gpu_snapshot", lambda device=0: None)
+        monkeypatch.setattr("aigamekit_shared.gpu.query_gpu_snapshot", lambda device=0: None)
         assert detect_low_memory() is False
 
     def test_returns_true_below_threshold(self, monkeypatch):
-        from gamedev_shared.gpu import GpuSnapshot
+        from aigamekit_shared.gpu import GpuSnapshot
 
         monkeypatch.setattr(
-            "gamedev_shared.gpu.query_gpu_snapshot",
+            "aigamekit_shared.gpu.query_gpu_snapshot",
             lambda device=0: GpuSnapshot(
                 index=0,
                 name="t",
@@ -124,10 +124,10 @@ class TestDetectLowVram:
         assert detect_low_memory(threshold_mb=8192) is True
 
     def test_returns_false_above_threshold(self, monkeypatch):
-        from gamedev_shared.gpu import GpuSnapshot
+        from aigamekit_shared.gpu import GpuSnapshot
 
         monkeypatch.setattr(
-            "gamedev_shared.gpu.query_gpu_snapshot",
+            "aigamekit_shared.gpu.query_gpu_snapshot",
             lambda device=0: GpuSnapshot(
                 index=0,
                 name="t",
@@ -143,7 +143,7 @@ class TestDetectLowVram:
         def _boom(device: int = 0):
             raise RuntimeError("nvml down")
 
-        monkeypatch.setattr("gamedev_shared.gpu.query_gpu_snapshot", _boom)
+        monkeypatch.setattr("aigamekit_shared.gpu.query_gpu_snapshot", _boom)
         assert detect_low_memory() is False
 
 
@@ -156,6 +156,6 @@ class TestToolBins:
         assert TOOL_BINS["skymap2d"] == "SKYMAP2D_BIN"
         assert TOOL_BINS["rigging3d"] == "RIGGING3D_BIN"
         assert TOOL_BINS["gameassets"] == "GAMEASSETS_BIN"
-        assert TOOL_BINS["gamedevlab"] == "GAMEDEVLAB_BIN"
+        assert TOOL_BINS["aigamekitlab"] == "AIGAMEKITLAB_BIN"
         assert TOOL_BINS["materialize"] == "MATERIALIZE_BIN"
         assert TOOL_BINS["vibegame"] == "VIBEGAME_BIN"

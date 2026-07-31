@@ -35,7 +35,7 @@ def test_torch_dtype_cuda_unavailable_uses_float32(monkeypatch: pytest.MonkeyPat
 
 
 def test_maybe_apply_quantized_matmul_no_triton() -> None:
-    from gamedev_shared.sdnq import apply_quantized_matmul
+    from aigamekit_shared.sdnq import apply_quantized_matmul
 
     pipe = MagicMock()
     apply_quantized_matmul(pipe, enabled=False)
@@ -44,7 +44,7 @@ def test_maybe_apply_quantized_matmul_no_triton() -> None:
 def test_maybe_apply_quantized_matmul_no_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
     import torch
 
-    from gamedev_shared.sdnq import apply_quantized_matmul
+    from aigamekit_shared.sdnq import apply_quantized_matmul
 
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     if getattr(torch, "xpu", None) is not None:
@@ -57,7 +57,7 @@ def test_maybe_apply_quantized_matmul_applies_to_modules(monkeypatch: pytest.Mon
     import sdnq.loader
     import torch
 
-    from gamedev_shared.sdnq import apply_quantized_matmul
+    from aigamekit_shared.sdnq import apply_quantized_matmul
 
     monkeypatch.setattr(torch, "cuda", MagicMock(is_available=lambda: True))
     apply_loader = MagicMock(side_effect=lambda m, **kw: m)
@@ -188,7 +188,7 @@ def test_memory_format_bytes_import() -> None:
 
 
 def test_hf_home_display_import() -> None:
-    from gamedev_shared.hf import hf_home_display_rich
+    from aigamekit_shared.hf import hf_home_display_rich
 
     assert hf_home_display_rich() is not None
 

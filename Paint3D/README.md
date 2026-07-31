@@ -8,7 +8,7 @@ AI-powered 3D texturing with **Hunyuan3D-Paint 2.1** — generates multiview PBR
 
 ## Overview
 
-Paint3D is part of the [GameDev](../README.md) monorepo and sits in the asset generation pipeline between shape creation ([Text3D](../Text3D)) and downstream processing ([Rigging3D](../Rigging3D)). It uses vendored **`hy3dpaint`** from Tencent's Hunyuan3D-2.1 — model weights download on demand from Hugging Face (`tencent/Hunyuan3D-2.1`, subfolder `hunyuan3d-paintpbr-v2-1`).
+Paint3D is part of the [AiGameKit](../README.md) monorepo and sits in the asset generation pipeline between shape creation ([Text3D](../Text3D)) and downstream processing ([Rigging3D](../Rigging3D)). It uses vendored **`hy3dpaint`** from Tencent's Hunyuan3D-2.1 — model weights download on demand from Hugging Face (`tencent/Hunyuan3D-2.1`, subfolder `hunyuan3d-paintpbr-v2-1`).
 
 **Key features:**
 
@@ -25,10 +25,10 @@ Paint3D is part of the [GameDev](../README.md) monorepo and sits in the asset ge
 
 ### Official (monorepo)
 
-At the **GameDev** repo root:
+At the **AiGameKit** repo root:
 
 ```bash
-cd /path/to/GameDev
+cd /path/to/AiGameKit
 ./install.sh paint3d
 ```
 
@@ -244,7 +244,7 @@ Default output naming: `<mesh_stem>_textured.glb` when `-o` is omitted.
 
 ## Pipeline Integration
 
-Paint3D runs after [Text3D](../Text3D) shape generation in the GameDev asset pipeline. It produces the final textured mesh before downstream processing:
+Paint3D runs after [Text3D](../Text3D) shape generation in the AiGameKit asset pipeline. It produces the final textured mesh before downstream processing:
 
 ```
 Text3D (shape) → Paint3D (texture) → Rigging3D (rigging) → Animator3D (animation)
@@ -275,7 +275,7 @@ ruff format .
 
 ## Dependencies
 
-- **gamedev-shared** — GPU utilities, logging, progress, quality presets
+- **aigamekit-shared** — GPU utilities, logging, progress, quality presets
 - **Hunyuan3D-2.1 `hy3dpaint`** (vendored) — texture pipeline; HF weights on demand
 - **nvdiffrast** (NVIDIA) — differentiable rasterizer shim
 - **pymeshlab**, **xatlas**, **omegaconf** — mesh processing

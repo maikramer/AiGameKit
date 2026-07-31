@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-from gamedev_shared.cli_rich import setup_rich_click_module
+from aigamekit_shared.cli_rich import setup_rich_click_module
 
 _HEADER: Final = "[bold cyan]Animator3D[/bold cyan] — animação 3D via Blender (bpy)"
 _FOOTER: Final = "[dim]README · BLENDER_COMMAND · ANIMATOR3D_ROOT[/dim]"

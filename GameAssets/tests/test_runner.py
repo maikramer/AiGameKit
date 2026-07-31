@@ -20,7 +20,7 @@ def test_resolve_binary_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     def _no_which(_name: str) -> None:
         return None
 
-    monkeypatch.setattr("gamedev_shared.subprocess_utils.shutil.which", _no_which)
+    monkeypatch.setattr("aigamekit_shared.subprocess_utils.shutil.which", _no_which)
     with pytest.raises(FileNotFoundError, match="Comando não encontrado"):
         resolve_binary("NONEXISTENT_TOOL_X", "nonexistent-command-xyz")
 

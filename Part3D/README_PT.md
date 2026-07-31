@@ -30,7 +30,7 @@ part3d decompose mesh.glb -q int4          # SDNQ int4
 part3d decompose mesh.glb --gpu-ids 0,1    # DiT / auxiliares
 
 # UMS (fila + modelo quente) — ver ModelServer/README.md
-gamedev-model-server start
+aigamekit-model-server start
 part3d decompose mesh.glb -o partes.glb --ums-stream
 part3d decompose mesh.glb -o partes.glb --ums-priority batch
 part3d decompose mesh.glb -o partes.glb --no-ums   # forçar in-process

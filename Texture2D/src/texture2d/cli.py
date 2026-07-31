@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import (
+from aigamekit_shared.cli_helpers import (
     add_ums_options,
     legacy_server_allowed,
     needed_mib_for_backend,
@@ -24,10 +24,10 @@ from gamedev_shared.cli_helpers import (
     with_ums_load_opts,
     with_ums_peak_opts,
 )
-from gamedev_shared.gpu import get_system_info
-from gamedev_shared.hf import hf_home_display_rich
-from gamedev_shared.path_utils import safe_filename
-from gamedev_shared.quality import VALID_QUALITIES
+from aigamekit_shared.gpu import get_system_info
+from aigamekit_shared.hf import hf_home_display_rich
+from aigamekit_shared.path_utils import safe_filename
+from aigamekit_shared.quality import VALID_QUALITIES
 
 from ._validate_cli import validate_tileable_cmd
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
@@ -71,7 +71,7 @@ def skill_group() -> None:
 @click.option("--force", is_flag=True, help="Sobrescrever SKILL.md existente")
 def skill_install_cmd(target: Path, force: bool) -> None:
     """Copia SKILL.md para .cursor/skills/texture2d/."""
-    from gamedev_shared.skill_install import install_my_skill
+    from aigamekit_shared.skill_install import install_my_skill
 
     try:
         dest = install_my_skill(vars(), target, force=force)
@@ -171,7 +171,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "torch_compile",
     default=False,
     show_default=True,
-    help="torch.compile no UNet (Inductor). Cold lento; útil em batch/server. Env: GAMEDEV_TORCH_COMPILE=1.",
+    help="torch.compile no UNet (Inductor). Cold lento; útil em batch/server. Env: AIGAMEKIT_TORCH_COMPILE=1.",
 )
 @click.option(
     "--compile-mode",
@@ -216,7 +216,7 @@ def generate_cmd(
     ums_stream: bool,
 ) -> None:
     """Gera uma textura seamless a partir do PROMPT (SD1.5 + circular padding)."""
-    from gamedev_shared.gpu import warn_if_vram_occupied
+    from aigamekit_shared.gpu import warn_if_vram_occupied
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
 
@@ -227,7 +227,7 @@ def generate_cmd(
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
     _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("texture2d", quality=quality)
@@ -306,7 +306,7 @@ def generate_cmd(
     ):
         return
 
-    # Fallback: per-tool legacy server — só com GAMEDEV_ALLOW_LEGACY_SERVER=1.
+    # Fallback: per-tool legacy server — só com AIGAMEKIT_ALLOW_LEGACY_SERVER=1.
     if not cpu and output is not None and legacy_server_allowed():
         from . import client
 
@@ -532,7 +532,7 @@ def batch_cmd(
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
     _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
 
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.quality import QualityEngine
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("texture2d", quality=quality)
@@ -676,7 +676,7 @@ def batch_cmd(
     "socket_path",
     type=click.Path(),
     default=None,
-    help="Path do Unix socket (default: ~/.cache/gamedev/texture2d-server.sock)",
+    help="Path do Unix socket (default: ~/.cache/aigamekit/texture2d-server.sock)",
 )
 @click.option(
     "--idle-timeout",
@@ -688,27 +688,27 @@ def batch_cmd(
 )
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
 def server_cmd(socket_path: str | None, idle_timeout_min: int, verbose: bool) -> None:
-    """[DEPRECATED] Server per-tool. Preferir ``gamedev-model-server start`` (UMS).
+    """[DEPRECATED] Server per-tool. Preferir ``aigamekit-model-server start`` (UMS).
 
-    Requer ``GAMEDEV_ALLOW_LEGACY_SERVER=1``.
+    Requer ``AIGAMEKIT_ALLOW_LEGACY_SERVER=1``.
     """
     import os
 
-    from gamedev_shared.model_server import server_socket_path
+    from aigamekit_shared.model_server import server_socket_path
 
     from . import server
 
-    allow = os.environ.get("GAMEDEV_ALLOW_LEGACY_SERVER", "").strip().lower()
+    allow = os.environ.get("AIGAMEKIT_ALLOW_LEGACY_SERVER", "").strip().lower()
     if allow not in ("1", "true", "yes", "on"):
         console.print(
             "[bold red]Legacy server bloqueado.[/bold red] Usa "
-            "[cyan]gamedev-model-server start[/cyan] (UMS).\n"
-            "[dim]Override: GAMEDEV_ALLOW_LEGACY_SERVER=1[/dim]"
+            "[cyan]aigamekit-model-server start[/cyan] (UMS).\n"
+            "[dim]Override: AIGAMEKIT_ALLOW_LEGACY_SERVER=1[/dim]"
         )
         sys.exit(1)
 
     console.print(
-        "[yellow]Deprecated:[/yellow] use [cyan]gamedev-model-server start[/cyan] "
+        "[yellow]Deprecated:[/yellow] use [cyan]aigamekit-model-server start[/cyan] "
         "(Unified Model Server). Este server per-tool fica só como fallback."
     )
     _default_sock = server_socket_path("texture2d")
@@ -745,7 +745,7 @@ def server_cmd(socket_path: str | None, idle_timeout_min: int, verbose: bool) ->
 @cli.command("server-status")
 def server_status_cmd() -> None:
     """Mostra o estado do model server."""
-    from gamedev_shared.model_server import server_socket_path
+    from aigamekit_shared.model_server import server_socket_path
 
     from . import server
 
@@ -769,7 +769,7 @@ def server_status_cmd() -> None:
 @cli.command("server-stop")
 def server_stop_cmd() -> None:
     """Para o model server (graceful shutdown)."""
-    from gamedev_shared.model_server import _pid_path, server_socket_path
+    from aigamekit_shared.model_server import _pid_path, server_socket_path
 
     from . import server
 
@@ -846,7 +846,7 @@ def serve(ums_worker: bool) -> None:
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico
-    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter texture2d
+    :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter texture2d
     local (:mod:`texture2d.worker_serve_adapter`).
     """
     if not ums_worker:
@@ -854,7 +854,7 @@ def serve(ums_worker: bool) -> None:
         console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
         return
 
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
     from texture2d.worker_serve_adapter import Adapter
 
     run_worker_loop(Adapter, backend_name="texture2d")

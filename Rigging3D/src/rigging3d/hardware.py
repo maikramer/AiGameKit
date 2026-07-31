@@ -24,8 +24,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, cuda_gpu_free_specs
-from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
+from aigamekit_shared.hardware import GIB, cuda_gpu_free_specs
+from aigamekit_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 HW_AUTO_ENV = "RIGGING3D_HW_AUTO"
 

@@ -9,7 +9,7 @@
 | [`scripts/setup.sh`](../scripts/setup.sh) | Cria `.venv`, PyTorch (CUDA/CPU), `pip install -e .` |
 | [`scripts/installer.py`](../scripts/installer.py) | Instalação estilo Text3D + wrappers em `--prefix/bin` |
 | [`scripts/run_installer.sh`](../scripts/run_installer.sh) | Executa `installer.py` (implementação) |
-| [`scripts/install.sh`](../scripts/install.sh) | Delega para `run_installer.sh` (não confundir com `GameDev/install.sh` na raiz) |
+| [`scripts/install.sh`](../scripts/install.sh) | Delega para `run_installer.sh` (não confundir com `AiGameKit/install.sh` na raiz) |
 
 ## `scripts/setup.sh` (recomendado para desenvolvimento)
 

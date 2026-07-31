@@ -1,4 +1,4 @@
-"""Tests for gamedev_shared.sdnq — centralized SDNQ module."""
+"""Tests for aigamekit_shared.sdnq — centralized SDNQ module."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gamedev_shared.sdnq import (
+from aigamekit_shared.sdnq import (
     DEFAULT_PRESET,
     PRESETS,
     estimate_vram_mb,
@@ -87,7 +87,7 @@ class TestRegisterSdnq:
         return fake_sdnq, fake_common
 
     def test_returns_bool(self):
-        from gamedev_shared.sdnq import register_sdnq
+        from aigamekit_shared.sdnq import register_sdnq
 
         fake_sdnq, fake_common = self._setup_modules()
         with patch.dict(sys.modules, {"sdnq": fake_sdnq, "sdnq.common": fake_common}):
@@ -96,29 +96,29 @@ class TestRegisterSdnq:
         assert result is True
 
     def test_raises_when_not_installed(self):
-        from gamedev_shared.sdnq import register_sdnq
+        from aigamekit_shared.sdnq import register_sdnq
 
         with patch.dict(sys.modules, {"sdnq": None}), pytest.raises(ImportError, match="sdnq"):
             register_sdnq()
 
     def test_patch_lora_called_when_requested(self):
-        from gamedev_shared.sdnq import register_sdnq
+        from aigamekit_shared.sdnq import register_sdnq
 
         fake_sdnq, fake_common = self._setup_modules()
         with (
             patch.dict(sys.modules, {"sdnq": fake_sdnq, "sdnq.common": fake_common}),
-            patch("gamedev_shared.sdnq.patch_lora_shape_calculation") as mock_patch,
+            patch("aigamekit_shared.sdnq.patch_lora_shape_calculation") as mock_patch,
         ):
             register_sdnq(patch_lora=True)
         mock_patch.assert_called_once()
 
     def test_patch_lora_not_called_by_default(self):
-        from gamedev_shared.sdnq import register_sdnq
+        from aigamekit_shared.sdnq import register_sdnq
 
         fake_sdnq, fake_common = self._setup_modules()
         with (
             patch.dict(sys.modules, {"sdnq": fake_sdnq, "sdnq.common": fake_common}),
-            patch("gamedev_shared.sdnq.patch_lora_shape_calculation") as mock_patch,
+            patch("aigamekit_shared.sdnq.patch_lora_shape_calculation") as mock_patch,
         ):
             register_sdnq()
         mock_patch.assert_not_called()
@@ -126,13 +126,13 @@ class TestRegisterSdnq:
 
 class TestDetectComputeBackend:
     def test_returns_string(self):
-        from gamedev_shared.sdnq import detect_compute_backend
+        from aigamekit_shared.sdnq import detect_compute_backend
 
         backend = detect_compute_backend()
         assert backend in ("cuda", "xpu", "mps", "cpu")
 
     def test_cpu_when_no_torch(self):
-        from gamedev_shared.sdnq import detect_compute_backend
+        from aigamekit_shared.sdnq import detect_compute_backend
 
         with patch.dict(sys.modules, {"torch": None}):
             assert detect_compute_backend() == "cpu"
@@ -148,7 +148,7 @@ class TestCreateConfig:
         return fake_sdnq, fake_common
 
     def test_creates_config_from_default_preset(self):
-        from gamedev_shared.sdnq import create_config
+        from aigamekit_shared.sdnq import create_config
 
         fake_sdnq, fake_common = self._setup_sdnq_mock()
         with patch.dict(sys.modules, {"sdnq": fake_sdnq, "sdnq.common": fake_common}):
@@ -158,13 +158,13 @@ class TestCreateConfig:
             assert call_kwargs["weights_dtype"] == "uint8"
 
     def test_raises_on_unknown_preset(self):
-        from gamedev_shared.sdnq import create_config
+        from aigamekit_shared.sdnq import create_config
 
         with pytest.raises(KeyError, match="Unknown SDNQ preset"):
             create_config("nonexistent")
 
     def test_overrides_forwarded(self):
-        from gamedev_shared.sdnq import create_config
+        from aigamekit_shared.sdnq import create_config
 
         fake_sdnq, fake_common = self._setup_sdnq_mock()
         with patch.dict(sys.modules, {"sdnq": fake_sdnq, "sdnq.common": fake_common}):
@@ -176,7 +176,7 @@ class TestCreateConfig:
 
 class TestQuantizeModel:
     def test_delegates_to_sdnq_post_load_quant(self):
-        from gamedev_shared.sdnq import quantize_model
+        from aigamekit_shared.sdnq import quantize_model
 
         fake_model = MagicMock()
         fake_result = MagicMock()
@@ -195,14 +195,14 @@ class TestQuantizeModel:
 
 class TestApplyQuantizedMatmul:
     def test_noop_when_disabled(self):
-        from gamedev_shared.sdnq import apply_quantized_matmul
+        from aigamekit_shared.sdnq import apply_quantized_matmul
 
         pipe = MagicMock()
         apply_quantized_matmul(pipe, enabled=False)
         pipe.assert_not_called()
 
     def test_skips_modules_when_triton_missing(self):
-        from gamedev_shared.sdnq import apply_quantized_matmul
+        from aigamekit_shared.sdnq import apply_quantized_matmul
 
         fake_torch = types.ModuleType("torch")
         fake_torch.cuda = MagicMock()  # type: ignore[attr-defined]
@@ -231,7 +231,7 @@ class TestApplyQuantizedMatmul:
         assert pipe.text_encoder is te
 
     def test_module_names_param_targets_unet(self):
-        from gamedev_shared.sdnq import apply_quantized_matmul
+        from aigamekit_shared.sdnq import apply_quantized_matmul
 
         unet = MagicMock()
         unet.quantization_config = {"test": True}
@@ -292,7 +292,7 @@ class TestSuggestPresetForVram:
 
 class TestPreQuantizeModel:
     def test_saves_model_and_metadata(self, tmp_path: Path):
-        from gamedev_shared.sdnq import pre_quantize_model
+        from aigamekit_shared.sdnq import pre_quantize_model
 
         fake_model = MagicMock()
         fake_model.state_dict.return_value = {"weight": MagicMock()}
@@ -330,17 +330,17 @@ class TestPreQuantizeModel:
 
 class TestAutoQuantizedMatmulDefault:
     def test_default_off_without_env(self, monkeypatch) -> None:
-        from gamedev_shared.sdnq import _auto_quantized_matmul_default
+        from aigamekit_shared.sdnq import _auto_quantized_matmul_default
 
-        monkeypatch.delenv("GAMEDEV_SDNQ_AUTO_MATMUL", raising=False)
+        monkeypatch.delenv("AIGAMEKIT_SDNQ_AUTO_MATMUL", raising=False)
         assert _auto_quantized_matmul_default() is False
 
     def test_opt_in_via_env(self, monkeypatch) -> None:
-        from gamedev_shared.sdnq import _auto_quantized_matmul_default
+        from aigamekit_shared.sdnq import _auto_quantized_matmul_default
 
-        monkeypatch.setenv("GAMEDEV_SDNQ_AUTO_MATMUL", "1")
+        monkeypatch.setenv("AIGAMEKIT_SDNQ_AUTO_MATMUL", "1")
         assert _auto_quantized_matmul_default() is True
-        monkeypatch.setenv("GAMEDEV_SDNQ_AUTO_MATMUL", "true")
+        monkeypatch.setenv("AIGAMEKIT_SDNQ_AUTO_MATMUL", "true")
         assert _auto_quantized_matmul_default() is True
-        monkeypatch.setenv("GAMEDEV_SDNQ_AUTO_MATMUL", "0")
+        monkeypatch.setenv("AIGAMEKIT_SDNQ_AUTO_MATMUL", "0")
         assert _auto_quantized_matmul_default() is False

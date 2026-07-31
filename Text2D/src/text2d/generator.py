@@ -17,10 +17,10 @@ from typing import Any
 
 from PIL import Image
 
-from gamedev_shared.base_generator import DiffusionGeneratorBase
+from aigamekit_shared.base_generator import DiffusionGeneratorBase
 
 # Re-export para backward compat (testes antigos importam de text2d.generator).
-from gamedev_shared.base_generator import torch_dtype_for as _torch_dtype_for  # noqa: F401
+from aigamekit_shared.base_generator import torch_dtype_for as _torch_dtype_for  # noqa: F401
 
 # Modelos BASE (fp16, não pré-quantizados). A quantização (uint8/int8/int4/fp8) é
 # escolhida por VRAM e aplicada em **runtime** via SDNQ — assim seguimos as melhorias
@@ -37,7 +37,7 @@ def model_footprint(model_id: str) -> Any:
     fp16 total é bem maior. Com int4, o residente do 4B ~4.5GB → em 6GB tem de ir a
     offload (validado: pico ~4.1GiB em model_cpu offload).
     """
-    from gamedev_shared.lowvram import get_footprint
+    from aigamekit_shared.lowvram import get_footprint
 
     if model_id == LOW_VRAM_MODEL_ID:
         return get_footprint("flux-klein-4b")
@@ -100,7 +100,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
         self._plan: Any = None
 
         if self.verbose:
-            from gamedev_shared.logging import Logger
+            from aigamekit_shared.logging import Logger
 
             Logger().info(f"device={self.device} dtype={self.torch_dtype} model={self.model_id}")
 
@@ -110,11 +110,11 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
 
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
 
-        from gamedev_shared.quantization import set_memory_optimization_env
+        from aigamekit_shared.quantization import set_memory_optimization_env
 
         set_memory_optimization_env()
 
-        from gamedev_shared.sdnq import apply_quantized_matmul, register_sdnq
+        from aigamekit_shared.sdnq import apply_quantized_matmul, register_sdnq
 
         triton_is_available = register_sdnq()
 
@@ -166,7 +166,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
 
     def _preflight_download(self) -> None:
         """Garante o checkpoint em disco antes do load (download com resume/progresso)."""
-        from gamedev_shared.model_download import ensure_model
+        from aigamekit_shared.model_download import ensure_model
 
         try:
             ensure_model(self.model_id, cache_dir=self.cache_dir, on_status=self._status)
@@ -175,8 +175,8 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
 
     def _resolve_plan(self) -> Any:
         """Resolve o OffloadPlan por VRAM (quant + offload) para o modelo base."""
-        from gamedev_shared.hardware import cuda_gpu_specs
-        from gamedev_shared.lowvram import plan_offload
+        from aigamekit_shared.hardware import cuda_gpu_specs
+        from aigamekit_shared.lowvram import plan_offload
 
         specs = [] if self.device == "cpu" else cuda_gpu_specs()
         if self.gpu_ids:
@@ -190,7 +190,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
         preset = self.quant_preset or (plan.quant_mode if plan.quant_mode != "none" else None)
         if not preset or preset == "none":
             return None
-        from gamedev_shared.sdnq import is_available
+        from aigamekit_shared.sdnq import is_available
 
         if not is_available():
             self._log("SDNQ indisponível — base em fp16 (sem quantização)")
@@ -199,7 +199,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
 
     def _runtime_quantize(self, pipe: Any, preset: str) -> None:
         """Quantiza os componentes pesados do pipeline em runtime (SDNQ post-load)."""
-        from gamedev_shared.sdnq import quantize_model
+        from aigamekit_shared.sdnq import quantize_model
 
         quant_device = "cuda" if self.device == "cuda" else "cpu"
         for attr in ("transformer", "text_encoder", "text_encoder_2"):
@@ -234,7 +234,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             Tuple ``(image, metadata)`` — alinhado com as outras tools 2D.
             Metadata inclui prompt, seed, guidance, steps, dimensions.
         """
-        from gamedev_shared.diffusion_control import attach_step_hooks
+        from aigamekit_shared.diffusion_control import attach_step_hooks
 
         pipe = self._load_pipeline()
         resolved_seed = self._resolve_seed(seed)

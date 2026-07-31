@@ -21,14 +21,14 @@ Auto-detecção de hardware (`--hw-auto`, ligada por defeito): GPUs <7.5 GB ganh
 
 ### Oficial (monorepo)
 
-Na **raiz** do repositório GameDev (pasta com `install.sh` e `Shared/`):
+Na **raiz** do repositório AiGameKit (pasta com `install.sh` e `Shared/`):
 
 ```bash
-cd /caminho/para/GameDev
+cd /caminho/para/AiGameKit
 ./install.sh text2d
 ```
 
-Equivalente: `gamedev-install text2d`. Guia geral: [docs/INSTALLING_PT.md](../docs/INSTALLING_PT.md) · [EN](../docs/INSTALLING.md)
+Equivalente: `aigamekit-install text2d`. Guia geral: [docs/INSTALLING_PT.md](../docs/INSTALLING_PT.md) · [EN](../docs/INSTALLING.md)
 
 ### Manual / desenvolvimento (`scripts/setup.sh`)
 
@@ -139,7 +139,7 @@ Text2D/
 │   ├── setup.sh           # Setup do venv + deps
 │   ├── run_installer.sh   # Chama installer.py (implementação)
 │   ├── install.sh         # Delega para run_installer.sh (atalho local)
-│   └── installer.py       # Lógica partilhada com gamedev-install
+│   └── installer.py       # Lógica partilhada com aigamekit-install
 └── tests/
 ```
 
@@ -153,4 +153,4 @@ pytest tests/ -v
 ## Licença
 
 - **Código:** MIT — [LICENSE](LICENSE).
-- **Pesos:** o default SDNQ segue o [card Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) (non-commercial no metadata HF). O checkpoint BF16 BFL está em [FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0). Tabela completa: [GameDev/README_PT.md — Licenças](../README_PT.md).
+- **Pesos:** o default SDNQ segue o [card Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) (non-commercial no metadata HF). O checkpoint BF16 BFL está em [FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0). Tabela completa: [AiGameKit/README_PT.md — Licenças](../README_PT.md).

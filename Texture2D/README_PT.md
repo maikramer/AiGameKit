@@ -6,7 +6,7 @@ CLI para **texturas 2D seamless (tileable)** usando **Stable Diffusion v1.5 + ci
 
 O tiling é conseguido **por construção**: todas as camadas `Conv2d` do UNet e do VAE são patcheadas para `padding_mode="circular"`, pelo que o campo recetivo dá a volta nas bordas da imagem e a saída ladrilha sem costuras em ambos os eixos — sem LoRA, sem pós-processamento, sem palavra-trigger. Usa [`stable-diffusion-v1-5/stable-diffusion-v1-5`](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) para gerar texturas que repetem sem costuras visíveis — ideal para chão, rochas, paredes e materiais de game dev.
 
-No monorepo [GameDev](../README_PT.md), o pacote depende de [**gamedev-shared**](../Shared/) (`gamedev_shared`): presets de qualidade, CLI Rich, helpers de GPU e convenções partilhadas alinhadas com Text2D, Text3D e GameAssets.
+No monorepo [AiGameKit](../README_PT.md), o pacote depende de [**aigamekit-shared**](../Shared/) (`aigamekit_shared`): presets de qualidade, CLI Rich, helpers de GPU e convenções partilhadas alinhadas com Text2D, Text3D e GameAssets.
 
 ## Características
 
@@ -25,7 +25,7 @@ No monorepo [GameDev](../README_PT.md), o pacote depende de [**gamedev-shared**]
 
 ### Oficial (monorepo)
 
-Na **raiz** do repositório GameDev:
+Na **raiz** do repositório AiGameKit:
 
 ```bash
 ./install.sh texture2d
@@ -49,9 +49,9 @@ Requer uma **GPU CUDA** (PyTorch, diffusers, transformers e accelerate são depe
 | `texture2d generate PROMPT` | Gera textura seamless (delega no UMS se disponível) |
 | `texture2d presets` | Lista presets de materiais disponíveis |
 | `texture2d batch FILE` | Batch a partir de um ficheiro de prompts (um por linha) |
-| `texture2d server` | **Deprecated** — usar `gamedev-model-server start` (UMS) |
-| `texture2d server-status` | **Deprecated** — usar `gamedev-model-server status` |
-| `texture2d server-stop` | **Deprecated** — usar `gamedev-model-server stop` |
+| `texture2d server` | **Deprecated** — usar `aigamekit-model-server start` (UMS) |
+| `texture2d server-status` | **Deprecated** — usar `aigamekit-model-server status` |
+| `texture2d server-stop` | **Deprecated** — usar `aigamekit-model-server stop` |
 | `texture2d info` | Configuração, sistema e ambiente |
 | `texture2d skill install` | Instala a Agent Skill do Cursor |
 | `texture2d validate-tileable` | Valida a tileability de uma textura |
@@ -147,16 +147,16 @@ texture2d skill install -t /caminho/do/meu-jogo --force
 
 ### Unified Model Server (UMS)
 
-Preferir **`gamedev-model-server`**: um socket, evicção VRAM inteligente, fila com
+Preferir **`aigamekit-model-server`**: um socket, evicção VRAM inteligente, fila com
 prioridade + afinidade. O `texture2d generate` delega automaticamente (e pode
-auto-arrancar o UMS salvo `GAMEDEV_UMS_AUTO_START=0`).
+auto-arrancar o UMS salvo `AIGAMEKIT_UMS_AUTO_START=0`).
 
 ```bash
-gamedev-model-server start
+aigamekit-model-server start
 texture2d generate "stone wall" -o stone.png --ums-stream
 texture2d generate "wood" -o wood.png --ums-priority batch
 texture2d generate "test" -o t.png --no-ums
-gamedev-model-server queue
+aigamekit-model-server queue
 ```
 
 | Flag | Descrição |
@@ -299,4 +299,4 @@ Texture2D/
 
 - **Código:** MIT — [LICENSE](LICENSE).
 - **Pesos (default):** [stable-diffusion-v1-5/stable-diffusion-v1-5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) — licença CreativeML Open RAIL-M; cumpre as restrições de uso do modelo.
-- **Tabela completa de licenças:** [GameDev/README_PT.md](../README_PT.md) (secção Licenças).
+- **Tabela completa de licenças:** [AiGameKit/README_PT.md](../README_PT.md) (secção Licenças).

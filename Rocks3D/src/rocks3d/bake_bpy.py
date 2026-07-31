@@ -8,7 +8,7 @@ in 3D, then *bakes* it to UV images with a bake margin that floods island
 gutters. The result has no texture seams, and the GLB is exported with smooth
 normals + MikkTSpace tangents so the normal map renders cleanly too.
 
-bpy ships transitively via ``gamedev-shared``; callers fall back to the
+bpy ships transitively via ``aigamekit-shared``; callers fall back to the
 trimesh exporter when it is unavailable.
 """
 
@@ -168,7 +168,7 @@ def bake_and_export(
     import bpy
     import numpy as np
 
-    from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+    from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
 
     clear_scene()
     bpy.context.scene.render.engine = "CYCLES"

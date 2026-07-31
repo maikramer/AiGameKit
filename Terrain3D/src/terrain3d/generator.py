@@ -160,7 +160,7 @@ def generate_terrain(config: TerrainConfig) -> TerrainResult:
     # progresso) antes do load. Se falhar, o from_pretrained trata on-demand.
     if model_id and "/" in model_id and not os.path.exists(model_id):
         try:
-            from gamedev_shared.model_download import ensure_model
+            from aigamekit_shared.model_download import ensure_model
 
             ensure_model(model_id)
         except Exception:

@@ -27,7 +27,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from gamedev_shared.logging import Logger
+from aigamekit_shared.logging import Logger
 
 _logger = Logger()
 

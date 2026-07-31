@@ -11,7 +11,7 @@ pytest.importorskip("bpy")
 import bpy
 from mathutils import Vector
 
-from gamedev_shared.bpy_mesh import clear_scene, face_count, load_glb, save_glb
+from aigamekit_shared.bpy_mesh import clear_scene, face_count, load_glb, save_glb
 from text3d.utils.collision import generate_collision_mesh, resolve_collision_mode
 
 

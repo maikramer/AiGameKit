@@ -9,13 +9,13 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import (
+from aigamekit_shared.cli_helpers import (
     add_ums_options,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
     try_ums_delegation,
 )
-from gamedev_shared.quality import VALID_QUALITIES
+from aigamekit_shared.quality import VALID_QUALITIES
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click before commands
 from .export import export_ahgt, export_heightmap, export_metadata
@@ -206,7 +206,7 @@ def generate_cmd(
     _user_set_elevation_contrast = ctx.get_parameter_source("elevation_contrast") != ParameterSource.DEFAULT
 
     try:
-        from gamedev_shared.quality import QualityEngine
+        from aigamekit_shared.quality import QualityEngine
 
         _qengine = QualityEngine()
         _qresolved = _qengine.resolve("terrain3d", quality=quality)
@@ -393,7 +393,7 @@ def serve(ums_worker: bool) -> None:
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico
-    :func:`gamedev_shared.worker_serve.run_worker_loop` com o adapter terrain3d
+    :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter terrain3d
     local (:mod:`terrain3d.worker_serve_adapter`).
     """
     if not ums_worker:
@@ -401,7 +401,7 @@ def serve(ums_worker: bool) -> None:
         console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
         return
 
-    from gamedev_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_worker_loop
     from terrain3d.worker_serve_adapter import Adapter
 
     run_worker_loop(Adapter, backend_name="terrain3d")

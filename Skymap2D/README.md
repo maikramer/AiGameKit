@@ -6,7 +6,7 @@ CLI for generating **equirectangular 360° skymaps** using FLUX.1-dev + LoRA, lo
 
 Uses the [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) model to produce full-dome panoramas usable as skybox/skymap environment maps in game engines — ideal for skies, outdoor environments, and atmospheric backgrounds.
 
-In the [GameDev](../README.md) monorepo, the package depends on [**gamedev-shared**](../Shared/) (`gamedev_shared`): Rich CLI, quality presets, multi-GPU, logging, and helpers aligned with Text2D / Texture2D / GameAssets.
+In the [AiGameKit](../README.md) monorepo, the package depends on [**aigamekit-shared**](../Shared/) (`aigamekit_shared`): Rich CLI, quality presets, multi-GPU, logging, and helpers aligned with Text2D / Texture2D / GameAssets.
 
 ## Overview
 
@@ -35,7 +35,7 @@ Requires **CUDA GPU** and Python 3.10+.
 
 ```bash
 ./install.sh skymap2d
-# or: python3 -m gamedev_shared.installer.unified skymap2d
+# or: python3 -m aigamekit_shared.installer.unified skymap2d
 ```
 
 ### Dev dependencies
@@ -270,4 +270,4 @@ ruff format .
 
 - **Code:** MIT — [LICENSE](LICENSE).
 - **Weights (default):** [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) — LoRA on [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) (**non-commercial** BFL license).
-- **Full license table:** [GameDev/README.md](../README.md) (Licenses section).
+- **Full license table:** [AiGameKit/README.md](../README.md) (Licenses section).

@@ -56,7 +56,7 @@ def resolve_mc_algo(mc_algo: str | None, *, device: str = "cuda") -> str:
 
 def enable_sage_attention_env() -> str:
     """Set Hunyuan CA sage env if SageAttention available. Returns backend label."""
-    from gamedev_shared.attention import get_attention_backend
+    from aigamekit_shared.attention import get_attention_backend
 
     backend = get_attention_backend()
     if backend == "sage":
@@ -124,7 +124,7 @@ def apply_channels_last_modules(
     log_fn: Callable[[str], None] | None = None,
 ) -> None:
     """Best-effort channels_last on CUDA modules (quality-neutral; may help VAE)."""
-    from gamedev_shared.quantization import apply_channels_last
+    from aigamekit_shared.quantization import apply_channels_last
 
     names = []
     for mod in modules:
@@ -151,7 +151,7 @@ def compile_modules(
     Não passar Conditioner — ``torch_cluster.fps`` rebenta Dynamo (fake tensor).
     Com CPU offload, ``resolve_torch_compile_mode`` evita CUDA graphs.
     """
-    from gamedev_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
+    from aigamekit_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
 
     offload = "sequential_cpu" if cpu_offload else "none"
     resolved = resolve_torch_compile_mode(

@@ -15,9 +15,9 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from gamedev_shared.profiler.session import ProfilerSession
-from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_RIGGING3D, emit_progress, emit_result
-from gamedev_shared.quality import VALID_QUALITIES
+from aigamekit_shared.profiler.session import ProfilerSession
+from aigamekit_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_RIGGING3D, emit_progress, emit_result
+from aigamekit_shared.quality import VALID_QUALITIES
 from rich.console import Console
 
 from . import __version__
@@ -602,7 +602,7 @@ def _smooth_shade_glb_or_warn(glb_path: Path) -> None:
     """Passe só de smooth-by-angle + re-export (anti V/Tri=3), best-effort."""
     try:
         import bpy
-        from gamedev_shared.bpy_mesh import clear_scene, smooth_shade_scene
+        from aigamekit_shared.bpy_mesh import clear_scene, smooth_shade_scene
 
         clear_scene()
         bpy.ops.import_scene.gltf(filepath=str(glb_path))
@@ -682,7 +682,7 @@ def cli(
                 click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
     ctx.obj["GPU_IDS"] = gpu_ids
     if profiler_flag:
-        os.environ["GAMEDEV_PROFILE"] = "1"
+        os.environ["AIGAMEKIT_PROFILE"] = "1"
 
 
 def _ctx_profiler(ctx: click.Context) -> bool:
@@ -757,8 +757,8 @@ def pipeline_cmd(
     quality: str,
 ) -> None:
     """Gera um GLB rigado (skeleton + skin, um único passo autoregressivo)."""
-    from gamedev_shared.gpu import warn_if_vram_occupied
-    from gamedev_shared.quality import QualityEngine
+    from aigamekit_shared.gpu import warn_if_vram_occupied
+    from aigamekit_shared.quality import QualityEngine
 
     from .skintokens_runner import run_rig_inprocess
 
@@ -901,7 +901,7 @@ def pipeline_cmd(
     default=None,
     help=(
         "GLB com clips (NLA/actions) quando --source não tem animações "
-        "(ex.: rigged_hi + id_lod0.glb já animado). Usa gamedev_shared.skin_transfer."
+        "(ex.: rigged_hi + id_lod0.glb já animado). Usa aigamekit_shared.skin_transfer."
     ),
 )
 def transfer_weights_cmd(
@@ -915,7 +915,7 @@ def transfer_weights_cmd(
 ) -> None:
     """Stage 8 — transfere weights + skeleton + animações para LOD0/1/2.
 
-    Implementação: ``gamedev_shared.skin_transfer`` (KDTree weights, bind
+    Implementação: ``aigamekit_shared.skin_transfer`` (KDTree weights, bind
     armature, copia actions/NLA). Ideal para reaproveitar ``rigged_hi`` em
     meshes decimadas sem re-correr o modelo de skinning.
     """

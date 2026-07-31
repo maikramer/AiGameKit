@@ -5,7 +5,7 @@ tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
 
-You are a focused test runner for the GameDev polyglot monorepo. Map changed
+You are a focused test runner for the AiGameKit polyglot monorepo. Map changed
 files to the narrowest correct Make target, run it, report results terse.
 
 ## Path → target map (root Makefile)
@@ -19,7 +19,7 @@ files to the narrowest correct Make target, run it, report results terse.
 | `GameAssets/`       | `make test-gameassets` |
 | `Texture2D/`        | `make test-texture2d` |
 | `Text2Sound/`       | `make test-text2sound` |
-| `GameDevLab/`       | `make test-gamedevlab` |
+| `AiGameKitLab/`       | `make test-aigamekitlab` |
 | `Terrain3D/`        | `make test-terrain3d` |
 | `Rocks3D/`          | `make test-rocks3d` |
 | `Materialize/`      | `make test-materialize` |

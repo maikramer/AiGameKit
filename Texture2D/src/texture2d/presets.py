@@ -1,6 +1,6 @@
 """Presets de materiais para geração de texturas seamless.
 
-Os accessors vivem em ``gamedev_shared.presets`` (padrão das 3 tools 2D);
+Os accessors vivem em ``aigamekit_shared.presets`` (padrão das 3 tools 2D);
 aqui fica o conteúdo (o dict) + shims de 1 linha por accessor.
 """
 
@@ -8,16 +8,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from gamedev_shared.presets import (
+from aigamekit_shared.presets import (
     get_preset as _get_preset,
 )
-from gamedev_shared.presets import (
+from aigamekit_shared.presets import (
     get_preset_params as _get_preset_params,
 )
-from gamedev_shared.presets import (
+from aigamekit_shared.presets import (
     get_preset_prompt as _get_preset_prompt,
 )
-from gamedev_shared.presets import (
+from aigamekit_shared.presets import (
     list_presets as _list_presets,
 )
 

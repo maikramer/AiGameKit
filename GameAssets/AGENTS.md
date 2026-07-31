@@ -1,7 +1,7 @@
 # AGENTS.md — GameAssets
 
-Batch asset orchestrator for the GameDev pipeline. Calls text2d, text3d, paint3d,
-rigging3d, animator3d, gamedev-lab, terrain3d via subprocess. Does NOT contain
+Batch asset orchestrator for the AiGameKit pipeline. Calls text2d, text3d, paint3d,
+rigging3d, animator3d, aigamekit-lab, terrain3d via subprocess. Does NOT contain
 mesh code itself.
 
 ## WHERE TO LOOK
@@ -37,7 +37,7 @@ UMS waves; master finalize is deferred (`MasterDeferQueue`) until the wave drain
 5. **animate** — `animator3d game-pack` **×1** → `_intermediate/id_rigged_animated.glb`
 6. **lod** — `text3d lod` on animated/rigged (geometry path, **no** `--painted-mesh`) → lod0/1/2 (+ KTX2/meshopt via `_finish_lod_with_rollback`). Keeps armature/weights/clips — **no** `transfer-weights` in the DAG. Text3D must **weld** before Decimate (rigged often V/Tri≈3).
 7. **collision** — from painted (as applicable; finish = dedup/prune only)
-8. **validate** — `gamedev-lab check glb --category …` (rules expect `ktx2` + `meshopt` on lod0)
+8. **validate** — `aigamekit-lab check glb --category …` (rules expect `ktx2` + `meshopt` on lod0)
 
 **Statics (no rig):** `text3d lod --painted-mesh` with `--target-faces` (LOD0≈1.2×) + `--finish-lod0` (meshopt/KTX2 ON).
 **Re-compress without regen:** `text3d finish meshes/id_lod0.glb` — deps + happy path:
@@ -46,8 +46,8 @@ UMS waves; master finalize is deferred (`MasterDeferQueue`) until the wave drain
 `text3d split-at-height --no-cap` → stump/top painted → LOD each → compose
 `Stump`+`Top` lodN + `*_stump_collision`. Cut-only geometry (`cap=False`);
 stamp `_intermediate/{id}_split_seal.txt` = `SEAL_VERSION` from
-`gamedev_shared.mesh_split` (`cut-only-v1`). Resume: seal drift or
-`--redo-split` / `GAMEDEV_REDO_SPLIT=1` → `invalidate_split_artifacts`
+`aigamekit_shared.mesh_split` (`cut-only-v1`). Resume: seal drift or
+`--redo-split` / `AIGAMEKIT_REDO_SPLIT=1` → `invalidate_split_artifacts`
 (keeps unsplit `*_painted.glb`). Details:
 [`docs/findings/MESH_PIPELINE_FINDINGS.md`](../docs/findings/MESH_PIPELINE_FINDINGS.md#árvores-derrubáveis--split-at-height-antes-do-lod).
 

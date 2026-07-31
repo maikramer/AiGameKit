@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gamedev_shared.gpu import format_bytes  # noqa: F401
-from gamedev_shared.path_utils import generate_output_path as _generate_output_path
-from gamedev_shared.path_utils import safe_filename  # noqa: F401
-from gamedev_shared.seed_utils import resolve_effective_seed  # noqa: F401
+from aigamekit_shared.gpu import format_bytes  # noqa: F401
+from aigamekit_shared.path_utils import generate_output_path as _generate_output_path
+from aigamekit_shared.path_utils import safe_filename  # noqa: F401
+from aigamekit_shared.seed_utils import resolve_effective_seed  # noqa: F401
 
 
 def generate_output_path(
@@ -17,7 +17,7 @@ def generate_output_path(
 ) -> Path:
     """Gera caminho de saída único baseado no prompt e timestamp.
 
-    Delega a ``gamedev_shared.path_utils.generate_output_path``.
+    Delega a ``aigamekit_shared.path_utils.generate_output_path``.
     """
     return _generate_output_path(prompt, output_dir, fmt)
 

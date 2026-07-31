@@ -2,7 +2,7 @@
 
 <!-- LLM:OVERVIEW -->
 
-Shipped examples in this repository: **hello-world** (minimal terrain + physics + deterministic placement) and **simple-rpg** (full GameDev pipeline demo). Other paths may exist in forks or history; these two are the maintained references.
+Shipped examples in this repository: **hello-world** (minimal terrain + physics + deterministic placement) and **simple-rpg** (full AiGameKit pipeline demo). Other paths may exist in forks or history; these two are the maintained references.
 <!-- /LLM:OVERVIEW -->
 
 ## Purpose

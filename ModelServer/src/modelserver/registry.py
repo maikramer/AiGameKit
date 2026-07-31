@@ -27,7 +27,7 @@ class BackendDescriptor:
         vram_mib: Estimativa do footprint em VRAM (MiB) quando carregado.
         priority: Prioridade de evicção — valores MAIORES = menos provável de ser
             evicted (backends "pesados" que compensa manter quentes). Tie-break: LRU.
-        footprint_key: Chave do registry ``gamedev_shared.lowvram.FOOTPRINTS`` (ex:
+        footprint_key: Chave do registry ``aigamekit_shared.lowvram.FOOTPRINTS`` (ex:
             ``"flux-klein-9b"``). Se definida, o ``vram_mib`` é derivado do footprint
             (mais preciso que o valor estático). Opcional.
         tool: Nome da tool monorepo (ex: ``text3d``, ``paint3d``) para o modo

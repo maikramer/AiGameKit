@@ -72,17 +72,17 @@ def test_transform_auto_mask_preserves_fine_parts_and_is_idempotent() -> None:
         prompt_batch_size=4,
     )
 
-    assert "bs = GAMEDEV_PROMPT_BATCH_SIZE" in transformed
+    assert "bs = AIGAMEKIT_PROMPT_BATCH_SIZE" in transformed
     assert "step_num = (prompt_num + bs - 1) // bs" in transformed
     assert MULTIHEAD_MARKER in transformed
     assert POOL_SORT_MARKER in transformed
     assert NMS_CONSENSUS_MARKER in transformed
     assert VOTE_ASSIGN_MARKER in transformed
-    assert "_gamedev_cluster_support(clusters[i], gamedev_prompt_ids_sorted)" in transformed
-    assert "> GAMEDEV_SECONDARY_MASK_IOU" in transformed
-    assert ") > GAMEDEV_BBOX_MERGE_IOU" in transformed
+    assert "_aigamekit_cluster_support(clusters[i], aigamekit_prompt_ids_sorted)" in transformed
+    assert "> AIGAMEKIT_SECONDARY_MASK_IOU" in transformed
+    assert ") > AIGAMEKIT_BBOX_MERGE_IOU" in transformed
     assert QUALITY_MARKER in transformed
-    assert "GAMEDEV_MULTI_HEAD" in transformed
+    assert "AIGAMEKIT_MULTI_HEAD" in transformed
 
     assert (
         transform_auto_mask(
@@ -157,19 +157,19 @@ class TestTransformAutoMask:
         out = transform_auto_mask(_FIXTURE, **_KW)
         assert "point_num = 100000" not in out
         assert "prompt_num = 400" not in out
-        assert "bs = GAMEDEV_PROMPT_BATCH_SIZE" in out and "bs = 64" not in out
+        assert "bs = AIGAMEKIT_PROMPT_BATCH_SIZE" in out and "bs = 64" not in out
         assert "part_areas[i] < 0.0025" in out
         assert "area / (cp_area + 1e-7) > 0.00025" in out
         assert "_area / mesh_total_area > 0.00025" in out
-        assert "GAMEDEV_SECONDARY_MASK_IOU" in out
-        assert "GAMEDEV_BBOX_MERGE_IOU" in out
+        assert "AIGAMEKIT_SECONDARY_MASK_IOU" in out
+        assert "AIGAMEKIT_BBOX_MERGE_IOU" in out
         assert MULTIHEAD_MARKER in out
         assert POOL_SORT_MARKER in out
         assert NMS_CONSENSUS_MARKER in out
         assert VOTE_ASSIGN_MARKER in out
         assert PERF_MARKER in out
         assert QUALITY_MARKER in out
-        assert "GAMEDEV_CONSENSUS" in out
+        assert "AIGAMEKIT_CONSENSUS" in out
 
     def test_idempotent(self):
         once = transform_auto_mask(_FIXTURE, **_KW)
@@ -178,8 +178,8 @@ class TestTransformAutoMask:
 
     def test_quality_values_are_runtime_configurable(self):
         out = transform_auto_mask(_FIXTURE, **_KW)
-        assert "def configure_gamedev_mask_quality(" in out
-        assert "GAMEDEV_BBOX_MERGE_IOU = 0.7" in out
+        assert "def configure_aigamekit_mask_quality(" in out
+        assert "AIGAMEKIT_BBOX_MERGE_IOU = 0.7" in out
 
     def test_perf_tail_is_valid_python(self):
         compile(_PERF_TAIL, "<perf_tail>", "exec")
@@ -187,8 +187,8 @@ class TestTransformAutoMask:
     def test_result_still_compiles(self):
         out = transform_auto_mask(_FIXTURE, **_KW)
         # Quality/perf tails must be valid Python; body is a patch fragment.
-        assert "def configure_gamedev_mask_quality(" in out
-        q_start = out.index("# GAMEDEV_MASK_QUALITY_V3")
+        assert "def configure_aigamekit_mask_quality(" in out
+        q_start = out.index("# AIGAMEKIT_MASK_QUALITY_V3")
         compile(out[q_start:], "<quality_tail>", "exec")
         compile(_PERF_TAIL, "<perf_tail>", "exec")
         assert NMS_CONSENSUS_MARKER in out

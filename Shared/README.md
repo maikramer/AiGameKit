@@ -1,10 +1,10 @@
-# gamedev-shared — Monorepo Utility Library
+# aigamekit-shared — Monorepo Utility Library
 
-> Shared utility library used by **all** Python packages in the GameDev monorepo — logging, GPU management, subprocess helpers, quality presets, multi-GPU support, profiling, and installer infrastructure.
+> Shared utility library used by **all** Python packages in the AiGameKit monorepo — logging, GPU management, subprocess helpers, quality presets, multi-GPU support, profiling, and installer infrastructure.
 
 ## Overview
 
-`gamedev-shared` (`gamedev_shared`) is the foundational Python package for the GameDev monorepo. Every other Python package (Text2D, Text3D, Paint3D, GameAssets, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, Terrain3D, GameDevLab) depends on it. **It must be installed before any other package.**
+`aigamekit-shared` (`aigamekit_shared`) is the foundational Python package for the AiGameKit monorepo. Every other Python package (Text2D, Text3D, Paint3D, GameAssets, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, Terrain3D, AiGameKitLab) depends on it. **It must be installed before any other package.**
 
 It provides reusable building blocks so each tool stays focused on its domain: structured logging, GPU detection and VRAM enforcement, subprocess execution with streaming output, a unified quality-preset engine, multi-GPU weight splitting, CPU/RAM/GPU profiling, JSONL progress reporting for batch orchestration, and a unified installer CLI.
 
@@ -16,7 +16,7 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 |--------|-------------|
 | `logging` | Shared `Logger` with Rich/ANSI console **and** daily file logs (`configure_logging`, stdlib bridge). See [docs/LOGGING.md](../docs/LOGGING.md) |
 | `gpu` | GPU detection, VRAM monitoring, `warn_if_vram_occupied()`, `enforce_exclusive_gpu()`, `kill_gpu_compute_processes_aggressive()`, `format_bytes()`, `clear_cuda_memory()` |
-| `subprocess_utils` | `run_cmd()`, `run_cmd_streaming()`, `resolve_binary()` (prefers `<Tool>/.venv/bin` when `GAMEDEV_PREFER_MONOREPO=1`), `merge_subprocess_output()`, `RunResult` |
+| `subprocess_utils` | `run_cmd()`, `run_cmd_streaming()`, `resolve_binary()` (prefers `<Tool>/.venv/bin` when `AIGAMEKIT_PREFER_MONOREPO=1`), `merge_subprocess_output()`, `RunResult` |
 | `cli_helpers` | UMS opts (`try_ums_delegation`, `with_ums_peak_opts`, `prepare_gpu_exclusive` — GPU prep only after UMS fail / `--no-ums`) |
 | `env` | Canonical env-var constants (`TOOL_BINS`, `get_tool_bin()`, `prefer_monorepo_tools()`, `ensure_pytorch_cuda_alloc_conf()`, `subprocess_gpu_env()`) |
 | `installer/` | Ponte Clified (`install.sh` → `tools.yaml`); hooks por ferramenta (`clified_hooks`, `*_extras`) |
@@ -33,7 +33,7 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 | `quantization` | `get_quantization_config()` — bitsandbytes int8/int4, torchao, quanto, FP8; `enable_vae_optimizations()`, `enable_attention_optimizations()` |
 | `sdnq` | SDNQ quantization helpers — 4 tested presets (`uint8`, `int8`, `int4`, `fp8`), `quantize_model()`, `create_config()`, VRAM estimation |
 | `bpy_mesh` | Mesh load/save via bpy (`load_glb()`, `save_glb()`, `load_any()`, `create_mesh_from_arrays()`, `save_colored_mesh()`, `smooth_shade_scene()`); `import_gltf()` defaults to `bone_heuristic=TEMPERANCE` (avoids Icosphere bone-display meshes that bpy's `BLENDER` heuristic materializes) + `strip_bone_display_meshes()` (only when an armature is present) |
-| `gltf_decode` | Decode glTF extensions bpy's importer rejects: `bpy_readable_glb()` context manager (KTX2/BasisU → `ktxdecompress`, meshopt on bpy<5.2 → `copy` via `@gltf-transform/cli`), `glb_extensions()` binary header parse, `bpy_decode_subcommand()`. Used by `import_gltf()` and GameDevLab so finished LODs (KTX2+meshopt) import without `Extension KHR_texture_basisu is not available` |
+| `gltf_decode` | Decode glTF extensions bpy's importer rejects: `bpy_readable_glb()` context manager (KTX2/BasisU → `ktxdecompress`, meshopt on bpy<5.2 → `copy` via `@gltf-transform/cli`), `glb_extensions()` binary header parse, `bpy_decode_subcommand()`. Used by `import_gltf()` and AiGameKitLab so finished LODs (KTX2+meshopt) import without `Extension KHR_texture_basisu is not available` |
 | `mesh_simplify` | Decimate COLLAPSE helpers + `pre_decimate_uv` / `post_decimate` repair profiles (Text3D LOD / simplify / to_paint) |
 | `mesh_split` | Height-plane bisect for fellable trees (`SEAL_VERSION=cut-only-v1` fingerprint; GameAssets resume invalidates stale stump/top when seal drifts) |
 | `mesh_utils` | Legacy compatibility (`weld_glb()` — retained as no-op) |
@@ -78,7 +78,7 @@ Centralized quality-preset system used by all Python generation tools.
 
 **5 quality tiers:** `fast` | `low` | `medium` | `high` | `highest`
 
-- Config files: `Shared/src/gamedev_shared/data/quality-profiles.yaml` and `asset-categories.yaml`
+- Config files: `Shared/src/aigamekit_shared/data/quality-profiles.yaml` and `asset-categories.yaml`
 - 14 asset categories (character, environment, prop, vehicle, texture, skymap, …)
 - 11 audio kinds (footstep, impact, ambient, music, …)
 - **Soft resolution:** only fills defaults when the user has not explicitly set a parameter (tracked via `ParameterSource`)
@@ -86,7 +86,7 @@ Centralized quality-preset system used by all Python generation tools.
 - GameAssets uses `generation:` in `game.yaml` → maps to `--quality`
 
 ```python
-from gamedev_shared.quality import QualityEngine
+from aigamekit_shared.quality import QualityEngine
 
 engine = QualityEngine()
 params = engine.resolve("text2d", quality="high", category="character")
@@ -98,7 +98,7 @@ params = engine.resolve("text2d", quality="high", category="character")
 Automatic multi-GPU weight splitting for large models.
 
 ```python
-from gamedev_shared import MultiGPUPlanner
+from aigamekit_shared import MultiGPUPlanner
 
 planner = (
     MultiGPUPlanner()
@@ -115,12 +115,12 @@ model = planner.apply() # Model dispatched across GPUs
 - Tools accept `--gpu-ids "0,1"` CLI flag
 - GameAssets batch/resume propagates `--gpu-ids` and `CUDA_VISIBLE_DEVICES` to all sub-tools
 
-## GPU / NVML (`gamedev_shared.gpu`)
+## GPU / NVML (`aigamekit_shared.gpu`)
 
 Primary VRAM/process queries use [`nvidia-ml-py`](https://pypi.org/project/nvidia-ml-py/) (NVML). Subprocess `nvidia-smi` remains only as fallback inside `gpu.py`.
 
 ```python
-from gamedev_shared.gpu import (
+from aigamekit_shared.gpu import (
     nvml_available,
     query_gpu_free_mib,
     query_gpu_snapshot,
@@ -145,11 +145,11 @@ Used by: UMS `doctor` / admit free-VRAM, GameAssets `info` / GPU preflight, Text
 Every Python CLI (and UMS) mirrors `Logger` + stdlib logging to:
 
 ```text
-~/.cache/gamedev/logs/<tool>-YYYY-MM-DD.log
+~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log
 ```
 
 ```python
-from gamedev_shared.logging import Logger, configure_logging
+from aigamekit_shared.logging import Logger, configure_logging
 
 configure_logging("text2d")  # called automatically via setup_rich_click_module(tool=…)
 log = Logger()
@@ -158,20 +158,20 @@ log.info("generation started")
 
 - Console: Rich/ANSI (unchanged)
 - File: plain text, UTC timestamps
-- Disable: `GAMEDEV_FILE_LOG=0` or `GAMEDEV_NO_FILE_LOG=1`
+- Disable: `AIGAMEKIT_FILE_LOG=0` or `AIGAMEKIT_NO_FILE_LOG=1`
 - Full guide: [docs/LOGGING.md](../docs/LOGGING.md)
 
 ## ProfilerSession
 
 CPU/RAM/GPU profiling with SQLite storage and JSONL span output.
 
-- **Enable:** set `GAMEDEV_PROFILE=1` or pass `--profile-tools` flag
+- **Enable:** set `AIGAMEKIT_PROFILE=1` or pass `--profile-tools` flag
 - Records wall-clock time, CPU %, RSS memory, and CUDA VRAM per span
 - Stores results in SQLite perf database (`PerfDB`)
-- `gamedev-lab perf` commands for analysis and comparison
+- `aigamekit-lab perf` commands for analysis and comparison
 
 ```python
-from gamedev_shared.profiler import ProfilerSession
+from aigamekit_shared.profiler import ProfilerSession
 
 with ProfilerSession("text3d_inference") as span:
     # ... heavy GPU work ...
@@ -181,14 +181,14 @@ with ProfilerSession("text3d_inference") as span:
 
 ## Unified Installer
 
-Installing `gamedev-shared` exposes the `gamedev-install` CLI:
+Installing `aigamekit-shared` exposes the `aigamekit-install` CLI:
 
 ```bash
-gamedev-install --list                     # List all tools
-gamedev-install materialize                # Install Materialize (Rust)
-gamedev-install text2d                     # Creates .venv if needed
-gamedev-install all                        # Install everything
-gamedev-install materialize --action uninstall
+aigamekit-install --list                     # List all tools
+aigamekit-install materialize                # Install Materialize (Rust)
+aigamekit-install text2d                     # Creates .venv if needed
+aigamekit-install all                        # Install everything
+aigamekit-install materialize --action uninstall
 ```
 
 Shell scripts at the monorepo root also work without pip install:
@@ -212,20 +212,20 @@ Shell scripts at the monorepo root also work without pip install:
 | `PAINT3D_BIN` | Path to `paint3d` |
 | `TERRAIN3D_BIN` | Path to `terrain3d` |
 | `GAMEASSETS_BIN` | Path to `gameassets` |
-| `GAMEDEVLAB_BIN` | Path to `gamedev-lab` |
+| `AIGAMEKITLAB_BIN` | Path to `aigamekit-lab` |
 | `MATERIALIZE_BIN` | Path to `materialize` |
 | `VIBEGAME_BIN` | Path to `vibegame` |
 | `HF_TOKEN` / `HUGGINGFACEHUB_API_TOKEN` | Hugging Face authentication token |
 | `HF_HOME` | Hugging Face cache directory |
 | `PYTORCH_CUDA_ALLOC_CONF` | CUDA allocator config (auto-set if empty) |
-| `GAMEDEV_PROFILE` | Set to `1` to enable profiling |
+| `AIGAMEKIT_PROFILE` | Set to `1` to enable profiling |
 | `CUDA_VISIBLE_DEVICES` | GPU device IDs (e.g., `0,1`) |
-| `GAMEDEV_LOG_DIR` | Daily log directory (default `~/.cache/gamedev/logs`) |
-| `GAMEDEV_LOG_FILE` | Exact log file path |
-| `GAMEDEV_LOG_TOOL` | Tool name segment in log filename |
-| `GAMEDEV_LOG_LEVEL` | Min file level (`DEBUG`/`INFO`/`WARN`/`ERROR`) |
-| `GAMEDEV_FILE_LOG` | `0` off; `1` force on (needed under pytest) |
-| `GAMEDEV_NO_FILE_LOG` | `1` disables file logging |
+| `AIGAMEKIT_LOG_DIR` | Daily log directory (default `~/.cache/aigamekit/logs`) |
+| `AIGAMEKIT_LOG_FILE` | Exact log file path |
+| `AIGAMEKIT_LOG_TOOL` | Tool name segment in log filename |
+| `AIGAMEKIT_LOG_LEVEL` | Min file level (`DEBUG`/`INFO`/`WARN`/`ERROR`) |
+| `AIGAMEKIT_FILE_LOG` | `0` off; `1` force on (needed under pytest) |
+| `AIGAMEKIT_NO_FILE_LOG` | `1` disables file logging |
 
 ## Development
 

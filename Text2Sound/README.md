@@ -293,4 +293,4 @@ ruff format .
 ## License
 
 - **Code:** MIT — [LICENSE](LICENSE).
-- **Weights:** [Stable Audio Open 1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) and [Stable Audio Open Small](https://huggingface.co/stabilityai/stable-audio-open-small) — **Stability AI Community License** (accept terms on Hub; commercial use with revenue cap — see each repo's `LICENSE.md` and [stability.ai/license](https://stability.ai/license)). Summary: [GameDev/README.md — Licenses](../README.md).
+- **Weights:** [Stable Audio Open 1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) and [Stable Audio Open Small](https://huggingface.co/stabilityai/stable-audio-open-small) — **Stability AI Community License** (accept terms on Hub; commercial use with revenue cap — see each repo's `LICENSE.md` and [stability.ai/license](https://stability.ai/license)). Summary: [AiGameKit/README.md — Licenses](../README.md).

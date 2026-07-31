@@ -28,7 +28,7 @@ para a praça ou via). Efeitos dinâmicos (brasa, fumo, luz de tocha/fogueira)
 ficam como `<Composition>`/`<ParticleSystem>` finos por cima do mesh estático
 — nunca bakeados na malha. Posições de fumo/brasa da forja são aproximadas
 (chaminé/hearth reais do GLB podem divergir ligeiramente da caixa antiga;
-QA visual pendente com `gamedev-lab debug screenshot`).
+QA visual pendente com `aigamekit-lab debug screenshot`).
 
 ## Shell contracts (`discordia.xml`)
 

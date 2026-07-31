@@ -1,11 +1,11 @@
-"""Tests for gamedev_shared.mesh_repair_arrays (vectorized repair phase)."""
+"""Tests for aigamekit_shared.mesh_repair_arrays (vectorized repair phase)."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from gamedev_shared.mesh_repair_arrays import (
+from aigamekit_shared.mesh_repair_arrays import (
     boundary_edge_count,
     boundary_edges,
     compact_mesh,
@@ -310,7 +310,7 @@ class TestTaubin:
 
 class TestSimplifyFacesArrays:
     def test_noop_when_below_target(self) -> None:
-        from gamedev_shared.mesh_repair_arrays import simplify_faces_arrays
+        from aigamekit_shared.mesh_repair_arrays import simplify_faces_arrays
 
         v, f = _box()
         v2, f2 = simplify_faces_arrays(v, f, target_faces=100)
@@ -320,7 +320,7 @@ class TestSimplifyFacesArrays:
         pytest.importorskip("fast_simplification")
         import trimesh
 
-        from gamedev_shared.mesh_repair_arrays import simplify_faces_arrays
+        from aigamekit_shared.mesh_repair_arrays import simplify_faces_arrays
 
         m = trimesh.creation.icosphere(subdivisions=5)
         v = np.asarray(m.vertices, dtype=np.float64)
@@ -336,7 +336,7 @@ class TestSimplifyFacesArrays:
     def test_missing_lib_returns_none(self, monkeypatch) -> None:
         import sys
 
-        from gamedev_shared.mesh_repair_arrays import simplify_faces_arrays
+        from aigamekit_shared.mesh_repair_arrays import simplify_faces_arrays
 
         monkeypatch.setitem(sys.modules, "fast_simplification", None)
         v, f = _box()
@@ -396,8 +396,8 @@ class TestBpyParity:
     def test_weld_matches_bmesh_remove_doubles(self, _bpy) -> None:
         import bpy
 
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import remove_doubles
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import remove_doubles
 
         rng = np.random.default_rng(42)
         base = rng.uniform(-1, 1, size=(200, 3))
@@ -419,8 +419,8 @@ class TestBpyParity:
     def test_boundary_count_matches_bmesh(self, _bpy) -> None:
         import bpy
 
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair import count_boundary_edges, count_boundary_edges_fast
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import count_boundary_edges, count_boundary_edges_fast
 
         v, f = _box()
         f = f[:-2]  # abre o topo
@@ -435,8 +435,8 @@ class TestBpyParity:
     def test_arrays_engine_ok_and_replace(self, _bpy) -> None:
         import bpy
 
-        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
-        from gamedev_shared.mesh_repair_arrays import arrays_engine_ok, extract_arrays, replace_mesh_arrays
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair_arrays import arrays_engine_ok, extract_arrays, replace_mesh_arrays
 
         v, f = _box()
         clear_scene()
@@ -479,7 +479,7 @@ def _flat_grid(n: int = 40, spacing: float = 0.008) -> tuple[np.ndarray, np.ndar
 
 class TestWeldDensityMedianCap:
     def test_dynamic_weld_caps_to_median_edge(self) -> None:
-        from gamedev_shared.mesh_repair import dynamic_weld_distance
+        from aigamekit_shared.mesh_repair import dynamic_weld_distance
 
         # 54k verts → dyn=0.008; mediana 0.008 → cap 0.0032
         assert dynamic_weld_distance(54_000, median_edge=0.008) == pytest.approx(0.0032)

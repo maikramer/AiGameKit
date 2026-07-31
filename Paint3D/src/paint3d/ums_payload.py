@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from gamedev_shared.cli_helpers import with_ums_load_opts, with_ums_peak_opts
-from gamedev_shared.ums_payload import build_request_body
+from aigamekit_shared.cli_helpers import with_ums_load_opts, with_ums_peak_opts
+from aigamekit_shared.ums_payload import build_request_body
 
 
 def build_texture_request(

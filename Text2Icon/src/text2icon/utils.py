@@ -1,6 +1,6 @@
-"""Funções utilitárias para Text2Icon — shims sobre ``gamedev_shared``.
+"""Funções utilitárias para Text2Icon — shims sobre ``aigamekit_shared``.
 
-As validações vivem em ``gamedev_shared.validation`` (parâmetros por-tool);
+As validações vivem em ``aigamekit_shared.validation`` (parâmetros por-tool);
 aqui ficam os defaults do Text2Icon (Sana Sprint: max_length 1000, 1-4 steps,
 guidance 4.5, resolução 512²) e os re-exports históricos.
 """
@@ -9,17 +9,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from gamedev_shared.gpu import format_bytes  # noqa: F401
-from gamedev_shared.path_utils import ensure_directory  # noqa: F401
-from gamedev_shared.seed_utils import generate_seed  # noqa: F401
-from gamedev_shared.validation import (
+from aigamekit_shared.gpu import format_bytes  # noqa: F401
+from aigamekit_shared.path_utils import ensure_directory  # noqa: F401
+from aigamekit_shared.seed_utils import generate_seed  # noqa: F401
+from aigamekit_shared.validation import (
     format_timestamp,  # noqa: F401
     validate_dimensions,  # noqa: F401
 )
-from gamedev_shared.validation import (
+from aigamekit_shared.validation import (
     validate_params as _validate_params,
 )
-from gamedev_shared.validation import (
+from aigamekit_shared.validation import (
     validate_prompt as _validate_prompt,
 )
 

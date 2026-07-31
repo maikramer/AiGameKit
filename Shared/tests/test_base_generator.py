@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gamedev_shared.base_generator import DiffusionGeneratorBase, torch_dtype_for
+from aigamekit_shared.base_generator import DiffusionGeneratorBase, torch_dtype_for
 
 
 class _MockGenerator(DiffusionGeneratorBase):

@@ -39,7 +39,7 @@ def test_defaults_preserve_original_behavior() -> None:
 
 def test_refresh_runtime_budget_without_vram_signal(monkeypatch) -> None:
     """Sem sinal de VRAM (CPU/CI) → None (contrato UMS)."""
-    import gamedev_shared.vram_budget as vb
+    import aigamekit_shared.vram_budget as vb
 
     monkeypatch.setattr(vb, "free_vram_bytes", lambda device=None: None)
     gen = HunyuanTextTo3DGenerator(device="cpu")
@@ -48,7 +48,7 @@ def test_refresh_runtime_budget_without_vram_signal(monkeypatch) -> None:
 
 def test_refresh_runtime_budget_with_vram_signal(monkeypatch) -> None:
     """Com VRAM livre → sugestão de num_chunks + cache para o próximo decode."""
-    import gamedev_shared.vram_budget as vb
+    import aigamekit_shared.vram_budget as vb
 
     free = 4 * 1024**3
     monkeypatch.setattr(vb, "free_vram_bytes", lambda device=None: free)
@@ -138,8 +138,8 @@ def test_compile_flag_applies_torch_compile() -> None:
         return mod
 
     with (
-        patch("gamedev_shared.quantization.apply_torch_compile", side_effect=_fake_compile),
-        patch("gamedev_shared.quantization.resolve_torch_compile_mode", return_value="default"),
+        patch("aigamekit_shared.quantization.apply_torch_compile", side_effect=_fake_compile),
+        patch("aigamekit_shared.quantization.resolve_torch_compile_mode", return_value="default"),
     ):
         gen._configure_acceleration(pipe)
     assert len(compiled_ids) == 3  # model + vae + cond_encoder

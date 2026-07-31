@@ -92,7 +92,7 @@ class Adapter(BackendAdapter):
                 setattr(model, name, request[name])
         if getattr(model, "segment_mode", "p3sam") != "geometry":
             auto_mask_module = sys.modules.get(type(model._bbox_predictor).__module__)
-            configure_mask_quality = getattr(auto_mask_module, "configure_gamedev_mask_quality", None)
+            configure_mask_quality = getattr(auto_mask_module, "configure_aigamekit_mask_quality", None)
             if callable(configure_mask_quality):
                 configure_mask_quality(
                     mask_nms_iou=model.mask_nms_iou,
@@ -108,7 +108,7 @@ class Adapter(BackendAdapter):
                     consensus_vote=getattr(model, "consensus_vote", 0.5),
                 )
 
-        from gamedev_shared.bpy_mesh import (
+        from aigamekit_shared.bpy_mesh import (
             save_colored_mesh,
             save_empty_glb,
             save_scene_geometries,

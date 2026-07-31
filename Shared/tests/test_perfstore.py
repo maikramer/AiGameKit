@@ -1,4 +1,4 @@
-"""Tests for gamedev_shared.perfstore (db, models, recorder)."""
+"""Tests for aigamekit_shared.perfstore (db, models, recorder)."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-from gamedev_shared.perfstore.db import PerfDB
-from gamedev_shared.perfstore.models import GPUMeta, RunRecord, SpanRecord
-from gamedev_shared.perfstore.recorder import PerfRecorder
+from aigamekit_shared.perfstore.db import PerfDB
+from aigamekit_shared.perfstore.models import GPUMeta, RunRecord, SpanRecord
+from aigamekit_shared.perfstore.recorder import PerfRecorder
 
 
 class TestModels:
@@ -304,7 +304,7 @@ class TestPerfRecorder:
     def test_own_db_lifecycle(self, tmp_path: Path):
         db_path = tmp_path / "auto_perf.db"
         with (
-            patch("gamedev_shared.perfstore.db.default_db_path", return_value=db_path),
+            patch("aigamekit_shared.perfstore.db.default_db_path", return_value=db_path),
             PerfRecorder("test-tool") as rec,
         ):
             assert rec.run_id is not None

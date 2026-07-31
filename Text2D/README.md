@@ -6,7 +6,7 @@
 
 ## Overview
 
-Text2D is a CLI tool that generates images from text prompts using the FLUX.2 Klein model in SDNQ (4-bit dynamic quantization). It integrates with the GameDev monorepo pipeline and supports quality presets, multi-GPU inference, and batch generation.
+Text2D is a CLI tool that generates images from text prompts using the FLUX.2 Klein model in SDNQ (4-bit dynamic quantization). It integrates with the AiGameKit monorepo pipeline and supports quality presets, multi-GPU inference, and batch generation.
 
 **Default model:** [Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32](https://huggingface.co/Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32) (high VRAM) or [Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) (low VRAM).
 
@@ -21,14 +21,14 @@ Text2D is a CLI tool that generates images from text prompts using the FLUX.2 Kl
 
 > **First run** downloads several GB from Hugging Face and may take many minutes. Subsequent runs with cached weights finish in seconds to ~1 minute depending on hardware.
 
-**Weight license:** the default SDNQ checkpoint is tied to **FLUX Non-Commercial**. For commercial use, set `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` (Apache 2.0, more VRAM). See [GameDev/README.md — Licenses](../README.md).
+**Weight license:** the default SDNQ checkpoint is tied to **FLUX Non-Commercial**. For commercial use, set `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` (Apache 2.0, more VRAM). See [AiGameKit/README.md — Licenses](../README.md).
 
 ## Installation
 
 ### Monorepo (recommended)
 
 ```bash
-cd /path/to/GameDev
+cd /path/to/AiGameKit
 cd Shared && pip install -e .
 cd Text2D && pip install -e .
 ```
@@ -37,7 +37,7 @@ Or use the unified installer:
 
 ```bash
 ./install.sh text2d
-# Equivalent: gamedev-install text2d
+# Equivalent: aigamekit-install text2d
 ```
 
 ### Development setup
@@ -208,7 +208,7 @@ text2d skill install -t /path/to/game-project --force
 
 ## Quality Presets
 
-The `--quality` flag sets resolution, steps, and guidance from a unified profile system ([`QualityEngine`](../Shared/src/gamedev_shared/quality.py)). Values are **soft defaults** — explicit CLI flags always take precedence.
+The `--quality` flag sets resolution, steps, and guidance from a unified profile system ([`QualityEngine`](../Shared/src/aigamekit_shared/quality.py)). Values are **soft defaults** — explicit CLI flags always take precedence.
 
 | Tier | Resolution | Steps | Guidance |
 |------|-----------|-------|----------|
@@ -233,7 +233,7 @@ text2d generate "thumbnail" --quality fast      # 512², 4 steps
 | `TEXT2D_MODELS_DIR` | Local models directory (installer writes to `~/.config/text2d/config.env`) |
 | `TEXT2D_OUTPUT_DIR` | Default image output directory |
 | `PYTORCH_CUDA_ALLOC_CONF` | CUDA memory config (auto-set if empty) |
-| `GAMEDEV_PROFILE_LOG` | Path for JSONL profiling output (used with `--profile`) |
+| `AIGAMEKIT_PROFILE_LOG` | Path for JSONL profiling output (used with `--profile`) |
 
 ## Output Layout
 
@@ -251,7 +251,7 @@ Use `-o` to specify a custom path. Supported formats: `.png` (default) and `.jpg
 
 ## Pipeline Integration
 
-Text2D is the **first step** in the GameDev batch asset pipeline:
+Text2D is the **first step** in the AiGameKit batch asset pipeline:
 
 ```
 Text2D (image) → Text3D (mesh) → Paint3D (textures)
@@ -318,4 +318,4 @@ Text2D/
 ## License
 
 - **Code:** MIT — [LICENSE](LICENSE).
-- **Weights:** default SDNQ follows [Disty0 model card](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) (non-commercial in HF metadata). BFL BF16 checkpoint: [FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0). Full license table: [GameDev/README.md — Licenses](../README.md).
+- **Weights:** default SDNQ follows [Disty0 model card](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) (non-commercial in HF metadata). BFL BF16 checkpoint: [FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0). Full license table: [AiGameKit/README.md — Licenses](../README.md).

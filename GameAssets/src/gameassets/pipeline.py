@@ -92,7 +92,7 @@ from .profile import Animator3DProfile, GameProfile, Paint3DProfile, Rigging3DPr
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
 
 try:
-    from gamedev_shared.subprocess_utils import run_cmd_streaming as _run_cmd_streaming
+    from aigamekit_shared.subprocess_utils import run_cmd_streaming as _run_cmd_streaming
 except ImportError:  # pragma: no cover
     _run_cmd_streaming = None  # type: ignore[assignment]
 
@@ -308,7 +308,7 @@ def invalidate_split_artifacts(mesh_final: Path) -> list[Path]:
 def _split_seal_stale(mesh_final: Path) -> bool:
     """True se falta stamp ou o seal no disco ≠ ``SEAL_VERSION`` actual."""
     try:
-        from gamedev_shared.mesh_split import SEAL_VERSION
+        from aigamekit_shared.mesh_split import SEAL_VERSION
     except Exception:
         SEAL_VERSION = "bisect-fill-v1"
     stamp = _split_seal_stamp_path(mesh_final)
@@ -324,7 +324,7 @@ def _split_seal_stale(mesh_final: Path) -> bool:
 
 def _write_split_seal_stamp(mesh_final: Path) -> None:
     try:
-        from gamedev_shared.mesh_split import SEAL_VERSION
+        from aigamekit_shared.mesh_split import SEAL_VERSION
     except Exception:
         SEAL_VERSION = "bisect-fill-v1"
     stamp = _split_seal_stamp_path(mesh_final)
@@ -1175,7 +1175,7 @@ def _resolve_lod_target_faces(profile: GameProfile, row: ManifestRow) -> int:
 
 def _resolve_lod0_texture_size(profile: GameProfile, row: ManifestRow | None = None) -> int:
     """Atlas lod0 por volume ∩ quality cap (snap64). Nunca acima do paint budget."""
-    from gamedev_shared.lod_budget import lod_texture_size_for_char, snap_tex_64
+    from aigamekit_shared.lod_budget import lod_texture_size_for_char, snap_tex_64
 
     quality_cap = _quality_paint_texture_cap(profile)
     # Paint override no profile também limita o LOD (não upscale além do bake).
@@ -1199,7 +1199,7 @@ def _resolve_paint_texture_size(profile: GameProfile, row: ManifestRow | None = 
     quality_cap = _quality_paint_texture_cap(profile)
     char = _char_m_for_budget(profile, row)
     if char is not None:
-        from gamedev_shared.paint_budget import paint_texture_for_char
+        from aigamekit_shared.paint_budget import paint_texture_for_char
 
         return paint_texture_for_char(char, quality_cap=quality_cap)
     return quality_cap
@@ -1210,7 +1210,7 @@ def _resolve_to_paint_faces(profile: GameProfile, row: ManifestRow | None = None
     p3 = profile.paint3d
     if p3 is not None and p3.to_paint_faces is not None and int(p3.to_paint_faces) >= 4:
         return int(p3.to_paint_faces)
-    from gamedev_shared.paint_budget import paint_target_faces
+    from aigamekit_shared.paint_budget import paint_target_faces
 
     return paint_target_faces(_resolve_paint_texture_size(profile, row))
 
@@ -1346,9 +1346,9 @@ def _run_check_glb(
 ) -> StageResult:
     import time as _time
 
-    bin_ = _bin_or_none("GAMEDEVLAB_BIN", "gamedev-lab")
+    bin_ = _bin_or_none("AIGAMEKITLAB_BIN", "aigamekit-lab")
     if not bin_:
-        return StageResult("validate", False, 0.0, "gamedev-lab não encontrado no PATH")
+        return StageResult("validate", False, 0.0, "aigamekit-lab não encontrado no PATH")
     argv = [bin_, "check", "glb", str(glb), str(rules)]
     if category:
         argv.extend(["--category", category])
@@ -1376,7 +1376,7 @@ def _stage(
     """Executa um stage do master pipeline.
 
     Round 2: envolto em ``ProfilerSession`` para spans no perf.db quando
-    ``profile_enabled`` (controlado por ``GAMEDEV_PROFILE`` no child_env).
+    ``profile_enabled`` (controlado por ``AIGAMEKIT_PROFILE`` no child_env).
     Emite ``emit_progress`` no início e fim para visibilidade no dashboard.
 
     ``on_progress_line``: callback alimentado linha-a-linha com stdout do
@@ -1387,8 +1387,8 @@ def _stage(
     """
     import time as _time
 
-    from gamedev_shared.profiler.session import ProfilerSession
-    from gamedev_shared.progress import emit_progress
+    from aigamekit_shared.profiler.session import ProfilerSession
+    from aigamekit_shared.progress import emit_progress
 
     profiler_tool = name.replace("-", "_")
 
@@ -1421,7 +1421,7 @@ def _stage(
     _emit("run", 0)
 
     with contextlib.suppress(Exception):
-        from gamedev_shared.pipeline_trace import trace_stage
+        from aigamekit_shared.pipeline_trace import trace_stage
 
         trace_stage(
             asset=str(item_id or "?"),
@@ -1494,7 +1494,7 @@ def _stage(
         dt = _time.perf_counter() - t0
         _emit("run", 100, status="error")
         with contextlib.suppress(Exception):
-            from gamedev_shared.pipeline_trace import trace_exception, trace_stage
+            from aigamekit_shared.pipeline_trace import trace_exception, trace_stage
 
             trace_exception("pipeline_stage_error", exc, asset=str(item_id or "?"), stage=name)
             trace_stage(asset=str(item_id or "?"), stage=name, status="error", seconds=round(dt, 3), error=str(exc))
@@ -1505,7 +1505,7 @@ def _stage(
         err = merge_subprocess_output(r, max_chars=400) or f"{name} falhou (rc={r.returncode})"
         _emit("run", 100, status="error")
         with contextlib.suppress(Exception):
-            from gamedev_shared.pipeline_trace import trace_stage
+            from aigamekit_shared.pipeline_trace import trace_stage
 
             trace_stage(
                 asset=str(item_id or "?"),
@@ -1521,7 +1521,7 @@ def _stage(
     if output is not None and not output.is_file():
         _emit("run", 100, status="error")
         with contextlib.suppress(Exception):
-            from gamedev_shared.pipeline_trace import trace_stage
+            from aigamekit_shared.pipeline_trace import trace_stage
 
             trace_stage(
                 asset=str(item_id or "?"),
@@ -1539,7 +1539,7 @@ def _stage(
     verify_payload: dict = {}
     if output is not None and output.is_file():
         with contextlib.suppress(Exception):
-            from gamedev_shared.glb_verify import post_save_verify
+            from aigamekit_shared.glb_verify import post_save_verify
 
             vr = post_save_verify(output)
             if vr is not None:
@@ -1556,7 +1556,7 @@ def _stage(
                     "bytes": vr.meta.get("byte_size"),
                 }
     with contextlib.suppress(Exception):
-        from gamedev_shared.pipeline_trace import trace_stage
+        from aigamekit_shared.pipeline_trace import trace_stage
 
         trace_stage(
             asset=str(item_id or "?"),
@@ -1874,7 +1874,7 @@ def _run_split_lod_stages(
     """
     import bpy
 
-    from gamedev_shared.bpy_mesh import clear_scene, save_glb
+    from aigamekit_shared.bpy_mesh import clear_scene, save_glb
 
     inter_dir = mesh_final.parent / "_intermediate"
     inter_dir.mkdir(parents=True, exist_ok=True)
@@ -1886,7 +1886,7 @@ def _run_split_lod_stages(
     stump_painted = inter_dir / f"{base}_stump_painted.glb"
     top_painted = inter_dir / f"{base}_top_painted.glb"
 
-    force_split = os.environ.get("GAMEDEV_REDO_SPLIT", "").strip().lower() in {
+    force_split = os.environ.get("AIGAMEKIT_REDO_SPLIT", "").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -2019,7 +2019,7 @@ def _run_split_lod_stages(
                 log.warning("split-lod: falta lod%d (stump=%s top=%s)", lvl, stump_lod, top_lod)
                 continue
             clear_scene()
-            from gamedev_shared.bpy_mesh import import_gltf
+            from aigamekit_shared.bpy_mesh import import_gltf
 
             for glb in (stump_lod, top_lod):
                 # import_gltf pré-decodifica KTX2/meshopt (bpy sem BasisU).
@@ -2103,7 +2103,7 @@ def run_master_pipeline(
             overrides=getattr(profile, "master_bake_normals_categories", None),
         )
 
-    profile_enabled = str(child_env.get("GAMEDEV_PROFILE", "")).strip() == "1"
+    profile_enabled = str(child_env.get("AIGAMEKIT_PROFILE", "")).strip() == "1"
 
     def _run(name: str, argv: list[str], output: Path | None = None) -> StageResult:
         return _stage(

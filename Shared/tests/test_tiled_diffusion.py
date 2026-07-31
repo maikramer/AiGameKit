@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gamedev_shared.tiled_diffusion import (
+from aigamekit_shared.tiled_diffusion import (
     TiledDiffusionCallback,
     _compute_tile_grid,
     _cosine_blend_window,

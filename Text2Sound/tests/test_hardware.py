@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("gamedev_shared.hardware")
+pytest.importorskip("aigamekit_shared.hardware")
 
-from gamedev_shared.hardware import GIB
+from aigamekit_shared.hardware import GIB
 from text2sound.hardware import HW_AUTO_ENV, HardwareProfile, hw_auto_enabled, profile_from_specs
 
 

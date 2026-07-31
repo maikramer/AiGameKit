@@ -30,7 +30,7 @@ Or use the unified installer:
 ### Requirements
 
 - Python 3.13+
-- `gamedev-shared` (install Shared first)
+- `aigamekit-shared` (install Shared first)
 - No GPU required
 
 ## Quick Start
@@ -157,7 +157,7 @@ Negative values are subtracted from the base preset. For example, a `fast` bould
 
 Two texturing backends, selected automatically (override with `--bake/--no-bake`):
 
-**bpy bake (default when Blender's `bpy` is importable — it ships via `gamedev-shared`).** Builds a procedural material driven by **object-space** coordinates (3D-coherent) plus geometry pointiness for cavities, then bakes albedo, normal, roughness and AO to UV images with a bake margin. Because the source signal is coherent in 3D and the margin floods UV-island gutters, the textures are **seamless**. The GLB is exported with smooth vertex normals and MikkTSpace **tangents**, so the normal map renders without seams too.
+**bpy bake (default when Blender's `bpy` is importable — it ships via `aigamekit-shared`).** Builds a procedural material driven by **object-space** coordinates (3D-coherent) plus geometry pointiness for cavities, then bakes albedo, normal, roughness and AO to UV images with a bake margin. Because the source signal is coherent in 3D and the margin floods UV-island gutters, the textures are **seamless**. The GLB is exported with smooth vertex normals and MikkTSpace **tangents**, so the normal map renders without seams too.
 
 **trimesh fallback.** Embeds a glTF `PBRMaterial` with a procedural albedo (cavity darkening), plus normal/roughness/AO via [Materialize](../Materialize/) (or a procedural fallback). UVs come from xatlas (boulders) / spherical projection (pebbles); smooth normals are carried through the xatlas vertex-split and exported so shading has no seams, though 2D textures can still seam across UV islands — prefer the bpy backend for final assets.
 

@@ -1,17 +1,17 @@
-"""Testes para gamedev_shared.profiler (sem GPU obrigatória)."""
+"""Testes para aigamekit_shared.profiler (sem GPU obrigatória)."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from gamedev_shared.profiler import (
+from aigamekit_shared.profiler import (
     ProfilerSession,
     get_active_session,
     is_profiling_enabled,
     profile_span,
 )
-from gamedev_shared.profiler.snapshot import resource_snapshot
+from aigamekit_shared.profiler.snapshot import resource_snapshot
 
 
 class TestProfilingEnabled:
@@ -19,11 +19,11 @@ class TestProfilingEnabled:
         assert is_profiling_enabled(cli_flag=True) is True
 
     def test_cli_false_env_unset(self, monkeypatch):
-        monkeypatch.delenv("GAMEDEV_PROFILE", raising=False)
+        monkeypatch.delenv("AIGAMEKIT_PROFILE", raising=False)
         assert is_profiling_enabled(cli_flag=False) is False
 
     def test_env_one(self, monkeypatch):
-        monkeypatch.setenv("GAMEDEV_PROFILE", "1")
+        monkeypatch.setenv("AIGAMEKIT_PROFILE", "1")
         assert is_profiling_enabled(cli_flag=False) is True
 
 

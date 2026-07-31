@@ -27,12 +27,12 @@ UMS, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 | [`TOPOLOGY_FIX_GPU_STUDY.md`](TOPOLOGY_FIX_GPU_STUDY.md) | Acelerar `topology-fix` (arrays/CPU vs bpy; longhouse 7M verts) |
 | [`bench_omni/README.md`](bench_omni/README.md) | Pose Quaternius T-pose + smoke |
 | [`ModelServer/README.md`](../ModelServer/README.md) | UMS: fila, admit, agents, `respawn`, CLI |
-| [`LOGGING.md`](LOGGING.md) · [PT](LOGGING_PT.md) | Ficheiros `~/.cache/gamedev/logs/` (tools + UMS) |
+| [`LOGGING.md`](LOGGING.md) · [PT](LOGGING_PT.md) | Ficheiros `~/.cache/aigamekit/logs/` (tools + UMS) |
 | Review vivo simple-rpg | `VibeGame/examples/simple-rpg/sample-gameassets/logs/omni_shape_inconsistencies.md` |
-| [`Shared/.../vram_budget.py`](../Shared/src/gamedev_shared/vram_budget.py) | Runtime budget (chunks/views) pós-load |
-| [`Shared/.../paint_budget.py`](../Shared/src/gamedev_shared/paint_budget.py) | Faces alvo pré-paint |
-| [`Shared/.../lowvram.py`](../Shared/src/gamedev_shared/lowvram.py) | `FOOTPRINTS` canónicos |
-| [`Shared/.../quality-profiles.yaml`](../Shared/src/gamedev_shared/data/quality-profiles.yaml) | Tiers `fast…highest` |
+| [`Shared/.../vram_budget.py`](../Shared/src/aigamekit_shared/vram_budget.py) | Runtime budget (chunks/views) pós-load |
+| [`Shared/.../paint_budget.py`](../Shared/src/aigamekit_shared/paint_budget.py) | Faces alvo pré-paint |
+| [`Shared/.../lowvram.py`](../Shared/src/aigamekit_shared/lowvram.py) | `FOOTPRINTS` canónicos |
+| [`Shared/.../quality-profiles.yaml`](../Shared/src/aigamekit_shared/data/quality-profiles.yaml) | Tiers `fast…highest` |
 
 **Hardware de referência dos benches:** NVIDIA RTX 4050 Laptop, **6141 MiB**, 2026-07.
 
@@ -52,13 +52,13 @@ UMS, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 | Camada | Quando | O quê | Código |
 |--------|--------|-------|--------|
 | **Admit** | Antes de `ensure_loaded` | Pico estático; se pico > VRAM total → **recusa permanente** | `vram_planner`, `BackendManager.peak_vram_mib` |
-| **Runtime** | Depois dos pesos | Dimensiona activação pela **livre** | `gamedev_shared.vram_budget`, `modelserver.runtime_budget` |
+| **Runtime** | Depois dos pesos | Dimensiona activação pela **livre** | `aigamekit_shared.vram_budget`, `modelserver.runtime_budget` |
 
 **Autoridade VRAM (operador):** **UMS** + **hw-auto** (default por tool).
 Não há CLI pública `--low-vram` / `--memory-efficient` — o perfil de hardware
 preenche os sinais de pico no payload. `prepare_gpu_exclusive` só no fallback
 in-process (`try_ums_delegation` falhou / `--no-ums`). Servers per-tool:
-só com `GAMEDEV_ALLOW_LEGACY_SERVER=1`.
+só com `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
 
 **Sinais de pico (internos, payload UMS):** `sdnq_preset` e/ou
 `memory_efficient=true`. Sem isso o admit assume fp16 → text3d ~8–12 GiB →
@@ -221,8 +221,8 @@ Text3D CLI presets (steps/octree/chunks): ver `Text3D/README.md` — `fast` 18/1
 | Subprocess `generate-batch` → `delegate_to_ums` sync (fila≈1) | `ums_coord` / `ums_batch`: **submit×N → wait** (1º job carrega backend) |
 | Preload sync text3d/paint antes da wave | **`preload=False`** — load Omni pode >10 min; timeout client 600 s → Broken pipe → evict → fila VRAM stuck |
 | Master pipeline no meio da wave paint | **Defer** `MasterDeferQueue` até fim da wave GPU |
-| Só `GAMEDEV_UMS_PRIORITY=batch` | Flags `--no-ums` / `--ums-stream`; env affinity/inflight |
-| VRAM transitória = fail job | Evict + backoff + **requeue** até `GAMEDEV_UMS_MAX_VRAM_RETRIES` |
+| Só `AIGAMEKIT_UMS_PRIORITY=batch` | Flags `--no-ums` / `--ums-stream`; env affinity/inflight |
+| VRAM transitória = fail job | Evict + backoff + **requeue** até `AIGAMEKIT_UMS_MAX_VRAM_RETRIES` |
 
 Ordem fixa (anti-thrash text3d↔paint3d):
 
@@ -241,7 +241,7 @@ Código tool novo → `ums respawn <backend>` (não restart do supervisor).
 
 ### Agents — GPU ocupada
 
-1. `gamedev-model-server status` / `queue` / **`debug`**
+1. `aigamekit-model-server status` / `queue` / **`debug`**
 2. Esperar (`ums wait`, `--ums-stream`) ou `ums cancel`
 3. **Nunca** `kill` / `nvidia-smi` pkill / `--gpu-kill-others` com UMS busy
 4. `queue_full` / timeout UMS up → **sem** fallback in-process paralelo
@@ -254,7 +254,7 @@ Código tool novo → `ums respawn <backend>` (não restart do supervisor).
 | `… stats` | backends + queue p50/p95 + `last_runtime_budget`; `--json` |
 | `… stats --reset` | Zera **contadores** (não para UMS / não cancela jobs) |
 | `… bench` | RTT IPC only (`status`/`queue`/`stats`) — **sem** generate |
-| ficheiro `ums-*.log` | `~/.cache/gamedev/logs/` — `_log` UMS mesmo sem `-v` ([LOGGING.md](LOGGING.md)) |
+| ficheiro `ums-*.log` | `~/.cache/aigamekit/logs/` — `_log` UMS mesmo sem `-v` ([LOGGING.md](LOGGING.md)) |
 
 Supervisor já a correr pode não ter código novo até restart **voluntário**.
 
@@ -272,7 +272,7 @@ Supervisor já a correr pode não ter código novo até restart **voluntário**.
 | Pés de elefante / finos soldados / casca plástico | [`HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`](HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md) — prompt/vista building; **não** bisect base |
 | `topology_clean` actual | weld → slivers/debris → fill → watertight **seletivo** (diâmetro loop) → shade-smooth; **sem** flare/Taubin/`force_close_base`; paint: `_clean` + `restrict_inpaint` |
 
-Ver `Text3D/AGENTS.md`, `gamedev_shared.mesh_repair`,
+Ver `Text3D/AGENTS.md`, `aigamekit_shared.mesh_repair`,
 [`findings/MESH_PIPELINE_FINDINGS.md`](findings/MESH_PIPELINE_FINDINGS.md).
 
 ---
@@ -295,10 +295,10 @@ Ver `Text3D/AGENTS.md`, `gamedev_shared.mesh_repair`,
 [ ] Text3D: flashvdm + int4; Omni bbox_axis_max=1.0
 [ ] Paint: face budget 6k–160k + atlas por size_m; sem compile+SDNQ
 [ ] Batch GameAssets: UMS up; prioridade batch; waves shape/paint + opcionais; não kill mid-queue
-[ ] Debug: ums debug / stats + `~/.cache/gamedev/logs/ums-*.log` — não nvidia-smi pkill
+[ ] Debug: ums debug / stats + `~/.cache/aigamekit/logs/ums-*.log` — não nvidia-smi pkill
 [ ] Kernel: ver findings/KERNEL_OPTS_FINDINGS.md (batch/UMS defaults)
 [ ] One-shot CLI: compile off (excepto defaults batch documentados)
-[ ] Dev: GAMEDEV_PREFER_MONOREPO=1; editar */src/ sem reinstall; ums respawn <backend> p/ worker
+[ ] Dev: AIGAMEKIT_PREFER_MONOREPO=1; editar */src/ sem reinstall; ums respawn <backend> p/ worker
 ```
 
 ---

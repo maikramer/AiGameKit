@@ -188,7 +188,7 @@ class TestBpyReadableGlb:
         yielded: list[Path] = []
         with (
             patch("rigging3d.transfer_weights._decompress_glb", return_value=True) as mock_dec,
-            patch("gamedev_shared.bpy_mesh.gltf_import_supports_meshopt", return_value=False),
+            patch("aigamekit_shared.bpy_mesh.gltf_import_supports_meshopt", return_value=False),
         ):
             with _bpy_readable_glb(src) as p:
                 yielded.append(p)
@@ -202,7 +202,7 @@ class TestBpyReadableGlb:
         src.write_bytes(b"x")
         with (
             patch("rigging3d.transfer_weights._decompress_glb", return_value=False),
-            patch("gamedev_shared.bpy_mesh.gltf_import_supports_meshopt", return_value=False),
+            patch("aigamekit_shared.bpy_mesh.gltf_import_supports_meshopt", return_value=False),
         ):
             with _bpy_readable_glb(src) as p:
                 assert p == src.resolve()
@@ -214,7 +214,7 @@ class TestBpyReadableGlb:
         seen: list[Path] = []
         with (
             patch("rigging3d.transfer_weights._decompress_glb", return_value=True),
-            patch("gamedev_shared.bpy_mesh.gltf_import_supports_meshopt", return_value=False),
+            patch("aigamekit_shared.bpy_mesh.gltf_import_supports_meshopt", return_value=False),
         ):
             with pytest.raises(RuntimeError, match="boom"):
                 with _bpy_readable_glb(src) as p:
@@ -415,9 +415,9 @@ class TestTransferOneErrorPaths:
             yield path
 
         with (
-            patch("gamedev_shared.bpy_mesh.clear_scene"),
-            patch("gamedev_shared.skin_transfer.bpy_readable_glb", side_effect=fake_readable),
-            patch("gamedev_shared.skin_transfer._import_glb", return_value=(empty_mesh, [])),
+            patch("aigamekit_shared.bpy_mesh.clear_scene"),
+            patch("aigamekit_shared.skin_transfer.bpy_readable_glb", side_effect=fake_readable),
+            patch("aigamekit_shared.skin_transfer._import_glb", return_value=(empty_mesh, [])),
         ):
             with pytest.raises(ValueError, match="Source GLB sem armature"):
                 tw._transfer_one(src, tgt, out)

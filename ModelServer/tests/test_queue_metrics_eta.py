@@ -121,7 +121,7 @@ class TestInflightVramGate:
 
 class TestDiffusionControl:
     def test_attach_step_hooks_aborts(self) -> None:
-        from gamedev_shared.diffusion_control import GenerationAborted, attach_step_hooks
+        from aigamekit_shared.diffusion_control import GenerationAborted, attach_step_hooks
 
         kwargs: dict[str, Any] = {}
         attach_step_hooks(kwargs, num_inference_steps=4, should_abort=lambda: True)

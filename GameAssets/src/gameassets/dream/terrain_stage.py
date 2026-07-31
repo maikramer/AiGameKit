@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from gamedev_shared.subprocess_utils import resolve_binary, run_cmd
+from aigamekit_shared.subprocess_utils import resolve_binary, run_cmd
 
 
 @dataclass

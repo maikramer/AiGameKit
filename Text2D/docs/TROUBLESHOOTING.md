@@ -52,4 +52,4 @@ O subcomando aceita `-v` / `--verbose`. Também: `text2d -v generate "..."`.
    export TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B
    text2d generate "prompt" ...
    ```
-4. **Resumo do monorepo:** [GameDev/README.md — secção Licenças](../../README.md).
+4. **Resumo do monorepo:** [AiGameKit/README.md — secção Licenças](../../README.md).

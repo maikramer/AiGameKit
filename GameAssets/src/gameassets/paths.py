@@ -503,7 +503,7 @@ def _glb_has_geometry(p: Path, *, min_tris: int = 64) -> bool:
     if not _valid_file(p):
         return False
     try:
-        from gamedev_shared.glb_verify import extract_glb_meta
+        from aigamekit_shared.glb_verify import extract_glb_meta
 
         meta = extract_glb_meta(p)
         if meta.get("_error"):

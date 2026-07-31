@@ -1,6 +1,6 @@
-"""Testes para gamedev_shared.cli_rich."""
+"""Testes para aigamekit_shared.cli_rich."""
 
-from gamedev_shared.cli_rich import setup_rich_click, setup_rich_click_module
+from aigamekit_shared.cli_rich import setup_rich_click, setup_rich_click_module
 
 
 class TestSetupRichClick:

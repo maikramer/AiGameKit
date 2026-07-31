@@ -459,7 +459,7 @@ def text2d_specs_from_items(
     w, h, st, g = width, height, steps, guidance
     if quality:
         try:
-            from gamedev_shared.quality import QualityEngine
+            from aigamekit_shared.quality import QualityEngine
 
             qp = QualityEngine().resolve("text2d", quality=quality).params
             if width == 1024 and "width" in qp:

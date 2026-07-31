@@ -79,7 +79,7 @@ Regenerar só um asset:
 ```bash
 # apagar _intermediate/{id}_rigged*.glb + lods públicos do id
 gameassets resume --manifest manifest_<id>_only.yaml --profile game.yaml
-gamedev-lab debug inspect meshes/{id}_lod0.glb   # anims: idle,walk,…
+aigamekit-lab debug inspect meshes/{id}_lod0.glb   # anims: idle,walk,…
 ```
 
 ---

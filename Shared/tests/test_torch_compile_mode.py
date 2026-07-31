@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gamedev_shared.quantization import resolve_torch_compile_mode
+from aigamekit_shared.quantization import resolve_torch_compile_mode
 
 
 class TestResolveTorchCompileMode:

@@ -10,17 +10,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-# Env keys propagados aos subprocessos GPU (além de GAMEDEV_UMS_PRIORITY).
+# Env keys propagados aos subprocessos GPU (além de AIGAMEKIT_UMS_PRIORITY).
 UMS_CHILD_ENV_KEYS: tuple[str, ...] = (
-    "GAMEDEV_UMS_PRIORITY",
-    "GAMEDEV_UMS_AUTO_START",
-    "GAMEDEV_UMS_DEBUG",
-    "GAMEDEV_UMS_STREAM",
-    "GAMEDEV_UMS_MAX_QUEUE_DEPTH",
-    "GAMEDEV_UMS_MAX_AFFINITY_CUTS",
-    "GAMEDEV_UMS_STARVATION_TIMEOUT_SEC",
-    "GAMEDEV_UMS_MAX_INFLIGHT",
-    "GAMEDEV_ALLOW_LEGACY_SERVER",
+    "AIGAMEKIT_UMS_PRIORITY",
+    "AIGAMEKIT_UMS_AUTO_START",
+    "AIGAMEKIT_UMS_DEBUG",
+    "AIGAMEKIT_UMS_STREAM",
+    "AIGAMEKIT_UMS_MAX_QUEUE_DEPTH",
+    "AIGAMEKIT_UMS_MAX_AFFINITY_CUTS",
+    "AIGAMEKIT_UMS_STARVATION_TIMEOUT_SEC",
+    "AIGAMEKIT_UMS_MAX_INFLIGHT",
+    "AIGAMEKIT_ALLOW_LEGACY_SERVER",
 )
 
 # Sentinel: caller deve usar subprocess generate-batch / texture-batch.
@@ -106,7 +106,7 @@ def apply_ums_child_env(
 
     Args:
         child_env: Env base (ex. ``subprocess_gpu_env``).
-        ums_stream: Se True, força ``GAMEDEV_UMS_STREAM=1``.
+        ums_stream: Se True, força ``AIGAMEKIT_UMS_STREAM=1``.
         no_ums: Se True, desliga auto-start UMS nos filhos.
         parent_environ: Ambiente pai (default ``os.environ``).
 
@@ -114,14 +114,14 @@ def apply_ums_child_env(
         O mesmo dict ``child_env`` (mutado) para encadear.
     """
     env = parent_environ if parent_environ is not None else os.environ
-    child_env.setdefault("GAMEDEV_UMS_PRIORITY", "batch")
+    child_env.setdefault("AIGAMEKIT_UMS_PRIORITY", "batch")
     for key in UMS_CHILD_ENV_KEYS:
         if key in env:
             child_env.setdefault(key, env[key])
     if ums_stream:
-        child_env["GAMEDEV_UMS_STREAM"] = "1"
+        child_env["AIGAMEKIT_UMS_STREAM"] = "1"
     if no_ums:
-        child_env["GAMEDEV_UMS_AUTO_START"] = "0"
+        child_env["AIGAMEKIT_UMS_AUTO_START"] = "0"
     return child_env
 
 
@@ -139,7 +139,7 @@ def preload_backend(
         timeout_sec: Timeout do RPC preload.
     """
     try:
-        from gamedev_shared.model_server import ensure_ums_running, send_to_ums
+        from aigamekit_shared.model_server import ensure_ums_running, send_to_ums
     except ImportError:
         return None
     if not ensure_ums_running():
@@ -177,7 +177,7 @@ def run_gpu_wave(
         return []
 
     try:
-        from gamedev_shared.model_server import (
+        from aigamekit_shared.model_server import (
             cancel_ums_job,
             ensure_ums_running,
             submit_to_ums,
@@ -196,7 +196,7 @@ def run_gpu_wave(
     # marcava os restantes como «fila cheia» sem nunca os correr.
     window = 16
     try:
-        from gamedev_shared.model_server import fetch_ums_queue_snapshot
+        from aigamekit_shared.model_server import fetch_ums_queue_snapshot
 
         snap = fetch_ums_queue_snapshot()
         if isinstance(snap, dict):

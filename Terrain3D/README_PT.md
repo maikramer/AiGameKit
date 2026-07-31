@@ -26,10 +26,10 @@ Usa um modelo de difusão treinado em dados de elevação reais (WorldClim + ETO
 
 ### Oficial (monorepo)
 
-Na raiz do repositório **GameDev**:
+Na raiz do repositório **AiGameKit**:
 
 ```bash
-cd /caminho/para/GameDev
+cd /caminho/para/AiGameKit
 ./install.sh terrain3d
 ```
 

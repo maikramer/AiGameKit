@@ -12,7 +12,7 @@ import numpy as np
 import xatlas
 from PIL import Image
 
-from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
 
 from .utils.mesh_io import load_mesh_trimesh, save_glb
 

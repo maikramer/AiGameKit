@@ -1,4 +1,4 @@
-"""Suite de cobertura elaborada (≥100 casos) — gamedev_shared, sem GPU."""
+"""Suite de cobertura elaborada (≥100 casos) — aigamekit_shared, sem GPU."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from gamedev_shared.cli_helpers import (
+from aigamekit_shared.cli_helpers import (
     BACKEND_FOOTPRINT_KEYS,
     env_bool,
     format_ums_debug_line,
@@ -20,7 +20,7 @@ from gamedev_shared.cli_helpers import (
     with_ums_load_opts,
     with_ums_peak_opts,
 )
-from gamedev_shared.env import (
+from aigamekit_shared.env import (
     ENV_TO_TOOL,
     PYTORCH_CUDA_ALLOC_CONF,
     TOOL_BINS,
@@ -28,8 +28,8 @@ from gamedev_shared.env import (
     prefer_monorepo_tools,
     subprocess_gpu_env,
 )
-from gamedev_shared.hardware import hw_auto_enabled
-from gamedev_shared.lowvram import (
+from aigamekit_shared.hardware import hw_auto_enabled
+from aigamekit_shared.lowvram import (
     GIB,
     QUANT_WEIGHT_FACTOR,
     ModelFootprint,
@@ -37,16 +37,16 @@ from gamedev_shared.lowvram import (
     get_footprint,
     plan_offload,
 )
-from gamedev_shared.mesh_repair import (
+from aigamekit_shared.mesh_repair import (
     _fibonacci_sphere_dirs,
     drop_nonfinite_faces,
     dynamic_weld_distance,
     get_repair_profile,
     infer_up_axis,
 )
-from gamedev_shared.path_utils import ensure_directory, generate_output_path, safe_filename
-from gamedev_shared.quality import VALID_QUALITIES, QualityEngine
-from gamedev_shared.seed_utils import generate_seed, resolve_effective_seed, seed_everything
+from aigamekit_shared.path_utils import ensure_directory, generate_output_path, safe_filename
+from aigamekit_shared.quality import VALID_QUALITIES, QualityEngine
+from aigamekit_shared.seed_utils import generate_seed, resolve_effective_seed, seed_everything
 
 QUALITIES = list(VALID_QUALITIES)
 TOOLS = [
@@ -174,7 +174,7 @@ def test_env_bool(env_val: str, cli_wants: bool, expected: bool) -> None:
 
 @pytest.mark.parametrize("env_val,expected", [("1", True), ("0", False), ("", False)])
 def test_legacy_server_allowed(env_val: str, expected: bool) -> None:
-    with patch.dict(os.environ, {"GAMEDEV_ALLOW_LEGACY_SERVER": env_val}, clear=False):
+    with patch.dict(os.environ, {"AIGAMEKIT_ALLOW_LEGACY_SERVER": env_val}, clear=False):
         assert legacy_server_allowed() is expected
 
 
@@ -412,7 +412,7 @@ def test_repair_unknown() -> None:
 
 @pytest.mark.parametrize("v,e", [("1", True), ("0", False)])
 def test_prefer_monorepo(v: str, e: bool) -> None:
-    with patch.dict(os.environ, {"GAMEDEV_PREFER_MONOREPO": v}, clear=False):
+    with patch.dict(os.environ, {"AIGAMEKIT_PREFER_MONOREPO": v}, clear=False):
         assert prefer_monorepo_tools() is e
 
 

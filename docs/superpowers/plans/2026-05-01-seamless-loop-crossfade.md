@@ -284,12 +284,12 @@ git commit -m "feat(text2sound): extend save_audio with seamless_loop crossfade 
 ### Task 3: Add `crossfade_ms` to `audio_kinds` and quality profiles in Shared YAML
 
 **Files:**
-- Modify: `Shared/src/gamedev_shared/data/asset-categories.yaml` (lines 184-202)
-- Modify: `Shared/src/gamedev_shared/data/quality-profiles.yaml` (text2sound sections)
+- Modify: `Shared/src/aigamekit_shared/data/asset-categories.yaml` (lines 184-202)
+- Modify: `Shared/src/aigamekit_shared/data/quality-profiles.yaml` (text2sound sections)
 
 - [ ] **Step 1: Add `crossfade_ms` to `music_loop` and `ambient_loop` in asset-categories.yaml**
 
-In `Shared/src/gamedev_shared/data/asset-categories.yaml`, add `crossfade_ms: 500` to both loop kinds:
+In `Shared/src/aigamekit_shared/data/asset-categories.yaml`, add `crossfade_ms: 500` to both loop kinds:
 
 For `music_loop` (after line 192, add):
 ```yaml
@@ -352,13 +352,13 @@ Example for `fast`:
 
 - [ ] **Step 3: Verify YAML syntax**
 
-Run: `python -c "import yaml; yaml.safe_load(open('Shared/src/gamedev_shared/data/asset-categories.yaml')); yaml.safe_load(open('Shared/src/gamedev_shared/data/quality-profiles.yaml')); print('OK')"`
+Run: `python -c "import yaml; yaml.safe_load(open('Shared/src/aigamekit_shared/data/asset-categories.yaml')); yaml.safe_load(open('Shared/src/aigamekit_shared/data/quality-profiles.yaml')); print('OK')"`
 Expected: `OK`
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add Shared/src/gamedev_shared/data/asset-categories.yaml Shared/src/gamedev_shared/data/quality-profiles.yaml
+git add Shared/src/aigamekit_shared/data/asset-categories.yaml Shared/src/aigamekit_shared/data/quality-profiles.yaml
 git commit -m "feat(shared): add crossfade_ms to loop audio_kinds and quality profiles"
 ```
 
@@ -464,7 +464,7 @@ Expected: All PASS
 
 - [ ] **Step 3: Run lint and format check**
 
-Run: `ruff check Text2Sound/ Shared/src/gamedev_shared/data/ && ruff format --check Text2Sound/`
+Run: `ruff check Text2Sound/ Shared/src/aigamekit_shared/data/ && ruff format --check Text2Sound/`
 Expected: No errors
 
 - [ ] **Step 4: Final commit if any fixes needed**

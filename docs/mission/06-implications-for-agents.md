@@ -46,7 +46,7 @@ Deep dives: [north star](01-north-star.md) · [ease](02-ease-over-knobs.md) · [
 
 - Recommend `--gpu-kill-others`, pkill, or `kill` while UMS holds work.
 - Document `--low-vram` / `--memory-efficient` as operator flags (removed).
-- Add a parallel “shadow server” per tool as the new default (legacy: `GAMEDEV_ALLOW_LEGACY_SERVER=1` only).
+- Add a parallel “shadow server” per tool as the new default (legacy: `AIGAMEKIT_ALLOW_LEGACY_SERVER=1` only).
 - Bypass UMS in docs “for speed” without labeling it an advanced escape hatch.
 
 **PR self-check:** Under contention, does the happy path wait/cancel — or murder a sibling job?

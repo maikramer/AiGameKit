@@ -1,10 +1,10 @@
-"""Tests for gamedev_shared.progress — unified JSONL progress protocol."""
+"""Tests for aigamekit_shared.progress — unified JSONL progress protocol."""
 
 from __future__ import annotations
 
 import json
 
-from gamedev_shared.progress import (
+from aigamekit_shared.progress import (
     STATUS_ERROR,
     STATUS_OK,
     STATUS_PROGRESS,

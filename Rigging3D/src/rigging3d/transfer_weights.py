@@ -1,4 +1,4 @@
-"""Stage 8 — transferência de skin (wrapper → ``gamedev_shared.skin_transfer``).
+"""Stage 8 — transferência de skin (wrapper → ``aigamekit_shared.skin_transfer``).
 
 API pública estável para o CLI e testes. Lógica canónica vive em Shared:
 weights (KDTree) + skeleton + animations.
@@ -13,7 +13,7 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
-from gamedev_shared.skin_transfer import SkinTransferResult, transfer_skin_to_mesh, transfer_skin_to_targets
+from aigamekit_shared.skin_transfer import SkinTransferResult, transfer_skin_to_mesh, transfer_skin_to_targets
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def _bpy_readable_glb(path: Path):
     """Yields a path to ``path`` that bpy's GLTF importer can read."""
     src = Path(path).resolve()
     try:
-        from gamedev_shared.bpy_mesh import gltf_import_supports_meshopt
+        from aigamekit_shared.bpy_mesh import gltf_import_supports_meshopt
 
         if gltf_import_supports_meshopt():
             yield src

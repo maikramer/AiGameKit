@@ -1,4 +1,4 @@
-# GameDev Monorepo — Instalador via Clified (PyPI)
+# AiGameKit Monorepo — Instalador via Clified (PyPI)
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path

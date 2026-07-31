@@ -17,7 +17,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from gamedev_shared.model_server import delegate_to_ums
+from aigamekit_shared.model_server import delegate_to_ums
 
 TEXTURES_DIR = Path(__file__).parent / "public" / "assets" / "textures"
 

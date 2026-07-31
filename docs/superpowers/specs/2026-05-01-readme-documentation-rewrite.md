@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-01
 **Status:** Draft
-**Scope:** All 14 package READMEs in the GameDev monorepo
+**Scope:** All 14 package READMEs in the AiGameKit monorepo
 
 ---
 
@@ -119,7 +119,7 @@ License info.
 - **Python requirement:** Python 3.13 + bpy 5.1.0
 - **Pipeline:** Final stage after Rigging3D; produces animated GLB for VibeGame
 
-### 4.9 GameDevLab (`GameDevLab/README.md`) — ~280-350 lines
+### 4.9 AiGameKitLab (`AiGameKitLab/README.md`) — ~280-350 lines
 
 - **6 command groups:** check, debug, bench, perf, profile, mesh
 - **check glb:** YAML/JSON rule validation (CI-ready, exit 0/1)
@@ -217,7 +217,7 @@ The READMEs will be written in dependency order (shared first, then consumers):
 9. **Terrain3D** — standalone
 10. **Rigging3D** — depends on Text3D
 11. **Animator3D** — depends on Rigging3D
-12. **GameDevLab** — debug tool, depends on all
+12. **AiGameKitLab** — debug tool, depends on all
 13. **GameAssets** — orchestrator, depends on all
 14. **VibeGame** — consumer, depends on GameAssets handoff
 15. **Root README** — references all packages
@@ -247,7 +247,7 @@ Each README will be written as a complete file, replacing the existing one.
 | Paint3D | ~250 |
 | Rigging3D | ~200 |
 | Animator3D | ~400 |
-| GameDevLab | ~320 |
+| AiGameKitLab | ~320 |
 | Materialize | ~160 |
 | Terrain3D | ~140 |
 | GameAssets | ~750 |

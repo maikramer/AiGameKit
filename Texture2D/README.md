@@ -6,7 +6,7 @@ CLI for **seamless (tileable) 2D textures** using **Stable Diffusion v1.5 + circ
 
 Tiling is achieved **by construction**: every `Conv2d` layer in the UNet and VAE is patched to `padding_mode="circular"`, so the receptive field wraps around the image borders and the output tiles seamlessly in both axes — no LoRA, no post-processing, no trigger word. Uses [`stable-diffusion-v1-5/stable-diffusion-v1-5`](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) to generate textures that repeat without visible seams — ideal for floors, rocks, walls, and game-dev materials.
 
-In the [GameDev](../README.md) monorepo, the package depends on [**gamedev-shared**](../Shared/) (`gamedev_shared`): quality presets, Rich CLI, GPU helpers, and shared conventions aligned with Text2D, Text3D, and GameAssets.
+In the [AiGameKit](../README.md) monorepo, the package depends on [**aigamekit-shared**](../Shared/) (`aigamekit_shared`): quality presets, Rich CLI, GPU helpers, and shared conventions aligned with Text2D, Text3D, and GameAssets.
 
 ## Overview
 
@@ -25,7 +25,7 @@ In the [GameDev](../README.md) monorepo, the package depends on [**gamedev-share
 
 ### Official (monorepo)
 
-At the **GameDev** repo root:
+At the **AiGameKit** repo root:
 
 ```bash
 ./install.sh texture2d
@@ -49,9 +49,9 @@ Requires a **CUDA GPU** (PyTorch, diffusers, transformers, accelerate are runtim
 | `texture2d generate PROMPT` | Generate a seamless texture (delegates to UMS when available) |
 | `texture2d presets` | List available material presets |
 | `texture2d batch FILE` | Batch generate from a prompt file (one per line) |
-| `texture2d server` | **Deprecated** — use `gamedev-model-server start` (UMS) |
-| `texture2d server-status` | **Deprecated** — use `gamedev-model-server status` |
-| `texture2d server-stop` | **Deprecated** — use `gamedev-model-server stop` |
+| `texture2d server` | **Deprecated** — use `aigamekit-model-server start` (UMS) |
+| `texture2d server-status` | **Deprecated** — use `aigamekit-model-server status` |
+| `texture2d server-stop` | **Deprecated** — use `aigamekit-model-server stop` |
 | `texture2d info` | Config, system, and environment info |
 | `texture2d skill install` | Install Cursor Agent Skill |
 | `texture2d validate-tileable` | Validate a texture's tileability |
@@ -147,23 +147,23 @@ texture2d skill install -t /path/to/my-game --force
 
 ### Unified Model Server (UMS)
 
-Prefer **`gamedev-model-server`** (monorepo supervisor): one socket, smart VRAM
+Prefer **`aigamekit-model-server`** (monorepo supervisor): one socket, smart VRAM
 eviction, job queue with priority + affinity. `texture2d generate` auto-delegates
-(and can auto-start the UMS unless `GAMEDEV_UMS_AUTO_START=0`).
+(and can auto-start the UMS unless `AIGAMEKIT_UMS_AUTO_START=0`).
 
 ```bash
-gamedev-model-server start
+aigamekit-model-server start
 texture2d generate "stone wall" -o stone.png
 texture2d generate "wood" -o wood.png --ums-stream          # queue/progress events
 texture2d generate "dirt" -o dirt.png --ums-priority batch
 texture2d generate "test" -o t.png --no-ums                 # force in-process
-gamedev-model-server queue
-gamedev-model-server stop
+aigamekit-model-server queue
+aigamekit-model-server stop
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--ums-priority interactive\|batch` | Queue priority (default interactive / `GAMEDEV_UMS_PRIORITY`) |
+| `--ums-priority interactive\|batch` | Queue priority (default interactive / `AIGAMEKIT_UMS_PRIORITY`) |
 | `--no-ums` | Skip UMS; run in-process |
 | `--ums-stream` | Print UMS queue/progress NDJSON events |
 
@@ -301,4 +301,4 @@ Texture2D/
 
 - **Code:** MIT — [LICENSE](LICENSE).
 - **Weights (default):** [stable-diffusion-v1-5/stable-diffusion-v1-5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) — CreativeML Open RAIL-M license; comply with the model's use restrictions.
-- **Full license table:** [GameDev/README.md](../README.md) (Licenses section).
+- **Full license table:** [AiGameKit/README.md](../README.md) (Licenses section).

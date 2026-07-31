@@ -3,7 +3,7 @@
 JSON sobre Unix domain socket. Comandos curtos: 1 linha request → 1 linha response.
 ``generate`` / ``wait`` com ``stream: true``: várias linhas NDJSON (eventos + resultado).
 
-O UMS escuta num único socket canónico (``~/.cache/gamedev/model-server.sock``)
+O UMS escuta num único socket canónico (``~/.cache/aigamekit/model-server.sock``)
 e roteia pedidos para backends via fila inteligente (afinidade VRAM + prioridades).
 
 Comandos suportados:
@@ -45,7 +45,7 @@ from pathlib import Path
 # Socket canónico do UMS (mesmo diretório dos per-tool legacy servers).
 SOCKET_FILENAME = "model-server.sock"
 WAL_FILENAME = "ums-jobs.jsonl"
-DEFAULT_SOCKET_PATH = Path.home() / ".cache" / "gamedev" / SOCKET_FILENAME
+DEFAULT_SOCKET_PATH = Path.home() / ".cache" / "aigamekit" / SOCKET_FILENAME
 
 # Comandos do protocolo.
 CMD_GENERATE = "generate"
@@ -145,18 +145,18 @@ def _env_int(name: str, default: int) -> int:
 
 
 # Fila / scheduler (env overrideáveis).
-MAX_AFFINITY_CUTS = _env_int("GAMEDEV_UMS_MAX_AFFINITY_CUTS", 3)
-MAX_QUEUE_DEPTH = _env_int("GAMEDEV_UMS_MAX_QUEUE_DEPTH", 32)
-MAX_INFLIGHT = _env_int("GAMEDEV_UMS_MAX_INFLIGHT", 1)
+MAX_AFFINITY_CUTS = _env_int("AIGAMEKIT_UMS_MAX_AFFINITY_CUTS", 3)
+MAX_QUEUE_DEPTH = _env_int("AIGAMEKIT_UMS_MAX_QUEUE_DEPTH", 32)
+MAX_INFLIGHT = _env_int("AIGAMEKIT_UMS_MAX_INFLIGHT", 1)
 # 0 = desactivado. Se >0, job queued há mais de N segundos força pick (anti-starve).
-STARVATION_TIMEOUT_SEC = float(_env_int("GAMEDEV_UMS_STARVATION_TIMEOUT_SEC", 0))
+STARVATION_TIMEOUT_SEC = float(_env_int("AIGAMEKIT_UMS_STARVATION_TIMEOUT_SEC", 0))
 
 # VRAM transitória (processo externo / fragmentação CUDA): requeue em vez de
 # falhar o batch inteiro. Pico > VRAM total da GPU → sem retry (impossível).
-MAX_VRAM_RETRIES = _env_int("GAMEDEV_UMS_MAX_VRAM_RETRIES", 8)
+MAX_VRAM_RETRIES = _env_int("AIGAMEKIT_UMS_MAX_VRAM_RETRIES", 8)
 # Worker subprocesso morreu entre load e generate (IdleEvictor race, OOM kill,
 # crash) — requeue curto em vez de falhar o asset no batch (ex. scorpion_nest).
-MAX_WORKER_DEAD_RETRIES = _env_int("GAMEDEV_UMS_MAX_WORKER_DEAD_RETRIES", 2)
+MAX_WORKER_DEAD_RETRIES = _env_int("AIGAMEKIT_UMS_MAX_WORKER_DEAD_RETRIES", 2)
 
 
 def _env_float(name: str, default: float) -> float:
@@ -169,35 +169,35 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-VRAM_RETRY_BASE_SEC = _env_float("GAMEDEV_UMS_VRAM_RETRY_BASE_SEC", 2.0)
-VRAM_RETRY_MAX_SEC = _env_float("GAMEDEV_UMS_VRAM_RETRY_MAX_SEC", 30.0)
+VRAM_RETRY_BASE_SEC = _env_float("AIGAMEKIT_UMS_VRAM_RETRY_BASE_SEC", 2.0)
+VRAM_RETRY_MAX_SEC = _env_float("AIGAMEKIT_UMS_VRAM_RETRY_MAX_SEC", 30.0)
 # Retries consecutivos SEM progresso (VRAM livre plana ±slack e nada evictável)
 # antes de falhar rápido — evita o loop histórico de 8x30s sem saída possível.
-VRAM_FLAT_RETRY_MAX = _env_int("GAMEDEV_UMS_VRAM_FLAT_RETRY_MAX", 2)
+VRAM_FLAT_RETRY_MAX = _env_int("AIGAMEKIT_UMS_VRAM_FLAT_RETRY_MAX", 2)
 # Slack (MiB) para considerar a VRAM livre «plana» entre retries.
-VRAM_FLAT_SLACK_MIB = _env_int("GAMEDEV_UMS_VRAM_FLAT_SLACK_MIB", 32)
+VRAM_FLAT_SLACK_MIB = _env_int("AIGAMEKIT_UMS_VRAM_FLAT_SLACK_MIB", 32)
 # Espera curta dentro de ensure_loaded antes de recusar (evict+clear já feitos).
-VRAM_ADMIT_WAIT_SEC = _env_float("GAMEDEV_UMS_VRAM_ADMIT_WAIT_SEC", 8.0)
-VRAM_ADMIT_POLL_SEC = _env_float("GAMEDEV_UMS_VRAM_ADMIT_POLL_SEC", 0.5)
+VRAM_ADMIT_WAIT_SEC = _env_float("AIGAMEKIT_UMS_VRAM_ADMIT_WAIT_SEC", 8.0)
+VRAM_ADMIT_POLL_SEC = _env_float("AIGAMEKIT_UMS_VRAM_ADMIT_POLL_SEC", 0.5)
 # Limiar para o aviso de residual no PID do UMS com ``loaded=[]`` (contexto
 # CUDA / cache que sobrevive ao scrub). O residual é baseline do worker: o
 # admit in-process credita o cache reutilizável (reserved-allocated) — sem
 # acção destrutiva sobre o processo.
-DEAD_VRAM_MIB = _env_int("GAMEDEV_UMS_DEAD_VRAM_MIB", 256)
+DEAD_VRAM_MIB = _env_int("AIGAMEKIT_UMS_DEAD_VRAM_MIB", 256)
 
 # Descarregar pesos de um backend após este tempo sem uso. 120s equilibra
 # "VRAM livre para o resto do sistema" com o custo do cold start (text3d/paint3d
 # levam dezenas de segundos); num batch contínuo o last_used renova-se e o
 # modelo fica quente.
-IDLE_EVICT_SEC = _env_float("GAMEDEV_UMS_IDLE_EVICT_SEC", 120.0)
-IDLE_EVICT_CHECK_SEC = _env_float("GAMEDEV_UMS_IDLE_EVICT_CHECK_SEC", 15.0)
+IDLE_EVICT_SEC = _env_float("AIGAMEKIT_UMS_IDLE_EVICT_SEC", 120.0)
+IDLE_EVICT_CHECK_SEC = _env_float("AIGAMEKIT_UMS_IDLE_EVICT_CHECK_SEC", 15.0)
 # Terminar o subprocesso worker após este tempo sem uso. ``unload`` só liberta
 # pesos — o contexto CUDA do processo (~0.3-1 GiB) só sai com o processo.
-WORKER_IDLE_SHUTDOWN_SEC = _env_float("GAMEDEV_UMS_WORKER_IDLE_SHUTDOWN_SEC", 300.0)
+WORKER_IDLE_SHUTDOWN_SEC = _env_float("AIGAMEKIT_UMS_WORKER_IDLE_SHUTDOWN_SEC", 300.0)
 # Health-check (ping/pong) aos workers vivos; sem pong ⇒ mata e marca para respawn.
-WORKER_HEALTH_CHECK_SEC = _env_float("GAMEDEV_UMS_WORKER_HEALTH_CHECK_SEC", 60.0)
+WORKER_HEALTH_CHECK_SEC = _env_float("AIGAMEKIT_UMS_WORKER_HEALTH_CHECK_SEC", 60.0)
 # Reap de supervisores/workers órfãos no arranque (0 desliga).
-REAP_ON_START = _env_int("GAMEDEV_UMS_REAP_ON_START", 1)
+REAP_ON_START = _env_int("AIGAMEKIT_UMS_REAP_ON_START", 1)
 
 # Default cmd quando ausente no request (retrocompat com per-tool: gerar).
 DEFAULT_CMD = CMD_GENERATE
@@ -211,7 +211,7 @@ MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MiB
 # Minutos de idle antes de self-shutdown do UMS (0 = desativado). 30 min: os
 # clientes fazem auto-start quando precisam, logo um supervisor parado só está
 # a segurar contexto CUDA e a arriscar ficar zombie.
-DEFAULT_IDLE_TIMEOUT_MIN = _env_int("GAMEDEV_UMS_IDLE_TIMEOUT_MIN", 30)
+DEFAULT_IDLE_TIMEOUT_MIN = _env_int("AIGAMEKIT_UMS_IDLE_TIMEOUT_MIN", 30)
 
 
 def normalize_priority(value: object | None) -> str:

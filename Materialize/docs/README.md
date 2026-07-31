@@ -13,12 +13,12 @@ Materialize CLI is a command-line tool that converts a diffuse/albedo image into
 
 ## Installation
 
-### GameDev monorepo
+### AiGameKit monorepo
 
-From the **GameDev** repository root (parent of this `Materialize/` folder):
+From the **AiGameKit** repository root (parent of this `Materialize/` folder):
 
 ```bash
-cd /path/to/GameDev
+cd /path/to/AiGameKit
 ./install.sh materialize
 ```
 

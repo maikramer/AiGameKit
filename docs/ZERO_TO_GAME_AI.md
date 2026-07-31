@@ -17,7 +17,7 @@ flowchart TB
   end
   subgraph agents [Coding agents and IDE]
     AG[AGENTS.md]
-    LL[Shared gamedev_shared]
+    LL[Shared aigamekit_shared]
     VG[VibeGame llms.txt]
     GAS[GameAssets cursor skill]
   end
@@ -42,7 +42,7 @@ None of these replaces the others: **prompts become files**, **files become URLs
 1. **Install** the CLIs you need from the repo root ([INSTALLING.md](INSTALLING.md)): at minimum `gameassets`, tools referenced by your profile, and optionally `./install.sh vibegame` for the scaffold CLI.
 2. **Author style and scope** in `game.yaml` + `manifest.csv` + presets; use `gameassets prompts` to review prompts before spending GPU/API quota.
 3. **Run batch**: `gameassets batch --profile … --manifest …`. Pipeline stages (3D, rig, parts, animate) are auto-detected from manifest columns and `game.yaml` profile blocks ([GameAssets README](../GameAssets/README.md)).
-4. **Validate assets**: optional `gamedev-lab debug …` on critical GLBs ([GameDevLab](../GameDevLab/)).
+4. **Validate assets**: optional `aigamekit-lab debug …` on critical GLBs ([AiGameKitLab](../AiGameKitLab/)).
 5. **Hand off to the web**: copy GLBs/audio into `public/assets/…` per [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md); use [VibeGame/examples/simple-rpg](../VibeGame/examples/simple-rpg/) as a full template or [VibeGame/examples/hello-world](../VibeGame/examples/hello-world/) for a minimal app.
 6. **Iterate with an agent**: keep [AGENTS.md](../AGENTS.md) in context for monorepo conventions; for VibeGame-specific XML/API, attach or resolve [VibeGame/llms.txt](../VibeGame/llms.txt) (built for LLM system prompts). For GameAssets-only tasks, the [GameAssets skill](../GameAssets/src/gameassets/cursor_skill/SKILL.md) describes when to use which flags and env vars.
 
@@ -155,5 +155,5 @@ Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_contex
 
 - [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) — folder layout and web contract  
 - [VibeGame README — GLB handoff](../VibeGame/README.md)  
-- [Shared](../Shared/) — `gamedev_shared`, unified installer including `vibegame`  
+- [Shared](../Shared/) — `aigamekit_shared`, unified installer including `vibegame`  
 - Upstream VibeGame AI workflow (Context7, Shallot): see [VibeGame README](../VibeGame/README.md) “AI Context Management”

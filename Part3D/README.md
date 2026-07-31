@@ -11,7 +11,7 @@ Part3D splits a single textured mesh into semantically meaningful parts — e.g.
 1. **P3-SAM** — segments the mesh surface into part regions.
 2. **X-Part** — generates separate 3D geometry for each detected part.
 
-The tool auto-tunes parameters based on mesh geometry and available VRAM, or you can set them explicitly. It integrates with the [QualityEngine](../Shared/src/gamedev_shared/quality.py) preset system for cross-tool quality control.
+The tool auto-tunes parameters based on mesh geometry and available VRAM, or you can set them explicitly. It integrates with the [QualityEngine](../Shared/src/aigamekit_shared/quality.py) preset system for cross-tool quality control.
 
 **Requirements:**
 
@@ -23,7 +23,7 @@ The tool auto-tunes parameters based on mesh geometry and available VRAM, or you
 
 ### Official (monorepo)
 
-From the **GameDev** repo root:
+From the **AiGameKit** repo root:
 
 ```bash
 ./install.sh part3d
@@ -224,7 +224,7 @@ Text3D (generate) → Paint3D (texture) → Part3D (decompose) → Rigging3D (au
 ```
 
 GameAssets parts stage is not wired yet (stub). UMS backend `part3d` is registered
-for warm model serving. Prefer `gamedev-model-server`; `part3d decompose` accepts
+for warm model serving. Prefer `aigamekit-model-server`; `part3d decompose` accepts
 `--ums-priority`, `--no-ums`, `--ums-stream` (see [`ModelServer/README.md`](../ModelServer/README.md)).
 
 ## Development

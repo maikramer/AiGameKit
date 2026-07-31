@@ -20,7 +20,7 @@ import torch.nn.functional as F
 from einops import repeat
 from tqdm import tqdm
 
-from gamedev_shared.logging import Logger
+from aigamekit_shared.logging import Logger
 
 _logger = Logger()
 

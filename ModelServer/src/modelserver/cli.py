@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Unified Model Server — CLI principal.
 
-Comandos (alias ``ums`` = ``gamedev-model-server``):
+Comandos (alias ``ums`` = ``aigamekit-model-server``):
   start|stop|status|queue|wait|cancel|flush|backends|preload|evict|respawn|
   stats|debug|bench|doctor
 
@@ -31,7 +31,7 @@ try:
 except ImportError:  # pragma: no cover
     import click  # type: ignore[no-redef]
 
-from gamedev_shared.model_server import (
+from aigamekit_shared.model_server import (
     UMS_DO_NOT_KILL_TIP,
     format_ums_holding_summary,
     is_server_running,
@@ -112,9 +112,9 @@ def _short_job_id(job_id: object, *, n: int = 12) -> str:
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="gamedev-model-server")
+@click.version_option(version="0.1.0", prog_name="aigamekit-model-server")
 def cli() -> None:
-    """Unified Model Server — supervisor único de VRAM para o monorepo GameDev."""
+    """Unified Model Server — supervisor único de VRAM para o monorepo AiGameKit."""
 
 
 @cli.command("start")
@@ -150,7 +150,7 @@ def start_cmd(
     verbose: bool,
 ) -> None:
     """Arranca o Unified Model Server (foreground)."""
-    from gamedev_shared.logging import configure_logging
+    from aigamekit_shared.logging import configure_logging
 
     from .server import UnifiedModelServer
 
@@ -217,7 +217,7 @@ def status_cmd(as_json: bool) -> None:
     resp = _send({"cmd": P.CMD_STATUS}, timeout=5.0)
     if resp is None:
         console.print("[yellow]UMS não está ativo.[/yellow]")
-        console.print("[dim]Arranca com: gamedev-model-server start[/dim]")
+        console.print("[dim]Arranca com: aigamekit-model-server start[/dim]")
         sys.exit(1)
 
     if as_json:
@@ -521,7 +521,7 @@ def queue_cmd(as_json: bool) -> None:
 @click.option("--json", "as_json", is_flag=True, help="Dump JSON da resposta final.")
 def wait_cmd(job_id: str, timeout: float, as_json: bool) -> None:
     """Bloqueia até o job UMS terminar (ou timeout)."""
-    from gamedev_shared.model_server import wait_ums_job
+    from aigamekit_shared.model_server import wait_ums_job
 
     console.print(f"[dim]À espera do job {job_id}… ({UMS_DO_NOT_KILL_TIP})[/dim]")
     resp = wait_ums_job(job_id, timeout_sec=timeout)
@@ -572,7 +572,7 @@ def preload_cmd(name: str, as_json: bool) -> None:
     """Pré-carrega um backend (ex: text2icon)."""
     resp = _send({"cmd": P.CMD_PRELOAD, "backend": name}, timeout=600.0)
     if resp is None:
-        console.print("[yellow]UMS não está ativo. Arranca com: gamedev-model-server start[/yellow]")
+        console.print("[yellow]UMS não está ativo. Arranca com: aigamekit-model-server start[/yellow]")
         sys.exit(1)
     if as_json:
         _print_json(resp)
@@ -876,7 +876,7 @@ def debug_cmd(as_json: bool, watch_sec: float) -> None:
 
         free_s = "?"
         with contextlib.suppress(Exception):
-            from gamedev_shared.gpu import query_gpu_free_mib
+            from aigamekit_shared.gpu import query_gpu_free_mib
 
             free = query_gpu_free_mib()
             if free is not None:
@@ -1096,16 +1096,16 @@ def doctor_cmd(fix: bool) -> None:
     checks: list[tuple[str, bool, str]] = []
 
     # 1. Socket do UMS ativo?
-    from gamedev_shared.model_server import UMS_SOCKET, discover_active_sockets, is_ums_running
+    from aigamekit_shared.model_server import UMS_SOCKET, discover_active_sockets, is_ums_running
 
     ums_up = is_ums_running()
     checks.append(
-        ("UMS ativo", ums_up, "Socket presente e respondendo" if ums_up else "Arrancar: gamedev-model-server start")
+        ("UMS ativo", ums_up, "Socket presente e respondendo" if ums_up else "Arrancar: aigamekit-model-server start")
     )
 
     free_mib: int | None = None
     with contextlib.suppress(Exception):
-        from gamedev_shared.gpu import query_gpu_free_mib
+        from aigamekit_shared.gpu import query_gpu_free_mib
 
         free_mib = query_gpu_free_mib()
 
@@ -1213,14 +1213,14 @@ def doctor_cmd(fix: bool) -> None:
             (
                 "Sockets legacy",
                 False,
-                f"Activos: {names} — conflito com UMS; para ou GAMEDEV_ALLOW_LEGACY_SERVER=1 só se preciso",
+                f"Activos: {names} — conflito com UMS; para ou AIGAMEKIT_ALLOW_LEGACY_SERVER=1 só se preciso",
             )
         )
     else:
         checks.append(("Sockets legacy", True, "nenhum per-tool activo"))
 
     # 2. GPU disponível? (NVML preferido; fallback nvidia-smi via Shared)
-    from gamedev_shared.gpu import check_nvidia_driver_match, list_gpu_snapshots, nvml_available
+    from aigamekit_shared.gpu import check_nvidia_driver_match, list_gpu_snapshots, nvml_available
 
     driver_ok, driver_detail = check_nvidia_driver_match()
     checks.append(("NVIDIA driver match", driver_ok, driver_detail))
@@ -1289,7 +1289,7 @@ def doctor_cmd(fix: bool) -> None:
     if ums_up and qresp and (qresp.get("queue") or {}).get("queue_depth"):
         console.print(
             "[yellow]Hint:[/yellow] há jobs na fila UMS — [bold]não mates GPU[/bold]; "
-            "usa [cyan]gamedev-model-server queue[/cyan] / cancel."
+            "usa [cyan]aigamekit-model-server queue[/cyan] / cancel."
         )
     if all_ok:
         console.print("[bold green]✓ Todos os checks passaram.[/bold green]")
@@ -1298,7 +1298,7 @@ def doctor_cmd(fix: bool) -> None:
 
 
 def main() -> None:
-    """Entry point para ``gamedev-model-server`` / ``ums``."""
+    """Entry point para ``aigamekit-model-server`` / ``ums``."""
     cli()
 
 

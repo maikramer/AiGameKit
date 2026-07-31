@@ -1,9 +1,9 @@
-"""Testes para gamedev_shared.skill_install."""
+"""Testes para aigamekit_shared.skill_install."""
 
 import pytest
 
-from gamedev_shared.installer.monorepo import try_find_monorepo_root
-from gamedev_shared.skill_install import (
+from aigamekit_shared.installer.monorepo import try_find_monorepo_root
+from aigamekit_shared.skill_install import (
     install_agent_skill,
     resolve_skill_source,
 )
@@ -32,15 +32,15 @@ class TestFindMonorepoRoot:
 
 class TestResolveSkillSource:
     def test_monorepo_source(self, tmp_path):
-        gamedev = tmp_path / "GameDev"
-        gamedev.mkdir()
-        (gamedev / ".git").mkdir()
-        (gamedev / "Shared").mkdir()
-        skill_dir = gamedev / ".cursor" / "create-skill" / "mytool"
+        aigamekit = tmp_path / "AiGameKit"
+        aigamekit.mkdir()
+        (aigamekit / ".git").mkdir()
+        (aigamekit / "Shared").mkdir()
+        skill_dir = aigamekit / ".cursor" / "create-skill" / "mytool"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("# Skill")
 
-        pkg_dir = gamedev / "MyTool" / "src" / "mytool"
+        pkg_dir = aigamekit / "MyTool" / "src" / "mytool"
         pkg_dir.mkdir(parents=True)
 
         result = resolve_skill_source("mytool", pkg_dir)

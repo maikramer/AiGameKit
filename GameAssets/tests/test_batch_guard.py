@@ -23,8 +23,8 @@ def test_subprocess_gpu_env_sets_expandable_when_empty(monkeypatch: pytest.Monke
 
 
 def test_query_gpu_free_mib_none_without_nvml_or_smi(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("gamedev_shared.gpu._nvml_init", lambda: False)
-    monkeypatch.setattr("gamedev_shared.gpu.shutil.which", lambda _x: None)
+    monkeypatch.setattr("aigamekit_shared.gpu._nvml_init", lambda: False)
+    monkeypatch.setattr("aigamekit_shared.gpu.shutil.which", lambda _x: None)
     assert query_gpu_free_mib() is None
 
 

@@ -159,8 +159,8 @@ def generate_pbr_with_materialize(
 
     materialize_bin: str
     try:
-        from gamedev_shared.env import MATERIALIZE_BIN
-        from gamedev_shared.subprocess_utils import resolve_binary
+        from aigamekit_shared.env import MATERIALIZE_BIN
+        from aigamekit_shared.subprocess_utils import resolve_binary
 
         materialize_bin = resolve_binary(MATERIALIZE_BIN, "materialize")
     except (ImportError, FileNotFoundError):

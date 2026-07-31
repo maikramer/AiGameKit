@@ -293,7 +293,7 @@ pós-shape (`topology-fix`) vs regen.
 - Shape wave: **não** pré-carregar text3d sync longo (timeout → Broken pipe →
   evict → fila VRAM stuck). 1º job carrega o shape certo.
 - Pico VRAM: payload UMS com `sdnq_preset` / `memory_efficient` (hw-auto / `resolve_*_vram_opts` — não CLI `--low-vram`).
-- Erro VRAM transitório: UMS requeue + backoff (`GAMEDEV_UMS_MAX_VRAM_RETRIES`).
+- Erro VRAM transitório: UMS requeue + backoff (`AIGAMEKIT_UMS_MAX_VRAM_RETRIES`).
 - **Nunca** kill GPU enquanto UMS tem jobs.
 - Resume: intermediários em `_intermediate/`; fingerprint Omni tem de bater
   senão regenera shape.

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gamedev_shared.bpy_mesh import load_glb
-from gamedev_shared.bpy_mesh import save_glb as _bpy_save_glb
+from aigamekit_shared.bpy_mesh import load_glb
+from aigamekit_shared.bpy_mesh import save_glb as _bpy_save_glb
 
 _MERGE_THRESHOLD = 2e-4
 
@@ -16,10 +16,10 @@ def load_mesh_bpy(path: str | Path) -> list:
 
 
 def _merge_duplicates_bmesh(obj, threshold: float = _MERGE_THRESHOLD) -> None:
-    """Merge duplicate vertices (delegado em ``gamedev_shared.mesh_repair``)."""
+    """Merge duplicate vertices (delegado em ``aigamekit_shared.mesh_repair``)."""
     import logging
 
-    from gamedev_shared.mesh_repair import remove_doubles
+    from aigamekit_shared.mesh_repair import remove_doubles
 
     before = len(obj.data.vertices)
     removed = remove_doubles(obj, threshold=threshold)
@@ -27,7 +27,7 @@ def _merge_duplicates_bmesh(obj, threshold: float = _MERGE_THRESHOLD) -> None:
 
 
 def save_glb(objects, output_path: str | Path) -> Path:
-    """Exporta mesh objects via ``gamedev_shared.bpy_mesh.save_glb``.
+    """Exporta mesh objects via ``aigamekit_shared.bpy_mesh.save_glb``.
 
     Mesmo contrato que Text3D/Rigging/Animator: shade-smooth + NORMAL+TANGENT
     + JPEG. Merge de duplicados só quando há UVs (costuras de atlas).
@@ -40,7 +40,7 @@ def save_glb(objects, output_path: str | Path) -> Path:
         if obj.data.uv_layers:
             _merge_duplicates_bmesh(obj)
 
-    from gamedev_shared.bpy_mesh import smooth_shade_scene
+    from aigamekit_shared.bpy_mesh import smooth_shade_scene
 
     # 180°: painted cartoon — sem creases duros que o exporter parta em seams.
     smooth_shade_scene(mesh_objs, degrees=180.0)

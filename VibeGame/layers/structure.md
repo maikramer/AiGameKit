@@ -68,7 +68,7 @@ vibegame/
 │   │   ├── index.html
 │   │   ├── package.json
 │   │   └── vite.config.ts
-│   └── simple-rpg/  # Full GameDev pipeline demo + handoff
+│   └── simple-rpg/  # Full AiGameKit pipeline demo + handoff
 │       ├── README.md
 │       ├── index.html
 │       ├── src/main.ts

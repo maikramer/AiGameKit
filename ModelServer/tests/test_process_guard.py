@@ -51,7 +51,7 @@ class TestClassifyCmdline:
         assert classify_cmdline(SUPERVISOR_ARGV) == (KIND_SUPERVISOR, None)
 
     def test_supervisor_console_script(self) -> None:
-        assert classify_cmdline(["/home/u/.local/bin/gamedev-model-server", "start", "-v"]) == (KIND_SUPERVISOR, None)
+        assert classify_cmdline(["/home/u/.local/bin/aigamekit-model-server", "start", "-v"]) == (KIND_SUPERVISOR, None)
         assert classify_cmdline(["/home/u/.local/bin/ums", "start"]) == (KIND_SUPERVISOR, None)
 
     def test_worker_carries_backend(self) -> None:

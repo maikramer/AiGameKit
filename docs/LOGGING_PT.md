@@ -1,24 +1,24 @@
-# Logging em ficheiro — tools GameDev + UMS
+# Logging em ficheiro — tools AiGameKit + UMS
 
 Todas as CLIs Python e o Unified Model Server (UMS) gravam logs plain-text no
-cache GameDev. Consola continua Rich/ANSI; ficheiro é espelho UTC para debug
+cache AiGameKit. Consola continua Rich/ANSI; ficheiro é espelho UTC para debug
 offline (GPU falha, fila presa, crash de worker).
 
-**Código:** [`Shared/src/gamedev_shared/logging.py`](../Shared/src/gamedev_shared/logging.py)  
+**Código:** [`Shared/src/aigamekit_shared/logging.py`](../Shared/src/aigamekit_shared/logging.py)  
 **English:** [LOGGING.md](LOGGING.md)
 
 ## Onde
 
 | Path | Significado |
 |------|-------------|
-| `~/.cache/gamedev/logs/<tool>-YYYY-MM-DD.log` | Ficheiro diário (data UTC) |
-| `$GAMEDEV_LOG_DIR/…` | Override do diretório |
-| `$GAMEDEV_LOG_FILE` | Path exacto (ignora naming diário) |
+| `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` | Ficheiro diário (data UTC) |
+| `$AIGAMEKIT_LOG_DIR/…` | Override do diretório |
+| `$AIGAMEKIT_LOG_FILE` | Path exacto (ignora naming diário) |
 
 Exemplos: `text2d-2026-07-16.log`, `ums-2026-07-16.log`, `gameassets-….log`.
 
 Nome da tool: `setup_rich_click_module(tool=…)` em cada `cli_rich.py`, ou
-`GAMEDEV_LOG_TOOL` / argv (`ums` / `gamedev-model-server` → `ums`).
+`AIGAMEKIT_LOG_TOOL` / argv (`ums` / `aigamekit-model-server` → `ums`).
 
 ## Formato
 
@@ -29,7 +29,7 @@ Nome da tool: `setup_rich_click_module(tool=…)` em cada `cli_rich.py`, ou
 ```
 
 Níveis: `DEBUG`, `DIM`, `INFO`, `STEP`, `SUCCESS`, `HEADER`, `WARN`, `ERROR`.
-Mínimo por omissão: `INFO` (`GAMEDEV_LOG_LEVEL`).
+Mínimo por omissão: `INFO` (`AIGAMEKIT_LOG_LEVEL`).
 
 ## O que vai para o ficheiro
 
@@ -43,19 +43,19 @@ Mínimo por omissão: `INFO` (`GAMEDEV_LOG_LEVEL`).
 
 | Variável | Efeito |
 |----------|--------|
-| `GAMEDEV_LOG_DIR` | Dir (default `~/.cache/gamedev/logs`) |
-| `GAMEDEV_LOG_FILE` | Path exacto |
-| `GAMEDEV_LOG_TOOL` | Segmento do nome |
-| `GAMEDEV_LOG_LEVEL` | `DEBUG` \| `INFO` \| `WARN` \| `ERROR` |
-| `GAMEDEV_FILE_LOG` | `0` off; `1` força on (preciso sob pytest) |
-| `GAMEDEV_NO_FILE_LOG` | `1` desliga |
+| `AIGAMEKIT_LOG_DIR` | Dir (default `~/.cache/aigamekit/logs`) |
+| `AIGAMEKIT_LOG_FILE` | Path exacto |
+| `AIGAMEKIT_LOG_TOOL` | Segmento do nome |
+| `AIGAMEKIT_LOG_LEVEL` | `DEBUG` \| `INFO` \| `WARN` \| `ERROR` |
+| `AIGAMEKIT_FILE_LOG` | `0` off; `1` força on (preciso sob pytest) |
+| `AIGAMEKIT_NO_FILE_LOG` | `1` desliga |
 
-Sob **pytest** o ficheiro fica **off** salvo `GAMEDEV_FILE_LOG=1`.
+Sob **pytest** o ficheiro fica **off** salvo `AIGAMEKIT_FILE_LOG=1`.
 
 ## API
 
 ```python
-from gamedev_shared.logging import Logger, configure_logging, current_log_path
+from aigamekit_shared.logging import Logger, configure_logging, current_log_path
 
 configure_logging("mytool")
 log = Logger(tool="mytool")
@@ -69,7 +69,7 @@ UMS: `configure_logging("ums")` no `ums start` (path no painel de arranque).
 ## Fora de scope
 
 - **Materialize** (Rust) e **VibeGame** (TS) — loggers próprios.
-- Profiler JSONL (`GAMEDEV_PROFILE_LOG`) é outro canal.
+- Profiler JSONL (`AIGAMEKIT_PROFILE_LOG`) é outro canal.
 
 ## Ver também
 

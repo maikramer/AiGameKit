@@ -6,7 +6,7 @@ deve despachar corretamente: o subprocesso vai ao SubprocessWorkerPool mock;
 o in-process vai ao adapter real.
 
 Cobre também:
-- ``_use_subprocess`` respeita ``GAMEDEV_UMS_SUBPROCESS=0`` (rollback).
+- ``_use_subprocess`` respeita ``AIGAMEKIT_UMS_SUBPROCESS=0`` (rollback).
 - ``is_loaded`` / ``loaded_names`` / ``shape_matches_loaded`` em modo subprocesso.
 - ``_evict_unlocked`` em modo subprocesso (chama pool.unload, não adapter.unload).
 - ``idle_candidates`` retorna backends em qualquer modo.
@@ -142,7 +142,7 @@ class TestUseSubprocess:
         assert mgr._use_subprocess("inproc_mock") is False
 
     def test_env_override_disables_globally(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GAMEDEV_UMS_SUBPROCESS", "0")
+        monkeypatch.setenv("AIGAMEKIT_UMS_SUBPROCESS", "0")
         mgr, _ = _make_hybrid_manager()
         assert mgr._use_subprocess("sub_mock") is False
 
@@ -295,8 +295,8 @@ class TestInProcessStillWorks:
 
 class TestRollbackViaEnv:
     def test_env_zero_forces_inprocess_for_subprocess_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """GAMEDEV_UMS_SUBPROCESS=0: sub_mock corre in-process em vez de via pool."""
-        monkeypatch.setenv("GAMEDEV_UMS_SUBPROCESS", "0")
+        """AIGAMEKIT_UMS_SUBPROCESS=0: sub_mock corre in-process em vez de via pool."""
+        monkeypatch.setenv("AIGAMEKIT_UMS_SUBPROCESS", "0")
         # Para o fallback funcionar, sub_mock precisa de um adapter real.
         registry = _make_hybrid_registry()
         registry._adapter_instances["sub_mock"] = MockAdapter(name="sub_mock")

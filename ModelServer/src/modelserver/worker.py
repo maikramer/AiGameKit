@@ -15,8 +15,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from gamedev_shared.diffusion_control import GenerationAborted
-from gamedev_shared.logging import Logger
+from aigamekit_shared.diffusion_control import GenerationAborted
+from aigamekit_shared.logging import Logger
 
 from . import protocol as P
 from .backend_manager import BackendManager
@@ -91,7 +91,7 @@ class WorkerPool:
         if self._query_free_mib is not None:
             return self._query_free_mib()
         try:
-            from gamedev_shared.gpu import query_gpu_free_mib
+            from aigamekit_shared.gpu import query_gpu_free_mib
 
             return query_gpu_free_mib()
         except Exception:
@@ -99,7 +99,7 @@ class WorkerPool:
 
     def _total_mib(self) -> int | None:
         try:
-            from gamedev_shared.gpu import query_gpu_snapshot
+            from aigamekit_shared.gpu import query_gpu_snapshot
 
             snap = query_gpu_snapshot()
             if snap is None:

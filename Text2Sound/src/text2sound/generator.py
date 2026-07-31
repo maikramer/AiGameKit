@@ -18,7 +18,7 @@ from einops import rearrange
 from stable_audio_tools import get_pretrained_model
 from stable_audio_tools.inference.generation import generate_diffusion_cond
 
-from gamedev_shared.diffusion_control import GenerationAborted
+from aigamekit_shared.diffusion_control import GenerationAborted
 
 from .models import MODEL_MUSIC_ID
 
@@ -98,7 +98,7 @@ class AudioGenerator:
         else:
             self._chunked_vae = chunked_vae
         if torch_compile is None:
-            self._torch_compile = os.environ.get("GAMEDEV_TORCH_COMPILE", "0").strip().lower() in (
+            self._torch_compile = os.environ.get("AIGAMEKIT_TORCH_COMPILE", "0").strip().lower() in (
                 "1",
                 "true",
                 "yes",
@@ -218,7 +218,7 @@ class AudioGenerator:
         Best-effort: se falhar, ``get_pretrained_model`` faz o download como antes.
         """
         try:
-            from gamedev_shared.model_download import ensure_model
+            from aigamekit_shared.model_download import ensure_model
 
             ensure_model(self._model_id)
         except Exception:
@@ -230,7 +230,7 @@ class AudioGenerator:
             return
 
         try:
-            from gamedev_shared.env import ensure_pytorch_cuda_alloc_conf
+            from aigamekit_shared.env import ensure_pytorch_cuda_alloc_conf
 
             ensure_pytorch_cuda_alloc_conf()
         except ImportError:
@@ -263,8 +263,8 @@ class AudioGenerator:
         # offload / full-GPU conforme VRAM livre. Footprint do registry centralizado.
         # (Antes o modelo ia para .to(device) primeiro — OOM prematuro em GPUs pequenas.)
         if self._device == "cuda":
-            from gamedev_shared.hardware import cuda_gpu_free_specs
-            from gamedev_shared.lowvram import get_footprint, place_pipeline
+            from aigamekit_shared.hardware import cuda_gpu_free_specs
+            from aigamekit_shared.lowvram import get_footprint, place_pipeline
 
             specs = cuda_gpu_free_specs()
             if self._gpu_ids:
@@ -299,7 +299,7 @@ class AudioGenerator:
             if offload in ("model_cpu", "sequential_cpu"):
                 pass  # ping-pong de device — skip
             else:
-                from gamedev_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
+                from aigamekit_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
 
                 requested = self._torch_compile_mode
                 mode = resolve_torch_compile_mode(
@@ -322,7 +322,7 @@ class AudioGenerator:
                         self._model = compiled
 
         if self._channels_last:
-            from gamedev_shared.quantization import apply_channels_last
+            from aigamekit_shared.quantization import apply_channels_last
 
             pre = getattr(self._model, "pretransform", None)
             if pre is not None:
@@ -378,7 +378,7 @@ class AudioGenerator:
     def _clear_cuda(self) -> None:
         if self._device == "cuda" and torch.cuda.is_available():
             try:
-                from gamedev_shared.gpu import clear_cuda_memory
+                from aigamekit_shared.gpu import clear_cuda_memory
 
                 clear_cuda_memory()
             except ImportError:

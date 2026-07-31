@@ -1,6 +1,6 @@
 """Adapter paint3d para o modo subprocesso (``paint3d serve --ums-worker``).
 
-Herda de :class:`gamedev_shared.worker_serve_adapter_base.WorkerAdapter`
+Herda de :class:`aigamekit_shared.worker_serve_adapter_base.WorkerAdapter`
 (standalone, sem depender do package modelserver) — os helpers estáticos
 (``report_progress``/``should_abort``/``cancelled_response``/``abort_hooks``/
 ``apply_runtime_budget``) vêm da base, sem cópias locais. Mesma lógica do
@@ -16,7 +16,7 @@ import contextlib
 import time
 from typing import Any
 
-from gamedev_shared.worker_serve_adapter_base import WorkerAdapter
+from aigamekit_shared.worker_serve_adapter_base import WorkerAdapter
 
 
 class Adapter(WorkerAdapter):

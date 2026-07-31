@@ -1,10 +1,10 @@
-"""Testes para gamedev_shared.installer.monorepo."""
+"""Testes para aigamekit_shared.installer.monorepo."""
 
 from pathlib import Path
 
 import pytest
 
-from gamedev_shared.installer.monorepo import (
+from aigamekit_shared.installer.monorepo import (
     find_monorepo_root,
     try_find_monorepo_root,
 )
