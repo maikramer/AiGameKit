@@ -25,10 +25,10 @@
     max-distance="260" random-yaw="true" variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_2_lod1.glb" lod1-url="/assets/meshes/form_outcrop_2_lod1.glb" lod2-url="/assets/meshes/form_outcrop_2_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_2_lod0.glb" lod1-url="/assets/meshes/form_outcrop_2_lod1.glb" lod2-url="/assets/meshes/form_outcrop_2_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_8_lod1.glb" lod1-url="/assets/meshes/form_outcrop_8_lod1.glb" lod2-url="/assets/meshes/form_outcrop_8_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_8_lod0.glb" lod1-url="/assets/meshes/form_outcrop_8_lod1.glb" lod2-url="/assets/meshes/form_outcrop_8_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -41,7 +41,7 @@
     max-distance="280" random-yaw="true" variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_cliff_1_lod1.glb" lod1-url="/assets/meshes/form_cliff_1_lod1.glb" lod2-url="/assets/meshes/form_cliff_1_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_cliff_1_lod0.glb" lod1-url="/assets/meshes/form_cliff_1_lod1.glb" lod2-url="/assets/meshes/form_cliff_1_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -54,7 +54,7 @@
     max-distance="250" random-yaw="true" variation="tree"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/pine_dark_lod1.glb" lod1-url="/assets/meshes/pine_dark_lod1.glb" lod2-url="/assets/meshes/pine_dark_lod2.glb" lod-threshold-near="60" lod-threshold-mid="140"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/pine_dark_lod0.glb" lod1-url="/assets/meshes/pine_dark_lod1.glb" lod2-url="/assets/meshes/pine_dark_lod2.glb" lod-threshold-near="60" lod-threshold-mid="140"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
 
@@ -72,10 +72,10 @@
     max-distance="260" random-yaw="true" variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_5_lod1.glb" lod1-url="/assets/meshes/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/form_outcrop_5_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_5_lod0.glb" lod1-url="/assets/meshes/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/form_outcrop_5_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_2_lod1.glb" lod1-url="/assets/meshes/form_outcrop_2_lod1.glb" lod2-url="/assets/meshes/form_outcrop_2_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_2_lod0.glb" lod1-url="/assets/meshes/form_outcrop_2_lod1.glb" lod2-url="/assets/meshes/form_outcrop_2_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -88,7 +88,7 @@
     max-distance="280" random-yaw="true" variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_cliff_20_lod1.glb" lod1-url="/assets/meshes/form_cliff_20_lod1.glb" lod2-url="/assets/meshes/form_cliff_20_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_cliff_20_lod0.glb" lod1-url="/assets/meshes/form_cliff_20_lod1.glb" lod2-url="/assets/meshes/form_cliff_20_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -101,7 +101,7 @@
     max-distance="250" random-yaw="true" variation="tree"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/dead_tree_lod1.glb" lod1-url="/assets/meshes/dead_tree_lod1.glb" lod2-url="/assets/meshes/dead_tree_lod2.glb" lod-threshold-near="60" lod-threshold-mid="140"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/dead_tree_lod0.glb" lod1-url="/assets/meshes/dead_tree_lod1.glb" lod2-url="/assets/meshes/dead_tree_lod2.glb" lod-threshold-near="60" lod-threshold-mid="140"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
 
@@ -119,10 +119,10 @@
     max-distance="260" random-yaw="true" variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_8_lod1.glb" lod1-url="/assets/meshes/form_outcrop_8_lod1.glb" lod2-url="/assets/meshes/form_outcrop_8_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_8_lod0.glb" lod1-url="/assets/meshes/form_outcrop_8_lod1.glb" lod2-url="/assets/meshes/form_outcrop_8_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_5_lod1.glb" lod1-url="/assets/meshes/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/form_outcrop_5_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_5_lod0.glb" lod1-url="/assets/meshes/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/form_outcrop_5_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -135,7 +135,7 @@
     max-distance="280" random-yaw="true" variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_cliff_1_lod1.glb" lod1-url="/assets/meshes/form_cliff_1_lod1.glb" lod2-url="/assets/meshes/form_cliff_1_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_cliff_1_lod0.glb" lod1-url="/assets/meshes/form_cliff_1_lod1.glb" lod2-url="/assets/meshes/form_cliff_1_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -148,7 +148,7 @@
     max-distance="250" random-yaw="true" variation="tree"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/tree_pine_lod1.glb" lod1-url="/assets/meshes/tree_pine_lod1.glb" lod2-url="/assets/meshes/tree_pine_lod2.glb" lod-threshold-near="60" lod-threshold-mid="140"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/tree_pine_lod0.glb" lod1-url="/assets/meshes/tree_pine_lod1.glb" lod2-url="/assets/meshes/tree_pine_lod2.glb" lod-threshold-near="60" lod-threshold-mid="140"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
 
@@ -166,10 +166,10 @@
     max-distance="260" random-yaw="true" variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_2_lod1.glb" lod1-url="/assets/meshes/form_outcrop_2_lod1.glb" lod2-url="/assets/meshes/form_outcrop_2_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_2_lod0.glb" lod1-url="/assets/meshes/form_outcrop_2_lod1.glb" lod2-url="/assets/meshes/form_outcrop_2_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_5_lod1.glb" lod1-url="/assets/meshes/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/form_outcrop_5_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_5_lod0.glb" lod1-url="/assets/meshes/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/form_outcrop_5_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -182,7 +182,7 @@
     max-distance="280" random-yaw="true" variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/form_cliff_20_lod1.glb" lod1-url="/assets/meshes/form_cliff_20_lod1.glb" lod2-url="/assets/meshes/form_cliff_20_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/form_cliff_20_lod0.glb" lod1-url="/assets/meshes/form_cliff_20_lod1.glb" lod2-url="/assets/meshes/form_cliff_20_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <!-- Pedras de margem ao longo da garganta do rio (near-water). -->
@@ -197,10 +197,10 @@
     max-distance="240" random-yaw="true" variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/rock_mossy_lod1.glb" lod1-url="/assets/meshes/rock_mossy_lod1.glb" lod2-url="/assets/meshes/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/rock_mossy_lod0.glb" lod1-url="/assets/meshes/rock_mossy_lod1.glb" lod2-url="/assets/meshes/rock_mossy_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/moss_rock_lod1.glb" lod1-url="/assets/meshes/moss_rock_lod1.glb" lod2-url="/assets/meshes/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/moss_rock_lod0.glb" lod1-url="/assets/meshes/moss_rock_lod1.glb" lod2-url="/assets/meshes/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
 </Group>

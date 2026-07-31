@@ -83,8 +83,8 @@
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/wooden_crate_lod1.glb"
-            lod1-url="/assets/meshes/wooden_crate_lod2.glb"
+            url="/assets/meshes/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/wooden_crate_lod1.glb"
             lod2-url="/assets/meshes/wooden_crate_lod2.glb"
           ></GLTFLoader>
         </GameObject>
@@ -95,8 +95,8 @@
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/wooden_barrel_lod1.glb"
-            lod1-url="/assets/meshes/wooden_barrel_lod2.glb"
+            url="/assets/meshes/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
             lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
           ></GLTFLoader>
         </GameObject>
@@ -106,8 +106,8 @@
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/wooden_bench_lod1.glb"
-            lod1-url="/assets/meshes/wooden_bench_lod2.glb"
+            url="/assets/meshes/wooden_bench_lod0.glb"
+            lod1-url="/assets/meshes/wooden_bench_lod1.glb"
             lod2-url="/assets/meshes/wooden_bench_lod2.glb"
           ></GLTFLoader>
         </GameObject>
@@ -132,7 +132,7 @@
           <GameObject role="static">
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/lily_pad_lod2.glb"
+              url="/assets/meshes/lily_pad_lod0.glb"
             ></GLTFLoader>
           </GameObject>
         </StaticSpawner>
@@ -199,7 +199,7 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod2.glb"
+              url="/assets/meshes/rock_mossy_lod0.glb"
             ></GLTFLoader>
             <ResourceNode
               kind="stone"
@@ -240,9 +240,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod1.glb"
+              url="/assets/meshes/rock_mossy_lod0.glb"
               lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -254,9 +254,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/moss_rock_lod1.glb"
+              url="/assets/meshes/moss_rock_lod0.glb"
               lod1-url="/assets/meshes/moss_rock_lod1.glb"
-              lod2-url="/assets/meshes/moss_rock_lod1.glb"
+              lod2-url="/assets/meshes/moss_rock_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -268,9 +268,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod1.glb"
+              url="/assets/meshes/rock_mossy_lod0.glb"
               lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -282,9 +282,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod1.glb"
+              url="/assets/meshes/rock_mossy_lod0.glb"
               lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -296,9 +296,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod1.glb"
+              url="/assets/meshes/rock_mossy_lod0.glb"
               lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -333,9 +333,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod1.glb"
+              url="/assets/meshes/rock_mossy_lod0.glb"
               lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -347,9 +347,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/stone_pillar_lod1.glb"
+              url="/assets/meshes/stone_pillar_lod0.glb"
               lod1-url="/assets/meshes/stone_pillar_lod1.glb"
-              lod2-url="/assets/meshes/stone_pillar_lod1.glb"
+              lod2-url="/assets/meshes/stone_pillar_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -361,9 +361,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod1.glb"
+              url="/assets/meshes/rock_mossy_lod0.glb"
               lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -391,8 +391,8 @@
           <Creature role="enemy" script="goblin-wander.ts">
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/goblin_lod2.glb"
-              lod1-url="/assets/meshes/goblin_lod2.glb"
+              url="/assets/meshes/goblin_lod0.glb"
+              lod1-url="/assets/meshes/goblin_lod1.glb"
               lod2-url="/assets/meshes/goblin_lod2.glb"
               lod-threshold-near="18"
               lod-threshold-mid="55"

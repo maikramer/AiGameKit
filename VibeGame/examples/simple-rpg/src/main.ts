@@ -46,7 +46,7 @@ import {
   attachHeldItem,
   loadHeldItemGrips,
   PlayerGltfConfig,
-  animatorRegistry,
+  getAnimator,
   // ecs / gameplay
   defineQuery,
   Transform,
@@ -589,7 +589,7 @@ const AttackContextSystem: System = {
     // Relaxed idle while exploring — weapon *idle clips (swordidle/axeidle/…)
     // plant a combat crouch with knee sway that reads as floating/dancing feet
     // on cobble. Guard stance only when a creature is aggro'd.
-    setPlayerIdleClip(anyCreatureAggro(state) && clip ? `${clip}idle` : null);
+    setPlayerIdleClip(anyCreatureAggro() && clip ? `${clip}idle` : null);
     // Show the matching model in hand (unless the bomb-aim owns the hand).
     if (!bombAiming) {
       const url = HELD_MODEL[clip] ?? null;
@@ -773,7 +773,7 @@ const BombAimSpineSystem: System = {
     if (hero === null) return;
     const regIdx = PlayerGltfConfig.animatorRegistryIndex[hero];
     if (regIdx === 0) return;
-    const animator = animatorRegistry.get(regIdx);
+    const animator = getAnimator(state, regIdx);
     if (!animator) return;
 
     if (!cachedSpineBone || cachedSpineBone.parent === null) {
@@ -1136,11 +1136,11 @@ async function runBootstrap(): Promise<void> {
   // Dev cheats (vite DEV only): grant items/gold via the debug surface for testing.
   //   __VIBEGAME__.debug.callAction('give', 'potion', 3)
   //   __VIBEGAME__.debug.callAction('gold', 500)
-  registerDebugAction(state, 'give', (id: string, n = 1) => {
+  registerDebugAction(state, 'give', (id: string, n: number = 1) => {
     const h = state.getEntityByName('hero') ?? 0;
     if (h) addItem(state, h, id, n);
   });
-  registerDebugAction(state, 'gold', (n = 100) => addGold(n));
+  registerDebugAction(state, 'gold', (n: number = 100) => addGold(n));
   // A Nota: __VIBEGAME__.debug.getVar('nota') → { marked, fixed, signed }
   registerDebugVar(state, 'nota', () => ({
     ...notaSnapshot(),
@@ -1275,11 +1275,15 @@ async function runBootstrap(): Promise<void> {
     for (const [eid, data] of getTerrainContext(state)) {
       out[String(eid)] = {
         initialized: data.initialized,
-        collisionReady: (data as Record<string, unknown>).collisionReady,
-        hasHeightmapUrl: !!(data as Record<string, unknown>).heightmapUrl,
-        samplerData:
-          !!(data as Record<string, unknown>).sampler &&
-          !!(data as Record<string, unknown>).sampler?.data,
+        collisionReady: (data as unknown as Record<string, unknown>)
+          .collisionReady,
+        hasHeightmapUrl: !!(data as unknown as Record<string, unknown>)
+          .heightmapUrl,
+        samplerData: (() => {
+          const sampler = (data as unknown as Record<string, unknown>)
+            .sampler as { data?: unknown } | undefined;
+          return !!sampler && !!sampler.data;
+        })(),
       };
     }
     return out;
@@ -1347,7 +1351,7 @@ async function runBootstrap(): Promise<void> {
         hands.push({
           childCount: o.children.length,
           childNames: o.children.map(
-            (c: Mesh) => `${c.name}(s${c.scale.x.toFixed(2)})`
+            (c: Object3D) => `${c.name}(s${c.scale.x.toFixed(2)})`
           ),
           worldScale: +_v.x.toFixed(3),
         });
@@ -1368,7 +1372,8 @@ void bootstrap();
 // always full-reloads. Unload path must stay lightweight: heavy destroy() here
 // can hang mid-boot and block location.reload() (dead page after "Disposing").
 if (import.meta.hot) {
-  import.meta.hot.decline();
+  // decline() exists in runtime Vite; older client typings omit it.
+  (import.meta.hot as unknown as { decline(): void }).decline();
   import.meta.hot.dispose(() => {
     try {
       clearBombs();

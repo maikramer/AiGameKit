@@ -13,9 +13,9 @@ import {
   PlayerGltfConfig,
   Transform,
   WorldTransform,
-  animatorRegistry,
   damageHealth,
   defineQuery,
+  getAnimator,
   getPlayerAttackClip,
   isDead,
   isKeyDown,
@@ -88,7 +88,7 @@ function labelFor(state: State, eid: number): string {
 function swingImpactDelay(state: State, hero: number): number {
   if (!state.hasComponent(hero, PlayerGltfConfig)) return FALLBACK_IMPACT_DELAY;
   const regIdx = PlayerGltfConfig.animatorRegistryIndex[hero];
-  const animator = regIdx ? animatorRegistry.get(regIdx) : undefined;
+  const animator = regIdx ? getAnimator(state, regIdx) : undefined;
   if (!animator) return FALLBACK_IMPACT_DELAY;
   // Prefer the context clip the engine will play (sword/axe/spear/chop/mine).
   const hint = getPlayerAttackClip();

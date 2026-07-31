@@ -35,8 +35,8 @@
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/wooden_crate_lod1.glb"
-      lod1-url="/assets/meshes/wooden_crate_lod2.glb"
+      url="/assets/meshes/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/wooden_crate_lod1.glb"
       lod2-url="/assets/meshes/wooden_crate_lod2.glb"
     ></GLTFLoader>
   </GameObject>
@@ -47,8 +47,8 @@
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/wooden_barrel_lod1.glb"
-      lod1-url="/assets/meshes/wooden_barrel_lod2.glb"
+      url="/assets/meshes/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
       lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
     ></GLTFLoader>
   </GameObject>
@@ -183,17 +183,17 @@
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod1.glb" lod1-url="/assets/meshes/wooden_crate_lod2.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod0.glb" lod1-url="/assets/meshes/wooden_crate_lod1.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
     place="at: -79 122; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod1.glb" lod1-url="/assets/meshes/wooden_barrel_lod2.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: -47 138; align-to-terrain: 1">
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_bench_lod1.glb" lod1-url="/assets/meshes/wooden_bench_lod2.glb" lod2-url="/assets/meshes/wooden_bench_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/wooden_bench_lod0.glb" lod1-url="/assets/meshes/wooden_bench_lod1.glb" lod2-url="/assets/meshes/wooden_bench_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: -60 128">
     <ParticleSystem
@@ -222,7 +222,7 @@
     ></GLTFLoader>
   </GameObject>
   <GameObject place="at: 33.2 188.8; align-to-terrain: 1" transform="rotation: 0 30 0">
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_bench_lod1.glb" lod1-url="/assets/meshes/wooden_bench_lod2.glb" lod2-url="/assets/meshes/wooden_bench_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/wooden_bench_lod0.glb" lod1-url="/assets/meshes/wooden_bench_lod1.glb" lod2-url="/assets/meshes/wooden_bench_lod2.glb"></GLTFLoader>
   </GameObject>
   <Composition
     place="at: 23.2 194.8; align-to-terrain: 1"
@@ -280,13 +280,13 @@
     ></PointLight>
   </Composition>
   <GameObject place="at: 34.4 142.8; align-to-terrain: 1" transform="rotation: 0 40 0">
-    <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod1.glb" lod1-url="/assets/meshes/mushroom_glow_lod2.glb" lod2-url="/assets/meshes/mushroom_glow_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/mushroom_glow_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 38.2 145.2; align-to-terrain: 1" transform="rotation: 0 160 0; scale: 0.85 0.85 0.85">
-    <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod1.glb" lod1-url="/assets/meshes/mushroom_glow_lod2.glb" lod2-url="/assets/meshes/mushroom_glow_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/mushroom_glow_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 36.8 141; align-to-terrain: 1" transform="rotation: 0 260 0; scale: 1.15 1.15 1.15">
-    <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod1.glb" lod1-url="/assets/meshes/mushroom_glow_lod2.glb" lod2-url="/assets/meshes/mushroom_glow_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/mushroom_glow_lod2.glb"></GLTFLoader>
   </GameObject>
   <!-- mushroom.ts: [F] come e cura 40 HP, uma vez cada. -->
   <GameObject

@@ -124,13 +124,15 @@ export function update(ctx: MonoBehaviourContext): void {
     openProgress = 0;
     glow = 1.6;
     unregisterInteractionTarget(ctx.state, eid);
-    addGold(GOLD_REWARD, x, gy, z);
+    // Positional args are ignored by addGold (hero-anchored) — and `gy`
+    // never existed here, so passing it threw a ReferenceError on open.
+    addGold(GOLD_REWARD);
     healHealth(player, HEAL_REWARD);
     playSound('coin');
     playSound('heal');
     spawnParticleBurst(ctx.state, {
       x,
-      y: baseY + 0.6,
+      y: y + 0.6,
       z,
       preset: 'explosion',
       count: 22,

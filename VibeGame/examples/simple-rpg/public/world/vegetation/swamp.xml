@@ -95,7 +95,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/dead_tree_lod1.glb"
+        url="/assets/meshes/dead_tree_lod0.glb"
         lod1-url="/assets/meshes/dead_tree_lod1.glb"
         lod2-url="/assets/meshes/dead_tree_lod2.glb"
         lod-threshold-near="45"
@@ -170,8 +170,8 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/lily_pad_lod1.glb"
-        lod1-url="/assets/meshes/lily_pad_lod2.glb"
+        url="/assets/meshes/lily_pad_lod0.glb"
+        lod1-url="/assets/meshes/lily_pad_lod1.glb"
         lod2-url="/assets/meshes/lily_pad_lod2.glb"
         lod-threshold-near="30"
         lod-threshold-mid="70"
@@ -206,7 +206,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/moss_rock_lod1.glb"
+        url="/assets/meshes/moss_rock_lod0.glb"
         lod1-url="/assets/meshes/moss_rock_lod1.glb"
         lod2-url="/assets/meshes/moss_rock_lod2.glb"
         lod-threshold-near="32"
@@ -242,7 +242,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/rock_mossy_lod1.glb"
+        url="/assets/meshes/rock_mossy_lod0.glb"
         lod1-url="/assets/meshes/rock_mossy_lod1.glb"
         lod2-url="/assets/meshes/rock_mossy_lod2.glb"
         lod-threshold-near="34"
@@ -252,7 +252,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/moss_rock_lod1.glb"
+        url="/assets/meshes/moss_rock_lod0.glb"
         lod1-url="/assets/meshes/moss_rock_lod1.glb"
         lod2-url="/assets/meshes/moss_rock_lod2.glb"
         lod-threshold-near="34"

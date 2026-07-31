@@ -76,14 +76,14 @@
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod1.glb" lod1-url="/assets/meshes/wooden_crate_lod2.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod0.glb" lod1-url="/assets/meshes/wooden_crate_lod1.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
     place="at: 220 -29; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod1.glb" lod1-url="/assets/meshes/wooden_barrel_lod2.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
   <SpawnExclusion at="216 -36" radius="18"></SpawnExclusion>
 
@@ -141,7 +141,7 @@
     ></GLTFLoader>
   </GameObject>
   <GameObject place="at: 161 -121; align-to-terrain: 1">
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_bench_lod1.glb" lod1-url="/assets/meshes/wooden_bench_lod2.glb" lod2-url="/assets/meshes/wooden_bench_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/wooden_bench_lod0.glb" lod1-url="/assets/meshes/wooden_bench_lod1.glb" lod2-url="/assets/meshes/wooden_bench_lod2.glb"></GLTFLoader>
   </GameObject>
   <SpawnExclusion at="156 -116" radius="14"></SpawnExclusion>
 
@@ -206,10 +206,10 @@
     variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/moss_rock_lod1.glb" lod1-url="/assets/meshes/moss_rock_lod1.glb" lod2-url="/assets/meshes/moss_rock_lod2.glb"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/moss_rock_lod0.glb" lod1-url="/assets/meshes/moss_rock_lod1.glb" lod2-url="/assets/meshes/moss_rock_lod2.glb"></GLTFLoader>
     </GameObject>
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/rock_mossy_lod1.glb" lod1-url="/assets/meshes/rock_mossy_lod1.glb" lod2-url="/assets/meshes/rock_mossy_lod2.glb"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/rock_mossy_lod0.glb" lod1-url="/assets/meshes/rock_mossy_lod1.glb" lod2-url="/assets/meshes/rock_mossy_lod2.glb"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -229,7 +229,7 @@
     variation="foliage"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/lily_pad_lod1.glb" lod1-url="/assets/meshes/lily_pad_lod2.glb" lod2-url="/assets/meshes/lily_pad_lod2.glb"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/lily_pad_lod0.glb" lod1-url="/assets/meshes/lily_pad_lod1.glb" lod2-url="/assets/meshes/lily_pad_lod2.glb"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
 
@@ -270,8 +270,8 @@
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/wooden_crate_lod1.glb"
-      lod1-url="/assets/meshes/wooden_crate_lod2.glb"
+      url="/assets/meshes/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/wooden_crate_lod1.glb"
       lod2-url="/assets/meshes/wooden_crate_lod2.glb"
     ></GLTFLoader>
   </GameObject>

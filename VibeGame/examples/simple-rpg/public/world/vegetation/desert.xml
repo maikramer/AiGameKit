@@ -138,7 +138,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/dead_bush_lod1.glb"
+        url="/assets/meshes/dead_bush_lod0.glb"
         lod1-url="/assets/meshes/dead_bush_lod1.glb"
         lod2-url="/assets/meshes/dead_bush_lod2.glb"
         lod-threshold-near="28"
@@ -178,7 +178,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/rock_mossy_lod1.glb"
+        url="/assets/meshes/rock_mossy_lod0.glb"
         lod1-url="/assets/meshes/rock_mossy_lod1.glb"
         lod2-url="/assets/meshes/rock_mossy_lod2.glb"
         lod-threshold-near="34"
@@ -188,7 +188,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/moss_rock_lod1.glb"
+        url="/assets/meshes/moss_rock_lod0.glb"
         lod1-url="/assets/meshes/moss_rock_lod1.glb"
         lod2-url="/assets/meshes/moss_rock_lod2.glb"
         lod-threshold-near="34"

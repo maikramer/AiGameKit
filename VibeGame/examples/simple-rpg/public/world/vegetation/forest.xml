@@ -99,7 +99,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/pine_dark_lod1.glb"
+        url="/assets/meshes/pine_dark_lod0.glb"
         lod1-url="/assets/meshes/pine_dark_lod1.glb"
         lod2-url="/assets/meshes/pine_dark_lod2.glb"
         lod-threshold-near="60"
@@ -134,7 +134,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/dead_tree_lod1.glb"
+        url="/assets/meshes/dead_tree_lod0.glb"
         lod1-url="/assets/meshes/dead_tree_lod1.glb"
         lod2-url="/assets/meshes/dead_tree_lod2.glb"
         lod-threshold-near="45"
@@ -211,8 +211,8 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/mushroom_red_lod1.glb"
-        lod1-url="/assets/meshes/mushroom_red_lod2.glb"
+        url="/assets/meshes/mushroom_red_lod0.glb"
+        lod1-url="/assets/meshes/mushroom_red_lod1.glb"
         lod2-url="/assets/meshes/mushroom_red_lod2.glb"
         lod-threshold-near="26"
         lod-threshold-mid="60"
@@ -247,7 +247,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/moss_rock_lod1.glb"
+        url="/assets/meshes/moss_rock_lod0.glb"
         lod1-url="/assets/meshes/moss_rock_lod1.glb"
         lod2-url="/assets/meshes/moss_rock_lod2.glb"
         lod-threshold-near="34"
@@ -257,7 +257,7 @@
     <GameObject role="static">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/rock_mossy_lod1.glb"
+        url="/assets/meshes/rock_mossy_lod0.glb"
         lod1-url="/assets/meshes/rock_mossy_lod1.glb"
         lod2-url="/assets/meshes/rock_mossy_lod2.glb"
         lod-threshold-near="34"

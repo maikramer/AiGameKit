@@ -201,7 +201,11 @@ function doDash(state: State, hero: number): void {
   Transform.posZ[hero] = nz;
   Transform.posY[hero] = gy;
   Transform.dirty[hero] = 1;
-  const RB = state.getComponent('rigidbody');
+  const RB = state.getComponent('rigidbody') as {
+    posX: Float32Array;
+    posY: Float32Array;
+    posZ: Float32Array;
+  } | null;
   if (RB) {
     RB.posX[hero] = nx;
     RB.posZ[hero] = nz;

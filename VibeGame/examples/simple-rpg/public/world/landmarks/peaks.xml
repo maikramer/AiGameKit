@@ -88,7 +88,7 @@
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod1.glb" lod1-url="/assets/meshes/wooden_crate_lod2.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod0.glb" lod1-url="/assets/meshes/wooden_crate_lod1.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
   <!-- Afloramento na encosta norte, atrás do posto — ancora a torre à montanha. -->
   <GameObject
@@ -145,14 +145,14 @@
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod1.glb" lod1-url="/assets/meshes/wooden_crate_lod2.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod0.glb" lod1-url="/assets/meshes/wooden_crate_lod1.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
     place="at: -211 68; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod1.glb" lod1-url="/assets/meshes/wooden_barrel_lod2.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
   <SpawnExclusion at="-216 60" radius="22"></SpawnExclusion>
 
@@ -191,7 +191,7 @@
     variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/moss_rock_lod1.glb" lod1-url="/assets/meshes/moss_rock_lod1.glb" lod2-url="/assets/meshes/moss_rock_lod2.glb"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/moss_rock_lod0.glb" lod1-url="/assets/meshes/moss_rock_lod1.glb" lod2-url="/assets/meshes/moss_rock_lod2.glb"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <GameObject
