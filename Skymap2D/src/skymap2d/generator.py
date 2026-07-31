@@ -102,25 +102,93 @@ def merge_negative_prompt(preset_neg: str, user_neg: str) -> str:
     return f"{preset_neg}, {user_neg}"
 
 
-def _fix_equirect_latitude(image: Image.Image) -> Image.Image:
-    """Corrige panoramas Flux-LoRA-Equirectangular que saem com o nadir ao centro vertical.
+EquirectLayout = str  # "correct" | "poles_center" | "little_planet"
 
-    Numa equirect standard, a fila central é o horizonte (elevação 0°), o topo é o zénite
-    (+90°) e o fundo é o nadir (-90°). O modelo Flux-LoRA-Equirectangular-v3 gera com os
-    polos ao centro e o horizonte nas bordas superior/inferior — equivale a um desfasamento
-    de 90° em latitude. Corrigimos com um scroll vertical de metade da altura (wrap em V).
-    """
+
+def _roll_equirect_latitude_half(image: Image.Image) -> Image.Image:
+    """Scroll vertical de metade da altura (wrap em V) — polos↔horizonte."""
     w, h = image.size
     if h < 4:
         return image
-
     mid = h // 2
     top = image.crop((0, 0, w, mid))
     bottom = image.crop((0, mid, w, h))
     corrected = Image.new("RGB", (w, h))
     corrected.paste(bottom, (0, 0))
     corrected.paste(top, (0, h - mid))
-    _logger.info("Equirect latitude shift aplicado (nadir ao centro → nadir no fundo).")
+    return corrected
+
+
+def classify_equirect_layout(image: Image.Image) -> EquirectLayout:
+    """Classifica layout do bitmap antes de qualquer correcção de latitude.
+
+    - ``correct``: horizonte no meio (alta var. nas filas centrais), polos nas bordas.
+    - ``poles_center``: horizonte nas bordas superior/inferior, polos ao centro → roll.
+    - ``little_planet``: disco de detalhe no centro + anel liso — roll não corrige.
+    """
+    import numpy as np
+
+    w, h = image.size
+    if h < 4 or w < 4:
+        return "correct"
+
+    # Stride sample (no bilinear resize): keep sharp band variance on large frames.
+    arr = np.asarray(image.convert("RGB"), dtype=np.float32)
+    xstep = max(1, w // 128)
+    ystep = max(1, h // 256)
+    lum = 0.2126 * arr[::ystep, ::xstep, 0] + 0.7152 * arr[::ystep, ::xstep, 1] + 0.0722 * arr[::ystep, ::xstep, 2]
+    sh, sw = lum.shape
+
+    # Radial: little-planet = high variance disk + smooth outer ring.
+    yy, xx = np.mgrid[0:sh, 0:sw]
+    cy, cx = (sh - 1) * 0.5, (sw - 1) * 0.5
+    r = np.sqrt(((yy - cy) / max(sh * 0.5, 1.0)) ** 2 + ((xx - cx) / max(sw * 0.5, 1.0)) ** 2)
+    inner = lum[r < 0.35]
+    outer = lum[r > 0.78]
+    if inner.size >= 32 and outer.size >= 32:
+        inner_var = float(inner.var())
+        outer_var = float(outer.var())
+        if outer_var < 80.0 and inner_var > max(outer_var * 4.0, 200.0):
+            return "little_planet"
+
+    # Row variance: detail along each horizontal scanline.
+    row_var = lum.var(axis=1)
+    edge = max(1, sh // 8)
+    mid0, mid1 = sh * 3 // 8, sh * 5 // 8
+    edge_var = float(np.mean(np.concatenate([row_var[:edge], row_var[-edge:]])))
+    mid_var = float(np.mean(row_var[mid0:mid1])) if mid1 > mid0 else float(row_var[sh // 2])
+
+    # Poles-at-center: horizon detail lives on the top/bottom bands.
+    if edge_var > mid_var * 1.35 and edge_var > 80.0:
+        return "poles_center"
+    return "correct"
+
+
+def _fix_equirect_latitude(image: Image.Image) -> Image.Image:
+    """Corrige latitude só quando a classificação indica polos ao centro.
+
+    Numa equirect standard, a fila central é o horizonte (elevação 0°), o topo é o zénite
+    (+90°) e o fundo é o nadir (-90°). O Flux-LoRA-Equirectangular-v3 *às vezes* devolve
+    polos ao centro — roll de 50% corrige isso. Aplicar o roll às cegas parte equirects
+    já correctos e mascara little-planet (chão colapsado num disco).
+    """
+    w, h = image.size
+    if h < 4:
+        return image
+
+    layout = classify_equirect_layout(image)
+    if layout == "correct":
+        _logger.info("Equirect layout OK — latitude shift omitido.")
+        return image
+    if layout == "little_planet":
+        _logger.warn(
+            "Equirect parece little-planet (disco central). Latitude shift omitido; "
+            "regerar ou usar unwarp estereográfico (ex. scripts/unwarp_little_planet_sky.py)."
+        )
+        return image
+
+    corrected = _roll_equirect_latitude_half(image)
+    _logger.info("Equirect latitude shift aplicado (poles_center → nadir no fundo).")
     return corrected
 
 

@@ -354,17 +354,22 @@ def test_default_base_model_id_env_override() -> None:
         assert gen.default_base_model_id() == "custom/base"
 
 
-def test_fix_equirect_latitude_swaps_halves() -> None:
-    from skymap2d.generator import _fix_equirect_latitude
+def test_fix_equirect_latitude_rolls_poles_center() -> None:
+    import numpy as np
+
+    from skymap2d.generator import _fix_equirect_latitude, _roll_equirect_latitude_half
 
     w, h = 64, 32
-    img = Image.new("RGB", (w, h), color=(255, 0, 0))
-    for y in range(h):
-        for x in range(w):
-            img.putpixel((x, y), (0, y * 8, 0))
+    arr = np.zeros((h, w, 3), dtype=np.uint8)
+    arr[:] = (40, 80, 160)
+    rng = np.random.default_rng(7)
+    band = max(2, h // 8)
+    arr[:band] = rng.integers(0, 256, size=(band, w, 3), dtype=np.uint8)
+    arr[-band:] = rng.integers(0, 256, size=(band, w, 3), dtype=np.uint8)
+    img = Image.fromarray(arr, "RGB")
     fixed = _fix_equirect_latitude(img)
     assert fixed.size == (w, h)
-    assert fixed.getpixel((0, 0))[1] != 0 or h < 4
+    np.testing.assert_array_equal(np.asarray(fixed), np.asarray(_roll_equirect_latitude_half(img)))
 
 
 def test_fix_equirect_latitude_short_image_unchanged() -> None:

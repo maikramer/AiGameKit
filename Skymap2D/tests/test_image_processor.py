@@ -1,10 +1,9 @@
 """Testes para skymap2d.image_processor e correcção equirectangular.
 
 ``image_processor`` grava PNG/EXR + sidecar JSON e cria thumbnails 2:1. A
-correcção equirectangular documentada (resize 2:1 + shift vertical de 50% para
-mover os polos do centro para as bordas) vive em ``generator._fix_equirect_latitude``
-e no pós-processamento de ``generate``; é testada aqui por ser a feature crítica
-deste módulo.
+correcção equirectangular (resize 2:1 + roll 50% *só* se ``poles_center``)
+vive em ``generator.classify_equirect_layout`` / ``_fix_equirect_latitude``;
+é testada aqui por ser a feature crítica deste módulo.
 """
 
 from __future__ import annotations
@@ -17,7 +16,12 @@ import numpy
 import pytest
 from PIL import Image
 
-from skymap2d.generator import SkymapGenerator, _fix_equirect_latitude
+from skymap2d.generator import (
+    SkymapGenerator,
+    _fix_equirect_latitude,
+    _roll_equirect_latitude_half,
+    classify_equirect_layout,
+)
 from skymap2d.image_processor import DEFAULT_OUTPUT_DIR, create_thumbnail, save_image
 
 
@@ -145,34 +149,77 @@ class TestCreateThumbnail:
         assert thumb.size == (200, 100)
 
 
+def _poles_center_image(w: int = 128, h: int = 64) -> Image.Image:
+    """Horizon detail on top/bottom bands, smooth pole band in the middle."""
+    arr = numpy.zeros((h, w, 3), dtype=numpy.uint8)
+    arr[:] = (40, 80, 160)  # smooth mid (poles)
+    rng = numpy.random.default_rng(1)
+    band = max(2, h // 8)
+    noise = rng.integers(0, 256, size=(band, w, 3), dtype=numpy.uint8)
+    arr[:band] = noise
+    arr[-band:] = rng.integers(0, 256, size=(band, w, 3), dtype=numpy.uint8)
+    return Image.fromarray(arr, "RGB")
+
+
+def _correct_equirect_image(w: int = 128, h: int = 64) -> Image.Image:
+    """Horizon detail in the middle band, smooth poles at the edges."""
+    arr = numpy.zeros((h, w, 3), dtype=numpy.uint8)
+    arr[:] = (30, 60, 140)
+    rng = numpy.random.default_rng(2)
+    mid0, mid1 = h * 3 // 8, h * 5 // 8
+    arr[mid0:mid1] = rng.integers(0, 256, size=(mid1 - mid0, w, 3), dtype=numpy.uint8)
+    return Image.fromarray(arr, "RGB")
+
+
+def _little_planet_image(w: int = 128, h: int = 64) -> Image.Image:
+    """Noisy disk at centre, flat outer ring."""
+    arr = numpy.full((h, w, 3), 200, dtype=numpy.uint8)
+    rng = numpy.random.default_rng(3)
+    yy, xx = numpy.mgrid[0:h, 0:w]
+    cy, cx = (h - 1) * 0.5, (w - 1) * 0.5
+    r = numpy.sqrt(((yy - cy) / (h * 0.5)) ** 2 + ((xx - cx) / (w * 0.5)) ** 2)
+    disk = r < 0.35
+    arr[disk] = rng.integers(0, 256, size=(int(disk.sum()), 3), dtype=numpy.uint8)
+    return Image.fromarray(arr, "RGB")
+
+
+class TestClassifyEquirectLayout:
+    def test_correct(self):
+        assert classify_equirect_layout(_correct_equirect_image()) == "correct"
+
+    def test_poles_center(self):
+        assert classify_equirect_layout(_poles_center_image()) == "poles_center"
+
+    def test_little_planet(self):
+        assert classify_equirect_layout(_little_planet_image()) == "little_planet"
+
+
 class TestFixEquirectLatitude:
-    def _half_half(self, w: int, h: int) -> Image.Image:
-        arr = numpy.zeros((h, w, 3), dtype=numpy.uint8)
-        arr[: h // 2] = (255, 0, 0)
-        arr[h // 2 :] = (0, 0, 255)
-        return Image.fromarray(arr, "RGB")
-
-    def test_even_height_swaps_halves(self):
-        img = self._half_half(64, 128)
+    def test_poles_center_rolls(self):
+        img = _poles_center_image(64, 128)
         out = _fix_equirect_latitude(img)
-        out_arr = numpy.asarray(out)
-        assert tuple(out_arr[10, 10]) == (0, 0, 255)
-        assert tuple(out_arr[118, 10]) == (255, 0, 0)
+        expected = numpy.asarray(_roll_equirect_latitude_half(img))
+        numpy.testing.assert_array_equal(numpy.asarray(out), expected)
 
-    def test_dimensions_unchanged(self):
-        img = self._half_half(80, 40)
+    def test_correct_unchanged(self):
+        img = _correct_equirect_image(80, 40)
         out = _fix_equirect_latitude(img)
-        assert out.size == (80, 40)
+        numpy.testing.assert_array_equal(numpy.asarray(out), numpy.asarray(img))
+
+    def test_little_planet_unchanged(self):
+        img = _little_planet_image(96, 48)
+        out = _fix_equirect_latitude(img)
+        numpy.testing.assert_array_equal(numpy.asarray(out), numpy.asarray(img))
 
     def test_tiny_height_returns_same_object(self):
         img = Image.new("RGB", (32, 2))
         out = _fix_equirect_latitude(img)
         assert out is img
 
-    def test_equivalent_to_numpy_roll_half(self):
+    def test_roll_helper_equivalent_to_numpy_roll_half(self):
         rng = numpy.random.default_rng(0)
         arr = rng.integers(0, 256, size=(64, 48, 3), dtype=numpy.uint8)
-        out = _fix_equirect_latitude(Image.fromarray(arr, "RGB"))
+        out = _roll_equirect_latitude_half(Image.fromarray(arr, "RGB"))
         expected = numpy.roll(arr, arr.shape[0] // 2, axis=0)
         numpy.testing.assert_array_equal(numpy.asarray(out), expected)
 
@@ -197,22 +244,27 @@ class TestGenerateEquirectCorrection:
 
         assert image.size == (2048, 1024)
 
-    def test_shift_applied_after_resize(self):
+    def test_shift_applied_after_resize_when_poles_center(self):
+        """Wrong ratio → resize 2:1, then roll only if still poles_center."""
         gen = SkymapGenerator(device="cpu")
+        src = _poles_center_image(1024, 768)
         with patch.object(gen, "_load_pipeline") as mock_load:
             mock_pipe = MagicMock()
             mock_out = MagicMock()
-            mock_out.images = [self._half_half(1024, 768)]
+            mock_out.images = [src]
             mock_pipe.return_value = mock_out
             mock_load.return_value = mock_pipe
 
             image, _metadata = gen.generate(prompt="sky", width=2048, height=1024, num_inference_steps=10)
 
-        out_arr = numpy.asarray(image)
-        top_region = out_arr[50:150].reshape(-1, 3).mean(axis=0)
-        bottom_region = out_arr[900:1000].reshape(-1, 3).mean(axis=0)
-        assert top_region[2] > top_region[0]
-        assert bottom_region[0] > bottom_region[2]
+        assert image.size == (2048, 1024)
+        resized = src.resize((2048, 1024), Image.Resampling.LANCZOS)
+        expected = _roll_equirect_latitude_half(resized)
+        numpy.testing.assert_allclose(
+            numpy.asarray(image, dtype=numpy.float32),
+            numpy.asarray(expected, dtype=numpy.float32),
+            atol=2.0,
+        )
 
 
 class TestOutputDir:
