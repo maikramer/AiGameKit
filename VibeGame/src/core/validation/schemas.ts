@@ -171,6 +171,8 @@ export const entityRecipeSchema = z
     shape: shapeSchema.optional(),
 
     id: z.string().optional(),
+    /** Analyze-only: max solid↔solid XZ penetration (metres). Default 0. */
+    'overlap-max': z.union([z.number(), z.string()]).optional(),
   })
   .passthrough();
 

@@ -28,6 +28,7 @@ import { MainCamera } from './plugins/rendering/components';
 import { defineQueryLive } from './core';
 import { setTargetCanvas } from './plugins/input';
 import { registerRuntime, unregisterRuntime } from './core/runtime-manager';
+import { syncComposerSize } from './plugins/postprocessing/composer';
 import { resumeAudioContextOnFirstUserGesture } from './plugins/audio/systems';
 import { cancelLoadingFade } from './plugins/loading/context';
 
@@ -48,11 +49,13 @@ export class GameRuntime {
   }
 
   async start(): Promise<void> {
-    if (this.isRunning) return;
+    if (this.isRunning || this.isDestroyed) return;
 
     if (typeof document !== 'undefined' && this.options.dom !== false) {
       await this.initializeBrowser();
     }
+
+    if (this.isDestroyed) return;
 
     this.isRunning = true;
 
@@ -76,21 +79,46 @@ export class GameRuntime {
     }
     if (this.mutationObserver) {
       this.mutationObserver.disconnect();
+      this.mutationObserver = undefined;
+    }
+  }
+
+  /**
+   * Drop the WebGL context without tearing down ECS/WASM.
+   * Safe to call from pagehide / full-reload (must stay sync and fast).
+   */
+  releaseGpuContext(): void {
+    if (this.state?.headless) return;
+    try {
+      const context = getRenderingContext(this.state);
+      if (context.renderer) {
+        context.renderer.setAnimationLoop(null);
+        try {
+          context.renderer.forceContextLoss();
+        } catch (e) {
+          logger.warn('forceContextLoss failed', e);
+        }
+      }
+    } catch (e) {
+      logger.warn('releaseGpuContext failed', e);
     }
   }
 
   destroy(): void {
-    if (this.isDestroyed) {
-      throw new Error('[VibeGame] Runtime already destroyed');
-    }
+    if (this.isDestroyed) return;
+    this.isDestroyed = true;
     // Cancel any pending loading-screen fade so its setTimeout does not fire
     // on a detached DOM node after teardown.
     cancelLoadingFade();
     this.stop();
-    this.state.dispose();
+    this.releaseGpuContext();
+    try {
+      this.state.dispose();
+    } catch (e) {
+      logger.warn('[VibeGame] state.dispose failed', e);
+    }
     this.canvasElements.clear();
     unregisterRuntime(this);
-    this.isDestroyed = true;
   }
 
   step(deltaTime: number = TIME_CONSTANTS.DEFAULT_DELTA): void {
@@ -146,6 +174,9 @@ export class GameRuntime {
 
           const draw = () => {
             if (context.postProcessing) {
+              // Skip until canvas has a real size — Firefox boots at 0×0 and
+              // EffectComposer depth targets are incomplete until then.
+              if (!syncComposerSize(context.postProcessing, renderer)) return;
               context.postProcessing.render();
             } else {
               renderer.render(scene, camera);

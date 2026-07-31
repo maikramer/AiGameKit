@@ -50,15 +50,20 @@ export {
   MINIMAP_WIDGET_TYPE,
 } from './widgets/minimap';
 export {
+  findNearestInteractionTarget,
   getInteractionTargets,
   interactionPromptParser,
   interactionPromptRecipe,
   interactionPromptWidgetFactory,
+  normalizePromptKey,
   registerInteractionTarget,
+  resolveInteractionGesture,
   unregisterInteractionTarget,
 } from './widgets/interaction-prompt';
 export type {
+  InteractionGesture,
   InteractionTarget,
+  NearestInteraction,
   PromptPosition,
 } from './widgets/interaction-prompt';
 export {

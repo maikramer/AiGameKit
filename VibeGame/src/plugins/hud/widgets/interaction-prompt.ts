@@ -9,6 +9,10 @@ import {
   registerHudWidget,
   registerHudWidgetFactory,
 } from '../screen-layer';
+import {
+  getInteractionTargets,
+  type InteractionTarget,
+} from '../interaction-targets';
 
 /**
  * Screen-space HUD widget showing a "Press <key> <label>" hint for the single
@@ -30,20 +34,19 @@ const DEFAULT_KEY = 'F';
 
 export type PromptPosition = 'bottom-center' | 'top-center';
 
-export interface InteractionTarget {
-  label?: string;
-  i18nKey?: string;
-  kind?: string;
-  key?: string;
-  /**
-   * Range in metres for this target only, overriding the widget default.
-   *
-   * Needed whenever one object's action reaches further than the rest: a hint
-   * that only appears at 4.5 m for something you can already do at 10 m reads
-   * as an unresponsive object, and the player walks away before it lights up.
-   */
-  range?: number;
-}
+export type {
+  InteractionGesture,
+  InteractionTarget,
+  NearestInteraction,
+} from '../interaction-targets';
+export {
+  findNearestInteractionTarget,
+  getInteractionTargets,
+  normalizePromptKey,
+  registerInteractionTarget,
+  resolveInteractionGesture,
+  unregisterInteractionTarget,
+} from '../interaction-targets';
 
 interface PromptConfig {
   range: number;
@@ -51,35 +54,6 @@ interface PromptConfig {
   i18nTemplate: string | undefined;
   position: PromptPosition;
   playerEid: number;
-}
-
-const stateToTargets = new WeakMap<State, Map<number, InteractionTarget>>();
-
-function targetMap(state: State): Map<number, InteractionTarget> {
-  let m = stateToTargets.get(state);
-  if (!m) {
-    m = new Map();
-    stateToTargets.set(state, m);
-  }
-  return m;
-}
-
-export function registerInteractionTarget(
-  state: State,
-  eid: number,
-  info: InteractionTarget
-): void {
-  targetMap(state).set(eid, info);
-}
-
-export function unregisterInteractionTarget(state: State, eid: number): void {
-  targetMap(state).delete(eid);
-}
-
-export function getInteractionTargets(
-  state: State
-): ReadonlyMap<number, InteractionTarget> {
-  return targetMap(state);
 }
 
 const playerQuery = defineQuery([PlayerController]);
@@ -222,10 +196,13 @@ export function interactionPromptWidgetFactory(
           const px = Transform.posX[playerEid];
           const pz = Transform.posZ[playerEid];
 
+          // Nearest of *all* keys (K trade + F interact can coexist); the
+          // prompt shows that target's own key. F-gesture resolution filters
+          // by key separately via findNearestInteractionTarget.
           let bestDist = Infinity;
           let bestTarget: InteractionTarget | null = null;
 
-          for (const [eid, info] of targetMap(state)) {
+          for (const [eid, info] of getInteractionTargets(state)) {
             if (!state.exists(eid)) continue;
             const range = info.range ?? cfg.range;
             const rangeSq = range * range;

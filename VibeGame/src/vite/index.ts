@@ -4,12 +4,14 @@ import { vibegamePublicLiveServe } from './public-live-serve';
 import { silenceTyprOpentypeNoise } from './silence-typr';
 import { mergeWatchIgnored } from './watch-ignored';
 
-/** WASM / yoga glue breaks Vite prebundle sourcemaps in Firefox DevTools. */
+/** WASM glue breaks Vite prebundle sourcemaps in Firefox DevTools. */
 const OPTIMIZE_DEPS_EXCLUDE = [
   '@pmndrs/uikit',
   'yoga-layout',
   'recast-navigation',
   '@recast-navigation/three',
+  '@dimforge/rapier3d-compat',
+  '@dimforge/rapier3d',
 ] as const;
 
 export function vibegame(): Plugin[] {

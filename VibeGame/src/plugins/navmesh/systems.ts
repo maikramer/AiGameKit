@@ -46,18 +46,22 @@ const OBSTACLE_MARGIN = 0.4;
 const MAX_STEP_HEIGHT = 0.4;
 // Voxel cell size. Drives both navmesh fidelity and generation cost: the recast
 // rasteriser allocates a (2·PLAY_AREA_RADIUS / cs)² column grid, so halving cs
-// quadruples the work. 0.4 over a 240 m span = 600² grid — fine enough to carve
-// 0.4 m-radius trunks while keeping generation sub-second.
-const FIXED_CS = 0.4;
+// quadruples the work. 0.6 over a 720 m span = 1200² grid — covers biome
+// spawn boxes / bosses at ±290 while keeping worker bake reasonable. City
+// trunks still carve (≥1 cell); finer cs at this radius blows memory.
+const FIXED_CS = 0.6;
 // Coarse source-mesh resolution for the play-area terrain skin. Dense patches
 // over lake/river/road brush AABBs are added in buildAdaptiveTerrainGeometry.
-// 96 over 240 m ≈ 2.5 m steps on the base grid (was 180 / ~1.3 m uniform).
-const TERRAIN_SOURCE_DIVISIONS = 96;
+// 360 over 720 m ≈ 2 m steps — steep peak ridges need denser source than the
+// old 3 m grid or recast leaves disconnected islands (path fails, agents idle).
+const TERRAIN_SOURCE_DIVISIONS = 360;
 
 const MAX_AGENTS = 256;
 const MAX_AGENT_RADIUS = 0.6;
 
-const PLAY_AREA_RADIUS = 120;
+// Must cover DynamicSpawner biome boxes (±350) and boss places (±290).
+// Radius 120 left peaks/forest/desert/swamp agents off-mesh → crowd vel=0.
+const PLAY_AREA_RADIUS = 360;
 
 function navMeshConfig(worldSize: number) {
   void worldSize;
@@ -65,7 +69,9 @@ function navMeshConfig(worldSize: number) {
   return {
     cs,
     ch: cs,
-    walkableSlopeAngle: 45,
+    // 45° matched flat biomes but carved the west peaks into poly islands
+    // (spawn slope gate still 45°; agents sat on mesh with no path out).
+    walkableSlopeAngle: 55,
     walkableHeight: Math.ceil(AGENT_HEIGHT / cs),
     walkableClimb: Math.max(1, Math.ceil(MAX_STEP_HEIGHT / cs)),
     walkableRadius: Math.max(

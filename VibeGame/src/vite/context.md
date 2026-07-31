@@ -24,6 +24,11 @@ Vite plugins for VibeGame development and build tooling.
   - `recast-navigation`, `@recast-navigation/three`
   - `@pmndrs/uikit`, `yoga-layout` (yoga WASM → `URL constructor: is not a valid URL`
     / `sourceMappingURL: null` when inlined in `.vite/deps`)
+  - `@dimforge/rapier3d-compat`, `@dimforge/rapier3d` (same DevTools sourcemap noise)
+- Engine TS edits force **full page reload** (`vibegameForceFullReload`, debounced)
+  — soft HMR orphans WebGL/KTX2/Rapier. Unload uses **lightweight**
+  `releaseRuntimeGpuResources` on `pagehide` only (never heavy `destroy()` on
+  `vite:beforeFullReload` — that can hang mid-boot and block `location.reload`)
 - Includes `silenceTyprOpentypeNoise()` (see below)
 
 Examples may still list the same excludes locally (e.g. simple-rpg) for clarity;

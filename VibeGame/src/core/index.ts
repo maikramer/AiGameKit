@@ -130,7 +130,9 @@ export type {
 
 export {
   disposeAllRuntimes,
+  ensureRuntimePageTeardown,
   registerRuntime,
+  releaseRuntimeGpuResources,
   unregisterRuntime,
 } from './runtime-manager';
 

@@ -58,7 +58,8 @@ export function spawnSpecFromLayer(
     surfaceEpsilon: 0.75,
     surfaceEpsilonAuto: false,
     maxSlopeDeg: plan.maxSlopeDeg,
-    maxSlopePlacementAttempts: 48,
+    // Dense carpets: fewer retries — 48×N froze boot at 50k+ instances.
+    maxSlopePlacementAttempts: 8,
     pickStrategy: 'random',
     avoidWater: plan.avoidWater,
     avoidRoad: plan.avoidRoad,

@@ -18,6 +18,13 @@ import {
   isGltfBoundsPrefetchInflight,
   prefetchGltfLocalYBounds,
 } from '../gltf-xml/gltf-bounds-cache';
+import {
+  addInstancedGltf,
+  getInstancedLodUrls,
+  isGltfInstanced,
+} from '../gltf-xml/auto-instance';
+import { GltfPending, GltfPhysicsPending } from '../gltf-xml/components';
+import { getGltfUrl } from '../gltf-xml/context';
 import { DistanceCull } from '../rendering/components';
 import { Rigidbody } from '../physics/components';
 import { syncBodyQuaternionFromEuler } from '../physics/utils';
@@ -230,6 +237,10 @@ export function spawnTemplateAtTerrain(
     const context = new ParseContext(state);
     processRecipeChildElements(state, eid, recipeName, ch, context);
   }
+  // Instanced foliage/props: attach to the shared pool immediately so the
+  // assets loading gate never sees tens of thousands of unkicked GltfPending
+  // (GltfXmlLoadSystem runs before TerrainSpawnSystem in setup).
+  kickInstancedVisualIfNeeded(state, eid);
   if (spec.maxDistance > 0) {
     state.addComponent(eid, DistanceCull);
     DistanceCull.maxDistance[eid] = spec.maxDistance;
@@ -237,6 +248,21 @@ export function spawnTemplateAtTerrain(
   writeSpawnVariation(state, eid, sample);
   mirrorPoseToRigidbody(state, eid);
   if (spawnedMeta) registerTerrainSpawned(state, eid, spawnedMeta);
+}
+
+function kickInstancedVisualIfNeeded(state: State, eid: number): void {
+  if (!state.hasComponent(eid, GltfPending)) return;
+  if (GltfPending.loaded[eid] === 1) return;
+  if (!isGltfInstanced(state, eid)) return;
+  if (state.hasComponent(eid, GltfPhysicsPending)) return;
+  const url = getGltfUrl(state, eid);
+  if (!url) {
+    GltfPending.loaded[eid] = 1;
+    return;
+  }
+  const [lod1, lod2] = getInstancedLodUrls(state, eid);
+  addInstancedGltf(state, eid, url, lod1, lod2);
+  GltfPending.loaded[eid] = 1;
 }
 
 /**

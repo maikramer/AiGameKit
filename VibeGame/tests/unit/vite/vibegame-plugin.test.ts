@@ -440,4 +440,13 @@ describe('vibegame() integration invariants', () => {
     expect(config.base).toBe('/game/');
     expect(config.publicDir).toBe('static');
   });
+
+  it('excludes Rapier WASM from optimizeDeps prebundle', () => {
+    const config = applyConfig(getVibegamePlugin(), {});
+    const exclude = (config.optimizeDeps as { exclude: string[] }).exclude;
+    expect(exclude).toContain('@dimforge/rapier3d-compat');
+    expect(exclude).toContain('@dimforge/rapier3d');
+    expect(exclude).toContain('yoga-layout');
+    expect(exclude).toContain('recast-navigation');
+  });
 });

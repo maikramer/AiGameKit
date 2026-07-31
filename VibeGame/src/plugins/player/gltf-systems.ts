@@ -16,6 +16,10 @@ import { HasAnimator } from '../animation/components';
 import { InputState } from '../input/components';
 import { isKeyDown } from '../input/utils';
 import {
+  findNearestInteractionTarget,
+  resolveInteractionGesture,
+} from '../hud/interaction-targets';
+import {
   CharacterController,
   CharacterMovement,
   Collider,
@@ -92,6 +96,8 @@ const ATTACK_DAMAGE = 25;
 const ATTACK_IMPACT_FRACTION = 0.35;
 // Fallback impact delay when the clip duration is unknown.
 const ATTACK_IMPACT_FALLBACK = 0.22; // s
+/** Speed-up for the bend-down gather clip (~40f @24fps → ~0.9s at 1.85×). */
+const GATHER_TIME_SCALE = 1.85;
 const prevPrimary = new Map<number, number>();
 // Per-attacker countdown until the pending melee blow lands (seconds).
 const pendingMelee = new Map<number, number>();
@@ -590,14 +596,28 @@ export const PlayerGltfAnimStateSystem: System = defineSystem({
         );
       }
 
-      // Interact (F): play the bare-hand "gather" reach as a one-shot gesture
-      // (opening chests, reading runes, picking up). No melee — purely visual.
+      // Interact (F): only the bend-down "gather" when the nearest F-target
+      // opted in (`gesture: 'gather'` — mushroom / ground loot). Portals,
+      // chests, readables, etc. stay on locomotion (no long crouch).
       const interact = isKeyDown('KeyF') ? 1 : 0;
       const wasInteract = prevInteract.get(eid) ?? 0;
       prevInteract.set(eid, interact);
       if (interact && !wasInteract && grounded && !animator.overrideLock) {
-        const gatherClip = findClipFuzzy(animator, 'gather');
-        if (gatherClip) animator.playOverride(gatherClip, { loop: false });
+        const nearest = findNearestInteractionTarget(
+          state,
+          Transform.posX[eid],
+          Transform.posZ[eid],
+          { key: 'F' }
+        );
+        if (resolveInteractionGesture(nearest?.info) === 'gather') {
+          const gatherClip = findClipFuzzy(animator, 'gather');
+          if (gatherClip) {
+            animator.playOverride(gatherClip, {
+              loop: false,
+              timeScale: GATHER_TIME_SCALE,
+            });
+          }
+        }
       }
 
       // Land the scheduled melee hit when the swing reaches its impact frame.

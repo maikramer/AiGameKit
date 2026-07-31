@@ -84,17 +84,20 @@ The system therefore only teleports when `needsCrowdResync(dx, dy, dz)` reports 
 
 ## NavMesh Config
 
-Fixed cell size `cs = 0.4` over a `PLAY_AREA_RADIUS = 120` (240 m span) → a 600²
-recast column grid. The grid scales as `(2·radius / cs)²`, so cs is the dominant
+Fixed cell size `cs = 0.6` over a `PLAY_AREA_RADIUS = 360` (720 m span) → a 1200²
+recast column grid. Radius must cover biome `DynamicSpawner` boxes (±350) and
+boss places (±290); a 120 m bake left outer agents off-mesh (crowd `desiredVel`
+stuck at 0). The grid scales as `(2·radius / cs)²`, so cs is the dominant
 generation cost — keep it as large as obstacle fidelity allows. Walkable params
 derive from agent dimensions and cs.
 
 Terrain **source** mesh resolution is decoupled from cs (`TERRAIN_SOURCE_DIVISIONS
-= 180`): recast re-voxelises at cs regardless, so a finer source mesh only wastes
-collection time. (Previously divisions = `bounds·2/cs` ≈ 800 → a 1.28 M-triangle
-source + 640 k grid that took seconds.)
+= 360` ≈ 2 m base steps): recast re-voxelises at cs regardless. Steep biomes
+(frozen peaks) need this density so ridges stay connected; coarser grids left
+agents on poly islands with `computePath` failure. Dense patches still overlay
+lake/river/road brush AABBs.
 
-Agent defaults: height=2.0m, radius=0.4m, max step=0.4m, max slope=45°.
+Agent defaults: height=2.0m, radius=0.4m, max step=0.4m, max slope=55°.
 Crowd: `maxAgents: 256, maxAgentRadius: 0.6`.
 Generation logs collect + recast timings to the console.
 

@@ -18,9 +18,10 @@ const gltfPendingQuery = defineQuery([GltfPending]);
  *    Background lod1/lod2 do not block. Per-entity clones of an already-cached
  *    master do not stack credits.
  * 2. Every `GltfPending` has been **kicked** (in-flight or loaded=1) — covers
- *    the race where spawn just created entities but GltfXmlLoadSystem has not
- *    started their fetches yet. Does **not** wait for thousands of clone
- *    attach completions after the shared master is ready.
+ *    the race where parse-time loaders exist before GltfXmlLoadSystem runs.
+ *    Instanced spawn foliage is kicked inside `spawnTemplateAtTerrain` so bulk
+ *    carpets do not hold this gate. Does **not** wait for clone attach after
+ *    the shared master is ready.
  */
 export function gltfAssetsReady(state: State): boolean {
   if (getCriticalGltfLoadCount() > 0) return false;

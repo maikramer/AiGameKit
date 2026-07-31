@@ -29,7 +29,9 @@ rendering/
 Renderer and camera use `canvas.clientWidth/clientHeight` for sizing and aspect ratio, respecting CSS dimensions. Multiple canvases per page require separate State instances (one State per canvas).
 
 **Shader warmup / postprocessing:** EffectComposer can start with 0×0 depth
-(Firefox: `DEPTH_ATTACHMENT…`). `syncComposerSize` re-syncs after construct.
+(Firefox: `DEPTH_ATTACHMENT…`). `syncComposerSize` re-syncs after construct,
+on window resize, and before each composer frame (skips draw until sized).
+Renderer setup calls an initial resize so the first frame is not 0×0.
 Warmup **must not** block the loading `shaders` gate on a single huge frame:
 compile + one raw `renderer.render` (no composer), latch immediately, then
 finish yaw×pitch orbit across later frames. Waiting on camera/drawing-buffer

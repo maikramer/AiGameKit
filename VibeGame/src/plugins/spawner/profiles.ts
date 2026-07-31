@@ -165,7 +165,9 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
     yawDiscreteDeg: [],
-    maxDistance: 100,
+    // Camera XZ cull + MonoBehaviour skip. Keep ≥ typical draw distance so
+    // creatures stay active while still on screen (third-person look-ahead).
+    maxDistance: 180,
   },
   'physics-box': {
     alignToTerrain: false,

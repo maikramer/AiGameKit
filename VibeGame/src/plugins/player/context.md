@@ -44,6 +44,13 @@ Blow schedule (not on the key edge):
 **25–40%**; 0.7× duration lands in the long recovery and feels a beat late for
 whoosh/SFX. Measure motion energy on the clip if retuning.
 
+## PlayerGLTF interact (F) gesture
+
+F only plays the bend-down `gather` clip when the nearest F
+`InteractionTarget` has `gesture: 'gather'` (mushroom / ground loot). Other F
+targets (portals, chests, readables) keep locomotion — no crouch. Gather plays
+at `GATHER_TIME_SCALE` (~1.85×) so the clip finishes faster.
+
 API: `setPlayerAttackClip` / `getPlayerAttackClip` / `setPlayerIdleClip` /
 `setPlayerHeldItem` / `setPlayerFaceTarget` (exported from `gltf-systems.ts`).
 

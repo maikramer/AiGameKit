@@ -372,7 +372,13 @@ export class GltfAnimator {
 
   playOverride(
     clipName: string,
-    options?: { loop?: boolean; crossfade?: number; onFinished?: () => void }
+    options?: {
+      loop?: boolean;
+      crossfade?: number;
+      /** Playback rate (1 = normal). Faster values shorten override lock. */
+      timeScale?: number;
+      onFinished?: () => void;
+    }
   ): AnimationAction | null {
     this._overrideLock = true;
 
@@ -389,6 +395,10 @@ export class GltfAnimator {
     });
 
     if (action) {
+      const scale = options?.timeScale;
+      if (scale !== undefined && Number.isFinite(scale) && scale > 0) {
+        action.setEffectiveTimeScale(scale);
+      }
       const onFinished = options?.onFinished;
       const mixer = action.getMixer();
       // The mixer fires 'finished' for ANY LoopOnce action it owns, so filter

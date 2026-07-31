@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'bun:test';
+import { existsSync, readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import {
   MeshAnchor,
   buildMeshColliderGeometry,
+  glbNeedsGeometryLoader,
+  loadGlbCollisionMesh,
   parseGlbCollisionMesh,
 } from 'vibegame/physics';
 
@@ -107,6 +111,19 @@ describe('buildMeshColliderGeometry', () => {
     expect(Array.from(src.vertices)).toEqual([1, 2, 3]);
   });
 
+  it('applies non-uniform scale per axis (bridge scaleX must not inflate Y)', () => {
+    const src = {
+      vertices: new Float32Array([1, 2, 3]),
+      indices: new Uint32Array([0]),
+    };
+    const out = buildMeshColliderGeometry(
+      src,
+      { x: 2.5, y: 1, z: 1 },
+      MeshAnchor.None
+    );
+    expect(Array.from(out.vertices)).toEqual([2.5, 2, 3]);
+  });
+
   it('anchor "base" recenters the AABB base center onto the origin', () => {
     const glb = buildTriangleGlb([10, 5, 0], [1, 1, 1]);
     const mesh = parseGlbCollisionMesh(glb);
@@ -116,5 +133,26 @@ describe('buildMeshColliderGeometry', () => {
     expect(Array.from(out.vertices)).toEqual([
       -0.5, 0, 0, 0.5, 0, 0, -0.5, 1, 0,
     ]);
+  });
+});
+
+describe('loadGlbCollisionMesh (meshopt)', () => {
+  const sample = path.resolve(
+    import.meta.dir,
+    '../../../../examples/simple-rpg/public/assets/meshes/wooden_bench_lod1.glb'
+  );
+
+  it('decodes meshopt/quantized LOD deliverable', async () => {
+    if (!existsSync(sample)) return;
+    const buf = readFileSync(sample);
+    const ab = buf.buffer.slice(
+      buf.byteOffset,
+      buf.byteOffset + buf.byteLength
+    );
+    expect(glbNeedsGeometryLoader(ab)).toBe(true);
+    expect(() => parseGlbCollisionMesh(ab)).toThrow(/float32 VEC3/);
+    const mesh = await loadGlbCollisionMesh(ab, sample);
+    expect(mesh.vertices.length).toBeGreaterThan(0);
+    expect(mesh.vertices.length % 3).toBe(0);
   });
 });

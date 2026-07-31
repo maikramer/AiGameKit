@@ -234,7 +234,7 @@ function applyAttribute(
   return false;
 }
 
-function getAvailableAttributes(recipe: Recipe, state: State): string[] {
+export function getAvailableAttributes(recipe: Recipe, state: State): string[] {
   const attrs: Set<string> = new Set();
 
   if (recipe.components) {
@@ -270,14 +270,30 @@ function getAvailableAttributes(recipe: Recipe, state: State): string[] {
             attrs.add(`${componentName}.${kebabField}`);
 
             attrs.add(kebabField);
+
+            // Vector shorthand: posX/posY/posZ → pos (and euler, scale, rot)
+            const vec = field.match(/^(.+)([XYZW])$/);
+            if (vec) {
+              const base = vec[1]!;
+              const kebabBase = base.replace(/([A-Z])/g, '-$1').toLowerCase();
+              attrs.add(kebabBase);
+              attrs.add(base.charAt(0).toLowerCase() + base.slice(1));
+            }
           }
         }
       }
     }
   }
 
+  if (recipe.parserAttributes) {
+    for (const a of recipe.parserAttributes) attrs.add(a);
+  }
+
   attrs.add('id');
   attrs.add('name');
+  attrs.add('tag');
+  attrs.add('layer');
+  attrs.add('script');
 
   return Array.from(attrs).sort();
 }

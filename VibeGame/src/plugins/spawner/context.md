@@ -44,6 +44,8 @@ Chaves típicas dentro de `place` (ver também `place-fields.ts` e `profiles.ts`
 | `align-to-terrain` | `1` \| `0` — rodar a raiz para alinhar à normal do terreno                                                     |
 | `max-slope-deg`    | Inclinação máxima aceite; acima, aviso e instâncias omitidas                                                   |
 
+Atributo irmão (fora de `place=`): `overlap-max="0.1"` — só `vibegame analyze`; tolera penetração XZ até N metros (`min(Δx,Δz)`). Default ausente = 0 (estrito). Também em `<Composition>` / `<Creature>`.
+
 O perfil interno `place` em `profiles.ts` define defaults para esse modo: `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90`.
 
 Ficheiros: `entity-parser.ts`, `place-fields.ts`, `place-system.ts` (`TerrainPlaceSystem`), `place-context.ts`, `place-types.ts`, `spawn-template.ts` (lógica partilhada com o spawn aleatório).

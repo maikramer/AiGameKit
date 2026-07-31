@@ -39,6 +39,8 @@ export {
 export {
   MeshAnchor,
   buildMeshColliderGeometry,
+  glbNeedsGeometryLoader,
+  loadGlbCollisionMesh,
   parseGlbCollisionMesh,
   setColliderMeshUrl,
   getColliderMeshUrl,

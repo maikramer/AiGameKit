@@ -1,6 +1,7 @@
 ﻿import type { State } from '../../core';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { syncComposerSize } from '../postprocessing/composer';
 import { MainCamera } from './components';
 
 const INITIAL_INSTANCES = 1000;
@@ -686,7 +687,7 @@ export function handleWindowResize(
     context.postProcessing &&
     typeof context.postProcessing.setSize === 'function'
   ) {
-    context.postProcessing.setSize(width, height);
+    syncComposerSize(context.postProcessing, renderer);
   }
 
   for (const [, camera] of threeCameras) {

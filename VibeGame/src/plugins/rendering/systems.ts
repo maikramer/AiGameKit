@@ -1345,6 +1345,8 @@ export const SceneRenderSystem: System = defineSystem({
     const onResize = () => handleWindowResize(state, renderer);
     context.resizeHandler = onResize;
     window.addEventListener('resize', onResize);
+    // Canvas may already have CSS size — sync before first composer/warmup draw.
+    onResize();
   },
   update(state: State) {
     if (state.headless) return;

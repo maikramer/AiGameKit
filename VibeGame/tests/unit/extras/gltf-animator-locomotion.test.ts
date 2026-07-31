@@ -169,6 +169,15 @@ describe('GltfAnimator locomotion', () => {
     expect(result).not.toBeNull();
   });
 
+  it('playOverride applies timeScale', () => {
+    const action = animator.playOverride('attack', {
+      loop: false,
+      timeScale: 1.85,
+    });
+    expect(action).not.toBeNull();
+    expect(action!.getEffectiveTimeScale()).toBeCloseTo(1.85, 5);
+  });
+
   it('backward compat: play() still works directly', () => {
     const result = animator.play('walk');
     expect(result).not.toBeNull();

@@ -546,7 +546,7 @@ function help() {
     '  vibegame run [opts] [-- …]  Build da engine + dev (bun install na engine se faltar deps)'
   );
   console.log(
-    '  vibegame analyze [entry]   Offline world compile (Includes, assets, solid overlaps)'
+    '  vibegame analyze [entry]   Offline world compile (schema, assets, scripts, overlaps)'
   );
   console.log(
     '  vibegame anim-viewer [opts]  Launch rigged-GLB animation inspector (alias: av)'
@@ -556,8 +556,9 @@ function help() {
   console.log('  vibegame help            This message');
   console.log('');
   console.log(
-    '  vibegame analyze [--public-dir DIR] [--json] [--fail-on error|warn]'
+    '  vibegame analyze [--public-dir DIR] [--scripts-dir DIR] [--plugins default|rpg|all]'
   );
+  console.log('                   [--json] [--fail-on error|warn]');
   console.log(
     '  vibegame run --install / -i / --sync   Força bun install na engine antes do build'
   );

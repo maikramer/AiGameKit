@@ -82,5 +82,6 @@ export const spawnExclusionRecipe: Recipe = {
 export const entitySpawnerRecipe: Recipe = {
   name: 'GameObject',
   components: ['transform'],
-  parserAttributes: ['place'],
+  /** `overlap-max` = analyze-only solid penetration tolerance (metres). */
+  parserAttributes: ['place', 'overlap-max'],
 };

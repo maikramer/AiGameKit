@@ -3,6 +3,9 @@ import type { Plugin, ViteDevServer } from 'vite';
 
 const CODE_EXT = /\.(tsx?|jsx?|mjs|cjs)$/i;
 
+/** Coalesce bursty saves / multi-file edits into one reload. */
+const FULL_RELOAD_DEBOUNCE_MS = 200;
+
 /**
  * Soft HMR of engine / example TS leaves orphan WebGL contexts, KTX2 workers,
  * and Rapier/recast WASM — Firefox often locks up until the process is killed.
@@ -16,7 +19,6 @@ export function shouldForceFullReload(file: string, root?: string): boolean {
   if (root) {
     const rel = path.relative(root, file).replace(/\\/g, '/');
     if (!rel.startsWith('..') && CODE_EXT.test(rel)) {
-      // Example project root (e.g. simple-rpg/src/main.ts)
       if (rel.startsWith('src/')) return true;
     }
   }
@@ -24,13 +26,27 @@ export function shouldForceFullReload(file: string, root?: string): boolean {
 }
 
 export function vibegameForceFullReload(): Plugin {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let pendingServer: ViteDevServer | undefined;
+
+  const flush = () => {
+    timer = undefined;
+    const server = pendingServer;
+    pendingServer = undefined;
+    if (!server) return;
+    server.ws.send({ type: 'full-reload', path: '*' });
+  };
+
   return {
     name: 'vibegame-force-full-reload',
     apply: 'serve',
     enforce: 'post',
     handleHotUpdate({ file, server }: { file: string; server: ViteDevServer }) {
       if (!shouldForceFullReload(file, server.config.root)) return;
-      server.ws.send({ type: 'full-reload', path: '*' });
+      pendingServer = server;
+      if (timer !== undefined) clearTimeout(timer);
+      timer = setTimeout(flush, FULL_RELOAD_DEBOUNCE_MS);
+      // Suppress soft HMR for this file; reload is scheduled above.
       return [];
     },
   };

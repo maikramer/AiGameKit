@@ -32,9 +32,9 @@ const gltfAnimQuery = defineQueryLive([GltfAnimationState]);
 const mainCameraQuery = defineQueryLive([MainCamera]);
 
 /** Beyond this: skip mixer entirely (pose frozen until closer). */
-const ANIM_SKIP_DIST_SQ = 150 * 150;
+const ANIM_SKIP_DIST_SQ = 220 * 220;
 /** Beyond this: update mixer every other frame. */
-const ANIM_HALF_DIST_SQ = 80 * 80;
+const ANIM_HALF_DIST_SQ = 140 * 140;
 
 export const GltfAnimationUpdateSystem: System = defineSystem({
   name: 'GltfAnimationUpdateSystem',

@@ -25,8 +25,8 @@ export const creatureRecipe: Recipe = {
     'character-movement',
   ],
   merge: true,
-  /** Same as GameObject: `place` is owned by the spawner entity-parser. */
-  parserAttributes: ['place'],
+  /** Same as GameObject: `place` + analyze-only `overlap-max`. */
+  parserAttributes: ['place', 'overlap-max'],
   overrides: {
     'rigidbody.type': BodyType.KinematicPositionBased,
     'rigidbody.mass': 1,

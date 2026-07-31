@@ -144,25 +144,49 @@ function spawnOne(
   spawnTemplateAtTerrain(state, spec, rand, wx, wy, wz, template);
 }
 
+/**
+ * Soft ceiling for density-mode foliage carpets. Above this, ECS entity
+ * creation + terrain probes freeze the boot loading gate for many seconds.
+ * Trees/rocks use `fixed` counts and are unaffected.
+ */
+const MAX_DENSITY_SPAWN_INSTANCES = 12_000;
+
 /** Instâncias a colocar: fixo, densidade (obj/km² × área XZ em km²), ou inteiro uniforme no intervalo. */
 function resolveSpawnInstanceCount(
   spec: SpawnGroupSpec,
   rand: () => number,
   areaKm2: number
 ): number {
+  let n: number;
   switch (spec.spawnCountMode) {
     case 'fixed':
-      return Math.max(0, Math.floor(spec.count));
+      n = Math.max(0, Math.floor(spec.count));
+      break;
     case 'density':
-      return Math.max(0, Math.round(spec.densityPerKm2 * areaKm2));
+      n = Math.max(0, Math.round(spec.densityPerKm2 * areaKm2));
+      break;
     case 'random-range': {
       const lo = Math.min(spec.countRangeMin, spec.countRangeMax);
       const hi = Math.max(spec.countRangeMin, spec.countRangeMax);
-      return lo + Math.floor(rand() * (hi - lo + 1));
+      n = lo + Math.floor(rand() * (hi - lo + 1));
+      break;
     }
     default:
-      return Math.max(0, Math.floor(spec.count));
+      n = Math.max(0, Math.floor(spec.count));
+      break;
   }
+  if (
+    spec.spawnCountMode === 'density' &&
+    spec.spawnGroupProfile === 'foliage' &&
+    n > MAX_DENSITY_SPAWN_INSTANCES
+  ) {
+    logger.warn(
+      `[spawner] foliage density count ${n} capped to ${MAX_DENSITY_SPAWN_INSTANCES} ` +
+        `(densityPerKm2=${spec.densityPerKm2} areaKm2=${areaKm2.toFixed(4)})`
+    );
+    return MAX_DENSITY_SPAWN_INSTANCES;
+  }
+  return n;
 }
 
 function resyncTerrainSpawnedHeights(state: State): void {

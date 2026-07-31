@@ -61,7 +61,7 @@ export {
 } from './plugins/player-controller/plugin';
 export { OrbitCamera, OrbitCameraPlugin } from './plugins/orbit-camera';
 export { getScene } from './plugins/rendering';
-export { MeshRenderer } from './plugins/rendering';
+export { MeshRenderer, DistanceCull } from './plugins/rendering';
 export {
   Transform,
   WorldTransform,
@@ -392,14 +392,22 @@ export type {
   WaypointStyle,
 } from './plugins/hud';
 export {
+  findNearestInteractionTarget,
   getInteractionTargets,
   interactionPromptParser,
   interactionPromptRecipe,
   interactionPromptWidgetFactory,
+  normalizePromptKey,
   registerInteractionTarget,
+  resolveInteractionGesture,
   unregisterInteractionTarget,
 } from './plugins/hud';
-export type { InteractionTarget, PromptPosition } from './plugins/hud';
+export type {
+  InteractionGesture,
+  InteractionTarget,
+  NearestInteraction,
+  PromptPosition,
+} from './plugins/hud';
 export {
   COMPASS_DEFAULT_FOV,
   COMPASS_DEFAULT_NORTH,
@@ -655,6 +663,13 @@ export type {
   PickupConfig,
   PickupTrigger,
 } from './extras/interactable-base';
+
+export {
+  doorWorldOffset,
+  doorWorldPosition,
+  rotateYawXZ,
+} from './extras/door-offset';
+export type { DoorLocal, Vec2 as DoorVec2 } from './extras/door-offset';
 
 export {
   createMeleeAi,

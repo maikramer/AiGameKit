@@ -70,9 +70,7 @@ export function requestColliderMesh(url: string): ColliderMeshData | null {
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buf = await res.arrayBuffer();
-      const data = hasMeshoptExtension(buf)
-        ? await parseGlbCollisionMeshViaLoader(buf, url)
-        : parseGlbCollisionMesh(buf);
+      const data = await loadGlbCollisionMesh(buf, url);
       meshCache.set(url, { status: 'ready', data });
     })
     .catch((err: unknown) => {
@@ -95,15 +93,41 @@ const _v = new THREE.Vector3();
  * Apply uniform scale + anchor to the cached mesh, producing the geometry
  * Rapier consumes. Returns fresh arrays — Rapier keeps a reference.
  */
+/** Per-axis scale for trimesh verts (matches Transform.scaleX/Y/Z). */
+export type MeshColliderScale = number | { x: number; y: number; z: number };
+
+function resolveMeshScale(scale: MeshColliderScale): {
+  x: number;
+  y: number;
+  z: number;
+} {
+  if (typeof scale === 'number') {
+    const s = scale > 0 ? scale : 1;
+    return { x: s, y: s, z: s };
+  }
+  return {
+    x: scale.x > 0 ? scale.x : 1,
+    y: scale.y > 0 ? scale.y : 1,
+    z: scale.z > 0 ? scale.z : 1,
+  };
+}
+
+/**
+ * Builds Rapier-ready verts from a loaded collision mesh.
+ * Accepts uniform number or `{x,y,z}` — bridges stretch only in X; applying
+ * `scaleX` to Y/Z inflated the hull into a ghost walk surface above the deck.
+ */
 export function buildMeshColliderGeometry(
   data: ColliderMeshData,
-  scale: number,
+  scale: MeshColliderScale,
   anchor: number
 ): ColliderMeshData {
-  const s = scale > 0 ? scale : 1;
+  const { x: sx, y: sy, z: sz } = resolveMeshScale(scale);
   const vertices = new Float32Array(data.vertices.length);
-  for (let i = 0; i < data.vertices.length; i++) {
-    vertices[i] = data.vertices[i] * s;
+  for (let i = 0; i < vertices.length; i += 3) {
+    vertices[i] = data.vertices[i]! * sx;
+    vertices[i + 1] = data.vertices[i + 1]! * sy;
+    vertices[i + 2] = data.vertices[i + 2]! * sz;
   }
 
   if (anchor === MeshAnchor.Base) {
@@ -128,11 +152,10 @@ export function buildMeshColliderGeometry(
 // --- meshopt detection + GLTFLoader path ----------------------------------
 
 /**
- * Peek at the GLB JSON chunk to check whether `EXT_meshopt_compression` is
- * declared. The manual parser cannot decode compressed bufferViews, so such
- * GLBs must go through THREE.GLTFLoader + MeshoptDecoder.
+ * Peek at the GLB JSON chunk to check whether the manual float32 POSITION
+ * parser can read it. Meshopt / mesh_quantization need THREE.GLTFLoader.
  */
-function hasMeshoptExtension(buffer: ArrayBuffer): boolean {
+export function glbNeedsGeometryLoader(buffer: ArrayBuffer): boolean {
   try {
     const view = new DataView(buffer);
     if (view.getUint32(0, true) !== 0x46546c67) return false;
@@ -144,22 +167,45 @@ function hasMeshoptExtension(buffer: ArrayBuffer): boolean {
         const text = new TextDecoder().decode(
           new Uint8Array(buffer, offset + 8, chunkLength)
         );
-        const json = JSON.parse(text) as { extensionsUsed?: string[] };
-        return (json.extensionsUsed ?? []).includes('EXT_meshopt_compression');
+        const json = JSON.parse(text) as {
+          extensionsUsed?: string[];
+          meshes?: Array<{
+            primitives?: Array<{ attributes?: Record<string, number> }>;
+          }>;
+          accessors?: Array<{
+            componentType?: number;
+            type?: string;
+          }>;
+        };
+        const used = json.extensionsUsed ?? [];
+        if (
+          used.includes('EXT_meshopt_compression') ||
+          used.includes('KHR_mesh_quantization')
+        ) {
+          return true;
+        }
+        for (const mesh of json.meshes ?? []) {
+          for (const prim of mesh.primitives ?? []) {
+            const posIdx = prim.attributes?.POSITION;
+            if (posIdx === undefined) continue;
+            const acc = json.accessors?.[posIdx];
+            if (!acc) continue;
+            if (acc.type !== 'VEC3' || acc.componentType !== 5126) return true;
+          }
+        }
+        return false;
       }
       offset = offset + 8 + chunkLength;
     }
   } catch {
-    // malformed — let the manual parser emit the real error
+    // malformed — let the parser emit the real error
   }
   return false;
 }
 
 /**
- * Decode a meshopt-compressed GLB via THREE.GLTFLoader (configured with
- * MeshoptDecoder by createGeometryGLTFLoader), then extract world-space
- * POSITION + index data without adding anything to the live scene. Textures are
- * never fetched — a collider only needs vertices.
+ * Decode a meshopt/quantized GLB via THREE.GLTFLoader (MeshoptDecoder), then
+ * extract world-space POSITION + index data. Textures are never fetched.
  */
 async function parseGlbCollisionMeshViaLoader(
   buffer: ArrayBuffer,
@@ -207,6 +253,30 @@ async function parseGlbCollisionMeshViaLoader(
     vertices: new Float32Array(positions),
     indices: new Uint32Array(indices),
   };
+}
+
+/**
+ * Load collision geometry from a GLB buffer, using the fast manual parser for
+ * plain float32 meshes and THREE.GLTFLoader + MeshoptDecoder for meshopt /
+ * quantized deliverables (LOD0 from `text3d lod --meshopt`).
+ */
+export async function loadGlbCollisionMesh(
+  buffer: ArrayBuffer,
+  url = 'collision.glb'
+): Promise<ColliderMeshData> {
+  if (glbNeedsGeometryLoader(buffer)) {
+    return parseGlbCollisionMeshViaLoader(buffer, url);
+  }
+  try {
+    return parseGlbCollisionMesh(buffer);
+  } catch (err) {
+    // Quantized / unexpected accessors that the peek missed — fall back.
+    try {
+      return await parseGlbCollisionMeshViaLoader(buffer, url);
+    } catch {
+      throw err;
+    }
+  }
 }
 
 // --- minimal GLB parsing (fast path for uncompressed collision hulls) ------

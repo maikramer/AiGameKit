@@ -523,9 +523,12 @@ function createColliderForEntity(
     // GLB still downloading: leave entityToCollider unset so the init system
     // retries next tick.
     if (!data) return;
+    // Non-uniform Transform scale (bridge scaleX stretch): must NOT apply
+    // scaleX to Y/Z — that inflated the hull into a ghost deck above the mesh.
+    const ms = Collider.meshScale[entity] || 1;
     mesh = buildMeshColliderGeometry(
       data,
-      (Collider.meshScale[entity] || 1) * scaleX,
+      { x: ms * scaleX, y: ms * scaleY, z: ms * scaleZ },
       Collider.meshAnchor[entity]
     );
   }
