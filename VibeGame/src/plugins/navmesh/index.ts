@@ -3,6 +3,10 @@ import type { State } from '../../core';
 import { NavMeshAgent } from './components';
 import { Transform } from '../transforms/components';
 import {
+  DEFAULT_NAVMESH_AGENT_HEIGHT,
+  DEFAULT_NAVMESH_AGENT_RADIUS,
+} from './constants';
+import {
   _getActiveRuntime,
   getNavMeshRuntime,
   stateToRuntime,
@@ -19,6 +23,10 @@ export type { NavMeshGeometry } from './geometry';
 export { bakeSoloNavMeshBytes } from './bake-worker';
 export type { NavMeshBakeConfig } from './bake-worker';
 export { NavMeshPlugin } from './plugin';
+export {
+  DEFAULT_NAVMESH_AGENT_HEIGHT,
+  DEFAULT_NAVMESH_AGENT_RADIUS,
+} from './plugin';
 export {
   navMeshAgentRecipe,
   navMeshRecipe,
@@ -61,8 +69,8 @@ export function createAgent(
   const existing = rt.agents.get(eid);
   if (existing) return existing.agentIndex;
 
-  const radius = NavMeshAgent.radius[eid] || 0.4;
-  const height = NavMeshAgent.height[eid] || 1.0;
+  const radius = NavMeshAgent.radius[eid] || DEFAULT_NAVMESH_AGENT_RADIUS;
+  const height = NavMeshAgent.height[eid] || DEFAULT_NAVMESH_AGENT_HEIGHT;
   const maxSpeed = NavMeshAgent.speed[eid] || 3.0;
 
   const pos = {

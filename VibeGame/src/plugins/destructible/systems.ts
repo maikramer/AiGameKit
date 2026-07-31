@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
-import { animatorRegistry } from '../gltf-anim/systems';
+import { getAnimator } from '../gltf-anim/systems';
 import { InputState } from '../input/components';
 import { spawnFloatingText } from '../floating-text/utils';
 import { spawnParticleBurst } from '../particles/utils';
@@ -62,9 +62,13 @@ const lastSwingAt = new WeakMap<State, number>();
 const _color = new THREE.Color();
 
 /** Time from swing start until the blow lands, from the attack clip length. */
-function attackImpactDelay(player: number, fraction: number): number {
+function attackImpactDelay(
+  state: State,
+  player: number,
+  fraction: number
+): number {
   const regIdx = PlayerGltfConfig.animatorRegistryIndex[player];
-  const animator = regIdx ? animatorRegistry.get(regIdx) : undefined;
+  const animator = regIdx ? getAnimator(state, regIdx) : undefined;
   if (!animator) return FALLBACK_IMPACT_DELAY;
 
   const attackName = animator.clipNames.find((name) =>
@@ -254,6 +258,7 @@ export const DestructibleSystem: System = defineSystem({
     }
     Destructible.hitsTaken[target] += 1;
     Destructible.pendingImpact[target] = attackImpactDelay(
+      state,
       player,
       Destructible.impactFraction[target] || 0.35
     );

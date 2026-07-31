@@ -1,3 +1,4 @@
+import { clamp01 } from '../../shared';
 import type { Adapter } from '../../core';
 import { BiomeRegion } from './components';
 
@@ -137,10 +138,6 @@ export function packRgb(r: number, g: number, b: number): number {
   const gi = Math.round(clamp01(g) * 255);
   const bi = Math.round(clamp01(b) * 255);
   return ((ri << 16) | (gi << 8) | bi) >>> 0;
-}
-
-function clamp01(v: number): number {
-  return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
 /** Writes the AABB derived from a `polygon` attribute onto a BiomeRegion entity. */

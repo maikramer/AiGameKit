@@ -328,6 +328,27 @@ export const EntityScriptSystem: System = defineSystem({
         }
 
         setEntityScriptSetupInflight(state, eid, true);
+        // Register cleanup BEFORE the async load: a destroy while the module
+        // loads or `start()` awaits would otherwise never run onDisable/
+        // onDestroy and would leak the scriptFile side-table entry (the old
+        // registration happened only after the load completed).
+        let loadedModule: MonoBehaviourModule | undefined;
+        let loadedCtx: MonoBehaviourContext | undefined;
+        state.onDestroy(eid, () => {
+          const mod =
+            loadedModule ?? getCachedMonoBehaviourModule(state, globKey);
+          if (mod) {
+            const destroyCtx = loadedCtx ?? buildContext(state, eid);
+            if (MonoBehaviour.enabled[eid] === 1 && mod.onDisable) {
+              mod.onDisable(destroyCtx);
+            }
+            if (mod.onDestroy) {
+              mod.onDestroy(destroyCtx);
+            }
+          }
+          deletePrevEnabled(state, eid);
+          deleteScriptFile(state, eid);
+        });
         void getOrLoadMonoBehaviourModule(state, glob, globKey)
           .then(async (mod) => {
             if (!state.exists(eid)) {
@@ -343,6 +364,8 @@ export const EntityScriptSystem: System = defineSystem({
               return;
             }
             const ctx = buildContext(state, eid);
+            loadedModule = mod;
+            loadedCtx = ctx;
             if (mod.awake) {
               mod.awake(ctx);
             }
@@ -357,20 +380,6 @@ export const EntityScriptSystem: System = defineSystem({
               MonoBehaviour.ready[eid] = 1;
               setPrevEnabled(state, eid, isEnabled ? 1 : 0);
             }
-            state.onDestroy(eid, () => {
-              const cached = getCachedMonoBehaviourModule(state, globKey);
-              if (cached) {
-                const destroyCtx = buildContext(state, eid);
-                if (MonoBehaviour.enabled[eid] === 1 && cached.onDisable) {
-                  cached.onDisable(destroyCtx);
-                }
-                if (cached.onDestroy) {
-                  cached.onDestroy(destroyCtx);
-                }
-              }
-              deletePrevEnabled(state, eid);
-              deleteScriptFile(state, eid);
-            });
             setEntityScriptSetupInflight(state, eid, false);
           })
           .catch((err: unknown) => {

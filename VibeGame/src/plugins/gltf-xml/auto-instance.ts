@@ -48,6 +48,23 @@ const _instanceColor = new THREE.Color(1, 1, 1);
 const LOD1_DIST = 50;
 const LOD2_DIST = 120;
 
+/**
+ * Drop `lod1`/`lod2` URLs that alias `url` (or each other).
+ *
+ * GLB masters share `BufferGeometry`. InstancedMesh2 `addLOD` then reuses the
+ * parent LOD object (`geometry ===`), and frustum LOD writes `object.count`
+ * per level — last write wins → near-band instances vanish when approaching.
+ */
+export function normalizeInstancedLodUrls(
+  url: string,
+  lod1?: string,
+  lod2?: string
+): [string, string | undefined, string | undefined] {
+  const l1 = lod1 && lod1 !== url ? lod1 : undefined;
+  const l2 = lod2 && lod2 !== url && lod2 !== l1 ? lod2 : undefined;
+  return [url, l1, l2];
+}
+
 interface PoolPrimitive {
   mesh: InstancedMesh2;
   /** Node transform of the primitive inside the GLB. */
@@ -623,9 +640,14 @@ export function addInstancedGltf(
     // contributes — the pool is shared and LOD thresholds are baked into the
     // primitives at attach time.
     const thresholds = consumeInstancedLodThresholds(state, entity);
-    pool = {
+    const [lod0, distinctLod1, distinctLod2] = normalizeInstancedLodUrls(
       url,
-      lodUrls: [url, lod1, lod2],
+      lod1,
+      lod2
+    );
+    pool = {
+      url: lod0,
+      lodUrls: [lod0, distinctLod1, distinctLod2],
       primitives: null,
       lodLevelsBuilt: 0,
       slots: [],

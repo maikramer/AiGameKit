@@ -25,6 +25,7 @@ import { acceptQuest } from '../../../../src/plugins/quests/dialogue';
 import {
   QuestProgressSystem,
   notifyEnemyKilled,
+  notifyResourceHarvested,
 } from '../../../../src/plugins/quests/systems';
 import {
   registerQuest,
@@ -160,3 +161,49 @@ function getDef(state: State, id: string): QuestDef {
   if (!def) throw new Error(`missing quest def ${id}`);
   return def;
 }
+
+describe('QuestProgressSystem kill/collect kind gate', () => {
+  let state: State;
+  let player: number;
+  let idx: number;
+
+  beforeEach(() => {
+    state = new State();
+    state.registerComponent('transform', Transform);
+    state.registerComponent('player', PlayerController);
+    state.registerComponent('quest-giver', QuestGiver);
+    state.registerComponent('vault', VaultComponent);
+    state.registerComponent('progression', ProgressionComponent);
+    state.registerComponent('inventory', InventoryComponent);
+    player = state.createEntity();
+    state.addComponent(player, PlayerController);
+    state.addComponent(player, Transform);
+
+    const def = makeDef('collect_wolf', 'wolf', 1);
+    idx = registerQuest(state, {
+      ...def,
+      objective: { type: 'collect', target: 'wolf', count: 1 },
+    });
+  });
+
+  it('a harvest report does not advance a kill objective with the same target name', () => {
+    const npc = state.createEntity();
+    state.addComponent(npc, QuestGiver);
+    QuestGiver.questId[npc] = idx;
+    QuestGiver.state[npc] = QUEST_STATE_AVAILABLE;
+    // The registered def already has a `collect` objective (see beforeEach).
+    acceptQuest(state, npc, getDef(state, 'collect_wolf'));
+
+    // Kill report for the same name must NOT advance the collect objective.
+    notifyEnemyKilled(state, 'wolf');
+    QuestProgressSystem.update!(state);
+    expect(QuestState.progress[idx]).toBe(0);
+    expect(QuestState.completed[idx]).toBe(0);
+
+    // The matching harvest report does.
+    notifyResourceHarvested(state, 'wolf');
+    QuestProgressSystem.update!(state);
+    expect(QuestState.progress[idx]).toBe(1);
+    expect(QuestState.completed[idx]).toBe(1);
+  });
+});

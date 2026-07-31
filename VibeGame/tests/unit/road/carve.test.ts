@@ -429,7 +429,7 @@ describe('clipPathApproaches / carveRoadApproaches', () => {
       for (let xi = 0; xi < 256; xi++) {
         const wx = xi * step - half;
         // Left bank ~40, right ~20, mid ditch ~5.
-        let h = 0.25;
+        let h: number;
         if (wx < -8) h = 0.4;
         else if (wx > 8) h = 0.2;
         else h = 0.05;

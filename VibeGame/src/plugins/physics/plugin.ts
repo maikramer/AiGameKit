@@ -1,3 +1,4 @@
+import { degToRad } from '../../shared';
 import {
   defineSystem,
   type Adapter,
@@ -131,8 +132,8 @@ export const PhysicsPlugin: Plugin = {
       },
       'character-controller': {
         offset: 0.08,
-        maxSlope: 45 * (Math.PI / 180),
-        maxSlide: 30 * (Math.PI / 180),
+        maxSlope: degToRad(45),
+        maxSlide: degToRad(30),
         snapDist: 0.5,
         autoStep: 1,
         maxStepHeight: 0.3,

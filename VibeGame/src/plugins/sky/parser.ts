@@ -1,18 +1,6 @@
 import { logger } from '../../core/utils/logger';
-import type { Parser } from '../../core';
+import { parseBoolAttr, parseNumberAttr, type Parser } from '../../core';
 import { EquirectSky, setEquirectSkyUrl } from './components';
-
-function toBool(value: unknown, fallback: boolean): boolean {
-  if (value === undefined || value === null || value === '') return fallback;
-  const s = String(value).trim().toLowerCase();
-  return s === '1' || s === 'true' || s === 'yes';
-}
-
-function toNumber(value: unknown, fallback: number): number {
-  if (value === undefined || value === null) return fallback;
-  const n = parseFloat(String(value));
-  return Number.isNaN(n) ? fallback : n;
-}
 
 export const equirectSkyParser: Parser = ({ entity, element }) => {
   if (element.tagName.toLowerCase() !== 'equirectsky') return;
@@ -25,22 +13,22 @@ export const equirectSkyParser: Parser = ({ entity, element }) => {
   }
 
   setEquirectSkyUrl(entity, url.trim());
-  EquirectSky.rotationDeg[entity] = toNumber(
+  EquirectSky.rotationDeg[entity] = parseNumberAttr(
     element.attributes['rotation-deg'],
     0
   );
-  EquirectSky.setBackground[entity] = toBool(
+  EquirectSky.setBackground[entity] = parseBoolAttr(
     element.attributes['set-background'],
     true
   )
     ? 1
     : 0;
   // 0 = "use loader default" (keeps backward compat). Positive overrides.
-  EquirectSky.environmentIntensity[entity] = toNumber(
+  EquirectSky.environmentIntensity[entity] = parseNumberAttr(
     element.attributes['environment-intensity'],
     0
   );
-  EquirectSky.backgroundIntensity[entity] = toNumber(
+  EquirectSky.backgroundIntensity[entity] = parseNumberAttr(
     element.attributes['background-intensity'],
     0
   );

@@ -1,3 +1,4 @@
+import { parseBoolAttr, parseNumberAttr } from '../../core';
 import type { ParsedElement, XMLValue } from '../../core';
 import {
   ROAD_CROSSING_WIDTH_FLARE,
@@ -74,20 +75,11 @@ function attrString(value: XMLValue | undefined): string | null {
 }
 
 function attrNumber(value: XMLValue | undefined, fallback: number): number {
-  if (value === undefined || value === null) return fallback;
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const n = parseFloat(String(value));
-  return Number.isFinite(n) ? n : fallback;
+  return parseNumberAttr(value, fallback);
 }
 
 function attrBool(value: XMLValue | undefined, fallback: boolean): boolean {
-  if (value === undefined || value === null) return fallback;
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') return value !== 0;
-  const s = String(value).trim().toLowerCase();
-  if (s === '0' || s === 'false' || s === 'no' || s === 'off') return false;
-  if (s === '1' || s === 'true' || s === 'yes' || s === 'on') return true;
-  return fallback;
+  return parseBoolAttr(value, fallback);
 }
 
 /**

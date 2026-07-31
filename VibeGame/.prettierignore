@@ -6,6 +6,8 @@ package-lock.json
 bun.lockb
 layers/context-template.md
 **/context.md
+# Playwright MCP session snapshots (auto-generated per browser session).
+**/.playwright-mcp/
 # Generated asset-pipeline output (manifests, sidecars, work logs) — machine
 # written, reformatting them creates churn and breaks byte-compare with the
 # gameassets tooling.

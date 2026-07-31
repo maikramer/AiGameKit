@@ -1,13 +1,13 @@
 import { z } from 'zod';
 
-const numberSchema = z.number();
+export const numberSchema = z.number();
 
-const numberStringSchema = z
+export const numberStringSchema = z
   .string()
   .regex(/^-?\d+(\.\d+)?$/)
   .transform((val) => parseFloat(val));
 
-const booleanSchema = z.union([
+export const booleanSchema = z.union([
   z.boolean(),
   z.literal('true').transform(() => true),
   z.literal('false').transform(() => false),
@@ -83,6 +83,12 @@ export function parseNumber(value: string | number): number {
 export const shapeSchema = z.enum(['box', 'sphere']);
 
 export const bodyTypeSchema = z.enum(['static', 'dynamic', 'kinematic']);
+
+export type Vector3Input = z.infer<typeof vector3Schema>;
+export type Vector2Input = z.infer<typeof vector2Schema>;
+export type ColorInput = z.infer<typeof colorSchema>;
+export type Shape = z.infer<typeof shapeSchema>;
+export type BodyType = z.infer<typeof bodyTypeSchema>;
 
 export const transformComponentSchema = z
   .object({

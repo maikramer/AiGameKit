@@ -1,3 +1,4 @@
+import { parseColorValue } from '../../core';
 import type { Adapter, Plugin, State } from '../../core';
 import { ParticleEmitter } from './components';
 import { ParticleUpdateSystem } from './systems';
@@ -10,7 +11,11 @@ function colorAdapter(
   bField: keyof typeof ParticleEmitter
 ): Adapter {
   return ((entity: number, value: string, _state: State) => {
-    const num = parseInt(value.replace('#', ''), 16);
+    // XMLValueParser pre-converts "#hex"/"0xhex" to numbers, which the
+    // adapter layer stringifies back — parseColorValue handles both that
+    // round-trip and bare hex strings.
+    const num = parseColorValue(value);
+    if (Number.isNaN(num)) return;
     ParticleEmitter[rField][entity] = ((num >> 16) & 0xff) / 255;
     ParticleEmitter[gField][entity] = ((num >> 8) & 0xff) / 255;
     ParticleEmitter[bField][entity] = (num & 0xff) / 255;

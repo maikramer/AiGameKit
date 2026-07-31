@@ -128,8 +128,10 @@ export const GamepadInputSystem: System = defineSystem({
       // Merge into InputState (keyboard priority — only write if not already set)
       if (InputState.moveX[eid] === 0)
         InputState.moveX[eid] = GamepadInput.leftStickX[eid];
-      if (InputState.moveZ[eid] === 0)
-        InputState.moveZ[eid] = -GamepadInput.leftStickY[eid];
+      // Left-stick Y is forward/back — the axis movement systems consume is
+      // moveY (moveZ is the vertical fly axis, which gamepads don't map to).
+      if (InputState.moveY[eid] === 0)
+        InputState.moveY[eid] = -GamepadInput.leftStickY[eid];
       if (InputState.lookX[eid] === 0)
         InputState.lookX[eid] = GamepadInput.rightStickX[eid];
       if (InputState.lookY[eid] === 0)

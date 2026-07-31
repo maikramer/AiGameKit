@@ -35,7 +35,12 @@ export { State } from './state';
 export { Scene } from './scene';
 export { type InstantiateOptions, type TemplateData } from './prefabs';
 export { Time } from './time';
-export { createSnapshot, formatSnapshot, restoreSnapshot } from './snapshot';
+export {
+  createSnapshot,
+  formatSnapshot,
+  restoreSnapshot,
+  sequenceProgress,
+} from './snapshot';
 export type {
   EntitySnapshot,
   RestoreResult,

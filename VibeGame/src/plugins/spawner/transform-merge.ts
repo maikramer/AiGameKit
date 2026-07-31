@@ -1,4 +1,5 @@
 ﻿import * as THREE from 'three';
+import { splitTokens } from '../../core';
 import { eulerToQuaternion, quaternionToEuler } from '../../core/math';
 
 export interface ParsedTransformParts {
@@ -27,7 +28,7 @@ export function parseTransformAttr(
     if (colon < 0) continue;
     const key = p.slice(0, colon).trim().toLowerCase();
     const val = p.slice(colon + 1).trim();
-    const nums = val.split(/\s+/).map((n) => parseFloat(n));
+    const nums = splitTokens(val).map(parseFloat);
     if (key === 'pos' && nums.length >= 3) {
       out.pos = [nums[0], nums[1], nums[2]];
     } else if (key === 'euler' && nums.length >= 3) {

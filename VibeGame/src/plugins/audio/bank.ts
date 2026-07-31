@@ -1,3 +1,4 @@
+import { clamp01 } from '../../shared';
 import { logger } from '../../core/utils/logger';
 /**
  * Sound bank: declare sounds once by key, then fire them from anywhere with no
@@ -157,10 +158,6 @@ function isBeyondHearRange(
   const dy = y - listenerY;
   const dz = z - listenerZ;
   return dx * dx + dy * dy + dz * dz > maxDistance * maxDistance;
-}
-
-function clamp01(v: number): number {
-  return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
 function bus(name: string): BusState {

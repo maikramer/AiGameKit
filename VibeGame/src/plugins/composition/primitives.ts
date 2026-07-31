@@ -1,5 +1,6 @@
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import { parseNumberAttr, parseVec3Attr } from '../../core';
 import type { State, XMLValue } from '../../core';
 
 export type PrimitiveKind = 'box' | 'sphere' | 'cylinder' | 'plane' | 'pad';
@@ -97,11 +98,7 @@ export function isPrimitiveTag(tagName: string): boolean {
 }
 
 function toFloat(value: XMLValue | undefined, fallback: number): number {
-  if (value === undefined || value === null) return fallback;
-  if (typeof value === 'number') return value;
-  if (typeof value === 'boolean') return value ? 1 : 0;
-  const n = parseFloat(String(value));
-  return Number.isNaN(n) ? fallback : n;
+  return parseNumberAttr(value, fallback);
 }
 
 // XMLValueParser (core/xml/values) already converts vector strings like
@@ -111,35 +108,7 @@ function parseVec3(
   value: XMLValue | undefined,
   fallback: [number, number, number]
 ): [number, number, number] {
-  if (typeof value === 'string') {
-    const parts = value
-      .trim()
-      .split(/\s+/)
-      .map((p) => parseFloat(p));
-    if (parts.length >= 3 && parts.every((n) => !Number.isNaN(n))) {
-      return [parts[0]!, parts[1]!, parts[2]!];
-    }
-    if (parts.length === 1 && !Number.isNaN(parts[0])) {
-      return [parts[0]!, parts[0]!, parts[0]!];
-    }
-    return fallback;
-  }
-  if (typeof value === 'number' && !Number.isNaN(value)) {
-    return [value, value, value];
-  }
-  if (Array.isArray(value) && value.length >= 3) {
-    return [Number(value[0]), Number(value[1]), Number(value[2])];
-  }
-  if (value && typeof value === 'object') {
-    const v = value as Record<string, unknown>;
-    const x = Number(v.x);
-    const y = Number(v.y);
-    const z = Number(v.z ?? v.w);
-    if (!Number.isNaN(x) && !Number.isNaN(y) && !Number.isNaN(z)) {
-      return [x, y, z];
-    }
-  }
-  return fallback;
+  return parseVec3Attr(value, fallback);
 }
 
 export function parseColorHex(

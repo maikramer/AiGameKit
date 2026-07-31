@@ -1,4 +1,4 @@
-import { defineQuery, defineSystem } from '../../core';
+import { defineQuery, defineSystem, splitTokens } from '../../core';
 import type { State, System } from '../../core';
 import {
   type Waypoint,
@@ -86,7 +86,7 @@ function publishObjectiveWaypoints(
 ): void {
   if (def.objective.type !== 'visit') return;
   const visited = getVisitedTargets(state, def.id);
-  for (const name of def.objective.target.split(/\s+/)) {
+  for (const name of splitTokens(def.objective.target)) {
     if (!name || visited.has(name)) continue;
     const eid = state.getEntityByName(name);
     if (eid === null) continue;

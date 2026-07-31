@@ -1,3 +1,4 @@
+import { parseNumberAttr } from '../../core';
 import type { XMLValue } from '../../core';
 
 export function attrString(value: XMLValue | undefined): string | null {
@@ -10,10 +11,7 @@ export function attrNumber(
   value: XMLValue | undefined,
   fallback: number
 ): number {
-  if (value === undefined || value === null) return fallback;
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const n = parseFloat(String(value));
-  return Number.isFinite(n) ? n : fallback;
+  return parseNumberAttr(value, fallback);
 }
 
 /** `origin="x z"` world metres for cell (0,0). */

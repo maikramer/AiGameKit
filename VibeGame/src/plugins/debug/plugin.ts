@@ -50,11 +50,17 @@ export interface VibeGameDebugBridge {
 }
 
 type TypedArrayField =
-  Float32Array | Int32Array | Uint8Array | Uint16Array | Uint32Array;
+  | Float32Array
+  | Float64Array
+  | Int32Array
+  | Uint8Array
+  | Uint16Array
+  | Uint32Array;
 
 function isTypedArrayField(v: unknown): v is TypedArrayField {
   return (
     v instanceof Float32Array ||
+    v instanceof Float64Array ||
     v instanceof Int32Array ||
     v instanceof Uint8Array ||
     v instanceof Uint16Array ||
@@ -91,6 +97,9 @@ function extractAllComponents(
   }
   return result;
 }
+
+/** State that installed `window.__VIBEGAME__` (cleared on dispose). */
+let bridgeOwnerState: State | null = null;
 
 function createBridge(state: State): VibeGameDebugBridge {
   return {
@@ -577,6 +586,15 @@ export const DebugOverlaySystem: System = defineSystem({
       runtime.tweakpane.pane.dispose();
       runtime.tweakpane = null;
     }
+    // Drop the global bridge when its owning State is disposed — otherwise
+    // the closed-over State (and every typed array) stays reachable forever.
+    if (bridgeOwnerState === state) {
+      bridgeOwnerState = null;
+      if (typeof window !== 'undefined') {
+        const w = window as unknown as Record<string, unknown>;
+        if (w.__VIBEGAME__) delete w.__VIBEGAME__;
+      }
+    }
     overlayByState.delete(state);
   },
 });
@@ -616,5 +634,6 @@ export const DebugPlugin: Plugin = {
     if (w.__VIBEGAME__) return;
 
     w.__VIBEGAME__ = createBridge(state);
+    bridgeOwnerState = state;
   },
 };

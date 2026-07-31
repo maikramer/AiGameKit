@@ -1,3 +1,4 @@
+import { parseNumberAttr } from '../../core';
 import type { Plugin, Recipe } from '../../core';
 import type { ParserParams, XMLValue } from '../../core';
 import { getDataRegistry } from '../rpg-core/registry';
@@ -37,7 +38,7 @@ const projectileTemplateRecipe: Recipe = {
 };
 
 function toNumber(value: XMLValue | undefined): number {
-  return typeof value === 'number' ? value : Number(value ?? 0);
+  return parseNumberAttr(value, 0);
 }
 
 function projectileTemplateParser({ element, state }: ParserParams): void {

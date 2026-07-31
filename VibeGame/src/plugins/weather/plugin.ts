@@ -1,3 +1,4 @@
+import { splitNumbers } from '../../core';
 import type { Adapter, Plugin, Recipe } from '../../core';
 import { WeatherComponent } from './components';
 import { WeatherSystem } from './systems';
@@ -15,7 +16,7 @@ export const weatherRecipe: Recipe = {
 
 /** `wind="x z"` — direction (normalized by the runtime). */
 const windAdapter: Adapter = (entity, value) => {
-  const parts = String(value).trim().split(/\s+/).map(Number);
+  const parts = splitNumbers(value);
   if (parts.length >= 2 && parts.every((n) => !Number.isNaN(n))) {
     WeatherComponent.windDirX[entity] = parts[0]!;
     WeatherComponent.windDirZ[entity] = parts[1]!;

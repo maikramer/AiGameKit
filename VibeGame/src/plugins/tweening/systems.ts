@@ -1,5 +1,5 @@
 import type { System } from '../../core';
-import { defineSystem, defineQuery, TIME_CONSTANTS } from '../../core';
+import { defineSystem, defineQuery } from '../../core';
 import { KinematicMove, Rigidbody } from '../physics/components';
 import { KinematicMovementSystem } from '../physics/systems';
 import { Transform } from '../transforms/components';
@@ -23,7 +23,9 @@ export const TweenProcessingSystem: System = defineSystem({
   group: 'fixed',
   before: [KinematicMovementSystem],
   update: (state) => {
-    const dt = TIME_CONSTANTS.FIXED_TIMESTEP;
+    // Read the scheduler-owned fixed step (== TIME_CONSTANTS.FIXED_TIMESTEP
+    // today, but stays correct if the scheduler ever scales fixed steps).
+    const dt = state.time.fixedDeltaTime;
 
     for (const entity of tweenQuery(state.world)) {
       if (!TweenData.active[entity]) continue;

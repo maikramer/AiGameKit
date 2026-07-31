@@ -1,3 +1,6 @@
+import { corridorAabb, nearestOnPolyline } from '../terrain/corridor';
+import { pathLength as corridorPathLength } from '../terrain/corridor';
+
 /** Flat polyline in world XZ: `[x0, z0, x1, z1, ...]`. Must have ≥ 2 points. */
 export type FlatPath = number[];
 
@@ -13,24 +16,9 @@ export function pathAabb(path: FlatPath, pad: number): PathAabb {
   if (path.length < 4) {
     throw new Error('pathAabb: path must have at least 2 points (4 numbers)');
   }
-  let minX = Infinity;
-  let minZ = Infinity;
-  let maxX = -Infinity;
-  let maxZ = -Infinity;
-  for (let i = 0; i < path.length; i += 2) {
-    const x = path[i]!;
-    const z = path[i + 1]!;
-    if (x < minX) minX = x;
-    if (z < minZ) minZ = z;
-    if (x > maxX) maxX = x;
-    if (z > maxZ) maxZ = z;
-  }
-  return {
-    minX: minX - pad,
-    minZ: minZ - pad,
-    maxX: maxX + pad,
-    maxZ: maxZ + pad,
-  };
+  // Shared implementation lives in terrain/corridor (returns null on short
+  // paths — callers here guarantee ≥ 2 points already).
+  return corridorAabb(path, pad)!;
 }
 
 /**
@@ -65,13 +53,7 @@ export function resamplePath(path: FlatPath, spacing: number): FlatPath {
 
 /** Total length of the polyline (sum of segment lengths). */
 export function pathLength(path: FlatPath): number {
-  let total = 0;
-  for (let i = 0; i + 3 < path.length; i += 2) {
-    const dx = path[i + 2]! - path[i]!;
-    const dz = path[i + 3]! - path[i + 1]!;
-    total += Math.hypot(dx, dz);
-  }
-  return total;
+  return corridorPathLength(path);
 }
 
 /**
@@ -104,17 +86,8 @@ export function distanceToPath(path: FlatPath, px: number, pz: number): number {
       'distanceToPath: path must have at least 2 points (4 numbers)'
     );
   }
-  let best = Infinity;
-  for (let i = 0; i + 3 < path.length; i += 2) {
-    const d = distanceToSegment(
-      px,
-      pz,
-      path[i]!,
-      path[i + 1]!,
-      path[i + 2]!,
-      path[i + 3]!
-    );
-    if (d < best) best = d;
-  }
-  return best;
+  // Shared nearest-on-polyline lives in terrain/corridor.
+  const nearest = nearestOnPolyline(path, px, pz);
+  if (!nearest) return Infinity;
+  return nearest.dist;
 }

@@ -23,7 +23,12 @@ function attrStr(v: XMLValue | undefined): string | null {
 
 function hasSpawnCount(el: ParsedElement): boolean {
   const density = attrStr(el.attributes['density-per-km2']);
-  if (density) return true;
+  if (density) {
+    // `density-per-km2="0"` spawns nothing — only a positive density counts
+    // (the old truthy check let a zero-density spawner pass as populated).
+    const n = parseFloat(density);
+    return Number.isFinite(n) && n > 0;
+  }
   const cmin = attrStr(el.attributes['count-min']);
   const cmax = attrStr(el.attributes['count-max']);
   if (cmin && cmax) return true;

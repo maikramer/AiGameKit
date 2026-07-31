@@ -1,3 +1,4 @@
+import { parseColorValue } from '../../core';
 import type { Plugin, Recipe, State } from '../../core';
 import { HudPanel } from './components';
 import { internString } from './context';
@@ -59,9 +60,10 @@ function textAdapter(entity: number, value: string, state: State): void {
 }
 
 function colorAdapter(entity: number, value: string, _state: State): void {
-  const n = value.startsWith('#')
-    ? parseInt(value.slice(1), 16)
-    : Number(value);
+  // XMLValueParser pre-converts "#hex"/"0xhex" to numbers, stringified back
+  // here — parseColorValue handles that round-trip and bare hex strings.
+  const n = parseColorValue(value);
+  if (Number.isNaN(n)) return;
   const r = ((n >> 16) & 0xff) / 255;
   const g = ((n >> 8) & 0xff) / 255;
   const b = (n & 0xff) / 255;

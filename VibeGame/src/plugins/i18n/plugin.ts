@@ -1,4 +1,5 @@
 import { logger } from '../../core/utils/logger';
+import { parseBoolAttr } from '../../core';
 import type { Adapter, Plugin } from '../../core';
 import { internString } from '../hud/context';
 import { I18nConfig, I18nText } from './components';
@@ -60,7 +61,11 @@ export const I18nPlugin: Plugin = {
       },
       'i18n-config': {
         'auto-engine-defaults': ((entity: number, value: string) => {
-          I18nConfig.autoEngineDefaults[entity] = value === 'true' ? 1 : 0;
+          // Accept 1/0/true/false/yes/no — the old `=== 'true'` check made
+          // auto-engine-defaults="1" silently false.
+          I18nConfig.autoEngineDefaults[entity] = parseBoolAttr(value, false)
+            ? 1
+            : 0;
         }) as Adapter,
       },
     },

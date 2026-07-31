@@ -754,7 +754,11 @@ export const TeleportationSystem: System = defineSystem({
       const body = context.entityToRigidbody.get(entity);
       if (!body) continue;
 
-      teleportEntity(entity, body);
+      teleportEntity(
+        entity,
+        body,
+        state.hasComponent(entity, InterpolatedTransform)
+      );
       Rigidbody.poseDirty[entity] = 0;
     }
   },

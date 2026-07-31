@@ -1,28 +1,11 @@
 import { defineQuery } from '../core';
 import type { Recipe, State } from '../core';
 import { isKeyDown } from '../plugins/input';
-import type { MonoBehaviourModule } from '../plugins/entity-script';
 import { PlayerController } from '../plugins/player';
 import { Transform } from '../plugins/transforms';
+import { MonoBehaviour } from './mono-behaviour';
 
-/**
- * Author-facing MonoBehaviour base for the Pickup / Interactable extras.
- *
- * The lifecycle signature is `(state, eid)` (NOT the engine's
- * `MonoBehaviourContext`) so behaviours are trivially unit-testable with a
- * lightweight state stub. Use {@link toMonoBehaviourModule} to adapt an
- * instance into the {@link MonoBehaviourModule} shape the entity-script system
- * loads via `import.meta.glob` / `script="…"` attributes.
- */
-export class MonoBehaviour {
-  start?(state: State, eid: number): void;
-  // Default no-op so `typeof MonoBehaviour` is an instantiable constructor.
-  update(state: State, eid: number): void {
-    void state;
-    void eid;
-  }
-  onDestroy?(state: State, eid: number): void;
-}
+export { MonoBehaviour, toMonoBehaviourModule } from './mono-behaviour';
 
 /** How a player "approves" collecting a pickup. */
 export type PickupTrigger = 'proximity' | 'input';
@@ -239,21 +222,8 @@ export function createInteractable(
  * const inst = new (createPickup({ pickupRange: 2, onPickup: healOnPickup }))();
  * export const { start, update, onDestroy } = toMonoBehaviourModule(inst);
  * ```
+ * Shared implementation lives in `extras/mono-behaviour.ts`.
  */
-export function toMonoBehaviourModule(
-  instance: MonoBehaviour
-): MonoBehaviourModule {
-  const wrap = (fn: ((state: State, eid: number) => void) | undefined) =>
-    fn
-      ? (ctx: { state: State; entity: number }): void =>
-          fn.call(instance, ctx.state, ctx.entity)
-      : undefined;
-  return {
-    start: wrap(instance.start),
-    update: wrap(instance.update),
-    onDestroy: wrap(instance.onDestroy),
-  } as MonoBehaviourModule;
-}
 
 /**
  * Scaffold recipe for `<Pickup range="…" spin="…" trigger="…"/>`. Creates a

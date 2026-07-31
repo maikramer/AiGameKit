@@ -1,9 +1,16 @@
+import { degToRad } from '../../shared';
 import { defineQuery, defineSystem } from '../../core';
 import type { State, System } from '../../core';
 import { PlayerController } from '../player';
 import { Transform } from '../transforms';
-import { setTransformYawRadians } from '../transforms/utils';
+import {
+  setTransformYawRadians,
+  shortestAngleDelta,
+  stepTowardYaw,
+} from '../transforms/utils';
 import { QuestGiver } from './components';
+
+export { shortestAngleDelta, stepTowardYaw } from '../transforms/utils';
 
 /**
  * Quest givers turn to face the player who walks up to them, and drift back to
@@ -18,7 +25,6 @@ import { QuestGiver } from './components';
 const DEFAULT_FACE_RANGE = 7;
 /** rad/s — fast enough to feel attentive, slow enough not to snap. */
 const TURN_SPEED = 4.5;
-const DEG2RAD = Math.PI / 180;
 
 const giverQuery = defineQuery([QuestGiver, Transform]);
 const playerQuery = defineQuery([PlayerController, Transform]);
@@ -33,22 +39,6 @@ function restYawMap(state: State): Map<number, number> {
     stateToRestYaw.set(state, m);
   }
   return m;
-}
-
-/** Shortest signed angle from `from` to `to`, in radians. */
-export function shortestAngleDelta(from: number, to: number): number {
-  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
-}
-
-/** One slew step toward `target`, capped at `maxStep` radians. */
-export function stepTowardYaw(
-  current: number,
-  target: number,
-  maxStep: number
-): number {
-  const err = shortestAngleDelta(current, target);
-  if (Math.abs(err) <= maxStep) return target;
-  return current + Math.sign(err) * maxStep;
 }
 
 export const QuestGiverFacingSystem: System = defineSystem({
@@ -68,7 +58,7 @@ export const QuestGiverFacingSystem: System = defineSystem({
     for (const eid of giverQuery(state.world)) {
       let rest = restYaws.get(eid);
       if (rest === undefined) {
-        rest = Transform.eulerY[eid] * DEG2RAD;
+        rest = degToRad(Transform.eulerY[eid]);
         restYaws.set(eid, rest);
       }
 
@@ -76,7 +66,7 @@ export const QuestGiverFacingSystem: System = defineSystem({
       const dz = pz - Transform.posZ[eid];
       const target = dx * dx + dz * dz <= rangeSq ? Math.atan2(dx, dz) : rest;
 
-      const current = Transform.eulerY[eid] * DEG2RAD;
+      const current = degToRad(Transform.eulerY[eid]);
       const next = stepTowardYaw(current, target, maxStep);
       if (Math.abs(shortestAngleDelta(current, next)) < 1e-4) continue;
       setTransformYawRadians(Transform, eid, next);

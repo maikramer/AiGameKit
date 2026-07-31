@@ -69,6 +69,10 @@ export class Scheduler {
     mutableTime.deltaTime = scaledDelta;
     commitRemovals(state.world);
     this.runSystemGroup(state, 'simulation');
+    // Entities destroyed during `simulation` must be gone before `late`/`draw`
+    // systems query them — otherwise their stale rows are read/written for one
+    // extra frame (ghost waypoints, stale interaction targets).
+    commitRemovals(state.world);
     this.runSystemGroup(state, 'late');
     this.runSystemGroup(state, 'draw');
 

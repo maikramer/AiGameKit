@@ -51,13 +51,13 @@ describe('GltfAnimationUpdateSystem world-pose write-back', () => {
   });
 
   afterEach(() => {
-    if (idx) unregisterAnimator(idx);
+    if (idx) unregisterAnimator(state, idx);
     idx = 0;
   });
 
   it('leaves the placed world pose alone for a non-root-motion animator', () => {
     // Identity root: a lod0 group sitting inside an already-placed GLB group.
-    idx = registerAnimator(makeAnimator(new Object3D()));
+    idx = registerAnimator(state, makeAnimator(new Object3D()));
     GltfAnimationState.registryIndex[eid] = idx;
     GltfAnimationState.rootMotion[eid] = 0;
 
@@ -71,7 +71,7 @@ describe('GltfAnimationUpdateSystem world-pose write-back', () => {
   it('copies the root pose back when root motion is opted in', () => {
     const root = new Object3D();
     root.position.set(4, 1, -2);
-    idx = registerAnimator(makeAnimator(root));
+    idx = registerAnimator(state, makeAnimator(root));
     GltfAnimationState.registryIndex[eid] = idx;
     GltfAnimationState.rootMotion[eid] = 1;
 
@@ -86,7 +86,7 @@ describe('GltfAnimationUpdateSystem world-pose write-back', () => {
   it('does not re-dirty Transform when a root-motion root has not moved', () => {
     const root = new Object3D();
     root.position.set(-8, 35.8, 30);
-    idx = registerAnimator(makeAnimator(root));
+    idx = registerAnimator(state, makeAnimator(root));
     GltfAnimationState.registryIndex[eid] = idx;
     GltfAnimationState.rootMotion[eid] = 1;
 

@@ -1,3 +1,4 @@
+import { parseNumberAttr, splitTokens } from '../../core';
 import type { Adapter, Plugin, State } from '../../core';
 import {
   getInstancedLodUrls,
@@ -76,7 +77,7 @@ export const GltfXmlPlugin: Plugin = {
           promoteDiscreteLodUrls(state, entity);
         }) as Adapter,
         'lod-urls': ((entity, value, state) => {
-          const parts = String(value).trim().split(/\s+/).filter(Boolean);
+          const parts = splitTokens(value);
           if (parts.length !== 3) return;
           const triple = [parts[0], parts[1], parts[2]] as [
             string,
@@ -100,7 +101,7 @@ export const GltfXmlPlugin: Plugin = {
           );
         }) as Adapter,
         'lod-threshold-near': ((entity, value, state) => {
-          const v = parseFloat(String(value));
+          const v = parseNumberAttr(value, Number.NaN);
           if (Number.isNaN(v)) return;
           if (state.hasComponent(entity, GltfLod)) {
             GltfLod.thresholdNear[entity] = v;
@@ -112,7 +113,7 @@ export const GltfXmlPlugin: Plugin = {
           setInstancedLodThreshold(state, entity, 1, v);
         }) as Adapter,
         'lod-threshold-mid': ((entity, value, state) => {
-          const v = parseFloat(String(value));
+          const v = parseNumberAttr(value, Number.NaN);
           if (Number.isNaN(v)) return;
           if (state.hasComponent(entity, GltfLod)) {
             GltfLod.thresholdMid[entity] = v;

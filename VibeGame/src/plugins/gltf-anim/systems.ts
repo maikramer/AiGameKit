@@ -10,22 +10,43 @@ import { Transform, WorldTransform } from '../transforms';
 import { syncEulerFromQuaternion } from '../transforms/utils';
 import { GltfAnimationState } from './components';
 
-export const animatorRegistry = new Map<number, GltfAnimator>();
+/**
+ * Per-State animator registries: two States on one page must not share
+ * indices, and disposing one State must not dispose the other's animators.
+ */
+const registryByState = new WeakMap<State, Map<number, GltfAnimator>>();
+const nextIndexByState = new WeakMap<State, number>();
 
-let nextRegistryIndex = 1;
+function getRegistry(state: State): Map<number, GltfAnimator> {
+  let r = registryByState.get(state);
+  if (!r) {
+    r = new Map();
+    registryByState.set(state, r);
+  }
+  return r;
+}
 
-export function registerAnimator(animator: GltfAnimator): number {
-  const idx = nextRegistryIndex++;
-  animatorRegistry.set(idx, animator);
-  return idx;
+export function registerAnimator(state: State, animator: GltfAnimator): number {
+  const next = nextIndexByState.get(state) ?? 1;
+  nextIndexByState.set(state, next + 1);
+  getRegistry(state).set(next, animator);
+  return next;
 }
 
 /** Drop and dispose an animator (call from the owner entity's onDestroy). */
-export function unregisterAnimator(idx: number): void {
-  const animator = animatorRegistry.get(idx);
+export function unregisterAnimator(state: State, idx: number): void {
+  const animator = getRegistry(state).get(idx);
   if (!animator) return;
   animator.dispose();
-  animatorRegistry.delete(idx);
+  getRegistry(state).delete(idx);
+}
+
+/** Animator for a registered entity, or undefined (used by update systems). */
+export function getAnimator(
+  state: State,
+  idx: number
+): GltfAnimator | undefined {
+  return getRegistry(state).get(idx);
 }
 
 const gltfAnimQuery = defineQueryLive([GltfAnimationState]);
@@ -62,7 +83,7 @@ export const GltfAnimationUpdateSystem: System = defineSystem({
         continue;
       }
 
-      const animator = animatorRegistry.get(idx);
+      const animator = getRegistry(state).get(idx);
       if (!animator) {
         continue;
       }
@@ -124,11 +145,11 @@ export const GltfAnimationUpdateSystem: System = defineSystem({
       }
     }
   },
-  dispose(_state: State) {
-    for (const animator of animatorRegistry.values()) {
+  dispose(state: State) {
+    for (const animator of getRegistry(state).values()) {
       animator.dispose();
     }
-    animatorRegistry.clear();
-    nextRegistryIndex = 1;
+    registryByState.delete(state);
+    nextIndexByState.delete(state);
   },
 });

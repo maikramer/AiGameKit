@@ -121,6 +121,17 @@ export function forEachCorridorSegment(
   }
 }
 
+/** Total length of the polyline (sum of segment lengths). */
+export function pathLength(path: number[]): number {
+  let total = 0;
+  for (let i = 0; i + 3 < path.length; i += 2) {
+    const dx = path[i + 2]! - path[i]!;
+    const dz = path[i + 3]! - path[i + 1]!;
+    total += Math.hypot(dx, dz);
+  }
+  return total;
+}
+
 /** AABB of one segment expanded by `reach` on every side. */
 export function segmentAabb(
   ax: number,

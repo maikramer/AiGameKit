@@ -11,6 +11,7 @@ export {
   getInstancePoolStats,
   isGltfInstanced,
   markGltfInstanced,
+  normalizeInstancedLodUrls,
   setInstancedLodThreshold,
 } from './auto-instance';
 export {

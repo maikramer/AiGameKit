@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { degToRad } from '../../shared';
 import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import {
@@ -41,6 +42,12 @@ function syncGroupPose(group: THREE.Object3D, eid: number, state: State): void {
     Math.abs(rx) < 1e-6 &&
     Math.abs(ry) < 1e-6 &&
     Math.abs(rz) < 1e-6;
+  // Engine euler is DEGREES; THREE.Euler is radians — convert before both the
+  // unchanged-pose comparison and the write, or the early-out never fires and
+  // programmatic euler values land ~57× rotated.
+  const ex = degToRad(t.eulerX[eid]);
+  const ey = degToRad(t.eulerY[eid]);
+  const ez = degToRad(t.eulerZ[eid]);
   const poseUnchanged =
     group.position.x === px &&
     group.position.y === py &&
@@ -49,9 +56,9 @@ function syncGroupPose(group: THREE.Object3D, eid: number, state: State): void {
     group.scale.y === sy &&
     group.scale.z === sz &&
     (isIdentity
-      ? group.rotation.x === t.eulerX[eid] &&
-        group.rotation.y === t.eulerY[eid] &&
-        group.rotation.z === t.eulerZ[eid]
+      ? group.rotation.x === ex &&
+        group.rotation.y === ey &&
+        group.rotation.z === ez
       : group.quaternion.x === rx &&
         group.quaternion.y === ry &&
         group.quaternion.z === rz &&
@@ -61,7 +68,7 @@ function syncGroupPose(group: THREE.Object3D, eid: number, state: State): void {
   group.position.set(px, py, pz);
   group.scale.set(sx, sy, sz);
   if (isIdentity) {
-    group.rotation.set(t.eulerX[eid], t.eulerY[eid], t.eulerZ[eid]);
+    group.rotation.set(ex, ey, ez);
   } else {
     group.quaternion.set(rx, ry, rz, rw);
   }

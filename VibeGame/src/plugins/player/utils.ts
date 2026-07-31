@@ -6,7 +6,6 @@ import {
   CharacterMovement,
   DEFAULT_GRAVITY,
 } from '../physics';
-import { ThirdPersonCamera } from '../player-controller';
 import { PlayerController } from './components';
 import * as THREE from 'three';
 
@@ -117,10 +116,14 @@ function calculateSlerpFactor(
   return angle > 0.001 ? Math.min(1.0, maxRotation / angle) : 1.0;
 }
 
-export function resolveMouseMode(entity: number, _world: IWorld): number {
-  const camEid = PlayerController.cameraEntity[entity];
-  if (camEid === 0) return 1;
-  if (!ThirdPersonCamera.target[camEid]) return 1;
+/**
+ * Resolve the rotation-follow mode for a player entity (see updateRotation).
+ * Modes 0/2 = face the camera while idle; 1/3 = lock facing while moving,
+ * keep rotation when idle; 4/5 = always face the camera. Currently pinned to
+ * 1: the camera-follow modes were half-removed (the camEid/target lookups
+ * below are the vestige), so the other branches are unreachable today.
+ */
+export function resolveMouseMode(_entity: number, _world: IWorld): number {
   return 1;
 }
 

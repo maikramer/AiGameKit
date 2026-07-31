@@ -1,3 +1,4 @@
+import { splitTokens } from '../../core';
 import { defineSystem, defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { isKeyDown } from '../input';
@@ -96,6 +97,9 @@ export const QuestTriggerSystem: System = defineSystem({
 
 interface PendingKill {
   readonly target: string;
+  /** Objective kind the report may advance — kill reports never advance
+   * `collect` objectives and vice-versa, even on name collisions. */
+  readonly kind: 'kill' | 'collect';
 }
 
 const stateToKillQueue = new WeakMap<State, PendingKill[]>();
@@ -115,12 +119,12 @@ function killQueue(state: State): PendingKill[] {
  * enemy-registry event API. Matches are processed next QuestProgressSystem tick.
  */
 export function notifyEnemyKilled(state: State, target: string): void {
-  killQueue(state).push({ target });
+  killQueue(state).push({ target, kind: 'kill' });
 }
 
 /** Report a harvested resource so active `collect` objectives can advance. */
 export function notifyResourceHarvested(state: State, kind: string): void {
-  killQueue(state).push({ target: kind });
+  killQueue(state).push({ target: kind, kind: 'collect' });
 }
 
 function markGiverCompleted(state: State, questId: string): void {
@@ -173,6 +177,9 @@ export const QuestProgressSystem: System = defineSystem({
         if (def.objective.type !== 'kill' && def.objective.type !== 'collect') {
           continue;
         }
+        // Kind gate: a kill report must not advance a `collect` objective that
+        // happens to share the target name (and vice-versa).
+        if (def.objective.type !== item.kind) continue;
         if (def.objective.target !== item.target) continue;
         const idx = getQuestIndex(state, def.id);
         if (idx < 0) continue;
@@ -286,7 +293,7 @@ function creditVisit(state: State, name: string): void {
     if (QuestState.active[idx] !== 1 || QuestState.completed[idx] === 1) {
       continue;
     }
-    if (!def.objective.target.split(/\s+/).includes(name)) continue;
+    if (!splitTokens(def.objective.target).includes(name)) continue;
 
     const seen = visitedSet(state, def.id);
     if (seen.has(name)) continue;
@@ -347,7 +354,7 @@ export const QuestVisitSystem: System = defineSystem({
       const radiusSq = radius * radius;
       const seen = visitedSet(state, def.id);
 
-      for (const name of def.objective.target.split(/\s+/)) {
+      for (const name of splitTokens(def.objective.target)) {
         if (!name || seen.has(name)) continue;
         const target = state.getEntityByName(name);
         if (target === null) continue;

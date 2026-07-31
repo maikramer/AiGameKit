@@ -378,8 +378,8 @@ describe('GamepadInput', () => {
       expect(InputState.jump[entity]).toBe(1);
     });
 
-    it('should invert Y on left stick for moveZ', () => {
-      InputState.moveZ[entity] = 0;
+    it('should invert Y on left stick into moveY (forward/back)', () => {
+      InputState.moveY[entity] = 0;
 
       const mockGamepad = makeMockGamepad({
         axes: [0, 0.8, 0, 0],
@@ -392,7 +392,10 @@ describe('GamepadInput', () => {
       gpSystem?.update?.(state);
 
       const expected = -applyDeadzone(0.8, 0.15);
-      expect(InputState.moveZ[entity]).toBeCloseTo(expected, 5);
+      // moveY is the axis movement systems consume; moveZ is the vertical
+      // fly axis and must stay untouched by the left stick.
+      expect(InputState.moveY[entity]).toBeCloseTo(expected, 5);
+      expect(InputState.moveZ[entity]).toBe(0);
     });
 
     it('should merge look axes when keyboard look is 0', () => {

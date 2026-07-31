@@ -1,6 +1,15 @@
 import type { Plugin } from '../../core';
 import { NavMeshAgent, NavMeshSurface, NavMeshWalkable } from './components';
 import {
+  DEFAULT_NAVMESH_AGENT_HEIGHT,
+  DEFAULT_NAVMESH_AGENT_RADIUS,
+} from './constants';
+
+export {
+  DEFAULT_NAVMESH_AGENT_HEIGHT,
+  DEFAULT_NAVMESH_AGENT_RADIUS,
+} from './constants';
+import {
   navMeshAgentRecipe,
   navMeshRecipe,
   navMeshWalkableRecipe,
@@ -27,8 +36,8 @@ export const NavMeshPlugin: Plugin = {
       'nav-mesh-agent': {
         agentIndex: -1,
         speed: 3,
-        radius: 0.4,
-        height: 1.0,
+        radius: DEFAULT_NAVMESH_AGENT_RADIUS,
+        height: DEFAULT_NAVMESH_AGENT_HEIGHT,
         targetX: 0,
         targetY: 0,
         targetZ: 0,

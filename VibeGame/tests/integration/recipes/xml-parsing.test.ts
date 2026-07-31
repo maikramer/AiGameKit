@@ -497,7 +497,9 @@ describe('XML Recipe Integration', () => {
     parseXMLToEntities(state, parsed.root);
 
     expect(warning).toContain('[GameObject] Unknown attribute "my-component"');
-    expect(warning).toContain('Available: id, name, parent');
+    // Suggestion list is generated from the recipe's registered attributes,
+    // which grow as built-ins are added — assert shape, not the exact list.
+    expect(warning).toMatch(/Available: [^\n]+\bname\b/);
 
     const MyComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('my-component', MyComponent);

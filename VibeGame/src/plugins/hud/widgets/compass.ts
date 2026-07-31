@@ -1,4 +1,5 @@
 import { Vector3 } from 'three';
+import { wrapAngle } from '../../../shared';
 import { defineQuery } from '../../../core';
 import type { ParserParams, State, XMLValue } from '../../../core';
 import { PlayerController } from '../../player';
@@ -128,12 +129,7 @@ export function cameraAzimuth(dirX: number, dirZ: number): number {
   return Math.atan2(dirX, dirZ);
 }
 
-export function wrapAngle(a: number): number {
-  let r = a;
-  while (r > Math.PI) r -= Math.PI * 2;
-  while (r < -Math.PI) r += Math.PI * 2;
-  return r;
-}
+export { wrapAngle } from '../../../shared';
 
 /**
  * Resolve a mark's horizontal placement relative to the camera heading.

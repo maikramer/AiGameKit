@@ -1,3 +1,4 @@
+import { splitNumbers } from '../../core';
 import { defineSystem, defineQuery } from '../../core';
 import type { Parser, State, System } from '../../core';
 import { Transform } from '../transforms/components';
@@ -122,7 +123,7 @@ export const terrainPadParser: Parser = ({ entity, element }) => {
     let x = 0;
     let z = 0;
     if (typeof v === 'string') {
-      const parts = v.trim().split(/\s+/).map(Number);
+      const parts = splitNumbers(v);
       x = parts[0] ?? 0;
       z = parts[1] ?? 0;
     } else if (typeof v === 'object') {
@@ -139,7 +140,7 @@ export const terrainPadParser: Parser = ({ entity, element }) => {
     let w = 0;
     let d = 0;
     if (typeof s === 'string') {
-      const parts = s.trim().split(/\s+/).map(Number);
+      const parts = splitNumbers(s);
       w = parts[0] ?? 0;
       d = parts[1] ?? parts[0] ?? 0;
     } else if (typeof s === 'object') {

@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import type { ParsedElement } from '../../../src/core';
-import { checkAssetUrls } from '../../../src/cli/analyze/assets';
+import {
+  checkAssetUrls,
+  lod0SiblingUrl,
+} from '../../../src/cli/analyze/assets';
 
 function el(
   tagName: string,
@@ -98,5 +101,40 @@ describe('checkAssetUrls', () => {
     const msgs = issues.map((i) => i.message);
     expect(msgs.some((m) => m.includes('gone.glb'))).toBe(true);
     expect(msgs.some((m) => m.includes('ok.glb'))).toBe(false);
+  });
+
+  it('lod0SiblingUrl maps lodN→lod0', () => {
+    expect(lod0SiblingUrl('/assets/meshes/moss_rock_lod1.glb')).toBe(
+      '/assets/meshes/moss_rock_lod0.glb'
+    );
+    expect(lod0SiblingUrl('/assets/meshes/moss_rock_lod0.glb')).toBe(null);
+  });
+
+  it('warns when url aliases lod1-url or skips existing lod0', () => {
+    const pub = mkdtempSync(path.join(tmpdir(), 'vg-analyze-'));
+    mkdirSync(path.join(pub, 'assets', 'meshes'), { recursive: true });
+    writeFileSync(path.join(pub, 'assets', 'meshes', 'rock_lod0.glb'), 'x');
+    writeFileSync(path.join(pub, 'assets', 'meshes', 'rock_lod1.glb'), 'x');
+    writeFileSync(path.join(pub, 'assets', 'meshes', 'rock_lod2.glb'), 'x');
+
+    const root = el('world', {}, [
+      el('GLTFLoader', {
+        url: '/assets/meshes/rock_lod1.glb',
+        'lod1-url': '/assets/meshes/rock_lod1.glb',
+        'lod2-url': '/assets/meshes/rock_lod2.glb',
+      }),
+      el('GLTFLoader', {
+        url: '/assets/meshes/rock_lod0.glb',
+        'lod1-url': '/assets/meshes/rock_lod1.glb',
+        'lod2-url': '/assets/meshes/rock_lod2.glb',
+      }),
+    ]);
+    const msgs = checkAssetUrls(root, pub).map((i) => i.message);
+    expect(msgs.some((m) => m.includes('aliases lod1-url'))).toBe(true);
+    expect(msgs.some((m) => m.includes('skips existing'))).toBe(true);
+    expect(
+      msgs.filter((m) => m.includes('rock_lod0.glb') && m.includes('missing'))
+        .length
+    ).toBe(0);
   });
 });

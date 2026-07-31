@@ -32,7 +32,8 @@ Reports:
 
 - broken Includes, comma cell coords, CityGrid kids outside grid
 - unknown recipe tags (error) + unknown attrs / soft Zod (warn) via Default+Rpg registry
-- missing assets (`/…` **or** relative under `public/`; GLB + images/maps)
+- missing assets (`/…` **or** relative under `public/`; GLB + images/maps);
+  warn if `url` aliases `lod1-url` or skips an existing `*_lod0.glb`
 - missing entity `script=` / `<MonoBehaviour>` under `--scripts-dir` (auto `src/scripts`)
 - empty spawners, duplicate `name=`, missing Player/camera, Terrain without heightmap
 - RoadNetwork issues; solid overlaps (XZ **and** Y); solid∩Pad/Road as warn

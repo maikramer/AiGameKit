@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { radToDeg } from '../../shared';
 import { Transform, WorldTransform } from './components';
 
 type TransformComponent = typeof Transform | typeof WorldTransform;
@@ -40,8 +41,6 @@ export function syncQuaternionFromEuler(
   transform.rotW[entity] = _quatScratch.w;
 }
 
-const RAD2DEG = 180 / Math.PI;
-
 /**
  * Planar yaw (radians) for a ground-plane direction.
  * Convention: ``atan2(dx, dz)`` — local +Z forward at yaw 0 (Three.js / Quaternius).
@@ -51,16 +50,31 @@ export function planarYawRadians(dx: number, dz: number): number {
 }
 
 /**
- * Set Transform yaw from radians. Writes ``eulerY`` in **degrees** (ECS contract)
- * and syncs the quaternion so ``TransformHierarchySystem`` cannot clobber facing.
+ * Shortest signed angle from `from` to `to`, in radians — the wrapped
+ * difference so steering never spins the long way around.
  */
+export function shortestAngleDelta(from: number, to: number): number {
+  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+}
+
+/** One slew step toward `target`, capped at `maxStep` radians. */
+export function stepTowardYaw(
+  current: number,
+  target: number,
+  maxStep: number
+): number {
+  const err = shortestAngleDelta(current, target);
+  if (Math.abs(err) <= maxStep) return target;
+  return current + Math.sign(err) * maxStep;
+}
+
 export function setTransformYawRadians(
   transform: TransformComponent,
   entity: number,
   yawRadians: number
 ): void {
   transform.eulerX[entity] = 0;
-  transform.eulerY[entity] = yawRadians * RAD2DEG;
+  transform.eulerY[entity] = radToDeg(yawRadians);
   transform.eulerZ[entity] = 0;
   syncQuaternionFromEuler(transform, entity);
   if ('dirty' in transform) {

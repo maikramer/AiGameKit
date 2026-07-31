@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { nearestOnPolyline, pathLength } from '../terrain/corridor';
 
 /**
  * Geometria de estrada: ribbon ao longo de uma polyline suavizada, com a
@@ -82,19 +83,8 @@ export function distanceToPolyline(
   x: number,
   z: number
 ): number {
-  let best = Infinity;
-  for (let i = 0; i + 3 < path.length; i += 2) {
-    const ax = path[i]!;
-    const az = path[i + 1]!;
-    const dx = path[i + 2]! - ax;
-    const dz = path[i + 3]! - az;
-    const lenSq = dx * dx + dz * dz;
-    let t = lenSq > 0 ? ((x - ax) * dx + (z - az) * dz) / lenSq : 0;
-    t = t < 0 ? 0 : t > 1 ? 1 : t;
-    const d = Math.hypot(x - (ax + t * dx), z - (az + t * dz));
-    if (d < best) best = d;
-  }
-  return best;
+  // Shared nearest-on-polyline lives in terrain/corridor.
+  return nearestOnPolyline(path, x, z)?.dist ?? Infinity;
 }
 
 /**
@@ -225,13 +215,7 @@ export function makeRoadGeometry(
   const widthAt = opts.widthAt;
 
   // Comprimento total (para o feather da ponta final).
-  let totalLen = 0;
-  for (let i = 0; i < nodeCount - 1; i++) {
-    totalLen += Math.hypot(
-      path[(i + 1) * 2]! - path[i * 2]!,
-      path[(i + 1) * 2 + 1]! - path[i * 2 + 1]!
-    );
-  }
+  const totalLen = pathLength(path);
 
   const positions: number[] = [];
   const uvs: number[] = [];

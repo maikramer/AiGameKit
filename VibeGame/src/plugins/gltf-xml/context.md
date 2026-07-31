@@ -40,6 +40,10 @@ gltf-xml/
   LOD via `lod1-url` / `lod2-url` + `addLOD` na mesma pool. Entidades
   instanciadas não têm grupo próprio na cena (sem registo no group-registry →
   fora do BVH de meshes estáticos).
+  **Armadilha:** `url === lod1-url` (mesma geometria partilhada) faz
+  InstancedMesh2 aliasar o object LOD → instâncias somem ao aproximar.
+  `normalizeInstancedLodUrls` descarta níveis duplicados; preferir
+  `url=*_lod0` + `lod1-url=*_lod1` + `lod2-url=*_lod2`.
 - **Spawn variation**: antes de `new InstancedMesh2` / `addLOD`, chamar
   `maybePatchInstanceVariationMaterial` + depois
   `initUniformsPerInstance(INSTANCE_VARIATION_UNIFORM_SCHEMA)`. Ver

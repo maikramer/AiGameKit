@@ -168,4 +168,27 @@ GAME.XMLValueParser.parse("0xff0000");     // 16711680
 GAME.XMLValueParser.parse("hello world");  // "hello world"
 ```
 
+### Canonical attribute parsers (plugins must reuse, not fork)
+
+`XMLValueParser` pre-converts values (vectors → `{x,y,z}`, `#hex` colors →
+numbers). When a plugin/parser needs a **typed read with a fallback**, use the
+canonical helpers in this module instead of a local copy:
+
+```typescript
+import {
+  parseNumberAttr, // (value, fallback) — number/string/boolean, NaN → fallback
+  parseBoolAttr,   // (value, fallback) — true/false, 1/0, yes/no, on/off
+  parseVec3Attr,   // (value, [fx,fy,fz]) — string/number/array/{x,y,z} → tuple
+  parseColorValue, // (string) — handles the #hex → number → string round-trip
+} from 'vibegame';
+
+parseNumberAttr("0", 1);          // 0  (never falls back on explicit zero)
+parseBoolAttr("false", true);     // false (honors explicit false)
+parseVec3Attr("5", [0, 0, 0]);    // [5, 5, 5] (scalar broadcast)
+parseColorValue("16737792");      // 0xff6600 (round-trip of #ff6600)
+```
+
+Color adapters receive `String(attrValue)`, so `#hex` arrives as a pure
+decimal digit string — `parseColorValue` recovers the original number.
+
 <!-- /LLM:EXAMPLES -->

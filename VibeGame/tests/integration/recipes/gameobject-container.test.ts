@@ -389,4 +389,27 @@ describe('GameObject Container Syntax', () => {
     expect(state.hasComponent(entity, AudioSource)).toBe(true);
     expect((AudioSource as any).volume[entity]).toBe(0.5);
   });
+
+  it('accepts numeric name/tag/layer attributes (XMLValueParser pre-converts)', () => {
+    // name/tag/layer arrive as NUMBERS via XMLValueParser — the parser must
+    // coerce them instead of silently dropping the attributes. Tag/Layer here
+    // are the core ECS components the parser actually writes.
+    const xml =
+      '<root><GameObject name="123" tag="2" layer="6"></GameObject></root>';
+    const parsed = XMLParser.parse(xml);
+    const entities = parseXMLToEntities(state, parsed.root);
+    const entity = entities[0]!.entity;
+
+    expect(state.getEntityByName('123')).toBe(entity);
+
+    const { Tag, getTagId } = require('../../../src/core/ecs/tags');
+    expect(state.hasComponent(entity, Tag)).toBe(true);
+    // Tag ids come from a global intern table (other tests intern first), so
+    // assert the round-trip rather than an absolute id.
+    expect((Tag as { value: Int32Array }).value[entity]).toBe(getTagId('2'));
+
+    const { Layer } = require('../../../src/core/ecs/layers');
+    expect(state.hasComponent(entity, Layer)).toBe(true);
+    expect((Layer as { value: Int32Array }).value[entity]).toBe(6);
+  });
 });

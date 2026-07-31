@@ -19,6 +19,7 @@ export {
   clamp01,
   degToRad,
   radToDeg,
+  wrapAngle,
   mapRange,
   smoothstep,
 } from './math';

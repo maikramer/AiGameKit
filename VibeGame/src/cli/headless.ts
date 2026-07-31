@@ -27,7 +27,10 @@ function normalizeBooleanAttributes(html: string): string {
       if (before.includes(`${attr}=`) || before.includes(`${attr} =`)) {
         return match;
       }
-      return `<${tag}${before}${space}${attr}=""`;
+      // Bare boolean attribute (`<Fog enabled>`) → `enabled="true"`. The old
+      // `=""` form produced the same empty value the browser DOM yields,
+      // which the property parser rejects with "value is empty".
+      return `<${tag}${before}${space}${attr}="true"`;
     }
   );
 }

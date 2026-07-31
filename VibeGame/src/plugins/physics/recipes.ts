@@ -1,12 +1,18 @@
 import type { Recipe } from '../../core';
+import {
+  DEFAULT_NAVMESH_AGENT_HEIGHT,
+  DEFAULT_NAVMESH_AGENT_RADIUS,
+} from '../navmesh/constants';
 import { BodyType, ColliderShape } from './components';
 
-/** Capsule sized to NavMeshAgent defaults (radius 0.4, height 1.0). */
+/**
+ * Capsule sized to the NavMeshAgent defaults — radius = agent radius, cylinder
+ * segment so total capsule height = height + 2·radius = agent height.
+ */
 const CREATURE_COLLIDER_DEFAULTS = {
   shape: ColliderShape.Capsule,
-  radius: 0.4,
-  /** Cylinder segment so total capsule height = height + 2·radius = 1.0. */
-  height: 0.2,
+  radius: DEFAULT_NAVMESH_AGENT_RADIUS,
+  height: DEFAULT_NAVMESH_AGENT_HEIGHT - 2 * DEFAULT_NAVMESH_AGENT_RADIUS,
   friction: 0,
   posOffsetY: 0.5,
 } as const;

@@ -124,6 +124,20 @@ export const vec2 = {
     return Math.sqrt(v.x * v.x + v.y * v.y);
   },
 
+  /** XZ ground-plane distance between two points (ignores Y). */
+  distanceXZ(ax: number, az: number, bx: number, bz: number): number {
+    const dx = bx - ax;
+    const dz = bz - az;
+    return Math.sqrt(dx * dx + dz * dz);
+  },
+
+  /** Normalized XZ direction (dx, dz) → (x, z); zero vector stays zero. */
+  normalizeXZ(dx: number, dz: number): { x: number; z: number } {
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 1e-9) return { x: 0, z: 0 };
+    return { x: dx / len, z: dz / len };
+  },
+
   lerp(a: Vector2Like, b: Vector2Like, t: number): Vector2Like {
     return {
       x: a.x + (b.x - a.x) * t,
@@ -188,6 +202,14 @@ export function degToRad(deg: number): number {
 
 export function radToDeg(rad: number): number {
   return rad * (180 / Math.PI);
+}
+
+/** Wrap an angle into [-π, π] (same convention as atan2). */
+export function wrapAngle(a: number): number {
+  let r = a;
+  while (r > Math.PI) r -= Math.PI * 2;
+  while (r < -Math.PI) r += Math.PI * 2;
+  return r;
 }
 
 export function mapRange(

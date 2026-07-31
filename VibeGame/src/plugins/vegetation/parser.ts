@@ -1,3 +1,4 @@
+import { parseNumberAttr, parseVec3Attr } from '../../core';
 import type { Parser, XMLValue } from '../../core';
 import { setSpawnGroupSpec } from '../spawner/context';
 import { SpawnerPending } from '../spawner/components';
@@ -13,36 +14,14 @@ import { spawnSpecFromLayer } from './spec-from-plan';
 import { registerVegetationWindUrl } from './wind';
 
 function toNumber(value: XMLValue | undefined, fallback: number): number {
-  if (value === undefined || value === null) return fallback;
-  if (typeof value === 'number') return value;
-  if (typeof value === 'boolean') return value ? 1 : 0;
-  if (typeof value === 'string') {
-    const n = parseFloat(value);
-    return Number.isNaN(n) ? fallback : n;
-  }
-  return fallback;
+  return parseNumberAttr(value, fallback);
 }
 
 function vec3FromAttr(
   value: XMLValue | undefined,
   fallback: [number, number, number]
 ): [number, number, number] {
-  if (value === undefined || value === null) return fallback;
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-    const o = value as Record<string, number>;
-    if ('x' in o) return [o.x ?? 0, o.y ?? 0, o.z ?? 0];
-  }
-  if (Array.isArray(value) && value.length >= 3) {
-    return [Number(value[0]), Number(value[1]), Number(value[2])];
-  }
-  if (typeof value === 'string') {
-    const p = value
-      .trim()
-      .split(/\s+/)
-      .map((x) => parseFloat(x));
-    if (p.length >= 3) return [p[0]!, p[1]!, p[2]!];
-  }
-  return fallback;
+  return parseVec3Attr(value, fallback);
 }
 
 function hasAttr(attrs: Record<string, XMLValue>, key: string): boolean {

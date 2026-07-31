@@ -70,8 +70,17 @@ export function resolveAssetPath(
   return path.join(publicDir, t);
 }
 
+/** `foo_lod1.glb` → `foo_lod0.glb` path string, or null if not a lodN (N≥1) name. */
+export function lod0SiblingUrl(url: string): string | null {
+  const m = url.trim().match(/^(.*_lod)([1-9])(\.glb)(\?.*)?$/i);
+  if (!m) return null;
+  return `${m[1]}0${m[3]}${m[4] ?? ''}`;
+}
+
 /**
  * Walk tree; report missing asset files under publicDir (absolute `/…` or relative).
+ * Also warns when `url` aliases `lod1-url` or skips an existing `*_lod0.glb`
+ * (InstancedMesh2 near-band vanish / soft LOD ladder).
  */
 export function checkAssetUrls(
   root: ParsedElement,
@@ -79,6 +88,7 @@ export function checkAssetUrls(
 ): AnalyzeIssue[] {
   const issues: AnalyzeIssue[] = [];
   const seen = new Set<string>();
+  const lodLadderSeen = new Set<string>();
 
   const checkUrl = (url: string, attr: string, tag: string) => {
     if (isRemoteUrl(url)) return;
@@ -93,6 +103,39 @@ export function checkAssetUrls(
       severity: lod ? 'warn' : 'error',
       code: 'asset',
       message: `[analyze] ${lod ? 'WARN' : 'ERROR'} missing asset ${url} (<${tag} ${attr}>)`,
+    });
+  };
+
+  const checkLodLadder = (el: ParsedElement) => {
+    const tag = el.tagName;
+    const url =
+      attrStr(el.attributes.url) ?? attrStr(el.attributes['model-url']);
+    if (!url || isRemoteUrl(url)) return;
+    const lod1 = attrStr(el.attributes['lod1-url']);
+    const ladderKey = `${tag}:${url}:${lod1 ?? ''}`;
+    if (lodLadderSeen.has(ladderKey)) return;
+    lodLadderSeen.add(ladderKey);
+
+    if (lod1 && lod1 === url) {
+      issues.push({
+        severity: 'warn',
+        code: 'asset',
+        message:
+          `[analyze] WARN url aliases lod1-url (${url}) (<${tag}>) — ` +
+          `instanced LOD near-band can vanish; use distinct *_lod0 / *_lod1`,
+      });
+    }
+
+    const lod0 = lod0SiblingUrl(url);
+    if (!lod0) return;
+    const lod0Path = resolveAssetPath(publicDir, lod0);
+    if (!lod0Path || !existsSync(lod0Path)) return;
+    issues.push({
+      severity: 'warn',
+      code: 'asset',
+      message:
+        `[analyze] WARN url=${url} skips existing ${lod0} (<${tag}>) — ` +
+        `prefer url=*_lod0 for near detail`,
     });
   };
 
@@ -115,6 +158,7 @@ export function checkAssetUrls(
         checkUrl(url, 'mesh-url', tag);
       }
     }
+    checkLodLadder(el);
     for (const c of el.children) walk(c);
   };
 

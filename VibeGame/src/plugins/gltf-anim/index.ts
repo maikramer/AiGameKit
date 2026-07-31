@@ -1,7 +1,8 @@
 export { GltfAnimationState } from './components';
 export { GltfAnimPlugin } from './plugin';
 export {
-  animatorRegistry,
   GltfAnimationUpdateSystem,
+  getAnimator,
   registerAnimator,
+  unregisterAnimator,
 } from './systems';

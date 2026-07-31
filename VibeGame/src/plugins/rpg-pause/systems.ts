@@ -1,6 +1,9 @@
 import { defineSystem, type State, type System } from '../../core';
 import { emitEvent } from '../rpg-core/events';
-import { setInputMovementSuppressed } from '../input';
+import {
+  isInputMovementSuppressed,
+  setInputMovementSuppressed,
+} from '../input';
 
 export const PAUSE_PUSHED = 'pause:pushed';
 export const PAUSE_POPPED = 'pause:popped';
@@ -106,6 +109,19 @@ export const PauseSystem: System = defineSystem({
   name: 'PauseSystem',
   group: 'late',
   update(state: State): void {
-    sync(state, true);
+    // Re-assert the pause contract only when timeScale or input suppression
+    // diverges from the expected state (pause → 0 + suppressed, unpause →
+    // ps.timeScale / ps.inputSuppressed). The old unconditional `sync`
+    // re-wrote both fields every frame even when nothing had changed.
+    const ps = getPauseState(state);
+    const shouldPause = ps.modalStack.length > 0;
+    const expectedScale = shouldPause ? 0 : ps.timeScale;
+    const expectedSuppressed = shouldPause ? true : ps.inputSuppressed;
+    if (
+      state.time.timeScale !== expectedScale ||
+      isInputMovementSuppressed() !== expectedSuppressed
+    ) {
+      sync(state, true);
+    }
   },
 });

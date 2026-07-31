@@ -1,5 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import type { Parser, XMLValue } from '../../core';
+import { parseBoolAttr, parseNumberAttr, parseVec3Attr } from '../../core';
 import { formatUnknownElement } from '../../core/recipes/diagnostics';
 import { setSpawnGroupSpec } from './context';
 import { prefetchGltfLocalYBounds } from '../gltf-xml/gltf-bounds-cache';
@@ -75,51 +76,18 @@ function parseRole(value: XMLValue | undefined): string {
 }
 
 function toBool(value: XMLValue | undefined): boolean {
-  if (value === undefined || value === null) return false;
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') return value !== 0;
-  if (typeof value === 'string') {
-    const s = value.trim().toLowerCase();
-    return s === '1' || s === 'true' || s === 'yes';
-  }
-  return false;
+  return parseBoolAttr(value, false);
 }
 
 function toNumber(value: XMLValue | undefined, fallback: number): number {
-  if (value === undefined || value === null) return fallback;
-  if (typeof value === 'number') return value;
-  if (typeof value === 'boolean') return value ? 1 : 0;
-  if (typeof value === 'string') {
-    const n = parseFloat(value);
-    return Number.isNaN(n) ? fallback : n;
-  }
-  return fallback;
+  return parseNumberAttr(value, fallback);
 }
 
 function vec3FromAttr(
   value: XMLValue | undefined,
   fallback: [number, number, number]
 ): [number, number, number] {
-  if (value === undefined || value === null) return fallback;
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-    const o = value as Record<string, number>;
-    if ('x' in o) {
-      return [o.x ?? 0, o.y ?? 0, o.z ?? 0];
-    }
-  }
-  if (Array.isArray(value) && value.length >= 3) {
-    return [Number(value[0]), Number(value[1]), Number(value[2])];
-  }
-  if (typeof value === 'string') {
-    const p = value
-      .trim()
-      .split(/\s+/)
-      .map((x) => parseFloat(x));
-    if (p.length >= 3) {
-      return [p[0], p[1], p[2]];
-    }
-  }
-  return fallback;
+  return parseVec3Attr(value, fallback);
 }
 
 export const spawnGroupParser: Parser = ({ entity, element, state }) => {

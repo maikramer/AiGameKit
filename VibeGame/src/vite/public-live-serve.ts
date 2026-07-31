@@ -3,6 +3,11 @@ import path from 'node:path';
 import type { Connect, Plugin, ViteDevServer } from 'vite';
 
 const MIME: Record<string, string> = {
+  '.html': 'text/html',
+  '.htm': 'text/html',
+  '.css': 'text/css',
+  '.js': 'text/javascript',
+  '.svg': 'image/svg+xml',
   '.glb': 'model/gltf-binary',
   '.gltf': 'model/gltf+json',
   '.png': 'image/png',

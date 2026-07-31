@@ -1,3 +1,4 @@
+import { radToDeg } from '../../shared';
 import type { ParsedElement, XMLValue } from '../../core';
 import {
   attrNumber,
@@ -215,7 +216,7 @@ function wallAlong(
   const len = Math.hypot(dx, dz) || g.cell;
   const midX = (x0 + x1) / 2;
   const midZ = (z0 + z1) / 2;
-  const yaw = (Math.atan2(dx, dz) * 180) / Math.PI;
+  const yaw = radToDeg(Math.atan2(dx, dz));
   return compositionAt(
     midX,
     midZ,

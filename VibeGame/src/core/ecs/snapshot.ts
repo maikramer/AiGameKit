@@ -33,6 +33,14 @@ export interface SequenceSnapshot {
   progress: number;
 }
 
+/** 0..1 playback progress; 0 when the sequence has no items. */
+export function sequenceProgress(
+  currentIndex: number,
+  itemCount: number
+): number {
+  return itemCount > 0 ? currentIndex / itemCount : 0;
+}
+
 export interface EntitySnapshot {
   eid: number;
   name?: string;
@@ -49,7 +57,12 @@ export interface WorldSnapshot {
 }
 
 type ComponentField =
-  Float32Array | Int32Array | Uint8Array | Uint16Array | Uint32Array;
+  | Float32Array
+  | Float64Array
+  | Int32Array
+  | Uint8Array
+  | Uint16Array
+  | Uint32Array;
 
 function getComponentFields(
   component: Component,
@@ -61,6 +74,7 @@ function getComponentFields(
     const field = component[key as keyof Component] as ComponentField | unknown;
     if (
       field instanceof Float32Array ||
+      field instanceof Float64Array ||
       field instanceof Int32Array ||
       field instanceof Uint8Array ||
       field instanceof Uint16Array ||
@@ -145,7 +159,7 @@ export function createSnapshot(
           state: fields.state === 1 ? 'playing' : 'idle',
           currentIndex: fields.currentIndex ?? 0,
           itemCount,
-          progress: itemCount > 0 ? (fields.currentIndex ?? 0) / itemCount : 0,
+          progress: sequenceProgress(fields.currentIndex ?? 0, itemCount),
         });
       }
 

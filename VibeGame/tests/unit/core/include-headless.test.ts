@@ -22,12 +22,10 @@ describe('loadWorldFromFile with Includes', () => {
     }
   });
 
-  it('loads town-demo.xml CityGrid buildings', async () => {
+  it('loads town-demo.xml stub group', async () => {
     const file = path.join(PUBLIC_DIR, 'world/cities/town-demo.xml');
     await loadWorldFromFile(state, file, { publicDir: PUBLIC_DIR });
     expect(state.getEntityByName('town')).not.toBeNull();
-    expect(state.getEntityByName('town.merchant')).not.toBeNull();
-    expect(state.getEntityByName('town.well')).not.toBeNull();
   });
 
   it('expands shell with nested Includes (town + stub)', async () => {
@@ -68,8 +66,8 @@ describe('loadWorldFromFile with Includes', () => {
     expect(state.getEntityByName('city.houses')).not.toBeNull();
     expect(state.getEntityByName('city.plaza')).not.toBeNull();
     expect(state.getEntityByName('city.landmarks')).not.toBeNull();
-    expect(state.getEntityByName('city.grid')).not.toBeNull();
-    expect(state.getEntityByName('city.grid.well')).not.toBeNull();
-    expect(state.getEntityByName('city.grid.chapel')).not.toBeNull();
+    expect(state.getEntityByName('city.walls')).not.toBeNull();
+    expect(state.getEntityByName('house_a')).not.toBeNull();
+    expect(state.getEntityByName('well')).not.toBeNull();
   });
 });

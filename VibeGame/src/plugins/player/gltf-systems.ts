@@ -8,7 +8,7 @@ import {
 } from '../../extras/gltf-bridge';
 import { GltfAnimator, matchClipKeyword } from '../../extras/gltf-animator';
 import {
-  animatorRegistry,
+  getAnimator,
   registerAnimator,
   unregisterAnimator,
 } from '../gltf-anim/systems';
@@ -35,6 +35,7 @@ import { computePlayerFootAnchor } from './player-foot-anchor';
 import { Transform, WorldTransform } from '../transforms';
 import { PlayerController, PlayerGltfConfig } from './components';
 import { PLAYER_COLLIDER_DEFAULTS } from './constants';
+import { damageHealth, Health } from '../combat/components';
 import { defineSystem } from '../../core';
 
 let nextModelUrlIndex = 1;
@@ -349,10 +350,8 @@ let meleeQuery: ReturnType<typeof defineQuery> | null = null;
 
 /** Damage Health entities within a forward cone when an attack lands. */
 function meleeHit(state: State, attacker: number): void {
-  const HealthComp = state.getComponent('health');
-  if (!HealthComp || !state.hasComponent(attacker, WorldTransform)) return;
-  const Health = HealthComp as unknown as { current: Float32Array };
-  if (!meleeQuery) meleeQuery = defineQuery([HealthComp, Transform]);
+  if (!state.hasComponent(attacker, WorldTransform)) return;
+  if (!meleeQuery) meleeQuery = defineQuery([Health, Transform]);
 
   const ax = WorldTransform.posX[attacker];
   const az = WorldTransform.posZ[attacker];
@@ -376,10 +375,10 @@ function meleeHit(state: State, attacker: number): void {
     // in front hemisphere (~90° each side) — forgiving so the swing lands
     // without pixel-perfect facing.
     if ((dx * _fwd.x + dz * _fwd.z) / dist < 0.0) continue;
-    Health.current[target] = Math.max(
-      0,
-      Health.current[target] - ATTACK_DAMAGE
-    );
+    // Route through the combat helper so COMBAT_DAMAGED / COMBAT_KILLED fire
+    // and death-triggered systems (save-state, quest kills, death FX) see the
+    // player's attacks. The old inline write bypassed all of that.
+    damageHealth(target, ATTACK_DAMAGE);
   }
 }
 
@@ -424,7 +423,7 @@ export const PlayerGltfSetupSystem: System = defineSystem({
       // load fails — otherwise the eid-keyed maps leak on load error.
       state.onDestroy(eid, () => {
         const idx = PlayerGltfConfig.animatorRegistryIndex[eid];
-        if (idx !== 0) unregisterAnimator(idx);
+        if (idx !== 0) unregisterAnimator(state, idx);
         prevPrimary.delete(eid);
         pendingMelee.delete(eid);
         prevInteract.delete(eid);
@@ -494,7 +493,7 @@ export const PlayerGltfSetupSystem: System = defineSystem({
           }
 
           const animator = new GltfAnimator(gltf, { crossfadeDuration: 0.25 });
-          const regIdx = registerAnimator(animator);
+          const regIdx = registerAnimator(state, animator);
           PlayerGltfConfig.animatorRegistryIndex[eid] = regIdx;
 
           const loco = resolveLocomotion(state, animator, eid);
@@ -544,7 +543,7 @@ export const PlayerGltfAnimStateSystem: System = defineSystem({
         continue;
       }
 
-      const animator = animatorRegistry.get(regIdx);
+      const animator = getAnimator(state, regIdx);
       if (!animator) {
         continue;
       }

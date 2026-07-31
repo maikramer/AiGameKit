@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { State } from 'vibegame';
 import type { GltfAnimator } from '../../../src/extras/gltf-animator';
 import {
-  animatorRegistry,
+  getAnimator,
   GltfAnimationUpdateSystem,
   registerAnimator,
   unregisterAnimator,
@@ -22,28 +23,22 @@ function makeMockAnimator(): {
   };
 }
 
-describe('gltf-anim animatorRegistry + registerAnimator', () => {
+describe('gltf-anim registerAnimator (per-State)', () => {
+  const state = new State();
   const owned: number[] = [];
 
   afterEach(() => {
-    for (const idx of owned.splice(0)) unregisterAnimator(idx);
-  });
-
-  it('inicia vazio (nenhum animator registrado)', () => {
-    expect(animatorRegistry.size).toBe(0);
+    for (const idx of owned.splice(0)) unregisterAnimator(state, idx);
   });
 
   it('registerAnimator adiciona uma entrada recuperável por get', () => {
     const { animator } = makeMockAnimator();
-    const sizeBefore = animatorRegistry.size;
 
-    const idx = registerAnimator(animator);
+    const idx = registerAnimator(state, animator);
     owned.push(idx);
 
     expect(idx).toBeGreaterThanOrEqual(1);
-    expect(animatorRegistry.size).toBe(sizeBefore + 1);
-    expect(animatorRegistry.get(idx)).toBe(animator);
-    expect(animatorRegistry.has(idx)).toBe(true);
+    expect(getAnimator(state, idx)).toBe(animator);
   });
 
   it('aloca índices crescentes e consecutivos a cada registro', () => {
@@ -51,67 +46,63 @@ describe('gltf-anim animatorRegistry + registerAnimator', () => {
     const b = makeMockAnimator().animator;
     const c = makeMockAnimator().animator;
 
-    const i1 = registerAnimator(a);
-    const i2 = registerAnimator(b);
-    const i3 = registerAnimator(c);
+    const i1 = registerAnimator(state, a);
+    const i2 = registerAnimator(state, b);
+    const i3 = registerAnimator(state, c);
     owned.push(i1, i2, i3);
 
     expect(i2).toBe(i1 + 1);
     expect(i3).toBe(i2 + 1);
-    expect(animatorRegistry.get(i1)).toBe(a);
-    expect(animatorRegistry.get(i2)).toBe(b);
-    expect(animatorRegistry.get(i3)).toBe(c);
+    expect(getAnimator(state, i1)).toBe(a);
+    expect(getAnimator(state, i2)).toBe(b);
+    expect(getAnimator(state, i3)).toBe(c);
   });
 
   it('reserva o índice 0 como sentinela "sem animator" (nunca usado)', () => {
-    expect(animatorRegistry.has(0)).toBe(false);
-    expect(animatorRegistry.get(0)).toBeUndefined();
+    expect(getAnimator(state, 0)).toBeUndefined();
   });
 
   it('lookup de índice desconhecido retorna undefined', () => {
-    expect(animatorRegistry.get(999999)).toBeUndefined();
-    expect(animatorRegistry.has(999999)).toBe(false);
+    expect(getAnimator(state, 999999)).toBeUndefined();
   });
 
   it('registrar a mesma instância duas vezes cria duas entradas distintas (não sobrescreve, não lança)', () => {
     const { animator } = makeMockAnimator();
-    const sizeBefore = animatorRegistry.size;
 
-    const idx1 = registerAnimator(animator);
-    const idx2 = registerAnimator(animator);
+    const idx1 = registerAnimator(state, animator);
+    const idx2 = registerAnimator(state, animator);
     owned.push(idx1, idx2);
 
     expect(idx1).not.toBe(idx2);
-    expect(animatorRegistry.size).toBe(sizeBefore + 2);
-    expect(animatorRegistry.get(idx1)).toBe(animator);
-    expect(animatorRegistry.get(idx2)).toBe(animator);
+    expect(getAnimator(state, idx1)).toBe(animator);
+    expect(getAnimator(state, idx2)).toBe(animator);
   });
 });
 
 describe('gltf-anim unregisterAnimator', () => {
+  const state = new State();
   const owned: number[] = [];
 
   afterEach(() => {
-    for (const idx of owned.splice(0)) unregisterAnimator(idx);
+    for (const idx of owned.splice(0)) unregisterAnimator(state, idx);
   });
 
   it('remove a entrada e chama dispose no animator', () => {
     const { animator, isDisposed } = makeMockAnimator();
-    const idx = registerAnimator(animator);
+    const idx = registerAnimator(state, animator);
     owned.push(idx);
 
     expect(isDisposed()).toBe(false);
-    expect(animatorRegistry.has(idx)).toBe(true);
+    expect(getAnimator(state, idx)).toBeDefined();
 
-    unregisterAnimator(idx);
+    unregisterAnimator(state, idx);
 
     expect(isDisposed()).toBe(true);
-    expect(animatorRegistry.has(idx)).toBe(false);
-    expect(animatorRegistry.get(idx)).toBeUndefined();
+    expect(getAnimator(state, idx)).toBeUndefined();
   });
 
   it('é no-op para um índice desconhecido (não lança)', () => {
-    expect(() => unregisterAnimator(888888)).not.toThrow();
+    expect(() => unregisterAnimator(state, 888888)).not.toThrow();
   });
 });
 

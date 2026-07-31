@@ -42,57 +42,53 @@ function addIfRegistered(
   }
 }
 
-type ApplyArg<T> = T extends (state: State, eid: number, data: infer D) => void
-  ? D
-  : never;
+/**
+ * Build an entity serializer from a component-name + snapshot pair. The four
+ * RPG serializers below are the same shape with different components — this
+ * factory is the single implementation.
+ */
+function makeEntitySerializer<G, A>(
+  componentName: string,
+  component: Component,
+  getSnapshot: (state: State, eid: number) => G,
+  applySnapshot: (state: State, eid: number, data: A) => void
+): SaveSerializer {
+  return {
+    serialize: (state, eid) => getSnapshot(state, eid),
+    deserialize: (state, eid, data) => {
+      addIfRegistered(state, eid, componentName, component);
+      applySnapshot(state, eid, data as A);
+    },
+  };
+}
 
-const vaultSerializer: SaveSerializer = {
-  serialize: (state, eid) => getVaultEntitySnapshot(state, eid),
-  deserialize: (state, eid, data) => {
-    addIfRegistered(state, eid, 'vault', VaultComponent);
-    applyVaultEntitySnapshot(
-      state,
-      eid,
-      data as ApplyArg<typeof applyVaultEntitySnapshot>
-    );
-  },
-};
+const vaultSerializer: SaveSerializer = makeEntitySerializer(
+  'vault',
+  VaultComponent,
+  getVaultEntitySnapshot,
+  applyVaultEntitySnapshot
+);
 
-const inventorySerializer: SaveSerializer = {
-  serialize: (state, eid) => getInventoryEntitySnapshot(state, eid),
-  deserialize: (state, eid, data) => {
-    addIfRegistered(state, eid, 'inventory', InventoryComponent);
-    applyInventoryEntitySnapshot(
-      state,
-      eid,
-      data as ApplyArg<typeof applyInventoryEntitySnapshot>
-    );
-  },
-};
+const inventorySerializer: SaveSerializer = makeEntitySerializer(
+  'inventory',
+  InventoryComponent,
+  getInventoryEntitySnapshot,
+  applyInventoryEntitySnapshot
+);
 
-const progressionSerializer: SaveSerializer = {
-  serialize: (state, eid) => getProgressionEntitySnapshot(state, eid),
-  deserialize: (state, eid, data) => {
-    addIfRegistered(state, eid, 'progression', ProgressionComponent);
-    applyProgressionEntitySnapshot(
-      state,
-      eid,
-      data as ApplyArg<typeof applyProgressionEntitySnapshot>
-    );
-  },
-};
+const progressionSerializer: SaveSerializer = makeEntitySerializer(
+  'progression',
+  ProgressionComponent,
+  getProgressionEntitySnapshot,
+  applyProgressionEntitySnapshot
+);
 
-const statusSerializer: SaveSerializer = {
-  serialize: (state, eid) => getStatusEffectEntitySnapshot(state, eid),
-  deserialize: (state, eid, data) => {
-    addIfRegistered(state, eid, 'status-effect', StatusEffectComponent);
-    applyStatusEffectEntitySnapshot(
-      state,
-      eid,
-      data as ApplyArg<typeof applyStatusEffectEntitySnapshot>
-    );
-  },
-};
+const statusSerializer: SaveSerializer = makeEntitySerializer(
+  'status-effect',
+  StatusEffectComponent,
+  getStatusEffectEntitySnapshot,
+  applyStatusEffectEntitySnapshot
+);
 
 let transientExclusionsRegistered = false;
 

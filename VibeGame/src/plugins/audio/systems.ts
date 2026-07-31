@@ -7,7 +7,7 @@ import { MainCamera } from '../rendering/components';
 import { TransformHierarchySystem } from '../transforms/systems';
 import { Transform, WorldTransform } from '../transforms/components';
 import { GltfAnimationState } from '../gltf-anim/components';
-import { animatorRegistry } from '../gltf-anim/systems';
+import { getAnimator } from '../gltf-anim/systems';
 import {
   allowSoundPreload,
   fireClipMarkers,
@@ -452,7 +452,7 @@ export const SoundBankSystem: System = defineSystem({
     for (const eid of animClipQuery(state.world)) {
       const idx = GltfAnimationState.registryIndex[eid];
       if (idx === 0) continue;
-      const animator = animatorRegistry.get(idx);
+      const animator = getAnimator(state, idx);
       if (!animator) continue;
 
       const clip = animator.activeClipName;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import CameraControls from 'camera-controls';
+import { wrapAngle } from '../../shared';
 import { defineSystem, defineQuery, type System } from '../../core';
 import { Transform, WorldTransform } from '../transforms';
 import { InputState } from '../input';
@@ -158,9 +159,9 @@ export const OrbitCameraSystem: System = defineSystem({
 
       // Read-back: mirror camera-controls state into the component so external
       // consumers (e.g. player yaw resolution) keep working. The camera-controls
-      // azimuth accumulates beyond [0, 2π) on full turns; wrap it for stability.
-      OrbitCamera.currentYaw[cameraEntity] =
-        ((controls.azimuthAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      // azimuth accumulates beyond [-π, π] on full turns; wrap it for stability
+      // into the engine's atan2 convention ([-π, π]).
+      OrbitCamera.currentYaw[cameraEntity] = wrapAngle(controls.azimuthAngle);
       OrbitCamera.currentPitch[cameraEntity] = controls.polarAngle;
       OrbitCamera.currentDistance[cameraEntity] = controls.distance;
 

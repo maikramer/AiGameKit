@@ -263,7 +263,8 @@ export function drawMinimap(
 
   for (const dot of collection.dots) {
     const rx = (dot.x - originX) * scale;
-    const rz = -(dot.z - originZ) * scale;
+    // North (-Z world) renders up: canvas Y grows downward, so negate world Z.
+    const rz = (dot.z - originZ) * scale;
     const dist = Math.hypot(rx, rz);
     let dx = rx;
     let dz = rz;
@@ -285,7 +286,7 @@ export function drawMinimap(
 
   for (const wp of collection.waypoints) {
     const rx = (wp.x - originX) * scale;
-    const rz = -(wp.z - originZ) * scale;
+    const rz = (wp.z - originZ) * scale;
     const dist = Math.hypot(rx, rz);
     const clamped = dist > maxPix - 4;
     const k = clamped ? (maxPix - 4) / Math.max(dist, 1e-6) : 1;
@@ -329,7 +330,11 @@ export function drawMinimap(
   if (collection.player) {
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(-collection.player.heading);
+    // `heading` is Transform.eulerY — degrees, yaw 0 = local +Z (south, since
+    // north is -Z). In the north-up canvas frame, facing (sin h, cos h) maps
+    // to canvas (sin h, -cos h), so the arrow rotation is atan2(sin h, -cos h)
+    // = PI - h. rotate() takes radians.
+    ctx.rotate(Math.PI - (collection.player.heading * Math.PI) / 180);
     ctx.beginPath();
     ctx.moveTo(0, -7);
     ctx.lineTo(5, 6);

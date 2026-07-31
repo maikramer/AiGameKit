@@ -1,4 +1,4 @@
-import { defineQuery } from '../core';
+import { defineQuery, sequenceProgress } from '../core';
 import type { State } from '../core';
 
 interface SequenceComponent {
@@ -49,7 +49,7 @@ export function getSequenceInfo(
     state: seq.state[eid] === SequenceStateValues.Playing ? 'playing' : 'idle',
     currentIndex: seq.currentIndex[eid],
     itemCount,
-    progress: itemCount > 0 ? seq.currentIndex[eid] / itemCount : 0,
+    progress: sequenceProgress(seq.currentIndex[eid], itemCount),
   };
 }
 
@@ -76,7 +76,7 @@ export function getAllSequences(state: State): SequenceInfo[] {
         seq.state[eid] === SequenceStateValues.Playing ? 'playing' : 'idle',
       currentIndex: seq.currentIndex[eid],
       itemCount,
-      progress: itemCount > 0 ? seq.currentIndex[eid] / itemCount : 0,
+      progress: sequenceProgress(seq.currentIndex[eid], itemCount),
     });
   }
 

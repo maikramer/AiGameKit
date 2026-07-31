@@ -1,4 +1,5 @@
 import { logger } from '../../core/utils/logger';
+import { parseNumberAttr } from '../../core';
 import type { XMLValue } from '../../core';
 import type { ScaleDistributionMode, YawDistributionMode } from './types';
 
@@ -361,14 +362,7 @@ export function optNumber(
   attr: XMLValue | undefined,
   profileVal: number
 ): number {
-  if (attr === undefined || attr === null) return profileVal;
-  if (typeof attr === 'number') return attr;
-  if (typeof attr === 'boolean') return attr ? 1 : 0;
-  if (typeof attr === 'string') {
-    const n = parseFloat(attr);
-    return Number.isNaN(n) ? profileVal : n;
-  }
-  return profileVal;
+  return parseNumberAttr(attr, profileVal);
 }
 
 /** Atributo ausente → `profileVal`; presente → parse como 0/1. */

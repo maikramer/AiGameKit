@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { flattenNumberList, splitNumbers } from '../../core';
 import type { ParsedElement, XMLValue } from '../../core';
 import { loadGlbCollisionMesh } from '../../plugins/physics/mesh-collider';
 import {
@@ -18,6 +19,10 @@ function attrStr(v: XMLValue | undefined): string | null {
   }
   if (typeof v === 'number') return String(v);
   return null;
+}
+
+function attrFlatNumbers(v: XMLValue | undefined): number[] {
+  return v === undefined || v === null ? [] : flattenNumberList(v);
 }
 
 function parseVec3(
@@ -253,8 +258,8 @@ function compositionFootprints(
     })();
     const totalYaw = yawRad + childYawRad;
     const box = emptyUnion();
-    let minY = 0;
-    let maxY = 0;
+    let minY: number;
+    let maxY: number;
 
     if (kind === 'box') {
       const [sx, sy, sz] = parseVec3(child.attributes.size, [1, 1, 1]);
@@ -329,13 +334,24 @@ function compositionGroundFootprints(
     const kind = child.tagName.toLowerCase();
     if (kind !== 'pad' && kind !== 'plane') continue;
     const [px, py, pz] = parseVec3(child.attributes.pos, [0, 0, 0]);
-    // Pad size is width depth (2-comp) or width height depth
+    // Pad size is width depth (2-comp) or width height depth. XMLValueParser
+    // pre-converts "16 12" into {x:16,y:12} and 3-comp into {x,y,z} — handle
+    // every shape; the old string-only read left every pad at 0.5 half-extent.
     const sizeRaw = child.attributes.size;
     let halfX = 0.5;
     let halfZ = 0.5;
-    if (typeof sizeRaw === 'string') {
-      const p = sizeRaw.trim().split(/\s+/).map(Number);
-      if (p.length >= 2 && p.every((n) => !Number.isNaN(n))) {
+    if (typeof sizeRaw === 'object' && sizeRaw !== null) {
+      const o = sizeRaw as Record<string, number>;
+      if (
+        typeof o.x === 'number' &&
+        (typeof o.y === 'number' || typeof o.z === 'number')
+      ) {
+        halfX = Math.abs(o.x) / 2;
+        halfZ = Math.abs(typeof o.z === 'number' ? o.z : o.y) / 2;
+      }
+    } else if (typeof sizeRaw === 'string') {
+      const p = splitNumbers(sizeRaw);
+      if (p.length >= 2) {
         halfX = Math.abs(p[0]!) / 2;
         halfZ = Math.abs(p[p.length >= 3 ? 2 : 1]!) / 2;
       }
@@ -475,13 +491,7 @@ function roadFootprint(
   el: ParsedElement,
   parentPath: string
 ): Footprint | null {
-  const pathRaw = attrStr(el.attributes.path);
-  if (!pathRaw) return null;
-  const nums = pathRaw
-    .trim()
-    .split(/\s+/)
-    .map(Number)
-    .filter((n) => !Number.isNaN(n));
+  const nums = attrFlatNumbers(el.attributes.path);
   if (nums.length < 4) return null;
   let minX = Infinity;
   let maxX = -Infinity;

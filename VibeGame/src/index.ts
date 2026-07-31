@@ -71,11 +71,12 @@ export {
 } from './plugins/transforms';
 export { AnimatedCharacter, HasAnimator } from './plugins/animation';
 export {
-  animatorRegistry,
+  getAnimator,
   GltfAnimationState,
   GltfAnimPlugin,
   GltfAnimationUpdateSystem,
   registerAnimator,
+  unregisterAnimator,
 } from './plugins/gltf-anim';
 export {
   isKeyDown,

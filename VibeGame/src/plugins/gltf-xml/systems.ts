@@ -122,13 +122,13 @@ async function maybeAutoPlayIdle(
       // Rigged but no idle clip — leave as-is rather than guessing a loop.
       return;
     }
-    const idx = registerAnimator(animator);
+    const idx = registerAnimator(state, animator);
     state.addComponent(eid, GltfAnimationState);
     GltfAnimationState.registryIndex[eid] = idx;
     animator.play('idle');
     // Drop the animator when the entity is destroyed so the registry + mixer
     // don't leak (the update system's dispose only runs on full teardown).
-    state.onDestroy(eid, () => unregisterAnimator(idx));
+    state.onDestroy(eid, () => unregisterAnimator(state, idx));
   } catch {
     // Master fetch can 404 for streamed LOD URLs; stay silent — the visual
     // already rendered, only the idle polish is missing.

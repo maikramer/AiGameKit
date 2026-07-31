@@ -316,38 +316,37 @@ function applyAttributesFromRecipe(
   for (const [attrName, attrValue] of Object.entries(expandedAttributes)) {
     if (attrName === 'id') continue;
     if (recipe.parserAttributes?.includes(attrName)) continue;
+    // XMLValueParser pre-converts numeric strings to numbers, so `name="123"`
+    // / `tag="2"` / `layer="2"` arrive as numbers — coerce before the
+    // string guards below, otherwise these attributes are silently dropped.
+    const stringValue =
+      typeof attrValue === 'string' ? attrValue : String(attrValue);
     if (attrName === 'name') {
-      if (typeof attrValue === 'string') {
-        context.setName(attrValue, entity);
-      }
+      context.setName(stringValue, entity);
       continue;
     }
     if (attrName === 'tag') {
-      if (typeof attrValue === 'string') {
-        const tagId = getTagId(attrValue);
-        if (tagId === -1) {
-          addTag(attrValue);
-        }
-        const finalId = getTagId(attrValue);
-        if (!state.hasComponent(entity, Tag)) {
-          state.addComponent(entity, Tag);
-        }
-        (Tag as ComponentWithFields).value[entity] = finalId;
+      const tagId = getTagId(stringValue);
+      if (tagId === -1) {
+        addTag(stringValue);
       }
+      const finalId = getTagId(stringValue);
+      if (!state.hasComponent(entity, Tag)) {
+        state.addComponent(entity, Tag);
+      }
+      (Tag as ComponentWithFields).value[entity] = finalId;
       continue;
     }
     if (attrName === 'layer') {
-      if (typeof attrValue === 'string') {
-        const numVal = parseFloat(attrValue);
-        const layerId = isNaN(numVal)
-          ? LayerMask.NameToLayer(attrValue)
-          : Math.round(numVal);
-        if (layerId >= 0) {
-          if (!state.hasComponent(entity, Layer)) {
-            state.addComponent(entity, Layer);
-          }
-          (Layer as ComponentWithFields).value[entity] = layerId;
+      const numVal = parseFloat(stringValue);
+      const layerId = isNaN(numVal)
+        ? LayerMask.NameToLayer(stringValue)
+        : Math.round(numVal);
+      if (layerId >= 0) {
+        if (!state.hasComponent(entity, Layer)) {
+          state.addComponent(entity, Layer);
         }
+        (Layer as ComponentWithFields).value[entity] = layerId;
       }
       continue;
     }

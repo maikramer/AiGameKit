@@ -38,11 +38,15 @@ export function vibegameAssetHotReload(
             if (!extensions.includes(ext)) return;
 
             const assetPath = path.join(dir, filename).replace(/\\/g, '/');
-            server.ws.send({
-              type: 'custom',
-              event: 'vibegame:asset-update',
-              data: { path: assetPath, ext },
-            });
+            try {
+              server.ws.send({
+                type: 'custom',
+                event: 'vibegame:asset-update',
+                data: { path: assetPath, ext },
+              });
+            } catch {
+              // Dev server torn down (file event after close) — ignore.
+            }
 
             console.log(`[VibeGame] Asset ${eventType}: ${assetPath}`);
           });

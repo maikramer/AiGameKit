@@ -9,6 +9,7 @@ import {
 } from '../transforms';
 import { ThirdPersonCamera } from './components';
 import { castBvhRay, getBvhSurfaceHeight, type BvhRaycastHit } from '../bvh';
+import { shortestAngleDelta } from '../transforms/utils';
 
 const thirdPersonCameraQuery = defineQuery([
   ThirdPersonCamera,
@@ -102,9 +103,9 @@ export const ThirdPersonCameraSystem: System = defineSystem({
       // Yaw trails the steered heading, slower than the player turns (shortest
       // angular path so it never spins the long way around).
       const aYaw = 1 - Math.exp(-dt / turnLag);
-      const yawErr = Math.atan2(
-        Math.sin(rawYaw - ThirdPersonCamera.smoothYaw[cam]),
-        Math.cos(rawYaw - ThirdPersonCamera.smoothYaw[cam])
+      const yawErr = shortestAngleDelta(
+        ThirdPersonCamera.smoothYaw[cam],
+        rawYaw
       );
       ThirdPersonCamera.smoothYaw[cam] += yawErr * aYaw;
 
@@ -273,11 +274,15 @@ export const ThirdPersonCameraSystem: System = defineSystem({
         const fy = dy / len;
         const fz = dz / len;
 
-        // Look-at rotation: forward = (fx, fy, fz), up = (0, 1, 0)
-        const rx = -fz;
-        const ry = 0;
-        const rz = fx;
-        const rw = 1 + fy;
+        // Look-at rotation: the camera views along its local -Z, so we need
+        // the shortest-arc quaternion mapping a = (0,0,-1) onto the target
+        // direction f. q = (a×b, |a||b| + a·b) with a = (0,0,-1), b = f gives
+        // (fy, -fx, 0, 1 - fz) — not (f×up, 1 + f·up), which would rotate the
+        // target direction onto +Y (camera looking straight up/down).
+        const rx = fy;
+        const ry = -fx;
+        const rz = 0;
+        const rw = 1 - fz;
 
         const mag = Math.sqrt(rx * rx + ry * ry + rz * rz + rw * rw);
         if (mag > 0.001) {

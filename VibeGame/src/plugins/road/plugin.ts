@@ -1,3 +1,4 @@
+import { flattenNumberList } from '../../core';
 import type { Parser, Plugin, Recipe } from '../../core';
 import { processRecipeChildElements } from '../../core/recipes/parser';
 import { Transform } from '../transforms/components';
@@ -85,17 +86,11 @@ export const segmentRecipe: Recipe = {
 };
 
 function parseFlatNumbers(raw: unknown): number[] {
-  if (Array.isArray(raw)) {
-    return raw.map(Number).filter((n) => Number.isFinite(n));
-  }
-  if (typeof raw === 'string') {
-    return raw
-      .trim()
-      .split(/[\s,]+/)
-      .map(Number)
-      .filter((n) => Number.isFinite(n));
-  }
-  return [];
+  // XMLValueParser pre-converts numeric lists into arrays or {x,y}/{x,y,z}/
+  // {x,y,z,w} objects — flattenNumberList covers every shape. The old
+  // string/array-only read left a 2-point road (4 numbers → object) with no
+  // geometry at all.
+  return flattenNumberList(raw);
 }
 
 function strAttr(raw: unknown): string | null {

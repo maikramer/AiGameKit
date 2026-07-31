@@ -1,6 +1,7 @@
 ﻿import type { State } from '../../core';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { TIER_PRESETS } from '../adaptive-quality/quality-tiers';
 import { syncComposerSize } from '../postprocessing/composer';
 import { MainCamera } from './components';
 
@@ -654,8 +655,10 @@ function computeAdaptivePixelRatio(state: State, cap: number): number {
     }
   }
   if (!found) return cap;
-  // Tier scale table mirrors TIER_PRESETS.pixelRatioScale in adaptive-quality.
-  const scale = [1.0, 1.0, 0.85, 0.75][tier] ?? 1.0;
+  // Read the canonical tier table (quality-tiers.ts has no dependency on this
+  // module, so importing it directly is cycle-free). The old mirrored array
+  // had 0.75 for Low where the table says 0.55.
+  const scale = TIER_PRESETS[tier]?.pixelRatioScale ?? 1.0;
   const effectiveCap = Math.min(cap, ceiling);
   return Math.max(floor, Math.min(effectiveCap, effectiveCap * scale));
 }

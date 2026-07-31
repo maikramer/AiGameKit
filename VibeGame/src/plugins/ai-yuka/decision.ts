@@ -1,6 +1,6 @@
 import type { State } from '../../core';
 import { Transform } from '../transforms/components';
-import { Health } from '../combat/components';
+import { Health, healthFraction } from '../combat/components';
 import { YukaAgentComponent } from './components';
 import {
   YUKA_BEHAVIOR_ARRIVE,
@@ -73,7 +73,7 @@ export function decide(input: DecisionInput): DecisionResult {
     return { mask: YUKA_BEHAVIOR_WANDER | packFlags, targetEid: 0 };
   }
 
-  const hpFrac = hpFraction(eid);
+  const hpFrac = healthFraction(eid);
   if (
     profile.fleeBelowHpFrac !== undefined &&
     hpFrac < profile.fleeBelowHpFrac
@@ -103,11 +103,6 @@ export function decide(input: DecisionInput): DecisionResult {
     mask: YUKA_BEHAVIOR_ARRIVE | YUKA_BEHAVIOR_HOLD_RING | packFlags,
     targetEid,
   };
-}
-
-function hpFraction(eid: number): number {
-  const max = Health.max[eid] || 1;
-  return Health.current[eid] / max;
 }
 
 function planarDistance(state: State, a: number, b: number): number {

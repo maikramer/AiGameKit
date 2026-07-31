@@ -1,3 +1,5 @@
+import { Cache } from 'three';
+
 /**
  * Client-side handler for VibeGame asset hot-reload.
  * Import this in your app entry point during development.
@@ -22,7 +24,10 @@ export function initAssetHotReload() {
   );
 }
 
-function invalidateTexture(_texturePath: string) {
-  // Texture cache invalidation requires access to Three.js Cache
-  // which is module-scoped. The texture will reload on next use.
+function invalidateTexture(texturePath: string) {
+  // TextureLoader caches by URL in THREE.Cache. Drop the entry (in both the
+  // relative and the Vite-public root-prefixed form) so the next load
+  // re-fetches the file. This used to be a no-op stub that only logged.
+  Cache.remove(texturePath);
+  Cache.remove(`/${texturePath.replace(/^\/+/, '')}`);
 }

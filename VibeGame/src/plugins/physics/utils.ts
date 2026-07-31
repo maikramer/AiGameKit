@@ -463,7 +463,11 @@ export function applyKinematicRotation(
   state.removeComponent(entity, KinematicRotate);
 }
 
-export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
+export function teleportEntity(
+  entity: number,
+  body: RAPIER.RigidBody,
+  syncInterpolated = false
+): void {
   const applied = getAppliedBodyPose(body);
 
   // Compare ECS → last applied pose (no WASM). NaN applied = never synced.
@@ -486,7 +490,10 @@ export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
     _teleportVec.z = Rigidbody.posZ[entity];
     body.setTranslation(_teleportVec, true);
 
-    if (InterpolatedTransform.prevPosX[entity] !== undefined) {
+    // Float32Array reads are never `undefined`, so presence must come from
+    // the caller (state.hasComponent) — write interpolation state only for
+    // entities that actually carry InterpolatedTransform.
+    if (syncInterpolated) {
       InterpolatedTransform.prevPosX[entity] = Rigidbody.posX[entity];
       InterpolatedTransform.prevPosY[entity] = Rigidbody.posY[entity];
       InterpolatedTransform.prevPosZ[entity] = Rigidbody.posZ[entity];
@@ -512,7 +519,7 @@ export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
     _teleportQuat.w = Rigidbody.rotW[entity];
     body.setRotation(_teleportQuat, true);
 
-    if (InterpolatedTransform.prevRotX[entity] !== undefined) {
+    if (syncInterpolated) {
       InterpolatedTransform.prevRotX[entity] = Rigidbody.rotX[entity];
       InterpolatedTransform.prevRotY[entity] = Rigidbody.rotY[entity];
       InterpolatedTransform.prevRotZ[entity] = Rigidbody.rotZ[entity];

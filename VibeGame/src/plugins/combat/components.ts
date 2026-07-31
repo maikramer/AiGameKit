@@ -101,6 +101,13 @@ export function isDead(eid: number): boolean {
   return Health.current[eid] <= 0;
 }
 
+/** `current / max` clamped to [0, 1]; treats an unset max as 1. */
+export function healthFraction(eid: number): number {
+  const max = Health.max[eid] || 1;
+  const frac = Health.current[eid] / max;
+  return frac < 0 ? 0 : frac > 1 ? 1 : frac;
+}
+
 export function setMaxHealth(eid: number, max: number): void {
   Health.max[eid] = max;
   Health.current[eid] = max;

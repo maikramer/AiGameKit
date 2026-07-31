@@ -1,3 +1,4 @@
+import { vec2 } from '../../shared';
 import { defineQuery } from '../../core';
 import type { State } from '../../core';
 import { Transform } from '../transforms/components';
@@ -9,6 +10,8 @@ import {
 } from '../combat/components';
 import { hasLineOfSight } from '../bvh/utils';
 import {
+  DEFAULT_NAVMESH_AGENT_HEIGHT,
+  DEFAULT_NAVMESH_AGENT_RADIUS,
   setAgentTarget,
   clearAgentTarget,
   isNavMeshReady,
@@ -54,12 +57,6 @@ const PEER_SEP_RADIUS = 1.35;
 const PEER_SEP_STRENGTH = 1.6;
 const aiAgentsQuery = defineQuery([AiStateComponent, Transform, Health]);
 
-function distanceXZ(ax: number, az: number, bx: number, bz: number): number {
-  const dx = ax - bx;
-  const dz = az - bz;
-  return Math.sqrt(dx * dx + dz * dz);
-}
-
 function entityAlive(state: State, eid: number): boolean {
   if (eid <= 0) return false;
   if (typeof state.exists === 'function' && !state.exists(eid)) return false;
@@ -97,7 +94,7 @@ export function acquireTarget(
     if (!entityAlive(state, candidate)) continue;
     const cx = Transform.posX[candidate];
     const cz = Transform.posZ[candidate];
-    const d = distanceXZ(ox, oz, cx, cz);
+    const d = vec2.distanceXZ(ox, oz, cx, cz);
     // Cheap rejects (array reads) before the faction lookup and the raycast.
     if (d > maxDist || d >= bestDist) continue;
     if (!isHostile(state, eid, candidate)) continue;
@@ -274,8 +271,8 @@ export function runMeleeAiFrame(
       state.addComponent(eid, NavMeshAgent);
     }
     NavMeshAgent.speed[eid] = config.chaseSpeed;
-    NavMeshAgent.radius[eid] = 0.4;
-    NavMeshAgent.height[eid] = 1.0;
+    NavMeshAgent.radius[eid] = DEFAULT_NAVMESH_AGENT_RADIUS;
+    NavMeshAgent.height[eid] = DEFAULT_NAVMESH_AGENT_HEIGHT;
     NavMeshAgent.enabled[eid] = 1;
   }
 
@@ -310,7 +307,7 @@ export function runMeleeAiFrame(
         config.leashRadius
       )
     ) {
-      const dist = distanceXZ(
+      const dist = vec2.distanceXZ(
         Transform.posX[eid],
         Transform.posZ[eid],
         Transform.posX[targetEid],
@@ -338,7 +335,12 @@ export function runMeleeAiFrame(
 
   const tx = Transform.posX[targetEid];
   const tz = Transform.posZ[targetEid];
-  const dist = distanceXZ(Transform.posX[eid], Transform.posZ[eid], tx, tz);
+  const dist = vec2.distanceXZ(
+    Transform.posX[eid],
+    Transform.posZ[eid],
+    tx,
+    tz
+  );
 
   if (!withinLeash(inst, tx, tz, config.leashRadius)) {
     comp.mode[eid] = AI_MODE_IDLE;

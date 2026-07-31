@@ -1,11 +1,5 @@
-import type { Parser } from '../../core';
+import { parseBoolAttr, parseNumberAttr, type Parser } from '../../core';
 import { EasingType, TweenAxis, TweenData } from './components';
-
-function toNum(value: unknown, fallback: number): number {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') return parseFloat(value) || fallback;
-  return fallback;
-}
 
 function parseVector3Component(value: unknown, axis: 0 | 1 | 2): number {
   if (typeof value === 'number') return value;
@@ -30,9 +24,8 @@ function parseVector3Component(value: unknown, axis: 0 | 1 | 2): number {
   return 0;
 }
 
-function toBool(value: unknown): number {
-  if (value === 'true' || value === '1' || value === 1) return 1;
-  return 0;
+function parseBool01(value: unknown): number {
+  return parseBoolAttr(value, false) ? 1 : 0;
 }
 
 export const tweenParser: Parser = ({ entity, element, state, context }) => {
@@ -74,14 +67,14 @@ export const tweenParser: Parser = ({ entity, element, state, context }) => {
   TweenData.axis[entity] = axis;
   TweenData.from[entity] = isRotationAxis
     ? parseVector3Component(from, vectorAxis)
-    : toNum(from, 0);
+    : parseNumberAttr(from, 0);
   TweenData.to[entity] = isRotationAxis
     ? parseVector3Component(to, vectorAxis)
-    : toNum(to, 0);
-  TweenData.duration[entity] = toNum(duration, 1);
-  TweenData.delay[entity] = toNum(delay, 0);
-  TweenData.loop[entity] = toBool(loop);
-  TweenData.pingPong[entity] = toBool(pingPong);
+    : parseNumberAttr(to, 0);
+  TweenData.duration[entity] = parseNumberAttr(duration, 1);
+  TweenData.delay[entity] = parseNumberAttr(delay, 0);
+  TweenData.loop[entity] = parseBool01(loop);
+  TweenData.pingPong[entity] = parseBool01(pingPong);
   TweenData.active[entity] = 1;
   TweenData.elapsed[entity] = 0;
 

@@ -1,3 +1,4 @@
+import { clamp01 } from '../../shared';
 import { logger } from '../../core/utils/logger';
 import { defineSystem, defineQuery } from '../../core';
 import type { Adapter, Parser, Recipe, State, System } from '../../core';
@@ -43,10 +44,6 @@ export function getAudioMix(state: State): AudioMix {
 
 export function _resetAudioMix(state: State): void {
   MIX_STATE.set(state, { ...DEFAULT_MIX });
-}
-
-function clamp01(v: number): number {
-  return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
 const layerNames = new Map<string, number>([

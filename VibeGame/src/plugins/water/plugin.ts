@@ -1,3 +1,4 @@
+import { parseColorValue, splitNumbers, splitTokens } from '../../core';
 import type { Adapter, Parser, Plugin, Recipe } from '../../core';
 import { Transform } from '../transforms/components';
 import { Lake, River, setRiverPath } from './components';
@@ -40,24 +41,15 @@ export const riverRecipe: Recipe = {
 };
 
 const colorAdapter: Adapter = (entity, value) => {
-  let hex = String(value).trim();
-  if (hex.startsWith('#')) hex = hex.slice(1);
-  if (hex.startsWith('0x') || hex.startsWith('0X')) hex = hex.slice(2);
-  const n = parseInt(hex, 16);
+  // XMLValueParser pre-converts "#hex"/"0xhex" to numbers, which the adapter
+  // layer stringifies back — parseColorValue handles that round-trip plus
+  // bare hex strings ("ff0000").
+  const n = parseColorValue(String(value).trim());
   if (!Number.isNaN(n)) Lake.color[entity] = n >>> 0;
 };
 
 const riverColorAdapter: Adapter = (entity, value) => {
-  // The XML parser may have already converted "#3a5a7a" / "0x3a5a7a" to a
-  // number; accept that directly. Otherwise parse the hex string.
-  if (typeof value === 'number') {
-    River.color[entity] = value >>> 0;
-    return;
-  }
-  let hex = String(value).trim();
-  if (hex.startsWith('#')) hex = hex.slice(1);
-  if (hex.startsWith('0x') || hex.startsWith('0X')) hex = hex.slice(2);
-  const n = parseInt(hex, 16);
+  const n = parseColorValue(String(value).trim());
   if (!Number.isNaN(n)) River.color[entity] = n >>> 0;
 };
 
@@ -68,7 +60,7 @@ const lakeParser: Parser = ({ entity, element }) => {
   let x = 0;
   let z = 0;
   if (typeof v === 'string') {
-    const parts = v.trim().split(/\s+/).map(Number);
+    const parts = splitNumbers(v);
     x = parts[0] ?? 0;
     z = parts[1] ?? 0;
   } else if (typeof v === 'object') {
@@ -89,7 +81,7 @@ const riverParser: Parser = ({ state, entity, element }) => {
   if (Array.isArray(raw)) {
     path = raw.map(Number).filter((n) => Number.isFinite(n));
   } else if (typeof raw === 'string') {
-    const points = raw.trim().split(/\s+/);
+    const points = splitTokens(raw);
     for (const pt of points) {
       const [xs, zs] = pt.split(',');
       const x = Number(xs);
@@ -104,16 +96,14 @@ const riverParser: Parser = ({ state, entity, element }) => {
     Transform.posZ[entity] = path[1]!;
     Transform.dirty[entity] = 1;
   }
-  // Color: the XML parser may hand us a number (already parsed from #hex) or a
-  // string. Accept both so the adapter double-conversion can't corrupt it.
+  // Color: XMLValueParser pre-converts "#hex"/"0xhex" to numbers; accept
+  // both shapes via the shared parser.
   const colorRaw = attrs.color;
-  if (typeof colorRaw === 'number') {
-    River.color[entity] = colorRaw >>> 0;
-  } else if (typeof colorRaw === 'string') {
-    let hex = colorRaw.trim();
-    if (hex.startsWith('#')) hex = hex.slice(1);
-    if (hex.startsWith('0x') || hex.startsWith('0X')) hex = hex.slice(2);
-    const n = parseInt(hex, 16);
+  if (colorRaw !== undefined && colorRaw !== null) {
+    const n =
+      typeof colorRaw === 'number'
+        ? colorRaw
+        : parseColorValue(String(colorRaw).trim());
     if (!Number.isNaN(n)) River.color[entity] = n >>> 0;
   }
 };

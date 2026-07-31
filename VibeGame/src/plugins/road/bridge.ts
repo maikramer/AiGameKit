@@ -1,3 +1,5 @@
+import { radToDeg } from '../../shared';
+
 /**
  * Bridge span helpers — lip decision, deck contour, yaw/scale, span fit.
  * Approach carve sizing lives in {@link ./carve} (avoids import cycles);
@@ -358,7 +360,7 @@ export function bridgeYawDeg(path: number[]): number {
   const z0 = path[1]!;
   const x1 = path[path.length - 2]!;
   const z1 = path[path.length - 1]!;
-  return (Math.atan2(-(z1 - z0), x1 - x0) * 180) / Math.PI;
+  return radToDeg(Math.atan2(-(z1 - z0), x1 - x0));
 }
 
 /** Midpoint of path endpoints (deck spawn xz). */

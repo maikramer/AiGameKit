@@ -1,6 +1,5 @@
 import { defineQuery } from '../core';
 import type { Recipe, State } from '../core';
-import type { MonoBehaviourModule } from '../plugins/entity-script';
 import { Transform } from '../plugins/transforms';
 import {
   FactionComponent,
@@ -9,21 +8,9 @@ import {
   isHostile,
   spawnProjectileFromTemplate,
 } from '../plugins/combat';
+import { MonoBehaviour } from './mono-behaviour';
 
-/**
- * Author-facing MonoBehaviour base for turret / aggressor AI. Lifecycle is
- * `(state, eid)` (not `MonoBehaviourContext`) so behaviours are unit-testable
- * with a real State. Use {@link toMonoBehaviourModule} to bind an instance to
- * the entity-script system via `script="…"`.
- */
-export class MonoBehaviour {
-  start?(state: State, eid: number): void;
-  update(state: State, eid: number): void {
-    void state;
-    void eid;
-  }
-  onDestroy?(state: State, eid: number): void;
-}
+export { MonoBehaviour, toMonoBehaviourModule } from './mono-behaviour';
 
 export interface TurretAiConfig {
   /** XZ distance within which a hostile target is acquired. */
@@ -126,25 +113,6 @@ export const turretAiScriptRecipe: Recipe = {
   name: 'TurretAi',
   components: ['transform', 'monoBehaviour'],
 };
-
-/**
- * Adapt a {@link TurretAiBehaviour} instance into the MonoBehaviourModule shape
- * the entity-script system loads. Mirrors the helper in sibling extras bases.
- */
-export function toMonoBehaviourModule(
-  instance: MonoBehaviour
-): MonoBehaviourModule {
-  const wrap = (fn: ((state: State, eid: number) => void) | undefined) =>
-    fn
-      ? (ctx: { state: State; entity: number }): void =>
-          fn.call(instance, ctx.state, ctx.entity)
-      : undefined;
-  return {
-    start: wrap(instance.start),
-    update: wrap(instance.update),
-    onDestroy: wrap(instance.onDestroy),
-  } as MonoBehaviourModule;
-}
 
 function pruneProjectiles(state: State, rt: TurretRuntime): void {
   for (const peid of rt.projectiles) {
