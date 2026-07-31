@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from gamedev_shared.cli_helpers import with_ums_load_opts, with_ums_peak_opts
+from gamedev_shared.ums_payload import build_request_body
 
 
 def build_generate_request(
@@ -28,25 +29,25 @@ def build_generate_request(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload UMS text2d com peak/load opts."""
-    payload: dict[str, Any] = {
-        "prompt": str(prompt),
-        "output": str(output),
-        "width": int(width),
-        "height": int(height),
-        "steps": int(steps),
-        "guidance": float(guidance),
-        "seed": seed,
-        "torch_compile": bool(torch_compile),
-        "channels_last": bool(channels_last),
-    }
-    if model_id is not None:
-        payload["model_id"] = model_id
-    if torch_compile_mode is not None:
-        payload["torch_compile_mode"] = torch_compile_mode
-    if step_cache is not None:
-        payload["step_cache"] = step_cache
-    if extra:
-        payload.update(extra)
+    payload = build_request_body(
+        prompt=prompt,
+        output=output,
+        core={
+            "width": int(width),
+            "height": int(height),
+            "steps": int(steps),
+            "guidance": float(guidance),
+            "seed": seed,
+            "torch_compile": bool(torch_compile),
+            "channels_last": bool(channels_last),
+        },
+        optional={
+            "model_id": model_id,
+            "torch_compile_mode": torch_compile_mode,
+            "step_cache": step_cache,
+        },
+        extra=extra,
+    )
 
     mem = bool(memory_efficient) if memory_efficient is not None else False
     return with_ums_peak_opts(

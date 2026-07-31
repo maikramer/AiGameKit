@@ -6,7 +6,6 @@ import pytest
 from click.testing import CliRunner
 
 from gamedev_shared.hardware import GIB
-from text3d import hardware
 from text3d.cli import cli
 from text3d.hardware import HardwareProfile, detect_hardware_profile, hw_auto_enabled, profile_from_specs
 
@@ -105,8 +104,10 @@ def test_hw_auto_env_kill_switch(monkeypatch) -> None:
 def test_cuda_gpu_specs_without_cuda(monkeypatch) -> None:
     import torch
 
+    from gamedev_shared.hardware import cuda_gpu_specs
+
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    assert hardware.cuda_gpu_specs() == []
+    assert cuda_gpu_specs() == []
 
 
 # ---------------------------------------------------------------------------

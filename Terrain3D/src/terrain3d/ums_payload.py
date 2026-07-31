@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from gamedev_shared.cli_helpers import with_ums_load_opts, with_ums_peak_opts
+from gamedev_shared.ums_payload import build_request_body
 
 
 def build_generate_request(
@@ -35,51 +36,33 @@ def build_generate_request(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload UMS terrain3d com peak/load opts."""
-    payload: dict[str, Any] = {"output": str(output)}
-    if metadata_path is not None:
-        payload["metadata_path"] = str(metadata_path)
-    if seed is not None:
-        payload["seed"] = int(seed)
-    if size is not None:
-        payload["size"] = int(size)
-    if world_size is not None:
-        payload["world_size"] = float(world_size)
-    if max_height is not None:
-        payload["max_height"] = float(max_height)
-    if mode is not None:
-        payload["mode"] = mode
-    if device is not None:
-        payload["device"] = device
-    if prompt is not None:
-        payload["prompt"] = prompt
-    if dtype is not None:
-        payload["dtype"] = dtype
-    if cache_size is not None:
-        payload["cache_size"] = cache_size
-    if coarse_window is not None:
-        payload["coarse_window"] = int(coarse_window)
-    if num_inference_steps is not None:
-        payload["num_inference_steps"] = int(num_inference_steps)
-    if offset_i is not None:
-        payload["offset_i"] = int(offset_i)
-    if offset_j is not None:
-        payload["offset_j"] = int(offset_j)
-    if island_falloff is not None:
-        payload["island_falloff"] = float(island_falloff)
-    if island_noise_scale is not None:
-        payload["island_noise_scale"] = float(island_noise_scale)
-    if island_noise_freq is not None:
-        payload["island_noise_freq"] = float(island_noise_freq)
-    if smooth_iterations is not None:
-        payload["smooth_iterations"] = int(smooth_iterations)
-    if elevation_gamma is not None:
-        payload["elevation_gamma"] = float(elevation_gamma)
-    if elevation_contrast is not None:
-        payload["elevation_contrast"] = float(elevation_contrast)
-    if format is not None:
-        payload["format"] = format
-    if extra:
-        payload.update(extra)
+    payload = build_request_body(
+        output=output,
+        optional={
+            "metadata_path": None if metadata_path is None else str(metadata_path),
+            "seed": seed,
+            "size": None if size is None else int(size),
+            "world_size": None if world_size is None else float(world_size),
+            "max_height": None if max_height is None else float(max_height),
+            "mode": mode,
+            "device": device,
+            "prompt": prompt,
+            "dtype": dtype,
+            "cache_size": cache_size,
+            "coarse_window": None if coarse_window is None else int(coarse_window),
+            "num_inference_steps": None if num_inference_steps is None else int(num_inference_steps),
+            "offset_i": None if offset_i is None else int(offset_i),
+            "offset_j": None if offset_j is None else int(offset_j),
+            "island_falloff": None if island_falloff is None else float(island_falloff),
+            "island_noise_scale": None if island_noise_scale is None else float(island_noise_scale),
+            "island_noise_freq": None if island_noise_freq is None else float(island_noise_freq),
+            "smooth_iterations": None if smooth_iterations is None else int(smooth_iterations),
+            "elevation_gamma": None if elevation_gamma is None else float(elevation_gamma),
+            "elevation_contrast": None if elevation_contrast is None else float(elevation_contrast),
+            "format": format,
+        },
+        extra=extra,
+    )
 
     return with_ums_peak_opts(
         with_ums_load_opts(payload, gpu_ids=gpu_ids),

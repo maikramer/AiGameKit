@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, cuda_gpu_specs
+from gamedev_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 from gamedev_shared.lowvram import plan_offload
 
@@ -29,13 +29,9 @@ def hw_auto_enabled() -> bool:
 
 
 @dataclass(frozen=True)
-class Text2DHardwareProfile:
-    name: str
-    device: str  # "cuda" | "cpu"
+class Text2DHardwareProfile(HardwareProfileBase):
     model_id: str  # modelo BASE sugerido (não sobrepõe -m / TEXT2D_MODEL_ID)
     memory_efficient: bool  # True = CPU offload na colocação
-    gpu_ids: list[int] | None  # >1 GPU: split multi-GPU; senão None
-    total_vram_gib: float
     quant_preset: str  # preset SDNQ runtime ("none" | "sdnq-uint8" | ... ) por VRAM
 
     def summary(self) -> str:
@@ -101,4 +97,4 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2DHardwareProfile:
 
 def detect_hardware_profile() -> Text2DHardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
-    return profile_from_specs(cuda_gpu_specs())
+    return detect_profile(profile_from_specs)

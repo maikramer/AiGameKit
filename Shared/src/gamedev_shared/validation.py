@@ -89,6 +89,10 @@ def validate_params(
     max_height: int = 2048,
     warn_ratio: float | None = None,
     logger: Any = None,
+    default_guidance: float = 7.5,
+    default_steps: int = 50,
+    default_width: int = 1024,
+    default_height: int = 1024,
 ) -> tuple[bool, str | None]:
     """Valida parâmetros de geração (guidance, steps, dimensions).
 
@@ -100,20 +104,26 @@ def validate_params(
         min_guidance: Guidance mínimo (default 1.0).
         max_guidance: Guidance máximo (default 20.0).
         min_dim, max_width, max_height, warn_ratio, logger: Ver ``validate_dimensions``.
+        default_guidance: Guidance usada quando o params não a traz (default 7.5;
+            Text2Icon/Sana 4.5, Skymap2D 6.0).
+        default_steps: Passos usados quando o params não os traz (default 50;
+            Text2Icon/Sana 2, Skymap2D 40).
+        default_width, default_height: Dimensões usadas quando ausentes
+            (default 1024; Text2Icon 512, Skymap2D 2048x1024).
 
     Returns:
         Tuple ``(is_valid, error_message)``.
     """
-    guidance = params.get("guidance_scale", 7.5)
+    guidance = params.get("guidance_scale", default_guidance)
     if not min_guidance <= guidance <= max_guidance:
         return False, f"Guidance scale deve estar entre {min_guidance} e {max_guidance}"
 
-    steps = params.get("num_inference_steps", 50)
+    steps = params.get("num_inference_steps", default_steps)
     if not min_steps <= steps <= max_steps:
         return False, f"Número de passos deve estar entre {min_steps} e {max_steps}"
 
-    width = params.get("width", 1024)
-    height = params.get("height", 1024)
+    width = params.get("width", default_width)
+    height = params.get("height", default_height)
     is_valid, error = validate_dimensions(
         width,
         height,

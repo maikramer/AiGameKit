@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from gamedev_shared.cli_helpers import with_ums_load_opts, with_ums_peak_opts
+from gamedev_shared.ums_payload import build_request_body
 
 
 def build_generate_request(
@@ -55,64 +56,50 @@ def build_generate_request(
     explícitos — se presentes, ``ums_generate`` trata como override e **não**
     sobe o eixo no size-tune (era o bug que fixava 384 e matava buildings).
     """
-    payload: dict[str, Any] = {
-        "from_image": str(from_image),
-        "output": str(output),
-        "guidance": float(guidance),
-        "seed": seed,
-        "mc_level": mc_level,
-        "bounds_mode": bounds_mode,
-        "auto_num_chunks": False,
-        "origin_mode": origin_mode,
-        "topology_fix": bool(topology_fix),
-        "torch_compile": bool(torch_compile),
-        "channels_last": bool(channels_last),
-        "allow_group_offload": bool(allow_group_offload),
-        "fp8_layerwise": bool(fp8_layerwise),
-        "sdnq_quantized_matmul": bool(sdnq_quantized_matmul),
-        "sage_attention": bool(sage_attention),
-        "offload": bool(offload),
-        "verbose": bool(verbose),
-        "bbox_tune": bool(bbox_tune),
-    }
-    if steps is not None:
-        payload["steps"] = int(steps)
-    if octree_resolution is not None:
-        payload["octree_resolution"] = int(octree_resolution)
-    if num_chunks is not None:
-        payload["num_chunks"] = int(num_chunks)
-    if seed_fingerprint is not None:
-        # Override de re-roll (GameAssets manifest seed:) — entra no sidecar
-        # Omni; distinto do RNG ``seed``.
-        payload["seed_fingerprint"] = int(seed_fingerprint)
-    if volume_decoder is not None:
-        payload["volume_decoder"] = volume_decoder
-    if mc_algo is not None:
-        payload["mc_algo"] = mc_algo
-    if torch_compile_mode is not None:
-        payload["torch_compile_mode"] = torch_compile_mode
-    if category is not None:
-        payload["category"] = category
-    if quality is not None:
-        payload["quality"] = quality
-    if control_type is not None:
-        payload["control_type"] = control_type
-    if pose_preset is not None:
-        payload["pose_preset"] = pose_preset
-    if bbox_preset is not None:
-        payload["bbox_preset"] = bbox_preset
-    if size_m is not None:
-        payload["size_m"] = size_m
-    if bbox is not None:
-        payload["bbox"] = bbox
-    if pose_file:
-        payload["pose_file"] = str(pose_file)
-    if point_cloud:
-        payload["point_cloud"] = str(point_cloud)
-    if voxel_mesh:
-        payload["voxel_mesh"] = str(voxel_mesh)
-    if extra:
-        payload.update(extra)
+    payload = build_request_body(
+        output=output,
+        core={
+            "from_image": str(from_image),
+            "guidance": float(guidance),
+            "seed": seed,
+            "mc_level": mc_level,
+            "bounds_mode": bounds_mode,
+            "auto_num_chunks": False,
+            "origin_mode": origin_mode,
+            "topology_fix": bool(topology_fix),
+            "torch_compile": bool(torch_compile),
+            "channels_last": bool(channels_last),
+            "allow_group_offload": bool(allow_group_offload),
+            "fp8_layerwise": bool(fp8_layerwise),
+            "sdnq_quantized_matmul": bool(sdnq_quantized_matmul),
+            "sage_attention": bool(sage_attention),
+            "offload": bool(offload),
+            "verbose": bool(verbose),
+            "bbox_tune": bool(bbox_tune),
+        },
+        optional={
+            "steps": None if steps is None else int(steps),
+            "octree_resolution": None if octree_resolution is None else int(octree_resolution),
+            "num_chunks": None if num_chunks is None else int(num_chunks),
+            # Override de re-roll (GameAssets manifest seed:) — entra no sidecar
+            # Omni; distinto do RNG ``seed``.
+            "seed_fingerprint": None if seed_fingerprint is None else int(seed_fingerprint),
+            "volume_decoder": volume_decoder,
+            "mc_algo": mc_algo,
+            "torch_compile_mode": torch_compile_mode,
+            "category": category,
+            "quality": quality,
+            "control_type": control_type,
+            "pose_preset": pose_preset,
+            "bbox_preset": bbox_preset,
+            "size_m": size_m,
+            "bbox": bbox,
+            "pose_file": None if not pose_file else str(pose_file),
+            "point_cloud": None if not point_cloud else str(point_cloud),
+            "voxel_mesh": None if not voxel_mesh else str(voxel_mesh),
+        },
+        extra=extra,
+    )
 
     mem_eff = memory_efficient
     if mem_eff is None:

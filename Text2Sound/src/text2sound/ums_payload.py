@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from gamedev_shared.cli_helpers import with_ums_load_opts, with_ums_peak_opts
+from gamedev_shared.ums_payload import build_request_body
 
 
 def build_generate_request(
@@ -26,30 +27,26 @@ def build_generate_request(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload UMS text2sound com peak/load opts."""
-    payload: dict[str, Any] = {
-        "prompt": str(prompt),
-        "output": str(output),
-        "duration": float(duration),
-        "steps": int(steps),
-        "cfg_scale": float(cfg_scale),
-        "seed": seed,
-    }
-    if sigma_min is not None:
-        payload["sigma_min"] = float(sigma_min)
-    if sigma_max is not None:
-        payload["sigma_max"] = float(sigma_max)
-    if sampler_type is not None:
-        payload["sampler_type"] = sampler_type
-    if negative_prompt is not None:
-        payload["negative_prompt"] = negative_prompt
-    if half_precision is not None:
-        payload["half_precision"] = bool(half_precision)
-    if quality is not None:
-        payload["quality"] = quality
-    if category is not None:
-        payload["category"] = category
-    if extra:
-        payload.update(extra)
+    payload = build_request_body(
+        prompt=prompt,
+        output=output,
+        core={
+            "duration": float(duration),
+            "steps": int(steps),
+            "cfg_scale": float(cfg_scale),
+            "seed": seed,
+        },
+        optional={
+            "sigma_min": None if sigma_min is None else float(sigma_min),
+            "sigma_max": None if sigma_max is None else float(sigma_max),
+            "sampler_type": sampler_type,
+            "negative_prompt": negative_prompt,
+            "half_precision": None if half_precision is None else bool(half_precision),
+            "quality": quality,
+            "category": category,
+        },
+        extra=extra,
+    )
 
     half = bool(half_precision) if half_precision is not None else False
     return with_ums_peak_opts(

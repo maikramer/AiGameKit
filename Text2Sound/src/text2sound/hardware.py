@@ -18,20 +18,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, cuda_gpu_specs
+from gamedev_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 HW_AUTO_ENV = "TEXT2SOUND_HW_AUTO"
 
 
 @dataclass(frozen=True)
-class HardwareProfile:
-    name: str
-    device: str  # "cuda" | "cpu"
-    gpu_ids: list[int] | None  # >1 GPU: lista para MultiGPUPlanner; senão None
+class HardwareProfile(HardwareProfileBase):
     half: bool  # float16 no DiT/conditioner (VAE fica sempre fp32)
     chunked_vae: bool  # decode do VAE em chunks (pico de VRAM ~constante)
-    total_vram_gib: float
 
     def summary(self) -> str:
         parts = [self.name, f"half={'on' if self.half else 'off'}"]
@@ -94,4 +90,4 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
 
 def detect_hardware_profile() -> HardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
-    return profile_from_specs(cuda_gpu_specs())
+    return detect_profile(profile_from_specs)

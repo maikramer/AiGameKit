@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, cuda_gpu_specs
+from gamedev_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 from . import defaults as _defaults
@@ -24,7 +24,6 @@ __all__ = [
     "GIB",
     "HW_AUTO_ENV",
     "HardwareProfile",
-    "cuda_gpu_specs",
     "detect_hardware_profile",
     "hw_auto_enabled",
     "profile_from_specs",
@@ -34,16 +33,12 @@ HW_AUTO_ENV = "TEXT3D_HW_AUTO"
 
 
 @dataclass(frozen=True)
-class HardwareProfile:
-    name: str
-    device: str  # "cuda" | "cpu"
-    gpu_ids: list[int] | None  # >1 GPU: lista para MultiGPUPlanner; senão None
+class HardwareProfile(HardwareProfileBase):
     sdnq_preset: str | None  # None = sem quantização
     steps: int
     octree: int
     chunks: int
     volume_decoder: str
-    total_vram_gib: float
     image_width: int | None = None  # None = não override (usa default do CLI)
     image_height: int | None = None
     offload: bool = False  # True = CPU offload (conditioner->model->vae) em VRAM baixa
@@ -152,4 +147,4 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
 
 def detect_hardware_profile() -> HardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
-    return profile_from_specs(cuda_gpu_specs())
+    return detect_profile(profile_from_specs)

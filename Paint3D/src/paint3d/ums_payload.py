@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from gamedev_shared.cli_helpers import with_ums_peak_opts
+from gamedev_shared.cli_helpers import with_ums_load_opts, with_ums_peak_opts
+from gamedev_shared.ums_payload import build_request_body
 
 
 def build_texture_request(
@@ -33,40 +34,31 @@ def build_texture_request(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload UMS paint3d com peak opts."""
-    payload: dict[str, Any] = {
-        "mesh_path": str(mesh_path),
-        "image_path": str(image_path),
-        "output": str(output),
-        "max_num_view": int(max_num_view),
-        "view_resolution": int(view_resolution),
-        "render_size": int(render_size),
-        "texture_size": int(texture_size),
-        "verbose": bool(verbose),
-        "preserve_origin": bool(preserve_origin),
-        "smooth": bool(smooth),
-        "torch_compile": bool(torch_compile),
-        "channels_last": bool(channels_last),
-        "allow_group_offload": bool(allow_group_offload),
-    }
-    if bake_exp is not None:
-        payload["bake_exp"] = bake_exp
-    if smooth_passes is not None:
-        payload["smooth_passes"] = int(smooth_passes)
-    if upscale:
-        payload["upscale"] = True
-    if upscale_factor is not None:
-        payload["upscale_factor"] = float(upscale_factor)
-    if torch_compile_mode is not None:
-        payload["torch_compile_mode"] = torch_compile_mode
-    if gpu_ids is not None:
-        if isinstance(gpu_ids, str):
-            parsed = [int(x.strip()) for x in gpu_ids.split(",") if x.strip()]
-        else:
-            parsed = [int(x) for x in gpu_ids]
-        if parsed:
-            payload["gpu_ids"] = parsed
-    if extra:
-        payload.update(extra)
+    payload = build_request_body(
+        core={
+            "mesh_path": str(mesh_path),
+            "image_path": str(image_path),
+            "output": str(output),
+            "max_num_view": int(max_num_view),
+            "view_resolution": int(view_resolution),
+            "render_size": int(render_size),
+            "texture_size": int(texture_size),
+            "verbose": bool(verbose),
+            "preserve_origin": bool(preserve_origin),
+            "smooth": bool(smooth),
+            "torch_compile": bool(torch_compile),
+            "channels_last": bool(channels_last),
+            "allow_group_offload": bool(allow_group_offload),
+        },
+        optional={
+            "bake_exp": bake_exp,
+            "smooth_passes": None if smooth_passes is None else int(smooth_passes),
+            "upscale": True if upscale else None,
+            "upscale_factor": None if upscale_factor is None else float(upscale_factor),
+            "torch_compile_mode": torch_compile_mode,
+        },
+        extra=extra,
+    )
 
     mem_eff = bool(memory_efficient)
     preset = sdnq_preset
@@ -76,7 +68,7 @@ def build_texture_request(
         preset = "none" if not mem_eff else "sdnq-uint8"
 
     return with_ums_peak_opts(
-        payload,
+        with_ums_load_opts(payload, gpu_ids=gpu_ids),
         backend="paint3d",
         memory_efficient=mem_eff,
         sdnq_preset=None if preset in (None, "none", "") else preset,

@@ -37,9 +37,9 @@ POSE_PRESETS: dict[str, str] = {
 }
 
 # [L, H, W] = aspect Omni → após export Y-up WebGL/Three.js mapeia para [X, Y, Z].
-#   L → X  (esquerda/direita na vista de frente, −Z)
-#   H → Y  (cima; Y+ up no exhibit / VibeGame)
-#   W → Z  (profundidade, afastamento da câmara)
+#   L -> X  (esquerda/direita na vista de frente, -Z)
+#   H -> Y  (cima; Y+ up no exhibit / VibeGame)
+#   W -> Z  (profundidade, afastamento da câmara)
 # Eixo maior = 1.0 (docs Omni 0-1). Cantos ±0.5; grid MC ±1.01 → margem.
 # NÃO escalar a 2.0 (enche e clipa). NÃO chamar L de “profundidade”.
 BBOX_PRESETS: dict[str, tuple[float, float, float]] = {
@@ -71,7 +71,7 @@ BBOX_PRESETS: dict[str, tuple[float, float, float]] = {
     "chest": (1.0, 0.61, 0.61),
     "furniture": (1.0, 0.85, 0.7),
     # Casa/capela: L=largura fachada (X), H=altura (Y), W=profundidade (Z).
-    # Ex. ~6 m largura × 7 m altura × 4.5 m profundidade → aspect ≈ (0.86, 1, 0.64).
+    # Ex. ~6 m largura x 7 m altura x 4.5 m profundidade -> aspect ~ (0.86, 1, 0.64).
     "building": (0.86, 1.0, 0.64),
     "chapel": (0.86, 1.0, 0.64),
 }
@@ -298,8 +298,8 @@ def merge_omni_controls(
     # só mapeia unidades→metros (uniforme no eixo maior). Nunca em pose; nunca se
     # user passou bbox/--size explícito.
     # - height+footprint → aspect size_m prevalece sobre preset
-    # - size_m anisotrópico → prevalece sobre bbox_preset (gate 10×5.5×2.2 vs
-    #   building 0.86×1×0.64 — senão o preset engole o authoring)
+    # - size_m anisotrópico -> prevalece sobre bbox_preset (gate 10x5.5x2.2 vs
+    #   building 0.86x1x0.64 - senão o preset engole o authoring)
     # - cube + size_m não-cúbico (slime/shade/mosquito)
     # - bbox ainda None + size_m
     author_mold = height_m is not None and footprint_m is not None
@@ -395,6 +395,18 @@ def omni_fingerprint(controls: dict[str, Any]) -> dict[str, Any]:
     # Sempre gravar bbox resolvido: mudar valores em BBOX_PRESETS (ex. tree
     # 0.35→0.55) tem de invalidar sidecars que só tinham o nome do preset.
     bbox_vals = controls.get("bbox")
+    # Mesma regra do merge_omni_controls (autoridade da resolução): com
+    # control_type=bbox e size_m presente, o molde do size_m prevalece —
+    # aniso descarta o bbox_preset (senão o preset engolia o authoring e o
+    # sidecar escrito de controls raw nunca coincidia com o expected do
+    # stale-check do GameAssets).
+    ct_raw = str(controls.get("control_type") or "none").strip().lower()
+    if bbox_vals is None and size_m is not None and ct_raw == "bbox":
+        if not size_m_near_cube(size_m):
+            bbox_vals = size_m_to_bbox(size_m)
+            bbox_preset = None
+        elif bbox_preset is None:
+            bbox_vals = size_m_to_bbox(size_m)
     if bbox_vals is None and bbox_preset:
         try:
             bbox_vals = resolve_bbox_preset(str(bbox_preset))

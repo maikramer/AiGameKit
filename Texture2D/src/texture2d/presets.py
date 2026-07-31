@@ -1,6 +1,25 @@
-"""Presets de materiais para geração de texturas seamless."""
+"""Presets de materiais para geração de texturas seamless.
+
+Os accessors vivem em ``gamedev_shared.presets`` (padrão das 3 tools 2D);
+aqui fica o conteúdo (o dict) + shims de 1 linha por accessor.
+"""
+
+from __future__ import annotations
 
 from typing import Any
+
+from gamedev_shared.presets import (
+    get_preset as _get_preset,
+)
+from gamedev_shared.presets import (
+    get_preset_params as _get_preset_params,
+)
+from gamedev_shared.presets import (
+    get_preset_prompt as _get_preset_prompt,
+)
+from gamedev_shared.presets import (
+    list_presets as _list_presets,
+)
 
 TEXTURE_PRESETS: dict[str, dict[str, Any]] = {
     "Wood": {
@@ -87,25 +106,19 @@ TEXTURE_PRESETS: dict[str, dict[str, Any]] = {
 
 def get_preset(name: str) -> dict[str, Any] | None:
     """Obtém um preset pelo nome."""
-    return TEXTURE_PRESETS.get(name)
+    return _get_preset(TEXTURE_PRESETS, name)
 
 
 def list_presets() -> list[str]:
     """Lista todos os nomes de presets disponíveis."""
-    return list(TEXTURE_PRESETS.keys())
+    return _list_presets(TEXTURE_PRESETS)
 
 
 def get_preset_prompt(name: str) -> str | None:
     """Obtém o prompt de um preset."""
-    preset = get_preset(name)
-    return preset.get("prompt") if preset else None
+    return _get_preset_prompt(TEXTURE_PRESETS, name)
 
 
 def get_preset_params(name: str) -> dict[str, Any] | None:
     """Obtém os parâmetros de um preset (excluindo prompt)."""
-    preset = get_preset(name)
-    if not preset:
-        return None
-    params = preset.copy()
-    params.pop("prompt", None)
-    return params
+    return _get_preset_params(TEXTURE_PRESETS, name)

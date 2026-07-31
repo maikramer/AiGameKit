@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, cuda_gpu_specs
+from gamedev_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 from .generator import STANDARD_TRANSFORMER_ID, TERNARY_TRANSFORMER_ID
@@ -37,14 +37,10 @@ def hw_auto_enabled() -> bool:
 
 
 @dataclass(frozen=True)
-class Text2IconHardwareProfile:
-    name: str
-    device: str  # "cuda" | "cpu"
+class Text2IconHardwareProfile(HardwareProfileBase):
     cpu_offload: bool  # True = enable_model_cpu_offload
     max_width: int | None  # None = sem clamp; int = clamp se utilizador não explicitou
     max_height: int | None
-    gpu_ids: list[int] | None  # >1 GPU: split multi-GPU; senão None
-    total_vram_gib: float
     transformer_id: str  # standard ou ternário (ver módulo)
     transformer_sdnq_preset: str | None  # None = sem SDNQ no transformer ("16-bit")
 
@@ -155,4 +151,4 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
 
 def detect_hardware_profile() -> Text2IconHardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
-    return profile_from_specs(cuda_gpu_specs())
+    return detect_profile(profile_from_specs)

@@ -105,11 +105,7 @@ class Adapter(WorkerAdapter):
 
         elapsed = time.perf_counter() - t_start
         self.report_progress(request, 1.0, "done")
-        return {
-            "status": "ok",
-            "output": str(saved),
-            "seconds": round(elapsed, 2),
-        }
+        return self.finish_response(output=saved, seconds=elapsed)
 
     def unload(self, model: Any) -> None:
         # No-op: a pipeline é fechada dentro de generate_terrain.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from gamedev_shared.cli_helpers import with_ums_load_opts, with_ums_peak_opts
+from gamedev_shared.ums_payload import build_request_body
 
 
 def build_generate_request(
@@ -25,24 +26,24 @@ def build_generate_request(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload UMS text2icon com peak/load opts."""
-    payload: dict[str, Any] = {
-        "prompt": str(prompt),
-        "output": str(output),
-        "width": int(width),
-        "height": int(height),
-        "steps": int(steps),
-        "guidance": float(guidance),
-        "seed": seed,
-        "transparent": bool(transparent),
-    }
-    if negative_prompt is not None:
-        payload["negative_prompt"] = negative_prompt
-    if transformer_quant_preset is not None:
-        payload["transformer_quant_preset"] = transformer_quant_preset
-    if model_id is not None:
-        payload["model_id"] = model_id
-    if extra:
-        payload.update(extra)
+    payload = build_request_body(
+        prompt=prompt,
+        output=output,
+        core={
+            "width": int(width),
+            "height": int(height),
+            "steps": int(steps),
+            "guidance": float(guidance),
+            "seed": seed,
+            "transparent": bool(transparent),
+        },
+        optional={
+            "negative_prompt": negative_prompt,
+            "transformer_quant_preset": transformer_quant_preset,
+            "model_id": model_id,
+        },
+        extra=extra,
+    )
 
     quant = transformer_quant_preset if transformer_quant_preset not in (None, "", "auto") else None
     mem = bool(memory_efficient) if memory_efficient is not None else bool(quant)

@@ -58,6 +58,47 @@ class WorkerAdapter(ABC):
     def unload(self, model: Any) -> None:
         """Liberta o model object (VRAM). Idempotente e à prova de exceções."""
 
+    @classmethod
+    def begin_generate(
+        cls,
+        request: dict[str, Any],
+        *,
+        default_steps: int,
+        required: tuple[str, ...] = ("prompt", "output"),
+    ) -> tuple[dict[str, Any] | None, int, Callable[[], bool] | None, Callable[[int, int], None] | None]:
+        """Prólogo canónico de ``generate`` nos adapters 2D/áudio.
+
+        Valida os campos obrigatórios, faz o abort pre-check, resolve os steps
+        e constrói os hooks ``should_abort``/``on_step`` (progresso "started").
+
+        Returns:
+            Tuplo ``(error, steps, should_abort, on_step)`` — se ``error``
+            não for ``None`` o caller deve devolvê-lo imediatamente.
+        """
+        missing = [field for field in required if not request.get(field)]
+        if missing:
+            return (
+                {"status": "error", "error": f"campos obrigatórios em falta: {', '.join(missing)}"},
+                0,
+                None,
+                None,
+            )
+        if cls.should_abort(request):
+            return (cls.cancelled_response("cancelled before generate"), 0, None, None)
+        try:
+            steps = int(request.get("steps", default_steps))
+        except (TypeError, ValueError):
+            # Steps malformados não podem matar o worker — default do adapter.
+            steps = default_steps
+        should_abort, on_step = cls.abort_hooks(request, num_inference_steps=steps)
+        cls.report_progress(request, 0.0, "started")
+        return (None, steps, should_abort, on_step)
+
+    @staticmethod
+    def finish_response(*, output: str, seconds: float, **extra: Any) -> dict[str, Any]:
+        """Resposta canónica de sucesso (``status ok`` + output + seconds)."""
+        return {"status": "ok", "output": str(output), "seconds": round(seconds, 2), **extra}
+
     @staticmethod
     def report_progress(request: dict[str, Any], pct: float | None = None, msg: str | None = None) -> None:
         """Helper: reporta progresso se o request trouxer ``_progress``."""

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, cuda_gpu_specs
+from gamedev_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 HW_AUTO_ENV = "PAINT3D_HW_AUTO"
@@ -47,12 +47,8 @@ def hw_auto_enabled() -> bool:
 
 
 @dataclass(frozen=True)
-class Paint3DHardwareProfile:
-    name: str
-    device: str  # "cuda" | "cpu"
+class Paint3DHardwareProfile(HardwareProfileBase):
     memory_efficient: bool  # True = SDNQ uint8 + CFG chunking + ref-UNet offload
-    gpu_ids: list[int] | None  # informativo; painter auto-split com ≥2 GPUs
-    total_vram_gib: float
     max_views: int | None = None  # None = don't override (use CLI default)
     view_resolution: int | None = None
     render_size: int | None = None
@@ -138,4 +134,4 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
 
 def detect_hardware_profile() -> Paint3DHardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
-    return profile_from_specs(cuda_gpu_specs())
+    return detect_profile(profile_from_specs)

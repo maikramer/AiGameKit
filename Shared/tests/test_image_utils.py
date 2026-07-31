@@ -213,3 +213,44 @@ class TestLoadImageMetadata:
 
         result = load_image_metadata(img_path)
         assert result is None
+
+
+class TestWriteMetadataSidecar:
+    def test_writes_sidecar_next_to_file(self, tmp_path) -> None:
+        from gamedev_shared.image_utils import write_metadata_sidecar
+
+        target = tmp_path / "sky.exr"
+        sidecar = write_metadata_sidecar(target, "a sky", {"seed": 1})
+        assert sidecar == tmp_path / "sky.json"
+        import json
+
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert data["prompt"] == "a sky"
+        assert data["params"] == {"seed": 1}
+        assert data["image_path"] == str(target)
+        assert data["filename"] == "sky.exr"
+
+    def test_extra_metadata_wins(self, tmp_path) -> None:
+        from gamedev_shared.image_utils import write_metadata_sidecar
+
+        target = tmp_path / "sky.exr"
+        write_metadata_sidecar(
+            target,
+            "p",
+            {},
+            metadata={"image_format": "exr", "color_space": "linear_rgb", "prompt": "override"},
+        )
+        import json
+
+        data = json.loads((tmp_path / "sky.json").read_text(encoding="utf-8"))
+        assert data["image_format"] == "exr"
+        assert data["color_space"] == "linear_rgb"
+        assert data["prompt"] == "override"
+
+    def test_no_sidecar_file_created_for_asset(self, tmp_path) -> None:
+        from gamedev_shared.image_utils import write_metadata_sidecar
+
+        target = tmp_path / "a.png"
+        write_metadata_sidecar(target, "p", {})
+        assert not target.exists()  # só o sidecar — o bitmap é gravado pelo caller
+        assert (tmp_path / "a.json").exists()

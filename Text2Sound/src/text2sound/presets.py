@@ -12,6 +12,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from gamedev_shared.presets import (
+    get_preset_ci as _get_preset_ci,
+)
+from gamedev_shared.presets import (
+    list_presets as _list_presets,
+)
+
 AUDIO_PRESETS: dict[str, dict[str, Any]] = {
     # ── Ambiences (12) ─────────────────────────────────────────────────
     "ambient": {
@@ -558,7 +565,7 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
 
 def list_presets() -> list[str]:
     """Retorna nomes dos presets disponíveis, ordenados."""
-    return sorted(AUDIO_PRESETS.keys())
+    return _list_presets(AUDIO_PRESETS, sorted_names=True)
 
 
 def get_preset(name: str) -> dict[str, Any]:
@@ -567,7 +574,4 @@ def get_preset(name: str) -> dict[str, Any]:
     Raises:
         KeyError: Preset não encontrado.
     """
-    key = name.lower().replace(" ", "-").replace("_", "-")
-    if key in AUDIO_PRESETS:
-        return AUDIO_PRESETS[key]
-    raise KeyError(f"Preset desconhecido: {name!r}. Disponíveis: {', '.join(list_presets())}")
+    return _get_preset_ci(AUDIO_PRESETS, name)

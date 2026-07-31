@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, cuda_gpu_specs
+from gamedev_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 HW_AUTO_ENV = "TEXTURE2D_HW_AUTO"
@@ -29,13 +29,9 @@ def hw_auto_enabled() -> bool:
 
 
 @dataclass(frozen=True)
-class Texture2DHardwareProfile:
-    name: str
-    device: str  # "cuda" | "cpu"
+class Texture2DHardwareProfile(HardwareProfileBase):
     max_width: int | None  # Sempre None (SD1.5 não precisa de clamp).
     max_height: int | None
-    gpu_ids: list[int] | None  # >1 GPU: detetado para display/info.
-    total_vram_gib: float
 
     def summary(self) -> str:
         parts = [self.name]
@@ -79,4 +75,4 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Texture2DHardwareProfile:
 
 def detect_hardware_profile() -> Texture2DHardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
-    return profile_from_specs(cuda_gpu_specs())
+    return detect_profile(profile_from_specs)

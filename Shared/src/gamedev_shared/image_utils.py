@@ -63,21 +63,46 @@ def save_image_with_metadata(
     image.save(filepath, image_format)
     logger.info(f"Image saved to {filepath}")
 
+    write_metadata_sidecar(filepath, prompt, params, metadata=metadata)
+    return filepath
+
+
+def write_metadata_sidecar(
+    filepath: Path,
+    prompt: str,
+    params: dict[str, Any],
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> Path:
+    """Write the canonical JSON metadata sidecar next to ``filepath``.
+
+    Extracted from :func:`save_image_with_metadata` for flows that write the
+    bitmap outside PIL (e.g. Skymap2D EXR export) but want the same metadata:
+    timestamp, prompt, params, image_path, filename + extra keys.
+
+    Args:
+        filepath: Path of the asset (sidecar becomes ``<stem>.json``).
+        prompt: Prompt used to generate the asset.
+        params: Generation parameters (seed, steps, guidance, etc.).
+        metadata: Extra keys merged into the sidecar JSON (win over base keys).
+
+    Returns:
+        Path to the written sidecar JSON.
+    """
     metadata_path = filepath.with_suffix(".json")
     metadata_dict: dict[str, Any] = {
         "timestamp": datetime.now().timestamp(),
         "prompt": prompt,
         "params": params,
         "image_path": str(filepath),
-        "filename": filename,
+        "filename": filepath.name,
     }
     if metadata:
         metadata_dict.update(metadata)
 
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(metadata_dict, f, indent=2, ensure_ascii=False)
-
-    return filepath
+    return metadata_path
 
 
 def create_thumbnail(image: Image.Image, size: tuple[int, int] = (256, 256)) -> Image.Image:

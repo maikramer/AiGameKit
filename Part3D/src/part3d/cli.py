@@ -610,52 +610,45 @@ def decompose(
 
     t_start = time.time()
 
-    _ums_request: dict[str, Any] = {
-        "mesh_path": str(mesh_path),
-        "output": str(output_path),
-        "output_segmented": str(output_segmented),
-        "seed": seed,
-        "segment_only": segment_only,
-        "postprocess": postprocess,
-        "threshold": threshold,
-        "refine_labels": refine_labels,
-        "bbox_merge_iou": _d.SPACE_BBOX_MERGE_IOU if merge_bbox_iou is None else merge_bbox_iou,
-        "mask_nms_iou": mask_nms_iou,
-        "secondary_mask_iou": secondary_mask_iou,
-        "min_cluster_support": min_cluster_support,
-        "min_predicted_iou": min_predicted_iou,
-        "prompt_batch_size": prompt_batch_size,
-        "multi_head": multi_head,
-        "consensus": consensus,
-        "consensus_vote": consensus_vote,
-        "segment_mode": segment_mode,
-        "detail_levels": detail_levels,
-    }
-    if segmentation_proxy is not None:
-        _ums_request["segmentation_proxy"] = str(segmentation_proxy)
-    if octree_resolution is not None:
-        _ums_request["octree_resolution"] = octree_resolution
-    if steps is not None:
-        _ums_request["num_inference_steps"] = steps
-    if num_chunks is not None:
-        _ums_request["num_chunks"] = num_chunks
-    if point_num is not None:
-        _ums_request["point_num"] = point_num
-    if prompt_num is not None:
-        _ums_request["prompt_num"] = prompt_num
-    if mc_algo is not None:
-        _ums_request["mc_algo"] = mc_algo
+    from .ums_payload import build_decompose_request
 
-    from gamedev_shared.cli_helpers import needed_mib_for_backend, with_ums_load_opts, with_ums_peak_opts
+    _ums_request = build_decompose_request(
+        mesh_path=mesh_path,
+        output=output_path,
+        output_segmented=output_segmented,
+        seed=seed,
+        segment_only=segment_only,
+        postprocess=postprocess,
+        threshold=threshold,
+        refine_labels=refine_labels,
+        bbox_merge_iou=_d.SPACE_BBOX_MERGE_IOU if merge_bbox_iou is None else merge_bbox_iou,
+        mask_nms_iou=mask_nms_iou,
+        secondary_mask_iou=secondary_mask_iou,
+        min_cluster_support=min_cluster_support,
+        min_predicted_iou=min_predicted_iou,
+        prompt_batch_size=prompt_batch_size,
+        multi_head=multi_head,
+        consensus=consensus,
+        consensus_vote=consensus_vote,
+        segment_mode=segment_mode,
+        detail_levels=detail_levels,
+        segmentation_proxy=segmentation_proxy,
+        octree_resolution=octree_resolution,
+        steps=steps,
+        num_chunks=num_chunks,
+        point_num=point_num,
+        prompt_num=prompt_num,
+        mc_algo=mc_algo,
+        gpu_ids=parsed_gpu_ids,
+        memory_efficient=mem_eff,
+        sdnq_preset=effective_preset,
+    )
+
+    from gamedev_shared.cli_helpers import needed_mib_for_backend
 
     if try_ums_delegation(
         "part3d",
-        with_ums_peak_opts(
-            with_ums_load_opts(_ums_request, gpu_ids=parsed_gpu_ids),
-            backend="part3d",
-            memory_efficient=mem_eff,
-            sdnq_preset=effective_preset,
-        ),
+        _ums_request,
         t_start=t_start,
         noun="Partes",
         console=console,

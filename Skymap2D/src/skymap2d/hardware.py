@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, cuda_gpu_specs
+from gamedev_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 HW_AUTO_ENV = "SKYMAP2D_HW_AUTO"
@@ -34,14 +34,10 @@ def hw_auto_enabled() -> bool:
 
 
 @dataclass(frozen=True)
-class Skymap2DHardwareProfile:
-    name: str
-    device: str  # "cuda" | "cpu"
+class Skymap2DHardwareProfile(HardwareProfileBase):
     memory_efficient: bool  # True = enable_model_cpu_offload
     max_width: int | None  # None = sem clamp; int = clamp se utilizador não explicitou
     max_height: int | None
-    gpu_ids: list[int] | None  # >1 GPU: split multi-GPU; senão None
-    total_vram_gib: float
 
     def summary(self) -> str:
         parts = [self.name]
@@ -112,4 +108,4 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Skymap2DHardwareProfile:
 
 def detect_hardware_profile() -> Skymap2DHardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
-    return profile_from_specs(cuda_gpu_specs())
+    return detect_profile(profile_from_specs)

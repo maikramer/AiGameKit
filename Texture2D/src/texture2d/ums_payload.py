@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from gamedev_shared.cli_helpers import with_ums_load_opts, with_ums_peak_opts
+from gamedev_shared.ums_payload import build_request_body
 
 
 def build_generate_request(
@@ -24,24 +25,24 @@ def build_generate_request(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Monta payload UMS texture2d com peak/load opts."""
-    payload: dict[str, Any] = {
-        "prompt": str(prompt),
-        "output": str(output),
-        "width": int(width),
-        "height": int(height),
-        "steps": int(steps),
-        "guidance": float(guidance),
-        "seed": seed,
-        "ground": bool(ground),
-    }
-    if negative_prompt is not None:
-        payload["negative_prompt"] = negative_prompt
-    if preset is not None:
-        payload["preset"] = preset
-    if model_id is not None:
-        payload["model_id"] = model_id
-    if extra:
-        payload.update(extra)
+    payload = build_request_body(
+        prompt=prompt,
+        output=output,
+        core={
+            "width": int(width),
+            "height": int(height),
+            "steps": int(steps),
+            "guidance": float(guidance),
+            "seed": seed,
+            "ground": bool(ground),
+        },
+        optional={
+            "negative_prompt": negative_prompt,
+            "preset": preset,
+            "model_id": model_id,
+        },
+        extra=extra,
+    )
 
     return with_ums_peak_opts(
         with_ums_load_opts(payload, gpu_ids=gpu_ids),

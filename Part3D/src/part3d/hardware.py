@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from gamedev_shared.hardware import GIB, cuda_gpu_specs
+from gamedev_shared.hardware import GIB, HardwareProfileBase, detect_profile
 from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 HW_AUTO_ENV = "PART3D_HW_AUTO"
@@ -42,14 +42,10 @@ def hw_auto_enabled() -> bool:
 
 
 @dataclass(frozen=True)
-class Part3DHardwareProfile:
-    name: str
-    device: str  # "cuda" | "cpu"
+class Part3DHardwareProfile(HardwareProfileBase):
     memory_efficient: bool  # True = SDNQ + CPU offload + attention slicing
     cpu_offload: bool
     sdnq_preset: str | None  # e.g. "sdnq-uint8"; None = sem SDNQ runtime
-    gpu_ids: list[int] | None  # >1 GPU: split multi-GPU; senão None
-    total_vram_gib: float
 
     def summary(self) -> str:
         parts = [self.name]
@@ -124,4 +120,4 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Part3DHardwareProfile:
 
 def detect_hardware_profile() -> Part3DHardwareProfile:
     """Detecta GPUs CUDA e devolve o perfil correspondente."""
-    return profile_from_specs(cuda_gpu_specs())
+    return detect_profile(profile_from_specs)

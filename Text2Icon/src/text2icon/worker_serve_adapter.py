@@ -51,17 +51,12 @@ class Adapter(WorkerAdapter):
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
         import time
 
+        error, steps, should_abort, on_step = self.begin_generate(request, default_steps=20)
+        if error:
+            return error
+
         prompt = request.get("prompt", "")
         output = request.get("output")
-        if not prompt or not output:
-            return {"status": "error", "error": "prompt e output são obrigatórios"}
-        if self.should_abort(request):
-            return self.cancelled_response("cancelled before generate")
-
-        steps = int(request.get("steps", 20))
-        should_abort, on_step = self.abort_hooks(request, num_inference_steps=steps)
-        self.report_progress(request, 0.0, "started")
-
         t_start = time.perf_counter()
         try:
             image, metadata = model.generate(
@@ -96,12 +91,7 @@ class Adapter(WorkerAdapter):
 
         elapsed = time.perf_counter() - t_start
         self.report_progress(request, 1.0, "done")
-        return {
-            "status": "ok",
-            "output": str(saved),
-            "seconds": round(elapsed, 2),
-            "seed": metadata.get("seed"),
-        }
+        return self.finish_response(output=saved, seconds=elapsed, seed=metadata.get("seed"))
 
     def unload(self, model: Any) -> None:
         unload = getattr(model, "unload", None)

@@ -1,10 +1,10 @@
 """Adapter paint3d para o modo subprocesso (``paint3d serve --ums-worker``).
 
-Espelha :mod:`modelserver.adapters.paint3d` mas vive no venv da tool e **não
-herda de ``modelserver.adapters.base.BackendAdapter```` (Paint3D não depende do
-modelserver). Mantém o mesmo contrato ``load/generate/unload`` + helpers
-``report_progress``/``should_abort``/``apply_runtime_budget`` para que
-:func:`gamedev_shared.worker_serve.run_worker_loop` o possa usar.
+Herda de :class:`gamedev_shared.worker_serve_adapter_base.WorkerAdapter`
+(standalone, sem depender do package modelserver) — os helpers estáticos
+(``report_progress``/``should_abort``/``cancelled_response``/``abort_hooks``/
+``apply_runtime_budget``) vêm da base, sem cópias locais. Mesma lógica do
+``modelserver.adapters.paint3d.Adapter`` mas vive no venv da tool.
 
 Este módulo só é importado quando o subcomando ``serve`` corre — não afecta o
 import normal do ``paint3d`` (CLI interactiva, batch, etc.).
@@ -16,69 +16,14 @@ import contextlib
 import time
 from typing import Any
 
-# Contrato do worker_serve: qualquer classe com load/generate/unload serve.
-# Helpers estáticos abaixo replicam os de BackendAdapter sem dependência do
-# modelserver (a tool vive no seu próprio venv, sem o supervisor).
+from gamedev_shared.worker_serve_adapter_base import WorkerAdapter
 
 
-def report_progress(request: dict[str, Any], pct: float | None = None, msg: str | None = None) -> None:
-    """Reporta progresso via ``request["_progress"]`` (callback do worker)."""
-    cb = request.get("_progress")
-    if callable(cb):
-        with contextlib.suppress(Exception):
-            cb(pct, msg)
-
-
-def should_abort(request: dict[str, Any]) -> bool:
-    """True se o UMS pediu cancel (``request["_abort"]``)."""
-    cb = request.get("_abort")
-    if not callable(cb):
-        return False
-    try:
-        return bool(cb())
-    except Exception:
-        return False
-
-
-def cancelled_response(reason: str = "cancelled") -> dict[str, Any]:
-    """Resposta canónica de cancel cooperativo."""
-    return {"status": "error", "error": reason, "error_code": "CANCELLED"}
-
-
-def apply_runtime_budget(
-    model: Any,
-    request: dict[str, Any],
-    *,
-    progress_pct: float | None = None,
-    **hints: Any,
-) -> dict[str, Any] | None:
-    """Reaplica o runtime VRAM budget do PaintBatchProcessor, se suportado.
-
-    Idêntico a :meth:`BackendAdapter.apply_runtime_budget` mas standalone.
-    """
-    refresh = getattr(model, "refresh_runtime_budget", None)
-    if not callable(refresh):
-        return None
-    try:
-        try:
-            budget = refresh(**hints) if hints else refresh()
-        except TypeError:
-            budget = refresh()
-    except (RuntimeError, MemoryError):
-        raise
-    except Exception:
-        return None
-    if budget and progress_pct is not None:
-        summary = ", ".join(f"{k}={v}" for k, v in budget.items() if k in ("num_chunks", "max_views", "dino_device"))
-        report_progress(request, progress_pct, f"vram_budget {summary}" if summary else "vram_budget")
-    return budget if isinstance(budget, dict) else None
-
-
-class Adapter:
+class Adapter(WorkerAdapter):
     """Adapter paint3d (PaintBatchProcessor — context manager) para subprocesso.
 
-    Mesma lógica que :class:`modelserver.adapters.paint3d.Adapter` mas com
-    helpers estáticos locais (ver acima). Corre no venv do Paint3D.
+    Mesma lógica que :class:`modelserver.adapters.paint3d.Adapter`. Corre no
+    venv do Paint3D.
     """
 
     name = "paint3d"
@@ -133,28 +78,28 @@ class Adapter:
         output = request.get("output")
         if not mesh_path or not image_path or not output:
             return {"status": "error", "error": "mesh_path, image_path e output são obrigatórios"}
-        if should_abort(request):
-            return cancelled_response("cancelled before generate")
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before generate")
 
-        report_progress(request, 0.0, "started")
+        self.report_progress(request, 0.0, "started")
         t_start = time.perf_counter()
 
         from paint3d.utils.mesh_io import load_mesh_trimesh, save_glb
 
-        if should_abort(request):
-            return cancelled_response("cancelled before load mesh")
-        report_progress(request, 0.15, "loading_mesh")
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before load mesh")
+        self.report_progress(request, 0.15, "loading_mesh")
         mesh_objs = load_mesh_trimesh(mesh_path)
 
-        if should_abort(request):
-            return cancelled_response("cancelled before paint")
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before paint")
         budget_hints: dict[str, Any] = {}
         if request.get("max_num_view"):
             budget_hints["requested_views"] = int(request["max_num_view"])
         if request.get("view_resolution"):
             budget_hints["requested_resolution"] = int(request["view_resolution"])
         try:
-            budget = apply_runtime_budget(model, request, progress_pct=0.22, **budget_hints)
+            budget = self.apply_runtime_budget(model, request, progress_pct=0.22, **budget_hints)
         except (RuntimeError, MemoryError) as exc:
             return {
                 "status": "error",
@@ -162,20 +107,20 @@ class Adapter:
                 "error_code": "VRAM_INSUFFICIENT",
                 "hint": "Runtime budget / MeshRender sem headroom — `ums evict` ou reduz views.",
             }
-        report_progress(request, 0.25, "painting")
+        self.report_progress(request, 0.25, "painting")
         textured = model.paint_mesh(mesh_objs, image_path)
 
-        if should_abort(request):
-            return cancelled_response("cancelled before save")
-        report_progress(request, 0.85, "saving")
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before save")
+        self.report_progress(request, 0.85, "saving")
         saved = save_glb(textured, output)
 
         # Pós-processo canónico.
         from paint3d.postprocess import apply_paint_postprocess
 
-        if should_abort(request):
-            return cancelled_response("cancelled before postprocess")
-        report_progress(request, 0.92, "postprocess")
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before postprocess")
+        self.report_progress(request, 0.92, "postprocess")
         post = apply_paint_postprocess(
             saved,
             mesh_path=mesh_path,
@@ -188,7 +133,7 @@ class Adapter:
         )
 
         elapsed = time.perf_counter() - t_start
-        report_progress(request, 1.0, "done")
+        self.report_progress(request, 1.0, "done")
         out: dict[str, Any] = {
             "status": "ok",
             "output": str(saved),

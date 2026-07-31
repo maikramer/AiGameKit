@@ -368,7 +368,7 @@ def test_hw_auto_env_no() -> None:
 
 
 def test_detect_hardware_profile_monkeypatch(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("part3d.hardware.cuda_gpu_specs", lambda: [])
+    monkeypatch.setattr("gamedev_shared.hardware.cuda_gpu_specs", lambda: [])
     p = detect_hardware_profile()
     assert isinstance(p, Part3DHardwareProfile)
 

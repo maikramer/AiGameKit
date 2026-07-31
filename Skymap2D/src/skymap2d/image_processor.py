@@ -7,7 +7,6 @@ defaults (EXR export, 2:1 thumbnail ratio).
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +14,7 @@ from typing import Any
 
 from PIL import Image
 
-from gamedev_shared.image_utils import save_image_with_metadata
+from gamedev_shared.image_utils import save_image_with_metadata, write_metadata_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -58,34 +57,23 @@ def save_image(
         linear = pil_rgb_to_linear_f32(image)
         write_exr_rgb_linear(filepath, linear, scale=exr_scale)
         logger.info("EXR gravado em %s", filepath)
-    else:
-        return save_image_with_metadata(
-            image,
+        write_metadata_sidecar(
+            filepath,
             prompt,
             params,
-            output_dir=out_dir,
-            filename=filename,
-            metadata=metadata,
-            image_format="PNG",
+            metadata={"image_format": fmt, "color_space": "linear_rgb", **(metadata or {})},
         )
+        return filepath
 
-    metadata_path = filepath.with_suffix(".json")
-    metadata_dict: dict[str, Any] = {
-        "timestamp": datetime.now().timestamp(),
-        "prompt": prompt,
-        "params": params,
-        "image_path": str(filepath),
-        "filename": filename,
-        "image_format": fmt,
-        "color_space": "linear_rgb" if fmt == "exr" else "srgb_png",
-    }
-    if metadata:
-        metadata_dict.update(metadata)
-
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(metadata_dict, f, indent=2, ensure_ascii=False)
-
-    return filepath
+    return save_image_with_metadata(
+        image,
+        prompt,
+        params,
+        output_dir=out_dir,
+        filename=filename,
+        metadata=metadata,
+        image_format="PNG",
+    )
 
 
 def create_thumbnail(image: Image.Image, size: tuple[int, int] = (512, 256)) -> Image.Image:
