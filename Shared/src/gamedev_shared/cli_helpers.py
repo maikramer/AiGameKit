@@ -99,7 +99,7 @@ BACKEND_FOOTPRINT_KEYS: dict[str, str] = {
 # Fallbacks quando não há footprint (MiB) — alinhados a ``backends.yaml`` vram_mib.
 _BACKEND_NEEDED_FALLBACK_MIB: dict[str, int] = {
     "texture2d": 2500,
-    "terrain3d": 6000,
+    "terrain3d": 3200,
 }
 
 

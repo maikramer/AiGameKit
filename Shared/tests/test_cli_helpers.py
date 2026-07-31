@@ -341,7 +341,7 @@ class TestNeededMibForBackend:
         assert needed_mib_for_backend("texture2d") == 2500
 
     def test_terrain3d_fallback(self) -> None:
-        assert needed_mib_for_backend("terrain3d") == 6000
+        assert needed_mib_for_backend("terrain3d") == 3200
 
     def test_mem_eff_infers_quant(self) -> None:
         plain = needed_mib_for_backend("paint3d", memory_efficient=False)

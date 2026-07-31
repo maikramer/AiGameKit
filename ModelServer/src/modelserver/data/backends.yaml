@@ -80,6 +80,9 @@ backends:
 
   - name: terrain3d
     adapter: modelserver.adapters.terrain3d
-    vram_mib: 6000
+    # Medido: pesos fp32 reais ~1.1 GiB (coarse 11M + base 968M + decoder 107M)
+    # + activações (tiles 512², warmup bs<=16) ~0.7 GiB + contexto CUDA.
+    # 6000 era ~2x conservador e recusava GPUs de 6 GB (peak 6384 > 5627 livre).
+    vram_mib: 3200
     priority: 40
     tool: terrain3d
