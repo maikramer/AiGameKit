@@ -21,6 +21,16 @@ def build_generate_request(
     dtype: str | None = None,
     cache_size: str | None = None,
     coarse_window: int | None = None,
+    num_inference_steps: int | None = None,
+    offset_i: int | None = None,
+    offset_j: int | None = None,
+    island_falloff: float | None = None,
+    island_noise_scale: float | None = None,
+    island_noise_freq: float | None = None,
+    smooth_iterations: int | None = None,
+    elevation_gamma: float | None = None,
+    elevation_contrast: float | None = None,
+    format: str | None = None,
     gpu_ids: list[int] | str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -48,6 +58,26 @@ def build_generate_request(
         payload["cache_size"] = cache_size
     if coarse_window is not None:
         payload["coarse_window"] = int(coarse_window)
+    if num_inference_steps is not None:
+        payload["num_inference_steps"] = int(num_inference_steps)
+    if offset_i is not None:
+        payload["offset_i"] = int(offset_i)
+    if offset_j is not None:
+        payload["offset_j"] = int(offset_j)
+    if island_falloff is not None:
+        payload["island_falloff"] = float(island_falloff)
+    if island_noise_scale is not None:
+        payload["island_noise_scale"] = float(island_noise_scale)
+    if island_noise_freq is not None:
+        payload["island_noise_freq"] = float(island_noise_freq)
+    if smooth_iterations is not None:
+        payload["smooth_iterations"] = int(smooth_iterations)
+    if elevation_gamma is not None:
+        payload["elevation_gamma"] = float(elevation_gamma)
+    if elevation_contrast is not None:
+        payload["elevation_contrast"] = float(elevation_contrast)
+    if format is not None:
+        payload["format"] = format
     if extra:
         payload.update(extra)
 

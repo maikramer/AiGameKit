@@ -14,14 +14,13 @@ from gamedev_shared.cli_helpers import (
     needed_mib_for_backend,
     prepare_gpu_exclusive,
     try_ums_delegation,
-    with_ums_load_opts,
-    with_ums_peak_opts,
 )
 from gamedev_shared.quality import VALID_QUALITIES
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click before commands
-from .export import export_heightmap, export_metadata
-from .generator import TerrainConfig, generate_terrain
+from .export import export_ahgt, export_heightmap, export_metadata
+from .generator import TerrainConfig, TerrainResult, generate_terrain
+from .ums_payload import build_generate_request
 
 console = Console()
 
@@ -56,6 +55,35 @@ def cli() -> None:
 )
 @click.option("--max-height", type=float, default=50.0, show_default=True, help="Max terrain height in meters")
 @click.option(
+    "--num-inference-steps",
+    type=int,
+    default=20,
+    show_default=True,
+    help="Coarse diffusion timesteps (mais = geografia mais refinada)",
+)
+@click.option(
+    "--offset-i",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Deslocamento da região amostrada (linhas, px) — explora o mundo infinito com o mesmo seed",
+)
+@click.option(
+    "--offset-j",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Deslocamento da região amostrada (colunas, px)",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["png", "ahgt"]),
+    default="png",
+    show_default=True,
+    help="Heightmap encoding: png (8-bit legacy) ou ahgt (uint16, sem terracing — VibeGame lê nativamente)",
+)
+@click.option(
     "--quality",
     type=click.Choice(list(VALID_QUALITIES)),
     default="medium",
@@ -76,7 +104,7 @@ def cli() -> None:
     type=int,
     default=4,
     show_default=True,
-    help="Number of coarse tiles (~7.7km each for 30m)",
+    help="Legacy: nº de células coarse (~256 px cada p/ 30m). Sem --size, deriva size = coarse-window x 256.",
 )
 @click.option(
     "--mode",
@@ -137,6 +165,10 @@ def generate_cmd(
     size: int,
     world_size: float,
     max_height: float,
+    num_inference_steps: int,
+    offset_i: int,
+    offset_j: int,
+    output_format: str,
     quality: str,
     device: str | None,
     dtype: str,
@@ -164,6 +196,7 @@ def generate_cmd(
     _user_set_size = ctx.get_parameter_source("size") != ParameterSource.DEFAULT
     _user_set_world_size = ctx.get_parameter_source("world_size") != ParameterSource.DEFAULT
     _user_set_coarse_window = ctx.get_parameter_source("coarse_window") != ParameterSource.DEFAULT
+    _user_set_num_steps = ctx.get_parameter_source("num_inference_steps") != ParameterSource.DEFAULT
     _user_set_mode = ctx.get_parameter_source("mode") != ParameterSource.DEFAULT
     _user_set_island_falloff = ctx.get_parameter_source("island_falloff") != ParameterSource.DEFAULT
     _user_set_island_noise_scale = ctx.get_parameter_source("island_noise_scale") != ParameterSource.DEFAULT
@@ -183,6 +216,8 @@ def generate_cmd(
             world_size = _qresolved.params["world_size"]
         if not _user_set_coarse_window and "coarse_window" in _qresolved.params:
             coarse_window = _qresolved.params["coarse_window"]
+        if not _user_set_num_steps and "num_inference_steps" in _qresolved.params:
+            num_inference_steps = _qresolved.params["num_inference_steps"]
         if not _user_set_mode and "mode" in _qresolved.params:
             mode = _qresolved.params["mode"]
         if not _user_set_island_falloff and "island_falloff" in _qresolved.params:
@@ -200,6 +235,11 @@ def generate_cmd(
     except Exception:
         pass  # QualityEngine unavailable — continue with CLI defaults
 
+    # coarse_window legacy: sem --size explícito, deriva size = coarse_window x 256
+    # (1 célula coarse ≈ 256 px de saída no modelo 30m ≈ 7.7 km).
+    if _user_set_coarse_window and not _user_set_size:
+        size = int(coarse_window) * 256
+
     if seed is None:
         import numpy as np
 
@@ -211,6 +251,9 @@ def generate_cmd(
         world_size=world_size,
         max_height=max_height,
         device=device,
+        num_inference_steps=num_inference_steps,
+        offset_i=offset_i,
+        offset_j=offset_j,
         dtype=dtype if dtype != "fp32" else None,
         cache_size=cache_size,
         coarse_window=coarse_window,
@@ -224,25 +267,42 @@ def generate_cmd(
         elevation_contrast=elevation_contrast,
     )
 
+    def _export(result: TerrainResult) -> tuple[Path, str | None]:
+        """Exporta heightmap no formato pedido + metadata; devolve (path, metadata)."""
+        if output_format == "ahgt":
+            hmap = export_ahgt(result.heightmap, output, world_size, max_height)
+        else:
+            hmap = export_heightmap(result.heightmap, output, size)
+        meta = export_metadata(result, metadata_path) if metadata_path else None
+        return hmap, (str(meta) if meta else None)
+
     t_start = time.time()
     out_resolved = str(Path(output).resolve())
     if try_ums_delegation(
         "terrain3d",
-        with_ums_peak_opts(
-            with_ums_load_opts(
-                {
-                    "output": out_resolved,
-                    "metadata_path": metadata_path,
-                    "seed": seed,
-                    "size": size,
-                    "world_size": world_size,
-                    "max_height": max_height,
-                    "mode": mode,
-                    "device": device,
-                    "prompt": prompt,
-                },
-            ),
-            backend="terrain3d",
+        build_generate_request(
+            output=out_resolved,
+            metadata_path=metadata_path,
+            seed=seed,
+            size=size,
+            world_size=world_size,
+            max_height=max_height,
+            mode=mode,
+            device=device,
+            prompt=prompt,
+            dtype=dtype if dtype != "fp32" else None,
+            cache_size=cache_size,
+            coarse_window=coarse_window,
+            num_inference_steps=num_inference_steps,
+            offset_i=offset_i,
+            offset_j=offset_j,
+            island_falloff=island_falloff,
+            island_noise_scale=island_noise_scale,
+            island_noise_freq=island_noise_freq,
+            smooth_iterations=smooth_iterations,
+            elevation_gamma=elevation_gamma,
+            elevation_contrast=elevation_contrast,
+            format=output_format,
         ),
         t_start=t_start,
         noun="Terreno",
@@ -268,10 +328,10 @@ def generate_cmd(
 
     if quiet:
         result = generate_terrain(config)
-        hmap_path = export_heightmap(result.heightmap, output, size)
-        meta_path = export_metadata(result, metadata_path)
+        hmap_path, meta_path = _export(result)
         print(hmap_path)
-        print(meta_path)
+        if meta_path:
+            print(meta_path)
         return
 
     with Progress(
@@ -282,8 +342,7 @@ def generate_cmd(
         task = progress.add_task("[cyan]Generating terrain...", total=None)
         result = generate_terrain(config)
         progress.update(task, description="[cyan]Exporting heightmap...")
-        hmap_path = export_heightmap(result.heightmap, output, size)
-        meta_path = export_metadata(result, metadata_path)
+        hmap_path, _ = _export(result)
         progress.update(task, description="[green]Done")
 
     stats = result.stats
@@ -296,6 +355,12 @@ def generate_cmd(
     table.add_row("Model", stats.get("model_id", "unknown"))
     table.add_row("Size", f"{size}x{size}")
     table.add_row("World size", f"{world_size}m")
+    table.add_row("Steps", str(num_inference_steps))
+    if offset_i or offset_j:
+        table.add_row("Offset", f"{offset_i},{offset_j}")
+    scale_ratio = stats.get("horizontal_scale_ratio")
+    if scale_ratio is not None:
+        table.add_row("Escala horiz.", f"{scale_ratio:.1f}x")
     table.add_row("Time", f"{gen_time:.2f}s")
     table.add_row("Height min", f"{result.heightmap.min():.4f}")
     table.add_row("Height max", f"{result.heightmap.max():.4f}")
@@ -303,7 +368,10 @@ def generate_cmd(
     table.add_row("Height std", f"{result.heightmap.std():.4f}")
     table.add_row("Mode", mode)
     table.add_row("Heightmap", str(hmap_path))
-    table.add_row("Metadata", str(meta_path))
+    if metadata_path:
+        table.add_row("Metadata", str(metadata_path))
+    if stats.get("scale_warning"):
+        table.add_row("Aviso escala", stats["scale_warning"])
     if prompt:
         table.add_row("Prompt", prompt)
     console.print(table)

@@ -32,6 +32,8 @@ class Adapter(WorkerAdapter):
             "dtype",
             "cache_size",
             "coarse_window",
+            "offset_i",
+            "offset_j",
             "prompt",
             "mode",
             "island_falloff",
@@ -53,15 +55,31 @@ class Adapter(WorkerAdapter):
         if self.should_abort(request):
             return self.cancelled_response("cancelled before generate")
 
-        # Aplicar overrides do request à config.
-        for field in ("seed", "size", "world_size", "max_height", "num_inference_steps", "mode"):
+        # Aplicar overrides do request à config (worker quente reutiliza a config
+        # do load — todos os campos editáveis têm de ser re-aplicados por job).
+        for field in (
+            "seed",
+            "size",
+            "world_size",
+            "max_height",
+            "num_inference_steps",
+            "mode",
+            "offset_i",
+            "offset_j",
+            "island_falloff",
+            "island_noise_scale",
+            "island_noise_freq",
+            "smooth_iterations",
+            "elevation_gamma",
+            "elevation_contrast",
+        ):
             if field in request:
                 setattr(model, field, request[field])
 
         self.report_progress(request, 0.0, "started")
         t_start = time.perf_counter()
 
-        from terrain3d.export import export_heightmap, export_metadata
+        from terrain3d.export import export_ahgt, export_heightmap, export_metadata
         from terrain3d.generator import generate_terrain
 
         if self.should_abort(request):
@@ -75,7 +93,10 @@ class Adapter(WorkerAdapter):
         self.report_progress(request, 0.85, "export")
 
         out_path = Path(output)
-        saved = export_heightmap(result.heightmap, out_path, size=model.size)
+        if str(request.get("format", "png")).lower() == "ahgt":
+            saved = export_ahgt(result.heightmap, out_path, model.world_size, model.max_height)
+        else:
+            saved = export_heightmap(result.heightmap, out_path, size=model.size)
 
         # Metadata sidecar opcional.
         metadata_path = request.get("metadata_path")

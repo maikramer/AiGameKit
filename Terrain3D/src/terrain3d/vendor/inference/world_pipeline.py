@@ -293,6 +293,7 @@ class WorldPipeline(ConfigMixin):
         native_resolution: float = 90.0,
         *,
         T: int = 2,
+        num_inference_steps: int = 20,  # GameDev: coarse diffusion timesteps (upstream hardcodes 20)
         log_mode: str = 'info',
         torch_compile: bool = False,
         dtype: str | None = None,
@@ -319,6 +320,7 @@ class WorldPipeline(ConfigMixin):
         if T not in (1, 2):
             raise ValueError(f"T must be 1 or 2, got {T}")
         self.T = T
+        self.num_inference_steps = int(num_inference_steps)
         
         # Resolve seed (64-bit when provided; portable RNG for default)
         self.seed = (int(seed) & 0xFFFFFFFFFFFFFFFF) if seed is not None else next_seed(None)
@@ -931,7 +933,7 @@ class WorldPipeline(ConfigMixin):
         ), device=self.device, dtype=model_dtype)[None]
         cond_img = torch.cos(t_cond.view(1, -1, 1, 1)) * synthetic_map + torch.sin(t_cond.view(1, -1, 1, 1)) * cond_noise
         
-        scheduler.set_timesteps(20)
+        scheduler.set_timesteps(self.num_inference_steps)  # GameDev: era hardcoded 20 no upstream
         sample_noise = torch.as_tensor(gaussian_noise_patch(
             self.seed + 1, i1, j1, TILE_SIZE, TILE_SIZE,
             channels=6, tile_h=TILE_SIZE, tile_w=TILE_SIZE

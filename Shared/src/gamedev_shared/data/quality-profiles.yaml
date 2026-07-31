@@ -61,8 +61,8 @@ profiles:
       groups_per_vertex: 4
     terrain3d:
       size: 512
-      world_size: 256.0
-      coarse_window: 2
+      world_size: 640.0        # 512px × 30m ÷ 640m = 24x de compressão horizontal
+      num_inference_steps: 16
       island_noise_scale: 0.12
       island_noise_freq: 2.5
       smooth_iterations: 2
@@ -140,8 +140,8 @@ profiles:
       groups_per_vertex: 4
     terrain3d:
       size: 1024
-      world_size: 256.0
-      coarse_window: 3
+      world_size: 1536.0       # 1024px × 30m ÷ 1536m = 20x
+      num_inference_steps: 18
       island_noise_scale: 0.14
       island_noise_freq: 2.8
       smooth_iterations: 3
@@ -219,8 +219,8 @@ profiles:
       groups_per_vertex: 8
     terrain3d:
       size: 2048
-      world_size: 512.0
-      coarse_window: 4
+      world_size: 3840.0       # 2048px × 30m ÷ 3840m = 16x
+      num_inference_steps: 20
       island_noise_scale: 0.15
       island_noise_freq: 3.0
       smooth_iterations: 3
@@ -298,8 +298,8 @@ profiles:
       groups_per_vertex: 12
     terrain3d:
       size: 4096
-      world_size: 512.0
-      coarse_window: 6
+      world_size: 10240.0      # 4096px × 30m ÷ 10240m = 12x
+      num_inference_steps: 24
       island_noise_scale: 0.16
       island_noise_freq: 3.2
       smooth_iterations: 4
@@ -377,8 +377,8 @@ profiles:
       groups_per_vertex: 16
     terrain3d:
       size: 4096
-      world_size: 1024.0
-      coarse_window: 8
+      world_size: 15360.0      # 4096px × 30m ÷ 15360m = 8x
+      num_inference_steps: 28
       island_noise_scale: 0.18
       island_noise_freq: 3.5
       smooth_iterations: 5

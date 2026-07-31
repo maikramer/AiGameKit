@@ -30,7 +30,10 @@ class TerrainConfig:
     num_inference_steps: int = 20
     dtype: str | None = None  # "fp32", "bf16", "fp16"
     cache_size: str = "100M"
-    coarse_window: int = 4  # number of coarse tiles to generate (each ~7.7km for 30m model)
+    coarse_window: int = 4  # legacy: 1 coarse cell ≈ 256 px de saída;
+    # a CLI deriva size = coarse_window x 256 quando --size é omitido
+    offset_i: int = 0  # deslocamento da região amostrada no mundo infinito (px de saída, linhas)
+    offset_j: int = 0  # idem, colunas — permite explorar outras regiões com o mesmo seed
     prompt: str | None = None  # stored as metadata only (model is unconditional)
     # --- Post-processing ---
     mode: str = "island"  # "island" | "continental"
@@ -64,6 +67,48 @@ def _native_resolution_from_model(model_id: str) -> float:
     if "90m" in model_lower:
         return 90.0
     return 30.0
+
+
+# Limites do guard-rail de escala horizontal (ratio = size x native_res / world_size).
+# Acima de _SCALE_RATIO_STEEP os declives ficam artificiais (montanhas "esmagadas");
+# abaixo de _SCALE_RATIO_SOFT o heightmap fica sub-resolvido (detalhe esticado).
+_SCALE_RATIO_STEEP = 32.0
+_SCALE_RATIO_SOFT = 1.5
+
+
+def check_scale_coherence(size: int, world_size: float, native_resolution: float) -> str | None:
+    """Check horizontal-scale coherence between the sampled region and the game world.
+
+    The diffusion model produces geographically-real terrain at
+    ``native_resolution`` meters per pixel.  Squeezing that region into a much
+    smaller ``world_size`` multiplies every slope by the same factor, turning
+    ranges into spiky walls; a much larger world just stretches the detail.
+
+    Args:
+        size: Heightmap resolution in pixels (sampled region side).
+        world_size: Game-world extent in meters.
+        native_resolution: Meters per output pixel of the model (30/90).
+
+    Returns:
+        Human-readable warning in Portuguese when the ratio is outside the
+        sane band, ``None`` otherwise.
+    """
+    if world_size <= 0:
+        return None
+    native_extent = float(size) * float(native_resolution)
+    ratio = native_extent / float(world_size)
+    if ratio > _SCALE_RATIO_STEEP:
+        return (
+            f"escala horizontal {ratio:.0f}x — a região nativa ({native_extent / 1000:.1f} km) fica comprimida em "
+            f"{world_size:.0f} m: declives {ratio:.0f}x mais íngremes que o relevo real (montanhas artificiais). "
+            f"Aumente --world-size para ~{native_extent / 16:.0f} m (16x) ou reduza --size."
+        )
+    if ratio < _SCALE_RATIO_SOFT:
+        return (
+            f"escala horizontal {ratio:.2f}x — o mundo ({world_size:.0f} m) é maior que a região amostrada "
+            f"({native_extent / 1000:.2f} km): detalhe esticado/suave demais. Aumente --size ou reduza --world-size."
+        )
+    return None
 
 
 def generate_terrain(config: TerrainConfig) -> TerrainResult:
@@ -126,11 +171,16 @@ def generate_terrain(config: TerrainConfig) -> TerrainResult:
         seed=config.seed,
         latents_batch_size=[1, 2, 4, 8, 16],
         native_resolution=native_resolution,
+        num_inference_steps=config.num_inference_steps,
         caching_strategy="direct",
         cache_limit=cache_limit,
         torch_compile=should_compile,
         dtype=config.dtype,
     )
+
+    scale_warning = check_scale_coherence(config.size, config.world_size, native_resolution)
+    if scale_warning:
+        print(f"WARNING: {scale_warning}")
 
     try:
         pipeline.to(device)
@@ -139,8 +189,11 @@ def generate_terrain(config: TerrainConfig) -> TerrainResult:
         # Sample the terrain region.  The residual InfiniteTensor coordinates
         # are in decoder-pixel space.  ``pipeline.get()`` runs the full
         # decode pipeline (laplacian denoise + decode) and returns elevation
-        # in meters.
-        result = pipeline.get(0, 0, config.size, config.size, with_climate=False)
+        # in meters.  Offsets select which region of the infinite world is
+        # sampled (same seed + different offset = different geography).
+        i1 = int(config.offset_i)
+        j1 = int(config.offset_j)
+        result = pipeline.get(i1, j1, i1 + config.size, j1 + config.size, with_climate=False)
         elev = result["elev"]  # torch.Tensor, shape (size, size), meters
 
         # Convert to float64 numpy and normalize to 0-1
@@ -175,6 +228,16 @@ def generate_terrain(config: TerrainConfig) -> TerrainResult:
         "device": str(device),
         "native_resolution": native_resolution,
         "torch_compile": should_compile,
+        "num_inference_steps": config.num_inference_steps,
+        "offset_i": int(config.offset_i),
+        "offset_j": int(config.offset_j),
+        "native_extent_m": round(float(config.size) * native_resolution, 1),
+        "horizontal_scale_ratio": (
+            round(float(config.size) * native_resolution / float(config.world_size), 3)
+            if config.world_size > 0
+            else None
+        ),
+        "scale_warning": scale_warning,
         "height_min_raw_meters": round(h_min, 4),
         "height_max_raw_meters": round(h_max, 4),
         "height_mean": round(float(heightmap.mean()), 6),
