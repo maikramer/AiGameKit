@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
-import * as path from 'node:path';
 import type { ParsedElement, XMLValue } from '../../core';
-import { parseGlbCollisionMesh } from '../../plugins/physics/mesh-collider';
+import { loadGlbCollisionMesh } from '../../plugins/physics/mesh-collider';
 import {
   parseAt,
   parseSemicolonPlaceString,
 } from '../../plugins/spawner/place-fields';
+import { resolveAssetPath } from './assets';
 import type { AnalyzeIssue, Footprint } from './types';
 
 const SOLID_PRIMS = new Set(['box', 'sphere', 'cylinder']);
@@ -69,6 +69,14 @@ function parsePlaceXZ(placeRaw: XMLValue | undefined): [number, number] | null {
   }
 }
 
+/** XML `overlap-max` metres; missing/invalid → 0 (strict). */
+function parseOverlapMax(raw: XMLValue | undefined): number {
+  const s = attrStr(raw);
+  if (!s) return 0;
+  const n = parseFloat(s);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 function expandRotatedRect(
   cx: number,
   cz: number,
@@ -109,46 +117,67 @@ function emptyUnion(): {
   };
 }
 
-function resolvePublicPath(publicDir: string, url: string): string | null {
-  const t = url.trim();
-  if (!t.startsWith('/')) return null;
-  return path.join(publicDir, t.replace(/^\//, ''));
-}
+type Bounds3 = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+};
 
-function glbXZBounds(
+/** Per-analyze-run cache: same URL reused across many GameObjects. */
+const boundsCache = new Map<string, Bounds3 | null>();
+
+async function glbBounds(
   publicDir: string,
   url: string,
   issues: AnalyzeIssue[],
   label: string
-): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
-  const file = resolvePublicPath(publicDir, url);
+): Promise<Bounds3 | null> {
+  const file = resolveAssetPath(publicDir, url);
   if (!file) return null;
+  const cacheKey = file;
+  if (boundsCache.has(cacheKey)) return boundsCache.get(cacheKey)!;
   try {
     const buf = readFileSync(file);
-    const mesh = parseGlbCollisionMesh(
-      buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+    const ab = buf.buffer.slice(
+      buf.byteOffset,
+      buf.byteOffset + buf.byteLength
     );
+    const mesh = await loadGlbCollisionMesh(ab, url);
     let minX = Infinity;
     let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
     let minZ = Infinity;
     let maxZ = -Infinity;
     const p = mesh.vertices;
     for (let i = 0; i < p.length; i += 3) {
       const x = p[i]!;
+      const y = p[i + 1]!;
       const z = p[i + 2]!;
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
       minZ = Math.min(minZ, z);
       maxZ = Math.max(maxZ, z);
     }
-    if (!Number.isFinite(minX)) return null;
-    return { minX, maxX, minZ, maxZ };
+    if (!Number.isFinite(minX)) {
+      boundsCache.set(cacheKey, null);
+      return null;
+    }
+    const bounds = { minX, maxX, minY, maxY, minZ, maxZ };
+    boundsCache.set(cacheKey, bounds);
+    return bounds;
   } catch (e) {
     issues.push({
       severity: 'warn',
       code: 'bounds',
       message: `[analyze] cannot read GLB bounds for ${label}: ${url} (${e instanceof Error ? e.message : e})`,
     });
+    boundsCache.set(cacheKey, null);
     return null;
   }
 }
@@ -203,6 +232,7 @@ function compositionFootprints(
   const yawRad = (yawDeg * Math.PI) / 180;
 
   const name = attrStr(el.attributes.name);
+  const overlapMax = parseOverlapMax(el.attributes['overlap-max']);
   const baseLabel =
     name ??
     `Composition@${parentPath || 'world'} place=(${atX.toFixed(1)}, ${atZ.toFixed(1)})`;
@@ -214,7 +244,7 @@ function compositionFootprints(
     const kind = child.tagName.toLowerCase();
     if (!SOLID_PRIMS.has(kind)) continue;
 
-    const [px, , pz] = parseVec3(child.attributes.pos, [0, 0, 0]);
+    const [px, py, pz] = parseVec3(child.attributes.pos, [0, 0, 0]);
     const [, childYawRad] = (() => {
       const [rx, ry, rz] = parseVec3(child.attributes.rotation, [0, 0, 0]);
       void rx;
@@ -223,9 +253,11 @@ function compositionFootprints(
     })();
     const totalYaw = yawRad + childYawRad;
     const box = emptyUnion();
+    let minY = 0;
+    let maxY = 0;
 
     if (kind === 'box') {
-      const [sx, , sz] = parseVec3(child.attributes.size, [1, 1, 1]);
+      const [sx, sy, sz] = parseVec3(child.attributes.size, [1, 1, 1]);
       expandRotatedRect(
         atX + px,
         atZ + pz,
@@ -234,13 +266,18 @@ function compositionFootprints(
         totalYaw,
         box
       );
+      minY = py - Math.abs(sy) / 2;
+      maxY = py + Math.abs(sy) / 2;
     } else if (kind === 'cylinder') {
-      const [rTop, rBot] = parseVec3(child.attributes.size, [0.5, 0.5, 1]);
+      const [rTop, rBot, h] = parseVec3(child.attributes.size, [0.5, 0.5, 1]);
       const r = Math.max(Math.abs(rTop), Math.abs(rBot));
+      const height = Math.abs(h);
       box.minX = atX + px - r;
       box.maxX = atX + px + r;
       box.minZ = atZ + pz - r;
       box.maxZ = atZ + pz + r;
+      minY = py - height / 2;
+      maxY = py + height / 2;
     } else if (kind === 'sphere') {
       const [r] = parseVec3(child.attributes.size, [0.5, 0.5, 0.5]);
       const rad = Math.abs(r);
@@ -248,6 +285,8 @@ function compositionFootprints(
       box.maxX = atX + px + rad;
       box.minZ = atZ + pz - rad;
       box.maxZ = atZ + pz + rad;
+      minY = py - rad;
+      maxY = py + rad;
     } else {
       continue;
     }
@@ -258,22 +297,72 @@ function compositionFootprints(
       label: part > 1 ? `${baseLabel}#${part}` : baseLabel,
       minX: box.minX,
       maxX: box.maxX,
+      minY,
+      maxY,
       minZ: box.minZ,
       maxZ: box.maxZ,
       kind: 'composition',
       groupId,
+      ...(overlapMax > 0 ? { overlapMax } : {}),
     });
   }
 
   return out;
 }
 
-function gameObjectFootprint(
+function compositionGroundFootprints(
+  el: ParsedElement,
+  parentPath: string
+): Footprint[] {
+  const place = parsePlaceXZ(el.attributes.place);
+  if (!place) return [];
+  const [atX, atZ] = place;
+  const yawDeg = parseRootYawDegrees(el.attributes.transform);
+  const yawRad = (yawDeg * Math.PI) / 180;
+  const name = attrStr(el.attributes.name);
+  const baseLabel =
+    name ??
+    `Pad@${parentPath || 'world'} place=(${atX.toFixed(1)}, ${atZ.toFixed(1)})`;
+  const out: Footprint[] = [];
+
+  for (const child of el.children) {
+    const kind = child.tagName.toLowerCase();
+    if (kind !== 'pad' && kind !== 'plane') continue;
+    const [px, py, pz] = parseVec3(child.attributes.pos, [0, 0, 0]);
+    // Pad size is width depth (2-comp) or width height depth
+    const sizeRaw = child.attributes.size;
+    let halfX = 0.5;
+    let halfZ = 0.5;
+    if (typeof sizeRaw === 'string') {
+      const p = sizeRaw.trim().split(/\s+/).map(Number);
+      if (p.length >= 2 && p.every((n) => !Number.isNaN(n))) {
+        halfX = Math.abs(p[0]!) / 2;
+        halfZ = Math.abs(p[p.length >= 3 ? 2 : 1]!) / 2;
+      }
+    }
+    const box = emptyUnion();
+    expandRotatedRect(atX + px, atZ + pz, halfX, halfZ, yawRad, box);
+    out.push({
+      id: makeId('pad'),
+      label: baseLabel,
+      minX: box.minX,
+      maxX: box.maxX,
+      minY: py,
+      maxY: py,
+      minZ: box.minZ,
+      maxZ: box.maxZ,
+      kind: 'pad',
+    });
+  }
+  return out;
+}
+
+async function gameObjectFootprint(
   el: ParsedElement,
   parentPath: string,
   publicDir: string,
   issues: AnalyzeIssue[]
-): Footprint | null {
+): Promise<Footprint | null> {
   const collider = attrStr(el.attributes.collider);
   if (colliderIsNone(collider)) return null;
 
@@ -283,15 +372,17 @@ function gameObjectFootprint(
   const yawDeg = parseRootYawDegrees(el.attributes.transform);
   const yawRad = (yawDeg * Math.PI) / 180;
   const name = attrStr(el.attributes.name);
+  const overlapMax = parseOverlapMax(el.attributes['overlap-max']);
   const label =
     name ??
     `GameObject@${parentPath || 'world'} place=(${atX.toFixed(1)}, ${atZ.toFixed(1)})`;
+  const withMax = (fp: Footprint): Footprint =>
+    overlapMax > 0 ? { ...fp, overlapMax } : fp;
 
-  // Prefer explicit box collider size
   if (collider) {
     const size = parseColliderBoxSize(collider);
     if (size) {
-      const [sx, , sz] = size;
+      const [sx, sy, sz] = size;
       const box = emptyUnion();
       expandRotatedRect(
         atX,
@@ -301,19 +392,21 @@ function gameObjectFootprint(
         yawRad,
         box
       );
-      return {
+      return withMax({
         id: makeId('go'),
         label,
         minX: box.minX,
         maxX: box.maxX,
+        minY: -Math.abs(sy) / 2,
+        maxY: Math.abs(sy) / 2,
         minZ: box.minZ,
         maxZ: box.maxZ,
         kind: 'gameobject',
-      };
+      });
     }
     const meshUrl = parseColliderMeshUrl(collider);
     if (meshUrl) {
-      const local = glbXZBounds(publicDir, meshUrl, issues, label);
+      const local = await glbBounds(publicDir, meshUrl, issues, label);
       if (local) {
         const cx = (local.minX + local.maxX) / 2;
         const cz = (local.minZ + local.maxZ) / 2;
@@ -321,25 +414,26 @@ function gameObjectFootprint(
         const hz = (local.maxZ - local.minZ) / 2;
         const world = emptyUnion();
         expandRotatedRect(atX + cx, atZ + cz, hx, hz, yawRad, world);
-        return {
+        return withMax({
           id: makeId('go'),
           label,
           minX: world.minX,
           maxX: world.maxX,
+          minY: local.minY,
+          maxY: local.maxY,
           minZ: world.minZ,
           maxZ: world.maxZ,
           kind: 'gameobject',
-        };
+        });
       }
     }
   }
 
-  // Fallback: first GLTFLoader url
   for (const child of el.children) {
     if (child.tagName.toLowerCase() !== 'gltfloader') continue;
     const url = attrStr(child.attributes.url);
     if (!url) continue;
-    const local = glbXZBounds(publicDir, url, issues, label);
+    const local = await glbBounds(publicDir, url, issues, label);
     if (!local) {
       issues.push({
         severity: 'warn',
@@ -354,15 +448,17 @@ function gameObjectFootprint(
     const hz = (local.maxZ - local.minZ) / 2;
     const world = emptyUnion();
     expandRotatedRect(atX + cx, atZ + cz, hx, hz, yawRad, world);
-    return {
+    return withMax({
       id: makeId('go'),
       label,
       minX: world.minX,
       maxX: world.maxX,
+      minY: local.minY,
+      maxY: local.maxY,
       minZ: world.minZ,
       maxZ: world.maxZ,
       kind: 'gameobject',
-    };
+    });
   }
 
   if (collider && /trimesh|mesh-url/i.test(collider)) {
@@ -375,18 +471,91 @@ function gameObjectFootprint(
   return null;
 }
 
+function roadFootprint(
+  el: ParsedElement,
+  parentPath: string
+): Footprint | null {
+  const pathRaw = attrStr(el.attributes.path);
+  if (!pathRaw) return null;
+  const nums = pathRaw
+    .trim()
+    .split(/\s+/)
+    .map(Number)
+    .filter((n) => !Number.isNaN(n));
+  if (nums.length < 4) return null;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    const x = nums[i]!;
+    const z = nums[i + 1]!;
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minZ = Math.min(minZ, z);
+    maxZ = Math.max(maxZ, z);
+  }
+  const width = parseFloat(attrStr(el.attributes.width) ?? '2') || 2;
+  const half = Math.abs(width) / 2;
+  const name = attrStr(el.attributes.name);
+  return {
+    id: makeId('road'),
+    label: name ?? `Road@${parentPath || 'world'}`,
+    minX: minX - half,
+    maxX: maxX + half,
+    minY: 0,
+    maxY: 0,
+    minZ: minZ - half,
+    maxZ: maxZ + half,
+    kind: 'road',
+  };
+}
+
+function standalonePadFootprint(
+  el: ParsedElement,
+  parentPath: string
+): Footprint | null {
+  const place = parsePlaceXZ(el.attributes.place);
+  const [px, py, pz] = parseVec3(el.attributes.pos, [0, 0, 0]);
+  const atX = place ? place[0] + px : px;
+  const atZ = place ? place[1] + pz : pz;
+  const sizeRaw = el.attributes.size;
+  let halfX = 0.5;
+  let halfZ = 0.5;
+  if (typeof sizeRaw === 'string') {
+    const p = sizeRaw.trim().split(/\s+/).map(Number);
+    if (p.length >= 2 && p.every((n) => !Number.isNaN(n))) {
+      halfX = Math.abs(p[0]!) / 2;
+      halfZ = Math.abs(p[p.length >= 3 ? 2 : 1]!) / 2;
+    }
+  }
+  const name = attrStr(el.attributes.name);
+  return {
+    id: makeId('pad'),
+    label: name ?? `Pad@${parentPath || 'world'}`,
+    minX: atX - halfX,
+    maxX: atX + halfX,
+    minY: py,
+    maxY: py,
+    minZ: atZ - halfZ,
+    maxZ: atZ + halfZ,
+    kind: 'pad',
+  };
+}
+
 /**
- * Walk expanded world tree; collect solid XZ footprints (skip Pad/Road ground).
+ * Walk expanded world tree; collect solid + ground (Pad/Road) footprints.
  */
-export function collectFootprints(
+export async function collectFootprints(
   root: ParsedElement,
   publicDir: string,
   issues: AnalyzeIssue[]
-): Footprint[] {
+): Promise<Footprint[]> {
   _fpSeq = 0;
+  boundsCache.clear();
   const out: Footprint[] = [];
 
-  const walk = (el: ParsedElement, groupPath: string) => {
+  const walk = async (el: ParsedElement, groupPath: string) => {
     const tag = el.tagName.toLowerCase();
     const name = attrStr(el.attributes.name);
     const nextPath =
@@ -398,27 +567,41 @@ export function collectFootprints(
 
     if (tag === 'composition') {
       out.push(...compositionFootprints(el, nextPath, publicDir, issues));
+      out.push(...compositionGroundFootprints(el, nextPath));
       for (const c of el.children) {
         const ct = c.tagName.toLowerCase();
         if (!SOLID_PRIMS.has(ct) && ct !== 'pad' && ct !== 'plane') {
-          walk(c, nextPath);
+          await walk(c, nextPath);
         }
       }
       return;
     }
 
     if (tag === 'gameobject') {
-      const fp = gameObjectFootprint(el, nextPath, publicDir, issues);
+      const fp = await gameObjectFootprint(el, nextPath, publicDir, issues);
       if (fp) out.push(fp);
       return;
     }
 
-    // Road / Pad alone are ground — skip
-    if (tag === 'road' || tag === 'pad') return;
+    if (tag === 'road') {
+      const fp = roadFootprint(el, nextPath);
+      if (fp) out.push(fp);
+      return;
+    }
 
-    for (const c of el.children) walk(c, nextPath);
+    if (tag === 'pad') {
+      const fp = standalonePadFootprint(el, nextPath);
+      if (fp) out.push(fp);
+      return;
+    }
+
+    for (const c of el.children) await walk(c, nextPath);
   };
 
-  walk(root, '');
+  await walk(root, '');
   return out;
+}
+
+export function solidFootprintCount(footprints: Footprint[]): number {
+  return footprints.filter((f) => f.kind !== 'pad' && f.kind !== 'road').length;
 }

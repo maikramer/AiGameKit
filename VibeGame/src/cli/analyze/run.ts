@@ -4,14 +4,17 @@ import { JSDOM } from 'jsdom';
 import { expandIncludes, XMLParser } from '../../core/xml';
 import { checkAssetUrls } from './assets';
 import { expandCityGridsInTree } from './expand-city';
-import { collectFootprints } from './footprints';
-import { findSolidOverlaps } from './overlap';
+import { collectFootprints, solidFootprintCount } from './footprints';
+import { findGroundOverlaps, findSolidOverlaps } from './overlap';
 import {
   checkCityChildrenOutsideGrid,
   checkCommaCellCoords,
 } from './parse-checks';
 import { checkRoadNetworks } from './roads';
+import { buildAnalyzeState, checkSchema } from './schema';
+import { checkScripts, resolveScriptsDir } from './scripts';
 import type { AnalyzeOptions, AnalyzeResult, AnalyzeIssue } from './types';
+import { checkWorld } from './world-checks';
 
 let domReady = false;
 
@@ -49,6 +52,12 @@ export async function analyzeWorld(
   const entry = path.resolve(options.entry);
   const publicDir = path.resolve(options.publicDir);
   const issues: AnalyzeIssue[] = [];
+  const pluginSet = options.plugins ?? 'all';
+  const scriptsDir = resolveScriptsDir(
+    entry,
+    publicDir,
+    options.scriptsDir ?? null
+  );
 
   let content: string;
   try {
@@ -109,15 +118,20 @@ export async function analyzeWorld(
     return finish(entry, publicDir, 0, issues);
   }
 
+  const state = buildAnalyzeState(pluginSet);
+  issues.push(...checkSchema(root, state));
   issues.push(...checkCityChildrenOutsideGrid(root));
   issues.push(...checkRoadNetworks(root));
+  issues.push(...checkWorld(root));
+  issues.push(...checkScripts(root, scriptsDir));
 
   const expandedTree = expandCityGridsInTree(root, issues);
   issues.push(...checkAssetUrls(expandedTree, publicDir));
-  const footprints = collectFootprints(expandedTree, publicDir, issues);
+  const footprints = await collectFootprints(expandedTree, publicDir, issues);
   issues.push(...findSolidOverlaps(footprints));
+  issues.push(...findGroundOverlaps(footprints));
 
-  return finish(entry, publicDir, footprints.length, issues);
+  return finish(entry, publicDir, solidFootprintCount(footprints), issues);
 }
 
 function finish(

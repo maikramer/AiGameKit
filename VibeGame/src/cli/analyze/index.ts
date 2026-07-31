@@ -4,12 +4,14 @@
  *
  * Usage:
  *   vibegame analyze [entry] [--public-dir <dir>] [--json] [--fail-on warn|error]
+ *                    [--scripts-dir <dir>] [--plugins default|rpg|all]
  */
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { formatJsonReport, formatTextReport, shouldFail } from './report';
 import { analyzeWorld } from './run';
+import type { AnalyzePluginSet } from './types';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const engineRoot = path.resolve(__dirname, '../../..');
@@ -19,6 +21,7 @@ function printHelp(): void {
 
 Usage:
   vibegame analyze [entry] [--public-dir <dir>] [--json] [--fail-on warn|error]
+                   [--scripts-dir <dir>] [--plugins default|rpg|all]
 
 Arguments:
   entry              index.html or world XML (default: ./index.html, or
@@ -26,6 +29,8 @@ Arguments:
 
 Options:
   --public-dir DIR   Site public/ root for Includes and /assets (default: next to entry or ./public)
+  --scripts-dir DIR  Entity script folder (default: auto src/scripts next to entry/public)
+  --plugins SET      Recipe registry: default | rpg | all (default: all = Default+Rpg)
   --json             Emit JSON report
   --fail-on LEVEL    error (default) | warn — exit 1 when that severity appears
   -h, --help         This message
@@ -54,6 +59,8 @@ export async function main(
 ): Promise<number> {
   let entry: string | null = null;
   let publicDir: string | null = null;
+  let scriptsDir: string | null = null;
+  let plugins: AnalyzePluginSet = 'all';
   let json = false;
   let failOn: 'error' | 'warn' = 'error';
 
@@ -80,6 +87,19 @@ export async function main(
       publicDir = argv[++i]!;
       continue;
     }
+    if (a === '--scripts-dir' && argv[i + 1]) {
+      scriptsDir = argv[++i]!;
+      continue;
+    }
+    if (a === '--plugins' && argv[i + 1]) {
+      const v = argv[++i]!.toLowerCase();
+      if (v !== 'default' && v !== 'rpg' && v !== 'all') {
+        console.error(`[analyze] invalid --plugins ${v} (use default|rpg|all)`);
+        return 2;
+      }
+      plugins = v;
+      continue;
+    }
     if (a.startsWith('-')) {
       console.error(`[analyze] unknown flag ${a}`);
       return 2;
@@ -96,10 +116,15 @@ export async function main(
     entry: resolvedEntry,
     publicDir: resolvedPublic,
     failOn,
+    scriptsDir,
+    plugins,
   });
 
-  if (json) console.log(formatJsonReport(result));
-  else console.log(formatTextReport(result));
+  if (json) {
+    console.log(formatJsonReport(result));
+  } else {
+    console.log(formatTextReport(result));
+  }
 
   return shouldFail(result, failOn) ? 1 : 0;
 }

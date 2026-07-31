@@ -8,6 +8,7 @@ export { analyzeWorld } from './analyze/run';
 export type {
   AnalyzeIssue,
   AnalyzeOptions,
+  AnalyzePluginSet,
   AnalyzeResult,
   Footprint,
 } from './analyze/types';

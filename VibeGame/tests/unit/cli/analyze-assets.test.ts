@@ -84,4 +84,19 @@ describe('checkAssetUrls', () => {
     ).toBe(true);
     expect(msgs.some((m) => m.includes('grass.glb'))).toBe(false);
   });
+
+  it('resolves relative asset paths under publicDir', () => {
+    const pub = mkdtempSync(path.join(tmpdir(), 'vg-analyze-'));
+    mkdirSync(path.join(pub, 'assets', 'meshes'), { recursive: true });
+    writeFileSync(path.join(pub, 'assets', 'meshes', 'ok.glb'), 'x');
+
+    const root = el('world', {}, [
+      el('GLTFLoader', { url: 'assets/meshes/ok.glb' }),
+      el('GLTFLoader', { url: 'assets/meshes/gone.glb' }),
+    ]);
+    const issues = checkAssetUrls(root, pub);
+    const msgs = issues.map((i) => i.message);
+    expect(msgs.some((m) => m.includes('gone.glb'))).toBe(true);
+    expect(msgs.some((m) => m.includes('ok.glb'))).toBe(false);
+  });
 });

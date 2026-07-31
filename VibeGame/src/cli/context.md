@@ -25,15 +25,24 @@ Offline checks on `index.html` / world XML after `<Include>` expand + CityGrid e
 vibegame analyze examples/simple-rpg/index.html
 vibegame analyze --public-dir examples/simple-rpg/public --json
 vibegame analyze --fail-on warn
+vibegame analyze --scripts-dir examples/simple-rpg/src/scripts --plugins all
 ```
 
-Reports: broken Includes, comma cell coords, missing `/assets/…` (GLB **and**
-images — `url`/`model-url`/`lod*-url`/`mesh-url`/`meshes`, plus
-`heightmap`/`texture`/`terrain-texture`/`icon`/`texture-url`/PBR maps), solid XZ
-overlaps (Composition boxes / GameObject colliders / GLB hulls). Pads/Roads are
-ground — not solid overlaps. Exit `1` on errors (or warns with `--fail-on warn`).
+Reports:
 
-API: `analyzeWorld({ entry, publicDir })` from `vibegame/cli`.
+- broken Includes, comma cell coords, CityGrid kids outside grid
+- unknown recipe tags (error) + unknown attrs / soft Zod (warn) via Default+Rpg registry
+- missing assets (`/…` **or** relative under `public/`; GLB + images/maps)
+- missing entity `script=` / `<MonoBehaviour>` under `--scripts-dir` (auto `src/scripts`)
+- empty spawners, duplicate `name=`, missing Player/camera, Terrain without heightmap
+- RoadNetwork issues; solid overlaps (XZ **and** Y); solid∩Pad/Road as warn
+- GLB bounds via meshopt/quantized path (`loadGlbCollisionMesh`) — LOD deliverables OK
+
+Pads/Roads are ground — not solid↔solid errors. Exit `1` on errors (or warns with `--fail-on warn`).
+
+**`overlap-max` (placeables):** optional metres on `<GameObject>` / `<Composition>` / `<Creature>`. Solid↔solid errors skip when penetration depth `min(Δx,Δz) ≤ max(allowA, allowB)`. Default omitted/`0` = strict (no depth tolerance). Wall joints often use `overlap-max="0.1"`.
+
+API: `analyzeWorld({ entry, publicDir, scriptsDir?, plugins? })` from `vibegame/cli`.
 
 ## `vibegame` CLI (Playwright)
 

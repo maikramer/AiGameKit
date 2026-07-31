@@ -46,15 +46,32 @@ function urlsFromList(raw: string): string[] {
   return raw
     .split(/[\s,]+/)
     .map((s) => s.trim())
-    .filter((s) => s.startsWith('/'));
+    .filter((s) => s.length > 0 && !/^https?:\/\//i.test(s));
 }
 
 function isLodSecondary(attr: string): boolean {
   return attr === 'lod1-url' || attr === 'lod2-url';
 }
 
+function isRemoteUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+/** Resolve site-root (`/…`) or relative path under publicDir. */
+export function resolveAssetPath(
+  publicDir: string,
+  url: string
+): string | null {
+  const t = url.trim();
+  if (!t || isRemoteUrl(t)) return null;
+  if (t.startsWith('/')) {
+    return path.join(publicDir, t.replace(/^\//, ''));
+  }
+  return path.join(publicDir, t);
+}
+
 /**
- * Walk tree; report missing `/assets/…` (and other site-root) files under publicDir.
+ * Walk tree; report missing asset files under publicDir (absolute `/…` or relative).
  */
 export function checkAssetUrls(
   root: ParsedElement,
@@ -64,11 +81,12 @@ export function checkAssetUrls(
   const seen = new Set<string>();
 
   const checkUrl = (url: string, attr: string, tag: string) => {
-    if (!url.startsWith('/')) return;
+    if (isRemoteUrl(url)) return;
     const key = `${attr}:${url}`;
     if (seen.has(key)) return;
     seen.add(key);
-    const file = path.join(publicDir, url.replace(/^\//, ''));
+    const file = resolveAssetPath(publicDir, url);
+    if (!file) return;
     if (existsSync(file)) return;
     const lod = isLodSecondary(attr);
     issues.push({

@@ -51,6 +51,39 @@ export function checkRoadNetworks(root: ParsedElement): AnalyzeIssue[] {
       return;
     }
     const graph = buildRoadNetworkGraph(def);
+    for (const seg of def.segments) {
+      const isBridge = seg.profile === 'bridge' || !!seg.bridgeUrl;
+      if (isBridge && !seg.bridgeUrl) {
+        issues.push({
+          severity: 'error',
+          code: 'road',
+          message: `[RoadNetwork] bridge Segment ${seg.a}→${seg.b} missing bridge-url`,
+        });
+      }
+      if (isBridge && seg.bridgeUrl) {
+        const wa = def.ways.get(seg.a);
+        const wb = def.ways.get(seg.b);
+        if (wa && wb) {
+          const path = [wa.x, wa.z, ...seg.via, wb.x, wb.z];
+          const native = seg.bridgeNativeSpan ?? 18;
+          let span = 0;
+          for (let i = 2; i < path.length; i += 2) {
+            span += Math.hypot(
+              path[i]! - path[i - 2]!,
+              path[i + 1]! - path[i - 1]!
+            );
+          }
+          const ratio = native > 0 ? span / native : 1;
+          if (ratio < 0.45 || ratio > 2.75) {
+            issues.push({
+              severity: 'warn',
+              code: 'road',
+              message: `[RoadNetwork] bridge ${seg.a}→${seg.b} span≈${span.toFixed(1)}m vs native ${native}m (ratio ${ratio.toFixed(2)}; stretch looks odd)`,
+            });
+          }
+        }
+      }
+    }
     // Soft connectivity hint: plaza ↔ farthest tips if named.
     const tips = ['desert_end', 'n_end', 's_end', 'w_end'];
     if (graph.ways.has('plaza')) {

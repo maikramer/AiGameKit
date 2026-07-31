@@ -1,12 +1,20 @@
 import type { AnalyzeIssue, Footprint } from './types';
 
 const OVERLAP_EPS_M2 = 0.05;
+const Y_EPS = 0.01;
+
+const SOLID_KINDS = new Set(['composition', 'gameobject', 'other']);
+const GROUND_KINDS = new Set(['pad', 'road']);
 
 function overlapArea(a: Footprint, b: Footprint): number {
   const ox = Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
   const oz = Math.min(a.maxZ, b.maxZ) - Math.max(a.minZ, b.minZ);
   if (ox <= 0 || oz <= 0) return 0;
   return ox * oz;
+}
+
+function yIntervalsOverlap(a: Footprint, b: Footprint): boolean {
+  return a.minY - Y_EPS <= b.maxY && b.minY - Y_EPS <= a.maxY;
 }
 
 function fmtSize(fp: Footprint): string {
@@ -21,16 +29,27 @@ function fmtCenter(fp: Footprint): string {
   return `(${x.toFixed(1)}, ${z.toFixed(1)})`;
 }
 
-/**
- * O(n²) with spatial hash bucketing for large n.
- */
-export function findSolidOverlaps(
-  footprints: Footprint[],
-  cellSize = 8
-): AnalyzeIssue[] {
-  const issues: AnalyzeIssue[] = [];
-  if (footprints.length < 2) return issues;
+function isSolid(fp: Footprint): boolean {
+  return SOLID_KINDS.has(fp.kind);
+}
 
+function isGround(fp: Footprint): boolean {
+  return GROUND_KINDS.has(fp.kind);
+}
+
+type PairHit = {
+  A: Footprint;
+  B: Footprint;
+  area: number;
+  ox: number;
+  oz: number;
+};
+
+function collectBestPairs(
+  footprints: Footprint[],
+  cellSize: number,
+  accept: (a: Footprint, b: Footprint) => boolean
+): Map<string, PairHit> {
   const buckets = new Map<string, number[]>();
   const key = (ix: number, iz: number) => `${ix},${iz}`;
 
@@ -54,11 +73,7 @@ export function findSolidOverlaps(
   }
 
   const seenPairs = new Set<string>();
-  /** Best (largest area) overlap per group-pair for a single clear log line. */
-  const bestByGroup = new Map<
-    string,
-    { A: Footprint; B: Footprint; area: number; ox: number; oz: number }
-  >();
+  const bestByGroup = new Map<string, PairHit>();
 
   for (const list of buckets.values()) {
     for (let a = 0; a < list.length; a++) {
@@ -75,6 +90,7 @@ export function findSolidOverlaps(
         const A = footprints[lo]!;
         const B = footprints[hi]!;
         if (A.groupId && A.groupId === B.groupId) continue;
+        if (!accept(A, B)) continue;
         const area = overlapArea(A, B);
         if (area < OVERLAP_EPS_M2) continue;
 
@@ -91,8 +107,29 @@ export function findSolidOverlaps(
     }
   }
 
-  for (const { A, B, area, ox, oz } of bestByGroup.values()) {
-    // Strip #part suffix for group-level label clarity
+  return bestByGroup;
+}
+
+/**
+ * Solid↔solid overlaps when XZ and Y intervals intersect.
+ */
+export function findSolidOverlaps(
+  footprints: Footprint[],
+  cellSize = 8
+): AnalyzeIssue[] {
+  const solids = footprints.filter(isSolid);
+  const issues: AnalyzeIssue[] = [];
+  if (solids.length < 2) return issues;
+
+  const best = collectBestPairs(solids, cellSize, (A, B) =>
+    yIntervalsOverlap(A, B)
+  );
+
+  for (const { A, B, area, ox, oz } of best.values()) {
+    const depth = Math.min(ox, oz);
+    const allow = Math.max(A.overlapMax ?? 0, B.overlapMax ?? 0);
+    if (allow > 0 && depth <= allow) continue;
+
     const labelA = A.label.replace(/#\d+$/, '');
     const labelB = B.label.replace(/#\d+$/, '');
     issues.push({
@@ -102,6 +139,41 @@ export function findSolidOverlaps(
       detail: [
         `  A: ${labelA} @ ${fmtCenter(A)} size≈${fmtSize(A)}`,
         `  B: ${labelB} @ ${fmtCenter(B)} size≈${fmtSize(B)}`,
+        `  overlap≈${area.toFixed(1)} m²  (Δx=${ox.toFixed(1)} Δz=${oz.toFixed(1)} depth=${depth.toFixed(2)})`,
+      ],
+    });
+  }
+
+  return issues;
+}
+
+/**
+ * Solid∩(pad|road) XZ overlaps — warn (ground vs solid).
+ */
+export function findGroundOverlaps(
+  footprints: Footprint[],
+  cellSize = 8
+): AnalyzeIssue[] {
+  const issues: AnalyzeIssue[] = [];
+  const mixed = footprints.filter((f) => isSolid(f) || isGround(f));
+  if (mixed.length < 2) return issues;
+
+  const best = collectBestPairs(
+    mixed,
+    cellSize,
+    (A, B) => (isSolid(A) && isGround(B)) || (isGround(A) && isSolid(B))
+  );
+
+  for (const { A, B, area, ox, oz } of best.values()) {
+    const labelA = A.label.replace(/#\d+$/, '');
+    const labelB = B.label.replace(/#\d+$/, '');
+    issues.push({
+      severity: 'warn',
+      code: 'overlap',
+      message: '[analyze] WARN overlap solid∩ground',
+      detail: [
+        `  A: ${labelA} (${A.kind}) @ ${fmtCenter(A)} size≈${fmtSize(A)}`,
+        `  B: ${labelB} (${B.kind}) @ ${fmtCenter(B)} size≈${fmtSize(B)}`,
         `  overlap≈${area.toFixed(1)} m²  (Δx=${ox.toFixed(1)} Δz=${oz.toFixed(1)})`,
       ],
     });
