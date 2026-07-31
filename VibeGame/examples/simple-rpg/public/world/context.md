@@ -9,7 +9,7 @@ Scene fragments loaded via `<Include src="/world/…">` from `index.html`.
 | `cities/discordia.xml`      | City shell (`SpawnExclusion` + `TerrainPad` + Includes)         |
 | `cities/discordia/*.xml`    | Districts: `houses`, `utilities`, `walls`, `roads`, `skirts`, … |
 | `cities/town-demo.xml`      | Demo town @ (420,420) — `CityGrid` + prefabs                    |
-| `spawn/ring.xml`            | Valley resource ring ±58, river, bridges, peri-urban carpet     |
+| `spawn/ring.xml`            | Valley resource ring 52–116, river, bridges, peri-urban carpet  |
 | `paths/network.xml`         | Cobble `<RoadNetwork>` cruz + anel periurbano + 4 biomes (~2 m) |
 | `paths/trails.xml`          | Dirt/sand spur `<Road flatten="0">` to landmarks                |
 | `vegetation/<biome>.xml`    | Carpet + canopy + rocks, one file per cardinal wedge            |
@@ -125,21 +125,38 @@ Regenerar: as `form_*` vêm do `rocks3d formation` (ver `Rocks3D/README.md`);
 Keep settlement **contained**; let biomes start after a short transition ring.
 
 ```
-walls ±32  →  SpawnExclusion r=42  →  TerrainPad ~96×96 (falloff 16)
-         →  valley ring ±36–58 (spawn/ring.xml)
-         →  deep biome spawners |x| or |z| ≥ 58
+walls ±39.8  →  SpawnExclusion r=52  →  TerrainPad 120×120 (falloff 20)
+           →  valley ring 52–116 (spawn/ring.xml)
+           →  deep biome spawners |x| or |z| ≥ 116 (a jusante do rio)
 ```
 
-| Contract                         | Value / file                                     |
-| -------------------------------- | ------------------------------------------------ |
-| Wall half-extent                 | ±32 (`walls.xml`, gates = `RESPAWN_POINTS`)      |
-| `SpawnExclusion`                 | `at="0 0" radius="42"` in `cities/discordia.xml` |
-| `villageZones` (main.ts)         | `[[0, 0, 42]]` — must match exclusion            |
-| `TerrainPad`                     | `size="96 96" falloff="16" corner-radius="14"`   |
-| Peri-urban props                 | `cities/discordia/skirts.xml` (`city.skirts`)    |
-| Valley vegetation / oaks / rocks | `spawn/ring.xml` region ±58                      |
-| Fog / biome atmosphere           | polygons from ~±28 in `environment.xml` (feel)   |
-| Deep biome props / enemies       | regions start at ±58 (avoid city sprawl)         |
+| Contract                         | Value / file                                      |
+| -------------------------------- | ------------------------------------------------- |
+| Wall half-extent                 | ±39.8 (`walls.xml`, gates = `RESPAWN_POINTS`)     |
+| Ruas internas                    | anel ±25, docks `mid_*` ±32 (`paths/network.xml`) |
+| `SpawnExclusion`                 | `at="0 0" radius="52"` in `cities/discordia.xml`  |
+| `villageZones` (main.ts)         | `[[0, 0, 52]]` — must match exclusion             |
+| `RESPAWN_POINTS` (main.ts)       | praça + ±50 nos quatro portões                    |
+| `TerrainPad`                     | `size="120 120" falloff="20" corner-radius="18"`  |
+| Peri-urban props                 | `cities/discordia/skirts.xml` (`city.skirts`)     |
+| Valley vegetation / oaks / rocks | `spawn/ring.xml` region ±116                      |
+| Fog / biome atmosphere           | polygons from ~±28 in `environment.xml` (feel)    |
+| Deep biome props / enemies       | wedges start at ±116 (para lá do rio)             |
+
+**Compactação 2026-07-30.** Muralha ±64 → ±39.8 (−38 % de lado, −61 % de área).
+O que encolheu foi o _vazio_ entre distritos, não as ruas: a cruz praça→portões
+e o anel periurbano continuam lá, agora a ±25/±32. Um passo de muralha é fixo
+(`city_wall_seg_*` = 6.615 m), por isso o semi-lado não é livre — sai de
+`5 segmentos × 6.68 + arco 10.146 + canto 2.565`. Regenerar com
+`python3 scripts/gen_city_walls.py > public/world/cities/discordia/walls.xml`.
+A `SpawnExclusion` caiu 84 → 52, libertando a coroa 52–84 que era planalto
+pelado; as contagens do `spawn/ring.xml` subiram ~40 % para a preencher.
+As cunhas de bioma **não** se mexeram: começam onde o rio manda (±116), não
+onde a cidade acaba.
+
+**Densidade (pós câmera/bioma alargados):** spawners `count=` ×2 (vegetação,
+anel, cristas, landmarks, inimigos). Tapete `<Vegetation>` erva/planta/flor
+reativado com `density-per-km2` ×8 vs baseline — ver `vegetation/context.md`.
 
 **Learnings**
 
@@ -153,7 +170,7 @@ walls ±32  →  SpawnExclusion r=42  →  TerrainPad ~96×96 (falloff 16)
 ## Estradas (`paths/network.xml` + `trails.xml`)
 
 Artéria cobble = um `<RoadNetwork>` (~2 m) em `network.xml`:
-cruz praça → `mid_*` (muralha ±28) → portões/biomas, **mais anel periurbano**
+cruz praça → `mid_*` (±32, 8 m dentro da muralha) → portões/biomas, **mais anel periurbano** (±25)
 (`mid_n`↔`ring_ne`↔`mid_e`↔…↔`mid_n`) para não ficar só um `+`.
 Gaps rio: `s_bank`↛`s_resume`, `w_bank`↛`w_resume`.
 Ramos de terra/areia = `<Road flatten="0">` em `trails.xml` (sem carve; docks nos `via=`).
@@ -192,8 +209,8 @@ Catches Include/asset misses and solid footprint overlaps (buildings/walls throu
 ## Contracts (sync with `src/main.ts`)
 
 - `name="hero"` / `name="boss"` / `name="merchant"`
-- `SpawnExclusion at="0 0" radius="42"` in `cities/discordia.xml`
-- Cardinal gates at wall ±32 (`RESPAWN_POINTS`)
+- `SpawnExclusion at="0 0" radius="52"` in `cities/discordia.xml`
+- Cardinal gates at wall ±39.8 (`RESPAWN_POINTS` = ±50)
 - Quest `dialogue-id` matches JSON under `src/data/quests/`
 
 Quest/dialogue **data** stays in `src/data/quests/` and `public/data/ai/*.yaml` — not in these Scene XMLs.

@@ -1,13 +1,18 @@
 <!--
   Discordia district fragment. Loaded via Include from cities/discordia.xml.
   Edit this file for this district only. Cell coords: space-separated (at="2 1").
+
+  GERADO — layout compacto. Muralha ±38: passo visual 6.38 m
+  (mesh LOD0 6.5 m − junta 0.12 m). Collider é ~0.12 m mais
+  longo → penetração coberta por `overlap-max=0.3`.
 -->
 <Group name="city.walls" pos="0 0 0">
-          <!-- §4.1 Muralha GLB (world 2×): semi-lado 64, vão portão ~8–10 m,
-           segs @6.5 m. Mesh-anchor base; collider envelope. -->
+          <!-- §4.1 Muralha GLB: semi-lado 38, vão visual 10 m,
+           segs @6.38 m. Mesh-anchor base; collider envelope. -->
           <GameObject
             name="wall_corner_nw"
-            place="at: -64 64; align-to-terrain: 0"
+            place="at: -38 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_corner_collision.glb; mesh-anchor: base"
           >
@@ -22,8 +27,9 @@
           </GameObject>
           <GameObject
             name="wall_corner_ne"
-            place="at: 64 64; align-to-terrain: 0"
+            place="at: 38 38; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_corner_collision.glb; mesh-anchor: base"
           >
@@ -38,8 +44,9 @@
           </GameObject>
           <GameObject
             name="wall_corner_se"
-            place="at: 64 -64; align-to-terrain: 0"
+            place="at: 38 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_corner_collision.glb; mesh-anchor: base"
           >
@@ -54,8 +61,9 @@
           </GameObject>
           <GameObject
             name="wall_corner_sw"
-            place="at: -64 -64; align-to-terrain: 0"
+            place="at: -38 -38; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_corner_collision.glb; mesh-anchor: base"
           >
@@ -70,7 +78,8 @@
           </GameObject>
           <GameObject
             name="wall_n_w0"
-            place="at: -8.25 64; align-to-terrain: 0"
+            place="at: -8.13 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -85,7 +94,8 @@
           </GameObject>
           <GameObject
             name="wall_n_w1"
-            place="at: -14.75 64; align-to-terrain: 0"
+            place="at: -14.51 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -100,7 +110,8 @@
           </GameObject>
           <GameObject
             name="wall_n_w2"
-            place="at: -21.25 64; align-to-terrain: 0"
+            place="at: -20.89 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
@@ -115,7 +126,8 @@
           </GameObject>
           <GameObject
             name="wall_n_w3"
-            place="at: -27.75 64; align-to-terrain: 0"
+            place="at: -27.27 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -130,67 +142,8 @@
           </GameObject>
           <GameObject
             name="wall_n_w4"
-            place="at: -34.25 64; align-to-terrain: 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_n_w5"
-            place="at: -40.75 64; align-to-terrain: 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_n_w6"
-            place="at: -47.25 64; align-to-terrain: 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_n_w7"
-            place="at: -53.75 64; align-to-terrain: 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_n_w8"
-            place="at: -60.25 64; align-to-terrain: 0"
+            place="at: -33.65 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -205,7 +158,8 @@
           </GameObject>
           <GameObject
             name="wall_n_e0"
-            place="at: 8.25 64; align-to-terrain: 0"
+            place="at: 8.13 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -220,7 +174,8 @@
           </GameObject>
           <GameObject
             name="wall_n_e1"
-            place="at: 14.75 64; align-to-terrain: 0"
+            place="at: 14.51 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -235,7 +190,8 @@
           </GameObject>
           <GameObject
             name="wall_n_e2"
-            place="at: 21.25 64; align-to-terrain: 0"
+            place="at: 20.89 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
@@ -250,7 +206,8 @@
           </GameObject>
           <GameObject
             name="wall_n_e3"
-            place="at: 27.75 64; align-to-terrain: 0"
+            place="at: 27.27 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -265,67 +222,8 @@
           </GameObject>
           <GameObject
             name="wall_n_e4"
-            place="at: 34.25 64; align-to-terrain: 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_n_e5"
-            place="at: 40.75 64; align-to-terrain: 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_n_e6"
-            place="at: 47.25 64; align-to-terrain: 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_n_e7"
-            place="at: 53.75 64; align-to-terrain: 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_n_e8"
-            place="at: 60.25 64; align-to-terrain: 0"
+            place="at: 33.65 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -340,8 +238,9 @@
           </GameObject>
           <GameObject
             name="wall_s_e0"
-            place="at: 8.25 -64; align-to-terrain: 0"
+            place="at: 8.13 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -356,8 +255,9 @@
           </GameObject>
           <GameObject
             name="wall_s_e1"
-            place="at: 14.75 -64; align-to-terrain: 0"
+            place="at: 14.51 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -372,8 +272,9 @@
           </GameObject>
           <GameObject
             name="wall_s_e2"
-            place="at: 21.25 -64; align-to-terrain: 0"
+            place="at: 20.89 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
@@ -388,8 +289,9 @@
           </GameObject>
           <GameObject
             name="wall_s_e3"
-            place="at: 27.75 -64; align-to-terrain: 0"
+            place="at: 27.27 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -404,72 +306,9 @@
           </GameObject>
           <GameObject
             name="wall_s_e4"
-            place="at: 34.25 -64; align-to-terrain: 0"
+            place="at: 33.65 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_s_e5"
-            place="at: 40.75 -64; align-to-terrain: 0"
-            transform="rotation: 0 180 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_s_e6"
-            place="at: 47.25 -64; align-to-terrain: 0"
-            transform="rotation: 0 180 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_s_e7"
-            place="at: 53.75 -64; align-to-terrain: 0"
-            transform="rotation: 0 180 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_s_e8"
-            place="at: 60.25 -64; align-to-terrain: 0"
-            transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -484,8 +323,9 @@
           </GameObject>
           <GameObject
             name="wall_s_w0"
-            place="at: -8.25 -64; align-to-terrain: 0"
+            place="at: -8.13 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -500,8 +340,9 @@
           </GameObject>
           <GameObject
             name="wall_s_w1"
-            place="at: -14.75 -64; align-to-terrain: 0"
+            place="at: -14.51 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -516,8 +357,9 @@
           </GameObject>
           <GameObject
             name="wall_s_w2"
-            place="at: -21.25 -64; align-to-terrain: 0"
+            place="at: -20.89 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
@@ -532,8 +374,9 @@
           </GameObject>
           <GameObject
             name="wall_s_w3"
-            place="at: -27.75 -64; align-to-terrain: 0"
+            place="at: -27.27 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -548,72 +391,9 @@
           </GameObject>
           <GameObject
             name="wall_s_w4"
-            place="at: -34.25 -64; align-to-terrain: 0"
+            place="at: -33.65 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_s_w5"
-            place="at: -40.75 -64; align-to-terrain: 0"
-            transform="rotation: 0 180 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_s_w6"
-            place="at: -47.25 -64; align-to-terrain: 0"
-            transform="rotation: 0 180 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_s_w7"
-            place="at: -53.75 -64; align-to-terrain: 0"
-            transform="rotation: 0 180 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_s_w8"
-            place="at: -60.25 -64; align-to-terrain: 0"
-            transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -628,8 +408,9 @@
           </GameObject>
           <GameObject
             name="wall_e_n0"
-            place="at: 64 8.25; align-to-terrain: 0"
+            place="at: 38 8.13; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -644,8 +425,9 @@
           </GameObject>
           <GameObject
             name="wall_e_n1"
-            place="at: 64 14.75; align-to-terrain: 0"
+            place="at: 38 14.51; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -660,8 +442,9 @@
           </GameObject>
           <GameObject
             name="wall_e_n2"
-            place="at: 64 21.25; align-to-terrain: 0"
+            place="at: 38 20.89; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
@@ -676,8 +459,9 @@
           </GameObject>
           <GameObject
             name="wall_e_n3"
-            place="at: 64 27.75; align-to-terrain: 0"
+            place="at: 38 27.27; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -692,72 +476,9 @@
           </GameObject>
           <GameObject
             name="wall_e_n4"
-            place="at: 64 34.25; align-to-terrain: 0"
+            place="at: 38 33.65; align-to-terrain: 0"
             transform="rotation: 0 90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_e_n5"
-            place="at: 64 40.75; align-to-terrain: 0"
-            transform="rotation: 0 90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_e_n6"
-            place="at: 64 47.25; align-to-terrain: 0"
-            transform="rotation: 0 90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_e_n7"
-            place="at: 64 53.75; align-to-terrain: 0"
-            transform="rotation: 0 90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_e_n8"
-            place="at: 64 60.25; align-to-terrain: 0"
-            transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -772,8 +493,9 @@
           </GameObject>
           <GameObject
             name="wall_e_s0"
-            place="at: 64 -8.25; align-to-terrain: 0"
+            place="at: 38 -8.13; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -788,8 +510,9 @@
           </GameObject>
           <GameObject
             name="wall_e_s1"
-            place="at: 64 -14.75; align-to-terrain: 0"
+            place="at: 38 -14.51; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -804,8 +527,9 @@
           </GameObject>
           <GameObject
             name="wall_e_s2"
-            place="at: 64 -21.25; align-to-terrain: 0"
+            place="at: 38 -20.89; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
@@ -820,8 +544,9 @@
           </GameObject>
           <GameObject
             name="wall_e_s3"
-            place="at: 64 -27.75; align-to-terrain: 0"
+            place="at: 38 -27.27; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -836,72 +561,9 @@
           </GameObject>
           <GameObject
             name="wall_e_s4"
-            place="at: 64 -34.25; align-to-terrain: 0"
+            place="at: 38 -33.65; align-to-terrain: 0"
             transform="rotation: 0 90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_e_s5"
-            place="at: 64 -40.75; align-to-terrain: 0"
-            transform="rotation: 0 90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_e_s6"
-            place="at: 64 -47.25; align-to-terrain: 0"
-            transform="rotation: 0 90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_e_s7"
-            place="at: 64 -53.75; align-to-terrain: 0"
-            transform="rotation: 0 90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_e_s8"
-            place="at: 64 -60.25; align-to-terrain: 0"
-            transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -916,8 +578,9 @@
           </GameObject>
           <GameObject
             name="wall_w_s0"
-            place="at: -64 -8.25; align-to-terrain: 0"
+            place="at: -38 -8.13; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -932,8 +595,9 @@
           </GameObject>
           <GameObject
             name="wall_w_s1"
-            place="at: -64 -14.75; align-to-terrain: 0"
+            place="at: -38 -14.51; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -948,8 +612,9 @@
           </GameObject>
           <GameObject
             name="wall_w_s2"
-            place="at: -64 -21.25; align-to-terrain: 0"
+            place="at: -38 -20.89; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
@@ -964,8 +629,9 @@
           </GameObject>
           <GameObject
             name="wall_w_s3"
-            place="at: -64 -27.75; align-to-terrain: 0"
+            place="at: -38 -27.27; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -980,72 +646,9 @@
           </GameObject>
           <GameObject
             name="wall_w_s4"
-            place="at: -64 -34.25; align-to-terrain: 0"
+            place="at: -38 -33.65; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_w_s5"
-            place="at: -64 -40.75; align-to-terrain: 0"
-            transform="rotation: 0 -90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_w_s6"
-            place="at: -64 -47.25; align-to-terrain: 0"
-            transform="rotation: 0 -90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_w_s7"
-            place="at: -64 -53.75; align-to-terrain: 0"
-            transform="rotation: 0 -90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_w_s8"
-            place="at: -64 -60.25; align-to-terrain: 0"
-            transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -1060,8 +663,9 @@
           </GameObject>
           <GameObject
             name="wall_w_n0"
-            place="at: -64 8.25; align-to-terrain: 0"
+            place="at: -38 8.13; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -1076,8 +680,9 @@
           </GameObject>
           <GameObject
             name="wall_w_n1"
-            place="at: -64 14.75; align-to-terrain: 0"
+            place="at: -38 14.51; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -1092,8 +697,9 @@
           </GameObject>
           <GameObject
             name="wall_w_n2"
-            place="at: -64 21.25; align-to-terrain: 0"
+            place="at: -38 20.89; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
@@ -1108,8 +714,9 @@
           </GameObject>
           <GameObject
             name="wall_w_n3"
-            place="at: -64 27.75; align-to-terrain: 0"
+            place="at: -38 27.27; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -1124,8 +731,9 @@
           </GameObject>
           <GameObject
             name="wall_w_n4"
-            place="at: -64 34.25; align-to-terrain: 0"
+            place="at: -38 33.65; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
@@ -1138,74 +746,11 @@
               lod-threshold-mid="160"
             ></GLTFLoader>
           </GameObject>
-          <GameObject
-            name="wall_w_n5"
-            place="at: -64 40.75; align-to-terrain: 0"
-            transform="rotation: 0 -90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_w_n6"
-            place="at: -64 47.25; align-to-terrain: 0"
-            transform="rotation: 0 -90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_w_n7"
-            place="at: -64 53.75; align-to-terrain: 0"
-            transform="rotation: 0 -90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <GameObject
-            name="wall_w_n8"
-            place="at: -64 60.25; align-to-terrain: 0"
-            transform="rotation: 0 -90 0"
-            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
-              lod-threshold-near="70"
-              lod-threshold-mid="160"
-            ></GLTFLoader>
-          </GameObject>
-          <!-- §4.2 Portões: GLB city_gate_arch + torch flanking. -->
+          <!-- Portões cardeais (sync RESPAWN_POINTS em src/main.ts). -->
           <GameObject
             name="gate_north"
-            place="at: 0 64; align-to-terrain: 0"
+            place="at: 0 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_gate_arch_collision.glb; mesh-anchor: base"
           >
@@ -1220,8 +765,9 @@
           </GameObject>
           <GameObject
             name="gate_south"
-            place="at: 0 -64; align-to-terrain: 0"
+            place="at: 0 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_gate_arch_collision.glb; mesh-anchor: base"
           >
@@ -1236,8 +782,9 @@
           </GameObject>
           <GameObject
             name="gate_east"
-            place="at: 64 0; align-to-terrain: 0"
+            place="at: 38 0; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_gate_arch_collision.glb; mesh-anchor: base"
           >
@@ -1252,8 +799,9 @@
           </GameObject>
           <GameObject
             name="gate_west"
-            place="at: -64 0; align-to-terrain: 0"
+            place="at: -38 0; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/city_gate_arch_collision.glb; mesh-anchor: base"
           >
@@ -1269,7 +817,8 @@
           <!-- Tochas nos portões (torch_post). -->
           <GameObject
             name="gate_n_torch_w"
-            place="at: -5.8 64; align-to-terrain: 0"
+            place="at: -5.8 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
           >
@@ -1284,7 +833,8 @@
           </GameObject>
           <GameObject
             name="gate_n_torch_e"
-            place="at: 5.8 64; align-to-terrain: 0"
+            place="at: 5.8 38; align-to-terrain: 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
           >
@@ -1299,8 +849,9 @@
           </GameObject>
           <GameObject
             name="gate_s_torch_w"
-            place="at: -5.8 -64; align-to-terrain: 0"
+            place="at: -5.8 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
           >
@@ -1315,8 +866,9 @@
           </GameObject>
           <GameObject
             name="gate_s_torch_e"
-            place="at: 5.8 -64; align-to-terrain: 0"
+            place="at: 5.8 -38; align-to-terrain: 0"
             transform="rotation: 0 180 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
           >
@@ -1331,8 +883,9 @@
           </GameObject>
           <GameObject
             name="gate_e_torch_s"
-            place="at: 64 -5.8; align-to-terrain: 0"
+            place="at: 38 -5.8; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
           >
@@ -1347,8 +900,9 @@
           </GameObject>
           <GameObject
             name="gate_e_torch_n"
-            place="at: 64 5.8; align-to-terrain: 0"
+            place="at: 38 5.8; align-to-terrain: 0"
             transform="rotation: 0 90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
           >
@@ -1363,8 +917,9 @@
           </GameObject>
           <GameObject
             name="gate_w_torch_s"
-            place="at: -64 -5.8; align-to-terrain: 0"
+            place="at: -38 -5.8; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
           >
@@ -1379,8 +934,9 @@
           </GameObject>
           <GameObject
             name="gate_w_torch_n"
-            place="at: -64 5.8; align-to-terrain: 0"
+            place="at: -38 5.8; align-to-terrain: 0"
             transform="rotation: 0 -90 0"
+            overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
           >

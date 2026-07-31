@@ -37,6 +37,7 @@ import {
   spawnProjectileFromTemplate,
   hasLineOfSight,
   Rigidbody,
+  DistanceCull,
 } from 'vibegame';
 import type { MeleeAiConfig } from 'vibegame';
 import {
@@ -46,7 +47,8 @@ import {
 } from './enemy-registry';
 
 /**
- * Beyond detect range (+ margin) creatures sleep: no AI, no animator.
+ * Sleep only when far from the hero **and** distance-culled (mesh hidden).
+ * Visible-on-camera packs keep AI/anim; near-player always wakes.
  *
  * Grounding: `<Creature>` CCT + heightfield. GLB must ship feet at origin
  * (pipeline `export_origin: feet`). No script Y lift / snap.
@@ -464,8 +466,7 @@ export function createCreatureBehaviours(
       return true;
     }
 
-    // Wake check is cheap (XZ only) — always run it so packs aren't stuck
-    // asleep for a staggered window while the hero is already in their face.
+    // Near hero → always awake (even if somehow culled).
     const player = resolvePlayer(ctx);
     if (!player) return true;
 
@@ -481,12 +482,24 @@ export function createCreatureBehaviours(
       return true;
     }
 
+    // Still drawn (camera within max-distance) → keep simulating. Old sleep
+    // at detect+8 froze packs that were clearly on screen past ~26 m.
+    const visuallyCulled =
+      ctx.state.hasComponent(eid, DistanceCull) &&
+      DistanceCull.culled[eid] === 1;
+    if (!visuallyCulled) {
+      if (s.sleeping) {
+        s.sleeping = false;
+        setNavEnabled(ctx.state, eid, true);
+        s.playing = '';
+      }
+      return true;
+    }
+
     if (!s.sleeping) {
       s.sleeping = true;
       setNavEnabled(ctx.state, eid, false);
       aggroEntities.delete(eid);
-      // Freeze on idle — not mid-jump/lunge — so packs visible past sleep
-      // range don't look stuck in a falling pose until the player walks up.
       s.playing = '';
     }
     return false;

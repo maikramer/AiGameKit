@@ -6,15 +6,12 @@
   O terreno aqui é uma bacia ~13 m abaixo do vale (scripts/sculpt_terrain.py).
 -->
 <Group name="biome.swamp.vegetation" pos="0 0 0">
-  <!-- NOTE (2026-07-29): tapete erva/planta/flor Quaternius desligado — pasta
-       /assets/meshes/vegetation/ não existe no disco (kit nunca chegou a ser
-       gerado; ver ASSETS_REGISTRY.md §"GLBs em falta"). Referenciar estes
-       caminhos faz `vibegame analyze` falhar. Reativar só quando os GLBs
-       existirem: regenerar via gameassets/Rocks3D ou trocar por meshes reais
-       da raiz de /assets/meshes (não há grass/flower/plant lá hoje).
+  <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).
+       density-per-km2=256000 (= 8× baseline pós-expansão do mapa). -->
+
   <Vegetation
     meshes="/assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb"
-    density-per-km2="32000"
+    density-per-km2="256000"
     seed="801"
     region-min="-200 0 -390"
     region-max="200 0 -116"
@@ -24,7 +21,7 @@
     avoid-water="1"
     avoid-overlaps="0"
     max-distance="110"
-    cluster-count="60"
+    cluster-count="120"
     cluster-radius="7.6"
     flower-near-radius="5.2"
     flower-density-ratio="0.34"
@@ -36,12 +33,11 @@
     random-yaw="true"
     variation="foliage"
   ></Vegetation>
-  -->
 
   <!-- §1 Salgueiros mortos — o dossel do brejo. -->
   <StaticSpawner
     profile="tree"
-    count="160"
+    count="320"
     seed="8101"
     region-min="-190 0 -380"
     region-max="190 0 -116"
@@ -76,7 +72,7 @@
   <!-- Troncos secos esparsos no fundo da bacia. -->
   <StaticSpawner
     profile="tree"
-    count="70"
+    count="140"
     seed="8102"
     region-min="-210 0 -430"
     region-max="210 0 -190"
@@ -111,7 +107,7 @@
   <!-- §2 Salgueiros colhíveis. -->
   <StaticSpawner
     profile="tree"
-    count="20"
+    count="40"
     seed="305"
     region-min="-116 0 -290"
     region-max="116 0 -120"
@@ -155,7 +151,7 @@
   <!-- §3 Vitórias-régias nas lagoas (in-water ancora o Y à lâmina de água). -->
   <StaticSpawner
     profile="tree"
-    count="34"
+    count="68"
     seed="325"
     region-min="-110 0 -310"
     region-max="80 0 -124"
@@ -186,7 +182,7 @@
   <!-- §4 Pedras musgosas semi-afundadas na lama. -->
   <StaticSpawner
     profile="tree"
-    count="90"
+    count="180"
     seed="8103"
     region-min="-200 0 -400"
     region-max="200 0 -116"
@@ -222,7 +218,7 @@
   <!-- §5 Afloramentos nas margens das lagoas (near-water = anel de barranco). -->
   <StaticSpawner
     profile="tree"
-    count="26"
+    count="52"
     seed="431"
     region-min="-190 0 -380"
     region-max="190 0 -116"

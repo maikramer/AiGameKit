@@ -21,14 +21,14 @@
        ============================================================ -->
   <DynamicSpawner
     avoid-water="1"
-    count="5"
+    count="10"
     seed="101"
     region-min="-170 0 124"
     region-max="170 0 350"
     random-yaw="true"
     avoid-overlaps="false"
     max-slope-deg="40"
-    max-distance="100"
+    max-distance="180"
   >
     <Creature role="enemy" script="enemies/wolf.ts">
       <GLTFLoader
@@ -44,14 +44,14 @@
 
   <DynamicSpawner
     avoid-water="1"
-    count="4"
+    count="8"
     seed="202"
     region-min="-170 0 160"
     region-max="170 0 360"
     random-yaw="true"
     avoid-overlaps="false"
     max-slope-deg="40"
-    max-distance="100"
+    max-distance="180"
   >
     <Creature role="enemy" script="enemies/shade.ts" transform="scale: 1.4 1.4 1.4">
       <GLTFLoader
@@ -70,14 +70,14 @@
        ============================================================ -->
   <DynamicSpawner
     avoid-water="1"
-    count="5"
+    count="10"
     seed="303"
     region-min="124 0 -160"
     region-max="350 0 160"
     random-yaw="true"
     avoid-overlaps="false"
     max-slope-deg="40"
-    max-distance="100"
+    max-distance="180"
   >
     <Creature role="enemy" script="enemies/scorpion.ts">
       <GLTFLoader
@@ -93,14 +93,14 @@
 
   <DynamicSpawner
     avoid-water="1"
-    count="5"
+    count="10"
     seed="404"
     region-min="124 0 -160"
     region-max="330 0 160"
     random-yaw="true"
     avoid-overlaps="false"
     max-slope-deg="40"
-    max-distance="100"
+    max-distance="180"
   >
     <Creature role="enemy" script="enemies/bandit.ts">
       <GLTFLoader
@@ -120,14 +120,14 @@
        archer asset exists. -->
   <DynamicSpawner
     avoid-water="1"
-    count="3"
+    count="6"
     seed="555"
     region-min="140 0 -140"
     region-max="320 0 140"
     random-yaw="true"
     avoid-overlaps="false"
     max-slope-deg="40"
-    max-distance="100"
+    max-distance="180"
   >
     <Creature role="enemy" script="enemies/bandit.ts">
       <GLTFLoader
@@ -146,14 +146,14 @@
        ============================================================ -->
   <DynamicSpawner
     avoid-water="1"
-    count="6"
+    count="12"
     seed="505"
     region-min="-170 0 -350"
     region-max="170 0 -124"
     random-yaw="true"
     avoid-overlaps="false"
     max-slope-deg="40"
-    max-distance="100"
+    max-distance="180"
   >
     <Creature role="enemy" script="enemies/bogling.ts">
       <GLTFLoader
@@ -169,14 +169,14 @@
 
   <DynamicSpawner
     avoid-water="1"
-    count="3"
+    count="6"
     seed="515"
     region-min="-170 0 -340"
     region-max="170 0 -160"
     random-yaw="true"
     avoid-overlaps="false"
     max-slope-deg="40"
-    max-distance="100"
+    max-distance="180"
   >
     <Creature role="enemy" script="enemies/wolf.ts">
       <GLTFLoader
@@ -191,19 +191,19 @@
   </DynamicSpawner>
 
   <!-- ============================================================
-       OESTE — Picos Gelados (regiões estreitas em z: os flancos são
-       encosta a sério e max-slope-deg rejeitaria quase tudo)
+       OESTE — Picos Gelados (Z estreito: flancos íngremes).
+       max-slope 50° alinha com navmesh walkableSlopeAngle 55°.
        ============================================================ -->
   <DynamicSpawner
     avoid-water="1"
-    count="5"
+    count="10"
     seed="707"
     region-min="-330 0 -110"
     region-max="-124 0 110"
     random-yaw="true"
     avoid-overlaps="false"
-    max-slope-deg="45"
-    max-distance="100"
+    max-slope-deg="50"
+    max-distance="180"
   >
     <Creature role="enemy" script="goblin-wander.ts">
       <GLTFLoader
@@ -219,14 +219,14 @@
 
   <DynamicSpawner
     avoid-water="1"
-    count="4"
+    count="8"
     seed="808"
     region-min="-320 0 -110"
     region-max="-124 0 110"
     random-yaw="true"
     avoid-overlaps="false"
-    max-slope-deg="45"
-    max-distance="100"
+    max-slope-deg="50"
+    max-distance="180"
   >
     <Creature role="enemy" script="slime.ts">
       <GLTFLoader
@@ -242,14 +242,14 @@
 
   <DynamicSpawner
     avoid-water="1"
-    count="4"
+    count="8"
     seed="909"
     region-min="-320 0 -110"
     region-max="-124 0 110"
     random-yaw="true"
     avoid-overlaps="false"
-    max-slope-deg="45"
-    max-distance="100"
+    max-slope-deg="50"
+    max-distance="180"
   >
     <Creature role="enemy" script="enemies/wolf.ts">
       <GLTFLoader

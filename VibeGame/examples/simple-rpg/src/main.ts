@@ -1,8 +1,8 @@
 import type { System, State, QuestDef, HeldItemGripRegistry } from 'vibegame';
 import {
   configure,
-  disposeAllRuntimes,
   getBuilder,
+  releaseRuntimeGpuResources,
   resetBuilder,
   withPlugin,
   withPlugins,
@@ -219,14 +219,14 @@ const HeroStatsSystem: System = {
 // ── Respawn: on death, after a delay, return the hero to the nearest checkpoint
 //    — the city centre or just outside whichever cardinal gate is closest to
 //    where they fell. Beats always trekking back from the city centre after
-//    dying deep in a biome. Each point is just outside the wall (z/x ±78),
-//    short of the biome enemy bands (~45+), so respawns aren't instant re-deaths.
+//    dying deep in a biome. Each point is just outside the wall (z/x ±50),
+//    short of the biome enemy bands, so respawns aren't instant re-deaths.
 const RESPAWN_POINTS: ReadonlyArray<readonly [number, number]> = [
   [0, 0], // city plaza
-  [0, 78], // north gate (forest) — wall ±64 + margin
-  [0, -78], // south gate (swamp)
-  [78, 0], // east gate (desert)
-  [-78, 0], // west gate (peaks)
+  [0, 50], // north gate (forest) — wall ±38 + margin
+  [0, -50], // south gate (swamp)
+  [50, 0], // east gate (desert)
+  [-50, 0], // west gate (peaks)
 ];
 let deathShown = false;
 let respawnAtTime = 0;
@@ -880,7 +880,21 @@ function loadQuests(raw: unknown): readonly QuestDef[] {
   return list as unknown as readonly QuestDef[];
 }
 
+let bootstrapPromise: Promise<void> | null = null;
+
 async function bootstrap(): Promise<void> {
+  // One boot per page load — concurrent re-entry used to race resetBuilder()
+  // against a live runtime and leave the tab stuck after Vite full-reload.
+  if (bootstrapPromise) return bootstrapPromise;
+  bootstrapPromise = runBootstrap();
+  return bootstrapPromise;
+}
+
+async function runBootstrap(): Promise<void> {
+  // Clear any stale builder before registering plugins (never dispose a live
+  // runtime mid-boot — that used to race with Vite full-reload teardown).
+  resetBuilder();
+
   const bootLang = navigator.language.startsWith('pt') ? 'pt' : 'en';
   setLoadingScreenLocale(bootLang);
   mountLoadingScreen({
@@ -915,9 +929,7 @@ async function bootstrap(): Promise<void> {
 
   configure({ canvas: '#game-canvas' });
 
-  const builder = getBuilder();
-  resetBuilder();
-  const runtime = await builder.build();
+  const runtime = await getBuilder().build();
   const state = runtime.getState();
 
   // Pack behavior: hitting one enemy alerts nearby allies with line of sight
@@ -928,8 +940,8 @@ async function bootstrap(): Promise<void> {
 
   // City exclusion zone — registered directly in the occupancy registry before
   // any StaticSpawner samples positions. Central walled city is at the origin
-  // (matches <SpawnExclusion at="0 0" radius="84"> in public/world/cities/discordia.xml).
-  const villageZones: Array<[number, number, number]> = [[0, 0, 84]];
+  // (matches <SpawnExclusion at="0 0" radius="52"> in public/world/cities/discordia.xml).
+  const villageZones: Array<[number, number, number]> = [[0, 0, 52]];
   for (const [x, z, r] of villageZones) {
     registerSpawnFootprint(state, x, z, r);
   }
@@ -1353,7 +1365,8 @@ async function bootstrap(): Promise<void> {
 void bootstrap();
 
 // Soft HMR of this graph leaks WebGL/KTX2/Rapier in Firefox — decline so Vite
-// always full-reloads. dispose() still runs before the document is torn down.
+// always full-reloads. Unload path must stay lightweight: heavy destroy() here
+// can hang mid-boot and block location.reload() (dead page after "Disposing").
 if (import.meta.hot) {
   import.meta.hot.decline();
   import.meta.hot.dispose(() => {
@@ -1363,7 +1376,8 @@ if (import.meta.hot) {
       clearHotbar();
       clearMelee();
       clearNota();
-      disposeAllRuntimes();
+      // GPU only — must not await Rapier/navmesh teardown before reload.
+      releaseRuntimeGpuResources();
     } catch (e) {
       console.error('[VibeGame] HMR dispose failed:', e);
     }

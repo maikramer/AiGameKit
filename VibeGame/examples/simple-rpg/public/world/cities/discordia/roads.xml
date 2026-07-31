@@ -1,6 +1,8 @@
 <!--
   Discordia district fragment. Loaded via Include from cities/discordia.xml.
   Artérias cobble → paths/network.xml (<RoadNetwork>). Aqui: só pad da praça.
+  Layout compacto: praça 32×32 → 20×20 (muralha ±39.8). Continua a ser a maior
+  área aberta da cidade — o que encolheu foi o vazio entre distritos.
 -->
 <Group name="city.roads" pos="0 0 0">
   <Composition
@@ -10,12 +12,12 @@
   >
     <Pad
       pos="0 0.03 0"
-      size="32 32"
-      corner-radius="10"
-      edge-feather="2.2"
-      edge-noise="0.55"
+      size="20 20"
+      corner-radius="6"
+      edge-feather="1.8"
+      edge-noise="0.5"
       texture-url="/assets/textures/cobblestone_road.png"
-      texture-scale="16"
+      texture-scale="5"
       normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
     ></Pad>
   </Composition>

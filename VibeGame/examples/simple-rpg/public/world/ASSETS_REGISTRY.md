@@ -14,7 +14,7 @@ Gerado: 2026-07-29. Inventário factual de `public/assets/` + ligações em `pub
 - **82 IDs** de mesh entregáveis em `/assets/meshes/` (lod0/lod1/lod2 + collision).
 - **143 referências GLB** únicas nos XML (incl. index.html).
 - **Onda composition** (`game.yaml` ids 1549–1944): **23 GLBs completos no disco**, **0 ligados** — distritos usam `<Composition>` de primitivas.
-- **Kit vegetação Quaternius** (`/assets/meshes/vegetation/*.glb`): **pasta ausente** — 9 URLs referenciados em `vegetation/*.xml` falham no analyze.
+- **Kit vegetação** (`/assets/meshes/vegetation/*.glb`): gerado via `npm run generate-vegetation` (bpy); tapetes `<Vegetation>` ativos (erva ×8 density).
 - **`shade`**: GLB no disco; cena usa `bogling` escalado (ver `context.md`).
 - **`npc_merchant`**: GLB no disco; entidade `merchant` em `market.xml` **sem** `<GLTFLoader>`.
 
@@ -233,19 +233,7 @@ Texturas principais: `vale_grass`, `forest_floor`, `desert_sand`, `swamp_mud`, `
 
 ## GLBs em falta (referenciados, ausentes no disco)
 
-### Kit vegetação Quaternius
-
-- `/assets/meshes/vegetation/flower_purpleA.glb`
-- `/assets/meshes/vegetation/flower_redA.glb`
-- `/assets/meshes/vegetation/flower_yellowA.glb`
-- `/assets/meshes/vegetation/grass.glb`
-- `/assets/meshes/vegetation/grass_large.glb`
-- `/assets/meshes/vegetation/grass_leafs.glb`
-- `/assets/meshes/vegetation/grass_leafsLarge.glb`
-- `/assets/meshes/vegetation/plant_flatShort.glb`
-- `/assets/meshes/vegetation/plant_flatTall.glb`
-
-Referenciados em `vegetation/forest.xml`, `vegetation/desert.xml`, `vegetation/swamp.xml`, `vegetation/peaks.xml`.
+Kit vegetação (`vegetation/*.glb`) — **presente** (bpy). Regenerar: `npm run generate-vegetation`.
 
 ## Proposta de layout por região (sem rewrite ainda)
 
@@ -315,7 +303,6 @@ public/world/
 ## Checklist para agentes de rewrite regional
 
 1. Substituir `<Composition>` por `<GameObject>` + `<GLTFLoader>` + `mesh-url: …_collision.glb` onde o GLB existe.
-2. Restaurar ou remover refs ao kit `vegetation/*.glb` (pasta em falta).
-3. Ligar `merchant` a `npc_merchant_lod0.glb`; avaliar `shade_lod0` vs bogling.
-4. Trocar arco/obelisco/deserto por `sandstone_arch` / `desert_obelisk` GLBs.
-5. Correr `vibegame analyze examples/simple-rpg/index.html` após cada região.
+2. Ligar `merchant` a `npc_merchant_lod0.glb`; avaliar `shade_lod0` vs bogling.
+3. Trocar arco/obelisco/deserto por `sandstone_arch` / `desert_obelisk` GLBs.
+4. Correr `vibegame analyze examples/simple-rpg/index.html` após cada região.

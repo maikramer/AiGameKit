@@ -1,13 +1,19 @@
 <!--
   Discordia district fragment. Loaded via Include from cities/discordia.xml.
   Edit this file for this district only. Cell coords: space-separated (at="4 2").
+
+  Layout compacto (muralha ±39.8): as âncoras da praça encolheram ~0.62×, mas
+  os offsets *dentro* de cada cluster (chama sobre a fogueira, bancos à volta
+  do lume, chama no topo do poste) são geometria medida do GLB e ficam como
+  estavam — escalá-los enterrava partículas dentro das malhas.
 -->
 <!-- utilities: praça essencial — poço, fogueira+luz, bancos GLB, quadro, tochas, santuários. -->
 <Group name="city.plaza" pos="0 0 0">
-          <!-- Poço medieval (~1.6 m nativo). Centro-oeste da praça. -->
+          <!-- Poço medieval (~1.6 m nativo). Centro-oeste da praça.
+               Fora do corredor da artéria praça→mid_w (|z| ≤ 2.4). -->
           <GameObject
             name="well"
-            place="at: -8 4; align-to-terrain: 0"
+            place="at: -6 4; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/medieval_well_lod2.glb; mesh-anchor: base"
           >
@@ -19,10 +25,11 @@
             ></GLTFLoader>
           </GameObject>
           <!-- Fogueira comunitária: GLB campfire_pit (anel de pedra, sem
-           chama modelada) + brasa/luz por cima. -->
+           chama modelada) + brasa/luz por cima. Canto SE da praça, fora dos
+           corredores das duas artérias (|x| ≤ 2.4 e |z| ≤ 2.4). -->
           <GameObject
             name="campfire"
-            place="at: 12 -10; align-to-terrain: 0"
+            place="at: 6.5 -6.6; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/campfire_pit_collision.glb; mesh-anchor: base"
           >
@@ -38,7 +45,7 @@
                Geometria medida do campfire_pit: aro de pedra com topo a
                y≈0.30 e cavidade interior de raio ≈0.5 → chama enraizada a
                y=0.30 com raio de emissão 0.32 (fica dentro do aro). -->
-          <GameObject place="at: 12 -10; align-to-terrain: 0">
+          <GameObject place="at: 6.5 -6.6; align-to-terrain: 0">
             <ParticleSystem
               preset="fire"
               transform="pos: 0 0.30 0"
@@ -46,7 +53,7 @@
             ></ParticleSystem>
           </GameObject>
           <Composition
-            place="at: 12 -10; align-to-terrain: 0"
+            place="at: 6.5 -6.6; align-to-terrain: 0"
             body="fixed"
             collider="none"
           >
@@ -55,10 +62,12 @@
               point-light="color: 0xff8a33; intensity: 3; distance: 10; decay: 2; cast-shadow: 0"
             ></PointLight>
           </Composition>
-          <!-- Bancos de madeira virados para a fogueira (rotação em graus) -->
+          <!-- Bancos de madeira virados para a fogueira (rotação em graus).
+               Offset ±3 m em X, +3 m em Z — encostar mais metia o banco
+               dentro do aro de pedra. -->
           <GameObject
             transform="rotation: 0 35 0"
-            place="at: 8 -6; align-to-terrain: 0"
+            place="at: 3.5 -3.6; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: box; size: 1.2 0.5 0.5"
           >
@@ -71,7 +80,7 @@
           </GameObject>
           <GameObject
             transform="rotation: 0 -35 0"
-            place="at: 16 -6; align-to-terrain: 0"
+            place="at: 9.5 -3.6; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: box; size: 1.2 0.5 0.5"
           >
@@ -85,7 +94,7 @@
           <!-- Quadro de avisos (borda sul da praça) — GLB notice_board. -->
           <GameObject
             name="notice_board"
-            place="at: 8 -20; align-to-terrain: 0"
+            place="at: 5 -12.5; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/notice_board_collision.glb; mesh-anchor: base"
           >
@@ -97,9 +106,10 @@
             ></GLTFLoader>
           </GameObject>
           <!-- Tochas da praça: GLB torch_post (sem chama modelada) + brasa/luz
-           por cima — orçamento de PointLights mantido em 2. -->
+           por cima — orçamento de PointLights mantido em 2. Nos cantos NE/SW
+           da praça, onde a rua não passa. -->
           <GameObject
-            place="at: 14 14; align-to-terrain: 0"
+            place="at: 8.5 8.5; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
           >
@@ -114,7 +124,7 @@
                y≈2.15, por isso a esfera a y=1.9 estava enterrada dentro do
                poste. Chama a y=2.14, estreita (raio 0.06) para caber na haste
                de 0.23 m. -->
-          <GameObject place="at: 14 14; align-to-terrain: 0">
+          <GameObject place="at: 8.5 8.5; align-to-terrain: 0">
             <ParticleSystem
               preset="fire"
               transform="pos: 0 2.14 0"
@@ -122,7 +132,7 @@
             ></ParticleSystem>
           </GameObject>
           <Composition
-            place="at: 14 14; align-to-terrain: 0"
+            place="at: 8.5 8.5; align-to-terrain: 0"
             body="fixed"
             collider="none"
           >
@@ -132,7 +142,7 @@
             ></PointLight>
           </Composition>
           <GameObject
-            place="at: -14 -14; align-to-terrain: 0"
+            place="at: -8.5 -8.5; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
           >
@@ -143,7 +153,7 @@
               lod2-url="/assets/meshes/torch_post_lod2.glb"
             ></GLTFLoader>
           </GameObject>
-          <GameObject place="at: -14 -14; align-to-terrain: 0">
+          <GameObject place="at: -8.5 -8.5; align-to-terrain: 0">
             <ParticleSystem
               preset="fire"
               transform="pos: 0 2.14 0"
@@ -151,7 +161,7 @@
             ></ParticleSystem>
           </GameObject>
           <Composition
-            place="at: -14 -14; align-to-terrain: 0"
+            place="at: -8.5 -8.5; align-to-terrain: 0"
             body="fixed"
             collider="none"
           >
@@ -163,17 +173,18 @@
         </Group>
 
 <Group name="city.landmarks" pos="0 0 0">
-          <!-- Santuários místicos junto às vias E-W (sólidos, [F]) -->
+          <!-- Santuários místicos entre o anel periurbano (±25) e a muralha
+               (±39.8), encostados às vias E-W sem lhes ficar em cima. -->
           <GameObject
             name="rune-pillar"
-            place="at: -52 28; align-to-terrain: 0"
+            place="at: -35 17; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base"
             script="stone-pillar.ts"
           ></GameObject>
           <GameObject
             name="crystal-shrine"
-            place="at: 52 28; align-to-terrain: 0"
+            place="at: 35 17; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
             script="crystal-shrine.ts"

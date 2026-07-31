@@ -15,7 +15,7 @@
        NE — entre Floresta e Deserto
        ============================================================ -->
   <StaticSpawner
-    profile="tree" count="70" seed="4101"
+    profile="tree" count="140" seed="4101"
     region-min="190 0 190" region-max="330 0 330"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
     max-slope-deg="68" max-slope-attempts="40"
@@ -32,7 +32,7 @@
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
-    profile="tree" count="55" seed="4102"
+    profile="tree" count="110" seed="4102"
     region-min="300 0 300" region-max="470 0 470"
     align-to-terrain="0" ground-align="auto" avoid-water="1"
     max-slope-deg="75" max-slope-attempts="40"
@@ -45,7 +45,7 @@
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
-    profile="tree" count="45" seed="4103"
+    profile="tree" count="90" seed="4103"
     region-min="176 0 176" region-max="300 0 300"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
     max-slope-deg="40" scale-min="0.8" scale-max="1.5"
@@ -62,7 +62,7 @@
        SE — entre Deserto e Pântano
        ============================================================ -->
   <StaticSpawner
-    profile="tree" count="70" seed="4201"
+    profile="tree" count="140" seed="4201"
     region-min="190 0 -330" region-max="330 0 -190"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
     max-slope-deg="68" max-slope-attempts="40"
@@ -79,7 +79,7 @@
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
-    profile="tree" count="55" seed="4202"
+    profile="tree" count="110" seed="4202"
     region-min="300 0 -470" region-max="470 0 -300"
     align-to-terrain="0" ground-align="auto" avoid-water="1"
     max-slope-deg="75" max-slope-attempts="40"
@@ -92,7 +92,7 @@
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
-    profile="tree" count="45" seed="4203"
+    profile="tree" count="90" seed="4203"
     region-min="176 0 -300" region-max="300 0 -176"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
     max-slope-deg="42" scale-min="0.8" scale-max="1.4"
@@ -109,7 +109,7 @@
        SO — entre Pântano e Picos
        ============================================================ -->
   <StaticSpawner
-    profile="tree" count="70" seed="4301"
+    profile="tree" count="140" seed="4301"
     region-min="-330 0 -330" region-max="-190 0 -190"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
     max-slope-deg="68" max-slope-attempts="40"
@@ -126,7 +126,7 @@
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
-    profile="tree" count="55" seed="4302"
+    profile="tree" count="110" seed="4302"
     region-min="-470 0 -470" region-max="-300 0 -300"
     align-to-terrain="0" ground-align="auto" avoid-water="1"
     max-slope-deg="75" max-slope-attempts="40"
@@ -139,7 +139,7 @@
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
-    profile="tree" count="45" seed="4303"
+    profile="tree" count="90" seed="4303"
     region-min="-300 0 -300" region-max="-176 0 -176"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
     max-slope-deg="40" scale-min="0.8" scale-max="1.5"
@@ -156,7 +156,7 @@
        NO — entre Picos e Floresta (o rio corta aqui: garganta)
        ============================================================ -->
   <StaticSpawner
-    profile="tree" count="70" seed="4401"
+    profile="tree" count="140" seed="4401"
     region-min="-330 0 190" region-max="-190 0 330"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
     max-slope-deg="68" max-slope-attempts="40"
@@ -173,7 +173,7 @@
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
-    profile="tree" count="55" seed="4402"
+    profile="tree" count="110" seed="4402"
     region-min="-470 0 300" region-max="-300 0 470"
     align-to-terrain="0" ground-align="auto" avoid-water="1"
     max-slope-deg="75" max-slope-attempts="40"
@@ -187,7 +187,7 @@
   </StaticSpawner>
   <!-- Pedras de margem ao longo da garganta do rio (near-water). -->
   <StaticSpawner
-    profile="tree" count="40" seed="4403"
+    profile="tree" count="80" seed="4403"
     region-min="-470 0 120" region-max="-140 0 420"
     near-water="1" avoid-water="0"
     align-to-terrain="1" ground-align="auto"

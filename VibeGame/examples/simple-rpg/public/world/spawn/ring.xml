@@ -9,9 +9,10 @@
            transição entre a cidade e os biomas profundos. -->
       <Group name="valley-outskirts" pos="0 0 0">
         <!-- ============================================================
-           §5 ANEL DO VALE — recursos junto à cidade (fora da muralha ±32,
-           dentro de ~±58). Exclusion r=42 limpa o interior; vegetação e
-           árvores ficam no anel imediato, não num carpete até ±90.
+           §5 ANEL DO VALE — recursos junto à cidade (fora da muralha ±39.8,
+           dentro de ~±116). Exclusion r=52 limpa o interior. A cidade
+           compacta libertou a coroa 52–84 que antes era planalto pelado:
+           as contagens abaixo subiram ~40 % para a preencher.
            ============================================================ -->
         <!-- Erva / plantas / flores no anel periurbano.
            O kit Quaternius (/assets/meshes/vegetation/*.glb) está ausente do
@@ -30,35 +31,33 @@
           color="#2a6685"
           opacity="0.72"
         ></Lake>
-        <!-- Aproches das pontes: TerrainPad pina as 2 margens à mesma altura
-           (antes do River — pads fora do carve ~±7.2 m do eixo). height = Y
-           heightmap na margem cidade. Bridge fica nivelado (sem pitch). -->
+        <!-- Aproches: pads LANDWARD dos Ways (tips fora do mesh de água). -->
         <TerrainPad
-          at="4 -101"
-          size="20 14"
-          falloff="10"
-          corner-radius="5"
+          at="4 -102"
+          size="20 12"
+          falloff="8"
+          corner-radius="4"
           height="34.9"
         ></TerrainPad>
         <TerrainPad
-          at="4 -145"
-          size="20 14"
-          falloff="10"
-          corner-radius="5"
+          at="4 -146"
+          size="20 12"
+          falloff="8"
+          corner-radius="4"
           height="34.9"
         ></TerrainPad>
         <TerrainPad
-          at="-97 -3"
-          size="14 20"
-          falloff="10"
-          corner-radius="5"
+          at="-94 -3"
+          size="12 20"
+          falloff="8"
+          corner-radius="4"
           height="33.7"
         ></TerrainPad>
         <TerrainPad
-          at="-141 -3"
-          size="16 20"
-          falloff="12"
-          corner-radius="5"
+          at="-138 -3"
+          size="12 20"
+          falloff="8"
+          corner-radius="4"
           height="33.7"
         ></TerrainPad>
         <!-- Rio: sul → oeste (x≲-58) → NW sem passar no laguinho.
@@ -74,42 +73,7 @@
           color="#2a6685"
           opacity="0.88"
         ></River>
-        <!-- Pontes GLB (gaps network: s_bank↔s_resume, w_bank↔w_resume).
-           Span 18 m. Pads nivelam margens → rotation só yaw. Mesh centrado Y;
-           base-y-offset sobe do leito até plano do pad (~depth). W: mid um
-           pouco mais a oeste (longe da muralha) p/ rampa não enterrar. -->
-        <GameObject
-          name="bridge_south"
-          place="at: 4 -123; align-to-terrain: 0; ground-align: none; base-y-offset: 1.5; max-slope-deg: 90"
-          transform="rotation: 0 90 0; scale: 2 1 2"
-          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/river_bridge_wood_collision.glb; mesh-anchor: base"
-        >
-          <GLTFLoader
-            role="visual"
-            url="/assets/meshes/river_bridge_wood_lod0.glb"
-            lod1-url="/assets/meshes/river_bridge_wood_lod1.glb"
-            lod2-url="/assets/meshes/river_bridge_wood_lod2.glb"
-            lod-threshold-near="70"
-            lod-threshold-mid="160"
-          ></GLTFLoader>
-        </GameObject>
-        <GameObject
-          name="bridge_west"
-          place="at: -121 -3; align-to-terrain: 0; ground-align: none; base-y-offset: 1.35; max-slope-deg: 90"
-          transform="scale: 2 1 2"
-          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/river_bridge_stone_collision.glb; mesh-anchor: base"
-        >
-          <GLTFLoader
-            role="visual"
-            url="/assets/meshes/river_bridge_stone_lod0.glb"
-            lod1-url="/assets/meshes/river_bridge_stone_lod1.glb"
-            lod2-url="/assets/meshes/river_bridge_stone_lod2.glb"
-            lod-threshold-near="70"
-            lod-threshold-mid="160"
-          ></GLTFLoader>
-        </GameObject>
+        <!-- Pontes: RoadNetwork Segment bridge (wood S / stone W) — sem GameObject. -->
         <!-- Posto de descanso na margem este (x≈-45): crate/barrel/bench. -->
         <GameObject
           place="at: -90.8 -4.4; align-to-terrain: 1"
@@ -150,7 +114,7 @@
         <!-- Vitórias-régias no laguinho (-40,52 r=8). -->
         <StaticSpawner
           profile="tree"
-          count="10"
+          count="20"
           seed="326"
           region-min="-94 0 90"
           region-max="-66 0 118"
@@ -174,7 +138,7 @@
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="30"
+          count="84"
           seed="7"
           region-min="-116 0 -116"
           region-max="116 0 116"
@@ -212,7 +176,7 @@
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="22"
+          count="62"
           seed="99"
           region-min="-116 0 -116"
           region-max="116 0 116"
@@ -249,7 +213,7 @@
            Região larga; o filtro só aceita carve sem água. -->
         <StaticSpawner
           profile="tree"
-          count="48"
+          count="96"
           seed="401"
           region-min="-400 0 -200"
           region-max="440 0 400"
@@ -343,7 +307,7 @@
         <!-- Outcrops cénicos no vale (fora da cidade) — não colheitáveis. -->
         <StaticSpawner
           profile="tree"
-          count="20"
+          count="56"
           seed="402"
           region-min="-110 0 -110"
           region-max="110 0 110"
@@ -415,14 +379,14 @@
         <!-- Enemies: Creature CCT on terrain heightfield; NavMesh steers desiredVel. -->
         <DynamicSpawner
           avoid-water="1"
-          count="3"
+          count="6"
           seed="11"
           region-min="-52 0 80"
           region-max="52 0 104"
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="40"
-          max-distance="100"
+          max-distance="180"
         >
           <Creature role="enemy" script="goblin-wander.ts">
             <GLTFLoader

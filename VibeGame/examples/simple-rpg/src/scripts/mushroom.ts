@@ -11,6 +11,7 @@ const mushroom = createMysticObject({
   toastColor: '#ffb0a0',
   readRangeSq: 4.6 * 4.6,
   promptLabel: 'Comer cogumelo',
+  gesture: 'gather',
   emissiveBase: 0.25,
   emissivePulse: 0.3,
   message: `"Você esmaga o chapéu — o calor se espalha pelos membros cansados."  (+${HEAL} HP)`,

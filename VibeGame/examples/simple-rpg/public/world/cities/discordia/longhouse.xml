@@ -7,7 +7,7 @@
           <GameObject
             name="longhouse"
             transform="rotation: 0 135 0"
-            place="at: 44 -48; align-to-terrain: 0"
+            place="at: 29 -31; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/village_longhouse_collision.glb; mesh-anchor: base"
           >
@@ -22,14 +22,14 @@
           </GameObject>
           <GameObject
             name="chest"
-            place="at: 58 -60; align-to-terrain: 1"
+            place="at: 35.5 -33; align-to-terrain: 1"
             script="chest.ts"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/treasure_chest_collision.glb; mesh-anchor: base"
           ></GameObject>
           <GameObject
             name="npc_elder"
-            place="at: 30 -34; align-to-terrain: 1"
+            place="at: 22 -24; align-to-terrain: 1"
             transform="rotation: 0 45 0"
           >
             <GLTFLoader

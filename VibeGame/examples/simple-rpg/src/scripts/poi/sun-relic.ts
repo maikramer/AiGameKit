@@ -13,6 +13,7 @@ const relic = createMysticObject({
   toastColor: '#ffe0a8',
   readRangeSq: 4.6 * 4.6,
   promptLabel: 'Pegar a relíquia solar',
+  gesture: 'gather',
   message: `"O obelisco guardava isto desde antes da cidade ter nome. Vale bem uma bolsa."  (+${GOLD_REWARD} ouro)`,
   onRead: () => addGold(GOLD_REWARD),
 });

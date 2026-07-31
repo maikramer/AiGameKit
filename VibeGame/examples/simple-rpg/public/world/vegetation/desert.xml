@@ -4,21 +4,16 @@
   "cacto"), a par do collider cactus_stump_collision que já era o pretendido.
   §1/§2 cactus já GLTFLoader (lod0-2 + collision) — confirmado em
   public/world/ASSETS_REGISTRY.md, nada a migrar aqui.
-  O tapete `<Vegetation>` (topo) referencia o kit Quaternius em
-  /assets/meshes/vegetation/*.glb — pasta ausente no bundle atual; não
-  trocar/reparar aqui (ver "GLBs em falta" no ASSETS_REGISTRY.md).
-  Densidade alta só em spawners scenery — ver nota em vegetation/forest.xml.
+  Tapete `<Vegetation>` ativo (kit bpy em /assets/meshes/vegetation/).
+  Densidade scenery ×2; erva ×8 vs baseline — ver vegetation/context.md.
 -->
 <Group name="biome.desert.vegetation" pos="0 0 0">
-  <!-- NOTE (2026-07-29): tapete erva/planta/flor Quaternius desligado — pasta
-       /assets/meshes/vegetation/ não existe no disco (kit nunca chegou a ser
-       gerado; ver ASSETS_REGISTRY.md §"GLBs em falta"). Referenciar estes
-       caminhos faz `vibegame analyze` falhar. Reativar só quando os GLBs
-       existirem: regenerar via gameassets/Rocks3D ou trocar por meshes reais
-       da raiz de /assets/meshes (não há grass/flower/plant lá hoje).
+  <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).
+       density-per-km2=176000 (= 8× baseline pós-expansão do mapa). -->
+
   <Vegetation
     meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_yellowA.glb"
-    density-per-km2="22000"
+    density-per-km2="176000"
     seed="702"
     region-min="116 0 -190"
     region-max="370 0 190"
@@ -28,7 +23,7 @@
     avoid-water="1"
     avoid-overlaps="0"
     max-distance="110"
-    cluster-count="34"
+    cluster-count="68"
     cluster-radius="5.6"
     flower-near-radius="3.6"
     flower-density-ratio="0.16"
@@ -40,12 +35,11 @@
     random-yaw="true"
     variation="foliage"
   ></Vegetation>
-  -->
 
   <!-- §1 Cactos — a assinatura do bioma. Em grupos, como cresce a saguaro. -->
   <StaticSpawner
     profile="tree"
-    count="140"
+    count="280"
     seed="7101"
     region-min="120 0 -184"
     region-max="400 0 184"
@@ -80,7 +74,7 @@
   <!-- §2 Cactos colhíveis (collider + ResourceNode). -->
   <StaticSpawner
     profile="tree"
-    count="18"
+    count="36"
     seed="302"
     region-min="124 0 -120"
     region-max="300 0 120"
@@ -124,7 +118,7 @@
   <!-- §3 Arbustos secos rolando pela areia — muitos, baratos, dão escala. -->
   <StaticSpawner
     profile="foliage"
-    count="190"
+    count="380"
     seed="7102"
     region-min="116 0 -190"
     region-max="430 0 190"
@@ -156,7 +150,7 @@
   <!-- §4 Campos de pedra sobre as dunas (só visual). -->
   <StaticSpawner
     profile="tree"
-    count="95"
+    count="190"
     seed="7103"
     region-min="116 0 -200"
     region-max="450 0 200"
@@ -206,7 +200,7 @@
   <!-- §5 Penedos de arenito com colisão — cobertura e obstáculos no combate. -->
   <StaticSpawner
     profile="tree"
-    count="14"
+    count="28"
     seed="7104"
     region-min="128 0 -156"
     region-max="370 0 156"

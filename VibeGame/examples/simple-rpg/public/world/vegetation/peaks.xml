@@ -8,15 +8,12 @@
   (max-slope-deg alto) é que sobem pelos flancos.
 -->
 <Group name="biome.peaks.vegetation" pos="0 0 0">
-  <!-- NOTE (2026-07-29): tapete erva/planta/flor Quaternius desligado — pasta
-       /assets/meshes/vegetation/ não existe no disco (kit nunca chegou a ser
-       gerado; ver ASSETS_REGISTRY.md §"GLBs em falta"). Referenciar estes
-       caminhos faz `vibegame analyze` falhar. Reativar só quando os GLBs
-       existirem: regenerar via gameassets/Rocks3D ou trocar por meshes reais
-       da raiz de /assets/meshes (não há grass/flower/plant lá hoje).
+  <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).
+       density-per-km2=144000 (= 8× baseline pós-expansão do mapa). -->
+
   <Vegetation
     meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_purpleA.glb"
-    density-per-km2="18000"
+    density-per-km2="144000"
     seed="907"
     region-min="-370 0 -190"
     region-max="-116 0 190"
@@ -26,7 +23,7 @@
     avoid-water="1"
     avoid-overlaps="0"
     max-distance="110"
-    cluster-count="28"
+    cluster-count="56"
     cluster-radius="6"
     flower-near-radius="4"
     flower-density-ratio="0.14"
@@ -38,14 +35,13 @@
     random-yaw="true"
     variation="foliage"
   ></Vegetation>
-  -->
 
   <!-- §1 Coníferas claras (tree_pine é o mesh dos Picos; a floresta norte
        fica com o pine_dark). Só nas cotas baixas — max-slope-deg corta as
        encostas por si. -->
   <StaticSpawner
     profile="tree"
-    count="120"
+    count="240"
     seed="9101"
     region-min="-380 0 -180"
     region-max="-116 0 180"
@@ -80,7 +76,7 @@
   <!-- §2 Coníferas colhíveis junto ao corredor. -->
   <StaticSpawner
     profile="tree"
-    count="16"
+    count="32"
     seed="307"
     region-min="-300 0 -100"
     region-max="-124 0 100"
@@ -125,7 +121,7 @@
        camada que faz a montanha parecer rocha e não um cone liso. -->
   <StaticSpawner
     profile="tree"
-    count="220"
+    count="440"
     seed="9102"
     region-min="-470 0 -280"
     region-max="-116 0 280"
@@ -172,7 +168,7 @@
   <!-- §4 Agulhas de pedra nos flancos — verticais, leem-se de longe. -->
   <StaticSpawner
     profile="tree"
-    count="46"
+    count="92"
     seed="9103"
     region-min="-430 0 -260"
     region-max="-128 0 260"
@@ -206,7 +202,7 @@
   <!-- §5 Pedra colhível (stone) no corredor. -->
   <StaticSpawner
     profile="tree"
-    count="18"
+    count="36"
     seed="317"
     region-min="-320 0 -110"
     region-max="-124 0 110"
@@ -249,7 +245,7 @@
        tem de se ver mais do que numa única jazida. -->
   <StaticSpawner
     profile="foliage"
-    count="70"
+    count="140"
     seed="9104"
     region-min="-410 0 -220"
     region-max="-132 0 220"
@@ -281,7 +277,7 @@
   <!-- §7 Penedos com colisão no corredor (cobertura no caminho da arena). -->
   <StaticSpawner
     profile="tree"
-    count="12"
+    count="24"
     seed="9105"
     region-min="-330 0 -92"
     region-max="-132 0 92"

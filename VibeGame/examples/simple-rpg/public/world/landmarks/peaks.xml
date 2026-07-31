@@ -172,7 +172,7 @@
   ></Lake>
   <StaticSpawner
     profile="tree"
-    count="14"
+    count="28"
     seed="9201"
     region-min="-212 0 -96"
     region-max="-156 0 -40"

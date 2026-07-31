@@ -8,15 +8,12 @@
   Ver VibeGame/src/plugins/spawner/context.md.
 -->
 <Group name="biome.forest.vegetation" pos="0 0 0">
-  <!-- NOTE (2026-07-29): tapete erva/planta/flor Quaternius desligado — pasta
-       /assets/meshes/vegetation/ não existe no disco (kit nunca chegou a ser
-       gerado; ver ASSETS_REGISTRY.md §"GLBs em falta"). Referenciar estes
-       caminhos faz `vibegame analyze` falhar. Reativar só quando os GLBs
-       existirem: regenerar via gameassets/Rocks3D ou trocar por meshes reais
-       da raiz de /assets/meshes (não há grass/flower/plant lá hoje).
+  <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).
+       density-per-km2=304000 (= 8× baseline pós-expansão do mapa). -->
+
   <Vegetation
     meshes="/assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/flower_yellowA.glb"
-    density-per-km2="38000"
+    density-per-km2="304000"
     seed="601"
     region-min="-190 0 116"
     region-max="190 0 380"
@@ -26,7 +23,7 @@
     avoid-water="1"
     avoid-overlaps="0"
     max-distance="110"
-    cluster-count="64"
+    cluster-count="128"
     cluster-radius="8.8"
     flower-near-radius="4.8"
     flower-density-ratio="0.32"
@@ -38,14 +35,13 @@
     random-yaw="true"
     variation="foliage"
   ></Vegetation>
-  -->
 
   <!-- §1 Dossel — pinheiro escuro (pine_dark é o mesh próprio deste bioma;
        o tree_pine claro fica reservado aos Picos). Só visual: é isto que
        transforma a cunha norte em floresta em vez de campo com árvores. -->
   <StaticSpawner
     profile="tree"
-    count="190"
+    count="380"
     seed="6101"
     region-min="-184 0 116"
     region-max="184 0 356"
@@ -80,7 +76,7 @@
   <!-- Mata alta e rala no fundo do bioma (silhueta contra a serra da borda). -->
   <StaticSpawner
     profile="tree"
-    count="120"
+    count="240"
     seed="6102"
     region-min="-250 0 330"
     region-max="250 0 490"
@@ -115,7 +111,7 @@
   <!-- Árvores mortas — quebram a monotonia do dossel e marcam clareiras. -->
   <StaticSpawner
     profile="tree"
-    count="46"
+    count="92"
     seed="6103"
     region-min="-180 0 124"
     region-max="180 0 400"
@@ -151,7 +147,7 @@
        faixa junto aos caminhos: é onde o jogador corta madeira. -->
   <StaticSpawner
     profile="tree"
-    count="22"
+    count="44"
     seed="301"
     region-min="-116 0 120"
     region-max="116 0 280"
@@ -195,7 +191,7 @@
   <!-- §3 Sub-bosque: cogumelos em tufos densos (chão de floresta húmida). -->
   <StaticSpawner
     profile="foliage"
-    count="70"
+    count="140"
     seed="6104"
     region-min="-176 0 120"
     region-max="176 0 400"
@@ -227,7 +223,7 @@
   <!-- §4 Pedregulhos musgosos entre as raízes (só visual). -->
   <StaticSpawner
     profile="tree"
-    count="80"
+    count="160"
     seed="6105"
     region-min="-190 0 120"
     region-max="190 0 420"
@@ -274,7 +270,7 @@
        NavMesh, que assa obstáculos a partir dos colliders de física). -->
   <StaticSpawner
     profile="tree"
-    count="12"
+    count="24"
     seed="6106"
     region-min="-170 0 132"
     region-max="170 0 350"

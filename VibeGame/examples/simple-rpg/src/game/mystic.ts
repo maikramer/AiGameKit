@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { defineQuery, loadGltfToSceneWithAnimator, playSound } from 'vibegame';
-import type { MonoBehaviourContext, State } from 'vibegame';
+import type { InteractionGesture, MonoBehaviourContext, State } from 'vibegame';
 import {
   Transform,
   PlayerController,
@@ -59,6 +59,11 @@ export interface MysticConfig {
   message: string;
   /** Button-prompt label shown when the player is in range (e.g. "Read"). */
   promptLabel: string;
+  /**
+   * Player body gesture on F. Use `'gather'` for ground collect/eat/pick-up;
+   * omit or `'none'` for read/touch/enter-style interactions.
+   */
+  gesture?: InteractionGesture;
   /** Uniform visual scale (default 1) — pipeline GLBs are ~2 units tall. */
   modelScale?: number;
   /** One-time reward applied when the player reads the object. */
@@ -75,6 +80,7 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
   const baseI = cfg.emissiveBase ?? 0.4;
   const pulseI = cfg.emissivePulse ?? 0.45;
   const toastColor = cfg.toastColor ?? '#c9a6ff';
+  const gesture: InteractionGesture = cfg.gesture ?? 'none';
 
   let group: THREE.Group | null = null;
   let loadStarted = false;
@@ -99,6 +105,7 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
     registerInteractionTarget(ctx.state, entityId, {
       label: cfg.promptLabel,
       key: 'F',
+      gesture,
     });
     if (loadStarted) return;
     loadStarted = true;

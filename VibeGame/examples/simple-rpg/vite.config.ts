@@ -72,6 +72,8 @@ export default defineConfig({
       '@recast-navigation/three',
       '@pmndrs/uikit',
       'yoga-layout',
+      '@dimforge/rapier3d-compat',
+      '@dimforge/rapier3d',
       '@gltf-transform/core',
       '@gltf-transform/functions',
     ],

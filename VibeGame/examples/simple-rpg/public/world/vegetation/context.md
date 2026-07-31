@@ -5,26 +5,34 @@
 correspondente. Ver custo scenery vs colhível vs inimigo em `../context.md`
 ("Densidade — spawner instanciado vs entidade").
 
+## Densidade (pós-expansão do mapa)
+
+- Spawners `count=` (árvores, rochas, foliage props, inimigos em `creatures/`) → **×2**
+- Tapete `<Vegetation>` erva/planta/flor → **×8** vs baseline (`density-per-km2`)
+- Kit bpy: `npm run generate-vegetation` → `public/assets/meshes/vegetation/*.glb`
+- Engine soft-cap: ≤12000 instâncias por camada `foliage` (density mode) — evita
+  `pendingKick` de dezenas de milhares a travar o loading gate
+
+| Bioma  | `density-per-km2` (erva) |
+| ------ | ------------------------ |
+| forest | 304000                   |
+| desert | 176000                   |
+| swamp  | 256000                   |
+| peaks  | 144000                   |
+
 ## forest.xml — Floresta Sombria (Norte)
 
 Dono: `vegetation/forest.xml`.
 
-| Camada                        | Mesh(es)                                                                           | `count`/densidade | Notas                                                                                                                                                  |
-| ----------------------------- | ---------------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Tapete erva/planta/flor       | kit Quaternius `vegetation/*.glb`                                                  | 38000/km²         | **Desligado** (comentado) 2026-07-29 — pasta `/assets/meshes/vegetation/` não existe no disco; ver NOTE inline e `ASSETS_REGISTRY.md` §"GLBs em falta" |
-| Dossel principal              | `pine_dark`                                                                        | 190               | mesh próprio deste bioma (não usar `tree_pine`, reservado aos Picos)                                                                                   |
-| Mata rala de fundo            | `pine_dark` (lod1 como visual base)                                                | 120               | silhueta contra a serra da borda                                                                                                                       |
-| Árvores mortas                | `dead_tree`                                                                        | 46                | quebram monotonia do dossel                                                                                                                            |
-| Árvores colhíveis             | `pine_dark` + `pine_dark_stump_collision` + `tree.ts` + `ResourceNode kind="wood"` | 22                | única camada com collider+script — fica cara, ver tabela de custo                                                                                      |
-| Sub-bosque cogumelos          | `mushroom_red`                                                                     | 70                | tufos densos, chão húmido                                                                                                                              |
-| Pedregulhos musgosos (visual) | `moss_rock` / `rock_mossy`                                                         | 80                | sem collider                                                                                                                                           |
-| Penedos com colisão           | `rock_mossy` (escala 3×)                                                           | 12                | poucos — alimentam bake do NavMesh                                                                                                                     |
+| Camada                        | Mesh(es)                                                                           | `count`/densidade | Notas                                |
+| ----------------------------- | ---------------------------------------------------------------------------------- | ----------------- | ------------------------------------ |
+| Tapete erva/planta/flor       | kit bpy `vegetation/*.glb`                                                         | 304000/km²        | ativo; `npm run generate-vegetation` |
+| Dossel principal              | `pine_dark`                                                                        | 380               | ×2                                   |
+| Mata rala de fundo            | `pine_dark` (lod1 como visual base)                                                | 240               | ×2                                   |
+| Árvores mortas                | `dead_tree`                                                                        | 92                | ×2                                   |
+| Árvores colhíveis             | `pine_dark` + `pine_dark_stump_collision` + `tree.ts` + `ResourceNode kind="wood"` | 44                | collider+script — cara               |
+| Sub-bosque cogumelos          | `mushroom_red`                                                                     | 140               | ×2                                   |
+| Pedregulhos musgosos (visual) | `moss_rock` / `rock_mossy`                                                         | 160               | ×2                                   |
+| Penedos com colisão           | `rock_mossy` (escala 3×)                                                           | 24                | NavMesh bake                         |
 
-**Kit de vegetação Quaternius ausente:** os 9 `.glb` (`grass*`, `plant_flat*`,
-`flower_*`) referenciados no `<Vegetation>` do tapete nunca chegaram a ser
-gerados/copiados para `/assets/meshes/vegetation/`. O elemento fica **comentado**
-com uma NOTE inline em vez de apontar para caminhos mortos (isso faz
-`vibegame analyze` falhar). Não existem GLBs de erva/planta/flor na raiz de
-`/assets/meshes/` para substituir 1:1 — reativar só depois de regenerar o kit.
-
-Depois de editar: `vibegame analyze examples/simple-rpg/index.html` → `errors=0`.
+Depois de editar: `vibegame analyze examples/simple-rpg/index.html`.

@@ -11,6 +11,8 @@ nevoeiro, o horizonte não fecha e "Picos Gelados" é um campo que *desce*.
 Este script relê o heightmap original (`heightmap.base.png`, nunca escrito) e
 escreve `heightmap.png` com:
 
+  · vale central re-assentado em VALLEY_Y (o terrain-diffusion é incondicional
+    — a altitude do centro é lotaria de seed; o contrato do mundo exige ~36 m);
   · vale central intocado (cidade, anel, rio e pontes mantêm as cotas de hoje);
   · maciço a oeste com corredor até à arena do ogro (Picos Gelados);
   · dunas a leste (Deserto) e bacia rebaixada a sul (Pântano);
@@ -154,6 +156,30 @@ def box_blur(a: np.ndarray, radius: int) -> np.ndarray:
 def load_terrain_meta() -> tuple[float, float]:
     meta = json.loads(TERRAIN_JSON.read_text())["terrain"]
     return float(meta["world_size"]), float(meta["max_height"])
+
+
+def seat_base_to_valley(base_m: np.ndarray, r: np.ndarray) -> np.ndarray:
+    """Re-assenta o vale central na cota VALLEY_Y.
+
+    O terrain-diffusion é incondicional: a altitude do centro do mapa é
+    lotaria de seed/região (um seed dá 36 m, outro 133 m). O contrato do
+    mundo — cotas dos landmarks, perfil do rio, campos do sculpt — parte de
+    VALLEY_Y no vale, por isso o base é transladado na vertical até a média
+    do disco central (r < CITY_KEEP_R) bater em VALLEY_Y.
+
+    O micro-relevo é invariante a translações (o campo `detail` não muda) e
+    fora do vale quem manda é o sculpt; vales profundos que fiquem abaixo de
+    zero são cortados no piso 0. Determinístico: mesmo base ⇒ mesmo shift.
+    """
+    center = base_m[r < CITY_KEEP_R]
+    if center.size == 0:
+        return base_m
+    shift = float(center.mean()) - VALLEY_Y
+    if abs(shift) < 1.0:
+        return base_m
+    seated = np.clip(base_m - shift, 0.0, None)
+    print(f"vale re-assentado: centro do base {float(center.mean()):.0f} m -> {VALLEY_Y:.0f} m (shift {-shift:+.0f} m)")
+    return seated
 
 
 def build_grid(n: int, world: float) -> tuple[np.ndarray, np.ndarray]:
@@ -318,6 +344,11 @@ def main() -> int:
 
     x, z = build_grid(n, world)
     r = np.hypot(x, z)
+
+    # Re-assenta o vale na cota do contrato antes de qualquer blend — sem
+    # isto um base com centro alto (lotaria do seed) cria uma falésia no anel
+    # de transição e descalibrava rio/landmarks.
+    base_m = seat_base_to_valley(base_m, r)
 
     target = sculpt(x, z)
 

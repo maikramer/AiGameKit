@@ -1,6 +1,124 @@
 <!--
   Discordia district fragment. Loaded via Include from cities/discordia.xml.
-  Edit this file for this district only. Cell coords: space-separated (at="4 2").
+
+  Antes: stub vazio (a vegetação periurbana vive nos spawners de
+  `vegetation/*.xml`, fora da muralha). Com o layout compacto a muralha veio
+  para ±38 e a `SpawnExclusion` para r=52 — ou seja, nenhum spawner entra
+  aqui dentro e o miolo entre a praça (±10) e o anel periurbano (±25) ficava
+  relvado e vazio. Estes props são a mobília desse miolo: quatro carvalhos de
+  sombra nas diagonais (onde nenhuma via passa) e caixotaria encostada à
+  muralha. Tudo GLB já no bundle — nada de assets novos.
+
+  Regras de colocação (verificadas com `vibegame analyze` + teste de distância
+  às polilinhas das vias):
+    - fora dos corredores de 4.8 m das artérias praça→portão (|x| ou |z| ≤ 2.4)
+    - fora do anel ±25 (largura 4 → folga ≥ 2 m ao eixo)
+    - face interior da muralha ~±37.5 — props encostados ficam antes disso
 -->
-<!-- Periurbano: vegetação vem dos spawners em vegetation/*.xml — sem clutter Box/Sphere. -->
-<Group name="city.skirts" pos="0 0 0"></Group>
+<Group name="city.skirts" pos="0 0 0">
+  <!-- Carvalhos do largo: um por quadrante, nas diagonais livres. -->
+  <GameObject
+    name="city_oak_ne"
+    place="at: 15 13; align-to-terrain: 1"
+    transform="rotation: 0 24 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/tree_oak_lod0.glb"
+      lod1-url="/assets/meshes/tree_oak_lod1.glb"
+      lod2-url="/assets/meshes/tree_oak_lod2.glb"
+      lod-threshold-near="36"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="city_oak_nw"
+    place="at: -13 11; align-to-terrain: 1"
+    transform="rotation: 0 -70 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/tree_oak_lod0.glb"
+      lod1-url="/assets/meshes/tree_oak_lod1.glb"
+      lod2-url="/assets/meshes/tree_oak_lod2.glb"
+      lod-threshold-near="36"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="city_oak_sw"
+    place="at: -15 -11; align-to-terrain: 1"
+    transform="rotation: 0 140 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/tree_oak_lod0.glb"
+      lod1-url="/assets/meshes/tree_oak_lod1.glb"
+      lod2-url="/assets/meshes/tree_oak_lod2.glb"
+      lod-threshold-near="36"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="city_oak_se"
+    place="at: 17 -7; align-to-terrain: 1"
+    transform="rotation: 0 -140 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/tree_oak_lod0.glb"
+      lod1-url="/assets/meshes/tree_oak_lod1.glb"
+      lod2-url="/assets/meshes/tree_oak_lod2.glb"
+      lod-threshold-near="36"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+
+  <!-- Caixotaria encostada à muralha (quebra o perímetro nu). -->
+  <GameObject
+    place="at: -34.5 -6; align-to-terrain: 1"
+    transform="rotation: 0 12 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/wooden_crate_lod1.glb"
+      lod2-url="/assets/meshes/wooden_crate_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: -34.5 -8.4; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
+      lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: 21 32; align-to-terrain: 1"
+    transform="rotation: 0 -25 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/chopping_block_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/chopping_block_lod0.glb"
+      lod1-url="/assets/meshes/chopping_block_lod1.glb"
+      lod2-url="/assets/meshes/chopping_block_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+</Group>
