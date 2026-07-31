@@ -42,6 +42,17 @@ export const Road = {
   roughness: new Float32Array(MAX_ENTITIES),
   /** Metalness do material. */
   metalness: new Float32Array(MAX_ENTITIES),
+  /**
+   * 1 = Segment bridge: ribbon at {@link Road.deckY}, approach-only flatten,
+   * GLB deck spawn (see RoadData.bridgeUrl).
+   */
+  bridge: new Uint8Array(MAX_ENTITIES),
+  /** Mean bank Y (spawn / fallback); ribbon may lerp {@link Road.deckY0}→{@link Road.deckY1}. */
+  deckY: new Float32Array(MAX_ENTITIES),
+  /** Bank height at path start (world Y), resolved at apply. */
+  deckY0: new Float32Array(MAX_ENTITIES),
+  /** Bank height at path end (world Y), resolved at apply. */
+  deckY1: new Float32Array(MAX_ENTITIES),
   /** 1 quando o ribbon foi construído e adicionado à cena. */
   applied: new Uint8Array(MAX_ENTITIES),
 } as const;
@@ -59,6 +70,13 @@ export interface RoadData {
   textureUrl: string | null;
   normalMapUrl: string | null;
   roughnessMapUrl: string | null;
+  /** Visual GLB for bridge deck (null = not a bridge). */
+  bridgeUrl?: string | null;
+  bridgeCollisionUrl?: string | null;
+  bridgeLod1Url?: string | null;
+  bridgeLod2Url?: string | null;
+  /** Mesh local +X length before scale (m); default 18. */
+  bridgeNativeSpan?: number;
 }
 
 const ROAD_DATA = new WeakMap<State, Map<number, RoadData>>();

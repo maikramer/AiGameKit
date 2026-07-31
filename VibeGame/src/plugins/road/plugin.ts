@@ -24,6 +24,12 @@ export const roadRecipe: Recipe = {
     'texture-url',
     'normal-map-url',
     'roughness-map-url',
+    'bridge',
+    'bridge-url',
+    'bridge-collision-url',
+    'bridge-lod1-url',
+    'bridge-lod2-url',
+    'bridge-native-span',
   ],
 };
 
@@ -70,6 +76,11 @@ export const segmentRecipe: Recipe = {
     'profile',
     'texture-url',
     'normal-map-url',
+    'bridge-url',
+    'bridge-collision-url',
+    'bridge-lod1-url',
+    'bridge-lod2-url',
+    'bridge-native-span',
   ],
 };
 
@@ -88,7 +99,15 @@ function parseFlatNumbers(raw: unknown): number[] {
 }
 
 function strAttr(raw: unknown): string | null {
-  return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : null;
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    return s !== '' ? s : null;
+  }
+  // Expand / XMLValue edge cases — coerce numbers etc. only if useful as URL.
+  if (typeof raw === 'number' && Number.isFinite(raw)) return null;
+  const s = String(raw).trim();
+  return s !== '' && s !== 'undefined' && s !== 'null' ? s : null;
 }
 
 const roadParser: Parser = ({ state, entity, element }) => {
@@ -117,10 +136,32 @@ const roadParser: Parser = ({ state, entity, element }) => {
     textureUrl: strAttr(attrs['texture-url']),
     normalMapUrl: strAttr(attrs['normal-map-url']),
     roughnessMapUrl: strAttr(attrs['roughness-map-url']),
+    bridgeUrl: strAttr(attrs['bridge-url']),
+    bridgeCollisionUrl: strAttr(attrs['bridge-collision-url']),
+    bridgeLod1Url: strAttr(attrs['bridge-lod1-url']),
+    bridgeLod2Url: strAttr(attrs['bridge-lod2-url']),
+    bridgeNativeSpan: (() => {
+      const raw = attrs['bridge-native-span'];
+      if (raw === undefined || raw === null) return undefined;
+      const n = typeof raw === 'number' ? raw : parseFloat(String(raw));
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    })(),
   });
   // Scalar width fallback = max of per-vertex widths when authored.
   if (widths && widths.length > 0) {
     Road.width[entity] = widths.reduce((a, b) => Math.max(a, b), 0);
+  }
+  const bridgeFlag = attrs.bridge;
+  const isBridge =
+    bridgeFlag === 1 ||
+    bridgeFlag === true ||
+    bridgeFlag === '1' ||
+    bridgeFlag === 'true' ||
+    !!strAttr(attrs['bridge-url']);
+  if (isBridge) {
+    Road.bridge[entity] = 1;
+    // Deck Y filled at apply from bank samples; ribbon uses it immediately.
+    Road.deckY[entity] = 0;
   }
 };
 
@@ -173,6 +214,10 @@ export const RoadPlugin: Plugin = {
         flattenWindow: 56,
         // Max |Δh/Δs| on terrace profile (~22%).
         flattenMaxGrade: 0.22,
+        bridge: 0,
+        deckY: 0,
+        deckY0: 0,
+        deckY1: 0,
         applied: 0,
       },
     },

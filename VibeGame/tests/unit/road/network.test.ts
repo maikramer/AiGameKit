@@ -91,6 +91,51 @@ describe('RoadNetwork expand', () => {
     expect(roads[0]!.attributes['end-feather-end']).toBe(3);
   });
 
+  it('bridge Segment expands with bridge=1 and urls; connects graph', () => {
+    const xml = el(
+      'RoadNetwork',
+      { 'default-width': 4, 'texture-url': '/c.png', 'crossing-flare': 0 },
+      [
+        el('Way', { id: 's_bank', xz: '4 -101' }),
+        el('Way', { id: 's_resume', xz: '4 -145' }),
+        el('Way', { id: 'plaza', xz: '0 0' }),
+        el('Segment', { a: 'plaza', b: 's_bank' }),
+        el('Segment', {
+          a: 's_bank',
+          b: 's_resume',
+          profile: 'bridge',
+          'bridge-url': '/assets/meshes/river_bridge_wood_lod0.glb',
+          'bridge-collision-url':
+            '/assets/meshes/river_bridge_wood_collision.glb',
+        }),
+      ]
+    );
+    const def = parseRoadNetworkElement(xml);
+    expect(def.segments[1]!.profile).toBe('bridge');
+    expect(def.segments[1]!.bridgeUrl).toContain('river_bridge_wood');
+    const roads = expandRoadNetworkToRoads(def);
+    const bridge = roads[1]!;
+    expect(bridge.attributes.bridge).toBe(1);
+    expect(bridge.attributes.flatten).toBe(0);
+    expect(bridge.attributes['bridge-url']).toContain('wood_lod0');
+    expect(bridge.attributes.path).toBe('4 -101 4 -145');
+    const graph = buildRoadNetworkGraph(def);
+    expect(pathBetweenWays(graph, 'plaza', 's_resume')).toEqual([
+      'plaza',
+      's_bank',
+      's_resume',
+    ]);
+  });
+
+  it('profile=bridge without bridge-url throws', () => {
+    const xml = el('RoadNetwork', { 'default-width': 2 }, [
+      el('Way', { id: 'a', xz: '0 0' }),
+      el('Way', { id: 'b', xz: '10 0' }),
+      el('Segment', { a: 'a', b: 'b', profile: 'bridge' }),
+    ]);
+    expect(() => parseRoadNetworkElement(xml)).toThrow(/bridge-url/);
+  });
+
   it('crossing flare widens plaza tips (degree ≥ 3)', () => {
     const xml = el('RoadNetwork', { 'default-width': 2, 'crossing-flare': 1 }, [
       el('Way', { id: 'plaza', xz: '0 0' }),

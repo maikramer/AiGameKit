@@ -25,7 +25,36 @@ import {
   registerGroundMutationCallback,
 } from '../terrain/utils';
 import { Transform, WorldTransform } from '../transforms/components';
-import { carveRoadCorridor } from './carve';
+import { setTransformYawRadians } from '../transforms/utils';
+import {
+  bridgeApproachStubs,
+  carveBridgeDeckClearance,
+  carveRoadApproaches,
+  carveRoadCorridor,
+  effectiveBridgeApproachMeters,
+  BRIDGE_APPROACH_METERS,
+  BRIDGE_CLEARANCE_WIDTH_BONUS,
+  BRIDGE_INTO_SPAN_METERS,
+  BRIDGE_LANDWARD_METERS,
+  BRIDGE_RIBBON_CLEARANCE,
+} from './carve';
+import { waterPreserveZonesLocal } from './water-guard';
+import {
+  BRIDGE_BANK_ABOVE_CHANNEL,
+  BRIDGE_DECK_LOCAL_Y,
+  BRIDGE_NATIVE_SPAN_M,
+  BRIDGE_TIP_EMBED_M,
+  bridgeSpanScaleX,
+  bridgeYawDeg,
+  chooseBridgeLip,
+  deckContourAt,
+  pathArcFraction,
+  pickSolidBankY,
+  planDeckOriginY,
+  type BridgeDeckContour,
+} from './bridge';
+import { probeDeckLocalContour } from './bridge-deck';
+import { bridgeDeckCenterXZ } from './river-crossing';
 import { deleteRoadData, getRoadData, Road } from './components';
 import {
   densifyPathByHeight,
@@ -51,7 +80,17 @@ import {
   type RoadJunctionInput,
   type StitchedRoadChain,
 } from './junctions';
+import { createEntityFromRecipe } from '../../core/recipes/parser';
+import { logger } from '../../core/utils/logger';
+import { GltfLod, GltfPending } from '../gltf-xml/components';
+import { setGltfLodUrls, setGltfUrl } from '../gltf-xml/context';
+import { getGltfRootGroup } from '../gltf-xml/group-registry';
+import { Rigidbody } from '../physics/components';
+import { syncBodyQuaternionFromEuler } from '../physics/utils';
+import { RiverApplySystem } from '../water';
 
+/** Re-export mesh native span for callers / tests. */
+export { BRIDGE_NATIVE_SPAN_M } from './bridge';
 const roadQuery = defineQuery([Road]);
 const terrainQuery = defineQuery([Terrain]);
 
@@ -119,8 +158,18 @@ interface JunctionSidecar {
 const ROAD_SIDECARS = new WeakMap<State, Map<number, RoadSidecar>>();
 /** Crossing patches (degree ≥ 3 only — not end-to-end stamps). */
 const JUNCTION_SIDECARS = new WeakMap<State, Map<string, JunctionSidecar>>();
+/** Bridge deck GameObject eid spawned from a bridge Road. */
+const BRIDGE_DECK_EIDS = new WeakMap<State, Map<number, number>>();
 /** Last fusion-graph signature — rebuild stitched ribbons when network changes. */
 const FUSION_SIG = new WeakMap<State, string>();
+/**
+ * Cheap topology key (`roadCount:gen`) recorded after a successful fusion pass.
+ * Avoids re-running junction detect / stitch / string sig every frame when the
+ * network membership has not changed.
+ */
+const FUSION_CHEAP = new WeakMap<State, string>();
+/** Bumped on road apply / dispose so fusion knows membership changed. */
+const ROAD_TOPO_GEN = new WeakMap<State, number>();
 const ROAD_CHAINS = new WeakMap<State, StitchedRoadChain[]>();
 const JUNCTION_PATCH_SIG = new WeakMap<State, string>();
 
@@ -131,6 +180,14 @@ const JUNCTION_PATCH_SIG = new WeakMap<State, string>();
  */
 const ROAD_BIAS = new WeakMap<State, number>();
 
+function bridgeDeckEids(state: State): Map<number, number> {
+  let m = BRIDGE_DECK_EIDS.get(state);
+  if (!m) {
+    m = new Map();
+    BRIDGE_DECK_EIDS.set(state, m);
+  }
+  return m;
+}
 function nextRoadBias(state: State): number {
   const n = (ROAD_BIAS.get(state) ?? 0) + 1;
   ROAD_BIAS.set(state, n);
@@ -159,6 +216,38 @@ function roadNeedRegrade(state: State): Set<number> {
     ROAD_REGRADE.set(state, s);
   }
   return s;
+}
+
+function bumpRoadTopology(state: State): void {
+  ROAD_TOPO_GEN.set(state, (ROAD_TOPO_GEN.get(state) ?? 0) + 1);
+  FUSION_CHEAP.delete(state);
+}
+
+function cheapFusionKey(state: State): string {
+  let n = 0;
+  for (const _ of roadQuery(state.world)) n++;
+  return `${n}:${ROAD_TOPO_GEN.get(state) ?? 0}`;
+}
+
+function hasUnseatedBridgeDeck(state: State): boolean {
+  const seated = bridgeDeckSeated(state);
+  for (const [, deckEid] of bridgeDeckEids(state)) {
+    if (state.exists(deckEid) && !seated.has(deckEid)) return true;
+  }
+  return false;
+}
+
+/** True when ribbons, fusion, and bridge decks need no work this frame. */
+function isRoadApplyIdle(state: State): boolean {
+  if (roadDirty(state).size > 0) return false;
+  const gen = ROAD_TOPO_GEN.get(state) ?? 0;
+  let n = 0;
+  for (const eid of roadQuery(state.world)) {
+    n++;
+    if (Road.applied[eid] !== 1) return false;
+  }
+  if (FUSION_CHEAP.get(state) !== `${n}:${gen}`) return false;
+  return !hasUnseatedBridgeDeck(state);
 }
 
 /**
@@ -191,14 +280,22 @@ function roadSidecars(state: State): Map<number, RoadSidecar> {
 function disposeRoad(state: State, eid: number): void {
   const cars = ROAD_SIDECARS.get(state);
   const car = cars?.get(eid);
-  if (!car) return;
-  car.mesh.removeFromParent();
-  car.mesh.geometry.dispose();
-  car.material.dispose(); // texturas são cache partilhado — não descartar
-  cars!.delete(eid);
+  if (car) {
+    car.mesh.removeFromParent();
+    car.mesh.geometry.dispose();
+    car.material.dispose(); // texturas são cache partilhado — não descartar
+    cars!.delete(eid);
+  }
+  const deckEid = bridgeDeckEids(state).get(eid);
+  if (deckEid !== undefined) {
+    bridgeDeckEids(state).delete(eid);
+    bridgeDeckSeated(state).delete(deckEid);
+    state.destroyEntity(deckEid);
+  }
   deleteRoadData(state, eid);
   // Network changed — next frame rebuilds fusion discs + neighbour docks.
   FUSION_SIG.delete(state);
+  bumpRoadTopology(state);
 }
 
 function disposeJunction(state: State, id: string): void {
@@ -247,6 +344,7 @@ export function collectRoadJunctionInputs(state: State): RoadJunctionInput[] {
       textureUrl: data.textureUrl,
       normalMapUrl: data.normalMapUrl,
       textureScale: Road.textureScale[eid] || 16,
+      bridge: Road.bridge[eid] === 1,
     });
   }
   return out;
@@ -269,15 +367,43 @@ function fusionPlanFor(
 const ROAD_DECAL_CLEARANCE = 0.04;
 
 /**
- * How many coarser LOD lattices (halving res each step) the ribbon must also
- * clear on the **centerline**. Coarse chunk triangles cut above a carved bed
- * at T-junctions; without this the transparent decal loses the depth test and
- * sand shows through as an orange band on the chunk edge. Centerline only —
- * never max-neighborhood (that parked the ribbon on every sand ridge = stripes).
+ * How many coarser LOD lattices (halving res each step) the ribbon also clears
+ * on the **centerline**. A chunk whose neighbour sits one level up cuts its
+ * triangles above the carved bed at the seam; the transparent decal then loses
+ * the depth test and sand shows through as an orange band on the chunk edge.
+ * One level only — corridors force the quadtree down to the deepest leaf
+ * (`densityNeedsDeeperSplit`), so nothing coarser than the neighbour is ever
+ * rendered over a road.
  */
-const ROAD_LOD_CLEARANCE_LEVELS = 2;
+const ROAD_LOD_CLEARANCE_LEVELS = 1;
 
-/** Analytic bed raised to centerline mesh lattices (flatten / junction discs). */
+/**
+ * Ceiling on the seam lift (m). Clearing a coarser quad is a centimetre problem
+ * on a graded bed, but a quad chord on a mountainside runs metres above the
+ * lattice below it: unclamped, the ribbon floated ~7 m over the ground the
+ * player walks on (and, on a bridge, above the deck itself). Capping trades a
+ * sliver of paint hidden by a distant coarse chunk for a road that always meets
+ * the ground.
+ *
+ * The cap **is** the float on any sustained slope: the coarser lattice runs
+ * 0.5-0.8 m above the rendered one for the whole of a climb, so the lift
+ * saturates and the ribbon rides the cap. Measured on the simple-rpg west
+ * artery (x -195..-227) with the old 0.3 m: the hero stood 0.26-0.28 m below
+ * the cobble the whole way up — legs sunk into the road. The chunk the player
+ * stands on is always the corridor-boosted leaf (its collider is built from the
+ * same lattice this samples), so a coarser neighbour can only cut over the
+ * paint at a chunk seam; a couple of centimetres is all that case needs.
+ */
+const ROAD_LOD_CLEARANCE_MAX_M = 0.06;
+
+/**
+ * Bed on the **rendered** chunk lattice (flatten / junction discs). The bilinear
+ * heightmap surface is not what the player stands on: a 4096-texel field runs up
+ * to ~1.5 m off the 7-8 m chunk quads on a mountainside, either way, so an
+ * analytic ribbon floats on ridges and sinks in hollows. Sampling the same
+ * lattice as the mesh (and as the heightfield collider) keeps the paint on the
+ * surface; the seam lift only clears a neighbour one level coarser.
+ */
 function roadDecalHeightAtField(
   state: State,
   fieldEntity: number
@@ -294,21 +420,270 @@ function roadDecalHeightAtField(
   return (x, z) => {
     const lx = x - ox;
     const lz = z - oz;
-    let y = sampleHeightAt(sampler, lx, lz);
     let res = meshSurfaceResolutionForPoint(baseRes, levels, density, lx, lz);
-    for (let i = 0; i <= ROAD_LOD_CLEARANCE_LEVELS; i++) {
-      const h = sampleMeshSurfaceHeight(sampler, lx, lz, res);
-      if (h > y) y = h;
+    const rendered = sampleMeshSurfaceHeight(sampler, lx, lz, res);
+    let coarse = rendered;
+    for (let i = 0; i < ROAD_LOD_CLEARANCE_LEVELS; i++) {
       res = Math.max(baseRes, Math.floor(res / 2));
+      const h = sampleMeshSurfaceHeight(sampler, lx, lz, res);
+      if (h > coarse) coarse = h;
     }
-    return baseY + y + ROAD_DECAL_CLEARANCE;
+    const lift = Math.min(coarse - rendered, ROAD_LOD_CLEARANCE_MAX_M);
+    return baseY + rendered + Math.max(lift, 0) + ROAD_DECAL_CLEARANCE;
   };
+}
+
+/** Terrain decal height of the first ready field (bridge ribbon fallback). */
+function bridgeGroundHeightAt(
+  state: State
+): ((x: number, z: number) => number) | null {
+  for (const [fe] of getTerrainContext(state)) {
+    const fn = roadDecalHeightAtField(state, fe);
+    if (fn) return fn;
+  }
+  return null;
+}
+
+/**
+ * Analytic field height → world Y (no LOD mesh max). LOD clearance inflates
+ * bank lips above the visible pad and parks the deck in the air.
+ */
+function sampleBridgeBankAnalyticY(state: State, x: number, z: number): number {
+  for (const [fe, fd] of getTerrainContext(state)) {
+    if (!fd.initialized || !fd.sampler.data) continue;
+    const lx = x - fd.worldOffset.x;
+    const lz = z - fd.worldOffset.z;
+    return terrainBaseY(state, fe) + sampleHeightAt(fd.sampler, lx, lz);
+  }
+  const y = sampleTerrainSurface(state, x, z, 0.75)?.worldY;
+  return y !== undefined && Number.isFinite(y) ? y : 0;
+}
+
+/**
+ * Sample solid ground **behind** each Way (away from the span). Several depths
+ * landward + the Way itself; {@link pickSolidBankY} keeps the lowest solid
+ * sample so an arterial flatten spike cannot bury the opposite abutment.
+ */
+function bridgeLandwardBankYs(state: State, path: number[]): [number, number] {
+  const x0 = path[0]!;
+  const z0 = path[1]!;
+  const x1 = path[path.length - 2]!;
+  const z1 = path[path.length - 1]!;
+  const dx = x1 - x0;
+  const dz = z1 - z0;
+  const len = Math.hypot(dx, dz);
+  const midY = sampleBridgeMidChannelY(state, path);
+  if (len < 1e-6) {
+    const y = sampleBridgeBankAnalyticY(state, x0, z0);
+    return [y, y];
+  }
+  const ux = dx / len;
+  const uz = dz / len;
+  const back = BRIDGE_LANDWARD_METERS;
+  const depths = [back, back * 0.5, 0];
+  const samples0 = depths.map((d) =>
+    sampleBridgeBankAnalyticY(state, x0 - ux * d, z0 - uz * d)
+  );
+  const samples1 = depths.map((d) =>
+    sampleBridgeBankAnalyticY(state, x1 + ux * d, z1 + uz * d)
+  );
+  return [pickSolidBankY(samples0, midY), pickSolidBankY(samples1, midY)];
+}
+
+/**
+ * Mid-span analytic Y (river bed after River carve). Used so lip choice never
+ * stamps a raise that would plug the channel.
+ */
+function sampleBridgeMidChannelY(state: State, path: number[]): number {
+  const { x, z } = bridgeDeckCenterXZ(state, path);
+  return sampleBridgeBankAnalyticY(state, x, z);
+}
+
+/**
+ * Resolve shared lip from landward banks + mid-channel (post pad/river).
+ * Prefers lowering the high bank — see {@link chooseBridgeLip}.
+ */
+export function resolveBridgeDeckY(state: State, path: number[]): number {
+  if (path.length < 4) return 0;
+  const [a, b] = bridgeLandwardBankYs(state, path);
+  return chooseBridgeLip(a, b, sampleBridgeMidChannelY(state, path)).lip;
+}
+
+/** Write deckY0/deckY1/deckY SOA for a bridge road. */
+export function applyBridgeDeckHeights(
+  state: State,
+  eid: number,
+  path: number[]
+): void {
+  if (path.length < 4) return;
+  const [y0, y1] = bridgeLandwardBankYs(state, path);
+  const midY = sampleBridgeMidChannelY(state, path);
+  const plan = chooseBridgeLip(y0, y1, midY);
+  Road.deckY0[eid] = plan.lip;
+  Road.deckY1[eid] = plan.lip;
+  Road.deckY[eid] = plan.lip;
+  logger.info(
+    `[Road] bridge lip eid=${eid} strategy=${plan.strategy} lip=${plan.lip.toFixed(2)} banks=${y0.toFixed(2)}/${y1.toFixed(2)} mid=${midY.toFixed(2)}`
+  );
+}
+
+/**
+ * World Y of the entity origin before the deck mesh has loaded: assume the
+ * topmost geometry ({@link BRIDGE_DECK_LOCAL_Y}) sits on the lip. One frame of
+ * approximation — {@link seatBridgeDeck} re-seats on the probed contour.
+ */
+export function bridgeDeckSpawnY(eid: number): number {
+  const lip = Road.deckY[eid];
+  const y = Number.isFinite(lip) ? lip : 0;
+  return y - BRIDGE_TIP_EMBED_M - BRIDGE_DECK_LOCAL_Y;
+}
+
+/** Deck walk surface offsets from the entity origin, probed once per deck. */
+const BRIDGE_DECK_CONTOUR = new WeakMap<
+  State,
+  Map<number, BridgeDeckContour>
+>();
+
+function bridgeDeckContours(state: State): Map<number, BridgeDeckContour> {
+  let m = BRIDGE_DECK_CONTOUR.get(state);
+  if (!m) {
+    m = new Map();
+    BRIDGE_DECK_CONTOUR.set(state, m);
+  }
+  return m;
+}
+
+/**
+ * Walk surface of a seated bridge deck in world Y, or null while the mesh is
+ * still loading. Read by the ribbon and by the terrain clearance cut so both
+ * agree on where the deck actually is.
+ */
+export function bridgeDeckWorldContour(
+  state: State,
+  roadEid: number
+): BridgeDeckContour | null {
+  const deckEid = bridgeDeckEids(state).get(roadEid);
+  if (deckEid === undefined || !state.exists(deckEid)) return null;
+  const local = bridgeDeckContours(state).get(deckEid);
+  if (!local) return null;
+  const originY = Transform.posY[deckEid];
+  return local.map((y) => y + originY);
+}
+
+/**
+ * Deck origin Y from the cached contour and the current lip, or null while the
+ * mesh has not been probed. Pure arithmetic: a later carve that moves the lip
+ * re-seats the deck without another raycast pass.
+ */
+function bridgeDeckSeatY(
+  state: State,
+  roadEid: number,
+  deckEid: number
+): number | null {
+  const local = bridgeDeckContours(state).get(deckEid);
+  if (!local) return null;
+  const lip = Number.isFinite(Road.deckY[roadEid]) ? Road.deckY[roadEid] : 0;
+  return planDeckOriginY(local, lip);
+}
+
+/**
+ * Move an already-probed deck onto the current lip. The ribbon samples the deck
+ * contour, so it has to run **before** the cobble is rebuilt: a regrade that
+ * lowers the lip (west artery: 37.19 → 36.85 once the pads finished carving)
+ * used to re-seat the deck only in {@link spawnBridgeDeck}, which the apply loop
+ * calls *after* the geometry — the cobble stayed on the old lip and floated the
+ * whole lip delta (0.34 m) over the stone, legs sunk into the span.
+ *
+ * No-op while the mesh is still loading (no contour yet) — {@link seatBridgeDeck}
+ * seats it on load and marks the road dirty.
+ */
+function reseatBridgeDeckToLip(state: State, roadEid: number): void {
+  const deckEid = bridgeDeckEids(state).get(roadEid);
+  if (deckEid === undefined || !state.exists(deckEid)) return;
+  if (!bridgeDeckSeated(state).has(deckEid)) return;
+  const seatY = bridgeDeckSeatY(state, roadEid, deckEid);
+  if (seatY === null || Transform.posY[deckEid] === seatY) return;
+  Transform.posY[deckEid] = seatY;
+  Transform.dirty[deckEid] = 1;
+  if (state.hasComponent(deckEid, Rigidbody)) {
+    Rigidbody.posY[deckEid] = seatY;
+    Rigidbody.poseDirty[deckEid] = 1;
+  }
+}
+
+const BRIDGE_DECK_SEATED = new WeakMap<State, Set<number>>();
+
+function bridgeDeckSeated(state: State): Set<number> {
+  let s = BRIDGE_DECK_SEATED.get(state);
+  if (!s) {
+    s = new Set();
+    BRIDGE_DECK_SEATED.set(state, s);
+  }
+  return s;
+}
+
+/**
+ * After GLTF load: centre the deck on the span and drop it so the abutment
+ * tips sit {@link BRIDGE_TIP_EMBED_M} under the bank lip. Seating on the AABB
+ * top instead parks the parapet crown at bank level and buries the whole ramp.
+ *
+ * Returns true once the deck is seated (contour cached, transform final).
+ */
+function seatBridgeDeck(
+  state: State,
+  roadEid: number,
+  deckEid: number,
+  path: number[]
+): boolean {
+  if (GltfPending.loaded[deckEid] !== 1) return false;
+  if (bridgeDeckSeated(state).has(deckEid)) return true;
+  const group = getGltfRootGroup(state, deckEid);
+  if (!group) return false;
+  group.updateWorldMatrix(true, true);
+  const box = new THREE.Box3().setFromObject(group);
+  if (box.isEmpty()) return false;
+
+  // Centre XZ on the river centreline (not Ways mid — can sit off-channel).
+  const { x: mx, z: mz } = bridgeDeckCenterXZ(state, path);
+  const cx = (box.min.x + box.max.x) * 0.5;
+  const cz = (box.min.z + box.max.z) * 0.5;
+  Transform.posX[deckEid] += mx - cx;
+  Transform.posZ[deckEid] += mz - cz;
+  Transform.dirty[deckEid] = 1;
+
+  const contour = probeDeckLocalContour(group, path, Transform.posY[deckEid]);
+  const lip = Number.isFinite(Road.deckY[roadEid]) ? Road.deckY[roadEid] : 0;
+  if (contour) {
+    bridgeDeckContours(state).set(deckEid, contour);
+    Transform.posY[deckEid] = planDeckOriginY(contour, lip);
+  } else {
+    // No lane hit (degenerate mesh): fall back to the AABB top on the lip.
+    Transform.posY[deckEid] += lip - BRIDGE_TIP_EMBED_M - box.max.y;
+  }
+  if (state.hasComponent(deckEid, Rigidbody)) {
+    Rigidbody.posX[deckEid] = Transform.posX[deckEid];
+    Rigidbody.posY[deckEid] = Transform.posY[deckEid];
+    Rigidbody.posZ[deckEid] = Transform.posZ[deckEid];
+    Rigidbody.poseDirty[deckEid] = 1;
+  }
+  bridgeDeckSeated(state).add(deckEid);
+  if (contour) {
+    const world = contour.map((y) => y + Transform.posY[deckEid]);
+    logger.info(
+      `[Road] bridge deck seated eid=${deckEid} lip=${lip.toFixed(2)} tips=${world[0]!.toFixed(2)}/${world[world.length - 1]!.toFixed(2)} crown=${Math.max(...world).toFixed(2)}`
+    );
+  }
+  return true;
 }
 
 /**
  * Ribbon Y for flattened roads: carved analytic bed, raised to the centerline
- * mesh lattice when a coarser LOD chord sits above the bed. Non-flatten decals
- * still follow the rendered mesh surface.
+ * mesh lattice when a coarser LOD chord sits above the bed.
+ *
+ * Bridges follow the **probed deck contour** — ramps included — so the cobble
+ * climbs onto the deck instead of a flat plane forcing the whole span down to
+ * bank level. Where the deck is still under ground (the embedded tips) the
+ * ribbon falls back to the terrain so the paint never disappears.
  */
 export function buildRoadHeightAt(
   state: State,
@@ -316,6 +691,24 @@ export function buildRoadHeightAt(
   _spacing: number,
   _width: number
 ): (x: number, z: number) => number {
+  if (Road.bridge[eid] === 1) {
+    const data = getRoadData(state, eid);
+    const contour = bridgeDeckWorldContour(state, eid);
+    const groundAt = bridgeGroundHeightAt(state);
+    if (contour && data && data.path.length >= 4) {
+      const path = data.path;
+      return (x, z) => {
+        const deck =
+          deckContourAt(contour, pathArcFraction(path, x, z)) +
+          BRIDGE_RIBBON_CLEARANCE;
+        const ground = groundAt?.(x, z);
+        return ground !== undefined && ground > deck ? ground : deck;
+      };
+    }
+    // Pre-load: keep the ribbon on the lip so it is never buried mid-span.
+    const lip = Number.isFinite(Road.deckY[eid]) ? Road.deckY[eid] : 0;
+    return () => lip + BRIDGE_RIBBON_CLEARANCE;
+  }
   if (Road.flatten[eid] === 1) {
     for (const [fe] of getTerrainContext(state)) {
       const fn = roadDecalHeightAtField(state, fe);
@@ -371,6 +764,7 @@ function carveRoadBed(
   path: number[],
   width: number
 ): void {
+  const isBridge = Road.bridge[eid] === 1;
   for (const [fe, fd] of getTerrainContext(state)) {
     if (!fd.initialized || !fd.sampler.data) continue;
     const localPath: number[] = new Array(path.length);
@@ -390,25 +784,112 @@ function carveRoadBed(
       width + ROADBED_OVERHANG,
       1.5
     );
-    const changed = carveRoadCorridor(fd.sampler, {
+    const baseY = terrainBaseY(state, fe);
+    // Lake/river carve first. Arteries: skip wet waterline + no-raise floor so
+    // blend cannot re-fill bowls. Bridges: only noRaiseBelowY — preserve discs
+    // would skip bank tips that must terrace up to the deck lip (south gap).
+    const waterZones = waterPreserveZonesLocal(
+      state,
+      localPath,
+      bedWidth * 0.5 + falloff,
+      fd.worldOffset,
+      baseY
+    );
+    const corridorOpts = {
       path: localPath,
       width: bedWidth,
       falloff,
       window,
       maxGrade,
-    });
+      noRaiseBelowY: waterZones.noRaiseBelowY,
+      preserveDiscs: isBridge ? undefined : waterZones.discs,
+      preserveRibbons: isBridge ? undefined : waterZones.ribbons,
+    };
+    // Bridge: landward stubs only when texel fine enough; coarse maps skip
+    // (minEffectiveWidth would stamp a ~texel-wide sand plug over the river).
+    const approachM = isBridge
+      ? effectiveBridgeApproachMeters(fd.sampler, BRIDGE_APPROACH_METERS)
+      : 0;
+    const lipWorld = Road.deckY[eid];
+    const flatTargetY =
+      isBridge && Number.isFinite(lipWorld) ? lipWorld - baseY : undefined;
+    let changed: boolean;
+    if (isBridge) {
+      // Approach seat: grade the landward stubs onto the deck plane. Texels
+      // already in the channel may only be cut, never filled into the water.
+      const midChannel = sampleBridgeMidChannelY(state, path);
+      const channelFloor = Number.isFinite(midChannel)
+        ? midChannel - baseY + BRIDGE_BANK_ABOVE_CHANNEL
+        : undefined;
+      const waterFloor = waterZones.noRaiseBelowY;
+      const noRaiseBelowY =
+        channelFloor !== undefined && waterFloor !== undefined
+          ? Math.min(channelFloor, waterFloor)
+          : (channelFloor ?? waterFloor);
+      changed = carveRoadApproaches(fd.sampler, {
+        ...corridorOpts,
+        // No preserve discs here: abutments sit on the beach just outside the
+        // shore line and must terrace up to the lip. Channel safety comes from
+        // clamped approach falloff (bridgeApproachCorridorOpts) + noRaiseBelowY
+        // + tiny into-span — not from skipping the whole waterline footprint.
+        preserveDiscs: undefined,
+        preserveRibbons: undefined,
+        approachMeters: approachM,
+        landwardMeters: BRIDGE_LANDWARD_METERS,
+        intoSpanMeters: BRIDGE_INTO_SPAN_METERS,
+        flatTargetY,
+        noRaiseBelowY,
+      });
+      // Span clearance: cut whatever pokes through the deck so only the
+      // abutment tips stay buried. Lower-only — the channel is never filled.
+      const contour = bridgeDeckWorldContour(state, eid);
+      if (contour) {
+        const cleared = carveBridgeDeckClearance(fd.sampler, {
+          path: localPath,
+          width: width + BRIDGE_CLEARANCE_WIDTH_BONUS,
+          falloff: Math.max(falloff * 0.35, 1.5),
+          deckYAt: (u) => deckContourAt(contour, u) - baseY,
+        });
+        if (cleared) changed = true;
+      }
+    } else {
+      changed = carveRoadCorridor(fd.sampler, corridorOpts);
+    }
+    if (isBridge && !changed) {
+      // Coarse heightmap: approach carve skipped (would plug the river).
+      // Deck seats on TerrainPad / analytic lip only.
+      logger.info(
+        `[Road] bridge eid=${eid} skip approach carve (coarse texel) lip=${lipWorld.toFixed(2)}`
+      );
+    }
+    // Density + brush AABB. Bridges: landward stubs plus the span itself once
+    // the deck contour is known — the clearance cut only shows up in the mesh
+    // if the chunks under the abutments are refined to the carved lattice.
+    const densityPaths =
+      isBridge && !bridgeDeckWorldContour(state, eid)
+        ? bridgeApproachStubs(
+            localPath,
+            BRIDGE_INTO_SPAN_METERS,
+            BRIDGE_LANDWARD_METERS
+          )
+        : isBridge
+          ? [
+              localPath,
+              ...bridgeApproachStubs(
+                localPath,
+                BRIDGE_INTO_SPAN_METERS,
+                BRIDGE_LANDWARD_METERS
+              ),
+            ]
+          : [localPath];
     if (fd.density) {
-      // Shared corridor density + leaf pad (same contract as rivers/lakes).
       const levels = Math.max(1, Terrain.levels[fe] || 1);
       const worldSize = Terrain.worldSize[fe] || fd.sampler.worldSize;
       const reach = bedWidth / 2 + Math.max(falloff, bedWidth / 2);
-      applyCorridorDensity(
-        fd.density,
-        localPath,
-        reach,
-        255,
-        densityLeafPad(worldSize, levels)
-      );
+      const leafPad = densityLeafPad(worldSize, levels);
+      for (const densPath of densityPaths) {
+        applyCorridorDensity(fd.density, densPath, reach, 255, leafPad);
+      }
       refreshChunkResolutions(state, fe, fd);
     }
     if (changed) rebuildTerrainDerivatives(state, fe, fd);
@@ -417,23 +898,31 @@ function carveRoadBed(
     let minZ = Infinity;
     let maxZ = -Infinity;
     const brushReach = bedWidth / 2 + Math.max(falloff, bedWidth / 2);
-    for (let i = 0; i < localPath.length; i += 2) {
-      const px = localPath[i]!;
-      const pz = localPath[i + 1]!;
-      minX = Math.min(minX, px - brushReach);
-      maxX = Math.max(maxX, px + brushReach);
-      minZ = Math.min(minZ, pz - brushReach);
-      maxZ = Math.max(maxZ, pz + brushReach);
+    for (const densPath of densityPaths) {
+      for (let i = 0; i < densPath.length; i += 2) {
+        const px = densPath[i]!;
+        const pz = densPath[i + 1]!;
+        minX = Math.min(minX, px - brushReach);
+        maxX = Math.max(maxX, px + brushReach);
+        minZ = Math.min(minZ, pz - brushReach);
+        maxZ = Math.max(maxZ, pz + brushReach);
+      }
     }
-    registerGroundBrush(state, {
-      kind: 'road',
-      minX,
-      maxX,
-      minZ,
-      maxZ,
-      path: localPath.slice(),
-      halfWidth: bedWidth / 2,
-    });
+    if (Number.isFinite(minX)) {
+      registerGroundBrush(state, {
+        kind: 'road',
+        minX,
+        maxX,
+        minZ,
+        maxZ,
+        // Brush path = stubs joined for bridges (queries stay bank-local).
+        path:
+          densityPaths.length === 1
+            ? densityPaths[0]!.slice()
+            : localPath.slice(),
+        halfWidth: bedWidth / 2,
+      });
+    }
     break;
   }
 }
@@ -471,6 +960,10 @@ function buildRoadGeometry(
 
   let heightAt: (x: number, z: number) => number;
   if (samplerReady) {
+    if (Road.bridge[eid] === 1) {
+      applyBridgeDeckHeights(state, eid, data.path);
+      reseatBridgeDeckToLip(state, eid);
+    }
     heightAt = buildRoadHeightAt(state, eid, spacing, width);
   } else {
     const terrainExists = terrainQuery(state.world).length > 0;
@@ -536,7 +1029,13 @@ function buildRoadGeometry(
         : width;
 
   // Phase A — prepare roadbed (once). Stitched leader carves the full chain.
-  if (regrade && Road.flatten[eid] === 1) {
+  // Bridge: resolve bank heights + approach-only flatten (profile flatten off).
+  if (regrade && Road.bridge[eid] === 1) {
+    applyBridgeDeckHeights(state, eid, authoredPath);
+    carveRoadBed(state, eid, path, paintWidth);
+    reseatBridgeDeckToLip(state, eid);
+    heightAt = buildRoadHeightAt(state, eid, spacing, paintWidth);
+  } else if (regrade && Road.flatten[eid] === 1) {
     carveRoadBed(state, eid, path, paintWidth);
     heightAt = buildRoadHeightAt(state, eid, spacing, paintWidth);
   }
@@ -695,13 +1194,21 @@ function syncCrossingPatches(
 /**
  * Rebuild end-to-end stitch chains + crossing patches. Absorbed members do not
  * paint — the leader paints one continuous carriageway with soft width lerp.
+ *
+ * Cheap key (`count:gen`) skips the full junction walk when membership is
+ * unchanged; the expensive string sig still gates dirty-marking of leaders.
  */
 function syncRoadFusion(state: State, scene: THREE.Scene): void {
+  const cheap = cheapFusionKey(state);
+  if (FUSION_CHEAP.get(state) === cheap) return;
+
   const inputs = collectRoadJunctionInputs(state);
   if (inputs.length === 0) {
     ROAD_CHAINS.set(state, []);
     disposeAllJunctionDiscs(state);
     JUNCTION_PATCH_SIG.delete(state);
+    FUSION_SIG.delete(state);
+    FUSION_CHEAP.set(state, cheap);
     return;
   }
   const junctions = detectRoadJunctions(inputs);
@@ -713,6 +1220,7 @@ function syncRoadFusion(state: State, scene: THREE.Scene): void {
   const prev = FUSION_SIG.get(state);
   ROAD_CHAINS.set(state, chains);
   syncCrossingPatches(state, scene, junctions);
+  FUSION_CHEAP.set(state, cheap);
   if (prev === sig) return;
   FUSION_SIG.set(state, sig);
 
@@ -740,14 +1248,133 @@ function syncRoadFusion(state: State, scene: THREE.Scene): void {
 }
 
 /**
+ * Spawn or sync fixed GLB deck for a bridge Road. Mesh spans local +X; yaw
+ * aligns +X to path A→B. Authored meshes are **centred** — entity Y is
+ * lip−{@link BRIDGE_DECK_LOCAL_Y} as a pre-load estimate; {@link seatBridgeDeck}
+ * drops it onto the probed contour after load. Collider matches the visual
+ * (no `mesh-anchor: base` — that would put pier feet on the lip).
+ *
+ * Wires {@link GltfPending} + URL sidecar explicitly (no merge-recipe child) so
+ * runtime spawn cannot silently skip the loader adapters.
+ */
+function spawnBridgeDeck(
+  state: State,
+  eid: number,
+  data: NonNullable<ReturnType<typeof getRoadData>>
+): void {
+  if (Road.bridge[eid] !== 1) return;
+  const url = data.bridgeUrl?.trim() || null;
+  if (!url) {
+    logger.warn(
+      `[Road] bridge eid=${eid} missing bridge-url — cobble ribbon only, no GLB deck`
+    );
+    return;
+  }
+
+  const path = data.path;
+  if (path.length < 4) return;
+  const nativeSpan = data.bridgeNativeSpan ?? BRIDGE_NATIVE_SPAN_M;
+  const scaleX = bridgeSpanScaleX(path, nativeSpan);
+  if (scaleX < 0.05) return;
+
+  const { x: mx, z: mz } = bridgeDeckCenterXZ(state, path);
+  const deckY = bridgeDeckSpawnY(eid);
+  const yawDeg = bridgeYawDeg(path);
+
+  const existing = bridgeDeckEids(state).get(eid);
+  if (existing !== undefined) {
+    if (!state.exists(existing)) {
+      bridgeDeckEids(state).delete(eid);
+      bridgeDeckSeated(state).delete(existing);
+    } else {
+      // Regrade may have moved the lip: re-seat from the cached contour when
+      // the deck is already probed, otherwise keep the pre-load estimate.
+      const seatedY = bridgeDeckSeatY(state, eid, existing);
+      Transform.posX[existing] = mx;
+      Transform.posY[existing] = seatedY ?? deckY;
+      Transform.posZ[existing] = mz;
+      Transform.scaleX[existing] = scaleX;
+      Transform.scaleY[existing] = 1;
+      Transform.scaleZ[existing] = 1;
+      setTransformYawRadians(Transform, existing, (yawDeg * Math.PI) / 180);
+      Transform.dirty[existing] = 1;
+      if (state.hasComponent(existing, Rigidbody)) {
+        Rigidbody.posX[existing] = mx;
+        Rigidbody.posY[existing] = Transform.posY[existing];
+        Rigidbody.posZ[existing] = mz;
+        Rigidbody.eulerX[existing] = Transform.eulerX[existing];
+        Rigidbody.eulerY[existing] = Transform.eulerY[existing];
+        Rigidbody.eulerZ[existing] = Transform.eulerZ[existing];
+        syncBodyQuaternionFromEuler(existing);
+        Rigidbody.poseDirty[existing] = 1;
+      }
+      seatBridgeDeck(state, eid, existing, path);
+      return;
+    }
+  }
+
+  const colUrl = (data.bridgeCollisionUrl ?? url).trim();
+  // Do NOT use place= here: mid-span XZ samples the river bed and would yank
+  // the deck down into the water. Entity Y accounts for centred mesh origin.
+  const deckEid = createEntityFromRecipe(state, 'GameObject', {
+    name: `road_bridge_${eid}`,
+    transform: `pos: ${mx} ${deckY} ${mz}; rotation: 0 ${yawDeg} 0; scale: ${scaleX} 1 1`,
+    rigidbody: 'type: fixed; mass: 0; gravity-scale: 0',
+    collider: `shape: trimesh; mesh-url: ${colUrl}`,
+  });
+
+  // Explicit GLTF pending — same contract as <GLTFLoader url> merge, but
+  // guaranteed at runtime (no dependency on processRecipeChildElements merge).
+  if (!state.hasComponent(deckEid, GltfPending)) {
+    state.addComponent(deckEid, GltfPending);
+  }
+  GltfPending.loaded[deckEid] = 0;
+  setGltfUrl(state, deckEid, url);
+
+  const lod1 = data.bridgeLod1Url?.trim() || null;
+  const lod2 = data.bridgeLod2Url?.trim() || null;
+  if (lod1 || lod2) {
+    const mid = lod1 ?? url;
+    const far = lod2 ?? mid;
+    setGltfLodUrls(state, deckEid, [url, mid, far]);
+    if (!state.hasComponent(deckEid, GltfLod)) {
+      state.addComponent(deckEid, GltfLod);
+    }
+    GltfLod.thresholdNear[deckEid] = 70;
+    GltfLod.thresholdMid[deckEid] = 160;
+    GltfLod.activeLevel[deckEid] = 0;
+    GltfLod.settled[deckEid] = 0;
+  }
+
+  // Physics bodies live in world space — without this mirror, Rapier spawns at
+  // origin and the sync loop yanks Transform (visual) off the river span.
+  if (state.hasComponent(deckEid, Rigidbody)) {
+    Rigidbody.posX[deckEid] = Transform.posX[deckEid];
+    Rigidbody.posY[deckEid] = Transform.posY[deckEid];
+    Rigidbody.posZ[deckEid] = Transform.posZ[deckEid];
+    Rigidbody.eulerX[deckEid] = Transform.eulerX[deckEid];
+    Rigidbody.eulerY[deckEid] = Transform.eulerY[deckEid];
+    Rigidbody.eulerZ[deckEid] = Transform.eulerZ[deckEid];
+    syncBodyQuaternionFromEuler(deckEid);
+    Rigidbody.poseDirty[deckEid] = 1;
+  }
+
+  bridgeDeckEids(state).set(eid, deckEid);
+  seatBridgeDeck(state, eid, deckEid, path);
+  logger.info(
+    `[Road] bridge deck spawned eid=${deckEid} url=${url} at (${mx.toFixed(1)}, ${Transform.posY[deckEid].toFixed(1)}, ${mz.toFixed(1)}) scaleX=${scaleX.toFixed(2)} lip=${Road.deckY[eid].toFixed(2)}`
+  );
+}
+
+/**
  * Constrói cada `<Road>` assim que a superfície do terreno está pronta
- * (depois dos TerrainPads aplainarem — a estrada tem de amostrar as alturas
- * pós-flatten). Mundos sem terreno constroem plano a y=0.
+ * (depois dos TerrainPads e do River — a estrada / ponte tem de amostrar as
+ * alturas pós-flatten e pós-carve do canal). Mundos sem terreno: y=0.
  */
 export const RoadApplySystem: System = defineSystem({
   name: 'RoadApplySystem',
   group: 'setup',
-  after: [TerrainPadApplySystem],
+  after: [TerrainPadApplySystem, RiverApplySystem],
   update(state: State) {
     if (state.headless) return;
     const scene = getScene(state);
@@ -756,49 +1383,81 @@ export const RoadApplySystem: System = defineSystem({
     let building = -1;
     hookGroundMutations(state, () => building);
 
+    // Steady-state network: skip fusion walk, pending sort, and deck polls.
+    if (isRoadApplyIdle(state)) return;
+
     // Chains before paint — leader needs the stitched path on first apply.
     syncRoadFusion(state, scene);
 
+    // Arteries first, bridges last — lip samples must see post-flatten banks
+    // (otherwise a later artery spike buries one abutment).
+    const pendingRoads: number[] = [];
     for (const eid of roadQuery(state.world)) {
-      if (Road.applied[eid] === 1) continue;
-      const data = getRoadData(state, eid);
-      if (!data || data.path.length < 4) {
-        Road.applied[eid] = 1;
-        continue;
-      }
-
-      const role = chainRoleFor(cachedChains(state), eid);
-      building = eid;
-      const geometry = buildRoadGeometry(state, eid, data, true);
-      building = -1;
-      if (!geometry) {
-        // Absorbed: leader owns the bed+ribbon. Sampler-not-ready: retry.
-        if (role.role === 'absorbed') {
+      if (Road.applied[eid] !== 1) pendingRoads.push(eid);
+    }
+    let appliedAny = false;
+    if (pendingRoads.length > 0) {
+      pendingRoads.sort(
+        (a, b) => (Road.bridge[a] || 0) - (Road.bridge[b] || 0)
+      );
+      for (const eid of pendingRoads) {
+        const data = getRoadData(state, eid);
+        if (!data || data.path.length < 4) {
           Road.applied[eid] = 1;
-          state.onDestroy(eid, () => disposeRoad(state, eid));
+          appliedAny = true;
+          bumpRoadTopology(state);
+          continue;
         }
-        continue;
+
+        const role = chainRoleFor(cachedChains(state), eid);
+        building = eid;
+        const geometry = buildRoadGeometry(state, eid, data, true);
+        building = -1;
+        if (!geometry) {
+          // Absorbed: leader owns the bed+ribbon. Sampler-not-ready: retry.
+          if (role.role === 'absorbed') {
+            Road.applied[eid] = 1;
+            appliedAny = true;
+            bumpRoadTopology(state);
+            state.onDestroy(eid, () => disposeRoad(state, eid));
+          }
+          continue;
+        }
+
+        // Blended decal with depth write: without it, terrain chunk cracks
+        // (rock-tint + AO on steep skirt/T-junction faces) show through as a
+        // dark terracotta band. `alphaTest` still avoided — hard chewed edges.
+        const { material, bias } = makeRoadDecalMaterial(state, eid, data);
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = false;
+        mesh.receiveShadow = true;
+        mesh.renderOrder = 1 + bias;
+        scene.add(mesh);
+        setupCsmMaterials(state, mesh);
+
+        roadSidecars(state).set(eid, { mesh, material });
+        spawnBridgeDeck(state, eid, data);
+        state.onDestroy(eid, () => disposeRoad(state, eid));
+        Road.applied[eid] = 1;
+        appliedAny = true;
+        bumpRoadTopology(state);
       }
-
-      // Blended decal with depth write: without it, terrain chunk cracks
-      // (rock-tint + AO on steep skirt/T-junction faces) show through as a
-      // dark terracotta band. `alphaTest` still avoided — hard chewed edges.
-      const { material, bias } = makeRoadDecalMaterial(state, eid, data);
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.castShadow = false;
-      mesh.receiveShadow = true;
-      mesh.renderOrder = 1 + bias;
-      scene.add(mesh);
-      setupCsmMaterials(state, mesh);
-
-      roadSidecars(state).set(eid, { mesh, material });
-      state.onDestroy(eid, () => disposeRoad(state, eid));
-      Road.applied[eid] = 1;
-      FUSION_SIG.delete(state);
     }
 
     // Recompute chains after new roads join the network.
-    syncRoadFusion(state, scene);
+    if (appliedAny) syncRoadFusion(state, scene);
+
+    // Bridge GLBs load async — seat on the probed contour once the root exists,
+    // then re-grade so the ribbon and the terrain cut use that contour.
+    for (const [roadEid, deckEid] of bridgeDeckEids(state)) {
+      if (!state.exists(deckEid)) continue;
+      const data = getRoadData(state, roadEid);
+      if (!data || data.path.length < 4) continue;
+      if (bridgeDeckSeated(state).has(deckEid)) continue;
+      if (!seatBridgeDeck(state, roadEid, deckEid, data.path)) continue;
+      roadDirty(state).add(roadEid);
+      roadNeedRegrade(state).add(roadEid);
+    }
 
     // Re-pave ribbons whose ground moved; re-carve when stitch topology changed.
     const dirty = roadDirty(state);
@@ -831,10 +1490,12 @@ export const RoadApplySystem: System = defineSystem({
         cars.set(eid, { mesh, material });
         state.onDestroy(eid, () => disposeRoad(state, eid));
         Road.applied[eid] = 1;
+        spawnBridgeDeck(state, eid, data);
         continue;
       }
       car.mesh.geometry.dispose();
       car.mesh.geometry = geometry;
+      spawnBridgeDeck(state, eid, data);
     }
   },
   dispose(state: State) {
@@ -844,6 +1505,8 @@ export const RoadApplySystem: System = defineSystem({
     }
     disposeAllJunctionDiscs(state);
     FUSION_SIG.delete(state);
+    FUSION_CHEAP.delete(state);
+    ROAD_TOPO_GEN.delete(state);
     ROAD_CHAINS.delete(state);
   },
 });

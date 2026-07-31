@@ -30,6 +30,13 @@ export type RoadSegmentDef = {
   profile?: RoadProfileName;
   textureUrl?: string | null;
   normalMapUrl?: string | null;
+  /** Bridge deck visual GLB (implies profile bridge if unset). */
+  bridgeUrl?: string | null;
+  bridgeCollisionUrl?: string | null;
+  bridgeLod1Url?: string | null;
+  bridgeLod2Url?: string | null;
+  /** Mesh local +X length (m) before scale; default 18. */
+  bridgeNativeSpan?: number;
 };
 
 export type RoadNetworkDef = {
@@ -213,20 +220,39 @@ export function parseRoadNetworkElement(
         );
       }
       const profileName = attrString(child.attributes.profile);
-      const profile = resolveRoadProfile(profileName);
+      const bridgeUrl = attrString(child.attributes['bridge-url']);
+      const profile = resolveRoadProfile(
+        profileName ?? (bridgeUrl ? 'bridge' : null)
+      );
       if (profileName && !profile) {
         throw new Error(
-          `[RoadNetwork] unknown profile="${profileName}" (use artery|spur|plaza)`
+          `[RoadNetwork] unknown profile="${profileName}" (use artery|spur|plaza|bridge)`
+        );
+      }
+      if ((profile?.name === 'bridge' || bridgeUrl) && !bridgeUrl) {
+        throw new Error(
+          `[RoadNetwork] <Segment a="${a}" b="${b}" profile="bridge"> requires bridge-url=`
         );
       }
       const seg: RoadSegmentDef = {
         a,
         b,
         via: viaRaw,
-        profile: profile?.name,
+        profile: profile?.name ?? (bridgeUrl ? 'bridge' : undefined),
         textureUrl: attrString(child.attributes['texture-url']),
         normalMapUrl: attrString(child.attributes['normal-map-url']),
+        bridgeUrl,
+        bridgeCollisionUrl: attrString(
+          child.attributes['bridge-collision-url']
+        ),
+        bridgeLod1Url: attrString(child.attributes['bridge-lod1-url']),
+        bridgeLod2Url: attrString(child.attributes['bridge-lod2-url']),
       };
+      const nativeSpanRaw = child.attributes['bridge-native-span'];
+      if (nativeSpanRaw !== undefined && nativeSpanRaw !== null) {
+        const ns = attrNumber(nativeSpanRaw, NaN);
+        if (Number.isFinite(ns) && ns > 0) seg.bridgeNativeSpan = ns;
+      }
       const wRaw = child.attributes.width;
       if (wRaw !== undefined && wRaw !== null && String(wRaw).trim() !== '') {
         seg.width = Math.max(0.2, attrNumber(wRaw, defaultWidth));
@@ -382,7 +408,8 @@ export function expandRoadNetworkToRoads(def: RoadNetworkDef): ParsedElement[] {
     }
     const { path, widths } = buildSegmentPathAndWidths(wa, wb, seg.via, w0, w1);
     const paint = widths.reduce((a, b) => Math.max(a, b), def.defaultWidth);
-    const flatten = profile ? profile.flatten : def.flatten;
+    const isBridge = profile?.name === 'bridge' || !!seg.bridgeUrl;
+    const flatten = isBridge ? false : profile ? profile.flatten : def.flatten;
     const attrs: Record<string, XMLValue> = {
       path: path.join(' '),
       widths: widths.map((w) => +w.toFixed(4)).join(' '),
@@ -410,6 +437,18 @@ export function expandRoadNetworkToRoads(def: RoadNetworkDef): ParsedElement[] {
       def.stationSpacing ?? profile?.stationSpacing ?? 0.35;
     attrs['end-feather-start'] = profile?.endFeatherStart ?? 0;
     attrs['end-feather-end'] = profile?.endFeatherEnd ?? 0;
+    if (isBridge && seg.bridgeUrl) {
+      attrs.bridge = 1;
+      attrs['bridge-url'] = seg.bridgeUrl;
+      if (seg.bridgeCollisionUrl) {
+        attrs['bridge-collision-url'] = seg.bridgeCollisionUrl;
+      }
+      if (seg.bridgeLod1Url) attrs['bridge-lod1-url'] = seg.bridgeLod1Url;
+      if (seg.bridgeLod2Url) attrs['bridge-lod2-url'] = seg.bridgeLod2Url;
+      if (seg.bridgeNativeSpan !== undefined) {
+        attrs['bridge-native-span'] = seg.bridgeNativeSpan;
+      }
+    }
     out.push(el('Road', attrs));
   }
   return out;

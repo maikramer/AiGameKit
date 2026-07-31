@@ -27,6 +27,11 @@ export interface RoadJunctionInput {
   textureUrl: string | null;
   normalMapUrl: string | null;
   textureScale: number;
+  /**
+   * Bridge spans must not join end-to-end stitch chains — a stitched leader
+   * would terrace the river mid-span. They still dock solid tips via fusion.
+   */
+  bridge?: boolean;
 }
 
 export interface RoadJunctionArm {
@@ -337,6 +342,8 @@ export function stitchEndToEndChains(
     const ra = byEid.get(a.eid);
     const rb = byEid.get(b.eid);
     if (!ra || !rb || !texturesCompatible(ra, rb)) continue;
+    // Never stitch a bridge into an arterial chain (would flatten the channel).
+    if (ra.bridge || rb.bridge) continue;
     const ka = `${a.eid}:${a.end}`;
     const kb = `${b.eid}:${b.end}`;
     link.set(ka, kb);

@@ -2,9 +2,14 @@ import { describe, expect, it } from 'bun:test';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';
 import { sampleHeightAt } from '../../../src/plugins/terrain/height-sampler';
 import {
+  BRIDGE_LANDWARD_METERS,
+  bridgeApproachStubs,
+  carveRoadApproaches,
   carveRoadCorridor,
+  clipPathApproaches,
   designRoadProfile,
   limitProfileGrade,
+  shouldCarveBridgeApproaches,
 } from '../../../src/plugins/road/carve';
 
 /** Flat sampler at a constant normalized height; high-res by default to avoid bilinear bleed. */
@@ -144,6 +149,39 @@ describe('carveRoadCorridor', () => {
     const h = sampleHeightAt(s, 0, 0);
     expect(h).toBeGreaterThan(35);
     expect(h).toBeLessThan(50);
+  });
+
+  it('noRaiseBelowY blocks fill into a pre-carved lake bowl', () => {
+    // Depression = lake floor at ~30 m; banks at 50 m. Guard at waterY=35.
+    const s = bumpSampler(0.5, -0.2, 0, 0, 10);
+    const before = sampleHeightAt(s, 0, 0);
+    carveRoadCorridor(s, {
+      path: densePath(0, -40, 0, 40),
+      width: 6,
+      falloff: 2,
+      window: 8,
+      platformSink: 0,
+      noRaiseBelowY: 35,
+    });
+    const after = sampleHeightAt(s, 0, 0);
+    // Floor must stay in the bowl — not terraced back up past the waterline.
+    expect(after).toBeLessThanOrEqual(before + 0.05);
+    expect(after).toBeLessThan(35);
+  });
+
+  it('preserveDiscs skip the lake footprint entirely (no shore shelf cut)', () => {
+    const s = bumpSampler(0.5, 0.2, 0, 0, 12);
+    const before = sampleHeightAt(s, 0, 0);
+    carveRoadCorridor(s, {
+      path: densePath(0, -40, 0, 40),
+      width: 6,
+      falloff: 2,
+      window: 8,
+      platformSink: 0,
+      preserveDiscs: [{ x: 0, z: 0, r: 14 }],
+    });
+    // Inside the disc the bump must be untouched (road would otherwise cut it).
+    expect(sampleHeightAt(s, 0, 0)).toBeCloseTo(before, 3);
   });
 
   it('does not touch terrain beyond the lateral reach (width/2 + falloff)', () => {
@@ -300,5 +338,127 @@ describe('limitProfileGrade / designRoadProfile', () => {
     // Multi-pass crush mid spike harder than a single light smooth.
     expect(designed[2]!).toBeLessThan(28);
     expect(designed[2]!).toBeGreaterThan(10);
+  });
+});
+
+describe('clipPathApproaches / carveRoadApproaches', () => {
+  it('keeps only tip stubs (mid-span omitted)', () => {
+    const path = [0, 0, 10, 0, 20, 0, 30, 0, 40, 0];
+    const stubs = clipPathApproaches(path, 8);
+    expect(stubs.length).toBe(2);
+    // Start stub near 0; end stub near 40.
+    expect(stubs[0]![0]).toBeCloseTo(0);
+    expect(stubs[1]![stubs[1]!.length - 2]).toBeCloseTo(40);
+    // No stub covers mid (20).
+    for (const stub of stubs) {
+      for (let i = 0; i < stub.length; i += 2) {
+        expect(Math.abs(stub[i]! - 20)).toBeGreaterThan(5);
+      }
+    }
+  });
+
+  it('bridgeApproachStubs include landward ground; into-span stays tiny', () => {
+    const path = [-20, 0, 0, 0, 20, 0];
+    const into = 2;
+    const stubs = bridgeApproachStubs(path, into, BRIDGE_LANDWARD_METERS);
+    expect(stubs.length).toBe(2);
+    // Start: landward west of -20, then tip, then tiny into span.
+    expect(stubs[0]![0]).toBeCloseTo(-20 - BRIDGE_LANDWARD_METERS);
+    expect(stubs[0]![2]).toBeCloseTo(-20);
+    expect(stubs[0]![4]).toBeCloseTo(-18);
+    // End: tiny into, tip, landward east of 20.
+    expect(stubs[1]![0]).toBeCloseTo(18);
+    expect(stubs[1]![2]).toBeCloseTo(20);
+    expect(stubs[1]![4]).toBeCloseTo(20 + BRIDGE_LANDWARD_METERS);
+    // Mid-span (0) never on stub verts — into capped so channel stays clear.
+    for (const stub of stubs) {
+      for (let i = 0; i < stub.length; i += 2) {
+        expect(Math.abs(stub[i]!)).toBeGreaterThan(5);
+      }
+    }
+  });
+
+  it('skips approach carve on coarse heightmaps (would plug the river)', () => {
+    // world 4000 / 64 ≈ simple-rpg — texel ~63 m ≥ BRIDGE_SKIP_CARVE_TEXEL_M.
+    const coarse: HeightSampler = {
+      width: 64,
+      height: 64,
+      data: new Float32Array(64 * 64).fill(0.3),
+      worldSize: 4000,
+      maxHeight: 200,
+    };
+    expect(shouldCarveBridgeApproaches(coarse)).toBe(false);
+    const yBefore = sampleHeightAt(coarse, 0, 0);
+    const changed = carveRoadApproaches(coarse, {
+      path: [-20, 0, 0, 0, 20, 0],
+      width: 6,
+      falloff: 4,
+      window: 8,
+      flatTargetY: 40,
+    });
+    expect(changed).toBe(false);
+    expect(sampleHeightAt(coarse, 0, 0)).toBeCloseTo(yBefore, 5);
+  });
+
+  it('carveRoadApproaches does not raise the mid-span channel', () => {
+    // Deep trench at x=0 mid; banks high at ±20.
+    const s = bumpSampler(0.5, -0.4, 0, 0, 8, 256, 80);
+    const path = [-20, 0, 0, 0, 20, 0];
+    const yMidBefore = sampleHeightAt(s, 0, 0);
+    carveRoadApproaches(s, {
+      path,
+      width: 4,
+      falloff: 2,
+      window: 8,
+      maxGrade: 0.22,
+      approachMeters: 6,
+      landwardMeters: 8,
+    });
+    const yMidAfter = sampleHeightAt(s, 0, 0);
+    // Mid channel must not be filled toward bank height.
+    expect(yMidAfter).toBeLessThanOrEqual(yMidBefore + 0.02);
+  });
+
+  it('flatTargetY levels both bank stubs to the same lip', () => {
+    // Uneven banks: left high, right low; mid trench.
+    const s = flatSampler(0.3, 256, 80);
+    if (!s.data) return;
+    const half = 40;
+    const step = 80 / 255;
+    for (let zi = 0; zi < 256; zi++) {
+      for (let xi = 0; xi < 256; xi++) {
+        const wx = xi * step - half;
+        // Left bank ~40, right ~20, mid ditch ~5.
+        let h = 0.25;
+        if (wx < -8) h = 0.4;
+        else if (wx > 8) h = 0.2;
+        else h = 0.05;
+        s.data[zi * 256 + xi] = h;
+      }
+    }
+    const path = [-20, 0, 0, 0, 20, 0];
+    const lip = 30; // field metres (maxHeight=100 → norm 0.3)
+    carveRoadApproaches(s, {
+      path,
+      width: 6,
+      falloff: 3,
+      window: 8,
+      approachMeters: 8,
+      landwardMeters: 8,
+      flatTargetY: lip,
+    });
+    // Landward seat + tip region (not the riverward-only ±18 of old stubs).
+    const yL = sampleHeightAt(s, -24, 0);
+    const yR = sampleHeightAt(s, 24, 0);
+    const yTipL = sampleHeightAt(s, -18, 0);
+    const yTipR = sampleHeightAt(s, 18, 0);
+    const yMid = sampleHeightAt(s, 0, 0);
+    expect(yL).toBeCloseTo(lip, 0);
+    expect(yR).toBeCloseTo(lip, 0);
+    expect(yTipL).toBeCloseTo(lip, 0);
+    expect(yTipR).toBeCloseTo(lip, 0);
+    expect(Math.abs(yL - yR)).toBeLessThan(0.5);
+    // Mid still ditch — not filled to lip.
+    expect(yMid).toBeLessThan(lip - 5);
   });
 });

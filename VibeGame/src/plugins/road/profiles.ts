@@ -3,7 +3,7 @@
  * profile instead of repeating 8 attributes per Segment.
  */
 
-export type RoadProfileName = 'artery' | 'spur' | 'plaza';
+export type RoadProfileName = 'artery' | 'spur' | 'plaza' | 'bridge';
 
 export interface RoadProfile {
   name: RoadProfileName;
@@ -51,6 +51,22 @@ export const ROAD_PROFILES: Record<RoadProfileName, RoadProfile> = {
     endFeatherStart: 0,
     endFeatherEnd: 0,
     stationSpacing: 0.35,
+  },
+  /**
+   * River/gap span: ribbon lerps bank heights, approach-only flatten (never
+   * fill channel), solid tips for stitch dock to bank roads. Requires
+   * Segment `bridge-url`. Soft edge noise; denser stations for deck pitch.
+   */
+  bridge: {
+    name: 'bridge',
+    width: 2,
+    flatten: false,
+    edgeFeather: 0.55,
+    edgeNoise: 0.12,
+    textureScale: 16,
+    endFeatherStart: 0,
+    endFeatherEnd: 0,
+    stationSpacing: 0.28,
   },
 };
 

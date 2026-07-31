@@ -45,13 +45,72 @@ Para uma **rede interligada** com larguras e cruzamentos programáticos, preferi
 ```
 
 - **Way**: `id` + `xz="x z"`; `width` opcional (diâmetro no nó).
-- **Segment**: `a`/`b`; opcional `via="x z …"`, `width`, `profile="artery|spur|plaza"`,
-  texture overrides.
+- **Segment**: `a`/`b`; opcional `via="x z …"`, `width`, `profile="artery|spur|plaza|bridge"`,
+  texture overrides; pontes: `bridge-url` (+ `bridge-collision-url`, `bridge-lod1-url`, `bridge-lod2-url`).
 - **Profiles** (`profiles.ts`): defaults de flatten / edge / width / feathers.
+  `bridge` = ribbon a `deckY`, flatten só nas aproches (não enche o canal).
 - **`crossing-flare`** (default on): Ways grau ≥ 3 alargam ×1.45 nas pontas +
   patch de cruzamento (`makeJunctionGeometry`) + tip flare em `planRoadFusion`.
 - Expand: **1 `<Road>` por Segment** com path densificado e `widths` lerped.
   Cadeias grau-2 → stitch; cruzamentos ≥3 tips → patch (não stamp end-to-end).
+
+### Segment bridge (vão de rio)
+
+```html
+<Segment
+  a="s_bank"
+  b="s_resume"
+  profile="bridge"
+  bridge-url="/assets/meshes/river_bridge_wood_lod0.glb"
+  bridge-collision-url="/assets/meshes/river_bridge_wood_collision.glb"
+  bridge-lod1-url="/assets/meshes/river_bridge_wood_lod1.glb"
+  bridge-lod2-url="/assets/meshes/river_bridge_wood_lod2.glb"
+  bridge-native-span="18"
+></Segment>
+```
+
+- Fecha o grafo (`pathToWay` / analyze).
+- `RoadApplySystem` corre **depois** de `RiverApplySystem` (+ TerrainPad).
+- Lip via `chooseBridgeLip`: **nunca raise** (`match-high` removido); gap →
+  `match-low` (banco sólido mais baixo). Samples landward multi-depth +
+  `pickSolidBankY` (ignora spike de artéria).
+- Apply: artérias primeiro, pontes **por último** (lip vê banks pós-flatten).
+- Ribbon Y = **topo do GLB** (`lip − embed + BRIDGE_RIBBON_CLEARANCE`), não o
+  lip cru (senão cobble flutua ~10 cm acima da malha).
+- Um regrade que baixa o lip tem de re-assentar o deck **antes** de pavimentar:
+  `reseatBridgeDeckToLip` corre logo a seguir a `applyBridgeDeckHeights` dentro
+  de `buildRoadGeometry`. Antes, o re-seat só acontecia em `spawnBridgeDeck`
+  (chamado _depois_ da geometria) e o cobble ficava no lip antigo — ponte de
+  pedra oeste: lip 37.19 → 36.85, ribbon 0.34 m acima da pedra.
+- GLB centrado: entity em `lip−embed−BRIDGE_DECK_LOCAL_Y`, depois
+  `seatBridgeDeckToLip` trava AABB max Y nesse plano.
+- Collider trimesh **sem** `mesh-anchor: base`.
+- Carve: só se texel menor que `BRIDGE_SKIP_CARVE_TEXEL_M` (10 m).
+  `bridgeApproachCorridorOpts` **não** herda `flatten-falloff` largo da artéria
+  (end-cap + `flatTargetY` tapava o vão quando Ways ≈ native span).
+- Deck XZ: `bridgeDeckCenterXZ` = centreline do rio sob o vão
+  (`river-crossing.ts`), não o mid dos Ways (pode ficar assimétrico).
+- Ways: tips **fora** do mesh/carve da água, simétricos ao centro do rio.
+- Into-span ≤ 2 m quando carve fino existe.
+- Collider trimesh: scale **não-uniforme** (scaleX≠Y) — scaleX em Y criava
+  hull fantasma acima do deck.
+- Density + brush só nas stubs.
+- Pontes **fora** do stitch end-to-end (evita leader a flattenar o canal).
+- Analyze: warn se span/native ≪0.45 ou ≫2.75.
+
+### Road × water (lake/river)
+
+`RoadApply` corre **depois** dos carves de água. O stamp do leito usa
+`mode=blend` (cut+fill); sem guarda, um flatten perto duma bacia **reenche** o
+fundo e a superfície de água corta areia (“lago a vazar”).
+
+- `waterPreserveZonesLocal` (`water-guard.ts`) → `noRaiseBelowY` +
+  `preserveDiscs` / `preserveRibbons` na **waterline** (shore, não carve completo).
+- Artérias: skip superfície molhada; bancos ficam stampáveis.
+- Aproches de ponte: **sem** preserve discs (praia sob abutment precisa de
+  terrace até ao lip); canal protegido por falloff curto + `noRaiseBelowY` +
+  into-span pequeno.
+- Trails `flatten="0"`: ribbon não deve terminar _dentro_ do raio do lago.
 
 ## Queries (runtime)
 
@@ -95,10 +154,13 @@ Para uma **rede interligada** com larguras e cruzamentos programáticos, preferi
 - **Terreno**: pipeline partilhado (`terrain/ground-mutation`): density
   (`applyCorridorDensity` + `densityLeafPad`) → `carveRoadCorridor`
   (`applyHeightBrush` + `nearestOnPolyline`) → `rebuildTerrainDerivatives`.
-  Ribbon Y = max(bed analítico, lattice mesh na **centerline** ±2 LOD
-  coarser) + clearance — limpa chords grossos acima do leito (areia a
-  atravessar o decal na junta de chunk). **Nunca** max-neighborhood (stripes
-  em dunas). Density força split até deepest leaf sob o corredor.
+  Ribbon Y = lattice mesh na **centerline** (mesma que o collider do chunk)
+  - seam lift para o nível 1× mais grosso, **cap `ROAD_LOD_CLEARANCE_MAX_M`
+    = 0.06 m** + 0.04 de decal. O cap _é_ a flutuação em qualquer encosta
+    longa (o lattice grosso corre 0.5–0.8 m acima) — com os antigos 0.3 m o
+    herói andava 0.26–0.28 m abaixo da calçada em toda a subida oeste (pernas
+    enterradas). **Nunca** max-neighborhood (stripes em dunas). Density força
+    split até deepest leaf sob o corredor.
 - **Fusão** (`junctions.ts`):
   - End-to-end (mesma textura, pontas ≤2.5 m, exactamente 2 tips no nó):
     `stitchEndToEndChains` — um ribbon + `widths[]` por vértice.
