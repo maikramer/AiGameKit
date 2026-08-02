@@ -21,11 +21,9 @@ from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
     add_ums_options,
+    delegate_or_prepare,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
-    try_ums_delegation,
-    with_ums_load_opts,
-    with_ums_peak_opts,
 )
 from aigamekit_shared.hf import hf_home_display_rich
 from aigamekit_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT2D, emit_progress, emit_result
@@ -34,7 +32,7 @@ from aigamekit_shared.skill_install import install_my_skill
 
 from .cli_rich import click
 from .generator import KleinFluxGenerator, _model_id, default_model_id, model_footprint_key
-from .utils.memory import format_bytes, get_system_info
+from .utils.memory import format_bytes
 
 console = Console()
 
@@ -283,37 +281,32 @@ def generate_cmd(
     if (
         not cpu
         and output is not None
-        and try_ums_delegation(
+        and delegate_or_prepare(
             "text2d",
-            with_ums_peak_opts(
-                with_ums_load_opts(
-                    {
-                        "prompt": prompt,
-                        "output": str(Path(output).resolve()),
-                        "width": width,
-                        "height": height,
-                        "steps": steps,
-                        "guidance": guidance_scale,
-                        "seed": seed,
-                        "model_id": resolved_model,
-                        "torch_compile": torch_compile,
-                        "torch_compile_mode": torch_compile_mode,
-                        "channels_last": channels_last,
-                        "step_cache": step_cache,
-                    },
-                    gpu_ids=gpu_ids,
-                ),
-                backend="text2d",
-                memory_efficient=mem_eff,
-                quant_preset=quant_preset,
-                footprint_key=model_footprint_key(resolved_model),
-            ),
+            payload={
+                "prompt": prompt,
+                "output": str(Path(output).resolve()),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "seed": seed,
+                "model_id": resolved_model,
+                "torch_compile": torch_compile,
+                "torch_compile_mode": torch_compile_mode,
+                "channels_last": channels_last,
+                "step_cache": step_cache,
+            },
             t_start=t_start,
             noun="Imagem",
             console=console,
             enabled=not no_ums,
             priority=ums_priority,
             stream=ums_stream,
+            gpu_ids=gpu_ids,
+            memory_efficient=mem_eff,
+            quant_preset=quant_preset,
+            footprint_key=model_footprint_key(resolved_model),
         )
     ):
         return
@@ -640,36 +633,31 @@ def generate_batch_cmd(
             item_seed = item.get("seed")
             out_path.parent.mkdir(parents=True, exist_ok=True)
 
-            if not cpu and try_ums_delegation(
+            if not cpu and delegate_or_prepare(
                 "text2d",
-                with_ums_peak_opts(
-                    with_ums_load_opts(
-                        {
-                            "prompt": prompt,
-                            "output": str(out_path.resolve()),
-                            "width": item_w,
-                            "height": item_h,
-                            "steps": item_steps,
-                            "guidance": item_guidance,
-                            "seed": item_seed,
-                            "model_id": resolved_model,
-                            "torch_compile": torch_compile,
-                            "torch_compile_mode": torch_compile_mode,
-                            "channels_last": channels_last,
-                        },
-                        gpu_ids=parsed_gpu_ids,
-                    ),
-                    backend="text2d",
-                    memory_efficient=mem_eff,
-                    quant_preset=quant_preset,
-                    footprint_key=model_footprint_key(resolved_model),
-                ),
+                payload={
+                    "prompt": prompt,
+                    "output": str(out_path.resolve()),
+                    "width": item_w,
+                    "height": item_h,
+                    "steps": item_steps,
+                    "guidance": item_guidance,
+                    "seed": item_seed,
+                    "model_id": resolved_model,
+                    "torch_compile": torch_compile,
+                    "torch_compile_mode": torch_compile_mode,
+                    "channels_last": channels_last,
+                },
                 t_start=t0,
                 noun="Imagem",
                 console=err_console,
                 enabled=not no_ums,
                 priority=ums_priority or "batch",
                 stream=ums_stream,
+                gpu_ids=parsed_gpu_ids,
+                memory_efficient=mem_eff,
+                quant_preset=quant_preset,
+                footprint_key=model_footprint_key(resolved_model),
             ):
                 elapsed = time.time() - t0
                 emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(out_rel), seconds=round(elapsed, 3))
@@ -762,29 +750,14 @@ def generate_batch_cmd(
 @cli.command("info")
 def info_cmd() -> None:
     """Informações do sistema e GPU."""
-    console.print(
-        Panel.fit(
-            "[bold]text2d info[/bold] — ambiente de execução e cache Hugging Face",
-            border_style="blue",
-        )
+    from aigamekit_shared.cli_tables import render_info_table
+
+    render_info_table(
+        console,
+        tool_name="text2d",
+        extra_rows=[("Modelo (default)", default_model_id())],
+        output_dir=str(DEFAULT_IMAGE_DIR.resolve()),
     )
-    data = get_system_info()
-    t = Table(title="[bold blue]Sistema", box=box.ROUNDED)
-    t.add_column("Componente", style="cyan", no_wrap=True)
-    t.add_column("Valor", style="green")
-    t.add_row("Python", data.get("python_version", "N/A"))
-    t.add_row("PyTorch", data.get("torch_version", "N/A"))
-    t.add_row("CUDA", str(data.get("cuda_available", False)))
-    if data.get("cuda_available"):
-        t.add_row("CUDA (versão)", str(data.get("cuda_version", "N/A")))
-        for i, gpu in enumerate(data.get("gpus", [])):
-            t.add_row(f"GPU {i}", str(gpu.get("name", "")))
-            t.add_row("  └ VRAM total", format_bytes(gpu.get("total_memory", 0)))
-            t.add_row("  └ VRAM livre", format_bytes(gpu.get("free_memory", 0)))
-    t.add_row("HF_HOME (cache Hub)", hf_home_display_rich())
-    t.add_row("Saída padrão (pasta)", str(DEFAULT_IMAGE_DIR.resolve()))
-    t.add_row("Modelo (default)", default_model_id())
-    console.print(t)
 
 
 @cli.command("doctor")
@@ -845,16 +818,16 @@ def models_cmd() -> None:
     t.add_column("ID", style="cyan")
     t.add_column("Notas", style="white")
     t.add_row(
-        "Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32",
-        "Padrão (high-VRAM), SDNQ 4-bit, 9B parâmetros",
-    )
-    t.add_row(
-        "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic",
-        "Padrão hw-auto (GPU apertada): SDNQ 4-bit, 4B parâmetros",
+        "black-forest-labs/FLUX.2-klein-9B",
+        "Padrão (high-VRAM): base fp16 + SDNQ runtime, 9B parâmetros (gated — aceitar termos no Hub)",
     )
     t.add_row(
         "black-forest-labs/FLUX.2-klein-4B",
-        "Alternativa: BF16 completo, mais VRAM (TEXT2D_MODEL_ID)",
+        "Padrão hw-auto (GPU apertada): base fp16 + SDNQ runtime, 4B parâmetros (público)",
+    )
+    t.add_row(
+        "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic",
+        "Alternativa: checkpoint pré-quantizado via TEXT2D_MODEL_ID (flux-non-commercial-license)",
     )
     console.print(t)
     console.print(
@@ -884,15 +857,10 @@ def serve(ums_worker: bool) -> None:
     :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter text2d
     local (:mod:`text2d.worker_serve_adapter`).
     """
-    if not ums_worker:
-        console.print("[yellow]text2d serve sem --ums-worker não faz nada.[/yellow]")
-        console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
-        return
-
-    from aigamekit_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_ums_worker_cli
     from text2d.worker_serve_adapter import Adapter
 
-    run_worker_loop(Adapter, backend_name="text2d")
+    run_ums_worker_cli(Adapter, tool_name="text2d", ums_worker=ums_worker, console=console)
 
 
 def main() -> None:

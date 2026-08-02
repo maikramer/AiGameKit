@@ -8,14 +8,14 @@ CLI de **text-to-imagem** com [FLUX.2 Klein 4B](https://huggingface.co/black-for
 
 | Item    | Mínimo | Notas |
 |---------|--------|--------|
-| Python  | 3.10+  | Testado em 3.10–3.13 |
+| Python  | 3.13+  | Fixado `>=3.13,<3.14` (`pyproject.toml`) |
 | GPU     | Opcional | NVIDIA + CUDA recomendado para inferência razoável |
 | VRAM    | ~6 GB+ com hw-auto e 512² | GPUs modestas: hw-auto (defeito) escolhe 4B + CPU offload; multi-GPU com `--gpu-ids` |
 
 Auto-detecção de hardware (`--hw-auto`, ligada por defeito): GPUs <7.5 GB ganham CPU offload + modelo 4B automaticamente; rigs grandes mantêm 9B/full-GPU/multi-GPU. Flags explícitas ganham. Desligar: `--no-hw-auto` ou `TEXT2D_HW_AUTO=0`. Ver perfil: `text2d doctor`.
 | Disco   | ~8 GB  | Cache HF + pesos SDNQ (~2,5 GB em disco) |
 
-**Licença dos pesos:** o default é o checkpoint SDNQ [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic), que no Hugging Face está associado a **FLUX Non-Commercial** (`flux-non-commercial-license` no metadata), **distinto** do oficial [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (**Apache 2.0** no model card). Para uso comercial com menos ambiguidade, define `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` (mais VRAM). Resumo: [Licenças no monorepo](../README_PT.md).
+**Licença dos pesos:** o default é a base oficial [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (**Apache 2.0**, download público) / [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (**gated** — aceitar termos BFL + `HF_TOKEN`) com quantização **SDNQ em runtime** (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Checkpoints pré-quantizados [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) são opcionais via `TEXT2D_MODEL_ID` (declaram `flux-non-commercial-license`). Resumo: [Licenças no monorepo](../README_PT.md).
 
 ## Instalação
 
@@ -42,7 +42,7 @@ source .venv/bin/activate
 text2d --help
 ```
 
-- Com **NVIDIA**, `setup.sh` instala PyTorch com CUDA (em **Python 3.13+** usa wheels do **PyPI**; em 3.10–3.12 usa o índice `cu121`/`cu118`).
+- Com **NVIDIA**, `setup.sh` instala PyTorch com CUDA (wheels do **PyPI** em **Python 3.13**).
 - Dependências de runtime: [`config/requirements.txt`](config/requirements.txt). Desenvolvimento/testes: [`config/requirements-dev.txt`](config/requirements-dev.txt) ou `pip install -e ".[dev]"`.
 
 ### Atalho local (`scripts/installer.py`)
@@ -106,15 +106,30 @@ Kernel opts (~6 GB): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/finding
 
 | Variável | Descrição |
 |----------|-----------|
-| `TEXT2D_MODEL_ID` | Repositório HF alternativo compatível com `Flux2KleinPipeline` (ex.: `black-forest-labs/FLUX.2-klein-4B` para Apache 2.0; default SDNQ = termos Disty0) |
+| `TEXT2D_MODEL_ID` | Repositório HF alternativo compatível com `Flux2KleinPipeline` (ex.: `black-forest-labs/FLUX.2-klein-4B` para Apache 2.0; default = base BFL fp16 + SDNQ runtime) |
 | `HF_HOME` | Cache Hugging Face (por defeito: `~/.cache/huggingface`) |
 | `TEXT2D_MODELS_DIR` | Diretório de modelos locais; o instalador grava em `~/.config/text2d/config.env` quando existe `Text2D/models/` com pesos |
 | `TEXT2D_OUTPUT_DIR` | Diretório de saída das imagens (criado pelo instalador em `~/.text2d/outputs`) |
 | `PYTORCH_CUDA_ALLOC_CONF` | Configuração CUDA (auto-definida se vazia) |
+| `AIGAMEKIT_UMS_AUTO_START` | `0` desliga o auto-start do UMS |
 
 ### Guidance
 
-O checkpoint **SDNQ Disty0** usa por defeito **guidance 1.0** (ver [card do modelo](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic)). O BF16 original BFL costuma usar valores mais altos (ex. 4.0).
+A base oficial FLUX.2 Klein usa **guidance 1.0** por defeito (compatível com o SDNQ runtime); o BF16 original BFL costuma aceitar valores mais altos (ex. 4.0).
+
+## Unified Model Server (UMS)
+
+`text2d generate` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+text2d generate "gato" -o gato.png --ums-stream          # eventos de fila/progresso
+text2d generate "gato" -o gato.png --ums-priority batch
+text2d generate "gato" -o gato.png --no-ums              # forçar in-process
+ums status                                               # backends + HOLDING/QUEUE
+ums respawn text2d                                       # recarrega código src/ editado
+```
+
+Após editar `*/src/`: `ums respawn text2d`. Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
 
 ## GGUF / Unsloth
 
@@ -153,4 +168,4 @@ pytest tests/ -v
 ## Licença
 
 - **Código:** MIT — [LICENSE](LICENSE).
-- **Pesos:** o default SDNQ segue o [card Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) (non-commercial no metadata HF). O checkpoint BF16 BFL está em [FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0). Tabela completa: [AiGameKit/README_PT.md — Licenças](../README_PT.md).
+- **Pesos:** default = base oficial BFL fp16 ([FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) Apache 2.0, público; [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) **gated**) + quantização SDNQ runtime (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Mirrors pré-quantizados [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declaram `flux-non-commercial-license`. Tabela completa: [AiGameKit/README_PT.md — Licenças](../README_PT.md).

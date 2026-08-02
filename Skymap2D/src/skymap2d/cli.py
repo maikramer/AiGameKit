@@ -17,13 +17,10 @@ from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
     add_ums_options,
+    delegate_or_prepare,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
-    try_ums_delegation,
-    with_ums_load_opts,
-    with_ums_peak_opts,
 )
-from aigamekit_shared.hf import hf_home_display_rich
 from aigamekit_shared.path_utils import safe_filename
 from aigamekit_shared.quality import VALID_QUALITIES
 
@@ -321,35 +318,30 @@ def generate_cmd(
         start = time.time()
 
         # UMS-first: não construir generator (nem tocar GPU) antes da delegação.
-        if not cpu and try_ums_delegation(
+        if not cpu and delegate_or_prepare(
             "skymap2d",
-            with_ums_peak_opts(
-                with_ums_load_opts(
-                    {
-                        "prompt": prompt,
-                        "output": str(Path(output).resolve()),
-                        "width": width,
-                        "height": height,
-                        "steps": steps,
-                        "guidance": guidance_scale,
-                        "seed": seed,
-                        "negative_prompt": negative_prompt,
-                        "cfg_scale": cfg_scale,
-                        "lora_strength": lora_strength,
-                        "preset": preset,
-                        "exr_scale": exr_scale,
-                    },
-                    gpu_ids=gpu_ids,
-                ),
-                backend="skymap2d",
-                memory_efficient=mem_eff,
-            ),
+            payload={
+                "prompt": prompt,
+                "output": str(Path(output).resolve()),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "seed": seed,
+                "negative_prompt": negative_prompt,
+                "cfg_scale": cfg_scale,
+                "lora_strength": lora_strength,
+                "preset": preset,
+                "exr_scale": exr_scale,
+            },
             t_start=start,
             noun="Skymap",
             console=console,
             enabled=not no_ums,
             priority=ums_priority,
             stream=ums_stream,
+            gpu_ids=gpu_ids,
+            memory_efficient=mem_eff,
         ):
             return
 
@@ -435,20 +427,18 @@ def generate_cmd(
 @cli.command("presets")
 def presets_cmd() -> None:
     """Lista presets de ambiente disponíveis."""
-    t = Table(title="[bold blue]Presets de Skymaps", box=box.ROUNDED)
-    t.add_column("Nome", style="cyan", no_wrap=True)
-    t.add_column("Prompt", style="white")
-    t.add_column("Steps", style="green", justify="right")
-    t.add_column("Guidance", style="green", justify="right")
+    from aigamekit_shared.cli_tables import render_presets_table
 
-    for name, preset in SKYMAP_PRESETS.items():
-        t.add_row(
-            name,
-            preset["prompt"][:60] + "..." if len(preset["prompt"]) > 60 else preset["prompt"],
-            str(preset.get("num_inference_steps", 28)),
-            str(preset.get("guidance_scale", 3.5)),
-        )
-    console.print(t)
+    render_presets_table(
+        console,
+        title="Presets de Skymaps",
+        presets=SKYMAP_PRESETS,
+        columns=[
+            ("Prompt", "white", "", lambda p: p["prompt"][:60] + "..." if len(p["prompt"]) > 60 else p["prompt"]),
+            ("Steps", "green", "right", lambda p: str(p.get("num_inference_steps", 28))),
+            ("Guidance", "green", "right", lambda p: str(p.get("guidance_scale", 3.5))),
+        ],
+    )
 
 
 @cli.command("batch")
@@ -621,31 +611,26 @@ def batch_cmd(
         safe = safe_filename(prompt_text)
         out_path = (out / f"{safe}_{ts}{ext}").resolve()
         t0 = time.time()
-        if not cpu and try_ums_delegation(
+        if not cpu and delegate_or_prepare(
             "skymap2d",
-            with_ums_peak_opts(
-                with_ums_load_opts(
-                    {
-                        "prompt": prompt_text,
-                        "output": str(out_path),
-                        "width": width,
-                        "height": height,
-                        "steps": steps,
-                        "guidance": guidance_scale,
-                        "preset": preset,
-                        "exr_scale": exr_scale,
-                    },
-                    gpu_ids=gpu_ids,
-                ),
-                backend="skymap2d",
-                memory_efficient=mem_eff,
-            ),
+            payload={
+                "prompt": prompt_text,
+                "output": str(out_path),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "preset": preset,
+                "exr_scale": exr_scale,
+            },
             t_start=t0,
             noun="Skymap",
             console=err_console,
             enabled=not no_ums,
             priority=ums_priority or "batch",
             stream=ums_stream,
+            gpu_ids=gpu_ids,
+            memory_efficient=mem_eff,
         ):
             ok_count += 1
             console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{out_path.name}[/cyan] [dim](UMS)[/dim]")
@@ -712,43 +697,24 @@ def batch_cmd(
 @cli.command("info")
 def info_cmd() -> None:
     """Informações de configuração e ambiente."""
-    from aigamekit_shared.gpu import get_system_info
-
-    console.print(
-        Panel.fit(
-            "[bold]skymap2d info[/bold] — configuração e ambiente",
-            border_style="blue",
-        )
-    )
-
-    t = Table(title="[bold blue]Configuração", box=box.ROUNDED)
-    t.add_column("Item", style="cyan", no_wrap=True)
-    t.add_column("Valor", style="green")
-
-    t.add_row("Modelo base (FLUX)", default_base_model_id())
-    t.add_row("LoRA equirectangular", default_model_id())
-    t.add_row("HF_HOME (cache Hub)", hf_home_display_rich())
-    t.add_row("Saída padrão", str(DEFAULT_SKYMAP_DIR.resolve()))
-    t.add_row("Presets disponíveis", str(len(SKYMAP_PRESETS)))
-
-    info = get_system_info()
-    t.add_row("Python", info.get("python_version", sys.version.split()[0]))
-    t.add_row("PyTorch", info.get("torch_version", "N/A"))
-    t.add_row("CUDA", str(info.get("cuda_available", False)))
-    if info.get("cuda_available"):
-        t.add_row("CUDA versão", str(info.get("cuda_version", "N/A")))
-        for i, gpu in enumerate(info.get("gpus", [])):
-            t.add_row(f"GPU {i}", str(gpu.get("name", "")))
-            t.add_row("  └ VRAM total", format_bytes(gpu.get("total_memory", 0)))
-            t.add_row("  └ VRAM livre", format_bytes(gpu.get("free_memory", 0)))
+    from aigamekit_shared.cli_tables import render_info_table
 
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     _hwp = detect_hardware_profile()
     _state = "" if hw_auto_enabled() else " [yellow](desligado: SKYMAP2D_HW_AUTO=0)[/yellow]"
-    t.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_state}")
-
-    console.print(t)
+    render_info_table(
+        console,
+        tool_name="skymap2d",
+        extra_rows=[
+            ("Modelo base (FLUX)", default_base_model_id()),
+            ("LoRA equirectangular", default_model_id()),
+            ("Presets disponíveis", str(len(SKYMAP_PRESETS))),
+        ],
+        output_dir=str(DEFAULT_SKYMAP_DIR.resolve()),
+        hw_profile_summary=_hwp.summary(),
+        hw_auto_state=_state,
+    )
 
 
 @cli.command("serve")
@@ -770,15 +736,10 @@ def serve(ums_worker: bool) -> None:
     :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter skymap2d
     local (:mod:`skymap2d.worker_serve_adapter`).
     """
-    if not ums_worker:
-        console.print("[yellow]skymap2d serve sem --ums-worker não faz nada.[/yellow]")
-        console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
-        return
-
-    from aigamekit_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_ums_worker_cli
     from skymap2d.worker_serve_adapter import Adapter
 
-    run_worker_loop(Adapter, backend_name="skymap2d")
+    run_ums_worker_cli(Adapter, tool_name="skymap2d", ums_worker=ums_worker, console=console)
 
 
 def main() -> None:

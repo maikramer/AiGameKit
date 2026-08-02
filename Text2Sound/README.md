@@ -39,7 +39,7 @@ Or use the unified installer:
 
 ### Requirements
 
-- Python 3.10+
+- Python 3.13+ (`>=3.13,<3.14`)
 - PyTorch 2.1+ with CUDA (~4 GB VRAM minimum)
 - HF token (for gated models): set `HF_TOKEN` environment variable
 
@@ -148,6 +148,19 @@ Install the Cursor agent skill into a game project.
 ```bash
 text2sound skill install -t /path/to/game --force
 ```
+
+## Unified Model Server (UMS)
+
+`text2sound generate` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+text2sound generate "sword clash" -o clash.wav --ums-stream
+text2sound generate "drum loop" -o drums.wav --no-ums     # force in-process
+ums status
+ums respawn text2sound                                    # reload edited src/ code
+```
+
+Both models are **gated**: accept terms on the Hub and set `HF_TOKEN` before the first download. Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
 
 ## Quality Presets
 

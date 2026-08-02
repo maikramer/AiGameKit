@@ -140,7 +140,7 @@ def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPa
     )
     monkeypatch.setattr("text2icon.hardware.detect_hardware_profile", lambda: fake_profile)
     monkeypatch.setattr("aigamekit_shared.gpu.warn_if_vram_occupied", lambda: None)
-    monkeypatch.setattr("text2icon.cli.try_ums_delegation", lambda *a, **k: False)
+    monkeypatch.setattr("text2icon.cli.delegate_or_prepare", lambda *a, **k: False)
     monkeypatch.setattr("text2icon.cli.prepare_gpu_exclusive", lambda **k: None)
 
     mock_gen = MagicMock()

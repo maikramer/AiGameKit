@@ -19,6 +19,7 @@ dependencies = [
     "huggingface-hub>=1.5.0,<2",
     "safetensors>=0.4.0",
     "sdnq>=0.2.1",
+    "peft>=0.13.0",
     "numpy>=1.24.0",
     "OpenEXR>=3.2.0",
     "Pillow>=10.0.0",

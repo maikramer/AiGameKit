@@ -8,20 +8,20 @@
 
 Text2D is a CLI tool that generates images from text prompts using the FLUX.2 Klein model in SDNQ (4-bit dynamic quantization). It integrates with the AiGameKit monorepo pipeline and supports quality presets, multi-GPU inference, and batch generation.
 
-**Default model:** [Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32](https://huggingface.co/Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32) (high VRAM) or [Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) (low VRAM).
+**Default model:** [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (low VRAM, public) or [FLUX.2 Klein 9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (high VRAM, **gated** — accept terms on the Hub). Both load the official BFL fp16 base; SDNQ quantization is applied at **runtime** (no pre-quantized checkpoint by default). Pre-quantized [Disty0 mirrors](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) are optional via `TEXT2D_MODEL_ID`.
 
 ## Requirements
 
 | Item   | Minimum  | Notes |
 |--------|----------|-------|
-| Python | 3.10+    | Tested on 3.10–3.13 |
+| Python | 3.13+    | Pinned `>=3.13,<3.14` (`pyproject.toml`) |
 | GPU    | Optional | NVIDIA + CUDA recommended for reasonable inference |
 | VRAM   | ~6 GB+   | With hw-auto memory-efficient mode (on by default) and 512² resolution; multi-GPU via `--gpu-ids` |
 | Disk   | ~8 GB    | HF cache + SDNQ weights (~2.5 GB on disk) |
 
 > **First run** downloads several GB from Hugging Face and may take many minutes. Subsequent runs with cached weights finish in seconds to ~1 minute depending on hardware.
 
-**Weight license:** the default SDNQ checkpoint is tied to **FLUX Non-Commercial**. For commercial use, set `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` (Apache 2.0, more VRAM). See [AiGameKit/README.md — Licenses](../README.md).
+**Weight license:** the default 4B base is **Apache 2.0** (public Hub download); the 9B base is **gated** (accept BFL terms + `HF_TOKEN`). SDNQ runtime quantization itself is MIT ([Disty0/sdnq](https://github.com/Disty0/sdnq)). See [AiGameKit/README.md — Licenses](../README.md).
 
 ## Installation
 
@@ -187,9 +187,9 @@ Output:
 
 | ID | Notes |
 |----|-------|
-| `Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32` | Default (high VRAM), SDNQ 4-bit, 9B params |
-| `Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic` | Auto-selected by hw-auto on small GPUs (<7.5 GB), SDNQ 4-bit, 4B params |
-| `black-forest-labs/FLUX.2-klein-4B` | Alternative: full BF16, more VRAM (via `TEXT2D_MODEL_ID`) |
+| `black-forest-labs/FLUX.2-klein-9B` | Default (high VRAM), fp16 base + SDNQ runtime quantization (**gated** — accept terms on Hub) |
+| `black-forest-labs/FLUX.2-klein-4B` | Auto-selected by hw-auto on small GPUs (<7.5 GB), fp16 base + SDNQ runtime (public) |
+| `Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic` | Optional pre-quantized checkpoint via `TEXT2D_MODEL_ID` (declares `flux-non-commercial-license`) |
 
 > GGUF weights target ComfyUI-GGUF workflows, not this CLI.
 
@@ -205,6 +205,20 @@ text2d skill install -t /path/to/game-project --force
 |------|------|---------|-------------|
 | `-t, --target` | path | `.` | Game project root directory |
 | `--force` | flag | off | Overwrite existing `SKILL.md` |
+
+## Unified Model Server (UMS)
+
+`text2d generate` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+text2d generate "cat" -o cat.png --ums-stream          # queue/progress events
+text2d generate "cat" -o cat.png --ums-priority batch
+text2d generate "cat" -o cat.png --no-ums              # force in-process
+ums status                                             # backends + HOLDING/QUEUE
+ums respawn text2d                                     # reload edited src/ code
+```
+
+After editing `*/src/`: `ums respawn text2d`. Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
 
 ## Quality Presets
 
@@ -318,4 +332,4 @@ Text2D/
 ## License
 
 - **Code:** MIT — [LICENSE](LICENSE).
-- **Weights:** default SDNQ follows [Disty0 model card](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) (non-commercial in HF metadata). BFL BF16 checkpoint: [FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0). Full license table: [AiGameKit/README.md — Licenses](../README.md).
+- **Weights:** default = official BFL fp16 base ([FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) Apache 2.0, public; [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) **gated**) with SDNQ runtime quantization (MIT, [Disty0/sdnq](https://github.com/Disty0/sdnq)). Optional pre-quantized [Disty0 mirrors](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declare `flux-non-commercial-license`. Full license table: [AiGameKit/README.md — Licenses](../README.md).

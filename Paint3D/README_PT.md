@@ -87,6 +87,19 @@ mesh = load_mesh_trimesh("model.glb")
 textured = apply_hunyuan_paint(mesh, "reference.png", bake_exp=6)
 ```
 
+## Unified Model Server (UMS)
+
+`paint3d texture` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro uso salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+paint3d texture mesh.glb -i ref.png -o pintado.glb --ums-stream
+paint3d texture mesh.glb -i ref.png -o pintado.glb --no-ums   # forçar in-process
+ums status
+ums respawn paint3d                                            # recarrega código src/ editado
+```
+
+Modelo: pesos paint [Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) (`hunyuan3d-paintpbr-v2-1`; públicos, Tencent Community License). Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
+
 ## Dependências
 
 - **aigamekit-shared** (monorepo AiGameKit — GPU, logging)

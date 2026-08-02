@@ -205,6 +205,19 @@ Display system information: Python version, PyTorch, CUDA, GPU details, and Hugg
 paint3d info
 ```
 
+## Unified Model Server (UMS)
+
+`paint3d texture` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first use unless `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+paint3d texture mesh.glb -i ref.png -o painted.glb --ums-stream
+paint3d texture mesh.glb -i ref.png -o painted.glb --no-ums   # force in-process
+ums status
+ums respawn paint3d                                            # reload edited src/ code
+```
+
+Model: [Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) paint weights (`hunyuan3d-paintpbr-v2-1`; public, Tencent Community License). Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
+
 ## Quality Presets
 
 Use `--quality <tier>` with `paint3d texture` to auto-configure rendering parameters. The QualityEngine fills defaults only for parameters the user did not explicitly set (soft resolution).

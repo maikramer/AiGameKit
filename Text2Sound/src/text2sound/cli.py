@@ -30,11 +30,9 @@ from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
     add_ums_options,
+    delegate_or_prepare,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
-    try_ums_delegation,
-    with_ums_load_opts,
-    with_ums_peak_opts,
 )
 from aigamekit_shared.hf import get_hf_token, hf_home_display_rich
 from aigamekit_shared.profiler.session import ProfilerSession, profile_span
@@ -784,34 +782,29 @@ def generate_cmd(
     item_id = Path(output).stem if output else prompt[:40].replace(" ", "_")
     start = time.time()
 
-    if output is not None and try_ums_delegation(
+    if output is not None and delegate_or_prepare(
         "text2sound",
-        with_ums_peak_opts(
-            with_ums_load_opts(
-                {
-                    "prompt": prompt,
-                    "output": str(Path(output).resolve()),
-                    "duration": duration,
-                    "steps": steps,
-                    "cfg_scale": cfg_scale,
-                    "seed": effective_seed,
-                    "sigma_min": sigma_min,
-                    "sigma_max": sigma_max,
-                    "sampler_type": sampler,
-                    "negative_prompt": effective_negative,
-                    "half_precision": half_precision,
-                },
-                gpu_ids=gpu_ids,
-            ),
-            backend="text2sound",
-            memory_efficient=bool(half_precision),
-        ),
+        payload={
+            "prompt": prompt,
+            "output": str(Path(output).resolve()),
+            "duration": duration,
+            "steps": steps,
+            "cfg_scale": cfg_scale,
+            "seed": effective_seed,
+            "sigma_min": sigma_min,
+            "sigma_max": sigma_max,
+            "sampler_type": sampler,
+            "negative_prompt": effective_negative,
+            "half_precision": half_precision,
+        },
         t_start=start,
         noun="Áudio",
         console=console,
         enabled=not no_ums,
         priority=ums_priority,
         stream=ums_stream,
+        gpu_ids=gpu_ids,
+        memory_efficient=bool(half_precision),
     ):
         return
 
@@ -1171,33 +1164,28 @@ def batch_cmd(
         item_id = out_path.stem
         item_start = time.time()
 
-        if try_ums_delegation(
+        if delegate_or_prepare(
             "text2sound",
-            with_ums_peak_opts(
-                with_ums_load_opts(
-                    {
-                        "prompt": full_prompt,
-                        "output": str(out_path.resolve()),
-                        "duration": duration,
-                        "steps": steps,
-                        "cfg_scale": cfg_scale,
-                        "seed": line_seed,
-                        "sigma_min": sigma_min,
-                        "sigma_max": sigma_max,
-                        "sampler_type": sampler,
-                        "half_precision": half_precision,
-                    },
-                    gpu_ids=gpu_ids,
-                ),
-                backend="text2sound",
-                memory_efficient=half_eff,
-            ),
+            payload={
+                "prompt": full_prompt,
+                "output": str(out_path.resolve()),
+                "duration": duration,
+                "steps": steps,
+                "cfg_scale": cfg_scale,
+                "seed": line_seed,
+                "sigma_min": sigma_min,
+                "sigma_max": sigma_max,
+                "sampler_type": sampler,
+                "half_precision": half_precision,
+            },
             t_start=item_start,
             noun="Áudio",
             console=err_console,
             enabled=not no_ums,
             priority=ums_priority or "batch",
             stream=ums_stream,
+            gpu_ids=gpu_ids,
+            memory_efficient=half_eff,
         ):
             ok_count += 1
             elapsed = time.time() - item_start
@@ -1336,28 +1324,20 @@ def batch_cmd(
 @cli.command("presets")
 def presets_cmd() -> None:
     """Lista presets de áudio disponíveis."""
-    t = Table(title="[bold blue]Presets de Áudio (Game Dev)", box=box.ROUNDED)
-    t.add_column("Nome", style="cyan", no_wrap=True)
-    t.add_column("Kind", style="magenta", no_wrap=True)
-    t.add_column("Prompt", style="white", max_width=50)
-    t.add_column("Duração", style="green", justify="right")
-    t.add_column("Steps", style="green", justify="right")
-    t.add_column("CFG", style="green", justify="right")
+    from aigamekit_shared.cli_tables import render_presets_table
 
-    for name in list_presets():
-        p = AUDIO_PRESETS[name]
-        prompt_text = p["prompt"]
-        if len(prompt_text) > 50:
-            prompt_text = prompt_text[:47] + "..."
-        t.add_row(
-            name,
-            p.get("kind", "—"),
-            prompt_text,
-            f"{p['duration']}s",
-            str(p["steps"]),
-            str(p["cfg_scale"]),
-        )
-    console.print(t)
+    render_presets_table(
+        console,
+        title="Presets de Áudio (Game Dev)",
+        presets=AUDIO_PRESETS,
+        columns=[
+            ("Kind", "magenta", "", lambda p: p.get("kind", "—")),
+            ("Prompt", "white", "", lambda p: p["prompt"][:47] + "..." if len(p["prompt"]) > 50 else p["prompt"]),
+            ("Duração", "green", "right", lambda p: f"{p['duration']}s"),
+            ("Steps", "green", "right", lambda p: str(p["steps"])),
+            ("CFG", "green", "right", lambda p: str(p["cfg_scale"])),
+        ],
+    )
 
 
 @cli.command("info")
@@ -1441,15 +1421,10 @@ def serve(ums_worker: bool) -> None:
     :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter text2sound
     local (:mod:`text2sound.worker_serve_adapter`).
     """
-    if not ums_worker:
-        console.print("[yellow]text2sound serve sem --ums-worker não faz nada.[/yellow]")
-        console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
-        return
-
-    from aigamekit_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_ums_worker_cli
     from text2sound.worker_serve_adapter import Adapter
 
-    run_worker_loop(Adapter, backend_name="text2sound")
+    run_ums_worker_cli(Adapter, tool_name="text2sound", ums_worker=ums_worker, console=console)
 
 
 def main() -> None:

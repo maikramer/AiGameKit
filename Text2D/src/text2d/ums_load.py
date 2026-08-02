@@ -29,14 +29,13 @@ def map_ums_load_kwargs(raw: dict[str, Any]) -> dict[str, Any]:
     """
     kwargs = dict(raw)
 
+    from aigamekit_shared.ums_load import normalize_quant_preset
+
     # Admit UMS usa sdnq_preset; ctor Text2D usa quant_preset.
     if kwargs.get("quant_preset") is None and kwargs.get("sdnq_preset") is not None:
-        qm = str(kwargs["sdnq_preset"]).strip().lower()
-        kwargs["quant_preset"] = None if qm in ("none", "null", "") else kwargs["sdnq_preset"]
+        kwargs["quant_preset"] = normalize_quant_preset(kwargs["sdnq_preset"])
     elif kwargs.get("quant_preset") is not None:
-        qm = str(kwargs["quant_preset"]).strip().lower()
-        if qm in ("none", "null", ""):
-            kwargs["quant_preset"] = None
+        kwargs["quant_preset"] = normalize_quant_preset(kwargs["quant_preset"])
 
     mem_eff = kwargs.get("memory_efficient")
     kwargs["memory_efficient"] = bool(mem_eff) if mem_eff is not None else False

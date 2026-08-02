@@ -260,13 +260,13 @@ class TestCliPayloadUMS:
 
         captured: dict = {}
 
-        def _fake_delegate(backend: str, payload: dict, **kwargs: object) -> bool:
+        def _fake_delegate(backend: str, **kwargs: object) -> bool:
             captured["backend"] = backend
-            captured["payload"] = payload
+            captured["payload"] = kwargs.get("payload", {})
             return True
 
         runner = CliRunner()
-        with patch("terrain3d.cli.try_ums_delegation", side_effect=_fake_delegate):
+        with patch("terrain3d.cli.delegate_or_prepare", side_effect=_fake_delegate):
             result = runner.invoke(cli, argv)
         assert result.exit_code == 0, result.output
         return captured
@@ -349,7 +349,7 @@ class TestCliExportInProcess:
         )
         runner = CliRunner()
         with (
-            patch("terrain3d.cli.try_ums_delegation", return_value=False),
+            patch("terrain3d.cli.delegate_or_prepare", return_value=False),
             patch("terrain3d.cli.prepare_gpu_exclusive", return_value=None),
             patch("terrain3d.cli.generate_terrain", return_value=fake),
         ):
@@ -389,7 +389,7 @@ class TestCliExportInProcess:
         )
         runner = CliRunner()
         with (
-            patch("terrain3d.cli.try_ums_delegation", return_value=False),
+            patch("terrain3d.cli.delegate_or_prepare", return_value=False),
             patch("terrain3d.cli.prepare_gpu_exclusive", return_value=None),
             patch("terrain3d.cli.generate_terrain", return_value=fake),
         ):
@@ -430,7 +430,12 @@ class TestQualityProfilesTerrain3d:
         import yaml
 
         data_path = (
-            Path(__file__).resolve().parents[2] / "Shared" / "src" / "aigamekit_shared" / "data" / "quality-profiles.yaml"
+            Path(__file__).resolve().parents[2]
+            / "Shared"
+            / "src"
+            / "aigamekit_shared"
+            / "data"
+            / "quality-profiles.yaml"
         )
         return yaml.safe_load(data_path.read_text(encoding="utf-8"))["profiles"]
 

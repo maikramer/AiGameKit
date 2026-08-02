@@ -29,7 +29,7 @@ cd Shared && pip install -e .
 cd Skymap2D && pip install -e .
 ```
 
-Requires **CUDA GPU** and Python 3.10+.
+Requires **CUDA GPU** and Python 3.13+ (`>=3.13,<3.14`).
 
 ### Unified installer
 
@@ -139,6 +139,20 @@ Install the Cursor Agent Skill file into a game project.
 ```bash
 skymap2d skill install --target /path/to/game --force
 ```
+
+## Unified Model Server (UMS)
+
+`skymap2d generate` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+skymap2d generate "sunset" -o sky.png --ums-stream
+skymap2d generate "night" -o sky_night.png --ums-priority batch
+skymap2d generate "storm" -o sky_storm.png --no-ums        # force in-process
+ums status
+ums respawn skymap2d                                       # reload edited src/ code
+```
+
+Model: base [FLUX.1-dev SDNQ uint4](https://huggingface.co/Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32) (public mirror) + [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) (public). The official `black-forest-labs/FLUX.1-dev` base is **gated** — use `SKYMAP2D_BASE_MODEL_ID` only after accepting BFL terms. Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
 
 ## Quality Presets
 

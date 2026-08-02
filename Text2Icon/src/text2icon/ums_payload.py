@@ -45,7 +45,12 @@ def build_generate_request(
         extra=extra,
     )
 
-    quant = transformer_quant_preset if transformer_quant_preset not in (None, "", "auto") else None
+    from aigamekit_shared.ums_load import normalize_quant_preset
+
+    quant = normalize_quant_preset(transformer_quant_preset)
+    if quant == "auto":
+        # "auto" = deixa o hw_auto decidir — sem sinal de peak no payload.
+        quant = None
     mem = bool(memory_efficient) if memory_efficient is not None else bool(quant)
     return with_ums_peak_opts(
         with_ums_load_opts(payload, gpu_ids=gpu_ids),

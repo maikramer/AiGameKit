@@ -38,9 +38,11 @@ class Adapter(WorkerAdapter):
         # Pós-processo é por-generate, não shape de load.
         for k in ("smooth", "smooth_passes", "upscale", "upscale_factor", "preserve_origin"):
             kwargs.pop(k, None)
+        from aigamekit_shared.ums_load import normalize_quant_preset
+
         mem_eff = kwargs.pop("memory_efficient", None)
         if mem_eff is None and quant is not None:
-            mem_eff = str(quant).strip().lower() not in ("none", "null", "")
+            mem_eff = normalize_quant_preset(quant) is not None
         mem_eff = bool(mem_eff)
 
         if mem_eff:

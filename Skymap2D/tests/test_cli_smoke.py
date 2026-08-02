@@ -1,4 +1,4 @@
-"""Smoke tests do CLI Skymap2D (sem chamar HF Inference API)."""
+"""Smoke tests do CLI Skymap2D (sem inferência)."""
 
 from __future__ import annotations
 

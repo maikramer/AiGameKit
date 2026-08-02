@@ -44,15 +44,15 @@ text2d -v generate "teste"
 
 | Variável | Função |
 |----------|--------|
-| `TEXT2D_MODEL_ID` | Repo Hugging Face alternativo compatível com o pipeline Klein (default SDNQ = termos Disty0; `black-forest-labs/FLUX.2-klein-4B` = Apache 2.0 no card BFL) |
+| `TEXT2D_MODEL_ID` | Repo Hugging Face alternativo compatível com o pipeline Klein (default = base oficial BFL `FLUX.2-klein-4B`/`-9B` fp16 + SDNQ runtime; mirrors pré-quantizados Disty0 via esta var) |
 | `HF_HOME` | Raiz do cache Hugging Face |
 
 ## Notas importantes
 
 - **Primeira execução:** download de pesos — pode parecer “parado” durante rede/disco.
 - Pesos **GGUF** são para fluxos tipo ComfyUI-GGUF, **não** este CLI Diffusers.
-- **Guidance** padrão **1.0** para o checkpoint SDNQ Disty0 (valores maiores são ignorados pelo modelo distilled).
-- **Licenças:** o default SDNQ (Disty0) declara no Hub termos tipo **non-commercial**; o BF16 oficial BFL é **Apache 2.0** — ver `Text2D/README.md` e `AiGameKit/README.md`.
+- **Guidance** padrão **1.0** para a base FLUX.2 Klein (distilled; valores maiores costumam ser ignorados).
+- **Licenças:** default = base oficial BFL (`4B` Apache 2.0 público; `9B` gated — aceitar termos no Hub) + SDNQ runtime MIT. Mirrors pré-quantizados Disty0 (`TEXT2D_MODEL_ID`) declara `flux-non-commercial-license` — ver `Text2D/README.md` e `AiGameKit/README.md`.
 - Em **GameAssets**, resolução 2D elevada + outras apps na mesma GPU (ex.: **Godot** + editor 3D) aumenta risco de **OOM**; reduzir `width`/`height` no bloco `text2d` do `game.yaml` ou libertar VRAM.
 
 ## Prompt — boas práticas para imagens limpas (especialmente para 3D)

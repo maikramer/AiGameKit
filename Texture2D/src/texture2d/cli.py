@@ -17,15 +17,11 @@ from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
     add_ums_options,
+    delegate_or_prepare,
     legacy_server_allowed,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
-    try_ums_delegation,
-    with_ums_load_opts,
-    with_ums_peak_opts,
 )
-from aigamekit_shared.gpu import get_system_info
-from aigamekit_shared.hf import hf_home_display_rich
 from aigamekit_shared.path_utils import safe_filename
 from aigamekit_shared.quality import VALID_QUALITIES
 
@@ -275,33 +271,28 @@ def generate_cmd(
     if (
         not cpu
         and output is not None
-        and try_ums_delegation(
+        and delegate_or_prepare(
             "texture2d",
-            with_ums_peak_opts(
-                with_ums_load_opts(
-                    {
-                        "prompt": prompt,
-                        "output": str(Path(output).resolve()),
-                        "width": width,
-                        "height": height,
-                        "steps": steps,
-                        "guidance": guidance_scale,
-                        "seed": seed,
-                        "negative_prompt": negative_prompt,
-                        "preset": preset,
-                        "ground": ground,
-                        "model_id": resolved_model,
-                    },
-                    gpu_ids=gpu_ids,
-                ),
-                backend="texture2d",
-            ),
+            payload={
+                "prompt": prompt,
+                "output": str(Path(output).resolve()),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "seed": seed,
+                "negative_prompt": negative_prompt,
+                "preset": preset,
+                "ground": ground,
+                "model_id": resolved_model,
+            },
             t_start=t_start,
             noun="Textura",
             console=console,
             enabled=not no_ums,
             priority=ums_priority,
             stream=ums_stream,
+            gpu_ids=gpu_ids,
         )
     ):
         return
@@ -427,20 +418,18 @@ def generate_cmd(
 @cli.command("presets")
 def presets_cmd() -> None:
     """Lista presets de materiais disponíveis."""
-    t = Table(title="[bold blue]Presets de Texturas", box=box.ROUNDED)
-    t.add_column("Nome", style="cyan", no_wrap=True)
-    t.add_column("Prompt", style="white")
-    t.add_column("Steps", style="green", justify="right")
-    t.add_column("Guidance", style="green", justify="right")
+    from aigamekit_shared.cli_tables import render_presets_table
 
-    for name, preset in TEXTURE_PRESETS.items():
-        t.add_row(
-            name,
-            preset["prompt"][:60] + "..." if len(preset["prompt"]) > 60 else preset["prompt"],
-            str(preset.get("num_inference_steps", DEFAULT_STEPS)),
-            str(preset.get("guidance_scale", DEFAULT_GUIDANCE)),
-        )
-    console.print(t)
+    render_presets_table(
+        console,
+        title="Presets de Texturas",
+        presets=TEXTURE_PRESETS,
+        columns=[
+            ("Prompt", "white", "", lambda p: p["prompt"][:60] + "..." if len(p["prompt"]) > 60 else p["prompt"]),
+            ("Steps", "green", "right", lambda p: str(p.get("num_inference_steps", DEFAULT_STEPS))),
+            ("Guidance", "green", "right", lambda p: str(p.get("guidance_scale", DEFAULT_GUIDANCE))),
+        ],
+    )
 
 
 @cli.command("batch")
@@ -585,31 +574,26 @@ def batch_cmd(
         safe = safe_filename(prompt_text)
         out_path = (out / f"{safe}_{ts}.png").resolve()
         t0 = time.time()
-        if try_ums_delegation(
+        if delegate_or_prepare(
             "texture2d",
-            with_ums_peak_opts(
-                with_ums_load_opts(
-                    {
-                        "prompt": prompt_text,
-                        "output": str(out_path),
-                        "width": width,
-                        "height": height,
-                        "steps": steps,
-                        "guidance": guidance_scale,
-                        "preset": preset,
-                        "ground": ground,
-                        "model_id": resolved_model,
-                    },
-                    gpu_ids=gpu_ids,
-                ),
-                backend="texture2d",
-            ),
+            payload={
+                "prompt": prompt_text,
+                "output": str(out_path),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "preset": preset,
+                "ground": ground,
+                "model_id": resolved_model,
+            },
             t_start=t0,
             noun="Textura",
             console=err_console,
             enabled=not no_ums,
             priority=ums_priority or "batch",
             stream=ums_stream,
+            gpu_ids=gpu_ids,
         ):
             ok_count += 1
             console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{out_path.name}[/cyan] [dim](UMS)[/dim]")
@@ -791,40 +775,24 @@ def server_stop_cmd() -> None:
 @cli.command("info")
 def info_cmd() -> None:
     """Informações de configuração e ambiente."""
-    console.print(
-        Panel.fit(
-            "[bold]texture2d info[/bold] — ambiente de execução e cache Hugging Face",
-            border_style="blue",
-        )
-    )
-
-    data = get_system_info()
-    t = Table(title="[bold blue]Sistema", box=box.ROUNDED)
-    t.add_column("Componente", style="cyan", no_wrap=True)
-    t.add_column("Valor", style="green")
-
-    t.add_row("Modelo (default)", default_model_id())
-    t.add_row("Backend", "Stable Diffusion v1.5 + circular padding")
-    t.add_row("Python", data.get("python_version", "N/A"))
-    t.add_row("PyTorch", data.get("torch_version", "N/A"))
-    t.add_row("CUDA", str(data.get("cuda_available", False)))
-    if data.get("cuda_available"):
-        t.add_row("CUDA (versão)", str(data.get("cuda_version", "N/A")))
-        for i, gpu in enumerate(data.get("gpus", [])):
-            t.add_row(f"GPU {i}", str(gpu.get("name", "")))
-            t.add_row("  └ VRAM total", format_bytes(gpu.get("total_memory", 0)))
-            t.add_row("  └ VRAM livre", format_bytes(gpu.get("free_memory", 0)))
-    t.add_row("HF_HOME (cache Hub)", hf_home_display_rich())
-    t.add_row("Saída padrão", str(DEFAULT_TEXTURE_DIR.resolve()))
-    t.add_row("Presets disponíveis", str(len(TEXTURE_PRESETS)))
+    from aigamekit_shared.cli_tables import render_info_table
 
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     _hwp = detect_hardware_profile()
     _state = "" if hw_auto_enabled() else " [yellow](desligado: TEXTURE2D_HW_AUTO=0)[/yellow]"
-    t.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_state}")
-
-    console.print(t)
+    render_info_table(
+        console,
+        tool_name="texture2d",
+        extra_rows=[
+            ("Modelo (default)", default_model_id()),
+            ("Backend", "Stable Diffusion v1.5 + circular padding"),
+            ("Presets disponíveis", str(len(TEXTURE_PRESETS))),
+        ],
+        output_dir=str(DEFAULT_TEXTURE_DIR.resolve()),
+        hw_profile_summary=_hwp.summary(),
+        hw_auto_state=_state,
+    )
 
 
 cli.add_command(validate_tileable_cmd)
@@ -849,15 +817,10 @@ def serve(ums_worker: bool) -> None:
     :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter texture2d
     local (:mod:`texture2d.worker_serve_adapter`).
     """
-    if not ums_worker:
-        console.print("[yellow]texture2d serve sem --ums-worker não faz nada.[/yellow]")
-        console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
-        return
-
-    from aigamekit_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_ums_worker_cli
     from texture2d.worker_serve_adapter import Adapter
 
-    run_worker_loop(Adapter, backend_name="texture2d")
+    run_ums_worker_cli(Adapter, tool_name="texture2d", ums_worker=ums_worker, console=console)
 
 
 def main() -> None:

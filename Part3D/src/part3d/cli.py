@@ -832,13 +832,7 @@ def serve(ums_worker: bool) -> None:
     :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter part3d
     local (:mod:`part3d.worker_serve_adapter`).
     """
-    if not ums_worker:
-        from rich.console import Console
-
-        Console().print("[yellow]part3d serve sem --ums-worker não faz nada.[/yellow]")
-        return
-
-    from aigamekit_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_ums_worker_cli
     from part3d.worker_serve_adapter import Adapter
 
-    run_worker_loop(Adapter, backend_name="part3d")
+    run_ums_worker_cli(Adapter, tool_name="part3d", ums_worker=ums_worker)

@@ -41,7 +41,7 @@ text2icon generate "shield emblem" --quant-transformer sdnq-fp8
 | `-o/--output` | `outputs/icons/<slug>_<ts>.png` | Ficheiro de saída |
 | `-W/--width` | `512` | Largura (múltiplo de 8) |
 | `-H/--height` | `512` | Altura (múltiplo de 8) |
-| `-s/--steps` | `2` | Passos de inferência (Sprint: 1–4) |
+| `-s/--steps` | `20` | Passos de inferência (default 20; Sprint permite 1–4 para rápido) |
 | `-g/--guidance` | `4.5` | Guidance scale (CFG) |
 | `--seed` | aleatório | Seed reprodutível |
 | `-n/--negative-prompt` | `""` | Prompt negativo |

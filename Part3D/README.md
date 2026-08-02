@@ -217,6 +217,19 @@ Soft-resolved via QualityEngine — explicit `--steps` / `--octree-resolution` /
 | `{stem}_parts.glb` | Multi-geometry parts GLB |
 | `{stem}_segmented.glb` | Segmented mesh with per-part colors |
 
+## Unified Model Server (UMS)
+
+`part3d decompose` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first use unless `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+part3d decompose mesh.glb -o parts.glb --ums-stream
+part3d decompose mesh.glb -o parts.glb --no-ums        # force in-process
+ums status
+ums respawn part3d                                     # reload edited src/ code
+```
+
+Model: [Hunyuan3D-Part](https://huggingface.co/tencent/Hunyuan3D-Part) (P3-SAM + X-Part; public, Tencent Community License). Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
+
 ## Pipeline Integration
 
 ```

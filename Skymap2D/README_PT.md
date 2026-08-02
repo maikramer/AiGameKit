@@ -2,7 +2,7 @@
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
-CLI para geração de skymaps equirectangular 360° via HF Inference API.
+CLI para geração de skymaps equirectangular 360° com FLUX.1-dev + LoRA, localmente na GPU.
 
 Usa o modelo [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) para gerar panorâmicas 360° usáveis como skybox/skymap em engines de jogo — ideal para céus, ambientes exteriores e cenários de fundo.
 
@@ -10,7 +10,7 @@ No monorepo [AiGameKit](../README_PT.md), o pacote depende de [**aigamekit-share
 
 ## Características
 
-- **Sem GPU local** — geração 100% cloud via HF Inference API
+- **Inferência local na GPU** — FLUX.1-dev + LoRA via `diffusers` (requer CUDA)
 - **Prompt equirectangular automático** — acrescenta instruções 360°/equirectangular automaticamente
 - **10 presets de ambiente** — Sunset, Night Sky, Overcast, Clear Day, Storm, Space, etc.
 - **Batch** — gera múltiplos skymaps a partir de um ficheiro de prompts
@@ -68,7 +68,7 @@ python3 scripts/installer.py --prefix ~/.local
 python3 scripts/installer.py --use-venv
 ```
 
-Sem PyTorch local — apenas `config/requirements.txt` e `aigamekit-shared`.
+Requer PyTorch/CUDA — FLUX.1-dev + LoRA correm localmente via `diffusers` (`config/requirements.txt` + `aigamekit-shared`).
 
 ## Comandos
 
@@ -117,6 +117,20 @@ Kernel opts (batch/UMS): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findi
 | Underwater | Vista subaquática, raios de luz, água |
 | Fantasy | Céu mágico, auroras, cristais flutuantes |
 
+## Unified Model Server (UMS)
+
+`skymap2d generate` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+skymap2d generate "pôr do sol" -o ceu.png --ums-stream
+skymap2d generate "noite" -o ceu_noite.png --ums-priority batch
+skymap2d generate "tempestade" -o ceu_storm.png --no-ums   # forçar in-process
+ums status
+ums respawn skymap2d                                       # recarrega código src/ editado
+```
+
+Modelo: base [FLUX.1-dev SDNQ uint4](https://huggingface.co/Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32) (mirror público) + [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) (público). A base oficial `black-forest-labs/FLUX.1-dev` é **gated** — usar `SKYMAP2D_BASE_MODEL_ID` só depois de aceitar os termos BFL. Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
+
 ## Configuração
 
 | Variável | Descrição |
@@ -141,5 +155,5 @@ pytest tests/ -v
 ## Licença
 
 - **Código:** MIT — [LICENSE](LICENSE).
-- **Pesos (default):** [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) — LoRA sobre [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) (licença **não comercial** BFL); inferência via [HF Inference API](https://huggingface.co/docs/api-inference/) — aplica-se também os [termos HF](https://huggingface.co/terms-of-service).
+- **Pesos (default):** [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) — LoRA sobre [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) (licença **não comercial** BFL); inferência local com `diffusers` — pesos descarregados do HF Hub (aplicam-se os [termos HF](https://huggingface.co/terms-of-service)).
 - **Tabela completa:** [AiGameKit/README_PT.md](../README_PT.md) (secção Licenças).

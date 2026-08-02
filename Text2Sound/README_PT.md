@@ -25,7 +25,7 @@ Ambos os repositórios podem ser **gated**: aceita os termos no Hub e define `HF
 
 ## Requisitos
 
-- Python 3.10+
+- Python 3.13+ (`>=3.13,<3.14`)
 - PyTorch 2.1+ (CUDA recomendado)
 - ~4 GB de VRAM (geração em GPU)
 - Token HF (se o modelo exigir autenticação): `HF_TOKEN`
@@ -104,6 +104,19 @@ text2sound batch prompts.txt --seed 1000   # seeds 1000, 1001, 1002, … por lin
 text2sound info     # ambiente, GPU, modelo, configuração
 text2sound --help   # ajuda completa
 ```
+
+## Unified Model Server (UMS)
+
+`text2sound generate` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+text2sound generate "choque de espadas" -o clash.wav --ums-stream
+text2sound generate "loop de bateria" -o drums.wav --no-ums   # forçar in-process
+ums status
+ums respawn text2sound                                        # recarrega código src/ editado
+```
+
+Ambos os modelos são **gated**: aceitar termos no Hub e definir `HF_TOKEN` antes do primeiro download. Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
 
 ## Presets disponíveis
 

@@ -17,7 +17,7 @@ Uses a diffusion model trained on real-world elevation data (WorldClim + ETOPO) 
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.13+ (`>=3.13,<3.14`)
 - PyTorch 2.4+ (CUDA required)
 - ~6 GB VRAM
 - Network access (model + WorldClim download on first run)
@@ -101,6 +101,19 @@ Quality presets control `--size`, `--world-size`, and `--coarse-window` via [Qua
 terrain3d --help        # Show all commands
 terrain3d --version     # Print version
 ```
+
+## Unified Model Server (UMS)
+
+`terrain3d generate` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+terrain3d generate "mountain ridge" -o terrain.json --ums-stream
+terrain3d generate "valley" -o valley.json --no-ums        # force in-process
+ums status
+ums respawn terrain3d                                      # reload edited src/ code
+```
+
+Model: [terrain-diffusion-30m](https://huggingface.co/xandergos/terrain-diffusion-30m) (public; vendored — WorldClim bioclim rasters auto-download on first run). Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
 
 ## Quality Presets
 

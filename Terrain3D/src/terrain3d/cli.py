@@ -11,9 +11,9 @@ from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
     add_ums_options,
+    delegate_or_prepare,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
-    try_ums_delegation,
 )
 from aigamekit_shared.quality import VALID_QUALITIES
 
@@ -278,9 +278,9 @@ def generate_cmd(
 
     t_start = time.time()
     out_resolved = str(Path(output).resolve())
-    if try_ums_delegation(
+    if delegate_or_prepare(
         "terrain3d",
-        build_generate_request(
+        payload=build_generate_request(
             output=out_resolved,
             metadata_path=metadata_path,
             seed=seed,
@@ -396,15 +396,10 @@ def serve(ums_worker: bool) -> None:
     :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter terrain3d
     local (:mod:`terrain3d.worker_serve_adapter`).
     """
-    if not ums_worker:
-        console.print("[yellow]terrain3d serve sem --ums-worker não faz nada.[/yellow]")
-        console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
-        return
-
-    from aigamekit_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_ums_worker_cli
     from terrain3d.worker_serve_adapter import Adapter
 
-    run_worker_loop(Adapter, backend_name="terrain3d")
+    run_ums_worker_cli(Adapter, tool_name="terrain3d", ums_worker=ums_worker, console=console)
 
 
 def main() -> None:

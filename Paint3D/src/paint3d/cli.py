@@ -31,8 +31,8 @@ from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
     add_ums_options,
+    delegate_or_prepare,
     prepare_gpu_exclusive,
-    try_ums_delegation,
 )
 from aigamekit_shared.gpu import (
     format_bytes,
@@ -416,9 +416,9 @@ def texture(
     # UMS primeiro — _prepare_gpu (ensure_vram/kill) só no fallback in-process.
     from .ums_payload import build_texture_request
 
-    if try_ums_delegation(
+    if delegate_or_prepare(
         "paint3d",
-        build_texture_request(
+        payload=build_texture_request(
             mesh_path=str(mesh_path),
             image_path=str(image_file),
             output=str(output),
@@ -433,13 +433,10 @@ def texture(
             smooth_passes=smooth_passes,
             upscale=upscale,
             upscale_factor=upscale_factor,
-            gpu_ids=parsed_gpu_ids,
             torch_compile=torch_compile,
             torch_compile_mode=torch_compile_mode,
             channels_last=channels_last,
             allow_group_offload=allow_group_offload,
-            memory_efficient=mem_eff,
-            sdnq_preset="sdnq-uint8" if mem_eff else "none",
         ),
         t_start=t_start,
         noun="Mesh texturizado",
@@ -447,6 +444,9 @@ def texture(
         enabled=not no_ums,
         priority=ums_priority,
         stream=ums_stream,
+        gpu_ids=parsed_gpu_ids,
+        memory_efficient=mem_eff,
+        sdnq_preset="sdnq-uint8" if mem_eff else "none",
     ):
         sys.exit(0)
 
@@ -770,9 +770,9 @@ def texture_batch(
                         item_tex = int(item_tex)
                     except (TypeError, ValueError):
                         item_tex = texture_size
-                if try_ums_delegation(
+                if delegate_or_prepare(
                     "paint3d",
-                    build_texture_request(
+                    payload=build_texture_request(
                         mesh_path=str(mesh_path),
                         image_path=str(image_path),
                         output=str(output_path),
@@ -785,13 +785,10 @@ def texture_batch(
                         preserve_origin=preserve_origin,
                         smooth=smooth,
                         smooth_passes=smooth_passes,
-                        gpu_ids=parsed_gpu_ids,
                         torch_compile=torch_compile,
                         torch_compile_mode=torch_compile_mode,
                         channels_last=channels_last,
                         allow_group_offload=allow_group_offload,
-                        memory_efficient=mem_eff,
-                        sdnq_preset="sdnq-uint8" if mem_eff else "none",
                     ),
                     t_start=t0,
                     noun="Mesh texturizado",
@@ -799,6 +796,9 @@ def texture_batch(
                     enabled=not no_ums,
                     priority=ums_priority,
                     stream=ums_stream,
+                    gpu_ids=parsed_gpu_ids,
+                    memory_efficient=mem_eff,
+                    sdnq_preset="sdnq-uint8" if mem_eff else "none",
                 ):
                     elapsed = time.time() - t0
                     emit_result(item_id, TOOL_PAINT3D, STATUS_OK, output=str(output_path), seconds=round(elapsed, 2))
@@ -1161,10 +1161,10 @@ def serve(ums_worker: bool) -> None:
         "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6",
     )
 
-    from aigamekit_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_ums_worker_cli
     from paint3d.worker_serve_adapter import Adapter
 
-    run_worker_loop(Adapter, backend_name="paint3d")
+    run_ums_worker_cli(Adapter, tool_name="paint3d", ums_worker=ums_worker, console=console)
 
 
 def main():

@@ -656,7 +656,7 @@ def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Pa
 
     Determinístico, **sem heurística**: lê rotação do node-transform do input,
     calcula escala+translação por AABB (trimesh só para métricas), aplica a
-    matriz 4×4 em bpy e re-exporta com NORMAL+TANGENT via ``save_glb``.
+    matriz 4x4 em bpy e re-exporta com NORMAL+TANGENT via ``save_glb``.
     """
     import trimesh
 

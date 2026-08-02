@@ -17,15 +17,11 @@ from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
     add_ums_options,
+    delegate_or_prepare,
     legacy_server_allowed,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
-    try_ums_delegation,
-    with_ums_load_opts,
-    with_ums_peak_opts,
 )
-from aigamekit_shared.gpu import get_system_info
-from aigamekit_shared.hf import hf_home_display_rich
 from aigamekit_shared.path_utils import safe_filename
 from aigamekit_shared.quality import VALID_QUALITIES
 
@@ -310,35 +306,30 @@ def generate_cmd(
     if (
         not cpu
         and output is not None
-        and try_ums_delegation(
+        and delegate_or_prepare(
             "text2icon",
-            with_ums_peak_opts(
-                with_ums_load_opts(
-                    {
-                        "prompt": prompt,
-                        "output": str(Path(output).resolve()),
-                        "width": width,
-                        "height": height,
-                        "steps": steps,
-                        "guidance": guidance_scale,
-                        "seed": seed,
-                        "transparent": transparent,
-                        "negative_prompt": negative_prompt,
-                        "transformer_quant_preset": transformer_quant_preset,
-                        "model_id": resolved_model,
-                    },
-                    gpu_ids=gpu_ids,
-                ),
-                backend="text2icon",
-                memory_efficient=_icon_mem_eff,
-                quant_preset=transformer_quant_preset if transformer_quant_preset not in (None, "", "auto") else None,
-            ),
+            payload={
+                "prompt": prompt,
+                "output": str(Path(output).resolve()),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "seed": seed,
+                "transparent": transparent,
+                "negative_prompt": negative_prompt,
+                "transformer_quant_preset": transformer_quant_preset,
+                "model_id": resolved_model,
+            },
             t_start=t_start,
             noun="Ícone",
             console=console,
             enabled=not no_ums,
             priority=ums_priority,
             stream=ums_stream,
+            gpu_ids=gpu_ids,
+            memory_efficient=_icon_mem_eff,
+            quant_preset=transformer_quant_preset if transformer_quant_preset not in (None, "", "auto") else None,
         )
     ):
         return
@@ -642,33 +633,28 @@ def batch_cmd(
         safe = safe_filename(prompt)
         out_path = (out / f"{safe}_{ts}.png").resolve()
         t0 = time.time()
-        if try_ums_delegation(
+        if delegate_or_prepare(
             "text2icon",
-            with_ums_peak_opts(
-                with_ums_load_opts(
-                    {
-                        "prompt": prompt,
-                        "output": str(out_path),
-                        "width": width,
-                        "height": height,
-                        "steps": steps,
-                        "guidance": guidance_scale,
-                        "transparent": transparent,
-                        "transformer_quant_preset": transformer_quant_preset,
-                        "model_id": resolved_model,
-                    },
-                    gpu_ids=gpu_ids,
-                ),
-                backend="text2icon",
-                memory_efficient=_icon_mem_eff,
-                quant_preset=transformer_quant_preset if transformer_quant_preset not in (None, "", "auto") else None,
-            ),
+            payload={
+                "prompt": prompt,
+                "output": str(out_path),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "transparent": transparent,
+                "transformer_quant_preset": transformer_quant_preset,
+                "model_id": resolved_model,
+            },
             t_start=t0,
             noun="Ícone",
             console=err_console,
             enabled=not no_ums,
             priority=ums_priority or "batch",
             stream=ums_stream,
+            gpu_ids=gpu_ids,
+            memory_efficient=_icon_mem_eff,
+            quant_preset=transformer_quant_preset if transformer_quant_preset not in (None, "", "auto") else None,
         ):
             ok_count += 1
             console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{out_path.name}[/cyan] [dim](UMS)[/dim]")
@@ -740,39 +726,23 @@ def batch_cmd(
 @cli.command("info")
 def info_cmd() -> None:
     """Informações de configuração e ambiente."""
-    console.print(
-        Panel.fit(
-            "[bold]text2icon info[/bold] — ambiente de execução e cache Hugging Face",
-            border_style="blue",
-        )
-    )
-
-    data = get_system_info()
-    t = Table(title="[bold blue]Sistema", box=box.ROUNDED)
-    t.add_column("Componente", style="cyan", no_wrap=True)
-    t.add_column("Valor", style="green")
-
-    t.add_row("Modelo (default)", default_model_id())
-    t.add_row("Fallback hardware modesto (≤4GB)", "clark-labs/clark-air-sana-1.6b-1.58bit")
-    t.add_row("Python", data.get("python_version", "N/A"))
-    t.add_row("PyTorch", data.get("torch_version", "N/A"))
-    t.add_row("CUDA", str(data.get("cuda_available", False)))
-    if data.get("cuda_available"):
-        t.add_row("CUDA (versão)", str(data.get("cuda_version", "N/A")))
-        for i, gpu in enumerate(data.get("gpus", [])):
-            t.add_row(f"GPU {i}", str(gpu.get("name", "")))
-            t.add_row("  └ VRAM total", format_bytes(gpu.get("total_memory", 0)))
-            t.add_row("  └ VRAM livre", format_bytes(gpu.get("free_memory", 0)))
-    t.add_row("HF_HOME (cache Hub)", hf_home_display_rich())
-    t.add_row("Saída padrão", str(DEFAULT_ICON_DIR.resolve()))
+    from aigamekit_shared.cli_tables import render_info_table
 
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     _hwp = detect_hardware_profile()
     _state = "" if hw_auto_enabled() else " [yellow](desligado: TEXT2ICON_HW_AUTO=0)[/yellow]"
-    t.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_state}")
-
-    console.print(t)
+    render_info_table(
+        console,
+        tool_name="text2icon",
+        extra_rows=[
+            ("Modelo (default)", default_model_id()),
+            ("Fallback hardware modesto (≤4GB)", "clark-labs/clark-air-sana-1.6b-1.58bit"),
+        ],
+        output_dir=str(DEFAULT_ICON_DIR.resolve()),
+        hw_profile_summary=_hwp.summary(),
+        hw_auto_state=_state,
+    )
 
 
 @cli.command("server")
@@ -948,15 +918,10 @@ def serve(ums_worker: bool) -> None:
     :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter text2icon
     local (:mod:`text2icon.worker_serve_adapter`).
     """
-    if not ums_worker:
-        console.print("[yellow]text2icon serve sem --ums-worker não faz nada.[/yellow]")
-        console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
-        return
-
-    from aigamekit_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_ums_worker_cli
     from text2icon.worker_serve_adapter import Adapter
 
-    run_worker_loop(Adapter, backend_name="text2icon")
+    run_ums_worker_cli(Adapter, tool_name="text2icon", ums_worker=ums_worker, console=console)
 
 
 def main() -> None:

@@ -17,7 +17,7 @@ Usa um modelo de difusão treinado em dados de elevação reais (WorldClim + ETO
 
 ## Requisitos
 
-- Python 3.10+
+- Python 3.13+ (`>=3.13,<3.14`)
 - PyTorch 2.4+ (CUDA necessário)
 - ~6 GB de VRAM
 - Acesso à rede (download do modelo na primeira execução)
@@ -131,6 +131,19 @@ Terrain3D/
 ├── pyproject.toml
 └── THIRD_PARTY.md             # Licenças do código vendored
 ```
+
+## Unified Model Server (UMS)
+
+`terrain3d generate` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+terrain3d generate "cume de montanha" -o terreno.json --ums-stream
+terrain3d generate "vale" -o vale.json --no-ums        # forçar in-process
+ums status
+ums respawn terrain3d                                  # recarrega código src/ editado
+```
+
+Modelo: [terrain-diffusion-30m](https://huggingface.co/xandergos/terrain-diffusion-30m) (público; vendored — rasters bioclimáticos WorldClim descarregados no primeiro run). Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
 
 ## Variáveis de ambiente
 

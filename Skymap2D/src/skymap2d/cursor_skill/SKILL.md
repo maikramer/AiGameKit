@@ -1,6 +1,6 @@
 # Skymap2D — Agent Skill
 
-Gera skymaps equirectangular 360° para game dev via HF Inference API.
+Gera skymaps equirectangular 360° para game dev, localmente na GPU (FLUX.1-dev + LoRA).
 
 ## Quando usar
 

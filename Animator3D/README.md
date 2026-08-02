@@ -11,7 +11,7 @@ then exports a single animated GLB ready for game engines. Designed as the **fin
 
 | Feature | Details |
 |---------|---------|
-| **Input** | Rigged GLB (from Rigging3D / UniRig) |
+| **Input** | Rigged GLB (from Rigging3D / SkinTokens) |
 | **Output** | Animated GLB with embedded named clips (NLA actions) |
 | **Runtime** | Blender 5.2 LTS embedded via `bpy>=5.2.0` (headless, no GUI) |
 | **Python** | 3.13+ (required by `bpy 5.2` PyPI wheels) |
@@ -20,7 +20,7 @@ then exports a single animated GLB ready for game engines. Designed as the **fin
 
 Animator3D classifies armature bones automatically (legs, wings, tail, neck, spine, arms, head) and
 applies procedural keyframes matched to each chain. Bones are renamed from chain analysis via
-`rename_bones_from_chains` before animation, so it works with arbitrary rigs — Mixamo, UniRig,
+`rename_bones_from_chains` before animation, so it works with arbitrary rigs — Mixamo, SkinTokens,
 Auto-Rig Pro, etc.
 
 ## Installation

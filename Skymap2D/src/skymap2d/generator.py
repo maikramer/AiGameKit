@@ -172,7 +172,7 @@ def _fix_equirect_latitude(image: Image.Image) -> Image.Image:
     polos ao centro — roll de 50% corrige isso. Aplicar o roll às cegas parte equirects
     já correctos e mascara little-planet (chão colapsado num disco).
     """
-    w, h = image.size
+    _w, h = image.size
     if h < 4:
         return image
 
