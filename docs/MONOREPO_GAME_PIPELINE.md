@@ -58,6 +58,27 @@ For the runtime to load content **without** a custom CMS:
 2. **Author** `game.yaml` + `manifest.csv` + presets ([GameAssets README](../GameAssets/README.md)).
 3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv`. GPU stages ride **UMS waves** (shape → paint → optional 2D/audio/terrain; see [GAMEASSETS_UMS_BATCH.md](GAMEASSETS_UMS_BATCH.md)). Master DAG after paint is **Round 3** (rig painted → `game-pack`×1 → `text3d lod`) — [MESH_PIPELINE_FINDINGS](findings/MESH_PIPELINE_FINDINGS.md). Omni knobs / soft-fill by category: [OMNI_SHAPE_FINDINGS.md](OMNI_SHAPE_FINDINGS.md). Stages (3D, rig, animate) auto-detect from manifest + `game.yaml`; `--no-rig` / `--no-animate` / `--no-ums` to opt out.
 4. **Handoff**: **`gameassets handoff --public-dir path/to/public`** copies/symlinks from the profile `output_dir` into `public/assets/…`, writes `assets/gameassets_handoff.json`, and can **prefer animated GLBs** over rigged/base when both exist. Alternatively copy files manually (see [VibeGame/examples/simple-rpg](../VibeGame/examples/simple-rpg/) for a full handoff layout).
+
+**Precompute contract (colisores):** no fim do master pipeline, o batch emite o sidecar `meshes/{id}_precompute.json` (`aigamekit-lab precompute <collision> --stump <stump> --category <cat>`; header-only, sem bpy; falha → skip soft). O handoff **inline** esse bloco na row do `gameassets_handoff.json`:
+
+```json
+{ "id": "pine_dark", "model": { "url": "/assets/models/pine_dark_lod0.glb", "lod": ["…"] },
+  "precompute": {
+    "version": 1, "asset_id": "pine_dark", "category": "vegetation",
+    "aabb": { "min": [-1, 0, -1], "max": [1, 5, 1] },
+    "collider": { "shape": "capsule", "radius": 0.23, "height": 0.6, "base_y": 0 },
+    "source": "stump", "collectible_hint": { "kind": "wood" } } }
+```
+
+Decisão da forma: árvores split → cápsula do AABB do `*_stump_collision.glb`
+(tronco exato); `vegetation` sem stump → fatia inferior do tronco; `rock`/
+`terrain` → cilindro do AABB; resto → cápsula do AABB. A engine VibeGame
+consome o manifest (`PrecomputePlugin`): `collider="shape: precompute;
+mesh-url: …"` vira cápsula/cilindro **sem fetch de `*_collision.glb`**, o
+AABB é semeado no bounds-cache (`ground-align` sem `setFromObject`) e o
+NavMesh corta o volume de forma **procedural** (prisma de 8 lados, sem
+esperar downloads). Sem manifest → fallback AABB-fit. Detalhe:
+[findings/PRECOMPUTE_COLLIDERS_FINDINGS.md](findings/PRECOMPUTE_COLLIDERS_FINDINGS.md).
 5. **Run** the web app: `bun dev` / `npm run dev`; load GLBs as above. **Skymap2D** equirect PNG/JPG: `applyEquirectSkyEnvironment` from `vibegame` (PMREM + optional background).
 
 **LOD0 contract:** after master pipeline promote, `meshes/{id}_lod0.glb` is the playable deliverable (animated > rigged > painted). Resume must not overwrite a promoted lod0 with painted — see [findings/MESH_PIPELINE_FINDINGS.md](findings/MESH_PIPELINE_FINDINGS.md). Rigged ladder uses geometry `text3d lod` (must weld before Decimate — V/Tri≈3 → moth-eaten LODs). Runtime tip (simple-rpg): hero uses lod0 only; distant enemies may declare `lod1-url` / `lod2-url` on `<GLTFLoader>`.

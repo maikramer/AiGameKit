@@ -1,0 +1,76 @@
+# =============================================================================
+# Teste de instalação em ambiente limpo — Ubuntu 24.04 (sem GPU, sem Python).
+#
+# Simula a "máquina de uma pessoa": o quickstart de docs/INSTALLING.md
+# (apt python3/nodejs) + o fluxo oficial ./install.sh. O teste em si corre
+# dentro do container via scripts/docker/ubuntu-clean-test-inner.sh.
+#
+# Build (contexto = raiz do repo; .dockerignore minimiza):
+#   docker build -f scripts/docker/Dockerfile.ubuntu-clean -t aigamekit-ubuntu-clean .
+# Run (opcional: -v $PWD/logs/ubuntu-clean-test:/artifacts):
+#   docker run --rm aigamekit-ubuntu-clean
+# =============================================================================
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HOME=/root
+
+# "Máquina limpa": ubuntu:24.04 não traz Python nem Node — instalar o mínimo
+# documentado no quickstart (python3-pip porque o bootstrap valida
+# `python3 -m pip --version`; build-essential = linker `cc` do cargo/rustup;
+# unzip = exigido pelo instalador do Bun).
+#
+# Node: o `nodejs` do apt do Ubuntu 24.04 é 18.x — demasiado velho para o
+# rolldown do Vite (precisa de `node:util.styleText`, Node >= 20.12), por isso
+# usa-se NodeSource 22.x (mesmo passo que o quickstart documenta).
+#
+# bpy (paint3d/aigamekitlab/rigging3d/animator3d) precisa de libs X11 mesmo
+# headless (libXfixes.so.3, libXi, ...).
+#
+# nvcc: o `nvidia-cuda-toolkit` do apt é CUDA 12.0 mas o torch instalado é
+# cu130 — o cpp_extension (nvdiffrast do paint3d) exige nvcc da MESMA versão.
+# Usa-se o pacote cuda-nvcc-13-0 do repo NVIDIA (muito mais leve que o toolkit).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-full \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    unzip \
+    pkg-config \
+    git \
+    curl \
+    ca-certificates \
+    libvulkan1 \
+    mesa-vulkan-drivers \
+    libxfixes3 \
+    libxi6 \
+    libxrender1 \
+    libxxf86vm1 \
+    libxkbcommon0 \
+    libxext6 \
+    libsm6 \
+    libice6 \
+    libgl1 \
+    libglx-mesa0 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb -o /tmp/cuda-keyring.deb \
+    && dpkg -i /tmp/cuda-keyring.deb \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        cuda-nvcc-13-0 \
+        cuda-cudart-dev-13-0 \
+        libcusparse-dev-13-0 \
+        libcublas-dev-13-0 \
+        libcusolver-dev-13-0 \
+        libcufft-dev-13-0 \
+        libcurand-dev-13-0 \
+    && rm -rf /var/lib/apt/lists/* /tmp/cuda-keyring.deb \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Repo sem .git/.venv/node_modules/target (ver .dockerignore)
+WORKDIR /workspace
+COPY . /workspace/AiGameKit
+
+CMD ["bash", "/workspace/AiGameKit/scripts/docker/ubuntu-clean-test-inner.sh"]

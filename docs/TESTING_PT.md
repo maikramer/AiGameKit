@@ -103,13 +103,18 @@ Paridade local: `make check` (Python+Rust) e `make check-vibegame` / `make test-
 
 ## Venvs por pacote
 
+Sempre o interpretador do pacote (criado por `./install.sh <tool>`, com extra `[dev]`):
+
 ```bash
 Text2D/.venv/bin/pytest Text2D/tests/test_text2d_coverage_suite.py -q
+Motion3D/.venv/bin/pytest   # ou: make test-motion3d
 Materialize: cargo test --bin materialize-cli
 VibeGame: bun test tests/coverage-100.test.ts
 ```
 
-`AIGAMEKIT_FILE_LOG=1` pode ser preciso sob pytest (ver [`LOGGING_PT.md`](LOGGING_PT.md)).
+Sem pytest no venv, `make test-<tool>` avisa e cai no python do sistema — instalar
+a tool, não deps globais. `AIGAMEKIT_FILE_LOG=1` pode ser preciso sob pytest
+(ver [`LOGGING_PT.md`](LOGGING_PT.md)).
 
 ## Estender cobertura
 

@@ -29,7 +29,7 @@ make test-shared
 
 ### Prerequisites
 
-- Python 3.10 or higher (Animator3D / Rigging3D: see package READMEs — often 3.13 + `bpy`)
+- Python 3.13 (all packages pin `>=3.13,<3.14`; `bpy>=5.2.0` for mesh tools)
 - Git
 - CUDA (optional, for GPU features)
 - Prefer root installers: [`docs/INSTALLING.md`](docs/INSTALLING.md)
@@ -271,16 +271,24 @@ Describe how you tested your changes.
 
 ```
 AiGameKit/
-├── Shared/           # Shared utilities (logging, GPU, HF helpers)
+├── Shared/           # Shared utilities (logging, GPU, HF helpers, UMS client)
+├── ModelServer/      # Unified Model Server (UMS) — GPU/VRAM supervisor
 ├── Text2D/           # Text to 2D sprite generation
-├── Text3D/           # Text to 3D model generation
-├── Paint3D/          # 3D texture painting
-├── GameAssets/       # CLI for combining all tools
-├── Texture2D/        # 2D texture generation
-├── Text2Sound/      # Text to sound effects
-├── Skymap2D/        # 2D skybox generation
-├── Rigging3D/       # 3D rigging (Rust + Python)
-└── Materialize/     # Rust crate for Materialize3D
+├── Text2Icon/        # Text to UI icon generation (Sana)
+├── Text3D/           # Text/image to 3D model generation (Hunyuan3D-Omni)
+├── Paint3D/          # 3D texture painting (Hunyuan3D-Paint 2.1)
+├── Part3D/           # Semantic part decomposition (Hunyuan3D-Part)
+├── GameAssets/       # CLI for combining all tools (batch, dream, handoff)
+├── Texture2D/        # 2D seamless texture generation (SD1.5)
+├── Skymap2D/         # Equirectangular 360° skymap generation (FLUX.1-dev + LoRA)
+├── Text2Sound/       # Text to sound effects (Stable Audio Open)
+├── Rigging3D/        # 3D rigging (Python, SkinTokens)
+├── Animator3D/       # Animation (bpy 5.2 LTS)
+├── Terrain3D/        # AI terrain generation (diffusion)
+├── Rocks3D/          # Procedural rock generation
+├── AiGameKitLab/     # Debug 3D, benches, profiling
+├── VibeGame/         # TypeScript browser 3D engine (Bun + Vite)
+└── Materialize/      # Rust crate for PBR map generation
 ```
 
 ## Common Issues
@@ -310,7 +318,7 @@ source .venv/bin/activate
 ## Questions?
 
 - Open an issue on GitHub
-- Check the [troubleshooting guide](troubleshooting.md)
+- Check the troubleshooting notes in [`docs/TESTING.md`](docs/TESTING.md) and [`docs/INSTALLING.md`](docs/INSTALLING.md)
 
 ## License
 

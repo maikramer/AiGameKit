@@ -95,16 +95,21 @@ Lacunas identificadas no pipeline de game development e plano de acção prioriz
 
 | Ferramenta | Versão | Funcional |
 |---|---|---|
-| Shared | — | ✅ logging, GPU, subprocess, installers |
-| Text2D | — | ✅ text-to-image (FLUX SDNQ) |
-| Text3D | — | ✅ text-to-3D (Hunyuan3D-2.1), LOD, collision, simplify |
-| Paint3D | — | ✅ 3D texturing (Hunyuan3D-Paint 2.1) |
-| Rigging3D | — | ✅ auto-rigging (UniRig) |
-| Animator3D | — | ✅ animation (bpy 5.1) |
-| Texture2D | — | ✅ seamless textures (HF API) |
-| Skymap2D | — | ✅ equirectangular skymaps (HF API) |
-| Text2Sound | — | ✅ text-to-audio (Stable Audio Open) |
-| Terrain3D | — | ✅ AI terrain |
+| Shared | 0.2.0 | ✅ logging, GPU, subprocess, installers |
+| ModelServer (UMS) | 0.1.0 | ✅ supervisor VRAM unificado |
+| Text2D | 0.1.0 | ✅ text-to-image (FLUX SDNQ) |
+| Text2Icon | 0.1.0 | ✅ text-to-icon (Sana Sprint 0.6B) |
+| Text3D | 0.1.0 | ✅ text-to-3D (Hunyuan3D-Omni), LOD, collision, simplify |
+| Paint3D | 0.1.0 | ✅ 3D texturing (Hunyuan3D-Paint 2.1) |
+| Part3D | 0.1.0 | ✅ decomposição semântica (Hunyuan3D-Part) |
+| Rigging3D | 0.6.0 | ✅ auto-rigging (SkinTokens) |
+| Animator3D | 0.1.0 | ✅ animation (bpy 5.2 LTS) |
+| Texture2D | 0.1.0 | ✅ seamless textures (local SD1.5) |
+| Skymap2D | 0.1.0 | ✅ equirectangular skymaps (local FLUX.1-dev + LoRA) |
+| Text2Sound | 0.1.0 | ✅ text-to-audio (Stable Audio Open) |
+| Terrain3D | 0.1.0 | ✅ AI terrain |
+| Rocks3D | 0.1.0 | ✅ rochas procedurais (sem PyTorch) |
+| AiGameKitLab | 0.1.0 | ✅ debug 3D, benches, profiling |
 | Materialize | — | ✅ PBR maps (Rust/wgpu) |
-| GameAssets | — | ✅ batch, handoff (OGG), dream, validate, manifest YAML |
+| GameAssets | 0.2.2 | ✅ batch, handoff (OGG), dream, validate, manifest YAML |
 | VibeGame | — | ✅ browser 3D engine (Three.js + bitecs) |

@@ -60,7 +60,7 @@ Master CPU: `MasterDeferQueue` até fim da wave (não misturar com GPU thrash).
 | Preload sync text3d >~600 s antes da wave | Client Broken pipe → UMS evict modelo → free stuck ~4 GB < peak → **todos** os jobs falham | **Remover** preload sync; 1º job da wave carrega o shape |
 | Preload timeout curto | Mesmo padrão | Se preload existir: default timeout alto (ex. 1800 s) |
 | Kill GPU com fila busy | Mata job errado / corrompe fila | `ums cancel` / wait; nunca pkill via NVML/`nvidia-smi` |
-| UMS idle (0 backends) com ~1.3 GiB CUDA | `livre` (ex. 4378) < peak text3d int4 (~4991) → refuse imediato | Sem jobs: `ums stop` + `ums start`; medir com NVML |
+| UMS idle com VRAM presa (workers idle ~0.3–1 GiB/contexto) | `livre` (ex. 4378) < peak text3d int4 (~4991) → refuse imediato | Sem jobs: **`ums zero`** (mata workers, supervisor intacto); medir com NVML |
 
 ---
 
@@ -106,7 +106,7 @@ estima LLM/KV-cache; admit usa `FOOTPRINTS` + `vram_planner` + safety.
 | `AIGAMEKIT_ALLOW_LEGACY_SERVER` | Opt-in servers per-tool + `ensure_vram` legacy |
 | `AIGAMEKIT_UMS_SUBPROCESS` | `0` = workers in-process (rollback); default subprocess |
 | `AIGAMEKIT_UMS_DEAD_VRAM_MIB` | Residual CUDA “morto” com `loaded=[]` (default 256) |
-| `AIGAMEKIT_UMS_DEAD_VRAM_EXIT_SEC` | IdleEvictor self-exit se residual persiste (default 20 s) |
+| ~~`AIGAMEKIT_UMS_DEAD_VRAM_EXIT_SEC`~~ | Documentado mas **nunca implementado** — obsoleto: usar `ums zero` (supervisor já não cria contexto CUDA) |
 
 Runtime pós-load: `aigamekit_shared.vram_budget` — Text3D `num_chunks`, Paint
 views/tiles. Desligar Paint auto: `PAINT3D_AUTO_VRAM_BUDGET=0`.
@@ -127,11 +127,15 @@ ums respawn                 # todos
 `RESPAWN_BUSY` se fila/inflight. Restart do processo UMS só para mudanças em
 `ModelServer/` ou protocolo partilhado (`worker_protocol`, `worker_serve`).
 
-Com `loaded=[]`, o PID UMS pode ainda segurar ~1 GiB (contexto CUDA).
-`ums evict` / `evict_all` fazem scrub; status expõe `process_vram_mib` /
-`dead_vram_suspect`. IdleEvictor pode pedir self-exit quando residual ≥
-`AIGAMEKIT_UMS_DEAD_VRAM_MIB` persiste ≥ `AIGAMEKIT_UMS_DEAD_VRAM_EXIT_SEC` com
-fila vazia — próximo auto-start nasce limpo.
+Com `loaded=[]`, a VRAM residual vive nos **workers idle vivos** (~0.3–1 GiB
+de contexto CUDA cada; morrem por idle em 300 s). `ums zero` termina-os já,
+**sem parar o supervisor** (`ZERO_BUSY` com fila ocupada). O supervisor em si
+não cria contexto CUDA em modo subprocesso: `clear_cuda_memory()` /
+`torch_reserved_mib()` saltam as chamadas torch quando
+`torch.cuda.is_initialized()` é False — antes desta correção,
+`torch.cuda.synchronize()` fazia `_lazy_init()` e o PID UMS ficava com
+~1.3 GiB permanentes (só `ums stop` libertava). Status expõe
+`process_vram_mib` / `dead_vram_suspect`.
 
 ---
 
@@ -184,7 +188,7 @@ não montar dicts peak à mão.
 2. Esperar (`ums wait`, `--ums-stream`) ou `ums cancel` / `flush` se stale.
 3. **Não** kill GPU enquanto houver jobs.
 4. Confirmar payload tem quant + `gpu_ids` correctos para o backend.
-5. Livre < peak com UMS idle (0 backends, contexto CUDA): `ums stop` + `ums start`.
+5. Livre < peak com UMS idle (workers vivos / residual): `ums zero` — zera sem parar o supervisor.
 6. Só `--no-ums` se bypass intencional; kill continua recusado se UMS busy.
 7. Legacy per-tool / `ensure_vram` cego: só com `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
 

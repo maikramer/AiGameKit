@@ -3,12 +3,12 @@
 **Docs:** English · [Português (`README_PT.md`)](README_PT.md)
 
 [![CI](https://github.com/maikramer/AiGameKit/actions/workflows/ci.yml/badge.svg)](https://github.com/maikramer/AiGameKit/actions)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![Rust](https://img.shields.io/badge/rust-1.75+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](Text2D/LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Monorepo for **text-to-image**, **text-to-3D**, **text-to-audio**, **seamless textures (local GPU)** and **skymaps** (Hugging Face Inference API), **PBR texturing**, **rigging**, **animation**, **asset batching**, and **browser 3D engine**, sharing the same foundation (`aigamekit-shared`), unified installer, and documentation.
+Monorepo for **text-to-image**, **text-to-3D**, **text-to-audio**, **seamless textures (local GPU)** and **skymaps** (local GPU), **PBR texturing**, **rigging**, **animation**, **asset batching**, and **browser 3D engine**, sharing the same foundation (`aigamekit-shared`), unified installer, and documentation.
 
 All GPU tools support **multi-GPU** (`--gpu-ids 0,1`) and **quality presets** (`--quality fast|low|medium|high|highest`).
 
@@ -64,15 +64,15 @@ Key APIs: [`gltf-bridge.ts`](VibeGame/src/extras/gltf-bridge.ts) (`loadGltfToSce
 |--------|-------------|
 | [**Shared**](Shared/) | Shared library (`aigamekit-shared`): logging, GPU, subprocess, installers, CLI. |
 | [**Text2D**](Text2D/) | **Text-to-image** CLI with FLUX (SDNQ quantization), aimed at modest GPUs. |
-| [**Text3D**](Text3D/) | **Text-to-3D** pipeline: 2D image (via Text2D) → GLB mesh with Hunyuan3D-2.1 (SDNQ INT4). Texturing via Paint3D (optional). |
+| [**Text3D**](Text3D/) | **Text-to-3D** pipeline: 2D image (via Text2D) → GLB mesh with Hunyuan3D-Omni (SDNQ INT4; bbox/pose/point/voxel controls). Texturing via Paint3D (optional). |
 | [**Paint3D**](Paint3D/) | **3D texturing**: Hunyuan3D-Paint 2.1 (multiview PBR) + Materialize PBR + AI upscale (Real-ESRGAN). Standalone or via Text3D. |
 | [**Part3D**](Part3D/) | **Semantic part decomposition**: Hunyuan3D-Part (P3-SAM + X-Part). SDNQ + CPU offload for ~6 GB VRAM. |
 | [**GameAssets**](GameAssets/) | **Prompt/asset batching**: profile + CSV → `text2d` or `texture2d` + optional `text3d`, rig, **Animator3D** (auto-detected), **`gameassets dream`** (idea → Vite scaffold). |
 | [**Texture2D**](Texture2D/) | **Seamless 2D textures** (tileable) via pattern-diffusion (local GPU) + PBR via Materialize. |
-| [**Skymap2D**](Skymap2D/) | **Equirectangular 360° skymaps** via HF Inference API — skyboxes for game dev, no local GPU. |
+| [**Skymap2D**](Skymap2D/) | **Equirectangular 360° skymaps** — FLUX.1-dev + LoRA locally on GPU (CUDA), skyboxes for game dev. |
 | [**Text2Sound**](Text2Sound/) | **Text-to-audio** CLI with Stable Audio Open 1.0: stereo 44.1 kHz, game-dev presets. |
-| [**Rigging3D**](Rigging3D/) | **rigging3d** — 3D auto-rigging with [**UniRig**](https://github.com/VAST-AI-Research/UniRig) (skeleton + skinning + merge); CUDA GPU; Python **3.11**, **bpy** 5.0.x (Open3D). |
-| [**Animator3D**](Animator3D/) | **animator3d** — **bpy** 5.1; Python **3.13**; procedural clips, **`game-pack`** (humanoid/creature/flying presets), GLB export after rigging. |
+| [**Rigging3D**](Rigging3D/) | **rigging3d** — 3D auto-rigging with [**SkinTokens**](https://github.com/VAST-AI-Research/SkinTokens) (unified autoregressive skeleton + skinning, successor to UniRig); CUDA GPU; Python **3.13**, **bpy** 5.2 LTS. |
+| [**Animator3D**](Animator3D/) | **animator3d** — **bpy** 5.2 LTS; Python **3.13**; procedural clips, **`game-pack`** (humanoid/creature/flying presets), GLB export after rigging. |
 | [**Materialize**](Materialize/) | **PBR maps** CLI (Rust/wgpu): normal, AO, metallic, smoothness from a diffuse texture. |
 | [**AiGameKitLab**](AiGameKitLab/) | **Lab CLI**: debug 3D, quantization benches, profiling, pipeline optimization. |
 | [**Terrain3D**](Terrain3D/) | **terrain3d** — AI terrain generation via diffusion models (terrain-diffusion; CUDA GPU). |
@@ -104,9 +104,9 @@ AiGameKit/
   Part3D/            ← part3d (pip) — depends on Shared; Hunyuan3D-Part (P3-SAM + X-Part)
   GameAssets/        ← gameassets (pip) — depends on Shared; calls text2d/texture2d/text3d via subprocess
   Texture2D/         ← texture2d (pip) — depende de Shared; pattern-diffusion local + PBR via Materialize
-  Skymap2D/          ← skymap2d (pip) — depends on Shared; equirectangular skymaps via HF
+  Skymap2D/          ← skymap2d (pip) — depends on Shared; equirectangular skymaps (local FLUX.1-dev + LoRA)
   Text2Sound/        ← text2sound (pip) — depends on Shared; Stable Audio Open 1.0
-  Rigging3D/         ← rigging3d (pip) — Shared; inference Py 3.11 + bpy 5.0.x
+  Rigging3D/         ← rigging3d (pip) — Shared; SkinTokens Py 3.13 + bpy 5.2 LTS
   Animator3D/        ← animator3d (pip) — Shared; Py 3.13 + bpy 5.2 LTS (animation)
   AiGameKitLab/        ← aigamekit-lab (pip) — depends on Shared; debug 3D, benches, profiling
   Terrain3D/        ← terrain3d (pip) — depends on Shared; AI terrain generation via diffusion
@@ -116,9 +116,9 @@ AiGameKit/
 
 ## General requirements
 
-- **Python**: most tools require **3.10+**; exceptions: **Rigging3D** (3.11), **Animator3D** (3.13 + `bpy` 5.1). See each folder's README.
+- **Python**: all tools require **3.13** (each `pyproject.toml` pins `>=3.13,<3.14`); `bpy>=5.2.0` (LTS) for mesh tools. See each folder's README.
 - **VibeGame** uses **Bun** and **Node**-compatible tooling (see `VibeGame/package.json`); run `make test-vibegame` from the repo root after installing Bun.
-- **GPU** optional for Text2D; for Text3D/Paint3D/Rigging3D, CUDA with enough VRAM is recommended for reasonable runtimes. **Texture2D** runs locally on a CUDA GPU (pattern-diffusion). **Skymap2D** does not need a local GPU (Hugging Face API). **GameAssets** only needs a GPU if the profile/row invokes local tools (e.g. text2d, text3d). **Multi-GPU:** most GPU tools accept `--gpu-ids 0,1` to split model weights across multiple NVIDIA GPUs via accelerate dispatch.
+- **GPU** optional for Text2D; for Text3D/Paint3D/Rigging3D, CUDA with enough VRAM is recommended for reasonable runtimes. **Texture2D** runs locally on a CUDA GPU (pattern-diffusion). **Skymap2D** runs locally on a CUDA GPU (FLUX.1-dev + LoRA). **GameAssets** only needs a GPU if the profile/row invokes local tools (e.g. text2d, text3d). **Multi-GPU:** most GPU tools accept `--gpu-ids 0,1` to split model weights across multiple NVIDIA GPUs via accelerate dispatch.
 - **Model weights** (Hugging Face, etc.) have their own licenses — read the model cards before shipping or using in production.
 
 ## Quick start
@@ -192,7 +192,7 @@ Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://pypi.
 ./install.sh text3d                     # Text3D (Text2D + Hunyuan; nvdiffrast for Paint)
 ./install.sh gameassets                 # GameAssets (batch; orchestrates other CLIs)
 ./install.sh paint3d                    # Paint3D (texturing + nvdiffrast)
-./install.sh rigging3d                  # Rigging3D (bundled UniRig + PyTorch/CUDA via installer)
+./install.sh rigging3d                  # Rigging3D (SkinTokens + PyTorch/CUDA via installer)
 ./install.sh animator3d                 # Animator3D (bpy / animation; no PyTorch)
 ./install.sh aigamekitlab                 # AiGameKitLab (debug 3D, benches, profiling)
 ./install.sh terrain3d                  # Terrain3D (AI terrain; CUDA GPU)
@@ -267,13 +267,13 @@ cd ../GameAssets && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .v
 # 6. Texture2D (seamless textures via pattern-diffusion; local GPU + PBR via Materialize)
 cd ../Texture2D && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && texture2d --help
 
-# 7. Skymap2D (equirectangular 360° skymaps via HF API; no local PyTorch)
+# 7. Skymap2D (equirectangular 360° skymaps; local FLUX.1-dev + LoRA)
 cd ../Skymap2D && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && skymap2d --help
 
 # 8. Text2Sound (text-to-audio; Stable Audio Open 1.0; needs CUDA)
 cd ../Text2Sound && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && text2sound --help
 
-# 9. Rigging3D (CUDA GPU; Python 3.11; heavy deps — prefer ./install.sh rigging3d)
+# 9. Rigging3D (CUDA GPU; Python 3.13; SkinTokens — prefer ./install.sh rigging3d)
 cd ../Rigging3D && pip install -e ".[inference,dev]" && rigging3d --help
 
 # 10. Animator3D (animation; venv with Python 3.13 + bpy — see Animator3D/README; Windows: py -3.13 -m venv .venv)
@@ -289,7 +289,7 @@ cd ../AiGameKitLab && python -m venv .venv && source .venv/bin/activate && pip i
 cd ../Terrain3D && python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && terrain3d --help
 ```
 
-Full instructions: [docs/INSTALLING.md](docs/INSTALLING.md), [docs/NEW_TOOLS.md](docs/NEW_TOOLS.md) (registering new tools), [Shared/README.md](Shared/README.md), and each package README.
+Full instructions: [docs/INSTALLING.md](docs/INSTALLING.md) (incl. registering new tools via `tools.yaml`), [Shared/README.md](Shared/README.md), and each package README.
 
 ## Licenses
 
@@ -298,15 +298,16 @@ Full instructions: [docs/INSTALLING.md](docs/INSTALLING.md), [docs/NEW_TOOLS.md]
 | Monorepo code (Text2D, Text3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, AiGameKitLab, Terrain3D, Shared) | MIT | See `LICENSE` in each folder |
 | Materialize CLI (Rust) | MIT | [Materialize/LICENSE](Materialize/LICENSE) |
 | FLUX.2 Klein 4B (official, BF16) | Apache 2.0 | [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) — commercial use allowed per model card; more VRAM than SDNQ |
-| FLUX.2 Klein 4B SDNQ (Text2D default) | FLUX Non-Commercial (HF metadata) | [Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declares `flux-non-commercial-license`; **not** the same as the official Apache 2.0 checkpoint. For commercial products prefer `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` or a BFL agreement |
-| Hunyuan3D-2.1 (shape + paint, Text3D + Paint3D) | Tencent Hunyuan Community License | [tencent/Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) — read repo `LICENSE`: territory restrictions (e.g. EU, UK, South Korea), acceptable use, downstream obligations. Code: [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1); shape weights `hunyuan3d-dit-v2-1` (SDNQ INT4), paint weights `hunyuan3d-paintpbr-v2-1` |
+| FLUX.2 Klein (Text2D default: fp16 base + SDNQ runtime) | 4B: Apache 2.0 · 9B: **gated** (accept terms on Hub) | Text2D loads the official [4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) / [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) base and applies SDNQ quantization **at runtime** — no pre-quantized checkpoint by default. Pre-quantized [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) mirrors are optional via `TEXT2D_MODEL_ID` (they declare `flux-non-commercial-license`) |
+| Hunyuan3D-Omni (Text3D shape) | Tencent Hunyuan Community License | [tencent/Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) — read repo `LICENSE`: territory restrictions (e.g. EU, UK, South Korea), acceptable use, downstream obligations. SDNQ INT4 on small GPUs |
+| Hunyuan3D-2.1 (Paint3D paint) | Tencent Hunyuan Community License | [tencent/Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) — paint weights `hunyuan3d-paintpbr-v2-1`; same territory/use restrictions. Code: [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1) |
 | Stable Audio Open 1.0 / Open Small (Text2Sound) | Stability AI Community License | [stabilityai/stable-audio-open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0), [stabilityai/stable-audio-open-small](https://huggingface.co/stabilityai/stable-audio-open-small) — **gated** models (accept on Hub); free commercial use with annual revenue cap (see repo `LICENSE.md`, currently ~USD 1M; changes: [stability.ai/license](https://stability.ai/license)) |
-| pattern-diffusion (Texture2D) | Apache 2.0 | [Arrexel/pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion) — StableDiffusion-2-base fine-tune on 6.8M tileable patterns; commercial use allowed per license |
+| Stable Diffusion 1.5 (Texture2D default) + pattern-diffusion (optional) | SD1.5: CreativeML Open RAIL-M · pattern-diffusion: Apache 2.0 | Default is [stable-diffusion-v1-5/stable-diffusion-v1-5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) (circular padding, no LoRA); [Arrexel/pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion) (SD2-base fine-tune on 6.8M tileable patterns) via `TEXTURE2D_MODEL_ID` |
 | Flux-LoRA-Equirectangular-v3 (Skymap2D) | FLUX.1 [dev] base (NCL) + HF card | [MultiTrickFox/Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) — no SPDX in README; base [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) is BFL non-commercial; Civitai origin on card |
-| UniRig (code under `Rigging3D/…/unirig/`) | MIT | [VAST-AI-Research/UniRig](https://github.com/VAST-AI-Research/UniRig) · [THIRD_PARTY.md](Rigging3D/THIRD_PARTY.md) |
-| UniRig (HF weights) | MIT (many mirrors list MIT) | [VAST-AI/UniRig](https://huggingface.co/VAST-AI/UniRig) — confirm in README/`LICENSE` of the snapshot you use; [example with MIT LICENSE](https://huggingface.co/apozz/UniRig-safetensors) |
+| SkinTokens (code under `Rigging3D/…/skintokens/`) | MIT | [VAST-AI-Research/SkinTokens](https://github.com/VAST-AI-Research/SkinTokens) — successor to UniRig · [THIRD_PARTY.md](Rigging3D/THIRD_PARTY.md) |
+| SkinTokens (HF weights) | MIT | [VAST-AI/SkinTokens](https://huggingface.co/VAST-AI/SkinTokens) — auto-downloaded on first run (~1.6 GB) |
 
-> **Note:** weights have their own licenses. **Inference API** (Skymap2D): besides the model, [Hugging Face terms](https://huggingface.co/terms-of-service) and API policies apply. **Do not** redistribute checkpoints without complying with the author's license and attribution. Shap-E (`openai/shap-e`) in legacy Text3D scripts requires accepting Hub terms.
+> **Note:** weights have their own licenses. **Do not** redistribute checkpoints without complying with the author's license and attribution. Shap-E (`openai/shap-e`) in legacy Text3D scripts requires accepting Hub terms.
 
 ## Environment variables
 
@@ -322,9 +323,10 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `AIGAMEKITLAB_BIN` | GameAssets | Path to `aigamekit-lab` |
 | `TERRAIN3D_BIN` | GameAssets | Path to `terrain3d` |
 | `TEXT2D_MODEL_ID` | Text2D | HF model override for Text2D |
-| `TEXTURE2D_MODEL_ID` | Texture2D | HF model override for Texture2D (default `Arrexel/pattern-diffusion`) |
-| `SKYMAP2D_MODEL_ID` | Skymap2D | HF model override for Skymap2D |
-| `HF_TOKEN` | Text2Sound, Texture2D, Skymap2D | Hugging Face token for authenticated APIs |
+| `TEXTURE2D_MODEL_ID` | Texture2D | HF model override for Texture2D (default `stable-diffusion-v1-5/stable-diffusion-v1-5`) |
+| `SKYMAP2D_MODEL_ID` | Skymap2D | HF model override for Skymap2D (LoRA; default `MultiTrickFox/Flux-LoRA-Equirectangular-v3`) |
+| `SKYMAP2D_BASE_MODEL_ID` | Skymap2D | Base FLUX.1-dev override (default `Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32`; official `black-forest-labs/FLUX.1-dev` is gated) |
+| `HF_TOKEN` | Text2Sound, Skymap2D, Texture2D | Hugging Face token for **gated** model downloads (accept terms on Hub first) |
 | `HF_HOME` | All (Python) | Hugging Face cache directory (default: `~/.cache/huggingface`) |
 | `PYTORCH_CUDA_ALLOC_CONF` | Text2D, Text3D, GameAssets | CUDA allocator config (auto-set if empty) |
 | `TEXT3D_ALLOW_SHARED_GPU` | Text3D | Allow GPU sharing with other processes |
@@ -357,7 +359,44 @@ The monorepo uses environment variables to locate binaries and configure behavio
 
 Logs: `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` (UMS → `ums-….log`). Console stays Rich/ANSI; file is plain text with UTC timestamps. Full guide: [docs/LOGGING.md](docs/LOGGING.md).
 
-Unified Model Server: [`ModelServer/README.md`](ModelServer/README.md). Tool CLIs accept `--ums-priority`, `--no-ums`, `--ums-stream`. VRAM path: **UMS + hw-auto** (no public `--low-vram` / `--memory-efficient`); peak signals ride the UMS payload. Local editable workflow: [`docs/INSTALLING.md`](docs/INSTALLING.md) (*Local edits without reinstall loops*) — edit `*/src/`, `ums respawn <backend>` for running workers.
+## Unified Model Server (UMS)
+
+Every GPU tool (Text2D, Text2Icon, Text3D, Paint3D, Part3D, Texture2D, Skymap2D, Text2Sound, Terrain3D) delegates generation to the **Unified Model Server** — a single supervisor process that owns the machine's VRAM. One socket (`~/.cache/aigamekit/model-server.sock`), one process, global model inventory, no per-tool servers.
+
+**How it works:**
+
+1. Tool CLIs call `delegate_to_ums` **before** any in-process GPU prep; the UMS auto-starts on first generate (disable with `AIGAMEKIT_UMS_AUTO_START=0`).
+2. Jobs go through `JobQueue` → `AffinityScheduler` → `WorkerPool` (`MAX_INFLIGHT=1` — one generation at a time).
+3. Each backend is a **persistent subprocess worker** in the tool's own venv (JSONL stdin/stdout) — after editing tool code, `ums respawn <backend>` reloads it without restarting the supervisor.
+4. Queue priority: `interactive` (CLI) > `batch` (GameAssets sets `AIGAMEKIT_UMS_PRIORITY=batch`). VRAM-affinity skips cold backends (≤3 cuts), then weight + LRU eviction keeps VRAM inside safe margins.
+5. **`hw-auto`** fills peak signals (SDNQ preset, memory-efficient) in the UMS payload — no operator `--low-vram` flag.
+
+```bash
+ums start | stop | status | submit | queue | wait | cancel | flush | backends | preload | evict | reap | respawn | zero | stats | debug | bench | doctor
+ums status                    # backends + HOLDING/QUEUE
+ums queue                     # jobs + timings
+ums wait <job_id>             # block until a job finishes
+ums respawn <backend>         # reload edited tool code in the worker
+```
+
+Tool flags: `--ums-priority interactive|batch`, `--no-ums`, `--ums-stream`. WAL: `~/.cache/aigamekit/ums-jobs.jsonl`. Full guide: [`ModelServer/README.md`](ModelServer/README.md).
+
+### Models & HF gates
+
+| Tool | Default model(s) | HF gate | Notes |
+|------|------------------|---------|-------|
+| **Text2D** | [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (low VRAM) / [FLUX.2 Klein 9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (high VRAM) — fp16 base + **SDNQ runtime** quantization | 9B: **gated** (accept on Hub); 4B: public | `TEXT2D_MODEL_ID` override; hw-auto picks 4B under ~7.5 GB VRAM |
+| **Text2Icon** | [Sana 600M 512px](https://huggingface.co/Efficient-Large-Model/Sana_600M_512px_diffusers) (default) / [Clark Air 1.6B 1.58-bit](https://huggingface.co/clark-labs/clark-air-sana-1.6b-1.58bit) (low VRAM) | no | pipeline [Sana 1600M 512px](https://huggingface.co/Efficient-Large-Model/Sana_1600M_512px_diffusers) |
+| **Text3D** | [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) shape (SDNQ INT4; bbox/pose/point/voxel controls) + Text2D FLUX reference image | no | Tencent Community License; BiRefNet bg-removal |
+| **Paint3D** | [Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) paint (`hunyuan3d-paintpbr-v2-1`) | no | + Real-ESRGAN (optional upscale) |
+| **Part3D** | [Hunyuan3D-Part](https://huggingface.co/tencent/Hunyuan3D-Part) (P3-SAM + X-Part) | no | Tencent Community License |
+| **Texture2D** | [Stable Diffusion 1.5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) + circular padding | no | `TEXTURE2D_MODEL_ID` override (e.g. [pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion)) |
+| **Skymap2D** | [FLUX.1-dev SDNQ uint4](https://huggingface.co/Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32) base + [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) | no (mirror); official [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) is **gated** | `SKYMAP2D_BASE_MODEL_ID` override |
+| **Text2Sound** | [Stable Audio Open 1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) (music) / [Open Small](https://huggingface.co/stabilityai/stable-audio-open-small) (effects) | **gated** — accept terms on Hub + `HF_TOKEN` | Stability AI Community License |
+| **Rigging3D** | [SkinTokens](https://huggingface.co/VAST-AI/SkinTokens) (TokenRig) | no | successor to UniRig; MIT |
+| **Terrain3D** | [terrain-diffusion-30m](https://huggingface.co/xandergos/terrain-diffusion-30m) | no | vendored; WorldClim rasters auto-download |
+
+**Gated models** require accepting terms on the Hugging Face Hub (and `HF_TOKEN` set) before the weights download. Everything runs **locally** — the Hub is only a weight source, never an inference API.
 
 ## Development
 

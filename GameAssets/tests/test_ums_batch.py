@@ -299,7 +299,9 @@ class TestOptionalWaveOrFallback:
 class TestMotion3dSpecs:
     def test_specs_from_items_mocked_payload(self, tmp_path: Path) -> None:
         items = [{"id": "w", "prompt": "walk", "output": "w.npz", "also_npz": True}]
-        with patch("motion3d.ums_payload.build_generate_request", return_value={"output": "w.npz"}) as build:
+        build = MagicMock(return_value={"output": "w.npz"})
+        mods = _make_pkg("motion3d.ums_payload", build_generate_request=build)
+        with _temp_modules(mods):
             specs = motion3d_specs_from_items(items, manifest_dir=tmp_path, quality="medium")
         assert len(specs) == 1
         assert specs[0].asset_id == "w"

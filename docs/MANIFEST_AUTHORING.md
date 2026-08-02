@@ -11,7 +11,7 @@ pipeline escolher octree/faces, só override quando o lab visual exigir.
 | [`findings/OCTREE_FACES_FINDINGS.md`](findings/OCTREE_FACES_FINDINGS.md) | Relação empírica octree × faces (simple-rpg, n=67) |
 | [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md) | `gameassets batch` / waves UMS |
 | [`findings/MESH_PIPELINE_FINDINGS.md`](findings/MESH_PIPELINE_FINDINGS.md) | DAG Round 3, LOD0, split árvores |
-| Exemplo vivo | `VibeGame/examples/simple-rpg/sample-gameassets/manifest.yaml` |
+| Exemplo vivo | `VibeGame/examples/simple-rpg/sample-gameassets/manifests/characters.yaml` |
 
 Código: `GameAssets/src/gameassets/manifest.py`, `omni_ctrl.py`;
 tune: `Text3D/src/text3d/bbox_tune.py`.
@@ -28,6 +28,50 @@ tune: `Text3D/src/text3d/bbox_tune.py`.
 
 Ease over knobs: o manifesto declara *intent* (o quê, tamanho, pipeline), não a
 folha de VRAM.
+
+### O manifesto define a pasta (output_dir por grupo)
+
+Desde que os assets se organizam em **1 manifesto por grupo** (ex. simple-rpg:
+`manifests/characters.yaml`, `manifests/village.yaml`, …), o manifesto pode
+declarar **no topo** (antes de `assets:`) para onde os deliverables do grupo
+vão — ganham sobre o `game.yaml`:
+
+```yaml
+# manifests/characters.yaml
+output_dir: ../../public/assets   # relativo À PASTA DO MANIFEST (não ao CWD)
+meshes_subdir: meshes/characters  # GLBs  → ../../public/assets/meshes/characters/
+images_subdir: images/characters  # PNGs  → ../../public/assets/images/characters/
+assets:
+  - id: hero
+    …
+```
+
+Chaves suportadas (todas opcionais; omitir = herdar do `game.yaml`):
+
+| Chave | Papel |
+|-------|-------|
+| `output_dir` | Raiz dos assets do grupo (resolvida relativa à pasta do manifest) |
+| `meshes_subdir` | Pasta dos GLB dentro de `output_dir` (pode ter `/`, ex. `meshes/characters`) |
+| `images_subdir` | Pasta dos PNG dentro de `output_dir` |
+| `audio_subdir` | Pasta do áudio dentro de `output_dir` |
+| `path_layout` | `split` (subdirs separados) ou `flat` (id pode ter `/`) |
+| `image_ext` | `png` / `jpg` / `jpeg` |
+
+Correr por grupo:
+
+```bash
+gameassets resume --profile game.yaml --manifest manifests/characters
+# → paths: ../../public/assets/meshes/characters/hero_lod0.glb etc.
+```
+
+Notas:
+- Os caminhos relativos resolvem contra a **pasta do manifesto**
+  (`manifest_dir`), igual ao `output_dir` do profile — simples-rpg usa
+  `../../public/assets` porque os manifests vivem em `sample-gameassets/manifests/`.
+- O estado de resume (`.gameassets_work/`, `logs/`, locks) também fica junto do
+  manifesto; os `_intermediate/` dos shapes ficam em `meshes/<grupo>/_intermediate/`.
+- Áudio mantém-se tipicamente numa pasta única (`audio/`) — o manifesto de
+  áudio não declara subdirs.
 
 ---
 

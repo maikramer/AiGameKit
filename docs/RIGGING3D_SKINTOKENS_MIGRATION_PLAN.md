@@ -1,4 +1,11 @@
-# Rigging3D — Plano de Migração UniRig → SkinTokens
+# Rigging3D — Registo da Migração UniRig → SkinTokens
+
+> **Estado: migração concluída (corte limpo, sem UniRig).** Este documento é o
+> registo histórico do trabalho executado em 2026-07-04 (Fases 0–3, mesma
+> sessão). As secções §1–7 abaixo descrevem o **raciocínio e estado pré-migração**
+> (UniRig como "atual", SkinTokens como "alvo") e estão retidas como contexto da
+> decisão; para a realidade **presente**, ver §0.5/§0.75/§8 (resultados das fases)
+> e o [`Rigging3D/README.md`](../Rigging3D/README.md).
 
 Data: 2026-07-04. Status: **Migração concluída — corte limpo, sem UniRig.**
 Fases 0–3 executadas na mesma sessão (por pedido explícito do utilizador: "sem
@@ -81,10 +88,13 @@ checkpoints automaticamente. Decisão de corte limpo (pedido do utilizador):
 mantido atrás de `RIGGING3D_BACKEND` (a estratégia de rollback do §6 foi
 descartada a favor de reverter por git se necessário).
 
-## 1. Contexto e motivação
+## 1. Contexto e motivação (estado pré-migração)
 
-O `Rigging3D` atual (`Rigging3D/src/rigging3d/unirig/`) empacota uma árvore vendored
-do UniRig e expõe via CLI (`rigging3d skeleton|skin|merge|pipeline|transfer-weights`).
+> **Nota:** esta secção descreve o Rigging3D **antes** da migração. O estado
+> **atual** é SkinTokens (ver §8); o `unirig/` referido abaixo foi removido.
+
+O `Rigging3D` pré-migração (`Rigging3D/src/rigging3d/unirig/`) empacotava uma
+árvore vendored do UniRig e expunha via CLI (`rigging3d skeleton|skin|merge|pipeline|transfer-weights`).
 Arquitetura de 2 modelos separados:
 
 1. **Skeleton** — modelo autoregressivo (task
@@ -305,22 +315,19 @@ bloqueantes (ou se houver mitigação clara: quantização, venv separada, etc).
 - Atualizar `docs/MONOREPO_GAME_PIPELINE.md` se ele referenciar
   especificamente UniRig/estágios skeleton+skin separados.
 
-## 6. Estratégia de rollback
+## 6. Estratégia de rollback — **descontinuada (ver §8)**
 
-Manter os dois backends coexistindo durante a transição via env var, análogo
-a outros flags já existentes no repo (`RIGGING3D_HW_AUTO`, `PAINT3D_MULTI_GPU`
-legado):
-
-```
-RIGGING3D_BACKEND=unirig|skintokens   # default: unirig até a Fase 3 completar; depois: skintokens
-```
-
-Só remover o branch `unirig` (Fase 5) quando `skintokens` tiver rodado com
-sucesso no `gameassets batch` master pipeline completo (stage rig →
-transfer-weights → validate) em pelo menos um asset humanoide e um
-não-humanoide (o ganho de "sem bleeding entre partes" do paper é mais
-relevante em meshes com múltiplas ilhas de geometria, que é o caso comum de
-assets Text3D pós-`topology-fix`).
+> Originalmente planeada a coexistência dos dois backends via env var durante a
+> transição (análogo a `RIGGING3D_HW_AUTO`, `PAINT3D_MULTI_GPU` legado):
+>
+> ```
+> RIGGING3D_BACKEND=unirig|skintokens   # default: unirig até à Fase 3; depois: skintokens
+> ```
+>
+> **Esta estratégia foi descartada** por decisão do utilizador na Fase 3 (corte
+> limpo, "sem nada de unirig", §8). O branch `unirig` foi removido por completo;
+> `RIGGING3D_BACKEND` deixou de existir. Rollback, se alguma vez necessário, é
+> via `git revert`/checkout do commit anterior à migração, não uma flag em runtime.
 
 ## 7. Decisões em aberto (precisam de resposta antes da Fase 3)
 

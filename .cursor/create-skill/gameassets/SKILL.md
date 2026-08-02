@@ -126,7 +126,7 @@ O sistema de prompt enhancement (v2) envolve automaticamente o prompt com enquad
 | Ferramenta | Papel |
 |------------|--------|
 | **Text2D** | Imagens gerais (FLUX) por prompt; referência para 3D. |
-| **Texture2D** | Texturas seamless (HF API); opcional + Materialize para mapas PBR em disco. |
+| **Texture2D** | Texturas seamless (local SD1.5); opcional + Materialize para mapas PBR em disco. |
 | **Text2Sound** | Text-to-audio (Stable Audio Open); clipes por linha com `generate_audio`. |
 | **Text3D** | Imagem → mesh (shape); com GameAssets + `text3d.texture` segue-se `paint3d texture` (GLB PBR). |
 | **Materialize** | Mapas PBR a partir do diffuse (CLI; após Texture2D com `texture2d.materialize`). |

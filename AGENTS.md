@@ -56,6 +56,7 @@ duras (git=`main`, UMS, LOD0). Tribal knowledge longa vive nos docs abaixo —
 | DAG mesh Round 3 / LOD0 / split árvores | [`docs/findings/MESH_PIPELINE_FINDINGS.md`](docs/findings/MESH_PIPELINE_FINDINGS.md) |
 | VRAM / UMS ops | [`docs/MODEL_FINDINGS.md`](docs/MODEL_FINDINGS.md), [`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md) |
 | Retarget Quaternius | [`docs/findings/ANIMATOR_RETARGET_FINDINGS.md`](docs/findings/ANIMATOR_RETARGET_FINDINGS.md) |
+| Motion3D HML → SkinTokens (`apply-rigged`) | [`docs/findings/MOTION3D_FINDINGS.md`](docs/findings/MOTION3D_FINDINGS.md) |
 | Compressão GLB | [`docs/GLB_FINISH_COMPRESSION.md`](docs/GLB_FINISH_COMPRESSION.md) |
 | Testes / cobertura | [`docs/TESTING.md`](docs/TESTING.md) |
 | Índice findings | [`docs/findings/README.md`](docs/findings/README.md) |
@@ -72,18 +73,21 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Shared/` | Python | `aigamekit-shared` | Shared lib (logging, GPU, subprocess, installers, CLI) |
 | `Text2D/` | Python | `text2d` | Text-to-image (FLUX SDNQ) |
 | `Text2Icon/` | Python | `text2icon` | Text-to-icon (Sana Sprint 0.6B, NVlabs/Sana); transparent BG via rembg |
-| `Text3D/` | Python | `text3d` | Text-to-3D (Hunyuan3D-2.1 SDNQ) |
+| `Text3D/` | Python | `text3d` | Text-to-3D (Hunyuan3D-Omni SDNQ) |
 | `Paint3D/` | Python | `paint3d` | 3D texturing (Hunyuan3D-Paint 2.1, bilateral smooth, bake_exp=6) |
 | `Part3D/` | Python | `part3d` | Semantic mesh part decomposition (Hunyuan3D-Part: P3-SAM + X-Part; SDNQ) |
 | `GameAssets/` | Python | `gameassets` | Batch asset generation |
-| `Texture2D/` | Python | `texture2d` | Seamless 2D textures (HF API) |
-| `Skymap2D/` | Python | `skymap2d` | 360-degree skymaps (HF API) |
+| `Texture2D/` | Python | `texture2d` | Seamless 2D textures (local SD1.5) |
+| `Skymap2D/` | Python | `skymap2d` | 360-degree skymaps (local FLUX.1-dev + LoRA) |
 | `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio Open) |
 | `Rigging3D/` | Python | `rigging3d` | Auto-rigging (SkinTokens, Python 3.13) |
 | `Animator3D/` | Python | `animator3d` | Animation (bpy 5.2 LTS, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
+| `Motion3D/` | Python | `motion3d` | Text-to-motion (Motius T2M-GPT HumanML3D) → NPZ / GLB (bpy); UMS |
 | `AiGameKitLab/` | Python | `aigamekit-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
 | `Terrain3D/` | Python | `terrain3d` | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
+| `Rocks3D/` | Python | `rocks3d` | Procedural 3D rock generation (no PyTorch) |
+| `ModelServer/` | Python | `modelserver` (CLI `aigamekit-model-server`/`ums`) | Unified Model Server (UMS) — single-process GPU/VRAM supervisor |
 | `VibeGame/` | TypeScript | `vibegame` (npm) | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `PlayerGLTF` recipe |
 
 All Python packages depend on `aigamekit-shared` (install Shared first). VibeGame is standalone (Bun + Vite); it does not use `aigamekit-shared`.
@@ -146,6 +150,7 @@ make test-text2sound   # pytest Text2Sound only
 make test-aigamekitlab   # pytest AiGameKitLab only
 make test-rigging3d    # pytest Rigging3D only
 make test-animator3d   # pytest Animator3D only
+make test-motion3d     # pytest Motion3D only
 make test-materialize  # cargo test in Materialize/
 make test-terrain3d    # pytest Terrain3D only
 make test-rocks3d      # pytest Rocks3D only
@@ -445,17 +450,23 @@ in-process. Legacy per-tool / blind `ensure_vram`: **opt-in**
 2. Wait (`ums wait <job_id>`, tool with `--ums-stream`) or `ums cancel <job_id>`.
 3. **Never** `kill` / GPU pkill / `--gpu-kill-others` while UMS has jobs —
    that races the queue and can murder the wrong workload (bench, sibling tool, batch).
-4. Idle UMS (0 backends) still holding ~1 GiB+ CUDA so `free < peak` (ex. text3d
-   int4 ~4991 MiB): `ums stop` + `ums start` — only with empty queue.
+4. Idle UMS holding VRAM (live workers keep ~0.3–1 GiB CUDA context each) so
+   `free < peak` (ex. text3d int4 ~4991 MiB): **`ums zero`** — kills all idle
+   workers without stopping the supervisor (refused `ZERO_BUSY` when the queue
+   is busy). The supervisor itself no longer creates a CUDA context
+   (`clear_cuda_memory`/`torch_reserved_mib` skip torch calls when CUDA is not
+   initialized); only a supervisor started *before* this fix needs one last
+   `ums stop` + auto-start.
 5. Only use `--no-ums` + in-process when you intentionally bypass the supervisor;
    then kill is still refused if UMS is busy.
 6. Full guide: `ModelServer/README.md` (section *Agents / anti-patterns*).
 
 **Commands:**
 ```bash
-ums start|stop|status|queue|wait|cancel|flush|backends|preload|evict|respawn|stats|debug|bench|doctor
+ums start|stop|status|submit|queue|wait|cancel|flush|backends|preload|evict|reap|respawn|zero|stats|debug|bench|doctor
 # cancel <job_id|prefixo> | cancel --all | flush [--queued-only]
 # respawn <backend|--all> [--hot]  — reinicia SÓ o worker da tool (código novo), sem reiniciar o supervisor
+# zero                        — zera TODA a VRAM do UMS (mata workers idle) SEM parar o supervisor
 # same as: aigamekit-model-server …
 text2icon generate "icon" -o out.png   # Auto-delegates to UMS (~7s vs ~20s cold)
 text2icon generate "icon" -o out.png --ums-stream --ums-priority interactive
@@ -469,6 +480,7 @@ text2icon generate "icon" -o out.png --ums-stream --ums-priority interactive
 | `delegate_to_ums(backend, request)` | Sync generate via UMS (main CLI path) |
 | `submit_to_ums` / `poll_ums_job` / `wait_ums_job` / `cancel_ums_job` | Async job API |
 | `respawn_ums_backend(backend, lazy=True)` | Restart a tool's worker subprocess (pick up edited tool code without restarting the supervisor) |
+| `zero_ums_vram()` | Zero ALL UMS-held VRAM (kills idle workers + scrub) without stopping the supervisor; `None` when UMS is down |
 | `fetch_ums_queue_snapshot` / `ums_is_busy` / `format_ums_holding_summary` | Queue introspection |
 | `UMS_DO_NOT_KILL_TIP` | Stable tip string for CLIs/agents |
 | `ensure_vram_available(needed_mib)` | Ask UMS; legacy sockets only if `AIGAMEKIT_ALLOW_LEGACY_SERVER=1` |
@@ -551,6 +563,7 @@ CI pitfalls (softfill sem Text3D, pedalboard SIGILL, Shared `[dev]` mesh deps, V
 
 - Terreno em exemplos VibeGame pode parecer voxel/escadinha; amostragem de altura/normal com um único ponto tende a falhar — estratégias multi-amostra ou suavização costumam ser necessárias para alinhar props ao chão. Árvores/erva a flutuar: (1) pivô GLB no centro em vez da base (pipeline Text3D/GameAssets → origem nos pés por omissão); (2) mesh leaf densificado vs spawn grosso — `meshSurfaceResolutionForPoint` tem de usar `maxBoostOverAabb` do deepest leaf (igual ao chunk), não só `boostAt(ponto)` (floats esparsos em dunas/pad skirt); ver `terrain`/`spawner` `context.md`. No recipe `<Terrain>`, campos kebab-case; `collision-resolution` (32/64/128) no `TerrainLOD` sem ser sobrescrito pela `resolution` do chunk.
 - **VibeGame chão:** estáticos (`tree`/`foliage`/`place`) = AABB + `TerrainSpawned` + resync após pad/road/river. Dinâmicos (`creature` / `role=enemy|npc`) = spawn seed Y + **CCT** no heightfield; perfil `groundAlign: none`, `baseYOffset: 0`. Scripts = AI/anim só — sem lift/snap/BVH/`settle`. `goblin_collision.glb` unused. Docs: [`docs/findings/VIBEGAME_SPAWN_GROUND_FINDINGS.md`](docs/findings/VIBEGAME_SPAWN_GROUND_FINDINGS.md), `VibeGame/src/plugins/spawner/context.md`.
+- **VibeGame rigidbodies: só TOP-LEVEL com `place`.** O `TerrainPlaceSystem` escreve o mundo em Transform E Rigidbody; entidades parentadas (`<Group pos≠0>` + filhos com `pos` local) NUNCA espelham o mundo no body Rapier (rb fica 0,0,0 → herói cai através do objeto). Para salas/estruturas: `<TerrainPad>` achata o terreno (altura = terreno no centro) + entidades top-level com `place="at: X Z"` — tudo cai no plano do pad. Dentro do core plano do pad, o placement ancora no plano analítico (`sampleTerrainSurfaceMatrix` → `padPlane: true` → `TerrainPlaceSystem` usa `s.worldY`); sem isso a amostragem do mesh lattice (LOD grosso à distância) mistura a borda do pad com o terreno e afunda/flutua props até ~1 m. Regressão coberta por `tests/unit/spawner/pad-plane-anchor.test.ts`. Exemplo: `examples/simple-rpg/public/world/interiors.xml` (3 salas em zona remota, portais de saída `building-portal.ts`).
 - O comando `gameassets mesh reorigin-feet` repõe a origem de GLBs estáticos nos pés/base; modelos rigged com animação podem precisar de correção de orientação de root (ex. rotação) antes de centrar o pivô — não aplicar só `reorigin-feet` sem validar o resultado.
 - O **rigged GLB** tem de herdar a origem/pivô e a orientação do LOD0 (mesh centrada em X/Z, y=0 na sola dos pés, em pé na vertical correta) e o esqueleto tem de estar alinhado e dentro da malha — não rotacionado, não deslocado em Y para fora do mesh. Helpers de debug (ex. icosphere em 0,0,0, eixos visuais) NÃO devem ficar no GLB final exportado pela stage de rig.
 - Text3D / Hunyuan3D (marching cubes): paredes duplas, rachas, edifícios tipo casca-plástico. Reparo: `aigamekit_shared.mesh_repair` perfis `topology_clean` / `pre_decimate_uv` / `part_decode` / `post_voxel`. `topology_clean` actual: weld → slivers/debris → fill → watertight **seletivo** (diâmetro de loop) → shade-smooth; **sem** `force_close_base`/flare/Taubin (removidos — destruíam capela). **Base oca por baixo é OK** — QA `_shape` foca cortes/forma graves, não fechar chão. Refs Text2D eye-level 3/4 (`categories.building` + `prompt_builder`). Paint: `ensure_clean_for_paint` + `paint_prep.restrict_inpaint`. Lições: `docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`.
@@ -568,7 +581,7 @@ CI pitfalls (softfill sem Text3D, pedalboard SIGILL, Shared `[dev]` mesh deps, V
 - OpenCode (`opencode.json` no repositório): entradas MCP locais devem declarar `type: "local"` e `command` como array de strings com executável e argumentos (não o par `command` + `args` usado noutras ferramentas).
 - VibeGame: corpos dinâmicos GLTF podem ter colisor desalinhado do mesh se o centro do AABB não coincidir com a origem da entidade — definir `Collider.posOffset*` a partir do delta AABB→Transform em espaço local. No plugin de partículas (`three.quarks`), usar o emissor interno `ParticleSystem.emitter`; um wrapper `ParticleEmitter` à parte faz o batch descartar o sistema no update e as partículas deixam de aparecer.
 - No PyPI, `bpy>=5.2.0` (LTS) exige Python 3.13. Rigging3D e Animator3D usam stack **3.13 + `bpy>=5.2.0`** — não assumir outro Python/`bpy` para estes pacotes. Meshopt nativo no exporter GLTF (`export_meshopt_compression_enable`); em Linux precisa de `libmeshoptimizer.so` (`libmeshoptimizer-dev`). KTX2/UASTC: `@gltf-transform/cli` **+** binário `ktx` (KTX-Software) — só npx não chega; ver [`docs/GLB_FINISH_COMPRESSION.md`](docs/GLB_FINISH_COMPRESSION.md).
-- **QualityEngine** (`aigamekit_shared.quality.QualityEngine`): sistema unificado de presets de qualidade cross-tool. 5 tiers (`fast|low|medium|high|highest`) em `Shared/src/aigamekit_shared/data/quality-profiles.yaml`, 14 categorias de assets + 11 audio_kinds em `asset-categories.yaml`. Todas as tools Python expõem `--quality` (e opcionalmente `--category`): Text2D, Texture2D, Skymap2D, Text3D, Paint3D, Part3D, Text2Sound, Rigging3D, Terrain3D. O QualityEngine faz resolução soft — preenche defaults só quando o utilizador não explicitou o parâmetro (via `ParameterSource`). O GameAssets usa `generation:` no `game.yaml` (mapeia para `--quality`) e passa `--quality`/`--category` às sub-tools. Spec: `docs/superpowers/specs/2026-04-30-quality-presets-design.md`.
+- **QualityEngine** (`aigamekit_shared.quality.QualityEngine`): sistema unificado de presets de qualidade cross-tool. 5 tiers (`fast|low|medium|high|highest`) em `Shared/src/aigamekit_shared/data/quality-profiles.yaml`, 14 categorias de assets + 11 audio_kinds em `asset-categories.yaml`. Todas as tools Python expõem `--quality` (e opcionalmente `--category`): Text2D, Texture2D, Skymap2D, Text3D, Paint3D, Part3D, Text2Sound, Rigging3D, Terrain3D, Motion3D. O QualityEngine faz resolução soft — preenche defaults só quando o utilizador não explicitou o parâmetro (via `ParameterSource`). O GameAssets usa `generation:` no `game.yaml` (mapeia para `--quality`) e passa `--quality`/`--category` às sub-tools. Spec: `docs/superpowers/specs/2026-04-30-quality-presets-design.md`.
 
 - **Arquitetura de responsabilidades — mesh operations**: O **Text3D** é o único dono de operações de mesh (LOD, collision, simplify, remesh, remesh-textured, `topology-fix`, `bake-master`). O GameAssets NÃO deve conter código de mesh — apenas orquestra subprocessos `text3d`. Não usar `bpy` nem `trimesh` diretamente no GameAssets (o legado `bpy_simplify.py` foi removido). O `text3d lod` preserva armatures/animations — no master pipeline Round 3 é ele que gera a ladder rigada (decimate sobre o animated/rigged). `rigging3d transfer-weights` continua disponível como CLI manual (rebinding pontual via `aigamekit_shared.skin_transfer`), mas deixou de fazer parte do DAG do batch.
 

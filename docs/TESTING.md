@@ -103,13 +103,20 @@ Local parity: `make check` (Python+Rust) and `make check-vibegame` / `make test-
 
 ## Package venvs
 
-Prefer the package-local interpreter so deps match install:
+Always use the package-local interpreter so deps match install:
 
 ```bash
 Text2D/.venv/bin/pytest Text2D/tests/test_text2d_coverage_suite.py -q
 Materialize: cargo test --bin materialize-cli
 VibeGame: bun test tests/coverage-100.test.ts
 ```
+
+`./install.sh <tool>` creates `<Tool>/.venv` and its post-install hook adds the
+`[dev]` extra (pytest, pytest-cov, ruff) there. If pytest is missing from that
+venv, `make test-<tool>` prints a warning and falls back to the system
+interpreter (CI has no per-package venv) — a fallback that surfaced as
+`ModuleNotFoundError: huggingface_hub` on `make test-motion3d`. Fix it by
+installing the tool, not by installing deps globally.
 
 `AIGAMEKIT_FILE_LOG=1` may be needed under pytest for tools that gate file logging (see [`LOGGING.md`](LOGGING.md)).
 

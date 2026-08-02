@@ -1,0 +1,45 @@
+# Docker build context — o working tree tem ~24 GB (venvs, targets, caches).
+# Este ficheiro minimiza o contexto para o teste de instalação limpa
+# (scripts/docker/Dockerfile.ubuntu-clean). Só o necessário para instalar tools.
+
+# Git / VCS — .git é INCLUÍDO de propósito (104 MB): o UMS (subprocess_pool)
+# deteta a raiz do monorepo por `.git` + `Shared/` — sem ele, os workers das
+# tools não arrancam ("venv da tool não encontrado").
+.gitignore
+
+# Python
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.egg-info
+.installer-venv
+**/build
+
+# Node / Bun
+**/node_modules
+**/dist
+VibeGame/examples
+VibeGame/create-vibegame/template/node_modules
+
+# Rust
+**/target
+
+# Generated / heavy / machine-local
+**/graphify-out
+outputs
+logs
+experiments
+docs/bench_kernel_opts
+docs/bench_omni
+docs/.debug_axis
+docs/.paint_mesh_audit_queue.json
+docs/.stabilize_wip_status.md
+docs/.stabilize_wip_status.json
+**/*.glb
+*.png
+*.jpg
+*.jpeg
+*.log

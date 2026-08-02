@@ -1,6 +1,6 @@
 # Texture2D — Agent Skill
 
-Ferramenta CLI para geração de texturas 2D seamless (tileable) via HF Inference API.
+Ferramenta CLI para geração de texturas 2D seamless (tileable), localmente na GPU (SD1.5 + circular padding).
 
 ## Quando usar
 
@@ -48,8 +48,8 @@ Wood, Fabric, Metal, Stone, Brick, Leather, Concrete, Marble, Grass, Sand, Dirt,
 ## Requisitos
 
 - Python 3.10+
-- Token HF (env `HF_TOKEN` ou `HUGGINGFACEHUB_API_TOKEN`) — recomendado para modelos gated
-- Sem GPU local necessária (geração via API cloud)
+- Token HF (env `HF_TOKEN` ou `HUGGINGFACEHUB_API_TOKEN`) — para download de pesos gated
+- GPU CUDA (SD1.5 local + circular padding; ~2,5 GB de VRAM)
 
 ## Integração com Materialize
 
