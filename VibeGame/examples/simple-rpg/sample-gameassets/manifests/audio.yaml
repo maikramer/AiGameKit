@@ -1,0 +1,192 @@
+# Grupo audio — BGM e SFX (Text2Sound).
+# Defs base (estilo, ferramentas, presets) em ../game.yaml.
+# Regenerar: gameassets resume --profile game.yaml --manifest manifests/audio
+output_dir: ../../public/assets
+assets:
+
+- id: bgm_battle
+  idea: intense fantasy battle music, driving orchestral combat theme, dramatic action
+    rhythm
+  kind: prop
+  category: music
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: battle
+- id: bgm_explore
+  idea: peaceful fantasy village exploration music, gentle acoustic guitar and flute,
+    warm ambient adventure melody, calm countryside
+  kind: prop
+  category: music
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: exploration
+- id: sfx_hit
+  idea: sharp metal sword clash, bright metallic ring, short combat hit impact
+  kind: prop
+  category: combat
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: sword-clash
+- id: sfx_swing
+  idea: whoosh sword swing through air, quick blade swish, fast weapon swing
+  kind: prop
+  category: combat
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_chop_hit
+  idea: sharp axe chop into wood tree trunk, heavy blade impact on timber
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_chop_break
+  idea: large tree falling crashing down, timber cracking and splintering
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_mine_hit
+  idea: pickaxe striking stone rock, hard mineral impact, mining chisel hit on ore,
+    sharp crack
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_mine_break
+  idea: rock crumbling apart, stone debris falling, boulder breaking into fragments
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_levelup
+  idea: triumphant level up fanfare, bright ascending victory chime, cheerful RPG
+    success jingle
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: victory
+- id: sfx_player_hurt
+  idea: painful grunt, male warrior taking damage, sharp exhale of pain, short hurt
+    vocalization
+  kind: prop
+  category: voice
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_enemy_hurt
+  idea: creature taking damage yelp, short monster pain cry, wounded beast whimper
+  kind: prop
+  category: voice
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_enemy_death
+  idea: creature death wail, fading monster cry, dying beast collapse, long final
+    groan
+  kind: prop
+  category: voice
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_boss_roar
+  idea: massive boss monster roar, deep terrifying beast bellow, giant creature threatening
+    growl, powerful boss entrance
+  kind: prop
+  category: voice
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: creature-roar
+- id: sfx_heal
+  idea: warm healing magic spell, gentle restoration chime, soft glowing energy swell,
+    soothing recovery aura
+  kind: prop
+  category: magic
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: heal
+- id: sfx_shop_open
+  idea: friendly shop door opening chime, welcoming merchant bell, cozy tavern door
+    creak, warm marketplace greeting
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_buy
+  idea: satisfying purchase confirmation, coin transaction chime, merchant deal struck,
+    bright purchase success tone
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_error
+  idea: negative error buzz, declining tone, low rejected action sound, descending
+    failure blip, interface denial
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_coin
+  idea: sparkling coin pickup chime, bright golden coin collect, rewarding currency
+    jingle, short treasure acquire
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: coin-pickup
+- id: sfx_item_drop
+  idea: item dropping on ground, object landing on stone floor, dull thud with bounce,
+    inventory item fall
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_bomb_drop
+  idea: bomb fuse igniting, sizzling explosive timer, crackling fuse burn, tense countdown
+    hiss
+  kind: prop
+  category: foley
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_save
+  idea: quick save confirmation chime, short success blip, game saved jingle, bright
+    digital confirm
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high
+  audio:
+    audio_preset: ui-confirm
+- id: sfx_load
+  idea: game load whoosh, data loading shimmer, short magical loading sparkle, transition
+    swirl
+  kind: prop
+  category: ui
+  pipeline:
+  - audio
+  generation: high

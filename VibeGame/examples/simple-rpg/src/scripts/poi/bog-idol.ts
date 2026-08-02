@@ -7,7 +7,7 @@ import { healHealth } from 'vibegame';
 const HEAL_REWARD = 70;
 
 const idol = createMysticObject({
-  modelUrl: '/assets/meshes/crystal_blue_lod1.glb',
+  modelUrl: '/assets/meshes/props/crystal_blue_lod1.glb',
   modelScale: 2.0,
   emissiveColor: 0x66e878,
   toastColor: '#a8ffb0',

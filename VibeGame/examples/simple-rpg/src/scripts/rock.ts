@@ -17,4 +17,3 @@ export function onDestroy(ctx: MonoBehaviourContext): void {
   unregisterInteractionTarget(ctx.state, ctx.entity);
 }
 
-export function update(_ctx: MonoBehaviourContext): void {}

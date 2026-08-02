@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Regenerate cities/discordia/walls.xml for a compact Discordia.
 
-Placement uses **visual** LOD0 extents (collision is ~10–15 cm larger).
+Placement uses **visual** LOD0 extents (collision is ~10-15 cm larger).
 Pitch from collision left visible gaps between segs/gate; packing to the
 painted mesh closes them. Colliders then interpenetrate — ``overlap-max``
 covers that depth for ``vibegame analyze``.
 
-Measured LOD0 / collision (metres, long × thick):
-  city_wall_seg_a/b : visual 6.500 × ~0.94–1.07 ; coll 6.615 × ~1.06–1.19
-  city_wall_corner  : visual ~2.426 × 2.438     ; coll 2.565 × 2.581
-  city_gate_arch    : visual 9.999 × 1.509       ; coll 10.146 × 1.675
+Measured LOD0 / collision (metres, long x thick):
+  city_wall_seg_a/b : visual 6.500 x ~0.94-1.07 ; coll 6.615 x ~1.06-1.19
+  city_wall_corner  : visual ~2.426 x 2.438     ; coll 2.565 x 2.581
+  city_gate_arch    : visual 9.999 x 1.509       ; coll 10.146 x 1.675
 """
 
 from __future__ import annotations
@@ -43,11 +43,12 @@ def fmt(v: float) -> str:
 
 
 def gltf(mesh: str, near: int = 70, mid: int = 160) -> str:
+    # Grupo `infra` (manifests/infra.yaml) — GLBs em meshes/infra/.
     return f"""            <GLTFLoader
               role="visual"
-              url="/assets/meshes/{mesh}_lod0.glb"
-              lod1-url="/assets/meshes/{mesh}_lod1.glb"
-              lod2-url="/assets/meshes/{mesh}_lod2.glb"
+              url="/assets/meshes/infra/{mesh}_lod0.glb"
+              lod1-url="/assets/meshes/infra/{mesh}_lod1.glb"
+              lod2-url="/assets/meshes/infra/{mesh}_lod2.glb"
               lod-threshold-near="{near}"
               lod-threshold-mid="{mid}"
             ></GLTFLoader>"""
@@ -60,7 +61,7 @@ def obj(name: str, x: float, z: float, rot: int | None, mesh: str, near: int = 7
             place="at: {fmt(x)} {fmt(z)}; align-to-terrain: 0"{rot_attr}
             overlap-max="{OVERLAP_MAX}"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/{mesh}_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/{mesh}_collision.glb; mesh-anchor: base"
           >
 {gltf(mesh, near, mid)}
           </GameObject>"""
@@ -73,7 +74,7 @@ out.append(
   Edit this file for this district only. Cell coords: space-separated (at="2 1").
 
   GERADO — layout compacto. Muralha ±{fmt(S)}: passo visual {fmt(PITCH)} m
-  (mesh LOD0 {fmt(SEG)} m − junta {fmt(JOINT)} m). Collider é ~0.12 m mais
+  (mesh LOD0 {fmt(SEG)} m - junta {fmt(JOINT)} m). Collider é ~0.12 m mais
   longo → penetração coberta por `overlap-max={OVERLAP_MAX}`.
 -->
 <Group name="city.walls" pos="0 0 0">

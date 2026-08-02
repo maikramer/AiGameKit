@@ -2,7 +2,7 @@ import { createCreatureBehaviours } from './creature';
 import { addGold } from '../game/economy';
 
 const { start, update, onDestroy } = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/goblin_lod2.glb',
+  modelUrl: '/assets/meshes/characters/goblin_lod2.glb',
   clips: {
     idle: 'idle',
     walk: 'walk',

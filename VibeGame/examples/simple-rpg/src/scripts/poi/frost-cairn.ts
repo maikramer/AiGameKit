@@ -7,7 +7,7 @@ import { addXp } from 'vibegame';
 const XP_REWARD = 60;
 
 const cairn = createMysticObject({
-  modelUrl: '/assets/meshes/crystal_blue_lod1.glb',
+  modelUrl: '/assets/meshes/props/crystal_blue_lod1.glb',
   modelScale: 2.4,
   emissiveColor: 0x8fd8ff,
   toastColor: '#cbeeff',

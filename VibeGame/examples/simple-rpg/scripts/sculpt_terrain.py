@@ -49,7 +49,7 @@ OUT_PNG = TERRAIN_DIR / "heightmap.png"
 TERRAIN_JSON = TERRAIN_DIR / "terrain.json"
 
 # --- contratos com o mundo (index.html / public/world) ------------------------
-CITY_KEEP_R = 144.0  # vale intocado: pad 192x192 + falloff 32 + folga (world 2×)
+CITY_KEEP_R = 144.0  # vale intocado: pad 192x192 + falloff 32 + folga (world 2x)
 CITY_BLEND_R = 232.0  # a partir daqui o relevo esculpido manda
 VALLEY_Y = 36.0  # cota do vale central no heightmap original
 
@@ -125,7 +125,7 @@ RIVER_PATH: list[tuple[float, float]] = [
     (-420, 330),
     (-482, 384),
 ]
-RIVER_CORRIDOR_W = 30.0  # meia-largura do leito aplanado (m) — world 2×
+RIVER_CORRIDOR_W = 30.0  # meia-largura do leito aplanado (m) — world 2x
 RIVER_CORRIDOR_FALLOFF = 52.0  # blend de volta ao relevo (m)
 
 

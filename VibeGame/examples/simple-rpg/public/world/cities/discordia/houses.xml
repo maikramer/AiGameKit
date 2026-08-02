@@ -16,13 +16,13 @@
             transform="rotation: 0 -90 0"
             place="at: 25 12; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/village_house_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/village_house_lod0.glb"
-              lod1-url="/assets/meshes/village_house_lod1.glb"
-              lod2-url="/assets/meshes/village_house_lod2.glb"
+              url="/assets/meshes/village/village_house_lod0.glb"
+              lod1-url="/assets/meshes/village/village_house_lod1.glb"
+              lod2-url="/assets/meshes/village/village_house_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -34,13 +34,13 @@
             transform="rotation: 0 135 0"
             place="at: -19 19; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/village_house_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/village_house_lod0.glb"
-              lod1-url="/assets/meshes/village_house_lod1.glb"
-              lod2-url="/assets/meshes/village_house_lod2.glb"
+              url="/assets/meshes/village/village_house_lod0.glb"
+              lod1-url="/assets/meshes/village/village_house_lod1.glb"
+              lod2-url="/assets/meshes/village/village_house_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -53,9 +53,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_barrel_lod0.glb"
-            lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
-            lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
+              url="/assets/meshes/village/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
             ></GLTFLoader>
           </GameObject>
 
@@ -65,13 +65,13 @@
             transform="rotation: 0 45 0"
             place="at: -17 -20; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/village_house_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/village_house_lod0.glb"
-              lod1-url="/assets/meshes/village_house_lod1.glb"
-              lod2-url="/assets/meshes/village_house_lod2.glb"
+              url="/assets/meshes/village/village_house_lod0.glb"
+              lod1-url="/assets/meshes/village/village_house_lod1.glb"
+              lod2-url="/assets/meshes/village/village_house_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -82,13 +82,13 @@
             name="shepherd_cottage"
             place="at: -21 8; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/shepherd_cottage_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/shepherd_cottage_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/shepherd_cottage_lod0.glb"
-              lod1-url="/assets/meshes/shepherd_cottage_lod1.glb"
-              lod2-url="/assets/meshes/shepherd_cottage_lod2.glb"
+              url="/assets/meshes/village/shepherd_cottage_lod0.glb"
+              lod1-url="/assets/meshes/village/shepherd_cottage_lod1.glb"
+              lod2-url="/assets/meshes/village/shepherd_cottage_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>

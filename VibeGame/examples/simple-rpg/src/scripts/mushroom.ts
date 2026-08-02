@@ -6,7 +6,7 @@ import { healHealth } from 'vibegame';
 const HEAL = 40;
 
 const mushroom = createMysticObject({
-  modelUrl: '/assets/meshes/mushroom_red_lod2.glb',
+  modelUrl: '/assets/meshes/props/mushroom_red_lod2.glb',
   emissiveColor: 0xff5a6a,
   toastColor: '#ffb0a0',
   readRangeSq: 4.6 * 4.6,

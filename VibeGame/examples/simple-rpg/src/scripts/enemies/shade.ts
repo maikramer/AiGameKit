@@ -5,7 +5,7 @@ import { addGold } from '../../game/economy';
 const behaviours = createCreatureBehaviours({
   // shade_*.glb ships static (no skin/clips) — the XML visual uses the bogling
   // LOD triple at 1.4x, so the animator clips must come from that same master.
-  modelUrl: '/assets/meshes/bogling_lod0.glb',
+  modelUrl: '/assets/meshes/characters/bogling_lod0.glb',
   clips: {
     idle: 'idle',
     walk: 'walk',

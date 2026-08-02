@@ -1,0 +1,420 @@
+# Grupo interiors — mobiliário e itens para ambientes internos.
+# Igreja (capela), ferraria, casa comum, taverna, celeiro.
+# Defs base (estilo, ferramentas, presets) em ../game.yaml.
+# Regenerar: gameassets resume --profile game.yaml --manifest manifests/interiors
+#
+# REUSO de assets externos já gerados (ficam nos seus grupos; NÃO duplicar):
+#   ferraria: anvil (village), weapon_rack (village), forge_bellows (village),
+#             quench_trough (village), horseshoe_pile (village), log_pile (village)
+#   casa/taverna: wooden_barrel (village), wooden_crate (village), wooden_bench (village),
+#             chopping_block (village), iron_brazier (village), treasure_chest (village)
+#   capela: stone_pillar (props), iron_brazier (village), wooden_bench (village)
+# size_m [L,H,W] = [X,Y,Z] metros — docs/OMNI_SHAPE_FINDINGS.md §1
+output_dir: ../../public/assets
+meshes_subdir: meshes/interiors
+images_subdir: images/interiors
+assets:
+# ── Capela ────────────────────────────────────────────────────────────────
+- id: chapel_pew
+  idea: cartoon wooden church pew with carved backrest, short bench row, warm
+    brown oak, medieval chapel seating, fantasy interior furniture, isolated
+    furniture item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  # Step 33 (1 acima do auto 32): detalhe fino.
+  text3d:
+    octree_resolution: 256
+    steps: 33
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 2.4
+    - 0.95
+    - 0.75
+- id: chapel_altar
+  idea: cartoon stone church altar table with white cloth draped over top, two
+    brass candlesticks with lit candles, carved stone base, medieval chapel centerpiece,
+    fantasy interior furniture, isolated item no room no floor, clean silhouette,
+    game-ready
+  kind: prop
+  category: furniture
+  # Step 33 (1 acima do auto 32): detalhe fino.
+  text3d:
+    octree_resolution: 288
+    steps: 33
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 2.8
+    - 1.3
+    - 1.2
+- id: chapel_pulpit
+  idea: cartoon wooden church pulpit with angled reading desk, carved side panels,
+    small step base, warm oak, medieval chapel preacher stand, fantasy interior
+    furniture, isolated item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 1.2
+    - 1.9
+    - 1.0
+- id: chapel_statue
+  idea: cartoon stone saint statue on small pedestal, robed figure with hands
+    clasped, weathered grey stone, fantasy church decoration prop, upright,
+    isolated item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: column
+    size_m:
+    - 0.8
+    - 1.8
+    - 0.7
+- id: candelabra_tall
+  idea: tall cartoon brass candelabra stand with three curved arms holding lit
+    candles, round base, fantasy church or tavern candle holder, upright prop,
+    isolated item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: column
+    size_m:
+    - 0.55
+    - 1.7
+    - 0.55
+- id: church_organ
+  idea: cartoon small wooden church pipe organ with gold front pipes of graded
+    lengths, bench seat, carved case, fantasy chapel music instrument, isolated
+    item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  # Octree 192: gerou 1 nível abaixo do ideal (tune dava menos).
+  text3d:
+    steps: 33
+    octree_resolution: 288
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 2.2
+    - 2.2
+    - 1.2
+- id: confessional
+  idea: cartoon wooden confessional booth with two curtained side compartments
+    and central carved priest door, dark oak, fantasy church furniture, isolated
+    item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  # Octree 224 (2 níveis acima do calculado): detalhe fino das portas/cortinas.
+  text3d:
+    steps: 33
+    octree_resolution: 352
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 1.4
+    - 2.2
+    - 1.0
+# ── Ferraria ──────────────────────────────────────────────────────────────
+- id: forge_furnace
+  idea: cartoon stone blacksmith forge furnace with wide brick firebox opening,
+    tall chimney hood, iron tools hanging on the side, dark hearth interior,
+    fantasy smithy interior fixture, solid base flush to ground, exterior of
+    the furnace only, no characters, clean silhouette, game-ready
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: building
+    size_m:
+    - 2.6
+    - 2.4
+    - 1.8
+- id: sledge_hammer
+  seed: 44107
+  idea: cartoon blacksmith sledge hammer standing perfectly upright vertical,
+    massive rectangular steel hammer head at the very top, thick round wooden
+    handle butt on ground, leather grip wrap, clearly a sledgehammer not a shovel
+    not a spade not an axe, orthographic front view, zero tilt, fantasy smithy
+    tool, white background, clean silhouette, game-ready
+  kind: prop
+  category: tool
+  pipeline:
+  - 3d
+  - paint
+  - collision
+  omni:
+    control_type: bbox
+    # Molde mais encorpado (antes 0.3×1.4×0.12 virava pá): cabeça larga + cabo.
+    size_m:
+    - 0.45
+    - 1.4
+    - 0.25
+# ── Casa / taverna ────────────────────────────────────────────────────────
+- id: fireplace_hearth
+  idea: cartoon stone fireplace hearth with wide firebox opening, thick wooden
+    mantel shelf above, short side columns, warm cottage interior fixture, solid
+    base flush to ground, no flames no logs mesh, no characters, clean silhouette,
+    game-ready
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: building
+    size_m:
+    - 2.4
+    - 2.2
+    - 0.9
+- id: dining_table
+  idea: long cartoon wooden dining table with thick plank top, four sturdy legs,
+    medieval tavern or cottage table, fantasy interior furniture, isolated item
+    no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 2.6
+    - 0.85
+    - 1.2
+- id: wooden_chair
+  idea: simple cartoon wooden chair with straight backrest, four legs, medieval
+    cottage seating, fantasy interior furniture, isolated item no room no floor,
+    clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 0.5
+    - 0.95
+    - 0.5
+- id: stool_wood
+  idea: cartoon three-legged wooden stool with round seat, rustic medieval
+    cottage stool, fantasy interior furniture, isolated item no room no floor,
+    clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 0.45
+    - 0.6
+    - 0.45
+- id: cupboard
+  idea: tall cartoon wooden cupboard with two closed doors, iron hinges and
+    handles, carved top cornice, medieval cottage storage furniture, fantasy
+    interior item, isolated item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 1.2
+    - 1.9
+    - 0.55
+- id: bed_simple
+  idea: cartoon simple wooden bed with straw mattress and folded wool blanket,
+    four postless corner legs, low headboard, medieval cottage bed, fantasy
+    interior furniture, isolated item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 2.1
+    - 1.0
+    - 1.2
+- id: bookshelf
+  idea: cartoon wooden bookshelf with three shelves full of colorful books,
+    some leaning, wooden side panels, medieval scholar furniture, fantasy interior
+    item, isolated item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 1.6
+    - 1.9
+    - 0.4
+- id: rug_woven
+  idea: very thick braided cartoon wool rug with raised rolled edges and big
+    tassel fringe at both ends, puffy padded center with striped geometric border
+    pattern, warm red and cream colors, rounded corners, medieval cottage floor
+    decoration, fantasy interior prop, clearly a thick soft rug not a wooden
+    plank not a board not a flat sheet, clean silhouette, game-ready
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    # Y=0.3 ainda gerava tábua (mesh 0.067): tapete grosso estilizado precisa
+    # de Y ≥ ~0.2 do eixo maior para o gerador dar volume.
+    size_m:
+    - 2.4
+    - 0.5
+    - 1.6
+- id: cauldron_iron
+  idea: big cartoon black iron cauldron with round belly and three short legs,
+    iron rim handles, dark cooking pot, fantasy tavern or cottage hearth prop,
+    isolated item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 1.0
+    - 1.1
+    - 1.0
+- id: lantern_hanging
+  idea: cartoon brass hanging lantern with glass panels and lit candle flame
+    glow, chain ring at top, round base, fantasy tavern or cottage light prop,
+    hanging from a hook, isolated item, clean silhouette, game-ready
+  kind: prop
+  category: prop
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    size_m:
+    - 0.35
+    - 0.8
+    - 0.35
+- id: tavern_bar
+  idea: long cartoon tavern bar counter with wooden plank top, front panel with
+    carved detail, foot rail, medieval inn serving counter, fantasy interior
+    furniture, isolated item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 3.0
+    - 1.15
+    - 0.8
+- id: spinning_wheel
+  idea: cartoon wooden spinning wheel with large drive wheel, spindle, bench
+    seat, medieval cottage textile tool, fantasy interior prop, upright, isolated
+    item no room no floor, clean silhouette, game-ready
+  kind: prop
+  category: furniture
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: furniture
+    size_m:
+    - 1.1
+    - 1.2
+    - 0.55

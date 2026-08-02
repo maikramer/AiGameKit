@@ -153,7 +153,7 @@
       <PlayerGLTF
         name="hero"
         pos="0 40 0"
-        model-url="/assets/meshes/hero_lod0.glb"
+        model-url="/assets/meshes/characters/hero_lod0.glb"
       >
       </PlayerGLTF>
       <!-- Hold hero until heightmap + heightfield ready, then seat once (CCT). -->
@@ -221,6 +221,10 @@
       <Include src="/world/landmarks/desert.xml"></Include>
       <Include src="/world/landmarks/swamp.xml"></Include>
       <Include src="/world/landmarks/peaks.xml"></Include>
+
+      <!-- Cena separada: ambientes internos (portais das portas → salas em
+           (-410, 120); saídas teleportam de volta para as portas exteriores). -->
+      <Include src="/world/interiors.xml"></Include>
 
       <Include src="/world/frontier/ridges.xml"></Include>
       <Include src="/world/atmosphere/ambient-fx.xml"></Include>

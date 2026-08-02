@@ -65,10 +65,10 @@
       b="s_resume"
       profile="bridge"
       bridge-native-span="18"
-      bridge-url="/assets/meshes/river_bridge_wood_lod0.glb"
-      bridge-collision-url="/assets/meshes/river_bridge_wood_collision.glb"
-      bridge-lod1-url="/assets/meshes/river_bridge_wood_lod1.glb"
-      bridge-lod2-url="/assets/meshes/river_bridge_wood_lod2.glb"
+      bridge-url="/assets/meshes/infra/river_bridge_wood_lod0.glb"
+      bridge-collision-url="/assets/meshes/infra/river_bridge_wood_collision.glb"
+      bridge-lod1-url="/assets/meshes/infra/river_bridge_wood_lod1.glb"
+      bridge-lod2-url="/assets/meshes/infra/river_bridge_wood_lod2.glb"
     ></Segment>
     <Segment a="s_resume" b="s_end" via="0 -184 18 -220"></Segment>
     <Segment a="mid_e" b="gate_e" via="60 0 96 2"></Segment>
@@ -79,10 +79,10 @@
       b="w_resume"
       profile="bridge"
       bridge-native-span="18"
-      bridge-url="/assets/meshes/river_bridge_stone_lod0.glb"
-      bridge-collision-url="/assets/meshes/river_bridge_stone_collision.glb"
-      bridge-lod1-url="/assets/meshes/river_bridge_stone_lod1.glb"
-      bridge-lod2-url="/assets/meshes/river_bridge_stone_lod2.glb"
+      bridge-url="/assets/meshes/infra/river_bridge_stone_lod0.glb"
+      bridge-collision-url="/assets/meshes/infra/river_bridge_stone_collision.glb"
+      bridge-lod1-url="/assets/meshes/infra/river_bridge_stone_lod1.glb"
+      bridge-lod2-url="/assets/meshes/infra/river_bridge_stone_lod2.glb"
     ></Segment>
     <Segment a="w_resume" b="w_end" via="-208 2"></Segment>
 

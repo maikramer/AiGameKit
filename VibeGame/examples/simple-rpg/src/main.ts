@@ -1141,6 +1141,29 @@ async function runBootstrap(): Promise<void> {
     if (h) addItem(state, h, id, n);
   });
   registerDebugAction(state, 'gold', (n: number = 100) => addGold(n));
+  // Teleporte de QA (vite DEV only): move o body do herói para x y z.
+  //   __VIBEGAME__.debug.callAction('tp', -410, 156, 118.5)
+  registerDebugAction(state, 'tp', (x: number, y: number, z: number) => {
+    const h = state.getEntityByName('hero') ?? 0;
+    if (!h) return -1;
+    Transform.posX[h] = x;
+    Transform.posY[h] = y;
+    Transform.posZ[h] = z;
+    Transform.dirty[h] = 1;
+    Rigidbody.posX[h] = x;
+    Rigidbody.posY[h] = y;
+    Rigidbody.posZ[h] = z;
+    Rigidbody.velX[h] = 0;
+    Rigidbody.velY[h] = 0;
+    Rigidbody.velZ[h] = 0;
+    const body = getBodyForEntity(state, h);
+    if (body) {
+      body.setTranslation({ x, y, z }, true);
+      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      body.wakeUp();
+    }
+    return h;
+  });
   // A Nota: __VIBEGAME__.debug.getVar('nota') → { marked, fixed, signed }
   registerDebugVar(state, 'nota', () => ({
     ...notaSnapshot(),

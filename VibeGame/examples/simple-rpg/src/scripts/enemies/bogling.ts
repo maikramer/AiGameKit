@@ -3,7 +3,7 @@ import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/bogling_lod2.glb',
+  modelUrl: '/assets/meshes/characters/bogling_lod2.glb',
   clips: {
     idle: 'idle',
     walk: 'walk',

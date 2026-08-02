@@ -11,13 +11,13 @@
             name="village_forge"
             place="at: -31 -33; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/village_forge_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/village_forge_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/village_forge_lod0.glb"
-              lod1-url="/assets/meshes/village_forge_lod1.glb"
-              lod2-url="/assets/meshes/village_forge_lod2.glb"
+              url="/assets/meshes/village/village_forge_lod0.glb"
+              lod1-url="/assets/meshes/village/village_forge_lod1.glb"
+              lod2-url="/assets/meshes/village/village_forge_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -76,26 +76,26 @@
           <GameObject
             place="at: -31.8 -28.2; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/anvil_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/anvil_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/anvil_lod0.glb"
-              lod1-url="/assets/meshes/anvil_lod1.glb"
-              lod2-url="/assets/meshes/anvil_lod2.glb"
+              url="/assets/meshes/village/anvil_lod0.glb"
+              lod1-url="/assets/meshes/village/anvil_lod1.glb"
+              lod2-url="/assets/meshes/village/anvil_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Monte de ferraduras junto à bigorna. -->
           <GameObject
             place="at: -29.8 -27.8; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/horseshoe_pile_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/horseshoe_pile_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/horseshoe_pile_lod0.glb"
-              lod1-url="/assets/meshes/horseshoe_pile_lod1.glb"
-              lod2-url="/assets/meshes/horseshoe_pile_lod2.glb"
+              url="/assets/meshes/village/horseshoe_pile_lod0.glb"
+              lod1-url="/assets/meshes/village/horseshoe_pile_lod1.glb"
+              lod2-url="/assets/meshes/village/horseshoe_pile_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Tina de arrefecimento, à direita da bigorna. -->
@@ -103,13 +103,13 @@
             transform="rotation: 0 20 0"
             place="at: -27.6 -28.4; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/quench_trough_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/quench_trough_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/quench_trough_lod0.glb"
-              lod1-url="/assets/meshes/quench_trough_lod1.glb"
-              lod2-url="/assets/meshes/quench_trough_lod2.glb"
+              url="/assets/meshes/village/quench_trough_lod0.glb"
+              lod1-url="/assets/meshes/village/quench_trough_lod1.glb"
+              lod2-url="/assets/meshes/village/quench_trough_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Fole na ombreira esquerda do pátio, virado à forja. -->
@@ -117,13 +117,13 @@
             transform="rotation: 0 -15 0"
             place="at: -34.6 -28.8; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/forge_bellows_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/forge_bellows_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/forge_bellows_lod0.glb"
-              lod1-url="/assets/meshes/forge_bellows_lod1.glb"
-              lod2-url="/assets/meshes/forge_bellows_lod2.glb"
+              url="/assets/meshes/village/forge_bellows_lod0.glb"
+              lod1-url="/assets/meshes/village/forge_bellows_lod1.glb"
+              lod2-url="/assets/meshes/village/forge_bellows_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Suporte de armas na ombreira direita, de perfil para a praça. -->
@@ -131,13 +131,13 @@
             transform="rotation: 0 90 0"
             place="at: -26.8 -29.2; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/weapon_rack_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/weapon_rack_lod0.glb"
-              lod1-url="/assets/meshes/weapon_rack_lod1.glb"
-              lod2-url="/assets/meshes/weapon_rack_lod2.glb"
+              url="/assets/meshes/village/weapon_rack_lod0.glb"
+              lod1-url="/assets/meshes/village/weapon_rack_lod1.glb"
+              lod2-url="/assets/meshes/village/weapon_rack_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Cepo e barril de carvão a fechar o pátio (assets já no pack,
@@ -145,25 +145,25 @@
           <GameObject
             place="at: -34.8 -26.8; align-to-terrain: 1"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/chopping_block_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/chopping_block_lod0.glb"
-              lod1-url="/assets/meshes/chopping_block_lod1.glb"
-              lod2-url="/assets/meshes/chopping_block_lod2.glb"
+              url="/assets/meshes/village/chopping_block_lod0.glb"
+              lod1-url="/assets/meshes/village/chopping_block_lod1.glb"
+              lod2-url="/assets/meshes/village/chopping_block_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
             place="at: -25.4 -30.2; align-to-terrain: 1"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_barrel_lod0.glb"
-              lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
-              lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
+              url="/assets/meshes/village/wooden_barrel_lod0.glb"
+              lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+              lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Ferreiro: estava em "-21 -30" = local (3.0, -4.0), ou seja atrás
@@ -176,9 +176,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/npc_blacksmith_lod0.glb"
-              lod1-url="/assets/meshes/npc_blacksmith_lod1.glb"
-              lod2-url="/assets/meshes/npc_blacksmith_lod2.glb"
+              url="/assets/meshes/characters/npc_blacksmith_lod0.glb"
+              lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb"
+              lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb"
               lod-threshold-near="22"
               lod-threshold-mid="60"
             ></GLTFLoader>

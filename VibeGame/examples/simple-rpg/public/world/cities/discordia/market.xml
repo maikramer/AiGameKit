@@ -27,9 +27,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/market_stall_lod0.glb"
-            lod1-url="/assets/meshes/market_stall_lod1.glb"
-            lod2-url="/assets/meshes/market_stall_lod2.glb"
+              url="/assets/meshes/village/market_stall_lod0.glb"
+            lod1-url="/assets/meshes/village/market_stall_lod1.glb"
+            lod2-url="/assets/meshes/village/market_stall_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
@@ -40,9 +40,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/market_stall_lod0.glb"
-            lod1-url="/assets/meshes/market_stall_lod1.glb"
-            lod2-url="/assets/meshes/market_stall_lod2.glb"
+              url="/assets/meshes/village/market_stall_lod0.glb"
+            lod1-url="/assets/meshes/village/market_stall_lod1.glb"
+            lod2-url="/assets/meshes/village/market_stall_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
@@ -53,9 +53,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/market_stall_lod0.glb"
-            lod1-url="/assets/meshes/market_stall_lod1.glb"
-            lod2-url="/assets/meshes/market_stall_lod2.glb"
+              url="/assets/meshes/village/market_stall_lod0.glb"
+            lod1-url="/assets/meshes/village/market_stall_lod1.glb"
+            lod2-url="/assets/meshes/village/market_stall_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Barris junto às bancas -->
@@ -66,9 +66,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_barrel_lod0.glb"
-            lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
-            lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
+              url="/assets/meshes/village/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
@@ -78,35 +78,35 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_barrel_lod0.glb"
-            lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
-            lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
+              url="/assets/meshes/village/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Caixas GLB junto à muralha Este -->
           <GameObject
             place="at: 34.5 -18.5; align-to-terrain: 1"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_crate_lod0.glb"
-            lod1-url="/assets/meshes/wooden_crate_lod1.glb"
-            lod2-url="/assets/meshes/wooden_crate_lod2.glb"
+              url="/assets/meshes/village/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
             transform="rotation: 0 25 0"
             place="at: 35.3 -21; align-to-terrain: 1"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_crate_lod0.glb"
-            lod1-url="/assets/meshes/wooden_crate_lod1.glb"
-            lod2-url="/assets/meshes/wooden_crate_lod2.glb"
+              url="/assets/meshes/village/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
             ></GLTFLoader>
           </GameObject>
 

@@ -22,13 +22,13 @@
     place="at: 15 13; align-to-terrain: 1"
     transform="rotation: 0 24 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+    collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/tree_oak_lod0.glb"
-      lod1-url="/assets/meshes/tree_oak_lod1.glb"
-      lod2-url="/assets/meshes/tree_oak_lod2.glb"
+      url="/assets/meshes/forest/tree_oak_lod0.glb"
+      lod1-url="/assets/meshes/forest/tree_oak_lod1.glb"
+      lod2-url="/assets/meshes/forest/tree_oak_lod2.glb"
       lod-threshold-near="36"
       lod-threshold-mid="110"
     ></GLTFLoader>
@@ -38,13 +38,13 @@
     place="at: -13 11; align-to-terrain: 1"
     transform="rotation: 0 -70 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+    collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/tree_oak_lod0.glb"
-      lod1-url="/assets/meshes/tree_oak_lod1.glb"
-      lod2-url="/assets/meshes/tree_oak_lod2.glb"
+      url="/assets/meshes/forest/tree_oak_lod0.glb"
+      lod1-url="/assets/meshes/forest/tree_oak_lod1.glb"
+      lod2-url="/assets/meshes/forest/tree_oak_lod2.glb"
       lod-threshold-near="36"
       lod-threshold-mid="110"
     ></GLTFLoader>
@@ -54,13 +54,13 @@
     place="at: -15 -11; align-to-terrain: 1"
     transform="rotation: 0 140 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+    collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/tree_oak_lod0.glb"
-      lod1-url="/assets/meshes/tree_oak_lod1.glb"
-      lod2-url="/assets/meshes/tree_oak_lod2.glb"
+      url="/assets/meshes/forest/tree_oak_lod0.glb"
+      lod1-url="/assets/meshes/forest/tree_oak_lod1.glb"
+      lod2-url="/assets/meshes/forest/tree_oak_lod2.glb"
       lod-threshold-near="36"
       lod-threshold-mid="110"
     ></GLTFLoader>
@@ -70,13 +70,13 @@
     place="at: 17 -7; align-to-terrain: 1"
     transform="rotation: 0 -140 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+    collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/tree_oak_lod0.glb"
-      lod1-url="/assets/meshes/tree_oak_lod1.glb"
-      lod2-url="/assets/meshes/tree_oak_lod2.glb"
+      url="/assets/meshes/forest/tree_oak_lod0.glb"
+      lod1-url="/assets/meshes/forest/tree_oak_lod1.glb"
+      lod2-url="/assets/meshes/forest/tree_oak_lod2.glb"
       lod-threshold-near="36"
       lod-threshold-mid="110"
     ></GLTFLoader>
@@ -87,38 +87,38 @@
     place="at: -34.5 -6; align-to-terrain: 1"
     transform="rotation: 0 12 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/wooden_crate_lod0.glb"
-      lod1-url="/assets/meshes/wooden_crate_lod1.glb"
-      lod2-url="/assets/meshes/wooden_crate_lod2.glb"
+      url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <GameObject
     place="at: -34.5 -8.4; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/wooden_barrel_lod0.glb"
-      lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
-      lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
+      url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <GameObject
     place="at: 21 32; align-to-terrain: 1"
     transform="rotation: 0 -25 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/chopping_block_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/chopping_block_lod0.glb"
-      lod1-url="/assets/meshes/chopping_block_lod1.glb"
-      lod2-url="/assets/meshes/chopping_block_lod2.glb"
+      url="/assets/meshes/village/chopping_block_lod0.glb"
+      lod1-url="/assets/meshes/village/chopping_block_lod1.glb"
+      lod2-url="/assets/meshes/village/chopping_block_lod2.glb"
     ></GLTFLoader>
   </GameObject>
 </Group>

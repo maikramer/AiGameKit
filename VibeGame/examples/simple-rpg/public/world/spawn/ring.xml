@@ -79,25 +79,25 @@
           place="at: -90.8 -4.4; align-to-terrain: 1"
           transform="rotation: 0 20 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/wooden_crate_lod0.glb"
-            lod1-url="/assets/meshes/wooden_crate_lod1.glb"
-            lod2-url="/assets/meshes/wooden_crate_lod2.glb"
+            url="/assets/meshes/village/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
           ></GLTFLoader>
         </GameObject>
         <GameObject
           place="at: -93.2 -6.8; align-to-terrain: 1"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/wooden_barrel_lod0.glb"
-            lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
-            lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
+            url="/assets/meshes/village/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
           ></GLTFLoader>
         </GameObject>
         <GameObject
@@ -106,9 +106,9 @@
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/wooden_bench_lod0.glb"
-            lod1-url="/assets/meshes/wooden_bench_lod1.glb"
-            lod2-url="/assets/meshes/wooden_bench_lod2.glb"
+            url="/assets/meshes/village/wooden_bench_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_bench_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"
           ></GLTFLoader>
         </GameObject>
         <!-- Vitórias-régias no laguinho (-40,52 r=8). -->
@@ -132,7 +132,7 @@
           <GameObject role="static">
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/lily_pad_lod0.glb"
+              url="/assets/meshes/swamp/lily_pad_lod0.glb"
             ></GLTFLoader>
           </GameObject>
         </StaticSpawner>
@@ -157,13 +157,13 @@
             destructible="popup-text: Wood; popup-color: #8b4513; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7"
             script="tree.ts"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_stump_collision.glb; mesh-anchor: base"
+            collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/tree_oak_lod0.glb"
-              lod1-url="/assets/meshes/tree_oak_lod1.glb"
-              lod2-url="/assets/meshes/tree_oak_lod2.glb"
+              url="/assets/meshes/forest/tree_oak_lod0.glb"
+              lod1-url="/assets/meshes/forest/tree_oak_lod1.glb"
+              lod2-url="/assets/meshes/forest/tree_oak_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
@@ -195,11 +195,11 @@
             script="rock.ts"
             destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod0.glb"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
             ></GLTFLoader>
             <ResourceNode
               kind="stone"
@@ -235,76 +235,111 @@
         >
           <GameObject
             role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod0.glb"
-              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
           </GameObject>
           <GameObject
             role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/moss_rock_collision.glb; mesh-anchor: base"
+            collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/moss_rock_lod0.glb"
-              lod1-url="/assets/meshes/moss_rock_lod1.glb"
-              lod2-url="/assets/meshes/moss_rock_lod2.glb"
+              url="/assets/meshes/swamp/moss_rock_lod0.glb"
+              lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb"
+              lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
           </GameObject>
           <GameObject
             role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod0.glb"
-              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
           </GameObject>
           <GameObject
             role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod0.glb"
-              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
           </GameObject>
           <GameObject
             role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod0.glb"
-              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
           </GameObject>
         </StaticSpawner>
-        <!-- Outcrops cénicos no vale (fora da cidade) — não colheitáveis. -->
+        <!-- Outcrops cénicos no vale (fora da cidade) — colheitáveis (stone). -->
         <StaticSpawner
           profile="tree"
           count="56"
@@ -328,45 +363,66 @@
         >
           <GameObject
             role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod0.glb"
-              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
           </GameObject>
           <GameObject
             role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/stone_pillar_lod0.glb"
-              lod1-url="/assets/meshes/stone_pillar_lod1.glb"
-              lod2-url="/assets/meshes/stone_pillar_lod2.glb"
+              url="/assets/meshes/props/stone_pillar_lod0.glb"
+              lod1-url="/assets/meshes/props/stone_pillar_lod1.glb"
+              lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
           </GameObject>
           <GameObject
             role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/rock_mossy_lod0.glb"
-              lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-              lod2-url="/assets/meshes/rock_mossy_lod2.glb"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
               lod-threshold-near="36"
               lod-threshold-mid="110"
             ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
           </GameObject>
         </StaticSpawner>
 
@@ -391,9 +447,9 @@
           <Creature role="enemy" script="goblin-wander.ts">
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/goblin_lod0.glb"
-              lod1-url="/assets/meshes/goblin_lod1.glb"
-              lod2-url="/assets/meshes/goblin_lod2.glb"
+              url="/assets/meshes/characters/goblin_lod0.glb"
+              lod1-url="/assets/meshes/characters/goblin_lod1.glb"
+              lod2-url="/assets/meshes/characters/goblin_lod2.glb"
               lod-threshold-near="18"
               lod-threshold-mid="55"
             ></GLTFLoader>

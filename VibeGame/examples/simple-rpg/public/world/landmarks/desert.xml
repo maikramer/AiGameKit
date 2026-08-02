@@ -26,9 +26,9 @@
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/sandstone_arch_lod0.glb"
-      lod1-url="/assets/meshes/sandstone_arch_lod1.glb"
-      lod2-url="/assets/meshes/sandstone_arch_lod2.glb"
+      url="/assets/meshes/desert/sandstone_arch_lod0.glb"
+      lod1-url="/assets/meshes/desert/sandstone_arch_lod1.glb"
+      lod2-url="/assets/meshes/desert/sandstone_arch_lod2.glb"
       lod-threshold-near="55"
       lod-threshold-mid="150"
     ></GLTFLoader>
@@ -60,13 +60,13 @@
     place="at: 216 -36; align-to-terrain: 0"
     transform="rotation: 0 -24 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/market_stall_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/market_stall_lod0.glb"
-      lod1-url="/assets/meshes/market_stall_lod1.glb"
-      lod2-url="/assets/meshes/market_stall_lod2.glb"
+      url="/assets/meshes/village/market_stall_lod0.glb"
+      lod1-url="/assets/meshes/village/market_stall_lod1.glb"
+      lod2-url="/assets/meshes/village/market_stall_lod2.glb"
       lod-threshold-near="45"
       lod-threshold-mid="120"
     ></GLTFLoader>
@@ -74,16 +74,16 @@
   <GameObject
     place="at: 211 -32; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod0.glb" lod1-url="/assets/meshes/wooden_crate_lod1.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
     place="at: 220 -29; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
   <SpawnExclusion at="216 -36" radius="18"></SpawnExclusion>
 
@@ -96,13 +96,13 @@
     name="desert-sun-obelisk"
     place="at: 240 80; align-to-terrain: 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/desert_obelisk_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/desert/desert_obelisk_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/desert_obelisk_lod0.glb"
-      lod1-url="/assets/meshes/desert_obelisk_lod1.glb"
-      lod2-url="/assets/meshes/desert_obelisk_lod2.glb"
+      url="/assets/meshes/desert/desert_obelisk_lod0.glb"
+      lod1-url="/assets/meshes/desert/desert_obelisk_lod1.glb"
+      lod2-url="/assets/meshes/desert/desert_obelisk_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <Composition place="at: 240 80; align-to-terrain: 0" body="none" collider="none">
@@ -116,7 +116,7 @@
     place="at: 248 74; align-to-terrain: 1"
     script="poi/sun-relic.ts"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base"
   ></GameObject>
   <GameObject place="at: 240 80">
     <ParticleSystem preset="sparkle" transform="pos: 0 8.4 0"></ParticleSystem>
@@ -131,17 +131,17 @@
     name="desert-dry-cistern"
     place="at: 156 -116; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/medieval_well_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/medieval_well_lod0.glb"
-      lod1-url="/assets/meshes/medieval_well_lod1.glb"
-      lod2-url="/assets/meshes/medieval_well_lod2.glb"
+      url="/assets/meshes/village/medieval_well_lod0.glb"
+      lod1-url="/assets/meshes/village/medieval_well_lod1.glb"
+      lod2-url="/assets/meshes/village/medieval_well_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <GameObject place="at: 161 -121; align-to-terrain: 1">
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_bench_lod0.glb" lod1-url="/assets/meshes/wooden_bench_lod1.glb" lod2-url="/assets/meshes/wooden_bench_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"></GLTFLoader>
   </GameObject>
   <SpawnExclusion at="156 -116" radius="14"></SpawnExclusion>
 
@@ -152,23 +152,23 @@
        ============================================================ -->
   <GameObject place="at: 288 112; align-to-terrain: 0" transform="rotation: 0 12 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 300 116; align-to-terrain: 0" transform="rotation: 0 -20 0; scale: 1.25 1.25 1.25"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 312 124; align-to-terrain: 0" transform="rotation: 0 40 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 304 134; align-to-terrain: 0" transform="rotation: 0 -8 0; scale: 0.9 0.9 0.9"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/ruin_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <SpawnExclusion at="300 122" radius="22"></SpawnExclusion>
 
@@ -206,10 +206,10 @@
     variation="rock"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/moss_rock_lod0.glb" lod1-url="/assets/meshes/moss_rock_lod1.glb" lod2-url="/assets/meshes/moss_rock_lod2.glb"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb"></GLTFLoader>
     </GameObject>
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/rock_mossy_lod0.glb" lod1-url="/assets/meshes/rock_mossy_lod1.glb" lod2-url="/assets/meshes/rock_mossy_lod2.glb"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -229,7 +229,7 @@
     variation="foliage"
   >
     <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/lily_pad_lod0.glb" lod1-url="/assets/meshes/lily_pad_lod1.glb" lod2-url="/assets/meshes/lily_pad_lod2.glb"></GLTFLoader>
+      <GLTFLoader role="visual" url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
 
@@ -237,13 +237,13 @@
   <GameObject
     place="at: 170.8 -73.2; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/campfire_pit_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/campfire_pit_lod0.glb"
-      lod1-url="/assets/meshes/campfire_pit_lod1.glb"
-      lod2-url="/assets/meshes/campfire_pit_lod2.glb"
+      url="/assets/meshes/village/campfire_pit_lod0.glb"
+      lod1-url="/assets/meshes/village/campfire_pit_lod1.glb"
+      lod2-url="/assets/meshes/village/campfire_pit_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <GameObject place="at: 170.8 -73.2; align-to-terrain: 1">
@@ -266,13 +266,13 @@
   <GameObject
     place="at: 176 -64; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/wooden_crate_lod0.glb"
-      lod1-url="/assets/meshes/wooden_crate_lod1.glb"
-      lod2-url="/assets/meshes/wooden_crate_lod2.glb"
+      url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <SpawnExclusion at="170 -70" radius="18"></SpawnExclusion>
@@ -284,13 +284,13 @@
     name="scorpion-nest"
     place="at: 260 16; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/scorpion_nest_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/desert/scorpion_nest_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/scorpion_nest_lod0.glb"
-      lod1-url="/assets/meshes/scorpion_nest_lod1.glb"
-      lod2-url="/assets/meshes/scorpion_nest_lod2.glb"
+      url="/assets/meshes/desert/scorpion_nest_lod0.glb"
+      lod1-url="/assets/meshes/desert/scorpion_nest_lod1.glb"
+      lod2-url="/assets/meshes/desert/scorpion_nest_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <GameObject place="at: 260 16">

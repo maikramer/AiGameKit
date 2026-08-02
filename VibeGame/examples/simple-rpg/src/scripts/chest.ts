@@ -20,7 +20,7 @@ import { addGold } from '../game/economy.ts';
 // drops gold + a heal once when the player walks up and presses F. Gold feeds
 // the merchant shop loop. Commerce-focused — no inventory item, just currency.
 
-const MODEL_URL = '/assets/meshes/treasure_chest_lod2.glb';
+const MODEL_URL = '/assets/meshes/village/treasure_chest_lod2.glb';
 const OPEN_RANGE_SQ = 4.6 * 4.6;
 const GOLD_REWARD = 60;
 const HEAL_REWARD = 25;

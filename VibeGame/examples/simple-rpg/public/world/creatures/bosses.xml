@@ -12,9 +12,9 @@
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/witch_boss_lod0.glb"
-      lod1-url="/assets/meshes/witch_boss_lod1.glb"
-      lod2-url="/assets/meshes/witch_boss_lod2.glb"
+      url="/assets/meshes/characters/witch_boss_lod0.glb"
+      lod1-url="/assets/meshes/characters/witch_boss_lod1.glb"
+      lod2-url="/assets/meshes/characters/witch_boss_lod2.glb"
       lod-threshold-near="18"
       lod-threshold-mid="55"
     ></GLTFLoader>
@@ -28,9 +28,9 @@
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/sand_worm_lod0.glb"
-      lod1-url="/assets/meshes/sand_worm_lod1.glb"
-      lod2-url="/assets/meshes/sand_worm_lod2.glb"
+      url="/assets/meshes/characters/sand_worm_lod0.glb"
+      lod1-url="/assets/meshes/characters/sand_worm_lod1.glb"
+      lod2-url="/assets/meshes/characters/sand_worm_lod2.glb"
       lod-threshold-near="18"
       lod-threshold-mid="55"
     ></GLTFLoader>
@@ -44,9 +44,9 @@
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/bog_warden_boss_lod0.glb"
-      lod1-url="/assets/meshes/bog_warden_boss_lod1.glb"
-      lod2-url="/assets/meshes/bog_warden_boss_lod2.glb"
+      url="/assets/meshes/characters/bog_warden_boss_lod0.glb"
+      lod1-url="/assets/meshes/characters/bog_warden_boss_lod1.glb"
+      lod2-url="/assets/meshes/characters/bog_warden_boss_lod2.glb"
       lod-threshold-near="18"
       lod-threshold-mid="55"
     ></GLTFLoader>
@@ -61,9 +61,9 @@
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/boss_ogre_lod0.glb"
-      lod1-url="/assets/meshes/boss_ogre_lod1.glb"
-      lod2-url="/assets/meshes/boss_ogre_lod2.glb"
+      url="/assets/meshes/characters/boss_ogre_lod0.glb"
+      lod1-url="/assets/meshes/characters/boss_ogre_lod1.glb"
+      lod2-url="/assets/meshes/characters/boss_ogre_lod2.glb"
       lod-threshold-near="18"
       lod-threshold-mid="55"
     ></GLTFLoader>

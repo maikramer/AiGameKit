@@ -15,13 +15,13 @@
             name="well"
             place="at: -6 4; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/medieval_well_lod2.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_lod2.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/medieval_well_lod0.glb"
-            lod1-url="/assets/meshes/medieval_well_lod1.glb"
-            lod2-url="/assets/meshes/medieval_well_lod2.glb"
+              url="/assets/meshes/village/medieval_well_lod0.glb"
+            lod1-url="/assets/meshes/village/medieval_well_lod1.glb"
+            lod2-url="/assets/meshes/village/medieval_well_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Fogueira comunitária: GLB campfire_pit (anel de pedra, sem
@@ -31,13 +31,13 @@
             name="campfire"
             place="at: 6.5 -6.6; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/campfire_pit_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/campfire_pit_lod0.glb"
-              lod1-url="/assets/meshes/campfire_pit_lod1.glb"
-              lod2-url="/assets/meshes/campfire_pit_lod2.glb"
+              url="/assets/meshes/village/campfire_pit_lod0.glb"
+              lod1-url="/assets/meshes/village/campfire_pit_lod1.glb"
+              lod2-url="/assets/meshes/village/campfire_pit_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Chama: partículas reais, não um <Sphere> laranja. A esfera opaca
@@ -73,9 +73,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_bench_lod0.glb"
-            lod1-url="/assets/meshes/wooden_bench_lod1.glb"
-            lod2-url="/assets/meshes/wooden_bench_lod2.glb"
+              url="/assets/meshes/village/wooden_bench_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_bench_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject
@@ -86,9 +86,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/wooden_bench_lod0.glb"
-            lod1-url="/assets/meshes/wooden_bench_lod1.glb"
-            lod2-url="/assets/meshes/wooden_bench_lod2.glb"
+              url="/assets/meshes/village/wooden_bench_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_bench_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Quadro de avisos (borda sul da praça) — GLB notice_board. -->
@@ -96,13 +96,13 @@
             name="notice_board"
             place="at: 5 -12.5; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/notice_board_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/notice_board_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/notice_board_lod0.glb"
-              lod1-url="/assets/meshes/notice_board_lod1.glb"
-              lod2-url="/assets/meshes/notice_board_lod2.glb"
+              url="/assets/meshes/village/notice_board_lod0.glb"
+              lod1-url="/assets/meshes/village/notice_board_lod1.glb"
+              lod2-url="/assets/meshes/village/notice_board_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Tochas da praça: GLB torch_post (sem chama modelada) + brasa/luz
@@ -111,13 +111,13 @@
           <GameObject
             place="at: 8.5 8.5; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/torch_post_lod0.glb"
-              lod1-url="/assets/meshes/torch_post_lod1.glb"
-              lod2-url="/assets/meshes/torch_post_lod2.glb"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <!-- Chama da tocha: torch_post mede 2.20 m e a haste é sólida até
@@ -144,13 +144,13 @@
           <GameObject
             place="at: -8.5 -8.5; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/torch_post_lod0.glb"
-              lod1-url="/assets/meshes/torch_post_lod1.glb"
-              lod2-url="/assets/meshes/torch_post_lod2.glb"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
             ></GLTFLoader>
           </GameObject>
           <GameObject place="at: -8.5 -8.5; align-to-terrain: 0">
@@ -179,14 +179,14 @@
             name="rune-pillar"
             place="at: -35 17; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base"
             script="stone-pillar.ts"
           ></GameObject>
           <GameObject
             name="crystal-shrine"
             place="at: 35 17; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base"
             script="crystal-shrine.ts"
           ></GameObject>
         </Group>

@@ -10,7 +10,7 @@ import { addXp } from 'vibegame';
 const XP_REWARD = 40;
 
 const tome = createMysticObject({
-  modelUrl: '/assets/meshes/treasure_chest_lod1.glb',
+  modelUrl: '/assets/meshes/village/treasure_chest_lod1.glb',
   modelScale: 0.8,
   emissiveColor: 0xffd24a,
   toastColor: '#ffe9a0',

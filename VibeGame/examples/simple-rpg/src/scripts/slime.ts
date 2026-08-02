@@ -2,7 +2,7 @@ import { createCreatureBehaviours } from './creature';
 import { addGold } from '../game/economy';
 
 const behaviours = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/slime_lod2.glb',
+  modelUrl: '/assets/meshes/characters/slime_lod2.glb',
   clips: {
     idle: 'idle',
     walk: 'walk',

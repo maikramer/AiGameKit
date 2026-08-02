@@ -18,7 +18,7 @@ import { getWoodCount, removeWood } from './wood.ts';
 import { heroStats, RING_SPEED_MULT } from '../game/skills';
 
 const TURN_SPEED = 6;
-const MODEL_URL = '/assets/meshes/npc_merchant_lod2.glb';
+const MODEL_URL = '/assets/meshes/characters/npc_merchant_lod2.glb';
 const IDLE_CLIP = 'idle';
 
 // Compared squared against dx*dx + dz*dz to avoid sqrt per frame.

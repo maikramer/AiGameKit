@@ -24,9 +24,9 @@
         <GameObject name="npc_forest_wolves" place="at: -16 60; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_guard_lod0.glb"
-            lod1-url="/assets/meshes/npc_guard_lod1.glb"
-            lod2-url="/assets/meshes/npc_guard_lod2.glb"
+            url="/assets/meshes/characters/npc_guard_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_guard_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_guard_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -40,9 +40,9 @@
         <GameObject name="npc_forest_shades" place="at: 16 68; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_healer_lod0.glb"
-            lod1-url="/assets/meshes/npc_healer_lod1.glb"
-            lod2-url="/assets/meshes/npc_healer_lod2.glb"
+            url="/assets/meshes/characters/npc_healer_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_healer_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_healer_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -56,9 +56,9 @@
         <GameObject name="npc_forest_darkwood" place="at: 0 100; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_blacksmith_lod0.glb"
-            lod1-url="/assets/meshes/npc_blacksmith_lod1.glb"
-            lod2-url="/assets/meshes/npc_blacksmith_lod2.glb"
+            url="/assets/meshes/characters/npc_blacksmith_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -74,9 +74,9 @@
         <GameObject name="npc_desert_scorpions" place="at: 60 -16; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_guard_lod0.glb"
-            lod1-url="/assets/meshes/npc_guard_lod1.glb"
-            lod2-url="/assets/meshes/npc_guard_lod2.glb"
+            url="/assets/meshes/characters/npc_guard_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_guard_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_guard_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -90,9 +90,9 @@
         <GameObject name="npc_desert_bandits" place="at: 68 16; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_blacksmith_lod0.glb"
-            lod1-url="/assets/meshes/npc_blacksmith_lod1.glb"
-            lod2-url="/assets/meshes/npc_blacksmith_lod2.glb"
+            url="/assets/meshes/characters/npc_blacksmith_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -107,9 +107,9 @@
         <GameObject name="npc_desert_ruins" place="at: 284 104; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_elder_lod0.glb"
-            lod1-url="/assets/meshes/npc_elder_lod1.glb"
-            lod2-url="/assets/meshes/npc_elder_lod2.glb"
+            url="/assets/meshes/characters/npc_elder_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_elder_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_elder_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -125,9 +125,9 @@
         <GameObject name="npc_swamp_boglings" place="at: -16 -60; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_healer_lod0.glb"
-            lod1-url="/assets/meshes/npc_healer_lod1.glb"
-            lod2-url="/assets/meshes/npc_healer_lod2.glb"
+            url="/assets/meshes/characters/npc_healer_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_healer_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_healer_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -141,9 +141,9 @@
         <GameObject name="npc_swamp_bogwarden" place="at: 16 -68; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_guard_lod0.glb"
-            lod1-url="/assets/meshes/npc_guard_lod1.glb"
-            lod2-url="/assets/meshes/npc_guard_lod2.glb"
+            url="/assets/meshes/characters/npc_guard_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_guard_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_guard_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -157,9 +157,9 @@
         <GameObject name="npc_swamp_bogmoss" place="at: 0 -100; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_elder_lod0.glb"
-            lod1-url="/assets/meshes/npc_elder_lod1.glb"
-            lod2-url="/assets/meshes/npc_elder_lod2.glb"
+            url="/assets/meshes/characters/npc_elder_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_elder_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_elder_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -175,9 +175,9 @@
         <GameObject name="npc_peaks_goblins" place="at: -60 -16; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_guard_lod0.glb"
-            lod1-url="/assets/meshes/npc_guard_lod1.glb"
-            lod2-url="/assets/meshes/npc_guard_lod2.glb"
+            url="/assets/meshes/characters/npc_guard_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_guard_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_guard_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -191,9 +191,9 @@
         <GameObject name="npc_peaks_frost" place="at: -68 16; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_healer_lod0.glb"
-            lod1-url="/assets/meshes/npc_healer_lod1.glb"
-            lod2-url="/assets/meshes/npc_healer_lod2.glb"
+            url="/assets/meshes/characters/npc_healer_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_healer_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_healer_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -207,9 +207,9 @@
         <GameObject name="npc_peaks_ogre" place="at: -100 0; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_blacksmith_lod0.glb"
-            lod1-url="/assets/meshes/npc_blacksmith_lod1.glb"
-            lod2-url="/assets/meshes/npc_blacksmith_lod2.glb"
+            url="/assets/meshes/characters/npc_blacksmith_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -233,9 +233,9 @@
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_scout_lod0.glb"
-            lod1-url="/assets/meshes/npc_scout_lod1.glb"
-            lod2-url="/assets/meshes/npc_scout_lod2.glb"
+            url="/assets/meshes/characters/npc_scout_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_scout_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_scout_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -252,9 +252,9 @@
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_scout_lod0.glb"
-            lod1-url="/assets/meshes/npc_scout_lod1.glb"
-            lod2-url="/assets/meshes/npc_scout_lod2.glb"
+            url="/assets/meshes/characters/npc_scout_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_scout_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_scout_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -271,9 +271,9 @@
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_scout_lod0.glb"
-            lod1-url="/assets/meshes/npc_scout_lod1.glb"
-            lod2-url="/assets/meshes/npc_scout_lod2.glb"
+            url="/assets/meshes/characters/npc_scout_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_scout_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_scout_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>
@@ -290,9 +290,9 @@
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/npc_scout_lod0.glb"
-            lod1-url="/assets/meshes/npc_scout_lod1.glb"
-            lod2-url="/assets/meshes/npc_scout_lod2.glb"
+            url="/assets/meshes/characters/npc_scout_lod0.glb"
+            lod1-url="/assets/meshes/characters/npc_scout_lod1.glb"
+            lod2-url="/assets/meshes/characters/npc_scout_lod2.glb"
             lod-threshold-near="22"
             lod-threshold-mid="60"
           ></GLTFLoader>

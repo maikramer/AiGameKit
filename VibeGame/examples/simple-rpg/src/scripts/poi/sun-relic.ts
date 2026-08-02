@@ -7,7 +7,7 @@ import { addGold } from '../../game/economy.ts';
 const GOLD_REWARD = 80;
 
 const relic = createMysticObject({
-  modelUrl: '/assets/meshes/crystal_blue_lod1.glb',
+  modelUrl: '/assets/meshes/props/crystal_blue_lod1.glb',
   modelScale: 2.2,
   emissiveColor: 0xffc766,
   toastColor: '#ffe0a8',

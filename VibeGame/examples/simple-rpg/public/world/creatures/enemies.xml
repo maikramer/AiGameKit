@@ -33,9 +33,9 @@
     <Creature role="enemy" script="enemies/wolf.ts">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/wolf_lod0.glb"
-        lod1-url="/assets/meshes/wolf_lod1.glb"
-        lod2-url="/assets/meshes/wolf_lod2.glb"
+        url="/assets/meshes/characters/wolf_lod0.glb"
+        lod1-url="/assets/meshes/characters/wolf_lod1.glb"
+        lod2-url="/assets/meshes/characters/wolf_lod2.glb"
         lod-threshold-near="18"
         lod-threshold-mid="55"
       ></GLTFLoader>
@@ -56,9 +56,9 @@
     <Creature role="enemy" script="enemies/shade.ts" transform="scale: 1.4 1.4 1.4">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/bogling_lod0.glb"
-        lod1-url="/assets/meshes/bogling_lod1.glb"
-        lod2-url="/assets/meshes/bogling_lod2.glb"
+        url="/assets/meshes/characters/bogling_lod0.glb"
+        lod1-url="/assets/meshes/characters/bogling_lod1.glb"
+        lod2-url="/assets/meshes/characters/bogling_lod2.glb"
         lod-threshold-near="18"
         lod-threshold-mid="55"
       ></GLTFLoader>
@@ -82,9 +82,9 @@
     <Creature role="enemy" script="enemies/scorpion.ts">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/scorpion_lod0.glb"
-        lod1-url="/assets/meshes/scorpion_lod1.glb"
-        lod2-url="/assets/meshes/scorpion_lod2.glb"
+        url="/assets/meshes/characters/scorpion_lod0.glb"
+        lod1-url="/assets/meshes/characters/scorpion_lod1.glb"
+        lod2-url="/assets/meshes/characters/scorpion_lod2.glb"
         lod-threshold-near="18"
         lod-threshold-mid="55"
       ></GLTFLoader>
@@ -105,9 +105,9 @@
     <Creature role="enemy" script="enemies/bandit.ts">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/bandit_lod0.glb"
-        lod1-url="/assets/meshes/bandit_lod1.glb"
-        lod2-url="/assets/meshes/bandit_lod2.glb"
+        url="/assets/meshes/characters/bandit_lod0.glb"
+        lod1-url="/assets/meshes/characters/bandit_lod1.glb"
+        lod2-url="/assets/meshes/characters/bandit_lod2.glb"
         lod-threshold-near="18"
         lod-threshold-mid="55"
       ></GLTFLoader>
@@ -132,9 +132,9 @@
     <Creature role="enemy" script="enemies/bandit.ts">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/bandit_lod0.glb"
-        lod1-url="/assets/meshes/bandit_lod1.glb"
-        lod2-url="/assets/meshes/bandit_lod2.glb"
+        url="/assets/meshes/characters/bandit_lod0.glb"
+        lod1-url="/assets/meshes/characters/bandit_lod1.glb"
+        lod2-url="/assets/meshes/characters/bandit_lod2.glb"
         lod-threshold-near="18"
         lod-threshold-mid="55"
       ></GLTFLoader>
@@ -158,9 +158,9 @@
     <Creature role="enemy" script="enemies/bogling.ts">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/bogling_lod0.glb"
-        lod1-url="/assets/meshes/bogling_lod1.glb"
-        lod2-url="/assets/meshes/bogling_lod2.glb"
+        url="/assets/meshes/characters/bogling_lod0.glb"
+        lod1-url="/assets/meshes/characters/bogling_lod1.glb"
+        lod2-url="/assets/meshes/characters/bogling_lod2.glb"
         lod-threshold-near="18"
         lod-threshold-mid="55"
       ></GLTFLoader>
@@ -181,9 +181,9 @@
     <Creature role="enemy" script="enemies/wolf.ts">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/wolf_lod0.glb"
-        lod1-url="/assets/meshes/wolf_lod1.glb"
-        lod2-url="/assets/meshes/wolf_lod2.glb"
+        url="/assets/meshes/characters/wolf_lod0.glb"
+        lod1-url="/assets/meshes/characters/wolf_lod1.glb"
+        lod2-url="/assets/meshes/characters/wolf_lod2.glb"
         lod-threshold-near="18"
         lod-threshold-mid="55"
       ></GLTFLoader>
@@ -208,9 +208,9 @@
     <Creature role="enemy" script="goblin-wander.ts">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/goblin_lod0.glb"
-        lod1-url="/assets/meshes/goblin_lod1.glb"
-        lod2-url="/assets/meshes/goblin_lod2.glb"
+        url="/assets/meshes/characters/goblin_lod0.glb"
+        lod1-url="/assets/meshes/characters/goblin_lod1.glb"
+        lod2-url="/assets/meshes/characters/goblin_lod2.glb"
         lod-threshold-near="18"
         lod-threshold-mid="55"
       ></GLTFLoader>
@@ -231,9 +231,9 @@
     <Creature role="enemy" script="slime.ts">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/slime_lod0.glb"
-        lod1-url="/assets/meshes/slime_lod1.glb"
-        lod2-url="/assets/meshes/slime_lod2.glb"
+        url="/assets/meshes/characters/slime_lod0.glb"
+        lod1-url="/assets/meshes/characters/slime_lod1.glb"
+        lod2-url="/assets/meshes/characters/slime_lod2.glb"
         lod-threshold-near="18"
         lod-threshold-mid="55"
       ></GLTFLoader>
@@ -254,9 +254,9 @@
     <Creature role="enemy" script="enemies/wolf.ts">
       <GLTFLoader
         role="visual"
-        url="/assets/meshes/wolf_lod0.glb"
-        lod1-url="/assets/meshes/wolf_lod1.glb"
-        lod2-url="/assets/meshes/wolf_lod2.glb"
+        url="/assets/meshes/characters/wolf_lod0.glb"
+        lod1-url="/assets/meshes/characters/wolf_lod1.glb"
+        lod2-url="/assets/meshes/characters/wolf_lod2.glb"
         lod-threshold-near="18"
         lod-threshold-mid="55"
       ></GLTFLoader>

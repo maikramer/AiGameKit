@@ -8,13 +8,13 @@
             name="watchtower"
             place="at: 32 32; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/watchtower_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/watchtower_lod0.glb"
-              lod1-url="/assets/meshes/watchtower_lod1.glb"
-              lod2-url="/assets/meshes/watchtower_lod2.glb"
+              url="/assets/meshes/village/watchtower_lod0.glb"
+              lod1-url="/assets/meshes/village/watchtower_lod1.glb"
+              lod2-url="/assets/meshes/village/watchtower_lod2.glb"
               lod-threshold-near="60"
               lod-threshold-mid="140"
             ></GLTFLoader>
@@ -26,9 +26,9 @@
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/npc_guard_lod0.glb"
-              lod1-url="/assets/meshes/npc_guard_lod1.glb"
-              lod2-url="/assets/meshes/npc_guard_lod2.glb"
+              url="/assets/meshes/characters/npc_guard_lod0.glb"
+              lod1-url="/assets/meshes/characters/npc_guard_lod1.glb"
+              lod2-url="/assets/meshes/characters/npc_guard_lod2.glb"
               lod-threshold-near="22"
               lod-threshold-mid="60"
             ></GLTFLoader>

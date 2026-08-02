@@ -14,13 +14,13 @@
             place="at: -38 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_corner_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_corner_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_corner_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_corner_lod2.glb"
+              url="/assets/meshes/infra/city_wall_corner_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_corner_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_corner_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -31,13 +31,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_corner_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_corner_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_corner_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_corner_lod2.glb"
+              url="/assets/meshes/infra/city_wall_corner_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_corner_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_corner_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -48,13 +48,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_corner_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_corner_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_corner_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_corner_lod2.glb"
+              url="/assets/meshes/infra/city_wall_corner_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_corner_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_corner_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -65,13 +65,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_corner_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_corner_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_corner_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_corner_lod2.glb"
+              url="/assets/meshes/infra/city_wall_corner_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_corner_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_corner_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -81,13 +81,13 @@
             place="at: -8.13 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -97,13 +97,13 @@
             place="at: -14.51 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -113,13 +113,13 @@
             place="at: -20.89 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_b_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -129,13 +129,13 @@
             place="at: -27.27 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -145,13 +145,13 @@
             place="at: -33.65 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -161,13 +161,13 @@
             place="at: 8.13 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -177,13 +177,13 @@
             place="at: 14.51 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -193,13 +193,13 @@
             place="at: 20.89 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_b_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -209,13 +209,13 @@
             place="at: 27.27 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -225,13 +225,13 @@
             place="at: 33.65 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -242,13 +242,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -259,13 +259,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -276,13 +276,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_b_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -293,13 +293,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -310,13 +310,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -327,13 +327,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -344,13 +344,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -361,13 +361,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_b_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -378,13 +378,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -395,13 +395,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -412,13 +412,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -429,13 +429,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -446,13 +446,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_b_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -463,13 +463,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -480,13 +480,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -497,13 +497,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -514,13 +514,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -531,13 +531,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_b_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -548,13 +548,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -565,13 +565,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -582,13 +582,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -599,13 +599,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -616,13 +616,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_b_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -633,13 +633,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -650,13 +650,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -667,13 +667,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -684,13 +684,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -701,13 +701,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_b_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_b_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_b_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_b_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_b_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -718,13 +718,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -735,13 +735,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_wall_seg_a_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_wall_seg_a_lod0.glb"
-              lod1-url="/assets/meshes/city_wall_seg_a_lod1.glb"
-              lod2-url="/assets/meshes/city_wall_seg_a_lod2.glb"
+              url="/assets/meshes/infra/city_wall_seg_a_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -752,13 +752,13 @@
             place="at: 0 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_gate_arch_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_gate_arch_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_gate_arch_lod0.glb"
-              lod1-url="/assets/meshes/city_gate_arch_lod1.glb"
-              lod2-url="/assets/meshes/city_gate_arch_lod2.glb"
+              url="/assets/meshes/infra/city_gate_arch_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_gate_arch_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_gate_arch_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -769,13 +769,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_gate_arch_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_gate_arch_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_gate_arch_lod0.glb"
-              lod1-url="/assets/meshes/city_gate_arch_lod1.glb"
-              lod2-url="/assets/meshes/city_gate_arch_lod2.glb"
+              url="/assets/meshes/infra/city_gate_arch_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_gate_arch_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_gate_arch_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -786,13 +786,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_gate_arch_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_gate_arch_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_gate_arch_lod0.glb"
-              lod1-url="/assets/meshes/city_gate_arch_lod1.glb"
-              lod2-url="/assets/meshes/city_gate_arch_lod2.glb"
+              url="/assets/meshes/infra/city_gate_arch_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_gate_arch_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_gate_arch_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -803,13 +803,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/city_gate_arch_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_gate_arch_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/city_gate_arch_lod0.glb"
-              lod1-url="/assets/meshes/city_gate_arch_lod1.glb"
-              lod2-url="/assets/meshes/city_gate_arch_lod2.glb"
+              url="/assets/meshes/infra/city_gate_arch_lod0.glb"
+              lod1-url="/assets/meshes/infra/city_gate_arch_lod1.glb"
+              lod2-url="/assets/meshes/infra/city_gate_arch_lod2.glb"
               lod-threshold-near="70"
               lod-threshold-mid="160"
             ></GLTFLoader>
@@ -820,13 +820,13 @@
             place="at: -5.8 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/torch_post_lod0.glb"
-              lod1-url="/assets/meshes/torch_post_lod1.glb"
-              lod2-url="/assets/meshes/torch_post_lod2.glb"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
               lod-threshold-near="50"
               lod-threshold-mid="120"
             ></GLTFLoader>
@@ -836,13 +836,13 @@
             place="at: 5.8 38; align-to-terrain: 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/torch_post_lod0.glb"
-              lod1-url="/assets/meshes/torch_post_lod1.glb"
-              lod2-url="/assets/meshes/torch_post_lod2.glb"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
               lod-threshold-near="50"
               lod-threshold-mid="120"
             ></GLTFLoader>
@@ -853,13 +853,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/torch_post_lod0.glb"
-              lod1-url="/assets/meshes/torch_post_lod1.glb"
-              lod2-url="/assets/meshes/torch_post_lod2.glb"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
               lod-threshold-near="50"
               lod-threshold-mid="120"
             ></GLTFLoader>
@@ -870,13 +870,13 @@
             transform="rotation: 0 180 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/torch_post_lod0.glb"
-              lod1-url="/assets/meshes/torch_post_lod1.glb"
-              lod2-url="/assets/meshes/torch_post_lod2.glb"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
               lod-threshold-near="50"
               lod-threshold-mid="120"
             ></GLTFLoader>
@@ -887,13 +887,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/torch_post_lod0.glb"
-              lod1-url="/assets/meshes/torch_post_lod1.glb"
-              lod2-url="/assets/meshes/torch_post_lod2.glb"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
               lod-threshold-near="50"
               lod-threshold-mid="120"
             ></GLTFLoader>
@@ -904,13 +904,13 @@
             transform="rotation: 0 90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/torch_post_lod0.glb"
-              lod1-url="/assets/meshes/torch_post_lod1.glb"
-              lod2-url="/assets/meshes/torch_post_lod2.glb"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
               lod-threshold-near="50"
               lod-threshold-mid="120"
             ></GLTFLoader>
@@ -921,13 +921,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/torch_post_lod0.glb"
-              lod1-url="/assets/meshes/torch_post_lod1.glb"
-              lod2-url="/assets/meshes/torch_post_lod2.glb"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
               lod-threshold-near="50"
               lod-threshold-mid="120"
             ></GLTFLoader>
@@ -938,13 +938,13 @@
             transform="rotation: 0 -90 0"
             overlap-max="0.3"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/torch_post_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
           >
             <GLTFLoader
               role="visual"
-              url="/assets/meshes/torch_post_lod0.glb"
-              lod1-url="/assets/meshes/torch_post_lod1.glb"
-              lod2-url="/assets/meshes/torch_post_lod2.glb"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
               lod-threshold-near="50"
               lod-threshold-mid="120"
             ></GLTFLoader>

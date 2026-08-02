@@ -1,0 +1,122 @@
+# Grupo forest — vegetação e construções da Floresta.
+# Defs base (estilo, ferramentas, presets) em ../game.yaml.
+# Regenerar: gameassets resume --profile game.yaml --manifest manifests/forest
+output_dir: ../../public/assets
+meshes_subdir: meshes/forest
+images_subdir: images/forest
+assets:
+
+- id: pine_dark
+  idea: tall cartoon dark pine tree with dense layered triangle foliage in deep forest
+    green, narrow brown trunk, slightly gloomy stylized shape, dark fantasy forest
+    tree
+  kind: environment
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  lod_levels: 2
+  omni:
+    control_type: bbox
+    bbox_preset: tree
+    size_m:
+    - 2.0
+    - 9.0
+    - 2.0
+- id: dead_tree
+  seed: 44119
+  idea: bare cartoon dead tree wide silhouette in front view, broad gnarled trunk
+    and branches spanning left-right, shallow depth front-to-back not a deep volume,
+    natural thick twisted leafless branches, pale grey bark, spooky dark fantasy forest
+    tree, full body visible, three-quarter front view
+  kind: environment
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  lod_levels: 2
+  omni:
+    control_type: bbox
+    size_m:
+    - 2.5
+    - 7.0
+    - 1.7
+- id: mushroom_glow
+  idea: cartoon tall glowing blue mushroom with slender vertical stalk and round cap,
+    bioluminescent fantasy fungi, soft cyan light, upright prop on dark forest floor,
+    narrow footprint
+  kind: prop
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  # Cogumelo baixo (0.55 m): split global cut_height=0.6 falha; não é árvore.
+  text3d:
+    split_at_height: false
+  omni:
+    control_type: bbox
+    height_m: 0.55
+    footprint_m: 0.35
+- id: witch_hut
+  idea: crooked cartoon witch hut with angled leaning walls, thatched roof, small
+    glowing window, wooden door, dark fantasy forest dwelling
+  kind: environment
+  category: building
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox:
+    - 1.0
+    - 0.9
+    - 1.0
+    size_m:
+    - 5.0
+    - 4.5
+    - 5.0
+- id: tree_oak
+  idea: cartoon oak tree with big round puffy green canopy on thick brown trunk, stylized
+    fantasy forest tree, bright cheerful foliage
+  kind: environment
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox:
+    - 0.5
+    - 1.0
+    - 0.5
+    size_m:
+    - 4.0
+    - 8.0
+    - 4.0
+- id: tree_pine
+  idea: tall cartoon pine tree with layered triangle foliage in rich green, narrow
+    brown trunk, stylized Christmas tree shape, fantasy forest
+  kind: environment
+  category: vegetation
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  omni:
+    control_type: bbox
+    bbox_preset: tree
+    size_m:
+    - 2.0
+    - 9.0
+    - 2.0

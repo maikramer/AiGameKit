@@ -17,13 +17,13 @@
     place="at: -92 176; align-to-terrain: 0"
     transform="rotation: 0 24 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/watchtower_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/watchtower_lod0.glb"
-      lod1-url="/assets/meshes/watchtower_lod1.glb"
-      lod2-url="/assets/meshes/watchtower_lod2.glb"
+      url="/assets/meshes/village/watchtower_lod0.glb"
+      lod1-url="/assets/meshes/village/watchtower_lod1.glb"
+      lod2-url="/assets/meshes/village/watchtower_lod2.glb"
       lod-threshold-near="55"
       lod-threshold-mid="140"
     ></GLTFLoader>
@@ -31,25 +31,25 @@
   <GameObject
     place="at: -86 172; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/wooden_crate_lod0.glb"
-      lod1-url="/assets/meshes/wooden_crate_lod1.glb"
-      lod2-url="/assets/meshes/wooden_crate_lod2.glb"
+      url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <GameObject
     place="at: -98 173; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/wooden_barrel_lod0.glb"
-      lod1-url="/assets/meshes/wooden_barrel_lod1.glb"
-      lod2-url="/assets/meshes/wooden_barrel_lod2.glb"
+      url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <!-- Recompensa do posto: tomo do vigia (XP), [F]. -->
@@ -58,7 +58,7 @@
     place="at: -84 183; align-to-terrain: 0"
     script="poi/watch-tome.ts"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/treasure_chest_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base"
   ></GameObject>
 
   <!-- ============================================================
@@ -68,56 +68,56 @@
        ============================================================ -->
   <GameObject place="at: 104 250; align-to-terrain: 0" transform="scale: 1.5 1.5 1.5"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/stone_pillar_lod0.glb" lod1-url="/assets/meshes/stone_pillar_lod1.glb" lod2-url="/assets/meshes/stone_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 114 246; align-to-terrain: 0" transform="rotation: 0 45 0; scale: 1.4 1.4 1.4"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/stone_pillar_lod0.glb" lod1-url="/assets/meshes/stone_pillar_lod1.glb" lod2-url="/assets/meshes/stone_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 118 236; align-to-terrain: 0" transform="rotation: 0 90 0; scale: 1.55 1.55 1.55"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/stone_pillar_lod0.glb" lod1-url="/assets/meshes/stone_pillar_lod1.glb" lod2-url="/assets/meshes/stone_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 114 226; align-to-terrain: 0" transform="rotation: 0 135 0; scale: 1.35 1.35 1.35"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/stone_pillar_lod0.glb" lod1-url="/assets/meshes/stone_pillar_lod1.glb" lod2-url="/assets/meshes/stone_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 104 222; align-to-terrain: 0" transform="rotation: 0 180 0; scale: 1.5 1.5 1.5"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/stone_pillar_lod0.glb" lod1-url="/assets/meshes/stone_pillar_lod1.glb" lod2-url="/assets/meshes/stone_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 94 226; align-to-terrain: 0" transform="rotation: 0 225 0; scale: 1.4 1.4 1.4"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/stone_pillar_lod0.glb" lod1-url="/assets/meshes/stone_pillar_lod1.glb" lod2-url="/assets/meshes/stone_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 90 236; align-to-terrain: 0" transform="rotation: 0 270 0; scale: 1.6 1.6 1.6"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/stone_pillar_lod0.glb" lod1-url="/assets/meshes/stone_pillar_lod1.glb" lod2-url="/assets/meshes/stone_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 94 246; align-to-terrain: 0" transform="rotation: 0 315 0; scale: 1.45 1.45 1.45"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base">
-    <GLTFLoader role="visual" url="/assets/meshes/stone_pillar_lod0.glb" lod1-url="/assets/meshes/stone_pillar_lod1.glb" lod2-url="/assets/meshes/stone_pillar_lod2.glb"></GLTFLoader>
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <!-- Altar central (GLB) + luz mágica -->
   <GameObject
     name="forest-stone-circle"
     place="at: 104 236; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/druid_stone_altar_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/terrain/druid_stone_altar_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/druid_stone_altar_lod0.glb"
-      lod1-url="/assets/meshes/druid_stone_altar_lod1.glb"
-      lod2-url="/assets/meshes/druid_stone_altar_lod2.glb"
+      url="/assets/meshes/terrain/druid_stone_altar_lod0.glb"
+      lod1-url="/assets/meshes/terrain/druid_stone_altar_lod1.glb"
+      lod2-url="/assets/meshes/terrain/druid_stone_altar_lod2.glb"
     ></GLTFLoader>
     <PointLight
       pos="0 1.1 0"
@@ -140,13 +140,13 @@
     place="at: -60 128; align-to-terrain: 0"
     transform="rotation: 0 -18 0; scale: 0.62 0.62 0.62"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/village_longhouse_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/village_longhouse_lod0.glb"
-      lod1-url="/assets/meshes/village_longhouse_lod1.glb"
-      lod2-url="/assets/meshes/village_longhouse_lod2.glb"
+      url="/assets/meshes/village/village_longhouse_lod0.glb"
+      lod1-url="/assets/meshes/village/village_longhouse_lod1.glb"
+      lod2-url="/assets/meshes/village/village_longhouse_lod2.glb"
       lod-threshold-near="50"
       lod-threshold-mid="130"
     ></GLTFLoader>
@@ -156,44 +156,44 @@
     place="at: -42 120; align-to-terrain: 1"
     transform="rotation: 0 -14 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/log_pile_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/log_pile_lod0.glb"
-      lod1-url="/assets/meshes/log_pile_lod1.glb"
-      lod2-url="/assets/meshes/log_pile_lod2.glb"
+      url="/assets/meshes/village/log_pile_lod0.glb"
+      lod1-url="/assets/meshes/village/log_pile_lod1.glb"
+      lod2-url="/assets/meshes/village/log_pile_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <GameObject
     place="at: -36.8 117.2; align-to-terrain: 1"
     transform="rotation: 0 20 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/chopping_block_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/chopping_block_lod0.glb"
-      lod1-url="/assets/meshes/chopping_block_lod1.glb"
-      lod2-url="/assets/meshes/chopping_block_lod2.glb"
+      url="/assets/meshes/village/chopping_block_lod0.glb"
+      lod1-url="/assets/meshes/village/chopping_block_lod1.glb"
+      lod2-url="/assets/meshes/village/chopping_block_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <GameObject
     place="at: -76 117; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_crate_lod0.glb" lod1-url="/assets/meshes/wooden_crate_lod1.glb" lod2-url="/assets/meshes/wooden_crate_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
     place="at: -79 122; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
   >
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/wooden_barrel_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: -47 138; align-to-terrain: 1">
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_bench_lod0.glb" lod1-url="/assets/meshes/wooden_bench_lod1.glb" lod2-url="/assets/meshes/wooden_bench_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: -60 128">
     <ParticleSystem
@@ -212,17 +212,17 @@
     name="forest-crossroads-well"
     place="at: 28 192; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/medieval_well_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/medieval_well_lod0.glb"
-      lod1-url="/assets/meshes/medieval_well_lod1.glb"
-      lod2-url="/assets/meshes/medieval_well_lod2.glb"
+      url="/assets/meshes/village/medieval_well_lod0.glb"
+      lod1-url="/assets/meshes/village/medieval_well_lod1.glb"
+      lod2-url="/assets/meshes/village/medieval_well_lod2.glb"
     ></GLTFLoader>
   </GameObject>
   <GameObject place="at: 33.2 188.8; align-to-terrain: 1" transform="rotation: 0 30 0">
-    <GLTFLoader role="visual" url="/assets/meshes/wooden_bench_lod0.glb" lod1-url="/assets/meshes/wooden_bench_lod1.glb" lod2-url="/assets/meshes/wooden_bench_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"></GLTFLoader>
   </GameObject>
   <Composition
     place="at: 23.2 194.8; align-to-terrain: 1"
@@ -243,13 +243,13 @@
     name="witch-hut"
     place="at: -20 270; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-    collider="shape: trimesh; mesh-url: /assets/meshes/witch_hut_collision.glb; mesh-anchor: base"
+    collider="shape: trimesh; mesh-url: /assets/meshes/forest/witch_hut_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader
       role="visual"
-      url="/assets/meshes/witch_hut_lod0.glb"
-      lod1-url="/assets/meshes/witch_hut_lod1.glb"
-      lod2-url="/assets/meshes/witch_hut_lod2.glb"
+      url="/assets/meshes/forest/witch_hut_lod0.glb"
+      lod1-url="/assets/meshes/forest/witch_hut_lod1.glb"
+      lod2-url="/assets/meshes/forest/witch_hut_lod2.glb"
       lod-threshold-near="45"
       lod-threshold-mid="120"
     ></GLTFLoader>
@@ -280,13 +280,13 @@
     ></PointLight>
   </Composition>
   <GameObject place="at: 34.4 142.8; align-to-terrain: 1" transform="rotation: 0 40 0">
-    <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/mushroom_glow_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 38.2 145.2; align-to-terrain: 1" transform="rotation: 0 160 0; scale: 0.85 0.85 0.85">
-    <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/mushroom_glow_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject place="at: 36.8 141; align-to-terrain: 1" transform="rotation: 0 260 0; scale: 1.15 1.15 1.15">
-    <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/mushroom_glow_lod2.glb"></GLTFLoader>
+    <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb"></GLTFLoader>
   </GameObject>
   <!-- mushroom.ts: [F] come e cura 40 HP, uma vez cada. -->
   <GameObject

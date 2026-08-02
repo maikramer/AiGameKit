@@ -11,7 +11,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MESHES_DIR="$(cd "$SCRIPT_DIR/../public/assets/meshes" && pwd)"
+# Todos os ids deste script (HUMANOIDS + NON_HUMANOIDS) pertencem ao grupo
+# `characters` (manifests/characters.yaml) — GLBs em meshes/characters/.
+MESHES_DIR="$(cd "$SCRIPT_DIR/../public/assets/meshes/characters" && pwd)"
 
 # Resolver animator3d: PATH > venv do Animator3D.
 if command -v animator3d >/dev/null 2>&1; then
