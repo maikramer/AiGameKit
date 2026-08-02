@@ -116,6 +116,8 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
         - ``vertex_count_total`` / ``triangle_count_total`` / ``face_count_total``.
         - ``v_per_tri``: vértices/triângulos agregado (None se sem indices).
         - ``world_bounds_y_min``: Y mínimo agregado a partir dos accessors POSITION.
+        - ``world_bounds_min`` / ``world_bounds_max``: AABB completo (3 eixos)
+          em espaço mundo (None se sem POSITION).
     """
     p = Path(path).expanduser().resolve()
     with open(p, "rb") as f:
@@ -135,6 +137,8 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
     total_v = 0
     total_i = 0
     y_min: float | None = None
+    world_min: list[float] | None = None
+    world_max: list[float] | None = None
     primitive_count = 0
     meshes_list = chunk.get("meshes", []) or []
     mesh_count = len(meshes_list)
@@ -162,8 +166,15 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
                         for cx in (vmin[0], vmax[0]):
                             for cy in (vmin[1], vmax[1]):
                                 for cz in (vmin[2], vmax[2]):
-                                    yv = _transform_point(world, (cx, cy, cz))[1]
-                                    y_min = yv if y_min is None else min(y_min, yv)
+                                    wx, wy, wz = _transform_point(world, (cx, cy, cz))
+                                    y_min = wy if y_min is None else min(y_min, wy)
+                                    if world_min is None:
+                                        world_min = [wx, wy, wz]
+                                        world_max = [wx, wy, wz]
+                                    else:
+                                        for ax, val in enumerate((wx, wy, wz)):
+                                            world_min[ax] = min(world_min[ax], val)
+                                            world_max[ax] = max(world_max[ax], val)
 
             idx_idx = p_.get("indices")
             if idx_idx is not None and 0 <= idx_idx < len(accessors):
@@ -205,6 +216,8 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
         "mesh_count": mesh_count,
         "v_per_tri": v_per_tri,
         "world_bounds_y_min": y_min,
+        "world_bounds_min": world_min,
+        "world_bounds_max": world_max,
         "vertex_count_total": total_v,
         "triangle_count_total": tris,
         "face_count_total": tris,  # alias: tris ≈ faces após export GLTF triangulado

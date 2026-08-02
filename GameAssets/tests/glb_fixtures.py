@@ -57,3 +57,40 @@ def write_min_glb(
 def write_collapsed_glb(path: Path) -> Path:
     """GLB parseável mas colapsado (poucas faces) — deve ser rejeitado."""
     return write_min_glb(path, tris=13)
+
+
+def write_glb_with_bounds(
+    path: Path,
+    bmin: list[float],
+    bmax: list[float],
+    *,
+    skinned: bool = False,
+) -> Path:
+    """GLB com cena/nó e AABB explícita — para checks de alinhamento."""
+    attrs: dict[str, int] = {"POSITION": 0, "NORMAL": 0, "TEXCOORD_0": 0}
+    if skinned:
+        attrs["JOINTS_0"] = 0
+        attrs["WEIGHTS_0"] = 0
+    chunk = {
+        "asset": {"version": "2.0", "generator": "gameassets tests"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"mesh": 0}],
+        "accessors": [
+            {
+                "componentType": 5126,
+                "count": 128,
+                "type": "VEC3",
+                "min": [float(v) for v in bmin],
+                "max": [float(v) for v in bmax],
+            },
+            {"componentType": 5123, "count": 384, "type": "SCALAR"},
+        ],
+        "meshes": [{"primitives": [{"attributes": attrs, "indices": 1}]}],
+        "extras": {"pad": "x" * 160},
+    }
+    raw = json.dumps(chunk, separators=(",", ":")).encode("utf-8")
+    raw += b" " * (-len(raw) % 4)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(raw)) + struct.pack("<I4s", len(raw), b"JSON") + raw)
+    return path

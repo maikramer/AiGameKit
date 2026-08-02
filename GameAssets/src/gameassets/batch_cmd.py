@@ -2471,6 +2471,11 @@ def batch_cmd(
                     batch_fn=_batch_fn,
                 )
                 app.run()
+                # Ver nota em resume_cmd: sem isto a excepção do worker do
+                # Textual perdia-se e o processo ficava vivo a girar.
+                if app.batch_error is not None:
+                    console.print(f"[red]batch abortado:[/red] {type(app.batch_error).__name__}: {app.batch_error}")
+                    raise app.batch_error
             else:
                 # === Existing Progress bar flow (unchanged) ===
                 with Progress(

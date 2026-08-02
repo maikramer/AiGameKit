@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -34,6 +35,30 @@ COLOR_SKIP = "dim cyan"
 COLOR_FAIL = "red"
 COLOR_RUNNING = "cyan"
 COLOR_PENDING = "dim"
+
+# Watchdog: sem um único evento de progresso durante este tempo, o batch é dado
+# como preso e a app sai. Um `resume` real ficou 7 h a 99.9% de CPU depois de o
+# worker abortar às 04:41 — a app continuou a desenhar "✓ 0 ◌ 0 ✗ 0 Σ 21" sem
+# nada a correr e sem forma de o notar. Generoso porque um único shape Hunyuan
+# em GPU lenta pode levar dezenas de minutos sem emitir linha de progresso.
+DEFAULT_STALL_TIMEOUT_SEC = 45 * 60.0
+# Env para afinar/desligar (0 = sem watchdog).
+STALL_TIMEOUT_ENV = "AIGAMEKIT_DASHBOARD_STALL_TIMEOUT"
+
+
+def resolve_stall_timeout(default: float = DEFAULT_STALL_TIMEOUT_SEC) -> float:
+    """Timeout do watchdog em segundos: env ``STALL_TIMEOUT_ENV`` > ``default``.
+
+    Valores inválidos ou negativos caem no default; ``0`` desliga o watchdog.
+    """
+    raw = os.environ.get(STALL_TIMEOUT_ENV)
+    if raw is None or not raw.strip():
+        return float(default)
+    try:
+        val = float(raw)
+    except ValueError:
+        return float(default)
+    return max(0.0, val)
 
 
 class AssetStatus(str, Enum):
@@ -188,6 +213,7 @@ class BatchDashboard(App):
         *,
         asset_pipelines: dict[str, list[str]] | None = None,
         batch_fn: Any = None,
+        stall_timeout_sec: float = DEFAULT_STALL_TIMEOUT_SEC,
     ) -> None:
         super().__init__()
         self.game_title = game_title
@@ -198,6 +224,11 @@ class BatchDashboard(App):
         self._assets: dict[str, AssetState] = {}
         self._col_keys: list[Any] = []
         self._row_keys: dict[str, Any] = {}
+        # Estado de saída — lido pelo chamador depois de ``run()``.
+        self.batch_error: BaseException | None = None
+        self.finished = False
+        self._last_activity = time.monotonic()
+        self._stall_timeout = resolve_stall_timeout(stall_timeout_sec)
 
         if asset_ids:
             for aid in asset_ids:
@@ -228,6 +259,11 @@ class BatchDashboard(App):
         self._setup_assets()
         self._update_timer = self.set_interval(1.0, self._tick_elapsed)
         self._ums_timer = self.set_interval(2.5, self._tick_ums)
+        if self._stall_timeout > 0:
+            # Amostrar bem mais depressa que o limite — com um tick fixo de 30 s
+            # um limite curto nunca chegava a disparar.
+            tick = max(1.0, min(30.0, self._stall_timeout / 4.0))
+            self._stall_timer = self.set_interval(tick, self._tick_watchdog)
         if self.batch_fn:
             self._run_batch_worker()
 
@@ -289,9 +325,52 @@ class BatchDashboard(App):
 
     @work(thread=True)
     def _run_batch_worker(self) -> None:
+        """Corre o batch e **garante** que a app sai no fim.
+
+        Sem o ``exit`` a app ficava viva para sempre depois de o batch acabar,
+        e uma excepção no ``batch_fn`` (ex. ``click.Abort`` num asset que falha
+        com ``continue_on_error=False``) era engolida pelo worker do Textual:
+        processo a 100% de CPU, ecrã congelado, zero diagnóstico.
+        """
         worker = get_current_worker()
-        if not worker.is_cancelled and self.batch_fn:
-            self.batch_fn(self)
+        try:
+            if not worker.is_cancelled and self.batch_fn:
+                self.batch_fn(self)
+        except BaseException as exc:
+            self.batch_error = exc
+            self.call_from_thread(self._abort_ui, exc)
+            return
+        self.call_from_thread(self._exit_when_done)
+
+    def _abort_ui(self, exc: BaseException) -> None:
+        self._fail_ui(exc)
+        # ``exit`` recebe ``result`` na 1ª posição — o código de saída é kwarg.
+        self.exit(return_code=1)
+
+    def _exit_when_done(self) -> None:
+        """Sai da app; marca conclusão se o ``batch_fn`` não chamou ``finish``."""
+        if not self.finished:
+            self._finish_ui()
+        self.exit(return_code=0)
+
+    def _fail_ui(self, exc: BaseException) -> None:
+        phase_label = self.query_one("#phase-label", PhaseLabel)
+        phase_label.phase_name = "Batch abortado"
+        phase_label.phase_detail = f"{type(exc).__name__}: {exc}"[:160]
+
+    def _tick_watchdog(self) -> None:
+        """Aborta a app quando o batch deixa de dar sinal de vida."""
+        if self.finished or self._stall_timeout <= 0:
+            return
+        idle = time.monotonic() - self._last_activity
+        if idle < self._stall_timeout:
+            return
+        self.batch_error = TimeoutError(
+            f"batch sem progresso há {idle / 60:.0f} min (limite {self._stall_timeout / 60:.0f} min); "
+            f"{STALL_TIMEOUT_ENV} ajusta o limite (0 desliga)"
+        )
+        self._fail_ui(self.batch_error)
+        self.exit(return_code=1)
 
     def feed_line(self, raw_line: str) -> None:
         parsed = parse_progress_line(raw_line)
@@ -305,6 +384,9 @@ class BatchDashboard(App):
         self.call_from_thread(self._update_from_parsed, data)
 
     def _update_from_parsed(self, data: dict[str, Any]) -> None:
+        # Qualquer evento conta como sinal de vida para o watchdog — inclusive
+        # de assets desconhecidos (o batch está a trabalhar de qualquer forma).
+        self._last_activity = time.monotonic()
         asset_id = data.get("id", "")
         state = self._assets.get(asset_id)
         if not state:
@@ -362,6 +444,7 @@ class BatchDashboard(App):
         self.call_from_thread(self._set_phase_ui, name, total)
 
     def _set_phase_ui(self, name: str, total: int) -> None:
+        self._last_activity = time.monotonic()
         phase_label = self.query_one("#phase-label", PhaseLabel)
         phase_label.phase_name = name
         phase_bar = self.query_one("#phase-bar", ProgressBar)
@@ -372,6 +455,7 @@ class BatchDashboard(App):
         self.call_from_thread(self._advance_phase_ui, n)
 
     def _advance_phase_ui(self, n: int = 1) -> None:
+        self._last_activity = time.monotonic()
         phase_bar = self.query_one("#phase-bar", ProgressBar)
         phase_bar.advance(n)
         completed = int(phase_bar.progress)
@@ -384,6 +468,7 @@ class BatchDashboard(App):
         self.call_from_thread(self._finish_ui)
 
     def _finish_ui(self) -> None:
+        self.finished = True
         stats = self.query_one("#stats-row", StatsBar)
         stats.elapsed = time.monotonic() - self._start_time
         phase_label = self.query_one("#phase-label", PhaseLabel)

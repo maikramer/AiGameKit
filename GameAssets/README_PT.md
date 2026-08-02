@@ -2,11 +2,11 @@
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
-CLI para **batches de prompts e assets** alinhados ao estilo e à ideia do teu jogo. Combina um perfil YAML (`game.yaml`), um manifest YAML e presets de estilo, e orquestra **`text2d`** ou **`texture2d`** (texturas seamless via API), opcionalmente **`text2sound`** (áudio por linha), **`text3d`** (só geometria), **`paint3d`** (Hunyuan3D-Paint 2.1 — textura + PBR no GLB com `text3d.texture`) e **Materialize** só para **mapas PBR a partir da imagem difusa** no fluxo Texture2D (`texture2d.materialize`).
+CLI para **batches de prompts e assets** alinhados ao estilo e à ideia do teu jogo. Combina um perfil YAML (`game.yaml`), um manifest YAML e presets de estilo, e orquestra **`text2d`** ou **`texture2d`** (texturas seamless locais), opcionalmente **`text2sound`** (áudio por linha), **`text3d`** (só geometria), **`paint3d`** (Hunyuan3D-Paint 2.1 — textura + PBR no GLB com `text3d.texture`) e **Materialize** só para **mapas PBR a partir da imagem difusa** no fluxo Texture2D (`texture2d.materialize`).
 
 ## Requisitos
 
-- Python 3.10+
+- Python 3.13+ (`>=3.13,<3.14`)
 - Comandos no `PATH` conforme o fluxo (instala os pacotes nos respetivos ambientes) ou variáveis de ambiente:
   - `TEXT2D_BIN` — executável `text2d` ([Text2D](../Text2D)) quando usas geração 2D **FLUX** (`image_source: text2d` ou coluna `image_source` por linha)
   - `TEXTURE2D_BIN` — executável `texture2d` ([Texture2D](../Texture2D)) quando usas **texturas seamless** (`image_source: texture2d` ou por linha no manifest)
@@ -156,7 +156,7 @@ No **`game.yaml`**, **`image_source`** escolhe a ferramenta de imagem por defeit
 | Valor | Ferramenta | Notas |
 |-------|--------------|--------|
 | `text2d` (defeito) | FLUX Klein — imagens gerais, referência para 3D | Consome VRAM local; bloco `text2d` no YAML |
-| `texture2d` | [Texture2D](../Texture2D) — texturas **seamless** (HF Inference API) | Pouca VRAM local; bloco `texture2d` no YAML (resolução, `materialize` para PBR em ficheiros separados, etc.) |
+| `texture2d` | [Texture2D](../Texture2D) — texturas **seamless** (inferência local SD1.5) | Pouca VRAM local; bloco `texture2d` no YAML (resolução, `materialize` para PBR em ficheiros separados, etc.) |
 
 **Por entrada no manifest:** campo opcional **`image_source`** (`text2d` ou `texture2d`) sobrepõe o defeito do perfil para essa linha (útil para misturar *props* com FLUX e *tiles* com Texture2D no mesmo manifest).
 
@@ -278,4 +278,4 @@ GameAssets/
 ## Licença
 
 - **Código:** MIT (alinhado ao resto do monorepo).
-- **Modelos invocados** (`text2d`, `texture2d`, `skymap2d`, `text2sound`, `text3d`, `rigging3d`): cada ferramenta descarrega ou usa pesos com licenças próprias (FLUX, Tencent Hunyuan, Stability Audio, UniRig, etc.). **Não** confundir a MIT do `gameassets` com a licença dos checkpoints. Tabela e notas: [README do monorepo — Licenças](../README_PT.md).
+- **Modelos invocados** (`text2d`, `texture2d`, `skymap2d`, `text2sound`, `text3d`, `rigging3d`): cada ferramenta descarrega ou usa pesos com licenças próprias (FLUX, Tencent Hunyuan, Stability Audio, SkinTokens, etc.). **Não** confundir a MIT do `gameassets` com a licença dos checkpoints. Tabela e notas: [README do monorepo — Licenças](../README_PT.md).

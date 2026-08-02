@@ -536,11 +536,11 @@ def get_target_faces(
     face_ratio: float = 1.0,
     char_m: float | None = None,
 ) -> int:
-    """Faces LOD alvo: bias de categoria × ``face_ratio`` × escala por volume.
+    """Faces LOD alvo: bias de categoria x ``face_ratio`` x escala por volume.
 
     Com ``char_m`` (diâmetro equivalente ``(L·H·W)^(1/3)``): multiplica por
     ``lod_face_scale`` e aplica piso absoluto. Sem ``char_m``: comportamento
-    legado (só categoria × ratio).
+    legado (só categoria x ratio).
     """
     cat = CATEGORIES.get(category)
     base = cat.target_faces if cat else default

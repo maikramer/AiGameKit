@@ -112,6 +112,40 @@ def check_glb_cmd(
 
 
 # ---------------------------------------------------------------------------
+# precompute
+# ---------------------------------------------------------------------------
+
+
+@main.command("precompute")
+@click.argument("glb_path", type=click.Path(exists=True, path_type=Path))
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="JSON de saída (stdout se omitido).")
+@click.option("--stump", type=click.Path(exists=True, path_type=Path), help="GLB do stump — tronco exato.")
+@click.option("--category", default=None, help="Categoria do manifest (vegetation, rock, ...).")
+@click.option("--asset-id", "asset_id", default=None, help="Id do asset no JSON.")
+def precompute_cmd(
+    glb_path: Path,
+    output: Path | None,
+    stump: Path | None,
+    category: str | None,
+    asset_id: str | None,
+) -> None:
+    """Pré-cálculo de colisor primitivo (cápsula/cilindro) a partir do GLB.
+
+    Parser header-only (sem bpy). Falhas soft saem como ``{"error": ...}`` com
+    exit 0 — o GameAssets decide se o sidecar entra no handoff.
+    """
+    from aigamekit_lab.precompute import precompute_asset
+
+    result = precompute_asset(glb_path, stump_glb=stump, category=category, asset_id=asset_id)
+    line = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
+    if output:
+        output.write_text(line, encoding="utf-8")
+    else:
+        sys.stdout.write(line)
+    sys.exit(0)
+
+
+# ---------------------------------------------------------------------------
 # debug
 # ---------------------------------------------------------------------------
 

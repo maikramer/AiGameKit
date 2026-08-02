@@ -41,7 +41,7 @@ text2d:
   width: 768
   height: 768
 
-# Texture2D (HF API) — descomenta image_source + bloco abaixo para seamless em vez de Text2D.
+# Texture2D (local SD1.5) — descomenta image_source + bloco abaixo para seamless em vez de Text2D.
 # Combo PBR: materialize: true gera mapas (normal, height, metallic) com o CLI materialize.
 # image_source: texture2d
 # texture2d:
@@ -50,7 +50,7 @@ text2d:
 #   materialize: true
 #   materialize_maps_subdir: pbr_maps
 
-# Skymap2D (HF API) — descomenta image_source + bloco abaixo para skymaps equirectangular 360°.
+# Skymap2D (local FLUX.1-dev + LoRA) — descomenta image_source + bloco abaixo para skymaps equirectangular 360°.
 # image_source: skymap2d
 # skymap2d:
 #   width: 2048

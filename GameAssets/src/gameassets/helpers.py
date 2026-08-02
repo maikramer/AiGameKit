@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import zlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from .cli_rich import click
-from .manifest import ManifestRow, effective_image_source, load_manifest
+from .manifest import ManifestConfig, ManifestRow, effective_image_source, load_manifest_bundle
 from .presets import get_preset, load_presets_bundle
 from .profile import (
     GameProfile,
@@ -418,6 +419,28 @@ def _resolve_manifest_path(raw: str | Path) -> Path:
     return p.parent / (p.name + ".yaml")
 
 
+def _apply_manifest_config(profile: GameProfile, mcfg: ManifestConfig) -> GameProfile:
+    """Aplica overrides de pasta declarados no topo do manifest (o manifest define a pasta).
+
+    Campos ``None`` no manifest herdam o game.yaml. Só quando o manifest declara
+    alguma chave é que o profile é substituído (``dataclasses.replace``).
+    """
+    overrides: dict[str, Any] = {}
+    for key, value in (
+        ("output_dir", mcfg.output_dir),
+        ("path_layout", mcfg.path_layout),
+        ("images_subdir", mcfg.images_subdir),
+        ("meshes_subdir", mcfg.meshes_subdir),
+        ("audio_subdir", mcfg.audio_subdir),
+        ("image_ext", mcfg.image_ext),
+    ):
+        if value is not None:
+            overrides[key] = value
+    if not overrides:
+        return profile
+    return replace(profile, **overrides)
+
+
 def _build_context(
     profile_path: Path,
     manifest_path: Path,
@@ -431,7 +454,8 @@ def _build_context(
         from .profile import apply_generation_profile
 
         profile = apply_generation_profile(profile, profile.generation)
-    rows = load_manifest(resolved)
+    rows, mcfg = load_manifest_bundle(resolved)
+    profile = _apply_manifest_config(profile, mcfg)
     bundle = load_presets_bundle(presets_local)
     preset = get_preset(bundle, profile.style_preset)
     return profile, rows, bundle, preset

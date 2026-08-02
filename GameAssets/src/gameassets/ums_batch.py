@@ -1,6 +1,7 @@
 """Bridge: manifests GPU → specs UMS → run_gpu_wave (ou fallback).
 
-Shape/paint + text2d/text2icon/texture2d/skymap2d/text2sound/terrain3d.
+Shape/paint + text2d/text2icon/texture2d/skymap2d/text2sound/terrain3d/motion3d.
+Motion wave = NPZ / HML22 source only; skinned bake = ``motion3d apply-rigged`` (CPU).
 """
 
 from __future__ import annotations
@@ -912,3 +913,72 @@ def run_terrain3d_wave_or_fallback(
         on_progress=on_progress,
         timeout_sec=1800.0,
     )
+
+
+def motion3d_specs_from_items(
+    items: list[dict[str, Any]],
+    *,
+    manifest_dir: Path,
+    max_frames: int | None = None,
+    half_precision: bool | None = None,
+    quality: str | None = None,
+    category: str | None = None,
+    gpu_ids: list[int] | None = None,
+) -> list[UmsJobSpec]:
+    """Converte items motion3d → ``UmsJobSpec``."""
+    try:
+        from motion3d.ums_payload import build_generate_request
+    except ImportError:
+        return []
+
+    specs: list[UmsJobSpec] = []
+    for item in items:
+        aid = str(item["id"])
+        out = _resolve_path(manifest_dir, str(item["output"]))
+        item_half = item.get("half_precision")
+        payload = build_generate_request(
+            prompt=str(item["prompt"]),
+            output=str(out),
+            max_frames=item.get("max_frames", item.get("frames", max_frames)),
+            seed=item.get("seed"),
+            temperature=item.get("temperature"),
+            half_precision=bool(item_half) if item_half is not None else half_precision,
+            gpu_ids=gpu_ids,
+            quality=item.get("quality", quality),
+            category=item.get("category", category),
+            also_npz=bool(item.get("also_npz", False)),
+        )
+        specs.append(UmsJobSpec(asset_id=aid, payload=payload, output=str(out)))
+    return specs
+
+
+def run_motion3d_wave_or_fallback(
+    items: list[dict[str, Any]],
+    *,
+    manifest_dir: Path,
+    no_ums: bool,
+    ums_stream: bool = False,
+    gpu_ids: list[int] | None = None,
+    max_frames: int | None = None,
+    half_precision: bool | None = None,
+    quality: str | None = None,
+    category: str | None = None,
+    on_progress: Callable[[UmsJobResult], None] | None = None,
+) -> list[dict[str, Any]] | None:
+    """Wave motion3d via UMS. ``None`` → caller usa subprocess generate."""
+    if no_ums:
+        return None
+    if not items:
+        return []
+    specs = motion3d_specs_from_items(
+        items,
+        manifest_dir=manifest_dir,
+        max_frames=max_frames,
+        half_precision=half_precision,
+        quality=quality,
+        category=category,
+        gpu_ids=gpu_ids,
+    )
+    if not specs:
+        return None
+    return _run_optional_wave("motion3d", specs, no_ums=False, ums_stream=ums_stream, on_progress=on_progress)

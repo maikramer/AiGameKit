@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+import pytest
 import yaml
 
 from gameassets.manifest import ManifestRow, effective_collision_args, effective_image_source, load_manifest
@@ -282,3 +283,130 @@ def test_row_collision_and_effective_args() -> None:
     )
     args = effective_collision_args(gp, row)
     assert args == {"mode": "envelope", "max_faces": 256, "voxel_size": 0.08, "inflate": 0.1}
+
+
+class TestManifestConfig:
+    """Manifest define a pasta: chaves top-level ``output_dir``/subdirs antes de ``assets:``."""
+
+    @staticmethod
+    def _write(content: str) -> Path:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+            f.write(content)
+            return Path(f.name)
+
+    def test_manifest_config_parsed(self) -> None:
+        from gameassets.manifest import load_manifest_bundle
+
+        content = yaml.dump(
+            {
+                "output_dir": "../public/assets",
+                "meshes_subdir": "meshes/characters",
+                "images_subdir": "images/characters",
+                "assets": [{"id": "hero", "idea": "hero", "pipeline": ["3d"]}],
+            }
+        )
+        path = self._write(content)
+        try:
+            rows, cfg = load_manifest_bundle(path)
+        finally:
+            path.unlink(missing_ok=True)
+        assert len(rows) == 1
+        assert cfg.output_dir == "../public/assets"
+        assert cfg.meshes_subdir == "meshes/characters"
+        assert cfg.images_subdir == "images/characters"
+        assert cfg.audio_subdir is None
+        assert cfg.path_layout is None
+        assert cfg.image_ext is None
+
+    def test_manifest_config_all_keys(self) -> None:
+        from gameassets.manifest import load_manifest_bundle
+
+        content = yaml.dump(
+            {
+                "output_dir": "/tmp/out",
+                "path_layout": "flat",
+                "images_subdir": "imgs/",
+                "meshes_subdir": "/glbs/",
+                "audio_subdir": "snd",
+                "image_ext": "jpg",
+                "assets": [{"id": "a", "idea": "i", "pipeline": []}],
+            }
+        )
+        path = self._write(content)
+        try:
+            _rows, cfg = load_manifest_bundle(path)
+        finally:
+            path.unlink(missing_ok=True)
+        assert cfg.output_dir == "/tmp/out"
+        assert cfg.path_layout == "flat"
+        assert cfg.images_subdir == "imgs"
+        assert cfg.meshes_subdir == "glbs"
+        assert cfg.audio_subdir == "snd"
+        assert cfg.image_ext == "jpg"
+
+    def test_manifest_config_list_doc_is_empty(self) -> None:
+        from gameassets.manifest import load_manifest_bundle
+
+        content = yaml.dump([{"id": "a", "idea": "i", "pipeline": []}])
+        path = self._write(content)
+        try:
+            rows, cfg = load_manifest_bundle(path)
+        finally:
+            path.unlink(missing_ok=True)
+        assert len(rows) == 1
+        assert cfg.output_dir is None
+        assert cfg.meshes_subdir is None
+
+    def test_manifest_config_unknown_top_level_ignored(self) -> None:
+        from gameassets.manifest import load_manifest_bundle
+
+        content = yaml.dump(
+            {
+                "title": "grupo qualquer",
+                "output_dir": "../out",
+                "assets": [{"id": "a", "idea": "i", "pipeline": []}],
+            }
+        )
+        path = self._write(content)
+        try:
+            _rows, cfg = load_manifest_bundle(path)
+        finally:
+            path.unlink(missing_ok=True)
+        assert cfg.output_dir == "../out"
+
+    def test_manifest_config_invalid_path_layout(self) -> None:
+        from gameassets.manifest import load_manifest_bundle
+
+        content = yaml.dump({"path_layout": "nested", "assets": [{"id": "a", "idea": "i", "pipeline": []}]})
+        path = self._write(content)
+        try:
+            with pytest.raises(ValueError, match="path_layout"):
+                load_manifest_bundle(path)
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_manifest_config_empty_subdir_rejected(self) -> None:
+        from gameassets.manifest import load_manifest_bundle
+
+        content = yaml.dump({"meshes_subdir": "", "assets": [{"id": "a", "idea": "i", "pipeline": []}]})
+        path = self._write(content)
+        try:
+            with pytest.raises(ValueError, match="meshes_subdir"):
+                load_manifest_bundle(path)
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_load_manifest_ignores_config(self) -> None:
+        content = yaml.dump(
+            {
+                "output_dir": "/tmp/out",
+                "meshes_subdir": "meshes/x",
+                "assets": [{"id": "a", "idea": "i", "pipeline": []}],
+            }
+        )
+        path = self._write(content)
+        try:
+            rows = load_manifest(path)
+        finally:
+            path.unlink(missing_ok=True)
+        assert [r.id for r in rows] == ["a"]

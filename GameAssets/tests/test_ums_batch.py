@@ -10,12 +10,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from gameassets.ums_batch import (
+    motion3d_specs_from_items,
     resolve_paint3d_vram_opts,
     resolve_skymap2d_vram_opts,
     resolve_text2d_vram_opts,
     resolve_text2icon_vram_opts,
     resolve_text2sound_vram_opts,
     resolve_text3d_vram_opts,
+    run_motion3d_wave_or_fallback,
     run_skymap2d_wave_or_fallback,
     run_terrain3d_wave_or_fallback,
     run_text2d_wave_or_fallback,
@@ -242,6 +244,7 @@ class TestOptionalWaveOrFallback:
         assert run_texture2d_wave_or_fallback(items, manifest_dir=Path("."), no_ums=True) is None
         assert run_skymap2d_wave_or_fallback(items, manifest_dir=Path("."), no_ums=True) is None
         assert run_text2sound_wave_or_fallback(items, manifest_dir=Path("."), no_ums=True) is None
+        assert run_motion3d_wave_or_fallback(items, manifest_dir=Path("."), no_ums=True) is None
         assert (
             run_terrain3d_wave_or_fallback([{"id": "t", "output": "/tmp/h.png"}], manifest_dir=Path("."), no_ums=True)
             is None
@@ -279,3 +282,29 @@ class TestOptionalWaveOrFallback:
             out = run_terrain3d_wave_or_fallback(items, manifest_dir=tmp_path, no_ums=False)
             assert out is not None
             assert out[0]["id"] == "terrain"
+
+    def test_motion3d_wave_mocked(self, tmp_path: Path) -> None:
+        items = [{"id": "walk", "prompt": "a person walks", "output": "walk.npz"}]
+        fake_specs = [UmsJobSpec(asset_id="walk", payload={"output": str(tmp_path / "walk.npz")})]
+        fake_results = [UmsJobResult(asset_id="walk", status="ok", output=str(tmp_path / "walk.npz"))]
+        with (
+            patch("gameassets.ums_batch.motion3d_specs_from_items", return_value=fake_specs),
+            patch("gameassets.ums_batch.run_gpu_wave", return_value=fake_results),
+        ):
+            out = run_motion3d_wave_or_fallback(items, manifest_dir=tmp_path, no_ums=False)
+            assert out is not None
+            assert out[0]["id"] == "walk"
+
+
+class TestMotion3dSpecs:
+    def test_specs_from_items_mocked_payload(self, tmp_path: Path) -> None:
+        items = [{"id": "w", "prompt": "walk", "output": "w.npz", "also_npz": True}]
+        with patch("motion3d.ums_payload.build_generate_request", return_value={"output": "w.npz"}) as build:
+            specs = motion3d_specs_from_items(items, manifest_dir=tmp_path, quality="medium")
+        assert len(specs) == 1
+        assert specs[0].asset_id == "w"
+        assert build.call_args.kwargs["also_npz"] is True
+        assert build.call_args.kwargs["quality"] == "medium"
+
+    def test_empty_items(self, tmp_path: Path) -> None:
+        assert motion3d_specs_from_items([], manifest_dir=tmp_path) == []

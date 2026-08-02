@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from aigamekit_shared.paint_budget import PAINT_FACES_MAX
 from gameassets.manifest import ManifestRow
 from gameassets.omni_ctrl import OmniControls
 from gameassets.pipeline import (
@@ -9,7 +10,6 @@ from gameassets.pipeline import (
     _resolve_to_paint_faces,
 )
 from gameassets.profile import GameProfile, Paint3DProfile
-from aigamekit_shared.paint_budget import PAINT_FACES_MAX
 
 
 def _row(*, rid: str, category: str, size_m: tuple[float, float, float]) -> ManifestRow:

@@ -449,6 +449,13 @@ def _top_path(mesh_final: Path) -> Path:
     return mesh_final.with_name(f"{base}_top{mesh_final.suffix}")
 
 
+def _precompute_path(mesh_final: Path) -> Path:
+    """``id_precompute.json`` em ``meshes/`` — sidecar do colisor pré-calculado."""
+    mesh_final = _canonical_mesh_final(mesh_final)
+    base = _base_stem(mesh_final.stem)
+    return mesh_final.with_name(f"{base}_precompute.json")
+
+
 def _unsplit_lod0_path(mesh_final: Path) -> Path:
     """``_intermediate/id_lod0_unsplit.glb`` — LOD0 antes do split (árvores)."""
     mesh_final = _canonical_mesh_final(mesh_final)

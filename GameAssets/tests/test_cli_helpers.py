@@ -5,6 +5,8 @@ from __future__ import annotations
 import zlib
 from pathlib import Path
 
+import pytest
+
 from gameassets.cli import (
     _extract_json_from_output,
     _paint3d_texture_argv,
@@ -562,3 +564,73 @@ def test_seed_for_manifest_row_none_without_base() -> None:
     # Override explícito funciona mesmo sem seed_base no perfil.
     row2 = ManifestRow(id="hero", idea="x", kind="character", generate_3d=True, seed=7)
     assert _seed_for_manifest_row(p, row2) == 7
+
+
+class TestBuildContextManifestOverrides:
+    """``_build_context`` aplica a pasta declarada no topo do manifest ao profile."""
+
+    @staticmethod
+    def _profile_yaml(tmp_path: Path) -> Path:
+        import yaml
+
+        p = tmp_path / "game.yaml"
+        p.write_text(
+            yaml.dump(
+                {
+                    "title": "T",
+                    "genre": "G",
+                    "tone": "t",
+                    "style_preset": "lowpoly",
+                    "output_dir": "../public/assets",
+                    "meshes_subdir": "meshes",
+                    "images_subdir": "images",
+                }
+            ),
+            encoding="utf-8",
+        )
+        return p
+
+    @staticmethod
+    def _manifest_yaml(tmp_path: Path, **top_level: object) -> Path:
+        import yaml
+
+        m = tmp_path / "manifest.yaml"
+        doc: dict[str, object] = dict(top_level)
+        doc["assets"] = [{"id": "hero", "idea": "hero", "pipeline": ["3d"]}]
+        m.write_text(yaml.dump(doc), encoding="utf-8")
+        return m
+
+    def test_manifest_output_dir_overrides_profile(self, tmp_path: Path) -> None:
+        from gameassets.helpers import _build_context
+
+        profile_path = self._profile_yaml(tmp_path)
+        manifest_path = self._manifest_yaml(
+            tmp_path,
+            output_dir="../public/assets",
+            meshes_subdir="meshes/characters",
+            images_subdir="images/characters",
+        )
+        profile, rows, _bundle, _preset = _build_context(profile_path, manifest_path, None)
+        assert profile.output_dir == "../public/assets"
+        assert profile.meshes_subdir == "meshes/characters"
+        assert profile.images_subdir == "images/characters"
+        assert [r.id for r in rows] == ["hero"]
+
+    def test_manifest_without_overrides_keeps_profile(self, tmp_path: Path) -> None:
+        from gameassets.helpers import _build_context
+
+        profile_path = self._profile_yaml(tmp_path)
+        manifest_path = self._manifest_yaml(tmp_path)
+        profile, rows, _bundle, _preset = _build_context(profile_path, manifest_path, None)
+        assert profile.output_dir == "../public/assets"
+        assert profile.meshes_subdir == "meshes"
+        assert profile.images_subdir == "images"
+        assert [r.id for r in rows] == ["hero"]
+
+    def test_manifest_invalid_path_layout_rejected(self, tmp_path: Path) -> None:
+        from gameassets.helpers import _build_context
+
+        profile_path = self._profile_yaml(tmp_path)
+        manifest_path = self._manifest_yaml(tmp_path, path_layout="nested")
+        with pytest.raises(ValueError, match="path_layout"):
+            _build_context(profile_path, manifest_path, None)

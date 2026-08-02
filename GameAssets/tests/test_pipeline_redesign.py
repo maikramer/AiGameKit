@@ -275,3 +275,73 @@ def test_target_faces_examples() -> None:
     tf_humanoid = get_target_faces("humanoid", face_ratio=1.0)
     assert tf_humanoid > 0
     assert tf_humanoid <= 38400  # alinhado com regra lod0
+
+
+def _touch(p: Path) -> Path:
+    from tests.glb_fixtures import write_min_glb
+
+    return write_min_glb(p)
+
+
+def test_collision_source_prefers_clean_for_static(tmp_path: Path) -> None:
+    """Estático: ``_clean`` (fechado) em vez de ``_painted`` (94/109 fechados)."""
+    from gameassets.pipeline import collision_source
+
+    meshes = tmp_path / "meshes"
+    mesh_final = meshes / "crate.glb"
+    inter = meshes / "_intermediate"
+    clean = _touch(inter / "crate_clean.glb")
+    painted = _touch(inter / "crate_painted.glb")
+    lod0 = _touch(meshes / "crate_lod0.glb")
+
+    assert collision_source(mesh_final, painted, lod0, rigged=False) == clean
+
+
+def test_collision_source_falls_back_to_painted(tmp_path: Path) -> None:
+    from gameassets.pipeline import collision_source
+
+    meshes = tmp_path / "meshes"
+    mesh_final = meshes / "crate.glb"
+    painted = _touch(meshes / "_intermediate" / "crate_painted.glb")
+    lod0 = _touch(meshes / "crate_lod0.glb")
+
+    assert collision_source(mesh_final, painted, lod0, rigged=False) == painted
+
+
+def test_collision_source_uses_lod0_when_rigged(tmp_path: Path) -> None:
+    """Riggado: o painted está em T-pose (herói 1.27 m vs 0.67 m posado)."""
+    from gameassets.pipeline import collision_source
+
+    meshes = tmp_path / "meshes"
+    mesh_final = meshes / "hero.glb"
+    inter = meshes / "_intermediate"
+    _touch(inter / "hero_clean.glb")
+    painted = _touch(inter / "hero_painted.glb")
+    lod0 = _touch(meshes / "hero_lod0.glb")
+
+    assert collision_source(mesh_final, painted, lod0, rigged=True) == lod0
+
+
+def test_collision_alignment_deviation_flags_offset(tmp_path: Path) -> None:
+    from tests.glb_fixtures import write_glb_with_bounds
+
+    from gameassets.pipeline import collision_alignment_deviation
+
+    lod0 = write_glb_with_bounds(tmp_path / "a_lod0.glb", [-1, 0, -1], [1, 2, 1])
+    aligned = write_glb_with_bounds(tmp_path / "a_collision.glb", [-1, 0, -1], [1, 2, 1])
+    assert collision_alignment_deviation(aligned, lod0) == 0.0
+
+    off = write_glb_with_bounds(tmp_path / "b_collision.glb", [-1, 0, -1], [1, 2.5, 1])
+    dev = collision_alignment_deviation(off, lod0)
+    assert dev is not None and dev == 0.5
+
+
+def test_collision_alignment_skips_skinned(tmp_path: Path) -> None:
+    """Skinned: accessors em espaço de bind — sem veredicto."""
+    from tests.glb_fixtures import write_glb_with_bounds
+
+    from gameassets.pipeline import collision_alignment_deviation
+
+    lod0 = write_glb_with_bounds(tmp_path / "s_lod0.glb", [-1, 0, -1], [1, 2, 1], skinned=True)
+    coll = write_glb_with_bounds(tmp_path / "s_collision.glb", [-9, 0, -9], [9, 9, 9])
+    assert collision_alignment_deviation(coll, lod0) is None

@@ -20,6 +20,7 @@ from .paths import (
     _collision_path,
     _lod_animated_path,
     _lod_path,
+    _precompute_path,
     _rigging3d_output_path,
     _split_path,
     _stump_path,
@@ -223,6 +224,13 @@ def run_handoff(
                 entry["model"][key] = rel
                 if not dry_run:
                     _install_file(src, dst, copy=copy)
+
+            # Pré-cálculo de colisor (engine): sidecar {id}_precompute.json
+            # emitido pelo batch no fim do master pipeline.
+            pre_path = _precompute_path(mesh_path)
+            if pre_path.is_file():
+                with contextlib.suppress(OSError, json.JSONDecodeError):
+                    entry["precompute"] = json.loads(pre_path.read_text(encoding="utf-8"))
 
         if row.generate_audio:
             audio_src = _audio_path_for_row_manifest(profile, manifest_dir, row)

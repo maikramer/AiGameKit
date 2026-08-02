@@ -61,6 +61,7 @@ from .param_optimizer import (
 from .paths import (
     _animated_existing,
     _animated_path,
+    _base_stem,
     _canonical_mesh_final,
     _clean_existing,
     _clean_path,
@@ -73,6 +74,7 @@ from .paths import (
     _painted_existing,
     _painted_path,
     _path_for_log,
+    _precompute_path,
     _rigged_existing,
     _rigged_path,
     _shape_existing,
@@ -194,6 +196,67 @@ def _lod_output_paths(mesh_path: Path, basename: str, num_levels: int = 3) -> li
 def _collision_output_path(mesh_path: Path) -> Path:
     """Espera-se: {meshes_dir}/{id}_collision.glb (nunca em ``_intermediate/``)."""
     return _collision_path(mesh_path)
+
+
+def collision_source(
+    mesh_final: Path,
+    painted_p: Path,
+    lod0_p: Path,
+    *,
+    rigged: bool,
+) -> Path:
+    """Escolhe a malha de onde nasce a colisão.
+
+    **Riggados** → ``lod0``. O ``_painted``/``_rigged`` estão em T-pose (braços
+    abertos) e o ``lod0`` é o que a engine desenha: o herói mede 1.27 m de
+    largura em T-pose contra 0.67 m posado, portanto a cápsula do
+    ``precompute`` saía com quase o dobro do raio e o personagem prendia em
+    portas e esquinas. Medido em 14 personagens entregues: desvio de 0.29 a
+    0.80 m entre a colisão e o visual.
+
+    **Estáticos** → ``_clean`` (topology-fix, alta resolução) em vez do
+    ``_painted``. O ``_clean`` é fechado em 108/109 assets contra 94/109 do
+    ``_painted``, e o remesh voxel do envelope precisa de superfície fechada
+    para produzir sólido (ver ``text3d.utils.collision._apply_envelope``). Os
+    dois estão alinhados: desvio mediano de 1.4 mm nos 95 assets estáticos.
+
+    Cai para o ``_painted`` e depois para o ``lod0`` quando a preferida falta.
+    """
+    if rigged:
+        for cand in (lod0_p, painted_p):
+            if cand and cand.is_file():
+                return cand
+        return mesh_final
+    for cand in (_clean_existing(mesh_final), painted_p, lod0_p):
+        if cand and cand.is_file():
+            return cand
+    return mesh_final
+
+
+# Desvio máximo tolerado entre a AABB da colisão e a do visual.
+COLLISION_ALIGN_TOL_M = 0.15
+
+
+def collision_alignment_deviation(coll_p: Path, lod0_p: Path) -> float | None:
+    """Maior desvio (m) entre as AABB da colisão e do ``lod0``, ou ``None``.
+
+    Uma colisão desalinhada é invisível em revisão e só aparece em jogo
+    (jogador atravessa parede, ou preso numa cápsula grande demais). Devolve
+    ``None`` — sem veredicto — quando o ``lod0`` é skinned: os ``min``/``max``
+    dos accessors de uma malha com skin estão em espaço de bind, portanto a
+    comparação seria contra a T-pose e não contra o que se desenha.
+    """
+    from aigamekit_shared.glb_verify import extract_glb_meta, glb_world_bounds
+
+    if not (coll_p.is_file() and lod0_p.is_file()):
+        return None
+    if extract_glb_meta(lod0_p).get("has_joints"):
+        return None
+    a = glb_world_bounds(coll_p)
+    b = glb_world_bounds(lod0_p)
+    if not a or not b:
+        return None
+    return max(max(abs(a[i][j] - b[i][j]) for j in range(3)) for i in range(2))
 
 
 _TREE_LIKE_NAME_RE = re.compile(
@@ -466,6 +529,7 @@ def _post_text3d_mesh_extras(
         rec["lod0_path"] = _path_for_log(mres.lod0_path, manifest_dir)
     if mres.intermediates_dir is not None:
         rec["intermediates_dir"] = _path_for_log(mres.intermediates_dir, manifest_dir)
+    _emit_precompute(row, mres, rec, manifest_dir, child_env)
     if not mres.ok:
         errors = [s.error for s in mres.stages if not s.ok and s.error]
         rec["status"] = "error"
@@ -473,6 +537,61 @@ def _post_text3d_mesh_extras(
         console.print(f"[red]master pipeline falhou[/red] {row.id}: {rec['error'][:200]}")
         return True
     return False
+
+
+def _emit_precompute(
+    row: ManifestRow,
+    mres: MasterPipelineResult,
+    rec: dict[str, Any],
+    manifest_dir: Path,
+    child_env: dict[str, str],
+) -> None:
+    """Gera o sidecar ``{id}_precompute.json`` (colisor cápsula/cilindro).
+
+    Roda depois do master pipeline OK — batch, dash e resume partilham este
+    hook. Sem ``aigamekit-lab`` no PATH ou falha → warn + skip (soft): o
+    handoff omite o bloco e a engine degrada para AABB-fit.
+
+    Input preferencial: o ``*_collision.glb`` (uncompressed — meshopt é pulado
+    nos collision); árvores split passam ``--stump <id>_stump_collision.glb``
+    para a cápsula nascer do tronco exato.
+    """
+    bin_ = _bin_or_none("AIGAMEKITLAB_BIN", "aigamekit-lab")
+    if not bin_:
+        console.print("[yellow]precompute: aigamekit-lab não encontrado no PATH — a omitir sidecar[/yellow]")
+        return
+    if not mres.lod0_path or not Path(mres.lod0_path).is_file():
+        return
+    lod0 = Path(mres.lod0_path)
+    out = _precompute_path(lod0)
+    source = _collision_path(lod0)
+    if not source.is_file():
+        source = lod0
+
+    argv = [bin_, "precompute", str(source), "-o", str(out), "--asset-id", row.id]
+    if row.category:
+        argv.extend(["--category", row.category])
+    stump_coll = _stump_path(lod0).parent / f"{_base_stem(lod0.stem)}_stump_collision.glb"
+    if stump_coll.is_file():
+        argv.extend(["--stump", str(stump_coll)])
+
+    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
+    if r.returncode != 0:
+        console.print(f"[yellow]precompute falhou (rc={r.returncode}) — a omitir sidecar {row.id}[/yellow]")
+        return
+    try:
+        payload = json.loads(out.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        console.print(f"[yellow]precompute: saída inválida — a omitir sidecar {row.id}[/yellow]")
+        with contextlib.suppress(OSError):
+            out.unlink()
+        return
+    if payload.get("error"):
+        console.print(f"[yellow]precompute: {payload['error']} — a omitir sidecar[/yellow]")
+        with contextlib.suppress(OSError):
+            out.unlink()
+        return
+    rec["precompute_path"] = _path_for_log(out, manifest_dir)
 
 
 def _try_paint3d_bin() -> str | None:
@@ -707,10 +826,7 @@ def _remesh_textured_to_target(
     """
     if not row.category:
         return False
-    if profile is not None:
-        target = _resolve_lod_target_faces(profile, row)
-    else:
-        target = get_target_faces(row.category)
+    target = _resolve_lod_target_faces(profile, row) if profile is not None else get_target_faces(row.category)
     if target <= 0:
         return False
     current_faces = _count_faces_glb(mesh_path)
@@ -772,10 +888,7 @@ def _simplify_to_target(
         return False
     if not row.category:
         return False
-    if profile is not None:
-        target = _resolve_lod_target_faces(profile, row)
-    else:
-        target = get_target_faces(row.category)
+    target = _resolve_lod_target_faces(profile, row) if profile is not None else get_target_faces(row.category)
     if target <= 0:
         return False
     current_faces = _count_faces_glb(mesh_path)
@@ -2193,7 +2306,7 @@ def run_master_pipeline(
         res.stages.append(StageResult("bake-master", False, 0.0, f"painted ausente: {painted_p}"))
         return res
 
-    # target_faces = orçamento base (categoria × volume); LOD0 = 1.2xtarget.
+    # target_faces = orçamento base (categoria x volume); LOD0 = 1.2xtarget.
     target_faces = _resolve_lod_target_faces(profile, row)
     if target_faces <= 0:
         target_faces = 8000
@@ -2400,8 +2513,8 @@ def run_master_pipeline(
             texture_size_lod0=lod0_tex,
         )
 
-    # Stage 6 - collision a partir do PAINTED (geometria estática idêntica ao
-    # lod0, sem armature nem meshopt — o builder não precisa de os desenredar).
+    # Stage 6 - collision: ``_clean`` nos estáticos (fechado, o envelope precisa)
+    # e ``lod0`` nos riggados (o painted está em T-pose) — ver collision_source.
     # Saltado quando o split-lod já gerou collision por peça (stump+top).
     _split_lod_did_collision = wants_split_at_height(profile, row) and not bool(rig_source)
     if with_collision and not _split_lod_did_collision:
@@ -2409,7 +2522,7 @@ def run_master_pipeline(
         if coll_p.is_file():
             res.stages.append(StageResult("collision", True, 0.0, "skipped (collision existente)", coll_p))
         else:
-            coll_src = painted_p if painted_p.is_file() else lod0_p
+            coll_src = collision_source(mesh_final, painted_p, lod0_p, rigged=bool(rig_source))
             from .manifest import effective_collision_args
 
             coll_opts = effective_collision_args(profile, row)
@@ -2446,6 +2559,12 @@ def run_master_pipeline(
                     )
                 except Exception as exc:
                     log.warning("master: finish collision falhou: %s", exc)
+                dev = collision_alignment_deviation(coll_p, lod0_p)
+                if dev is not None and dev > COLLISION_ALIGN_TOL_M:
+                    console.print(
+                        f"[yellow]collision desalinhada em {row.id}: {dev:.2f} m entre a AABB da "
+                        f"colisão e a do lod0 (fonte {coll_src.name})[/yellow]"
+                    )
 
     # Stage 6b - split-at-height LEGADO: só para árvores que NÃO passaram pelo
     # _run_split_lod_stages (ex.: category=tree sem rig, path estático antigo).

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from aigamekit_shared.lod_budget import lod_texture_ladder
 from gameassets.categories import get_target_faces
 from gameassets.manifest import ManifestRow
 from gameassets.omni_ctrl import OmniControls
@@ -10,7 +11,6 @@ from gameassets.pipeline import (
     _resolve_lod_target_faces,
 )
 from gameassets.profile import GameProfile
-from aigamekit_shared.lod_budget import lod_texture_ladder
 
 
 def _row(*, rid: str, category: str, size_m: tuple[float, float, float]) -> ManifestRow:

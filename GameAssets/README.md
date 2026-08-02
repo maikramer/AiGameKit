@@ -10,10 +10,10 @@ Reads `game.yaml` (style + tool configuration) and `manifest.yaml` (asset list),
 
 GameAssets is the central hub of the [AiGameKit monorepo](../). It does **not** generate images or meshes itself — it delegates to specialized packages and manages the workflow:
 
-- **2D generation:** Text2D (FLUX, local GPU) or Texture2D (seamless textures, HF API) or Skymap2D (equirectangular 360° sky)
+- **2D generation:** Text2D (FLUX, local GPU) or Texture2D (seamless textures, local SD1.5) or Skymap2D (equirectangular 360° sky, local FLUX.1-dev + LoRA)
 - **3D shape:** Text3D (Hunyuan3D-2.1, image→geometry)
 - **3D texturing:** Paint3D (Hunyuan3D-Paint 2.1, PBR-ready GLB) with optional quick paint (solid / perlin)
-- **Auto-rigging:** Rigging3D (UniRig, GLB → rigged GLB)
+- **Auto-rigging:** Rigging3D (SkinTokens, GLB → rigged GLB)
 - **Animation:** Animator3D (`game-pack`, rigged GLB → animated GLB with clips)
 - **Audio:** Text2Sound (Stable Audio Open, per-row SFX / BGM)
 - **PBR maps:** Materialize (diffuse → normal / metallic / roughness / AO, only for Texture2D flow)
@@ -98,7 +98,7 @@ Dev extras (pytest, ruff, bpy):
 cd GameAssets && pip install -e ".[dev]"
 ```
 
-**Requirements:** Python 3.10+, `aigamekit-shared`, click, rich, rich-click, textual, Pillow, PyYAML.
+**Requirements:** Python 3.13+ (`>=3.13,<3.14`), `aigamekit-shared`, click, rich, rich-click, textual, Pillow, PyYAML.
 
 ## Commands
 
@@ -628,12 +628,12 @@ Options for Text2Sound (Stable Audio Open) audio generation.
 
 #### `rigging3d` — Rigging3DProfile
 
-Options for UniRig auto-rigging after Text3D.
+Options for SkinTokens auto-rigging after Text3D.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `output_suffix` | `str` | `"_rigged"` | Suffix for rigged GLB (e.g., `hero_rigged.glb`) |
-| `root` | `str` | `None` | UniRig package root (like `RIGGING3D_ROOT`) |
+| `root` | `str` | `None` | SkinTokens package root (like `RIGGING3D_ROOT`) |
 | `python` | `str` | `None` | Python interpreter path (like `RIGGING3D_PYTHON`) |
 
 > **Presence** of a `rigging3d` block enables rigging for character rows even without `rig` in the manifest pipeline.
@@ -781,7 +781,7 @@ Pass via `--presets-local presets-local.yaml`. Local presets merge with (and ove
 | `PAINT3D_BIN` | Paint3D | Path to `paint3d` executable (when `paint3d` block configured) |
 | `TEXT2SOUND_BIN` | Text2Sound | Path to `text2sound` executable |
 | `RIGGING3D_BIN` | Rigging3D | Path to `rigging3d` executable |
-| `RIGGING3D_ROOT` | Rigging3D | UniRig package root directory |
+| `RIGGING3D_ROOT` | Rigging3D | SkinTokens package root directory |
 | `RIGGING3D_PYTHON` | Rigging3D | Python interpreter for rigging |
 | `ANIMATOR3D_BIN` | Animator3D | Path to `animator3d` executable |
 | `MATERIALIZE_BIN` | Materialize | Path to `materialize` executable (Texture2D + PBR only) |
@@ -986,4 +986,4 @@ GameAssets/
 ## License
 
 - **Code:** MIT (aligned with the rest of the monorepo).
-- **Invoked models** (`text2d`, `texture2d`, `skymap2d`, `text2sound`, `text3d`, `rigging3d`): each tool downloads or uses weights under its own license (FLUX, Tencent Hunyuan, Stability Audio, UniRig, etc.). **Do not** confuse the MIT `gameassets` code with checkpoint licenses. See [monorepo README — Licenses](../README.md).
+- **Invoked models** (`text2d`, `texture2d`, `skymap2d`, `text2sound`, `text3d`, `rigging3d`): each tool downloads or uses weights under its own license (FLUX, Tencent Hunyuan, Stability Audio, SkinTokens, etc.). **Do not** confuse the MIT `gameassets` code with checkpoint licenses. See [monorepo README — Licenses](../README.md).

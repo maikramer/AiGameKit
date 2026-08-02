@@ -9,6 +9,74 @@ from typing import Any
 
 from .profile import GameProfile
 
+# Chaves top-level que o manifest pode declarar (antes de ``assets:``) para
+# definir a pasta de saída do grupo. Ganham do game.yaml (profile) para este
+# manifest — ver ManifestConfig.
+_MANIFEST_CONFIG_KEYS = frozenset(
+    {"output_dir", "path_layout", "images_subdir", "meshes_subdir", "audio_subdir", "image_ext"}
+)
+
+
+@dataclass(frozen=True)
+class ManifestConfig:
+    """Overrides de pastas/layout declarados no topo do manifest.
+
+    O manifest define a pasta para onde os assets do grupo são gravados
+    (ex. ``output_dir: ../public/assets`` + ``meshes_subdir: meshes/characters``).
+    Campos ``None`` = herdar do game.yaml (profile).
+    """
+
+    output_dir: str | None = None
+    path_layout: str | None = None
+    images_subdir: str | None = None
+    meshes_subdir: str | None = None
+    audio_subdir: str | None = None
+    image_ext: str | None = None
+
+
+def _manifest_config_from_dict(doc: dict[str, Any], path: Path) -> ManifestConfig:
+    """Parse das chaves top-level do manifest (ignora chaves desconhecidas)."""
+    raw = doc.get("output_dir")
+    output_dir: str | None = None
+    if raw is not None:
+        output_dir = str(raw).strip()
+        if not output_dir:
+            raise ValueError(f"manifest {path}: output_dir não pode ser vazio")
+
+    pl_raw = doc.get("path_layout")
+    path_layout: str | None = None
+    if pl_raw is not None:
+        path_layout = str(pl_raw).strip().lower()
+        if path_layout not in ("split", "flat"):
+            raise ValueError(f"manifest {path}: path_layout deve ser split ou flat")
+
+    subdirs: dict[str, str | None] = {}
+    for key in ("images_subdir", "meshes_subdir", "audio_subdir"):
+        raw_sd = doc.get(key)
+        if raw_sd is None:
+            subdirs[key] = None
+            continue
+        sd = str(raw_sd).strip().strip("/")
+        if not sd:
+            raise ValueError(f"manifest {path}: {key} não pode ser vazio")
+        subdirs[key] = sd
+
+    ext_raw = doc.get("image_ext")
+    image_ext: str | None = None
+    if ext_raw is not None:
+        image_ext = str(ext_raw).lower().lstrip(".")
+        if not image_ext:
+            raise ValueError(f"manifest {path}: image_ext não pode ser vazio")
+
+    return ManifestConfig(
+        output_dir=output_dir,
+        path_layout=path_layout,
+        images_subdir=subdirs["images_subdir"],
+        meshes_subdir=subdirs["meshes_subdir"],
+        audio_subdir=subdirs["audio_subdir"],
+        image_ext=image_ext,
+    )
+
 
 @dataclass(frozen=True)
 class RowText3D:
@@ -260,11 +328,8 @@ def effective_collision_args(profile: GameProfile, row: ManifestRow) -> dict[str
     return {"mode": mode, "max_faces": max_faces, "voxel_size": voxel_size, "inflate": inflate}
 
 
-def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
-    """Lê YAML: assets com pipeline e audio sub-configs."""
-    import yaml
-
-    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
+    """Constrói rows a partir do documento YAML (lista ou mapa com ``assets:``)."""
     assets = doc if isinstance(doc, list) else doc.get("assets", [])
     rows: list[ManifestRow] = []
     for entry in assets:
@@ -334,9 +399,32 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
     return rows
 
 
+def _load_manifest_bundle(path: Path) -> tuple[list[ManifestRow], ManifestConfig]:
+    """Lê YAML: config de pasta top-level + assets com pipeline e audio sub-configs."""
+    import yaml
+
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if isinstance(doc, list):
+        config = ManifestConfig()
+    else:
+        doc = doc or {}
+        config = _manifest_config_from_dict(doc, path)
+    return _rows_from_doc(doc, path), config
+
+
+def load_manifest_bundle(path: Path) -> tuple[list[ManifestRow], ManifestConfig]:
+    """Lê manifest YAML: (rows, config de pasta).
+
+    ``ManifestConfig`` carrega as chaves top-level (``output_dir``, subdirs,
+    ``path_layout``, ``image_ext``) que o manifest pode declarar para definir
+    a pasta de saída do grupo — aplicadas ao profile em ``_build_context``.
+    """
+    return _load_manifest_bundle(path)
+
+
 def load_manifest(path: Path) -> list[ManifestRow]:
-    """Lê manifest YAML."""
-    return _load_manifest_yaml(path)
+    """Lê manifest YAML (só rows)."""
+    return _load_manifest_bundle(path)[0]
 
 
 def iter_manifest(path: Path) -> Iterator[ManifestRow]:

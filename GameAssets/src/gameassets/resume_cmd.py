@@ -1299,6 +1299,11 @@ def resume_cmd(
             batch_fn=_resume_fn,
         )
         app.run()
+        # A app engolia qualquer excepção do worker: um `click.Abort` num asset
+        # deixava o processo vivo a 100% de CPU sem diagnóstico nenhum.
+        if app.batch_error is not None:
+            console.print(f"[red]resume abortado:[/red] {type(app.batch_error).__name__}: {app.batch_error}")
+            raise app.batch_error
     else:
         # === Existing Progress bar flow (unchanged) ===
 

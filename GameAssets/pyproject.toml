@@ -18,7 +18,10 @@ dependencies = [
     "textual>=3.0",
     "Pillow>=10.0",
     "aigamekit-shared @ file:../Shared",
-    "modelserver @ file:../ModelServer",
+    # O GameAssets não importa o modelserver (fala com o UMS via socket/subprocess
+    # — aigamekit_shared.model_server). Declarar `modelserver @ file:` faria o uv
+    # copiar o supervisor para este venv (ferramenta dentro de ferramenta); quem
+    # cuida das interações é o UMS (auto-start / subprocess workers).
     "bpy>=5.2.0",
 ]
 
