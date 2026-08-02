@@ -49,7 +49,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     "--output",
     type=click.Path(),
     required=True,
-    help="Output .npz (features+joints) or .glb (bpy armature animation)",
+    help="Output .npz (features+joints) or .glb (HML22 source armature; use apply-rigged for skinned)",
 )
 @click.option("--frames", "max_frames", type=int, default=None, help="Cap decoded motion length")
 @click.option("--seed", type=int, default=None, help="RNG seed")
