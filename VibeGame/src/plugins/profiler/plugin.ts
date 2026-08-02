@@ -166,7 +166,8 @@ export const ProfilerPanelSystem: System = defineSystem({
 /**
  * Opt-in hierarchical frame profiler: per-system timings, group bars,
  * renderer/terrain/BVH counters, Chrome User Timing (`deep` mode), JSON export,
- * plus Audio (plays/origins) and World (player/camera/nearby) debug tabs.
+ * plus Audio (plays/origins), World (player/camera/nearby) and Physics
+ * (Rapier bodies/colliders/CCTs + fixed-system timings) debug tabs.
  *
  * Keys (when registered, not headless):
  *   `P` — toggle panel (enables sample mode)
@@ -177,9 +178,10 @@ export const ProfilerPanelSystem: System = defineSystem({
  *   `?profiler=1` or `?profiler=deep` — open Systems tab
  *   `?profiler=audio` — open Audio tab (arms stack capture)
  *   `?profiler=world` — open World tab (player/camera/nearby)
- *   `?profiler=1&profilerTab=audio|world` — same
+ *   `?profiler=physics` — open Physics tab (Rapier world + fixed systems)
+ *   `?profiler=1&profilerTab=audio|world|physics` — same
  *
- * Bridge: `window.__VIBEGAME__.profiler` (`getTab` / `setTab` / `audioSnapshot` / `worldSnapshot`)
+ * Bridge: `window.__VIBEGAME__.profiler` (`getTab` / `setTab` / `audioSnapshot` / `worldSnapshot` / `physicsSnapshot`)
  */
 export const ProfilerPlugin: Plugin = {
   systems: [ProfilerPanelSystem],

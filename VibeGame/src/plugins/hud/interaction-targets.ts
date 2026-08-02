@@ -50,6 +50,11 @@ export function registerInteractionTarget(
   eid: number,
   info: InteractionTarget
 ): void {
+  // Key normalizada uma única vez: o sweep por frame compara strings diretas
+  // (milhares de targets — regex por target por frame era custo visível).
+  if (info.key !== undefined && info.key !== null) {
+    info = { ...info, key: normalizePromptKey(info.key) };
+  }
   targetMap(state).set(eid, info);
 }
 
@@ -87,8 +92,8 @@ export function findNearestInteractionTarget(
 
   for (const [eid, info] of targetMap(state)) {
     if (!state.exists(eid)) continue;
-    const targetKey = normalizePromptKey(info.key ?? 'F');
-    if (targetKey !== wantKey) continue;
+    // info.key já vem normalizado do registo (ou default 'F').
+    if ((info.key ?? 'F') !== wantKey) continue;
 
     const range = info.range ?? defaultRange;
     const rangeSq = range * range;

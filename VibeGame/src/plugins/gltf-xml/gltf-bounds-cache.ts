@@ -74,6 +74,26 @@ export function getGltfLocalYBounds(
   return full ? { minY: full.minY, maxY: full.maxY } : null;
 }
 
+/**
+ * Semeia o AABB local a partir do pré-cálculo do GameAssets
+ * (`gameassets_handoff.json`) — evita `Box3.setFromObject` e permite ao
+ * spawner com `ground-align="aabb"` levantar a origem antes do GLB carregar.
+ * `aabb` está em espaço do root do GLB (contrato do `glb_extract_meta`).
+ */
+export function seedGltfPrecomputedBounds(
+  url: string,
+  aabb: { min: [number, number, number]; max: [number, number, number] }
+): void {
+  const key = normalizeGltfUrlKey(url);
+  if (!key || boundsByUrl.has(key)) return;
+  const [minX, minY, minZ] = aabb.min;
+  const [maxX, maxY, maxZ] = aabb.max;
+  boundsByUrl.set(key, { minX, minY, minZ, maxX, maxY, maxZ });
+  prefetchQueued.delete(key);
+  prefetchInflight.delete(key);
+  prefetchFailed.delete(key);
+}
+
 export function getGltfLocalAABB(url: string): {
   minX: number;
   minY: number;

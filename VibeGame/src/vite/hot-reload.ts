@@ -56,6 +56,26 @@ export function vibegameAssetHotReload(
       }
     },
 
+    // Vite 8+ hook name (handleHotUpdate is skipped for the client environment).
+    hotUpdate({ file, server }) {
+      if (!enabled) return;
+
+      const ext = path.extname(file).toLowerCase();
+      if (!extensions.includes(ext)) return;
+
+      const root = server.config.root;
+      const relative = path.relative(root, file).replace(/\\/g, '/');
+
+      server.ws.send({
+        type: 'custom',
+        event: 'vibegame:asset-update',
+        data: { path: relative, ext },
+      });
+
+      return []; // Don't trigger Vite's default HMR
+    },
+
+    // Vite 6/7: legacy hook name.
     handleHotUpdate({ file, server }) {
       if (!enabled) return;
 

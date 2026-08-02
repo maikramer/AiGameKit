@@ -1,7 +1,7 @@
 import { logger } from '../../core/utils/logger';
 import type { State } from '../../core';
 
-import type { MonoBehaviourModule } from './types';
+import type { MonoBehaviourContext, MonoBehaviourModule } from './types';
 
 const scriptFileByState = new WeakMap<State, Map<number, string>>();
 const globByState = new WeakMap<
@@ -15,6 +15,19 @@ const moduleLoadPromises = new WeakMap<
   State,
   Map<string, Promise<MonoBehaviourModule | null>>
 >();
+/** Runtime por entidade (módulo + ctx + ficheiro) — o loop por frame do
+ * `EntityScriptSystem` faz 1 lookup + chamada direta, sem re-resolver glob,
+ * módulo nem `buildContext` (milhares de scripts de spawner). */
+const scriptRuntimeByState = new WeakMap<
+  State,
+  Map<number, EntityScriptRuntime>
+>();
+
+export interface EntityScriptRuntime {
+  mod: MonoBehaviourModule;
+  ctx: MonoBehaviourContext;
+  file: string;
+}
 /** Tracks previous enabled state per entity for onEnable/onDisable transitions. */
 const prevEnabledByState = new WeakMap<State, Map<number, number>>();
 
@@ -46,6 +59,30 @@ export function getScriptFile(
 
 export function deleteScriptFile(state: State, entity: number): void {
   scriptFileByState.get(state)?.delete(entity);
+}
+
+export function getScriptRuntime(
+  state: State,
+  entity: number
+): EntityScriptRuntime | undefined {
+  return scriptRuntimeByState.get(state)?.get(entity);
+}
+
+export function setScriptRuntime(
+  state: State,
+  entity: number,
+  rt: EntityScriptRuntime
+): void {
+  let m = scriptRuntimeByState.get(state);
+  if (!m) {
+    m = new Map();
+    scriptRuntimeByState.set(state, m);
+  }
+  m.set(entity, rt);
+}
+
+export function deleteScriptRuntime(state: State, entity: number): void {
+  scriptRuntimeByState.get(state)?.delete(entity);
 }
 
 /**

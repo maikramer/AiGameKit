@@ -34,6 +34,12 @@ import {
   renderWorldTab,
   type WorldDebugSnapshot,
 } from './world-debug';
+import {
+  bindPhysicsDebugState,
+  getPhysicsDebugSnapshot,
+  renderPhysicsTab,
+  type PhysicsDebugSnapshot,
+} from './physics-debug';
 
 const PANEL_ID = 'vibegame-profiler-panel';
 const REFRESH_FRAMES = 10;
@@ -61,6 +67,8 @@ export interface ProfilerPanelRuntime {
   audioBodyEl: HTMLPreElement;
   worldPane: HTMLDivElement;
   worldBodyEl: HTMLPreElement;
+  physicsPane: HTMLDivElement;
+  physicsBodyEl: HTMLPreElement;
   tabButtons: Record<ProfilerTabId, HTMLButtonElement>;
   tab: ProfilerTabId;
   visible: boolean;
@@ -71,6 +79,7 @@ export interface ProfilerPanelRuntime {
   minAvgMs: number;
   nearbyRadius: number;
   lastWorldSnap: WorldDebugSnapshot | null;
+  lastPhysicsSnap: PhysicsDebugSnapshot | null;
   lastRefreshFrame: number;
   systemNames: string[];
   onTabChange?: (tab: ProfilerTabId) => void;
@@ -485,7 +494,8 @@ export function setProfilerPanelTab(
   runtime.systemsPane.style.display = tab === 'systems' ? 'block' : 'none';
   runtime.audioPane.style.display = tab === 'audio' ? 'block' : 'none';
   runtime.worldPane.style.display = tab === 'world' ? 'block' : 'none';
-  for (const id of ['systems', 'audio', 'world'] as const) {
+  runtime.physicsPane.style.display = tab === 'physics' ? 'block' : 'none';
+  for (const id of ['systems', 'audio', 'world', 'physics'] as const) {
     styleTabBtn(runtime.tabButtons[id], id === tab);
   }
   if (tab === 'audio') armAudioDebug(true);
@@ -517,18 +527,30 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   const worldTabBtn = document.createElement('button');
   worldTabBtn.type = 'button';
   worldTabBtn.textContent = 'World';
+  const physicsTabBtn = document.createElement('button');
+  physicsTabBtn.type = 'button';
+  physicsTabBtn.textContent = 'Physics';
 
   const statusEl = document.createElement('span');
   statusEl.style.opacity = '0.8';
   statusEl.style.marginLeft = '8px';
 
-  tabBar.append(title, systemsTabBtn, audioTabBtn, worldTabBtn, statusEl);
+  tabBar.append(
+    title,
+    systemsTabBtn,
+    audioTabBtn,
+    worldTabBtn,
+    physicsTabBtn,
+    statusEl
+  );
 
   const systemsPane = document.createElement('div');
   const audioPane = document.createElement('div');
   audioPane.style.display = 'none';
   const worldPane = document.createElement('div');
   worldPane.style.display = 'none';
+  const physicsPane = document.createElement('div');
+  physicsPane.style.display = 'none';
 
   const header = document.createElement('div');
   header.style.display = 'flex';
@@ -758,13 +780,36 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
 
   worldPane.append(worldToolbar, worldBodyEl);
 
+  const physicsToolbar = document.createElement('div');
+  physicsToolbar.style.display = 'flex';
+  physicsToolbar.style.flexWrap = 'wrap';
+  physicsToolbar.style.gap = '4px';
+  physicsToolbar.style.marginBottom = '8px';
+  physicsToolbar.style.alignItems = 'center';
+
+  const copyPhysicsBtn = document.createElement('button');
+  copyPhysicsBtn.type = 'button';
+  copyPhysicsBtn.textContent = 'Copy JSON';
+  styleButton(copyPhysicsBtn);
+
+  physicsToolbar.append(copyPhysicsBtn);
+
+  const physicsBodyEl = document.createElement('pre');
+  physicsBodyEl.style.margin = '0';
+  physicsBodyEl.style.whiteSpace = 'pre';
+  physicsBodyEl.style.overflowX = 'auto';
+  physicsBodyEl.style.maxHeight = '70vh';
+  physicsBodyEl.style.overflowY = 'auto';
+
+  physicsPane.append(physicsToolbar, physicsBodyEl);
+
   const hint = document.createElement('div');
   hint.style.marginTop = '8px';
   hint.style.opacity = '0.55';
   hint.textContent =
-    '[P] toggle  [Shift+P] sample↔deep  [Pause] freeze  · ?profiler=audio|world  · ?profilerTab=systems|audio|world';
+    '[P] toggle  [Shift+P] sample↔deep  [Pause] freeze  · ?profiler=audio|world|physics  · ?profilerTab=systems|audio|world|physics';
 
-  root.append(tabBar, systemsPane, audioPane, worldPane, hint);
+  root.append(tabBar, systemsPane, audioPane, worldPane, physicsPane, hint);
 
   const runtime: ProfilerPanelRuntime = {
     root,
@@ -782,10 +827,13 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
     audioBodyEl,
     worldPane,
     worldBodyEl,
+    physicsPane,
+    physicsBodyEl,
     tabButtons: {
       systems: systemsTabBtn,
       audio: audioTabBtn,
       world: worldTabBtn,
+      physics: physicsTabBtn,
     },
     tab: 'systems',
     visible: false,
@@ -795,6 +843,7 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
     minAvgMs: 0.05,
     nearbyRadius: DEFAULT_NEARBY_RADIUS,
     lastWorldSnap: null,
+    lastPhysicsSnap: null,
     lastRefreshFrame: 0,
     systemNames: [],
   };
@@ -802,6 +851,7 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   styleTabBtn(systemsTabBtn, true);
   styleTabBtn(audioTabBtn, false);
   styleTabBtn(worldTabBtn, false);
+  styleTabBtn(physicsTabBtn, false);
 
   systemsTabBtn.addEventListener('click', () => {
     setProfilerPanelTab(runtime, 'systems');
@@ -811,6 +861,9 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   });
   worldTabBtn.addEventListener('click', () => {
     setProfilerPanelTab(runtime, 'world');
+  });
+  physicsTabBtn.addEventListener('click', () => {
+    setProfilerPanelTab(runtime, 'physics');
   });
   radiusSelect.addEventListener('change', () => {
     const n = Number(radiusSelect.value);
@@ -824,6 +877,15 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
     }
     void navigator.clipboard?.writeText(JSON.stringify(snap, null, 2));
     runtime.statusEl.textContent = ' copied world JSON';
+  });
+  copyPhysicsBtn.addEventListener('click', () => {
+    const snap = runtime.lastPhysicsSnap;
+    if (!snap) {
+      runtime.statusEl.textContent = ' no physics snapshot yet';
+      return;
+    }
+    void navigator.clipboard?.writeText(JSON.stringify(snap, null, 2));
+    runtime.statusEl.textContent = ' copied physics JSON';
   });
 
   filterInput.addEventListener('input', () => {
@@ -924,10 +986,23 @@ export function refreshProfilerPanel(
 ): void {
   if (!runtime.visible) return;
   bindWorldDebugState(state);
+  bindPhysicsDebugState(state);
   if (state.time.frameCount - runtime.lastRefreshFrame < REFRESH_FRAMES) {
     return;
   }
   runtime.lastRefreshFrame = state.time.frameCount;
+
+  if (runtime.tab === 'physics') {
+    const physicsSnap = getPhysicsDebugSnapshot(state);
+    runtime.lastPhysicsSnap = physicsSnap;
+    runtime.statusEl.textContent = ` ${getProfilerMode()} · physics${isProfilerFrozen() ? ' · frozen' : ''}${
+      physicsSnap.available
+        ? ` · bodies=${physicsSnap.bodies.total} · colliders=${physicsSnap.colliders.total} · cct=${physicsSnap.cct.total}`
+        : ''
+    }`;
+    runtime.physicsBodyEl.textContent = renderPhysicsTab(physicsSnap);
+    return;
+  }
 
   if (runtime.tab === 'audio') {
     const audioSnap = getAudioDebugSnapshot();

@@ -278,6 +278,10 @@ export const PhysicsInitializationSystem: System = defineSystem({
           !context.entityToCollider.has(entity) &&
           !context.failedColliders.has(entity)
         ) {
+          // Marker do precompute: o PrecomputeColliderSystem (bucket 'fixed',
+          // antes deste sistema) substitui a shape assim que o manifest
+          // chega; enquanto isso, nada é criado no Rapier.
+          if (Collider.shape[entity] === ColliderShape.Precompute) continue;
           try {
             createColliderForEntity(entity, worldRapier, state, context);
           } catch (err) {

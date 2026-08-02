@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { Plugin, ViteDevServer } from 'vite';
+import type { HotUpdateOptions, Plugin, ViteDevServer } from 'vite';
 
 const CODE_EXT = /\.(tsx?|jsx?|mjs|cjs)$/i;
 
@@ -25,6 +25,14 @@ export function shouldForceFullReload(file: string, root?: string): boolean {
   return false;
 }
 
+/**
+ * Vite 8 renamed `handleHotUpdate` → `hotUpdate`; the legacy hook is skipped for
+ * the client environment (only consulted for the mixed graph, with a deprecation
+ * warning). Without the new hook, every saved engine/example TS file triggers
+ * Vite's default per-file full reload — no coalescing — so a multi-file edit
+ * reloads the page once per file and aborts the game mid-boot. Both hook names
+ * are implemented so the plugin works on Vite 6/7 and 8+.
+ */
 export function vibegameForceFullReload(): Plugin {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pendingServer: ViteDevServer | undefined;
@@ -37,15 +45,29 @@ export function vibegameForceFullReload(): Plugin {
     server.ws.send({ type: 'full-reload', path: '*' });
   };
 
+  const scheduleReload = (server: ViteDevServer) => {
+    pendingServer = server;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(flush, FULL_RELOAD_DEBOUNCE_MS);
+  };
+
   return {
     name: 'vibegame-force-full-reload',
     apply: 'serve',
     enforce: 'post',
+    // Vite 8+: new hook name; options carry the dev server.
+    hotUpdate(options: HotUpdateOptions) {
+      if (!shouldForceFullReload(options.file, options.server.config.root)) {
+        return;
+      }
+      scheduleReload(options.server);
+      // Suppress soft HMR for this file; reload is scheduled above.
+      return [];
+    },
+    // Vite 6/7: legacy hook name.
     handleHotUpdate({ file, server }: { file: string; server: ViteDevServer }) {
       if (!shouldForceFullReload(file, server.config.root)) return;
-      pendingServer = server;
-      if (timer !== undefined) clearTimeout(timer);
-      timer = setTimeout(flush, FULL_RELOAD_DEBOUNCE_MS);
+      scheduleReload(server);
       // Suppress soft HMR for this file; reload is scheduled above.
       return [];
     },

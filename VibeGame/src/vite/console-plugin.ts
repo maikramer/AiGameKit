@@ -67,7 +67,55 @@ if (import.meta.hot) {
     error: console.error.bind(console),
     debug: console.debug.bind(console),
   };
-  
+
+  // Vite 8's HMR client (module-runner transport) throws SendBeforeConnectError
+  // when import.meta.hot.send runs before the socket connects, and the client
+  // logs that rejection via console.error — which this override would re-forward
+  // and re-send, cascading until the socket opens. Gate sends on the socket
+  // state (vite:ws:connect/disconnect), queue while disconnected, and never
+  // surface SendBeforeConnectError itself.
+  const MAX_QUEUED = 200;
+  let wsConnected = false;
+  let selfHealTries = 0;
+  let flushTimer = 0;
+  const pending = [];
+
+  function scheduleFlush() {
+    if (flushTimer !== 0 || pending.length === 0) return;
+    flushTimer = setTimeout(flushPending, 0);
+  }
+
+  function flushPending() {
+    flushTimer = 0;
+    const batch = pending.splice(0);
+    for (const message of batch) {
+      try {
+        import.meta.hot.send('vibegame:console', message);
+      } catch (e) {
+        // Socket closed mid-flush: drop the rest; the next connect re-opens.
+        return;
+      }
+    }
+  }
+
+  import.meta.hot.on('vite:ws:connect', () => {
+    wsConnected = true;
+    scheduleFlush();
+  });
+  import.meta.hot.on('vite:ws:disconnect', () => {
+    wsConnected = false;
+  });
+
+  // The connect event can fire before this module evaluated (the client script
+  // runs before main.ts). Self-heal at boot with a few blind flushes; a send on
+  // a still-disconnected socket just rejects (guarded below, not forwarded).
+  function bootSelfHeal() {
+    if (wsConnected || selfHealTries++ >= 10) return;
+    scheduleFlush();
+    setTimeout(bootSelfHeal, 300);
+  }
+  setTimeout(bootSelfHeal, 300);
+
   function getStackInfo() {
     const stack = new Error().stack;
     if (!stack) return {};
@@ -107,12 +155,16 @@ if (import.meta.hot) {
       message.context.stack = args[0].stack;
     }
     
-    try {
-      import.meta.hot.send('vibegame:console', message);
-    } catch (e) {
-      // Best-effort forwarding: never throw out of the console override. An
-      // uncaught throw here re-enters console.error via the browser's
-      // uncaught-error path and loops while the HMR socket is still connecting.
+    if (wsConnected) {
+      try {
+        import.meta.hot.send('vibegame:console', message);
+      } catch (e) {
+        // Best-effort forwarding: never throw out of the console override. An
+        // uncaught throw here re-enters console.error via the browser's
+        // uncaught-error path and loops while the HMR socket is still connecting.
+      }
+    } else if (pending.length < MAX_QUEUED) {
+      pending.push(message);
     }
   }
   
@@ -120,6 +172,12 @@ if (import.meta.hot) {
     console[method] = function(...args) {
       // Suppress known Rapier initialization warning
       if (method === 'warn' && args[0]?.toString().includes('using deprecated parameters for the initialization function')) {
+        return;
+      }
+      // Transient HMR-socket race (Vite 8 module-runner): never show or forward
+      // it — the client reports send failures through console.error, which would
+      // loop back into this override while the socket reconnects after a reload.
+      if (args[0] instanceof Error && args[0].name === 'SendBeforeConnectError') {
         return;
       }
       originalConsole[method](...args);

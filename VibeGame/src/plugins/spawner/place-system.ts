@@ -137,6 +137,7 @@ function registerPlacedColliderFootprint(state: State, eid: number): void {
       radius = (Collider.sizeX[eid] / 2) * Math.max(sx, sz);
       break;
     case ColliderShape.Capsule:
+    case ColliderShape.Cylinder:
       radius = Collider.radius[eid];
       break;
     case ColliderShape.TriMesh:
@@ -226,7 +227,12 @@ export const TerrainPlaceSystem: System = defineSystem({
         continue;
       }
 
-      const wy = terrainWorldGroundY(state, s.terrainEntity, wx, wz);
+      // Pad-plane samples carry the exact analytic height — re-sampling the
+      // lattice here would blend the pad edge with untouched terrain (coarse
+      // LOD step at distance) and float/sink props by up to ~1 m.
+      const wy = s.padPlane
+        ? s.worldY
+        : terrainWorldGroundY(state, s.terrainEntity, wx, wz);
 
       if (spec.templates.length === 0) {
         applyRootPlacement(state, eid, spec.spawn, wx, wy, wz, s.normal);

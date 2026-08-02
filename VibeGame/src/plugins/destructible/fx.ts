@@ -1,8 +1,21 @@
 import * as THREE from 'three';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import { defineSystem, type State, type System } from '../../core';
-import { getScene, setupCsmMaterial } from '../rendering';
-import { getGltfRootGroup } from '../gltf-xml/group-registry';
+import { loadGltfMaster } from '../../extras/gltf-bridge';
+import { getScene, setupCsmMaterial, setupCsmMaterials } from '../rendering';
+import {
+  getGltfRootGroup,
+  registerGltfRootGroup,
+} from '../gltf-xml/group-registry';
+import { getGltfUrl } from '../gltf-xml/context';
+import { GltfPending } from '../gltf-xml/components';
+import {
+  BodyType,
+  Collider,
+  ColliderShape,
+  Rigidbody,
+} from '../physics/components';
+import { Transform } from '../transforms/components';
 import { spawnParticleBurst } from '../particles/utils';
 
 /**
@@ -485,7 +498,9 @@ export function prepareTreeFallHalves(
  * the top half over in direction (dirX, dirZ), with dust on impact and a
  * fade-out. Prefers pre-split `Stump`/`Top` meshes from the GLB; falls back to
  * clipping planes for legacy single-mesh trees. Returns false (caller falls
- * back to the plain burst) when the entity has no visual group or no scene.
+ * back to the plain burst) when there is no scene. Entities sem visual group
+ * (props instanciados do spawner) caem pelo caminho instanciado: o master GLB
+ * (em cache) é clonado na pose da instância e o efeito corre igual.
  */
 export function startTreeFall(
   state: State,
@@ -495,8 +510,7 @@ export function startTreeFall(
   cutHeight: number
 ): boolean {
   const scene = getScene(state);
-  const source = findVisualGroup(state, entity);
-  if (!scene || !source) return false;
+  if (!scene) return false;
 
   const len = Math.hypot(dirX, dirZ);
   if (len < 1e-4) {
@@ -508,9 +522,177 @@ export function startTreeFall(
     dirZ /= len;
   }
 
+  // Pose + colisor capturados ANTES do destroy (a entidade é destruída logo a
+  // seguir no breakProp) — o stump persistente reusa os valores do precompute.
+  const pose = captureTreeFallPose(state, entity);
+
+  const source = findVisualGroup(state, entity);
+  if (!source) {
+    // Instanced (spawner estático): sem grupo por entidade — clona do master.
+    void startInstancedTreeFall(state, entity, pose, dirX, dirZ, cutHeight);
+    return true;
+  }
+
   const halves = prepareTreeFallHalves(source, cutHeight);
   if (!halves) return false;
+  const stumpEid = spawnPersistentStump(state, pose, source);
+  return pushTreeFallFx(state, halves, dirX, dirZ, stumpEid !== null);
+}
 
+const _fallMat = new THREE.Matrix4();
+const _fallPos = new THREE.Vector3();
+const _fallQuat = new THREE.Quaternion();
+const _fallScl = new THREE.Vector3(1, 1, 1);
+
+interface TreeFallPose {
+  x: number;
+  y: number;
+  z: number;
+  rotX: number;
+  rotY: number;
+  rotZ: number;
+  rotW: number;
+  sx: number;
+  sy: number;
+  sz: number;
+  /** Colisor cápsula da árvore em pé (= o stump nas split) — copiado tal qual. */
+  radius: number;
+  height: number;
+  posOffsetY: number;
+}
+
+function captureTreeFallPose(state: State, entity: number): TreeFallPose {
+  const hasCollider = state.hasComponent(entity, Collider);
+  const sx = Transform.scaleX[entity] || 1;
+  const sy = Transform.scaleY[entity] || 1;
+  return {
+    x: Transform.posX[entity],
+    y: Transform.posY[entity],
+    z: Transform.posZ[entity],
+    rotX: Transform.rotX[entity],
+    rotY: Transform.rotY[entity],
+    rotZ: Transform.rotZ[entity],
+    rotW: Transform.rotW[entity] || 1,
+    sx,
+    sy,
+    sz: Transform.scaleZ[entity] || 1,
+    radius: hasCollider ? Collider.radius[entity] : 0.3 * Math.max(sx, sy),
+    height: hasCollider ? Collider.height[entity] : 0.6 * sy,
+    posOffsetY: hasCollider ? Collider.posOffsetY[entity] : 0.3 * sy,
+  };
+}
+
+/**
+ * Fallback para entidades instanciadas (sem `GltfRootGroup`): clona o master
+ * GLB (cache partilhada do loader — sem rede) na pose mundo da instância e
+ * corre o mesmo `pushTreeFallFx`. A pose é capturada antes do destroy da
+ * entidade; o clone é descartável (geometrias partilham o master).
+ */
+async function startInstancedTreeFall(
+  state: State,
+  entity: number,
+  pose: TreeFallPose,
+  dirX: number,
+  dirZ: number,
+  cutHeight: number
+): Promise<void> {
+  const url = getGltfUrl(state, entity);
+  const scene = getScene(state);
+  if (!url || !scene) return;
+
+  _fallPos.set(pose.x, pose.y, pose.z);
+  _fallQuat.set(pose.rotX, pose.rotY, pose.rotZ, pose.rotW);
+  _fallScl.set(pose.sx, pose.sy, pose.sz);
+  _fallMat.compose(_fallPos, _fallQuat, _fallScl);
+
+  try {
+    const gltf = await loadGltfMaster(state, url);
+    const root = gltf.scene.clone(true);
+    root.applyMatrix4(_fallMat);
+    root.updateMatrixWorld(true);
+    const halves = prepareTreeFallHalves(root, cutHeight);
+    if (halves) {
+      const stumpEid = spawnPersistentStump(state, pose, root);
+      pushTreeFallFx(state, halves, dirX, dirZ, stumpEid !== null);
+    }
+  } catch {
+    // Sem master (404/erro de decode): o burst plain do caller cobre.
+  }
+}
+
+/**
+ * Stump persistente pós-queda: entidade estática com o colisor cápsula da
+ * árvore em pé (o precompute das split É o stump) + o visual da peça `Stump`
+ * do GLB (clone local — a pose vem do `Transform` da entidade, sincronizada
+ * pelo `GltfSceneSyncSystem`). Sem isto, depois da queda não sobra colisor e
+ * o jogador atravessa a base.
+ */
+export function spawnPersistentStump(
+  state: State,
+  pose: TreeFallPose,
+  source: THREE.Object3D
+): number | null {
+  const parts = findTreeSplitParts(source);
+  if (!parts) return null;
+
+  const group = new THREE.Group();
+  group.add(parts.stump.clone(true));
+  // O grupo registado só é sincronizado (Transform) — tem de entrar na cena
+  // como o loadGltfToSceneForEntity faz (scene.add + materiais CSM), senão o
+  // stump fica invisível (colisor ativo, mesh sem render).
+  const scene = getScene(state);
+  if (scene) {
+    scene.add(group);
+    setupCsmMaterials(state, group);
+  }
+
+  const eid = state.createEntity();
+  state.addComponent(eid, Transform);
+  Transform.posX[eid] = pose.x;
+  Transform.posY[eid] = pose.y;
+  Transform.posZ[eid] = pose.z;
+  Transform.rotX[eid] = pose.rotX;
+  Transform.rotY[eid] = pose.rotY;
+  Transform.rotZ[eid] = pose.rotZ;
+  Transform.rotW[eid] = pose.rotW;
+  Transform.scaleX[eid] = pose.sx;
+  Transform.scaleY[eid] = pose.sy;
+  Transform.scaleZ[eid] = pose.sz;
+  Transform.dirty[eid] = 1;
+
+  state.addComponent(eid, Rigidbody);
+  Rigidbody.type[eid] = BodyType.Fixed;
+  Rigidbody.posX[eid] = pose.x;
+  Rigidbody.posY[eid] = pose.y;
+  Rigidbody.posZ[eid] = pose.z;
+  Rigidbody.poseDirty[eid] = 1;
+
+  state.addComponent(eid, Collider);
+  Collider.shape[eid] = ColliderShape.Capsule;
+  Collider.radius[eid] = pose.radius;
+  Collider.height[eid] = pose.height;
+  Collider.posOffsetX[eid] = 0;
+  Collider.posOffsetY[eid] = pose.posOffsetY;
+  Collider.posOffsetZ[eid] = 0;
+
+  // GltfSceneSyncSystem só aplica o Transform a grupos com GltfPending.loaded.
+  state.addComponent(eid, GltfPending);
+  GltfPending.loaded[eid] = 1;
+  registerGltfRootGroup(state, eid, group);
+  state.setEntityName('stump', eid);
+  return eid;
+}
+
+/** Adiciona stump + pivot da queda à cena e regista o FallFx. */
+function pushTreeFallFx(
+  state: State,
+  halves: NonNullable<ReturnType<typeof prepareTreeFallHalves>>,
+  dirX: number,
+  dirZ: number,
+  skipStumpVisual = false
+): boolean {
+  const scene = getScene(state);
+  if (!scene) return false;
   const {
     stump,
     top,
@@ -527,7 +709,9 @@ export function startTreeFall(
   top.position.sub(cutPoint);
   pivot.add(top);
   scene.add(pivot);
-  scene.add(stump);
+  // Com stump persistente (entidade própria), o clone do FX fica de fora —
+  // senão sobrepõem-se no mesmo lugar durante o fade (z-fighting).
+  if (!skipStumpVisual) scene.add(stump);
 
   getFxStore(state).falls.push({
     pivot,

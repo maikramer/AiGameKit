@@ -37,6 +37,22 @@ describe('parseProfilerUrl', () => {
     });
   });
 
+  it('opens physics tab for ?profiler=physics', () => {
+    expect(parseProfilerUrl('?profiler=physics')).toEqual({
+      mode: 'sample',
+      tab: 'physics',
+      audioDebug: false,
+    });
+  });
+
+  it('honours profilerTab=physics with profiler=1', () => {
+    expect(parseProfilerUrl('?profiler=1&profilerTab=physics')).toEqual({
+      mode: 'sample',
+      tab: 'physics',
+      audioDebug: false,
+    });
+  });
+
   it('honours profilerTab=audio with profiler=1', () => {
     expect(parseProfilerUrl('?profiler=1&profilerTab=audio')).toEqual({
       mode: 'sample',
@@ -64,10 +80,11 @@ describe('parseProfilerUrl', () => {
 });
 
 describe('isProfilerTabId', () => {
-  it('accepts systems, audio, and world', () => {
+  it('accepts systems, audio, world, and physics', () => {
     expect(isProfilerTabId('systems')).toBe(true);
     expect(isProfilerTabId('audio')).toBe(true);
     expect(isProfilerTabId('world')).toBe(true);
+    expect(isProfilerTabId('physics')).toBe(true);
     expect(isProfilerTabId('gpu')).toBe(false);
   });
 });

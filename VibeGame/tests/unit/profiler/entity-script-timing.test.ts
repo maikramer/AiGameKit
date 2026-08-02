@@ -14,6 +14,7 @@ import {
   registerEntityScripts,
   setCachedMonoBehaviourModule,
   setScriptFile,
+  setScriptRuntime,
 } from '../../../src/plugins/entity-script/context';
 import { EntityScriptPlugin } from '../../../src/plugins/entity-script/plugin';
 import {
@@ -21,6 +22,7 @@ import {
   scriptSpanName,
 } from '../../../src/plugins/entity-script/script-profiler';
 import {
+  buildContext,
   EntityScriptFixedUpdateSystem,
   EntityScriptSystem,
 } from '../../../src/plugins/entity-script/system';
@@ -53,6 +55,13 @@ describe('entity-script per-file profiler spans', () => {
       const eid = state.createEntity();
       state.addComponent(eid, MonoBehaviour, { ready: 1, enabled: 1 });
       setScriptFile(state, eid, file);
+      // The hot loop resolves the runtime from the cache populated by setup;
+      // mirror that here so update/fixedUpdate are actually invoked.
+      setScriptRuntime(state, eid, {
+        mod: mod as never,
+        ctx: buildContext(state, eid),
+        file,
+      });
     }
   }
 

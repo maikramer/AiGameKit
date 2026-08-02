@@ -27,17 +27,20 @@ import {
   addActiveCollisionPair,
   deletePrevEnabled,
   deleteScriptFile,
+  deleteScriptRuntime,
   getActiveCollisionPairs,
   getCachedMonoBehaviourModule,
   getEntityScriptsGlob,
   getOrLoadMonoBehaviourModule,
   getPrevEnabled,
   getScriptFile,
+  getScriptRuntime,
   isEntityScriptSetupInflight,
   removeActiveCollisionPair,
   resolveEntityScriptGlobKey,
   setEntityScriptSetupInflight,
   setPrevEnabled,
+  setScriptRuntime,
 } from './context';
 import {
   beginScriptProfilePass,
@@ -287,13 +290,15 @@ export const EntityScriptSystem: System = defineSystem({
     const profiling = beginScriptProfilePass(state.time.frameCount);
 
     for (const eid of entityScriptQuery(state.world)) {
-      const file = getScriptFile(state, eid);
-      if (!file) {
+      // Setup (ready===0) ainda corre para spawns distantes; updates quentes
+      // saltam. Check barato primeiro (evita lookups de side-table para
+      // milhares de scripts culled por frame).
+      if (MonoBehaviour.ready[eid] === 1 && isDistanceCulled(state, eid)) {
         continue;
       }
 
-      // Setup (ready===0) still runs so distant spawns can load once; hot updates skip.
-      if (MonoBehaviour.ready[eid] === 1 && isDistanceCulled(state, eid)) {
+      const file = getScriptFile(state, eid);
+      if (!file) {
         continue;
       }
 
@@ -347,6 +352,7 @@ export const EntityScriptSystem: System = defineSystem({
             }
           }
           deletePrevEnabled(state, eid);
+          deleteScriptRuntime(state, eid);
           deleteScriptFile(state, eid);
         });
         void getOrLoadMonoBehaviourModule(state, glob, globKey)
@@ -379,6 +385,8 @@ export const EntityScriptSystem: System = defineSystem({
             if (state.exists(eid)) {
               MonoBehaviour.ready[eid] = 1;
               setPrevEnabled(state, eid, isEnabled ? 1 : 0);
+              // Runtime em cache: o loop por frame usa ctx+mod sem lookups.
+              setScriptRuntime(state, eid, { mod, ctx, file });
             }
             setEntityScriptSetupInflight(state, eid, false);
           })
@@ -396,30 +404,22 @@ export const EntityScriptSystem: System = defineSystem({
         continue;
       }
 
-      const glob2 = getEntityScriptsGlob(state);
-      if (!glob2) {
+      // Runtime resolvido no setup: 1 lookup + chamada direta por frame (sem
+      // glob/globKey/módulo/`buildContext` — milhares de scripts de spawner).
+      const rt = getScriptRuntime(state, eid);
+      if (!rt) {
         continue;
       }
-
-      const globKey2 = resolveEntityScriptGlobKey(glob2, file);
-      if (!globKey2) {
-        continue;
-      }
-
-      const mod = getCachedMonoBehaviourModule(state, globKey2);
-      if (!mod) {
-        continue;
-      }
+      const mod = rt.mod;
 
       const curEnabled = MonoBehaviour.enabled[eid];
       const prev = getPrevEnabled(state, eid);
 
       if (prev !== undefined && curEnabled !== prev) {
-        const ctx = buildContext(state, eid);
         if (prev === 1 && curEnabled === 0 && mod.onDisable) {
-          mod.onDisable(ctx);
+          mod.onDisable(rt.ctx);
         } else if (prev === 0 && curEnabled === 1 && mod.onEnable) {
-          mod.onEnable(ctx);
+          mod.onEnable(rt.ctx);
         }
         setPrevEnabled(state, eid, curEnabled);
       }
@@ -432,8 +432,9 @@ export const EntityScriptSystem: System = defineSystem({
         continue;
       }
 
-      profileScriptCall(profiling, file, 'update', () => {
-        mod.update!(buildContext(state, eid));
+      rt.ctx.deltaTime = state.time.deltaTime;
+      profileScriptCall(profiling, rt.file, 'update', () => {
+        mod.update!(rt.ctx);
       });
     }
 
@@ -474,13 +475,14 @@ export const EntityScriptFixedUpdateSystem: System = defineSystem({
       }
       if (isDistanceCulled(state, eid)) continue;
 
-      const resolved = resolveModule(state, eid);
-      if (!resolved || !resolved.mod.fixedUpdate) {
+      // Runtime em cache: 1 lookup (sem re-resolver glob/módulo por frame).
+      const rt = getScriptRuntime(state, eid);
+      if (!rt || !rt.mod.fixedUpdate) {
         continue;
       }
 
-      profileScriptCall(profiling, resolved.file, 'fixed', () => {
-        resolved.mod.fixedUpdate!(buildContext(state, eid));
+      profileScriptCall(profiling, rt.file, 'fixed', () => {
+        rt.mod.fixedUpdate!(rt.ctx);
       });
     }
 
@@ -502,13 +504,14 @@ export const EntityScriptLateUpdateSystem: System = defineSystem({
       }
       if (isDistanceCulled(state, eid)) continue;
 
-      const resolved = resolveModule(state, eid);
-      if (!resolved || !resolved.mod.lateUpdate) {
+      // Runtime em cache: 1 lookup (sem re-resolver glob/módulo por frame).
+      const rt = getScriptRuntime(state, eid);
+      if (!rt || !rt.mod.lateUpdate) {
         continue;
       }
 
-      profileScriptCall(profiling, resolved.file, 'late', () => {
-        resolved.mod.lateUpdate!(buildContext(state, eid));
+      profileScriptCall(profiling, rt.file, 'late', () => {
+        rt.mod.lateUpdate!(rt.ctx);
       });
     }
 

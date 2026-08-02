@@ -58,12 +58,29 @@ Development plugin that forwards browser console output to terminal:
 - Uses Vite's HMR WebSocket for message transport
 - Only active in serve mode with enforce: 'post'
 - Transform matcher is substring-based (`/src/main.ts` / `/src/main.js`) — near-miss paths may also inject
+- Sends are gated on the HMR socket state (`vite:ws:connect`/`disconnect`): while
+  disconnected (e.g. right after a reload) messages queue instead of calling
+  `import.meta.hot.send` — Vite 8's module-runner client throws
+  `SendBeforeConnectError` there, and the client's error log would re-enter the
+  console override and cascade. `SendBeforeConnectError` is never surfaced or
+  forwarded; a bounded boot self-heal covers the connect event racing module eval.
 
 ### vibegameAssetHotReload()
 
 - Watches asset dirs (default `public/assets`) with Node `fs.watch`
-- Sends `vibegame:asset-update` over the Vite WS; `handleHotUpdate` suppresses default HMR for matched extensions
+- Sends `vibegame:asset-update` over the Vite WS; `hotUpdate` (Vite 8) /
+  `handleHotUpdate` (Vite 6/7) suppresses default HMR for matched extensions
 - Client: `initAssetHotReload()` from `hot-reload-client.ts`
+
+### vibegameForceFullReload()
+
+- Forces one debounced full page reload for engine/example TS changes (soft HMR
+  leaks WebGL contexts / WASM in Firefox)
+- Implements **both** hook names: `hotUpdate` (Vite 8 — `handleHotUpdate` is
+  skipped for the client environment there) and `handleHotUpdate` (Vite 6/7)
+- Returning `[]` from the hook suppresses Vite's own per-file reload; the
+  debounce (200 ms) coalesces multi-file edits into a single reload — without
+  the new hook, Vite 8 reloads once per saved file and aborts the game mid-boot
 
 ## Usage
 

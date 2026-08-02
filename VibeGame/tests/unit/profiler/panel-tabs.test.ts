@@ -71,6 +71,28 @@ describe('profiler panel tabs', () => {
     expect(panel.systemsPane.style.display).toBe('block');
   });
 
+  it('creates a Physics tab and switches panes', () => {
+    const panel = createProfilerPanel();
+    expect(panel.tabButtons.physics).toBeDefined();
+    expect(panel.tabButtons.physics.textContent).toBe('Physics');
+    expect(panel.physicsPane.style.display).toBe('none');
+
+    setProfilerPanelTab(panel, 'physics', { syncUrl: false });
+    expect(panel.tab).toBe('physics');
+    expect(panel.physicsPane.style.display).toBe('block');
+    expect(panel.systemsPane.style.display).toBe('none');
+    expect(panel.worldPane.style.display).toBe('none');
+
+    // Copy JSON button exists inside the physics toolbar.
+    const copyBtn = [...panel.physicsPane.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Copy JSON'
+    );
+    expect(copyBtn).toBeDefined();
+
+    setProfilerPanelTab(panel, 'systems', { syncUrl: false });
+    expect(panel.physicsPane.style.display).toBe('none');
+  });
+
   it('audio pane buttons clear log', () => {
     const panel = createProfilerPanel();
     setProfilerPanelTab(panel, 'audio', { syncUrl: false });

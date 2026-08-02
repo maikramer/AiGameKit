@@ -861,6 +861,17 @@ export {
   PhysicsStepSystem,
 } from './plugins/physics/systems';
 export { markRigidbodyPoseDirty } from './plugins/physics/utils';
+export {
+  PrecomputePlugin,
+  PrecomputeColliderSystem,
+  loadPrecomputeManifest,
+  resolvePrecompute,
+  DEFAULT_PRECOMPUTE_MANIFEST_URL,
+} from './plugins/asset-precompute';
+export type {
+  AssetPrecompute,
+  PrecomputeColliderSpec,
+} from './plugins/asset-precompute';
 
 /**
  * Character ground-snap helpers for placing a body so its feet rest on a surface.

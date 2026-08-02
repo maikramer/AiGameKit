@@ -1,6 +1,7 @@
 import type { System } from '../../core';
 import { defineSystem, defineQuery, TIME_CONSTANTS } from '../../core';
 import {
+  BodyType,
   InterpolatedTransform,
   Rigidbody,
   TouchedEvent,
@@ -38,6 +39,15 @@ export const PhysicsRapierSyncSystem: System = defineSystem({
     const context = getPhysicsContext(state);
 
     for (const [entity, body] of context.entityToRigidbody) {
+      // Corpos fixos nunca se movem: skip puro em JS. Evita a chamada WASM
+      // `isSleeping()` por corpo parado por step — com milhares de colisores
+      // fixos (coletáveis pré-calculados) eram ~2400 chamadas WASM/frame.
+      if (
+        !state.hasComponent(entity, Rigidbody) ||
+        Rigidbody.type[entity] === BodyType.Fixed
+      ) {
+        continue;
+      }
       // Corpos dormindo não se moveram: pular evita ~5 chamadas WASM +
       // conversão de euler por corpo parado por step. Kinematic ficam de
       // fora do skip (o estado de sleep deles não garante pose imutável).
@@ -49,7 +59,6 @@ export const PhysicsRapierSyncSystem: System = defineSystem({
       // instead of throwing, which otherwise spams the console and aborts the
       // fixed-step loop.
       if (
-        !state.hasComponent(entity, Rigidbody) ||
         !state.hasComponent(entity, Transform) ||
         !state.hasComponent(entity, WorldTransform) ||
         !state.hasComponent(entity, InterpolatedTransform)

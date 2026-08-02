@@ -27,3 +27,9 @@ export {
   type WorldDebugNearby,
   type WorldDebugNearbyDetail,
 } from './world-debug';
+export {
+  getPhysicsDebugSnapshot,
+  getBoundPhysicsDebugSnapshot,
+  renderPhysicsTab,
+  type PhysicsDebugSnapshot,
+} from './physics-debug';

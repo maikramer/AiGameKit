@@ -15,6 +15,13 @@ export enum ColliderShape {
   TriMesh = 3,
   /** Convex hull of a collision GLB's vertices (`mesh-url`); cheaper, works on dynamic bodies. */
   ConvexHull = 4,
+  /** Vertical cylinder (Rapier `ColliderDesc.cylinder`); cheap fixed prop collider. */
+  Cylinder = 5,
+  /**
+   * Placeholder resolvido pelo PrecomputeColliderSystem a partir do manifest
+   * de pré-cálculo (`gameassets_handoff.json`) — nunca chega ao Rapier.
+   */
+  Precompute = 6,
 }
 
 export const PhysicsWorld = {

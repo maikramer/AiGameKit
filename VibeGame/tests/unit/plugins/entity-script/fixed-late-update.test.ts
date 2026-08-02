@@ -7,8 +7,10 @@ import {
   registerEntityScripts,
   setCachedMonoBehaviourModule,
   setScriptFile,
+  setScriptRuntime,
 } from '../../../../src/plugins/entity-script/context';
 import {
+  buildContext,
   EntityScriptFixedUpdateSystem,
   EntityScriptLateUpdateSystem,
   EntityScriptSystem,
@@ -39,6 +41,13 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
     setCachedMonoBehaviourModule(state, globKey, mod as any);
 
     MonoBehaviour.ready[eid] = 1;
+    // The hot loop resolves the runtime from the setup cache; mirror setup so
+    // update/fixedUpdate/lateUpdate are actually invoked.
+    setScriptRuntime(state, eid, {
+      mod: mod as any,
+      ctx: buildContext(state, eid),
+      file,
+    });
 
     return eid;
   }

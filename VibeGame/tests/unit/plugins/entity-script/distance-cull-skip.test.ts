@@ -6,9 +6,13 @@ import {
   registerEntityScripts,
   setCachedMonoBehaviourModule,
   setScriptFile,
+  setScriptRuntime,
 } from '../../../../src/plugins/entity-script/context';
 import { EntityScriptPlugin } from '../../../../src/plugins/entity-script/plugin';
-import { EntityScriptSystem } from '../../../../src/plugins/entity-script/system';
+import {
+  buildContext,
+  EntityScriptSystem,
+} from '../../../../src/plugins/entity-script/system';
 import { DistanceCull } from '../../../../src/plugins/rendering/components';
 import { TransformsPlugin } from '../../../../src/plugins/transforms';
 
@@ -38,6 +42,13 @@ describe('entity-script skips DistanceCull.culled entities', () => {
     state.addComponent(eid, DistanceCull);
     DistanceCull.maxDistance[eid] = 40;
     DistanceCull.culled[eid] = 1;
+    // The hot loop resolves the runtime from the setup cache; mirror setup so
+    // the unculled update actually fires.
+    setScriptRuntime(state, eid, {
+      mod,
+      ctx: buildContext(state, eid),
+      file: 'far.ts',
+    });
 
     EntityScriptSystem.update!(state);
     EntityScriptSystem.update!(state);

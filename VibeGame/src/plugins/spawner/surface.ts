@@ -1,6 +1,7 @@
 ﻿import * as THREE from 'three';
 import { defineQuery, type State } from '../../core';
 import { Terrain, TerrainPad } from '../terrain/components';
+import { getGroundBrushes, pointInPadCore } from '../terrain/brush-registry';
 import { sampleHeightAt, type HeightSampler } from '../terrain/height-sampler';
 import { meshSurfaceResolutionForPoint } from '../terrain/lod-select';
 import { getTerrainContext } from '../terrain/utils';
@@ -122,6 +123,13 @@ export interface TerrainSurfaceSample {
   terrainEntity: number;
   worldY: number;
   normal: THREE.Vector3;
+  /**
+   * True when `worldY` is the analytic plane of a TerrainPad flat core (not
+   * the mesh lattice). Placement must use `worldY` verbatim for these —
+   * re-sampling the lattice would blend the pad edge with untouched terrain
+   * (coarse LOD step at distance) and float/sink props by up to ~1 m.
+   */
+  padPlane?: boolean;
 }
 
 /** Slope angle in radians between the surface normal and vertical (+Y). */
@@ -225,6 +233,30 @@ function terrainBaseY(state: State, terrainEntity: number): number {
   return Transform.posY[terrainEntity];
 }
 
+/** Up normal shared by pad-plane samples. */
+const _padPlaneNormal = new THREE.Vector3(0, 1, 0);
+
+/**
+ * World Y of a TerrainPad's flat core plane at (field-local x, z), or null
+ * when the point lies outside every applied pad core. Brushes register the
+ * resolved pad plane (`targetY`, field-local) at apply time — before that
+ * there is no plane and callers fall back to the mesh lattice.
+ */
+function padCoreWorldY(
+  state: State,
+  localX: number,
+  localZ: number,
+  terrainBaseYValue: number
+): number | null {
+  for (const brush of getGroundBrushes(state)) {
+    if (brush.kind !== 'pad' || brush.targetY === undefined) continue;
+    if (pointInPadCore(brush, localX, localZ)) {
+      return terrainBaseYValue + brush.targetY;
+    }
+  }
+  return null;
+}
+
 export function sampleTerrainSurface(
   state: State,
   wx: number,
@@ -244,6 +276,23 @@ export function sampleTerrainSurface(
 
     const localX = wx - ox;
     const localZ = wz - oz;
+    const ty = terrainBaseY(state, entity);
+
+    // Inside a TerrainPad's flat core the ground is exactly the pad plane.
+    // Sampling the mesh lattice here blends the pad edge with untouched
+    // terrain (coarse LOD step at distance), which left small pads with
+    // furniture floating/sunk by up to ~1 m. The brush registry already has
+    // the analytic plane — anchor to it and skip the lattice entirely.
+    const padPlane = padCoreWorldY(state, wx - ox, wz - oz, ty);
+    if (padPlane !== null) {
+      return {
+        terrainEntity: entity,
+        worldY: padPlane,
+        normal: _padPlaneNormal,
+        padPlane: true,
+      };
+    }
+
     const meshRes = meshSurfaceResolutionForPoint(
       Terrain.resolution[entity],
       Terrain.levels[entity],
@@ -252,7 +301,6 @@ export function sampleTerrainSurface(
       localZ
     );
     const h = sampleMeshSurfaceHeight(data.sampler, localX, localZ, meshRes);
-    const ty = terrainBaseY(state, entity);
 
     const heightAtRawSlope = (x: number, z: number) =>
       sampleHeightAt(data.sampler, x - ox, z - oz);
@@ -298,6 +346,24 @@ export function sampleTerrainSurfaceMatrix(
 
     const localX = wx - ox;
     const localZ = wz - oz;
+    const ty = terrainBaseY(state, entity);
+
+    // Inside a TerrainPad's flat core the ground is exactly the pad plane.
+    // Sampling the mesh lattice here blends the pad edge with untouched
+    // terrain (coarse LOD step at distance), which left small pads with
+    // furniture floating/sunk by up to ~1 m. The brush registry already has
+    // the analytic plane — anchor to it and skip the lattice entirely.
+    const padPlane = padCoreWorldY(state, wx - ox, wz - oz, ty);
+    if (padPlane !== null) {
+      return {
+        terrainEntity: entity,
+        worldY: padPlane,
+        normal: _padPlaneNormal,
+        slopeAngleRad: 0,
+        padPlane: true,
+      };
+    }
+
     const meshRes = meshSurfaceResolutionForPoint(
       Terrain.resolution[entity],
       Terrain.levels[entity],
@@ -306,7 +372,6 @@ export function sampleTerrainSurfaceMatrix(
       localZ
     );
     const h = sampleMeshSurfaceHeight(data.sampler, localX, localZ, meshRes);
-    const ty = terrainBaseY(state, entity);
 
     const heightAtRawSlope = (x: number, z: number) =>
       sampleHeightAt(data.sampler, x - ox, z - oz);

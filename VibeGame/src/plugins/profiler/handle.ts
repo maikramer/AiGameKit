@@ -26,6 +26,10 @@ import {
   getBoundWorldDebugSnapshot,
   type WorldDebugSnapshot,
 } from './world-debug';
+import {
+  getBoundPhysicsDebugSnapshot,
+  type PhysicsDebugSnapshot,
+} from './physics-debug';
 
 export interface ProfilerTabBridge {
   getTab(): ProfilerTabId;
@@ -51,6 +55,7 @@ export interface VibeGameProfilerHandle {
   setTab(tab: ProfilerTabId): void;
   audioSnapshot(): AudioDebugSnapshot;
   worldSnapshot(): WorldDebugSnapshot | null;
+  physicsSnapshot(): PhysicsDebugSnapshot | null;
 }
 
 let tabBridge: ProfilerTabBridge | null = null;
@@ -110,6 +115,9 @@ export function createProfilerHandle(): VibeGameProfilerHandle {
     },
     worldSnapshot() {
       return getBoundWorldDebugSnapshot();
+    },
+    physicsSnapshot() {
+      return getBoundPhysicsDebugSnapshot();
     },
   };
 }

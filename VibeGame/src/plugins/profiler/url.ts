@@ -3,10 +3,11 @@
  *   ?profiler=1|sample|deep|0|off
  *   ?profiler=audio              → enable sample + open Audio tab
  *   ?profiler=world              → enable sample + open World tab
- *   ?profilerTab=systems|audio|world
+ *   ?profiler=physics            → enable sample + open Physics tab
+ *   ?profilerTab=systems|audio|world|physics
  */
 
-export type ProfilerTabId = 'systems' | 'audio' | 'world';
+export type ProfilerTabId = 'systems' | 'audio' | 'world' | 'physics';
 
 export interface ProfilerUrlConfig {
   /** null = do not auto-open / leave disabled */
@@ -16,7 +17,7 @@ export interface ProfilerUrlConfig {
   audioDebug: boolean;
 }
 
-const TABS: readonly ProfilerTabId[] = ['systems', 'audio', 'world'];
+const TABS: readonly ProfilerTabId[] = ['systems', 'audio', 'world', 'physics'];
 
 export function isProfilerTabId(v: string): v is ProfilerTabId {
   return (TABS as readonly string[]).includes(v);
@@ -41,6 +42,9 @@ export function parseProfilerUrl(
     } else if (raw === 'world') {
       mode = 'sample';
       tab = 'world';
+    } else if (raw === 'physics') {
+      mode = 'sample';
+      tab = 'physics';
     } else if (raw === '' && params.has('profiler')) {
       mode = 'sample';
     } else if (raw === '1' || raw === 'true' || raw === 'sample') {
@@ -84,12 +88,15 @@ export function syncProfilerTabToUrl(tab: ProfilerTabId): void {
       p === 'true' ||
       p === 'sample' ||
       p === 'audio' ||
-      p === 'world';
+      p === 'world' ||
+      p === 'physics';
     if (tab === 'audio' && shorthandOk) {
       url.searchParams.set('profiler', 'audio');
     } else if (tab === 'world' && shorthandOk) {
       url.searchParams.set('profiler', 'world');
-    } else if (p === 'audio' || p === 'world') {
+    } else if (tab === 'physics' && shorthandOk) {
+      url.searchParams.set('profiler', 'physics');
+    } else if (p === 'audio' || p === 'world' || p === 'physics') {
       url.searchParams.set('profiler', '1');
     }
     history.replaceState(null, '', url.toString());

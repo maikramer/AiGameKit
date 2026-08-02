@@ -298,6 +298,63 @@ function appendBox(eid: number, matrix: THREE.Matrix4, out: MeshSoup): void {
   appendMesh(_boxVerts, BOX_INDICES, matrix, out);
 }
 
+// Prisma vertical de 8 lados (unidade: raio 1, Y ∈ [-0.5, 0.5]) — o carve
+// procedural das cápsulas/cilindros pré-calculados. Gerado uma vez; cada
+// `appendPrism` re-escala a partir da base (nunca acumula escala).
+const PRISM_SEGMENTS = 8;
+const _prismBaseVerts = (() => {
+  const v = new Float32Array(PRISM_SEGMENTS * 2 * 3);
+  for (let i = 0; i < PRISM_SEGMENTS; i++) {
+    const a = (i / PRISM_SEGMENTS) * Math.PI * 2;
+    const x = Math.cos(a);
+    const z = Math.sin(a);
+    v[i * 3] = x;
+    v[i * 3 + 1] = -0.5;
+    v[i * 3 + 2] = z;
+    const t = (PRISM_SEGMENTS + i) * 3;
+    v[t] = x;
+    v[t + 1] = 0.5;
+    v[t + 2] = z;
+  }
+  return v;
+})();
+const _prismVerts = new Float32Array(PRISM_SEGMENTS * 2 * 3);
+const PRISM_INDICES = (() => {
+  const s = PRISM_SEGMENTS;
+  const idx: number[] = [];
+  for (let i = 0; i < s; i++) {
+    const j = (i + 1) % s;
+    idx.push(i, s + j, s + i, i, j, s + j);
+  }
+  for (let i = 1; i < s - 1; i++) idx.push(0, i, i + 1);
+  for (let i = 1; i < s - 1; i++) idx.push(s, s + i + 1, s + i);
+  return new Uint32Array(idx);
+})();
+
+/**
+ * Carve de cápsula/cilindro pré-calculado: prisma vertical de raio
+ * `Collider.radius` e altura total (cápsula: `height + 2·radius`; cilindro:
+ * `height`). Campos em metros mundo — iguais aos usados pelo Rapier (não
+ * escalados pelo Transform). fullCarve: parede vertical não cria rampa, por
+ * isso o trim `OBSTACLE_NAV_HEIGHT` não se aplica (consistente com boxes).
+ */
+function appendPrism(eid: number, matrix: THREE.Matrix4, out: MeshSoup): void {
+  const radius = Collider.radius[eid];
+  const halfH =
+    Collider.shape[eid] === ColliderShape.Capsule
+      ? (Collider.height[eid] + 2 * radius) / 2
+      : Collider.height[eid] / 2;
+  // Base unit tem y ∈ [-0.5, 0.5] — o fator Y é 2×halfH para atingir
+  // [-halfH, halfH]; o raio unit (1.0) usa o próprio `radius`.
+  _prismVerts.set(_prismBaseVerts);
+  for (let i = 0; i < PRISM_SEGMENTS * 2; i++) {
+    _prismVerts[i * 3] *= radius;
+    _prismVerts[i * 3 + 1] *= halfH * 2;
+    _prismVerts[i * 3 + 2] *= radius;
+  }
+  appendMesh(_prismVerts, PRISM_INDICES, matrix, out, true);
+}
+
 const obstacleQuery = defineQuery([Collider]);
 const compositionObstacleQuery = defineQuery([CompositionPending]);
 
@@ -373,6 +430,8 @@ function appendCompositionSpec(
  * Kick off collision-GLB fetches for every fixed trimesh/convex obstacle in
  * range. Safe to call every frame before carvers finish — starts downloads
  * early so bake is not blocked waiting on first-touch lazy loads.
+ * Primitive shapes (box, cápsula/cilindro pré-calculados) carve de forma
+ * procedural e não precisam de fetch (bake não espera por eles).
  */
 export function prefetchNavmeshObstacles(state: State, bounds: number): void {
   for (const eid of obstacleQuery(state.world)) {
@@ -419,6 +478,10 @@ function isFixedObstacle(state: State, eid: number): boolean {
   const shape = Collider.shape[eid];
   return (
     shape === ColliderShape.Box ||
+    // Cápsula/cilindro pré-calculados (tree trunk / rock): carve procedural,
+    // sem fetch de collision GLB (ver `appendPrism`).
+    shape === ColliderShape.Capsule ||
+    shape === ColliderShape.Cylinder ||
     shape === ColliderShape.TriMesh ||
     shape === ColliderShape.ConvexHull
   );
@@ -434,10 +497,12 @@ function withinBounds(state: State, eid: number, bounds: number): boolean {
   return Math.abs(x) <= bounds + 10 && Math.abs(z) <= bounds + 10;
 }
 
-/** Bake every fixed Box/TriMesh/ConvexHull collider within `bounds` into one
- * mesh. Colliders are the single source of truth for what blocks movement, so
- * the navmesh carves holes exactly where physics blocks the player. */
-function collectColliderObstacles(
+/** Bake every fixed Box/Capsule/Cylinder/TriMesh/ConvexHull collider within
+ * `bounds` into one mesh. Colliders are the single source of truth for what
+ * blocks movement, so the navmesh carves holes exactly where physics blocks
+ * the player. Primitive shapes (box, cápsula/cilindro pré-calculados) carve
+ * de forma procedural — sem fetch de collision GLB. */
+export function collectColliderObstacles(
   state: State,
   bounds: number
 ): NavMeshGeometry | null {
@@ -452,6 +517,11 @@ function collectColliderObstacles(
 
     if (shape === ColliderShape.Box) {
       appendBox(eid, matrix, soup);
+      continue;
+    }
+
+    if (shape === ColliderShape.Capsule || shape === ColliderShape.Cylinder) {
+      appendPrism(eid, matrix, soup);
       continue;
     }
 

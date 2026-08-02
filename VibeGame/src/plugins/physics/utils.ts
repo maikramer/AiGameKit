@@ -237,6 +237,9 @@ export function createColliderDescriptor(
     case ColliderShape.Capsule:
       desc = RAPIER.ColliderDesc.capsule(height / 2, radius);
       break;
+    case ColliderShape.Cylinder:
+      desc = RAPIER.ColliderDesc.cylinder(height / 2, radius);
+      break;
     case ColliderShape.TriMesh: {
       if (!mesh) throw new Error('TriMesh collider requires mesh geometry');
       desc = RAPIER.ColliderDesc.trimesh(mesh.vertices, mesh.indices);

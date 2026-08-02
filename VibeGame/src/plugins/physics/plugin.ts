@@ -165,6 +165,8 @@ export const PhysicsPlugin: Plugin = {
           mesh: 3,
           'convex-hull': 4,
           hull: 4,
+          cylinder: 5,
+          precompute: 6,
         },
         meshAnchor: {
           none: 0,

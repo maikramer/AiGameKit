@@ -13,6 +13,7 @@ import { NavMeshPlugin } from './navmesh/plugin';
 import { OrbitCameraPlugin } from './orbit-camera/plugin';
 
 import { PhysicsPlugin } from './physics/plugin';
+import { PrecomputePlugin } from './asset-precompute/plugin';
 import { HudPlugin } from './hud/plugin';
 import { PlayerPlugin } from './player/plugin';
 import { RaycastPlugin } from './raycast/plugin';
@@ -45,6 +46,7 @@ export const DefaultPlugins: Plugin[] = [
   AnimationPlugin,
   InputPlugin,
   PhysicsPlugin,
+  PrecomputePlugin,
   RaycastPlugin,
   RenderingPlugin,
   PostprocessingPlugin,
