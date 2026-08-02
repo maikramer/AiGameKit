@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from pathlib import Path
 from typing import Literal
+
+log = logging.getLogger(__name__)
 
 CollisionMode = Literal["hull", "envelope", "mesh"]
 COLLISION_MODES: tuple[str, ...] = ("hull", "envelope", "mesh")
@@ -87,31 +90,124 @@ def _apply_hull(obj) -> None:
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
+def _mesh_volume(obj) -> float:
+    """Volume assinado da malha (unidades de mundo)."""
+    import bmesh
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    v = float(bm.calc_volume(signed=True))
+    bm.free()
+    return abs(v)
+
+
+def _boundary_edges(obj) -> int:
+    from aigamekit_shared.mesh_repair import count_boundary_edges_fast
+
+    return int(count_boundary_edges_fast(obj))
+
+
+def _weld_seams(obj) -> int:
+    """Funde vértices coincidentes (costuras UV/normal do glTF).
+
+    Sem isto o mesh importado chega partido em milhares de retalhos: o
+    ``Displace``/COLLAPSE tratam cada retalho isolado e a colisão sai como uma
+    nuvem de triângulos soltos.
+    """
+    from aigamekit_shared.mesh_repair import remove_doubles
+
+    return int(remove_doubles(obj, threshold=1e-6) or 0)
+
+
 def _inflate(obj, amount: float) -> None:
-    """Empurra a superfície para fora (metros) — evita CCT afundar no visual."""
+    """Empurra a superfície para fora (metros) — evita CCT afundar no visual.
+
+    Usa ``Displace`` ao longo das normais: deslocamento **limitado** a
+    ``amount``. O antigo ``shrink_fatten(use_even_offset=True)`` escala por
+    1/cos(ângulo) para manter espessura constante e explode em vértices
+    quase-degenerados — medido no ``city_wall_seg_c``: área 77 → 1922 m² (25x)
+    com um inflate de 8 cm.
+    """
     import bpy
 
     if amount <= 0:
         return
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    # shrink_fatten positivo = engorda ao longo das normais
-    bpy.ops.transform.shrink_fatten(value=float(amount), use_even_offset=True)
-    bpy.ops.object.mode_set(mode="OBJECT")
+    mod = obj.modifiers.new("CollisionInflate", "DISPLACE")
+    mod.mid_level = 0.0
+    mod.strength = float(amount)
+    mod.direction = "NORMAL"
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
-def _apply_envelope(obj, *, voxel_size: float | None) -> None:
-    """Voxel remesh → envelope volumétrico côncavo (preserva buracos se voxel caber)."""
+# Abaixo desta fração do volume de entrada, o voxel remesh falhou (o campo de
+# distância assinado degenerou) e o resultado é uma crosta de fragmentos.
+_ENVELOPE_MIN_VOLUME_RATIO = 0.5
+
+
+def _apply_envelope(obj, *, voxel_size: float | None) -> bool:
+    """Voxel remesh → envelope volumétrico côncavo (preserva buracos se voxel caber).
+
+    O remesh VOXEL do Blender (OpenVDB) só produz um sólido a partir de uma
+    superfície **fechada**: com arestas de fronteira o campo passa a não
+    assinado e sai uma crosta fina em pedaços. Medido no ``city_wall_seg_c``
+    pintado (353 arestas abertas): volume 29.3 → 0.068 m³ e 101 componentes —
+    a colisão entregue era uma nuvem de blobs. A partir do ``_clean``
+    (fechado) o mesmo remesh dá 30.17 m³ e 1 componente.
+
+    Aqui o remesh é validado à posteriori: se o volume colapsar, a malha
+    original é restaurada e o chamador cai para decimação directa.
+
+    Returns:
+        True se o envelope foi aplicado; False se foi rejeitado e revertido.
+    """
     import bpy
 
     char = _char_size(obj)
-    # Mais fino que char/32 — pilares de arco (~1–2 m) não encolhem demais.
+    # Mais fino que char/32 — pilares de arco (~1-2 m) não encolhem demais.
     vs = float(voxel_size) if voxel_size is not None and voxel_size > 0 else max(char / 48.0, 0.04)
+
+    bnd_before = _boundary_edges(obj)
+    if bnd_before:
+        # Sem isto o VDB entrega a crosta descrita acima. Fechar primeiro é o
+        # que torna o envelope utilizável a partir de um ``_painted``
+        # (city_wall_seg_c: 353 → 76 arestas abertas, remesh 28.0 m³ e 1 peça).
+        from aigamekit_shared.mesh_repair import make_watertight
+
+        wt = make_watertight(obj, planar_tol=0.15, max_loop_edges=400, cap_base=True, final_fill=True)
+        log.info(
+            "collision envelope: fecho prévio %s → %s arestas de fronteira",
+            wt.get("boundary_before"),
+            wt.get("boundary_after"),
+        )
+
+    vol_before = _mesh_volume(obj)
+    backup = obj.data.copy()
+
     mod = obj.modifiers.new("CollisionEnvelope", "REMESH")
     mod.mode = "VOXEL"
     mod.voxel_size = vs
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.modifier_apply(modifier=mod.name)
+
+    vol_after = _mesh_volume(obj)
+    if vol_before > 0 and vol_after < _ENVELOPE_MIN_VOLUME_RATIO * vol_before:
+        log.warning(
+            "collision envelope rejeitado: voxel remesh (%.3f m) levou o volume de %.3f para %.3f m³ "
+            "(%d arestas de fronteira na entrada) — a usar a malha original",
+            vs,
+            vol_before,
+            vol_after,
+            bnd_before,
+        )
+        old = obj.data
+        obj.data = backup
+        bpy.data.meshes.remove(old)
+        obj.data.validate(verbose=False)
+        obj.data.update()
+        return False
+    bpy.data.meshes.remove(backup)
+    return True
 
 
 def _strip_visual_data(mesh) -> None:
@@ -150,12 +246,14 @@ def generate_collision_mesh(
     """
     import bpy
 
-    from aigamekit_shared.bpy_mesh import clear_scene
+    from aigamekit_shared.bpy_mesh import clear_scene, import_gltf
 
     resolved = resolve_collision_mode(mode=mode, convex_hull=convex_hull)
 
     clear_scene()
-    bpy.ops.import_scene.gltf(filepath=str(Path(input_path)))
+    # import_gltf (não bpy.ops directo): trata KTX2/meshopt — um lod0 finalizado
+    # rebentava com "Extension KHR_texture_basisu is not available".
+    import_gltf(Path(input_path))
 
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     if not mesh_objs:
@@ -171,17 +269,23 @@ def generate_collision_mesh(
     bpy.ops.object.select_all(action="DESELECT")
     obj.select_set(True)
 
+    # Reconectar antes de qualquer coisa: inflate e COLLAPSE sobre uma malha
+    # partida nas costuras produzem uma colisão em pedaços.
+    welded = _weld_seams(obj)
+    if welded:
+        log.info("collision: weld de costuras fundiu %d vértices", welded)
+
     char = _char_size(obj)
-    if inflate is None:
-        inflate_m = 0.0 if resolved == "hull" else max(char * 0.008, 0.04)
-    else:
-        inflate_m = float(inflate)
+    inflate_m = (0.0 if resolved == "hull" else max(char * 0.008, 0.04)) if inflate is None else float(inflate)
 
     if resolved == "hull":
         _apply_hull(obj)
     elif resolved == "envelope":
+        # Inflate **depois** do remesh: sobre a malha crua (auto-intersectada,
+        # com agulhas) o Displace amplifica ruído que o remesh depois solidifica.
+        if not _apply_envelope(obj, voxel_size=voxel_size):
+            log.warning("collision: envelope indisponível — a cair para modo 'mesh' (silhueta directa)")
         _inflate(obj, inflate_m)
-        _apply_envelope(obj, voxel_size=voxel_size)
     else:  # mesh — silhueta precisa do source
         _inflate(obj, inflate_m)
 

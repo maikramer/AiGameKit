@@ -105,6 +105,91 @@ def test_collision_mesh_mode_precise_keeps_torus_hole(tmp_path: Path) -> None:
     assert not _origin_ray_hits(out)
 
 
+def _save_split_sphere_glb(path: Path) -> Path:
+    """Esfera com todos os vértices partidos — como um GLB reimportado."""
+    import bmesh
+
+    clear_scene()
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=3, radius=1.0)
+    obj = bpy.context.active_object
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.split_edges(bm, edges=bm.edges[:])
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    save_glb([obj], path)
+    return path
+
+
+def _components_and_volume(path: Path) -> tuple[int, float]:
+    import bmesh
+
+    clear_scene()
+    objs = load_glb(path)
+    obj = max((o for o in objs if o.type == "MESH"), key=lambda o: len(o.data.polygons))
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    seen: set[int] = set()
+    comps = 0
+    for f in bm.faces:
+        if f.index in seen:
+            continue
+        comps += 1
+        stack = [f]
+        seen.add(f.index)
+        while stack:
+            cur = stack.pop()
+            for e in cur.edges:
+                for nf in e.link_faces:
+                    if nf.index not in seen:
+                        seen.add(nf.index)
+                        stack.append(nf)
+    vol = abs(float(bm.calc_volume(signed=True)))
+    bm.free()
+    return comps, vol
+
+
+def test_collision_from_split_mesh_stays_one_solid(tmp_path: Path) -> None:
+    """Costuras do glTF não podem virar uma nuvem de triângulos soltos.
+
+    Regressão: ``city_wall_seg_c_collision.glb`` saiu com 138 componentes e
+    0.57 m² de área — os jogadores atravessavam a muralha.
+    """
+    inp = _save_split_sphere_glb(tmp_path / "split.glb")
+    out = tmp_path / "coll.glb"
+    generate_collision_mesh(inp, out, max_faces=200, mode="mesh", inflate=0.02)
+    comps, vol = _components_and_volume(out)
+    assert comps == 1
+    # Esfera r=1 → 4/3 pi ≈ 4.19; inflate pequeno + decimate mantém a ordem.
+    assert 2.5 < vol < 7.0
+
+
+def test_collision_envelope_rejects_volume_collapse(tmp_path: Path) -> None:
+    """Se o voxel remesh esvaziar o volume, o envelope é revertido."""
+    from text3d.utils import collision as C
+
+    inp = _save_sphere_glb(tmp_path / "sphere.glb", subdivisions=3)
+    out = tmp_path / "coll.glb"
+    calls: list[bool] = []
+    real = C._apply_envelope
+
+    def fake(obj, *, voxel_size):
+        ok = real(obj, voxel_size=voxel_size)
+        calls.append(ok)
+        return ok
+
+    C._apply_envelope = fake  # type: ignore[assignment]
+    try:
+        # Voxel absurdamente grosso: o remesh não consegue representar a esfera.
+        generate_collision_mesh(inp, out, max_faces=120, mode="envelope", voxel_size=50.0, inflate=0.0)
+    finally:
+        C._apply_envelope = real  # type: ignore[assignment]
+    assert calls == [False]
+    _comps, vol = _components_and_volume(out)
+    assert vol > 1.0  # a malha original sobreviveu, não uma casca vazia
+
+
 def test_collision_creates_parent_dir(tmp_path: Path) -> None:
     inp = _save_box_glb(tmp_path / "box.glb", extents=(1.0, 1.0, 1.0))
     out = tmp_path / "subdir" / "deep" / "collision.glb"

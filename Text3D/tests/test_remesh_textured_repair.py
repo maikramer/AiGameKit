@@ -111,8 +111,11 @@ class TestClampDecimateTarget:
     def test_raises_floor_on_extreme_ratio(self) -> None:
         from text3d.utils.mesh_remesh_textured import _clamp_decimate_target
 
-        # 246k → 750 seria ~0.3%; piso 0.8% ≈ 1968
-        assert _clamp_decimate_target(246_013, 750) >= int(246_013 * 0.008)
+        # Piso relativo é só rede de segurança (0.05%): 246k → 123.
+        # O absoluto (150) domina, e um pedido de 750 passa intacto — o piso
+        # antigo (0.8% ≈ 1968) substituía o orçamento de LOD e achatava a ladder.
+        assert _clamp_decimate_target(246_013, 750) == 750
+        assert _clamp_decimate_target(246_013, 10) == 150
 
     def test_keeps_request_when_above_floor(self) -> None:
         from text3d.utils.mesh_remesh_textured import _clamp_decimate_target

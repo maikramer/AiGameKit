@@ -42,7 +42,10 @@ dependencies = [
     "setuptools>=69,<81",
     "bpy>=5.2.0",
     "aigamekit-shared @ file:../Shared",
-    "text2d @ file:../Text2D",
+    # NÃO declarar irmãs via file: (ex. text2d) — o uv copiaria o pacote para
+    # site-packages e a cópia vence o .pth monorepo (cross_deps do Clified).
+    # O text2d (import Python no generator) é gerido pelo instalador via
+    # `_clified_text2d.pth` → Text2D/src (tools.yaml: cross_deps: [text2d]).
     "pymeshfix>=0.18.0",
     # UV unwrap na rota de reconstrução de LOD texturado (remesh-textured).
     "xatlas>=0.0.10",

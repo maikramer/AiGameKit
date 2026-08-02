@@ -39,9 +39,10 @@ def map_ums_load_kwargs(raw: dict[str, Any]) -> dict[str, Any]:
     else:
         kwargs.pop("torch_compile_mode", None)
 
+    from aigamekit_shared.ums_load import normalize_quant_preset
+
     if kwargs.get("sdnq_preset") is None and kwargs.get("quant_mode") is not None:
-        qm = kwargs["quant_mode"]
-        kwargs["sdnq_preset"] = "" if str(qm).strip().lower() in ("none", "null", "") else qm
+        kwargs["sdnq_preset"] = normalize_quant_preset(kwargs["quant_mode"]) or ""
 
     mem_eff = kwargs.pop("memory_efficient", None)
     if mem_eff is True:

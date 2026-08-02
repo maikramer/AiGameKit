@@ -124,15 +124,17 @@ def test_voxel_meters(char_m: float, octree: int, expected: float) -> None:
 
 
 # --- _snap_octree (20 valores) ---
+# Ladder actual: floor 128 (11b2a542 baixou de 160), step 32, ceil 512,
+# snapping "nearest" com round() do Python (banker's: meios-degrau alternam).
 
 
 @pytest.mark.parametrize(
     "raw,expected",
     [
-        (0, 160),
+        (0, 128),
         (159, 160),
         (160, 160),
-        (176, 160),
+        (176, 192),
         (192, 192),
         (256, 256),
         (320, 320),
@@ -144,10 +146,10 @@ def test_voxel_meters(char_m: float, octree: int, expected: float) -> None:
         (161, 160),
         (177, 192),
         (200, 192),
-        (208, 224),
-        (240, 224),
+        (208, 192),
+        (240, 256),
         (241, 256),
-        (400, 416),
+        (400, 384),
         (480, 480),
     ],
 )
@@ -162,8 +164,8 @@ def test_snap_octree_ladder(raw: int, expected: int) -> None:
     "vram,offload,expected",
     [
         (None, False, 384),
-        (None, True, 448),
-        (6.0, True, 448),
+        (None, True, 480),
+        (6.0, True, 480),
         (6.0, False, 320),
         (12.0, False, 512),
         (10.0, False, 448),
@@ -172,7 +174,7 @@ def test_snap_octree_ladder(raw: int, expected: int) -> None:
         (4.0, True, 320),
         (16.0, False, 512),
         (11.0, True, 512),
-        (8.0, True, 448),
+        (8.0, True, 480),
         (5.5, True, 384),
         (5.5, False, 256),
     ],

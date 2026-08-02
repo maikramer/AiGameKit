@@ -6,7 +6,7 @@ Text-to-3D and image-to-3D generation powered by [Text2D](../Text2D) (FLUX.2 Kle
 
 Text3D is also the **central mesh operations hub** in the monorepo — it owns all mesh post-processing (LOD, collision, remesh, simplify, align).
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 
 ## Overview
 
@@ -19,9 +19,9 @@ Generation presets (`--preset`) adjust steps, octree resolution, and chunk count
 
 | Preset | Steps | Octree | Chunks | Profile |
 |--------|-------|--------|--------|---------|
-| `fast` | 18 | 128 | 4 096 | Minimal VRAM, fastest |
-| `balanced` | 24 | 256 | 8 000 | ~6 GB VRAM, good quality |
-| `hq` | 30 | 384 | 20 000 | Large GPU, highest quality |
+| `fast` | 20 | 128 | 4 096 | Minimal VRAM, fastest |
+| `balanced` | 30 | 256 | 8 000 | ~6 GB VRAM, good quality |
+| `hq` | 50 | 384 | 20 000 | Large GPU, highest quality |
 
 After generation, use ``--no-topology-fix`` (recommended in the master pipeline) for a raw shape, then ``text3d topology-fix`` (Shared profile ``topology_clean``) as Stage 2. Without that flag, ``generate`` still runs topology repair in-process (see [Mesh Topology](#mesh-topology)).
 
@@ -33,7 +33,7 @@ After generation, use ``--no-topology-fix`` (recommended in the master pipeline)
 
 | Config | Minimum | Recommended |
 |--------|---------|-------------|
-| Python | 3.10+ | 3.11+ |
+| Python | 3.13+ | Pinned `>=3.13,<3.14` |
 | GPU | Optional | CUDA ~6 GB+ (defaults tuned for this) |
 | RAM | 16 GB | 32 GB |
 | Disk | ~20 GB free | More (Hugging Face cache) |
@@ -135,16 +135,16 @@ Operational findings (bbox axis max=1 vs clip, presets, `size_m`, decode bounds,
 | `-o, --output` | path | `outputs/meshes/<name>_<ts>.glb` | Output file path |
 | `-f, --format` | str | `glb` | Output format: `glb`, `ply`, `obj` |
 | `--preset` | str | `balanced` | Generation preset: `fast`, `balanced`, `hq` |
-| `--steps` | int | 30 | Hunyuan3D inference steps |
+| `--steps` | int | 50 | Hunyuan3D inference steps (`DEFAULT_HY_STEPS`) |
 | `--octree-resolution` | int | 384 | Octree resolution (VRAM in decode phase) |
 | `--num-chunks` | int | 20 000 | Surface extraction chunks |
-| `--mc-level` | float | 0 | Marching cubes iso-surface level (0 = default) |
-| `--guidance` | float | 5.0 | Hunyuan3D guidance scale |
+| `--mc-level` | float/`auto` | `auto` | Marching cubes iso-surface level (`auto` resolves to the numeric `DEFAULT_MC_LEVEL`) |
+| `--guidance` | float | 4.5 | Hunyuan3D guidance scale (`DEFAULT_HY_GUIDANCE`) |
 | `-W, --image-width` | int | 2048 | Text2D reference image width |
 | `-H, --image-height` | int | 2048 | Text2D reference image height |
 | `--t2d-steps` | int | 8 | Text2D inference steps |
 | `--t2d-guidance` | float | 1.0 | Text2D guidance |
-| `--model` | str | None | Text2D model ID override (default: `TEXT2D_MODEL_ID` or Disty0) |
+| `--model` | str | None | Text2D model ID override (default: `TEXT2D_MODEL_ID` or official BFL base) |
 | `--t2d-full-gpu` | flag | false | Load Text2D fully on GPU (~12 GB+ VRAM required) |
 | `--seed` | int | None | Reproducible seed for Text2D and Hunyuan3D |
 | `--cpu` | flag | false | Force CPU inference (much slower) |
@@ -416,6 +416,20 @@ Default engine: `--engine arrays` (perf study: [`docs/TOPOLOGY_FIX_GPU_STUDY.md`
 
 LOD / bake-master use profile `pre_decimate_uv` before Decimate (UV-safe weld `0.0005`, slivers, no watertight).
 
+## Unified Model Server (UMS)
+
+`text3d generate` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+text3d generate "a dragon" -o dragon.glb --ums-stream    # queue/progress events
+text3d generate "a dragon" -o dragon.glb --ums-priority batch
+text3d generate "a dragon" -o dragon.glb --no-ums        # force in-process
+ums status                                               # backends + HOLDING/QUEUE
+ums respawn text3d                                       # reload edited src/ code
+```
+
+Models: [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) shape (SDNQ INT4 on small GPUs; public, Tencent Community License; bbox/pose/point/voxel controls) + Text2D FLUX reference image (see [Text2D/README](../Text2D/README.md) for the 9B gate). Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
+
 ## Quality Presets
 
 Quality tiers map to generation presets via the [QualityEngine](../Shared/src/aigamekit_shared/quality.py) (`quality-profiles.yaml`):
@@ -526,7 +540,7 @@ Full CI: `make check` (from repo root) runs lint, format check, typecheck, and t
 ## Credits
 
 - **Tencent Hunyuan3D-Omni** — [GitHub](https://github.com/Tencent-Hunyuan/Hunyuan3D-Omni), [HuggingFace](https://huggingface.co/tencent/Hunyuan3D-Omni) (image + bbox/pose/point/voxel; SDNQ INT4 on small GPUs)
-- **Text2D** — FLUX.2 Klein (SDNQ Disty0 by default; optional BFL BF16 via `TEXT2D_MODEL_ID`) in the monorepo `text2d` package
+- **Text2D** — FLUX.2 Klein (official BFL fp16 base + SDNQ runtime by default; optional pre-quantized mirror via `TEXT2D_MODEL_ID`) in the monorepo `text2d` package
 
 ## License
 

@@ -30,7 +30,7 @@ def _require_bpy():
 
 
 def _scale_object_textures(mesh_obj, texture_size: int) -> None:
-    """Downscale todas as ``TEX_IMAGE`` do mesh para ``texture_size``×``texture_size``."""
+    """Downscale todas as ``TEX_IMAGE`` do mesh para ``texture_size``x``texture_size``."""
     if texture_size is None or int(texture_size) <= 0:
         return
     from text3d.utils.mesh_remesh_textured import downscale_image_replace
@@ -220,10 +220,11 @@ def _repair_topology_arrays_phase(
 
         mc_stats = morphological_close(mesh_obj, distance=float(morph_close))
         log.info(
-            "morph-close (pós-weld): %s→%s faces (voxel=%.3f)",
+            "morph-close (pós-weld): %s→%s faces (voxel=%.3f)%s",
             mc_stats.get("faces_before"),
             mc_stats.get("faces_after"),
             mc_stats.get("voxel_size", 0.0),
+            " — REVERTIDO (colapso de volume)" if mc_stats.get("reverted_volume_collapse") else "",
         )
     return stats
 
@@ -346,7 +347,12 @@ def _prepare_topology_bpy(
     if stats.get("long_edge_faces"):
         log.warning("Leque/arestas outlier: %d faces removidas", stats["long_edge_faces"])
     if stats.get("sliver_faces"):
-        log.warning("Slivers (agulhas): %d faces removidas", stats["sliver_faces"])
+        log.info("Slivers (agulhas): %d faces colapsadas", stats["sliver_faces"])
+    if stats.get("duplicate_faces"):
+        log.info("Faces sobrepostas removidas (pós-weld): %d", stats["duplicate_faces"])
+    for key, val in stats.items():
+        if key.endswith("_reverted") and val:
+            log.warning("Reparo revertido (%s): %d faces abririam a malha fechada", key[:-9], val)
     if stats.get("debris_faces"):
         log.info("Debris removido: %d faces em ilhas soltas minúsculas", stats["debris_faces"])
 
@@ -739,6 +745,18 @@ def generate_lod_textured_glb_triplet(
         lod0_target = n
         lod1_target = _clamp_decimate_target(n, max(min_faces_lod1, int(n * lod1_ratio)))
         lod2_target = _clamp_decimate_target(n, max(min_faces_lod2, int(n * lod2_ratio)))
+
+    # Ladder achatada = três meshes iguais em disco e em VRAM, sem ganho de LOD.
+    # Acontecia quando o piso relativo de clamp_decimate_target subia lod1 e
+    # lod2 ao mesmo valor (ver _MIN_DECIMATE_FRAC).
+    if lod1_target == lod2_target or lod0_target == lod1_target:
+        log.warning(
+            "LOD ladder achatada: alvos lod0=%d lod1=%d lod2=%d (pedido %s) — níveis iguais não poupam nada",
+            lod0_target,
+            lod1_target,
+            lod2_target,
+            target_faces,
+        )
 
     out_paths: list[Path] = []
 

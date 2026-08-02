@@ -32,7 +32,7 @@ _OCTREE_CEILING = 512
 _OCTREE_STEP = 32
 # Soft-floor não-linear: sobe o piso efectivo nos assets **pequenos**
 # (anti-pinholes leve) e decai a ~0 nos grandes. ``floor_eff = 128 + MAX * e^(-char/τ)``.
-# MAX era 128 → props ~224–256 e faces ~9× o orçamento físico (OCTREE_FACES_FINDINGS);
+# MAX era 128 → props ~224-256 e faces ~9x o orçamento físico (OCTREE_FACES_FINDINGS);
 # 32 mantém margem mínima acima do piso sem explodir κ·octree².
 # ``char`` = diâmetro equivalente por volume ``(L·H·W)^(1/3)``.
 _OCTREE_SMALL_BOOST_MAX = 32.0
@@ -40,7 +40,7 @@ _OCTREE_SMALL_BOOST_TAU_M = 2.5
 # Orçamento físico de faces (OCTREE_FACES_FINDINGS): faces ≈ 8e4·char² ≈ κ·octree².
 _FACE_BUDGET_COEF = 8.0e4
 _FACE_BUDGET_KAPPA = 5.5  # mediana global; categories finas em _CATEGORY_FACE_KAPPA
-_FACE_BUDGET_SLACK = 3.0  # tecto props: ≤ slack × phys (anti soft-boost 224+)
+_FACE_BUDGET_SLACK = 3.0  # tecto props: ≤ slack x phys (anti soft-boost 224+)
 _FACE_BUDGET_CHAR_MAX_M = 2.0
 # κ mediana por category (findings §4). terrain/rock usam 5.5 (mais octree)
 # — approach 2 m fazia voxel grosso e auto caía a 128 → buracos; manifesto
@@ -66,13 +66,14 @@ _HOLE_PRONE_CATEGORIES = frozenset({"terrain", "rock", "environment"})
 # «auto 224 → 256 ainda fraco → +32» do manifesto.
 _PHYSICS_FLOOR_MARGIN = 1.125
 
-# Morph-close / «voxel merge»: N x voxel_m MC. Default ~0.18 voxel — margem
-# leve sobre 0.15 para fechar rachas MC sem chegar perto de 1 vox (que
-# derretia detalhe — capela); o fecho aqui dispensa welds extra a jusante.
+# Morph-close / «voxel merge»: N x voxel_m MC. Default 0.24 voxel — mais
+# agressivo que o antigo 0.18 para fechar rachas MC / irregularidades no clean
+# (interiores: mesas, tapetes, confessionários); ainda longe de 1 vox (que
+# derretia detalhe — capela). O fecho aqui dispensa welds extra a jusante.
 # Auto ON: funde double-shell sub-voxel; remesh interno usa grid ≥ octree (ver
 # ``morphological_close``). Opt-out: ``--morph-close 0``. Override:
 # ``--morph-close-voxels`` / category map.
-DEFAULT_MORPH_VOXELS = 0.18
+DEFAULT_MORPH_VOXELS = 0.24
 _MORPH_VOXELS = DEFAULT_MORPH_VOXELS  # alias interno
 _MORPH_FRAC_LO = 0.0002  # 0.02% char
 _MORPH_FRAC_HI = 0.004  # 0.4% char
@@ -141,6 +142,24 @@ _QUALITY_VOXEL_FACTOR: dict[str, float] = {
     "highest": 0.65,
 }
 
+# Tecto **absoluto** de voxel por category, aplicado depois da regra perceptual.
+#
+# O alvo perceptual escala com a distância de inspeção (``approach``), o que é
+# certo para superfícies lisas mas errado para categorias de **parede fina**: a
+# parede de um casebre e a de um celeiro têm ambas ~10-20 cm, não escalam com o
+# edifício. Com ``approach`` 1.5 m o alvo dava 0.0375 m — uma parede de 10 cm
+# ficava com 2.7 voxels e o marching cubes devolvia casca perfurada.
+#
+# Medido nos 19 assets que tiveram de ser regenerados: 13 eram ``building``, com
+# voxel mediano de 0.0121 m contra 0.0064 m dos saudáveis. Os octrees que o
+# utilizador validou à mão implicam voxel 0.0105-0.0140 m.
+_CATEGORY_TARGET_VOXEL_MAX_M: dict[str, float] = {
+    "building": 0.015,
+    "environment": 0.015,
+    "terrain": 0.030,
+    "rock": 0.030,
+}
+
 
 def target_voxel_for(
     category: str | None = None,
@@ -151,6 +170,10 @@ def target_voxel_for(
 
     Sem sinal de categoria/preset usa o approach default (1 m → alvo clássico
     de 2.5 cm — paridade com o comportamento antigo).
+
+    Categorias de parede fina levam ainda um tecto absoluto
+    (:data:`_CATEGORY_TARGET_VOXEL_MAX_M`): as features delas têm tamanho fixo
+    em metros e não acompanham o tamanho do objecto.
     """
     approach = _DEFAULT_APPROACH_M
     cat_key = (category or "").strip().lower()
@@ -163,6 +186,12 @@ def target_voxel_for(
             approach = _CATEGORY_APPROACH_M.get(mapped, _DEFAULT_APPROACH_M)
     factor = _QUALITY_VOXEL_FACTOR.get((quality or "").strip().lower(), 1.0)
     raw = _VOXEL_PER_APPROACH_M * approach * factor
+
+    key = cat_key or _PRESET_APPROACH_KEY.get(preset_key, "")
+    cap = _CATEGORY_TARGET_VOXEL_MAX_M.get(key)
+    if cap is not None:
+        # O tier de qualidade ainda aperta abaixo do tecto, nunca o afrouxa.
+        raw = min(raw, cap * min(1.0, factor))
     return float(max(_TARGET_VOXEL_LO, min(_TARGET_VOXEL_HI, raw)))
 
 
@@ -208,7 +237,13 @@ _OCTREE_LADDER = tuple(range(_OCTREE_FLOOR, _OCTREE_CEILING + 1, _OCTREE_STEP))
 # soltos dentro da shell, «geração a vazar»). Calibrável com
 # ``text3d bench-decode`` (summary.recommended_latent_ceiling); override via
 # env TEXT3D_LATENT_OCTREE_CEILING.
-LATENT_DETAIL_CEILING = 448
+#
+# 448 → 480: com 448 os edifícios de 6-11 m (shepherd_cottage, village_barn,
+# village_longhouse) ficavam presos no tecto e saíam com paredes perfuradas; a
+# 480 passam, validado à mão asset a asset. Subir mais exige medição — usar
+# ``bench-decode`` em vez de adivinhar, porque acima do detalhe real do latent
+# só se paga tempo e ruído interior.
+LATENT_DETAIL_CEILING = 480
 _LATENT_CEILING_ENV = "TEXT3D_LATENT_OCTREE_CEILING"
 
 
@@ -360,14 +395,20 @@ def max_octree_for_vram(
     residente — tecto sobe para aproveitar a GPU em marching cubes / qualidade high.
     """
     if total_vram_gib is None:
-        return 448 if group_offload else 384
+        # A pipeline não propaga VRAM (``hardware.total_vram_gib`` vem ``null``
+        # nos sidecars), portanto este ramo é o que manda na prática — tem de
+        # espelhar o tier ≥6 GiB, senão mexer lá em cima não muda nada.
+        return 480 if group_offload else 384
     if group_offload:
         # Stream pesos → VRAM ≈ ativação + MC. Sacrifica tempo, enche a GPU.
-        # 6 GB + sdnq-int4 + group_offload aguenta 448 (validado longhouse ~10 m).
+        # 6 GB + sdnq-int4 + group_offload: 448 → 480. Os edifícios de 6-11 m
+        # ficavam colados a 448 e saíam com paredes perfuradas; 480 corre sem
+        # OOM na 4050 6 GB (validado asset a asset em shepherd_cottage,
+        # village_barn e village_longhouse).
         if total_vram_gib >= 10.0:
             return 512
         if total_vram_gib >= 6.0:
-            return 448
+            return 480
         if total_vram_gib >= 5.0:
             return 384
         return 320
@@ -443,7 +484,7 @@ def octree_face_budget_cap(char_m: float, category: str | None = None) -> int | 
     if max_faces <= 0.0:
         return None
     raw = math.sqrt(max_faces / category_face_kappa(category))
-    return max(_OCTREE_FLOOR, int(round(raw)))
+    return max(_OCTREE_FLOOR, round(raw))
 
 
 def tune_hunyuan_for_bbox(
@@ -526,10 +567,10 @@ def tune_hunyuan_for_bbox(
     phys = physics_target_octree(float(char_m), category)
     if cat_key in _HOLE_PRONE_CATEGORIES:
         # Terrain/rock: approach voxel grosso → geom ~128 → buracos MC.
-        # Manifesto forçava 256/288; piso = alvo físico × margem (~+1 ladder).
+        # Manifesto forçava 256/288; piso = alvo físico x margem (~+1 ladder).
         desired = max(desired, round(phys * _PHYSICS_FLOOR_MARGIN))
     else:
-        # Props pequenos: tecto ~3× phys (κ category) — evita 0.5M faces.
+        # Props pequenos: tecto ~3x phys (κ category) — evita 0.5M faces.
         face_cap = octree_face_budget_cap(float(char_m), category)
         if face_cap is not None:
             desired = min(desired, int(face_cap))

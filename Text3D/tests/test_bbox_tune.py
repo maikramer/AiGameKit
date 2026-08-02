@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
+import pytest
+
 from text3d.bbox_tune import _OCTREE_CEILING, _OCTREE_FLOOR, _OCTREE_STEP, _snap_octree, tune_hunyuan_for_bbox
 
 
@@ -202,3 +206,93 @@ class TestTuneHunyuanForBbox:
         b_large = small_asset_octree_boost(10.0)
         assert b_small > b_mid > b_large
         assert b_large < 5.0  # chapel: boost desprezável
+
+
+# --- Voxel-alvo de categorias de parede fina (regressão) -------------------
+#
+# 13 dos 19 assets que tiveram de ser regenerados eram ``building``: o alvo
+# perceptual escala com a distância de inspeção, portanto edifícios grandes
+# recebiam o voxel MAIS GROSSO de todos (0.0375 m) e uma parede de 10 cm ficava
+# com 2.7 voxels — casca perfurada no marching cubes.
+
+
+class TestThinWallTargetVoxel:
+    def test_building_capped_below_perceptual_target(self) -> None:
+        from text3d.bbox_tune import target_voxel_for
+
+        tv = target_voxel_for("building", None, "medium")
+        assert tv <= 0.015, f"edifícios não podem levar voxel grosso: {tv}"
+
+    def test_building_not_coarser_than_props(self) -> None:
+        """O bug era exactamente este: edifícios mais grosseiros que props."""
+        from text3d.bbox_tune import target_voxel_for
+
+        assert target_voxel_for("building", None, "medium") < target_voxel_for("prop", None, "medium")
+
+    def test_quality_tier_still_tightens(self) -> None:
+        from text3d.bbox_tune import target_voxel_for
+
+        hi = target_voxel_for("building", None, "highest")
+        med = target_voxel_for("building", None, "medium")
+        assert hi < med
+
+    def test_low_tier_does_not_loosen_past_cap(self) -> None:
+        from text3d.bbox_tune import target_voxel_for
+
+        assert target_voxel_for("building", None, "fast") <= 0.015
+
+    def test_other_categories_unchanged(self) -> None:
+        from text3d.bbox_tune import target_voxel_for
+
+        assert target_voxel_for("furniture", None, "medium") == pytest.approx(0.025)
+        assert target_voxel_for("weapon", None, "medium") == pytest.approx(0.0125)
+
+
+class TestBuildingOctreeTargets:
+    """Octrees validados à mão nos assets que falharam."""
+
+    CASES: ClassVar[list[tuple[str, list[float], int]]] = [
+        ("shepherd_cottage", [6.7, 3.94, 7.5], 480),
+        ("village_barn", [8.48, 6.06, 11.0], 480),
+        ("village_longhouse", [5.73, 5.61, 10.0], 480),
+        ("witch_hut", [5.0, 3.99, 4.94], 416),
+        ("village_house", [4.73, 3.18, 6.0], 416),
+        ("swamp_shack", [5.0, 4.09, 4.94], 416),
+        ("village_forge", [6.0, 5.75, 4.88], 448),
+        ("city_wall_seg_b", [6.5, 5.0, 1.2], 224),
+        ("forge_furnace", [2.2, 2.6, 1.5], 192),
+        ("fireplace_hearth", [1.8, 2.0, 1.2], 160),
+    ]
+
+    @pytest.mark.parametrize(("asset", "size_m", "min_octree"), CASES)
+    def test_reaches_validated_octree(self, asset: str, size_m: list[float], min_octree: int) -> None:
+        from text3d.bbox_tune import tune_hunyuan_for_bbox
+
+        r = tune_hunyuan_for_bbox(
+            base_steps=50,
+            base_octree=256,
+            base_chunks=20000,
+            size_m=size_m,
+            category="building",
+            total_vram_gib=6.0,
+            group_offload=True,
+            quality="medium",
+        )
+        assert r.octree >= min_octree, f"{asset}: octree {r.octree} < {min_octree}"
+
+    def test_wall_resolved_by_several_voxels(self) -> None:
+        """Parede típica de 10 cm tem de caber em ≥5 voxels."""
+        from text3d.bbox_tune import tune_hunyuan_for_bbox
+
+        for _asset, size_m, _o in self.CASES:
+            r = tune_hunyuan_for_bbox(
+                base_steps=50,
+                base_octree=256,
+                base_chunks=20000,
+                size_m=size_m,
+                category="building",
+                total_vram_gib=6.0,
+                group_offload=True,
+                quality="medium",
+            )
+            assert 0.10 / r.voxel_m >= 5.0, f"voxel {r.voxel_m:.4f} grosso demais para parede de 10 cm"

@@ -25,10 +25,8 @@ from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
     add_ums_options,
+    delegate_or_prepare,
     prepare_gpu_exclusive,
-    try_ums_delegation,
-    with_ums_load_opts,
-    with_ums_peak_opts,
 )
 from aigamekit_shared.hf import hf_home_display_rich
 from aigamekit_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT3D, emit_progress, emit_result
@@ -236,7 +234,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "-m",
     "text2d_model_id",
     default=None,
-    help="Modelo Hugging Face Text2D (default: env TEXT2D_MODEL_ID ou Disty0)",
+    help="Modelo Hugging Face Text2D (default: env TEXT2D_MODEL_ID ou base oficial BFL)",
 )
 @click.option(
     "--t2d-full-gpu",
@@ -997,29 +995,24 @@ def generate(
                     _ums_request["t2d_full_gpu"] = t2d_full_gpu
 
                 # UMS primeiro — nunca ensure_vram/kill antes de enfileirar.
-                if try_ums_delegation(
+                if delegate_or_prepare(
                     "text3d",
-                    with_ums_peak_opts(
-                        with_ums_load_opts(
-                            _ums_request,
-                            gpu_ids=parsed_gpu_ids,
-                            volume_decoder=volume_decoder,
-                            allow_group_offload=allow_group_offload,
-                            channels_last=channels_last,
-                            offload=offload,
-                        ),
-                        backend="text3d",
-                        memory_efficient=bool(offload or allow_group_offload)
-                        or (sdnq_preset not in (None, "none", "")),
-                        sdnq_preset=None if sdnq_preset in (None, "none", "") else sdnq_preset,
-                    ),
+                    payload={
+                        **_ums_request,
+                        "volume_decoder": volume_decoder,
+                        "allow_group_offload": allow_group_offload,
+                        "channels_last": channels_last,
+                        "offload": offload,
+                    },
                     t_start=start_time,
                     noun="Mesh",
                     console=console,
                     enabled=not no_ums,
                     priority=ums_priority,
                     stream=ums_stream,
-                    timeout_sec=1800.0,
+                    gpu_ids=parsed_gpu_ids,
+                    memory_efficient=bool(offload or allow_group_offload) or (sdnq_preset not in (None, "none", "")),
+                    sdnq_preset=None if sdnq_preset in (None, "none", "") else sdnq_preset,
                 ):
                     sys.exit(0)
 
@@ -1355,11 +1348,20 @@ def doctor():
                 "OK — export_meshopt_compression_enable + libmeshoptimizer",
             )
         else:
-            extra.add_row(
-                "meshopt (bpy)",
-                "[yellow]RNA OK mas libmeshoptimizer.so ausente — "
-                "instale libmeshoptimizer-dev (Debian/Ubuntu); fallback gltf-transform[/yellow]",
-            )
+            if sys.platform == "win32":
+                _meshopt_hint = (
+                    "sem libmeshoptimizer no Windows — meshopt via @gltf-transform/cli; instala Node.js para compressão"
+                )
+            elif sys.platform == "darwin":
+                _meshopt_hint = (
+                    "sem libmeshoptimizer.dylib — instala `brew install meshoptimizer`; fallback @gltf-transform/cli"
+                )
+            else:
+                _meshopt_hint = (
+                    "RNA OK mas libmeshoptimizer.so ausente — "
+                    "instale libmeshoptimizer-dev (Debian/Ubuntu); fallback gltf-transform"
+                )
+            extra.add_row("meshopt (bpy)", f"[yellow]{_meshopt_hint}[/yellow]")
     except Exception as exc:
         extra.add_row("bpy / meshopt", f"[yellow]erro: {exc}[/yellow]")
 
@@ -3002,53 +3004,47 @@ def generate_batch(
                 t0 = time.time()
                 from .ums_payload import build_generate_request
 
-                _ums_item = build_generate_request(
-                    from_image=str(img_path),
-                    output=str(out_path),
-                    steps=item_steps,
-                    guidance=guidance,
-                    octree_resolution=item_octree,
-                    num_chunks=item_chunks,
-                    seed=item_seed,
-                    mc_level=item_mc_level,
-                    bounds_mode=bounds_mode,
-                    origin_mode=export_origin,
-                    topology_fix=not no_topology_fix,
-                    volume_decoder=volume_decoder,
-                    mc_algo=mc_algo,
-                    torch_compile=compile_models,
-                    torch_compile_mode=compile_mode,
-                    channels_last=channels_last,
-                    allow_group_offload=allow_group_offload,
-                    fp8_layerwise=fp8_layerwise,
-                    sdnq_quantized_matmul=sdnq_matmul,
-                    sage_attention=sage_attention,
-                    offload=batch_offload,
-                    verbose=batch_verbose,
-                    category=item.get("category", category),
-                    quality=item.get("quality", quality),
-                    bbox_tune=False,  # já afinado acima
-                    control_type=_omni.get("control_type"),
-                    pose_preset=_omni.get("pose_preset"),
-                    bbox_preset=_omni.get("bbox_preset"),
-                    size_m=_item_size_m,
-                    bbox=_omni.get("bbox"),
-                    pose_file=str(_omni["pose_file"]) if _omni.get("pose_file") else None,
-                    point_cloud=str(_omni["point_cloud"]) if _omni.get("point_cloud") else None,
-                    voxel_mesh=str(_omni["voxel_mesh"]) if _omni.get("voxel_mesh") else None,
-                    gpu_ids=parsed_gpu_ids,
-                    sdnq_preset=sdnq_preset,
-                    memory_efficient=bool(batch_offload or allow_group_offload)
-                    or (sdnq_preset not in (None, "none", "")),
-                    extra={
-                        "bbox_tune_snapshot": bbox_tune_to_debug(_bt),
-                        "seed_fingerprint": item.get("seed_fingerprint"),
-                    },
-                )
-
-                if try_ums_delegation(
+                if delegate_or_prepare(
                     "text3d",
-                    _ums_item,
+                    payload=build_generate_request(
+                        from_image=str(img_path),
+                        output=str(out_path),
+                        steps=item_steps,
+                        guidance=guidance,
+                        octree_resolution=item_octree,
+                        num_chunks=item_chunks,
+                        seed=item_seed,
+                        mc_level=item_mc_level,
+                        bounds_mode=bounds_mode,
+                        origin_mode=export_origin,
+                        topology_fix=not no_topology_fix,
+                        volume_decoder=volume_decoder,
+                        mc_algo=mc_algo,
+                        torch_compile=compile_models,
+                        torch_compile_mode=compile_mode,
+                        channels_last=channels_last,
+                        allow_group_offload=allow_group_offload,
+                        fp8_layerwise=fp8_layerwise,
+                        sdnq_quantized_matmul=sdnq_matmul,
+                        sage_attention=sage_attention,
+                        offload=batch_offload,
+                        verbose=batch_verbose,
+                        category=item.get("category", category),
+                        quality=item.get("quality", quality),
+                        bbox_tune=False,  # já afinado acima
+                        control_type=_omni.get("control_type"),
+                        pose_preset=_omni.get("pose_preset"),
+                        bbox_preset=_omni.get("bbox_preset"),
+                        size_m=_item_size_m,
+                        bbox=_omni.get("bbox"),
+                        pose_file=str(_omni["pose_file"]) if _omni.get("pose_file") else None,
+                        point_cloud=str(_omni["point_cloud"]) if _omni.get("point_cloud") else None,
+                        voxel_mesh=str(_omni["voxel_mesh"]) if _omni.get("voxel_mesh") else None,
+                        extra={
+                            "bbox_tune_snapshot": bbox_tune_to_debug(_bt),
+                            "seed_fingerprint": item.get("seed_fingerprint"),
+                        },
+                    ),
                     t_start=t0,
                     noun="Mesh",
                     console=_err,
@@ -3056,6 +3052,10 @@ def generate_batch(
                     priority=ums_priority or "batch",
                     stream=ums_stream,
                     timeout_sec=1800.0,
+                    gpu_ids=parsed_gpu_ids,
+                    sdnq_preset=sdnq_preset,
+                    memory_efficient=bool(batch_offload or allow_group_offload)
+                    or (sdnq_preset not in (None, "none", "")),
                 ):
                     elapsed = time.time() - t0
                     emit_result(
@@ -3365,15 +3365,10 @@ def serve(ums_worker: bool) -> None:
     :func:`aigamekit_shared.worker_serve.run_worker_loop` com o adapter text3d
     local (:mod:`text3d.worker_serve_adapter`).
     """
-    if not ums_worker:
-        console.print("[yellow]text3d serve sem --ums-worker não faz nada.[/yellow]")
-        console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
-        return
-
-    from aigamekit_shared.worker_serve import run_worker_loop
+    from aigamekit_shared.worker_serve import run_ums_worker_cli
     from text3d.worker_serve_adapter import Adapter
 
-    run_worker_loop(Adapter, backend_name="text3d")
+    run_ums_worker_cli(Adapter, tool_name="text3d", ums_worker=ums_worker, console=console)
 
 
 def main():

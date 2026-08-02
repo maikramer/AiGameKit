@@ -140,10 +140,12 @@ class FastGeometryExtractorV2(BaseGeometryExtractor):
             grid_size = np.array([octree_depth_now + 1] * 3)
             resolution = bbox_size / octree_depth_now
             next_index = torch.zeros(tuple(grid_size), dtype=dtype, device=self.device)
-            if octree_depth_now == resolutions[-1]:
-                next_logits = torch.full(next_index.shape, float("nan"), dtype=dtype, device=self.device)
-            else:
-                next_logits = torch.full(next_index.shape, -10000.0, dtype=dtype, device=self.device)
+            # Células fora da região refinada valem "fora do sólido". O upstream
+            # usava NaN no nível mais fino: qualquer comparação com NaN é False,
+            # portanto os cubos que tocavam a fronteira da máscara não geravam
+            # triângulos — buracos na malha extraída. -10000 (o mesmo dos níveis
+            # grosseiros) mantém o sinal coerente e o MC fecha a superfície.
+            next_logits = torch.full(next_index.shape, -10000.0, dtype=dtype, device=self.device)
             curr_points = find_invalid_pionts_fn(grid_logits.squeeze(0), mc_level)
             curr_points += grid_logits.squeeze(0).abs() < min(0.95, 0.95 * 128 * 4 / octree_depth_now)
             if octree_depth_now > 510:
@@ -188,7 +190,14 @@ class FastGeometryExtractorV2(BaseGeometryExtractor):
         try:
             if mc_mode == "mc":
                 if len(resolutions) > 1:
-                    mask = (next_index > 0).cpu().numpy()
+                    # ``measure.marching_cubes`` só processa um cubo quando os 8
+                    # cantos estão na máscara: usar ``next_index`` cru deixa uma
+                    # coroa de cubos meio-mascarados sem triângulos (rachas ao
+                    # longo de toda a fronteira da região refinada). Dilatar uma
+                    # vez cobre esses cubos — as células novas já têm o valor
+                    # "fora" (-10000), portanto não inventam superfície.
+                    mask_t = self.dilate((next_index > 0).to(dtype).unsqueeze(0)).squeeze(0)
+                    mask = (mask_t > 0).cpu().numpy()
                     grid_logits = grid_logits.cpu().numpy()
                     vertices, faces, normals, _ = measure.marching_cubes(
                         grid_logits[0], mc_level, method="lewiner", mask=mask

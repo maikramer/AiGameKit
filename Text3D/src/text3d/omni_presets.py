@@ -459,7 +459,15 @@ def json_safe(obj: Any) -> Any:
     if isinstance(obj, (list, tuple)):
         return [json_safe(v) for v in obj]
     if hasattr(obj, "_asdict"):
-        return json_safe(obj._asdict())
+        try:
+            as_dict = obj._asdict()
+        except Exception:
+            return repr(obj)
+        # namedtuples devolvem dict; mocks/objetos estranhos podem devolver
+        # outra coisa (até outro mock) — nunca recursar sobre isso.
+        if isinstance(as_dict, dict):
+            return {str(k): json_safe(v) for k, v in as_dict.items()}
+        return repr(obj)
     if hasattr(obj, "__dataclass_fields__"):
         from dataclasses import asdict
 

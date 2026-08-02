@@ -12,13 +12,13 @@ Os **valores por defeito** do CLI/API estão em [`src/text3d/defaults.py`](src/t
 
 > **Licença dos pesos Hunyuan:** [Tencent Hunyuan Community License](https://huggingface.co/tencent/Hunyuan3D-Omni) — lê o ficheiro `LICENSE` no repositório ([Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni)): restrições de território, política de uso aceitável e obrigações. **Text2D (FLUX):** o default SDNQ no monorepo não é o mesmo regime que o BF16 Apache 2.0 da BFL — ver [Text2D/README](../Text2D/README.md) e [AiGameKit/README_PT](../README_PT.md).
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 
 ## Requisitos
 
 | Configuração | Mínimo | Recomendado |
 |-------------|--------|-------------|
-| Python | 3.10+ | 3.11+ |
+| Python | 3.13+ | Pinned `>=3.13,<3.14` |
 | GPU | Opcional | CUDA ~6 GB+ (defeitos já calibrados) |
 | RAM | 16GB | 32GB |
 | Disco | ~20GB livres | Mais (cache Hugging Face) |
@@ -100,13 +100,13 @@ Ver [`defaults.py`](src/text3d/defaults.py). Resumo:
 | Flag | Padrão atual | Exemplo GPU grande (HF) |
 |------|----------------|-------------------------|
 | `-W` / `-H` | 768 | 1024 |
-| `--steps` | 24 | 30 |
-| `--guidance` | 5.0 | 5.0 |
-| `--octree-resolution` | 256 | 380 |
+| `--steps` | 30 | 50 |
+| `--guidance` | 4.5 | 4.5 |
+| `--octree-resolution` | 256 | 384 |
 | `--num-chunks` | 8000 | 20000 |
 | `--seed` | — | — |
 | `--preset` | — | `fast` / `balanced` / `hq` (substitui steps+octree+chunks) |
-| `--mc-level` | 0 | Iso-superfície Hunyuan (ajuste fino) |
+| `--mc-level` | `auto` | Iso-superfície Hunyuan (`auto` = `DEFAULT_MC_LEVEL` numérico; ajuste fino manual) |
 | `--gpu-ids` | off | Split multi-GPU via accelerate (ex. `0,1`) |
 | `--hw-auto` | **on** | Auto-detecta GPU(s): 2x12GB → multi-GPU hq sem quant; 6GB → balanced + SDNQ INT4; desliga com `--no-hw-auto` / `TEXT3D_HW_AUTO=0`. Flags explícitas, `--quality` e `--preset` ganham sempre. Ver perfil: `text3d doctor` |
 | `--volume-decoder` | `vanilla` | `hierarchical` (~lossless, decode muito mais rápido) / `flashvdm` (mais rápido, perda ligeira) |
@@ -169,6 +169,20 @@ text3d generate "robô" --octree-resolution 256 --num-chunks 8000 --steps 28
 | [docs/PAINT_SETUP.md](docs/PAINT_SETUP.md) | Redireciona para Paint3D (textura Hunyuan) |
 | [docs/PBR_MATERIALIZE.md](docs/PBR_MATERIALIZE.md) | PBR no GLB (Paint 2.1) vs Materialize em textura |
 
+## Unified Model Server (UMS)
+
+`text3d generate` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+
+```bash
+text3d generate "um dragão" -o dragao.glb --ums-stream    # eventos de fila/progresso
+text3d generate "um dragão" -o dragao.glb --ums-priority batch
+text3d generate "um dragão" -o dragao.glb --no-ums        # forçar in-process
+ums status                                                # backends + HOLDING/QUEUE
+ums respawn text3d                                        # recarrega código src/ editado
+```
+
+Modelos: shape [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (SDNQ INT4 em GPUs pequenas; público, Tencent Community License; controlos bbox/pose/point/voxel) + imagem de referência Text2D FLUX (ver [Text2D/README_PT](../Text2D/README_PT.md) para o gate do 9B). Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
+
 ## Variáveis de Ambiente
 
 | Variável | Descrição |
@@ -185,4 +199,4 @@ text3d generate "robô" --octree-resolution 256 --num-chunks 8000 --steps 28
 ## Créditos
 
 - **Tencent Hunyuan3D-Omni** — [Hunyuan3D-Omni](https://github.com/Tencent-Hunyuan/Hunyuan3D-Omni), [tencent/Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (controlos bbox/pose/point/voxel; SDNQ INT4 em GPUs pequenas)
-- **Text2D** — FLUX.2 Klein (SDNQ Disty0 por defeito; opcional BF16 BFL via `TEXT2D_MODEL_ID`) no pacote `text2d` do monorepo — licenças: [AiGameKit/README_PT](../README_PT.md)
+- **Text2D** — FLUX.2 Klein (base BFL fp16 + SDNQ runtime por defeito; opcional pré-quantizado via `TEXT2D_MODEL_ID`) no pacote `text2d` do monorepo — licenças: [AiGameKit/README_PT](../README_PT.md)
