@@ -106,6 +106,7 @@ class UnifiedModelServer:
             check_interval_sec=P.IDLE_EVICT_CHECK_SEC,
             worker_shutdown_sec=worker_shutdown_sec,
             health_check_sec=P.WORKER_HEALTH_CHECK_SEC,
+            queue=self.queue,
         )
 
         self._server_sock: socket.socket | None = None
@@ -542,7 +543,8 @@ class UnifiedModelServer:
         if cmd == P.CMD_RESPAWN:
             # Respawn só faz sentido com workers subprocesso activos. Recusar se
             # há jobs na fila/inflight — matar um worker mid-generate rouba o job.
-            if self.queue.inflight > 0 or self.queue.depth > 0:
+            # ``is_busy()`` lê inflight+depth sob o mesmo lock (TOCTOU-safe).
+            if self.queue.is_busy():
                 return self._error(
                     "fila ocupada — espera os jobs terminarem antes de respawn",
                     error_code=P.ERR_RESPAWN_BUSY,
@@ -588,6 +590,46 @@ class UnifiedModelServer:
                 "results": results,
                 "lazy": lazy,
                 "scrub": scrub,
+                "loaded_backends": self.manager.loaded_names(),
+            }
+
+        if cmd == P.CMD_ZERO:
+            # Zero liberta TODA a VRAM do UMS sem parar o supervisor: mata os
+            # workers vivos (só a morte do processo devolve o contexto CUDA) e
+            # scrubba caches. Mesmo busy-guard do respawn — nunca matar um
+            # worker mid-generate. ``is_busy()`` lê inflight+depth sob o mesmo
+            # lock (TOCTOU-safe).
+            if self.queue.is_busy():
+                return self._error(
+                    "fila ocupada — espera os jobs terminarem antes de zerar a VRAM",
+                    error_code=P.ERR_ZERO_BUSY,
+                    hint="ums queue / ums wait <job_id> — não mates o worker a meio de um job.",
+                    queue=self.queue.snapshot(),
+                )
+            from .backend_manager import ShapeBusyError
+
+            try:
+                summary = self.manager.zero_vram()
+            except ShapeBusyError as e:
+                return self._error(
+                    str(e),
+                    error_code=P.ERR_ZERO_BUSY,
+                    hint="Backend com job a correr (ref_count>0). Espera o job terminar.",
+                )
+            except Exception as e:
+                return self._error(
+                    f"falha ao zerar VRAM: {e}",
+                    error_code=P.ERR_ZERO_BUSY,
+                    hint="Worker provavelmente já morto — o próximo generate arranca um novo.",
+                )
+            killed = int(summary.get("workers_killed") or 0)
+            fb, fa = summary.get("free_mib_before"), summary.get("free_mib_after")
+            freed = (fa - fb) if (isinstance(fa, int) and isinstance(fb, int)) else None
+            freed_str = f"; ~{freed} MiB recuperados" if freed else ""
+            return {
+                "status": P.STATUS_OK,
+                "message": f"{killed} worker(s) terminado(s) — VRAM zerada, supervisor intacto{freed_str}",
+                **summary,
                 "loaded_backends": self.manager.loaded_names(),
             }
 
@@ -969,7 +1011,8 @@ class UnifiedModelServer:
         if not self._singleton.acquire():
             owner = self._singleton.owner_pid()
             raise RuntimeError(
-                f"UMS já ativo (PID {owner or '?'}) — lock {self._singleton.path}. "
+                f"[{P.ERR_ALREADY_RUNNING}] UMS já ativo (PID {owner or '?'}) — "
+                f"lock {self._singleton.path}. "
                 "Usa `ums status` / `ums stop`; não arranques um segundo supervisor."
             )
 

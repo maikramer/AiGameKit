@@ -2,8 +2,8 @@
 """Unified Model Server — CLI principal.
 
 Comandos (alias ``ums`` = ``aigamekit-model-server``):
-  start|stop|status|queue|wait|cancel|flush|backends|preload|evict|respawn|
-  stats|debug|bench|doctor
+  start|stop|status|submit|cancel|flush|queue|wait|backends|preload|evict|reap|
+  respawn|zero|stats|debug|bench|doctor
 
 Agentes / humanos: se a GPU estiver ocupada, usa ``status`` / ``queue`` /
 ``debug`` — **não** mates processos GPU enquanto houver jobs UMS.
@@ -699,6 +699,39 @@ def respawn_cmd(name: str | None, lazy: bool) -> None:
         )
     else:
         console.print("[dim]Worker arranca no próximo generate/preload — já com código atualizado.[/dim]")
+
+
+@cli.command("zero")
+def zero_cmd() -> None:
+    """Zera TODA a VRAM segurada pelo UMS SEM parar o supervisor.
+
+    ``evict`` só larga os pesos — os workers ficam vivos a segurar o contexto
+    CUDA (~0.3-1 GiB cada). ``zero`` termina todos os workers (o próximo
+    generate arranca-os frescos), evicta resíduos e scrubba caches. Recusa com
+    fila ocupada — nunca mata um worker a meio de um job.
+    """
+    resp = _send({"cmd": P.CMD_ZERO}, timeout=120.0)
+    if resp is None:
+        console.print("[yellow]UMS não está ativo — nada para zerar.[/yellow]")
+        sys.exit(0)
+    if resp.get("status") != "ok":
+        _print_ums_error(resp)
+        _print_do_not_kill_tip()
+        sys.exit(1)
+
+    for r in resp.get("results", []) or []:
+        rname = r.get("name", "?")
+        if r.get("killed"):
+            tag = "terminado (contexto CUDA libertado)"
+        elif r.get("was_alive"):
+            tag = "[dim]skip (load/generate em curso)[/dim]"
+        else:
+            tag = "[dim]não estava vivo[/dim]"
+        model_str = " (tinha modelo)" if r.get("had_model") else ""
+        console.print(f"  • {rname}: {tag}{model_str}")
+    fb, fa = resp.get("free_mib_before"), resp.get("free_mib_after")
+    free_str = f" — VRAM livre: {fb} → {fa} MiB" if isinstance(fa, int) else ""
+    console.print(f"[bold green]✓ {resp.get('message', 'VRAM zerada')}{free_str}[/bold green]")
 
 
 def _print_queue_metrics(qm: dict[str, Any], *, affinity_hits: object = None) -> None:

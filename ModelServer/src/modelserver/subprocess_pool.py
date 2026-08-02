@@ -55,7 +55,7 @@ _logger = Logger()
 # demorar muitos minutos no total — NÃO é wall-clock do generate inteiro.
 DEFAULT_EVENT_TIMEOUT_SEC = 600.0  # 10 min sem progress → force abort
 # Após progress pct≥1.0 / msg "done": o adapter já acabou o GPU work — só
-# falta ``EVENT_DONE``. NÃO renovar o idle de 600s (era o hang de ~7–10 min
+# falta ``EVENT_DONE``. NÃO renovar o idle de 600s (era o hang de ~7-10 min
 # com UI a 100% done e ``completed=0``). Grace curto para scrub+emit.
 DEFAULT_POST_DONE_TIMEOUT_SEC = 90.0
 # Após CMD_ABORT: se worker não emitir done/error, SIGTERM (antes: ficava
@@ -163,6 +163,9 @@ class _WorkerState:
     vram_mib: int | None = None  # último reportado pelo worker
     lock: threading.RLock = field(default_factory=threading.RLock)
     log_path: Path | None = None
+    # File handle do stderr do worker (aberto em _spawn, fechado em
+    # shutdown/_force_abort — antes ficava órfão e só era recuperado por GC).
+    log_fh: Any = None
 
 
 class SubprocessWorkerError(Exception):
@@ -398,6 +401,11 @@ class SubprocessWorkerPool:
             finally:
                 state.proc = None
                 state.loaded = False
+                # Fechar o handle do stderr do worker (antes ficava órfão).
+                if state.log_fh is not None:
+                    with contextlib.suppress(Exception):
+                        state.log_fh.close()
+                    state.log_fh = None
             return True
 
     def shutdown_all(self) -> None:
@@ -461,7 +469,12 @@ class SubprocessWorkerPool:
         # Log stderr para ficheiro (captura imports / warnings torch).
         state.log_path = state.log_path or self._log_path_fn(backend)
         state.log_path.parent.mkdir(parents=True, exist_ok=True)
-        log_fh = open(state.log_path, "ab")  # noqa: SIM115 — fechado no shutdown
+        # Fechar handle anterior se existir (respawn sem shutdown limpo).
+        if state.log_fh is not None:
+            with contextlib.suppress(Exception):
+                state.log_fh.close()
+        log_fh = open(state.log_path, "ab")  # noqa: SIM115 — fechado no shutdown/_force_abort
+        state.log_fh = log_fh
         _logger.info(f"[UMS] spawn worker {backend}: {' '.join(cmd)} (log: {state.log_path})")
         # ``spawn_fn`` recebe kwargs stdin/stdout/stderr explícitos — o fake
         # em testes ignora-os (já tem StringIO próprios); o default passa-os
@@ -574,6 +587,11 @@ class SubprocessWorkerPool:
                     state.proc.kill()
         state.loaded = False
         state.proc = None
+        # Fechar o handle do stderr do worker (antes ficava órfão).
+        if state.log_fh is not None:
+            with contextlib.suppress(Exception):
+                state.log_fh.close()
+            state.log_fh = None
 
 
 # ---------------------------------------------------------------------------
@@ -589,6 +607,14 @@ def _resolve_tool_python(tool: str) -> str | None:
 
 
 def _shape_mismatch(stored: dict[str, Any], new: dict[str, Any]) -> bool:
-    """True se kwargs relevantes mudaram (ex.: max_num_view, sdnq_preset)."""
-    relevant = {"max_num_view", "view_resolution", "sdnq_preset", "memory_efficient", "gpu_ids", "octree_resolution"}
-    return any(stored.get(k) != new.get(k) for k in relevant)
+    """True se kwargs relevantes mudaram (ex.: max_num_view, sdnq_preset).
+
+    Reutiliza o ``_SHAPE_LOAD_KEYS`` do BackendManager (source of truth) para
+    garantir que o reuse-fast-path do pool decide "mesma shape" com os mesmos
+    critérios do manager — antes o pool tinha um subset divergente, o que era
+    um latent footgun (bug M4): podia reusar um worker com shape errada se um
+    caller futuro dependesse só da lógica do pool.
+    """
+    from .backend_manager import _SHAPE_LOAD_KEYS
+
+    return any(stored.get(k) != new.get(k) for k in _SHAPE_LOAD_KEYS)

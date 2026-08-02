@@ -64,6 +64,7 @@ CMD_PRELOAD = "preload"
 CMD_ENSURE_VRAM = "ensure-vram"
 CMD_RESPAWN = "respawn"
 CMD_REAP = "reap"
+CMD_ZERO = "zero"
 
 # Comandos válidos (para validação no servidor).
 KNOWN_COMMANDS = frozenset(
@@ -84,6 +85,7 @@ KNOWN_COMMANDS = frozenset(
         CMD_STATS,
         CMD_RESPAWN,
         CMD_REAP,
+        CMD_ZERO,
     }
 )
 
@@ -107,7 +109,9 @@ ERR_PRELOAD_FAILED = "PRELOAD_FAILED"
 ERR_VRAM_INSUFFICIENT = "VRAM_INSUFFICIENT"
 ERR_RESPAWN_FAILED = "RESPAWN_FAILED"
 ERR_RESPAWN_BUSY = "RESPAWN_BUSY"
+ERR_ZERO_BUSY = "ZERO_BUSY"
 ERR_ALREADY_RUNNING = "ALREADY_RUNNING"
+ERR_SHAPE_BUSY = "SHAPE_BUSY"
 
 # Prioridades de pedido (menor rank = atende primeiro).
 PRIORITY_INTERACTIVE = "interactive"
@@ -210,7 +214,9 @@ MAX_REQUEST_BYTES = 1 * 1024 * 1024  # 1 MiB
 
 # Minutos de idle antes de self-shutdown do UMS (0 = desativado). 30 min: os
 # clientes fazem auto-start quando precisam, logo um supervisor parado só está
-# a segurar contexto CUDA e a arriscar ficar zombie.
+# a arriscar ficar zombie. (Contexto CUDA do supervisor: não existe em modo
+# subprocesso — `clear_cuda_memory` salta torch sem `is_initialized()`; para
+# VRAM presa em workers idle vivos, `ums zero` liberta sem parar o supervisor.)
 DEFAULT_IDLE_TIMEOUT_MIN = _env_int("AIGAMEKIT_UMS_IDLE_TIMEOUT_MIN", 30)
 
 

@@ -196,6 +196,10 @@ _WAL_STATE_MAP = {
 # dentro desta janela; depois são purgados para não crescer sem limite).
 _FINISHED_TTL_SEC = 600.0
 _MAX_FINISHED_JOBS = 256
+# Compaction do WAL: a cada N ops (enqueue/started/finished/requeue), reescrever
+# o ficheiro só com jobs queued. Evita crescimento monótono em daemons longos
+# (batch loops de dias). 512 = ~1 rewrite por cada 2-3 waves de batch típicas.
+_WAL_COMPACT_OPS = 512
 
 
 class JobQueue:
@@ -219,16 +223,32 @@ class JobQueue:
         self._seq = 0
         self._inflight = 0
         self._running_ids: list[str] = []
+        # Compaction periódica: o WAL cresce a cada op sem bound; o rewrite
+        # só corria no arranque. A cada _WAL_COMPACT_OPS operações, reescrevemos
+        # o ficheiro só com jobs queued (os terminais já foram purgados em
+        # memória e filtrados no replay) — evita centenas de MB em batch loops
+        # longos (bug A3).
+        self._wal_ops_since_compact = 0
 
     def _append_wal(self, record: dict[str, Any]) -> None:
         if self._wal_path is None:
             return
         payload = {**record, "ts": time.time()}
         line = json.dumps(payload, ensure_ascii=False) + "\n"
+        compact = False
         with self._wal_lock:
             self._wal_path.parent.mkdir(parents=True, exist_ok=True)
             with self._wal_path.open("a", encoding="utf-8") as fh:
                 fh.write(line)
+            self._wal_ops_since_compact += 1
+            if self._wal_ops_since_compact >= _WAL_COMPACT_OPS:
+                compact = True
+                self._wal_ops_since_compact = 0
+        # Compactar fora do _wal_lock (adquire _lock internamente — ordem
+        # consistente _wal_lock→_lock evita deadlock).
+        if compact:
+            with contextlib.suppress(Exception):
+                self._rewrite_wal_from_queue()
 
     def _rewrite_wal_from_queue(self) -> None:
         if self._wal_path is None:
@@ -323,6 +343,19 @@ class JobQueue:
     def inflight(self) -> int:
         with self._lock:
             return self._inflight
+
+    def is_busy(self) -> bool:
+        """True atómicamente se há jobs inflight OU na fila.
+
+        ``inflight > 0 or depth > 0`` lê as duas properties em momentos
+        distintos (cada uma adquire ``_lock`` separadamente) — uma janela
+        onde um job entra em ``inflight`` entre as duas leituras passa
+        despercebida. Este helper lê ambos sob o mesmo lock, fechando o
+        TOCTOU que permitia a ``CMD_ZERO``/``CMD_RESPAWN`` matarem um
+        worker que um job acabou de requisitar (bug A2).
+        """
+        with self._lock:
+            return self._inflight > 0 or len(self._queued) > 0
 
     def enqueue(
         self,

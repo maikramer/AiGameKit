@@ -111,7 +111,7 @@ Descobertas multi-modelo (footprints, runtime budget, kernel opts, batch):
 | paint3d | Paint3D | 4000 | 40 | context-manager |
 | part3d | Part3D | 5200 | 35 | pipeline |
 | text2sound | Text2Sound | 5000 | 30 | `load()` |
-| terrain3d | Terrain3D | 6000 | 40 | procedural |
+| terrain3d | Terrain3D | 3200 | 40 | procedural |
 
 **VRAM** na tabela = hint YAML; **admit real** usa `aigamekit_shared.lowvram.FOOTPRINTS` + quant
 (ver hub [`docs/MODEL_FINDINGS.md`](../docs/MODEL_FINDINGS.md)).
@@ -169,10 +169,27 @@ ums evict text2icon
 ums respawn text3d        # reinicia SÓ o worker da tool (código novo, sem tocar no supervisor)
 ums respawn               # todos os backends com worker subprocesso
 ums respawn text3d --hot  # mata e recarrega já o modelo (fica quente)
+ums zero                  # zera TODA a VRAM do UMS (mata workers idle) SEM parar o supervisor
 ums stats
 ums doctor
 ums stop
 ```
+
+### Zerar a VRAM sem parar o UMS (`ums zero`)
+
+`ums evict` só larga os **pesos** — os workers idle ficam vivos a segurar o
+contexto CUDA (~0.3–1 GiB cada) até ao `shutdown` por idle (300 s). Quando
+precisas da VRAM **já** (ex.: correr algo fora do UMS, ou `free < peak` a
+bloquear um admit), `ums zero` termina todos os workers vivos e scrubba caches
+**sem parar o supervisor**; o próximo generate arranca workers frescos
+(~2–5 s de spawn + load normal). Recusa com `ZERO_BUSY` se houver jobs na
+fila ou em curso — nunca mata um worker a meio de um job.
+
+O supervisor em si não segura VRAM: em modo subprocesso nunca inicializa CUDA
+(os scrubs internos saltam `torch.cuda.*` quando `is_initialized()` é False —
+o `synchronize()` criaria um contexto primário permanente). Supervisores
+arrancados antes desta correção ainda podem ter esse contexto; nesse caso um
+único `ums stop` + auto-start o liberta de vez.
 
 ### Reiniciar workers sem reiniciar o UMS (`ums respawn`)
 
@@ -286,14 +303,22 @@ A fila UMS é a **autoridade** de quem usa a GPU. Se NVML / `ums doctor` /
 7. VRAM ocupada mas `ums status` diz `loaded=0`? Olha a tabela **Processos UMS
    órfãos** no status e corre `ums reap` — é lixo de uma run anterior, não um
    job legítimo.
-8. UMS com **0 backends** mas ainda ~1 GiB+ em CUDA context: free pode ficar
-   abaixo do peak (ex. text3d `sdnq-int4` ~4991 MiB). Sem jobs na fila →
-   `ums stop` + `ums start` limpa o contexto; **não** pkill com fila busy.
+8. UMS com **0 backends** mas VRAM ainda presa (workers idle vivos a segurar
+   o contexto CUDA, ~0.3–1 GiB cada): sem jobs na fila → **`ums zero`** —
+   termina todos os workers (o próximo generate arranca-os frescos) e scrubba
+   caches, **sem parar o supervisor**; recusa com `ZERO_BUSY` se a fila
+   estiver ocupada. Cliente: `zero_ums_vram()` em
+   `aigamekit_shared.model_server`.
+   O supervisor em modo subprocesso **não cria contexto CUDA próprio**:
+   `clear_cuda_memory()`/`torch_reserved_mib()` em `aigamekit_shared.gpu`
+   saltam as chamadas torch quando `torch.cuda.is_initialized()` é False
+   (`torch.cuda.synchronize()` faria `_lazy_init()` → contexto primário
+   ~0.3–1.3 GiB que só morre com o processo). Supervisores arrancados
+   **antes** desta correção: o contexto já criado só sai com um último
+   `ums stop` + `ums start`.
    Free VRAM: `aigamekit_shared.gpu.query_gpu_free_mib` (NVML-first).
    Residual “morto” com `loaded=[]`: status `process_vram_mib` /
-   `dead_vram_suspect`; IdleEvictor pode self-exit se
-   `AIGAMEKIT_UMS_DEAD_VRAM_MIB` (default 256) persistir ≥
-   `AIGAMEKIT_UMS_DEAD_VRAM_EXIT_SEC` (20 s) com fila vazia.
+   `dead_vram_suspect` (threshold `AIGAMEKIT_UMS_DEAD_VRAM_MIB`, default 256).
 
 ### Integração com CLIs das tools
 
@@ -418,13 +443,15 @@ JSON / NDJSON sobre Unix socket (`~/.cache/aigamekit/model-server.sock`):
 | `{"cmd":"preload","backend":"X"}` | Pré-aquece |
 | `{"cmd":"ensure-vram","needed_mib":N}` | Evicta até N MiB livres |
 | `{"cmd":"respawn","backend":"X","lazy":true}` | Reinicia o worker subprocesso (código novo da tool) |
+| `{"cmd":"zero"}` | Zera a VRAM do UMS (termina workers idle + scrub) sem parar o supervisor |
 | `{"cmd":"shutdown"}` | Graceful |
 
 Com `stream: true` em `generate`/`wait`: linhas NDJSON
 `queued` → `started` → `progress` → resultado final (`status` ok/error).
 
 Cliente Shared: `delegate_to_ums`, `submit_to_ums`, `poll_ums_job`, `wait_ums_job`,
-`cancel_ums_job`, `cancel_ums_all`, `respawn_ums_backend`, `send_request_stream`.
+`cancel_ums_job`, `cancel_ums_all`, `respawn_ums_backend`, `zero_ums_vram`,
+`send_request_stream`.
 
 ## Retrocompatibilidade
 

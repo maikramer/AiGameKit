@@ -48,6 +48,7 @@ class IdleEvictor:
         worker_shutdown_sec: float = 300.0,
         health_check_sec: float = 60.0,
         daemon: bool = True,
+        queue: Any = None,
     ) -> None:
         self._manager = manager
         self._idle_timeout_sec = idle_timeout_sec
@@ -58,6 +59,10 @@ class IdleEvictor:
         self._stop_event = threading.Event()
         self._daemon = daemon
         self._last_health_check = 0.0
+        # Queue opcional: o health-check salta quando há jobs a correr, para
+        # não matar um worker no gap take()→ensure_loaded (ref_count ainda 0)
+        # — bug M5.
+        self._queue = queue
 
     @property
     def idle_timeout_sec(self) -> float:
@@ -119,10 +124,9 @@ class IdleEvictor:
         for name, last_used in candidates:
             idle_sec = now - last_used
             _logger.info(f"[UMS] IdleEvictor: backend {name!r} idle há {idle_sec:.0f}s — a evictar.")
-            evicted = manager.evict(name)
-            if evicted:
-                # clear_cache após evict para libertar VRAM imediatamente.
-                manager._clear_cache()
+            # ``manager.evict`` já chama ``_clear_cache`` (e ``scrub_dead_vram``
+            # quando nada fica loaded) — não duplicar o toque em CUDA/NVML.
+            manager.evict(name)
 
     def _shutdown_idle_workers(self) -> None:
         """Termina subprocessos worker idle — devolve o contexto CUDA à GPU."""
@@ -145,6 +149,15 @@ class IdleEvictor:
         now = time.monotonic()
         if now - self._last_health_check < self._health_check_sec:
             return
+        # Com jobs a correr, há um worker prestes a receber (ou a processar)
+        # um job no gap take()→ensure_loaded onde ref_count ainda é 0 — skip
+        # para não o matar (bug M5).
+        if self._queue is not None:
+            try:
+                if self._queue.is_busy():
+                    return
+            except Exception:
+                pass
         self._last_health_check = now
         check = getattr(self._manager, "health_check_workers", None)
         if check is None:

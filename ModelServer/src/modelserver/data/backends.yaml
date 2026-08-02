@@ -86,3 +86,11 @@ backends:
     vram_mib: 3200
     priority: 40
     tool: terrain3d
+
+  - name: motion3d
+    adapter: modelserver.adapters.motion3d
+    # CLIP ViT-B/32 (~0.35) + GPT (~0.9) + VQ (~0.08) + activações; conservador.
+    vram_mib: 3000
+    footprint_key: motius-t2mgpt
+    priority: 30
+    tool: motion3d

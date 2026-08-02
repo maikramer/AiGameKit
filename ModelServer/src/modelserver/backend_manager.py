@@ -39,6 +39,11 @@ from .vram_planner import (
 
 _logger = Logger()
 
+# TTL do cache de ``status()``: ``worker_vram_mib`` (walk /proc + NVML) e
+# ``_torch_alloc_stats`` (import torch) são caros e correm em cada poll de
+# status/queue/stats. 1.5s equilibra "fresco" com "não martelar o driver".
+_STATUS_CACHE_TTL_SEC = 1.5
+
 
 def _is_worker_dead_message(err: str) -> bool:
     """True se a mensagem indica worker subprocesso morto / load incompleto."""
@@ -110,6 +115,7 @@ _SHAPE_LOAD_KEYS = frozenset(
         "model_id",
         "quant_preset",
         "step_cache",
+        "octree_resolution",  # afeta a shape do mesh gerado (text3d/part3d)
     }
 )
 
@@ -232,6 +238,14 @@ class BackendManager:
         # modo (todos os backends correm in-process, legado). Quando definido,
         # backends com ``desc.tool`` no registry despacham para o pool.
         self._subprocess_pool = subprocess_pool
+        # Cache TTL curto para o snapshot de ``status()`` — ``worker_vram_mib``
+        # (walk /proc + NVML) e ``_torch_alloc_stats`` (import torch) são
+        # razoavelmente caros e ``status`` corre a cada ``ums status``/``queue``
+        # /``stats`` poll. CLIs/dashboards que fazem poll por segundo não devem
+        # martelar /proc e NVML (bug M1).
+        self._status_cache: dict[str, Any] | None = None
+        self._status_cache_ts: float = 0.0
+        self._status_cache_lock = threading.Lock()
 
     def _use_subprocess(self, name: str) -> bool:
         """True se ``name`` deve correr em subprocesso (desc.tool definido e pool activo).
@@ -874,7 +888,7 @@ class BackendManager:
             return {
                 "status": "error",
                 "error": str(e),
-                "error_code": "SHAPE_BUSY",
+                "error_code": P.ERR_SHAPE_BUSY,
                 "hint": "Espera o job atual (`ums queue` / `ums wait`) antes de mudar shape.",
             }
         state = self._states[name]
@@ -1102,20 +1116,31 @@ class BackendManager:
             # 1) Descarregar marcador + mandar pool matar o subprocesso.
             if state is not None:
                 state.mark_unloaded()
+            # gen_lock: garantir que um ensure_loaded/generate concorrente não
+            # usa o worker enquanto o matamos. (shutdown faz wait do processo
+            # internamente — rápido, mas seguramos gen_lock para consistência.)
+            if state is None:
+                state = _LoadedState()
+                self._states[name] = state
+            gen_lock = state.gen_lock
+
+        # shutdown fora do struct_lock (espera o processo morrer — pode demorar
+        # uns segundos no SIGTERM). gen_lock evita race com generate/load.
+        with gen_lock:
             killed = self._subprocess_pool.shutdown(name)
             # O lazy deixa o worker em «morto» — o próximo ensure_loaded faz
             # _spawn (state.proc is None) + load.
             # Modo hot: recarregar com o mesmo load_shape para ficar quente.
+            # CRÍTICO: o load demora dezenas de segundos a minutos (spawn +
+            # carregar modelo) — tem de correr FORA do struct_lock, senão todos
+            # os status/evict/ensure_vram bloqueiam (bug C3).
             if not lazy and saved_shape:
-                # Recriar state (shutdown removeu-o do pool interno).
-                if state is None:
-                    state = _LoadedState()
-                    self._states[name] = state
                 tool = desc.tool
                 self._subprocess_pool.load(name, tool, dict(saved_shape))
-                state.subprocess_loaded = True
-                state.load_shape = dict(saved_shape)
-                state.last_used = time.monotonic()
+                with self._struct_lock:
+                    state.subprocess_loaded = True
+                    state.load_shape = dict(saved_shape)
+                    state.last_used = time.monotonic()
         self._clear_cache()
         _logger.info(
             f"[UMS] respawn {name!r}: worker {'morto' if killed else 'não estava vivo'} "
@@ -1139,6 +1164,82 @@ class BackendManager:
         with self._struct_lock:
             names = [n for n in self._registry.names if self._use_subprocess(n)]
         return [self.respawn(n, lazy=lazy) for n in names]
+
+    # ------------------------------------------------------------------
+    # Zero VRAM (libertar TODA a VRAM sem parar o supervisor)
+    # ------------------------------------------------------------------
+
+    def zero_vram(self) -> dict[str, Any]:
+        """Zera a VRAM segurada pelo UMS **sem parar o supervisor**.
+
+        ``evict`` só larga os pesos — o worker subprocesso fica vivo a segurar
+        o seu contexto CUDA (~0.3-1 GiB cada) e caches do allocator. Só a morte
+        do processo devolve esse contexto ao driver. Este método termina todos
+        os workers vivos (sem reload — o próximo generate faz spawn fresco,
+        semântica do ``respawn lazy``), evicta resíduos in-process e scrubba
+        caches. O supervisor nunca sai do ar.
+
+        Custo: o próximo job paga spawn do worker (~2-5 s de import) + load do
+        modelo — que pagaria de qualquer forma após um evict.
+
+        Levanta ``ShapeBusyError`` se algum backend tiver ``ref_count > 0``
+        (dupla-trava — o dispatch no server.py já recusou fila ocupada).
+
+        Returns:
+            Dict com ``results`` (sumário por backend), ``workers_killed``,
+            ``free_mib_before/after`` (NVML) e ``scrub``.
+        """
+        free_before = self._free_mib()
+        with self._struct_lock:
+            names = [n for n in self._registry.names if self._use_subprocess(n)]
+            for n in names:
+                st = self._states.get(n)
+                if st is not None and st.ref_count > 0:
+                    raise ShapeBusyError(
+                        n,
+                        stored=dict(st.load_shape),
+                        requested=dict(st.load_shape),
+                    )
+            snapshots = {
+                n: {
+                    "was_alive": bool(self._subprocess_pool and self._subprocess_pool.is_alive(n)),
+                    "had_model": bool(self._states.get(n) and self._states[n].is_loaded()),
+                }
+                for n in names
+            }
+
+        # 1) Descarregar pesos primeiro (em ambos os modos): unload gracioso
+        # via pool.unload nos subprocessos + adapter.unload in-process, com
+        # contabilidade de stats (record_evict). Matar o worker antes saltava
+        # este caminho e sub-contava os evicts em ``ums stats``.
+        evicted = self.evict_all()
+
+        # 2) Terminar os workers que sobreviveram (só a morte do processo
+        # devolve o contexto CUDA ao driver). shutdown_worker re-verifica
+        # ref_count/gen_lock — seguro contra jobs que entraram entretanto.
+        results: list[dict[str, Any]] = []
+        killed = 0
+        for n in names:
+            snap = snapshots[n]
+            done = self.shutdown_worker(n) if snap["was_alive"] else False
+            killed += 1 if done else 0
+            results.append({"name": n, "killed": done, **snap})
+
+        # 3) Scrub final de caches/contexto.
+        scrub = self.scrub_dead_vram()
+        free_after = self._free_mib()
+        _logger.info(
+            f"[UMS] zero VRAM: {killed} worker(s) terminado(s), {evicted} evicted in-process "
+            f"(livre {free_before} → {free_after} MiB)."
+        )
+        return {
+            "results": results,
+            "workers_killed": killed,
+            "evicted_in_process": evicted,
+            "free_mib_before": free_before,
+            "free_mib_after": free_after,
+            "scrub": scrub,
+        }
 
     def idle_worker_candidates(self, idle_timeout_sec: float) -> list[tuple[str, float]]:
         """``(name, last_activity)`` dos subprocessos worker vivos e idle.
@@ -1401,15 +1502,29 @@ class BackendManager:
                 )
             loaded_count = sum(1 for b in backends if b["loaded"])
             loaded_vram = sum(b["vram_mib"] for b in backends if b["loaded"])
-        # Fora do lock: NVML/smi pode ser lento.
-        process_vram = self._process_vram_mib()
-        alloc_stats = self._torch_alloc_stats()
+        # Fora do lock: NVML/smi pode ser lento. Cache TTL curto para não
+        # martelar /proc + NVML em polls de status/queue/stats (bug M1).
+        now = time.monotonic()
+        with self._status_cache_lock:
+            if self._status_cache is not None and (now - self._status_cache_ts) < _STATUS_CACHE_TTL_SEC:
+                cached = self._status_cache
+            else:
+                cached = None
+        if cached is None:
+            cached = {
+                "process_vram_mib": self._process_vram_mib(),
+                "worker_vram_mib": self.worker_vram_mib(),
+                "torch_alloc": self._torch_alloc_stats(),
+            }
+            with self._status_cache_lock:
+                self._status_cache = cached
+                self._status_cache_ts = now
         return {
             "loaded_count": loaded_count,
             "loaded_vram_mib": loaded_vram,
-            "process_vram_mib": process_vram,
-            "worker_vram_mib": self.worker_vram_mib(),
-            "torch_alloc": alloc_stats,
+            "process_vram_mib": cached["process_vram_mib"],
+            "worker_vram_mib": cached["worker_vram_mib"],
+            "torch_alloc": cached["torch_alloc"],
             "backends": backends,
         }
 
