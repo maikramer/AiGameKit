@@ -84,9 +84,38 @@ aigamekit-lab debug inspect meshes/{id}_lod0.glb   # anims: idle,walk,…
 
 ---
 
+## Motion3D (HML22) → SkinTokens: o rest do source manda
+
+Doc canónico (tabela completa + QA + integração): [`MOTION3D_FINDINGS.md`](MOTION3D_FINDINGS.md).
+
+`motion3d apply-rigged` constrói um GLB source HML22 (`bpy_export.py`) e deixa o
+retarget ao Animator3D (perfil `Animator3D/src/animator3d/data/retarget/hml22.yaml`).
+Porque o retarget transfere rotações **locais**, qualquer desalinhamento entre o
+rest do source e o rest do alvo aparece como membro colapsado, não como offset
+subtil:
+
+| Sintoma no hero | Causa | Fix |
+|-----------------|-------|-----|
+| Tronco/pescoço/cabeça/braço esquerdo colapsados de lado | aim (tail de cada osso) derivado de `t2m_kinematic_chain`: as 3 cadeias que arrancam em `spine_03` sobrescrevem-se → `spine_03` apontava à `clavicle_l` | mapa explícito `HML22_AIM_CHILD` |
+| Cabeça dobrada ~90° para a frente | rest vindo cru dos `t2m_raw_offsets`: `offsets[15] = [0,0,1]` põe a cabeça **à frente** do pescoço → rest do `neck_01` para a frente, e o filho herda a compensação | forçar T-pose no rest: cabeça `+Y`, braços `±X` (`_canonical_rest_joints_yup`) |
+| Membros torcidos ao longo do próprio eixo | `Vector.to_track_quat` mete roll arbitrário | swing-only: `rest_dir.rotation_difference(dir) @ rest_quat` |
+| Mãos torcidas, dedos do pé enrolados («sapato de palhaço»), nod duplo na cabeça | folhas (`Head`, `hand_*`, `ball_*`) não têm joint HML para apontar; estender a direção do pai inventa pose | `HML22_LEAF_BONES` ficam no rest — o pai carrega o movimento |
+| Cabeça a olhar para o chão, braços colados ao torso | anatomia SMPL ≠ rig de jogo (pescoço→cabeça ~28° à frente, braços na vertical) e o retarget copia direções em **mundo** | rodar a mediana do clip para um neutro antes do swing (calibrar contra o rest do *source* não serve — o retarget é absoluto) |
+| Botas com pitch errado / pé direito virado para fora | o sample T2M é assimétrico: 29° de toe-out à direita vs 6° à esquerda | só os **pés** vêm do rest do rig alvo (`HML22_TARGET_REST_BONES`); braços/coluna ficam no A-pose soft de `HML22_NEUTRAL_AIM` |
+| Braços abertos outra vez após corrigir os pés | `target_rest_aims` em todos os ossos: rest SkinTokens dos braços = T-pose (~horizontal) | nunca calibrar braços no rest do alvo — só `foot_l`/`foot_r` |
+| Botas a atravessar-se uma na outra | o clip anda em linha de passerelle — tornozelos cruzam até 8 cm em 17/116 frames | `HML22_LEG_SPLAY_DEG` (±6° por perna) alarga a base sem tocar no timing |
+| Herói sai do lugar / roda no sítio | translação do pélvis + yaw drift do sample T2M | `--in-place` (`stabilize_facing_zup` + strip do travel) |
+
+QA rápido (dirs de osso em mundo, por frame) chega para apanhar isto: cabeça e
+pescoço devem ter direções quase iguais e ~`+Z`; coxas alternam `±Y` ao longo do
+ciclo; `pelvis` só oscila em Z (~4 cm).
+
+---
+
 ## Changelog
 
 | Data | Nota |
 |------|------|
+| 2026-08-02 | Motion3D HML22: aim explícito + rest T-pose (cabeça/braços) |
 | 2026-07-24 | Bípedes creature→humanoid Quaternius; incidente shade; force_preset |
 | 2026-07-24 | Extraído de AGENTS.md learned facts (loc_conv + `_bone_rest_dir`) |

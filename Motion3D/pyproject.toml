@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "motion3d"
+version = "0.1.0"
+description = "CLI text-to-motion via Motius T2M-GPT (HumanML3D-263) → NPZ / GLB (bpy)"
+readme = "README.md"
+authors = [{ name = "Motion3D Project" }]
+requires-python = ">=3.13,<3.14"
+license = "MIT"
+dependencies = [
+    "torch>=2.13.0",
+    "numpy>=2.0.0",
+    "safetensors>=0.5.0",
+    "huggingface_hub>=0.27.0",
+    "transformers>=5.14.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "rich-click>=1.8.0",
+    # bpy 5.2 LTS — GLB armature export (Text3D / Animator3D stack)
+    "bpy>=5.2.0",
+    "aigamekit-shared @ file:../Shared",
+    # NÃO declarar irmãs via file: (ex. animator3d) — o uv copiaria o pacote para
+    # dentro do venv e as edições locais deixavam de ser live.
+    # O animator3d (import Python em apply_rigged) é gerido pelo instalador via
+    # `_clified_animator3d.pth` → Animator3D/src (tools.yaml: cross_deps: [animator3d]).
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+clip = [
+    "ftfy>=6.1.0",
+    "regex>=2024.0.0",
+    "tqdm>=4.66.0",
+    "clip @ git+https://github.com/openai/CLIP.git",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.11.0",
+]
+
+[project.scripts]
+motion3d = "motion3d.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

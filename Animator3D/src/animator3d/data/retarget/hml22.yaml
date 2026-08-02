@@ -1,0 +1,46 @@
+# Perfil de retarget: HumanML3D-22 / T2M-GPT (Motion3D) → SkinTokens.
+#
+# O source GLB do Motion3D (`motion3d export-glb` / `apply-rigged`) usa o mesmo
+# naming UE5/SkinTokens que o Quaternius (pelvis, thigh_l, …) + root estático
+# nos pés. bone_map = identidade (+ aliases Mixamo). NÃO mapear `root`.
+#
+# Pipeline feliz:
+#   motion3d generate "a person walks forward" -o walk.npz
+#   motion3d apply-rigged walk.npz hero_rigged.glb -o hero_walk.glb --clip walk
+#
+# Ou CLI Animator3D directo:
+#   animator3d retarget hero_rigged.glb hml22_source.glb out.glb \
+#       --profile hml22 --source-track t2m_motion --clip walk
+
+profile: hml22
+
+bone_map:
+  pelvis: [pelvis, Hips]
+  spine_01: [spine_01, Spine]
+  spine_02: [spine_02, Chest]
+  spine_03: [spine_03, UpperChest]
+  neck_01: [neck_01, Neck]
+  Head: [Head]
+  clavicle_l: [clavicle_l, LeftShoulder]
+  upperarm_l: [upperarm_l, LeftArm]
+  lowerarm_l: [lowerarm_l, LeftForeArm]
+  hand_l: [hand_l, LeftHand]
+  clavicle_r: [clavicle_r, RightShoulder]
+  upperarm_r: [upperarm_r, RightArm]
+  lowerarm_r: [lowerarm_r, RightForeArm]
+  hand_r: [hand_r, RightHand]
+  thigh_l: [thigh_l, LeftUpLeg]
+  calf_l: [calf_l, LeftLeg]
+  foot_l: [foot_l, LeftFoot]
+  ball_l: [ball_l, LeftToeBase]
+  thigh_r: [thigh_r, RightUpLeg]
+  calf_r: [calf_r, RightLeg]
+  foot_r: [foot_r, RightFoot]
+  ball_r: [ball_r, RightToeBase]
+
+clip_map:
+  # Clip limpo → action name no source Motion3D (default export).
+  walk: t2m_motion
+  run: t2m_motion
+  idle: t2m_motion
+  motion: t2m_motion
