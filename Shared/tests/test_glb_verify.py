@@ -131,3 +131,118 @@ class TestVerifyGlb:
         assert m["has_normals"] is True
         assert m["triangle_count_total"] == 4
         assert m["v_per_tri"] == 1.5
+
+
+def _glb_with_nodes(
+    *,
+    acc_min: list[float],
+    acc_max: list[float],
+    component_type: int = 5126,
+    normalized: bool = False,
+    node: dict | None = None,
+) -> bytes:
+    """GLB com cena/nó — permite exercitar bounds em espaço-mundo."""
+    accessors = [
+        {
+            "count": 3,
+            "type": "VEC3",
+            "componentType": component_type,
+            "min": acc_min,
+            "max": acc_max,
+        },
+        {"count": 3, "type": "SCALAR", "componentType": 5123},
+    ]
+    if normalized:
+        accessors[0]["normalized"] = True
+    mesh_node: dict = {"mesh": 0}
+    mesh_node.update(node or {})
+    doc = {
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [mesh_node],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+        "accessors": accessors,
+        "buffers": [{"byteLength": 1}],
+        "bufferViews": [{"buffer": 0, "byteLength": 1}],
+    }
+    js = json.dumps(doc, separators=(",", ":")).encode("utf-8")
+    js += b" " * ((4 - (len(js) % 4)) % 4)
+    bin_chunk = b"\x00\x00\x00\x00"
+    out = bytearray()
+    out += struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(js) + 8 + len(bin_chunk))
+    out += struct.pack("<I4s", len(js), b"JSON")
+    out += js
+    out += struct.pack("<I4s", len(bin_chunk), b"BIN\x00")
+    out += bin_chunk
+    return bytes(out)
+
+
+class TestGlbWorldBounds:
+    def test_identity_node_passthrough(self, tmp_path: Path) -> None:
+        from aigamekit_shared.glb_verify import glb_world_bounds
+
+        p = tmp_path / "a.glb"
+        p.write_bytes(_glb_with_nodes(acc_min=[-1.0, 0.0, -2.0], acc_max=[1.0, 3.0, 2.0]))
+        lo, hi = glb_world_bounds(p)
+        assert lo == pytest.approx([-1.0, 0.0, -2.0])
+        assert hi == pytest.approx([1.0, 3.0, 2.0])
+
+    def test_node_translation_and_scale_applied(self, tmp_path: Path) -> None:
+        from aigamekit_shared.glb_verify import glb_world_bounds
+
+        p = tmp_path / "b.glb"
+        p.write_bytes(
+            _glb_with_nodes(
+                acc_min=[-1.0, -1.0, -1.0],
+                acc_max=[1.0, 1.0, 1.0],
+                node={"translation": [0.0, 5.0, 0.0], "scale": [2.0, 2.0, 2.0]},
+            )
+        )
+        lo, hi = glb_world_bounds(p)
+        assert lo == pytest.approx([-2.0, 3.0, -2.0])
+        assert hi == pytest.approx([2.0, 7.0, 2.0])
+
+    def test_quantized_positions_dequantized(self, tmp_path: Path) -> None:
+        """KHR_mesh_quantization: SHORT normalizado + escala no nó.
+
+        Regressão: o accessor cru dava y_min=-32767 e o check ORIGIN_Y
+        disparava em todo o lod0 finalizado do projecto.
+        """
+        from aigamekit_shared.glb_verify import extract_glb_meta, glb_world_bounds
+
+        p = tmp_path / "q.glb"
+        p.write_bytes(
+            _glb_with_nodes(
+                acc_min=[-32767, -32767, -32767],
+                acc_max=[32767, 32767, 32767],
+                component_type=5122,
+                normalized=True,
+                node={"translation": [0.0, 3.5, 0.0], "scale": [3.5, 3.5, 3.5]},
+            )
+        )
+        lo, hi = glb_world_bounds(p)
+        assert lo == pytest.approx([-3.5, 0.0, -3.5])
+        assert hi == pytest.approx([3.5, 7.0, 3.5])
+        assert extract_glb_meta(p)["world_bounds_y_min"] == pytest.approx(0.0)
+
+    def test_quantized_lod0_does_not_warn_origin_y(self, tmp_path: Path) -> None:
+        p = tmp_path / "thing_lod0.glb"
+        p.write_bytes(
+            _glb_with_nodes(
+                acc_min=[-32767, -32767, -32767],
+                acc_max=[32767, 32767, 32767],
+                component_type=5122,
+                normalized=True,
+                node={"translation": [0.0, 3.5, 0.0], "scale": [3.5, 3.5, 3.5]},
+            )
+        )
+        r = verify_glb(p, stage="lod0")
+        assert not any(i.code == "ORIGIN_Y" for i in r.issues)
+
+    def test_no_nodes_returns_none(self, tmp_path: Path) -> None:
+        from aigamekit_shared.glb_verify import glb_world_bounds
+
+        p = tmp_path / "c.glb"
+        p.write_bytes(_minimal_glb())
+        assert glb_world_bounds(p) is None

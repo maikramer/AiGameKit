@@ -88,6 +88,27 @@ class TestUmsClientDown:
         assert calls == [False, False, False]
 
 
+class TestZeroUmsVram:
+    def test_sends_zero_cmd_without_auto_start(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[dict] = []
+
+        def _send(req: dict, *, timeout_sec: float, auto_start: bool) -> dict:
+            seen.append({"req": req, "timeout_sec": timeout_sec, "auto_start": auto_start})
+            return {"status": "ok", "workers_killed": 2, "free_mib_before": 1000, "free_mib_after": 3400}
+
+        monkeypatch.setattr(ms, "send_to_ums", _send)
+        resp = ms.zero_ums_vram()
+        assert resp is not None
+        assert resp["workers_killed"] == 2
+        assert seen == [
+            {"req": {"cmd": "zero"}, "timeout_sec": 120.0, "auto_start": False},
+        ]
+
+    def test_none_when_ums_down(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "send_to_ums", lambda *_a, **_k: None)
+        assert ms.zero_ums_vram() is None
+
+
 class TestUmsClientAgainstMockSocket:
     """Sobe um mini-socket que fala o protocolo UMS mínimo."""
 

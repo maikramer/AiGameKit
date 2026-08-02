@@ -659,6 +659,26 @@ def respawn_ums_backend(
     return send_to_ums(req, timeout_sec=timeout_sec, auto_start=False)
 
 
+def zero_ums_vram(*, timeout_sec: float = 120.0) -> dict[str, Any] | None:
+    """Zera TODA a VRAM segurada pelo UMS sem parar o supervisor.
+
+    ``evict``/``release`` só largam os pesos — os workers subprocesso ficam
+    vivos a segurar o contexto CUDA (~0.3-1 GiB cada). ``zero`` termina todos
+    os workers vivos (o próximo ``generate`` arranca-os frescos), evicta
+    resíduos in-process e scrubba caches. Recusa com ``ZERO_BUSY`` se houver
+    jobs na fila — nunca mata um worker a meio de um job.
+
+    Args:
+        timeout_sec: Timeout da chamada (shutdown gracioso de workers).
+
+    Returns:
+        Resposta do UMS (``{"status": "ok", "workers_killed": N,
+        "free_mib_before/after": ..., "results": [...]}``) ou ``None`` se o
+        UMS não estiver ativo (nada para zerar).
+    """
+    return send_to_ums({"cmd": "zero"}, timeout_sec=timeout_sec, auto_start=False)
+
+
 # ---------------------------------------------------------------------------
 # Coordenação de VRAM
 # ---------------------------------------------------------------------------

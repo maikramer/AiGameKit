@@ -23,7 +23,9 @@ Lifecycle do worker:
 from __future__ import annotations
 
 import io
+import queue
 import sys
+import threading
 import traceback
 from typing import Any, TextIO, cast
 
@@ -47,6 +49,49 @@ from .worker_protocol import (
     emit_event,
     read_cmd,
 )
+
+
+def _start_cmd_reader(cmd_q: queue.Queue, abort_state: dict[str, bool]) -> threading.Thread:
+    """Thread que lê continuamente do stdin e põe comandos numa queue.
+
+    O loop principal do worker é single-threaded e bloqueia dentro de
+    ``adapter.generate()`` durante um job. Sem este reader, um ``CMD_ABORT``
+    enviado a meio do generate fica por ler no pipe — o abort cooperativo
+    nunca dispara (ver bug C1). O reader drena o stdin em paralelo e entrega
+    os comandos ao loop via ``cmd_q``; o loop principal consome de lá.
+
+    **CRÍTICO:** o ``CMD_ABORT`` é tratado **aqui** (não delegado ao loop),
+    porque o loop está bloqueado dentro de ``adapter.generate()`` e não pode
+    consumir a queue a meio. O reader põe ``abort_state["abort"] = True``
+    diretamente — o hook ``_should_abort`` do adapter lê esse mesmo dict e
+    vê o valor corrente imediatamente. O ``CMD_ABORT`` **não** vai para a
+    queue (evita que o loop o processe outra vez no fim do generate).
+
+    Em EOF no stdin (UMS fechou o pipe / morreu), põe ``None`` na queue e sai.
+    """
+
+    def _reader() -> None:
+        while True:
+            try:
+                msg = read_cmd()
+            except Exception:
+                # JSON inválido → empilhar sentinela para o loop responder erro.
+                cmd_q.put({"cmd": "__bad_cmd__"})
+                continue
+            if msg is None:
+                # EOF = UMS fechou stdin = shutdown gracioso.
+                cmd_q.put(None)
+                return
+            # CMD_ABORT é urgente e tratado aqui — o loop principal pode estar
+            # bloqueado em adapter.generate() e não conseguir consumir a queue.
+            if msg.get("cmd") == CMD_ABORT:
+                abort_state["abort"] = True
+                continue  # não empilhar na queue
+            cmd_q.put(msg)
+
+    t = threading.Thread(target=_reader, daemon=True, name="worker-cmd-reader")
+    t.start()
+    return t
 
 
 def start_parent_watchdog(*, poll_sec: float = 5.0) -> None:
@@ -160,23 +205,29 @@ def run_worker_loop(
     # o generate precisam de ver o valor corrente (B023-safe).
     state = {"abort": False}
 
+    # Reader thread: drena o stdin continuamente e entrega comandos via queue.
+    # Isto é CRÍTICO para o abort cooperativo funcionar — sem ele, o loop
+    # principal bloqueia dentro de ``adapter.generate()`` e nunca lê o
+    # ``CMD_ABORT`` enviado a meio do job (bug C1). O reader põe ``None`` na
+    # queue em EOF (UMS fechou stdin = shutdown gracioso).
+    cmd_q: queue.Queue = queue.Queue()
+    _start_cmd_reader(cmd_q, state)
+
     while True:
-        try:
-            cmd_msg = read_cmd()
-        except Exception as exc:
+        cmd_msg = cmd_q.get()
+        if cmd_msg is None:
+            # EOF no stdin = UMS fechou = shutdown gracioso.
+            break
+        cmd = cmd_msg.get("cmd")
+        if cmd == "__bad_cmd__":
             emit_event(
                 EVENT_ERROR,
-                error=f"comando inválido: {exc}",
+                error="comando inválido (JSON malformado)",
                 error_code="BAD_CMD",
                 backend=backend_name,
             )
             continue
 
-        if cmd_msg is None:
-            # EOF no stdin = UMS fechou = shutdown gracioso.
-            break
-
-        cmd = cmd_msg.get("cmd")
         if cmd == CMD_PING:
             emit_event(EVENT_PONG, backend=backend_name, version=version)
             continue
@@ -219,10 +270,8 @@ def run_worker_loop(
             emit_event(EVENT_UNLOADED, backend=backend_name)
             continue
 
-        if cmd == CMD_ABORT:
-            # Marca abort; o generate em curso vai checar e cooperar.
-            state["abort"] = True
-            continue
+        # CMD_ABORT é tratado pelo reader thread (não chega a esta queue) —
+        # põe state["abort"]=True diretamente para o hook _should_abort ver.
 
         if cmd == CMD_GENERATE:
             if model is None:
@@ -353,3 +402,35 @@ def _probe_vram_mib() -> int | None:
     except Exception:
         pass
     return None
+
+
+def run_ums_worker_cli(
+    adapter_cls: type[Any],  # classe Adapter da tool (contrato load/generate/unload)
+    *,
+    tool_name: str,
+    ums_worker: bool,
+    console: Any | None = None,
+) -> None:
+    """Corpo canónico do subcomando ``serve --ums-worker`` (padrão das 9 tools).
+
+    Sem ``--ums-worker`` não faz nada (o UMS arranca este subcomando
+    internamente); com a flag, corre :func:`run_worker_loop` com o adapter
+    local da tool.
+
+    Args:
+        adapter_cls: Classe ``Adapter`` do ``worker_serve_adapter`` da tool.
+        tool_name: Nome do backend (ex: ``text2icon``).
+        ums_worker: Valor da flag ``--ums-worker`` do click.
+        console: Console Rich opcional (output do aviso sem a flag).
+    """
+    if not ums_worker:
+        msg = f"{tool_name} serve sem --ums-worker não faz nada."
+        dim = "O UMS arranca este subcomando internamente."
+        if console is not None:
+            console.print(f"[yellow]{msg}[/yellow]")
+            console.print(f"[dim]{dim}[/dim]")
+        else:
+            print(msg)
+            print(dim)
+        return
+    run_worker_loop(adapter_cls, backend_name=tool_name)

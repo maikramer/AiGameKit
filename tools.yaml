@@ -19,7 +19,7 @@ tools:
     description: "Unified Model Server — supervisor único de VRAM para todas as ferramentas GPU"
     min_python: [3, 13]
     install_order: -3
-    install_before: [text2d, text2icon, text3d, paint3d, texture2d, skymap2d, text2sound, terrain3d]
+    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
   text2d:
     name: "Text2D"
@@ -32,7 +32,7 @@ tools:
     extra_aliases: [text2d-generate]
     needs_pytorch: true
     install_order: -2
-    post_install: clified.hooks:pip_check
+    post_install: aigamekit_shared.installer.clified_hooks:pip_check_post_install
 
   text2icon:
     name: "Text2Icon"
@@ -44,7 +44,7 @@ tools:
     min_python: [3, 13]
     extra_aliases: [text2icon-generate]
     needs_pytorch: true
-    post_install: clified.hooks:pip_check
+    post_install: aigamekit_shared.installer.clified_hooks:pip_check_post_install
 
   text3d:
     name: "Text3D"
@@ -69,6 +69,7 @@ tools:
     python_module: gameassets
     description: "Batch de prompts/assets 2D/3D alinhados ao jogo"
     min_python: [3, 13]
+    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
   aigamekitlab:
     name: "AiGameKitLab"
@@ -78,6 +79,7 @@ tools:
     python_module: aigamekit_lab
     description: "Laboratório: debug 3D, bancadas de quantização, profiling"
     min_python: [3, 13]
+    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
   text2sound:
     name: "Text2Sound"
@@ -97,10 +99,11 @@ tools:
     folder: Texture2D
     cli_name: texture2d
     python_module: texture2d
-    description: "Texturas 2D seamless via HF Inference API (sem GPU local)"
+    description: "Texturas 2D seamless (SD1.5 local + circular padding)"
     min_python: [3, 13]
     extra_aliases: [texture2d-generate]
     needs_pytorch: true
+    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
   skymap2d:
     name: "Skymap2D"
@@ -108,9 +111,10 @@ tools:
     folder: Skymap2D
     cli_name: skymap2d
     python_module: skymap2d
-    description: "Skymaps equirectangular 360° via HF Inference API (sem GPU local)"
+    description: "Skymaps equirectangular 360° (FLUX.1-dev + LoRA local)"
     min_python: [3, 13]
     extra_aliases: [skymap2d-generate]
+    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
   terrain3d:
     name: "Terrain3D"
@@ -121,6 +125,7 @@ tools:
     description: "AI terrain generation via diffusion models (CUDA GPU)"
     min_python: [3, 13]
     needs_pytorch: true
+    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
   rocks3d:
     name: "Rocks3D"
@@ -131,6 +136,7 @@ tools:
     description: "Procedural 3D rock generation for game dev"
     min_python: [3, 13]
     needs_pytorch: false
+    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
   rigging3d:
     name: "Rigging3D"
@@ -138,7 +144,7 @@ tools:
     folder: Rigging3D
     cli_name: rigging3d
     python_module: rigging3d
-    description: "UniRig empacotado + CLI (auto-rigging 3D; PyTorch/CUDA; bpy 5.1+)"
+    description: "SkinTokens/TokenRig + CLI (auto-rigging 3D; PyTorch/CUDA; bpy>=5.2.0)"
     min_python: [3, 13]
     needs_pytorch: true
     post_install: aigamekit_shared.installer.clified_hooks:rigging3d_post_install
@@ -151,6 +157,21 @@ tools:
     python_module: animator3d
     description: "Animação 3D com bpy (Blender Python) — complementa Rigging3D"
     min_python: [3, 13]
+    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
+
+  motion3d:
+    name: "Motion3D"
+    kind: python
+    folder: Motion3D
+    cli_name: motion3d
+    python_module: motion3d
+    description: "Text-to-motion Motius T2M-GPT (HumanML3D) → NPZ / GLB (bpy)"
+    min_python: [3, 13]
+    needs_pytorch: true
+    # `motion3d apply-rigged` calls animator3d.retarget in-process.
+    install_before: [animator3d]
+    cross_deps: [animator3d]
+    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
   paint3d:
     name: "Paint3D"
@@ -172,6 +193,7 @@ tools:
     description: "Decomposição semântica de meshes 3D (Hunyuan3D-Part: P3-SAM + X-Part)"
     min_python: [3, 13]
     needs_pytorch: true
+    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
   materialize:
     name: "Materialize CLI"

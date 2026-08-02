@@ -41,13 +41,37 @@ log = logging.getLogger(__name__)
 
 _LOD_PROTECT_GROUP = "_lod_boundary_protect"
 
-# Piso de decimação: abaixo disto, features finas colapsam em agulhas.
-_MIN_DECIMATE_FRAC = 0.008
+# Piso de decimação.
+#
+# ``_MIN_DECIMATE_FACES`` (absoluto) é o piso real: abaixo de ~150 tris não há
+# silhueta que sobreviva.
+#
+# O piso *relativo* era 0.008 (0.8% da malha de origem) e existia para conter os
+# estragos da decimação em malhas que chegavam desconectadas — problema
+# resolvido na origem pelo weld de costuras (:data:`_SEAM_WELD_DIST`). Como a
+# contagem de faces da origem é só a resolução do estágio de paint (~90k-175k
+# para qualquer objecto, do cristal à catedral), esse piso não media nada sobre
+# o objecto e **substituía silenciosamente o orçamento de** ``lod_budget``:
+# props pequenos saíam com lod1 == lod2 (baú 1389/1389/1389, cristal 960/718/718
+# — 718 = 0.008 x 89754).
+#
+# Medido depois do weld: baú 174k faces → 484 (0.28% da origem) mantém-se
+# watertight, 1 componente, área a 99.8% da origem. 0.0005 fica como rede de
+# segurança contra pedidos absurdos (só morde acima de ~300k faces).
+_MIN_DECIMATE_FRAC = 0.0005
 _MIN_DECIMATE_FACES = 150
 
 # Weld de duplicados exactos (GLBs V/Tri≈3). Igual ao usado em
 # smooth_shade_scene / mesh_lod.
 _STAGNATION_WELD_DIST = 1e-4
+
+# Weld de vértices *coincidentes* (posição idêntica). O importer glTF parte
+# vértices em cada costura de UV/normal — o mesh reimportado fica com dezenas
+# de milhares de arestas de fronteira falsas e centenas de "componentes" que
+# na verdade são a mesma superfície. O COLLAPSE trata cada ilha isolada como
+# um retalho independente e rasga-a; é a origem dos rasgos nos LODs de árvore.
+# 1e-6 é sub-micrométrico: só funde o que já está no mesmo ponto.
+_SEAM_WELD_DIST = 1e-6
 
 # Deteção de triangle soup: mesh tri conexo tem V ≈ F/2; soup (verts
 # partidos por canto, V/Tri≈3) tem V = 3F. Acima deste rácio, weld exacto
@@ -61,6 +85,10 @@ _SOUP_VERTS_PER_FACE = 1.5
 # Weld **só verts de fronteira** (1e-4) reconecta cascas (chapel 3647→4 comps)
 # sem o weld global que trava props UV-densos (crate piso ~22k).
 _FRAGMENT_BOUNDARY_FRAC = 0.12
+
+# Acima disto, o resultado do COLLAPSE conta como rasgado (sinal de que a
+# malha chegou desconectada). Só para diagnóstico — não altera a geometria.
+_TEAR_BOUNDARY_FRAC = 0.05
 
 
 def clamp_decimate_target(n_faces: int, requested: int) -> int:
@@ -136,6 +164,17 @@ def _boundary_edge_fraction(obj: Any) -> float:
     return n_boundary / n_edges
 
 
+def _nonmanifold_edge_count(obj: Any) -> int:
+    """Arestas com >2 faces — bloqueiam o COLLAPSE (piso topológico)."""
+    import bmesh
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    n = sum(1 for e in bm.edges if len(e.link_faces) > 2)
+    bm.free()
+    return n
+
+
 def _weld_boundary_duplicates(obj: Any, threshold: float = _STAGNATION_WELD_DIST) -> int:
     """Funde só vértices que tocam aresta de fronteira (fissuras entre cascas).
 
@@ -162,47 +201,60 @@ def _weld_boundary_duplicates(obj: Any, threshold: float = _STAGNATION_WELD_DIST
 
 
 def _weld_if_split_soup(obj: Any) -> int:
-    """Reconecta topologia partida antes do COLLAPSE (anti moth-eaten).
+    """Reconecta topologia partida antes do COLLAPSE (anti moth-eaten/rasgos).
 
-    Dois casos:
+    Três passos, do mais seguro para o mais agressivo:
 
-    1. **Triangle soup** (V/Tri≈3): weld exacto em todos os verts.
-    2. **Cascas fragmentadas** (Hunyuan, ``bfrac`` ≥
-       :data:`_FRAGMENT_BOUNDARY_FRAC`): weld só verts de fronteira —
-       reconecta paredes duplas/fissuras sem o piso ~22k do weld global
-       em meshes UV-densos (crate).
+    1. **Costuras do glTF** (sempre): weld a :data:`_SEAM_WELD_DIST` (1e-6).
+       Todo o GLB reimportado tem os vértices partidos nas costuras de
+       UV/normal; sem isto o COLLAPSE decima cada ilha de UV isoladamente e
+       abre rasgos entre elas (canópia de carvalho: bfrac 0.10 → 0.55 e 1 →
+       317 componentes no lod0). Só funde vértices na mesma posição — as UVs
+       vivem nos loops e sobrevivem intactas.
+    2. **Triangle soup** (V/Tri≈3): weld a 1e-4 em todos os verts.
+    3. **Cascas fragmentadas** (Hunyuan, ``bfrac`` ≥
+       :data:`_FRAGMENT_BOUNDARY_FRAC` *depois* do passo 1 — fissuras a sério,
+       já não costuras): weld só verts de fronteira, sem o piso ~22k do weld
+       global em meshes UV-densos (crate).
 
     Returns:
         Número de vértices fundidos (0 se nada feito).
     """
+    from aigamekit_shared.mesh_repair import remove_doubles
+
+    welded = int(remove_doubles(obj, threshold=_SEAM_WELD_DIST) or 0)
+    if welded:
+        log.info(
+            "Costuras glTF: weld coincidente (%g) fundiu %d verts antes do COLLAPSE",
+            _SEAM_WELD_DIST,
+            welded,
+        )
+
     n_faces = len(obj.data.polygons) or 1
     n_verts = len(obj.data.vertices)
-
     if n_verts > _SOUP_VERTS_PER_FACE * n_faces:
-        from aigamekit_shared.mesh_repair import remove_doubles
-
-        welded = int(remove_doubles(obj, threshold=_STAGNATION_WELD_DIST) or 0)
-        if welded:
+        n = int(remove_doubles(obj, threshold=_STAGNATION_WELD_DIST) or 0)
+        if n:
             log.info(
                 "Triangle soup detectado (%d verts / %d faces) — weld exacto fundiu %d verts antes do COLLAPSE",
                 n_verts,
                 n_faces,
-                welded,
+                n,
             )
-        return welded
+        return welded + n
 
     bfrac = _boundary_edge_fraction(obj)
     if bfrac < _FRAGMENT_BOUNDARY_FRAC:
-        return 0
+        return welded
 
-    welded = _weld_boundary_duplicates(obj, _STAGNATION_WELD_DIST)
-    if welded:
+    n = _weld_boundary_duplicates(obj, _STAGNATION_WELD_DIST)
+    if n:
         log.info(
             "Cascas fragmentadas (bfrac=%.3f) — weld de fronteira fundiu %d verts antes do COLLAPSE",
             bfrac,
-            welded,
+            n,
         )
-    return welded
+    return welded + n
 
 
 def _triangulate_if_needed(bpy: Any, obj: Any) -> bool:
@@ -300,10 +352,12 @@ def decimate_mesh_object(
     target = clamp_decimate_target(n_now, target_faces)
     if n_now <= target:
         return n_now
-    # Soup (V/Tri≈3): reconectar ANTES do loop — decimar soup apaga
-    # triângulos em vez de colapsar arestas (destrutivo e silencioso).
+    # Costuras/soup: reconectar ANTES do loop — decimar geometria partida
+    # apaga triângulos em vez de colapsar arestas (destrutivo e silencioso).
     weld_tried = _weld_if_split_soup(obj) > 0
     use_protect = protect_boundaries
+    n_start = len(obj.data.polygons)
+    bfrac_before = _boundary_edge_fraction(obj)
 
     for attempt in range(max(1, int(max_passes))):
         n_now = len(obj.data.polygons)
@@ -346,14 +400,29 @@ def decimate_mesh_object(
             if n_after <= int(target * slack):
                 log.info("Decimate estagnou em %d faces — dentro da banda slack do alvo %d", n_after, target)
             else:
+                # Arestas non-manifold (>2 faces) são o piso mais comum: o
+                # COLLAPSE recusa-se a colapsá-las. Não as partimos — separar
+                # reabriria a malha (crate: alvo cravado mas bfrac 0→0.45).
                 log.warning(
-                    "Decimate estagnou em %d faces (alvo %d) — piso topológico",
+                    "Decimate estagnou em %d faces (alvo %d) — piso topológico (%d arestas non-manifold)",
                     n_after,
                     target,
+                    _nonmanifold_edge_count(obj),
                 )
             break
 
-    return len(obj.data.polygons)
+    n_final = len(obj.data.polygons)
+    bfrac_after = _boundary_edge_fraction(obj)
+    if bfrac_after > max(3.0 * bfrac_before, _TEAR_BOUNDARY_FRAC) and bfrac_after > bfrac_before:
+        log.warning(
+            "Decimate abriu fronteira: bfrac %.3f→%.3f em %d→%d faces — LOD provavelmente rasgado "
+            "(malha chegou desconectada ao COLLAPSE)",
+            bfrac_before,
+            bfrac_after,
+            n_start,
+            n_final,
+        )
+    return n_final
 
 
 def simplify_mesh_object(

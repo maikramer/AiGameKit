@@ -120,6 +120,134 @@ def infer_stage_from_path(path: str | Path) -> str:
     return "default"
 
 
+def _node_matrix(node: dict[str, Any]) -> list[list[float]]:
+    """Matriz 4x4 (linha-maior) de um nó glTF, de ``matrix`` ou TRS."""
+    m = node.get("matrix")
+    if isinstance(m, list) and len(m) == 16:
+        # glTF guarda coluna-maior.
+        return [[float(m[c * 4 + r]) for c in range(4)] for r in range(4)]
+
+    t = node.get("translation") or [0.0, 0.0, 0.0]
+    r = node.get("rotation") or [0.0, 0.0, 0.0, 1.0]  # quaternião xyzw
+    s = node.get("scale") or [1.0, 1.0, 1.0]
+    x, y, z, w = (float(v) for v in r)
+    rot = [
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ]
+    return [
+        [rot[i][0] * float(s[0]), rot[i][1] * float(s[1]), rot[i][2] * float(s[2]), float(t[i])] for i in range(3)
+    ] + [[0.0, 0.0, 0.0, 1.0]]
+
+
+def _mat_mul(a: list[list[float]], b: list[list[float]]) -> list[list[float]]:
+    return [[sum(a[i][k] * b[k][j] for k in range(4)) for j in range(4)] for i in range(4)]
+
+
+def _xform(m: list[list[float]], p: tuple[float, float, float]) -> tuple[float, float, float]:
+    return tuple(m[i][0] * p[0] + m[i][1] * p[1] + m[i][2] * p[2] + m[i][3] for i in range(3))  # type: ignore[return-value]
+
+
+# glTF: accessors com ``normalized`` guardam inteiros que mapeiam para [-1,1]
+# (com sinal) ou [0,1]. É assim que o KHR_mesh_quantization guarda POSITION.
+_NORMALIZED_DIVISOR: dict[int, float] = {
+    5120: 127.0,  # BYTE
+    5121: 255.0,  # UNSIGNED_BYTE
+    5122: 32767.0,  # SHORT
+    5123: 65535.0,  # UNSIGNED_SHORT
+}
+
+
+def _dequantize(acc: dict[str, Any], values: list[float]) -> list[float]:
+    """Aplica a normalização do accessor (no-op em floats)."""
+    if not acc.get("normalized"):
+        return values
+    div = _NORMALIZED_DIVISOR.get(int(acc.get("componentType") or 0))
+    if not div:
+        return values
+    signed = int(acc.get("componentType") or 0) in (5120, 5122)
+    return [max(v / div, -1.0) if signed else v / div for v in values]
+
+
+def glb_world_bounds(path: str | Path) -> tuple[list[float], list[float]] | None:
+    """AABB em espaço-mundo de um GLB, compondo as transforms dos nós (sem bpy).
+
+    Os ``min``/``max`` dos accessors estão em espaço **local** e, com
+    ``KHR_mesh_quantization``, em unidades **inteiras**: ler o accessor
+    directamente devolve ``-32767`` em vez de metros (todo o lod0 finalizado do
+    projecto). A escala/offset da dequantização vive na TRS do nó, portanto
+    compor a hierarquia resolve os dois problemas de uma vez.
+
+    Skins: os bounds de uma malha skinned estão em espaço de bind; sem avaliar
+    os joints o resultado é aproximado (suficiente para verificar origem e
+    alinhamento colisão↔visual).
+
+    Returns:
+        ``(min_xyz, max_xyz)`` em unidades de mundo, ou ``None`` se o ficheiro
+        não tiver geometria legível.
+    """
+    p = Path(path)
+    try:
+        data = p.read_bytes()
+    except OSError:
+        return None
+    if len(data) < 20 or data[:4] != b"glTF":
+        return None
+    json_len = struct.unpack_from("<I", data, 12)[0]
+    try:
+        chunk = json.loads(data[20 : 20 + json_len])
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+    accessors = chunk.get("accessors") or []
+    meshes = chunk.get("meshes") or []
+    nodes = chunk.get("nodes") or []
+    if not nodes or not meshes:
+        return None
+
+    lo = [float("inf")] * 3
+    hi = [float("-inf")] * 3
+    found = False
+
+    def visit(idx: int, parent: list[list[float]], depth: int = 0) -> None:
+        nonlocal found
+        if depth > 64 or not (0 <= idx < len(nodes)):
+            return
+        node = nodes[idx]
+        world = _mat_mul(parent, _node_matrix(node))
+        mesh_idx = node.get("mesh")
+        if isinstance(mesh_idx, int) and 0 <= mesh_idx < len(meshes):
+            for prim in meshes[mesh_idx].get("primitives") or []:
+                pos = (prim.get("attributes") or {}).get("POSITION")
+                if not isinstance(pos, int) or not (0 <= pos < len(accessors)):
+                    continue
+                acc = accessors[pos]
+                amin, amax = acc.get("min"), acc.get("max")
+                if not (isinstance(amin, list) and isinstance(amax, list) and len(amin) == 3 == len(amax)):
+                    continue
+                amin = _dequantize(acc, [float(v) for v in amin])
+                amax = _dequantize(acc, [float(v) for v in amax])
+                for cx in (amin[0], amax[0]):
+                    for cy in (amin[1], amax[1]):
+                        for cz in (amin[2], amax[2]):
+                            w = _xform(world, (cx, cy, cz))
+                            for i in range(3):
+                                lo[i] = min(lo[i], w[i])
+                                hi[i] = max(hi[i], w[i])
+                            found = True
+        for child in node.get("children") or []:
+            visit(int(child), world, depth + 1)
+
+    identity = [[1.0 if i == j else 0.0 for j in range(4)] for i in range(4)]
+    scenes = chunk.get("scenes") or []
+    scene_idx = chunk.get("scene", 0)
+    roots = scenes[scene_idx].get("nodes") if 0 <= scene_idx < len(scenes) else None
+    for root in roots if roots else range(len(nodes)):
+        visit(int(root), identity)
+    return ([round(v, 6) for v in lo], [round(v, 6) for v in hi]) if found else None
+
+
 def extract_glb_meta(path: str | Path) -> dict[str, Any]:
     """Metadados leves do GLB (JSON chunk) — sem bpy.
 
@@ -170,6 +298,12 @@ def extract_glb_meta(path: str | Path) -> dict[str, Any]:
 
     tris = total_i // 3 if total_i else 0
     v_per_tri = round(total_v / tris, 4) if tris > 0 else None
+    # Bounds a sério: com transforms de nó compostas e dequantização implícita.
+    # O ``y_min`` cru dos accessors dava -32767 em qualquer GLB quantizado
+    # (KHR_mesh_quantization) e ignorava rotações/escalas de nó nos restantes.
+    world = glb_world_bounds(p)
+    if world is not None:
+        y_min = world[0][1]
     return {
         "attributes_present": sorted(union),
         "has_normals": "NORMAL" in union,
@@ -183,6 +317,8 @@ def extract_glb_meta(path: str | Path) -> dict[str, Any]:
         "triangle_count_total": tris,
         "v_per_tri": v_per_tri,
         "world_bounds_y_min": y_min,
+        "world_bounds_min": world[0] if world else None,
+        "world_bounds_max": world[1] if world else None,
         "extensions_used": list(chunk.get("extensionsUsed") or []),
         "byte_size": len(data),
     }

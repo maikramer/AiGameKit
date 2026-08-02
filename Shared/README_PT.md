@@ -21,7 +21,7 @@ Biblioteca partilhada do monorepo **AiGameKit** — código comum entre Text2D, 
 | `aigamekit_shared.installer.clified_hooks` | Hooks por ferramenta (Text3D, Text2Sound, Paint3D, Rigging3D) |
 | `aigamekit_shared.installer.text3d_extras` | Pós-venv Text3D (`~/.config/text3d`, wrappers) |
 | `aigamekit_shared.multi_gpu` | Planeador de split multi-GPU (MultiGPUPlanner, DevicePlan, ModelArchitectureRegistry) — envolve o accelerate para colocação inteligente de dispositivos |
-| `aigamekit_shared.profiler` | Spans com tempo, CPU, RSS e VRAM CUDA (`ProfilerSession`, `profile_span`, `cuda_memory_snapshot_all` para todas as GPUs; extra `[profiler]` → `psutil`) |
+| `aigamekit_shared.profiler` | Spans com tempo, CPU, RSS e VRAM CUDA (`ProfilerSession`, `profile_span`, `cuda_memory_snapshot_all` para todas as GPUs; `psutil` é dep core) |
 
 ## Exemplo de uso
 
@@ -78,21 +78,17 @@ Também pode ser executado sem `pip install` via scripts na raiz do monorepo:
 ## Instalação
 
 ```bash
-# Dentro do monorepo (modo editável)
+# Dentro do monorepo (modo editável).
+# Deps core (torch, rich-click, bitsandbytes/torchao/quanto/sdnq, xformers, psutil, bpy>=5.2.0)
+# são instaladas automaticamente — não há extras GPU/CLI/quantização opcionais.
 pip install -e Shared/
-
-# Com suporte GPU
-pip install -e "Shared/[gpu]"
-
-# Com CLI (click + rich-click)
-pip install -e "Shared/[cli]"
 ```
 
 ## Extras
 
-- `gpu` — torch (para `aigamekit_shared.gpu`)
-- `cli` — click + rich-click (para `aigamekit_shared.cli_rich`)
-- `dev` — pytest
+- `dev` — pytest, pytest-cov, ruff, mypy, clified, numpy, scipy, trimesh (testes/lint + deps de `mesh_repair*` para CI)
+
+> Deps de runtime (`torch`, `rich-click`, `bitsandbytes`, `torchao`, `optimum-quanto`, `sdnq`, `xformers` em Linux, `psutil`, `bpy>=5.2.0`) são **core** — não estão atrás de um extra. **Não há** flag CLI `--low-vram` / `--memory-efficient`; a VRAM é gerida pelo **UMS + hw-auto** (ver [`ModelServer/README.md`](../ModelServer/README.md)).
 
 ## Desenvolvimento
 

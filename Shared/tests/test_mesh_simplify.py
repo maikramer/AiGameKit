@@ -18,12 +18,23 @@ class TestClampDecimateTarget:
         assert clamp_decimate_target(100_000, 5000) == 5000
 
     def test_target_below_floor_raised(self) -> None:
-        # floor = max(150, 1_000_000 * 0.008) = 8000
-        assert clamp_decimate_target(1_000_000, 1000) == 8000
+        # floor = max(150, 1_000_000 * 0.0005) = 500
+        assert clamp_decimate_target(1_000_000, 100) == 500
 
     def test_small_mesh_min_faces_floor(self) -> None:
-        # floor = max(150, 10_000 * 0.008 = 80) = 150
+        # floor = max(150, 10_000 * 0.0005 = 5) = 150
         assert clamp_decimate_target(10_000, 50) == _MIN_DECIMATE_FACES
+
+    def test_lod_ladder_budget_not_overridden(self) -> None:
+        """O piso relativo não pode achatar a ladder de um prop pequeno.
+
+        Regressão: com _MIN_DECIMATE_FRAC=0.008 o baú (174k faces pintadas)
+        via lod0/1/2 todos subidos a 1394 → três meshes iguais em disco.
+        """
+        n = 174_258
+        targets = [clamp_decimate_target(n, t) for t in (8712, 4356, 2904)]
+        assert targets == [8712, 4356, 2904]
+        assert len(set(targets)) == 3
 
     def test_target_above_face_count_passthrough(self) -> None:
         assert clamp_decimate_target(100, 500) == 500
@@ -60,6 +71,7 @@ bpy = pytest.importorskip("bpy")
 from aigamekit_shared.bpy_mesh import clear_scene, load_glb, save_glb  # noqa: E402
 from aigamekit_shared.mesh_simplify import (  # noqa: E402
     _boundary_edge_fraction,
+    _nonmanifold_edge_count,
     _weld_if_split_soup,
     decimate_mesh_object,
     has_shape_keys,
@@ -74,6 +86,19 @@ def _make_dense_sphere(name: str = "Sphere", subdivisions: int = 4) -> object:
     obj = bpy.context.active_object
     obj.name = name
     return obj
+
+
+def _split_all_vertices(obj: object) -> None:
+    """Parte todos os vértices por canto (V/Tri=3) — como um GLB reimportado."""
+    import bmesh
+
+    me = obj.data  # type: ignore[attr-defined]
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.split_edges(bm, edges=bm.edges[:])
+    bm.to_mesh(me)
+    me.update()
+    bm.free()
 
 
 class TestDecimateMeshObject:
@@ -123,19 +148,39 @@ class TestDecimateMeshObject:
         assert len(obj.data.polygons) <= 500
 
     def test_fragmented_shells_weld_before_collapse(self) -> None:
-        """Cascas abertas coincidentes: sem weld COLLAPSE rasga; com weld bfrac cai."""
+        """Cascas coincidentes: o weld funde-as numa só antes do COLLAPSE."""
         obj = _make_double_open_shell()
+        n_faces0 = len(obj.data.polygons)
         bfrac0 = _boundary_edge_fraction(obj)
         assert bfrac0 >= 0.12
         welded = _weld_if_split_soup(obj)
         assert welded > 0
-        bfrac1 = _boundary_edge_fraction(obj)
-        assert bfrac1 < bfrac0
+        # As duas cascas passam a ser uma: metade das faces/vértices, e sem
+        # arestas non-manifold (o weld só-de-fronteira antigo deixava 37).
+        assert len(obj.data.polygons) <= n_faces0 // 2
+        assert _nonmanifold_edge_count(obj) == 0
         target = max(300, len(obj.data.polygons) // 4)
         n = decimate_mesh_object(obj, target, protect_boundaries=False)
         assert n <= int(target * 1.5)
         # LOD não pode sair "comido" (quase só boundary).
         assert _boundary_edge_fraction(obj) < 0.45
+
+    def test_uv_seam_splits_welded_before_collapse(self) -> None:
+        """Costuras do glTF (verts coincidentes) não podem rasgar o LOD.
+
+        Reproduz o import de GLB: cada face com os seus próprios vértices
+        (triangle soup). Sem o weld, o COLLAPSE decima cada triângulo isolado
+        e o LOD sai em centenas de ilhas — o defeito das árvores lod2.
+        """
+        obj = _make_dense_sphere(subdivisions=4)
+        n_faces0 = len(obj.data.polygons)
+        _split_all_vertices(obj)
+        assert _boundary_edge_fraction(obj) == pytest.approx(1.0)
+        target = n_faces0 // 8
+        decimate_mesh_object(obj, target, protect_boundaries=False)
+        assert len(obj.data.polygons) <= int(target * 1.2)
+        # Reconectada: superfície fechada, não uma sopa de retalhos.
+        assert _boundary_edge_fraction(obj) < 0.05
 
 
 def _make_double_open_shell() -> object:

@@ -1,15 +1,17 @@
 # AiGameKit monorepo — common tasks for Python packages (ruff, pytest, mypy), Rust (Materialize), and VibeGame (Bun).
 # Requires GNU Make; on Windows, use Git Bash / MSYS2 / WSL so shell recipes and `find` work as expected.
 
-PYTHON_PROJECTS := Shared ModelServer Text2D Text2Icon Text3D Paint3D Part3D GameAssets Texture2D Text2Sound AiGameKitLab Terrain3D Rocks3D
+PYTHON_PROJECTS := Shared ModelServer Text2D Text2Icon Text3D Paint3D Part3D GameAssets Texture2D Skymap2D Text2Sound Rigging3D Animator3D Motion3D AiGameKitLab Terrain3D Rocks3D
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-modelserver test-text2d test-text2icon test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-text2sound test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-modelserver test-text2d test-text2icon test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
 
-# Prefer .venv only if pytest is installed there; else python3, then python.
+# Each package is tested from its own venv (installed by ./install.sh <tool>, which
+# adds the [dev] extra). CI has no per-package venv, so the system interpreter stays
+# as a fallback — but it says so, instead of failing later on a missing dependency.
 define run-pytest
-	cd $(1) && if [ -f .venv/Scripts/python.exe ] && .venv/Scripts/python.exe -c "import pytest" 2>/dev/null; then .venv/Scripts/python.exe -m pytest; elif [ -f .venv/bin/python ] && .venv/bin/python -c "import pytest" 2>/dev/null; then .venv/bin/python -m pytest; elif command -v python3 >/dev/null 2>&1; then python3 -m pytest; else python -m pytest; fi
+	cd $(1) && if [ -f .venv/Scripts/python.exe ] && .venv/Scripts/python.exe -c "import pytest" 2>/dev/null; then .venv/Scripts/python.exe -m pytest; elif [ -f .venv/bin/python ] && .venv/bin/python -c "import pytest" 2>/dev/null; then .venv/bin/python -m pytest; else echo "warning: $(1)/.venv has no pytest — falling back to the system interpreter (run ./install.sh $(shell echo $(1) | tr 'A-Z' 'a-z') for the package venv)"; if command -v python3 >/dev/null 2>&1; then python3 -m pytest; else python -m pytest; fi; fi
 endef
 
 define run-mypy-shared
@@ -86,6 +88,9 @@ test-rigging3d: ## pytest only in Rigging3D/
 
 test-animator3d: ## pytest only in Animator3D/
 	$(call run-pytest,Animator3D)
+
+test-motion3d: ## pytest only in Motion3D/
+	$(call run-pytest,Motion3D)
 
 test-terrain3d: ## pytest only in Terrain3D/
 	$(call run-pytest,Terrain3D)

@@ -265,6 +265,96 @@ class TestAbort:
         assert err is not None
         assert err["error_code"] == "CANCELLED"
 
+    def test_cmd_abort_via_stdin_during_blocking_generate(self) -> None:
+        """C1: ``CMD_ABORT`` chega via stdin a meio de um generate bloqueante.
+
+        Antes do reader thread, o loop principal bloqueava dentro de
+        ``adapter.generate()`` e nunca lia o ``CMD_ABORT`` — o hook
+        ``_abort`` ficava sempre ``False`` e o cancel degradava para SIGTERM.
+        Com o reader thread a drenar o stdin em paralelo, o ``CMD_ABORT`` é
+        lido e o flag ``state["abort"]`` passa a ``True`` a meio do generate.
+
+        Usa um pipe real (não StringIO pré-preenchido) para simular o UMS a
+        escrever o abort só DEPOIS do generate começar — um StringIO
+        pré-preenchido seria lido num rajão pelo reader antes do generate.
+        """
+        import json as _json
+        import os as _os
+        import threading as _t
+        import time as _time
+
+        # Signal: o adapter põe True quando entra em generate.
+        generate_started = _t.Event()
+        abort_seen = {"value": False}
+
+        class BlockingAdapter(MockAdapter):
+            def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
+                generate_started.set()
+                abort = request.get("_abort")
+                # Polling do hook até o reader thread entregar o CMD_ABORT.
+                for _ in range(200):  # ~2s máximo
+                    if callable(abort) and abort():
+                        abort_seen["value"] = True
+                        raise RuntimeError("cancelled by abort")
+                    _time.sleep(0.01)
+                return {"status": "ok", "output": "/tmp/never.glb"}
+
+        r_fd, w_fd = _os.pipe()
+        w = _os.fdopen(w_fd, "w")
+        r = _os.fdopen(r_fd, "r")
+        original_stdin = sys.stdin
+        original_stdout = sys.stdout
+        sys.stdin = r
+        fake_stdout = io.StringIO()
+        sys.stdout = fake_stdout
+
+        # Simula o UMS: escreve load + generate, espera o generate começar,
+        # depois escreve abort (a meio) e ping (após o cancel).
+        def _ums():
+            w.write(_json.dumps({"cmd": "load", "kwargs": {}}) + "\n")
+            w.flush()
+            w.write(_json.dumps({"cmd": "generate", "request": {}}) + "\n")
+            w.flush()
+            # Esperar o generate entrar — só então enviar abort (a meio).
+            generate_started.wait(timeout=3.0)
+            _time.sleep(0.05)  # garantir que o adapter está dentro do loop
+            w.write(_json.dumps({"cmd": "abort"}) + "\n")
+            w.flush()
+            # Após o cancel, ping para confirmar worker vivo.
+            _time.sleep(0.1)
+            w.write(_json.dumps({"cmd": "ping"}) + "\n")
+            w.flush()
+            _time.sleep(0.2)
+            w.write(_json.dumps({"cmd": "shutdown"}) + "\n")
+            w.flush()
+            w.close()
+
+        ums_thread = _t.Thread(target=_ums, daemon=True)
+        ums_thread.start()
+        try:
+            from aigamekit_shared.worker_serve import run_worker_loop
+
+            run_worker_loop(BlockingAdapter, backend_name="mock")
+        finally:
+            sys.stdin = original_stdin
+            sys.stdout = original_stdout
+            import contextlib as _ctx
+
+            with _ctx.suppress(Exception):
+                r.close()
+
+        events: list[dict[str, Any]] = []
+        for line in fake_stdout.getvalue().splitlines():
+            line = line.strip()
+            if line:
+                events.append(_json.loads(line))
+        err = next((e for e in events if e["event"] == "error"), None)
+        assert err is not None, f"esperado error CANCELLED; eventos: {events}"
+        assert err["error_code"] == "CANCELLED"
+        assert abort_seen["value"] is True  # o hook viu abort=True a meio
+        # Worker sobreviveu ao cancel cooperativo.
+        assert any(e["event"] == "pong" for e in events)
+
 
 class TestUnknownCmd:
     def test_unknown_cmd_emits_error_and_continues(self) -> None:

@@ -82,6 +82,10 @@ class TestClearCudaMemoryIpc:
                 return True
 
             @staticmethod
+            def is_initialized() -> bool:
+                return True
+
+            @staticmethod
             def synchronize() -> None:
                 calls.append("sync")
 
@@ -99,6 +103,107 @@ class TestClearCudaMemoryIpc:
         assert "empty" in calls
         assert "ipc" in calls
         assert "sync" in calls
+
+
+class TestClearCudaMemoryGuard:
+    """Sem CUDA inicializada, clear_cuda_memory NÃO pode tocar em torch.cuda.
+
+    ``torch.cuda.synchronize()`` faz ``_lazy_init()`` incondicionalmente —
+    criaria um contexto CUDA primário (~0.3-1.3 GiB) que só morre com o
+    processo. É o que matava a VRAM do supervisor UMS em modo subprocesso.
+    """
+
+    def _fake_torch(self, calls: list[str], *, available: bool, initialized: bool) -> SimpleNamespace:
+        class _Cuda:
+            @staticmethod
+            def is_available() -> bool:
+                return available
+
+            @staticmethod
+            def is_initialized() -> bool:
+                return initialized
+
+            @staticmethod
+            def synchronize() -> None:
+                calls.append("sync")
+
+            @staticmethod
+            def empty_cache() -> None:
+                calls.append("empty")
+
+            @staticmethod
+            def ipc_collect() -> None:
+                calls.append("ipc")
+
+        return SimpleNamespace(cuda=_Cuda())
+
+    def test_skips_cuda_when_not_initialized(self, monkeypatch):
+        calls: list[str] = []
+        monkeypatch.setattr(
+            gpu_module,
+            "_torch",
+            lambda: self._fake_torch(calls, available=True, initialized=False),
+        )
+        gpu_module.clear_cuda_memory()
+        assert calls == []
+
+    def test_skips_cuda_when_unavailable(self, monkeypatch):
+        calls: list[str] = []
+        monkeypatch.setattr(
+            gpu_module,
+            "_torch",
+            lambda: self._fake_torch(calls, available=False, initialized=False),
+        )
+        gpu_module.clear_cuda_memory(devices=[0, 1])
+        assert calls == []
+
+    def test_scrubs_when_initialized(self, monkeypatch):
+        calls: list[str] = []
+        monkeypatch.setattr(
+            gpu_module,
+            "_torch",
+            lambda: self._fake_torch(calls, available=True, initialized=True),
+        )
+        gpu_module.clear_cuda_memory()
+        assert "sync" in calls
+        assert "empty" in calls
+
+
+class TestTorchReservedMib:
+    def test_none_when_not_initialized(self, monkeypatch):
+        def _boom(*_a: object, **_k: object) -> int:
+            raise AssertionError("memory_reserved não deve ser chamado sem CUDA inicializada")
+
+        fake_torch = SimpleNamespace(
+            cuda=SimpleNamespace(
+                is_available=lambda: True,
+                is_initialized=lambda: False,
+                memory_reserved=_boom,
+            )
+        )
+        monkeypatch.setattr(gpu_module, "_torch", lambda: fake_torch)
+        assert gpu_module.torch_reserved_mib() is None
+
+    def test_none_when_unavailable(self, monkeypatch):
+        fake_torch = SimpleNamespace(
+            cuda=SimpleNamespace(
+                is_available=lambda: False,
+                is_initialized=lambda: False,
+            )
+        )
+        monkeypatch.setattr(gpu_module, "_torch", lambda: fake_torch)
+        assert gpu_module.torch_reserved_mib() is None
+
+    def test_returns_mib_when_initialized(self, monkeypatch):
+        fake_torch = SimpleNamespace(
+            cuda=SimpleNamespace(
+                is_available=lambda: True,
+                is_initialized=lambda: True,
+                memory_reserved=lambda device=0: 1536 * 1024 * 1024,
+            )
+        )
+        monkeypatch.setattr(gpu_module, "_torch", lambda: fake_torch)
+        assert gpu_module.torch_reserved_mib() == 1536
 
 
 class TestWarnIfVramOccupied:

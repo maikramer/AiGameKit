@@ -8,7 +8,7 @@
 
 It provides reusable building blocks so each tool stays focused on its domain: structured logging, GPU detection and VRAM enforcement, subprocess execution with streaming output, a unified quality-preset engine, multi-GPU weight splitting, CPU/RAM/GPU profiling, JSONL progress reporting for batch orchestration, and a unified installer CLI.
 
-**Version:** 0.2.0 | **License:** MIT | **Python:** >= 3.10
+**Version:** 0.2.0 | **License:** MIT | **Python:** >= 3.13, < 3.14
 
 ## Modules
 
@@ -26,7 +26,18 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 | `profiler/` | `ProfilerSession` — CPU/RAM/GPU profiling with SQLite perf DB and JSONL span output |
 | `perfstore/` | SQLite perf database (`PerfDB`) for storing and querying profiling records |
 | `progress` | `emit_progress()` / `emit_result()` / `parse_progress_line()` — structured JSONL progress for batch tools |
-| `pipeline/` | Manifest parsing, GLB metadata extraction, validation, and caching helpers |
+| `pipeline_trace` | JSONL pipeline-stage tracing for batch orchestration (`PipelineTracer`) |
+| `model_server` | **UMS client** — `delegate_to_ums()`, `submit_to_ums()`, `wait_ums_job()`, `respawn_ums_backend()`, `ensure_ums_running()`, `ensure_vram_available()`, `discover_server_pids()`; `UMS_DO_NOT_KILL_TIP`. See [ModelServer/README.md](../ModelServer/README.md) |
+| `lowvram` | Model VRAM `FOOTPRINTS` registry (peak accounting for UMS admit) + `get_footprint()`, `plan_offload()` |
+| `vram_budget`, `paint_budget`, `lod_budget` | Per-domain VRAM/face budgets (UMS peak signals, Paint3D views, LOD0 face targets) |
+| `ums_payload`, `ums_load`, `worker_protocol`, `worker_serve`, `worker_serve_adapter_base` | UMS subprocess worker protocol + payload builders (JSONL stdin/stdout workers per tool) |
+| `base_generator` | `DiffusionGeneratorBase` — shared lifecycle (warmup, unload, `_place_with_planner`, `save_image`, `generate_batch`) for all diffusion tools |
+| `hardware` | `hw-auto` planning (GPU detect → model/quant/offload profile) shared across tools |
+| `model_download` | `ensure_model()` — resumable HF weight download with status callback |
+| `attention`, `group_offload`, `tiled_diffusion`, `diffusion_control`, `step_cache` | Diffusion inference optimizations (attention backend select, layer/group offload, tiled VAE/attention, abort control, step caching) |
+| `mesh_repair`, `mesh_repair_arrays` | Mesh topology repair profiles (`topology_clean`, `pre_decimate_uv`, …); arrays backend (numpy/scipy) for UV-less meshes |
+| `skin_transfer` | Bone rebind via geodesic/nearest skin transfer (`rigging3d transfer-weights`) |
+| `monorepo`, `validation`, `presets`, `quaternius_fetch`, `cli_tables`, `glb_verify` | Monorepo path resolution, asset validation, preset loaders, Quaternius animation fetch, CLI table formatting, GLB verification |
 | `path_utils` | `safe_filename()`, `ensure_directory()` — filesystem-safe path helpers |
 | `hf` | HuggingFace token resolution (`get_hf_token`) and cache display (`hf_home_display_rich`) |
 | `seed_utils` | `generate_seed()`, `resolve_effective_seed()`, `seed_everything()` — reproducible generation across random/numpy/torch |
@@ -36,7 +47,6 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 | `gltf_decode` | Decode glTF extensions bpy's importer rejects: `bpy_readable_glb()` context manager (KTX2/BasisU → `ktxdecompress`, meshopt on bpy<5.2 → `copy` via `@gltf-transform/cli`), `glb_extensions()` binary header parse, `bpy_decode_subcommand()`. Used by `import_gltf()` and AiGameKitLab so finished LODs (KTX2+meshopt) import without `Extension KHR_texture_basisu is not available` |
 | `mesh_simplify` | Decimate COLLAPSE helpers + `pre_decimate_uv` / `post_decimate` repair profiles (Text3D LOD / simplify / to_paint) |
 | `mesh_split` | Height-plane bisect for fellable trees (`SEAL_VERSION=cut-only-v1` fingerprint; GameAssets resume invalidates stale stump/top when seal drifts) |
-| `mesh_utils` | Legacy compatibility (`weld_glb()` — retained as no-op) |
 | `image_utils` | `save_image_with_metadata()`, `create_thumbnail()`, `create_zip()`, `load_bytes_as_rgb()`, `ensure_rgb()` |
 | `vram_monitor` | `VRAMMonitor` — live VRAM monitoring in background thread, `VRAMStats`, `find_quantization_sweet_spot()` |
 | `skill_install` | `install_my_skill()` / `install_agent_skill()` — Cursor Agent Skill installation from monorepo or package source |
@@ -44,33 +54,22 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 ## Installation
 
 ```bash
-# Editable install (required before any other package)
+# Editable install (required before any other package).
+# Core deps (torch, rich-click, bitsandbytes/torchao/quanto/sdnq, xformers, psutil, bpy>=5.2.0)
+# are pulled in automatically — there are no optional GPU/CLI/quantization extras.
 cd Shared && pip install -e .
 
-# With GPU support (torch)
-cd Shared && pip install -e ".[gpu]"
-
-# With CLI support (rich-click)
-cd Shared && pip install -e ".[cli]"
-
-# Development dependencies (pytest, ruff, mypy)
+# Development dependencies (pytest, pytest-cov, ruff, mypy, clified, numpy, scipy, trimesh)
 cd Shared && pip install -e ".[dev]"
-
-# Full dev + GPU
-cd Shared && pip install -e ".[dev,gpu]"
 ```
 
 ### Optional Extras
 
 | Extra | Installs | Used by |
 |-------|----------|---------|
-| `gpu` | `torch>=2.1.0` | `gpu`, `vram_monitor`, `multi_gpu` |
-| `cli` | `rich-click>=1.8.0` | `cli_rich` |
-| `quantization` | `bitsandbytes`, `torchao`, `optimum-quanto`, `sdnq` | `quantization`, `sdnq` |
-| `low_vram` | `xformers` (Linux) | Optional pip extra for xformers — **not** a CLI `--low-vram` flag (VRAM = UMS + hw-auto) |
-| `profiler` | `psutil` | `profiler/` |
-| `mesh` | `bpy>=5.0.1` | `bpy_mesh` |
-| `dev` | `pytest`, `pytest-cov`, `ruff`, `mypy`, `clified`, `numpy`, `scipy`, `trimesh` | Testing & linting (+ mesh_repair* unit deps for CI) |
+| `dev` | `pytest`, `pytest-cov`, `ruff`, `mypy`, `clified`, `numpy`, `scipy`, `trimesh` | Testing & linting (+ `mesh_repair*` unit deps for CI) |
+
+> Runtime deps (`torch`, `rich-click`, `bitsandbytes`, `torchao`, `optimum-quanto`, `sdnq`, `xformers` on Linux, `psutil`, `bpy>=5.2.0`) are **core** — not behind an extra. There is **no** CLI `--low-vram` / `--memory-efficient` flag; VRAM is managed by **UMS + hw-auto** (see [ModelServer/README.md](../ModelServer/README.md)).
 
 ## QualityEngine
 

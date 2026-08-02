@@ -243,6 +243,77 @@ class TestPrimitives:
         assert removed == len(tiny.faces)
         clear_scene()
 
+    def test_sliver_collapse_keeps_mesh_closed(self, _bpy) -> None:
+        """Agulha numa malha fechada: colapsar não abre buraco; apagar abre."""
+        import trimesh
+
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import count_boundary_edges, remove_sliver_faces
+
+        box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide().subdivide()
+        verts = np.asarray(box.vertices)
+        faces = np.asarray(box.faces, dtype=np.int64)
+        # Parte uma face em 3 com um vértice quase colinear → agulha fina.
+        a, b, c = verts[faces[0][0]], verts[faces[0][1]], verts[faces[0][2]]
+        p = a + (b - a) * 0.5 + (c - a) * 1e-4
+        verts = np.vstack([verts, p[None, :]])
+        i = len(verts) - 1
+        t = faces[0]
+        faces = np.vstack([faces[1:], [[t[0], t[1], i]], [[t[0], i, t[2]]], [[i, t[1], t[2]]]]).astype(np.int64)
+
+        for collapse, expect_closed in ((True, True), (False, False)):
+            clear_scene()
+            obj = create_mesh_from_arrays(verts, faces, name="sliver_test")
+            assert count_boundary_edges(obj) == 0
+            removed = remove_sliver_faces(obj, max_aspect=80.0, collapse=collapse)
+            assert removed > 0
+            assert (count_boundary_edges(obj) == 0) is expect_closed
+        clear_scene()
+
+
+class TestErodeBoundaryFlaps:
+    def test_plain_hole_is_not_widened(self, _bpy) -> None:
+        """Erodir o rebordo de um buraco normal alargava-o (353→502 no muro)."""
+        import trimesh
+
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import _erode_boundary_flaps, count_boundary_edges
+
+        box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide().subdivide()
+        keep = np.abs(box.triangles_center[:, 2] + 0.5) > 1e-6  # abre o fundo
+        shell = trimesh.Trimesh(vertices=box.vertices, faces=box.faces[keep], process=False)
+        shell.remove_unreferenced_vertices()
+        clear_scene()
+        obj = create_mesh_from_arrays(
+            np.asarray(shell.vertices), np.asarray(shell.faces, dtype=np.int64), name="erode_test"
+        )
+        before = count_boundary_edges(obj)
+        assert before > 0
+        _erode_boundary_flaps(obj)
+        assert count_boundary_edges(obj) <= before
+        clear_scene()
+
+    def test_dangling_flap_is_eroded(self, _bpy) -> None:
+        """Aba pendurada (2+ arestas de fronteira) é removida e a fronteira desce."""
+        import trimesh
+
+        from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from aigamekit_shared.mesh_repair import _erode_boundary_flaps, count_boundary_edges
+
+        box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide().subdivide()
+        verts = np.vstack([np.asarray(box.vertices), [[2.0, 0.0, 0.0]]])
+        spike = len(verts) - 1
+        e = np.asarray(box.faces, dtype=np.int64)[0]
+        faces = np.vstack([np.asarray(box.faces, dtype=np.int64), [[e[0], e[1], spike]]])
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces.astype(np.int64), name="flap_test")
+        before = count_boundary_edges(obj)
+        assert before > 0
+        removed = _erode_boundary_flaps(obj)
+        assert removed > 0
+        assert count_boundary_edges(obj) < before
+        clear_scene()
+
 
 class TestMakeWatertight:
     def test_open_bottom_box_closed(self, _bpy) -> None:
@@ -920,6 +991,80 @@ class TestCapBoundaryDiameterGuard:
         clear_scene()
 
 
+def _holed_box(holes: int):
+    """Caixa subdividida com ``holes`` buracos — entrada aberta para o VDB."""
+    import trimesh
+
+    from aigamekit_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+
+    box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide().subdivide().subdivide()
+    faces = np.asarray(box.faces, dtype=np.int64)
+    if holes:
+        keep = np.ones(len(faces), dtype=bool)
+        keep[np.arange(0, len(faces), max(1, len(faces) // (holes * 8)))] = False
+        faces = faces[keep]
+    clear_scene()
+    return create_mesh_from_arrays(np.asarray(box.vertices), faces, name="morph_test")
+
+
+def _bm_volume(obj) -> float:
+    import bmesh
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    v = float(bm.calc_volume(signed=True))
+    bm.free()
+    return v
+
+
+class TestMorphVolumeGuard:
+    """``morphological_close`` nunca pode transformar um sólido numa crosta."""
+
+    def test_open_mesh_collapse_is_reverted(self, _bpy) -> None:
+        """VDB sobre malha aberta devolve crosta — o fecho tem de ser revertido.
+
+        Regressão: ``shepherd_cottage`` saía com 9% do volume e o dobro da área
+        (sólido → casca dupla), e o resultado dependia da RAM livre porque o
+        voxel vem de ``adapt_morph_max_grid_axis``.
+        """
+        from aigamekit_shared.bpy_mesh import clear_scene
+        from aigamekit_shared.mesh_repair import morphological_close
+
+        obj = _holed_box(6)
+        v0 = _bm_volume(obj)
+        stats = morphological_close(obj, distance=0.02, max_grid_axis=256)
+        assert stats["reverted_volume_collapse"] == 1
+        assert _bm_volume(obj) == pytest.approx(v0, rel=1e-9)
+        clear_scene()
+
+    def test_closed_mesh_is_not_reverted(self, _bpy) -> None:
+        """Sólido fechado: o fecho corre e o volume mantém-se."""
+        from aigamekit_shared.bpy_mesh import clear_scene
+        from aigamekit_shared.mesh_repair import morphological_close
+
+        obj = _holed_box(0)
+        v0 = _bm_volume(obj)
+        stats = morphological_close(obj, distance=0.02, max_grid_axis=256)
+        assert stats["reverted_volume_collapse"] == 0
+        assert _bm_volume(obj) == pytest.approx(v0, rel=0.05)
+        clear_scene()
+
+    def test_volume_preserved_across_grid_sizes(self, _bpy) -> None:
+        """Invariante: o resultado não pode depender da grelha (= da RAM livre)."""
+        from aigamekit_shared.bpy_mesh import clear_scene
+        from aigamekit_shared.mesh_repair import morphological_close
+
+        vols = []
+        for grid in (64, 128, 256):
+            obj = _holed_box(1)
+            v0 = _bm_volume(obj)
+            morphological_close(obj, distance=0.02, max_grid_axis=grid)
+            vols.append(_bm_volume(obj) / v0)
+            clear_scene()
+        assert all(r > 0.5 for r in vols), vols
+        assert max(vols) - min(vols) < 0.1, vols
+
+
 class TestMorphRamAdapt:
     """Anti-OOM do morphological_close — puro, sem bpy."""
 
@@ -929,7 +1074,7 @@ class TestMorphRamAdapt:
         # ~8 GiB available → fraction 0.2 → ~1.6 GiB → ~48 B/cell → grid ~330
         g = adapt_morph_max_grid_axis(8 * 1024**3, requested=800)
         assert 64 <= g <= 400
-        # 800³×48 / 0.2 ≈ 115 GiB MemAvailable para libertar o tecto pedido
+        # 800³x48 / 0.2 ≈ 115 GiB MemAvailable para libertar o tecto pedido
         g_hi = adapt_morph_max_grid_axis(128 * 1024**3, requested=800)
         assert g_hi == 800
         assert g_hi > g

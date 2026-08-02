@@ -62,7 +62,9 @@ def add_ums_options(fn: F) -> F:
         "--ums-priority",
         type=click.Choice(["interactive", "batch"], case_sensitive=False),
         default=None,
-        help=("Prioridade na fila UMS (default: interactive, ou AIGAMEKIT_UMS_PRIORITY). GameAssets batch usa 'batch'."),
+        help=(
+            "Prioridade na fila UMS (default: interactive, ou AIGAMEKIT_UMS_PRIORITY). GameAssets batch usa 'batch'."
+        ),
     )(fn)
     return fn
 
@@ -670,3 +672,69 @@ def make_profiler(
         params=params,
     )
     return profiler, prof_log
+
+
+def delegate_or_prepare(
+    backend: str,
+    *,
+    payload: dict[str, Any],
+    t_start: float,
+    noun: str,
+    console: Console,
+    enabled: bool = True,
+    priority: str | None = None,
+    stream: bool = False,
+    timeout_sec: float = 600.0,
+    gpu_ids: list[int] | str | None = None,
+    memory_efficient: bool | None = None,
+    sdnq_preset: str | None = None,
+    quant_preset: str | None = None,
+    footprint_key: str | None = None,
+    prepare: Callable[[], None] | None = None,
+) -> bool:
+    """Tenta delegar no UMS; se não, chama o fallback in-process.
+
+    Padrão dos 9 CLIs de generate: montar o request da tool (payload),
+    envolver com ``with_ums_peak_opts(with_ums_load_opts(...))`` e delegar via
+    :func:`try_ums_delegation`. Se o UMS não tratar, o caller prepara a GPU
+    exclusiva (``prepare_gpu_exclusive``) — o ``prepare`` callback encapsula
+    esse passo (com os args per-tool: quant_mode, env flags, etc.).
+
+    Args:
+        backend: Nome do backend UMS (ex: ``texture2d``).
+        payload: Corpo do request da tool (sem gpu_ids/peak opts — o helper
+            injeta).
+        t_start, noun, console, enabled, priority, stream, timeout_sec: Ver
+            :func:`try_ums_delegation`.
+        gpu_ids: IDs de GPU para load (multi-GPU).
+        memory_efficient, sdnq_preset, quant_preset, footprint_key: Sinais de
+            pico VRAM (ver :func:`with_ums_peak_opts`).
+        prepare: Callback do fallback in-process (ex: ``prepare_gpu_exclusive``
+            com os args da tool). Chamado só se o UMS não tratar.
+
+    Returns:
+        ``True`` se o UMS tratou (o caller deve ``return``); ``False`` se o
+        caller deve seguir para o fallback.
+    """
+    if try_ums_delegation(
+        backend,
+        with_ums_peak_opts(
+            with_ums_load_opts(payload, gpu_ids=gpu_ids),
+            backend=backend,
+            memory_efficient=memory_efficient,
+            sdnq_preset=sdnq_preset,
+            quant_preset=quant_preset,
+            footprint_key=footprint_key,
+        ),
+        t_start=t_start,
+        noun=noun,
+        console=console,
+        enabled=enabled,
+        priority=priority,
+        stream=stream,
+        timeout_sec=timeout_sec,
+    ):
+        return True
+    if prepare is not None:
+        prepare()
+    return False

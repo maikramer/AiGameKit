@@ -11,6 +11,9 @@ Cada tool fornece apenas as rows extra específicas (model IDs, presets, etc.).
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
+from typing import Any, Literal
+
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
@@ -136,3 +139,38 @@ def render_doctor_table(
 
     console.print(t)
     return all_ok
+
+
+def render_presets_table(
+    console: Console,
+    *,
+    title: str,
+    presets: Mapping[str, dict[str, Any]],
+    columns: list[
+        tuple[
+            str,
+            str,
+            Literal["default", "left", "center", "right", "full"] | None,
+            Callable[[dict[str, Any]], str],
+        ]
+    ],
+) -> None:
+    """Renderiza o comando ``presets`` (tabela Nome + colunas por preset).
+
+    Padrão das tools 2D (Texture2D/Skymap2D byte-idênticos; Text2Sound com
+    colunas próprias) — as tools fornecem apenas título e colunas.
+
+    Args:
+        console: Console Rich.
+        title: Título da tabela (ex: ``Presets de Texturas``).
+        presets: Dict de presets da tool.
+        columns: ``(label, style, justify, formatter)`` — o formatter recebe o
+            dict do preset e devolve a string da célula. ``justify`` vazio = esquerda.
+    """
+    t = Table(title=f"[bold blue]{title}", box=box.ROUNDED)
+    t.add_column("Nome", style="cyan", no_wrap=True)
+    for label, style, justify, _ in columns:
+        t.add_column(label, style=style, justify=justify or "left")
+    for name, preset in presets.items():
+        t.add_row(name, *(fmt(preset) for _, _, _, fmt in columns))
+    console.print(t)

@@ -59,7 +59,9 @@ class TestResolveUmsStartCmd:
     def test_path_lookup_used_when_no_canonical(self) -> None:
         cmd, warning = _resolve_ums_start_cmd(
             canonical_python=None,
-            path_lookup=lambda name: "/usr/local/bin/aigamekit-model-server" if name == "aigamekit-model-server" else None,
+            path_lookup=lambda name: (
+                "/usr/local/bin/aigamekit-model-server" if name == "aigamekit-model-server" else None
+            ),
             import_probe=lambda: True,
             sys_executable="/wrong/python",
         )

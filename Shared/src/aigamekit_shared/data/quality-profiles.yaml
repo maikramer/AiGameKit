@@ -85,6 +85,10 @@ profiles:
       prompt_num: 48
       postprocess_threshold: 0.95
 
+    motion3d:
+      max_frames: 80
+      temperature: 0.0
+
   low:
     label: "Low (~1min, basic quality)"
     text2d:
@@ -163,6 +167,10 @@ profiles:
       point_num: 40000
       prompt_num: 64
       postprocess_threshold: 0.95
+
+    motion3d:
+      max_frames: 120
+      temperature: 0.0
 
   medium:
     label: "Medium (~2min, standard quality — DEFAULT)"
@@ -243,6 +251,10 @@ profiles:
       prompt_num: 128
       postprocess_threshold: 0.99
 
+    motion3d:
+      max_frames: 160
+      temperature: 0.0
+
   high:
     label: "High (~5min, high quality)"
     text2d:
@@ -322,6 +334,10 @@ profiles:
       prompt_num: 160
       postprocess_threshold: 0.99
 
+    motion3d:
+      max_frames: 196
+      temperature: 0.5
+
   highest:
     label: "Highest (~10min+, maximum quality)"
     text2d:
@@ -400,3 +416,7 @@ profiles:
       point_num: 72000
       prompt_num: 192
       postprocess_threshold: 0.995
+
+    motion3d:
+      max_frames: 196
+      temperature: 1.0

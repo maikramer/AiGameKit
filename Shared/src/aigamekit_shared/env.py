@@ -26,6 +26,7 @@ ANIMATOR3D_BIN = "ANIMATOR3D_BIN"
 TERRAIN3D_BIN = "TERRAIN3D_BIN"
 ROCKS3D_BIN = "ROCKS3D_BIN"
 PART3D_BIN = "PART3D_BIN"
+MOTION3D_BIN = "MOTION3D_BIN"
 VIBEGAME_BIN = "VIBEGAME_BIN"
 MODELSERVER_BIN = "MODELSERVER_BIN"
 HF_HOME = "HF_HOME"
@@ -48,6 +49,7 @@ TOOL_BINS = {
     "terrain3d": TERRAIN3D_BIN,
     "rocks3d": ROCKS3D_BIN,
     "part3d": PART3D_BIN,
+    "motion3d": MOTION3D_BIN,
     "materialize": MATERIALIZE_BIN,
     "vibegame": VIBEGAME_BIN,
     "modelserver": MODELSERVER_BIN,
@@ -86,6 +88,7 @@ TOOL_LAYOUT: dict[str, ToolLayout] = {
     "terrain3d": ToolLayout("Terrain3D", "terrain3d"),
     "rocks3d": ToolLayout("Rocks3D", "rocks3d"),
     "part3d": ToolLayout("Part3D", "part3d"),
+    "motion3d": ToolLayout("Motion3D", "motion3d"),
     "modelserver": ToolLayout("ModelServer", "aigamekit-model-server"),
     "materialize": ToolLayout("Materialize", "materialize", kind="rust"),
     "vibegame": ToolLayout("VibeGame", "vibegame", kind="bun"),

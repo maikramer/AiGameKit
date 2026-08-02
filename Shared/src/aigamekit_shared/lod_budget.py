@@ -1,8 +1,8 @@
 """Orçamento de faces e texturas LOD em função do volume mundo (``char_m``).
 
-Categoria define o bias de densidade (``target_faces`` a ~2 m). Volume escala
+Categoria define o bias de densidade (``target_faces`` a ~2 m). Volume escala
 faces ~ área ``(char/REF)^2``. Atlas lod0 segue a ladder de paint; lod1/2 = /2 /4
-com snap a múltiplos de 64 px.
+com snap a múltiplos de 64 px.
 """
 
 from __future__ import annotations

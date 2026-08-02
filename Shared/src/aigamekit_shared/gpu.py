@@ -351,13 +351,20 @@ def clear_cuda_memory(devices: list[int] | None = None) -> None:
     Também tenta ``ipc_collect`` (quando existe) para libertar blocos partilhados
     que ``empty_cache`` sozinho deixa no processo (VRAM «morta» no UMS).
 
+    Se o processo **nunca inicializou CUDA** (``torch.cuda.is_initialized()``),
+    faz apenas ``gc.collect()`` e retorna: não há tensores nem caches para
+    limpar, e ``torch.cuda.synchronize()`` chamaria ``_lazy_init()`` — criando
+    um contexto CUDA primário (~0.3-1.3 GiB) que **só morre com o processo**.
+    Era assim que o supervisor UMS (modo subprocesso, sem tensores próprios)
+    ficava a segurar VRAM residual para sempre após o primeiro scrub.
+
     Args:
         devices: Lista de índices GPU para limpar. Se ``None``, limpa apenas
             o dispositivo atual (comportamento original).
     """
     torch = _torch()
     gc.collect()
-    if not torch.cuda.is_available():
+    if not torch.cuda.is_available() or not torch.cuda.is_initialized():
         return
 
     def _scrub_device() -> None:
@@ -397,9 +404,14 @@ def process_vram_mib(pid: int | None = None) -> int | None:
 
 
 def torch_reserved_mib(device: int = 0) -> int | None:
-    """MiB reservados pelo allocator PyTorch no dispositivo (fallback sem NVML)."""
+    """MiB reservados pelo allocator PyTorch no dispositivo (fallback sem NVML).
+
+    Retorna ``None`` sem tocar em CUDA quando o processo nunca a inicializou —
+    ``memory_reserved()`` faz ``_lazy_init()`` e criaria um contexto primário
+    permanente (~0.3-1.3 GiB) só para reportar zero.
+    """
     torch = _torch()
-    if not torch.cuda.is_available():
+    if not torch.cuda.is_available() or not torch.cuda.is_initialized():
         return None
     with contextlib.suppress(Exception):
         return int(torch.cuda.memory_reserved(device) // (1024 * 1024))

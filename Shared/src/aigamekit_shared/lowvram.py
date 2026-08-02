@@ -95,12 +95,14 @@ class ModelFootprint:
 
 # Registry centralizado de pegadas por modelo/família. Cada tool consulta aqui
 # em vez de inline literais dispersos. Valores calibrados das tools de produção.
-# "flux-dev-uint4": fp16_weights_gib reflete o tamanho JÁ quantizado (uint4 ~7.4 GiB);
+# "flux-dev-uint4": fp16_weights_gib reflete o tamanho JÁ quantizado (uint4 ~2.2 GiB);
 # usar com allow_quant=("none",) para não duplicar a redução.
+# (Antes 7.4 GiB — o peak recusava o skymap2d em GPUs ~6 GB apesar do modelo
+# SDNQ uint4 real caber. Calibrado do checkpoint Disty0/FLUX.1-dev-SDNQ-uint4.)
 FOOTPRINTS: dict[str, ModelFootprint] = {
     "flux-klein-4b": ModelFootprint(14.0, 1.5, 5.0, architecture="flux"),
     "flux-klein-9b": ModelFootprint(26.0, 1.5, 9.0, architecture="flux"),
-    "flux-dev-uint4": ModelFootprint(7.4, 2.0, 3.0, architecture="flux"),
+    "flux-dev-uint4": ModelFootprint(2.2, 2.0, 3.0, architecture="flux"),
     "hunyuan3d-2.1-dit": ModelFootprint(6.5, 1.5, 5.0, architecture="hunyuan3d"),
     # Hunyuan3D-Omni (~3.3B): DiT + ShapeVAE + OmniEncoder/DINOv2; README ~10 GB fp16.
     "hunyuan3d-omni": ModelFootprint(10.0, 2.0, 6.0, architecture="hunyuan3d"),
@@ -108,6 +110,8 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     "hunyuan3d-part": ModelFootprint(4.75, 1.5, 5.2, architecture="dit"),
     "hunyuan-paint": ModelFootprint(6.0, 2.0, 5.0, architecture="unet"),
     "stable-audio-open": ModelFootprint(3.5, 1.5, 2.0, architecture="stable-audio"),
+    # Motius T2M-GPT HumanML3D: CLIP+GPT+VQ safetensors (~1.35 GiB) + act.
+    "motius-t2mgpt": ModelFootprint(1.5, 0.8, 2.5, architecture="dit"),
     # Sana Sprint 600M transformer + Gemma 2B encoder (~7.3 GiB fp16 total).
     "sana-sprint-600m": ModelFootprint(7.3, 1.5, 3.0, architecture="sana"),
 }

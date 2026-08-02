@@ -393,6 +393,169 @@ def drop_sliver_faces(
     return v, f, n
 
 
+def _sliver_mask(verts: np.ndarray, tris: np.ndarray, max_aspect: float) -> tuple[np.ndarray, np.ndarray]:
+    """``(mask_agulha, comprimentos_de_aresta_por_face)`` — ``longest²/area``."""
+    e_faces, area = _face_metrics(verts, tris)
+    longest = e_faces.max(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        aspect = (longest * longest) / np.maximum(area, 1e-300)
+    return (area < 1e-18) | (aspect > float(max_aspect)), e_faces
+
+
+def collapse_sliver_faces(
+    verts: np.ndarray,
+    tris: np.ndarray,
+    *,
+    max_aspect: float = 80.0,
+    max_removal_ratio: float = 0.25,
+    short_edge_factor: float = 2.0,
+    passes: int = 3,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Colapsa triângulos-agulha em vez de os apagar (mantém estanqueidade).
+
+    :func:`drop_sliver_faces` apaga a face — numa malha fechada isso **abre um
+    buraco por agulha** (organ da igreja: 693 slivers apagados ⇒ 2033 arestas
+    de fronteira numa mesh que entrou watertight) que o ``fill_holes``/cap a
+    seguir tapa com leques n-gon visíveis. Aqui a agulha é removida por
+    *edge collapse* da sua aresta mais curta: num mesh fechado o colapso
+    apaga as 2 faces adjacentes e a superfície continua fechada.
+
+    Só arestas curtas (``<= short_edge_factor x mediana``) são colapsadas —
+    agulhas do tipo "cap" (obtusas, três arestas longas) ficam intactas em vez
+    de deformar a silhueta; são inofensivas e a decimação seguinte resolve-as.
+
+    Args:
+        verts: (N, 3) posições.
+        tris: (M, 3) triângulos.
+        max_aspect: Limiar de aspecto ``longest²/area``.
+        max_removal_ratio: Aborta (no-op) acima desta fração de faces-agulha —
+            a malha é maioritariamente agulhas, colapsar destruiria a forma.
+        short_edge_factor: Múltiplo da mediana de aresta abaixo do qual a
+            aresta curta da agulha é colapsável.
+        passes: Repetições (um colapso pode criar novas agulhas vizinhas).
+
+    Returns:
+        ``(verts, tris, n_faces_removidas)``.
+    """
+    verts = np.asarray(verts, dtype=np.float64)
+    tris = np.asarray(tris, dtype=np.int64)
+    if len(tris) == 0:
+        return verts, tris, 0
+
+    faces_before = len(tris)
+    for _ in range(max(1, int(passes))):
+        needle, e_faces = _sliver_mask(verts, tris, max_aspect)
+        n_needle = int(needle.sum())
+        if n_needle == 0:
+            break
+        if n_needle > max_removal_ratio * len(tris):
+            log.info(
+                "collapse_sliver_faces: %d/%d faces são agulhas (> %.0f%%) — no-op",
+                n_needle,
+                len(tris),
+                100.0 * max_removal_ratio,
+            )
+            break
+
+        edges, _, _ = _unique_edges(tris)
+        if len(edges) == 0:
+            break
+        med = float(np.median(np.linalg.norm(verts[edges[:, 0]] - verts[edges[:, 1]], axis=1)))
+        max_len = float(short_edge_factor) * med if med > 0 else np.inf
+
+        # Aresta mais curta de cada agulha: índice 0=(v0,v1), 1=(v1,v2), 2=(v2,v0).
+        idx = np.flatnonzero(needle)
+        short_i = e_faces[idx].argmin(axis=1)
+        short_len = e_faces[idx, short_i]
+        keep = short_len <= max_len
+        idx = idx[keep]
+        short_i = short_i[keep]
+        if len(idx) == 0:
+            break
+
+        f = tris[idx]
+        a = np.where(short_i == 0, f[:, 0], np.where(short_i == 1, f[:, 1], f[:, 2]))
+        b = np.where(short_i == 0, f[:, 1], np.where(short_i == 1, f[:, 2], f[:, 0]))
+
+        labels, n_groups = _connected_components(len(verts), a.astype(np.int64), b.astype(np.int64))
+        if n_groups >= len(verts):
+            break
+        # Representante = menor índice; posição = média do grupo (midpoint do
+        # colapso, não um dos extremos — evita enviesar a silhueta).
+        first = np.full(n_groups, len(verts), dtype=np.int64)
+        np.minimum.at(first, labels, np.arange(len(verts), dtype=np.int64))
+        reps, inverse = np.unique(first[labels], return_inverse=True)
+        sums = np.zeros((len(reps), 3), dtype=np.float64)
+        np.add.at(sums, inverse, verts)
+        counts = np.bincount(inverse, minlength=len(reps)).astype(np.float64)
+        verts = sums / counts[:, None]
+        tris = inverse[tris].astype(np.int64, copy=False)
+        verts, tris = compact_mesh(verts, tris)
+        if len(tris) == 0:
+            break
+
+    return verts, tris, int(faces_before - len(tris))
+
+
+def dedupe_coincident_faces(
+    verts: np.ndarray,
+    tris: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Remove triângulos coincidentes (mesmo trio de vértices) deixados pelo weld.
+
+    O weld por densidade cola paredes finas e produz faces exactamente
+    sobrepostas. Isso é invisível aqui mas o ``mesh.validate()`` do Blender
+    apaga-as ao construir o objecto — e aí já é tarde: aparecem centenas de
+    arestas de fronteira que o ``fill_holes`` tapa com leques.
+
+    Política por grupo de faces coincidentes:
+
+    * orientações opostas aos pares (folha de volume zero) — remove o par;
+    * resto — mantém uma cópia.
+
+    Returns:
+        ``(verts, tris, n_faces_removidas)``.
+    """
+    verts = np.asarray(verts, dtype=np.float64)
+    tris = np.asarray(tris, dtype=np.int64)
+    if len(tris) == 0:
+        return verts, tris, 0
+
+    key = np.sort(tris, axis=1)
+    _uniq, inverse, counts = np.unique(key, axis=0, return_inverse=True, return_counts=True)
+    inverse = inverse.reshape(-1)
+    if not (counts > 1).any():
+        return verts, tris, 0
+
+    # Orientação: par (+1) ou ímpar (-1) da permutação que ordena o trio.
+    order = np.argsort(tris, axis=1)
+    sign = np.where(
+        ((order[:, 0] == 0) & (order[:, 1] == 1))
+        | ((order[:, 0] == 1) & (order[:, 1] == 2))
+        | ((order[:, 0] == 2) & (order[:, 1] == 0)),
+        1,
+        -1,
+    )
+    net = np.bincount(inverse, weights=sign, minlength=len(counts))
+
+    keep = np.ones(len(tris), dtype=bool)
+    dup_groups = np.flatnonzero(counts > 1)
+    for g in dup_groups:
+        members = np.flatnonzero(inverse == g)
+        keep[members] = False
+        if abs(net[g]) >= 1:
+            # Sobra orientação líquida — manter uma face com esse sentido.
+            want = 1 if net[g] > 0 else -1
+            same = members[sign[members] == want]
+            keep[same[0] if len(same) else members[0]] = True
+
+    n = int((~keep).sum())
+    if n == 0:
+        return verts, tris, 0
+    v, f = compact_mesh(verts, tris, keep)
+    return v, f, n
+
+
 def drop_loose_debris(
     verts: np.ndarray,
     tris: np.ndarray,
@@ -711,6 +874,8 @@ def repair_arrays_topology_clean(
     internal_shell_passes: int = 2,
     shell_k_neighbors: int = 16,
     weld_method: WeldMethod = "exact",
+    sliver_collapse: bool = True,
+    guard_watertight: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
     """Fase de filtro do perfil ``topology_clean`` sobre arrays.
 
@@ -723,11 +888,21 @@ def repair_arrays_topology_clean(
     Os passos topológicos (fill_holes / caps / watertight / normais) NÃO fazem
     parte — correr depois em bmesh sobre o mesh já reduzido.
 
+    Args:
+        sliver_collapse: Agulhas removidas por *edge collapse*
+            (:func:`collapse_sliver_faces`) em vez de delete — não abre buracos
+            numa malha fechada. ``False`` volta ao delete histórico.
+        guard_watertight: Se a malha entrar fechada (0 arestas de fronteira),
+            qualquer passo destrutivo que abra fronteira é revertido. Sem isto,
+            o ``fill_holes``/cap a jusante tapa os buracos com leques n-gon
+            (efeito "faces em falta" no organ da igreja).
+
     Returns:
         ``(verts, tris, stats)`` com as mesmas chaves de log do caminho bmesh
         (``nonfinite_verts``, ``rewelded_coincident``, ``welded_exact``,
         ``welded_relative``, ``weld_distance``, ``long_edge_faces``,
-        ``sliver_faces``, ``debris_faces``, ``internal_shell_faces``).
+        ``sliver_faces``, ``debris_faces``, ``internal_shell_faces``). Passos
+        revertidos pelo guard aparecem como ``<passo>_reverted``.
     """
     from aigamekit_shared.mesh_repair import dynamic_weld_distance
 
@@ -772,19 +947,56 @@ def repair_arrays_topology_clean(
         stats["welded_relative"] = 0
         verts, tris = compact_mesh(verts, tris)
 
-    verts, tris, stats["long_edge_faces"] = drop_long_edge_faces(
-        verts,
-        tris,
-        max_length=long_edge_length,
-        median_factor=long_edge_median_factor,
+    # Guard de estanqueidade: só faz sentido se a malha JÁ estava fechada
+    # depois dos welds (os splits de normal do glTF criam fronteira falsa).
+    closed_in = guard_watertight and boundary_edge_count(tris) == 0
+
+    def _destructive(name: str, fn: Any) -> None:
+        """Aplica um passo que apaga faces; reverte se abrir fronteira nova."""
+        nonlocal verts, tris
+        v2, t2, n = fn(verts, tris)
+        if n and closed_in and boundary_edge_count(t2) > 0:
+            log.warning(
+                "%s: %d faces abririam fronteira numa malha fechada — passo revertido",
+                name,
+                int(n),
+            )
+            stats[f"{name}_reverted"] = int(n)
+            stats[name] = 0
+            return
+        verts, tris, stats[name] = v2, t2, int(n)
+
+    # Faces sobrepostas do weld: apagá-las aqui (com o guard) evita que o
+    # ``mesh.validate()`` do Blender as apague sem critério mais à frente.
+    _destructive("duplicate_faces", lambda v, t: dedupe_coincident_faces(v, t))
+
+    _destructive(
+        "long_edge_faces",
+        lambda v, t: drop_long_edge_faces(
+            v,
+            t,
+            max_length=long_edge_length,
+            median_factor=long_edge_median_factor,
+        ),
     )
     if sliver_max_aspect is not None and sliver_max_aspect > 0:
-        verts, tris, stats["sliver_faces"] = drop_sliver_faces(verts, tris, max_aspect=sliver_max_aspect)
-    verts, tris, stats["debris_faces"] = drop_loose_debris(
-        verts,
-        tris,
-        face_ratio=debris_face_ratio,
-        min_faces=debris_min_faces,
+        if sliver_collapse:
+            # Colapso é topology-preserving — não precisa do guard.
+            verts, tris, stats["sliver_faces"] = collapse_sliver_faces(verts, tris, max_aspect=sliver_max_aspect)
+            # O colapso pode sobrepor faces vizinhas — segunda limpeza.
+            verts, tris, n_dup2 = dedupe_coincident_faces(verts, tris)
+            if n_dup2:
+                stats["duplicate_faces"] = stats.get("duplicate_faces", 0) + int(n_dup2)
+        else:
+            _destructive("sliver_faces", lambda v, t: drop_sliver_faces(v, t, max_aspect=sliver_max_aspect))
+    _destructive(
+        "debris_faces",
+        lambda v, t: drop_loose_debris(
+            v,
+            t,
+            face_ratio=debris_face_ratio,
+            min_faces=debris_min_faces,
+        ),
     )
     if do_remove_internal_shells and len(tris):
         verts, tris, stats["internal_shell_faces"] = drop_internal_shell_faces(

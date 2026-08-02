@@ -52,6 +52,7 @@ TOOL_PAINT3D = "paint3d"
 TOOL_RIGGING3D = "rigging3d"
 TOOL_ANIMATOR3D = "animator3d"
 TOOL_TEXT2SOUND = "text2sound"
+TOOL_MOTION3D = "motion3d"
 TOOL_GAMEASSETS = "gameassets"
 
 PHASE_LOADING_MODEL = "loading_model"

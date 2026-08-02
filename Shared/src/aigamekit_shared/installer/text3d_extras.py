@@ -5,11 +5,12 @@ from __future__ import annotations
 import contextlib
 import platform
 import shutil
+import subprocess
 import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from clified.installer.python_installer import PythonProjectInstaller
@@ -17,6 +18,19 @@ if TYPE_CHECKING:
 # KTX-Software — CLI ``ktx`` exigido por ``gltf-transform uastc`` (KTX2).
 _KTX_VERSION = "4.4.2"
 _KTX_RELEASE_BASE = f"https://github.com/KhronosGroup/KTX-Software/releases/download/v{_KTX_VERSION}"
+# Windows: instalador NSIS (exige admin para instalar) — extraímos o ``ktx.exe``
+# com 7-Zip para não bloquear o install em prompts de UAC.
+_KTX_WIN_ASSET = f"KTX-Software-{_KTX_VERSION}-Windows-x64.exe"
+_KTX_WIN_URL = f"{_KTX_RELEASE_BASE}/{_KTX_WIN_ASSET}"
+_7Z_CANDIDATES = (
+    "7z",
+    r"C:\Program Files\7-Zip\7z.exe",
+    r"C:\Program Files (x86)\7-Zip\7z.exe",
+)
+_KTX_MANUAL_HINT = (
+    f"baixa {_KTX_WIN_URL} e instala (admin), "
+    "ou instala 7-Zip (https://www.7-zip.org/) e corre install.sh text3d de novo"
+)
 
 
 class Text3DPostInstall:
@@ -41,13 +55,17 @@ class Text3DPostInstall:
         self._show_text3d_summary()
 
     def ensure_ktx_software(self) -> None:
-        """Instala KTX-Software user-local se ``ktx`` não estiver no PATH (Linux)."""
+        """Instala KTX-Software user-local se ``ktx`` não estiver no PATH.
+
+        Linux: tarball pré-built → ``~/.local/opt/KTX-Software`` + symlink.
+        Windows: extrai ``ktx.exe`` do installer NSIS via 7-Zip (sem admin).
+        """
         log = self._i.logger
         if shutil.which("ktx"):
             log.info(f"ktx já no PATH: {shutil.which('ktx')}")
             return
         if self._i.is_windows:
-            log.info("KTX-Software: instale manualmente em Windows (gltf-transform uastc precisa de `ktx`).")
+            self._ensure_ktx_windows(log)
             return
 
         machine = platform.machine().lower()
@@ -94,6 +112,56 @@ class Text3DPostInstall:
             log.success(f"ktx → {link} ({ktx_bin})")
         except Exception as exc:
             log.info(f"KTX-Software: falha na instalação automática ({exc}); KTX2 ficará offline até instalar `ktx`.")
+
+    def _ensure_ktx_windows(self, log: Any) -> None:
+        """Windows: extrai ``ktx.exe`` do installer NSIS com 7-Zip (sem admin)."""
+        dest = Path.home() / ".local" / "opt" / "KTX-Software"
+        bin_dir = Path.home() / ".local" / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        target = bin_dir / "ktx.exe"
+
+        existing = dest / "bin" / "ktx.exe"
+        if existing.is_file():
+            shutil.copy2(existing, target)
+            log.success(f"ktx → {target} ({existing})")
+            return
+
+        seven_zip = next(
+            (c for c in _7Z_CANDIDATES if shutil.which(c) or Path(c).is_file()),
+            None,
+        )
+        if not seven_zip:
+            log.info(f"KTX-Software (Windows): 7-Zip não encontrado — instale manualmente ({_KTX_MANUAL_HINT}).")
+            return
+
+        log.step(f"A instalar KTX-Software {_KTX_VERSION} (Windows, via 7-Zip)…")
+        try:
+            with tempfile.TemporaryDirectory(prefix="ktx_install_") as tdir:
+                installer = Path(tdir) / _KTX_WIN_ASSET
+                extract_to = Path(tdir) / "x"
+                extract_to.mkdir()
+                urllib.request.urlretrieve(_KTX_WIN_URL, installer)
+                run = subprocess.run(
+                    [seven_zip, "x", "-y", f"-o{extract_to}", str(installer)],
+                    capture_output=True,
+                    text=True,
+                    timeout=180,
+                    check=False,
+                )
+                if run.returncode != 0:
+                    log.info(f"KTX-Software: 7-Zip falhou ({run.returncode}) — {_KTX_MANUAL_HINT}")
+                    return
+                ktx_exe = next(extract_to.glob("**/bin/ktx.exe"), None)
+                if ktx_exe is None:
+                    log.info(f"KTX-Software: layout inesperado no installer — {_KTX_MANUAL_HINT}")
+                    return
+                if dest.exists():
+                    shutil.rmtree(dest)
+                shutil.move(str(ktx_exe.parent.parent), str(dest))
+            shutil.copy2(dest / "bin" / "ktx.exe", target)
+            log.success(f"ktx → {target}")
+        except Exception as exc:
+            log.info(f"KTX-Software: falha na instalação automática ({exc}) — {_KTX_MANUAL_HINT}")
 
     def setup_models(self) -> None:
         log = self._i.logger

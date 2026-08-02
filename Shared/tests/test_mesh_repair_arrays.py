@@ -8,7 +8,9 @@ import pytest
 from aigamekit_shared.mesh_repair_arrays import (
     boundary_edge_count,
     boundary_edges,
+    collapse_sliver_faces,
     compact_mesh,
+    dedupe_coincident_faces,
     drop_internal_shell_faces,
     drop_long_edge_faces,
     drop_loose_debris,
@@ -190,6 +192,74 @@ class TestDropSliverFaces:
         v, f = _box()
         _v2, f2, n = drop_sliver_faces(v, f, max_aspect=80.0)
         assert n == 0 and len(f2) == 12
+
+
+class TestCollapseSliverFaces:
+    def test_collapses_needle_without_opening_hole(self) -> None:
+        """Agulha dentro de malha fechada: some sem deixar fronteira."""
+        v, f = _box_with_needle()
+        assert boundary_edge_count(f) == 0
+        _v2, f2, n = collapse_sliver_faces(v, f, max_aspect=80.0)
+        assert n > 0
+        assert boundary_edge_count(f2) == 0
+
+    def test_drop_variant_opens_hole(self) -> None:
+        """Contraste: o delete histórico abre buraco (bug do organ)."""
+        v, f = _box_with_needle()
+        _v2, f2, n = drop_sliver_faces(v, f, max_aspect=80.0)
+        assert n > 0
+        assert boundary_edge_count(f2) > 0
+
+    def test_keeps_healthy(self) -> None:
+        v, f = _box()
+        _v2, f2, n = collapse_sliver_faces(v, f, max_aspect=80.0)
+        assert n == 0 and len(f2) == 12
+
+    def test_topology_clean_keeps_watertight(self) -> None:
+        v, f = _box_with_needle()
+        _v2, f2, stats = repair_arrays_topology_clean(v, f, sliver_max_aspect=80.0)
+        assert stats["sliver_faces"] > 0
+        assert boundary_edge_count(f2) == 0
+
+
+class TestDedupeCoincidentFaces:
+    def test_removes_zero_volume_flap(self) -> None:
+        """Par de faces coincidentes com winding oposto: sai o par inteiro."""
+        v, f = _box()
+        flap = np.vstack([f, f[0][::-1]])
+        _v2, f2, n = dedupe_coincident_faces(v, flap)
+        assert n == 2
+        assert len(f2) == 11
+
+    def test_keeps_single_of_same_winding(self) -> None:
+        v, f = _box()
+        doubled = np.vstack([f, f[0]])
+        _v2, f2, n = dedupe_coincident_faces(v, doubled)
+        assert n == 1
+        assert len(f2) == 12
+
+    def test_noop_on_clean_mesh(self) -> None:
+        v, f = _box()
+        _v2, f2, n = dedupe_coincident_faces(v, f)
+        assert n == 0 and len(f2) == 12
+
+
+def _box_with_needle() -> tuple[np.ndarray, np.ndarray]:
+    """Cubo fechado onde uma face foi dividida numa agulha + vizinhas.
+
+    Um vértice novo quase colinear com uma aresta parte a face em duas, uma
+    delas com aspecto >> 80. A malha continua fechada — é o caso que o delete
+    de slivers rompia.
+    """
+    v, f = _box()
+    tri = f[0]
+    a, b, c = v[tri[0]], v[tri[1]], v[tri[2]]
+    # Ponto a 1e-4 da aresta (a,b): cria uma agulha longa e fina.
+    p = a + (b - a) * 0.5 + (c - a) * 1e-4
+    v2 = np.vstack([v, p[None, :]])
+    idx = len(v2) - 1
+    f2 = np.vstack([f[1:], [[tri[0], tri[1], idx]], [[tri[0], idx, tri[2]]], [[idx, tri[1], tri[2]]]])
+    return v2, f2.astype(np.int64)
 
 
 def _tetra(size: float = 1.0, center: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> tuple[np.ndarray, np.ndarray]:

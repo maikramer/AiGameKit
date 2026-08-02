@@ -70,12 +70,17 @@ def text2sound_install_in_venv(inst: PythonProjectInstaller) -> None:
     subprocess.run([*pip_cmd, *constr, "-r", str(sat_deps)], check=True, cwd=_root)
 
     inst.logger.info("Instalando pacote em modo editável...")
+    # O uv rejeita deps ``file:`` relativas (ex. ``aigamekit-shared @ file:../Shared``)
+    # sem o mesmo patch que o clified aplica no install normal.
+    from clified.installer.python_installer import _patched_relative_deps
+
     if inst._use_uv:
-        subprocess.run(
-            [*pip_cmd, *constr, "-e", str(inst.project_root), "--no-deps"],
-            check=True,
-            cwd=_root,
-        )
+        with _patched_relative_deps(inst.project_root, inst.logger):
+            subprocess.run(
+                [*pip_cmd, *constr, "-e", str(inst.project_root), "--no-deps"],
+                check=True,
+                cwd=_root,
+            )
     else:
         subprocess.run(
             [

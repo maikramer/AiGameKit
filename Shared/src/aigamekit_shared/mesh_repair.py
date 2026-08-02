@@ -70,12 +70,12 @@ RepairProfileName = Literal["topology_clean", "pre_decimate_uv", "part_decode", 
 # distâncias que a grelha não consegue resolver (fecho sub-voxel = no-op caro).
 MORPH_MAX_GRID_AXIS = 800
 MORPH_MIN_GRID_AXIS = 64
-# OpenVDB + overhead bpy por célula (cubo denso, pior caso). 800³×48 ≈ 23 GiB
+# OpenVDB + overhead bpy por célula (cubo denso, pior caso). 800³x48 ≈ 23 GiB
 # teóricos — sem adaptação o topology-fix em edifícios MC mata o processo.
 MORPH_BYTES_PER_GRID_CELL = 48
 # Fração da RAM *disponível* reservada ao volume; resto = solidify/cópias/OS.
 MORPH_RAM_FRACTION = 0.20
-# Solidify duplica topologia antes do remesh — input HI (1–4M faces) é OOM
+# Solidify duplica topologia antes do remesh — input HI (1-4M faces) é OOM
 # mesmo com grelha já clamped. Morph remesha à resolução do voxel; faces
 # acima deste tecto não ajudam o fecho.
 MORPH_INPUT_FACE_CAP = 400_000
@@ -114,7 +114,7 @@ def adapt_morph_max_grid_axis(
     sozinho. Mesma ideia que :func:`aigamekit_shared.vram_budget.budget_units`
     para activação GPU, mas para o cubo OpenVDB do voxel remesh.
 
-    Sem sinal de RAM: tecto conservador 400 (histórico OOM em buildings ~10 m
+    Sem sinal de RAM: tecto conservador 400 (histórico OOM em buildings ~10 m
     com grelha 800).
     """
     req = max(int(min_axis), int(requested))
@@ -126,7 +126,7 @@ def adapt_morph_max_grid_axis(
     max_cells = int(available_bytes * frac) // bpp
     if max_cells < 1:
         return lo
-    grid = int(math.floor(max_cells ** (1.0 / 3.0)))
+    grid = int(max_cells ** (1.0 / 3.0))
     return max(lo, min(req, grid))
 
 
@@ -134,7 +134,7 @@ def morph_input_face_cap(max_grid_axis: int) -> int:
     """Tecto de faces *antes* do solidify/voxel — escala com a grelha efectiva.
 
     Superfície ~O(G²); manter mais faces que o remesh resolve só inflaciona
-    o solidify (×2) sem melhorar o fecho.
+    o solidify (x2) sem melhorar o fecho.
     """
     g = max(MORPH_MIN_GRID_AXIS, int(max_grid_axis))
     surface = 4 * g * g
@@ -598,12 +598,25 @@ def remove_sliver_faces(
     *,
     max_aspect: float = 80.0,
     max_removal_ratio: float = 0.25,
+    collapse: bool = True,
+    short_edge_factor: float = 2.0,
 ) -> int:
-    """Remove triângulos-agulha (aspecto = longest_edge² / area).
+    """Elimina triângulos-agulha (aspecto = longest_edge² / area).
 
-    Tipico em sparks/fuses/folhas finas após decimação agressiva: faces com
-    área ~0 e arestas longas viram "estrelas" visuais. Aborta se apagaria
+    Típico em sparks/fuses/folhas finas após decimação agressiva: faces com
+    área ~0 e arestas longas viram "estrelas" visuais. Aborta se afectaria
     mais de ``max_removal_ratio`` das faces (malha já quase só slivers).
+
+    Com ``collapse=True`` (default) a agulha é removida por **edge collapse**
+    da sua aresta mais curta (``bmesh.ops.collapse``, UVs interpoladas): numa
+    malha fechada isso apaga as faces adjacentes sem abrir buraco. O delete
+    histórico (``collapse=False``) abre um buraco por agulha — em meshes que
+    entram watertight o ``fill_holes`` a seguir tapa-os com leques n-gon
+    visíveis (sintoma "faces em falta").
+
+    Só arestas curtas (``<= short_edge_factor x mediana``) são colapsadas;
+    agulhas "cap" (obtusas, três arestas longas) ficam intactas em vez de
+    deformar a silhueta.
 
     Returns:
         Número de faces removidas.
@@ -633,15 +646,29 @@ def remove_sliver_faces(
         bm.free()
         return 0
 
-    n = len(doomed)
-    bmesh.ops.delete(bm, geom=doomed, context="FACES")
+    n_faces_before = len(bm.faces)
+    if collapse:
+        bm.edges.ensure_lookup_table()
+        lengths = [e.calc_length() for e in bm.edges]
+        median = float(sorted(lengths)[len(lengths) // 2]) if lengths else 0.0
+        max_len = short_edge_factor * median if median > 0 else float("inf")
+        short_edges = {
+            e for f in doomed for e in [min(f.edges, key=lambda x: x.calc_length())] if e.calc_length() <= max_len
+        }
+        if not short_edges:
+            bm.free()
+            return 0
+        bmesh.ops.collapse(bm, edges=list(short_edges), uvs=True)
+    else:
+        bmesh.ops.delete(bm, geom=doomed, context="FACES")
     orphans = [v for v in bm.verts if not v.link_faces]
     if orphans:
         bmesh.ops.delete(bm, geom=orphans, context="VERTS")
     bm.to_mesh(me)
     me.update()
+    n = n_faces_before - len(me.polygons)
     bm.free()
-    return n
+    return int(max(0, n))
 
 
 def close_holes_and_repair(
@@ -715,15 +742,22 @@ def loop_is_cappable(
     max_edges: int,
     planar_tol: float,
     max_diameter: float | None = None,
+    world_matrix: np.ndarray | None = None,
 ) -> bool:
     """Loop pequeno e ~planar → seguro tapar. Cortes gigantes/serpenteantes → não.
 
     ``max_diameter``: se dado, loops com diâmetro ≥ este valor (ex. porta/janela)
     não são tapados mesmo que tenham poucas arestas densas.
+
+    ``world_matrix`` tem de ser a mesma com que ``max_diameter`` foi calculado —
+    o chamador deriva-o da diagonal da AABB em **mundo**, portanto medir o loop
+    em espaço local compara escalas diferentes. Objectos importados de glTF com
+    escala != 1 (ex. ``Top`` das árvores, escala 3.73) faziam o guarda de
+    diâmetro nunca disparar e portas/janelas eram tapadas.
     """
     if len(loop) < 3 or len(loop) > max_edges:
         return False
-    stats = _loop_plane_stats(loop)
+    stats = _loop_plane_stats(loop, world_matrix)
     if stats is None:
         return False
     _center, _normal, thickness, diameter = stats
@@ -817,7 +851,13 @@ def cap_boundary_loops(
 
     capped = 0
     for loop in boundary_loops(bm):
-        ok = loop_is_cappable(loop, max_edges=max_loop_edges, planar_tol=planar_tol, max_diameter=max_diameter)
+        ok = loop_is_cappable(
+            loop,
+            max_edges=max_loop_edges,
+            planar_tol=planar_tol,
+            max_diameter=max_diameter,
+            world_matrix=world_matrix,
+        )
         if not ok and cap_base and bbox_min is not None and bbox_max is not None:
             ok = _loop_is_base(
                 loop,
@@ -834,8 +874,12 @@ def cap_boundary_loops(
         if len(edges) < 3:
             continue
         try:
-            bmesh.ops.holes_fill(bm, edges=edges, sides=0)
-            capped += 1
+            # Contar só quando o fill produziu faces — holes_fill devolve um
+            # dict vazio (sem excepção) em cadeias que não fecham, e o contador
+            # antigo reportava loops "tapados" com a fronteira intacta.
+            res = bmesh.ops.holes_fill(bm, edges=edges, sides=0)
+            if res.get("faces"):
+                capped += 1
         except Exception:
             continue
     if capped:
@@ -1005,6 +1049,42 @@ def make_watertight(
     return stats
 
 
+# Volume abaixo do qual o guard do morph não se aplica (cascas/folhas abertas
+# não têm volume para preservar).
+_MORPH_MIN_VOLUME = 1e-6
+# Fração do volume de entrada abaixo da qual o fecho morfológico é considerado
+# degenerado (crosta do OpenVDB) e revertido. A margem medida é enorme: casos
+# bons ficam em 1.00-1.03, os degenerados em 0.09.
+_MORPH_MIN_VOLUME_RATIO = 0.5
+
+
+def _signed_volume(obj: Any) -> float:
+    """Volume assinado da malha via bmesh (unidades do objecto)."""
+    import bmesh
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    v = float(bm.calc_volume(signed=True))
+    bm.free()
+    return v
+
+
+def _restore_morph_backup(obj: Any, backup: Any, vol_before: float, vol_after: float) -> None:
+    """Repõe a malha pré-morph e liberta o datablock temporário."""
+    import bpy
+
+    log.warning(
+        "morphological_close: volume colapsou %.3f → %.3f (%.0f%%) — fecho revertido, malha original preservada",
+        vol_before,
+        vol_after,
+        100.0 * vol_after / vol_before if vol_before else 0.0,
+    )
+    old = obj.data
+    obj.data = backup
+    bpy.data.meshes.remove(old)
+    obj.data.update()
+
+
 def _vertex_gap_weights(
     obj: Any,
     *,
@@ -1148,7 +1228,7 @@ def morphological_close(
             max_grid_axis,
         )
 
-    # Input HI (edifício MC 1–4M faces): solidify ×2 rebenta RAM. Remesh
+    # Input HI (edifício MC 1-4M faces): solidify x2 rebenta RAM. Remesh
     # resolve à escala do voxel — pré-decimar até tecto da grelha.
     face_cap = morph_input_face_cap(max_grid_axis)
     faces_pre = faces_before
@@ -1183,6 +1263,25 @@ def morphological_close(
                 faces_before,
                 face_cap,
             )
+
+    # Rede de segurança (depois do pré-decimate, para que uma reversão devolva a
+    # malha já dentro do orçamento de faces): o remesh VOXEL (OpenVDB) só assina
+    # o campo a partir de uma superfície **fechada**. Com a malha aberta — o caso
+    # normal a seguir a ``remove_internal_shells`` — devolve uma crosta fina:
+    # medido no ``shepherd_cottage``, 75.8 → 0.8 m³ logo no primeiro remesh, e o
+    # ``clean`` entregue ficava com o dobro da área e 9% do volume (sólido
+    # transformado em casca dupla). Pior, o voxel efectivo sai de
+    # :func:`adapt_morph_max_grid_axis`, que lê a RAM livre — o mesmo asset saía
+    # sólido (grelha ≤449) ou oco (≥500) conforme a memória da máquina.
+    vol_before = _signed_volume(obj)
+    bnd_before = count_boundary_edges_fast(obj)
+    morph_backup = obj.data.copy() if abs(vol_before) > _MORPH_MIN_VOLUME else None
+    if bnd_before and morph_backup is not None:
+        log.info(
+            "morphological_close: entrada com %d arestas de fronteira — o remesh voxel pode "
+            "degenerar (guard de volume activo)",
+            bnd_before,
+        )
 
     # Piso do remesh: nunca maior que distance/2 (senão distance≈0.005 vira grelha 1cm).
     vox_floor = min(0.01, max(distance / 2.0, 0.001))
@@ -1321,6 +1420,15 @@ def morphological_close(
         _voxel()
         faces_remeshed = tri_count(obj.data)
         _decimate_back()
+        reverted = 0
+        if morph_backup is not None:
+            vol_after = _signed_volume(obj)
+            if abs(vol_after) < _MORPH_MIN_VOLUME_RATIO * abs(vol_before):
+                _restore_morph_backup(obj, morph_backup, vol_before, vol_after)
+                reverted = 1
+                morph_backup = None
+        if morph_backup is not None:
+            bpy.data.meshes.remove(morph_backup)
         faces_after = len(obj.data.polygons)
         log.info(
             "morphological_close (grid-clamped, remesh único): %d→%d faces (remesh=%d voxel=%.4f wall=%.4f)",
@@ -1336,6 +1444,7 @@ def morphological_close(
             "voxel_size": vox,
             "wall_thickness": wall,
             "distance_eff": dist_eff,
+            "reverted_volume_collapse": reverted,
         }
 
     _voxel()  # normaliza normais antes do displace
@@ -1386,6 +1495,16 @@ def morphological_close(
     faces_remeshed = tri_count(obj.data)
     _decimate_back()
 
+    reverted = 0
+    if morph_backup is not None:
+        vol_after = _signed_volume(obj)
+        if abs(vol_after) < _MORPH_MIN_VOLUME_RATIO * abs(vol_before):
+            _restore_morph_backup(obj, morph_backup, vol_before, vol_after)
+            reverted = 1
+            morph_backup = None
+    if morph_backup is not None:
+        bpy.data.meshes.remove(morph_backup)
+
     faces_after = len(obj.data.polygons)
     log.info(
         "morphological_close: %d→%d faces (remesh=%d dist=%.4f voxel=%.4f wall=%.4f gap_mask=%s)",
@@ -1403,6 +1522,7 @@ def morphological_close(
         "voxel_size": vox,
         "wall_thickness": wall,
         "distance_eff": dist_eff,
+        "reverted_volume_collapse": reverted,
     }
 
 
@@ -1613,16 +1733,29 @@ def with_suppress_fill(obj: Any, sides: int) -> None:
 
 
 def _erode_boundary_flaps(obj: Any, *, max_iters: int = 6, max_faces_ratio: float = 0.01) -> int:
-    """Erode faces penduradas em arestas de fronteira (abas internas do MC).
+    """Erode abas penduradas em arestas de fronteira (abas internas do MC).
 
-    Cada passada apaga faces com ≥1 aresta boundary; abas finas encolhem até
-    à junção manifold, deixando loops fecháveis. Guard: nunca remove mais de
-    ``max_faces_ratio`` do total de faces.
+    Só são apagadas faces com **≥2** arestas de fronteira. Num triângulo o
+    balanço é exacto: apagar uma face com 3 arestas de fronteira tira 3 da
+    contagem, com 2 arestas tira 2 e promove 1 (net -1), mas com **1** aresta
+    tira 1 e promove 2 (net **+1**) — ou seja, erodir o rebordo de um buraco
+    normal alarga-o em vez de o fechar. A versão anterior apagava tudo o que
+    tocasse a fronteira e por isso subia a contagem: medido no
+    ``city_wall_seg_c``, 314 → 502 arestas de fronteira com 1240 faces
+    apagadas, dentro do orçamento de 1% e sem qualquer aviso.
+
+    Guards: orçamento de ``max_faces_ratio`` das faces e reversão se a
+    fronteira não tiver diminuído no fim.
 
     Returns:
-        Faces removidas.
+        Faces removidas (0 se o passo foi revertido).
     """
     import bmesh
+
+    before = count_boundary_edges_fast(obj)
+    if before == 0:
+        return 0
+    backup = obj.data.copy()
 
     bm = bmesh.new()
     bm.from_mesh(obj.data)
@@ -1631,7 +1764,7 @@ def _erode_boundary_flaps(obj: Any, *, max_iters: int = 6, max_faces_ratio: floa
     removed = 0
     for _ in range(max_iters):
         bm.edges.ensure_lookup_table()
-        doomed = list({f for e in bm.edges if len(e.link_faces) == 1 for f in e.link_faces})
+        doomed = [f for f in bm.faces if sum(1 for e in f.edges if len(e.link_faces) == 1) >= 2]
         if not doomed or removed + len(doomed) > budget:
             break
         removed += len(doomed)
@@ -1643,6 +1776,23 @@ def _erode_boundary_flaps(obj: Any, *, max_iters: int = 6, max_faces_ratio: floa
         bm.to_mesh(obj.data)
         obj.data.update()
     bm.free()
+
+    if removed and count_boundary_edges_fast(obj) >= before:
+        log.warning(
+            "_erode_boundary_flaps: fronteira não desceu (%d) com %d faces apagadas — revertido",
+            before,
+            removed,
+        )
+        import bpy
+
+        old = obj.data
+        obj.data = backup
+        bpy.data.meshes.remove(old)
+        return 0
+
+    import bpy
+
+    bpy.data.meshes.remove(backup)
     return removed
 
 
@@ -1700,14 +1850,18 @@ def _cap_all_remaining_loops(obj: Any) -> int:
         if len(edges) < 3:
             continue
         try:
-            bmesh.ops.holes_fill(bm, edges=edges, sides=0)
-            capped += 1
-        except Exception:
-            try:
-                bmesh.ops.contextual_create(bm, geom=edges)
+            res = bmesh.ops.holes_fill(bm, edges=edges, sides=0)
+            if res.get("faces"):
                 capped += 1
-            except Exception:
                 continue
+        except Exception:
+            pass
+        try:
+            res = bmesh.ops.contextual_create(bm, geom=edges)
+            if res.get("faces"):
+                capped += 1
+        except Exception:
+            continue
     bm.to_mesh(obj.data)
     obj.data.update()
     bm.free()
@@ -1764,6 +1918,8 @@ class RepairProfile:
     long_edge_length: float = 8.0 / 512.0
     long_edge_median_factor: float = 8.0
     sliver_max_aspect: float | None = None
+    # Agulhas por edge collapse (não abre buracos) em vez de delete.
+    sliver_collapse: bool = True
     debris_face_ratio: float = 0.0005
     debris_min_faces: int = 64
     # Cascas internas (paredes duplas MC) — antes de fill/watertight.
@@ -1802,6 +1958,7 @@ class RepairProfile:
     use_post_decimate_cleanup: bool = False
     post_decimate_weld: float = 1e-5
     post_decimate_sliver_aspect: float = 80.0
+    post_decimate_sliver_collapse: bool = True
 
 
 REPAIR_PROFILES: dict[str, RepairProfile] = {
@@ -1881,11 +2038,14 @@ def post_decimate_cleanup(
     weld_threshold: float = 1e-5,
     sliver_max_aspect: float = 80.0,
     degenerate_threshold: float = 1e-6,
+    sliver_collapse: bool = True,
 ) -> dict[str, int]:
     """Limpeza leve após Decimate COLLAPSE (preserva UVs).
 
     dissolve → weld exacto → slivers → triangulate. Sem watertight/debris
     (o Decimate já alterou a topologia; o objectivo é só remover agulhas).
+    Agulhas são colapsadas, não apagadas (``sliver_collapse``) — apagar num
+    LOD fechado abre buracos que nada a jusante volta a fechar.
     """
     stats: dict[str, int] = {}
     try:
@@ -1896,7 +2056,7 @@ def post_decimate_cleanup(
         stats["welded_exact"] = remove_doubles(obj, threshold=weld_threshold)
     if sliver_max_aspect > 0:
         try:
-            stats["sliver_faces"] = remove_sliver_faces(obj, max_aspect=sliver_max_aspect)
+            stats["sliver_faces"] = remove_sliver_faces(obj, max_aspect=sliver_max_aspect, collapse=sliver_collapse)
         except Exception as exc:
             log.warning("remove_sliver_faces pós-decimate falhou: %s", exc)
             stats["sliver_faces"] = 0
@@ -1927,6 +2087,7 @@ def repair_mesh_object_with_profile(
             weld_threshold=prof.post_decimate_weld,
             sliver_max_aspect=prof.post_decimate_sliver_aspect,
             degenerate_threshold=prof.degenerate_threshold,
+            sliver_collapse=prof.post_decimate_sliver_collapse,
         )
         stats["profile_post_decimate"] = 1
         return stats
@@ -1963,6 +2124,7 @@ def repair_mesh_object_with_profile(
         long_edge_length=prof.long_edge_length,
         long_edge_median_factor=prof.long_edge_median_factor,
         sliver_max_aspect=prof.sliver_max_aspect,
+        sliver_collapse=prof.sliver_collapse,
         debris_face_ratio=prof.debris_face_ratio,
         debris_min_faces=prof.debris_min_faces,
         do_remove_internal_shells=prof.do_remove_internal_shells,
@@ -2022,6 +2184,7 @@ def repair_mesh_object(
     long_edge_length: float = 8.0 / 512.0,
     long_edge_median_factor: float = 8.0,
     sliver_max_aspect: float | None = None,
+    sliver_collapse: bool = True,
     debris_face_ratio: float = 0.0005,
     debris_min_faces: int = 64,
     do_remove_internal_shells: bool = False,
@@ -2131,7 +2294,7 @@ def repair_mesh_object(
         )
     if sliver_max_aspect is not None and sliver_max_aspect > 0:
         try:
-            stats["sliver_faces"] = remove_sliver_faces(obj, max_aspect=sliver_max_aspect)
+            stats["sliver_faces"] = remove_sliver_faces(obj, max_aspect=sliver_max_aspect, collapse=sliver_collapse)
         except Exception as exc:
             log.warning("remove_sliver_faces falhou: %s", exc)
             stats["sliver_faces"] = 0
