@@ -387,6 +387,45 @@ Verifica: UMS up, fila (`depth`/`inflight`/`eta`/`affinity_hits`/`queue_full`),
 GPU NVIDIA, `hf_xet`, import deps de cada backend. Se a fila tem jobs, imprime
 hint explícito: não mates GPU — usa `queue` / `cancel` / `wait`.
 
+### `ums calibrate` — medir o footprint em vez de o adivinhar
+
+```bash
+ums calibrate motion3d --repeats 3 --out backends.calibrated.yaml --report cal.json
+ums calibrate text3d --quant sdnq-int4 --prompt "uma pedra" --cycles 2
+ums calibrate paint3d --request-json job.json          # backends sem prompt
+```
+
+Corre um job real, amostra a VRAM **por processo** (worker + descendentes) a
+~20 Hz e resolve a decomposição a partir das fronteiras de fase:
+
+| Medida | Como sai |
+|---|---|
+| contexto CUDA | residual do processo depois do `unload` |
+| pesos | residente depois do `load` menos o contexto |
+| activação | pico do `generate` menos o residente |
+| **pico** | `max(pico do load, pico do generate)` |
+| safety | dispersão entre repetições + fragmentação (piso 384 MiB) |
+
+Detalhes que mudam o resultado e que o comando trata:
+
+- **o pico pode estar no `load`** (carregar fp16 e só depois quantizar) — admitir
+  só pelo pico da inferência dá OOM ao carregar;
+- **activação ≫ pesos** denuncia carregamento faseado dentro do `generate`
+  (HY-Motion: encoder de texto sobe e desce) — o número está certo, a
+  interpretação não, por isso é sinalizado;
+- **warmup**: a 1.ª repetição inclui autotune/inits — separada do estado estável;
+- **fuga e fragmentação**: residente a crescer por repetição, e cache do
+  allocator que não volta ao driver;
+- **contaminação**: VRAM de terceiros a variar durante a medição baixa a
+  confiança em vez de produzir um número plausível e errado.
+
+O preflight **recusa** medir com jobs UMS em curso ou com VRAM de terceiros
+acima de 512 MiB (`--force` mede na mesma). `--compare` (ligado por omissão)
+confronta o medido com o declarado em `backends.yaml`/`FOOTPRINTS`, usando a
+mesma fórmula do admit; sai com código 1 se algo estiver **subdimensionado**
+(risco de OOM). O YAML emitido é v2 mas mantém `adapter`/`vram_mib` no topo —
+o loader actual continua a lê-lo.
+
 ### Coordenação de VRAM
 
 **Pico = pesos(quant) + activação de inferência + `AIGAMEKIT_UMS_VRAM_SAFETY_MIB`

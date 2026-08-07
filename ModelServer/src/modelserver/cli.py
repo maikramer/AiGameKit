@@ -3,7 +3,7 @@
 
 Comandos (alias ``ums`` = ``aigamekit-model-server``):
   start|stop|status|submit|cancel|flush|queue|wait|backends|preload|evict|reap|
-  respawn|zero|stats|debug|bench|doctor
+  respawn|zero|stats|debug|bench|doctor|calibrate
 
 Agentes / humanos: se a GPU estiver ocupada, usa ``status`` / ``queue`` /
 ``debug`` — **não** mates processos GPU enquanto houver jobs UMS.
@@ -1328,6 +1328,265 @@ def doctor_cmd(fix: bool) -> None:
         console.print("[bold green]✓ Todos os checks passaram.[/bold green]")
     else:
         console.print("[yellow]Alguns checks falharam — ver detalhes acima.[/yellow]")
+
+
+def _coerce_scalar(raw: str) -> Any:
+    """``"4"`` → 4, ``"0.7"`` → 0.7, ``"true"`` → True, ``"none"`` → None, resto string."""
+    text = raw.strip()
+    low = text.lower()
+    if low in ("true", "yes", "on"):
+        return True
+    if low in ("false", "no", "off"):
+        return False
+    if low in ("none", "null", ""):
+        return None
+    with contextlib.suppress(ValueError):
+        return int(text)
+    with contextlib.suppress(ValueError):
+        return float(text)
+    return text
+
+
+def _parse_kv(pairs: tuple[str, ...]) -> dict[str, Any]:
+    """``("a=1", "b=x")`` → ``{"a": 1, "b": "x"}``.
+
+    Raises:
+        click.BadParameter: par sem ``=``.
+    """
+    out: dict[str, Any] = {}
+    for pair in pairs:
+        if "=" not in pair:
+            raise click.BadParameter(f"esperado K=V, recebido {pair!r}")
+        key, _, value = pair.partition("=")
+        out[key.strip()] = _coerce_scalar(value)
+    return out
+
+
+def _render_calibration(cal: Any) -> None:
+    """Tabela com a decomposição medida + avisos."""
+    colour = {"high": "green", "medium": "yellow", "low": "red"}.get(cal.confidence, "white")
+    console.print(
+        Panel.fit(
+            f"[bold]{cal.backend}[/bold] — pico medido [bold]{cal.peak_mib} MiB[/bold] "
+            f"(admit {cal.admit_peak_mib} MiB) · confiança [{colour}]{cal.confidence}[/{colour}]",
+            border_style=colour,
+        )
+    )
+    t = Table(box=box.SIMPLE, show_header=True)
+    t.add_column("Componente")
+    t.add_column("MiB", justify="right")
+    t.add_column("GiB", justify="right")
+    t.add_column("Origem", style="dim")
+    t.add_row("contexto CUDA", str(cal.context_mib), f"{cal.context_gib:.2f}", "residual pós-unload")
+    t.add_row("pesos", str(cal.weights_mib), f"{cal.weights_gib:.2f}", "residente pós-load - contexto")
+    t.add_row("activação", str(cal.activation_mib), f"{cal.activation_gib:.2f}", "pico generate - residente")
+    t.add_row("pico do load", str(cal.load_peak_mib), "", "transiente de carregamento")
+    t.add_row("pico do generate", str(cal.generate_peak_mib), "", f"máx de {cal.repeats} repetições")
+    t.add_row("[bold]pico[/bold]", f"[bold]{cal.peak_mib}[/bold]", f"{cal.peak_gib:.2f}", "max(load, generate)")
+    t.add_row("safety recomendado", str(cal.recommended_safety_mib), "", "dispersão + fragmentação")
+    console.print(t)
+
+    q = Table(box=box.SIMPLE, show_header=True, title="Qualidade da medição")
+    q.add_column("Métrica")
+    q.add_column("Valor", justify="right")
+    q.add_row("amostras", str(cal.samples_n))
+    q.add_row("maior gap", f"{cal.max_gap_sec:.3f}s (alvo {cal.interval_sec:.3f}s)")
+    q.add_row("amostras sem dados", f"{cal.missed_ratio:.1%}")
+    q.add_row("VRAM de terceiros", f"{cal.foreign_baseline_mib} → {cal.foreign_max_mib} MiB")
+    q.add_row("load / generate", f"{cal.load_sec:.1f}s / {cal.generate_sec_median:.1f}s (mediana)")
+    console.print(q)
+
+    for warning in cal.warnings:
+        console.print(f"[yellow]![/yellow] {warning}")
+
+
+def _render_comparison(rows: list[Any]) -> int:
+    """Tabela medido vs declarado; devolve o número de métricas subdimensionadas."""
+    from .calibrate.compare import VERDICT_OK, VERDICT_OVER, VERDICT_UNDER
+
+    t = Table(box=box.SIMPLE, show_header=True, title="Declarado vs medido")
+    t.add_column("Métrica")
+    t.add_column("Declarado", justify="right")
+    t.add_column("Medido", justify="right")
+    t.add_column("Δ", justify="right")
+    t.add_column("Rácio", justify="right")
+    t.add_column("Veredicto")
+    styles = {
+        VERDICT_OK: "[green]ok[/green]",
+        VERDICT_UNDER: "[red]subdimensionado[/red]",
+        VERDICT_OVER: "[yellow]sobredimensionado[/yellow]",
+    }
+    under = 0
+    for row in rows:
+        if row.verdict == VERDICT_UNDER:
+            under += 1
+        delta = "—" if row.delta_mib is None else f"{row.delta_mib:+d}"
+        ratio = "—" if row.ratio is None else f"{row.ratio:.2f}x"
+        t.add_row(
+            row.metric,
+            "—" if row.declared_mib is None else str(row.declared_mib),
+            str(row.measured_mib),
+            delta,
+            ratio,
+            styles.get(row.verdict, row.verdict),
+        )
+    console.print(t)
+    return under
+
+
+@cli.command("calibrate")
+@click.argument("backend")
+@click.option("--prompt", default=None, help="Prompt do job de calibração (atalho para --request-json).")
+@click.option("--output", "output_path", default=None, help="Path de output do job.")
+@click.option(
+    "--request-json",
+    "request_json",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Ficheiro JSON com o request completo (backends sem prompt: paint3d, part3d…).",
+)
+@click.option("--load-kwarg", "load_kwargs_raw", multiple=True, metavar="K=V", help="Kwarg de load (repetível).")
+@click.option("--quant", default=None, help="Atalho para --load-kwarg sdnq_preset=… (etiqueta no relatório).")
+@click.option("--repeats", default=3, show_default=True, help="Repetições do generate (≥2 separa warmup).")
+@click.option("--cycles", default=1, show_default=True, help="Pares load/unload extra (isola contexto CUDA).")
+@click.option("--interval", default=0.05, show_default=True, help="Intervalo de amostragem (s).")
+@click.option("--settle", default=1.5, show_default=True, help="Espera para o driver assentar (s).")
+@click.option("--baseline", default=1.0, show_default=True, help="Janela de silêncio antes do spawn (s).")
+@click.option("--out", "out_path", type=click.Path(dir_okay=False), default=None, help="Escreve o YAML calibrado.")
+@click.option("--report", "report_path", type=click.Path(dir_okay=False), default=None, help="Escreve o JSON.")
+@click.option("--compare/--no-compare", default=True, show_default=True, help="Comparar com o declarado.")
+@click.option("--zero/--no-zero", default=True, show_default=True, help="`ums zero` antes de medir (GPU limpa).")
+@click.option("--force", is_flag=True, help="Ignora o preflight (medição pode ficar contaminada).")
+@click.option("--json", "as_json", is_flag=True, help="Dump JSON do relatório.")
+def calibrate_cmd(
+    backend: str,
+    prompt: str | None,
+    output_path: str | None,
+    request_json: str | None,
+    load_kwargs_raw: tuple[str, ...],
+    quant: str | None,
+    repeats: int,
+    cycles: int,
+    interval: float,
+    settle: float,
+    baseline: float,
+    out_path: str | None,
+    report_path: str | None,
+    compare: bool,
+    zero: bool,
+    force: bool,
+    as_json: bool,
+) -> None:
+    """Mede o footprint VRAM real de um backend e emite o descriptor YAML.
+
+    Corre um job real com amostragem por processo a ~20 Hz, separa contexto
+    CUDA / pesos / activação, e compara com o que está declarado.
+
+    A GPU tem de estar livre: com jobs UMS em curso a medição mede-os a eles.
+    """
+    from .calibrate import CalibrationRunner, CalibrationSpec
+    from .calibrate.compare import compare_to_declared, declared_parts_from_registry
+    from .calibrate.emit import calibration_to_report, calibration_to_yaml
+    from .subprocess_pool import SubprocessWorkerPool
+
+    registry = Registry()
+    try:
+        desc = registry.descriptor(backend)
+    except KeyError as exc:
+        console.print(f"[red]{exc}[/red]")
+        sys.exit(2)
+
+    load_kwargs = _parse_kv(load_kwargs_raw)
+    if quant:
+        load_kwargs.setdefault("sdnq_preset", quant)
+    quant_mode = str(load_kwargs.get("sdnq_preset") or load_kwargs.get("quant_mode") or "none")
+
+    if request_json:
+        request = json.loads(Path(request_json).read_text(encoding="utf-8"))
+    else:
+        request = {
+            "prompt": prompt or "calibration job",
+            "output": output_path or f"/tmp/ums-calibrate-{backend}.bin",
+        }
+
+    pool = SubprocessWorkerPool()
+    runner = CalibrationRunner(pool)
+
+    blockers = runner.preflight()
+    if blockers:
+        for reason in blockers:
+            console.print(f"[red]✗[/red] {reason}")
+        if not force:
+            console.print("[dim]Usa --force para medir na mesma (resultado marcado como pouco fiável).[/dim]")
+            sys.exit(2)
+
+    if zero:
+        with contextlib.suppress(Exception):
+            from aigamekit_shared.model_server import zero_ums_vram
+
+            if zero_ums_vram() is not None:
+                console.print("[dim]UMS zero: workers idle terminados antes de medir.[/dim]")
+
+    spec = CalibrationSpec(
+        backend=backend,
+        tool=desc.tool,
+        request=request,
+        load_kwargs=load_kwargs,
+        repeats=repeats,
+        cycles=cycles,
+        baseline_sec=baseline,
+        settle_sec=settle,
+        interval_sec=interval,
+        quant_mode=quant_mode,
+    )
+
+    console.print(f"[dim]A calibrar {backend} ({repeats}x generate, amostragem {interval:.3f}s)…[/dim]")
+    try:
+        cal = runner.run(spec)
+    except Exception as exc:
+        console.print(f"[red]Calibração falhou:[/red] {exc}")
+        sys.exit(1)
+    finally:
+        with contextlib.suppress(Exception):
+            pool.shutdown_all()
+
+    report = calibration_to_report(cal)
+    if as_json:
+        _print_json(report)
+    else:
+        _render_calibration(cal)
+
+    exit_code = 0
+    if compare:
+        weights, activation, vram_mib = declared_parts_from_registry(backend, registry=registry, quant_mode=quant_mode)
+        rows = compare_to_declared(
+            cal,
+            declared_weights_mib=weights,
+            declared_activation_mib=activation,
+            declared_vram_mib=vram_mib,
+        )
+        report["comparison"] = [row.as_dict() for row in rows]
+        if not as_json:
+            under = _render_comparison(rows)
+            if under:
+                console.print(f"[red]{under} métrica(s) subdimensionada(s)[/red] — risco de OOM em admissão.")
+                exit_code = 1
+
+    if out_path:
+        meta = {
+            backend: {
+                "adapter": desc.adapter,
+                "priority": desc.priority,
+                "footprint_key": desc.footprint_key,
+            }
+        }
+        Path(out_path).write_text(calibration_to_yaml(cal, descriptors=meta), encoding="utf-8")
+        console.print(f"[green]YAML escrito:[/green] {out_path}")
+    if report_path:
+        Path(report_path).write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        console.print(f"[green]Relatório escrito:[/green] {report_path}")
+
+    sys.exit(exit_code)
 
 
 def main() -> None:

@@ -430,6 +430,18 @@ class SubprocessWorkerPool:
             state = self._workers.get(backend)
         return state is not None and state.proc is not None and state.proc.poll() is None
 
+    def worker_pid(self, backend: str) -> int | None:
+        """PID do worker vivo, ou ``None``.
+
+        Usado pela calibração para atribuir VRAM por processo (NVML só reporta
+        por PID; sem isto a medição incluiria compositor e vizinhos).
+        """
+        with self._pool_lock:
+            state = self._workers.get(backend)
+        if state is None or state.proc is None or state.proc.poll() is not None:
+            return None
+        return int(state.proc.pid)
+
     def vram_mib(self, backend: str) -> int | None:
         """Última VRAM reportada pelo worker (None se desconhecida)."""
         with self._pool_lock:
