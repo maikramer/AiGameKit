@@ -96,6 +96,71 @@ def test_has_npx_helper_returns_bool() -> None:
     assert isinstance(_has_ktx(), bool)
 
 
+def _synthetic_glb(path: Path, *, tri_count: int) -> Path:
+    """GLB mínimo válido do ponto de vista do chunk JSON (sem binário real)."""
+    import json
+    import struct
+
+    doc = {
+        "asset": {"version": "2.0"},
+        "accessors": [
+            {"componentType": 5125, "count": tri_count * 3, "type": "SCALAR"},
+            {"componentType": 5126, "count": tri_count * 3, "type": "VEC3"},
+        ],
+        "meshes": [{"primitives": [{"indices": 0, "attributes": {"POSITION": 1}}]}],
+    }
+    raw = json.dumps(doc).encode()
+    raw += b" " * (-len(raw) % 4)
+    header = struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(raw))
+    path.write_bytes(header + struct.pack("<II", len(raw), 0x4E4F534A) + raw)
+    return path
+
+
+def test_glb_face_count_reads_json_chunk(tmp_path: Path) -> None:
+    from text3d.utils.gltf_finish import glb_face_count
+
+    glb = _synthetic_glb(tmp_path / "m.glb", tri_count=1200)
+    assert glb_face_count(glb) == 1200
+    assert glb_face_count(tmp_path / "nope.glb") == -1
+
+
+def test_meshopt_simplify_refuses_when_already_below_target(tmp_path: Path) -> None:
+    from text3d.utils.gltf_finish import meshopt_simplify_glb
+
+    glb = _synthetic_glb(tmp_path / "small.glb", tri_count=100)
+    ok, faces, err = meshopt_simplify_glb(glb, tmp_path / "out.glb", target_faces=500)
+    assert ok is False
+    assert faces == 100
+    assert "abaixo do alvo" in err
+    assert not (tmp_path / "out.glb").exists()
+
+
+def test_meshopt_simplify_reports_unreadable_input(tmp_path: Path) -> None:
+    from text3d.utils.gltf_finish import meshopt_simplify_glb
+
+    bogus = tmp_path / "bogus.glb"
+    bogus.write_bytes(b"not a glb")
+    ok, faces, err = meshopt_simplify_glb(bogus, tmp_path / "out.glb", target_faces=10)
+    assert ok is False
+    assert faces == -1
+    assert "contar faces" in err
+
+
+def test_meshopt_simplify_locks_uv_seams_by_default() -> None:
+    """Regression: o valor do meshoptimizer aqui é travar costuras de atributos.
+
+    Passar ``--lock-border`` ou pré-weld com tolerância fundiria as costuras e
+    o simplificador voltaria a colapsar através das ilhas UV (textura rasgada).
+    """
+    import inspect
+
+    from text3d.utils import gltf_finish
+
+    src = inspect.getsource(gltf_finish.meshopt_simplify_glb)
+    assert "weld" in src
+    assert "--lock-border" not in src
+
+
 @pytest.mark.skipif(not __import__("shutil").which("npx"), reason="npx não está disponível neste ambiente")
 def test_finish_runs_dedup_prune_when_npx_available(tmp_path: Path) -> None:
     """Smoke: pelo menos os passos sem texturas devem aplicar quando há npx.

@@ -384,6 +384,77 @@ lods compostos, `*_stump_collision` / `*_top_collision` / `*_collision`.
 
 ---
 
+## LOD texturado — Decimate COLLAPSE não conhece ilhas UV (2026-08)
+
+**Sintoma:** `mushroom_red_painted.glb` perfeito (75k faces), `mushroom_red_lod0.glb`
+(1440 faces) com as pintas brancas rasgadas em estilhaços; no `lod2` (480 faces)
+vira salada de textura. Não era o orçamento de faces (`lod_budget` correcto) nem
+o `split-at-height`: `mushroom_glow` (sem split, mesmo orçamento) tinha o mesmo
+defeito.
+
+**Causa:** o Decimate COLLAPSE do bpy optimiza só erro **geométrico**. Os
+vértices das costuras UV colapsam através das ilhas do atlas e as UVs esticam.
+Delator barato: **V/Tri sobe** com a decimação (1.17 → 1.55 na escada antiga) —
+o exporter parte cada vez mais loops porque as costuras se multiplicam.
+
+**Correcção — duas rotas em `remesh_textured_glb`:**
+
+| Rota | Quando | Como | Atlas |
+|------|--------|------|-------|
+| Atlas preservado | alvo ≥ piso de costuras | `gltf-transform simplify` (meshoptimizer) | intacto |
+| Atlas refeito | alvo < piso de costuras | decimate + `xatlas` + closest-point rebake | repintado |
+
+O **meshoptimizer** trata costuras de atributos como fronteiras bloqueadas — desce
+faces sem tocar nas UVs. Em troca tem um **piso de costuras**: no cogumelo parou
+em 2402 faces com qualquer rácio. Abaixo disso a única saída correcta é descartar
+as UVs e repintar (`_rebake_textured_lod`).
+
+**Segundo gatilho do rebake: V/Tri.** Um atlas intacto mas cheio de costura sai
+caro em vértices. `MESHOPT_MAX_V_PER_TRI = 1.35`, medido **no intermédio**, antes
+do re-export — o `smooth_shade_scene` a 60° torna creases em arestas duras e o
+exporter parte loops: malhas sãs inflacionam 2–3%, as cheias de costura 11–15%
+(spear 1.451 → 1.662; swamp_shack 1.533 → 1.702). 1.35 × 1.15 = 1.55, dentro do
+tecto 1.6 das regras LOD. Sem esta guarda o `swamp_shack_lod0` saía com V/Tri
+1.70 **e** 8.7% acima do orçamento de faces; pelo rebake acerta 28566/28567 com
+V/Tri 1.37.
+
+**Resíduo conhecido:** em formas finas/recortadas (spear, swamp_shack) o xatlas
+cria muitos charts pequenos e o V/Tri dos `lod1`/`lod2` fica ~1.6–1.8, acima da
+regra. Continua melhor que a rota antiga (2.03 / 2.15) e as UVs estão íntegras —
+é custo de charts + arestas duras, não rasgadura.
+
+**O rebake não passa por voxel remesh.** A mesh decimada é um subconjunto da
+original, logo o closest-point cai na superfície certa. Com voxel remesh (versão
+antiga, só accionada em stall) a casca reconstruída caía do lado errado de paredes
+duplas Hunyuan → "salada de textura" da chapel.
+
+**Não fazer:**
+- COLLAPSE com o atlas original em rácios agressivos (é o bug acima).
+- `gltf-transform weld` com tolerância ou `--lock-border` antes do simplify: funde
+  as costuras e o meshoptimizer volta a colapsar através das ilhas.
+- Reconstruir o material do zero sem copiar `Roughness`/`Metallic` do painted — o
+  BSDF default tem specular alto e lava a cor (vermelho → salmão).
+
+**Fidelidade ao painted, não ao LOD anterior.** No `crystal_blue` o painted tem
+contornos claros nas facetas; o `lod0` antigo tinha-os esmagado em azul liso
+(UVs esticadas) e o novo repõe-nos. Ao comparar LODs, a referência é o
+`_painted.glb` — um LOD "mais suave" pode ser simplesmente detalhe perdido.
+
+**Resultado medido (`mushroom_red`, mesmo orçamento de faces):**
+
+| | faces | verts | V/Tri | bytes |
+|---|---|---|---|---|
+| lod0 antigo | 1439 | 1681 | 1.17 | 876 KB |
+| lod0 novo | 1438 | 1019 | 0.71 | 575 KB |
+| lod2 antigo | 478 | 740 | 1.55 | 94 KB |
+| lod2 novo | 480 | 395 | 0.82 | 67 KB |
+
+Código: `Text3D/src/text3d/utils/gltf_finish.py` (`meshopt_simplify_glb`),
+`Text3D/src/text3d/utils/mesh_remesh_textured.py` (`_meshopt_preserve_atlas`,
+`_rebake_textured_lod`). Testes: `Text3D/tests/test_lod_textured_routes.py`.
+
+---
+
 ## Checklist pós-shape (antes paint)
 
 QA no **`_shape` fresco** (não GLBs antigos de `public/`):
@@ -412,6 +483,7 @@ removido de propósito.
 
 | Data | Nota |
 |------|------|
+| 2026-08-06 | LOD texturado: meshoptimizer (atlas preservado) + rebake xatlas sem voxel (decimação extrema); COLLAPSE com atlas original rasgava UVs |
 | 2026-07-24 | Doc fix: `import_gltf` default=`TEMPERANCE` (não BLENDER); BLENDER materializa Icosphere helpers |
 | 2026-07-24 | `debug viz` (6 modos); weld antes de métricas boundary/flipped (seam-splits); WIREFRAME sem even_offset; depsgraph p/ rigged; `gltf_decode` (KTX2/meshopt); strip helpers só com armature |
 | 2026-07-24 | N/T sobreviver: paint exporta N+T; finish `ktxdecompress`+prune `--keep-attributes`; Decimate stepwise; weld pré-COLLAPSE só modo B (não painted texturado) |

@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import math
+import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -598,13 +599,37 @@ def _transfer_texture_direct(
 # ---------------------------------------------------------------------------
 
 
+def _principled_surface_params(obj) -> dict[str, float]:
+    """Lê roughness/metallic do Principled BSDF do *obj* (vazio se ausente)."""
+    params: dict[str, float] = {}
+    for mat_slot in getattr(obj, "material_slots", []):
+        mat = mat_slot.material
+        if not mat or not mat.use_nodes:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type != "BSDF_PRINCIPLED":
+                continue
+            for key in ("Roughness", "Metallic"):
+                socket = node.inputs.get(key)
+                if socket is not None and not socket.is_linked:
+                    params[key.lower()] = float(socket.default_value)
+            if params:
+                return params
+    return params
+
+
 def _build_textured_bpy_mesh(
     verts: np.ndarray,
     faces: np.ndarray,
     uvs: np.ndarray,
     baked_tex: np.ndarray,
+    surface_params: dict[str, float] | None = None,
 ) -> tuple[object, str]:
     """Create a bpy mesh with vertices, faces, UVs, and a baked texture material.
+
+    ``surface_params`` reaplica roughness/metallic do material original: sem
+    isso o BSDF default do Blender devolve um specular alto que lava a cor do
+    LOD reconstruído face ao painted.
 
     Returns (bpy_object, temp_image_path) — caller should unlink/delete temp file
     after saving.
@@ -672,8 +697,16 @@ def _build_textured_bpy_mesh(
     if bsdf is None:
         bsdf = nodes.new("ShaderNodeBsdfPrincipled")
     links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
+    for key, value in (surface_params or {}).items():
+        socket = bsdf.inputs.get(key.capitalize())
+        if socket is not None:
+            socket.default_value = value
 
     mesh.materials.append(mat)
+
+    from aigamekit_shared.bpy_mesh import apply_smooth_by_angle
+
+    apply_smooth_by_angle(obj)
 
     return obj, temp_path
 
@@ -817,20 +850,28 @@ def _pre_decimate_repair(obj) -> None:
         )
 
 
-# --- Rota de reconstrução (voxel + xatlas + reprojeção) -------------------
+# --- Duas rotas para LOD texturado ----------------------------------------
 #
-# Preferência: Decimate COLLAPSE com UVs/textura originais (preserva o atlas
-# do paint). Rebuild (voxel+xatlas+closest-point rebake) só quando COLLAPSE
-# estagna longe do alvo — NÃO dispara só por ``boundary_edge_fraction``.
+# 1. Preservar o atlas: o meshoptimizer (``gltf-transform simplify``) trata as
+#    costuras de UV como fronteiras bloqueadas, por isso desce faces sem mexer
+#    nas UVs nem na textura do paint. É a rota preferida — qualidade máxima e
+#    sem reamostragem. Tem um **piso de costuras**: abaixo dele não desce.
 #
-# Motivo: Hunyuan/paint gera paredes duplas; o rebake por closest-point pinta
-# o lado errado da parede e vira "salada de textura" (chapel lod0). UV-preserve
-# fica legível; rebuild fica como rede de segurança do stall.
+# 2. Rebake do atlas: decimate COLLAPSE (livre, as UVs deixam de importar) +
+#    unwrap xatlas + transferência de textura por closest-point contra o
+#    painted original. É o que permite decimação extrema (LOD2) sem rasgar a
+#    textura, ao custo de uma reamostragem do atlas.
+#
+# O que NÃO se faz: COLLAPSE com o atlas original em rácios agressivos — os
+# vértices atravessam ilhas UV e a textura fica esticada/rasgada.
+#
+# O rebake **não** passa por voxel remesh: a mesh decimada é um subconjunto da
+# original, logo o closest-point cai na superfície certa. Com voxel remesh a
+# casca reconstruída podia cair do lado errado de paredes duplas
+# (Hunyuan/paint) e produzir "salada de textura" (chapel lod0).
 
-# Estagnação do COLLAPSE: acima de slack*alvo, reconstruir.
+# Tolerância acima do alvo antes de trocar de rota.
 _REBUILD_STALL_FACTOR = 1.5
-# Resolução do voxel remesh relativa ao alvo (decimado a seguir).
-_REBUILD_VOXEL_MULT = 10
 
 
 def _boundary_edge_fraction(obj) -> float:
@@ -845,15 +886,19 @@ def _boundary_edge_fraction(obj) -> float:
     return n_boundary / n_edges
 
 
-def _rebuild_textured_lod(
+def _rebake_textured_lod(
     obj,
     source: MeshData,
     target_faces: int,
     texture_size: int,
 ) -> tuple[object, str]:
-    """Reconstrói um LOD texturado: voxel remesh + decimate + xatlas + rebake.
+    """LOD texturado com atlas refeito: decimate + xatlas + rebake por closest-point.
 
-    Destrutivo para o *obj* dado (voxel remesh in-place) e para a cena
+    Permite decimação muito abaixo do piso de costuras sem esticar a textura,
+    porque as UVs originais são descartadas e um atlas novo é pintado a partir
+    do painted.
+
+    Destrutivo para o *obj* dado (decimate in-place) e para a cena
     (``_build_textured_bpy_mesh`` limpa-a). Preserva o ``matrix_world`` do
     objecto original no reconstruído (rotação Hunyuan→OpenGL do import).
 
@@ -864,9 +909,10 @@ def _rebuild_textured_lod(
     from aigamekit_shared.mesh_simplify import decimate_mesh_object
 
     matrix = obj.matrix_world.copy()
+    surface_params = _principled_surface_params(obj)
+    # Weld das costuras que o glTF partiu: sem isto o COLLAPSE rasga a
+    # geometria em ilhas soltas. Seguro aqui — as UVs vão ser refeitas.
     remove_doubles(obj, threshold=0.0001)
-    _bpy_remesh(obj, target_faces * _REBUILD_VOXEL_MULT)
-    _bpy_post_remesh_repair(obj)
     decimate_mesh_object(obj, target_faces, protect_boundaries=False)
 
     new_verts, new_faces = _bpy_obj_to_arrays(obj)
@@ -881,12 +927,12 @@ def _rebuild_textured_lod(
         remeshed_faces=indices,
         new_uvs=uvs,
         texture_size=texture_size,
-        padding=4,
+        padding=8,
     )
-    new_obj, temp_png = _build_textured_bpy_mesh(remapped_verts, indices, uvs, baked)
+    new_obj, temp_png = _build_textured_bpy_mesh(remapped_verts, indices, uvs, baked, surface_params)
     new_obj.matrix_world = matrix
     log.info(
-        "Rebuild texturado: %d faces (alvo %d), textura %dx%d rebaked",
+        "Rebake texturado: %d faces (alvo %d), atlas %dx%d refeito",
         len(new_obj.data.polygons),
         target_faces,
         texture_size,
@@ -903,15 +949,19 @@ def remesh_textured_glb(
     texture_size: int = 2048,
     repair: bool = True,
 ) -> Path:
-    """Simplifica GLB texturado preservando UVs e textura.
+    """Simplifica GLB texturado sem esticar a textura.
 
-    Pipeline:
-    1. Merge by distance (0.0001) — fecha micro-rachaduras
-    2. Reparo pré-decimação (weld conservador, leques, debris, normais, holes)
-    3. Decimate geometry (ratio = target_faces / current_faces)
-    4. Limpeza pós-decimação (degenerados + weld exato)
-    5. Downscale texture
-    6. Export
+    Duas rotas, escolhidas pelo alvo pedido:
+
+    1. **Atlas preservado** — ``gltf-transform simplify`` (meshoptimizer) trata
+       as costuras de UV como fronteiras bloqueadas, portanto o atlas do paint
+       chega intacto ao LOD. Usada sempre que o alvo é atingível.
+    2. **Atlas refeito** — quando o alvo fica abaixo do piso de costuras
+       (típico em LOD2), decima livremente e repinta um atlas novo por
+       unwrap xatlas + closest-point contra o painted.
+
+    Sem ``npx``/meshoptimizer cai para Decimate COLLAPSE com as UVs originais
+    (comportamento legado; rasga textura em rácios agressivos).
 
     Args:
         path_in: Caminho do GLB de entrada.
@@ -924,7 +974,6 @@ def remesh_textured_glb(
     Returns:
         Path do ficheiro escrito.
     """
-    import bpy
 
     path_in = Path(path_in)
     path_out = Path(path_out)
@@ -936,10 +985,91 @@ def remesh_textured_glb(
         path_out.unlink()
         log.info("Hardlink quebrado em %s (nlink>1)", path_out.name)
 
+    scratch = Path(tempfile.mkdtemp(prefix="lod_textured_"))
+    try:
+        return _remesh_textured_session(
+            path_in,
+            path_out,
+            target_faces=target_faces,
+            texture_size=texture_size,
+            repair=repair,
+            scratch=scratch,
+        )
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _meshopt_preserve_atlas(path_in: Path, target_faces: int, scratch: Path) -> tuple[Path | None, bool]:
+    """Tenta atingir ``target_faces`` com o meshoptimizer, atlas intacto.
+
+    Returns:
+        ``(glb_simplificado_ou_None, floored)`` — ``floored`` é True quando o
+        simplificador correu mas parou acima do alvo (piso de costuras), sinal
+        de que o caller deve refazer o atlas em vez de forçar COLLAPSE.
+    """
+    from .gltf_finish import (
+        MESHOPT_MAX_V_PER_TRI,
+        MESHOPT_SIMPLIFY_SLACK,
+        _glb_has_skins,
+        glb_face_count,
+        glb_v_per_tri,
+        meshopt_simplify_glb,
+    )
+
+    if _glb_has_skins(path_in):
+        return None, False
+    n_source = glb_face_count(path_in)
+    if n_source <= 0:
+        return None, False
+    target = clamp_decimate_target(n_source, target_faces)
+    if n_source <= target:
+        return None, False
+
+    out = scratch / "meshopt.glb"
+    ok, faces, err = meshopt_simplify_glb(path_in, out, target_faces=target)
+    if not ok:
+        log.info("meshopt simplify indisponível (%s) — rota legada COLLAPSE", err)
+        return None, False
+    if faces > int(target * MESHOPT_SIMPLIFY_SLACK):
+        log.info(
+            "meshopt parou em %d faces (alvo %d) — piso de costuras UV; refazer atlas",
+            faces,
+            target,
+        )
+        return None, True
+
+    v_per_tri = glb_v_per_tri(out)
+    if v_per_tri > MESHOPT_MAX_V_PER_TRI:
+        log.info(
+            "meshopt atingiu %d faces mas V/Tri=%.2f > %.1f (atlas com demasiada costura) — refazer atlas",
+            faces,
+            v_per_tri,
+            MESHOPT_MAX_V_PER_TRI,
+        )
+        return None, True
+
+    log.info("LOD via meshopt: %d → %d faces (alvo %d), atlas preservado", n_source, faces, target)
+    return out, False
+
+
+def _remesh_textured_session(
+    path_in: Path,
+    path_out: Path,
+    *,
+    target_faces: int,
+    texture_size: int,
+    repair: bool,
+    scratch: Path,
+) -> Path:
+    """Corpo de ``remesh_textured_glb`` (sessão bpy + escolha de rota)."""
+    import bpy
+
+    meshopt_glb, force_rebake = _meshopt_preserve_atlas(path_in, target_faces, scratch)
+
     clear_scene()
     from aigamekit_shared.bpy_mesh import import_gltf
 
-    import_gltf(path_in)
+    import_gltf(meshopt_glb or path_in)
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     if not mesh_objs:
         raise ValueError(f"Mesh vazia: {path_in}")
@@ -956,7 +1086,6 @@ def remesh_textured_glb(
     has_arm = any(o.type == "ARMATURE" for o in bpy.context.scene.objects)
     temp_png: str | None = None
 
-    # Sempre UV-preserve primeiro. Rebuild só se COLLAPSE estagnar (stall).
     # ``pre_decimate_uv`` antes do COLLAPSE trava o rácio em meshes texturados
     # (crate ~22k piso → lod1==lod2) — só corre sem textura (remove leques).
     has_texture = False
@@ -968,56 +1097,69 @@ def remesh_textured_glb(
             has_texture = True
             break
 
-    if repair and not has_texture:
-        from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
-
-        repair_mesh_object_with_profile(obj, "pre_decimate_uv")
-
-    simplify_mesh_object(obj, target_faces, repair=False)
-    if repair:
-        from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
-
-        # Texturado: não apagar slivers (remove_sliver_faces abre buracos em
-        # edifícios casca-fina / janelas). Só dissolve+weld exacto+tri.
-        if has_texture:
-            post = repair_mesh_object_with_profile(
-                obj,
-                "post_decimate",
-                post_decimate_sliver_aspect=0.0,
-            )
-        else:
-            post = repair_mesh_object_with_profile(obj, "post_decimate")
-        if post.get("sliver_faces"):
-            log.warning("Slivers pós-decimate: %d faces removidas", post["sliver_faces"])
-
-    n_after = len(obj.data.polygons)
-    if not has_arm and n_after > int(effective_target * _REBUILD_STALL_FACTOR):
-        # Rede de segurança: COLLAPSE estagnou longe do alvo → reimportar
-        # o original e reconstruir (o mesh decimado já está degradado).
-        clear_scene()
-        from aigamekit_shared.bpy_mesh import import_gltf
-
-        import_gltf(path_in)
-        obj = max(
-            (o for o in bpy.context.scene.objects if o.type == "MESH"),
-            key=lambda o: len(o.data.polygons),
-        )
-        bpy.context.view_layer.objects.active = obj
-        obj.select_set(True)
+    rebaked = False
+    if force_rebake and not has_arm:
         source = _extract_source_data(obj)
         if source.uvs is not None and source.texture_image is not None:
-            log.warning(
-                "COLLAPSE estagnou em %d faces (alvo %d) — rota de reconstrução",
-                n_after,
-                effective_target,
-            )
-            obj, temp_png = _rebuild_textured_lod(obj, source, effective_target, texture_size or 2048)
+            obj, temp_png = _rebake_textured_lod(obj, source, effective_target, texture_size or 2048)
+            rebaked = True
         else:
-            log.warning(
-                "COLLAPSE estagnou em %d faces (alvo %d); sem UVs/textura para reconstruir",
-                n_after,
-                effective_target,
+            log.warning("Alvo abaixo do piso de costuras mas sem UVs/textura para rebake — COLLAPSE cru")
+
+    if meshopt_glb is not None or rebaked:
+        # Geometria já no alvo: decimar outra vez só degradaria a silhueta.
+        pass
+    else:
+        if repair and not has_texture:
+            from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
+
+            repair_mesh_object_with_profile(obj, "pre_decimate_uv")
+
+        simplify_mesh_object(obj, target_faces, repair=False)
+        if repair:
+            from aigamekit_shared.mesh_repair import repair_mesh_object_with_profile
+
+            # Texturado: não apagar slivers (remove_sliver_faces abre buracos em
+            # edifícios casca-fina / janelas). Só dissolve+weld exacto+tri.
+            if has_texture:
+                post = repair_mesh_object_with_profile(
+                    obj,
+                    "post_decimate",
+                    post_decimate_sliver_aspect=0.0,
+                )
+            else:
+                post = repair_mesh_object_with_profile(obj, "post_decimate")
+            if post.get("sliver_faces"):
+                log.warning("Slivers pós-decimate: %d faces removidas", post["sliver_faces"])
+
+        n_after = len(obj.data.polygons)
+        if not has_arm and n_after > int(effective_target * _REBUILD_STALL_FACTOR):
+            # Rede de segurança: COLLAPSE estagnou longe do alvo → reimportar
+            # o original e refazer o atlas (o mesh decimado já está degradado).
+            clear_scene()
+            from aigamekit_shared.bpy_mesh import import_gltf
+
+            import_gltf(path_in)
+            obj = max(
+                (o for o in bpy.context.scene.objects if o.type == "MESH"),
+                key=lambda o: len(o.data.polygons),
             )
+            bpy.context.view_layer.objects.active = obj
+            obj.select_set(True)
+            source = _extract_source_data(obj)
+            if source.uvs is not None and source.texture_image is not None:
+                log.warning(
+                    "COLLAPSE estagnou em %d faces (alvo %d) — rota de rebake",
+                    n_after,
+                    effective_target,
+                )
+                obj, temp_png = _rebake_textured_lod(obj, source, effective_target, texture_size or 2048)
+            else:
+                log.warning(
+                    "COLLAPSE estagnou em %d faces (alvo %d); sem UVs/textura para rebake",
+                    n_after,
+                    effective_target,
+                )
 
     mesh = obj.data
 

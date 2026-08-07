@@ -75,7 +75,7 @@ L=largura (X), H=altura (Y), W=profundidade (Z). Full map:
 
 | Flag | Path | Decimate |
 |------|------|----------|
-| `--painted-mesh` | `generate_lod_textured_glb_triplet` → `remesh_textured_glb` | stepwise `mesh_simplify` **sem** pre-merge/`pre_decimate_uv`; `post_decimate` depois |
+| `--painted-mesh` | `generate_lod_textured_glb_triplet` → `remesh_textured_glb` | **meshoptimizer** (`gltf-transform simplify`, costuras UV bloqueadas, atlas intacto); abaixo do piso de costuras → **rebake** (decimate + xatlas + closest-point). Sem `npx` cai para COLLAPSE legado |
 | (omitido) | `generate_lod_glb_triplet` (Round 3: input = animated/rigged) | weld lod0 (modo B) + simplify LOD1/2 |
 
 Preserves armatures/animations. Manual rebind: `rigging3d transfer-weights` (fora do DAG Round 3).
@@ -94,7 +94,9 @@ Preserves armatures/animations. Manual rebind: `rigging3d transfer-weights` (for
 
 **FORBIDDEN:** `gltf-transform prune` without `--keep-attributes` (strips `TANGENT`).
 
-**FORBIDDEN:** Weld/`remove_doubles` immediately before COLLAPSE on healthy painted meshes (stalls face budget → identical lod1/lod2).
+**FORBIDDEN:** Weld/`remove_doubles` immediately before COLLAPSE on healthy painted meshes (stalls face budget → identical lod1/lod2). Exception: the rebake route welds on purpose — the UVs are discarded there anyway.
+
+**FORBIDDEN:** Decimate COLLAPSE with the original atlas at aggressive ratios — it collapses across UV islands and shreds the texture. Route through `meshopt_simplify_glb` (atlas preserved) or the rebake (atlas repainted). Detector: V/Tri *rises* with decimation. See [`MESH_PIPELINE_FINDINGS`](../docs/findings/MESH_PIPELINE_FINDINGS.md).
 
 **FORBIDDEN:** Silent exception swallowing in `weld_glb` (`export.py`). Use `try/except` with `log.warning`.
 

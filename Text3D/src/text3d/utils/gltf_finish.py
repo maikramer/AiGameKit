@@ -152,6 +152,131 @@ def _glb_has_skins(path: Path) -> bool:
     return bool(meta.get("skins"))
 
 
+def glb_mesh_totals(path: Path) -> tuple[int, int]:
+    """``(faces, vertices)`` lidos do chunk JSON do GLB (sem bpy). ``(-1, -1)`` se ilegível."""
+    meta = _glb_json(Path(path))
+    if not meta:
+        return -1, -1
+    accessors = meta.get("accessors") or []
+    faces = verts = 0
+    for mesh in meta.get("meshes") or []:
+        for prim in mesh.get("primitives") or []:
+            idx = prim.get("indices")
+            if idx is not None and idx < len(accessors):
+                faces += int(accessors[idx].get("count", 0)) // 3
+            pos = (prim.get("attributes") or {}).get("POSITION")
+            if pos is not None and pos < len(accessors):
+                verts += int(accessors[pos].get("count", 0))
+    return faces, verts
+
+
+def glb_face_count(path: Path) -> int:
+    """Triângulos totais lidos do chunk JSON do GLB (sem bpy). ``-1`` se ilegível."""
+    return glb_mesh_totals(path)[0]
+
+
+def glb_v_per_tri(path: Path) -> float:
+    """Vértices por triângulo — proxy barato para costuras/loops partidos."""
+    faces, verts = glb_mesh_totals(path)
+    if faces <= 0:
+        return -1.0
+    return verts / faces
+
+
+# Tolerância aceite acima do alvo antes de desistir do caminho meshopt.
+MESHOPT_SIMPLIFY_SLACK = 1.10
+# Tecto de V/Tri do atlas preservado. Acima disto o custo em vértices das
+# costuras originais supera o ganho de manter o atlas — compensa refazer o UV
+# (xatlas empacota com muito menos costura).
+#
+# Medido **no intermédio**, antes do re-export. O `smooth_shade_scene` a 60graus
+# transforma creases em arestas duras e o exporter parte loops: malhas sãs
+# inflacionam 2-3% (V/Tri ~1.0), as cheias de costura 11-15% (spear 1.451 -> 1.662,
+# swamp_shack 1.533 -> 1.702). 1.35 * 1.15 = 1.55, dentro do tecto 1.6 das regras
+# LOD do GameAssets.
+MESHOPT_MAX_V_PER_TRI = 1.35
+# Passes de refinamento do rácio (o simplificador subestima quando há costuras).
+_MESHOPT_SIMPLIFY_PASSES = 3
+
+
+def meshopt_simplify_glb(
+    src: Path,
+    dst: Path,
+    *,
+    target_faces: int,
+    weld: bool = True,
+) -> tuple[bool, int, str]:
+    """Simplifica geometria com o meshoptimizer via ``gltf-transform simplify``.
+
+    Ao contrário do Decimate COLLAPSE do bpy, o meshoptimizer trata as costuras
+    de atributos (UV/normal) como fronteiras bloqueadas: o atlas do paint
+    sobrevive intacto, sem os rasgos de textura que o COLLAPSE produz em rácios
+    agressivos. Em troca existe um **piso de costuras** — o alvo pode não ser
+    atingível e o caller precisa de rebake do atlas para descer abaixo dele.
+
+    Args:
+        src: GLB de entrada.
+        dst: GLB de saída (só escrito em caso de sucesso).
+        target_faces: Orçamento de triângulos.
+        weld: Corre ``gltf-transform weld`` antes (recomendado pelo upstream).
+
+    Returns:
+        ``(ok, faces, erro)`` — ``ok`` é False quando o CLI falhou; ``faces`` é a
+        contagem obtida (pode ficar acima de ``target_faces`` no piso de costuras).
+    """
+    src = Path(src)
+    dst = Path(dst)
+    n_before = glb_face_count(src)
+    if n_before <= 0:
+        return False, -1, "não foi possível contar faces do GLB"
+    target = max(4, int(target_faces))
+    if n_before <= target:
+        return False, n_before, "mesh já abaixo do alvo"
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="meshopt_simplify_") as tmpdir:
+        tmp = Path(tmpdir)
+        current = src
+        if weld:
+            welded = tmp / "welded.glb"
+            ok, err = _run_gltf_transform("weld", current, welded)
+            if not ok:
+                return False, -1, f"weld: {err}"
+            current = welded
+
+        best: Path | None = None
+        best_faces = -1
+        ratio = target / float(n_before)
+        for _ in range(_MESHOPT_SIMPLIFY_PASSES):
+            out = tmp / "simplified.glb"
+            ok, err = _run_gltf_transform(
+                "simplify",
+                current,
+                out,
+                ["--ratio", f"{max(1e-4, min(1.0, ratio)):.6f}", "--error", "1"],
+            )
+            if not ok:
+                return False, -1, f"simplify: {err}"
+            faces = glb_face_count(out)
+            if faces <= 0:
+                return False, -1, "GLB simplificado ilegível"
+            keep = tmp / f"best_{faces}.glb"
+            shutil.copy2(out, keep)
+            best, best_faces = keep, faces
+            if faces <= target:
+                break
+            # Piso de costuras: outra passagem com o mesmo rácio não desce mais.
+            next_ratio = ratio * (target / float(faces))
+            if next_ratio >= ratio * 0.95:
+                break
+            ratio = next_ratio
+
+        if best is None or best_faces <= 0:
+            return False, -1, "simplify não produziu resultado"
+        shutil.copy2(best, dst)
+        return True, best_faces, ""
+
+
 def _glb_vertex_attrs(path: Path) -> set[str]:
     """Conjunto de attrs de vértice presentes em qualquer primitive do GLB."""
     meta = _glb_json(path)
