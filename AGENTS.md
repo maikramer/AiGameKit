@@ -56,7 +56,7 @@ duras (git=`main`, UMS, LOD0). Tribal knowledge longa vive nos docs abaixo —
 | DAG mesh Round 3 / LOD0 / split árvores | [`docs/findings/MESH_PIPELINE_FINDINGS.md`](docs/findings/MESH_PIPELINE_FINDINGS.md) |
 | VRAM / UMS ops | [`docs/MODEL_FINDINGS.md`](docs/MODEL_FINDINGS.md), [`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md) |
 | Retarget Quaternius | [`docs/findings/ANIMATOR_RETARGET_FINDINGS.md`](docs/findings/ANIMATOR_RETARGET_FINDINGS.md) |
-| Motion3D HML → SkinTokens (`apply-rigged`) | [`docs/findings/MOTION3D_FINDINGS.md`](docs/findings/MOTION3D_FINDINGS.md) |
+| Text-to-motion → SkinTokens (`apply-rigged`) | [`docs/findings/MOTION3D_FINDINGS.md`](docs/findings/MOTION3D_FINDINGS.md) · [`Motion3D/`](Motion3D/) |
 | Compressão GLB | [`docs/GLB_FINISH_COMPRESSION.md`](docs/GLB_FINISH_COMPRESSION.md) |
 | Testes / cobertura | [`docs/TESTING.md`](docs/TESTING.md) |
 | Índice findings | [`docs/findings/README.md`](docs/findings/README.md) |
@@ -82,7 +82,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio Open) |
 | `Rigging3D/` | Python | `rigging3d` | Auto-rigging (SkinTokens, Python 3.13) |
 | `Animator3D/` | Python | `animator3d` | Animation (bpy 5.2 LTS, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
-| `Motion3D/` | Python | `motion3d` | Text-to-motion (Motius T2M-GPT HumanML3D) → NPZ / GLB (bpy); UMS |
+| `Motion3D/` | Python | `motion3d` | Text-to-motion (HY-Motion-1.0 Lite/Full) → NPZ @30fps; `apply-rigged` → SkinTokens via Animator3D `hml22`; UMS |
 | `AiGameKitLab/` | Python | `aigamekit-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
 | `Terrain3D/` | Python | `terrain3d` | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
@@ -463,10 +463,11 @@ in-process. Legacy per-tool / blind `ensure_vram`: **opt-in**
 
 **Commands:**
 ```bash
-ums start|stop|status|submit|queue|wait|cancel|flush|backends|preload|evict|reap|respawn|zero|stats|debug|bench|doctor
+ums start|stop|status|submit|queue|wait|cancel|flush|backends|preload|evict|reap|respawn|zero|stats|debug|bench|doctor|calibrate
 # cancel <job_id|prefixo> | cancel --all | flush [--queued-only]
 # respawn <backend|--all> [--hot]  — reinicia SÓ o worker da tool (código novo), sem reiniciar o supervisor
 # zero                        — zera TODA a VRAM do UMS (mata workers idle) SEM parar o supervisor
+# calibrate <backend>         — mede o footprint VRAM real (job real + NVML por processo) e emite o descriptor YAML
 # same as: aigamekit-model-server …
 text2icon generate "icon" -o out.png   # Auto-delegates to UMS (~7s vs ~20s cold)
 text2icon generate "icon" -o out.png --ums-stream --ums-priority interactive

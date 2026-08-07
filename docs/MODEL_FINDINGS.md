@@ -18,6 +18,7 @@ UMS, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 | [`findings/MESH_PIPELINE_FINDINGS.md`](findings/MESH_PIPELINE_FINDINGS.md) | Master DAG **Round 3**; promote/resume; **N/T sobreviver** + V/Tri; Decimate stepwise; árvores cut-only; compressão |
 | [`GLB_FINISH_COMPRESSION.md`](GLB_FINISH_COMPRESSION.md) | Happy path KTX2+meshopt: `text3d finish`, deps `ktx`+npx, GameAssets rollback |
 | [`findings/ANIMATOR_RETARGET_FINDINGS.md`](findings/ANIMATOR_RETARGET_FINDINGS.md) | Quaternius retarget; root/pelvis; **humanoid p/ bípedes** (não creature procedural) |
+| [`findings/MOTION3D_FINDINGS.md`](findings/MOTION3D_FINDINGS.md) | Text-to-motion → SkinTokens: `apply-rigged`, HML22 aim/rest/neutro, in-place |
 | [`findings/README.md`](findings/README.md) | Índice da pasta findings |
 | [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md) | Waves UMS, window≤16, `MasterDeferQueue`, softfill |
 | [`mission/README.md`](mission/README.md) | Missão / premissas (norte para agentes) |

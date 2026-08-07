@@ -4,6 +4,7 @@ Happy path: rigged GLB → `animator3d game-pack` → animated GLB → (GameAsse
 
 Package docs: [`Animator3D/README.md`](../Animator3D/README.md).  
 Retarget bugs / biped vs creature: [`findings/ANIMATOR_RETARGET_FINDINGS.md`](findings/ANIMATOR_RETARGET_FINDINGS.md).  
+Text-to-motion → SkinTokens (`motion3d apply-rigged`, perfil `hml22`): [`findings/MOTION3D_FINDINGS.md`](findings/MOTION3D_FINDINGS.md).  
 Clip inventory: [`quaternius_inventory.md`](quaternius_inventory.md).
 
 ---

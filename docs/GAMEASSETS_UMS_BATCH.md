@@ -43,13 +43,8 @@ shapes (text3d) → ensure_to_paint (CPU)
 | Skymap | `skymap2d` | `run_skymap2d_wave_or_fallback` | |
 | Sound | `text2sound` | `run_text2sound_wave_or_fallback` | |
 | Terrain | `terrain3d` | `run_terrain3d_wave_or_fallback` | |
-| Motion | `motion3d` | `run_motion3d_wave_or_fallback` | NPZ / HML22 source GLB; **não** skinned |
 
-Specs: `shape_specs_from_items`, `paint_specs_from_items`, `motion3d_specs_from_items`, …
-
-**Motion3D skinned bake** não é wave UMS: após o NPZ, o operador (ou um passo
-CPU do batch) corre `motion3d apply-rigged <npz> <rigged.glb> -o <out.glb>`
-(Animator3D `hml22`). Ver [`findings/MOTION3D_FINDINGS.md`](findings/MOTION3D_FINDINGS.md).
+Specs: `shape_specs_from_items`, `paint_specs_from_items`, …
 
 ### Sliding window
 

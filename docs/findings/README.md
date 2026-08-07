@@ -12,8 +12,8 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [VIBEGAME_AUDIO_COMBAT_FINDINGS.md](VIBEGAME_AUDIO_COMBAT_FINDINGS.md) | Cull espacial, profiler Audio, SFX longos, melee impact 0.35 |
 | [VIBEGAME_SPAWN_GROUND_FINDINGS.md](VIBEGAME_SPAWN_GROUND_FINDINGS.md) | Chão: estáticos AABB; creatures CCT; anti-settle / anti-fudge Y |
 | [KERNEL_OPTS_FINDINGS.md](KERNEL_OPTS_FINDINGS.md) | compile / channels-last / flashvdm defaults |
-| [ANIMATOR_RETARGET_FINDINGS.md](ANIMATOR_RETARGET_FINDINGS.md) | Quaternius retarget: loc_conv, `_bone_rest_dir`, QA; bipeds → `humanoid` (não `creature`) |
-| [MOTION3D_FINDINGS.md](MOTION3D_FINDINGS.md) | Motius HML22 → SkinTokens: aim, folhas, A-pose, pés do alvo, `--in-place`, wave UMS |
+| [ANIMATOR_RETARGET_FINDINGS.md](ANIMATOR_RETARGET_FINDINGS.md) | Quaternius retarget: loc_conv, `_bone_rest_dir`, QA; bipeds → `humanoid` (não `creature`); tabela HML22 |
+| [MOTION3D_FINDINGS.md](MOTION3D_FINDINGS.md) | Text-to-motion → SkinTokens: `apply-rigged`, aim/rest/folhas, neutro A-pose vs pés do alvo, in-place, venv |
 | [PRECOMPUTE_COLLIDERS_FINDINGS.md](PRECOMPUTE_COLLIDERS_FINDINGS.md) | Colisores cápsula/cilindro pré-calculados (tronco); `aigamekit-lab precompute` → `gameassets_handoff.json` → `PrecomputePlugin`; carve procedural |
 
 **Relacionados (fora desta pasta):**

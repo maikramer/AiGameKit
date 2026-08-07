@@ -95,9 +95,9 @@ Instalar tudo o que estiver presente no checkout: `./install.sh all` ou one-line
 
 Detalhes técnicos: [`tools.yaml`](../tools.yaml) (registo Clified) e hooks em [`Shared/src/aigamekit_shared/installer/clified_hooks.py`](../Shared/src/aigamekit_shared/installer/clified_hooks.py).
 
-Cada tool Python corre um post-install que instala o extra `[dev]` (pytest, …)
-no próprio venv — é aí que corre `make test-<tool>`. Entrada Python em
-`tools.yaml` sem `post_install` / `custom_install` é bug
+Cada tool Python corre um post-install que mete o extra `[dev]` (pytest, pytest-cov,
+ruff) no **próprio** venv — é aí que a suite corre (`make test-<tool>`). Entrada
+Python em `tools.yaml` sem `post_install` / `custom_install` é bug
 (`Shared/tests/test_dev_extras.py`).
 
 **De assets em batch ao jogo no browser (pastas, handoff GLB, VibeGame):** [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) (documento em inglês).
