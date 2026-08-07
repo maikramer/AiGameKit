@@ -15,6 +15,10 @@ class AssetCategory:
     hint_rig: str
     hint_texture: str
     extra_negatives: tuple[str, ...] = ()
+    # Silhueta (``sqrt(d1·d2)``, m) a que a categoria recebe ``target_faces``
+    # cheio. Ver ``aigamekit_shared.lod_budget``. Personagens são pequenas em
+    # silhueta mas dominam o ecrã — ref baixa para não caírem no FLOOR.
+    lod_ref_m: float = 2.0
 
 
 CATEGORIES: dict[str, AssetCategory] = {
@@ -22,6 +26,8 @@ CATEGORIES: dict[str, AssetCategory] = {
         name="humanoid",
         default_kind="character",
         target_faces=32000,
+        # Silhueta de um bípede de ~1.8 m: sqrt(1.8 x 0.6) ~ 1.04.
+        lod_ref_m=1.0,
         hint_2d="full-body character concept, front-facing view, clean silhouette on white background",
         hint_3d=(
             "single character model, no weapons or props attached, "
@@ -60,6 +66,8 @@ CATEGORIES: dict[str, AssetCategory] = {
         name="creature",
         default_kind="character",
         target_faces=24000,
+        # Quadrúpede/criatura media: sqrt(1.2 x 0.9) ~ 1.04.
+        lod_ref_m=1.0,
         hint_2d="creature concept art, side view, clear silhouette on white background",
         hint_3d="single creature model, no rider or accessories, clean organic mesh",
         hint_rig="standing in neutral pose with legs apart, arms or forelimbs extended, symmetrical stance",
@@ -536,11 +544,11 @@ def get_target_faces(
     face_ratio: float = 1.0,
     char_m: float | None = None,
 ) -> int:
-    """Faces LOD alvo: bias de categoria x ``face_ratio`` x escala por volume.
+    """Faces LOD alvo: bias de categoria x ``face_ratio`` x escala por silhueta.
 
-    Com ``char_m`` (diâmetro equivalente ``(L·H·W)^(1/3)``): multiplica por
-    ``lod_face_scale`` e aplica piso absoluto. Sem ``char_m``: comportamento
-    legado (só categoria x ratio).
+    Com ``char_m`` (silhueta equivalente ``sqrt(d1·d2)``): multiplica por
+    ``lod_face_scale`` relativo ao ``lod_ref_m`` da categoria e aplica piso
+    absoluto. Sem ``char_m``: comportamento legado (só categoria x ratio).
     """
     cat = CATEGORIES.get(category)
     base = cat.target_faces if cat else default
@@ -550,9 +558,17 @@ def get_target_faces(
     if char_m is not None and float(char_m) > 0:
         from aigamekit_shared.lod_budget import LOD_FACES_ABS_MIN, lod_face_scale
 
-        faces = int(faces * lod_face_scale(float(char_m)))
+        faces = int(faces * lod_face_scale(float(char_m), ref_m=get_lod_ref_m(category)))
         return max(LOD_FACES_ABS_MIN, faces)
     return max(4, faces)
+
+
+def get_lod_ref_m(category: str) -> float:
+    """Silhueta de referência da categoria (fallback ``LOD_FACE_REF_M``)."""
+    from aigamekit_shared.lod_budget import LOD_FACE_REF_M
+
+    cat = CATEGORIES.get(category)
+    return float(cat.lod_ref_m) if cat else float(LOD_FACE_REF_M)
 
 
 # Round 2: categorias que beneficiam de bake-normals high→low por defeito.

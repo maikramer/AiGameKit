@@ -41,6 +41,7 @@ from rich.console import Console
 from .categories import (
     animator_preset_for_category,
     category_wants_bake_normals,
+    get_lod_ref_m,
     get_target_faces,
 )
 from .helpers import (
@@ -1250,26 +1251,33 @@ def _quality_paint_texture_cap(profile: GameProfile) -> int:
 
 
 def _char_m_for_budget(profile: GameProfile, row: ManifestRow | None) -> float | None:
-    """Diâmetro equivalente de volume para orçamento paint/LOD (size_m / prior)."""
+    """Silhueta equivalente para orçamento paint/LOD (``size_m`` / prior).
+
+    Orçamentos de faces e de atlas escalam com a **área projectada em ecrã**, não
+    com o volume: ``sqrt(d1·d2)`` dos dois eixos maiores. O volume-equivalente
+    ``(L·H·W)^(1/3)`` do ``characteristic_meters`` (usado pelo octree) trata
+    qualquer coisa alongada como minúscula — um herói de 1.55 m dava 0.70 m e
+    caía no ``LOD_FACE_SCALE_FLOOR``, ~4.6k faces no lod0.
+    """
     if row is None:
         return None
+    from aigamekit_shared.lod_budget import silhouette_equivalent_meters
+
     from .omni_ctrl import expand_omni_world_size
 
     cat = getattr(row, "category", None) or getattr(row, "kind", None) or None
     omni = expand_omni_world_size(resolve_row_omni(profile, row), category=cat)
     size_m = list(omni.size_m) if omni.size_m is not None else None
+    sil = silhouette_equivalent_meters(size_m)
+    if sil is not None and sil > 0:
+        return float(sil)
+    # Sem size_m utilizável: prior de eixo típico por categoria/preset.
     try:
         from text3d.bbox_tune import characteristic_meters
 
-        char, _src = characteristic_meters(
-            size_m,
-            category=cat,
-            bbox_preset=omni.bbox_preset,
-        )
+        char, _src = characteristic_meters(None, category=cat, bbox_preset=omni.bbox_preset)
         return float(char) if char is not None and char > 0 else None
     except ImportError:
-        if size_m is not None and len(size_m) == 3 and all(float(v) > 0 for v in size_m):
-            return float((float(size_m[0]) * float(size_m[1]) * float(size_m[2])) ** (1.0 / 3.0))
         return None
 
 
@@ -1277,8 +1285,18 @@ def _char_m_for_budget(profile: GameProfile, row: ManifestRow | None) -> float |
 _char_m_for_paint = _char_m_for_budget
 
 
+def _lod_ref_m_for_row(row: ManifestRow | None) -> float:
+    """Silhueta de referência da categoria da row (default global)."""
+    from aigamekit_shared.lod_budget import LOD_FACE_REF_M
+
+    if row is None:
+        return float(LOD_FACE_REF_M)
+    cat = getattr(row, "category", None) or ""
+    return get_lod_ref_m(str(cat))
+
+
 def _resolve_lod_target_faces(profile: GameProfile, row: ManifestRow) -> int:
-    """``get_target_faces`` com ``face_ratio`` + escala por ``char_m``."""
+    """``get_target_faces`` com ``face_ratio`` + escala por silhueta."""
     fr = effective_face_ratio(profile, row)
     char = _char_m_for_budget(profile, row)
     if row.category:
@@ -1287,7 +1305,7 @@ def _resolve_lod_target_faces(profile: GameProfile, row: ManifestRow) -> int:
 
 
 def _resolve_lod0_texture_size(profile: GameProfile, row: ManifestRow | None = None) -> int:
-    """Atlas lod0 por volume ∩ quality cap (snap64). Nunca acima do paint budget."""
+    """Atlas lod0 por silhueta ∩ quality cap (snap64). Nunca acima do paint budget."""
     from aigamekit_shared.lod_budget import lod_texture_size_for_char, snap_tex_64
 
     quality_cap = _quality_paint_texture_cap(profile)
@@ -1296,7 +1314,7 @@ def _resolve_lod0_texture_size(profile: GameProfile, row: ManifestRow | None = N
     cap = min(quality_cap, paint_cap)
     char = _char_m_for_budget(profile, row)
     if char is not None:
-        return lod_texture_size_for_char(char, quality_cap=cap)
+        return lod_texture_size_for_char(char, quality_cap=cap, ref_m=_lod_ref_m_for_row(row))
     return snap_tex_64(cap, cap=cap)
 
 
@@ -1314,7 +1332,7 @@ def _resolve_paint_texture_size(profile: GameProfile, row: ManifestRow | None = 
     if char is not None:
         from aigamekit_shared.paint_budget import paint_texture_for_char
 
-        return paint_texture_for_char(char, quality_cap=quality_cap)
+        return paint_texture_for_char(char, quality_cap=quality_cap, ref_m=_lod_ref_m_for_row(row))
     return quality_cap
 
 
@@ -1449,6 +1467,20 @@ def _rules_dir() -> Path:
     return Path(__file__).resolve().parent / "data" / "rules"
 
 
+# Chaves de regra que o parser JSON (`glb_meta`) não consegue avaliar — exigem
+# o import bpy do `aigamekit-lab check` (ver `_run_check_glb`).
+_RULES_REQUIRING_BPY = ("armatures", "actions_min", "bone_count")
+
+
+def _rules_need_bpy_inspect(rules: Path) -> bool:
+    """``True`` se o ficheiro de regras depender de introspecção bpy."""
+    try:
+        text = Path(rules).read_text(encoding="utf-8")
+    except OSError:
+        return True  # não conseguimos decidir — validar a fundo é o lado seguro
+    return any(key in text for key in _RULES_REQUIRING_BPY)
+
+
 def _run_check_glb(
     glb: Path,
     rules: Path,
@@ -1465,7 +1497,13 @@ def _run_check_glb(
     argv = [bin_, "check", "glb", str(glb), str(rules)]
     if category:
         argv.extend(["--category", category])
-    argv.extend(["--no-bpy-inspect"])  # rules estão preparadas para glb_meta
+    # `--no-bpy-inspect` lê só o JSON do GLB (glb_meta) — rápido, mas cego a
+    # armatures/actions: `armatures[]`/`actions_min` reportavam sempre 0 e
+    # rigged.yaml/animated.yaml falhavam em TODOS os personagens (medido:
+    # goblin_lod0 com 35 joints + 7 clips dava "modelo tem só 0 armature(s)").
+    # Regras que precisam de introspecção pedem o import bpy.
+    if not _rules_need_bpy_inspect(rules):
+        argv.extend(["--no-bpy-inspect"])
     t0 = _time.perf_counter()
     r = run_cmd(argv, extra_env=env, cwd=cwd)
     dt = _time.perf_counter() - t0

@@ -20,7 +20,8 @@ mesh code itself.
 | Game profiles | `profile.py` | Sub-profiles + `from_dict` |
 | Dream (idea to game) | `dream/` | planner / emitter / runner |
 | Quality presets | `generation_profiles.py` | Maps to `--quality` |
-| Asset categories | `categories.py` | Target faces + hints |
+| Asset categories | `categories.py` | Target faces + hints + `lod_ref_m` |
+| Orçamento LOD/atlas | `aigamekit_shared.lod_budget`, `paint_budget` | **Silhueta** `sqrt(d1·d2)`, não volume — ver anti-patterns |
 | GLB validation rules | `data/rules/*.yaml` | lod0, lod1, lod2, rigged, animated, collision |
 | Handoff to VibeGame | `handoff_export.py` | Prefers animated GLB |
 | TUI dashboard | `dashboard.py` | All stages (not paint-only) |
@@ -87,6 +88,12 @@ gameassets skill install
 - **Never overwrite promoted lod0/1/2 with painted on resume.** Guard `_glb_is_promoted_*`.
 - **Do not name promote archives `*_lodN_painted`.** Use `*_lodN_pre_promote`.
 - **Do not reintroduce bake-master + transfer-weights as the default DAG.** Round 3 = rig painted → game-pack×1 → `text3d lod`.
+- **Orçamento de faces/atlas escala com SILHUETA, não com volume.** `_char_m_for_budget`
+  devolve `sqrt(d1·d2)` dos dois eixos maiores e cada categoria tem `lod_ref_m`
+  (humanoid/creature = 1.0). Com o volume-equivalente `(L·H·W)^(1/3)` todo o
+  bípede caía no `LOD_FACE_SCALE_FLOOR` (hero: lod0 4.6k tris de 144k, atlas
+  2048→1024). `text3d.bbox_tune.characteristic_meters` **continua** volumétrico —
+  é o sinal do octree, não do orçamento. Não unificar os dois.
 - **Do not Decimate rigged/animated LODs without weld in Text3D.** V/Tri≈3 → moth-eaten LOD1/2. Fix lives in `text3d` / `smooth_shade_scene`, not GameAssets.
 - **Do not enable tree cap (`--cap`) by default.** Cut-only geometry; hole closure is future work. The **version stamp** (`SEAL_VERSION` / `*_split_seal.txt`) is required — do not confuse stamp with mesh caps.
 - **Do not use `animate.preset: creature` for bipedal enemies** that scripts drive with Quaternius clip names — use `humanoid` + `force_preset`.
