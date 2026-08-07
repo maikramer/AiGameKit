@@ -515,12 +515,13 @@ class BackendManager:
             #   paint3d — CFG chunk / vistas menores
             #   text3d  — group offload + streams; act orçada em runtime
             #   text2d  — CPU offload / 4B path (activation x0.65)
-            mem = name in ("paint3d", "text3d", "text2d") and quant.startswith("sdnq")
+            #   motion3d — DiT SDNQ + text-encoder CPU offload
+            mem = name in ("paint3d", "text3d", "text2d", "motion3d") and quant.startswith("sdnq")
         mem = bool(mem)
         go = self._as_bool(src.get("allow_group_offload"))
         if go is None:
-            # text3d mem_eff ⇒ group+stream por defeito (ums_load / generator).
-            go = name == "text3d" and mem
+            # text3d/motion3d mem_eff ⇒ group/offload por defeito (ums_load / generator).
+            go = name in ("text3d", "motion3d") and mem
         streams = self._as_bool(src.get("streams_on_load"))
         if streams is None:
             streams = name == "text2d" and mem

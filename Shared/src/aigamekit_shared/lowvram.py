@@ -110,7 +110,12 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     "hunyuan3d-part": ModelFootprint(4.75, 1.5, 5.2, architecture="dit"),
     "hunyuan-paint": ModelFootprint(6.0, 2.0, 5.0, architecture="unet"),
     "stable-audio-open": ModelFootprint(3.5, 1.5, 2.0, architecture="stable-audio"),
-    # Motius T2M-GPT HumanML3D: CLIP+GPT+VQ safetensors (~1.35 GiB) + act.
+    # HY-Motion staged load (Text2D-like): GPU holds DiT OR text encode, not both.
+    # Text encoder (Qwen3-8B) runs on CPU when mem-eff; DiT (+optional SDNQ) on GPU.
+    # Pegadas = DiT residente + act (não soma Qwen+DiT ~24 GiB).
+    "hy-motion-lite": ModelFootprint(1.2, 1.2, 1.0, architecture="dit"),
+    "hy-motion-full": ModelFootprint(2.5, 1.5, 2.0, architecture="dit"),
+    # Legacy Motius key (retired path) — keep for old payloads.
     "motius-t2mgpt": ModelFootprint(1.5, 0.8, 2.5, architecture="dit"),
     # Sana Sprint 600M transformer + Gemma 2B encoder (~7.3 GiB fp16 total).
     "sana-sprint-600m": ModelFootprint(7.3, 1.5, 3.0, architecture="sana"),

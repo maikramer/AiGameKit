@@ -11,6 +11,8 @@
 # Ou CLI Animator3D directo:
 #   animator3d retarget hero_rigged.glb hml22_source.glb out.glb \
 #       --profile hml22 --source-track t2m_motion --clip walk
+#
+# Deep dive (aim/rest/neutro/pés): docs/findings/MOTION3D_FINDINGS.md
 
 profile: hml22
 

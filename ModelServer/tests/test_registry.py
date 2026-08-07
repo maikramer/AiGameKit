@@ -12,8 +12,8 @@ from modelserver.registry import BackendDescriptor, Registry, load_descriptors
 class TestLoadDescriptors:
     """Carregar descriptors do backends.yaml."""
 
-    def test_loads_default_yaml_has_9_backends(self) -> None:
-        """O YAML empacotado tem exatamente os 9 backends GPU esperados."""
+    def test_loads_default_yaml_has_10_backends(self) -> None:
+        """O YAML empacotado tem exatamente os 10 backends GPU esperados."""
         descs = load_descriptors()
         expected = {
             "text2icon",
@@ -25,6 +25,7 @@ class TestLoadDescriptors:
             "part3d",
             "text2sound",
             "terrain3d",
+            "motion3d",
         }
         assert set(descs) == expected
 
@@ -68,7 +69,7 @@ class TestRegistry:
 
     def test_names_and_len(self) -> None:
         registry = Registry()
-        assert len(registry) == 9
+        assert len(registry) == 10
         assert "text2icon" in registry.names
         assert "part3d" in registry.names
 
@@ -100,5 +101,5 @@ class TestRegistry:
     def test_iter_descriptors(self) -> None:
         registry = Registry()
         names = [d.name for d in registry]
-        assert len(names) == 9
+        assert len(names) == 10
         assert "text2icon" in names

@@ -5,7 +5,6 @@ Thin wrapper around ``motion3d.apply_rigged`` (same as CLI ``apply-rigged``).
 
 Usage:
   python scripts/bake_hml_to_rigged.py walk.npz hero_rigged.glb -o hero_walk.glb
-  # Prefer: motion3d apply-rigged walk.npz hero_rigged.glb -o hero_walk.glb
 """
 
 from __future__ import annotations
@@ -23,12 +22,6 @@ def main() -> None:
     ap.add_argument("--clip", default="walk")
     ap.add_argument("--profile", default="hml22")
     ap.add_argument("--keep-source", type=Path, default=None)
-    ap.add_argument(
-        "--in-place",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Loopable clip (default) vs keep root motion (--no-in-place)",
-    )
     args = ap.parse_args()
 
     from motion3d.apply_rigged import apply_npz_to_rigged
@@ -41,14 +34,13 @@ def main() -> None:
             clip_name=args.clip,
             profile_name=args.profile,
             keep_source=args.keep_source,
-            in_place=args.in_place,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         raise
     print(res["output"])
+    print(res["retarget"])
 
 
 if __name__ == "__main__":
     main()
-    sys.exit(0)

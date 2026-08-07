@@ -1,29 +1,22 @@
 # Third-party components — Motion3D
 
-## T2M-GPT (vendored)
+## HY-Motion-1.0 (vendored)
 
-- **Source:** [Mael-zys/T2M-GPT](https://github.com/Mael-zys/T2M-GPT)
-- **Location:** `src/motion3d/vendor/t2mgpt/`
-- **License:** Apache 2.0 — see `src/motion3d/vendor/t2mgpt/LICENSE`
-- **Files:** `HumanVQVAE`, `Text2Motion_Transformer`, motion recovery utils (`recover_from_ric`)
+- **Source:** [Tencent/HY-Motion-1.0](https://github.com/Tencent-Hunyuan/HY-Motion-1.0)
+- **Location:** `src/motion3d/vendor/hymotion/` (+ `vendor/hymotion_assets/stats/`)
+- **License:** Tencent HY-Motion 1.0 Community License — see `src/motion3d/vendor/hymotion/LICENSE.txt`
+- **Notes:** Happy path uses `output_format=dict` / `keypoints3d` only — **no Autodesk FBX SDK**. Prompt-engineering LLM rewriter is **off** by default (`disable_prompt_engineering=True`).
 
-Imports were rewritten to package-relative paths under `motion3d.vendor.t2mgpt`.
+Imports resolve as top-level `hymotion` via `motion3d.vendor_bootstrap.ensure_hymotion_on_path()`.
 
-## Motius weights
+## Weights (Hugging Face)
 
-- **Primary Hub:** `ZeyuLing/Motius-T2M-GPT-HumanML3D`
-- **Fallback Hub:** `ZeyuLing/hftrainer-t2mgpt-humanml3d`
-- **Artifacts:** `vq.safetensors`, `gpt.safetensors`, optional `clip.safetensors`, `t2mgpt_config.json`, `Mean.npy`, `Std.npy`
+- **Hub:** [`tencent/HY-Motion-1.0`](https://huggingface.co/tencent/HY-Motion-1.0)
+- **Variants:** `HY-Motion-1.0-Lite/*` (default) · `HY-Motion-1.0/*` (Full)
+- **Cache:** `~/.cache/aigamekit/models/hy-motion-1.0/`
+- **Text encoders:** CLIP ViT-L/14 (`openai/clip-vit-large-patch14`) + Qwen3-8B (`Qwen/Qwen3-8B`) via `USE_HF_MODELS=1` / optional cache under `encoders/`
 
-## CLIP text encoder
+## Retarget / export
 
-Phase 1 resolution order:
-
-1. **Optional OpenAI CLIP** (`pip install -e ".[clip]"`): load `ViT-B/32` architecture and apply Motius `clip.safetensors` with `strict=False`.
-2. **Fallback:** Hugging Face `transformers` `CLIPTextModel` + `CLIPTokenizer` from `openai/clip-vit-base-patch32`. If Motius keys partially match, they are loaded with `strict=False`; otherwise the pretrained HF text tower is used.
-
-This matches Motius artifact design (frozen ViT-B/32 text tower bundled as safetensors).
-
-## HumanML3D normalization
-
-`Mean.npy` / `Std.npy` travel with the Motius checkpoint (263-dim HumanML3D training stats).
+- Animator3D profile `hml22` (22 SMPL joints = HY keypoints order)
+- `bpy` GLB export (SkinTokens bone names) — AiGameKit stack

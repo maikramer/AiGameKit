@@ -86,8 +86,10 @@ profiles:
       postprocess_threshold: 0.95
 
     motion3d:
-      max_frames: 80
-      temperature: 0.0
+      duration: 2.5
+      cfg_scale: 4.0
+      validation_steps: 20
+      model: lite
 
   low:
     label: "Low (~1min, basic quality)"
@@ -169,8 +171,10 @@ profiles:
       postprocess_threshold: 0.95
 
     motion3d:
-      max_frames: 120
-      temperature: 0.0
+      duration: 3.5
+      cfg_scale: 4.5
+      validation_steps: 30
+      model: lite
 
   medium:
     label: "Medium (~2min, standard quality — DEFAULT)"
@@ -252,8 +256,10 @@ profiles:
       postprocess_threshold: 0.99
 
     motion3d:
-      max_frames: 160
-      temperature: 0.0
+      duration: 5.0
+      cfg_scale: 5.0
+      validation_steps: 40
+      model: lite
 
   high:
     label: "High (~5min, high quality)"
@@ -335,8 +341,10 @@ profiles:
       postprocess_threshold: 0.99
 
     motion3d:
-      max_frames: 196
-      temperature: 0.5
+      duration: 6.5
+      cfg_scale: 5.0
+      validation_steps: 50
+      model: lite
 
   highest:
     label: "Highest (~10min+, maximum quality)"
@@ -418,5 +426,7 @@ profiles:
       postprocess_threshold: 0.995
 
     motion3d:
-      max_frames: 196
-      temperature: 1.0
+      duration: 6.5
+      cfg_scale: 5.5
+      validation_steps: 50
+      model: full

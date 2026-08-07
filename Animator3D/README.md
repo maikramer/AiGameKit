@@ -66,6 +66,11 @@ Animator3D venv (Quaternius lock + fetch). Inventory + bone maps:
 pitfalls (feet OK at rest → waist when a clip plays):
 [`docs/findings/ANIMATOR_RETARGET_FINDINGS.md`](../docs/findings/ANIMATOR_RETARGET_FINDINGS.md).
 
+**Motion3D path:** text-to-motion builds an HML22 source GLB and calls
+`retarget_animation` with profile `hml22` (`data/retarget/hml22.yaml`). Happy path
+is `motion3d apply-rigged` — see [`Motion3D/README.md`](../Motion3D/README.md) and
+[`docs/findings/MOTION3D_FINDINGS.md`](../docs/findings/MOTION3D_FINDINGS.md).
+
 **Root bone policy:** `ensure_feet_root_bone` creates a static `root` at the feet.
 Never retarget Quaternius `root` rotation (±90° Y↔Z tips the hierarchy on play).
 Only `pelvis` gets location (gait bob).

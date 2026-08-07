@@ -86,7 +86,8 @@ aigamekit-lab debug inspect meshes/{id}_lod0.glb   # anims: idle,walk,…
 
 ## Motion3D (HML22) → SkinTokens: o rest do source manda
 
-Doc canónico (tabela completa + QA + integração): [`MOTION3D_FINDINGS.md`](MOTION3D_FINDINGS.md).
+Doc canónico (happy path, CLIs, QA, anti-padrões):
+[`MOTION3D_FINDINGS.md`](MOTION3D_FINDINGS.md).
 
 `motion3d apply-rigged` constrói um GLB source HML22 (`bpy_export.py`) e deixa o
 retarget ao Animator3D (perfil `Animator3D/src/animator3d/data/retarget/hml22.yaml`).
@@ -116,6 +117,6 @@ ciclo; `pelvis` só oscila em Z (~4 cm).
 
 | Data | Nota |
 |------|------|
-| 2026-08-02 | Motion3D HML22: aim explícito + rest T-pose (cabeça/braços) |
+| 2026-08-02 | Motion3D HML22: aim explícito + rest T-pose; neutro A-pose; pés do rest alvo; doc canónica `MOTION3D_FINDINGS.md` |
 | 2026-07-24 | Bípedes creature→humanoid Quaternius; incidente shade; force_preset |
 | 2026-07-24 | Extraído de AGENTS.md learned facts (loc_conv + `_bone_rest_dir`) |

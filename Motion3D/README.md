@@ -1,99 +1,84 @@
 # Motion3D
 
-Text-to-motion CLI for AiGameKit using **Motius T2M-GPT HumanML3D** (VQ-VAE + GPT + CLIP).
+Text-to-motion CLI for AiGameKit using **Tencent HY-Motion-1.0** (Lite default / Full via hw-auto or `--model full`).
 
-Patterns: **Text3D** (UMS / QualityEngine / worker) + **Animator3D** (retarget onto SkinTokens) + Shared `save_glb`.
+Pipeline: prompt → UMS `motion3d` → HY text encoders (CLIP+Qwen) → HunyuanMotionMMDiT → WoodenMesh FK → NPZ `joints (T,22,3) @ 30fps` → optional `apply-rigged` (Animator3D `hml22`) → skinned GLB.
 
 ## Install
 
 ```bash
-./install.sh motion3d
-```
-
-Creates `Motion3D/.venv`, installs PyTorch + `bpy`, links Shared + **Animator3D** (`cross_deps`), and the `[dev]` extra (pytest). CLI lands on `PATH` as `motion3d`.
-
-Always run from that venv (`make test-motion3d`, or the `motion3d` wrapper). Do not borrow Text3D’s venv.
-
-```bash
+./install.sh motion3d   # Motion3D/.venv + cross_deps animator3d
 motion3d doctor
 ```
 
-## Happy path (skinned walk)
+## Happy path
 
 ```bash
-# 1) GPU — NPZ with HumanML3D joints
-motion3d generate "a person walks forward" -o walk.npz
+# Generate (GPU via UMS by default; hw-auto picks Full on ~6GB with staged text-CPU)
+motion3d generate "a person walks forward" -o walk.npz --quality medium
 
-# 2) CPU — bake onto a SkinTokens *_rigged.glb (Animator3D retarget)
-motion3d apply-rigged walk.npz hero_rigged.glb -o hero_walk.glb --clip walk --in-place
-```
-
-`--in-place` (default) strips horizontal travel + yaw drift so the clip loops under game locomotion. Use `--root-motion` only when the clip itself should carry displacement.
-
-Optional intermediate HML22 source GLB (debug / Animator3D CLI):
-
-```bash
+# Apply onto SkinTokens *_rigged.glb (in-place, loopable)
 motion3d apply-rigged walk.npz hero_rigged.glb -o hero_walk.glb \
-  --keep-source hml22_source.glb
-# or:
-motion3d export-glb walk.npz -o hml22_source.glb --in-place
-animator3d retarget hero_rigged.glb hml22_source.glb out.glb \
-  --profile hml22 --source-track t2m_motion --clip walk
+  --clip walk --in-place
+
+# Pack several NPZs onto one skinned GLB (walk/run/jump/sprint, …)
+motion3d pack-rigged hero_rigged.glb -o hero_locomotion.glb --active walk \
+  -m walk=walk.npz -m run=run.npz -m jump=jump.npz -m sprint=sprint.npz
 ```
 
-## Outputs
+Each `-m name=path.npz` becomes a named glTF animation on the same mesh/skin
+(`export_animation_mode=ACTIONS`, same contract as Animator3D `game-pack`).
+`--active` picks the default action for viewers that ignore extra clips.
 
-| Artifact | Contents |
-|----------|----------|
-| `.npz` | `hml263 (T,263)`, `joints (T,22,3)` Y-up meters, `fps=20`, `prompt`, `n_frames` |
-| `export-glb` / `generate … .glb` | **HML22 source** armature (SkinTokens names, look-at bake) — not skinned mesh |
-| `apply-rigged` | Target mesh + retargeted clip (deliverable for VibeGame / game-pack) |
+### Movement constraints
 
-`generate -o walk.glb` writes the HML22 source only. For a playable hero, always finish with `apply-rigged`.
+HY-Motion ignores contact and posture wording in the prompt: hands drift apart,
+feet shuffle, and a "swing down" folds the spine ~60°. `apply-rigged` takes
+mechanical constraints you can state per clip — off by default, named after body
+mechanics rather than any one gesture:
 
-## Pipeline (what each stage owns)
-
-```
-prompt → Motius T2M-GPT → joints (Y-up)
-       → bpy_export (Z-up, swing-only look-at, neutral A-pose, leaf rest, foot rest from target)
-       → Animator3D retarget --profile hml22
-       → skinned GLB
-```
-
-Hard lessons (aim map, leaf bones, feet vs arms, leg splay):  
-[`docs/findings/MOTION3D_FINDINGS.md`](../docs/findings/MOTION3D_FINDINGS.md) ·  
-[`docs/findings/ANIMATOR_RETARGET_FINDINGS.md`](../docs/findings/ANIMATOR_RETARGET_FINDINGS.md).
-
-## UMS
+| Flag | Effect |
+|------|--------|
+| `--hands-together 0.10` | Both wrists within N meters, same height, uncrossed — any two-hand prop (axe, staff, greatsword) rides the midpoint |
+| `--plant-feet` | Stance rigid under the pelvis — stationary actions stop shuffling |
+| `--max-lean 25` | Cap torso tilt off vertical, arms carried along — a swing stays a swing instead of a bend-over |
 
 ```bash
-motion3d generate "…" -o out.npz          # delegates to UMS by default
-motion3d generate "…" -o out.npz --no-ums # in-process
-motion3d serve --ums-worker               # subprocess worker
+# Two-handed axe chop at waist height, one shot
+motion3d generate "a person chops down at a tree trunk with a two-handed axe, \
+swinging from above the shoulder down to waist height, then lifts the axe back up" \
+  -o chop.npz --duration 4
+motion3d apply-rigged chop.npz hero_rigged.glb -o hero_chop.glb \
+  --clip chop --max-lean 25 --hands-together 0.10 --plant-feet
 ```
 
-Backend: `motion3d` in ModelServer `backends.yaml` (`footprint_key: motius-t2mgpt`).
+After editing Motion3D code: `ums respawn motion3d`.
 
-GameAssets: `run_motion3d_wave_or_fallback` / `motion3d_specs_from_items` in `ums_batch.py` (NPZ/GLB generate wave). Skinned bake stays a CPU `apply-rigged` step after the wave.
+## Flags
 
-## Quality
+| Flag | Role |
+|------|------|
+| `--duration` | Seconds @ 30fps (QualityEngine soft-fill) |
+| `--frames` | Alternate length cap (`duration = frames/30`) |
+| `--model lite\|full` | Explicit variant (else hw-auto / quality) |
+| `--cfg-scale` | CFG guidance |
+| `--sdnq-preset` | DiT quant (`none` / `sdnq-uint8` / `sdnq-int4`) |
+| `--quality` | Soft defaults for duration / cfg / steps / model |
+| `--no-ums` | In-process fallback |
 
-`--quality fast|low|medium|high|highest` soft-fills `max_frames` / `temperature` via QualityEngine.
+## VRAM (Text2D-style hw-auto)
+
+- Planner: `aigamekit_shared.lowvram.plan_offload` + staged load (DiT on GPU, Qwen encode on CPU when tight).
+- On **~6 GB**: prefers **Full** + text-CPU + optional SDNQ; clamps `validation_steps` / duration.
+- Prompt-engineering LLM rewriter is **off** (saves VRAM).
+- UMS footprint keys: `hy-motion-lite` / `hy-motion-full` (DiT-resident, not stacked Qwen).
 
 ## Weights
 
-HF: [`ZeyuLing/Motius-T2M-GPT-HumanML3D`](https://huggingface.co/ZeyuLing/Motius-T2M-GPT-HumanML3D)
+HF: [`tencent/HY-Motion-1.0`](https://huggingface.co/tencent/HY-Motion-1.0)
 
-Cache: `~/.cache/aigamekit/models/motius-t2mgpt-humanml3d`
+Cache: `~/.cache/aigamekit/models/hy-motion-1.0/`
 
-## Vendor
+## License
 
-Apache-2.0 T2M-GPT core under `src/motion3d/vendor/t2mgpt/` — see [THIRD_PARTY.md](THIRD_PARTY.md).
-
-## Tests
-
-```bash
-make test-motion3d   # Motion3D/.venv
-```
-
-Agent notes: [AGENTS.md](AGENTS.md). PT: [README_PT.md](README_PT.md).
+HY-Motion Community License — see [THIRD_PARTY.md](THIRD_PARTY.md).

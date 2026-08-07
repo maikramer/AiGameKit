@@ -6,7 +6,7 @@ from typing import Final
 
 from aigamekit_shared.cli_rich import setup_rich_click_module
 
-_HEADER: Final = "[bold cyan]Motion3D[/bold cyan] — text-to-motion · Motius T2M-GPT HumanML3D"
-_FOOTER: Final = "[dim]README · HF Motius weights · UMS · bpy GLB · motion3d doctor[/dim]"
+_HEADER: Final = "[bold cyan]Motion3D[/bold cyan] — text-to-motion · HY-Motion-1.0"
+_FOOTER: Final = "[dim]README · tencent/HY-Motion-1.0 · UMS · bpy GLB · motion3d doctor[/dim]"
 
 click, RICH_CLICK = setup_rich_click_module(tool="motion3d", header=_HEADER, footer=_FOOTER)

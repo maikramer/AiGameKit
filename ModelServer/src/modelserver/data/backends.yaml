@@ -89,8 +89,9 @@ backends:
 
   - name: motion3d
     adapter: modelserver.adapters.motion3d
-    # CLIP ViT-B/32 (~0.35) + GPT (~0.9) + VQ (~0.08) + activações; conservador.
-    vram_mib: 3000
-    footprint_key: motius-t2mgpt
+    # HY-Motion staged (DiT GPU + text CPU): admit via footprint hy-motion-* + peak opts.
+    # YAML fallback ~ Full DiT fp16 + act (~4 GiB); hw-auto injecta sdnq/offload.
+    vram_mib: 4500
+    footprint_key: hy-motion-lite
     priority: 30
     tool: motion3d
