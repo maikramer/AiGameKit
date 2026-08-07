@@ -34,18 +34,23 @@ PAINT_FACES_MAX = 160_000
 # V/F típico em malha triangular welded (antes do UV split).
 PAINT_VERTS_PER_FACE = 0.55
 
-# Ladder de atlas por diâmetro equivalente de volume (metros).
+# Ladder de atlas por silhueta (metros), calibrada a ``PAINT_TEX_REF_M``.
 _PAINT_TEX_CHAR_BUCKET_M = 0.5
 _PAINT_TEX_CHAR_PROP_M = 1.2
 _PAINT_TEX_CHAR_MID_M = 3.5
+# Silhueta de referência dos buckets acima. ``ref_m`` menor (ex. humanoid=1.0)
+# desloca a ladder para cima: o mesmo asset conta como "maior" no orçamento.
+PAINT_TEX_REF_M = 2.0
 
 
-def paint_texture_for_char(char_m: float, *, quality_cap: int) -> int:
+def paint_texture_for_char(char_m: float, *, quality_cap: int, ref_m: float = PAINT_TEX_REF_M) -> int:
     """Lado do atlas (power-of-2) para o tamanho mundo, nunca acima do tier.
 
     Args:
-        char_m: Diâmetro equivalente ``(L·H·W)^(1/3)`` em metros.
+        char_m: Silhueta equivalente ``sqrt(d1·d2)`` em metros.
         quality_cap: Tecto do tier QualityEngine / profile (ex. medium=2048).
+        ref_m: Silhueta de referência da categoria (default 2 m). Os buckets são
+            avaliados sobre ``char_m · (PAINT_TEX_REF_M / ref_m)``.
 
     Returns:
         512 (balde) / 1024 (prop) / 2048 / 4096 (casa+), clampado a ``quality_cap``.
@@ -54,6 +59,8 @@ def paint_texture_for_char(char_m: float, *, quality_cap: int) -> int:
     c = float(char_m)
     if c <= 0:
         return cap
+    ref = float(ref_m) if float(ref_m) > 0 else PAINT_TEX_REF_M
+    c *= PAINT_TEX_REF_M / ref
     if c <= _PAINT_TEX_CHAR_BUCKET_M:
         ladder = 512
     elif c <= _PAINT_TEX_CHAR_PROP_M:

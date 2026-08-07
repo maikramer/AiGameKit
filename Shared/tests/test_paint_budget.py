@@ -60,3 +60,15 @@ class TestPaintTextureForChar:
     def test_never_above_quality_cap(self) -> None:
         assert paint_texture_for_char(10.0, quality_cap=1024) == 1024
         assert paint_texture_for_char(0.2, quality_cap=256) == 256
+
+    def test_category_ref_shifts_ladder_up(self) -> None:
+        """Herói (silhueta 0.92) é 'prop' com ref 2 m, mas 2048 com ref 1 m."""
+        assert paint_texture_for_char(0.92, quality_cap=2048) == 1024
+        assert paint_texture_for_char(0.92, quality_cap=2048, ref_m=1.0) == 2048
+        # O cap do tier continua a mandar.
+        assert paint_texture_for_char(0.92, quality_cap=1024, ref_m=1.0) == 1024
+
+    def test_ref_zero_falls_back_to_default(self) -> None:
+        assert paint_texture_for_char(0.69, quality_cap=2048, ref_m=0.0) == paint_texture_for_char(
+            0.69, quality_cap=2048
+        )
