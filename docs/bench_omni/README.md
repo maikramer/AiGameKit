@@ -5,7 +5,7 @@ Skeleton control for Hunyuan3D-Omni pose conditioning.
 **Descobertas / knobs / armadilhas (bbox max, presets, decode, falhas de
 batch):** ver [`docs/OMNI_SHAPE_FINDINGS.md`](../OMNI_SHAPE_FINDINGS.md).
 
-**Hub multi-modelo (VRAM / kernels / UMS):** [`docs/MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
+**Hub multi-modelo (VRAM / kernels / vramd):** [`docs/MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 
 **Packaged (preferred):** `text3d --pose-preset quaternius-tpose` uses
 `Text3D/src/text3d/data/omni/` (bone.txt + reference GLB).
