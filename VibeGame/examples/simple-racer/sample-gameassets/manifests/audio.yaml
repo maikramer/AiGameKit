@@ -1,0 +1,96 @@
+# Grupo audio — BGM e SFX do simple racer (Text2Sound).
+# Defs base (estilo, ferramentas, presets) em ../game.yaml.
+# Categorias = audio_kinds do QualityEngine (music_loop, sfx_vehicle, sfx_ui, ...).
+# Regenerar: gameassets resume --profile game.yaml --manifest manifests/audio
+output_dir: ../../public/assets
+assets:
+
+- id: bgm_race
+  idea: upbeat arcade kart racing music, energetic synth rock loop, fast driving
+    tempo, pumping bass line, catchy electric guitar melody, exciting race atmosphere,
+    seamless loop
+  kind: music
+  category: music_loop
+  pipeline:
+  - audio
+  generation: high
+- id: bgm_menu
+  idea: cheerful arcade racing menu music, light synth pop loop, playful and relaxed,
+    retro racing game lobby jingle, warm synth pads, seamless loop
+  kind: music
+  category: music_loop
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_engine_rev
+  idea: arcade race car engine revving up, high revving kart motor roar, aggressive
+    throttle blip, mechanical engine growl
+  kind: sfx
+  category: sfx_vehicle
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_skid
+  idea: tire skid squeal on asphalt, sharp rubber screech, kart drift brake sound,
+    short sliding friction squeak
+  kind: sfx
+  category: sfx_movement
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_nitro
+  idea: nitro boost activation whoosh, powerful rocket-like surge, jet burst hiss
+    with rising pitch, turbo power up
+  kind: sfx
+  category: sfx_vehicle
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_crash
+  idea: kart crash impact, metal scrape and smash, car collision bang with debris
+    rattle, short heavy crash
+  kind: sfx
+  category: sfx_destruction
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_countdown
+  idea: single short countdown beep, clean digital tone, race start ready signal,
+    brief electronic beep
+  kind: sfx
+  category: sfx_ui
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_go
+  idea: loud race start horn blast, GO signal klaxon, powerful air horn, short urgent
+    starting signal
+  kind: sfx
+  category: sfx_alarm
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_coin
+  idea: bright coin pickup chime, sparkling collectible jingle, short rewarding
+    sparkle sound
+  kind: sfx
+  category: sfx_collectible
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_lap
+  idea: soft lap completion chime, pleasant two-tone bell, checkpoint confirm sound,
+    gentle success ping
+  kind: sfx
+  category: sfx_ui
+  pipeline:
+  - audio
+  generation: high
+- id: sfx_finish
+  idea: triumphant race finish fanfare, short victory jingle, celebratory brass
+    melody, crossing the finish line
+  kind: sfx
+  category: sfx_short
+  pipeline:
+  - audio
+  generation: high

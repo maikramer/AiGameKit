@@ -1,0 +1,52 @@
+# Grupo vehicles — karts do simple racer (estáticos, sem rig/animate).
+# Defs base (estilo, ferramentas, presets) em ../game.yaml.
+# Regenerar: gameassets resume --profile game.yaml --manifest manifests/vehicles
+output_dir: ../../public/assets
+meshes_subdir: meshes/vehicles
+images_subdir: images/vehicles
+assets:
+
+- id: kart_hero
+  seed: 55801
+  idea: cute cartoon arcade racing kart, low rounded go-kart body, bright red body with
+    white racing stripe, open cockpit with small steering wheel, four chunky black
+    wheels with silver hubcaps, front bumper, rear spoiler wing, exhaust pipe at the
+    back, no driver, empty seat, glossy toy-like finish, chunky proportions, game-ready
+    low poly kart, front three-quarter view
+  kind: vehicle
+  category: vehicle
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  lod_levels: 1
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 1.4
+    - 1.0
+    - 2.4
+- id: kart_rival
+  seed: 55802
+  idea: cute cartoon arcade racing kart, low rounded go-kart body, bright blue body
+    with yellow racing stripe, open cockpit with small steering wheel, four chunky
+    black wheels with silver hubcaps, front bumper, rear spoiler wing, exhaust pipe
+    at the back, no driver, empty seat, glossy toy-like finish, chunky proportions,
+    game-ready low poly kart, front three-quarter view
+  kind: vehicle
+  category: vehicle
+  pipeline:
+  - 3d
+  - paint
+  - lod
+  - collision
+  lod_levels: 1
+  omni:
+    control_type: bbox
+    bbox_preset: cube
+    size_m:
+    - 1.4
+    - 1.0
+    - 2.4

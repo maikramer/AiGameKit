@@ -1,0 +1,55 @@
+title: Simple Racer Demo
+genre: cartoon arcade kart racing
+tone: bright vibrant arcade racing, playful cartoon track, sunny race day
+style_preset: lowpoly
+output_dir: ../../public/assets
+path_layout: split
+images_subdir: images
+meshes_subdir: meshes
+image_ext: png
+seed_base: 5555
+# Qualidade única: high → text3d preset hq + paint 8 views/4096 (auto-tune
+# ajusta por VRAM) + simplify_face_ratio 2.0 (LOD0 com o dobro de faces —
+# menos decimado). hw-auto/vramd cuidam de caber na VRAM.
+generation: high
+
+# Round 3 — master pipeline (default ON).
+# DAG: topology-fix → bake-master → LOD → collision → promote (lod0=painted) → validate.
+# Sem rig/animate: o kart e os props são estáticos — LOD0 = painted decimado.
+master_validate: true
+master_bake_normals: false
+negative_keywords:
+  - gore
+  - realistic
+  - photorealistic
+  - dark gritty
+  - scary
+  - damaged
+  - rusted
+text2d:
+  width: 768
+  height: 768
+text3d:
+  export_origin: feet
+  # Decode Omni: bounds anisotrópicos + mc_level ∝ 1/octree (pinholes) — auto.
+  bounds_mode: auto
+  mc_level: auto
+  # Kart/props sem split (só árvores com copa>tronco poderiam querer; aqui não).
+  split_at_height: false
+  # Sem sdnq/memory_efficient explícitos: hw-auto decide a quantização
+  # (int4 em GPUs ~6 GB) e o vramd admite/evita conforme a VRAM livre.
+paint3d:
+  preserve_origin: true
+  # Sem texture_size explícito: auto-tune ladder size_m ∩ cap do tier (high=4096).
+audio_subdir: audio
+text2sound:
+  quality: medium
+  audio_format: ogg
+
+# ============================================================
+# ASSETS: em manifests/<grupo>.yaml — 1 manifesto por grupo.
+#   gameassets resume --profile game.yaml --manifest manifests/vehicles
+#   gameassets resume --profile game.yaml --manifest manifests/props
+#   gameassets resume --profile game.yaml --manifest manifests/audio
+# Cada grupo declara a própria pasta (output_dir / meshes_subdir / images_subdir).
+# ============================================================

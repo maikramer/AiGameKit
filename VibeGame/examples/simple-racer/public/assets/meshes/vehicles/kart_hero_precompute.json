@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "kart_hero",
+  "category": "vehicle",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -0.7801,
+      0.0003,
+      -1.2002
+    ],
+    "max": [
+      0.7803,
+      1.0307,
+      1.2
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 1.2001,
+    "height": 1.0303,
+    "base_y": 0.0003
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

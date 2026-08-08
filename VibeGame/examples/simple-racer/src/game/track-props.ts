@@ -1,0 +1,323 @@
+/**
+ * Track dressing: places the generated prop GLBs around the circuit.
+ *
+ * Two rules the previous version broke, and which matter more than the prop
+ * choice itself:
+ *
+ * 1. **Every model is fitted to a declared real-world size.** Assets from the
+ *    GameAssets/Hunyuan3D pipeline come out at arbitrary scale — dropping one
+ *    in untouched is how a road sign ended up bigger than the grandstand.
+ * 2. **Nothing is placed on the racing surface.** Offsets are measured from the
+ *    barrier line (`width/2 + shoulder`) outwards, so scenery never spawns
+ *    inside the track or inside the wall it is supposed to sit behind.
+ *
+ * Solid props (tyre stacks, boulders) additionally register a collision circle
+ * with the racing plugin, so hitting one costs you the corner.
+ */
+import * as THREE from 'three';
+import * as GAME from 'vibegame';
+
+const ASSETS = '/assets/meshes/props';
+
+interface PropDef {
+  /** File stem under `/assets/meshes/props` (LOD0 is used). */
+  file: string;
+  /** Target height of the model (m) — everything scales from this. */
+  height: number;
+  /** Distance outside the barrier line (m). */
+  offset: number;
+  /** Metres of track between two of this prop. */
+  spacing: number;
+  /** Place on the left (-1), right (+1) or both (0) sides. */
+  side: -1 | 0 | 1;
+  /** Random yaw spread (radians). */
+  yawJitter?: number;
+  /** Random size spread (fraction). */
+  sizeJitter?: number;
+  /** Register a collision circle of this radius (m). */
+  solid?: number;
+}
+
+/** Props per circuit section (see `src/track.ts` for the section layout). */
+const SECTION_PROPS: Record<string, PropDef[]> = {
+  main: [
+    { file: 'barrier_red', height: 1.0, offset: 0.6, spacing: 9, side: 0 },
+    { file: 'road_sign', height: 2.4, offset: 5, spacing: 120, side: 1 },
+  ],
+  turn1: [
+    {
+      file: 'tire_stack',
+      height: 0.9,
+      offset: 1.2,
+      spacing: 7,
+      side: 1,
+      solid: 1.0,
+    },
+    { file: 'guard_rail', height: 0.9, offset: 0.8, spacing: 12, side: -1 },
+    {
+      file: 'palm_tree',
+      height: 8.5,
+      offset: 14,
+      spacing: 26,
+      side: 1,
+      yawJitter: Math.PI,
+      sizeJitter: 0.25,
+    },
+  ],
+  climb: [
+    {
+      file: 'pine_tree',
+      height: 9.5,
+      offset: 10,
+      spacing: 17,
+      side: 0,
+      yawJitter: Math.PI,
+      sizeJitter: 0.3,
+    },
+    { file: 'guard_rail', height: 0.9, offset: 0.8, spacing: 12, side: 1 },
+    {
+      file: 'rock_boulder',
+      height: 1.7,
+      offset: 22,
+      spacing: 45,
+      side: -1,
+      yawJitter: Math.PI,
+      sizeJitter: 0.4,
+    },
+  ],
+  crest: [
+    { file: 'checkered_flag', height: 2.2, offset: 3, spacing: 22, side: 0 },
+    {
+      file: 'pine_tree',
+      height: 9.5,
+      offset: 13,
+      spacing: 24,
+      side: 0,
+      yawJitter: Math.PI,
+      sizeJitter: 0.3,
+    },
+  ],
+  descent: [
+    {
+      file: 'tire_stack',
+      height: 0.9,
+      offset: 1.2,
+      spacing: 8,
+      side: -1,
+      solid: 1.0,
+    },
+    {
+      file: 'pine_tree',
+      height: 9.5,
+      offset: 12,
+      spacing: 20,
+      side: 1,
+      yawJitter: Math.PI,
+      sizeJitter: 0.3,
+    },
+    { file: 'road_sign', height: 2.4, offset: 5, spacing: 90, side: -1 },
+  ],
+  esses: [
+    { file: 'barrier_red', height: 1.0, offset: 0.6, spacing: 8, side: 0 },
+    {
+      file: 'rock_boulder',
+      height: 1.7,
+      offset: 16,
+      spacing: 32,
+      side: 0,
+      yawJitter: Math.PI,
+      sizeJitter: 0.4,
+    },
+  ],
+  hairpin: [
+    {
+      file: 'tire_stack',
+      height: 0.9,
+      offset: 1.0,
+      spacing: 5,
+      side: 0,
+      solid: 1.0,
+    },
+    { file: 'road_sign', height: 2.4, offset: 6, spacing: 60, side: 1 },
+  ],
+  infield: [
+    { file: 'guard_rail', height: 0.9, offset: 0.8, spacing: 12, side: 0 },
+    {
+      file: 'palm_tree',
+      height: 8.5,
+      offset: 15,
+      spacing: 22,
+      side: 0,
+      yawJitter: Math.PI,
+      sizeJitter: 0.25,
+    },
+  ],
+  final: [
+    { file: 'barrier_red', height: 1.0, offset: 0.6, spacing: 9, side: 0 },
+    {
+      file: 'palm_tree',
+      height: 8.5,
+      offset: 16,
+      spacing: 26,
+      side: -1,
+      yawJitter: Math.PI,
+      sizeJitter: 0.25,
+    },
+  ],
+};
+
+const DEFAULT_PROPS: PropDef[] = [
+  { file: 'barrier_red', height: 1.0, offset: 0.6, spacing: 12, side: 0 },
+];
+
+/** Cache of loaded prototypes, so each GLB is fetched and parsed once. */
+const prototypes = new Map<string, Promise<THREE.Object3D | null>>();
+
+function loadPrototype(url: string): Promise<THREE.Object3D | null> {
+  let p = prototypes.get(url);
+  if (!p) {
+    p = GAME.createGLTFLoader()
+      .loadAsync(url)
+      .then((gltf) => gltf.scene as THREE.Object3D)
+      .catch((err) => {
+        console.warn('[track-props] failed to load', url, err);
+        return null;
+      });
+    prototypes.set(url, p);
+  }
+  return p;
+}
+
+/**
+ * Wrap a normalised model in a group so callers can move it freely.
+ *
+ * `fitModel` does the real work: it stands the model up, measures its heading
+ * from the vertex cloud (not the bounding box) and scales it to a real-world
+ * size. `align: 'across'` is for the start gantry, whose long side has to span
+ * the road rather than point down it.
+ */
+function instantiate(
+  prototype: THREE.Object3D,
+  size: number,
+  fit: 'height' | 'width' = 'height',
+  align: 'forward' | 'across' = 'forward'
+): THREE.Group {
+  const holder = new THREE.Group();
+  const clone = prototype.clone(true);
+  holder.add(clone);
+  GAME.fitModel(clone, { align, fit, size, ground: true });
+  clone.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    }
+  });
+  return holder;
+}
+
+let dressed = false;
+
+/**
+ * Walks the circuit once on the first frame and scatters section-appropriate
+ * scenery. Runs off the spline, so it always agrees with the road that was
+ * actually built.
+ */
+export const TrackPropSpawnSystem: GAME.System = {
+  name: 'TrackPropSpawnSystem',
+  group: 'simulation',
+  update(state: GAME.State) {
+    if (state.headless || dressed) return;
+    const trackEid = GAME.getPrimaryTrackEntity();
+    if (trackEid === undefined) return;
+    const spline = GAME.getTrackSpline(trackEid);
+    const scene = GAME.getScene(state);
+    if (!spline || !scene) return;
+    // The prop GLBs carry KTX2 textures — wire the transcoder from the live
+    // renderer before the first load or every one of them fails to parse.
+    GAME.ensureKTX2LoaderReady(state);
+    dressed = true;
+    void dressTrack(
+      scene as THREE.Object3D,
+      spline,
+      GAME.RaceTrackComponent.shoulder[trackEid] || 3
+    );
+  },
+};
+
+async function dressTrack(
+  scene: THREE.Object3D,
+  spline: GAME.TrackSpline,
+  shoulder: number
+): Promise<void> {
+  const group = new THREE.Group();
+  group.name = 'TrackDressing';
+  scene.add(group);
+
+  // Start/finish gantry, sized to span the road.
+  const startFrame = spline.sampleAt(0);
+  const banner = await loadPrototype(`${ASSETS}/start_banner_lod0.glb`);
+  if (banner) {
+    const holder = instantiate(banner, startFrame.width + 8, 'width', 'across');
+    holder.position.set(startFrame.x, startFrame.y, startFrame.z);
+    // The gantry's long side is on +X now, so aligning its local +Z with the
+    // track tangent makes it span the road.
+    holder.rotation.y = Math.atan2(startFrame.tx, startFrame.tz);
+    group.add(holder);
+  }
+
+  // Everything else: walk the circuit and place per-section props on cadence.
+  const cadence = new Map<string, number>();
+  const step = 4;
+  for (let s = 0; s < spline.length; s += step) {
+    const frame = spline.sampleAt(s);
+    const defs = SECTION_PROPS[frame.section] ?? DEFAULT_PROPS;
+    const barrier = frame.width * 0.5 + shoulder;
+
+    for (const def of defs) {
+      const key = `${def.file}:${def.offset}:${def.side}`;
+      const acc = (cadence.get(key) ?? def.spacing) + step;
+      if (acc < def.spacing) {
+        cadence.set(key, acc);
+        continue;
+      }
+      cadence.set(key, 0);
+
+      const sides: number[] = def.side === 0 ? [-1, 1] : [def.side];
+      const prototype = await loadPrototype(`${ASSETS}/${def.file}_lod0.glb`);
+      if (!prototype) continue;
+
+      for (const side of sides) {
+        const size =
+          def.height * (1 + (def.sizeJitter ?? 0) * (Math.random() - 0.5) * 2);
+        const holder = instantiate(prototype, size);
+        const lateral = (barrier + def.offset + Math.random() * 1.5) * side;
+        holder.position.set(
+          frame.x + frame.rx * lateral,
+          frame.y + frame.ry * lateral - 0.05,
+          frame.z + frame.rz * lateral
+        );
+        holder.rotation.y =
+          Math.atan2(frame.tx, frame.tz) +
+          (def.yawJitter ? (Math.random() - 0.5) * def.yawJitter : 0);
+        group.add(holder);
+
+        if (def.solid) {
+          GAME.addTrackObstacle(
+            holder.position.x,
+            holder.position.z,
+            def.solid,
+            0.5
+          );
+        }
+      }
+    }
+  }
+}
+
+/** Reset the one-shot guard (used when the page hot-reloads the module). */
+export function resetTrackDressing(): void {
+  dressed = false;
+  prototypes.clear();
+  GAME.clearTrackObstacles();
+}

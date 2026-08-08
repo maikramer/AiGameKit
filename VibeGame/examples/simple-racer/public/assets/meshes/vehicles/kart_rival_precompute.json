@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "kart_rival",
+  "category": "vehicle",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -0.6835,
+      0.0014,
+      -1.1993
+    ],
+    "max": [
+      0.6833,
+      0.8881,
+      1.1991
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 1.1992,
+    "height": 0.8867,
+    "base_y": 0.0014
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

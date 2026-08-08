@@ -135,6 +135,13 @@ VibeGame/examples/simple-rpg/public/assets/.assets-version
 # Screenshots de teste no exemplo
 VibeGame/examples/simple-rpg/screenshot*.png
 
+# VibeGame simple-racer — intermediários de pipeline e estado local de batch
+VibeGame/examples/simple-racer/public/assets/meshes/**/_intermediate/
+VibeGame/examples/simple-racer/sample-gameassets/**/.gameassets_work/
+VibeGame/examples/simple-racer/sample-gameassets/resume-*.jsonl
+VibeGame/examples/simple-racer/sample-gameassets/resume-*.stdout
+VibeGame/examples/simple-racer/node_modules/
+
 # Backups locais (.bak)
 *.bak.*
 *.bak
@@ -149,6 +156,8 @@ docs/bench_kernel_opts/*.png
 # Screenshots de teste na raiz do VibeGame
 VibeGame/*test*.png
 VibeGame/screenshot*.png
+VibeGame/simple-racer-*.png
+VibeGame/simple-racer-*.yml
 
 # OpenCode agent workspace (local state, plans, evidence, notepads)
 .omo/
