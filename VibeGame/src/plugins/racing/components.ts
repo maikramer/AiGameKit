@@ -1,101 +1,244 @@
 import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 /**
- * Arcade vehicle state. A `Vehicle` entity drives itself with a kinematic-velocity
- * rigidbody: the {@link VehicleControlSystem} writes forward velocity from the
- * throttle and a yaw rate from the steer, and Rapier integrates it. This keeps
- * the car stable and snappy (no tipping, no inertia tensor flips) while still
- * colliding with track walls and props. All fields are SOA arrays indexed by eid.
+ * Arcade vehicle state (SOA, indexed by entity id).
+ *
+ * The racing plugin owns vehicle motion outright: a car is a `Transform` entity
+ * whose pose is written by {@link VehicleControlSystem} each fixed step from a
+ * closed-form arcade model, grounded on the {@link TrackSpline} surface. There
+ * is deliberately no rigidbody — a kinematic body fighting Rapier over ride
+ * height was the source of the old jitter, the vertical teleports and the
+ * "car floats off the hill" bugs, and a dynamic body needs a suspension model
+ * to feel anything like a kart.
+ *
+ * Fields split into three groups: tunables (parsed once), driver inputs (set by
+ * the player or the AI each step) and simulation state (owned by the
+ * controller, read by camera / HUD / FX).
  */
 export const Vehicle = {
-  // Kinematic target the chassis chases (for visual smoothing, not physics).
-  speed: new Float32Array(MAX_ENTITIES), // current forward speed (m/s, signed)
-  // Tunables (set once at parse time, then read every fixed step).
-  maxSpeed: new Float32Array(MAX_ENTITIES), // top speed (m/s)
-  accel: new Float32Array(MAX_ENTITIES), // throttle accel (m/s^2)
-  brake: new Float32Array(MAX_ENTITIES), // brake decel (m/s^2)
-  engineBrake: new Float32Array(MAX_ENTITIES), // coast decel (m/s^2)
-  reverseSpeed: new Float32Array(MAX_ENTITIES), // reverse top speed (m/s)
-  maxSteer: new Float32Array(MAX_ENTITIES), // max yaw rate (rad/s) at low speed
-  steerSpeed: new Float32Array(MAX_ENTITIES), // how fast steer input ramps (1/s)
-  grip: new Float32Array(MAX_ENTITIES), // lateral velocity kill (0..1 per step)
-  // Live control state (written by input, read by the controller).
-  throttle: new Float32Array(MAX_ENTITIES), // -1..1 (brake/reverse when negative)
-  steer: new Float32Array(MAX_ENTITIES), // -1..1 (left negative)
-  handbrake: new Uint8Array(MAX_ENTITIES),
-  // Visual chassis roll/pitch for juice (written by controller, read by wheel/visual sync).
-  roll: new Float32Array(MAX_ENTITIES),
-  pitch: new Float32Array(MAX_ENTITIES),
-  wheelSpin: new Float32Array(MAX_ENTITIES),
-  // Ride height the chassis is clamped to each fixed step (anti-fall). Arcade
-  // racers are ground-locked — this keeps the car on the road without a full
-  // suspension/raycast-vehicle simulation.
+  // ---- Tunables -----------------------------------------------------------
+  /** Top speed on full throttle (m/s). */
+  maxSpeed: new Float32Array(MAX_ENTITIES),
+  /** Engine acceleration at zero speed (m/s²); tapers toward `maxSpeed`. */
+  accel: new Float32Array(MAX_ENTITIES),
+  /** Braking deceleration (m/s²). */
+  brake: new Float32Array(MAX_ENTITIES),
+  /** Coasting deceleration with no throttle (m/s²). */
+  engineBrake: new Float32Array(MAX_ENTITIES),
+  /** Top speed in reverse (m/s). */
+  reverseSpeed: new Float32Array(MAX_ENTITIES),
+  /** Peak yaw rate at low speed (rad/s). */
+  maxSteer: new Float32Array(MAX_ENTITIES),
+  /** How fast the steer input ramps toward the key state (1/s). */
+  steerSpeed: new Float32Array(MAX_ENTITIES),
+  /** Lateral grip: fraction of side-slip killed per second (higher = stickier). */
+  grip: new Float32Array(MAX_ENTITIES),
+  /** Grip multiplier while the handbrake is held (lower = slides more). */
+  driftGrip: new Float32Array(MAX_ENTITIES),
+  /** Extra acceleration while boosting (m/s²). */
+  boostAccel: new Float32Array(MAX_ENTITIES),
+  /** Top-speed multiplier while boosting. */
+  boostSpeed: new Float32Array(MAX_ENTITIES),
+  /** Boost tank capacity (seconds of continuous boost). */
+  boostCapacity: new Float32Array(MAX_ENTITIES),
+  /** Boost refill rate (units/s) while not boosting. */
+  boostRecharge: new Float32Array(MAX_ENTITIES),
+  /** Chassis half-length (m) — collision + grid spacing. */
+  halfLength: new Float32Array(MAX_ENTITIES),
+  /** Chassis half-width (m). */
+  halfWidth: new Float32Array(MAX_ENTITIES),
+  /** Height of the chassis origin above the road surface (m). */
   rideHeight: new Float32Array(MAX_ENTITIES),
+
+  // ---- Driver input (written by player input or the AI) -------------------
+  /** Throttle 0..1. */
+  throttle: new Float32Array(MAX_ENTITIES),
+  /** Brake 0..1 (also reverses once stopped). */
+  brakeInput: new Float32Array(MAX_ENTITIES),
+  /** Steering -1..1 (positive = right). */
+  steerInput: new Float32Array(MAX_ENTITIES),
+  /** Handbrake 0/1. */
+  handbrake: new Uint8Array(MAX_ENTITIES),
+  /** Boost request 0/1. */
+  boostInput: new Uint8Array(MAX_ENTITIES),
+
+  // ---- Simulation state ---------------------------------------------------
+  /** Forward speed along the chassis heading (m/s, signed). */
+  speed: new Float32Array(MAX_ENTITIES),
+  /** Sideways speed in chassis space (m/s, positive = sliding right). */
+  lateralSpeed: new Float32Array(MAX_ENTITIES),
+  /** World heading (yaw, radians; 0 = +Z). */
+  heading: new Float32Array(MAX_ENTITIES),
+  /** Current yaw rate (rad/s). */
+  yawRate: new Float32Array(MAX_ENTITIES),
+  /** Smoothed steer state (-1..1) — the ramped version of `steerInput`. */
+  steer: new Float32Array(MAX_ENTITIES),
+  /** Arc position along the track (m). */
+  trackS: new Float32Array(MAX_ENTITIES),
+  /** Signed lateral offset from the centerline (m, positive = right). */
+  trackLateral: new Float32Array(MAX_ENTITIES),
+  /** Height above the road surface (m). */
+  airHeight: new Float32Array(MAX_ENTITIES),
+  /** Vertical velocity while airborne (m/s). */
+  verticalSpeed: new Float32Array(MAX_ENTITIES),
+  /** 1 while the wheels are off the ground. */
+  airborne: new Uint8Array(MAX_ENTITIES),
+  /** Surface grip multiplier under the wheels (1 = road, <1 = kerb/dirt). */
+  surfaceGrip: new Float32Array(MAX_ENTITIES),
+  /** Normalised slide amount 0..1 — drives smoke, skid marks and screech. */
+  slip: new Float32Array(MAX_ENTITIES),
+  /** Remaining boost (same unit as `boostCapacity`). */
+  boost: new Float32Array(MAX_ENTITIES),
+  /** 1 while boost is actually being spent. */
+  boosting: new Uint8Array(MAX_ENTITIES),
+  /** Seconds since the last wall/car impact (impact FX + AI recovery). */
+  impactTimer: new Float32Array(MAX_ENTITIES),
+  /** Engine revs 0..1 (audio + HUD). */
+  rpm: new Float32Array(MAX_ENTITIES),
+  /** Current gear (1-based, 0 = reverse) — audio + HUD only. */
+  gear: new Uint8Array(MAX_ENTITIES),
+
+  // ---- Visual juice (read by the chassis visual) --------------------------
+  /** Accumulated wheel rotation (rad). */
+  wheelSpin: new Float32Array(MAX_ENTITIES),
+  /** Steering angle applied to the front wheels (rad). */
+  wheelSteer: new Float32Array(MAX_ENTITIES),
+  /** Body roll (rad, leans out of the corner). */
+  roll: new Float32Array(MAX_ENTITIES),
+  /** Body pitch (rad, dives on the brakes). */
+  pitch: new Float32Array(MAX_ENTITIES),
 } as const;
 
-/**
- * A follow-behind racing camera. Trails the vehicle's heading (not a free yaw),
- * decoupled low-pass follow point, terrain-agnostic (races are on a flat ribbon).
- * Owned by {@link ChaseCameraSystem} (group `draw`, after the generic camera sync
- * so it is the sole authority over the THREE camera transform).
- */
-export const ChaseCamera = {
-  target: new Uint32Array(MAX_ENTITIES), // target entity id (the vehicle)
-  distance: new Float32Array(MAX_ENTITIES), // how far behind (m)
-  height: new Float32Array(MAX_ENTITIES), // how high above the target (m)
-  followLag: new Float32Array(MAX_ENTITIES), // positional follow time constant (s)
-  turnLag: new Float32Array(MAX_ENTITIES), // heading trail time constant (s)
-  lookAhead: new Float32Array(MAX_ENTITIES), // look-ahead along heading (m)
-  fovBase: new Float32Array(MAX_ENTITIES), // resting FOV (deg)
-  fovBoost: new Float32Array(MAX_ENTITIES), // FOV added at top speed (deg)
-  // Internal smoothed state (persisted across frames).
-  followX: new Float32Array(MAX_ENTITIES),
-  followY: new Float32Array(MAX_ENTITIES),
-  followZ: new Float32Array(MAX_ENTITIES),
-  smoothYaw: new Float32Array(MAX_ENTITIES),
-  initialized: new Uint8Array(MAX_ENTITIES),
-} as const;
-
-/**
- * A racing circuit. `Track` is a sidecar-holding entity: the parser drops the
- * centerline polyline into {@link setTrackData}, and the {@link RaceTrackerSystem}
- * samples it to score vehicle progress and detect laps. One per circuit.
- */
-export const Track = {
-  totalLaps: new Uint32Array(MAX_ENTITIES),
-  // Filled at runtime by resolveTrackMetrics.
-  length: new Float32Array(MAX_ENTITIES), // total arc length (m)
-} as const;
-
-/**
- * Per-vehicle race progress: lap count, next checkpoint, lap start time, finish
- * time. The {@link RaceTrackerSystem} updates it each frame from the vehicle's
- * projection on the track centerline.
- */
-export const RaceTracker = {
-  track: new Uint32Array(MAX_ENTITIES), // track entity id
-  lap: new Uint32Array(MAX_ENTITIES), // current lap (0-indexed; incremented on cross)
-  nextCheckpoint: new Uint32Array(MAX_ENTITIES), // next centerline index to reach
-  lastProgress: new Float32Array(MAX_ENTITIES), // last arc-fraction (0..1) seen
-  lapStartTime: new Float32Array(MAX_ENTITIES), // realtime at current lap start
-  bestLapTime: new Float32Array(MAX_ENTITIES), // best lap duration (s), -1 = none
-  lastLapTime: new Float32Array(MAX_ENTITIES), // last lap duration (s), -1 = none
-  finished: new Uint8Array(MAX_ENTITIES), // 1 once totalLaps reached
-  finishTime: new Float32Array(MAX_ENTITIES), // total race time at finish (s)
-  progress: new Float32Array(MAX_ENTITIES), // monotonic progress (laps + frac)
-} as const;
-
-/** Tag a vehicle as player-controlled (the one the camera + HUD follow). */
+/** Tag: the vehicle the local player drives (camera + HUD bind to it). */
 export const PlayerVehicle = {
   tag: new Uint8Array(MAX_ENTITIES),
 } as const;
 
 /**
- * Optional GLB chassis per vehicle: eid → model URL (from `<Vehicle model-url=…>`
- * / `<PlayerVehicle model-url=…>`). When set, {@link VehicleVisualSystem} swaps
- * the procedural body for the loaded GLB (model-yaw rotates it to face +Z).
+ * Tag + tuning for a computer-driven rival. The {@link AiDriverSystem} writes
+ * this vehicle's inputs from the racing line.
  */
+export const AiDriver = {
+  /** 0..1 — how hard this rival drives (corner speed, throttle discipline). */
+  skill: new Float32Array(MAX_ENTITIES),
+  /** Preferred lateral offset from the racing line (m) — keeps rivals apart. */
+  lineOffset: new Float32Array(MAX_ENTITIES),
+  /** Rubber-band strength 0..1 (0 = none, 1 = strongly matches the player). */
+  rubberBand: new Float32Array(MAX_ENTITIES),
+  /** Internal: smoothed steering target, and a per-driver noise phase. */
+  steerState: new Float32Array(MAX_ENTITIES),
+  noisePhase: new Float32Array(MAX_ENTITIES),
+  /** Seconds spent making no progress along the track → recovery nudge. */
+  stuckTimer: new Float32Array(MAX_ENTITIES),
+  /** Arc position when the stuck check last sampled it (m). */
+  progressS: new Float32Array(MAX_ENTITIES),
+} as const;
+
+/**
+ * A racing circuit. The polyline lives in a sidecar ({@link getTrackSpline})
+ * because bitecs stores only numbers; this component holds the scalars other
+ * systems query.
+ */
+export const Track = {
+  /** Laps required to finish. */
+  totalLaps: new Uint32Array(MAX_ENTITIES),
+  /** Total circuit length (m), filled once the spline is built. */
+  length: new Float32Array(MAX_ENTITIES),
+  /** Default road width (m). */
+  width: new Float32Array(MAX_ENTITIES),
+  /** Width of the drivable-but-slow shoulder either side of the road (m). */
+  shoulder: new Float32Array(MAX_ENTITIES),
+  /** 1 when barriers stop the car at the shoulder edge. */
+  walls: new Uint8Array(MAX_ENTITIES),
+} as const;
+
+/**
+ * Per-vehicle race progress. Owned by {@link RaceDirectorSystem}.
+ *
+ * Progress is continuous: `lap * trackLength + trackS`. Lap counting watches the
+ * arc position wrap forward past the start line, which — unlike the old
+ * "fraction jumped from 0.9 to 0.1" heuristic — cannot be fooled by a car
+ * reversing over the line or by a projection glitch on a crossover.
+ */
+export const RaceTracker = {
+  /** The track entity this vehicle races on. */
+  track: new Uint32Array(MAX_ENTITIES),
+  /** Completed laps. */
+  lap: new Uint32Array(MAX_ENTITIES),
+  /** Arc position last frame (m) — wrap detector. */
+  lastS: new Float32Array(MAX_ENTITIES),
+  /** Total distance covered (m); the ranking key. */
+  distance: new Float32Array(MAX_ENTITIES),
+  /** Race clock when the current lap started (s). */
+  lapStartTime: new Float32Array(MAX_ENTITIES),
+  /** Best lap so far (s); -1 = none yet. */
+  bestLapTime: new Float32Array(MAX_ENTITIES),
+  /** Last completed lap (s); -1 = none yet. */
+  lastLapTime: new Float32Array(MAX_ENTITIES),
+  /** 1 once the car has taken the chequered flag. */
+  finished: new Uint8Array(MAX_ENTITIES),
+  /** Race time at the finish (s). */
+  finishTime: new Float32Array(MAX_ENTITIES),
+  /** Live race position (1 = leading). */
+  position: new Uint32Array(MAX_ENTITIES),
+  /** 1 while the car is pointing against the racing direction. */
+  wrongWay: new Uint8Array(MAX_ENTITIES),
+  /** Seconds spent going the wrong way (debounce for the HUD warning). */
+  wrongWayTimer: new Float32Array(MAX_ENTITIES),
+  /** Grid slot (0 = pole) used when placing cars for the start / a restart. */
+  gridSlot: new Uint32Array(MAX_ENTITIES),
+} as const;
+
+/**
+ * Follow camera. Trails the car's heading and rides the track's up vector so it
+ * banks with the road instead of staying stubbornly world-up.
+ */
+export const ChaseCamera = {
+  /** Vehicle entity being followed. */
+  target: new Uint32Array(MAX_ENTITIES),
+  /** Distance behind the car (m). */
+  distance: new Float32Array(MAX_ENTITIES),
+  /** Height above the car (m). */
+  height: new Float32Array(MAX_ENTITIES),
+  /** Positional follow time constant (s). */
+  followLag: new Float32Array(MAX_ENTITIES),
+  /** Heading trail time constant (s). */
+  turnLag: new Float32Array(MAX_ENTITIES),
+  /** Look-ahead distance in front of the car (m). */
+  lookAhead: new Float32Array(MAX_ENTITIES),
+  /** Resting field of view (deg). */
+  fovBase: new Float32Array(MAX_ENTITIES),
+  /** Extra FOV at top speed (deg). */
+  fovBoost: new Float32Array(MAX_ENTITIES),
+  /** Active view: 0 chase, 1 close chase, 2 hood, 3 orbit (replay/podium). */
+  mode: new Uint8Array(MAX_ENTITIES),
+
+  // Smoothed internal state.
+  followX: new Float32Array(MAX_ENTITIES),
+  followY: new Float32Array(MAX_ENTITIES),
+  followZ: new Float32Array(MAX_ENTITIES),
+  smoothYaw: new Float32Array(MAX_ENTITIES),
+  upX: new Float32Array(MAX_ENTITIES),
+  upY: new Float32Array(MAX_ENTITIES),
+  upZ: new Float32Array(MAX_ENTITIES),
+  fov: new Float32Array(MAX_ENTITIES),
+  orbitAngle: new Float32Array(MAX_ENTITIES),
+  initialized: new Uint8Array(MAX_ENTITIES),
+} as const;
+
+/** Optional GLB chassis per vehicle (`<Vehicle model-url=…>`). */
 export const VehicleModelUrls = new Map<number, string>();
 
-/** Optional chassis yaw (degrees, applied around Y) per vehicle; 0 = +Z forward. */
+/** Chassis yaw correction in degrees per vehicle; 0 = the model already faces +Z. */
 export const VehicleModelYaw = new Map<number, number>();
+
+/**
+ * Target chassis length in metres per vehicle. Generated GLBs arrive at
+ * arbitrary scale, so the visual system fits the model to this length instead
+ * of trusting the file (that is why the old example rendered a kart the size of
+ * a building).
+ */
+export const VehicleModelLength = new Map<number, number>();
+
+/** Body tint per vehicle, applied to the procedural chassis. */
+export const VehicleColors = new Map<number, number>();

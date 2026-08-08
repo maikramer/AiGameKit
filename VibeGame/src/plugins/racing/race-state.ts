@@ -1,28 +1,52 @@
 /**
- * Singleton race state — the bridge between the race systems and the HUD widgets.
- * HUD widgets are pure DOM factories updated every frame; they read this module
- * instead of threading race state through ECS queries (which would couple widget
- * lifecycles to entity ids). Mirrors how the timer widget reads `state.time`.
+ * Singleton race state — the contract between the race director, the HUD and
+ * game code. HUD widgets are plain DOM factories that tick every frame; reading
+ * a module singleton keeps their lifecycle independent of entity ids.
  *
- * Phase machine: COUNTDOWN -> RACING -> FINISHED. The countdown lives here so any
- * system (vehicle control, HUD, audio) can gate on it without re-deriving it.
+ * Phase machine:
+ *
+ * ```
+ * idle ──(track + cars exist)──▶ grid ──(assets ready)──▶ countdown ──▶ racing ──▶ finished
+ *   ▲                                                                                │
+ *   └──────────────────────────── restartRace() ─────────────────────────────────────┘
+ * ```
+ *
+ * `grid` exists so the cars are parked on the start grid while GLBs stream in;
+ * the old build started the clock on frame 1 and the player met a race already
+ * 30 seconds old.
  */
-export type RacePhase = 'idle' | 'countdown' | 'racing' | 'finished';
+export type RacePhase = 'idle' | 'grid' | 'countdown' | 'racing' | 'finished';
+
+/** One row of the end-of-race classification. */
+export interface RaceResult {
+  entity: number;
+  name: string;
+  position: number;
+  /** Total race time (s); -1 when the car didn't finish. */
+  totalTime: number;
+  /** Best lap (s); -1 when never set. */
+  bestLap: number;
+  laps: number;
+  isPlayer: boolean;
+}
 
 export interface RaceState {
   phase: RacePhase;
-  /** Countdown: 3.0 -> 0.0 counts down; we render ceil() as 3/2/1 and 0 as GO. */
+  /** Countdown seconds remaining (3 → 0); rendered as 3/2/1/GO. */
   countdown: number;
-  /** The player vehicle entity (0 if unset). */
+  /** Player vehicle entity (0 = unset). */
   playerVehicle: number;
-  /** The track entity (0 if unset). */
+  /** Track entity (0 = unset). */
   track: number;
-  /** Total laps configured for the race. */
   totalLaps: number;
-  /** Realtime (state.time.realtimeSinceStartup) the racing phase began. */
-  raceStartTime: number;
-  /** Realtime the player finished. */
-  finishTime: number;
+  /** Number of cars in the race. */
+  entrants: number;
+  /** Seconds of racing elapsed (excludes the countdown). */
+  raceTime: number;
+  /** Final classification, filled when the phase turns `finished`. */
+  results: RaceResult[];
+  /** Incremented by every restart — lets systems reset per-race caches. */
+  generation: number;
 }
 
 const initial: RaceState = {
@@ -31,11 +55,16 @@ const initial: RaceState = {
   playerVehicle: 0,
   track: 0,
   totalLaps: 3,
-  raceStartTime: 0,
-  finishTime: 0,
+  entrants: 0,
+  raceTime: 0,
+  results: [],
+  generation: 0,
 };
 
-let current: RaceState = { ...initial };
+let current: RaceState = { ...initial, results: [] };
+
+/** Set by game code when its assets are streamed in; gates the countdown. */
+let assetsReady = true;
 
 export function getRaceState(): RaceState {
   return current;
@@ -46,10 +75,41 @@ export function setRaceState(patch: Partial<RaceState>): void {
 }
 
 export function resetRaceState(): void {
-  current = { ...initial };
+  current = { ...initial, results: [] };
+  assetsReady = true;
 }
 
-/** Convenience: has the race reached the point where the player can drive? */
+/** True once the player is allowed to drive. */
 export function isRacingActive(): boolean {
   return current.phase === 'racing';
+}
+
+/**
+ * Hold the race on the grid until the caller says its assets are in.
+ * `markRaceReady()` releases it. Games that don't call this start immediately.
+ */
+export function holdRaceOnGrid(): void {
+  assetsReady = false;
+}
+
+export function markRaceReady(): void {
+  assetsReady = true;
+}
+
+export function isRaceReady(): boolean {
+  return assetsReady;
+}
+
+/**
+ * Restart the race: the director re-places every car on the grid and re-runs
+ * the countdown on the next frame.
+ */
+export function restartRace(): void {
+  setRaceState({
+    phase: 'grid',
+    countdown: 0,
+    raceTime: 0,
+    results: [],
+    generation: current.generation + 1,
+  });
 }

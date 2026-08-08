@@ -41,10 +41,34 @@ export const LightingStartupSystem: System = defineSystem({
   },
 });
 
+/**
+ * Whether a scene with no `<Player>` gets the default character spawned for it.
+ *
+ * Games whose player is not a walking character (a racer, an RTS, a top-down
+ * shooter) turn this off — otherwise a stray humanoid is created at the world
+ * origin and stands in the middle of the scene. `RacingPlugin` disables it.
+ */
+let autoPlayerEnabled = true;
+
+/** Stop the default character from being spawned when no `<Player>` exists. */
+export function disableDefaultPlayer(): void {
+  autoPlayerEnabled = false;
+}
+
+/** Re-enable the default character spawn (tests, or a game that opts back in). */
+export function enableDefaultPlayer(): void {
+  autoPlayerEnabled = true;
+}
+
+export function isDefaultPlayerEnabled(): boolean {
+  return autoPlayerEnabled;
+}
+
 export const PlayerStartupSystem: System = defineSystem({
   name: 'PlayerStartupSystem',
   group: 'setup',
   update: (state) => {
+    if (!autoPlayerEnabled) return;
     const existingPlayers = playersQuery(state.world);
     if (existingPlayers.length === 0) {
       const entity = state.createEntity();

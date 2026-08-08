@@ -1,37 +1,72 @@
-import { defineSystem, defineQuery, type State, type System } from '../../core';
 import * as THREE from 'three';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
+import { isKeyDown } from '../input';
 import { MainCamera, threeCameras } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
-import { ChaseCamera, Vehicle } from './components';
+import { ChaseCamera, Track, Vehicle } from './components';
+import { getTrackSpline } from './data';
+import { createFrame } from './spline';
+import { getRaceState } from './race-state';
 
 const chaseCamQuery = defineQuery([ChaseCamera, MainCamera]);
+const trackQuery = defineQuery([Track]);
 
-// Module-temp THREE objects (no per-frame allocation).
+export type CameraModeName = 'chase' | 'close' | 'hood' | 'orbit';
+export const CAMERA_MODES: CameraModeName[] = [
+  'chase',
+  'close',
+  'hood',
+  'orbit',
+];
+
+/** Per-mode rig offsets, multiplied onto the entity's authored distance/height. */
+const MODE_RIG: Record<
+  CameraModeName,
+  { distance: number; height: number; lookAhead: number; fov: number }
+> = {
+  chase: { distance: 1, height: 1, lookAhead: 1, fov: 0 },
+  close: { distance: 0.62, height: 0.75, lookAhead: 0.8, fov: 3 },
+  hood: { distance: 0.05, height: 0.34, lookAhead: 1.6, fov: 6 },
+  orbit: { distance: 1.5, height: 1.3, lookAhead: 0, fov: -4 },
+};
+
 const _forward = new THREE.Vector3();
-const _desiredPos = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const _desired = new THREE.Vector3();
 const _lookAt = new THREE.Vector3();
-const _camQuat = new THREE.Quaternion();
-const _up = new THREE.Vector3(0, 1, 0);
-const _m = new THREE.Matrix4();
+const _quat = new THREE.Quaternion();
+const _matrix = new THREE.Matrix4();
+const _frame = createFrame();
 
-function eulerYFromQuaternion(x: number, y: number, z: number, w: number): number {
-  const siny_cosp = 2 * (w * y + z * x);
-  const cosy_cosp = 1 - 2 * (y * y + z * z);
-  return Math.atan2(siny_cosp, cosy_cosp);
+let modeKeyHeld = false;
+
+function damp(
+  current: number,
+  target: number,
+  lag: number,
+  dt: number
+): number {
+  return (
+    current + (target - current) * (1 - Math.exp(-dt / Math.max(1e-4, lag)))
+  );
 }
 
 /**
- * Racing chase camera. Unlike the third-person camera (free yaw steered by A/D),
- * this one trails the vehicle's heading: it sits behind wherever the car points,
- * smoothing position and heading with independent time constants so the view
- * feels weighted but never lost. A speed-sensitive FOV kick widens at top speed
- * for sense-of-speed juice.
+ * Racing chase camera.
  *
- * Runs in `draw`, after the generic `CameraSyncSystem`, and — critically — writes
- * the resolved pose back into the camera entity's `Transform` (not just the
- * THREE camera). The generic `CameraSyncSystem` rebuilds the THREE camera from
- * `Transform` every frame, so writing only the THREE camera is wiped next frame;
- * owning the `Transform` is the same pattern `ThirdPersonCameraSystem` uses.
+ * Three things separate it from the generic third-person camera:
+ *
+ * - **It trails the car's heading**, not a free yaw, and it lags the heading on
+ *   its own time constant, which is what makes a corner feel like a corner.
+ * - **It rides the track's up vector**, so on a banked corner the horizon tilts
+ *   with the road instead of the car appearing to fall over sideways.
+ * - **Drift is readable**: the view yaw leans toward the car's actual direction
+ *   of travel, so a slide shows the car sideways in frame rather than hiding it
+ *   behind its own rear wing.
+ *
+ * Runs in `draw` after the generic camera sync, and owns the camera entity's
+ * `Transform` (the sync system rebuilds the THREE camera from it every frame,
+ * so writing only the THREE camera would be wiped next frame).
  */
 export const ChaseCameraSystem: System = defineSystem({
   name: 'ChaseCameraSystem',
@@ -39,126 +74,189 @@ export const ChaseCameraSystem: System = defineSystem({
 
   update(state: State) {
     if (state.headless) return;
-    const dt = state.time.deltaTime;
+    const dt = Math.min(state.time.deltaTime, 0.1);
     const cams = chaseCamQuery(state.world);
+    if (cams.length === 0) return;
+
+    const trackEid = trackQuery(state.world)[0];
+    const spline =
+      trackEid !== undefined ? getTrackSpline(trackEid) : undefined;
+    const phase = getRaceState().phase;
+
+    // `C` cycles the view (edge-triggered so a held key doesn't spin through).
+    const cyclePressed = isKeyDown('KeyC');
+    const cycle = cyclePressed && !modeKeyHeld;
+    modeKeyHeld = cyclePressed;
 
     for (const cam of cams) {
       const target = ChaseCamera.target[cam];
       if (!target || !state.hasComponent(target, WorldTransform)) continue;
 
+      if (cycle) {
+        ChaseCamera.mode[cam] =
+          (ChaseCamera.mode[cam] + 1) % CAMERA_MODES.length;
+      }
+      // The podium shot after the flag: orbit the winner.
+      const modeIndex = phase === 'finished' ? 3 : ChaseCamera.mode[cam];
+      const mode = CAMERA_MODES[modeIndex] ?? 'chase';
+      const rig = MODE_RIG[mode];
+
       const tx = WorldTransform.posX[target];
       const ty = WorldTransform.posY[target];
       const tz = WorldTransform.posZ[target];
-      const tyaw = eulerYFromQuaternion(
-        WorldTransform.rotX[target],
-        WorldTransform.rotY[target],
-        WorldTransform.rotZ[target],
-        WorldTransform.rotW[target]
+      const speed = Vehicle.speed[target] || 0;
+      const maxSpeed = Vehicle.maxSpeed[target] || 1;
+      const speedFrac = Math.min(1, Math.abs(speed) / maxSpeed);
+
+      // Heading the camera wants to sit behind: the chassis heading, nudged
+      // toward the travel direction so a drift stays legible.
+      const slipAngle = Math.atan2(
+        Vehicle.lateralSpeed[target] || 0,
+        Math.max(4, Math.abs(speed))
       );
+      const targetYaw = Vehicle.heading[target] + slipAngle * 0.55;
 
-      const dist = ChaseCamera.distance[cam];
-      const height = ChaseCamera.height[cam];
-      const followLag = Math.max(1e-4, ChaseCamera.followLag[cam]);
-      const turnLag = Math.max(1e-4, ChaseCamera.turnLag[cam]);
-      const lookAhead = ChaseCamera.lookAhead[cam];
+      // Track up vector (banking); falls back to world up off-circuit.
+      let upX = 0;
+      let upY = 1;
+      let upZ = 0;
+      if (spline) {
+        const f = spline.sampleAt(Vehicle.trackS[target], _frame);
+        upX = f.ux;
+        upY = f.uy;
+        upZ = f.uz;
+      }
 
-      // First frame: snap onto the target — no startup swoop.
       if (ChaseCamera.initialized[cam] === 0) {
         ChaseCamera.followX[cam] = tx;
         ChaseCamera.followY[cam] = ty;
         ChaseCamera.followZ[cam] = tz;
-        ChaseCamera.smoothYaw[cam] = tyaw;
+        ChaseCamera.smoothYaw[cam] = targetYaw;
+        ChaseCamera.upX[cam] = upX;
+        ChaseCamera.upY[cam] = upY;
+        ChaseCamera.upZ[cam] = upZ;
+        ChaseCamera.fov[cam] = ChaseCamera.fovBase[cam] || 70;
         ChaseCamera.initialized[cam] = 1;
       }
 
-      // Position follow: low-pass on the target. Horizontal and vertical damped
-      // separately so the camera doesn't sink/rise with every chassis bounce.
-      const aXZ = 1 - Math.exp(-dt / followLag);
-      const aY = 1 - Math.exp(-dt / (followLag * 1.5));
-      ChaseCamera.followX[cam] += (tx - ChaseCamera.followX[cam]) * aXZ;
-      ChaseCamera.followY[cam] += (ty - ChaseCamera.followY[cam]) * aY;
-      ChaseCamera.followZ[cam] += (tz - ChaseCamera.followZ[cam]) * aXZ;
+      const followLag =
+        Math.max(1e-3, ChaseCamera.followLag[cam]) *
+        (mode === 'hood' ? 0.25 : 1);
+      const turnLag =
+        Math.max(1e-3, ChaseCamera.turnLag[cam]) * (mode === 'hood' ? 0.2 : 1);
 
-      // Heading trail: camera yaw chases the car yaw on the shortest arc, slower
-      // than the car turns. This is the Mario Kart "camera swings round the bend
-      // slightly after the kart" feel.
-      let yawErr = tyaw - ChaseCamera.smoothYaw[cam];
+      ChaseCamera.followX[cam] = damp(
+        ChaseCamera.followX[cam],
+        tx,
+        followLag,
+        dt
+      );
+      ChaseCamera.followY[cam] = damp(
+        ChaseCamera.followY[cam],
+        ty,
+        followLag * 1.4,
+        dt
+      );
+      ChaseCamera.followZ[cam] = damp(
+        ChaseCamera.followZ[cam],
+        tz,
+        followLag,
+        dt
+      );
+
+      let yawErr = targetYaw - ChaseCamera.smoothYaw[cam];
       while (yawErr > Math.PI) yawErr -= Math.PI * 2;
       while (yawErr < -Math.PI) yawErr += Math.PI * 2;
       ChaseCamera.smoothYaw[cam] += yawErr * (1 - Math.exp(-dt / turnLag));
 
+      ChaseCamera.upX[cam] = damp(ChaseCamera.upX[cam], upX, 0.25, dt);
+      ChaseCamera.upY[cam] = damp(ChaseCamera.upY[cam], upY, 0.25, dt);
+      ChaseCamera.upZ[cam] = damp(ChaseCamera.upZ[cam], upZ, 0.25, dt);
+      _up
+        .set(ChaseCamera.upX[cam], ChaseCamera.upY[cam], ChaseCamera.upZ[cam])
+        .normalize();
+
       const fx = ChaseCamera.followX[cam];
       const fy = ChaseCamera.followY[cam];
       const fz = ChaseCamera.followZ[cam];
-      const yaw = ChaseCamera.smoothYaw[cam];
 
-      // Desired camera position: behind the follow point along the smoothed heading,
-      // raised by `height`.
+      let yaw = ChaseCamera.smoothYaw[cam];
+      if (mode === 'orbit') {
+        ChaseCamera.orbitAngle[cam] += dt * 0.35;
+        yaw = ChaseCamera.orbitAngle[cam];
+      }
+
+      // Forward along the camera yaw, flattened onto the track plane.
       _forward.set(Math.sin(yaw), 0, Math.cos(yaw));
-      _desiredPos.set(fx - _forward.x * dist, fy + height, fz - _forward.z * dist);
+      _forward.addScaledVector(_up, -_forward.dot(_up)).normalize();
 
-      // Look-at: the follow point, pushed forward by lookAhead so the view leads
-      // the car slightly into the turn instead of staring at its rear bumper.
-      _lookAt.set(fx + _forward.x * lookAhead, fy + height * 0.25, fz + _forward.z * lookAhead);
+      const distance = (ChaseCamera.distance[cam] || 7) * rig.distance;
+      const height = (ChaseCamera.height[cam] || 3) * rig.height;
+      // Pull back a little at speed — the extra framing reads as acceleration.
+      const speedPull = 1 + speedFrac * 0.18;
 
-      // Resolve the desired camera orientation from lookAt.
-      _m.lookAt(_desiredPos, _lookAt, _up);
-      _camQuat.setFromRotationMatrix(_m);
+      _desired
+        .set(fx, fy, fz)
+        .addScaledVector(_forward, -distance * speedPull)
+        .addScaledVector(_up, height);
 
-      // --- Write the pose to the camera's Transform (the authority). --------
-      // The generic CameraSyncSystem copies Transform → THREE camera every frame;
-      // if we only touched the THREE camera, CameraSync would wipe our changes
-      // next frame (that's why the earlier version never moved off y≈0.3).
-      Transform.posX[cam] = _desiredPos.x;
-      Transform.posY[cam] = _desiredPos.y;
-      Transform.posZ[cam] = _desiredPos.z;
-      Transform.rotX[cam] = _camQuat.x;
-      Transform.rotY[cam] = _camQuat.y;
-      Transform.rotZ[cam] = _camQuat.z;
-      Transform.rotW[cam] = _camQuat.w;
+      const lookAhead = (ChaseCamera.lookAhead[cam] || 3) * rig.lookAhead;
+      _lookAt
+        .set(tx, ty, tz)
+        .addScaledVector(_forward, lookAhead + speedFrac * 4)
+        .addScaledVector(_up, height * 0.22);
+
+      _matrix.lookAt(_desired, _lookAt, _up);
+      _quat.setFromRotationMatrix(_matrix);
+
+      // Impact and speed shake, applied to the final position only.
+      const impact = Vehicle.impactTimer[target];
+      let shake = speedFrac > 0.55 ? (speedFrac - 0.55) * 0.06 : 0;
+      if (impact < 0.35) shake += (1 - impact / 0.35) * 0.22;
+      if (Vehicle.boosting[target]) shake += 0.05;
+      if (shake > 0) {
+        _desired.x += (Math.random() - 0.5) * shake;
+        _desired.y += (Math.random() - 0.5) * shake * 0.6;
+        _desired.z += (Math.random() - 0.5) * shake;
+      }
+
+      Transform.posX[cam] = _desired.x;
+      Transform.posY[cam] = _desired.y;
+      Transform.posZ[cam] = _desired.z;
+      Transform.rotX[cam] = _quat.x;
+      Transform.rotY[cam] = _quat.y;
+      Transform.rotZ[cam] = _quat.z;
+      Transform.rotW[cam] = _quat.w;
       Transform.dirty[cam] = 1;
 
-      // Also drive the THREE camera directly so this frame is correct even though
-      // CameraSync ran before us this frame.
-      const threeCam = threeCameras.get(cam);
-      const perspCam = threeCam as THREE.PerspectiveCamera | null;
+      const threeCam = threeCameras.get(cam) as
+        THREE.PerspectiveCamera | undefined;
       if (threeCam) {
-        threeCam.position.copy(_desiredPos);
-        threeCam.quaternion.copy(_camQuat);
-
-        // Speed-sensitive FOV: widen at high speed for a sense-of-speed kick.
-        if (perspCam && perspCam.isPerspectiveCamera) {
-          const speed = Vehicle.speed[target] || 0;
-          const maxSpeed = Vehicle.maxSpeed[target] || 1;
-          const speedFrac = Math.max(0, Math.min(1, Math.abs(speed) / maxSpeed));
-          const fovBase = ChaseCamera.fovBase[cam] || 70;
-          const fovBoost = ChaseCamera.fovBoost[cam] || 10;
-          const targetFov = fovBase + fovBoost * speedFrac;
-          if (perspCam.fov !== targetFov) {
-            perspCam.fov += (targetFov - perspCam.fov) * Math.min(1, 4 * dt);
-            perspCam.updateProjectionMatrix();
-          }
-
-          // Camera shake at high speed (NFS-style vibration).
-          if (speedFrac > 0.6) {
-            const shakeIntensity = (speedFrac - 0.6) * 0.03; // max ~3cm at top speed
-            const shakeX = (Math.random() - 0.5) * shakeIntensity;
-            const shakeY = (Math.random() - 0.5) * shakeIntensity * 0.5; // less vertical
-            threeCam.position.x += shakeX;
-            threeCam.position.y += shakeY;
-          }
-
-          // Nitro boost: extra FOV spike + stronger shake.
-          const nitroActive = (state as unknown as { __nitro?: { active: boolean } }).__nitro?.active;
-          if (nitroActive) {
-            perspCam.fov += 4 * dt * 60; // temporary wide FOV burst
-            perspCam.updateProjectionMatrix();
-            const nitroShake = 0.05;
-            threeCam.position.x += (Math.random() - 0.5) * nitroShake;
-            threeCam.position.y += (Math.random() - 0.5) * nitroShake * 0.3;
+        threeCam.position.copy(_desired);
+        threeCam.quaternion.copy(_quat);
+        if (threeCam.isPerspectiveCamera) {
+          const base = (ChaseCamera.fovBase[cam] || 70) + rig.fov;
+          const targetFov =
+            base +
+            (ChaseCamera.fovBoost[cam] || 10) * speedFrac +
+            (Vehicle.boosting[target] ? 6 : 0);
+          ChaseCamera.fov[cam] = damp(
+            ChaseCamera.fov[cam],
+            targetFov,
+            0.18,
+            dt
+          );
+          if (Math.abs(threeCam.fov - ChaseCamera.fov[cam]) > 0.01) {
+            threeCam.fov = ChaseCamera.fov[cam];
+            threeCam.updateProjectionMatrix();
           }
         }
       }
     }
   },
 });
+
+/** Current view name for the HUD ("CHASE", "HOOD", …). */
+export function getCameraModeName(cam: number): CameraModeName {
+  return CAMERA_MODES[ChaseCamera.mode[cam]] ?? 'chase';
+}

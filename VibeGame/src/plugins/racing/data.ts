@@ -1,229 +1,129 @@
 import type { State } from '../../core';
+import { TrackSpline, type TrackNode, type TrackSplineOptions } from './spline';
 
 /**
- * Sidecar for {@link Track} polyline data. bitecs can't hold arrays, so the
- * centerline lives here keyed by track entity id, mirroring the road plugin's
- * `getRoadData` pattern. The centerline is `[x0,z0,x1,z1,...]` in world XZ.
+ * Sidecar storage for track geometry and track-side obstacles.
+ *
+ * bitecs components hold numbers only, so the spline (and the obstacle list the
+ * vehicle controller resolves against) live here, keyed by the track entity.
  */
-// (State is referenced by the public helpers below; keep the import.)
-export interface TrackData {
-  /** Centerline as a flat XZ polyline: [x0,z0,x1,z1,...]. */
-  centerline: number[];
-  /** Half-width of the drivable corridor (m). Used by HUD/minimap + walls. */
-  halfWidth: number;
-  /** True if the centerline is a closed circuit (last point connects to first). */
-  closed: boolean;
-  /**
-   * Elevation (Y) per centerline point, same length as `centerline.length / 2`.
-   * When present, the track is 3D: the road ribbon follows these heights and the
-   * vehicle samples them so it rides up/down hills. Omitted → flat (y=0).
-   */
-  elevations?: number[];
-  /**
-   * Theme section per centerline point (e.g. 'city', 'tunnel', 'desert',
-   * 'mountain'). Same length as `centerline.length / 2`. Used by the spawner to
-   * pick props/palette per section. Omitted → single default theme.
-   */
-  sections?: string[];
+
+const splines = new Map<number, TrackSpline>();
+
+/** Build and store the circuit geometry for a track entity. */
+export function setTrackSpline(
+  _state: State,
+  entity: number,
+  nodes: TrackNode[],
+  options?: TrackSplineOptions
+): TrackSpline {
+  const spline = new TrackSpline(nodes, options);
+  splines.set(entity, spline);
+  return spline;
 }
 
-const tracks = new Map<number, TrackData>();
-
-export function setTrackData(_state: State, entity: number, data: TrackData): void {
-  tracks.set(entity, { ...data });
+/** Store an already-built spline (used by tests and by generated tracks). */
+export function attachTrackSpline(entity: number, spline: TrackSpline): void {
+  splines.set(entity, spline);
 }
 
-export function getTrackData(_state: State, entity: number): TrackData | undefined {
-  return tracks.get(entity);
+export function getTrackSpline(entity: number): TrackSpline | undefined {
+  return splines.get(entity);
+}
+
+/** The first (usually only) circuit in the scene. */
+export function getPrimaryTrackEntity(): number | undefined {
+  for (const key of splines.keys()) return key;
+  return undefined;
 }
 
 export function getAllTrackEntities(): number[] {
-  return [...tracks.keys()];
+  return [...splines.keys()];
 }
 
-/** Clear all track sidecar data (test isolation). */
 export function clearTrackData(): void {
-  tracks.clear();
+  splines.clear();
+  obstacles.length = 0;
+  obstacleGrid.clear();
 }
 
-// ---- Centerline helpers (pure math, no allocations after warmup) ----
-
-export interface TrackMetrics {
-  /** Arc length at each centerline point (point 0 = 0). */
-  cumLengths: number[];
-  /** Total length of the circuit (m). For closed tracks this includes the wrap. */
-  total: number;
-}
-
-export function computeTrackMetrics(track: TrackData): TrackMetrics {
-  const { centerline, closed } = track;
-  const n = Math.floor(centerline.length / 2);
-  const cumLengths = new Array<number>(n).fill(0);
-  let total = 0;
-  for (let i = 1; i < n; i++) {
-    const dx = centerline[i * 2]! - centerline[(i - 1) * 2]!;
-    const dz = centerline[i * 2 + 1]! - centerline[(i - 1) * 2 + 1]!;
-    total += Math.hypot(dx, dz);
-    cumLengths[i] = total;
-  }
-  if (closed && n >= 2) {
-    const dx = centerline[0]! - centerline[(n - 1) * 2]!;
-    const dz = centerline[1]! - centerline[(n - 1) * 2 + 1]!;
-    total += Math.hypot(dx, dz);
-  }
-  return { cumLengths, total };
-}
-
-export interface ProgressSample {
-  /** Monotonic distance along the track (m, grows across laps). */
-  distance: number;
-  /** Fraction of one lap (0..1). */
-  fraction: number;
-  /** Index of the centerline segment the point is on. */
-  segment: number;
-}
+// ---- Track-side obstacles ---------------------------------------------------
 
 /**
- * Project a world XZ point onto the track centerline and return its progress.
- * For closed circuits the fraction wraps in [0,1). Uses brute-force nearest-segment
- * (centerlines are short — a few hundred points max — so this is cheap and exact).
+ * A solid object cars bounce off (tyre stack, boulder, sign post).
+ *
+ * The plugin resolves these analytically instead of routing them through
+ * Rapier: vehicles are transform-driven, obstacles never move, and a circle
+ * test against a bucketed list is both cheaper and impossible to tunnel
+ * through at 200 km/h.
  */
-export function sampleProgress(
-  track: TrackData,
-  metrics: TrackMetrics,
+export interface TrackObstacle {
+  x: number;
+  z: number;
+  /** Collision radius (m). */
+  radius: number;
+  /** How much speed survives a hit (0..1). */
+  bounce: number;
+}
+
+const obstacles: TrackObstacle[] = [];
+const obstacleGrid = new Map<number, number[]>();
+const OBSTACLE_CELL = 16;
+
+function cellKey(x: number, z: number): number {
+  const cx = Math.floor(x / OBSTACLE_CELL);
+  const cz = Math.floor(z / OBSTACLE_CELL);
+  // Cantor-ish pairing into a single number key (fine for the ranges we use).
+  return cx * 73856093 + cz * 19349663;
+}
+
+/** Register a solid track-side object. Returns its index. */
+export function addTrackObstacle(
   x: number,
   z: number,
-  prevSegment = 0
-): ProgressSample {
-  const { centerline, closed } = track;
-  const n = Math.floor(centerline.length / 2);
-  if (n < 2) return { distance: 0, fraction: 0, segment: 0 };
-
-  // Search a window around the previous segment first (cheap common case), then
-  // fall back to a full scan. The window catches a fast-mover without missing it.
-  let bestSeg = prevSegment;
-  let bestT = 0;
-  let bestDist = Infinity;
-
-  const consider = (i: number): void => {
-    const i0 = i % n;
-    const i1 = closed ? (i + 1) % n : Math.min(i + 1, n - 1);
-    if (i0 === i1) return;
-    const ax = centerline[i0 * 2]!;
-    const az = centerline[i0 * 2 + 1]!;
-    const bx = centerline[i1 * 2]!;
-    const bz = centerline[i1 * 2 + 1]!;
-    const dx = bx - ax;
-    const dz = bz - az;
-    const len2 = dx * dx + dz * dz;
-    let t = len2 > 0 ? ((x - ax) * dx + (z - az) * dz) / len2 : 0;
-    t = Math.max(0, Math.min(1, t));
-    const px = ax + dx * t;
-    const pz = az + dz * t;
-    const d = (x - px) ** 2 + (z - pz) ** 2;
-    if (d < bestDist) {
-      bestDist = d;
-      bestSeg = i0;
-      bestT = t;
-    }
-  };
-
-  const window = 6;
-  for (let k = -window; k <= window; k++) consider(prevSegment + k);
-  // Full scan: guarantees we never lose the car on a cut/reset.
-  for (let i = 0; i < n - (closed ? 0 : 1); i++) consider(i);
-
-  const segLenBase = bestSeg > 0 ? metrics.cumLengths[bestSeg]! : 0;
-  // Distance within this segment.
-  const i0 = bestSeg;
-  const i1 = closed ? (bestSeg + 1) % n : Math.min(bestSeg + 1, n - 1);
-  let segLen = 0;
-  if (i0 !== i1) {
-    const dx = centerline[i1 * 2]! - centerline[i0 * 2]!;
-    const dz = centerline[i1 * 2 + 1]! - centerline[i0 * 2 + 1]!;
-    segLen = Math.hypot(dx, dz);
-  }
-  const lapDistance = segLenBase + bestT * segLen;
-  const total = metrics.total > 0 ? metrics.total : 1;
-  return {
-    distance: lapDistance,
-    fraction: closed ? lapDistance / total : Math.min(0.9999, lapDistance / total),
-    segment: bestSeg,
-  };
-}
-
-/**
- * Sample the track elevation at a world XZ point. Projects onto the centerline
- * (nearest segment, same as {@link sampleProgress}) then interpolates the per-point
- * elevation. Returns 0 for flat tracks (no `elevations`).
- */
-export function sampleElevation(
-  track: TrackData,
-  x: number,
-  z: number
+  radius: number,
+  bounce = 0.45
 ): number {
-  const { centerline, closed, elevations } = track;
-  if (!elevations || elevations.length === 0) return 0;
-  const n = Math.floor(centerline.length / 2);
-  if (n < 2) return 0;
+  const index = obstacles.length;
+  obstacles.push({ x, z, radius, bounce });
+  const key = cellKey(x, z);
+  const bucket = obstacleGrid.get(key);
+  if (bucket) bucket.push(index);
+  else obstacleGrid.set(key, [index]);
+  return index;
+}
 
-  // Find the nearest segment (brute force; centerlines are short).
-  let bestSeg = 0;
-  let bestT = 0;
-  let bestDist = Infinity;
-  const count = closed ? n : n - 1;
-  for (let i = 0; i < count; i++) {
-    const i1 = (i + 1) % n;
-    const ax = centerline[i * 2]!;
-    const az = centerline[i * 2 + 1]!;
-    const bx = centerline[i1 * 2]!;
-    const bz = centerline[i1 * 2 + 1]!;
-    const dx = bx - ax;
-    const dz = bz - az;
-    const len2 = dx * dx + dz * dz;
-    let t = len2 > 0 ? ((x - ax) * dx + (z - az) * dz) / len2 : 0;
-    t = Math.max(0, Math.min(1, t));
-    const px = ax + dx * t;
-    const pz = az + dz * t;
-    const d = (x - px) ** 2 + (z - pz) ** 2;
-    if (d < bestDist) {
-      bestDist = d;
-      bestSeg = i;
-      bestT = t;
-    }
-  }
+export function getTrackObstacles(): readonly TrackObstacle[] {
+  return obstacles;
+}
 
-  const i1 = closed ? (bestSeg + 1) % n : Math.min(bestSeg + 1, n - 1);
-  const e0 = elevations[bestSeg] ?? 0;
-  const e1 = elevations[i1] ?? e0;
-  return e0 + (e1 - e0) * bestT;
+export function clearTrackObstacles(): void {
+  obstacles.length = 0;
+  obstacleGrid.clear();
 }
 
 /**
- * Sample the section theme at a world XZ point (nearest centerline point).
- * Returns the default theme if no sections are defined.
+ * Visit every obstacle whose cell touches (x, z). The callback receives the
+ * obstacle; returning `true` stops the iteration.
  */
-export function sampleSection(
-  track: TrackData,
+export function forEachNearbyObstacle(
   x: number,
   z: number,
-  fallback = 'default'
-): string {
-  const { centerline, sections } = track;
-  if (!sections || sections.length === 0) return fallback;
-  const n = Math.floor(centerline.length / 2);
-  if (n < 1) return fallback;
-
-  let bestSeg = 0;
-  let bestDist = Infinity;
-  for (let i = 0; i < n; i++) {
-    const px = centerline[i * 2]!;
-    const pz = centerline[i * 2 + 1]!;
-    const d = (x - px) ** 2 + (z - pz) ** 2;
-    if (d < bestDist) {
-      bestDist = d;
-      bestSeg = i;
+  fn: (o: TrackObstacle) => boolean | void
+): void {
+  for (let oz = -1; oz <= 1; oz++) {
+    for (let ox = -1; ox <= 1; ox++) {
+      const bucket = obstacleGrid.get(
+        cellKey(x + ox * OBSTACLE_CELL, z + oz * OBSTACLE_CELL)
+      );
+      if (!bucket) continue;
+      for (let i = 0; i < bucket.length; i++) {
+        const o = obstacles[bucket[i]!];
+        if (o && fn(o) === true) return;
+      }
     }
   }
-  return sections[bestSeg] ?? fallback;
 }
+
+export type { TrackNode, TrackSplineOptions };
+export { TrackSpline };

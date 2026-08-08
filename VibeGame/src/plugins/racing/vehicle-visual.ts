@@ -1,41 +1,226 @@
 import * as THREE from 'three';
 import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { getScene } from '../rendering';
-import { createGLTFLoader } from '../../extras/gltf-bridge';
+import {
+  createGLTFLoader,
+  ensureKTX2LoaderReady,
+} from '../../extras/gltf-bridge';
+import { logger } from '../../core/utils/logger';
+import { fitModel } from '../../extras/model-fit';
 import { WorldTransform } from '../transforms';
-import { Vehicle, VehicleModelUrls, VehicleModelYaw } from './components';
+import {
+  Vehicle,
+  VehicleColors,
+  VehicleModelLength,
+  VehicleModelUrls,
+  VehicleModelYaw,
+} from './components';
 
 const visualQuery = defineQuery([Vehicle]);
 const built = new Map<number, ChassisVisual>();
 
 interface ChassisVisual {
+  /** Root, driven by the entity world transform. */
   group: THREE.Group;
-  body: THREE.Mesh;
-  wheels: THREE.Mesh[];
-  rollPivot: THREE.Group;
-  /** GLB chassis (when `<Vehicle model-url=…>` is set); replaces the procedural body. */
+  /** Child pivot carrying roll/pitch so juice never fights the physics pose. */
+  pivot: THREE.Group;
+  procedural: THREE.Group;
+  wheels: THREE.Object3D[];
+  steerWheels: THREE.Object3D[];
+  brakeLights: THREE.Mesh[];
+  exhaust: THREE.Mesh | null;
+  shadow: THREE.Mesh;
   modelRoot: THREE.Group | null;
 }
 
-// NFS-inspired palette: metallic crimson body, carbon roof, gunmetal accents.
-const BODY_COLOR = 0xcc2233;      // vibrant racing red
-const BODY_SECONDARY = 0x991122;  // darker red for depth
-const ROOF_COLOR = 0x1a1a1a;     // carbon black
-const WHEEL_COLOR = 0x0a0a0a;     // gloss black tires
-const WHEEL_HUB = 0xcccccc;       // silver rims
-const HEADLIGHT_COLOR = 0xffffee; // warm white
-const TAILLIGHT_COLOR = 0xff0000; // bright red
-const GLASS_COLOR = 0x88ccff;     // tinted windshield
-const CHROME_COLOR = 0xeeeeee;    // chrome trim/exhaust
+const WHEEL_COLOR = 0x141416;
+const RIM_COLOR = 0xb9bec8;
+const GLASS_COLOR = 0x9fd0ff;
+
+/** Default chassis length used to normalise generated GLBs (m). */
+const DEFAULT_MODEL_LENGTH = 2.6;
+
+function makeMaterial(
+  color: number,
+  options: Partial<THREE.MeshStandardMaterialParameters> = {}
+) {
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.45,
+    metalness: 0.25,
+    ...options,
+  });
+}
+
+/** A readable low-poly kart, used when no GLB is supplied (or while it loads). */
+function buildProceduralChassis(color: number): {
+  group: THREE.Group;
+  wheels: THREE.Object3D[];
+  steerWheels: THREE.Object3D[];
+  brakeLights: THREE.Mesh[];
+  exhaust: THREE.Mesh;
+} {
+  const group = new THREE.Group();
+  const bodyMat = makeMaterial(color, { roughness: 0.35, metalness: 0.35 });
+  const darkMat = makeMaterial(0x1b1d22, { roughness: 0.6, metalness: 0.2 });
+
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.42, 3.1), bodyMat);
+  hull.position.y = 0.44;
+  hull.castShadow = true;
+  group.add(hull);
+
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.26, 0.9), bodyMat);
+  nose.position.set(0, 0.34, 1.75);
+  nose.castShadow = true;
+  group.add(nose);
+
+  const cockpit = new THREE.Mesh(
+    new THREE.BoxGeometry(1.05, 0.42, 1.1),
+    darkMat
+  );
+  cockpit.position.set(0, 0.76, -0.15);
+  cockpit.castShadow = true;
+  group.add(cockpit);
+
+  const screen = new THREE.Mesh(
+    new THREE.BoxGeometry(0.95, 0.3, 0.06),
+    makeMaterial(GLASS_COLOR, {
+      roughness: 0.1,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 0.55,
+    })
+  );
+  screen.position.set(0, 0.82, 0.42);
+  screen.rotation.x = -0.35;
+  group.add(screen);
+
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 0.42), darkMat);
+  wing.position.set(0, 0.95, -1.6);
+  wing.castShadow = true;
+  group.add(wing);
+  for (const side of [-1, 1]) {
+    const strut = new THREE.Mesh(
+      new THREE.BoxGeometry(0.09, 0.34, 0.12),
+      darkMat
+    );
+    strut.position.set(side * 0.6, 0.78, -1.6);
+    group.add(strut);
+  }
+
+  const brakeLights: THREE.Mesh[] = [];
+  for (const side of [-1, 1]) {
+    const light = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.12, 0.06),
+      new THREE.MeshStandardMaterial({
+        color: 0x6a0d12,
+        emissive: 0xff2233,
+        emissiveIntensity: 0.15,
+        roughness: 0.4,
+      })
+    );
+    light.position.set(side * 0.45, 0.52, -1.57);
+    group.add(light);
+    brakeLights.push(light);
+  }
+
+  const exhaust = new THREE.Mesh(
+    new THREE.ConeGeometry(0.16, 0.9, 8, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0x66ccff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+  );
+  exhaust.rotation.x = Math.PI / 2;
+  exhaust.position.set(0, 0.45, -1.9);
+  group.add(exhaust);
+
+  const wheels: THREE.Object3D[] = [];
+  const steerWheels: THREE.Object3D[] = [];
+  const tyreGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.3, 14);
+  tyreGeo.rotateZ(Math.PI / 2);
+  const rimGeo = new THREE.CylinderGeometry(0.19, 0.19, 0.32, 10);
+  rimGeo.rotateZ(Math.PI / 2);
+  const tyreMat = makeMaterial(WHEEL_COLOR, { roughness: 0.9, metalness: 0 });
+  const rimMat = makeMaterial(RIM_COLOR, { roughness: 0.3, metalness: 0.8 });
+
+  for (const [sx, sz, front] of [
+    [-1, 1, true],
+    [1, 1, true],
+    [-1, -1, false],
+    [1, -1, false],
+  ] as [number, number, boolean][]) {
+    // Steering pivot → spin pivot → mesh, so steer and roll never mix.
+    const steerPivot = new THREE.Group();
+    steerPivot.position.set(sx * 0.78, 0.34, sz * 1.12);
+    const spin = new THREE.Group();
+    const tyre = new THREE.Mesh(tyreGeo, tyreMat);
+    tyre.castShadow = true;
+    const rim = new THREE.Mesh(rimGeo, rimMat);
+    rim.position.x = sx * 0.02;
+    spin.add(tyre, rim);
+    steerPivot.add(spin);
+    group.add(steerPivot);
+    wheels.push(spin);
+    if (front) steerWheels.push(steerPivot);
+  }
+
+  return { group, wheels, steerWheels, brakeLights, exhaust };
+}
+
+/** Soft contact shadow: cheap, and it stops cars looking like they hover. */
+function buildShadow(): THREE.Mesh {
+  const geo = new THREE.PlaneGeometry(2.4, 3.6);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    transparent: true,
+    opacity: 0.32,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.y = 0.02;
+  mesh.renderOrder = -1;
+  return mesh;
+}
 
 /**
- * Builds a low-pogy arcade car (a body box + cabin + four wheels) for each
- * `Vehicle` entity and updates wheel rotation + body roll/pitch every frame
- * from the {@link Vehicle} juice state. This keeps the car readable from the
- * chase cam — it leans into turns, dives under braking, and the wheels spin.
+ * Normalise a generated GLB into a chassis the game can use.
  *
- * The visual group is a child of a roll-pivot so we can roll the chassis without
- * fighting the physics transform (which the transforms plugin owns).
+ * Delegates to {@link fitModel}, which measures the model's heading from its
+ * own geometry (a PCA of the vertex cloud) rather than from its bounding box.
+ * A kart measures 2.38 m across and 2.69 m long, so a box-based guess is a coin
+ * flip — and a wrong flip is a car that drives sideways down the straight.
+ */
+function normaliseModel(
+  root: THREE.Object3D,
+  targetLength: number,
+  yawDeg: number
+): void {
+  fitModel(root, {
+    align: 'forward',
+    fit: 'length',
+    size: targetLength,
+    yawDegrees: yawDeg,
+    ground: true,
+    // A car is barely elongated in plan view (a kart is 2.4 m wide and 2.7 m
+    // long), so the measured axis is not trustworthy enough to rotate by: a
+    // wide rear axle is enough to flip it. Chassis models keep the orientation
+    // they were authored with, and `model-yaw` is the knob that corrects it.
+    minElongation: 1.6,
+    standUp: 'never',
+  });
+}
+
+const WHEEL_NAME = /wheel|tyre|tire|rim/i;
+
+/**
+ * Draws every vehicle: a procedural kart by default, or a normalised GLB when
+ * one is supplied, plus the juice the controller computes (wheel spin, steering
+ * angle, body roll/pitch, brake lights, boost flame, contact shadow).
  */
 export const VehicleVisualSystem: System = defineSystem({
   name: 'VehicleVisualSystem',
@@ -45,24 +230,19 @@ export const VehicleVisualSystem: System = defineSystem({
     if (state.headless) return;
     const scene = getScene(state);
     if (!scene) return;
-    const vehicles = visualQuery(state.world);
 
-    for (const eid of vehicles) {
+    for (const eid of visualQuery(state.world)) {
       let v = built.get(eid);
       if (!v) {
-        v = buildChassis();
+        // Chassis GLBs from the asset pipeline ship KTX2 textures; the loader
+        // needs the transcoder wired from the live renderer before the first
+        // load, or every model fails with "setKTX2Loader must be called".
+        ensureKTX2LoaderReady(state);
+        v = createVisual(eid);
         built.set(eid, v);
         scene.add(v.group);
-        const modelUrl = VehicleModelUrls.get(eid);
-        if (modelUrl) {
-          // GLB chassis: hide the procedural body and load the kart model.
-          v.body.visible = false;
-          for (const w of v.wheels) w.visible = false;
-          loadModelChassis(v, modelUrl, VehicleModelYaw.get(eid) ?? 0);
-        }
       }
 
-      // Drive the group's position/orientation from the world transform.
       v.group.position.set(
         WorldTransform.posX[eid],
         WorldTransform.posY[eid],
@@ -75,390 +255,143 @@ export const VehicleVisualSystem: System = defineSystem({
         WorldTransform.rotW[eid]
       );
 
-      // Roll/pitch live on the inner pivot so the outer group stays physics-aligned.
-      v.rollPivot.rotation.z = Vehicle.roll[eid];
-      v.rollPivot.rotation.x = Vehicle.pitch[eid];
+      v.pivot.rotation.z = Vehicle.roll[eid];
+      v.pivot.rotation.x = Vehicle.pitch[eid];
 
-      // Spin the wheels (visual only; we don't simulate ground contact).
       const spin = Vehicle.wheelSpin[eid];
-      for (const w of v.wheels) w.rotation.x = spin;
-      spinModelWheels(v, spin);
+      for (const wheel of v.wheels) wheel.rotation.x = spin;
+      for (const steer of v.steerWheels)
+        steer.rotation.y = -Vehicle.wheelSteer[eid];
+
+      const braking =
+        Vehicle.brakeInput[eid] > 0 || Vehicle.handbrake[eid] === 1;
+      for (const light of v.brakeLights) {
+        const mat = light.material as THREE.MeshStandardMaterial;
+        mat.emissiveIntensity = braking ? 2.4 : 0.15;
+      }
+
+      if (v.exhaust) {
+        const mat = v.exhaust.material as THREE.MeshBasicMaterial;
+        const want = Vehicle.boosting[eid] ? 0.75 : 0;
+        mat.opacity += (want - mat.opacity) * 0.25;
+        v.exhaust.visible = mat.opacity > 0.02;
+        if (v.exhaust.visible) {
+          const flicker = 0.85 + Math.random() * 0.35;
+          v.exhaust.scale.set(flicker, 1, flicker);
+        }
+      }
+
+      // The contact shadow stays on the ground when the car jumps.
+      const air = Math.max(
+        0,
+        Vehicle.airHeight[eid] - (Vehicle.rideHeight[eid] || 0.35)
+      );
+      v.shadow.position.y = 0.02 - air;
+      const shadowMat = v.shadow.material as THREE.MeshBasicMaterial;
+      shadowMat.opacity = Math.max(0.05, 0.32 - air * 0.05);
     }
   },
 
   dispose() {
     for (const v of built.values()) {
-      v.body.geometry.dispose();
-      (v.body.material as THREE.Material).dispose();
-      for (const w of v.wheels) {
-        w.geometry.dispose();
-        (w.material as THREE.Material).dispose();
-      }
-      v.modelRoot?.removeFromParent();
       v.group.parent?.remove(v.group);
+      v.group.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.isMesh) {
+          mesh.geometry?.dispose();
+          const mat = mesh.material as THREE.Material | THREE.Material[];
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+          else mat?.dispose();
+        }
+      });
     }
     built.clear();
   },
 });
 
-/**
- * Load a GLB chassis (from `model-url`) into the vehicle's roll pivot.
- * The model's base is snapped to the ground plane (assets with centre pivots
- * are shifted down by half their height); `modelYaw` rotates it (degrees) so
- * the nose faces +Z. GLB nodes named `wheel`/`tire`/`tyre`/`rim`
- * (case-insensitive) spin with the chassis wheelSpin.
- */
-function loadModelChassis(v: ChassisVisual, url: string, modelYawDeg: number): void {
+function createVisual(eid: number): ChassisVisual {
+  const group = new THREE.Group();
+  group.name = `Vehicle:${eid}`;
+  const pivot = new THREE.Group();
+  group.add(pivot);
+
+  const color = VehicleColors.get(eid) ?? 0xcc2233;
+  const proc = buildProceduralChassis(color);
+  pivot.add(proc.group);
+
+  const shadow = buildShadow();
+  group.add(shadow);
+
+  const visual: ChassisVisual = {
+    group,
+    pivot,
+    procedural: proc.group,
+    wheels: proc.wheels,
+    steerWheels: proc.steerWheels,
+    brakeLights: proc.brakeLights,
+    exhaust: proc.exhaust,
+    shadow,
+    modelRoot: null,
+  };
+
+  const url = VehicleModelUrls.get(eid);
+  if (url) loadModel(visual, eid, url);
+  return visual;
+}
+
+function loadModel(visual: ChassisVisual, eid: number, url: string): void {
   createGLTFLoader()
     .loadAsync(url)
     .then((gltf) => {
       const root = gltf.scene;
+      normaliseModel(
+        root,
+        VehicleModelLength.get(eid) ?? DEFAULT_MODEL_LENGTH,
+        VehicleModelYaw.get(eid) ?? 0
+      );
       root.traverse((o) => {
-        if ((o as THREE.Mesh).isMesh) {
-          o.castShadow = true;
-          o.receiveShadow = true;
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh) {
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
         }
       });
-      const box = new THREE.Box3().setFromObject(root);
-      const sizeX = box.max.x - box.min.x;
-      const sizeY = box.max.y - box.min.y;
-      const sizeZ = box.max.z - box.min.z;
 
-      // Some generated assets come out "standing up" (height ≫ length, e.g. a
-      // kart exported Z-up). If the model is much taller than it is long, lay it
-      // down: rotate X −90° so the Y span becomes the Z (length) span. Then the
-      // kart's length runs along +Z like the physics forward expects.
-      if (sizeY > sizeZ * 1.4 && sizeY > sizeX * 0.9) {
-        root.rotation.x = -Math.PI / 2;
-        // Re-measure after the rotation so the base-fit below is correct.
-        root.updateMatrixWorld(true);
-        const box2 = new THREE.Box3().setFromObject(root);
-        if (Math.abs(box2.min.y) > 0.05 && box2.max.y - box2.min.y > 0) {
-          root.position.y -= box2.min.y;
-        }
-      } else {
-        if (Math.abs(box.min.y) > 0.05 && sizeY > 0) {
-          root.position.y -= box.min.y;
-        }
+      // The GLB replaces the procedural kart outright. Mixing the two — a
+      // generated chassis sitting on top of four procedural wheels — is how a
+      // car ends up with eight wheels and two bodies in the same place.
+      const modelWheels: THREE.Object3D[] = [];
+      root.traverse((o) => {
+        if (WHEEL_NAME.test(o.name)) modelWheels.push(o);
+      });
+
+      // Keep the boost flame: re-parent it to the pivot and sit it behind the
+      // model's own tail so nitro still reads on a GLB chassis.
+      const modelBox = new THREE.Box3().setFromObject(root);
+      if (visual.exhaust) {
+        visual.pivot.add(visual.exhaust);
+        visual.exhaust.position.set(
+          0,
+          modelBox.max.y * 0.45,
+          modelBox.min.z - 0.15
+        );
       }
-      if (modelYawDeg !== 0) {
-        root.rotation.y = THREE.MathUtils.degToRad(modelYawDeg);
-      }
-      v.modelRoot = root;
-      v.rollPivot.add(root);
+
+      visual.procedural.visible = false;
+      visual.procedural.parent?.remove(visual.procedural);
+      visual.brakeLights = [];
+      visual.steerWheels = [];
+      // Only nodes the model itself provides can spin; a bodyshell with the
+      // wheels modelled into it simply has none, and that is fine.
+      visual.wheels = modelWheels;
+
+      visual.pivot.add(root);
+      visual.modelRoot = root;
     })
     .catch((err) => {
-      // Model failed to load — keep the procedural chassis visible.
-      v.body.visible = true;
-      for (const w of v.wheels) w.visible = true;
-      console.warn(`[racing] vehicle model load failed: ${url}`, err);
+      // Keep the procedural chassis — a missing GLB must not delete the car —
+      // but say so, because a silently ignored model is how the old example
+      // shipped "working" with none of its assets on screen.
+      logger.warn(`[Racing] chassis GLB failed to load: ${url}`, err);
     });
-}
-
-/** Spin GLB wheel nodes (named wheel/tire/tyre/rim) around their local X axis. */
-function spinModelWheels(v: ChassisVisual, spin: number): void {
-  if (!v.modelRoot) return;
-  v.modelRoot.traverse((o) => {
-    if (/(wheel|tire|tyre|rim)/.test(o.name.toLowerCase())) {
-      o.rotation.x = spin;
-    }
-  });
-}
-
-function buildChassis(): ChassisVisual {
-  const group = new THREE.Group();
-  const rollPivot = new THREE.Group();
-  group.add(rollPivot);
-
-  // --- Materials (NFS-style) -----------------------------------------------
-  const paintMat = new THREE.MeshStandardMaterial({
-    color: BODY_COLOR,
-    roughness: 0.18,
-    metalness: 0.82,
-    envMapIntensity: 1.4,
-  });
-  const darkPaintMat = new THREE.MeshStandardMaterial({
-    color: BODY_SECONDARY,
-    roughness: 0.25,
-    metalness: 0.7,
-  });
-  const carbonMat = new THREE.MeshStandardMaterial({
-    color: ROOF_COLOR,
-    roughness: 0.32,
-    metalness: 0.55,
-  });
-  const glassMat = new THREE.MeshStandardMaterial({
-    color: GLASS_COLOR,
-    roughness: 0.05,
-    metalness: 0.9,
-    transparent: true,
-    opacity: 0.5,
-  });
-  const chromeMat = new THREE.MeshStandardMaterial({
-    color: CHROME_COLOR,
-    roughness: 0.08,
-    metalness: 1.0,
-  });
-  const tailLightMat = new THREE.MeshStandardMaterial({
-    color: TAILLIGHT_COLOR,
-    emissive: TAILLIGHT_COLOR,
-    emissiveIntensity: 0.6,
-    roughness: 0.3,
-  });
-  const headLightMat = new THREE.MeshStandardMaterial({
-    color: HEADLIGHT_COLOR,
-    emissive: HEADLIGHT_COLOR,
-    emissiveIntensity: 0.4,
-    roughness: 0.2,
-  });
-
-  // --- Main Body (side profile extruded along X = width) --------------------
-  // The shape is the car's SIDE PROFILE in the XY plane: x = length
-  // (rear → nose), y = height (0 → roofline). We extrude along Z (width) then
-  // rotate Y −90° so the finished body has: length→Z, height→Y, width→X.
-  // (three.js is y-up: height must live on Y, never on X or Z.)
-  const bodyShape = new THREE.Shape();
-  bodyShape.moveTo(-1.05, 0.02);   // rear bottom
-  bodyShape.lineTo(-1.0, 0.24);    // rear bumper
-  bodyShape.lineTo(-0.88, 0.36);   // rear fender top
-  bodyShape.lineTo(-0.55, 0.44);   // rear deck
-  bodyShape.lineTo(-0.2, 0.46);    // roof peak
-  bodyShape.lineTo(0.25, 0.44);    // windshield base
-  bodyShape.lineTo(0.55, 0.36);    // hood
-  bodyShape.lineTo(0.88, 0.28);    // front fender
-  bodyShape.lineTo(1.02, 0.18);    // nose top
-  bodyShape.lineTo(1.05, 0.06);    // nose tip
-  bodyShape.lineTo(1.05, 0.02);    // nose bottom
-  bodyShape.lineTo(-1.05, 0.02);   // close
-
-  const extrudeSettings = {
-    depth: 0.92,
-    bevelEnabled: true,
-    bevelThickness: 0.03,
-    bevelSize: 0.03,
-    bevelSegments: 2,
-  };
-  const bodyGeo = new THREE.ExtrudeGeometry(bodyShape, extrudeSettings);
-  bodyGeo.center();
-  // Rotate the extruded profile so height lands on Y and length on Z:
-  // rotateY(-π/2) maps (x, y, z) → (-z, y, x).
-  bodyGeo.rotateY(-Math.PI / 2);
-  // After center() the height spans [-0.22, 0.22]; lift so the sills sit at
-  // ~0.12 above the ground (between the wheel hubs).
-  bodyGeo.translate(0, 0.34, 0);
-  const body = new THREE.Mesh(bodyGeo, paintMat);
-  body.castShadow = true;
-  rollPivot.add(body);
-
-  // --- Hood / Front clamshell (separate piece with vents) -------------------
-  const hoodGeo = new THREE.BoxGeometry(0.92, 0.08, 0.85);
-  const hood = new THREE.Mesh(hoodGeo, darkPaintMat);
-  hood.position.set(0, 0.46, 0.65);
-  hood.rotation.x = -0.06;
-  hood.castShadow = true;
-  rollPivot.add(hood);
-
-  // Hood vents (two recessed lines)
-  const ventGeo = new THREE.BoxGeometry(0.22, 0.02, 0.35);
-  const ventMat = carbonMat;
-  const ventL = new THREE.Mesh(ventGeo, ventMat);
-  ventL.position.set(-0.22, 0.51, 0.62);
-  const ventR = new THREE.Mesh(ventGeo, ventMat);
-  ventR.position.set(0.22, 0.51, 0.62);
-  rollPivot.add(ventL, ventR);
-
-  // --- Cabin / Greenhouse --------------------------------------------------
-  const cabinGeo = new THREE.BoxGeometry(0.78, 0.36, 0.95);
-  const cabin = new THREE.Mesh(cabinGeo, carbonMat);
-  cabin.position.set(0, 0.72, -0.12);
-  cabin.castShadow = true;
-  rollPivot.add(cabin);
-
-  // Windshield (angled)
-  const windshieldGeo = new THREE.PlaneGeometry(0.72, 0.34);
-  const windshield = new THREE.Mesh(windshieldGeo, glassMat);
-  windshield.position.set(0, 0.70, 0.30);
-  windshield.rotation.x = -0.45;
-  rollPivot.add(windshield);
-
-  // Rear window
-  const rearWindowGeo = new THREE.PlaneGeometry(0.68, 0.26);
-  const rearWindow = new THREE.Mesh(rearWindowGeo, glassMat);
-  rearWindow.position.set(0, 0.68, -0.55);
-  rearWindow.rotation.x = 0.55;
-  rollPivot.add(rearWindow);
-
-  // --- Side Skirts & Rocker Panels -----------------------------------------
-  const skirtGeo = new THREE.BoxGeometry(0.04, 0.14, 1.7);
-  const skirtL = new THREE.Mesh(skirtGeo, darkPaintMat);
-  skirtL.position.set(-0.52, 0.24, 0.0);
-  const skirtR = new THREE.Mesh(skirtGeo, darkPaintMat);
-  skirtR.position.set(0.52, 0.24, 0.0);
-  rollPivot.add(skirtL, skirtR);
-
-  // --- Headlights (angular, aggressive) ------------------------------------
-  const hlGeo = new THREE.BoxGeometry(0.18, 0.08, 0.04);
-  const hlL = new THREE.Mesh(hlGeo, headLightMat);
-  hlL.position.set(-0.28, 0.24, 1.05);
-  const hlR = new THREE.Mesh(hlGeo, headLightMat);
-  hlR.position.set(0.28, 0.24, 1.05);
-  rollPivot.add(hlL, hlR);
-
-  // Headlight housings (chrome surround)
-  const hlHousingGeo = new THREE.BoxGeometry(0.20, 0.10, 0.03);
-  const hlHousingMat = chromeMat;
-  const hhlL = new THREE.Mesh(hlHousingGeo, hlHousingMat);
-  hhlL.position.set(-0.28, 0.23, 1.07);
-  const hhlR = new THREE.Mesh(hlHousingGeo, hlHousingMat);
-  hhlR.position.set(0.28, 0.23, 1.07);
-  rollPivot.add(hhlL, hhlR);
-
-  // --- Taillights (thin LED strip across rear) ----------------------------
-  const tlStripGeo = new THREE.BoxGeometry(0.96, 0.03, 0.02);
-  const tlStrip = new THREE.Mesh(tlStripGeo, tailLightMat);
-  tlStrip.position.set(0, 0.38, -1.01);
-  rollPivot.add(tlStrip);
-
-  // --- Grille / Lower intake ----------------------------------------------
-  const grilleGeo = new THREE.BoxGeometry(0.6, 0.12, 0.03);
-  const grilleMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 });
-  const grille = new THREE.Mesh(grilleGeo, grilleMat);
-  grille.position.set(0, 0.22, 1.03);
-  rollPivot.add(grille);
-
-  // --- Spoiler (large racing wing) ----------------------------------------
-  const wingGeo = new THREE.BoxGeometry(1.12, 0.04, 0.28);
-  const wing = new THREE.Mesh(wingGeo, carbonMat);
-  wing.position.set(0, 0.92, -0.92);
-  rollPivot.add(wing);
-
-  // Spoiler stands
-  const standGeo = new THREE.BoxGeometry(0.05, 0.28, 0.06);
-  const standL = new THREE.Mesh(standGeo, carbonMat);
-  standL.position.set(-0.42, 0.78, -0.92);
-  const standR = new THREE.Mesh(standGeo, carbonMat);
-  standR.position.set(0.42, 0.78, -0.92);
-  rollPivot.add(standL, standR);
-
-  // --- Side Mirrors -------------------------------------------------------
-  const mirrorGeo = new THREE.BoxGeometry(0.06, 0.06, 0.09);
-  const mirrorL = new THREE.Mesh(mirrorGeo, darkPaintMat);
-  mirrorL.position.set(-0.56, 0.58, 0.20);
-  const mirrorR = new THREE.Mesh(mirrorGeo, darkPaintMat);
-  mirrorR.position.set(0.56, 0.58, 0.20);
-  rollPivot.add(mirrorL, mirrorR);
-
-  // --- Exhaust Pipes (dual chrome) ----------------------------------------
-  const exhaustGeo = new THREE.CylinderGeometry(0.035, 0.04, 0.18, 8);
-  exhaustGeo.rotateZ(Math.PI / 2);
-  const exhaustL = new THREE.Mesh(exhaustGeo, chromeMat);
-  exhaustL.position.set(-0.18, 0.22, -1.08);
-  const exhaustR = new THREE.Mesh(exhaustGeo, chromeMat);
-  exhaustR.position.set(0.18, 0.22, -1.08);
-  rollPivot.add(exhaustL, exhaustR);
-
-  // --- Wheels (low-profile performance tires + multi-spoke rims) ----------
-  const wheels: THREE.Mesh[] = [];
-  const wheelGeo = new THREE.CylinderGeometry(0.33, 0.33, 0.26, 20);
-  wheelGeo.rotateZ(Math.PI / 2);
-  const tireMat = new THREE.MeshStandardMaterial({
-    color: WHEEL_COLOR,
-    roughness: 0.92,
-    metalness: 0.02,
-  });
-
-  // Rim: 5-spoke star pattern using multiple boxes
-  function buildRim(): THREE.Group {
-    const rimGroup = new THREE.Group();
-    const hubGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.27, 12);
-    hubGeo.rotateZ(Math.PI / 2);
-    const hub = new THREE.Mesh(hubGeo, new THREE.MeshStandardMaterial({
-      color: WHEEL_HUB, roughness: 0.22, metalness: 0.88,
-    }));
-    rimGroup.add(hub);
-
-    // 5 spokes — the tire cylinder's axis is X (after rotateZ), so the wheel
-    // face is the YZ plane: place spokes radially in YZ (rotation.x).
-    const spokeGeo = new THREE.BoxGeometry(0.05, 0.26, 0.16);
-    const spokeMat = new THREE.MeshStandardMaterial({
-      color: WHEEL_HUB, roughness: 0.18, metalness: 0.92,
-    });
-    for (let i = 0; i < 5; i++) {
-      const spoke = new THREE.Mesh(spokeGeo, spokeMat);
-      const angle = (i / 5) * Math.PI * 2;
-      spoke.position.set(0, Math.cos(angle) * 0.17, Math.sin(angle) * 0.17);
-      spoke.rotation.x = angle;
-      rimGroup.add(spoke);
-    }
-    return rimGroup;
-  }
-
-  const offsets: [number, number, number][] = [
-    [-0.54, 0.33, 0.68],
-    [0.54, 0.33, 0.68],
-    [-0.54, 0.33, -0.68],
-    [0.54, 0.33, -0.68],
-  ];
-  for (const [x, y, z] of offsets) {
-    const wheel = new THREE.Mesh(wheelGeo, tireMat);
-    wheel.position.set(x, y, z);
-    wheel.castShadow = true;
-
-    const rim = buildRim();
-    rim.position.copy(wheel.position);
-
-    rollPivot.add(wheel);
-    rollPivot.add(rim);
-    wheels.push(wheel);
-  }
-
-  // --- Ground Effect / Front Splitter -------------------------------------
-  const splitterGeo = new THREE.BoxGeometry(0.96, 0.04, 0.18);
-  const splitter = new THREE.Mesh(splitterGeo, carbonMat);
-  splitter.position.set(0, 0.14, 1.0);
-  rollPivot.add(splitter);
-
-  // Rear diffuser
-  const diffuserGeo = new THREE.BoxGeometry(0.84, 0.06, 0.16);
-  const diffuser = new THREE.Mesh(diffuserGeo, carbonMat);
-  diffuser.position.set(0, 0.13, -1.0);
-  rollPivot.add(diffuser);
-
-  // --- Environment Map (night city reflections) ----------------------------
-  const envMapSize = 256;
-  const envCanvas = document.createElement('canvas');
-  envCanvas.width = envMapSize;
-  envCanvas.height = envMapSize;
-  const envCtx = envCanvas.getContext('2d')!;
-  // Dark sky gradient.
-  const skyGrad = envCtx.createLinearGradient(0, 0, 0, envMapSize);
-  skyGrad.addColorStop(0, '#050510');   // top (space)
-  skyGrad.addColorStop(0.6, '#0a0a1a');  // mid
-  skyGrad.addColorStop(1, '#1a0a15');   // horizon (city glow)
-  envCtx.fillStyle = skyGrad;
-  envCtx.fillRect(0, 0, envMapSize, envMapSize);
-  // Add bright spots for "city lights" reflection.
-  for (let i = 0; i < 40; i++) {
-    const x = Math.random() * envMapSize;
-    const y = envMapSize * 0.7 + Math.random() * envMapSize * 0.3;
-    const r = 1 + Math.random() * 3;
-    const grad = envCtx.createRadialGradient(x, y, 0, x, y, r);
-    const hue = Math.random() > 0.5 ? 'rgba(255,150,50,' : 'rgba(100,180,255,';
-    grad.addColorStop(0, hue + '0.8)');
-    grad.addColorStop(1, hue + '0)');
-    envCtx.fillStyle = grad;
-    envCtx.beginPath();
-    envCtx.arc(x, y, r, 0, Math.PI * 2);
-    envCtx.fill();
-  }
-  const envTexture = new THREE.CanvasTexture(envCanvas);
-  envTexture.mapping = THREE.EquirectangularReflectionMapping;
-
-  // Apply envMap to all glossy/metallic materials on the car.
-  paintMat.envMap = envTexture;
-  darkPaintMat.envMap = envTexture;
-  // chromeMat is defined later in the function — apply via traverse after return if needed.
-  // For now, the main body paint has the reflection which is the most visible part.
-
-  return { group, body, wheels, rollPivot, modelRoot: null };
 }

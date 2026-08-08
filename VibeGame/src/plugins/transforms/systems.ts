@@ -9,12 +9,14 @@ import {
   syncEulerFromQuaternion,
   syncQuaternionFromEuler,
 } from './utils';
+import { eulerToQuaternionInto } from '../../core/math';
 
 const matrix = new THREE.Matrix4();
 const parentMatrix = new THREE.Matrix4();
 const position = new THREE.Vector3();
 const rotation = new THREE.Quaternion();
 const scale = new THREE.Vector3();
+const _quatFromEuler = { x: 0, y: 0, z: 0, w: 1 };
 
 // Read-only membership: this system may add WorldTransform, never Transform.
 const transformQuery = defineQueryLive([Transform]);
@@ -70,7 +72,27 @@ export const TransformHierarchySystem: System = defineSystem({
         if (!ancestorIsDirty(state, entity)) continue;
       }
 
-      syncQuaternionFromEuler(Transform, entity);
+      // If the entity was only dirtied by a quaternion-first writer, preserve the
+      // quaternion and update the Euler from it instead of the other way around.
+      // A true Euler-first write leaves `eulerX/Y/Z` different from the stored
+      // quaternion, so we detect it by comparing the current quaternion to the one
+      // derived from the current Euler.
+      eulerToQuaternionInto(
+        Transform.eulerX[entity],
+        Transform.eulerY[entity],
+        Transform.eulerZ[entity],
+        _quatFromEuler
+      );
+      const quatFromEulerMatches =
+        Transform.rotX[entity] === _quatFromEuler.x &&
+        Transform.rotY[entity] === _quatFromEuler.y &&
+        Transform.rotZ[entity] === _quatFromEuler.z &&
+        Transform.rotW[entity] === _quatFromEuler.w;
+      if (isDirty && !quatFromEulerMatches) {
+        syncEulerFromQuaternion(Transform, entity);
+      } else {
+        syncQuaternionFromEuler(Transform, entity);
+      }
 
       if (!state.hasComponent(entity, WorldTransform)) {
         state.addComponent(entity, WorldTransform);
@@ -117,12 +139,14 @@ export const TransformHierarchySystem: System = defineSystem({
         );
       }
 
-      if (
-        state.hasComponent(entity, Parent) &&
-        state.hasComponent(entity, WorldTransform)
-      ) {
+      if (state.hasComponent(entity, WorldTransform)) {
         syncEulerFromQuaternion(WorldTransform, entity);
       }
+
+      // Keep the local Euler in sync with the local quaternion so the next
+      // Euler-first writer starts from the correct rotation. Otherwise a system
+      // that wrote a quaternion (e.g. the vehicle controller) is overwritten on
+      // the very next frame because `eulerX/Y/Z` still read 0,0,0.
     }
 
     // Deferred dirty-clear: runs only after every entity has been processed,
