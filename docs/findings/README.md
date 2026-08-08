@@ -5,9 +5,10 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | Doc | Foco |
 |-----|------|
 | [UMS_VRAM_FINDINGS.md](UMS_VRAM_FINDINGS.md) | Admit, peak, waves, WAL, respawn, dead VRAM, testes |
+| [UMS_CALIBRATION_RTX4050_6G.md](UMS_CALIBRATION_RTX4050_6G.md) | Footprint **medido** dos 10 backends numa GPU 6 GB (`vramd calibrate`); 4 subdimensionados, skymap2d não carrega |
 | [MESH_PIPELINE_FINDINGS.md](MESH_PIPELINE_FINDINGS.md) | Master DAG Round 3, LOD0, promote/resume; **normais/tangentes** (prune keep-attrs, ktxdecompress); Decimate stepwise; V/Tri; árvores cut-only; compressão ([`../GLB_FINISH_COMPRESSION.md`](../GLB_FINISH_COMPRESSION.md)) |
 | [OCTREE_FACES_FINDINGS.md](OCTREE_FACES_FINDINGS.md) | Empírico simple-rpg: faces ≈ 8×10⁴·char_m²; κ·octree² (κ≈5.5); por categoria |
-| [PAINT_PART_FINDINGS.md](PAINT_PART_FINDINGS.md) | Paint SDNQ/bake; Part3D; payload UMS |
+| [PAINT_PART_FINDINGS.md](PAINT_PART_FINDINGS.md) | Paint SDNQ/bake; Part3D; payload vramd |
 | [IMAGE_SKY_SOUND_FINDINGS.md](IMAGE_SKY_SOUND_FINDINGS.md) | Text2D, Skymap, audio trim, kernels |
 | [VIBEGAME_AUDIO_COMBAT_FINDINGS.md](VIBEGAME_AUDIO_COMBAT_FINDINGS.md) | Cull espacial, profiler Audio, SFX longos, melee impact 0.35 |
 | [VIBEGAME_SPAWN_GROUND_FINDINGS.md](VIBEGAME_SPAWN_GROUND_FINDINGS.md) | Chão: estáticos AABB; creatures CCT; anti-settle / anti-fudge Y |

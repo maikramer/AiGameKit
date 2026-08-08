@@ -193,13 +193,15 @@ extraídos de `model_server.py` (987 L), sem torch nas dependências.
 
 | Fase | Entrega | Fecha | Esforço |
 |---|---|---|---|
-| **F0** | `load_keys`/`shape_keys` por backend no YAML; allowlists atuais viram defaults | A3, A7 | 1 dia |
-| **F1** | `runtime:` (`command`/`cwd`/`env`/timeouts) + merge de YAML externo (`$UMS_BACKENDS_FILE`, `backends.d/`) | A1, A6 | 2–3 dias |
-| **F2** | `vram:`/`peak_profile:` declarativos; `FOOTPRINTS` migra para YAML com merge | A2, A4 | 2 dias |
-| **F3** | Split de packages: `ums-core` (supervisor, sem torch), `ums-worker-sdk`, `ums-client`. `aigamekit-shared` passa a *depender* deles | A5 | 1 semana |
+| **F0** ✅ | `load_keys`/`shape_keys` por backend no YAML; allowlists atuais viram defaults | A3 | feito |
+| **F1** ✅ | `runtime:` (`command`/`cwd`/`env`/timeouts) + merge por chave de YAML externo (`$UMS_BACKENDS_FILE`, `backends.d/`) | A1 | feito |
+| **F2** ✅ | `vram:` medido vence o footprint no admit; `peak_profile:` substitui as heurísticas por nome | A2 | feito |
+| **F3** ✅ | Supervisor sem torch por **extras** (`gpu`/`image`/`mesh`) em vez de split físico: os módulos já eram lazy, só a declaração de deps pesava. Venv 5 GB → 8.7 MB | A5 | feito |
 | **F4** ✅ | **`ums calibrate <backend>`** — corre um job real, mede pico com NVML, escreve o descriptor v2 (`modelserver/calibrate/`, 162 casos) | atrito #1 de config | feito |
 | **F5** | Produto: `ums init`, `ums add`, docs EN, exemplos (whisper / SDXL / llama.cpp / TTS), gateway HTTP opcional | — | 2 semanas |
 | **F6** *(opcional)* | Camada de IO portável (asyncio) → Windows/macOS | A8 | 1 semana |
+| **M1** ✅ | `ums calibrate --hw-auto` — kwargs de load vindos do perfil da própria tool | calibrar o caminho real | feito |
+| **M2** ✅ | `unload_frees_vram: false` respeitado: planner desprioriza, evicção escala para matar o worker | evicção que não libertava | feito |
 
 **F4 é o diferenciador.** A pergunta que mata a adoção é "como é que eu sei o
 `weights_gib`/`activation_gib` do *meu* modelo?". O UMS já mede tudo o que

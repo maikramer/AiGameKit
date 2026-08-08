@@ -50,6 +50,31 @@ def test_finish_defaults_enable_ktx2_and_meshopt() -> None:
     assert params["apply_meshopt"].default is True
 
 
+def test_finish_uses_hybrid_ktx2_by_slot() -> None:
+    """Albedo → ETC1S; normais → UASTC (UASTC-all ~2x disco no albedo)."""
+    import inspect
+
+    from text3d.utils import gltf_finish
+
+    src = inspect.getsource(gltf_finish.gltf_transform_finish)
+    assert "_KTX2_UASTC_SLOTS" in src
+    assert "_KTX2_ETC1S_SLOTS" in src
+    assert '"etc1s"' in src or "'etc1s'" in src
+    assert gltf_finish._KTX2_UASTC_SLOTS == "*normal*"
+    assert "baseColorTexture" in gltf_finish._KTX2_ETC1S_SLOTS
+
+
+def test_finish_bpy_exports_jpeg_not_auto() -> None:
+    """AUTO+PNG no downscale fazia lod1 (bytes) > lod0."""
+    import inspect
+
+    from text3d.utils import gltf_finish
+
+    src = inspect.getsource(gltf_finish._recalc_tangents_inplace)
+    assert '"export_image_format": "JPEG"' in src
+    assert '"export_image_format": "AUTO"' not in src
+
+
 def test_prune_keeps_vertex_attributes() -> None:
     """Regression: prune sem --keep-attributes apaga TANGENT (gltf-transform 4.x)."""
     import inspect

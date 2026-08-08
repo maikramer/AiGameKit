@@ -28,7 +28,7 @@ dependencies = [
     "rich-click>=1.8.0",
     # bpy 5.2 LTS — GLB armature export (Text3D / Animator3D stack)
     "bpy>=5.2.0",
-    "aigamekit-shared @ file:../Shared",
+    "aigamekit-shared[gpu,mesh] @ file:../Shared",
     # NÃO declarar irmãs via file: (ex. animator3d) — o uv copiaria o pacote para
     # dentro do venv e as edições locais deixavam de ser live.
     # O animator3d (import Python em apply_rigged) é gerido pelo instalador via

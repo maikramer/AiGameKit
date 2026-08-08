@@ -36,6 +36,7 @@ import { WaterPlugin } from './water/plugin';
 import { WeatherPlugin } from './weather/plugin';
 import { VegetationPlugin } from './vegetation/plugin';
 import { CityLayoutPlugin } from './city-layout/plugin';
+import { RacingPlugin } from './racing/plugin';
 
 export const DefaultPlugins: Plugin[] = [
   TransformsPlugin,
@@ -74,4 +75,5 @@ export const DefaultPlugins: Plugin[] = [
   FloatingTextPlugin,
   DestructiblePlugin,
   TweeningPlugin,
+  RacingPlugin,
 ];

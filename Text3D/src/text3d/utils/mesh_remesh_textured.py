@@ -46,9 +46,11 @@ def downscale_image_replace(node, size: int) -> bool:
         log.warning("image.scale failed %dx%d → %dx%d (want %d)", w0, h0, w, h, want)
         return False
     pixels = list(img.pixels)
+    # JPEG: alpha=False já. PNG aqui fazia lod1 (atlas refeito) pesar MAIS que
+    # lod0 (JPEG original intacto quando max≤want) — bytes lod1 > lod0.
     new = bpy.data.images.new(f"{img.name}_s{want}", width=w, height=h, alpha=False)
     new.pixels = pixels
-    new.file_format = "PNG"
+    new.file_format = "JPEG"
     new.alpha_mode = "NONE"
     new.pack()
     node.image = new
@@ -1226,7 +1228,8 @@ def _remesh_textured_session(
         export_animations=has_armature,
         export_skins=has_armature,
         export_materials="EXPORT",
-        export_image_format="AUTO",
+        # JPEG até finish KTX2; AUTO+PNG no downscale fazia lod1 > lod0.
+        export_image_format="JPEG",
     )
 
     if temp_png:

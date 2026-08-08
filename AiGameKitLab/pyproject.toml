@@ -16,7 +16,7 @@ dependencies = [
     "Pillow>=10.0",
     "numpy>=1.24.0",
     "pyyaml>=6.0",
-    "aigamekit-shared @ file:../Shared",
+    "aigamekit-shared[gpu,image,mesh] @ file:../Shared",
     "torch>=2.13.0",
     "diffusers>=0.30.0",
     "transformers>=5.14.0",

@@ -3213,6 +3213,6 @@ def project_texture_to_parts(
         export_tangents=True,
         export_skins=True,
         export_materials="EXPORT",
-        export_image_format="AUTO",
+        export_image_format="JPEG",
         export_keep_originals=False,
     )

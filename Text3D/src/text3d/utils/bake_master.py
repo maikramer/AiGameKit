@@ -199,7 +199,8 @@ def _bake_master_bpy_session(
         "export_tangents": True,
         "export_texcoords": True,
         "export_materials": "EXPORT",
-        "export_image_format": "AUTO",
+        # JPEG intermédio até o finish KTX2; AUTO/PNG inflava lod1 vs lod0.
+        "export_image_format": "JPEG",
         "export_animations": bool(arm_objs),
         "export_skins": bool(arm_objs),
     }

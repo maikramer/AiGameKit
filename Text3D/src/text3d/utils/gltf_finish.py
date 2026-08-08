@@ -6,7 +6,9 @@ Pipeline canónico aplicado a todo output ``meshes/``:
 2. ``gltf-transform dedup``  — remove buffers/imagens duplicadas.
 3. ``gltf-transform prune --keep-attributes`` — limpa nós órfãos **sem**
    apagar TANGENT/NORMAL (prune default do CLI 4.x remove TANGENT).
-4. ``gltf-transform uastc``  — comprime texturas para KTX2/UASTC (ainda via npx).
+4. KTX2 por tipo de mapa (``KHR_texture_basisu``):
+   - ``uastc --slots '*normal*'`` — normais (qualidade GPU);
+   - ``etc1s`` no resto — albedo / MR / AO / emissive (disco ≈ JPEG, VRAM GPU).
 5. Meshopt — **preferir bpy 5.2+** (``export_meshopt_compression_enable``);
    fallback ``gltf-transform meshopt`` quando bpy/runtime indisponível ou quando
    o GLB já tem KTX2 (re-export bpy arrisca re-encodar texturas).
@@ -38,6 +40,11 @@ _KTX_PATH_CANDIDATES = (
 )
 
 
+# Slots glTF que precisam de UASTC (detalhe direccional). Resto → ETC1S.
+_KTX2_UASTC_SLOTS = "*normal*"
+_KTX2_ETC1S_SLOTS = "{baseColorTexture,metallicRoughnessTexture,occlusionTexture,emissiveTexture}"
+
+
 @dataclass
 class FinishResult:
     output_path: Path
@@ -45,6 +52,8 @@ class FinishResult:
     dedup_applied: bool = False
     prune_applied: bool = False
     ktx2_applied: bool = False
+    ktx2_etc1s_applied: bool = False
+    ktx2_uastc_applied: bool = False
     meshopt_applied: bool = False
     meshopt_backend: str = ""  # "bpy" | "gltf-transform" | ""
     skipped_reason: str = ""
@@ -71,7 +80,7 @@ def _has_npx() -> bool:
 
 
 def _has_ktx() -> bool:
-    """True quando o CLI ``ktx`` (KTX-Software) está no PATH — requisito do uastc."""
+    """True quando o CLI ``ktx`` (KTX-Software) está no PATH — requisito uastc/etc1s."""
     _ensure_finish_path()
     return shutil.which("ktx") is not None
 
@@ -87,10 +96,10 @@ def _run_gltf_transform(
     _ensure_finish_path()
     if not _has_npx():
         return False, "npx ausente no PATH"
-    if subcmd == "uastc" and not _has_ktx():
+    if subcmd in ("uastc", "etc1s") and not _has_ktx():
         return (
             False,
-            "ktx (KTX-Software) ausente no PATH — necessário para UASTC/KTX2; "
+            "ktx (KTX-Software) ausente no PATH — necessário para KTX2 (ETC1S/UASTC); "
             "instale https://github.com/KhronosGroup/KTX-Software/releases "
             "ou `./install.sh text3d` (extras)",
         )
@@ -105,10 +114,10 @@ def _run_gltf_transform(
         return False, f"gltf-transform {subcmd} timeout"
     if r.returncode != 0:
         snippet = (r.stderr or r.stdout or "")[-400:]
-        if subcmd == "uastc" and ("command -v ktx" in snippet or "ktx" in snippet.lower()):
+        if subcmd in ("uastc", "etc1s") and ("command -v ktx" in snippet or "ktx" in snippet.lower()):
             return (
                 False,
-                f"gltf-transform uastc precisa do CLI `ktx` (KTX-Software) no PATH — {snippet.strip()}",
+                f"gltf-transform {subcmd} precisa do CLI `ktx` (KTX-Software) no PATH — {snippet.strip()}",
             )
         return False, snippet
     return True, ""
@@ -345,7 +354,8 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
         "export_tangents": has_uv,
         "export_texcoords": True,
         "export_materials": "EXPORT",
-        "export_image_format": "AUTO",
+        # JPEG intermédio: AUTO+PNG no downscale fazia lod1 > lod0 em bytes.
+        "export_image_format": "JPEG",
         "export_animations": bool(arm_objs),
         "export_skins": bool(arm_objs),
     }
@@ -427,7 +437,7 @@ def _apply_meshopt_bpy(glb_in: Path, glb_out: Path) -> tuple[bool, str]:
         "export_tangents": True,
         "export_texcoords": True,
         "export_materials": "EXPORT",
-        "export_image_format": "AUTO",
+        "export_image_format": "JPEG",
         "export_animations": bool(arm_objs),
         "export_skins": bool(arm_objs),
         **gltf_meshopt_export_kwargs(enable=True),
@@ -492,14 +502,16 @@ def gltf_transform_finish(
 ) -> FinishResult:
     """Pipeline padrão de finalização de GLB.
 
-    Ordem fixa: shade+tangents → dedup → prune(--keep-attributes) → uastc →
-    meshopt. Cada passo é opcional. Quando ``glb_in == glb_out``, escreve
-    in-place após pipeline em tempdir.
+    Ordem fixa: shade+tangents → dedup → prune(--keep-attributes) →
+    uastc(normais) → etc1s(albedo/MR/AO/emissive) → meshopt. Cada passo é
+    opcional. Quando ``glb_in == glb_out``, escreve in-place após pipeline em
+    tempdir.
 
     ``prune`` **tem** de usar ``--keep-attributes true`` — sem isso o
     gltf-transform remove TANGENT (medido: goblin_lod0_animated).
 
-    ``apply_meshopt`` ativa ``EXT_meshopt_compression``. Preferência:
+    ``apply_uastc`` (nome histórico) activa o bloco KTX2 híbrido — não só
+    UASTC. ``apply_meshopt`` activa ``EXT_meshopt_compression``. Preferência:
     bpy 5.2+ nativo (quando runtime ``libmeshoptimizer`` OK e sem KTX2 no
     input do passo); senão ``@gltf-transform/cli meshopt``.
     """
@@ -546,7 +558,29 @@ def gltf_transform_finish(
             # keep-attributes: sem isto prune apaga TANGENT (gltf-transform 4.x).
             steps.append(("prune", "prune", ["--keep-attributes", "true"]))
         if apply_uastc:
-            steps.append(("uastc", "uastc", ["--level", str(uastc_level), "--rdo", str(uastc_rdo)]))
+            # Híbrido: UASTC só em normais; ETC1S no resto (albedo-only ≈ JPEG
+            # no disco, VRAM GPU). etc1s em textura já KTX2 é no-op.
+            steps.append(
+                (
+                    "uastc",
+                    "uastc",
+                    [
+                        "--level",
+                        str(uastc_level),
+                        "--rdo",
+                        str(uastc_rdo),
+                        "--slots",
+                        _KTX2_UASTC_SLOTS,
+                    ],
+                )
+            )
+            steps.append(
+                (
+                    "etc1s",
+                    "etc1s",
+                    ["--slots", _KTX2_ETC1S_SLOTS],
+                )
+            )
 
         for idx, (label, subcmd, extra) in enumerate(steps, start=1):
             staged = tmp / f"{idx}.glb"
@@ -558,9 +592,32 @@ def gltf_transform_finish(
                 elif label == "prune":
                     res.prune_applied = True
                 elif label == "uastc":
-                    res.ktx2_applied = True
+                    # Sem normal maps o passo é no-op (ficheiro igual) — OK.
+                    res.ktx2_uastc_applied = True
+                    if _glb_has_ktx2(current):
+                        res.ktx2_applied = True
+                elif label == "etc1s":
+                    res.ktx2_etc1s_applied = True
+                    if _glb_has_ktx2(current):
+                        res.ktx2_applied = True
             else:
                 log.warning("gltf_finish: passo %s falhou — %s", label, err)
+                # Sem etc1s, último recurso: UASTC em tudo (legado).
+                if label == "etc1s" and apply_uastc and not res.ktx2_applied:
+                    fb = tmp / f"{idx}_uastc_all.glb"
+                    ok_fb, err_fb = _run_gltf_transform(
+                        "uastc",
+                        current,
+                        fb,
+                        ["--level", str(uastc_level), "--rdo", str(uastc_rdo)],
+                    )
+                    if ok_fb:
+                        current = fb
+                        res.ktx2_applied = True
+                        res.ktx2_uastc_applied = True
+                        log.warning("gltf_finish: etc1s falhou — fallback uastc-all (%s)", err)
+                    else:
+                        log.warning("gltf_finish: fallback uastc-all falhou — %s", err_fb)
 
         if apply_meshopt:
             staged = tmp / "meshopt.glb"

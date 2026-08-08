@@ -11,7 +11,7 @@ requires-python = ">=3.13,<3.14"
 license = "MIT"
 authors = [{ name = "Animator3D Project" }]
 dependencies = [
-    "aigamekit-shared @ file:../Shared",
+    "aigamekit-shared[mesh] @ file:../Shared",
     "click>=8.1.0",
     "rich>=13.0.0",
     "rich-click>=1.8.0",

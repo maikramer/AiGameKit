@@ -9,7 +9,7 @@ description = "Texturização 3D: Hunyuan3D-Paint 2.1 (PBR) + Upscale IA"
 requires-python = ">=3.13,<3.14"
 license = "MIT"
 dependencies = [
-    "aigamekit-shared @ file:../Shared",
+    "aigamekit-shared[gpu,image,mesh] @ file:../Shared",
     "torch>=2.13.0",
     "torchvision>=0.28.0",
     "pytorch-lightning>=2.1.0",

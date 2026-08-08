@@ -152,7 +152,8 @@ def _export_textured_glb(
         export_tangents=export_tangents,
         export_texcoords=True,
         export_materials="EXPORT",
-        export_image_format="AUTO",
+        # JPEG: AUTO + downscale PNG fazia lod1 (1024 PNG) > lod0 (2048 JPEG).
+        export_image_format="JPEG",
     )
     with contextlib.suppress(Exception):
         from aigamekit_shared.glb_verify import post_save_verify
@@ -591,13 +592,17 @@ def generate_lod_glb_triplet(
 ) -> list[Path]:
     """Gera três GLB: ``{basename}_lod0.glb`` … ``{basename}_lod2.glb``.
 
-    Pipeline completo via bpy que preserva armatures, skin weights e
-    animações em todos os níveis. Se bpy não estiver disponível,
-    devolve lista vazia com warning.
+    Preferência: ``gltf-transform simplify`` (meshoptimizer) — costuras UV e
+    de skin (`JOINTS`/`WEIGHTS`) ficam bloqueadas, atlas intacto. No **piso de
+    costuras** (alvo inatingível sem rasgar) aceita faces acima do orçamento;
+    Decimate COLLAPSE bpy só entra se o CLI faltar. Skinned: weld desligado
+    (fundir verts com weights diferentes corrompe o rig).
+
+    Preserva armatures, skin weights e animações. Sem bpy → lista vazia.
 
     ``texture_size_lod0``: downscale atlas (lod1=/2, lod2=/4, snap64).
-    ``target_faces``: se dado, LOD0 decima a este alvo; LOD1/2 usam ratios
-    sobre o LOD0 (com mínimos).
+    ``target_faces``: se dado, LOD0 tenta este alvo; LOD1/2 usam ratios sobre
+    o LOD0 efectivo (com mínimos).
     """
     if not 0 < lod2_ratio < lod1_ratio <= 1.0:
         raise ValueError("Esperado 0 < lod2_ratio < lod1_ratio <= 1.0")
@@ -623,6 +628,63 @@ def generate_lod_glb_triplet(
         return []
 
 
+def _meshopt_simplify_level(
+    src: Path,
+    dst: Path,
+    target_faces: int,
+    *,
+    weld: bool,
+) -> int | None:
+    """Simplifica com meshoptimizer. Aceita piso de costuras (faces ≥ alvo).
+
+    Returns:
+        Contagem de faces em ``dst``, ou ``None`` se o CLI estiver indisponível.
+    """
+    import shutil
+
+    from .gltf_finish import glb_face_count, meshopt_simplify_glb
+
+    n = glb_face_count(src)
+    if n <= 0:
+        return None
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if n <= int(target_faces):
+        if Path(src).resolve() != dst.resolve():
+            shutil.copy2(src, dst)
+        return n
+    ok, faces, err = meshopt_simplify_glb(src, dst, target_faces=int(target_faces), weld=weld)
+    if not ok:
+        log.info("LOD meshopt skip (%s) — cai para Decimate COLLAPSE", err)
+        return None
+    if faces > int(target_faces):
+        log.info(
+            "LOD meshopt piso de costuras: alvo %d → %d faces (aceite — COLLAPSE rasgaria UVs/weights)",
+            int(target_faces),
+            faces,
+        )
+    else:
+        log.info("LOD meshopt: %d → %d faces (alvo %d)", n, faces, int(target_faces))
+    return faces
+
+
+def _finalize_geometric_lod(
+    src: Path,
+    dst: Path,
+    *,
+    texture_size: int | None,
+    meshfix: bool,
+) -> None:
+    """Importa o GLB simplificado, aplica downscale de atlas / meshfix, re-exporta."""
+    mesh_obj, arm_objs = _load_glb_with_armatures(src)
+    if meshfix:
+        _fill_holes_bpy(mesh_obj, sides=30)
+    if texture_size is not None and int(texture_size) > 0:
+        _scale_object_textures(mesh_obj, int(texture_size))
+    _shade_smooth(mesh_obj)
+    _export_glb(dst, mesh_obj, arm_objs)
+
+
 def _generate_lod_glb_triplet_impl(
     input_path,
     output_dir,
@@ -635,6 +697,156 @@ def _generate_lod_glb_triplet_impl(
     texture_size_lod0,
     target_faces,
 ):
+    import shutil
+    import tempfile
+
+    from aigamekit_shared.lod_budget import lod_texture_ladder
+
+    from .gltf_finish import _glb_has_skins, glb_face_count
+
+    input_path = Path(input_path)
+    skinned = _glb_has_skins(input_path)
+    # Skinned: nunca weld pré-simplify — funde verts com JOINTS/WEIGHTS diferentes.
+    weld = not skinned
+    n_source = glb_face_count(input_path)
+    if n_source < 4:
+        # Contagem JSON falhou — deixa o caminho bpy decidir / erro.
+        return _generate_lod_glb_triplet_bpy_collapse(
+            input_path,
+            output_dir,
+            basename,
+            lod1_ratio,
+            lod2_ratio,
+            min_faces_lod1,
+            min_faces_lod2,
+            meshfix,
+            texture_size_lod0,
+            target_faces,
+        )
+
+    lod0_target = n_source
+    if target_faces is not None and int(target_faces) > 0:
+        lod0_target = min(n_source, int(target_faces))
+
+    tex_ladder: tuple[int, int, int] | None = None
+    if texture_size_lod0 is not None and int(texture_size_lod0) > 0:
+        tex_ladder = lod_texture_ladder(int(texture_size_lod0))
+
+    with tempfile.TemporaryDirectory(prefix="lod_meshopt_") as tmpdir:
+        tmp = Path(tmpdir)
+        raw0 = tmp / "raw_lod0.glb"
+        faces0 = _meshopt_simplify_level(input_path, raw0, lod0_target, weld=weld)
+        if faces0 is None:
+            return _generate_lod_glb_triplet_bpy_collapse(
+                input_path,
+                output_dir,
+                basename,
+                lod1_ratio,
+                lod2_ratio,
+                min_faces_lod1,
+                min_faces_lod2,
+                meshfix,
+                texture_size_lod0,
+                target_faces,
+            )
+
+        lod0_path = Path(output_dir) / f"{basename}_lod0.glb"
+        _finalize_geometric_lod(
+            raw0,
+            lod0_path,
+            texture_size=tex_ladder[0] if tex_ladder else None,
+            meshfix=meshfix,
+        )
+        faces0 = glb_face_count(lod0_path) or faces0
+        out_paths: list[Path] = [lod0_path]
+
+        target_lod1 = max(min_faces_lod1, int(faces0 * lod1_ratio))
+        target_lod2 = max(min_faces_lod2, int(faces0 * lod2_ratio))
+        prev_raw = raw0
+        prev_faces = faces0
+        for level, target in ((1, target_lod1), (2, target_lod2)):
+            raw = tmp / f"raw_lod{level}.glb"
+            if prev_faces <= target:
+                shutil.copy2(prev_raw, raw)
+                faces = prev_faces
+            else:
+                # Simplifica a partir do HI (melhor silhueta); se o piso ≥ lod
+                # anterior, reutiliza o nível anterior.
+                faces = _meshopt_simplify_level(input_path, raw, target, weld=weld)
+                if faces is None:
+                    log.warning(
+                        "LOD meshopt falhou no lod%d — a completar ladder com COLLAPSE a partir do lod0",
+                        level,
+                    )
+                    return _complete_ladder_bpy_from_lod0(
+                        lod0_path,
+                        output_dir,
+                        basename,
+                        out_paths,
+                        start_level=level,
+                        targets={1: target_lod1, 2: target_lod2},
+                        meshfix=meshfix,
+                        tex_ladder=tex_ladder,
+                    )
+                if faces >= int(prev_faces * 0.98):
+                    shutil.copy2(prev_raw, raw)
+                    faces = prev_faces
+                    log.info(
+                        "LOD meshopt lod%d no mesmo piso que lod%d (%d faces) — a reutilizar",
+                        level,
+                        level - 1,
+                        faces,
+                    )
+            path = Path(output_dir) / f"{basename}_lod{level}.glb"
+            _finalize_geometric_lod(
+                raw,
+                path,
+                texture_size=tex_ladder[level] if tex_ladder else None,
+                meshfix=meshfix,
+            )
+            out_paths.append(path)
+            prev_raw, prev_faces = raw, faces
+        return out_paths
+
+
+def _complete_ladder_bpy_from_lod0(
+    lod0_path: Path,
+    output_dir: Path,
+    basename: str,
+    out_paths: list[Path],
+    *,
+    start_level: int,
+    targets: dict[int, int],
+    meshfix: bool,
+    tex_ladder: tuple[int, int, int] | None,
+) -> list[Path]:
+    """Completa lod1/lod2 com Decimate COLLAPSE quando meshopt morre a meio."""
+    for level in range(start_level, 3):
+        mesh_obj_l, arm_objs_l = _load_glb_with_armatures(lod0_path)
+        _decimate_to_target(mesh_obj_l, targets[level])
+        if meshfix:
+            _fill_holes_bpy(mesh_obj_l, sides=30)
+        if tex_ladder is not None:
+            _scale_object_textures(mesh_obj_l, tex_ladder[level])
+        path = Path(output_dir) / f"{basename}_lod{level}.glb"
+        _export_glb(path, mesh_obj_l, arm_objs_l)
+        out_paths.append(path)
+    return out_paths
+
+
+def _generate_lod_glb_triplet_bpy_collapse(
+    input_path,
+    output_dir,
+    basename,
+    lod1_ratio,
+    lod2_ratio,
+    min_faces_lod1,
+    min_faces_lod2,
+    meshfix,
+    texture_size_lod0,
+    target_faces,
+):
+    """Fallback legado: Decimate COLLAPSE bpy (cego a costuras UV)."""
     from aigamekit_shared.lod_budget import lod_texture_ladder
     from aigamekit_shared.mesh_repair import remove_doubles
 
@@ -658,7 +870,7 @@ def _generate_lod_glb_triplet_impl(
     if texture_size_lod0 is not None and int(texture_size_lod0) > 0:
         tex_ladder = lod_texture_ladder(int(texture_size_lod0))
         _scale_object_textures(mesh_obj, tex_ladder[0])
-    lod0_path = output_dir / f"{basename}_lod0.glb"
+    lod0_path = Path(output_dir) / f"{basename}_lod0.glb"
     _export_glb(lod0_path, mesh_obj, arm_objs)
     out_paths: list[Path] = [lod0_path]
     target_lod1 = max(min_faces_lod1, int(n * lod1_ratio))
@@ -670,7 +882,7 @@ def _generate_lod_glb_triplet_impl(
             _fill_holes_bpy(mesh_obj_l, sides=30)
         if tex_ladder is not None:
             _scale_object_textures(mesh_obj_l, tex_ladder[level])
-        path = output_dir / f"{basename}_lod{level}.glb"
+        path = Path(output_dir) / f"{basename}_lod{level}.glb"
         _export_glb(path, mesh_obj_l, arm_objs_l)
         out_paths.append(path)
     return out_paths

@@ -455,6 +455,35 @@ Código: `Text3D/src/text3d/utils/gltf_finish.py` (`meshopt_simplify_glb`),
 
 ---
 
+## LOD geométrico / rigado — mesmo bug, sem rebake (2026-08)
+
+Round 3: `text3d lod` sobre `_rigged_animated` **sem** `--painted-mesh`. Antes =
+Decimate COLLAPSE bpy (cego a UV). Sintoma: `boss_ogre` lod1≡lod2 @5988 faces,
+V/Tri 2.23, textura em salada; `wolf` lod2 V/Tri a subir 1.19→1.65.
+
+**meshopt simplify em skinned funciona.** Mantém `JOINTS_0`/`WEIGHTS_0`/
+`TEXCOORD_0`, skins e clips. Y dos pés quase intacto. O que partia origem era
+só a **compressão** meshopt+quantize do finish — não o simplify. `weld=False`
+obrigatório (weld funde verts com weights diferentes).
+
+**Diferença face ao path texturado:** no piso de costuras **não** há rebake
+(xatlas mata o layout de weights; `transfer_weights` saiu do DAG). Política:
+**aceitar faces acima do orçamento**. Medido:
+
+| | alvo lod2 | COLLAPSE (antigo) | meshopt piso |
+|---|---|---|---|
+| goblin | 4135 | 4135 | **4134** (atinge) |
+| wolf | 7941 | 7941 (rasga) | **~13276** |
+| boss_ogre | ~6000 | 5988 stall+salada | **~28980** |
+
+SSIM vs painted (ogre ¾): lod2 COLLAPSE 0.21 → meshopt@29k 0.30.
+
+Código: `generate_lod_glb_triplet` → `_meshopt_simplify_level` /
+`_generate_lod_glb_triplet_bpy_collapse` (fallback). Testes:
+`Text3D/tests/test_lod_geometric_meshopt.py`.
+
+---
+
 ## Checklist pós-shape (antes paint)
 
 QA no **`_shape` fresco** (não GLBs antigos de `public/`):
@@ -484,6 +513,8 @@ removido de propósito.
 | Data | Nota |
 |------|------|
 | 2026-08-06 | LOD texturado: meshoptimizer (atlas preservado) + rebake xatlas sem voxel (decimação extrema); COLLAPSE com atlas original rasgava UVs |
+| 2026-08-06 | LOD geométrico/rigado: meshopt-first (`weld=False` skinned); piso de costuras aceite (sem COLLAPSE abaixo; sem rebake no DAG) |
+| 2026-08-06 | Finish KTX2 híbrido: ETC1S albedo/MR/AO/emissive + UASTC `*normal*`; intermédios bpy exportam JPEG (não PNG) |
 | 2026-07-24 | Doc fix: `import_gltf` default=`TEMPERANCE` (não BLENDER); BLENDER materializa Icosphere helpers |
 | 2026-07-24 | `debug viz` (6 modos); weld antes de métricas boundary/flipped (seam-splits); WIREFRAME sem even_offset; depsgraph p/ rigged; `gltf_decode` (KTX2/meshopt); strip helpers só com armature |
 | 2026-07-24 | N/T sobreviver: paint exporta N+T; finish `ktxdecompress`+prune `--keep-attributes`; Decimate stepwise; weld pré-COLLAPSE só modo B (não painted texturado) |

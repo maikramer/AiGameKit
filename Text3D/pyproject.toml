@@ -41,7 +41,7 @@ dependencies = [
     # lightning_fabric still imports pkg_resources (removed in setuptools 82+).
     "setuptools>=69,<81",
     "bpy>=5.2.0",
-    "aigamekit-shared @ file:../Shared",
+    "aigamekit-shared[gpu,image,mesh] @ file:../Shared",
     # NÃO declarar irmãs via file: (ex. text2d) — o uv copiaria o pacote para
     # site-packages e a cópia vence o .pth monorepo (cross_deps do Clified).
     # O text2d (import Python no generator) é gerido pelo instalador via
