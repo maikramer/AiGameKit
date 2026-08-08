@@ -28,10 +28,10 @@ ROCKS3D_BIN = "ROCKS3D_BIN"
 PART3D_BIN = "PART3D_BIN"
 MOTION3D_BIN = "MOTION3D_BIN"
 VIBEGAME_BIN = "VIBEGAME_BIN"
-MODELSERVER_BIN = "MODELSERVER_BIN"
+VRAMD_BIN = "VRAMD_BIN"
 HF_HOME = "HF_HOME"
 PYTORCH_CUDA_ALLOC_CONF = "PYTORCH_CUDA_ALLOC_CONF"
-AIGAMEKIT_MODEL_SERVER_SOCKET = "AIGAMEKIT_MODEL_SERVER_SOCKET"
+VRAMD_CLIENT_SOCKET = "VRAMD_CLIENT_SOCKET"
 AIGAMEKIT_PREFER_MONOREPO = "AIGAMEKIT_PREFER_MONOREPO"
 
 TOOL_BINS = {
@@ -52,7 +52,7 @@ TOOL_BINS = {
     "motion3d": MOTION3D_BIN,
     "materialize": MATERIALIZE_BIN,
     "vibegame": VIBEGAME_BIN,
-    "modelserver": MODELSERVER_BIN,
+    "vramd": VRAMD_BIN,
 }
 """Mapeamento tool_name → nome da variável de ambiente do binário.
 
@@ -89,7 +89,7 @@ TOOL_LAYOUT: dict[str, ToolLayout] = {
     "rocks3d": ToolLayout("Rocks3D", "rocks3d"),
     "part3d": ToolLayout("Part3D", "part3d"),
     "motion3d": ToolLayout("Motion3D", "motion3d"),
-    "modelserver": ToolLayout("ModelServer", "aigamekit-model-server"),
+    "vramd": ToolLayout("Vramd", "vramd"),
     "materialize": ToolLayout("Materialize", "materialize", kind="rust"),
     "vibegame": ToolLayout("VibeGame", "vibegame", kind="bun"),
 }
@@ -192,7 +192,7 @@ def discover_monorepo_tool_python(
 ) -> str | None:
     """Resolve o interpretador Python do venv da tool no checkout.
 
-    Útil para o UMS spawnar workers subprocesso no venv canónico de cada tool:
+    Útil para o vramd spawnar workers subprocesso no venv canónico de cada tool:
     ``Text3D/.venv/bin/python -m text3d serve --ums-worker``.
 
     Args:
@@ -310,13 +310,13 @@ def subprocess_gpu_env(
     # ``ensure_vram_available`` (pede release gracioso) antes de precisar disto,
     # mas esta é a rede de segurança para children que chamam kill_gpu_compute.
     try:
-        from .model_server import discover_active_sockets
+        from .vramd_client import discover_active_sockets
 
         if discover_active_sockets():
             # Propagar o socket path (se definido via env)
-            sock = os.environ.get(AIGAMEKIT_MODEL_SERVER_SOCKET, "").strip()
+            sock = os.environ.get(VRAMD_CLIENT_SOCKET, "").strip()
             if sock:
-                env.setdefault(AIGAMEKIT_MODEL_SERVER_SOCKET, sock)
+                env.setdefault(VRAMD_CLIENT_SOCKET, sock)
             # Desligar kill-others nos children para não matarem o server
             env.setdefault("TEXT3D_GPU_KILL_OTHERS", "0")
             env.setdefault("PAINT3D_GPU_KILL_OTHERS", "0")

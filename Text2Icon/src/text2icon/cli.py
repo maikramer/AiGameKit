@@ -16,7 +16,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
-    add_ums_options,
+    add_vramd_options,
     delegate_or_prepare,
     legacy_server_allowed,
     needed_mib_for_backend,
@@ -203,7 +203,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     show_default=True,
     help="Memory format NHWC (channels_last) no VAE/transformer — Ampere+ conv path.",
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -228,9 +228,9 @@ def generate_cmd(
     torch_compile_mode: str,
     step_cache: str,
     channels_last: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Gera um ícone a partir do PROMPT."""
     from aigamekit_shared.gpu import warn_if_vram_occupied
@@ -301,7 +301,7 @@ def generate_cmd(
 
     t_start = time.time()
 
-    # Unified Model Server (fila + VRAM). Flags: --ums-priority / --no-ums / --ums-stream.
+    # Unified Model Server (fila + VRAM). Flags: --vramd-priority / --no-vramd / --vramd-stream.
     _icon_mem_eff = bool(cpu_offload) or (transformer_quant_preset not in (None, "", "none", "auto"))
     if (
         not cpu
@@ -324,9 +324,9 @@ def generate_cmd(
             t_start=t_start,
             noun="Ícone",
             console=console,
-            enabled=not no_ums,
-            priority=ums_priority,
-            stream=ums_stream,
+            enabled=not no_vramd,
+            priority=vramd_priority,
+            stream=vramd_stream,
             gpu_ids=gpu_ids,
             memory_efficient=_icon_mem_eff,
             quant_preset=transformer_quant_preset if transformer_quant_preset not in (None, "", "auto") else None,
@@ -334,7 +334,7 @@ def generate_cmd(
     ):
         return
 
-    # Fallback: per-tool legacy server — só com AIGAMEKIT_ALLOW_LEGACY_SERVER=1.
+    # Fallback: per-tool legacy server — só com VRAMD_ALLOW_LEGACY_SERVER=1.
     if not cpu and output is not None and legacy_server_allowed():
         from . import client
 
@@ -533,7 +533,7 @@ def generate_cmd(
     show_default=True,
     help="channels_last NHWC (default ON em batch — ~-13% hot).",
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -553,9 +553,9 @@ def batch_cmd(
     torch_compile_mode: str,
     step_cache: str,
     channels_last: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Gera ícones em batch a partir de um ficheiro de prompts (um por linha)."""
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
@@ -649,9 +649,9 @@ def batch_cmd(
             t_start=t0,
             noun="Ícone",
             console=err_console,
-            enabled=not no_ums,
-            priority=ums_priority or "batch",
-            stream=ums_stream,
+            enabled=not no_vramd,
+            priority=vramd_priority or "batch",
+            stream=vramd_stream,
             gpu_ids=gpu_ids,
             memory_efficient=_icon_mem_eff,
             quant_preset=transformer_quant_preset if transformer_quant_preset not in (None, "", "auto") else None,
@@ -785,27 +785,27 @@ def server_cmd(
     quant_preset: str,
     transformer_quant_preset: str,
 ) -> None:
-    """[DEPRECATED] Server per-tool. Preferir ``aigamekit-model-server start`` (UMS).
+    """[DEPRECATED] Server per-tool. Preferir ``vramd start`` (UMS).
 
-    Requer ``AIGAMEKIT_ALLOW_LEGACY_SERVER=1``.
+    Requer ``VRAMD_ALLOW_LEGACY_SERVER=1``.
     """
     import os
 
-    from aigamekit_shared.model_server import server_socket_path
+    from aigamekit_shared.vramd_client import server_socket_path
 
     from . import server
 
-    allow = os.environ.get("AIGAMEKIT_ALLOW_LEGACY_SERVER", "").strip().lower()
+    allow = os.environ.get("VRAMD_ALLOW_LEGACY_SERVER", "").strip().lower()
     if allow not in ("1", "true", "yes", "on"):
         console.print(
             "[bold red]Legacy server bloqueado.[/bold red] Usa "
-            "[cyan]aigamekit-model-server start[/cyan] (UMS).\n"
-            "[dim]Override: AIGAMEKIT_ALLOW_LEGACY_SERVER=1[/dim]"
+            "[cyan]vramd start[/cyan] (UMS).\n"
+            "[dim]Override: VRAMD_ALLOW_LEGACY_SERVER=1[/dim]"
         )
         sys.exit(1)
 
     console.print(
-        "[yellow]Deprecated:[/yellow] use [cyan]aigamekit-model-server start[/cyan] "
+        "[yellow]Deprecated:[/yellow] use [cyan]vramd start[/cyan] "
         "(Unified Model Server). Este server per-tool fica só como fallback."
     )
     _default_sock = server_socket_path("text2icon")
@@ -854,7 +854,7 @@ def server_cmd(
 @cli.command("server-status")
 def server_status_cmd() -> None:
     """Mostra o estado do model server."""
-    from aigamekit_shared.model_server import server_socket_path
+    from aigamekit_shared.vramd_client import server_socket_path
 
     from . import server
 
@@ -879,7 +879,7 @@ def server_status_cmd() -> None:
 @cli.command("server-stop")
 def server_stop_cmd() -> None:
     """Para o model server (graceful shutdown)."""
-    from aigamekit_shared.model_server import _pid_path, server_socket_path
+    from aigamekit_shared.vramd_client import _pid_path, server_socket_path
 
     from . import server
 
@@ -904,14 +904,14 @@ def server_stop_cmd() -> None:
     "--ums-worker",
     is_flag=True,
     help=(
-        "Modo worker subprocesso do UMS: lê comandos JSONL do stdin (load / "
+        "Modo worker subprocesso do vramd: lê comandos JSONL do stdin (load / "
         "generate / unload / shutdown) e emite eventos no stdout. Usado pelo "
         "SubprocessWorkerPool do ModelServer — text2icon corre no seu próprio "
         "venv e o supervisor (ModelServer/.venv) coordena via JSONL."
     ),
 )
 def serve(ums_worker: bool) -> None:
-    """Modo worker subprocesso do UMS (subprocess-per-backend).
+    """Modo worker subprocesso do vramd (subprocess-per-backend).
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico

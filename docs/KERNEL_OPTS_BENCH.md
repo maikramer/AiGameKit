@@ -2,8 +2,8 @@
 
 Medição cold vs hot (mesmo processo: load 1×, generate 2×).
 
-**Guia operacional (flags, defaults UMS/batch, checklist):** [`findings/KERNEL_OPTS_FINDINGS.md`](findings/KERNEL_OPTS_FINDINGS.md).  
-**Hub consolidado (VRAM admit, footprints, Omni, UMS):** [`MODEL_FINDINGS.md`](MODEL_FINDINGS.md).
+**Guia operacional (flags, defaults vramd/batch, checklist):** [`findings/KERNEL_OPTS_FINDINGS.md`](findings/KERNEL_OPTS_FINDINGS.md).  
+**Hub consolidado (VRAM admit, footprints, Omni, vramd):** [`MODEL_FINDINGS.md`](MODEL_FINDINGS.md).
 
 ## Hardware
 
@@ -231,9 +231,9 @@ Part3D/.venv/bin/python docs/scripts/bench_kernel_opts.py --tool part3d --append
 **Replicar já:** hw-auto Text3D `flashvdm` se VRAM&lt;7.5 GiB; Part3D autotune: `cond_batch=1` + `max_parts=1` em ≤6.5GB; DiT compile off c/ mem-eff.
 
 **Aplicado (server/batch defaults):**
-- UMS `text2d`: `torch_compile=True` + `channels_last=True` (override via preload kwargs)
-- UMS `skymap2d`: `torch_compile=True`
-- UMS `text2icon`: `channels_last=True` (compile off — hot pior)
+- vramd `text2d`: `torch_compile=True` + `channels_last=True` (override via preload kwargs)
+- vramd `skymap2d`: `torch_compile=True`
+- vramd `text2icon`: `channels_last=True` (compile off — hot pior)
 - CLI `text2d generate-batch`: `--compile` / `--channels-last` default **ON**
 - CLI `skymap2d batch`: `--compile` default **ON**
 - CLI `text2icon batch`: `--channels-last` default **ON**

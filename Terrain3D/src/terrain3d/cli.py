@@ -10,7 +10,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
-    add_ums_options,
+    add_vramd_options,
     delegate_or_prepare,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
@@ -20,7 +20,7 @@ from aigamekit_shared.quality import VALID_QUALITIES
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click before commands
 from .export import export_ahgt, export_heightmap, export_metadata
 from .generator import TerrainConfig, TerrainResult, generate_terrain
-from .ums_payload import build_generate_request
+from .vramd_payload import build_generate_request
 
 console = Console()
 
@@ -156,7 +156,7 @@ def cli() -> None:
     help="Sigmoid contrast for elevation (0=off)",
 )
 @click.option("--quiet", is_flag=True, help="Suppress progress output")
-@add_ums_options
+@add_vramd_options
 def generate_cmd(
     prompt: str | None,
     seed: int | None,
@@ -182,9 +182,9 @@ def generate_cmd(
     elevation_gamma: float,
     elevation_contrast: float,
     quiet: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Generate an AI terrain heightmap via diffusion."""
 
@@ -307,9 +307,9 @@ def generate_cmd(
         t_start=t_start,
         noun="Terreno",
         console=console,
-        enabled=not no_ums,
-        priority=ums_priority,
-        stream=ums_stream,
+        enabled=not no_vramd,
+        priority=vramd_priority,
+        stream=vramd_stream,
         timeout_sec=1800.0,
     ):
         if quiet:
@@ -382,14 +382,14 @@ def generate_cmd(
     "--ums-worker",
     is_flag=True,
     help=(
-        "Modo worker subprocesso do UMS: lê comandos JSONL do stdin (load / "
+        "Modo worker subprocesso do vramd: lê comandos JSONL do stdin (load / "
         "generate / unload / shutdown) e emite eventos no stdout. Usado pelo "
         "SubprocessWorkerPool do ModelServer — terrain3d corre no seu próprio "
         "venv e o supervisor (ModelServer/.venv) coordena via JSONL."
     ),
 )
 def serve(ums_worker: bool) -> None:
-    """Modo worker subprocesso do UMS (subprocess-per-backend).
+    """Modo worker subprocesso do vramd (subprocess-per-backend).
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico

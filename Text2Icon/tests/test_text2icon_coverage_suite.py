@@ -1,4 +1,4 @@
-"""Suite de cobertura Text2Icon (utils, ums_payload, generator, CLI) sem GPU/HF."""
+"""Suite de cobertura Text2Icon (utils, vramd_payload, generator, CLI) sem GPU/HF."""
 
 from __future__ import annotations
 
@@ -176,7 +176,7 @@ def test_format_timestamp_fraction_ignored() -> None:
 
 
 def test_icon_ums_defaults_size() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png")
     assert req["width"] == 512
@@ -184,7 +184,7 @@ def test_icon_ums_defaults_size() -> None:
 
 
 def test_icon_ums_defaults_steps_guidance() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png")
     assert req["steps"] == 2
@@ -192,35 +192,35 @@ def test_icon_ums_defaults_steps_guidance() -> None:
 
 
 def test_icon_ums_transparent_default_false() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png")
     assert req["transparent"] is False
 
 
 def test_icon_ums_transparent_true() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png", transparent=True)
     assert req["transparent"] is True
 
 
 def test_icon_ums_negative_prompt_optional() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png", negative_prompt="blur")
     assert req["negative_prompt"] == "blur"
 
 
 def test_icon_ums_negative_prompt_omitted() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png")
     assert "negative_prompt" not in req
 
 
 def test_icon_ums_transformer_quant_in_payload() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png", transformer_quant_preset="sdnq-int4")
     assert req["transformer_quant_preset"] == "sdnq-int4"
@@ -228,7 +228,7 @@ def test_icon_ums_transformer_quant_in_payload() -> None:
 
 
 def test_icon_ums_transformer_quant_auto_no_sdnq_peak() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png", transformer_quant_preset="auto")
     assert req["transformer_quant_preset"] == "auto"
@@ -236,7 +236,7 @@ def test_icon_ums_transformer_quant_auto_no_sdnq_peak() -> None:
 
 
 def test_icon_ums_model_id_set() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     mid = "Efficient-Large-Model/Sana_600M_512px_diffusers"
     req = build_generate_request(prompt="icon", output="/tmp/i.png", model_id=mid)
@@ -244,28 +244,28 @@ def test_icon_ums_model_id_set() -> None:
 
 
 def test_icon_ums_gpu_ids_list() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png", gpu_ids=[1])
     assert req["gpu_ids"] == [1]
 
 
 def test_icon_ums_gpu_ids_csv() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png", gpu_ids="0,2")
     assert req["gpu_ids"] == [0, 2]
 
 
 def test_icon_ums_memory_efficient_explicit_true() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png", memory_efficient=True)
     assert req["memory_efficient"] is True
 
 
 def test_icon_ums_memory_efficient_follows_quant_when_unset() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(
         prompt="icon", output="/tmp/i.png", transformer_quant_preset="sdnq-uint8", memory_efficient=None
@@ -274,14 +274,14 @@ def test_icon_ums_memory_efficient_follows_quant_when_unset() -> None:
 
 
 def test_icon_ums_extra_merged() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png", extra={"batch_id": "b1"})
     assert req["batch_id"] == "b1"
 
 
 def test_icon_ums_seed_and_coercion() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt=99, output=88, seed=7, width="256", height="256")
     assert req["prompt"] == "99"
@@ -424,7 +424,7 @@ def test_validate_params_steps_at_boundary_100() -> None:
 
 
 def test_icon_ums_memory_efficient_false_overrides_quant() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(
         prompt="icon",
@@ -436,14 +436,14 @@ def test_icon_ums_memory_efficient_false_overrides_quant() -> None:
 
 
 def test_icon_ums_empty_extra_ignored() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png", extra={})
     assert "batch_id" not in req
 
 
 def test_icon_ums_transformer_quant_empty_string_no_peak_quant() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="icon", output="/tmp/i.png", transformer_quant_preset="")
     assert "sdnq_preset" not in req
@@ -500,7 +500,7 @@ def test_validate_params_guidance_at_upper_bound() -> None:
 
 
 def test_icon_ums_prompt_output_strings() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="p", output="out.png")
     assert req["prompt"] == "p"
@@ -508,7 +508,7 @@ def test_icon_ums_prompt_output_strings() -> None:
 
 
 def test_icon_ums_seed_none_default() -> None:
-    from text2icon.ums_payload import build_generate_request
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="p", output="out.png")
     assert req["seed"] is None

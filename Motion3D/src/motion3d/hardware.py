@@ -198,7 +198,7 @@ def estimate_peak_mib(
     sdnq_preset: str | None = None,
     memory_efficient: bool = False,
 ) -> int:
-    """UMS admit hint — mirrors plan_offload peak when possible."""
+    """vramd admit hint — mirrors plan_offload peak when possible."""
     del half
     # Synthetic 6GB when no real GPU in doctor — use planner with 6GiB budget.
     fake_6g = [(0, int(6 * GIB))]

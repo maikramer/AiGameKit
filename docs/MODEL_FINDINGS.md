@@ -1,16 +1,16 @@
 # Descobertas sobre modelos GPU (hub)
 
 Índice operacional das descobertas calibradas no monorepo (VRAM, kernels, Omni,
-UMS, budgets). **Não** substitui READMEs por tool — aponta e consolida.
+vramd, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 
 | Doc especializado | Conteúdo |
 |-------------------|----------|
 | [`KERNEL_OPTS_BENCH.md`](KERNEL_OPTS_BENCH.md) | Tabela cold/hot (compile, CL, flashvdm) — RTX 4050 6 GB |
-| [`findings/KERNEL_OPTS_FINDINGS.md`](findings/KERNEL_OPTS_FINDINGS.md) | Guia operacional: flags, defaults UMS/batch, checklist |
+| [`findings/KERNEL_OPTS_FINDINGS.md`](findings/KERNEL_OPTS_FINDINGS.md) | Guia operacional: flags, defaults vramd/batch, checklist |
 | [`OMNI_SHAPE_FINDINGS.md`](OMNI_SHAPE_FINDINGS.md) | Hunyuan3D-Omni: bbox max, presets, decode, falhas de batch |
 | [`MANIFEST_AUTHORING.md`](MANIFEST_AUTHORING.md) | Manual `manifest.yaml`: size_m, Omni, octree (quando override) |
 | [`findings/OCTREE_FACES_FINDINGS.md`](findings/OCTREE_FACES_FINDINGS.md) | Empírico: faces ≈ 8×10⁴·char_m²; κ·octree² (κ≈5.5) |
-| [`findings/UMS_VRAM_FINDINGS.md`](findings/UMS_VRAM_FINDINGS.md) | Admit, peak, retry VRAM, waves, `gpu_ids` UMS, WAL, **NVML**, idle CUDA context |
+| [`findings/UMS_VRAM_FINDINGS.md`](findings/UMS_VRAM_FINDINGS.md) | Admit, peak, retry VRAM, waves, `gpu_ids` vramd, WAL, **NVML**, idle CUDA context |
 | [`Shared/README.md`](../Shared/README.md) (sec. GPU/NVML) | `query_gpu_free_mib`, snapshots, apps; dep `nvidia-ml-py` |
 | [`findings/PAINT_PART_FINDINGS.md`](findings/PAINT_PART_FINDINGS.md) | Paint bake/SDNQ; `restrict_inpaint` + `_clean`; Part3D **faces**/p3sam/fine-parts/`label_fuse` |
 | [`findings/IMAGE_SKY_SOUND_FINDINGS.md`](findings/IMAGE_SKY_SOUND_FINDINGS.md) | Text2D 1024; Skymap shift/PMREM; audio trim; kernel flags |
@@ -20,15 +20,15 @@ UMS, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 | [`findings/ANIMATOR_RETARGET_FINDINGS.md`](findings/ANIMATOR_RETARGET_FINDINGS.md) | Quaternius retarget; root/pelvis; **humanoid p/ bípedes** (não creature procedural) |
 | [`findings/MOTION3D_FINDINGS.md`](findings/MOTION3D_FINDINGS.md) | Text-to-motion → SkinTokens: `apply-rigged`, HML22 aim/rest/neutro, in-place |
 | [`findings/README.md`](findings/README.md) | Índice da pasta findings |
-| [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md) | Waves UMS, window≤16, `MasterDeferQueue`, softfill |
+| [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md) | Waves vramd, window≤16, `MasterDeferQueue`, softfill |
 | [`mission/README.md`](mission/README.md) | Missão / premissas (norte para agentes) |
 | [`UMS_SUBPROCESS_PLAN.md`](UMS_SUBPROCESS_PLAN.md) | Workers subprocess (implementado; protocolo) |
 | [`quaternius_inventory.md`](quaternius_inventory.md) | Pack CC0: bones, clips, bone_map, pitfall cintura-ao-play |
 | [`HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`](HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md) | Casca plástico, finos soldados, prompts building, faces vs X-Part · [EN](HUNYUAN_MESH_AND_PARTS_LESSONS.md) |
 | [`TOPOLOGY_FIX_GPU_STUDY.md`](TOPOLOGY_FIX_GPU_STUDY.md) | Acelerar `topology-fix` (arrays/CPU vs bpy; longhouse 7M verts) |
 | [`bench_omni/README.md`](bench_omni/README.md) | Pose Quaternius T-pose + smoke |
-| [`ModelServer/README.md`](../ModelServer/README.md) | UMS: fila, admit, agents, `respawn`, CLI |
-| [`LOGGING.md`](LOGGING.md) · [PT](LOGGING_PT.md) | Ficheiros `~/.cache/aigamekit/logs/` (tools + UMS) |
+| [`Vramd/README.md`](../Vramd/README.md) | vramd: fila, admit, agents, `respawn`, CLI |
+| [`LOGGING.md`](LOGGING.md) · [PT](LOGGING_PT.md) | Ficheiros `~/.cache/aigamekit/logs/` (tools + vramd) |
 | Review vivo simple-rpg | `VibeGame/examples/simple-rpg/sample-gameassets/logs/omni_shape_inconsistencies.md` |
 | [`Shared/.../vram_budget.py`](../Shared/src/aigamekit_shared/vram_budget.py) | Runtime budget (chunks/views) pós-load |
 | [`Shared/.../paint_budget.py`](../Shared/src/aigamekit_shared/paint_budget.py) | Faces alvo pré-paint |
@@ -43,7 +43,7 @@ UMS, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 
 ```
 ┌─────────────────────┐     load / offload      ┌──────────────────────┐
-│  UMS ADMIT (estático)│ ─────────────────────► │ RUNTIME BUDGET       │
+│  vramd ADMIT (estático)│ ─────────────────────► │ RUNTIME BUDGET       │
 │  pesos(quant)+act+   │                         │ 70% VRAM livre →     │
 │  safety (384 MiB)    │                         │ chunks / views /tiles│
 │  → aceitar ou refuse │                         │ after weights loaded │
@@ -55,16 +55,16 @@ UMS, budgets). **Não** substitui READMEs por tool — aponta e consolida.
 | **Admit** | Antes de `ensure_loaded` | Pico estático; se pico > VRAM total → **recusa permanente** | `vram_planner`, `BackendManager.peak_vram_mib` |
 | **Runtime** | Depois dos pesos | Dimensiona activação pela **livre** | `aigamekit_shared.vram_budget`, `modelserver.runtime_budget` |
 
-**Autoridade VRAM (operador):** **UMS** + **hw-auto** (default por tool).
+**Autoridade VRAM (operador):** **vramd** + **hw-auto** (default por tool).
 Não há CLI pública `--low-vram` / `--memory-efficient` — o perfil de hardware
 preenche os sinais de pico no payload. `prepare_gpu_exclusive` só no fallback
-in-process (`try_ums_delegation` falhou / `--no-ums`). Servers per-tool:
+in-process (`try_vramd_delegation` falhou / `--no-vramd`). Servers per-tool:
 só com `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
 
-**Sinais de pico (internos, payload UMS):** `sdnq_preset` e/ou
+**Sinais de pico (internos, payload vramd):** `sdnq_preset` e/ou
 `memory_efficient=true`. Sem isso o admit assume fp16 → text3d ~8–12 GiB →
-**refuse** em 6 GB. Happy path: hw-auto → `with_ums_peak_opts` /
-`with_ums_load_opts` (`cli_helpers`) ou `ums_batch.resolve_*_vram_opts`.
+**refuse** em 6 GB. Happy path: hw-auto → `with_vramd_peak_opts` /
+`with_vramd_load_opts` (`cli_helpers`) ou `ums_batch.resolve_*_vram_opts`.
 
 ---
 
@@ -111,7 +111,7 @@ usa `FOOTPRINTS` + quant. text3d YAML ~10000 MiB / footprint Omni 10+2 GiB fp16.
 | MeshRender min free | **256 MiB** | dual-UNet deixa ~34 MiB → OOM |
 | Livre &lt; 2.5 GiB | — | cfg_chunk + ref_offload + DINO CPU |
 
-Observabilidade: resposta `runtime_budget`; `ums stats` → `last_runtime_budget`.
+Observabilidade: resposta `runtime_budget`; `vramd stats` → `last_runtime_budget`.
 Kill-switch paint: `PAINT3D_AUTO_VRAM_BUDGET=0`.
 
 ---
@@ -150,23 +150,23 @@ Tabela raw: [`KERNEL_OPTS_BENCH.md`](KERNEL_OPTS_BENCH.md). Prompt/seed fixos.
 | Tool | Usar | Evitar |
 |------|------|--------|
 | **Text3D** | `flashvdm` (−42% hot vs vanilla) | fp8 (Half/BF16); compile one-shot; CL só (~0) |
-| **Text2D** | compile+CL em **batch/UMS** (já default) | step-cache c/ group_stream |
-| **Text2Icon** | channels_last batch/UMS (já default) | compile em 6 GB (hot pior) |
+| **Text2D** | compile+CL em **batch/vramd** (já default) | step-cache c/ group_stream |
+| **Text2Icon** | channels_last batch/vramd (já default) | compile em 6 GB (hot pior) |
 | **Paint3D** | mem-eff / SDNQ | `--compile` mem-eff (`QConv2d` FAIL) |
 | **Part3D** | flashvdm+CL; autotune `cond_batch=1` / `max_parts=1` ≤6.5 GB | Conditioner compile (`torch_cluster.fps`) |
-| **Skymap2D** | compile em batch/UMS (−19% hot; já default) | CL só (~0); one-shot compile (cold ~6 min) |
+| **Skymap2D** | compile em batch/vramd (−19% hot; já default) | CL só (~0); one-shot compile (cold ~6 min) |
 | **Texture2D / Text2Sound** | baseline | compile/CL (sem ganho nestes benches) |
 | **Terrain3D** | compile vendor ON (Linux+CUDA) | — |
 
 Bottleneck Text3D fast em 6 GB: **volume decode vanilla** (~2122 chunks), não DiT.
 
-**Defaults no código (UMS / CLI batch):**
+**Defaults no código (vramd / CLI batch):**
 
 | Onde | Default |
 |------|---------|
-| UMS `text2d` | `torch_compile=True` + `channels_last=True` |
-| UMS `skymap2d` | `torch_compile=True` |
-| UMS `text2icon` | `channels_last=True`, compile off |
+| vramd `text2d` | `torch_compile=True` + `channels_last=True` |
+| vramd `skymap2d` | `torch_compile=True` |
+| vramd `text2icon` | `channels_last=True`, compile off |
 | `text2d generate-batch` | `--compile` / `--channels-last` ON |
 | `skymap2d batch` | `--compile` ON |
 | `text2icon batch` | `--channels-last` ON |
@@ -213,17 +213,17 @@ Text3D CLI presets (steps/octree/chunks): ver `Text3D/README.md` — `fast` 18/1
 
 ---
 
-## 8. UMS + GameAssets — co-op batch
+## 8. vramd + GameAssets — co-op batch
 
 ### Orquestração
 
 | Antes | Agora |
 |-------|-------|
-| Subprocess `generate-batch` → `delegate_to_ums` sync (fila≈1) | `ums_coord` / `ums_batch`: **submit×N → wait** (1º job carrega backend) |
+| Subprocess `generate-batch` → `delegate_to_vramd` sync (fila≈1) | `ums_coord` / `ums_batch`: **submit×N → wait** (1º job carrega backend) |
 | Preload sync text3d/paint antes da wave | **`preload=False`** — load Omni pode >10 min; timeout client 600 s → Broken pipe → evict → fila VRAM stuck |
 | Master pipeline no meio da wave paint | **Defer** `MasterDeferQueue` até fim da wave GPU |
-| Só `AIGAMEKIT_UMS_PRIORITY=batch` | Flags `--no-ums` / `--ums-stream`; env affinity/inflight |
-| VRAM transitória = fail job | Evict + backoff + **requeue** até `AIGAMEKIT_UMS_MAX_VRAM_RETRIES` |
+| Só `VRAMD_PRIORITY=batch` | Flags `--no-vramd` / `--vramd-stream`; env affinity/inflight |
+| VRAM transitória = fail job | Evict + backoff + **requeue** até `VRAMD_MAX_VRAM_RETRIES` |
 
 Ordem fixa (anti-thrash text3d↔paint3d):
 
@@ -238,14 +238,14 @@ Peak na wave: **hw_auto** da tool → fallback admit-safe (`resolve_*_vram_opts`
 Omni inactivo no manifest: `softfill_omni_from_category` ([`OMNI_SHAPE_FINDINGS.md`](OMNI_SHAPE_FINDINGS.md)).
 **Guia operador batch:** [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md).
 Detalhe ops + armadilhas de teste: [`findings/UMS_VRAM_FINDINGS.md`](findings/UMS_VRAM_FINDINGS.md).
-Código tool novo → `ums respawn <backend>` (não restart do supervisor).
+Código tool novo → `vramd respawn <backend>` (não restart do supervisor).
 
 ### Agents — GPU ocupada
 
-1. `aigamekit-model-server status` / `queue` / **`debug`**
-2. Esperar (`ums wait`, `--ums-stream`) ou `ums cancel`
-3. **Nunca** `kill` / `nvidia-smi` pkill / `--gpu-kill-others` com UMS busy
-4. `queue_full` / timeout UMS up → **sem** fallback in-process paralelo
+1. `vramd status` / `queue` / **`debug`**
+2. Esperar (`vramd wait`, `--vramd-stream`) ou `vramd cancel`
+3. **Nunca** `kill` / `nvidia-smi` pkill / `--gpu-kill-others` com vramd busy
+4. `queue_full` / timeout vramd up → **sem** fallback in-process paralelo
 
 ### CLI diagnóstico (read-only)
 
@@ -253,9 +253,9 @@ Código tool novo → `ums respawn <backend>` (não restart do supervisor).
 |-----|-----|
 | `… debug` | HOLDING + fila + erros + budgets + GPU; `--watch N` |
 | `… stats` | backends + queue p50/p95 + `last_runtime_budget`; `--json` |
-| `… stats --reset` | Zera **contadores** (não para UMS / não cancela jobs) |
+| `… stats --reset` | Zera **contadores** (não para vramd / não cancela jobs) |
 | `… bench` | RTT IPC only (`status`/`queue`/`stats`) — **sem** generate |
-| ficheiro `ums-*.log` | `~/.cache/aigamekit/logs/` — `_log` UMS mesmo sem `-v` ([LOGGING.md](LOGGING.md)) |
+| ficheiro `vramd-*.log` | `~/.cache/aigamekit/logs/` — `_log` vramd mesmo sem `-v` ([LOGGING.md](LOGGING.md)) |
 
 Supervisor já a correr pode não ter código novo até restart **voluntário**.
 
@@ -284,7 +284,7 @@ Ver `Text3D/AGENTS.md`, `aigamekit_shared.mesh_repair`,
 |------|--------|
 | ModelServer README text3d **8000** MiB vs YAML/Omni footprint **~10 GiB** | Admit usa `FOOTPRINTS`; coluna README = legado — preferir esta hub + `lowvram.py` |
 | README hw-auto “hierarchical” vs bench **flashvdm** &lt;7.5 GiB | Preferir flashvdm em 6 GB (KERNEL_OPTS) |
-| `sdnq.suggest_preset_for_vram` (≥6 GB → uint8) vs UMS 6 GB → **int4** text3d | Tools/UMS path: int4 em ~6 GB para text3d |
+| `sdnq.suggest_preset_for_vram` (≥6 GB → uint8) vs vramd 6 GB → **int4** text3d | Tools/vramd path: int4 em ~6 GB para text3d |
 
 ---
 
@@ -292,14 +292,14 @@ Ver `Text3D/AGENTS.md`, `aigamekit_shared.mesh_repair`,
 
 ```
 [ ] hw-auto ligado (default); sem --low-vram / --memory-efficient na CLI
-[ ] Payloads UMS com sdnq_preset / memory_efficient (via hw-auto / with_ums_peak_opts)
+[ ] Payloads vramd com sdnq_preset / memory_efficient (via hw-auto / with_vramd_peak_opts)
 [ ] Text3D: flashvdm + int4; Omni bbox_axis_max=1.0
 [ ] Paint: face budget 6k–160k + atlas por size_m; sem compile+SDNQ
-[ ] Batch GameAssets: UMS up; prioridade batch; waves shape/paint + opcionais; não kill mid-queue
-[ ] Debug: ums debug / stats + `~/.cache/aigamekit/logs/ums-*.log` — não nvidia-smi pkill
-[ ] Kernel: ver findings/KERNEL_OPTS_FINDINGS.md (batch/UMS defaults)
+[ ] Batch GameAssets: vramd up; prioridade batch; waves shape/paint + opcionais; não kill mid-queue
+[ ] Debug: vramd debug / stats + `~/.cache/aigamekit/logs/vramd-*.log` — não nvidia-smi pkill
+[ ] Kernel: ver findings/KERNEL_OPTS_FINDINGS.md (batch/vramd defaults)
 [ ] One-shot CLI: compile off (excepto defaults batch documentados)
-[ ] Dev: AIGAMEKIT_PREFER_MONOREPO=1; editar */src/ sem reinstall; ums respawn <backend> p/ worker
+[ ] Dev: AIGAMEKIT_PREFER_MONOREPO=1; editar */src/ sem reinstall; vramd respawn <backend> p/ worker
 ```
 
 ---
@@ -311,12 +311,12 @@ Ver `Text3D/AGENTS.md`, `aigamekit_shared.mesh_repair`,
 | Footprint modelo | `Shared/.../lowvram.py` `FOOTPRINTS` |
 | Bytes/query decode | `vram_budget.py` + env |
 | Faces paint | `paint_budget.py` |
-| YAML admit hint | `ModelServer/.../backends.yaml` |
+| YAML admit hint | `Vramd/.../backends.yaml` |
 | Bench tabela | `docs/scripts/bench_kernel_opts.py` → KERNEL_OPTS_BENCH |
 | Kernel defaults guia | `findings/KERNEL_OPTS_FINDINGS.md` |
 | Omni clip/presets | `OMNI_SHAPE_FINDINGS.md` + `omni_controls.py` |
 
-Ao mudar defaults hw-auto, UMS adapter kwargs ou CLI batch kernel flags:
+Ao mudar defaults hw-auto, vramd adapter kwargs ou CLI batch kernel flags:
 actualizar **esta hub** §5 + KERNEL_OPTS “Aplicado” +
 `findings/KERNEL_OPTS_FINDINGS.md` na mesma alteração.
 
@@ -327,9 +327,9 @@ actualizar **esta hub** §5 + KERNEL_OPTS “Aplicado” +
 | 2026-07-24 | `GLB_FINISH_COMPRESSION.md` — KTX2+meshopt, dep `ktx`, `text3d finish` |
 | 2026-07-24 | Guia `GAMEASSETS_UMS_BATCH`; mission/; findings index; Round 3 nos ponteiros mesh |
 | 2026-07-24 | `ANIMATOR_RETARGET_FINDINGS` + índice Quaternius (root estático / cintura-ao-play) |
-| 2026-07-24 | UMS+hw-auto autoridade VRAM; pico interno; sem CLI `--low-vram`; waves opcionais |
-| 2026-07-24 | `ums_payload` all tools; hw_auto peak waves; Omni softfill; testes UMS vivo |
+| 2026-07-24 | vramd+hw-auto autoridade VRAM; pico interno; sem CLI `--low-vram`; waves opcionais |
+| 2026-07-24 | `ums_payload` all tools; hw_auto peak waves; Omni softfill; testes vramd vivo |
 | 2026-07-24 | Part3D faces/p3sam/fine-parts/`label_fuse` em PAINT_PART; índice TOPOLOGY_FIX |
 | 2026-07-24 | Hunyuan lessons: topology lean (sem force_base); prompts building; paint inpaint |
-| 2026-07-24 | Guia `KERNEL_OPTS_FINDINGS`; defaults UMS/batch Text2D/Skymap/Icon |
+| 2026-07-24 | Guia `KERNEL_OPTS_FINDINGS`; defaults vramd/batch Text2D/Skymap/Icon |
 | 2026-07-19 | Índice `findings/*`; preload=False shape/paint; VRAM requeue; links Hunyuan lessons + review simple-rpg |

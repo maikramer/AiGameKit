@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Regenera todas as texturas do simple-rpg via UMS (texture2d) + Materialize (PBR).
+"""Regenera todas as texturas do simple-rpg via vramd (texture2d) + Materialize (PBR).
 
 9 texturas:
   Ground/Terrain: vale_grass, forest_floor, desert_sand, swamp_mud, snow_peak, mountain_stone
   Props/Materiais: wood_planks, wall_plaster, roof_tiles
 
 Cada textura:
-  1. Gerada via UMS (texture2d com group_offload auto na RTX 4050)
+  1. Gerada via vramd (texture2d com group_offload auto na RTX 4050)
   2. PBR maps gerados via Materialize (height, normal, metallic, smoothness, edge, AO)
 """
 
@@ -17,7 +17,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from aigamekit_shared.model_server import delegate_to_ums
+from aigamekit_shared.vramd_client import delegate_to_vramd
 
 TEXTURES_DIR = Path(__file__).parent / "public" / "assets" / "textures"
 
@@ -92,12 +92,12 @@ SPECS: list[tuple[str, str, str, str]] = [
 
 
 def generate_texture(name: str, prompt: str, negative: str) -> bool:
-    """Gera uma textura via UMS (texture2d). Retorna True se OK."""
+    """Gera uma textura via vramd (texture2d). Retorna True se OK."""
     output = TEXTURES_DIR / f"{name}.png"
-    print(f"  [UMS] A gerar {name}.png...", flush=True)
+    print(f"  [vramd] A gerar {name}.png...", flush=True)
 
     t0 = time.time()
-    result = delegate_to_ums(
+    result = delegate_to_vramd(
         "texture2d",
         {
             "prompt": prompt,
@@ -113,7 +113,7 @@ def generate_texture(name: str, prompt: str, negative: str) -> bool:
     elapsed = time.time() - t0
 
     if result and result.get("status") == "ok":
-        print(f"  [UMS] ✓ {name}.png em {elapsed:.1f}s", flush=True)
+        print(f"  [vramd] ✓ {name}.png em {elapsed:.1f}s", flush=True)
         # Guardar sidecar JSON com metadados.
         meta = {
             "prompt": prompt,
@@ -128,8 +128,8 @@ def generate_texture(name: str, prompt: str, negative: str) -> bool:
         (TEXTURES_DIR / f"{name}.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
         return True
     else:
-        error = result.get("error", "?") if result else "UMS não respondeu"
-        print(f"  [UMS] ✗ {name}: {error}", flush=True)
+        error = result.get("error", "?") if result else "vramd não respondeu"
+        print(f"  [vramd] ✗ {name}: {error}", flush=True)
         return False
 
 
@@ -179,7 +179,7 @@ def main() -> None:
     for idx, (name, prompt, negative, preset) in enumerate(SPECS, 1):
         print(f"\n[{idx}/{len(SPECS)}] {name}", flush=True)
 
-        # 1. Gerar diffuse via UMS.
+        # 1. Gerar diffuse via vramd.
         if not generate_texture(name, prompt, negative):
             fail_count += 1
             continue

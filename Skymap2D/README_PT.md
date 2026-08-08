@@ -100,7 +100,7 @@ Requer PyTorch/CUDA — FLUX.1-dev + LoRA correm localmente via `diffusers` (`co
 | `--compile/--no-compile` | off (`generate`); **on** (`batch`) | `torch.compile` (~−19% hot); cold ~6 min — off em one-shot |
 | `--channels-last` | off | NHWC; pouco ganho nestes benches |
 
-Kernel opts (batch/UMS): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
+Kernel opts (batch/vramd): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 ## Presets
 
@@ -117,19 +117,19 @@ Kernel opts (batch/UMS): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findi
 | Underwater | Vista subaquática, raios de luz, água |
 | Fantasy | Céu mágico, auroras, cristais flutuantes |
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`skymap2d generate` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+`skymap2d generate` delega automaticamente no **`vramd`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `VRAMD_AUTO_START=0`.
 
 ```bash
-skymap2d generate "pôr do sol" -o ceu.png --ums-stream
-skymap2d generate "noite" -o ceu_noite.png --ums-priority batch
-skymap2d generate "tempestade" -o ceu_storm.png --no-ums   # forçar in-process
-ums status
-ums respawn skymap2d                                       # recarrega código src/ editado
+skymap2d generate "pôr do sol" -o ceu.png --vramd-stream
+skymap2d generate "noite" -o ceu_noite.png --vramd-priority batch
+skymap2d generate "tempestade" -o ceu_storm.png --no-vramd   # forçar in-process
+vramd status
+vramd respawn skymap2d                                       # recarrega código src/ editado
 ```
 
-Modelo: base [FLUX.1-dev SDNQ uint4](https://huggingface.co/Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32) (mirror público) + [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) (público). A base oficial `black-forest-labs/FLUX.1-dev` é **gated** — usar `SKYMAP2D_BASE_MODEL_ID` só depois de aceitar os termos BFL. Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
+Modelo: base [FLUX.1-dev SDNQ uint4](https://huggingface.co/Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32) (mirror público) + [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) (público). A base oficial `black-forest-labs/FLUX.1-dev` é **gated** — usar `SKYMAP2D_BASE_MODEL_ID` só depois de aceitar os termos BFL. Guia completo: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Configuração
 

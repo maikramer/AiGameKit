@@ -21,10 +21,10 @@ class Adapter(WorkerAdapter):
 
     def load(self, **kwargs: Any) -> Any:
         from text2d.generator import KleinFluxGenerator
-        from text2d.ums_load import map_ums_load_kwargs
+        from text2d.vramd_load import map_vramd_load_kwargs
 
-        # Peak/offload: só do request (CLI hw_auto / with_ums_peak_opts).
-        load_kwargs = map_ums_load_kwargs(kwargs)
+        # Peak/offload: só do request (CLI hw_auto / with_vramd_peak_opts).
+        load_kwargs = map_vramd_load_kwargs(kwargs)
         gen = KleinFluxGenerator(**load_kwargs)
         gen.warmup()
         return gen

@@ -18,7 +18,7 @@ bater, nenhuma transferência é feita.
 
 Env vars:
     QUATERNIUS_PACK_URL: override do slug itch (raramente necessário).
-    AIGAMEKIT_CACHE_DIR: diretório base de cache (default: XDG/``~/.cache/aigamekit``).
+    VRAMD_CACHE_DIR: diretório base de cache (default: XDG/``~/.cache/aigamekit``).
 """
 
 from __future__ import annotations
@@ -63,10 +63,10 @@ def _lock_data() -> dict[str, Any]:
 def cache_dir() -> Path:
     """Diretório base de cache do AiGameKit (fora do git).
 
-    Ordem de precedência: ``AIGAMEKIT_CACHE_DIR`` → ``XDG_CACHE_HOME/aigamekit`` →
+    Ordem de precedência: ``VRAMD_CACHE_DIR`` → ``XDG_CACHE_HOME/aigamekit`` →
     ``~/.cache/aigamekit``.
     """
-    env = os.environ.get("AIGAMEKIT_CACHE_DIR")
+    env = os.environ.get("VRAMD_CACHE_DIR")
     if env:
         return Path(env)
     xdg = os.environ.get("XDG_CACHE_HOME")

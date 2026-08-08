@@ -20,7 +20,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
-    add_ums_options,
+    add_vramd_options,
     delegate_or_prepare,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
@@ -179,7 +179,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     show_default=True,
     help="Memory format NHWC (channels_last) no VAE/transformer — Ampere+ conv path.",
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -201,9 +201,9 @@ def generate_cmd(
     torch_compile_mode: str,
     step_cache: str,
     channels_last: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Gera uma imagem a partir do PROMPT."""
     from aigamekit_shared.gpu import warn_if_vram_occupied
@@ -300,9 +300,9 @@ def generate_cmd(
             t_start=t_start,
             noun="Imagem",
             console=console,
-            enabled=not no_ums,
-            priority=ums_priority,
-            stream=ums_stream,
+            enabled=not no_vramd,
+            priority=vramd_priority,
+            stream=vramd_stream,
             gpu_ids=gpu_ids,
             memory_efficient=mem_eff,
             quant_preset=quant_preset,
@@ -528,7 +528,7 @@ def _parse_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     help="channels_last NHWC (default ON em batch).",
 )
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def generate_batch_cmd(
     ctx: click.Context,
@@ -548,9 +548,9 @@ def generate_batch_cmd(
     torch_compile: bool,
     torch_compile_mode: str,
     channels_last: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Gera múltiplas imagens a partir de um manifesto JSON (JSONL em stdout)."""
     global _batch_gen
@@ -614,7 +614,7 @@ def generate_batch_cmd(
     pending_inprocess: list[dict[str, Any]] = []
 
     try:
-        # UMS por item (paridade Paint3D) — load in-process só se sobrar trabalho.
+        # vramd por item (paridade Paint3D) — load in-process só se sobrar trabalho.
         for item in items:
             t0 = time.time()
             item_id = item["id"]
@@ -651,9 +651,9 @@ def generate_batch_cmd(
                 t_start=t0,
                 noun="Imagem",
                 console=err_console,
-                enabled=not no_ums,
-                priority=ums_priority or "batch",
-                stream=ums_stream,
+                enabled=not no_vramd,
+                priority=vramd_priority or "batch",
+                stream=vramd_stream,
                 gpu_ids=parsed_gpu_ids,
                 memory_efficient=mem_eff,
                 quant_preset=quant_preset,
@@ -843,14 +843,14 @@ def models_cmd() -> None:
     "--ums-worker",
     is_flag=True,
     help=(
-        "Modo worker subprocesso do UMS: lê comandos JSONL do stdin (load / "
+        "Modo worker subprocesso do vramd: lê comandos JSONL do stdin (load / "
         "generate / unload / shutdown) e emite eventos no stdout. Usado pelo "
         "SubprocessWorkerPool do ModelServer — text2d corre no seu próprio "
         "venv e o supervisor (ModelServer/.venv) coordena via JSONL."
     ),
 )
 def serve(ums_worker: bool) -> None:
-    """Modo worker subprocesso do UMS (subprocess-per-backend).
+    """Modo worker subprocesso do vramd (subprocess-per-backend).
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico

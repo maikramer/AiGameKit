@@ -25,7 +25,7 @@ Anyone who opens this repository — human or cold AI agent — can get the **sa
 3. **Agent-first reproducibility.** Docs, CLIs, and env contracts must be sufficient for a fresh agent to succeed. Same inputs + same quality tier ⇒ same deliverable class. Ambiguity in the happy path is a bug in the product, not a training gap for the user.
    → [`docs/mission/04-agent-first-reproducibility.md`](docs/mission/04-agent-first-reproducibility.md)
 
-4. **VRAM is infrastructure, not a user problem.** Nobody should plan peak memory, juggle which models fit, or keep GPU occupancy in their head — regardless of how large the models are or how many backends a tool owns. The Unified Model Server (UMS) owns admit, queue, eviction, and peak accounting so that:
+4. **VRAM is infrastructure, not a user problem.** Nobody should plan peak memory, juggle which models fit, or keep GPU occupancy in their head — regardless of how large the models are or how many backends a tool owns. The Unified Model Server (vramd) owns admit, queue, eviction, and peak accounting so that:
    - the GPU stays **busy** when there is work (high utilization);
    - VRAM stays **inside a safe margin** at all times;
    - model count and model size change **latency and queue order**, not the mental model (no new manual VRAM checklist).
@@ -34,7 +34,7 @@ Anyone who opens this repository — human or cold AI agent — can get the **sa
 ### Implications for agents changing this repo
 
 - Optimize for "first command works" and "batch finishes alone."
-- Route GPU work through UMS; never teach kill/race/pkill as the normal path.
+- Route GPU work through vramd; never teach kill/race/pkill as the normal path.
 - Hide VRAM math behind admit / peak / quant / soft-fill; surface progress and artifacts, not memory spreadsheets.
 - When adding models or stages, extend the coordinator and defaults — do not add operator burden.
 - Document the happy path so the next AI gets identical results without this conversation.
@@ -44,7 +44,7 @@ Anyone who opens this repository — human or cold AI agent — can get the **sa
 ## Agent reference index (optional deep dives)
 
 Este ficheiro é o **contrato curto**: missão, mapa do monorepo, comandos, regras
-duras (git=`main`, UMS, LOD0). Tribal knowledge longa vive nos docs abaixo —
+duras (git=`main`, vramd, LOD0). Tribal knowledge longa vive nos docs abaixo —
 **abrir só quando a tarefa tocar nesse domínio**.
 
 | Tarefa | Doc |
@@ -52,9 +52,9 @@ duras (git=`main`, UMS, LOD0). Tribal knowledge longa vive nos docs abaixo —
 | Escrever / regenerar assets (`manifest.yaml`, Omni, size_m, octree) | [`docs/MANIFEST_AUTHORING.md`](docs/MANIFEST_AUTHORING.md) |
 | Relação empírica octree × faces (`_shape`) | [`docs/findings/OCTREE_FACES_FINDINGS.md`](docs/findings/OCTREE_FACES_FINDINGS.md) |
 | Omni bbox/pose/clip/fingerprint | [`docs/OMNI_SHAPE_FINDINGS.md`](docs/OMNI_SHAPE_FINDINGS.md) |
-| Batch UMS / waves | [`docs/GAMEASSETS_UMS_BATCH.md`](docs/GAMEASSETS_UMS_BATCH.md) |
+| Batch vramd / waves | [`docs/GAMEASSETS_UMS_BATCH.md`](docs/GAMEASSETS_UMS_BATCH.md) |
 | DAG mesh Round 3 / LOD0 / split árvores | [`docs/findings/MESH_PIPELINE_FINDINGS.md`](docs/findings/MESH_PIPELINE_FINDINGS.md) |
-| VRAM / UMS ops | [`docs/MODEL_FINDINGS.md`](docs/MODEL_FINDINGS.md), [`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md) |
+| VRAM / vramd ops | [`docs/MODEL_FINDINGS.md`](docs/MODEL_FINDINGS.md), [`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md) |
 | Retarget Quaternius | [`docs/findings/ANIMATOR_RETARGET_FINDINGS.md`](docs/findings/ANIMATOR_RETARGET_FINDINGS.md) |
 | Text-to-motion → SkinTokens (`apply-rigged`) | [`docs/findings/MOTION3D_FINDINGS.md`](docs/findings/MOTION3D_FINDINGS.md) · [`Motion3D/`](Motion3D/) |
 | Compressão GLB | [`docs/GLB_FINISH_COMPRESSION.md`](docs/GLB_FINISH_COMPRESSION.md) |
@@ -82,12 +82,12 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio Open) |
 | `Rigging3D/` | Python | `rigging3d` | Auto-rigging (SkinTokens, Python 3.13) |
 | `Animator3D/` | Python | `animator3d` | Animation (bpy 5.2 LTS, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
-| `Motion3D/` | Python | `motion3d` | Text-to-motion (HY-Motion-1.0 Lite/Full) → NPZ @30fps; `apply-rigged` → SkinTokens via Animator3D `hml22`; UMS |
+| `Motion3D/` | Python | `motion3d` | Text-to-motion (HY-Motion-1.0 Lite/Full) → NPZ @30fps; `apply-rigged` → SkinTokens via Animator3D `hml22`; vramd |
 | `AiGameKitLab/` | Python | `aigamekit-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
 | `Terrain3D/` | Python | `terrain3d` | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
 | `Rocks3D/` | Python | `rocks3d` | Procedural 3D rock generation (no PyTorch) |
-| `ModelServer/` | Python | `modelserver` (CLI `aigamekit-model-server`/`ums`) | Unified Model Server (UMS) — single-process GPU/VRAM supervisor |
+| `Vramd/` | Python | `modelserver` (CLI `vramd`/`vramd`) | Unified Model Server (vramd) — single-process GPU/VRAM supervisor |
 | `VibeGame/` | TypeScript | `vibegame` (npm) | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `PlayerGLTF` recipe |
 
 All Python packages depend on `aigamekit-shared` (install Shared first). VibeGame is standalone (Bun + Vite); it does not use `aigamekit-shared`.
@@ -137,7 +137,7 @@ make test              # pytest all Python packages + cargo test Materialize
 
 ```bash
 make test-shared       # pytest Shared only
-make test-modelserver  # pytest ModelServer (UMS) only
+make test-modelserver  # pytest ModelServer (vramd) only
 make test-text2d       # pytest Text2D only
 make test-text2icon    # pytest Text2Icon only
 make test-text3d       # pytest Text3D only
@@ -401,44 +401,50 @@ Requires `bpy` installed in the active venv (`pip install bpy`, Python 3.13+ / B
 
 See `AiGameKitLab/README.md` for full documentation.
 
-## Model Server (VRAM Coordination)
+## vramd (VRAM Coordination)
 
-The canonical system is the **Unified Model Server (UMS)** in `ModelServer/` —
-one process, one socket (`~/.cache/aigamekit/model-server.sock`), 9 GPU backends,
-smart job queue (priority + VRAM affinity cuts≤3), and weight+LRU eviction.
-Client helpers live in `Shared/src/aigamekit_shared/model_server.py`.
-Alias CLI: `ums` ≡ `aigamekit-model-server`.
+The canonical system is the **vramd** supervisor in `Vramd/` (PyPI package,
+installed by `./install.sh vramd`) — one process, one socket
+(`~/.cache/vramd/vramd.sock`), 9 GPU backends, smart job queue (priority + VRAM
+affinity cuts≤3), and weight+LRU eviction. It replaces the former
+`ModelServer/`. Client helpers live in
+`Shared/src/aigamekit_shared/vramd_client.py`.
+CLI: `vramd` (`vramd start` / `status` / `queue` / `cancel` / `respawn` / …).
 
-**File logs:** all Python tools + UMS write
+**File logs:** all Python tools + vramd write
 `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` via `aigamekit_shared.logging`
-(`configure_logging` / `Logger`). UMS always files `_log` lines; console needs
+(`configure_logging` / `Logger`). vramd always files `_log` lines; console needs
 `-v`. Guide: [`docs/LOGGING.md`](docs/LOGGING.md).
 
-**Architecture:** CLIs call `try_ums_delegation` / `delegate_to_ums` **before** any
-in-process GPU prep (auto-starts UMS unless `AIGAMEKIT_UMS_AUTO_START=0`). Jobs go
+**Architecture:** CLIs call `try_vramd_delegation` / `delegate_to_vramd` **before** any
+in-process GPU prep (auto-starts vramd unless `VRAMD_AUTO_START=0`). Jobs go
 through `JobQueue` → `AffinityScheduler` → `WorkerPool` (`MAX_INFLIGHT=1`).
-Interactive CLI beats batch (`AIGAMEKIT_UMS_PRIORITY=batch` set by GameAssets).
+Interactive CLI beats batch (`VRAMD_PRIORITY=batch` set by GameAssets).
 Per-tool legacy servers (`text2icon server`, etc.) remain as **deprecated** fallback only.
 
-**Canonical venv + subprocess workers (live):** UMS runs in `ModelServer/.venv`
-(`./install.sh modelserver`). Auto-start precedence
-(`_resolve_ums_start_cmd`): `MODELSERVER_BIN` → `ModelServer/.venv/bin/python`
-→ `aigamekit-model-server`/`ums` on PATH → `sys.executable` (last resort, warns).
+**Canonical venv + subprocess workers (live):** vramd runs in `Vramd/.venv`
+(`./install.sh vramd`). Auto-start precedence
+(`_resolve_vramd_start_cmd`): `VRAMD_BIN` → `Vramd/.venv/bin/python`
+→ `vramd` on PATH → `sys.executable` (last resort, warns).
+The auto-start sets `VRAMD_TOOLS_ROOT` (checkout) and `VRAMD_BACKENDS_FILE`
+(`Shared/src/aigamekit_shared/data/backends.yaml`).
 Each GPU backend = persistent worker in `<Tool>/.venv` (JSONL stdin/stdout).
-Design: [`docs/UMS_SUBPROCESS_PLAN.md`](docs/UMS_SUBPROCESS_PLAN.md) (Fases 0–4 ✅).
-Rollback: `AIGAMEKIT_UMS_SUBPROCESS=0`. After editing tool code: `ums respawn
-<backend>` (not a full UMS restart). GameAssets waves:
+Design: [`docs/UMS_SUBPROCESS_PLAN.md`](docs/UMS_SUBPROCESS_PLAN.md) (Fases 0–4 ✅,
+histórico — o daemon é agora o vramd).
+Rollback: `VRAMD_SUBPROCESS=0` (não suportado sem adapters in-process).
+After editing tool code: `vramd respawn
+<backend>` (not a full vramd restart). GameAssets waves:
 [`docs/GAMEASSETS_UMS_BATCH.md`](docs/GAMEASSETS_UMS_BATCH.md).
 
-**VRAM coordination:** **UMS + hw-auto** are the public VRAM authority. No
+**VRAM coordination:** **vramd + hw-auto** are the public VRAM authority. No
 operator CLI `--low-vram` / `--memory-efficient` — hw-auto fills peak signals on
-the UMS payload (`sdnq_preset` / `memory_efficient` via `with_ums_peak_opts` /
-`ums_batch.resolve_*_vram_opts`). Omit those → admit assumes fp16 (~8 GiB
-text3d) → refuse on 6 GB. Call `try_ums_delegation` **before** GPU prep;
-`prepare_gpu_exclusive` only after UMS fail / `--no-ums`. Multi-GPU: put
-`gpu_ids` in the payload (`with_ums_load_opts`) or `--gpu-ids` only applies
+the vramd payload (`sdnq_preset` / `memory_efficient` via `with_vramd_peak_opts` /
+`vramd_batch.resolve_*_vram_opts`). Omit those → admit assumes fp16 (~8 GiB
+text3d) → refuse on 6 GB. Call `try_vramd_delegation` **before** GPU prep;
+`prepare_gpu_exclusive` only after vramd fail / `--no-vramd`. Multi-GPU: put
+`gpu_ids` in the payload (`with_vramd_load_opts`) or `--gpu-ids` only applies
 in-process. Legacy per-tool / blind `ensure_vram`: **opt-in**
-`AIGAMEKIT_ALLOW_LEGACY_SERVER=1`. Kill refuses while UMS busy. Free VRAM:
+`VRAMD_ALLOW_LEGACY_SERVER=1`. Kill refuses while vramd busy. Free VRAM:
 **NVML-first** (`aigamekit_shared.gpu`, dep `nvidia-ml-py`). Ops:
 [`docs/MODEL_FINDINGS.md`](docs/MODEL_FINDINGS.md),
 [`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md),
@@ -446,58 +452,58 @@ in-process. Legacy per-tool / blind `ensure_vram`: **opt-in**
 
 ### Agents — VRAM busy checklist (do NOT skip)
 
-1. `aigamekit-model-server status` / `queue` / `doctor` — see **HOLDING** / who owns the GPU.
-2. Wait (`ums wait <job_id>`, tool with `--ums-stream`) or `ums cancel <job_id>`.
-3. **Never** `kill` / GPU pkill / `--gpu-kill-others` while UMS has jobs —
+1. `vramd status` / `queue` / `doctor` — see **HOLDING** / who owns the GPU.
+2. Wait (`vramd wait <job_id>`, tool with `--vramd-stream`) or `vramd cancel <job_id>`.
+3. **Never** `kill` / GPU pkill / `--gpu-kill-others` while vramd has jobs —
    that races the queue and can murder the wrong workload (bench, sibling tool, batch).
-4. Idle UMS holding VRAM (live workers keep ~0.3–1 GiB CUDA context each) so
-   `free < peak` (ex. text3d int4 ~4991 MiB): **`ums zero`** — kills all idle
+4. Idle vramd holding VRAM (live workers keep ~0.3–1 GiB CUDA context each) so
+   `free < peak` (ex. text3d int4 ~4991 MiB): **`vramd zero`** — kills all idle
    workers without stopping the supervisor (refused `ZERO_BUSY` when the queue
    is busy). The supervisor itself no longer creates a CUDA context
    (`clear_cuda_memory`/`torch_reserved_mib` skip torch calls when CUDA is not
    initialized); only a supervisor started *before* this fix needs one last
-   `ums stop` + auto-start.
-5. Only use `--no-ums` + in-process when you intentionally bypass the supervisor;
-   then kill is still refused if UMS is busy.
-6. Full guide: `ModelServer/README.md` (section *Agents / anti-patterns*).
+   `vramd stop` + auto-start.
+5. Only use `--no-vramd` + in-process when you intentionally bypass the supervisor;
+   then kill is still refused if vramd is busy.
+6. Full guide: `Vramd/README.md` (section *Agents / anti-patterns*).
 
 **Commands:**
 ```bash
-ums start|stop|status|submit|queue|wait|cancel|flush|backends|preload|evict|reap|respawn|zero|stats|debug|bench|doctor|calibrate
+vramd start|stop|status|submit|queue|wait|cancel|flush|backends|preload|evict|reap|respawn|zero|stats|debug|bench|doctor|calibrate
 # cancel <job_id|prefixo> | cancel --all | flush [--queued-only]
 # respawn <backend|--all> [--hot]  — reinicia SÓ o worker da tool (código novo), sem reiniciar o supervisor
-# zero                        — zera TODA a VRAM do UMS (mata workers idle) SEM parar o supervisor
+# zero                        — zera TODA a VRAM do vramd (mata workers idle) SEM parar o supervisor
 # calibrate <backend>         — mede o footprint VRAM real (job real + NVML por processo) e emite o descriptor YAML
-# same as: aigamekit-model-server …
-text2icon generate "icon" -o out.png   # Auto-delegates to UMS (~7s vs ~20s cold)
-text2icon generate "icon" -o out.png --ums-stream --ums-priority interactive
-# Tool flags (all GPU generate/decompose): --ums-priority | --no-ums | --ums-stream
+# same as: vramd …
+text2icon generate "icon" -o out.png   # Auto-delegates to vramd (~7s vs ~20s cold)
+text2icon generate "icon" -o out.png --vramd-stream --vramd-priority interactive
+# Tool flags (all GPU generate/decompose): --vramd-priority | --no-vramd | --vramd-stream
 # Deprecated legacy: text2icon server | server-status | server-stop
 ```
 
 **Key APIs in `aigamekit_shared.model_server`:**
 | Function | Purpose |
 |----------|---------|
-| `delegate_to_ums(backend, request)` | Sync generate via UMS (main CLI path) |
+| `delegate_to_vramd(backend, request)` | Sync generate via vramd (main CLI path) |
 | `submit_to_ums` / `poll_ums_job` / `wait_ums_job` / `cancel_ums_job` | Async job API |
 | `respawn_ums_backend(backend, lazy=True)` | Restart a tool's worker subprocess (pick up edited tool code without restarting the supervisor) |
-| `zero_ums_vram()` | Zero ALL UMS-held VRAM (kills idle workers + scrub) without stopping the supervisor; `None` when UMS is down |
+| `zero_ums_vram()` | Zero ALL vramd-held VRAM (kills idle workers + scrub) without stopping the supervisor; `None` when vramd is down |
 | `fetch_ums_queue_snapshot` / `ums_is_busy` / `format_ums_holding_summary` | Queue introspection |
 | `UMS_DO_NOT_KILL_TIP` | Stable tip string for CLIs/agents |
-| `ensure_vram_available(needed_mib)` | Ask UMS; legacy sockets only if `AIGAMEKIT_ALLOW_LEGACY_SERVER=1` |
-| `ensure_ums_running()` | Auto-start UMS supervisor |
+| `ensure_vram_available(needed_mib)` | Ask vramd; legacy sockets only if `AIGAMEKIT_ALLOW_LEGACY_SERVER=1` |
+| `ensure_ums_running()` | Auto-start vramd supervisor |
 | `discover_server_pids()` | Protect server PIDs from GPU kill |
 | `ModelServer(...)` | Legacy per-tool server class (deprecated) |
 
-**Env vars:** `AIGAMEKIT_MODEL_SERVER_SOCKET`, `AIGAMEKIT_UMS_AUTO_START`,
-`AIGAMEKIT_UMS_PRIORITY`, `AIGAMEKIT_UMS_STREAM`, `AIGAMEKIT_UMS_DEBUG`,
-`AIGAMEKIT_UMS_MAX_AFFINITY_CUTS`, `AIGAMEKIT_UMS_MAX_QUEUE_DEPTH`,
-`AIGAMEKIT_UMS_MAX_INFLIGHT`, `AIGAMEKIT_ALLOW_LEGACY_SERVER`, `MODELSERVER_BIN`,
+**Env vars:** `VRAMD_CLIENT_SOCKET`, `VRAMD_AUTO_START`,
+`VRAMD_PRIORITY`, `VRAMD_STREAM`, `VRAMD_DEBUG`,
+`VRAMD_MAX_AFFINITY_CUTS`, `VRAMD_MAX_QUEUE_DEPTH`,
+`VRAMD_MAX_INFLIGHT`, `AIGAMEKIT_ALLOW_LEGACY_SERVER`, `VRAMD_BIN`,
 `AIGAMEKIT_PREFER_MONOREPO` (default on — `resolve_binary` prefers
-`<Tool>/.venv/bin`). WAL: `~/.cache/aigamekit/ums-jobs.jsonl`.
+`<Tool>/.venv/bin`). WAL: `~/.cache/aigamekit/vramd-jobs.jsonl`.
 Dev edits under `*/src/` are live (editable install); tool worker reload →
-`ums respawn <backend>`; supervisor/protocol → `ums stop`. See
-`ModelServer/README.md`, [`docs/INSTALLING.md`](docs/INSTALLING.md).
+`vramd respawn <backend>`; supervisor/protocol → `vramd stop`. See
+`Vramd/README.md`, [`docs/INSTALLING.md`](docs/INSTALLING.md).
 
 ## Commit Conventions
 
@@ -570,7 +576,7 @@ CI pitfalls (softfill sem Text3D, pedalboard SIGILL, Shared `[dev]` mesh deps, V
 - Text3D / Hunyuan3D (marching cubes): paredes duplas, rachas, edifícios tipo casca-plástico. Reparo: `aigamekit_shared.mesh_repair` perfis `topology_clean` / `pre_decimate_uv` / `part_decode` / `post_voxel`. `topology_clean` actual: weld → slivers/debris → fill → watertight **seletivo** (diâmetro de loop) → shade-smooth; **sem** `force_close_base`/flare/Taubin (removidos — destruíam capela). **Base oca por baixo é OK** — QA `_shape` foca cortes/forma graves, não fechar chão. Refs Text2D eye-level 3/4 (`categories.building` + `prompt_builder`). Paint: `ensure_clean_for_paint` + `paint_prep.restrict_inpaint`. Lições: `docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`.
 - **topology-fix rápido (engine arrays)**: `text3d topology-fix --engine arrays|auto|bpy` (default `arrays`; `auto`≡arrays). GameAssets batch/resume passa `--engine arrays`. Filtros `topology_clean` vetorizados em `aigamekit_shared.mesh_repair_arrays` (numpy/scipy) quando o mesh não tem UVs/weights/shape-keys/armature; fill/caps/`make_watertight` ficam em bmesh. Morph-close no engine arrays corre **depois** do weld. Estudo: `docs/TOPOLOGY_FIX_GPU_STUDY.md`.
 - **Octree / faces / manifesto:** happy path = `category` + `size_m` (sem `octree_resolution`). `char_m=(L·H·W)^(1/3)` → `bbox_tune` → octree; faces ≈ `8×10⁴·char_m²` ≈ `κ·octree²`. Props: tecto faces (128–160). Terrain/rock: **piso físico** `√(8e4·char²/κ)×1.125` (cobre antigos +32 manuais anti-buracos). Hero dedos = único override típico (`octree`+`mc_level: 0`). Manual: [`docs/MANIFEST_AUTHORING.md`](docs/MANIFEST_AUTHORING.md). Dados: [`docs/findings/OCTREE_FACES_FINDINGS.md`](docs/findings/OCTREE_FACES_FINDINGS.md).
-- **UMS ops (residual / singleton / idle):** detalhe em [`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md) e checklist na secção Model Server acima. Nunca `kill`/pkill GPU com UMS busy; `ums respawn <backend>` após editar código de tool.
+- **vramd ops (residual / singleton / idle):** detalhe em [`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md) e checklist na secção Model Server acima. Nunca `kill`/pkill GPU com vramd busy; `vramd respawn <backend>` após editar código de tool.
 - O comando `vibegame run` foi concebido para rebuild/atualização da engine face a exemplos que usam `file:vibegame`; em Windows podem ocorrer falhas de cópia/cache (`ENOENT` no pacote `vibegame`) e é preciso alvo/cwd coerente com a raiz da engine ou exemplo com `dev` ligado à engine.
 - Skymap2D e equirect/PMREM: o modelo HF Flux-LoRA-Equirectangular-v3 devolve imagens em resolução errada (1024×768 em vez do pedido 2048×1024) e com os polos ao centro vertical em vez das bordas; Skymap2D `generator.py` faz auto-resize e shift vertical de 50% para corrigir. O `PMREMGenerator` do Three.js ignora `texture.offset`/`repeat` no shader interno — para ajustar UV de texturas equirect antes de `fromEquirectangular()` é necessário manipular o bitmap a nível de píxeis (canvas). Convenção equirect Three.js: `u = atan(dir.z, dir.x)`, `v = asin(dir.y)` — centro da imagem = horizonte, topo = zénite, fundo = nadir. Texturas equirect em **retrato** (altura > largura) ou com eixos trocados podem mapear o azimute ao eixo vertical do bitmap e produzir artefactos tipo «pilares» no céu; convém normalizar para panorama 2:1 em paisagem antes do PMREM quando isso ocorrer.
 - Dependências de screen-space / pós-processamento (ex. `screen-space-reflections`) podem importar símbolos removidos ou renomeados no Three.js (ex. `WebGLMultipleRenderTargets`), falhando no Vite com «No matching export» até alinhar versões do Three ou substituir o efeito. Em áudio Web, `AudioContext` bloqueado ou `listener.positionX` indisponível costuma ligar-se a autoplay sem gesto do utilizador e/ou à ausência de cadeia válida `AudioListener` + câmera principal.
@@ -604,7 +610,7 @@ CI pitfalls (softfill sem Text3D, pedalboard SIGILL, Shared `[dev]` mesh deps, V
 
 - Multi-GPU: a maioria dos pacotes com GPU agora aceitam `--gpu-ids 0,1` para dividir pesos entre GPUs via accelerate (`MultiGPUPlanner` em `aigamekit_shared.multi_gpu`). GameAssets batch/`resume` propaga `--gpu-ids` e `CUDA_VISIBLE_DEVICES` a todos os sub-tools; deteta GPUs via NVML (`aigamekit_shared.gpu.detect_gpu_ids`) quando omitido. Pipeline stages (3D, rig, animate) são agora auto-detetados do manifest + `game.yaml` blocks; usar `--no-3d`, `--no-rig`, `--no-animate` para opt-out. O env var `PAINT3D_MULTI_GPU` está obsoleto — usar `--gpu-ids`. Resolução por defeito do Text2D passou de 2048 para 1024.
 
-- **UMS respawn:** editar tool → `ums respawn <backend>` (não restart do supervisor). Supervisor só para código ModelServer / `backends.yaml` / protocolo partilhado. Ver Model Server acima + [`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md).
+- **vramd respawn:** editar tool → `vramd respawn <backend>` (não restart do supervisor). Supervisor só para código ModelServer / `backends.yaml` / protocolo partilhado. Ver Model Server acima + [`docs/findings/UMS_VRAM_FINDINGS.md`](docs/findings/UMS_VRAM_FINDINGS.md).
 
 ## graphify
 

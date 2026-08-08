@@ -99,7 +99,7 @@ skymap2d generate "alien planet" -o sky_alien.png
 | `--compile-mode` | str | `default` | Inductor mode |
 | `--channels-last/--no-channels-last` | flag | off | NHWC; little gain in 6 GB skymap benches |
 
-Kernel opts (batch/UMS compile ON by default): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
+Kernel opts (batch/vramd compile ON by default): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 ### `skymap2d presets`
 
@@ -140,19 +140,19 @@ Install the Cursor Agent Skill file into a game project.
 skymap2d skill install --target /path/to/game --force
 ```
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`skymap2d generate` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `AIGAMEKIT_UMS_AUTO_START=0`.
+`skymap2d generate` auto-delegates to **`vramd`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `VRAMD_AUTO_START=0`.
 
 ```bash
-skymap2d generate "sunset" -o sky.png --ums-stream
-skymap2d generate "night" -o sky_night.png --ums-priority batch
-skymap2d generate "storm" -o sky_storm.png --no-ums        # force in-process
-ums status
-ums respawn skymap2d                                       # reload edited src/ code
+skymap2d generate "sunset" -o sky.png --vramd-stream
+skymap2d generate "night" -o sky_night.png --vramd-priority batch
+skymap2d generate "storm" -o sky_storm.png --no-vramd        # force in-process
+vramd status
+vramd respawn skymap2d                                       # reload edited src/ code
 ```
 
-Model: base [FLUX.1-dev SDNQ uint4](https://huggingface.co/Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32) (public mirror) + [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) (public). The official `black-forest-labs/FLUX.1-dev` base is **gated** — use `SKYMAP2D_BASE_MODEL_ID` only after accepting BFL terms. Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
+Model: base [FLUX.1-dev SDNQ uint4](https://huggingface.co/Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32) (public mirror) + [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) (public). The official `black-forest-labs/FLUX.1-dev` base is **gated** — use `SKYMAP2D_BASE_MODEL_ID` only after accepting BFL terms. Full guide: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Quality Presets
 

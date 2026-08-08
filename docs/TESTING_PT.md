@@ -17,7 +17,7 @@ Testes GPU / bpy / integração continuam úteis; têm de fazer **skip** limpo s
 | Pacote | Tipo | Como correr | Suites de cobertura (exemplos) |
 |--------|------|-------------|-------------------------------|
 | Shared | acessório (lib) | `make test-shared` | `tests/test_shared_coverage_100.py` |
-| ModelServer (UMS) | acessório | `make test-modelserver` | `tests/test_modelserver_coverage_100.py` |
+| ModelServer (vramd) | acessório | `make test-modelserver` | `tests/test_modelserver_coverage_100.py` |
 | AiGameKitLab | acessório | `make test-aigamekitlab` | `tests/test_aigamekitlab_coverage_suite.py`, `*_100b.py` |
 | Text2D | ferramenta | `make test-text2d` | `test_text2d_coverage_suite.py`, `*_100b.py` |
 | Text2Icon | ferramenta | `make test-text2icon` | `test_text2icon_coverage_suite.py`, `*_100b.py` |
@@ -54,7 +54,7 @@ CI Python+Rust: `make check` / `make test`. VibeGame à parte: `make test-vibega
 
 ### O que cobrir (prioridade)
 
-1. **Payloads UMS** — `build_*_request` / opts peak+load.
+1. **Payloads vramd** — `build_*_request` / opts peak+load.
 2. **Perfis de hardware soft** — `profile_from_specs` / `hw_auto_enabled` (puro).
 3. **Validadores e defaults** — prompts, dimensões, presets, categorias.
 4. **Math puro** — mesh repair, postprocess terrain, DSP áudio (`import torch` local no teste se preciso).
@@ -65,7 +65,7 @@ CI Python+Rust: `make check` / `make test`. VibeGame à parte: `make test-vibega
 
 - **Pads fluff** que só dizem “árvore de sources não vazia” — apagar; incham contagem sem proteger contratos.
 - **Importar torch/diffusers no topo** das suites de cobertura — parte a collection; usar imports locais.
-- **Exigir socket UMS ou GPU viva** em suites unitárias — mock / skip.
+- **Exigir socket vramd ou GPU viva** em suites unitárias — mock / skip.
 - **Hacks binários de GLB** como “teste de animação” — regenerar asset; testar math de retarget.
 - **Mexer em código vendored** só para testabilidade — testar wrappers/adapters.
 - **Importar wheels nativos in-process no CI** quando o wheel pode SIGILL (mata o processo pytest) — probe em subprocesso primeiro (Text2Sound abaixo).

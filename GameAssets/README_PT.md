@@ -139,8 +139,8 @@ gameassets batch --profile game.yaml --manifest manifest.yaml --gpu-ids 0,1
 - **Lock exclusivo:** na pasta do manifest é criado `.gameassets_batch.lock` (ficheiro `fcntl`) para **impedir dois batches na mesma pasta** — evita disputa de VRAM entre `text2d`/`text3d` em paralelo. Se o PID no lock já não existir, o lock é recuperado. `--skip-batch-lock` desliga (avançado).
 - **VRAM:** antes da execução, se `nvidia-smi` existir e a VRAM livre for inferior a ~1,8 GiB, mostra-se um aviso. `--skip-gpu-preflight` desliga o aviso.
 - **CUDA:** os subprocessos `text2d`/`text3d` recebem `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` se a variável ainda não estiver definida no ambiente (reduz falhas por fragmentação).
-- **Multi-GPU:** `--gpu-ids 0,1` auto-deteta as GPUs disponíveis via `nvidia-smi` (ou aceita IDs explícitos separados por vírgula) e propaga `CUDA_VISIBLE_DEVICES` e `--gpu-ids` a todos os sub-tools (text2d, text3d, paint3d, …) — incluindo no payload UMS.
-- **UMS:** o batch garante o supervisor, exporta `AIGAMEKIT_UMS_PRIORITY=batch`, herda outras `AIGAMEKIT_UMS_*` do ambiente, e o dashboard (se activo) mostra `UMS q=… run=… eta=…`. Opt-in ruidoso: `--ums-stream` → `AIGAMEKIT_UMS_STREAM=1` nos filhos. O mesmo padrão de env aplica-se a `resume` e `dream`. **hw-auto** preenche o pico no payload (sem CLI `--low-vram` / `--memory-efficient`). **Waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + opcionais `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` / `terrain3d`. Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
+- **Multi-GPU:** `--gpu-ids 0,1` auto-deteta as GPUs disponíveis via `nvidia-smi` (ou aceita IDs explícitos separados por vírgula) e propaga `CUDA_VISIBLE_DEVICES` e `--gpu-ids` a todos os sub-tools (text2d, text3d, paint3d, …) — incluindo no payload vramd.
+- **vramd:** o batch garante o supervisor, exporta `VRAMD_PRIORITY=batch`, herda outras `VRAMD_*` do ambiente, e o dashboard (se activo) mostra `vramd q=… run=… eta=…`. Opt-in ruidoso: `--vramd-stream` → `VRAMD_STREAM=1` nos filhos. O mesmo padrão de env aplica-se a `resume` e `dream`. **hw-auto** preenche o pico no payload (sem CLI `--low-vram` / `--memory-efficient`). **Waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + opcionais `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` / `terrain3d`. Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
 
 ### Text2Sound (`generate_audio`)
 
@@ -226,7 +226,7 @@ Todos os sub-tools também aceitam `--gpu-ids` propagado pelo comando batch.
 
 ### Hunyuan3D e qualidade
 
-Flags `low_vram`, `--low-vram`, `low_vram_mode` e CLI `--memory-efficient` foram **removidas**. VRAM = **UMS** + **hw-auto** (sinais de pico só no payload). Para assets sérios: `preset: balanced` ou `fast`; fecha apps que consumam VRAM.
+Flags `low_vram`, `--low-vram`, `low_vram_mode` e CLI `--memory-efficient` foram **removidas**. VRAM = **vramd** + **hw-auto** (sinais de pico só no payload). Para assets sérios: `preset: balanced` ou `fast`; fecha apps que consumam VRAM.
 
 ### Layout de pastas (`path_layout`)
 

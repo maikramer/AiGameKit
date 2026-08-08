@@ -110,18 +110,18 @@ export RIGGING3D_ROOT=/outro/caminho
 | `merge` | Junta skin + mesh original |
 | `pipeline` | skeleton → skin → merge |
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`rigging3d pipeline` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro uso salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+`rigging3d pipeline` delega automaticamente no **`vramd`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro uso salvo `VRAMD_AUTO_START=0`.
 
 ```bash
-rigging3d pipeline char.glb -o char_rigged.glb --ums-stream
-rigging3d pipeline char.glb -o char_rigged.glb --no-ums   # forçar in-process
-ums status
-ums respawn rigging3d                                     # recarrega código src/ editado
+rigging3d pipeline char.glb -o char_rigged.glb --vramd-stream
+rigging3d pipeline char.glb -o char_rigged.glb --no-vramd   # forçar in-process
+vramd status
+vramd respawn rigging3d                                     # recarrega código src/ editado
 ```
 
-Modelo: [SkinTokens](https://huggingface.co/VAST-AI/SkinTokens) (TokenRig; download público, MIT — ~1,6 GB descarregados automaticamente no primeiro run). Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
+Modelo: [SkinTokens](https://huggingface.co/VAST-AI/SkinTokens) (TokenRig; download público, MIT — ~1,6 GB descarregados automaticamente no primeiro run). Guia completo: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Licença
 

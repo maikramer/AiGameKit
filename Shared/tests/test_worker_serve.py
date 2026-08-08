@@ -242,13 +242,13 @@ class TestAbort:
         a meio da inferência e este retorna True, o adapter lança; o worker
         converte para ``error_code=CANCELLED``.
 
-        Simulamos o cenário real (UMS manda abort a meio) forçando o hook a
+        Simulamos o cenário real (vramd manda abort a meio) forçando o hook a
         ``True`` e chamando-o via ``request["_abort"]()``.
         """
 
         class CooperativeAdapter(MockAdapter):
             def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
-                # Simula UMS enviou abort a meio: substituir o hook.
+                # Simula vramd enviou abort a meio: substituir o hook.
                 request["_abort"] = lambda: True
                 # Adapter chama o hook corrente (em produção, dentro do loop).
                 abort = request["_abort"]
@@ -274,7 +274,7 @@ class TestAbort:
         Com o reader thread a drenar o stdin em paralelo, o ``CMD_ABORT`` é
         lido e o flag ``state["abort"]`` passa a ``True`` a meio do generate.
 
-        Usa um pipe real (não StringIO pré-preenchido) para simular o UMS a
+        Usa um pipe real (não StringIO pré-preenchido) para simular o vramd a
         escrever o abort só DEPOIS do generate começar — um StringIO
         pré-preenchido seria lido num rajão pelo reader antes do generate.
         """
@@ -308,7 +308,7 @@ class TestAbort:
         fake_stdout = io.StringIO()
         sys.stdout = fake_stdout
 
-        # Simula o UMS: escreve load + generate, espera o generate começar,
+        # Simula o vramd: escreve load + generate, espera o generate começar,
         # depois escreve abort (a meio) e ping (após o cancel).
         def _ums():
             w.write(_json.dumps({"cmd": "load", "kwargs": {}}) + "\n")
@@ -421,7 +421,7 @@ class TestParentWatchdog:
     def test_starts_thread_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from aigamekit_shared.worker_serve import start_parent_watchdog
 
-        monkeypatch.delenv("AIGAMEKIT_WORKER_PARENT_WATCHDOG", raising=False)
+        monkeypatch.delenv("VRAMD_WORKER_PARENT_WATCHDOG", raising=False)
         before = self._watchdogs()
         start_parent_watchdog(poll_sec=3600.0)
         assert self._watchdogs() == before + 1
@@ -429,7 +429,7 @@ class TestParentWatchdog:
     def test_env_flag_disables(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from aigamekit_shared.worker_serve import start_parent_watchdog
 
-        monkeypatch.setenv("AIGAMEKIT_WORKER_PARENT_WATCHDOG", "0")
+        monkeypatch.setenv("VRAMD_WORKER_PARENT_WATCHDOG", "0")
         before = self._watchdogs()
         start_parent_watchdog(poll_sec=3600.0)
         assert self._watchdogs() == before
@@ -439,7 +439,7 @@ class TestParentWatchdog:
 
         from aigamekit_shared.worker_serve import start_parent_watchdog
 
-        monkeypatch.delenv("AIGAMEKIT_WORKER_PARENT_WATCHDOG", raising=False)
+        monkeypatch.delenv("VRAMD_WORKER_PARENT_WATCHDOG", raising=False)
         monkeypatch.setattr(os, "getppid", lambda: 1)
         before = self._watchdogs()
         start_parent_watchdog(poll_sec=3600.0)

@@ -1,0 +1,106 @@
+# Registry declarativo de backends do vramd (supervisor de VRAM do monorepo).
+#
+# Cada backend é uma ferramenta GPU do monorepo. O vramd spawna um worker
+# persistente por backend no venv da tool: ``<Tool>/.venv/bin/python -m <tool>
+# serve --ums-worker`` (JSONL stdin/stdout — ver aigamekit_shared.worker_serve).
+#
+# vram_mib: estimativa estática (MiB) — fallback se footprint_key falhar.
+# footprint_key: chave do registry de footprints do vramd (vramd.footprints).
+#   O vramd admite jobs com peak = pesos(quant) + activation_gib + safety — NÃO
+#   só pesos. GPUs ~6 GB recusam text3d fp16 full; usam sdnq-int4.
+# priority: prioridade de evicção. Valores MAIORES = mais pesado/urgente de MANTER
+#   carregado (menos provável de ser evicted). Backends leves (priority baixa)
+#   são evicted primeiro quando a VRAM escasseia. Tie-break: LRU.
+# adapter: campo obrigatório do schema v2, mas IGNORADO no modo subprocesso
+#   (``tool:`` definido) — aponta para um módulo importável da shared só para
+#   o schema não falhar. O modo in-process (sem ``tool:``) deixou de ser
+#   suportado: o supervisor (venv Vramd/) não tem as deps torch das tools.
+# tool: nome da tool monorepo — o vramd deriva o interpretador do venv a partir
+#   de VRAMD_TOOLS_ROOT (o checkout) e corre ``serve --ums-worker``.
+# Env VRAMD_SUBPROCESS=0 desliga o modo subprocesso (rollback, não suportado
+# sem adapters in-process).
+
+backends:
+  - name: text2icon
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 3000
+    footprint_key: sana-sprint-600m
+    priority: 20
+    tool: text2icon
+
+  - name: texture2d
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 2500
+    priority: 20
+    tool: texture2d
+
+  - name: text2d
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 4500
+    footprint_key: flux-klein-9b
+    priority: 25
+    tool: text2d
+    peak_profile:
+      memory_efficient_with_quant: true
+      streams_on_load_with_memory_efficient: true
+
+  - name: skymap2d
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 7000
+    footprint_key: flux-dev-uint4
+    priority: 25
+    tool: skymap2d
+
+  - name: text3d
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 10000
+    footprint_key: hunyuan3d-omni
+    priority: 40
+    tool: text3d
+    peak_profile:
+      memory_efficient_with_quant: true
+      group_offload_with_memory_efficient: true
+
+  - name: paint3d
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 4000
+    footprint_key: hunyuan-paint
+    priority: 40
+    tool: paint3d
+    peak_profile:
+      memory_efficient_with_quant: true
+
+  - name: part3d
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 5200
+    footprint_key: hunyuan3d-part
+    priority: 35
+    tool: part3d
+
+  - name: text2sound
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 5000
+    footprint_key: stable-audio-open
+    priority: 30
+    tool: text2sound
+
+  - name: terrain3d
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    # Medido: pesos fp32 reais ~1.1 GiB (coarse 11M + base 968M + decoder 107M)
+    # + activações (tiles 512², warmup bs<=16) ~0.7 GiB + contexto CUDA.
+    # 6000 era ~2x conservador e recusava GPUs de 6 GB (peak 6384 > 5627 livre).
+    vram_mib: 3200
+    priority: 40
+    tool: terrain3d
+
+  - name: motion3d
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    # HY-Motion staged (DiT GPU + text CPU): admit via footprint hy-motion-* + peak opts.
+    # YAML fallback ~ Full DiT fp16 + act (~4 GiB); hw-auto injecta sdnq/offload.
+    vram_mib: 4500
+    footprint_key: hy-motion-lite
+    priority: 30
+    tool: motion3d
+    peak_profile:
+      memory_efficient_with_quant: true
+      group_offload_with_memory_efficient: true

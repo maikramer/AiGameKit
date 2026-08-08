@@ -13,12 +13,12 @@ import pytest
 from aigamekit_shared.cli_helpers import (
     BACKEND_FOOTPRINT_KEYS,
     env_bool,
-    format_ums_debug_line,
+    format_vramd_debug_line,
     legacy_server_allowed,
     needed_mib_for_backend,
-    raise_if_ums_queue_full,
-    with_ums_load_opts,
-    with_ums_peak_opts,
+    raise_if_vramd_queue_full,
+    with_vramd_load_opts,
+    with_vramd_peak_opts,
 )
 from aigamekit_shared.env import (
     ENV_TO_TOOL,
@@ -174,7 +174,7 @@ def test_env_bool(env_val: str, cli_wants: bool, expected: bool) -> None:
 
 @pytest.mark.parametrize("env_val,expected", [("1", True), ("0", False), ("", False)])
 def test_legacy_server_allowed(env_val: str, expected: bool) -> None:
-    with patch.dict(os.environ, {"AIGAMEKIT_ALLOW_LEGACY_SERVER": env_val}, clear=False):
+    with patch.dict(os.environ, {"VRAMD_ALLOW_LEGACY_SERVER": env_val}, clear=False):
         assert legacy_server_allowed() is expected
 
 
@@ -220,8 +220,8 @@ def test_needed_mib_quant_mode(backend: str, quant: str) -> None:
         ([], None),
     ],
 )
-def test_with_ums_load_opts(gpu_ids: Any, expected: list[int] | None) -> None:
-    out = with_ums_load_opts({"a": 1}, gpu_ids=gpu_ids)
+def test_with_vramd_load_opts(gpu_ids: Any, expected: list[int] | None) -> None:
+    out = with_vramd_load_opts({"a": 1}, gpu_ids=gpu_ids)
     if expected is None:
         assert "gpu_ids" not in out
     else:
@@ -229,8 +229,8 @@ def test_with_ums_load_opts(gpu_ids: Any, expected: list[int] | None) -> None:
 
 
 @pytest.mark.parametrize("k,v", [("seed", 1), ("steps", 4), ("output", "/x")])
-def test_with_ums_load_extra(k: str, v: Any) -> None:
-    assert with_ums_load_opts({}, **{k: v})[k] == v
+def test_with_vramd_load_extra(k: str, v: Any) -> None:
+    assert with_vramd_load_opts({}, **{k: v})[k] == v
 
 
 @pytest.mark.parametrize(
@@ -244,37 +244,37 @@ def test_with_ums_load_extra(k: str, v: Any) -> None:
     ],
 )
 def test_with_ums_peak_mem_eff(backend: str, mem: bool, exp: str | None) -> None:
-    out = with_ums_peak_opts({}, backend=backend, memory_efficient=mem)
+    out = with_vramd_peak_opts({}, backend=backend, memory_efficient=mem)
     if exp:
         assert out.get("sdnq_preset") == exp
 
 
 @pytest.mark.parametrize("preset", ["sdnq-int4", "sdnq-uint8", "none"])
 def test_with_ums_peak_explicit_preset(preset: str) -> None:
-    out = with_ums_peak_opts({}, backend="text3d", sdnq_preset=preset)
+    out = with_vramd_peak_opts({}, backend="text3d", sdnq_preset=preset)
     assert out["sdnq_preset"] == preset
 
 
 @pytest.mark.parametrize("fk", ["flux-klein-4b", "hunyuan3d-omni"])
 def test_with_ums_peak_footprint(fk: str) -> None:
-    assert with_ums_peak_opts({}, backend="text3d", footprint_key=fk)["footprint_key"] == fk
+    assert with_vramd_peak_opts({}, backend="text3d", footprint_key=fk)["footprint_key"] == fk
 
 
 @pytest.mark.parametrize("fragment", ["backend=", "pri="])
 def test_format_ums_debug(fragment: str) -> None:
-    line = format_ums_debug_line({"ums_debug": {"backend": "text3d", "priority": "batch"}})
+    line = format_vramd_debug_line({"ums_debug": {"backend": "text3d", "priority": "batch"}})
     assert fragment in line
 
 
-def test_raise_if_ums_queue_full() -> None:
+def test_raise_if_vramd_queue_full() -> None:
     import click
 
     with pytest.raises(click.ClickException):
-        raise_if_ums_queue_full({"status": "queue_full", "queue_depth": 1, "max_depth": 1})
+        raise_if_vramd_queue_full({"status": "queue_full", "queue_depth": 1, "max_depth": 1})
 
 
 def test_raise_if_ums_ok() -> None:
-    raise_if_ums_queue_full({"status": "ok"})
+    raise_if_vramd_queue_full({"status": "ok"})
 
 
 @pytest.mark.parametrize(

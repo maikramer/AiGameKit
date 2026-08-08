@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from aigamekit_shared.cli_helpers import add_ums_options
+from aigamekit_shared.cli_helpers import add_vramd_options
 from aigamekit_shared.quality import VALID_QUALITIES
 
 from . import defaults as _d
@@ -302,7 +302,7 @@ def main() -> None:
     show_default=True,
     help="Fechar buracos de fronteira nas face-parts (bpy fill_holes) — remover uma parte não deixa geometria aberta.",
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def decompose(
     ctx: Any,
@@ -362,9 +362,9 @@ def decompose(
     consensus_vote: float,
     detail_levels: int | None,
     cap_part_holes: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Decompõe uma mesh 3D em partes semânticas.
 
@@ -376,7 +376,7 @@ def decompose(
     from aigamekit_shared.cli_helpers import (
         apply_quality_defaults,
         prepare_gpu_exclusive,
-        try_ums_delegation,
+        try_vramd_delegation,
     )
     from aigamekit_shared.env import ensure_pytorch_cuda_alloc_conf
     from aigamekit_shared.quantization import format_quantization_info, get_quantization_config
@@ -610,7 +610,7 @@ def decompose(
 
     t_start = time.time()
 
-    from .ums_payload import build_decompose_request
+    from .vramd_payload import build_decompose_request
 
     _ums_request = build_decompose_request(
         mesh_path=mesh_path,
@@ -646,15 +646,15 @@ def decompose(
 
     from aigamekit_shared.cli_helpers import needed_mib_for_backend
 
-    if try_ums_delegation(
+    if try_vramd_delegation(
         "part3d",
         _ums_request,
         t_start=t_start,
         noun="Partes",
         console=console,
-        enabled=not no_ums,
-        priority=ums_priority,
-        stream=ums_stream,
+        enabled=not no_vramd,
+        priority=vramd_priority,
+        stream=vramd_stream,
     ):
         return
 
@@ -818,14 +818,14 @@ if __name__ == "__main__":
     "--ums-worker",
     is_flag=True,
     help=(
-        "Modo worker subprocesso do UMS: lê comandos JSONL do stdin (load / "
+        "Modo worker subprocesso do vramd: lê comandos JSONL do stdin (load / "
         "generate / unload / shutdown) e emite eventos no stdout. Usado pelo "
         "SubprocessWorkerPool do ModelServer — part3d corre no seu próprio "
         "venv e o supervisor (ModelServer/.venv) coordena via JSONL."
     ),
 )
 def serve(ums_worker: bool) -> None:
-    """Modo worker subprocesso do UMS (subprocess-per-backend).
+    """Modo worker subprocesso do vramd (subprocess-per-backend).
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico

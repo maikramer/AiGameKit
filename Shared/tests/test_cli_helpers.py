@@ -1,4 +1,4 @@
-"""Testes dos cli_helpers — env_bool, apply_quality_defaults, try_ums_delegation."""
+"""Testes dos cli_helpers — env_bool, apply_quality_defaults, try_vramd_delegation."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from aigamekit_shared.cli_helpers import (
     env_bool,
     legacy_server_allowed,
     needed_mib_for_backend,
-    try_ums_delegation,
-    with_ums_peak_opts,
+    try_vramd_delegation,
+    with_vramd_peak_opts,
 )
 
 
@@ -82,21 +82,21 @@ class TestApplyQualityDefaults:
 
 
 class TestTryUmsDelegation:
-    """try_ums_delegation: delega no UMS e retorna se handled."""
+    """try_vramd_delegation: delega no vramd e retorna se handled."""
 
     def test_returns_false_when_no_output(self) -> None:
         console = MagicMock()
-        result = try_ums_delegation("text2icon", {}, t_start=time.time(), noun="Ícone", console=console)
+        result = try_vramd_delegation("text2icon", {}, t_start=time.time(), noun="Ícone", console=console)
         assert result is False
 
     def test_returns_false_when_ums_down(self) -> None:
-        """Se o UMS não está ativo, delegate_to_ums retorna None → False + mensagem."""
+        """Se o vramd não está ativo, delegate_to_vramd retorna None → False + mensagem."""
         console = MagicMock()
         with (
-            patch("aigamekit_shared.model_server.is_ums_running", return_value=False),
-            patch("aigamekit_shared.cli_helpers.delegate_to_ums", return_value=None),
+            patch("aigamekit_shared.vramd_client.is_vramd_running", return_value=False),
+            patch("aigamekit_shared.cli_helpers.delegate_to_vramd", return_value=None),
         ):
-            result = try_ums_delegation(
+            result = try_vramd_delegation(
                 "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
             )
         assert result is False
@@ -104,7 +104,7 @@ class TestTryUmsDelegation:
         assert "indisponível" in printed or "fallback in-process" in printed
 
     def test_returns_true_on_success(self, tmp_path) -> None:
-        """Se o UMS responde ok, imprime e retorna True."""
+        """Se o vramd responde ok, imprime e retorna True."""
 
         # Criar ficheiro fake para format_bytes funcionar.
         fake_output = tmp_path / "result.png"
@@ -112,10 +112,10 @@ class TestTryUmsDelegation:
 
         console = MagicMock()
         with patch(
-            "aigamekit_shared.cli_helpers.delegate_to_ums",
+            "aigamekit_shared.cli_helpers.delegate_to_vramd",
             return_value={"status": "ok", "output": str(fake_output), "seed": 42},
         ):
-            result = try_ums_delegation(
+            result = try_vramd_delegation(
                 "text2icon", {"output": str(fake_output)}, t_start=time.time(), noun="Ícone", console=console
             )
         assert result is True
@@ -126,29 +126,29 @@ class TestTryUmsDelegation:
         console = MagicMock()
         with (
             patch(
-                "aigamekit_shared.cli_helpers.delegate_to_ums",
+                "aigamekit_shared.cli_helpers.delegate_to_vramd",
                 return_value={"status": "error", "error": "backend down"},
             ),
-            patch("aigamekit_shared.model_server.is_ums_running", return_value=True),
-            patch("aigamekit_shared.model_server.ums_is_busy", return_value=False),
+            patch("aigamekit_shared.vramd_client.is_vramd_running", return_value=True),
+            patch("aigamekit_shared.vramd_client.vramd_is_busy", return_value=False),
         ):
-            result = try_ums_delegation(
+            result = try_vramd_delegation(
                 "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
             )
         assert result is False
 
     def test_raises_when_none_but_ums_still_running(self) -> None:
-        """Timeout com UMS up → sem fallback in-process (GPU pode estar ocupada)."""
+        """Timeout com vramd up → sem fallback in-process (GPU pode estar ocupada)."""
         import click
 
         console = MagicMock()
         with (
-            patch("aigamekit_shared.cli_helpers.delegate_to_ums", return_value=None),
-            patch("aigamekit_shared.model_server.is_ums_running", return_value=True),
-            patch("aigamekit_shared.model_server.fetch_ums_queue_snapshot", return_value=None),
+            patch("aigamekit_shared.cli_helpers.delegate_to_vramd", return_value=None),
+            patch("aigamekit_shared.vramd_client.is_vramd_running", return_value=True),
+            patch("aigamekit_shared.vramd_client.fetch_vramd_queue_snapshot", return_value=None),
             pytest.raises(click.ClickException, match="sem resposta"),
         ):
-            try_ums_delegation(
+            try_vramd_delegation(
                 "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
             )
 
@@ -158,14 +158,14 @@ class TestTryUmsDelegation:
         console = MagicMock()
         with (
             patch(
-                "aigamekit_shared.cli_helpers.delegate_to_ums",
+                "aigamekit_shared.cli_helpers.delegate_to_vramd",
                 return_value={"status": "error", "error_code": "BACKEND_FAIL", "error": "boom"},
             ),
-            patch("aigamekit_shared.model_server.is_ums_running", return_value=True),
-            patch("aigamekit_shared.model_server.ums_is_busy", return_value=True),
-            pytest.raises(click.ClickException, match="UMS ocupado"),
+            patch("aigamekit_shared.vramd_client.is_vramd_running", return_value=True),
+            patch("aigamekit_shared.vramd_client.vramd_is_busy", return_value=True),
+            pytest.raises(click.ClickException, match="vramd ocupado"),
         ):
-            try_ums_delegation(
+            try_vramd_delegation(
                 "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
             )
 
@@ -173,9 +173,9 @@ class TestTryUmsDelegation:
         """VRAM_INSUFFICIENT sem fila busy → fallback in-process (caller decide)."""
         console = MagicMock()
         with (
-            patch("aigamekit_shared.model_server.ums_is_busy", return_value=False),
+            patch("aigamekit_shared.vramd_client.vramd_is_busy", return_value=False),
             patch(
-                "aigamekit_shared.cli_helpers.delegate_to_ums",
+                "aigamekit_shared.cli_helpers.delegate_to_vramd",
                 return_value={
                     "status": "error",
                     "error_code": "VRAM_INSUFFICIENT",
@@ -184,25 +184,25 @@ class TestTryUmsDelegation:
                 },
             ),
         ):
-            result = try_ums_delegation(
+            result = try_vramd_delegation(
                 "paint3d",
                 {"output": "/tmp/x.glb"},
                 t_start=time.time(),
                 noun="Mesh",
                 console=console,
             )
-        # Caller cai in-process (GPU limpa fora do UMS) — sem auto-exit do supervisor.
+        # Caller cai in-process (GPU limpa fora do vramd) — sem auto-exit do supervisor.
         assert result is False
 
     def test_vram_insufficient_busy_raises(self) -> None:
-        """VRAM_INSUFFICIENT com UMS busy → sem fallback (evita competir pela GPU)."""
+        """VRAM_INSUFFICIENT com vramd busy → sem fallback (evita competir pela GPU)."""
         import click
 
         console = MagicMock()
         with (
-            patch("aigamekit_shared.model_server.ums_is_busy", return_value=True),
+            patch("aigamekit_shared.vramd_client.vramd_is_busy", return_value=True),
             patch(
-                "aigamekit_shared.cli_helpers.delegate_to_ums",
+                "aigamekit_shared.cli_helpers.delegate_to_vramd",
                 return_value={
                     "status": "error",
                     "error_code": "VRAM_INSUFFICIENT",
@@ -212,7 +212,7 @@ class TestTryUmsDelegation:
             ),
             pytest.raises(click.ClickException, match="VRAM_INSUFFICIENT"),
         ):
-            try_ums_delegation(
+            try_vramd_delegation(
                 "paint3d",
                 {"output": "/tmp/x.glb"},
                 t_start=time.time(),
@@ -222,8 +222,8 @@ class TestTryUmsDelegation:
 
     def test_returns_false_when_disabled(self) -> None:
         console = MagicMock()
-        with patch("aigamekit_shared.cli_helpers.delegate_to_ums") as mock_delegate:
-            result = try_ums_delegation(
+        with patch("aigamekit_shared.cli_helpers.delegate_to_vramd") as mock_delegate:
+            result = try_vramd_delegation(
                 "text2icon",
                 {"output": "/tmp/x.png"},
                 t_start=time.time(),
@@ -240,7 +240,7 @@ class TestTryUmsDelegation:
         console = MagicMock()
         with (
             patch(
-                "aigamekit_shared.cli_helpers.delegate_to_ums",
+                "aigamekit_shared.cli_helpers.delegate_to_vramd",
                 return_value={
                     "status": "queue_full",
                     "queue_depth": 8,
@@ -250,7 +250,7 @@ class TestTryUmsDelegation:
             ),
             pytest.raises(click.ClickException, match="fila cheia"),
         ):
-            try_ums_delegation(
+            try_vramd_delegation(
                 "text2icon",
                 {"output": "/tmp/x.png"},
                 t_start=time.time(),
@@ -264,10 +264,10 @@ class TestTryUmsDelegation:
 
         console = MagicMock()
         with patch(
-            "aigamekit_shared.cli_helpers.delegate_to_ums",
+            "aigamekit_shared.cli_helpers.delegate_to_vramd",
             return_value={"status": "ok", "output": str(fake_output)},
         ) as mock_delegate:
-            try_ums_delegation(
+            try_vramd_delegation(
                 "text2icon",
                 {"output": str(fake_output)},
                 t_start=time.time(),
@@ -280,20 +280,20 @@ class TestTryUmsDelegation:
 
 
 class TestWithUmsPeakOpts:
-    """with_ums_peak_opts: sinais honestos de pico VRAM para admit UMS."""
+    """with_vramd_peak_opts: sinais honestos de pico VRAM para admit vramd."""
 
     def test_paint_mem_eff_default_sdnq(self) -> None:
-        out = with_ums_peak_opts({}, backend="paint3d", memory_efficient=True)
+        out = with_vramd_peak_opts({}, backend="paint3d", memory_efficient=True)
         assert out["memory_efficient"] is True
         assert out["sdnq_preset"] == "sdnq-uint8"
 
     def test_text2d_quant_preset_maps_to_sdnq(self) -> None:
-        out = with_ums_peak_opts({}, backend="text2d", quant_preset="sdnq-int4")
+        out = with_vramd_peak_opts({}, backend="text2d", quant_preset="sdnq-int4")
         assert out["quant_preset"] == "sdnq-int4"
         assert out["sdnq_preset"] == "sdnq-int4"
 
     def test_explicit_none_preset(self) -> None:
-        out = with_ums_peak_opts(
+        out = with_vramd_peak_opts(
             {},
             backend="text3d",
             memory_efficient=True,
@@ -302,21 +302,21 @@ class TestWithUmsPeakOpts:
         assert out["sdnq_preset"] == "none"
 
     def test_skymap_mem_eff_forces_none_sdnq(self) -> None:
-        out = with_ums_peak_opts({}, backend="skymap2d", memory_efficient=True)
+        out = with_vramd_peak_opts({}, backend="skymap2d", memory_efficient=True)
         assert out["memory_efficient"] is True
         assert out["sdnq_preset"] == "none"
 
     def test_part3d_mem_eff_default_sdnq(self) -> None:
-        out = with_ums_peak_opts({}, backend="part3d", memory_efficient=True)
+        out = with_vramd_peak_opts({}, backend="part3d", memory_efficient=True)
         assert out["sdnq_preset"] == "sdnq-uint8"
 
     def test_texture2d_passthrough_no_forced_sdnq(self) -> None:
-        out = with_ums_peak_opts({"prompt": "x"}, backend="texture2d")
+        out = with_vramd_peak_opts({"prompt": "x"}, backend="texture2d")
         assert out["prompt"] == "x"
         assert "sdnq_preset" not in out
 
     def test_terrain3d_passthrough(self) -> None:
-        out = with_ums_peak_opts({"size": 512}, backend="terrain3d")
+        out = with_vramd_peak_opts({"size": 512}, backend="terrain3d")
         assert out["size"] == 512
 
 
@@ -326,7 +326,7 @@ class TestLegacyServerAllowed:
             assert legacy_server_allowed() is False
 
     def test_opt_in(self) -> None:
-        with patch.dict("os.environ", {"AIGAMEKIT_ALLOW_LEGACY_SERVER": "1"}):
+        with patch.dict("os.environ", {"VRAMD_ALLOW_LEGACY_SERVER": "1"}):
             assert legacy_server_allowed() is True
 
 

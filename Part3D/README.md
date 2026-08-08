@@ -217,18 +217,18 @@ Soft-resolved via QualityEngine — explicit `--steps` / `--octree-resolution` /
 | `{stem}_parts.glb` | Multi-geometry parts GLB |
 | `{stem}_segmented.glb` | Segmented mesh with per-part colors |
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`part3d decompose` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first use unless `AIGAMEKIT_UMS_AUTO_START=0`.
+`part3d decompose` auto-delegates to **`vramd`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first use unless `VRAMD_AUTO_START=0`.
 
 ```bash
-part3d decompose mesh.glb -o parts.glb --ums-stream
-part3d decompose mesh.glb -o parts.glb --no-ums        # force in-process
-ums status
-ums respawn part3d                                     # reload edited src/ code
+part3d decompose mesh.glb -o parts.glb --vramd-stream
+part3d decompose mesh.glb -o parts.glb --no-vramd        # force in-process
+vramd status
+vramd respawn part3d                                     # reload edited src/ code
 ```
 
-Model: [Hunyuan3D-Part](https://huggingface.co/tencent/Hunyuan3D-Part) (P3-SAM + X-Part; public, Tencent Community License). Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
+Model: [Hunyuan3D-Part](https://huggingface.co/tencent/Hunyuan3D-Part) (P3-SAM + X-Part; public, Tencent Community License). Full guide: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Pipeline Integration
 
@@ -236,9 +236,9 @@ Model: [Hunyuan3D-Part](https://huggingface.co/tencent/Hunyuan3D-Part) (P3-SAM +
 Text3D (generate) → Paint3D (texture) → Part3D (decompose) → Rigging3D (auto-rig)
 ```
 
-GameAssets parts stage is not wired yet (stub). UMS backend `part3d` is registered
-for warm model serving. Prefer `aigamekit-model-server`; `part3d decompose` accepts
-`--ums-priority`, `--no-ums`, `--ums-stream` (see [`ModelServer/README.md`](../ModelServer/README.md)).
+GameAssets parts stage is not wired yet (stub). vramd backend `part3d` is registered
+for warm model serving. Prefer `vramd`; `part3d decompose` accepts
+`--vramd-priority`, `--no-vramd`, `--vramd-stream` (see [`Vramd/README.md`](../Vramd/README.md)).
 
 ## Development
 

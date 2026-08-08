@@ -1,6 +1,6 @@
-# File logging — AiGameKit tools + UMS
+# File logging — AiGameKit tools + vramd
 
-All Python CLIs and the Unified Model Server (UMS) write plain-text logs under
+All Python CLIs and the Unified Model Server (vramd) write plain-text logs under
 the AiGameKit cache. Console output stays Rich/ANSI; the file is a UTC mirror for
 offline debug (failed GPU runs, queue stalls, worker crashes).
 
@@ -15,17 +15,17 @@ offline debug (failed GPU runs, queue stalls, worker crashes).
 | `$AIGAMEKIT_LOG_DIR/…` | Override directory |
 | `$AIGAMEKIT_LOG_FILE` | Exact path (skips daily naming) |
 
-Examples: `text2d-2026-07-16.log`, `ums-2026-07-16.log`, `gameassets-….log`.
+Examples: `text2d-2026-07-16.log`, `vramd-2026-07-16.log`, `gameassets-….log`.
 
 Tool name comes from `setup_rich_click_module(tool=…)` in each package’s
-`cli_rich.py`, or from `AIGAMEKIT_LOG_TOOL` / argv (`ums` /
-`aigamekit-model-server` → `ums`).
+`cli_rich.py`, or from `AIGAMEKIT_LOG_TOOL` / argv (`vramd` /
+`vramd` → `vramd`).
 
 ## Format
 
 ```
-2026-07-16T20:01:02.123Z [INFO   ] === log start tool=ums pid=12345 ===
-2026-07-16T20:01:03.456Z [INFO   ] [UMS] worker started backend=text3d
+2026-07-16T20:01:02.123Z [INFO   ] === log start tool=vramd pid=12345 ===
+2026-07-16T20:01:03.456Z [INFO   ] [vramd] worker started backend=text3d
 2026-07-16T20:01:10.789Z [WARN   ] gameassets.pipeline: stage paint retry
 ```
 
@@ -37,9 +37,9 @@ Default min level: `INFO` (`AIGAMEKIT_LOG_LEVEL`).
 1. **`aigamekit_shared.logging.Logger`** — every `info` / `warn` / `error` / `step` / …
 2. **stdlib `logging.getLogger`** — bridged once per process to the same file
    (covers GameAssets, Text3D mesh paths, etc.)
-3. **UMS** — `_log()` always writes to file; console only with `ums start -v`
+3. **vramd** — `_log()` always writes to file; console only with `vramd start -v`
 
-`Logger.info(msg, console=False)` → file only (used by UMS when not verbose).
+`Logger.info(msg, console=False)` → file only (used by vramd when not verbose).
 
 ## Env vars
 
@@ -67,8 +67,8 @@ print(current_log_path())    # Path | None
 ```
 
 CLI wiring: `setup_rich_click_module(..., tool="text2d")` calls
-`configure_logging` at import time. UMS: `configure_logging("ums")` in
-`ums start` (path shown in the start panel).
+`configure_logging` at import time. vramd: `configure_logging("vramd")` in
+`vramd start` (path shown in the start panel).
 
 ## Not covered
 
@@ -78,5 +78,5 @@ CLI wiring: `setup_rich_click_module(..., tool="text2d")` calls
 ## Related
 
 - Root env table: [`README.md`](../README.md) § Environment variables
-- UMS: [`ModelServer/README.md`](../ModelServer/README.md)
+- vramd: [`Vramd/README.md`](../Vramd/README.md)
 - Shared module: [`Shared/README.md`](../Shared/README.md)

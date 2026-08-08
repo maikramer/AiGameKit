@@ -149,7 +149,7 @@ def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("text2icon.image_processor.save_image", lambda *a, **kw: Path("/tmp/fake.png"))
 
     runner = CliRunner()
-    r = runner.invoke(cli, ["generate", "test", "-W", "1024", "--hw-auto", "--no-ums", "-o", "/tmp/out.png"])
+    r = runner.invoke(cli, ["generate", "test", "-W", "1024", "--hw-auto", "--no-vramd", "-o", "/tmp/out.png"])
     assert r.exit_code == 0, r.output
     _, kwargs = mock_gen.generate.call_args
     assert kwargs.get("width") == 1024

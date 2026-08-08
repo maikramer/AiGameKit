@@ -41,7 +41,7 @@ dependencies = [
     "fpsample",
     "scikit-learn",
     "onnxruntime>=1.16.0",
-    "aigamekit-shared @ file:../Shared",
+    "aigamekit-shared[gpu,image,mesh] @ file:../Shared",
     "bpy>=5.1.0",
 ]
 

@@ -1,9 +1,9 @@
 """Testes das correções de qualidade do Terrain3D (2026-07):
 
 - export_ahgt: formato binário uint16+deflate compatível com o parseAhgt do VibeGame;
-- ums_payload: payload UMS transporta TODOS os params de geração/pós-processamento;
+- vramd_payload: payload vramd transporta TODOS os params de geração/pós-processamento;
 - worker adapter: overrides por request aplicados mesmo com worker quente;
-- CLI: delegação UMS não descarta flags; coarse_window deriva size; --format ahgt;
+- CLI: delegação vramd não descarta flags; coarse_window deriva size; --format ahgt;
 - generator: guard-rail de escala horizontal (check_scale_coherence).
 
 Sem GPU — todo o pipeline pesado é mockado.
@@ -24,7 +24,7 @@ from click.testing import CliRunner
 
 from terrain3d.export import AHGT_MAGIC, AHGT_VERSION, export_ahgt
 from terrain3d.generator import TerrainConfig, TerrainResult, check_scale_coherence
-from terrain3d.ums_payload import build_generate_request
+from terrain3d.vramd_payload import build_generate_request
 
 
 def _parse_ahgt(path: Path) -> dict:
@@ -115,7 +115,7 @@ class TestExportAhgt:
 
 
 class TestUmsPayloadCompleto:
-    """O payload UMS tem de transportar TODOS os knobs de geração/pós-processamento."""
+    """O payload vramd tem de transportar TODOS os knobs de geração/pós-processamento."""
 
     ALL_FIELDS: ClassVar[dict] = {
         "seed": 7,
@@ -143,7 +143,7 @@ class TestUmsPayloadCompleto:
     def test_todos_os_campos_presentes(self) -> None:
         req = build_generate_request(output="/tmp/h.png", **self.ALL_FIELDS)
         for key, value in self.ALL_FIELDS.items():
-            assert key in req, f"campo {key} perdido no payload UMS"
+            assert key in req, f"campo {key} perdido no payload vramd"
             assert req[key] == value
 
     def test_campos_omitidos_ausentes(self) -> None:
@@ -367,7 +367,7 @@ class TestCliExportInProcess:
                     "64",
                     "--world-size",
                     "640",
-                    "--no-ums",
+                    "--no-vramd",
                     "--format",
                     "ahgt",
                     "--quiet",
@@ -407,7 +407,7 @@ class TestCliExportInProcess:
                     "64",
                     "--world-size",
                     "640",
-                    "--no-ums",
+                    "--no-vramd",
                     "--quiet",
                 ],
             )

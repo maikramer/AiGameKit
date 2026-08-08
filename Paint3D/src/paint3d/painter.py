@@ -172,7 +172,7 @@ def _park_ref_unet_on_cpu(pipe: Any, *, verbose: bool = False) -> bool:
 def ensure_meshrender_vram_headroom(pipe: Any, *, verbose: bool = False) -> None:
     """Garante margem livre para MeshRender; levanta RuntimeError se impossível.
 
-    Nunca deixar cair em cudaMalloc OOM silencioso — falha clara + tip UMS.
+    Nunca deixar cair em cudaMalloc OOM silencioso — falha clara + tip vramd.
     Em GPUs folgadas (já ≥ mínimo) não mexe no dual-UNet.
     """
     from aigamekit_shared.vram_budget import PAINT_MESHRENDER_MIN_FREE_BYTES, free_vram_bytes
@@ -193,7 +193,7 @@ def ensure_meshrender_vram_headroom(pipe: Any, *, verbose: bool = False) -> None
     need_mib = PAINT_MESHRENDER_MIN_FREE_BYTES / (1024 * 1024)
     raise RuntimeError(
         f"VRAM insuficiente para MeshRender: {free_mib:.0f} MiB livres "
-        f"(mínimo {need_mib:.0f} MiB). Evicta backends (ums evict) ou reduz "
+        f"(mínimo {need_mib:.0f} MiB). Evicta backends (vramd evict) ou reduz "
         f"views/texture; sem fallback que OOMa a GPU."
     )
 
@@ -210,7 +210,7 @@ def apply_runtime_vram_budget(
     """Orça views/tiles/DINO pela VRAM livre **após** load/offload.
 
     Canónico: :func:`aigamekit_shared.vram_budget.paint_runtime_budget` (também
-    exposto no UMS via ``modelserver.runtime_budget``). Desligar:
+    exposto no vramd via ``modelserver.runtime_budget``). Desligar:
     ``PAINT3D_AUTO_VRAM_BUDGET=0``.
 
     Com ``offload_ref_unet`` (mem_eff / VRAM apertada), estaciona ``unet_dual``
@@ -1287,7 +1287,7 @@ class PaintBatchProcessor:
         requested_views: int | None = None,
         requested_resolution: int | None = None,
     ) -> dict[str, Any] | None:
-        """Reaplica orçamento VRAM (UMS / batch entre itens).
+        """Reaplica orçamento VRAM (vramd / batch entre itens).
 
         Args:
             requested_views: override por-request (UMS). Clamped ao

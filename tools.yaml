@@ -10,16 +10,15 @@ workspace:
     src_subpath: src
 
 tools:
-  modelserver:
-    name: "ModelServer"
+  vramd:
+    name: "Vramd"
     kind: python
-    folder: ModelServer
-    cli_name: aigamekit-model-server
-    python_module: modelserver
-    description: "Unified Model Server — supervisor único de VRAM para todas as ferramentas GPU"
-    min_python: [3, 13]
+    folder: Vramd
+    cli_name: vramd
+    python_module: vramd
+    description: "vramd — supervisor único de VRAM para todas as ferramentas GPU (substitui o ModelServer)"
+    min_python: [3, 11]
     install_order: -3
-    post_install: aigamekit_shared.installer.clified_hooks:dev_extras_post_install
 
   text2d:
     name: "Text2D"

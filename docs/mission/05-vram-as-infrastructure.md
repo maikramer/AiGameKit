@@ -1,6 +1,6 @@
 # Premise 4 — VRAM is infrastructure, not a user problem
 
-> Nobody should plan peak memory, juggle which models fit, or keep GPU occupancy in their head — regardless of how large the models are or how many backends a tool owns. The Unified Model Server (UMS) owns admit, queue, eviction, and peak accounting so that the GPU stays **busy** when there is work, VRAM stays **inside a safe margin** at all times, and model count/size change **latency and queue order**, not the mental model.
+> Nobody should plan peak memory, juggle which models fit, or keep GPU occupancy in their head — regardless of how large the models are or how many backends a tool owns. The Unified Model Server (vramd) owns admit, queue, eviction, and peak accounting so that the GPU stays **busy** when there is work, VRAM stays **inside a safe margin** at all times, and model count/size change **latency and queue order**, not the mental model.
 
 ## Intent
 
@@ -9,7 +9,7 @@ VRAM anxiety is the tax that makes local generative pipelines feel like research
 Operators (human or AI) should think:
 
 - “generate this asset / run this batch”
-- “is my job queued or done?” (`ums status`, `ums queue`, `ums wait`)
+- “is my job queued or done?” (`vramd status`, `vramd queue`, `vramd wait`)
 
 They should **not** think:
 
@@ -28,11 +28,11 @@ Infrastructure success is two-sided:
 | **GPU busy** | When the queue has work, the device should stay highly utilized — not idle because nothing dared to load |
 | **VRAM in margin** | Peak residency (weights + activation + safety) stays under a safe envelope; OOM and thrash are supervisor failures |
 
-Saturating the GPU by ignoring peaks is not success. Leaving the GPU idle “to be safe” while jobs wait is not success either. UMS exists to hit **both**.
+Saturating the GPU by ignoring peaks is not success. Leaving the GPU idle “to be safe” while jobs wait is not success either. vramd exists to hit **both**.
 
-## What UMS owns
+## What vramd owns
 
-Canonical system: `ModelServer/` (CLI `ums` ≡ `aigamekit-model-server`).
+Canonical system: `Vramd/` (CLI `vramd` ≡ `vramd`).
 
 Responsibilities:
 
@@ -42,7 +42,7 @@ Responsibilities:
 - **Single flight** — `MAX_INFLIGHT` (and related env) so peaks do not stack blindly.
 - **Truth for agents** — `status` / `queue` / `wait` / `cancel` / `flush` as the control plane.
 
-Clients delegate **before** in-process GPU prep (`try_ums_delegation` / `delegate_to_ums`). Auto-start unless explicitly disabled.
+Clients delegate **before** in-process GPU prep (`try_vramd_delegation` / `delegate_to_vramd`). Auto-start unless explicitly disabled.
 
 ## Peak accounting (the real unit)
 
@@ -57,9 +57,9 @@ Not bare card size. Not YAML “footprint” alone when it understates activatio
 Consequences:
 
 - Small cards may refuse full fp16 and require quant (`sdnq-int4`, etc.).
-- Peak signals (`sdnq_preset`, `memory_efficient=true`, …) ride the **UMS payload**, filled by **hw-auto** / `with_ums_peak_opts` — **not** public CLI flags (`--low-vram` / `--memory-efficient` removed). Omitting them makes UMS assume a larger peak and refuse — or worse, admit wrong.
-- `prepare_gpu_exclusive` / aggressive ensure-vram only after UMS fail or `--no-ums`. Legacy per-tool servers: `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
-- In-process `ensure_vram_available(N, backend=…)` should align with UMS peak logic (`max(N, peak)`), not a parallel folk formula.
+- Peak signals (`sdnq_preset`, `memory_efficient=true`, …) ride the **vramd payload**, filled by **hw-auto** / `with_vramd_peak_opts` — **not** public CLI flags (`--low-vram` / `--memory-efficient` removed). Omitting them makes vramd assume a larger peak and refuse — or worse, admit wrong.
+- `prepare_gpu_exclusive` / aggressive ensure-vram only after vramd fail or `--no-vramd`. Legacy per-tool servers: `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
+- In-process `ensure_vram_available(N, backend=…)` should align with vramd peak logic (`max(N, peak)`), not a parallel folk formula.
 
 ## What may change when models grow
 
@@ -78,11 +78,11 @@ Not allowed to change:
 
 ## Agent protocol when GPU seems “stuck”
 
-1. `ums status` / `ums queue` / `ums doctor` — see **HOLDING** / who owns the device; free MiB via NVML (`aigamekit_shared.gpu`).
-2. Wait (`ums wait <job_id>`, `--ums-stream`) or cancel deliberately (`ums cancel`).
-3. **Never** `kill` / GPU pkill / `--gpu-kill-others` while UMS has jobs.
-4. Idle UMS holding CUDA context with 0 backends and `free < peak`: `ums stop` + `ums start` (only when queue empty).
-5. `--no-ums` only when intentionally bypassing the supervisor; kill still respects a busy queue.
+1. `vramd status` / `vramd queue` / `vramd doctor` — see **HOLDING** / who owns the device; free MiB via NVML (`aigamekit_shared.gpu`).
+2. Wait (`vramd wait <job_id>`, `--vramd-stream`) or cancel deliberately (`vramd cancel`).
+3. **Never** `kill` / GPU pkill / `--gpu-kill-others` while vramd has jobs.
+4. Idle vramd holding CUDA context with 0 backends and `free < peak`: `vramd stop` + `vramd start` (only when queue empty).
+5. `--no-vramd` only when intentionally bypassing the supervisor; kill still respects a busy queue.
 
 This checklist is part of the premise, not optional etiquette.
 
@@ -90,13 +90,13 @@ This checklist is part of the premise, not optional etiquette.
 
 - Teaching MiB budgets in every tool README as the main UX.
 - Racing the queue with process kills.
-- Loading a second backend in-process “because UMS felt slow.”
+- Loading a second backend in-process “because vramd felt slow.”
 - Omitting quant/memory flags so admit math is wrong.
 - Assuming “one model at a time” in docs while code paths stack peaks.
 
 ## Acceptance questions (for PRs)
 
-- Does new GPU work delegate to UMS by default?
+- Does new GPU work delegate to vramd by default?
 - Is peak/quant declared so admit can be honest?
 - Did we add operator-facing VRAM steps that belong in the supervisor?
 - Under load, do we still prefer queue/wait over kill?
@@ -104,12 +104,12 @@ This checklist is part of the premise, not optional etiquette.
 ## Concrete examples in this repo
 
 - Batch waves submit×N with sliding window; no sync preload of Omni/paint weights.
-- `*/ums_payload.py` + `with_ums_peak_opts` declare quant so admit is honest.
-- After editing a tool: `ums respawn <backend>` — not “kill GPU and restart everything.”
+- `*/ums_payload.py` + `with_vramd_peak_opts` declare quant so admit is honest.
+- After editing a tool: `vramd respawn <backend>` — not “kill GPU and restart everything.”
 
 ## Pointers in this repo
 
-- UMS: [`ModelServer/README.md`](../../ModelServer/README.md)
-- Client helpers: `Shared/src/aigamekit_shared/model_server.py`
+- vramd: [`Vramd/README.md`](../../Vramd/README.md)
+- Client helpers: `Shared/src/aigamekit_shared/vramd_client.py`
 - Batch waves: [`GAMEASSETS_UMS_BATCH.md`](../GAMEASSETS_UMS_BATCH.md)
 - Findings: [`UMS_VRAM_FINDINGS.md`](../findings/UMS_VRAM_FINDINGS.md)

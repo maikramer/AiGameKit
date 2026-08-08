@@ -30,7 +30,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
-    add_ums_options,
+    add_vramd_options,
     delegate_or_prepare,
     prepare_gpu_exclusive,
 )
@@ -83,7 +83,7 @@ def _enable_sage_attention(requested: bool) -> bool:
 
 
 def _prepare_gpu(allow_shared: bool, kill_others: bool, memory_efficient: bool = False) -> None:
-    """Prep GPU só para path in-process (depois de tentar UMS)."""
+    """Prep GPU só para path in-process (depois de tentar vramd)."""
     prepare_gpu_exclusive(
         needed_mib=4000,
         allow_shared=allow_shared,
@@ -256,7 +256,7 @@ def cli(ctx, verbose):
         "Pode conflitar com dual-stream reference UNet."
     ),
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def texture(
     ctx,
@@ -286,9 +286,9 @@ def texture(
     torch_compile_mode,
     channels_last,
     allow_group_offload,
-    ums_priority,
-    no_ums,
-    ums_stream,
+    vramd_priority,
+    no_vramd,
+    vramd_stream,
 ):
     """Texturizar mesh com Hunyuan3D-Paint 2.1 → GLB com PBR."""
     from .painter import paint_file_to_file
@@ -413,8 +413,8 @@ def texture(
     prof_log = Path(log_p) if log_p else None
 
     t_start = time.time()
-    # UMS primeiro — _prepare_gpu (ensure_vram/kill) só no fallback in-process.
-    from .ums_payload import build_texture_request
+    # vramd primeiro — _prepare_gpu (ensure_vram/kill) só no fallback in-process.
+    from .vramd_payload import build_texture_request
 
     if delegate_or_prepare(
         "paint3d",
@@ -441,9 +441,9 @@ def texture(
         t_start=t_start,
         noun="Mesh texturizado",
         console=console,
-        enabled=not no_ums,
-        priority=ums_priority,
-        stream=ums_stream,
+        enabled=not no_vramd,
+        priority=vramd_priority,
+        stream=vramd_stream,
         gpu_ids=parsed_gpu_ids,
         memory_efficient=mem_eff,
         sdnq_preset="sdnq-uint8" if mem_eff else "none",
@@ -591,7 +591,7 @@ def texture(
     help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
 )
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def texture_batch(
     ctx,
@@ -618,15 +618,15 @@ def texture_batch(
     quality,
     category,
     batch_verbose,
-    ums_priority,
-    no_ums,
-    ums_stream,
+    vramd_priority,
+    no_vramd,
+    vramd_stream,
 ):
     """Texturizar batch via manifest JSON. Saída JSONL em stdout.
 
-    Por defeito cada item passa pelo UMS (mesmo pico/admit que ``texture``).
-    Só carrega ``PaintBatchProcessor`` in-process se o UMS estiver indisponível
-    (``--no-ums`` ou supervisor down). ``VRAM_INSUFFICIENT`` não faz fallback.
+    Por defeito cada item passa pelo vramd (mesmo pico/admit que ``texture``).
+    Só carrega ``PaintBatchProcessor`` in-process se o vramd estiver indisponível
+    (``--no-vramd`` ou supervisor down). ``VRAM_INSUFFICIENT`` não faz fallback.
     """
     from .painter import PaintBatchProcessor, _fit_glb_aabb_to_reference
     from .texture_smooth import smooth_trimesh_texture
@@ -698,7 +698,7 @@ def texture_batch(
             _defaults.MEMORY_EFFICIENT_VIEW_RESOLUTION if mem_eff else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
         )
 
-    # GPU prep só quando houver fallback in-process (após loop UMS).
+    # GPU prep só quando houver fallback in-process (após loop vramd).
     parsed_gpu_ids = None
     if gpu_ids is not None:
         try:
@@ -761,8 +761,8 @@ def texture_batch(
                     raise FileNotFoundError(f"Imagem não encontrada: {image_path}")
                 output_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # UMS primeiro (admit + pico honestos). VRAM_INSUFFICIENT → ClickException.
-                from .ums_payload import build_texture_request
+                # vramd primeiro (admit + pico honestos). VRAM_INSUFFICIENT → ClickException.
+                from .vramd_payload import build_texture_request
 
                 item_tex = item.get("texture_size", texture_size)
                 if item_tex is not None:
@@ -793,9 +793,9 @@ def texture_batch(
                     t_start=t0,
                     noun="Mesh texturizado",
                     console=err_console,
-                    enabled=not no_ums,
-                    priority=ums_priority,
-                    stream=ums_stream,
+                    enabled=not no_vramd,
+                    priority=vramd_priority,
+                    stream=vramd_stream,
                     gpu_ids=parsed_gpu_ids,
                     memory_efficient=mem_eff,
                     sdnq_preset="sdnq-uint8" if mem_eff else "none",
@@ -1136,14 +1136,14 @@ def info():
     "--ums-worker",
     is_flag=True,
     help=(
-        "Modo worker subprocesso do UMS: lê comandos JSONL do stdin (load / "
+        "Modo worker subprocesso do vramd: lê comandos JSONL do stdin (load / "
         "generate / unload / shutdown) e emite eventos no stdout. Usado pelo "
         "SubprocessWorkerPool do ModelServer — Paint3D corre no seu próprio "
         "venv e o supervisor (ModelServer/.venv) coordena via JSONL."
     ),
 )
 def serve(ums_worker: bool) -> None:
-    """Modo worker subprocesso do UMS (subprocess-per-backend).
+    """Modo worker subprocesso do vramd (subprocess-per-backend).
 
     Sem ``--ums-worker`` ainda não tem utilidade (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico
@@ -1152,7 +1152,7 @@ def serve(ums_worker: bool) -> None:
     """
     if not ums_worker:
         console.print("[yellow]paint3d serve sem --ums-worker não faz nada.[/yellow]")
-        console.print("[dim]O UMS arranca este subcomando internamente.[/dim]")
+        console.print("[dim]O vramd arranca este subcomando internamente.[/dim]")
         return
 
     # PYTORCH_CUDA_ALLOC_CONF é critério para VRAM ~6 GB; herda do env se definido.

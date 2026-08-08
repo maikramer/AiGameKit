@@ -77,7 +77,7 @@ Useful variable: `PYTHON_CMD` — interpreter to use (default `python3`, or `pyt
 | `text3d` | Text3D | Python | 3.13 | Depends on Text2D; nvdiffrast after venv |
 | `part3d` | Part3D | Python | 3.13 | Semantic decomposition (Hunyuan3D-Part: P3-SAM + X-Part); PyTorch |
 | `gameassets` | GameAssets | Python | 3.13 | Batch + `dream`; orchestrates CLIs |
-| `modelserver` | ModelServer | Python | 3.13 | Unified Model Server (`aigamekit-model-server`/`ums`); supervisor VRAM |
+| `modelserver` | ModelServer | Python | 3.13 | Unified Model Server (`vramd`/`vramd`); supervisor VRAM |
 | `aigamekitlab` | AiGameKitLab | Python | 3.13 | Debug 3D, benches, profiling |
 | `text2sound` | Text2Sound | Python | 3.13 | PyTorch/CUDA |
 | `texture2d` | Texture2D | Python | 3.13 | Local GPU (SD1.5) |
@@ -123,7 +123,7 @@ compression), and — per tool — Rust (`materialize`) or Bun (`vibegame`).
 | NVIDIA driver + CUDA | all GPU tools (text2d/text3d/paint3d/…) | `nvidia-smi` must list a GPU | NVIDIA App / driver install | manual |
 
 **Check what your machine is missing:** `text3d doctor` (bpy/meshopt/npx/ktx) ·
-`clified doctor` (receipts/wrappers) · `ums doctor` (UMS/VRAM).
+`clified doctor` (receipts/wrappers) · `vramd doctor` (vramd/VRAM).
 
 ### Fresh machine — Linux quickstart
 
@@ -182,13 +182,13 @@ SKIP_INFERENCE=1 scripts/docker/ubuntu-clean-test.sh # installs + smokes only
   when the host has `nvidia-smi` (falls back to CPU only on container startup
   errors — a failed *test* never re-runs without GPU).
 - Build context is minimized by the root `.dockerignore`; `.git` is included
-  (the UMS detects the monorepo root by `.git` + `Shared/`).
+  (the vramd detects the monorepo root by `.git` + `Shared/`).
 - Logs land in `logs/ubuntu-clean-test/` (per-step files + per-group logs
   preserved outside the cleaned artifacts); exit code 0 only when every group
   has zero FAILs.
 - **Known tolerances on a 6 GB GPU** (hardware limits, not install bugs):
   `skymap2d` (FLUX.1-dev SDNQ load needs ~5.6 GiB; the laptop display reserves
-  ~0.4 GiB) and the `gameassets batch` paint stage (UMS torch cache residual
+  ~0.4 GiB) and the `gameassets batch` paint stage (vramd torch cache residual
   between stages). Both are reported as WARN; every individual tool passes.
 - Files: `scripts/docker/Dockerfile.ubuntu-clean` (image) ·
   `ubuntu-clean-test-inner.sh` (the test, runs inside the container) ·
@@ -224,13 +224,13 @@ GameAssets / `resolve_binary` prefer `<Tool>/.venv/bin/<cli>` over stale `~/.loc
 | Change | What to run |
 |--------|-------------|
 | New dependency / entry point / `pyproject.toml` metadata | `./install.sh <tool>` or `clified update <tool>` |
-| Code used by a **running UMS tool worker** | `ums respawn <backend>` (or `ums respawn` for all) — picks up `*/src/` without restarting the supervisor |
-| Code in **ModelServer / worker protocol** (`Shared/.../worker_*.py`) | `aigamekit-model-server stop` (next job auto-starts) |
+| Code used by a **running vramd tool worker** | `vramd respawn <backend>` (or `vramd respawn` for all) — picks up `*/src/` without restarting the supervisor |
+| Code in **ModelServer / worker protocol** (`Shared/.../worker_*.py`) | `vramd stop` (next job auto-starts) |
 | Moved the clone (broken wrapper paths) | `./install.sh <tool>` once to rewrite `~/.local/bin` |
 
 Normal Python edits under `*/src/` → save → re-run the CLI / batch. No reinstall.
-VRAM path: UMS + hw-auto (no public `--low-vram`); see
-[`ModelServer/README.md`](../ModelServer/README.md).
+VRAM path: vramd + hw-auto (no public `--low-vram`); see
+[`Vramd/README.md`](../Vramd/README.md).
 
 ---
 

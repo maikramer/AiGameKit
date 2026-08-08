@@ -32,11 +32,11 @@ Helpers: `aigamekit_shared.quantization.apply_torch_compile` /
 
 ## Quando usar (resumo)
 
-| Tool | One-shot `generate` | Batch / UMS |
+| Tool | One-shot `generate` | Batch / vramd |
 |------|---------------------|-------------|
-| **Text2D** | opt-in `--compile --channels-last` | **default ON** (batch + UMS) |
+| **Text2D** | opt-in `--compile --channels-last` | **default ON** (batch + vramd) |
 | **Text2Icon** | opt-in `--channels-last` | **CL ON**; compile **OFF** |
-| **Skymap2D** | compile off (cold ~6 min) | **compile ON** (batch + UMS) |
+| **Skymap2D** | compile off (cold ~6 min) | **compile ON** (batch + vramd) |
 | **Text3D** | `--volume-decoder flashvdm` (hw-auto &lt;7.5 GiB) | idem; compile one-shot não vale |
 | **Paint3D** | mem-eff/SDNQ | **nunca** `--compile` c/ SDNQ (`QConv2d`) |
 | **Part3D** | flashvdm+CL; autotune anti-OOM | DiT compile **skip** em ≤8 GB+offload |
@@ -47,7 +47,7 @@ Helpers: `aigamekit_shared.quantization.apply_torch_compile` /
 
 ## Defaults aplicados no código
 
-### UMS (`ModelServer/adapters/`)
+### vramd (`Vramd/adapters/`)
 
 | Backend | Defaults no `load()` | Override |
 |---------|----------------------|----------|
@@ -75,8 +75,8 @@ One-shot `generate` continua default **OFF** (cold do compile não compensa).
 | Tool / config | Hot (s) | Nota |
 |---------------|--------:|------|
 | Text3D flashvdm vs vanilla | 43 vs 74 | **−42%** — maior win |
-| Text2D compile+CL | ~4.3 vs 4.8 | ~−10%; batch/UMS |
-| Text2Icon channels_last | 1.3 vs 1.5 | ~−13%; batch/UMS |
+| Text2D compile+CL | ~4.3 vs 4.8 | ~−10%; batch/vramd |
+| Text2Icon channels_last | 1.3 vs 1.5 | ~−13%; batch/vramd |
 | Skymap2D compile | 30.4 vs 37.7 | −19%; cold ~359 s |
 | Text2Icon / Texture2D / Sound compile | ≈baseline ou pior | skip em 6 GB |
 | Paint3D compile mem-eff | FAIL | SDNQ `QConv2d.weight` |
@@ -104,7 +104,7 @@ Input preferido: mesh **shape** Text3D — paint GLB pode hangar em `fix_mesh`.
 
 1. **Subprocesso por config** (Text2Icon / Skymap / Text2Sound): group_offload deixa
    VRAM presa no mesmo PID → OOM falso entre configs.
-2. **Não matar** jobs GPU / UMS mid-queue sem olhar `ums queue` / `ums debug`.
+2. **Não matar** jobs GPU / vramd mid-queue sem olhar `vramd queue` / `vramd debug`.
 3. Comparar só **hot** para compile (cold inclui Inductor).
 4. Replicar: `Tool/.venv/bin/python docs/scripts/bench_kernel_opts.py --tool <name> --append`.
 
@@ -114,9 +114,9 @@ Input preferido: mesh **shape** Text3D — paint GLB pode hangar em `fix_mesh`.
 
 ```
 [ ] Text3D: flashvdm (não vanilla) em VRAM <7.5 GiB
-[ ] Text2D batch/UMS: compile+CL (já default)
-[ ] Text2Icon batch/UMS: channels_last; sem compile
-[ ] Skymap batch/UMS: compile; sem depender de CL
+[ ] Text2D batch/vramd: compile+CL (já default)
+[ ] Text2Icon batch/vramd: channels_last; sem compile
+[ ] Skymap batch/vramd: compile; sem depender de CL
 [ ] Paint: sem --compile com SDNQ/mem-eff
 [ ] Part3D: shape mesh; autotune; sem Conditioner compile
 [ ] One-shot: compile off salvo necessidade batch local
@@ -129,4 +129,4 @@ Input preferido: mesh **shape** Text3D — paint GLB pode hangar em `fix_mesh`.
 
 | Data | Nota |
 |------|------|
-| 2026-07-24 | Extraído da campanha bench; defaults UMS/batch Text2D/Skymap/Icon |
+| 2026-07-24 | Extraído da campanha bench; defaults vramd/batch Text2D/Skymap/Icon |

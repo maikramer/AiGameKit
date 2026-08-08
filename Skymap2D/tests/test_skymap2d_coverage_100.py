@@ -380,13 +380,13 @@ def test_fix_equirect_latitude_short_image_unchanged() -> None:
 
 
 # ---------------------------------------------------------------------------
-# ums_payload
+# vramd_payload
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("width,height", [(2048, 1024), (1024, 512)])
 def test_build_generate_request_dimensions(width: int, height: int) -> None:
-    from skymap2d.ums_payload import build_generate_request
+    from skymap2d.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="sky", output="/tmp/out.png", width=width, height=height)
     assert req["width"] == width
@@ -395,7 +395,7 @@ def test_build_generate_request_dimensions(width: int, height: int) -> None:
 
 
 def test_build_generate_request_optional_fields() -> None:
-    from skymap2d.ums_payload import build_generate_request
+    from skymap2d.vramd_payload import build_generate_request
 
     req = build_generate_request(
         prompt="p",
@@ -523,7 +523,7 @@ def test_preset_inference_steps_reasonable(name: str, steps: int) -> None:
 
 @pytest.mark.parametrize("scale", [0.5, 1.0, 2.0])
 def test_build_generate_request_exr_scale(scale: float) -> None:
-    from skymap2d.ums_payload import build_generate_request
+    from skymap2d.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="x", output="y.png", exr_scale=scale)
     assert req["exr_scale"] == scale
@@ -531,7 +531,7 @@ def test_build_generate_request_exr_scale(scale: float) -> None:
 
 @pytest.mark.parametrize("seed", [None, 0, 42, 99999])
 def test_build_generate_request_seed(seed: int | None) -> None:
-    from skymap2d.ums_payload import build_generate_request
+    from skymap2d.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="x", output="y.png", seed=seed)
     assert req["seed"] == seed
@@ -539,7 +539,7 @@ def test_build_generate_request_seed(seed: int | None) -> None:
 
 @pytest.mark.parametrize("gpu", [None, [0], "0,1"])
 def test_build_generate_request_gpu_ids(gpu) -> None:
-    from skymap2d.ums_payload import build_generate_request
+    from skymap2d.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="x", output="y.png", gpu_ids=gpu)
     assert "prompt" in req

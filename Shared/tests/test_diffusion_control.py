@@ -1,4 +1,4 @@
-"""Hooks de cancel/progress Diffusers (UMS P0)."""
+"""Hooks de cancel/progress Diffusers (vramd P0)."""
 
 from __future__ import annotations
 

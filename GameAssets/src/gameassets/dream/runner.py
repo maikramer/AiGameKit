@@ -136,7 +136,7 @@ def run_dream(
         *batch_flags,
     ]
     dream_env = dict(os.environ)
-    dream_env.setdefault("AIGAMEKIT_UMS_PRIORITY", "batch")
+    dream_env.setdefault("VRAMD_PRIORITY", "batch")
     console.print(f"[dim]$ {' '.join(batch_argv)}[/dim]")
     rc = subprocess.call(batch_argv, cwd=str(batch_dir), env=dream_env)
     ok = rc == 0

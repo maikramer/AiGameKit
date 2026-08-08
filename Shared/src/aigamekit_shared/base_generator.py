@@ -10,7 +10,7 @@ faz override apenas de ``_load_pipeline`` (como o pipeline é construído) e
 
 Lazy import: a base não importa torch/diffusers no topo — as tools continuam a
 fazer lazy import dentro de ``_load_pipeline``. Isto mantém o módulo importável
-sem deps GPU instaladas (útil para o UMS e testes).
+sem deps GPU instaladas (útil para o vramd e testes).
 """
 
 from __future__ import annotations

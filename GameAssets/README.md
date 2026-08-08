@@ -171,19 +171,19 @@ Full pipeline execution. Generates 2D images, 3D meshes, textures, audio, riggin
 | `--profile-log FILE.jsonl` | Profiler log output |
 | `--force` | Regenerate everything (ignore existing outputs) |
 | `--gpu-ids "0,1"` | Multi-GPU IDs (auto-detected via `nvidia-smi` if omitted) |
-| `--ums-stream` | Opt-in: set `AIGAMEKIT_UMS_STREAM=1` on children (UMS NDJSON; noisy) |
+| `--vramd-stream` | Opt-in: set `VRAMD_STREAM=1` on children (vramd NDJSON; noisy) |
 | `--no-dashboard` | Simple progress bars instead of TUI dashboard |
 | `--plain` | Plain text output (no Rich/TUI, for scripts) |
 
 **Key behaviors:**
 
 - **Exclusive lock:** `.gameassets_batch.lock` (fcntl) prevents two batches in the same folder. `--skip-batch-lock` disables.
-- **VRAM / UMS:** GPU sub-tools delegate to **UMS** by default; batch sets `AIGAMEKIT_UMS_PRIORITY=batch` and inherits other `AIGAMEKIT_UMS_*` / `AIGAMEKIT_ALLOW_LEGACY_SERVER` from the parent env. **hw-auto** fills peak signals (`sdnq_preset` / `memory_efficient` on the payload) — no public `--low-vram` / `--memory-efficient` CLI. Batch **waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + optional `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` / `terrain3d` (`run_*_wave_or_fallback`). Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
+- **VRAM / vramd:** GPU sub-tools delegate to **vramd** by default; batch sets `VRAMD_PRIORITY=batch` and inherits other `VRAMD_*` / `AIGAMEKIT_ALLOW_LEGACY_SERVER` from the parent env. **hw-auto** fills peak signals (`sdnq_preset` / `memory_efficient` on the payload) — no public `--low-vram` / `--memory-efficient` CLI. Batch **waves** (`ums_batch.py`): shape (`text3d`) + paint (`paint3d`) + optional `text2d` / `text2icon` / `texture2d` / `skymap2d` / `text2sound` / `terrain3d` (`run_*_wave_or_fallback`). Ops: [`docs/findings/UMS_VRAM_FINDINGS.md`](../docs/findings/UMS_VRAM_FINDINGS.md).
 - **VRAM preflight:** warns if free VRAM < ~1.8 GiB. `--skip-gpu-preflight` disables.
 - **CUDA:** sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` if unset.
-- **Multi-GPU:** `--gpu-ids 0,1` propagates `CUDA_VISIBLE_DEVICES` and `--gpu-ids` to all sub-tools (and into UMS payloads via each CLI’s `with_ums_load_opts`).
+- **Multi-GPU:** `--gpu-ids 0,1` propagates `CUDA_VISIBLE_DEVICES` and `--gpu-ids` to all sub-tools (and into vramd payloads via each CLI’s `with_vramd_load_opts`).
 - **JSONL log:** each record includes `timings_sec` per subprocess (e.g., `image_text2d`, `text3d`, `paint3d_texture`), `audio_path` / `audio_error` when applicable.
-- **Dashboard TUI:** per-asset pipeline progress; when UMS is up, stats bar shows `UMS q=… run=… eta=…`. Use `--no-dashboard` or `--plain` for headless / CI.
+- **Dashboard TUI:** per-asset pipeline progress; when vramd is up, stats bar shows `vramd q=… run=… eta=…`. Use `--no-dashboard` or `--plain` for headless / CI.
 
 **Batch mode:** Text2D uses `generate-batch` (JSONL manifest) for efficiency; Texture2D rows run individually per row.
 
@@ -209,7 +209,7 @@ Smart resume: analyzes each asset's state on disk and runs only pending phases. 
 | `--gpu-ids "0,1"` | Multi-GPU IDs |
 | `--no-dashboard` | Simple progress bars |
 
-Resume also ensures UMS is up and propagates `AIGAMEKIT_UMS_*` (+ `AIGAMEKIT_UMS_PRIORITY=batch`) to subprocesses, same as batch. `gameassets dream` inherits the parent env with `AIGAMEKIT_UMS_PRIORITY=batch` when invoking batch.
+Resume also ensures vramd is up and propagates `VRAMD_*` (+ `VRAMD_PRIORITY=batch`) to subprocesses, same as batch. `gameassets dream` inherits the parent env with `VRAMD_PRIORITY=batch` when invoking batch.
 
 **State detection per asset:**
 

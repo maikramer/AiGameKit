@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import platform
 import time
@@ -111,6 +112,48 @@ def check_scale_coherence(size: int, world_size: float, native_resolution: float
     return None
 
 
+def _release_pipeline(pipeline: Any) -> None:
+    """Liberta a pipeline **e a VRAM que ela detém**.
+
+    ``WorldPipeline.close()`` só fecha o tile store e o ficheiro temporário —
+    nunca toca nos modelos na GPU. Como o pipeline é construído de novo a cada
+    ``generate_terrain``, os pesos do ciclo anterior ficavam presos no allocator:
+    medido com ``ums calibrate``, o residente crescia ~651 MiB por geração
+    (4660 → 5578 → 5720 MiB ao fim de três), até deixar de haver VRAM para
+    admitir o job seguinte.
+
+    A ordem importa: mover para CPU antes de largar as referências, senão os
+    blocos CUDA só voltam ao driver quando o GC decidir — e o allocator do
+    PyTorch não os devolve sem ``empty_cache``.
+
+    Args:
+        pipeline: ``WorldPipeline`` a libertar. Tolerante a ``None`` e a
+            pipelines parcialmente construídas (falha a meio do load).
+    """
+    import gc
+
+    if pipeline is None:
+        return
+
+    with contextlib.suppress(Exception):
+        pipeline.close()
+
+    # Pesos fora da GPU antes de perder as referências.
+    with contextlib.suppress(Exception):
+        pipeline.to("cpu")
+    for attr in ("coarse_model", "base_model", "decoder_model", "coarse", "tile_store"):
+        with contextlib.suppress(Exception):
+            setattr(pipeline, attr, None)
+
+    gc.collect()
+    with contextlib.suppress(Exception):
+        import torch
+
+        if torch.cuda.is_available() and torch.cuda.is_initialized():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+
+
 def generate_terrain(config: TerrainConfig) -> TerrainResult:
     """Generate an AI terrain heightmap via the vendored WorldPipeline.
 
@@ -218,7 +261,7 @@ def generate_terrain(config: TerrainConfig) -> TerrainResult:
             elevation_contrast=config.elevation_contrast,
         )
     finally:
-        pipeline.close()
+        _release_pipeline(pipeline)
 
     elapsed = time.perf_counter() - t0
 

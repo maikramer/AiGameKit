@@ -113,7 +113,7 @@ text2d generate "character design" --quality high
 
 When `--quality` is set and explicit `--width` / `--height` / `--steps` are **not** provided, the QualityEngine fills in the tier defaults (see [Quality Presets](#quality-presets)).
 
-Kernel opts on ~6 GB: prefer compile+channels-last for **batch/UMS** (defaults on); keep one-shot `generate` opt-in. Details: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
+Kernel opts on ~6 GB: prefer compile+channels-last for **batch/vramd** (defaults on); keep one-shot `generate` opt-in. Details: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
 ### `text2d generate-batch MANIFEST`
 
@@ -206,19 +206,19 @@ text2d skill install -t /path/to/game-project --force
 | `-t, --target` | path | `.` | Game project root directory |
 | `--force` | flag | off | Overwrite existing `SKILL.md` |
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`text2d generate` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `AIGAMEKIT_UMS_AUTO_START=0`.
+`text2d generate` auto-delegates to **`vramd`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `VRAMD_AUTO_START=0`.
 
 ```bash
-text2d generate "cat" -o cat.png --ums-stream          # queue/progress events
-text2d generate "cat" -o cat.png --ums-priority batch
-text2d generate "cat" -o cat.png --no-ums              # force in-process
-ums status                                             # backends + HOLDING/QUEUE
-ums respawn text2d                                     # reload edited src/ code
+text2d generate "cat" -o cat.png --vramd-stream          # queue/progress events
+text2d generate "cat" -o cat.png --vramd-priority batch
+text2d generate "cat" -o cat.png --no-vramd              # force in-process
+vramd status                                             # backends + HOLDING/QUEUE
+vramd respawn text2d                                     # reload edited src/ code
 ```
 
-After editing `*/src/`: `ums respawn text2d`. Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
+After editing `*/src/`: `vramd respawn text2d`. Full guide: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Quality Presets
 

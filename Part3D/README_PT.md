@@ -2,7 +2,7 @@
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
-Decomposição semântica de meshes 3D via **Hunyuan3D-Part** (P3-SAM + X-Part): segmentação e geração de partes. Alinhado aos padrões Shared (QualityEngine, SDNQ, hw-auto, `ensure_vram` / exclusive GPU, UMS).
+Decomposição semântica de meshes 3D via **Hunyuan3D-Part** (P3-SAM + X-Part): segmentação e geração de partes. Alinhado aos padrões Shared (QualityEngine, SDNQ, hw-auto, `ensure_vram` / exclusive GPU, vramd).
 
 ## Requisitos
 
@@ -29,14 +29,14 @@ part3d decompose mesh.glb --quality fast
 part3d decompose mesh.glb -q int4          # SDNQ int4
 part3d decompose mesh.glb --gpu-ids 0,1    # DiT / auxiliares
 
-# UMS (fila + modelo quente) — ver ModelServer/README.md
-aigamekit-model-server start
-part3d decompose mesh.glb -o partes.glb --ums-stream
-part3d decompose mesh.glb -o partes.glb --ums-priority batch
-part3d decompose mesh.glb -o partes.glb --no-ums   # forçar in-process
+# vramd (fila + modelo quente) — ver Vramd/README.md
+vramd start
+part3d decompose mesh.glb -o partes.glb --vramd-stream
+part3d decompose mesh.glb -o partes.glb --vramd-priority batch
+part3d decompose mesh.glb -o partes.glb --no-vramd   # forçar in-process
 ```
 
-Flags UMS partilhadas: `--ums-priority`, `--no-ums`, `--ums-stream`.
+Flags vramd partilhadas: `--vramd-priority`, `--no-vramd`, `--vramd-stream`.
 
 **6 GB:** autotune põe `cond_batch=1` / `max_parts=1`; DiT `torch.compile` skip com offload; Conditioner nunca compilado. Preferir mesh **shape**. Ver [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 

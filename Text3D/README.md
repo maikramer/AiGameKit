@@ -416,19 +416,19 @@ Default engine: `--engine arrays` (perf study: [`docs/TOPOLOGY_FIX_GPU_STUDY.md`
 
 LOD / bake-master use profile `pre_decimate_uv` before Decimate (UV-safe weld `0.0005`, slivers, no watertight).
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`text3d generate` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `AIGAMEKIT_UMS_AUTO_START=0`.
+`text3d generate` auto-delegates to **`vramd`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `VRAMD_AUTO_START=0`.
 
 ```bash
-text3d generate "a dragon" -o dragon.glb --ums-stream    # queue/progress events
-text3d generate "a dragon" -o dragon.glb --ums-priority batch
-text3d generate "a dragon" -o dragon.glb --no-ums        # force in-process
-ums status                                               # backends + HOLDING/QUEUE
-ums respawn text3d                                       # reload edited src/ code
+text3d generate "a dragon" -o dragon.glb --vramd-stream    # queue/progress events
+text3d generate "a dragon" -o dragon.glb --vramd-priority batch
+text3d generate "a dragon" -o dragon.glb --no-vramd        # force in-process
+vramd status                                               # backends + HOLDING/QUEUE
+vramd respawn text3d                                       # reload edited src/ code
 ```
 
-Models: [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) shape (SDNQ INT4 on small GPUs; public, Tencent Community License; bbox/pose/point/voxel controls) + Text2D FLUX reference image (see [Text2D/README](../Text2D/README.md) for the 9B gate). Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
+Models: [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) shape (SDNQ INT4 on small GPUs; public, Tencent Community License; bbox/pose/point/voxel controls) + Text2D FLUX reference image (see [Text2D/README](../Text2D/README.md) for the 9B gate). Full guide: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Quality Presets
 

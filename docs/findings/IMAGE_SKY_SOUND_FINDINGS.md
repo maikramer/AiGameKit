@@ -8,12 +8,12 @@ Hub: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 
 - Gera referência 2D para Omni (`--from-image`) e assets 2D.
 - Resolução default passou a **1024** (não 2048) — VRAM/tempo.
-- Quant SDNQ + `--quality`; UMS precisa do preset no request.
+- Quant SDNQ + `--quality`; vramd precisa do preset no request.
 - Matmul quantizado: `aigamekit_shared.sdnq.apply_quantized_matmul` (não helper
   privado em `text2d.generator` — removido).
 - Payload wave/CLI: `text2d/ums_payload.py`.
 - **Kernel:** `--compile` + `--channels-last` (~−10% hot). Default **ON** em
-  `generate-batch` e UMS; one-shot `generate` opt-in.
+  `generate-batch` e vramd; one-shot `generate` opt-in.
 - Guia: [`KERNEL_OPTS_FINDINGS.md`](KERNEL_OPTS_FINDINGS.md) ·
   bench [`../KERNEL_OPTS_BENCH.md`](../KERNEL_OPTS_BENCH.md).
 
@@ -25,9 +25,9 @@ errada mesmo com bbox/pose OK. Melhorar `idea`/prompt 2D antes de re-roll 3D.
 ## Text2Icon (Sana Sprint 0.6B)
 
 - Ícones; BG transparente via **rembg**.
-- Relativamente leve; bom canário UMS (~7 s hot vs ~20 s cold tip.).
-- Servers legados `text2icon server` = deprecated; usar UMS.
-- **Kernel:** `--channels-last` (~−13% hot) — default **ON** em `batch` + UMS.
+- Relativamente leve; bom canário vramd (~7 s hot vs ~20 s cold tip.).
+- Servers legados `text2icon server` = deprecated; usar vramd.
+- **Kernel:** `--channels-last` (~−13% hot) — default **ON** em `batch` + vramd.
   `--compile` em 6 GB **piora** hot — deixar OFF.
 
 ---
@@ -35,7 +35,7 @@ errada mesmo com bbox/pose OK. Melhorar `idea`/prompt 2D antes de re-roll 3D.
 ## Texture2D
 
 - Texturas seamless (SD1.5 + circular padding).
-- Backend UMS `texture2d`.
+- Backend vramd `texture2d`.
 - CLI: `--compile` / `--channels-last` wired; benches 6 GB sem ganho útil.
 - **Testes CI:** asserts de `dtype`/fp16 em `device="cuda"` têm de **skip** sem CUDA real —
   PyTorch pode cair em CPU e ficar float32 (falso negativo).
@@ -53,7 +53,7 @@ errada mesmo com bbox/pose OK. Melhorar `idea`/prompt 2D antes de re-roll 3D.
 
 ### Kernel
 
-- `--compile` (~−19% hot @ 1024×512/14 steps). Default **ON** em `batch` + UMS.
+- `--compile` (~−19% hot @ 1024×512/14 steps). Default **ON** em `batch` + vramd.
 - Cold compile ~6 min — **não** usar em one-shot.
 - `--channels-last` ≈0 ganho nestes benches.
 
@@ -68,8 +68,8 @@ errada mesmo com bbox/pose OK. Melhorar `idea`/prompt 2D antes de re-roll 3D.
 
 ### Testes CLI
 
-Com UMS a correr, `CliRunner` + `generate` sem isolamento → job real +
-`VRAM_INSUFFICIENT`. Padrão: `--no-ums` + mock
+Com vramd a correr, `CliRunner` + `generate` sem isolamento → job real +
+`VRAM_INSUFFICIENT`. Padrão: `--no-vramd` + mock
 `prepare_gpu_exclusive` / `warn_if_vram_occupied` (ver
 `Skymap2D/tests/test_hardware.py`).
 
@@ -107,5 +107,5 @@ Com UMS a correr, `CliRunner` + `generate` sem isolamento → job real +
 | 2026-07-24 | Link preload diferido / gesto Howler (VibeGame audio findings) |
 | 2026-07-24 | SFX long-tail pitfall + link VibeGame audio/combat findings |
 | 2026-07-24 | Pedalboard SIGILL probe; Texture2D skip dtype sem CUDA |
-| 2026-07-24 | `apply_quantized_matmul` Shared; Skymap testes `--no-ums`; Text2Sound path_utils; kernel flags UMS/batch |
+| 2026-07-24 | `apply_quantized_matmul` Shared; Skymap testes `--no-vramd`; Text2Sound path_utils; kernel flags vramd/batch |
 | 2026-07-19 | Skymap shift/resize; Text2D 1024; audio trim; PMREM offset |

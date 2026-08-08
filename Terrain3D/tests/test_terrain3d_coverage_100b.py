@@ -6,7 +6,7 @@ import numpy as np
 
 from terrain3d.generator import TerrainConfig, _native_resolution_from_model
 from terrain3d.postprocess import _smoothstep, elevation_scurve, taubin_smooth
-from terrain3d.ums_payload import build_generate_request
+from terrain3d.vramd_payload import build_generate_request
 
 
 def test_build_request_mode_island() -> None:

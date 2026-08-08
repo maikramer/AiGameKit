@@ -1,4 +1,4 @@
-"""Suite de cobertura Terrain3D (UMS payload, postprocess, export, config, CLI) — sem GPU."""
+"""Suite de cobertura Terrain3D (vramd payload, postprocess, export, config, CLI) — sem GPU."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from terrain3d.postprocess import (
     island_falloff,
     taubin_smooth,
 )
-from terrain3d.ums_payload import build_generate_request
+from terrain3d.vramd_payload import build_generate_request
 
 
 class TestBuildGenerateRequest:

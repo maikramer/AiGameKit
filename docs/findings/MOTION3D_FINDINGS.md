@@ -13,7 +13,7 @@ Perfil: `Animator3D/src/animator3d/data/retarget/hml22.yaml`.
 ./install.sh motion3d
 motion3d doctor
 
-# 1) gerar motion (GPU via UMS; hw-auto pode escolher Full em ~6GB com text-CPU)
+# 1) gerar motion (GPU via vramd; hw-auto pode escolher Full em ~6GB com text-CPU)
 motion3d generate "a person walks forward" -o walk.npz --quality medium
 python -c "import numpy as np; d=np.load('walk.npz'); print(d['joints'].shape, int(d['fps']))"
 
@@ -51,7 +51,7 @@ API canónica para N clips:
 - Prompt rewriter LLM **off** (`disable_prompt_engineering=True`).
 - NPZ: `joints (T,22,3)`, `fps=30`, opcional `rot6d`/`transl`. Sem `hml263`.
 - FOOTPRINTS `hy-motion-lite|full` = DiT residente (não soma Qwen).
-- Após editar Motion3D: `ums respawn motion3d`.
+- Após editar Motion3D: `vramd respawn motion3d`.
 
 ### Soft-tune hw-auto
 
@@ -103,10 +103,10 @@ Detalhe do hook `[dev]`: [`../INSTALLING.md`](../INSTALLING.md) · código `Shar
 
 | Comando | Função |
 |---------|--------|
-| `motion3d generate PROMPT -o out.npz\|.glb` | Inferência T2M-GPT; UMS por omissão; `--also-npz` com `.glb` |
+| `motion3d generate PROMPT -o out.npz\|.glb` | Inferência T2M-GPT; vramd por omissão; `--also-npz` com `.glb` |
 | `motion3d export-glb walk.npz -o hml22.glb` | Só source HML22 (debug / retarget manual) |
 | `motion3d apply-rigged walk.npz rigged.glb -o out.glb` | Happy path skinned |
-| `motion3d doctor` | deps, bpy, cache, UMS |
+| `motion3d doctor` | deps, bpy, cache, vramd |
 
 Flags importantes em `export-glb` / `apply-rigged`:
 
@@ -270,7 +270,7 @@ coluna + rest do alvo só nos pés + leg splay + folhas quietas.
 5. Aim em folhas (`Head` / `hand_*` / `ball_*`).
 6. Neutro dos braços = rest T-pose do alvo.
 7. Calibrar neutro rodando o rest do *source* (retarget é absoluto em mundo).
-8. `kill`/pkill GPU com UMS busy — usar `ums` / `--ums-stream`.
+8. `kill`/pkill GPU com vramd busy — usar `vramd` / `--vramd-stream`.
 9. Correr testes fora de `Motion3D/.venv`.
 
 ---

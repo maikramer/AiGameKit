@@ -1,11 +1,11 @@
 # AiGameKit monorepo — common tasks for Python packages (ruff, pytest, mypy), Rust (Materialize), and VibeGame (Bun).
 # Requires GNU Make; on Windows, use Git Bash / MSYS2 / WSL so shell recipes and `find` work as expected.
 
-PYTHON_PROJECTS := Shared ModelServer Text2D Text2Icon Text3D Paint3D Part3D GameAssets Texture2D Skymap2D Text2Sound Rigging3D Animator3D Motion3D AiGameKitLab Terrain3D Rocks3D
+PYTHON_PROJECTS := Shared Text2D Text2Icon Text3D Paint3D Part3D GameAssets Texture2D Skymap2D Text2Sound Rigging3D Animator3D Motion3D AiGameKitLab Terrain3D Rocks3D
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-modelserver test-text2d test-text2icon test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text2icon test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
 
 # Each package is tested from its own venv (installed by ./install.sh <tool>, which
 # adds the [dev] extra). CI has no per-package venv, so the system interpreter stays
@@ -49,9 +49,6 @@ test: ## pytest in each Python project; cargo test in Materialize/
 
 test-shared: ## pytest only in Shared/
 	$(call run-pytest,Shared)
-
-test-modelserver: ## pytest only in ModelServer/
-	$(call run-pytest,ModelServer)
 
 test-text2d: ## pytest only in Text2D/
 	$(call run-pytest,Text2D)

@@ -123,9 +123,9 @@ Detail: `large_region_candidates` **salta** labels já thin (aspect alto) para n
 
 ### VRAM (~6 GB)
 
-- UMS pode recusar `part3d` (peak estimado alto) → fallback in-process.
+- vramd pode recusar `part3d` (peak estimado alto) → fallback in-process.
 - Concurrent paint3d / blender snap / outro job → OOM a meio do P3-SAM.
-- Antes de decompose: `ums status` + NVML (`query_gpu_free_mib` / `list_gpu_snapshots`); preferir GPU livre; `--point-num` / `--prompt-num` / `--quality fast` se preciso.
+- Antes de decompose: `vramd status` + NVML (`query_gpu_free_mib` / `list_gpu_snapshots`); preferir GPU livre; `--point-num` / `--prompt-num` / `--quality fast` se preciso.
 - **Não sobrescrever** `*_lod0.glb` com clean high-poly por engano — confirmar face count após LOD (`~` target-faces).
 
 ## 4. Critério de qualidade (o que julgar)
@@ -178,4 +178,4 @@ paint3d texture _intermediate/id_clean.glb \
 - Gerar building com worm’s-eye e esperar base fechada no mesh.
 - Pintar `_shape` quando deve existir `_clean`.
 - Julgar Part3D em seed B com expectativas do seed A.
-- Correr paint + part3d na mesma 6 GB sem UMS estável.
+- Correr paint + part3d na mesma 6 GB sem vramd estável.

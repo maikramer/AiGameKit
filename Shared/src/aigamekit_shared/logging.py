@@ -64,7 +64,7 @@ _LEVEL_RANK: dict[str, int] = {
 }
 
 _TOOL_ALIASES: dict[str, str] = {
-    "aigamekit-model-server": "ums",
+    "vramd": "ums",
     "ums": "ums",
     "aigamekit-lab": "aigamekit-lab",
     "aigamekit-install": "aigamekit-install",
@@ -82,7 +82,7 @@ _atexit_registered: bool = False
 
 def _cache_dir() -> Path:
     """Mesma precedência que ``quaternius_fetch.cache_dir`` (sem import circular)."""
-    env = os.environ.get("AIGAMEKIT_CACHE_DIR", "").strip()
+    env = os.environ.get("VRAMD_CACHE_DIR", "").strip()
     if env:
         return Path(env)
     xdg = os.environ.get("XDG_CACHE_HOME", "").strip()

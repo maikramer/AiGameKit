@@ -129,15 +129,15 @@ Full guide (tool table, minimum Python per CLI, **repo root vs `Project/scripts/
 
 **Hunyuan shape / repair / Part3D lessons** (faces vs X-Part, elephant feet, welded thins): [docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md](docs/HUNYUAN_MESH_AND_PARTS_LESSONS.md) · [Português](docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 
-**Model findings hub** (VRAM, SDNQ, kernels, Omni, UMS, paint/sky/mesh): [docs/MODEL_FINDINGS.md](docs/MODEL_FINDINGS.md) · [docs/findings/](docs/findings/) · Omni [docs/OMNI_SHAPE_FINDINGS.md](docs/OMNI_SHAPE_FINDINGS.md) · benches [docs/KERNEL_OPTS_BENCH.md](docs/KERNEL_OPTS_BENCH.md).
+**Model findings hub** (VRAM, SDNQ, kernels, Omni, vramd, paint/sky/mesh): [docs/MODEL_FINDINGS.md](docs/MODEL_FINDINGS.md) · [docs/findings/](docs/findings/) · Omni [docs/OMNI_SHAPE_FINDINGS.md](docs/OMNI_SHAPE_FINDINGS.md) · benches [docs/KERNEL_OPTS_BENCH.md](docs/KERNEL_OPTS_BENCH.md).
 
 **GLB compression (KTX2 + meshopt, `text3d finish`):** [docs/GLB_FINISH_COMPRESSION.md](docs/GLB_FINISH_COMPRESSION.md).
 
-**UMS batch waves** (GameAssets shape/paint + optional GPU tools): [docs/GAMEASSETS_UMS_BATCH.md](docs/GAMEASSETS_UMS_BATCH.md).
+**vramd batch waves** (GameAssets shape/paint + optional GPU tools): [docs/GAMEASSETS_UMS_BATCH.md](docs/GAMEASSETS_UMS_BATCH.md).
 
 **Mission / premises** (ease, automate, agent-first, VRAM-as-infra): [docs/mission/](docs/mission/README.md) · summary in [AGENTS.md](AGENTS.md).
 
-**File logging** (all Python tools + UMS → `~/.cache/aigamekit/logs/`): [docs/LOGGING.md](docs/LOGGING.md) · [Português](docs/LOGGING_PT.md).
+**File logging** (all Python tools + vramd → `~/.cache/aigamekit/logs/`): [docs/LOGGING.md](docs/LOGGING.md) · [Português](docs/LOGGING_PT.md).
 
 **Testing** (coverage floor ≥100/tool, suite naming, CPU-first rules): [docs/TESTING.md](docs/TESTING.md) · [Português](docs/TESTING_PT.md).
 
@@ -341,45 +341,45 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `PAINT3D_MULTI_GPU` | Paint3D | **Deprecated** — use `--gpu-ids 0,1` instead. Legacy env var to split VAE across GPUs |
 | `RIGGING3D_ROOT` | Rigging3D | Inference tree root (default: bundled package) |
 | `RIGGING3D_PYTHON` | Rigging3D | Python interpreter for the inference environment |
-| `MODELSERVER_BIN` | All GPU tools | Path to `aigamekit-model-server` (UMS) |
-| `AIGAMEKIT_UMS_AUTO_START` | All GPU tools | `0` disables auto-start of UMS on first generate |
-| `AIGAMEKIT_UMS_PRIORITY` | All GPU tools / GameAssets | Default queue priority: `interactive` \| `batch` |
-| `AIGAMEKIT_UMS_MAX_AFFINITY_CUTS` | ModelServer | Max VRAM-affinity skips before forcing HOL (default `3`) |
-| `AIGAMEKIT_UMS_MAX_QUEUE_DEPTH` | ModelServer | Job queue depth before `queue_full` (default `32`) |
-| `AIGAMEKIT_UMS_MAX_INFLIGHT` | ModelServer | Parallel generations (default `1`) |
+| `VRAMD_BIN` | All GPU tools | Path to `vramd` (vramd) |
+| `VRAMD_AUTO_START` | All GPU tools | `0` disables auto-start of vramd on first generate |
+| `VRAMD_PRIORITY` | All GPU tools / GameAssets | Default queue priority: `interactive` \| `batch` |
+| `VRAMD_MAX_AFFINITY_CUTS` | ModelServer | Max VRAM-affinity skips before forcing HOL (default `3`) |
+| `VRAMD_MAX_QUEUE_DEPTH` | ModelServer | Job queue depth before `queue_full` (default `32`) |
+| `VRAMD_MAX_INFLIGHT` | ModelServer | Parallel generations (default `1`) |
 | `AIGAMEKIT_ALLOW_LEGACY_SERVER` | Shared / tools | `1` = opt-in per-tool legacy servers + legacy `ensure_vram` (default off) |
 | `AIGAMEKIT_PREFER_MONOREPO` | Shared / GameAssets | Default `1`: `resolve_binary` prefers `<Tool>/.venv/bin` over stale `~/.local/bin` |
-| `AIGAMEKIT_MODEL_SERVER_SOCKET` | Shared | Override Unix socket path (legacy / tests) |
-| `AIGAMEKIT_LOG_DIR` | All Python tools + UMS | Directory for daily log files (default `~/.cache/aigamekit/logs`) |
-| `AIGAMEKIT_LOG_FILE` | All Python tools + UMS | Exact log file path (overrides per-tool daily naming) |
-| `AIGAMEKIT_LOG_TOOL` | All Python tools + UMS | Tool name used in log filename (auto from CLI / `ums`) |
-| `AIGAMEKIT_LOG_LEVEL` | All Python tools + UMS | Min file level: `DEBUG` \| `INFO` \| `WARN` \| `ERROR` (default `INFO`) |
-| `AIGAMEKIT_FILE_LOG` | All Python tools + UMS | `0` disables file logging; `1` forces on (needed under pytest) |
-| `AIGAMEKIT_NO_FILE_LOG` | All Python tools + UMS | `1` disables file logging |
+| `VRAMD_CLIENT_SOCKET` | Shared | Override Unix socket path (legacy / tests) |
+| `AIGAMEKIT_LOG_DIR` | All Python tools + vramd | Directory for daily log files (default `~/.cache/aigamekit/logs`) |
+| `AIGAMEKIT_LOG_FILE` | All Python tools + vramd | Exact log file path (overrides per-tool daily naming) |
+| `AIGAMEKIT_LOG_TOOL` | All Python tools + vramd | Tool name used in log filename (auto from CLI / `vramd`) |
+| `AIGAMEKIT_LOG_LEVEL` | All Python tools + vramd | Min file level: `DEBUG` \| `INFO` \| `WARN` \| `ERROR` (default `INFO`) |
+| `AIGAMEKIT_FILE_LOG` | All Python tools + vramd | `0` disables file logging; `1` forces on (needed under pytest) |
+| `AIGAMEKIT_NO_FILE_LOG` | All Python tools + vramd | `1` disables file logging |
 
-Logs: `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` (UMS → `ums-….log`). Console stays Rich/ANSI; file is plain text with UTC timestamps. Full guide: [docs/LOGGING.md](docs/LOGGING.md).
+Logs: `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` (vramd → `vramd-….log`). Console stays Rich/ANSI; file is plain text with UTC timestamps. Full guide: [docs/LOGGING.md](docs/LOGGING.md).
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
 Every GPU tool (Text2D, Text2Icon, Text3D, Paint3D, Part3D, Texture2D, Skymap2D, Text2Sound, Terrain3D) delegates generation to the **Unified Model Server** — a single supervisor process that owns the machine's VRAM. One socket (`~/.cache/aigamekit/model-server.sock`), one process, global model inventory, no per-tool servers.
 
 **How it works:**
 
-1. Tool CLIs call `delegate_to_ums` **before** any in-process GPU prep; the UMS auto-starts on first generate (disable with `AIGAMEKIT_UMS_AUTO_START=0`).
+1. Tool CLIs call `delegate_to_vramd` **before** any in-process GPU prep; the vramd auto-starts on first generate (disable with `VRAMD_AUTO_START=0`).
 2. Jobs go through `JobQueue` → `AffinityScheduler` → `WorkerPool` (`MAX_INFLIGHT=1` — one generation at a time).
-3. Each backend is a **persistent subprocess worker** in the tool's own venv (JSONL stdin/stdout) — after editing tool code, `ums respawn <backend>` reloads it without restarting the supervisor.
-4. Queue priority: `interactive` (CLI) > `batch` (GameAssets sets `AIGAMEKIT_UMS_PRIORITY=batch`). VRAM-affinity skips cold backends (≤3 cuts), then weight + LRU eviction keeps VRAM inside safe margins.
-5. **`hw-auto`** fills peak signals (SDNQ preset, memory-efficient) in the UMS payload — no operator `--low-vram` flag.
+3. Each backend is a **persistent subprocess worker** in the tool's own venv (JSONL stdin/stdout) — after editing tool code, `vramd respawn <backend>` reloads it without restarting the supervisor.
+4. Queue priority: `interactive` (CLI) > `batch` (GameAssets sets `VRAMD_PRIORITY=batch`). VRAM-affinity skips cold backends (≤3 cuts), then weight + LRU eviction keeps VRAM inside safe margins.
+5. **`hw-auto`** fills peak signals (SDNQ preset, memory-efficient) in the vramd payload — no operator `--low-vram` flag.
 
 ```bash
-ums start | stop | status | submit | queue | wait | cancel | flush | backends | preload | evict | reap | respawn | zero | stats | debug | bench | doctor
-ums status                    # backends + HOLDING/QUEUE
-ums queue                     # jobs + timings
-ums wait <job_id>             # block until a job finishes
-ums respawn <backend>         # reload edited tool code in the worker
+vramd start | stop | status | submit | queue | wait | cancel | flush | backends | preload | evict | reap | respawn | zero | stats | debug | bench | doctor
+vramd status                    # backends + HOLDING/QUEUE
+vramd queue                     # jobs + timings
+vramd wait <job_id>             # block until a job finishes
+vramd respawn <backend>         # reload edited tool code in the worker
 ```
 
-Tool flags: `--ums-priority interactive|batch`, `--no-ums`, `--ums-stream`. WAL: `~/.cache/aigamekit/ums-jobs.jsonl`. Full guide: [`ModelServer/README.md`](ModelServer/README.md).
+Tool flags: `--vramd-priority interactive|batch`, `--no-vramd`, `--vramd-stream`. WAL: `~/.cache/aigamekit/vramd-jobs.jsonl`. Full guide: [`Vramd/README.md`](Vramd/README.md).
 
 ### Models & HF gates
 

@@ -14,7 +14,7 @@ Biblioteca partilhada do monorepo **AiGameKit** — código comum entre Text2D, 
 | `aigamekit_shared.skill_install` | Instalação de Agent Skills Cursor genérica por `tool_name` (ex.: `rigging3d` quando existir `SKILL.md`) |
 | `aigamekit_shared.gpu` | Utilitários GPU/memória (format_bytes, get_gpu_info, clear_cuda_memory, ...) |
 | `aigamekit_shared.subprocess_utils` | Subprocess (`resolve_binary` prefere `<Tool>/.venv/bin` se `AIGAMEKIT_PREFER_MONOREPO=1`, `run_cmd`, `RunResult`) |
-| `aigamekit_shared.cli_helpers` | UMS (`try_ums_delegation`, `with_ums_peak_opts`; `prepare_gpu_exclusive` só após UMS falhar / `--no-ums`) |
+| `aigamekit_shared.cli_helpers` | vramd (`try_vramd_delegation`, `with_vramd_peak_opts`; `prepare_gpu_exclusive` só após vramd falhar / `--no-vramd`) |
 | `aigamekit_shared.env` | Env do monorepo (`TOOL_BINS`, `get_tool_bin`, `prefer_monorepo_tools`, …) |
 | `aigamekit_shared.installer` | Ponte Clified (`aigamekit-install` / `install.sh` → `tools.yaml`) |
 | `aigamekit_shared.installer.monorepo` | `find_monorepo_root`, `try_find_monorepo_root` |
@@ -88,7 +88,7 @@ pip install -e Shared/
 
 - `dev` — pytest, pytest-cov, ruff, mypy, clified, numpy, scipy, trimesh (testes/lint + deps de `mesh_repair*` para CI)
 
-> Deps de runtime (`torch`, `rich-click`, `bitsandbytes`, `torchao`, `optimum-quanto`, `sdnq`, `xformers` em Linux, `psutil`, `bpy>=5.2.0`) são **core** — não estão atrás de um extra. **Não há** flag CLI `--low-vram` / `--memory-efficient`; a VRAM é gerida pelo **UMS + hw-auto** (ver [`ModelServer/README.md`](../ModelServer/README.md)).
+> Deps de runtime (`torch`, `rich-click`, `bitsandbytes`, `torchao`, `optimum-quanto`, `sdnq`, `xformers` em Linux, `psutil`, `bpy>=5.2.0`) são **core** — não estão atrás de um extra. **Não há** flag CLI `--low-vram` / `--memory-efficient`; a VRAM é gerida pelo **vramd + hw-auto** (ver [`Vramd/README.md`](../Vramd/README.md)).
 
 ## Desenvolvimento
 
@@ -108,7 +108,7 @@ Guia: [`docs/TESTING_PT.md`](../docs/TESTING_PT.md).
 
 ## Logging em ficheiro
 
-Todas as CLIs Python (+ UMS) espelham `Logger` e stdlib para
+Todas as CLIs Python (+ vramd) espelham `Logger` e stdlib para
 `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log`. Guia completo:
 [docs/LOGGING_PT.md](../docs/LOGGING_PT.md).
 

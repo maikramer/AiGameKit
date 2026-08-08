@@ -12,7 +12,9 @@ Pipeline canónico em `text3d.utils.gltf_finish.gltf_transform_finish`:
 [ktxdecompress se input já KTX2]
   → shade-smooth + NORMAL + tangents (bpy MikkTSpace)
   → dedup → prune --keep-attributes
-  → uastc (KTX2) → meshopt
+  → uastc --slots '*normal*'  (qualidade)
+  → etc1s --slots '{baseColor,metallicRoughness,occlusion,emissive}'
+  → meshopt
 ```
 
 | Passo | Extensão / efeito | Backend |
@@ -20,8 +22,15 @@ Pipeline canónico em `text3d.utils.gltf_finish.gltf_transform_finish`:
 | ktxdecompress | KTX2 → PNG (só se input já KTX2) | `@gltf-transform/cli` |
 | shade + tangents | `NORMAL` + `TANGENT`; anti V/Tri≈3 | bpy (`smooth_shade_scene`) |
 | dedup / prune | buffers/nós órfãos; **keep vertex attrs** | `@gltf-transform/cli` |
-| uastc | `KHR_texture_basisu`, `image/ktx2` | gltf-transform **+** CLI `ktx` |
+| uastc (normais) | `KHR_texture_basisu` em `*normal*` | gltf-transform **+** CLI `ktx` |
+| etc1s (resto) | `KHR_texture_basisu` albedo/MR/AO/emissive | gltf-transform **+** CLI `ktx` |
 | meshopt | `EXT_meshopt_compression` (+ quantização) | bpy 5.2+ se **sem** KTX2 no input; senão gltf-transform |
+
+**Porquê híbrido:** UASTC-all no albedo ~2× o disco vs ETC1S (goblin painted
+2.71 MB → uastc 5.32 MB / etc1s 2.81 MB). ETC1S ≈ JPEG no cabo mas **VRAM GPU
+comprimida**. WebP só ganha download e decode CPU→RGBA — não usar em mesh GLB.
+Intermédios bpy (lod/bake/rig/animate) exportam **JPEG** (não PNG) para bytes
+monotónicos lod0≥lod1≥lod2 antes do finish.
 
 Defaults: **KTX2 ON**, **meshopt ON**, **tangents ON**. Collision: só dedup/prune
 (sem KTX2/meshopt).
@@ -112,7 +121,7 @@ PY
 
 ## Anti-padrões
 
-- Ensinar `kill` / pkill GPU por causa de finish (CPU/Node — não UMS).
+- Ensinar `kill` / pkill GPU por causa de finish (CPU/Node — não vramd).
 - Comprimir collision com meshopt/KTX2 (physics precisa geometria simples).
 - Assumir “doctor verde = KTX2” sem linha `ktx (KTX-Software)`.
 - Regenerar shape/paint só para comprimir — usar `text3d finish`.

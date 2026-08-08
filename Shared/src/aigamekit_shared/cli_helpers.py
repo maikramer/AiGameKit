@@ -6,8 +6,8 @@ Extrai padrões que eram copy-pasted across 9 CLIs:
     (era inline em Text3D e Paint3D._prepare_gpu, 5 call sites).
   - ``apply_quality_defaults()``: resolve defaults do QualityEngine só quando o
     user não explicitou (era ~15 linhas x 13 call sites).
-  - ``try_ums_delegation()`` / ``add_ums_options``: delegação UMS com prioridade,
-    stream e ``--no-ums``.
+  - ``try_vramd_delegation()`` / ``add_vramd_options``: delegação vramd com prioridade,
+    stream e ``--no-vramd``.
   - ``make_profiler()``: envolve o padrão ProfilerSession + prof_log.
 """
 
@@ -22,21 +22,21 @@ from typing import Any, TypeVar
 from rich.console import Console
 
 from .logging import Logger
-from .model_server import delegate_to_ums, send_request_stream
+from .vramd_client import delegate_to_vramd, send_request_stream
 
 _logger = Logger()
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def add_ums_options(fn: F) -> F:
-    """Decorator Click: acrescenta ``--ums-priority``, ``--no-ums``, ``--ums-stream``.
+def add_vramd_options(fn: F) -> F:
+    """Decorator Click: acrescenta ``--vramd-priority``, ``--no-vramd``, ``--vramd-stream``.
 
     Usar por cima do ``@click.pass_context`` (ou por baixo das outras options)::
 
         @cli.command("generate")
         @click.option(...)
-        @add_ums_options
+        @add_vramd_options
         @click.pass_context
         def generate_cmd(ctx, ..., ums_priority, no_ums, ums_stream):
             ...
@@ -47,23 +47,23 @@ def add_ums_options(fn: F) -> F:
         import click
 
     fn = click.option(
-        "--ums-stream",
+        "--vramd-stream",
         is_flag=True,
         default=False,
-        help="Mostra eventos NDJSON do UMS (fila, started, progress) durante a geração.",
+        help="Mostra eventos NDJSON do vramd (fila, started, progress) durante a geração.",
     )(fn)
     fn = click.option(
-        "--no-ums",
+        "--no-vramd",
         is_flag=True,
         default=False,
         help="Não delegar no Unified Model Server; forçar geração in-process.",
     )(fn)
     fn = click.option(
-        "--ums-priority",
+        "--vramd-priority",
         type=click.Choice(["interactive", "batch"], case_sensitive=False),
         default=None,
         help=(
-            "Prioridade na fila UMS (default: interactive, ou AIGAMEKIT_UMS_PRIORITY). GameAssets batch usa 'batch'."
+            "Prioridade na fila vramd (default: interactive, ou VRAMD_PRIORITY). GameAssets batch usa 'batch'."
         ),
     )(fn)
     return fn
@@ -87,7 +87,7 @@ def env_bool(env_var: str, cli_wants: bool) -> bool:
     return cli_wants
 
 
-# Backend UMS → chave em ``aigamekit_shared.lowvram.FOOTPRINTS`` (ou None = YAML/heuristic).
+# Backend vramd → chave em ``aigamekit_shared.lowvram.FOOTPRINTS`` (ou None = YAML/heuristic).
 BACKEND_FOOTPRINT_KEYS: dict[str, str] = {
     "text2d": "flux-klein-9b",
     "text2icon": "sana-sprint-600m",
@@ -107,8 +107,8 @@ _BACKEND_NEEDED_FALLBACK_MIB: dict[str, int] = {
 
 
 def legacy_server_allowed() -> bool:
-    """``AIGAMEKIT_ALLOW_LEGACY_SERVER=1`` — opt-in servers per-tool / ensure_vram legacy."""
-    return os.environ.get("AIGAMEKIT_ALLOW_LEGACY_SERVER", "").strip().lower() in (
+    """``VRAMD_ALLOW_LEGACY_SERVER=1`` — opt-in servers per-tool / ensure_vram legacy."""
+    return os.environ.get("VRAMD_ALLOW_LEGACY_SERVER", "").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -124,7 +124,7 @@ def needed_mib_for_backend(
 ) -> int:
     """Estima MiB para ``ensure_vram`` / ``prepare_gpu_exclusive`` (fallback in-process).
 
-    Usa FOOTPRINTS (pesos+act). Admit UMS continua autoridade; isto só liberta
+    Usa FOOTPRINTS (pesos+act). Admit vramd continua autoridade; isto só liberta
     headroom antes do load local.
     """
     from .lowvram import get_footprint
@@ -167,8 +167,8 @@ def prepare_gpu_exclusive(
     ``kill_gpu_compute_processes_aggressive`` (SIGTERM outros processos GPU) →
     ``clear_cuda_memory`` → ``enforce_exclusive_gpu`` (gate de VRAM ocupada).
 
-    Só para fallback **in-process** (depois de ``try_ums_delegation`` falhar /
-    ``--no-ums``). Nunca chamar antes de enfileirar no UMS.
+    Só para fallback **in-process** (depois de ``try_vramd_delegation`` falhar /
+    ``--no-vramd``). Nunca chamar antes de enfileirar no vramd.
 
     Args:
         needed_mib: VRAM necessária para o model server libertar (default 4000).
@@ -177,7 +177,7 @@ def prepare_gpu_exclusive(
         allow_shared_env: Env var que override allow_shared (ex: ``TEXT3D_ALLOW_SHARED_GPU``).
         kill_others_env: Env var que override kill_others (ex: ``TEXT3D_GPU_KILL_OTHERS``).
         console: Console Rich para output (opcional).
-        backend: Nome UMS (ex: ``text3d``) para peak admit no ensure-vram.
+        backend: Nome vramd (ex: ``text3d``) para peak admit no ensure-vram.
         quant_mode: Quantização assumida no pico (ex: ``sdnq-int4``).
 
     Raises:
@@ -191,40 +191,40 @@ def prepare_gpu_exclusive(
         kill_gpu_compute_processes_aggressive,
         warn_if_vram_occupied,
     )
-    from .model_server import (
-        UMS_DO_NOT_KILL_TIP,
+    from .vramd_client import (
+        VRAMD_DO_NOT_KILL_TIP,
         ensure_vram_available,
-        fetch_ums_queue_snapshot,
-        format_ums_holding_summary,
-        is_ums_running,
-        ums_is_busy,
+        fetch_vramd_queue_snapshot,
+        format_vramd_holding_summary,
+        is_vramd_running,
+        vramd_is_busy,
     )
 
-    # Pedir aos model servers / UMS para descarregar (libertar VRAM).
+    # Pedir aos model servers / vramd para descarregar (libertar VRAM).
     if not ensure_vram_available(needed_mib=needed_mib, backend=backend, quant_mode=quant_mode):
         raise click.ClickException(
-            f"VRAM insuficiente após ensure_vram (preciso ~{needed_mib} MiB). {UMS_DO_NOT_KILL_TIP}"
+            f"VRAM insuficiente após ensure_vram (preciso ~{needed_mib} MiB). {VRAMD_DO_NOT_KILL_TIP}"
         )
 
     kill = env_bool(kill_others_env, kill_others) if kill_others_env else kill_others
     allow = allow_shared or (env_bool(allow_shared_env, False) if allow_shared_env else False)
 
     if kill:
-        snap = fetch_ums_queue_snapshot() if is_ums_running() else None
-        # UMS up mas snapshot falhou → fail-closed (não matar às cegas).
-        if is_ums_running() and (snap is None or ums_is_busy(snap)):
-            hold = format_ums_holding_summary(snap) if snap else "UMS ativo (snapshot indisponível)"
+        snap = fetch_vramd_queue_snapshot() if is_vramd_running() else None
+        # vramd up mas snapshot falhou → fail-closed (não matar às cegas).
+        if is_vramd_running() and (snap is None or vramd_is_busy(snap)):
+            hold = format_vramd_holding_summary(snap) if snap else "vramd ativo (snapshot indisponível)"
             if console is not None:
                 from rich.panel import Panel
 
                 console.print(
                     Panel(
-                        f"[bold yellow]Kill GPU recusado — UMS tem jobs[/bold yellow]\n"
-                        f"{hold}\n[dim]{UMS_DO_NOT_KILL_TIP}[/dim]",
+                        f"[bold yellow]Kill GPU recusado — vramd tem jobs[/bold yellow]\n"
+                        f"{hold}\n[dim]{VRAMD_DO_NOT_KILL_TIP}[/dim]",
                         border_style="yellow",
                     )
                 )
-            raise click.ClickException(f"Kill GPU recusado: UMS tem jobs na fila ({hold}). {UMS_DO_NOT_KILL_TIP}")
+            raise click.ClickException(f"Kill GPU recusado: vramd tem jobs na fila ({hold}). {VRAMD_DO_NOT_KILL_TIP}")
         if console is not None:
             from rich.panel import Panel
 
@@ -232,7 +232,7 @@ def prepare_gpu_exclusive(
                 Panel(
                     "[bold]Terminar processos GPU alvo[/bold]\n"
                     f"[dim]Desliga com --no-gpu-kill-others ou {kill_others_env}=0[/dim]\n"
-                    f"[dim]{UMS_DO_NOT_KILL_TIP}[/dim]",
+                    f"[dim]{VRAMD_DO_NOT_KILL_TIP}[/dim]",
                     border_style="yellow",
                 )
             )
@@ -303,14 +303,16 @@ def apply_quality_defaults(
     return resolved
 
 
-def _ums_debug_enabled() -> bool:
-    """``AIGAMEKIT_UMS_DEBUG=1`` imprime o bloco ums_debug completo."""
-    return os.environ.get("AIGAMEKIT_UMS_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+def _vramd_debug_enabled() -> bool:
+    """``VRAMD_DEBUG=1`` imprime o bloco ``ums_debug`` completo (campo do protocolo do vramd)."""
+    return os.environ.get("VRAMD_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
 
 
-def format_ums_debug_line(result: dict[str, Any]) -> str:
+def format_vramd_debug_line(result: dict[str, Any]) -> str:
     """Linha compacta de debug a partir de ``ums_debug`` / campos top-level."""
-    dbg = result.get("ums_debug") or {}
+    # O vramd emite o bloco com o nome histórico ``ums_debug`` (wire contract) —
+    # ler também ``vramd_debug`` para compatibilidade com releases futuros.
+    dbg = result.get("ums_debug") or result.get("vramd_debug") or {}
     backend = dbg.get("backend") or result.get("backend") or "?"
     job = str(dbg.get("job_id") or result.get("job_id") or "")[:8]
     wait = dbg.get("queue_wait_sec")
@@ -332,7 +334,7 @@ def format_ums_debug_line(result: dict[str, Any]) -> str:
     return " | ".join(parts)
 
 
-def _print_ums_success(
+def _print_vramd_success(
     console: Console,
     *,
     noun: str,
@@ -348,18 +350,18 @@ def _print_ums_success(
         sz = format_bytes(Path(str(out)).stat().st_size) if out else "?"
     except OSError:
         sz = "?"
-    console.print(f"[bold green]\u2713[/bold green] {noun} (via UMS): [cyan]{out}[/cyan] [dim]({sz})[/dim]")
+    console.print(f"[bold green]\u2713[/bold green] {noun} (via vramd): [cyan]{out}[/cyan] [dim]({sz})[/dim]")
     if result.get("seed") is not None:
         console.print(f"[dim]Seed: {result.get('seed', '?')}[/dim]")
-    console.print(f"[dim]UMS: {format_ums_debug_line(result)}[/dim]")
+    console.print(f"[dim]vramd: {format_vramd_debug_line(result)}[/dim]")
     console.print(f"[dim]Tempo total (cliente): {elapsed:.1f}s[/dim]")
-    if _ums_debug_enabled() and result.get("ums_debug"):
+    if _vramd_debug_enabled() and result.get("ums_debug"):
         import json
 
         console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
 
 
-def _ums_generate_stream(
+def _vramd_generate_stream(
     tool: str,
     payload: dict[str, Any],
     *,
@@ -367,23 +369,23 @@ def _ums_generate_stream(
     timeout_sec: float,
     console: Console,
 ) -> dict[str, Any] | None:
-    """Gera via UMS com ``stream: true`` e imprime eventos de fila/progresso."""
-    from .model_server import UMS_SOCKET, ensure_ums_running, resolve_ums_priority
+    """Gera via vramd com ``stream: true`` e imprime eventos de fila/progresso."""
+    from .vramd_client import VRAMD_SOCKET, ensure_vramd_running, resolve_vramd_priority
 
-    if not ensure_ums_running():
+    if not ensure_vramd_running():
         return None
-    pri = resolve_ums_priority(priority if priority is not None else payload.get("priority"))
+    pri = resolve_vramd_priority(priority if priority is not None else payload.get("priority"))
     req = {"cmd": "generate", "backend": tool, "stream": True, "priority": pri, **payload}
     req["priority"] = pri
     final: dict[str, Any] | None = None
-    for event in send_request_stream(req, UMS_SOCKET, timeout_sec=timeout_sec):
+    for event in send_request_stream(req, VRAMD_SOCKET, timeout_sec=timeout_sec):
         if "event" in event and "status" not in event:
             ev = event.get("event")
             if ev == "queued":
                 pos = event.get("queue_position", "?")
                 jid = str(event.get("job_id", ""))[:8]
                 console.print(
-                    f"[dim]UMS fila: pos={pos} pri={event.get('priority', pri)} "
+                    f"[dim]vramd fila: pos={pos} pri={event.get('priority', pri)} "
                     f"job={jid or '?'}… backend={event.get('backend', tool)}[/dim]"
                 )
             elif ev == "started":
@@ -395,26 +397,26 @@ def _ums_generate_stream(
                 if cuts is not None:
                     extra.append(f"cuts={cuts}")
                 suffix = f" ({', '.join(extra)})" if extra else ""
-                console.print(f"[dim]UMS started: {event.get('backend', tool)}{suffix}[/dim]")
+                console.print(f"[dim]vramd started: {event.get('backend', tool)}{suffix}[/dim]")
             elif ev == "progress":
                 pct = event.get("pct")
                 msg = event.get("message") or ""
                 pct_s = f"{pct:.0%}" if isinstance(pct, (int, float)) else "?"
-                console.print(f"[dim]UMS progresso: {pct_s} {msg}[/dim]")
+                console.print(f"[dim]vramd progresso: {pct_s} {msg}[/dim]")
             continue
         final = event
     return final
 
 
-def with_ums_load_opts(
+def with_vramd_load_opts(
     payload: dict[str, Any],
     *,
     gpu_ids: list[int] | str | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
-    """Copia ``payload`` e injeta kwargs de load UMS (``gpu_ids``, etc.).
+    """Copia ``payload`` e injeta kwargs de load vramd (``gpu_ids``, etc.).
 
-    Usar antes de ``try_ums_delegation`` / ``call_ums`` para o BackendManager
+    Usar antes de ``try_vramd_delegation`` / ``call_vramd`` para o BackendManager
     passar ``gpu_ids`` ao ``adapter.load``.
     """
     out = dict(payload)
@@ -431,7 +433,7 @@ def with_ums_load_opts(
     return out
 
 
-def with_ums_peak_opts(
+def with_vramd_peak_opts(
     payload: dict[str, Any],
     *,
     backend: str,
@@ -440,14 +442,14 @@ def with_ums_peak_opts(
     quant_preset: str | None = None,
     footprint_key: str | None = None,
 ) -> dict[str, Any]:
-    """Injeta sinais de pico VRAM para admit UMS (evita assume-fp16).
+    """Injeta sinais de pico VRAM para admit vramd (evita assume-fp16).
 
     Sem ``sdnq_preset`` / ``memory_efficient``, o BackendManager assume pesos
     fp16 e recusa GPUs ~6 GB. Text2D usa ``quant_preset`` no ctor — mapeamos
     também para ``sdnq_preset`` (admit partilha a mesma tabela).
 
     Args:
-        payload: Request UMS (mutado via cópia).
+        payload: Request vramd (mutado via cópia).
         backend: ``text2d`` | ``text3d`` | ``paint3d`` (defaults por tool).
         memory_efficient: Flag CLI / hw-auto.
         sdnq_preset: Preset explícito (``none`` / ``sdnq-int4`` / …).
@@ -489,7 +491,7 @@ def with_ums_peak_opts(
     return out
 
 
-def call_ums(
+def call_vramd(
     tool: str,
     payload: dict[str, Any],
     *,
@@ -498,17 +500,17 @@ def call_ums(
     timeout_sec: float = 600.0,
     console: Console | None = None,
 ) -> dict[str, Any] | None:
-    """Chamada UMS de baixo nível (sync ou stream). Não faz fallback.
+    """Chamada vramd de baixo nível (sync ou stream). Não faz fallback.
 
     Returns:
-        Dict de resposta, ou ``None`` se o UMS não estiver disponível.
+        Dict de resposta, ou ``None`` se o vramd não estiver disponível.
     """
     if stream and console is not None:
-        return _ums_generate_stream(tool, payload, priority=priority, timeout_sec=timeout_sec, console=console)
-    return delegate_to_ums(tool, payload, timeout_sec=timeout_sec, priority=priority)
+        return _vramd_generate_stream(tool, payload, priority=priority, timeout_sec=timeout_sec, console=console)
+    return delegate_to_vramd(tool, payload, timeout_sec=timeout_sec, priority=priority)
 
 
-def try_ums_delegation(
+def try_vramd_delegation(
     tool: str,
     payload: dict[str, Any],
     *,
@@ -521,10 +523,10 @@ def try_ums_delegation(
     priority: str | None = None,
     stream: bool = False,
 ) -> bool:
-    """Delega uma geração no UMS se ativo. Retorna ``True`` se handled.
+    """Delega uma geração no vramd se ativo. Retorna ``True`` se handled.
 
     Helper para CLIs: no início do comando ``generate``, chamar esta função.
-    Se retornar ``True``, a geração foi feita pelo UMS — o caller deve ``return``.
+    Se retornar ``True``, a geração foi feita pelo vramd — o caller deve ``return``.
     Se ``False``, fazer fallback in-process.
 
     ``queue_full`` e ``VRAM_INSUFFICIENT`` **não** fazem fallback (evitam OOM /
@@ -537,44 +539,44 @@ def try_ums_delegation(
         noun: Substantivo para a mensagem de sucesso (ex: ``"Ícone"``, ``"Textura"``).
         console: Console Rich para output.
         output_key: Chave do payload que contém o path de output (default ``"output"``).
-        enabled: Se ``False`` (``--no-ums``), salta a delegação.
+        enabled: Se ``False`` (``--no-vramd``), salta a delegação.
         priority: ``interactive`` | ``batch`` (ou None → env / default).
-        stream: Se ``True``, imprime eventos de fila/progresso (``--ums-stream``).
+        stream: Se ``True``, imprime eventos de fila/progresso (``--vramd-stream``).
 
     Returns:
-        ``True`` se o UMS handle o pedido (caller deve return);
-        ``False`` se deve fazer fallback in-process (UMS down ou erro).
+        ``True`` se o vramd handle o pedido (caller deve return);
+        ``False`` se deve fazer fallback in-process (vramd down ou erro).
     """
     if not enabled:
-        console.print("[dim]UMS: --no-ums → geração in-process[/dim]")
+        console.print("[dim]vramd: --no-vramd → geração in-process[/dim]")
         return False
 
     output = payload.get(output_key)
     if output is None:
         return False
 
-    # Opt-in stream via env (GameAssets batch --ums-stream → AIGAMEKIT_UMS_STREAM=1).
+    # Opt-in stream via env (GameAssets batch --vramd-stream → VRAMD_STREAM=1).
     if not stream:
-        stream = os.environ.get("AIGAMEKIT_UMS_STREAM", "").strip().lower() in ("1", "true", "yes", "on")
+        stream = os.environ.get("VRAMD_STREAM", "").strip().lower() in ("1", "true", "yes", "on")
 
-    from .model_server import (
-        UMS_DO_NOT_KILL_TIP,
-        fetch_ums_queue_snapshot,
-        format_ums_holding_summary,
-        is_ums_running,
-        ums_is_busy,
+    from .vramd_client import (
+        VRAMD_DO_NOT_KILL_TIP,
+        fetch_vramd_queue_snapshot,
+        format_vramd_holding_summary,
+        is_vramd_running,
+        vramd_is_busy,
     )
 
-    if is_ums_running():
-        snap = fetch_ums_queue_snapshot()
-        if ums_is_busy(snap) and snap is not None:
-            console.print(f"[dim]UMS ocupado: {format_ums_holding_summary(snap)}[/dim]")
+    if is_vramd_running():
+        snap = fetch_vramd_queue_snapshot()
+        if vramd_is_busy(snap) and snap is not None:
+            console.print(f"[dim]vramd ocupado: {format_vramd_holding_summary(snap)}[/dim]")
         if not stream:
-            console.print("[dim]UMS: a enfileirar… (progresso: --ums-stream | aigamekit-model-server queue)[/dim]")
+            console.print("[dim]vramd: a enfileirar… (progresso: --vramd-stream | vramd queue)[/dim]")
     else:
-        console.print("[dim]UMS: a garantir supervisor (auto-start se AIGAMEKIT_UMS_AUTO_START≠0)…[/dim]")
+        console.print("[dim]vramd: a garantir supervisor (auto-start se VRAMD_AUTO_START≠0)…[/dim]")
 
-    result = call_ums(
+    result = call_vramd(
         tool,
         payload,
         priority=priority,
@@ -583,62 +585,62 @@ def try_ums_delegation(
         console=console if stream else None,
     )
     if result is None:
-        # Timeout/socket morreu com UMS ainda up → GPU pode estar a meio de generate.
+        # Timeout/socket morreu com vramd ainda up → GPU pode estar a meio de generate.
         # Fallback in-process corre em paralelo e OOMa / mata o job errado.
-        if is_ums_running():
+        if is_vramd_running():
             import click
 
-            snap = fetch_ums_queue_snapshot()
-            hold = format_ums_holding_summary(snap) if snap else "UMS ativo (sem snapshot)"
+            snap = fetch_vramd_queue_snapshot()
+            hold = format_vramd_holding_summary(snap) if snap else "vramd ativo (sem snapshot)"
             raise click.ClickException(
-                f"UMS sem resposta (timeout/socket) com supervisor ainda ativo. "
-                f"Sem fallback in-process. {hold}. {UMS_DO_NOT_KILL_TIP}"
+                f"vramd sem resposta (timeout/socket) com supervisor ainda ativo. "
+                f"Sem fallback in-process. {hold}. {VRAMD_DO_NOT_KILL_TIP}"
             )
         console.print(
-            "[yellow]UMS indisponível — fallback in-process[/yellow]\n"
-            f"[dim]Arranca com: aigamekit-model-server start · {UMS_DO_NOT_KILL_TIP}[/dim]"
+            "[yellow]vramd indisponível — fallback in-process[/yellow]\n"
+            f"[dim]Arranca com: vramd start · {VRAMD_DO_NOT_KILL_TIP}[/dim]"
         )
         return False
     status = result.get("status")
     if status == "ok":
-        _print_ums_success(console, noun=noun, result=result, t_start=t_start, output_key=output_key)
+        _print_vramd_success(console, noun=noun, result=result, t_start=t_start, output_key=output_key)
         return True
     if status == "queue_full":
-        raise_if_ums_queue_full(result)
+        raise_if_vramd_queue_full(result)
         return False  # pragma: no cover
     if status == "error":
         code = str(result.get("error_code", "?") or "?")
         hint = result.get("hint")
         err = result.get("error", "?")
-        console.print(f"[dim]UMS: {format_ums_debug_line(result)}[/dim]")
-        if _ums_debug_enabled() and result.get("ums_debug"):
+        console.print(f"[dim]vramd: {format_vramd_debug_line(result)}[/dim]")
+        if _vramd_debug_enabled() and result.get("ums_debug"):
             import json
 
             console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
-        # UMS ainda com jobs → não competir in-process pela mesma GPU.
-        if ums_is_busy():
+        # vramd ainda com jobs → não competir in-process pela mesma GPU.
+        if vramd_is_busy():
             import click
 
-            tip = hint or UMS_DO_NOT_KILL_TIP
-            raise click.ClickException(f"UMS erro [{code}]: {err}. Sem fallback in-process (UMS ocupado). {tip}")
-        console.print(f"[yellow]UMS erro [{code}]: {err} — fallback in-process[/yellow]")
+            tip = hint or VRAMD_DO_NOT_KILL_TIP
+            raise click.ClickException(f"vramd erro [{code}]: {err}. Sem fallback in-process (vramd ocupado). {tip}")
+        console.print(f"[yellow]vramd erro [{code}]: {err} — fallback in-process[/yellow]")
         if hint:
             console.print(f"[dim]hint: {hint}[/dim]")
     return False
 
 
-def raise_if_ums_queue_full(result: dict[str, Any] | None) -> None:
-    """Levanta ClickException se a resposta UMS for ``queue_full`` (para call sites legacy)."""
+def raise_if_vramd_queue_full(result: dict[str, Any] | None) -> None:
+    """Levanta ClickException se a resposta vramd for ``queue_full`` (para call sites legacy)."""
     if result is not None and result.get("status") == "queue_full":
         import click
 
         depth = result.get("queue_depth", "?")
         max_d = result.get("max_depth", "?")
         code = result.get("error_code", "QUEUE_FULL")
-        hint = result.get("hint") or "Espera ou aumenta AIGAMEKIT_UMS_MAX_QUEUE_DEPTH."
-        dbg = format_ums_debug_line(result)
+        hint = result.get("hint") or "Espera ou aumenta VRAMD_MAX_QUEUE_DEPTH."
+        dbg = format_vramd_debug_line(result)
         raise click.ClickException(
-            f"UMS [{code}] fila cheia ({depth}/{max_d}): {result.get('error', 'queue_full')}. {hint} ({dbg})"
+            f"vramd [{code}] fila cheia ({depth}/{max_d}): {result.get('error', 'queue_full')}. {hint} ({dbg})"
         )
 
 
@@ -693,34 +695,34 @@ def delegate_or_prepare(
     footprint_key: str | None = None,
     prepare: Callable[[], None] | None = None,
 ) -> bool:
-    """Tenta delegar no UMS; se não, chama o fallback in-process.
+    """Tenta delegar no vramd; se não, chama o fallback in-process.
 
     Padrão dos 9 CLIs de generate: montar o request da tool (payload),
-    envolver com ``with_ums_peak_opts(with_ums_load_opts(...))`` e delegar via
-    :func:`try_ums_delegation`. Se o UMS não tratar, o caller prepara a GPU
+    envolver com ``with_vramd_peak_opts(with_vramd_load_opts(...))`` e delegar via
+    :func:`try_vramd_delegation`. Se o vramd não tratar, o caller prepara a GPU
     exclusiva (``prepare_gpu_exclusive``) — o ``prepare`` callback encapsula
     esse passo (com os args per-tool: quant_mode, env flags, etc.).
 
     Args:
-        backend: Nome do backend UMS (ex: ``texture2d``).
+        backend: Nome do backend vramd (ex: ``texture2d``).
         payload: Corpo do request da tool (sem gpu_ids/peak opts — o helper
             injeta).
         t_start, noun, console, enabled, priority, stream, timeout_sec: Ver
-            :func:`try_ums_delegation`.
+            :func:`try_vramd_delegation`.
         gpu_ids: IDs de GPU para load (multi-GPU).
         memory_efficient, sdnq_preset, quant_preset, footprint_key: Sinais de
-            pico VRAM (ver :func:`with_ums_peak_opts`).
+            pico VRAM (ver :func:`with_vramd_peak_opts`).
         prepare: Callback do fallback in-process (ex: ``prepare_gpu_exclusive``
-            com os args da tool). Chamado só se o UMS não tratar.
+            com os args da tool). Chamado só se o vramd não tratar.
 
     Returns:
-        ``True`` se o UMS tratou (o caller deve ``return``); ``False`` se o
+        ``True`` se o vramd tratou (o caller deve ``return``); ``False`` se o
         caller deve seguir para o fallback.
     """
-    if try_ums_delegation(
+    if try_vramd_delegation(
         backend,
-        with_ums_peak_opts(
-            with_ums_load_opts(payload, gpu_ids=gpu_ids),
+        with_vramd_peak_opts(
+            with_vramd_load_opts(payload, gpu_ids=gpu_ids),
             backend=backend,
             memory_efficient=memory_efficient,
             sdnq_preset=sdnq_preset,

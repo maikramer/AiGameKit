@@ -63,13 +63,13 @@ from .pipeline import (
 from .profile import Paint3DProfile
 from .prompt_builder import build_prompt
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
-from .ums_batch import (
+from .vramd_batch import (
     run_paint_wave_or_fallback,
     run_shape_wave_or_fallback,
     run_text2d_wave_or_fallback,
     run_texture2d_wave_or_fallback,
 )
-from .ums_coord import MasterDeferQueue, apply_ums_child_env
+from .vramd_coord import MasterDeferQueue, apply_vramd_child_env
 
 console = Console()
 
@@ -125,16 +125,16 @@ console = Console()
     help="Usar barras de progresso simples em vez do dashboard TUI",
 )
 @click.option(
-    "--ums-stream",
+    "--vramd-stream",
     is_flag=True,
     default=False,
-    help="Propaga AIGAMEKIT_UMS_STREAM=1 aos subprocessos (eventos UMS; só com verbose/ruído OK).",
+    help="Propaga VRAMD_STREAM=1 aos subprocessos (eventos vramd; só com verbose/ruído OK).",
 )
 @click.option(
-    "--no-ums",
+    "--no-vramd",
     is_flag=True,
     default=False,
-    help="Desliga UMS (auto-start off + waves GPU via subprocess CLI; tools recebem --no-ums).",
+    help="Desliga vramd (auto-start off + waves GPU via subprocess CLI; tools recebem --no-vramd).",
 )
 @click.option(
     "--redo-split",
@@ -153,8 +153,8 @@ def resume_cmd(
     force: bool,
     gpu_ids_str: str | None,
     no_dashboard: bool,
-    ums_stream: bool,
-    no_ums: bool,
+    vramd_stream: bool,
+    no_vramd: bool,
     redo_split: bool,
 ) -> None:
     """Batch inteligente: analisa o estado de cada asset e executa apenas as fases pendentes.
@@ -219,15 +219,15 @@ def resume_cmd(
     work_dir.mkdir(parents=True, exist_ok=True)
 
     child_env = dict(subprocess_gpu_env(gpu_ids=gpu_ids))
-    apply_ums_child_env(child_env, ums_stream=ums_stream, no_ums=no_ums)
+    apply_vramd_child_env(child_env, vramd_stream=vramd_stream, no_vramd=no_vramd)
     if redo_split:
         child_env["AIGAMEKIT_REDO_SPLIT"] = "1"
         os.environ["AIGAMEKIT_REDO_SPLIT"] = "1"
-    if not no_ums:
+    if not no_vramd:
         try:
-            from aigamekit_shared.model_server import ensure_ums_running
+            from aigamekit_shared.vramd_client import ensure_vramd_running
 
-            ensure_ums_running()
+            ensure_vramd_running()
         except Exception:
             pass
 
@@ -577,8 +577,8 @@ def resume_cmd(
                     _t2 = profile.text2d
                     _kw: dict[str, Any] = {
                         "manifest_dir": manifest_dir,
-                        "no_ums": no_ums,
-                        "ums_stream": ums_stream,
+                        "no_vramd": no_vramd,
+                        "vramd_stream": vramd_stream,
                         "gpu_ids": gpu_ids,
                         "quality": profile.generation,
                     }
@@ -628,8 +628,8 @@ def resume_cmd(
                     ums_tex = run_texture2d_wave_or_fallback(
                         tex_items_r,
                         manifest_dir=manifest_dir,
-                        no_ums=no_ums,
-                        ums_stream=ums_stream,
+                        no_vramd=no_vramd,
+                        vramd_stream=vramd_stream,
                         gpu_ids=gpu_ids,
                         width=int(tt_line.width or 512),
                         height=int(tt_line.height or 512),
@@ -707,8 +707,8 @@ def resume_cmd(
                         _append_text2d_profile_args(profile, argv)
                         if gpu_ids:
                             argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
-                    if no_ums:
-                        argv.append("--no-ums")
+                    if no_vramd:
+                        argv.append("--no-vramd")
                     seed = _seed_for_manifest_row(profile, row)
                     if seed is not None:
                         argv.extend(["--seed", str(seed)])
@@ -759,7 +759,7 @@ def resume_cmd(
                     row = it["row"]
                     _omni_row = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
                     _shape_out = _shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"])
-                    # UMS wave / generate-batch saltam outputs existentes: apaga
+                    # vramd wave / generate-batch saltam outputs existentes: apaga
                     # shape stale (+ derivados) antes de enfileirar, senão o
                     # resume avançava com a mesh antiga.
                     prepare_shape_for_generation(
@@ -784,7 +784,7 @@ def resume_cmd(
                         item_d["seed_fingerprint"] = row.seed
                     if row.category:
                         item_d["category"] = row.category
-                    # Sem isto UMS cai em bbox default e humanoids "engordam".
+                    # Sem isto vramd cai em bbox default e humanoids "engordam".
                     _omni_d = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
                     item_d.update(omni_to_batch_item(_omni_d))
                     if t3_opts and should_optimize_text3d(t3_opts) and row.category:
@@ -804,8 +804,8 @@ def resume_cmd(
                     t3 = t3_opts
                     _shape_kw: dict[str, Any] = {
                         "manifest_dir": manifest_dir,
-                        "no_ums": no_ums,
-                        "ums_stream": ums_stream,
+                        "no_vramd": no_vramd,
+                        "vramd_stream": vramd_stream,
                         "gpu_ids": gpu_ids,
                         "quality": profile.generation,
                         "export_origin": t3.export_origin if t3 else "feet",
@@ -838,8 +838,8 @@ def resume_cmd(
                         batch_args.extend(["--quality", profile.generation or "medium"])
                         if force:
                             batch_args.append("--force")
-                        if no_ums:
-                            batch_args.append("--no-ums")
+                        if no_vramd:
+                            batch_args.append("--no-vramd")
                         if t3:
                             if not should_optimize_text3d(t3):
                                 explicit_hunyuan = (
@@ -1020,8 +1020,8 @@ def resume_cmd(
                         paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
                         _paint_kw: dict[str, Any] = {
                             "manifest_dir": manifest_dir,
-                            "no_ums": no_ums,
-                            "ums_stream": ums_stream,
+                            "no_vramd": no_vramd,
+                            "vramd_stream": vramd_stream,
                             "gpu_ids": gpu_ids,
                             "texture_size": _quality_paint_texture_cap(profile),
                         }
@@ -1052,8 +1052,8 @@ def resume_cmd(
                             batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
                             if force:
                                 batch_args.append("--force")
-                            if no_ums:
-                                batch_args.append("--no-ums")
+                            if no_vramd:
+                                batch_args.append("--no-vramd")
                             batch_args.extend(["--quality", profile.generation or "medium"])
                             if t3_opts:
                                 if t3_opts.allow_shared_gpu:
@@ -1337,8 +1337,8 @@ def resume_cmd(
                 ums_t2d_rp = run_text2d_wave_or_fallback(
                     t2d_items_rp,
                     manifest_dir=manifest_dir,
-                    no_ums=no_ums,
-                    ums_stream=ums_stream,
+                    no_vramd=no_vramd,
+                    vramd_stream=vramd_stream,
                     gpu_ids=gpu_ids,
                     quality=profile.generation,
                 )
@@ -1349,7 +1349,7 @@ def resume_cmd(
                         ir = by_id.get(it["row"].id, {})
                         if ir.get("status") in ("ok", "skipped") and it["img_final"].is_file():
                             it["state"] = _ROW_NEED_SHAPE
-                            console.print(f"  [green]OK[/green] {it['row'].id} (text2d UMS)")
+                            console.print(f"  [green]OK[/green] {it['row'].id} (text2d vramd)")
                         else:
                             failures += 1
                             console.print(f"  [red]FAIL[/red] {it['row'].id}: {ir.get('error') or 'text2d falhou'}")
@@ -1369,8 +1369,8 @@ def resume_cmd(
                 ums_tex_rp = run_texture2d_wave_or_fallback(
                     tex_items_rp,
                     manifest_dir=manifest_dir,
-                    no_ums=no_ums,
-                    ums_stream=ums_stream,
+                    no_vramd=no_vramd,
+                    vramd_stream=vramd_stream,
                     gpu_ids=gpu_ids,
                     width=int(tt_line.width or 512),
                     height=int(tt_line.height or 512),
@@ -1401,7 +1401,7 @@ def resume_cmd(
                                     failures += 1
                             if mat_ok:
                                 it["state"] = _ROW_NEED_SHAPE
-                                console.print(f"  [green]OK[/green] {it['row'].id} (texture2d UMS)")
+                                console.print(f"  [green]OK[/green] {it['row'].id} (texture2d vramd)")
                             else:
                                 console.print(f"  [red]FAIL[/red] {it['row'].id} (materialize)")
                                 if not continue_on_error:
@@ -1452,8 +1452,8 @@ def resume_cmd(
                         _append_text2d_profile_args(profile, argv)
                         if gpu_ids:
                             argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
-                    if no_ums:
-                        argv.append("--no-ums")
+                    if no_vramd:
+                        argv.append("--no-vramd")
                     seed = _seed_for_manifest_row(profile, row)
                     if seed is not None:
                         argv.extend(["--seed", str(seed)])
@@ -1531,7 +1531,7 @@ def resume_cmd(
                         item["seed_fingerprint"] = row.seed
                     if row.category:
                         item["category"] = row.category
-                    # Sem isto UMS cai em bbox default e humanoids "engordam".
+                    # Sem isto vramd cai em bbox default e humanoids "engordam".
                     _omni_item = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
                     item.update(omni_to_batch_item(_omni_item))
                     if t3_opts and should_optimize_text3d(t3_opts) and row.category:
@@ -1550,8 +1550,8 @@ def resume_cmd(
                     t3 = t3_opts
                     _shape_kw: dict[str, Any] = {
                         "manifest_dir": manifest_dir,
-                        "no_ums": no_ums,
-                        "ums_stream": ums_stream,
+                        "no_vramd": no_vramd,
+                        "vramd_stream": vramd_stream,
                         "gpu_ids": gpu_ids,
                         "quality": profile.generation,
                         "export_origin": t3.export_origin if t3 else "feet",
@@ -1580,8 +1580,8 @@ def resume_cmd(
                         batch_args.extend(["--quality", profile.generation or "medium"])
                         if force:
                             batch_args.append("--force")
-                        if no_ums:
-                            batch_args.append("--no-ums")
+                        if no_vramd:
+                            batch_args.append("--no-vramd")
                         if t3:
                             if not should_optimize_text3d(t3):
                                 explicit_hunyuan = (
@@ -1771,8 +1771,8 @@ def resume_cmd(
                         paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
                         _paint_kw: dict[str, Any] = {
                             "manifest_dir": manifest_dir,
-                            "no_ums": no_ums,
-                            "ums_stream": ums_stream,
+                            "no_vramd": no_vramd,
+                            "vramd_stream": vramd_stream,
                             "gpu_ids": gpu_ids,
                             "texture_size": _quality_paint_texture_cap(profile),
                         }
@@ -1799,8 +1799,8 @@ def resume_cmd(
                             batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
                             if force:
                                 batch_args.append("--force")
-                            if no_ums:
-                                batch_args.append("--no-ums")
+                            if no_vramd:
+                                batch_args.append("--no-vramd")
                             batch_args.extend(["--quality", profile.generation or "medium"])
                             if t3_opts:
                                 if t3_opts.allow_shared_gpu:

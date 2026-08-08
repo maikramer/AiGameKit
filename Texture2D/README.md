@@ -46,12 +46,12 @@ Requires a **CUDA GPU** (PyTorch, diffusers, transformers, accelerate are runtim
 
 | Command | Description |
 |---------|-------------|
-| `texture2d generate PROMPT` | Generate a seamless texture (delegates to UMS when available) |
+| `texture2d generate PROMPT` | Generate a seamless texture (delegates to vramd when available) |
 | `texture2d presets` | List available material presets |
 | `texture2d batch FILE` | Batch generate from a prompt file (one per line) |
-| `texture2d server` | **Deprecated** — use `aigamekit-model-server start` (UMS) |
-| `texture2d server-status` | **Deprecated** — use `aigamekit-model-server status` |
-| `texture2d server-stop` | **Deprecated** — use `aigamekit-model-server stop` |
+| `texture2d server` | **Deprecated** — use `vramd start` (vramd) |
+| `texture2d server-status` | **Deprecated** — use `vramd status` |
+| `texture2d server-stop` | **Deprecated** — use `vramd stop` |
 | `texture2d info` | Config, system, and environment info |
 | `texture2d skill install` | Install Cursor Agent Skill |
 | `texture2d validate-tileable` | Validate a texture's tileability |
@@ -145,29 +145,29 @@ Install the Cursor Agent Skill (`SKILL.md`) into a game project's `.cursor/skill
 texture2d skill install -t /path/to/my-game --force
 ```
 
-### Unified Model Server (UMS)
+### Unified Model Server (vramd)
 
-Prefer **`aigamekit-model-server`** (monorepo supervisor): one socket, smart VRAM
+Prefer **`vramd`** (monorepo supervisor): one socket, smart VRAM
 eviction, job queue with priority + affinity. `texture2d generate` auto-delegates
-(and can auto-start the UMS unless `AIGAMEKIT_UMS_AUTO_START=0`).
+(and can auto-start the vramd unless `VRAMD_AUTO_START=0`).
 
 ```bash
-aigamekit-model-server start
+vramd start
 texture2d generate "stone wall" -o stone.png
-texture2d generate "wood" -o wood.png --ums-stream          # queue/progress events
-texture2d generate "dirt" -o dirt.png --ums-priority batch
-texture2d generate "test" -o t.png --no-ums                 # force in-process
-aigamekit-model-server queue
-aigamekit-model-server stop
+texture2d generate "wood" -o wood.png --vramd-stream          # queue/progress events
+texture2d generate "dirt" -o dirt.png --vramd-priority batch
+texture2d generate "test" -o t.png --no-vramd                 # force in-process
+vramd queue
+vramd stop
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--ums-priority interactive\|batch` | Queue priority (default interactive / `AIGAMEKIT_UMS_PRIORITY`) |
-| `--no-ums` | Skip UMS; run in-process |
-| `--ums-stream` | Print UMS queue/progress NDJSON events |
+| `--vramd-priority interactive\|batch` | Queue priority (default interactive / `VRAMD_PRIORITY`) |
+| `--no-vramd` | Skip vramd; run in-process |
+| `--vramd-stream` | Print vramd queue/progress NDJSON events |
 
-Per-tool `texture2d server` remains only as a **deprecated** fallback. See [`ModelServer/README.md`](../ModelServer/README.md).
+Per-tool `texture2d server` remains only as a **deprecated** fallback. See [`Vramd/README.md`](../Vramd/README.md).
 
 ## Quality Presets
 

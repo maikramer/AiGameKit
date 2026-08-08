@@ -1,6 +1,6 @@
 # Premise 2 — Automate to the edge
 
-> Stages chain without babysitting: shape → clean → paint → rig → animate → LOD → validate → handoff (Round 3). GPU work rides UMS waves; master finalize is deferred. Resume, profile autodetection, and orchestration exist so neither humans nor agents re-learn the DAG each run.
+> Stages chain without babysitting: shape → clean → paint → rig → animate → LOD → validate → handoff (Round 3). GPU work rides vramd waves; master finalize is deferred. Resume, profile autodetection, and orchestration exist so neither humans nor agents re-learn the DAG each run.
 
 ## Intent
 
@@ -10,11 +10,11 @@ A game asset is not “a mesh file.” It is the **terminal deliverable** of a d
 
 ## Canonical stage story (master pipeline — Round 3)
 
-Conceptual order (see `GameAssets` `run_master_pipeline` + UMS waves):
+Conceptual order (see `GameAssets` `run_master_pipeline` + vramd waves):
 
-1. **Shape** — `text3d generate` (raw; often UMS shape wave; Omni soft-fill)
+1. **Shape** — `text3d generate` (raw; often vramd shape wave; Omni soft-fill)
 2. **Clean** — `text3d topology-fix` (origin, holes, repair)
-3. **Paint** — `paint3d` (UMS paint wave; master deferred until wave drains)
+3. **Paint** — `paint3d` (vramd paint wave; master deferred until wave drains)
 4. **Rig** — `rigging3d pipeline` on **`_painted`** (not clean HI)
 5. **Animate** — `animator3d game-pack` **×1** on the rigged GLB
 6. **LOD / finish** — `text3d lod` on animated/rigged → lod0/1/2 (+ KTX2/meshopt); **no** `transfer-weights` in the DAG
@@ -66,7 +66,7 @@ Automation is orchestration, not “put mesh math everywhere”:
 - **Text3D** owns mesh ops (LOD, collision, simplify, topology-fix, bake-master).
 - **GameAssets** owns the DAG and subprocess wiring — not `bpy`/`trimesh` mesh surgery.
 - **Rigging3D / Animator3D** own rig and clips.
-- **UMS** owns GPU scheduling across tools.
+- **vramd** owns GPU scheduling across tools.
 
 Crossing these boundaries “to go faster” usually breaks resume, testing, and agent comprehension.
 

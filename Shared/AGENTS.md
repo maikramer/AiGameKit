@@ -19,16 +19,16 @@ Foundation library for ALL Python packages in the monorepo. 47 files, 7122 LOC +
 | `profiler/*` | ~650 | 19 files | ProfilerSession, PerfRecorder, CUDA snapshots, SQLite perf DB |
 | `env.py` | 133 | 10+ files | `TOOL_BINS`, `prefer_monorepo_tools` (`AIGAMEKIT_PREFER_MONOREPO`), `subprocess_gpu_env` |
 | `subprocess_utils.py` | 169 | GameAssets | `resolve_binary` → `<Tool>/.venv/bin` first; `run_cmd` / streaming |
-| `cli_helpers.py` | ~600 | All GPU CLIs | `try_ums_delegation`, `with_ums_peak_opts`; `prepare_gpu_exclusive` only after UMS fail / `--no-ums` |
+| `cli_helpers.py` | ~600 | All GPU CLIs | `try_vramd_delegation`, `with_vramd_peak_opts`; `prepare_gpu_exclusive` only after vramd fail / `--no-vramd` |
 | `progress.py` | 175 | 9 files | JSONL progress protocol: `emit_progress`, `emit_result` |
 | `multi_gpu.py` | 288 | GPU tools | MultiGPUPlanner fluent builder, accelerate dispatch |
 | `cli_rich.py` | ~90 | All CLIs | `setup_rich_click`, `setup_rich_click_module(tool=…)` — `tool=` → file logging |
-| `logging.py` | ~450 | All Python tools + UMS | Logger Rich/ANSI + daily file sink + stdlib bridge |
+| `logging.py` | ~450 | All Python tools + vramd | Logger Rich/ANSI + daily file sink + stdlib bridge |
 | `installer/*` | 1372 | install.sh, aigamekit-install | BaseInstaller, Clified bridge, per-package hooks |
 
 ## SUBSYSTEMS
 
-1. **GPU/VRAM** (`gpu.py` + `vram_monitor.py` + `cli_helpers.py`): NVML-first inventory; UMS delegation before prep; `prepare_gpu_exclusive` only in-process fallback; kill respects UMS queue; legacy servers need `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
+1. **GPU/VRAM** (`gpu.py` + `vram_monitor.py` + `cli_helpers.py`): NVML-first inventory; vramd delegation before prep; `prepare_gpu_exclusive` only in-process fallback; kill respects vramd queue; legacy servers need `AIGAMEKIT_ALLOW_LEGACY_SERVER=1`.
 2. **Quality** (`quality.py` + `data/*.yaml`): QualityEngine resolves `--quality` + `--category` to concrete params. Soft resolution: fills only `None` fields (tracked via `ParameterSource` enum).
 3. **Quantization** (`quantization.py` + `sdnq.py`): Multi-backend (bitsandbytes, torchao, quanto, FP8). SDNQ: 4 presets (`int4_dynamic`, `int4_static`, `int8`, `fp8`). VRAM estimation pre-flight.
 4. **Installer** (`installer/` 10 files): `BaseInstaller` base class, `clified_hooks` per-package post-install, `unified.py` Clified bridge. Cross-deps: text3d needs nvdiffrast, rigging3d needs inference env.
@@ -45,7 +45,7 @@ Foundation library for ALL Python packages in the monorepo. 47 files, 7122 LOC +
 - **JSONL progress protocol**: `emit_progress(stream=sys.stderr, stage="...", progress=0.5, message="...")`. Orchestrator parses via `parse_progress_line`.
 - **Protected process list**: `kill_gpu_compute_processes_aggressive` never kills X11/compositor/system processes.
 - **YAML-driven config**: `quality-profiles.yaml` (5 tiers x 10 tools) and `asset-categories.yaml` (14 categories + 17 audio kinds).
-- **File logging via CLI bootstrap**: every package `cli_rich.py` passes `tool=` to `setup_rich_click_module` → `configure_logging`. UMS calls `configure_logging("ums")` in `start`. Prefer `Logger.info(..., console=False)` for file-only lines.
+- **File logging via CLI bootstrap**: every package `cli_rich.py` passes `tool=` to `setup_rich_click_module` → `configure_logging`. vramd calls `configure_logging("vramd")` in `start`. Prefer `Logger.info(..., console=False)` for file-only lines.
 
 ## ANTI-PATTERNS
 
@@ -54,7 +54,7 @@ Foundation library for ALL Python packages in the monorepo. 47 files, 7122 LOC +
 - `data/asset-categories.yaml` has 17 audio kinds (root README says 11, which is outdated).
 - `__init__` exports only 3 symbols (`MultiGPUPlanner`, `DevicePlan`, `ModelArchitectureRegistry`). Everything else via direct submodule import.
 - GPU kill functions have a protected process list. Never remove entries from it.
-- Do not document public `--low-vram` / `--memory-efficient` CLI — peak signals are payload-only (hw-auto / `with_ums_peak_opts`).
+- Do not document public `--low-vram` / `--memory-efficient` CLI — peak signals are payload-only (hw-auto / `with_vramd_peak_opts`).
 
 ## DATA FILES
 
@@ -66,7 +66,7 @@ Foundation library for ALL Python packages in the monorepo. 47 files, 7122 LOC +
 25+ test files. Key: `test_logging.py`, `test_gpu.py` / `test_gpu_ums_kill.py`,
 `test_quality.py`, `test_sdnq.py` (`apply_quantized_matmul`), `test_path_utils.py`
 (`safe_filename`), `test_model_server*.py`, `test_env.py`, `test_mesh_repair.py`,
-`test_shared_coverage_100.py` (CPU floor: QualityEngine, UMS helpers, hardware).
+`test_shared_coverage_100.py` (CPU floor: QualityEngine, vramd helpers, hardware).
 
 Run: `make test-shared` **só** se `Shared/.venv` tiver pytest+torch (extra
 `[gpu]`). Sem venv local, `make` cai no `python3` do PATH → fails falsos
@@ -78,7 +78,7 @@ cd Shared && ../GameAssets/.venv/bin/python -m pytest -q
 ```
 
 Kill GPU tests: `patch(aigamekit_shared.gpu.os.kill)` = patch **global** `os.kill`
-— isolar UMS com mocks `is_ums_running` / `discover_server_pids` (ver
+— isolar vramd com mocks `is_ums_running` / `discover_server_pids` (ver
 `docs/findings/UMS_VRAM_FINDINGS.md` § Testes).
 
 Monorepo guide: [`docs/TESTING.md`](../docs/TESTING.md) · [`docs/TESTING_PT.md`](../docs/TESTING_PT.md).

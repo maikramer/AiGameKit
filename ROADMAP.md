@@ -96,7 +96,7 @@ Lacunas identificadas no pipeline de game development e plano de acção prioriz
 | Ferramenta | Versão | Funcional |
 |---|---|---|
 | Shared | 0.2.0 | ✅ logging, GPU, subprocess, installers |
-| ModelServer (UMS) | 0.1.0 | ✅ supervisor VRAM unificado |
+| ModelServer (vramd) | 0.1.0 | ✅ supervisor VRAM unificado |
 | Text2D | 0.1.0 | ✅ text-to-image (FLUX SDNQ) |
 | Text2Icon | 0.1.0 | ✅ text-to-icon (Sana Sprint 0.6B) |
 | Text3D | 0.1.0 | ✅ text-to-3D (Hunyuan3D-Omni), LOD, collision, simplify |

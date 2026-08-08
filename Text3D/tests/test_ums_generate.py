@@ -1,10 +1,10 @@
-"""Testes thin do orquestrador ums_generate (sem GPU)."""
+"""Testes thin do orquestrador vramd_generate (sem GPU)."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from text3d.ums_generate import run_generate
+from text3d.vramd_generate import run_generate
 
 
 class TestRunGenerateValidation:

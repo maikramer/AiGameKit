@@ -197,7 +197,7 @@ class HunyuanTextTo3DGenerator:
         self._offload_plan = None
         # Group-offload / accelerate deixam hooks e staging buffers na GPU —
         # tentar CPU + drop refs antes do GC (contexto CUDA ~1 GiB continua
-        # no processo até o UMS sair; isto só liberta pesos/activação).
+        # no processo até o vramd sair; isto só liberta pesos/activação).
         for attr in ("model", "cond_stage_model", "first_stage_model", "scheduler"):
             mod = getattr(pipe, attr, None)
             if mod is None:
@@ -216,11 +216,11 @@ class HunyuanTextTo3DGenerator:
         self._unload_hunyuan()
 
     def unload(self) -> None:
-        """Alias UMS / BackendAdapter — igual a ``unload_hunyuan``."""
+        """Alias vramd / BackendAdapter — igual a ``unload_hunyuan``."""
         self._unload_hunyuan()
 
     def warmup(self) -> Any:
-        """Contrato UMS canónico: carrega Omni na VRAM (ou offload hooks)."""
+        """Contrato vramd canónico: carrega Omni na VRAM (ou offload hooks)."""
         return self._load_hunyuan()
 
     def _load_hunyuan(self) -> Any:
@@ -687,7 +687,7 @@ class HunyuanTextTo3DGenerator:
             except Exception as exc:
                 decode_free_b = None
                 self._log(f"mem_get_info falhou ({exc}) — chunks estáticos={num_chunks}")
-            # Seed do UMS refresh (se houver); medição live tem prioridade.
+            # Seed do vramd refresh (se houver); medição live tem prioridade.
             if self._cached_num_chunks is not None:
                 num_chunks = self._cached_num_chunks
             dyn = _auto_num_chunks(decode_free_b)
@@ -740,7 +740,7 @@ class HunyuanTextTo3DGenerator:
             **pre_stats,
             "drop_seconds": round(_dt_drop, 3),
             "post_faces": len(mesh.faces),
-            # Runtime budget efetivo do decode (visível no UMS via adapter).
+            # Runtime budget efetivo do decode (visível no vramd via adapter).
             "num_chunks": int(num_chunks),
             "num_chunks_static": int(chunks_static),
             "auto_num_chunks": bool(auto_num_chunks),
@@ -761,7 +761,7 @@ class HunyuanTextTo3DGenerator:
     def refresh_runtime_budget(self) -> dict[str, Any] | None:
         """Orça ``num_chunks`` pela VRAM livre e cacheia para o próximo decode.
 
-        Contrato UMS (:meth:`BackendAdapter.apply_runtime_budget`): o adapter
+        Contrato vramd (:meth:`BackendAdapter.apply_runtime_budget`): o adapter
         chama isto antes da inferência. O decode re-mede ``mem_get_info`` (live
         manda) mas usa o cache como seed se a medição falhar. Devolve ``None``
         sem sinal de VRAM.

@@ -73,7 +73,7 @@ Sem `--presets-local`, o comando falha com **preset desconhecido**.
   - **Paint3D tuning:** `paint_max_views`, `paint_view_resolution`, `paint_render_size`, `paint_texture_size`, `paint_bake_exp` (default 6 — costuras mais nítidas).
 - **`rigging3d`** (opcional): `output_suffix`, `root`, `python` — usado com `batch --with-rig` e `generate_rig` no CSV.
 
-**VRAM:** sub-tools delegam ao **UMS**; **hw-auto** (defeito) ajusta SDNQ/offload em GPUs pequenas — sem flags manuais de low-vram no `game.yaml`.
+**VRAM:** sub-tools delegam ao **vramd**; **hw-auto** (defeito) ajusta SDNQ/offload em GPUs pequenas — sem flags manuais de low-vram no `game.yaml`.
 
 ## Manifest (`manifest.csv`)
 

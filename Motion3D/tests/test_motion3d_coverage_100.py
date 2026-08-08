@@ -117,7 +117,7 @@ def test_hw_auto_enabled_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# ums_payload
+# vramd_payload
 # ---------------------------------------------------------------------------
 
 
@@ -136,7 +136,7 @@ def test_build_generate_request_core(
     quality: str | None,
     model: str | None,
 ) -> None:
-    from motion3d.ums_payload import build_generate_request
+    from motion3d.vramd_payload import build_generate_request
 
     payload = build_generate_request(
         prompt="a person walks",
@@ -159,14 +159,14 @@ def test_build_generate_request_core(
 
 @pytest.mark.parametrize("gpu_ids", [None, [0], [0, 1], "0,1"])
 def test_build_generate_request_gpu_ids(gpu_ids) -> None:
-    from motion3d.ums_payload import build_generate_request
+    from motion3d.vramd_payload import build_generate_request
 
     payload = build_generate_request(prompt="x", output="y.npz", gpu_ids=gpu_ids)
     assert isinstance(payload, dict)
 
 
-def test_ums_payload_allow_group_offload() -> None:
-    from motion3d.ums_payload import build_generate_request
+def test_vramd_payload_allow_group_offload() -> None:
+    from motion3d.vramd_payload import build_generate_request
 
     payload = build_generate_request(
         prompt="x",

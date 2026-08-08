@@ -15,13 +15,13 @@ Hub: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
   seams sem blur global agressivo.
 - Upscale opcional Real-ESRGAN.
 
-### VRAM / UMS
+### VRAM / vramd
 
 | Modo | Comportamento |
 |------|----------------|
-| FP16 full | Pico alto (~8 GiB ordem) — 6 GB recusa se UMS não vir quant |
+| FP16 full | Pico alto (~8 GiB ordem) — 6 GB recusa se vramd não vir quant |
 | `memory_efficient=True` (interno) | SDNQ uint8 + CFG chunking + ref-UNet offload |
-| Payload UMS | hw-auto / `ums_payload` preenche `memory_efficient` e/ou `sdnq_preset` (não CLI pública) |
+| Payload vramd | hw-auto / `ums_payload` preenche `memory_efficient` e/ou `sdnq_preset` (não CLI pública) |
 
 Hardware profiles: `paint3d/hardware.py` — GPUs pequenas forçam mem-eff.
 
@@ -56,7 +56,7 @@ sem `NORMAL` → lod/finish import flat → V/Tri≈3 / edges vivos. Ver
 ### Armadilhas
 
 - Shape Omni clipado / oco → paint não “cura” geometria; só textura.
-- Pedir paint sem UMS quant → fila recusa ou OOM.
+- Pedir paint sem vramd quant → fila recusa ou OOM.
 - GLB painted ≠ LOD0 final se há bake-master / rig / animate a seguir.
 - Painted sem `NORMAL`/`TANGENT` (export antigo) → shading partido no lod; re-paint
   ou `text3d finish` no lod (com `ktxdecompress` se já KTX2).
@@ -72,7 +72,7 @@ sem `NORMAL` → lod/finish import flat → V/Tri≈3 / edges vivos. Ver
 - Preferir **shape** (ou LOD limpo) como input — painted GLB pode hangar bpy
   `fix_mesh` / atrapalhar segmentação.
 - Repair pós-decode: perfil `part_decode` em `aigamekit_shared.mesh_repair`.
-- UMS backend `part3d` — mesmo contrato peak/quant.
+- vramd backend `part3d` — mesmo contrato peak/quant.
 - Lições finos / faces: [`../HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`](../HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 
 ### Export (`--parts-mode`)
@@ -124,4 +124,4 @@ LOD após export (não sobrescrever `*_lod0` com clean high-poly).
 | 2026-07-24 | Part3D: `faces` default; p3sam vs fine-parts; `label_fuse` |
 | 2026-07-24 | `restrict_inpaint` + `ensure_clean_for_paint`; interiores UV |
 | 2026-07-24 | Paint compile FAIL; Part3D autotune + flashvdm/CL |
-| 2026-07-19 | Extraído de ops batch + defaults Paint; payload UMS quant |
+| 2026-07-19 | Extraído de ops batch + defaults Paint; payload vramd quant |

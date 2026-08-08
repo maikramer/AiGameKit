@@ -1,4 +1,4 @@
-"""Cobertura alargada Texture2D (sem GPU): utils, presets, UMS, CLI."""
+"""Cobertura alargada Texture2D (sem GPU): utils, presets, vramd, CLI."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from texture2d.prompt_enhancer import (
     looks_like_ground,
 )
 from texture2d.tileability import TileabilityReport, score_tileability
-from texture2d.ums_payload import build_generate_request
+from texture2d.vramd_payload import build_generate_request
 from texture2d.utils import (
     ensure_directory,
     format_bytes,
@@ -344,79 +344,79 @@ def test_validate_params_steps_high() -> None:
     assert validate_params({"num_inference_steps": 101})[0] is False
 
 
-def test_ums_payload_core() -> None:
+def test_vramd_payload_core() -> None:
     req = build_generate_request(prompt="grass", output="/tmp/out.png")
     assert req["prompt"] == "grass"
     assert req["width"] == 512
 
 
-def test_ums_payload_dims() -> None:
+def test_vramd_payload_dims() -> None:
     req = build_generate_request(prompt="x", output="o.png", width=1024, height=768, steps=40, guidance=8.5)
     assert req["width"] == 1024
     assert req["steps"] == 40
 
 
-def test_ums_payload_neg_preset() -> None:
+def test_vramd_payload_neg_preset() -> None:
     req = build_generate_request(prompt="p", output="o.png", negative_prompt="blur", preset="Stone")
     assert req["negative_prompt"] == "blur"
 
 
-def test_ums_payload_model_ground() -> None:
+def test_vramd_payload_model_ground() -> None:
     req = build_generate_request(prompt="p", output="o.png", model_id="m/id", ground=True)
     assert req["ground"] is True
 
 
-def test_ums_payload_extra() -> None:
+def test_vramd_payload_extra() -> None:
     req = build_generate_request(prompt="p", output="o.png", extra={"quality": "high"})
     assert req["quality"] == "high"
 
 
-def test_ums_payload_seed_0() -> None:
+def test_vramd_payload_seed_0() -> None:
     req = build_generate_request(prompt="p", output="o.png", seed=2000)
     assert req["seed"] == 2000
 
 
-def test_ums_payload_seed_1() -> None:
+def test_vramd_payload_seed_1() -> None:
     req = build_generate_request(prompt="p", output="o.png", seed=2001)
     assert req["seed"] == 2001
 
 
-def test_ums_payload_seed_2() -> None:
+def test_vramd_payload_seed_2() -> None:
     req = build_generate_request(prompt="p", output="o.png", seed=2002)
     assert req["seed"] == 2002
 
 
-def test_ums_payload_seed_3() -> None:
+def test_vramd_payload_seed_3() -> None:
     req = build_generate_request(prompt="p", output="o.png", seed=2003)
     assert req["seed"] == 2003
 
 
-def test_ums_payload_seed_4() -> None:
+def test_vramd_payload_seed_4() -> None:
     req = build_generate_request(prompt="p", output="o.png", seed=2004)
     assert req["seed"] == 2004
 
 
-def test_ums_payload_seed_5() -> None:
+def test_vramd_payload_seed_5() -> None:
     req = build_generate_request(prompt="p", output="o.png", seed=2005)
     assert req["seed"] == 2005
 
 
-def test_ums_payload_seed_6() -> None:
+def test_vramd_payload_seed_6() -> None:
     req = build_generate_request(prompt="p", output="o.png", seed=2006)
     assert req["seed"] == 2006
 
 
-def test_ums_payload_seed_7() -> None:
+def test_vramd_payload_seed_7() -> None:
     req = build_generate_request(prompt="p", output="o.png", seed=2007)
     assert req["seed"] == 2007
 
 
-def test_ums_payload_seed_8() -> None:
+def test_vramd_payload_seed_8() -> None:
     req = build_generate_request(prompt="p", output="o.png", seed=2008)
     assert req["seed"] == 2008
 
 
-def test_ums_payload_seed_9() -> None:
+def test_vramd_payload_seed_9() -> None:
     req = build_generate_request(prompt="p", output="o.png", seed=2009)
     assert req["seed"] == 2009
 
@@ -649,14 +649,14 @@ def test_generate_help_flag_umspriority() -> None:
     runner = CliRunner()
     r = runner.invoke(cli, ["generate", "--help"])
     assert r.exit_code == 0
-    assert "--ums-priority" in r.output
+    assert "--vramd-priority" in r.output
 
 
 def test_generate_help_flag_noums() -> None:
     runner = CliRunner()
     r = runner.invoke(cli, ["generate", "--help"])
     assert r.exit_code == 0
-    assert "--no-ums" in r.output
+    assert "--no-vramd" in r.output
 
 
 def test_generate_help_flag_quality() -> None:

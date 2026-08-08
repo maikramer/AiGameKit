@@ -22,7 +22,7 @@ class Adapter(WorkerAdapter):
     def load(self, **kwargs: Any) -> Any:
         from skymap2d.generator import SkymapGenerator
 
-        # UMS: compile on (bench 6GB: ~-19% hot; cold ~6 min amortizado).
+        # vramd: compile on (bench 6GB: ~-19% hot; cold ~6 min amortizado).
         # channels_last ~0 no skymap - nao forcar.
         # memory_efficient (cpu-offload): só do request (CLI hw_auto) — sem re-decidir.
         load_kwargs: dict[str, Any] = {

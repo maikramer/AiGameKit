@@ -2,7 +2,7 @@
 
 CLI text-to-motion do AiGameKit com **Tencent HY-Motion-1.0** (Lite por omissão / Full via hw-auto ou `--model full`).
 
-Pipeline: prompt → UMS `motion3d` → encoders HY (CLIP+Qwen) → HunyuanMotionMMDiT → WoodenMesh FK → NPZ `joints (T,22,3) @ 30fps` → `apply-rigged` (Animator3D `hml22`) → GLB skinned.
+Pipeline: prompt → vramd `motion3d` → encoders HY (CLIP+Qwen) → HunyuanMotionMMDiT → WoodenMesh FK → NPZ `joints (T,22,3) @ 30fps` → `apply-rigged` (Animator3D `hml22`) → GLB skinned.
 
 ## Instalar
 
@@ -19,7 +19,7 @@ motion3d apply-rigged walk.npz hero_rigged.glb -o hero_walk.glb \
   --clip walk --in-place
 ```
 
-Após editar código: `ums respawn motion3d`.
+Após editar código: `vramd respawn motion3d`.
 
 ## VRAM
 

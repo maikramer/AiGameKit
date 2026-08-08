@@ -20,18 +20,18 @@ class Adapter(WorkerAdapter):
     def load(self, **kwargs: Any) -> Any:
         from text3d.generator import HunyuanTextTo3DGenerator
         from text3d.hy3dshape_paths import ensure_hy3dshape_on_path
-        from text3d.ums_load import map_ums_load_kwargs
+        from text3d.vramd_load import map_vramd_load_kwargs
 
         ensure_hy3dshape_on_path(quiet=True)
 
-        # Peak/offload: só do request (CLI hw_auto / with_ums_peak_opts).
-        load_kwargs = map_ums_load_kwargs(kwargs)
+        # Peak/offload: só do request (CLI hw_auto / with_vramd_peak_opts).
+        load_kwargs = map_vramd_load_kwargs(kwargs)
         gen = HunyuanTextTo3DGenerator(**load_kwargs)
         gen.warmup()
         return gen
 
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
-        from text3d.ums_generate import run_generate
+        from text3d.vramd_generate import run_generate
 
         return run_generate(
             model,

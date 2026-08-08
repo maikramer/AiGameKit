@@ -32,13 +32,13 @@ class Adapter(WorkerAdapter):
         from paint3d import defaults as _defaults
         from paint3d.painter import PaintBatchProcessor
 
-        # UMS-only / peak-planning keys — PaintBatchProcessor não os aceita.
+        # vramd-only / peak-planning keys — PaintBatchProcessor não os aceita.
         quant = kwargs.pop("sdnq_preset", None) or kwargs.pop("quant_mode", None)
         kwargs.pop("offload", None)
         # Pós-processo é por-generate, não shape de load.
         for k in ("smooth", "smooth_passes", "upscale", "upscale_factor", "preserve_origin"):
             kwargs.pop(k, None)
-        from aigamekit_shared.ums_load import normalize_quant_preset
+        from aigamekit_shared.vramd_load import normalize_quant_preset
 
         mem_eff = kwargs.pop("memory_efficient", None)
         if mem_eff is None and quant is not None:
@@ -107,7 +107,7 @@ class Adapter(WorkerAdapter):
                 "status": "error",
                 "error": str(exc),
                 "error_code": "VRAM_INSUFFICIENT",
-                "hint": "Runtime budget / MeshRender sem headroom — `ums evict` ou reduz views.",
+                "hint": "Runtime budget / MeshRender sem headroom — `vramd evict` ou reduz views.",
             }
         self.report_progress(request, 0.25, "painting")
         textured = model.paint_mesh(mesh_objs, image_path)

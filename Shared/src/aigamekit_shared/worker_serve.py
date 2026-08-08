@@ -1,11 +1,11 @@
 """Loop canónico do worker subprocesso — lado tool.
 
 Cada tool GPU do monorepo expõe um subcomando ``serve --ums-worker`` que
-invoca :func:`run_worker_loop` com o seu adapter local (não o adapter do UMS).
+invoca :func:`run_worker_loop` com o seu adapter local (não o adapter do vramd).
 O loop lê comandos JSONL do stdin (UMS) e emite eventos no stdout (UMS);
 
 O adapter da tool é uma classe que implementa o contrato ``BackendAdapter``
-(de :mod:`modelserver.adapters.base` no UMS, ou equivalente local na tool).
+(de :mod:`vramd.worker.adapter` no vramd, ou equivalente local na tool).
 Como o adapter corre no venv da tool, tem acesso aos módulos (ex.:
 ``from paint3d.painter import PaintBatchProcessor``).
 
@@ -67,7 +67,7 @@ def _start_cmd_reader(cmd_q: queue.Queue, abort_state: dict[str, bool]) -> threa
     vê o valor corrente imediatamente. O ``CMD_ABORT`` **não** vai para a
     queue (evita que o loop o processe outra vez no fim do generate).
 
-    Em EOF no stdin (UMS fechou o pipe / morreu), põe ``None`` na queue e sai.
+    Em EOF no stdin (vramd fechou o pipe / morreu), põe ``None`` na queue e sai.
     """
 
     def _reader() -> None:
@@ -79,7 +79,7 @@ def _start_cmd_reader(cmd_q: queue.Queue, abort_state: dict[str, bool]) -> threa
                 cmd_q.put({"cmd": "__bad_cmd__"})
                 continue
             if msg is None:
-                # EOF = UMS fechou stdin = shutdown gracioso.
+                # EOF = vramd fechou stdin = shutdown gracioso.
                 cmd_q.put(None)
                 return
             # CMD_ABORT é urgente e tratado aqui — o loop principal pode estar
@@ -95,20 +95,20 @@ def _start_cmd_reader(cmd_q: queue.Queue, abort_state: dict[str, bool]) -> threa
 
 
 def start_parent_watchdog(*, poll_sec: float = 5.0) -> None:
-    """Thread que termina o worker se o supervisor UMS desaparecer.
+    """Thread que termina o worker se o supervisor vramd desaparecer.
 
-    O caminho normal é o EOF no stdin (o UMS fecha o pipe ao morrer), mas um
+    O caminho normal é o EOF no stdin (o vramd fecha o pipe ao morrer), mas um
     ``SIGKILL`` no supervisor ou um pipe herdado por outro processo pode deixar
     o worker vivo — e um worker vivo segura os pesos e o contexto CUDA para
     sempre. O watchdog fecha esse buraco: se o PPID mudar (reparenting para
     ``init``/subreaper), sai.
 
-    ``AIGAMEKIT_WORKER_PARENT_WATCHDOG=0`` desliga (ex.: correr o worker à mão).
+    ``VRAMD_WORKER_PARENT_WATCHDOG=0`` desliga (ex.: correr o worker à mão).
     """
     import os
     import threading
 
-    if os.environ.get("AIGAMEKIT_WORKER_PARENT_WATCHDOG", "1") == "0":
+    if os.environ.get("VRAMD_WORKER_PARENT_WATCHDOG", "1") == "0":
         return
     initial_ppid = os.getppid()
     if initial_ppid <= 1:
@@ -141,7 +141,7 @@ def _is_vram_error(exc: Exception) -> bool:
 
 
 # Canal JSONL dedicado — separado do stdout "real" da tool (que vai para
-# stderr capturado pelo UMS). Inicializado em ``run_worker_loop``.
+# stderr capturado pelo vramd). Inicializado em ``run_worker_loop``.
 _jsonl_stdout: Any = None
 
 
@@ -160,9 +160,9 @@ def _install_jsonl_stdout() -> None:
     import sys
 
     real_stdout = sys.stdout
-    # Tudo o que a tool imprime vai para o stderr do worker (log do UMS).
+    # Tudo o que a tool imprime vai para o stderr do worker (log do vramd).
     sys.stdout = sys.stderr
-    # Novo stdout limpo só para JSONL — duplica o fd original (que o UMS lê).
+    # Novo stdout limpo só para JSONL — duplica o fd original (que o vramd lê).
     # Se o stdout não tem fileno() (ex.: capsys em testes), usar o próprio.
     try:
         jsonl_fd = os.dup(real_stdout.fileno())
@@ -190,12 +190,12 @@ def run_worker_loop(
         adapter_class: classe ``BackendAdapter`` concreta da tool (instância sem
             args; tem métodos ``load/generate/unload``).
         backend_name: Nome do backend (ex.: ``text3d``) — só para diagnóstico.
-        version: Versão do protocolo esperado (para quebra-graceful entre UMS
+        version: Versão do protocolo esperado (para quebra-graceful entre vramd
             e worker de versões diferentes).
     """
     # CRÍTICO: o stdout é o canal JSONL do protocolo — qualquer texto extra
     # (print, warnings torch, tqdm) corrompe os eventos. Redireccionar o stdout
-    # "real" da tool para stderr (capturado pelo UMS no log) e substituir por
+    # "real" da tool para stderr (capturado pelo vramd no log) e substituir por
     # um canal estrito só para JSONL via set_jsonl_stream no worker_protocol.
     _install_jsonl_stdout()
     start_parent_watchdog()
@@ -209,14 +209,14 @@ def run_worker_loop(
     # Isto é CRÍTICO para o abort cooperativo funcionar — sem ele, o loop
     # principal bloqueia dentro de ``adapter.generate()`` e nunca lê o
     # ``CMD_ABORT`` enviado a meio do job (bug C1). O reader põe ``None`` na
-    # queue em EOF (UMS fechou stdin = shutdown gracioso).
+    # queue em EOF (vramd fechou stdin = shutdown gracioso).
     cmd_q: queue.Queue = queue.Queue()
     _start_cmd_reader(cmd_q, state)
 
     while True:
         cmd_msg = cmd_q.get()
         if cmd_msg is None:
-            # EOF no stdin = UMS fechou = shutdown gracioso.
+            # EOF no stdin = vramd fechou = shutdown gracioso.
             break
         cmd = cmd_msg.get("cmd")
         if cmd == "__bad_cmd__":
@@ -255,7 +255,7 @@ def run_worker_loop(
                     backend=backend_name,
                     traceback=tb,
                 )
-                # Falha de load é fatal: o UMS re-spawn ou marca broken.
+                # Falha de load é fatal: o vramd re-spawn ou marca broken.
                 sys.exit(1)
             # Reportar VRAM depois do load (se disponível).
             vram = _probe_vram_mib()
@@ -299,7 +299,7 @@ def run_worker_loop(
             except Exception as exc:
                 tb = traceback.format_exc()
                 code = ERR_VRAM_INSUFFICIENT if _is_vram_error(exc) else ERR_GENERATE_FAILED
-                # Cancelado cooperativamente: o UMS mandou abort (state["abort"])
+                # Cancelado cooperativamente: o vramd mandou abort (state["abort"])
                 # ou o adapter substituiu o hook e ele retorna True.
                 hook = request.get("_abort")
                 aborted = state["abort"] or (callable(hook) and bool(hook()))
@@ -318,7 +318,7 @@ def run_worker_loop(
             try:
                 emit_event(EVENT_DONE, result=result, backend=backend_name)
             except Exception as exc:
-                # Result não-JSON → sem EVENT_DONE o UMS ficava a 100% até idle.
+                # Result não-JSON → sem EVENT_DONE o vramd ficava a 100% até idle.
                 tb = traceback.format_exc()
                 emit_event(
                     EVENT_ERROR,
@@ -383,8 +383,8 @@ def _scrub_result(result: Any) -> Any:
 def _probe_vram_mib() -> int | None:
     """Tenta reportar a VRAM usada por este processo (NVML ou torch).
 
-    O UMS usa o seu próprio NVML também (soma dos PIDs filho); este valor é
-    só informativo — o planeamento de VRAM no UMS não depende dele.
+    O vramd usa o seu próprio NVML também (soma dos PIDs filho); este valor é
+    só informativo — o planeamento de VRAM no vramd não depende dele.
     """
     try:
         from aigamekit_shared.gpu import process_vram_mib
@@ -413,7 +413,7 @@ def run_ums_worker_cli(
 ) -> None:
     """Corpo canónico do subcomando ``serve --ums-worker`` (padrão das 9 tools).
 
-    Sem ``--ums-worker`` não faz nada (o UMS arranca este subcomando
+    Sem ``--ums-worker`` não faz nada (o vramd arranca este subcomando
     internamente); com a flag, corre :func:`run_worker_loop` com o adapter
     local da tool.
 
@@ -425,7 +425,7 @@ def run_ums_worker_cli(
     """
     if not ums_worker:
         msg = f"{tool_name} serve sem --ums-worker não faz nada."
-        dim = "O UMS arranca este subcomando internamente."
+        dim = "O vramd arranca este subcomando internamente."
         if console is not None:
             console.print(f"[yellow]{msg}[/yellow]")
             console.print(f"[dim]{dim}[/dim]")

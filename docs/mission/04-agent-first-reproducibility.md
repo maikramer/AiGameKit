@@ -32,10 +32,10 @@ Designing for agents makes the human path better too: clearer errors, fewer secr
 |----------|------|
 | `AGENTS.md` | Operating manual + mission + anti-patterns |
 | Package CLIs / `--help` | Executable truth of flags |
-| Env vars (`AIGAMEKIT_*`, tool bins, UMS socket) | Configuration without code edits |
+| Env vars (`AIGAMEKIT_*`, tool bins, vramd socket) | Configuration without code edits |
 | `game.yaml` + manifest | Intent for batch/dream |
 | Quality presets YAML | Soft default matrix |
-| UMS protocol / queue commands | GPU coordination language |
+| vramd protocol / queue commands | GPU coordination language |
 | Artifact paths (LOD0, `_intermediate`, handoff) | Where “done” lives |
 
 Changing a contract without updating docs and tests is a reproducibility bug.
@@ -47,7 +47,7 @@ Given:
 - fixed prompt / manifest row;
 - fixed `--quality` (and category if any);
 - fixed pipeline profile (master vs legacy, rig/animate opts);
-- healthy UMS / install;
+- healthy vramd / install;
 
 …two runs should produce assets that pass the **same validation rules** and fit the **same engine slot**. Sampling noise may change vertices/pixels; structure (origin, stages present, texture expectations, LOD0 role) must not randomly drop.
 
@@ -60,8 +60,8 @@ Examples of happy-path ambiguity (fix these, do not document around them):
 - Two “official” ways that disagree on defaults.
 - Docs say master pipeline; CLI still defaults to legacy.
 - Handoff examples use paths that batch never writes.
-- “Works if you remember SDNQ” but UMS admit assumes fp16.
-- Agent told to `--gpu-kill-others` while UMS holds a job.
+- “Works if you remember SDNQ” but vramd admit assumes fp16.
+- Agent told to `--gpu-kill-others` while vramd holds a job.
 
 If an agent needs a coin-flip, we failed this premise.
 
@@ -81,7 +81,7 @@ Installers, retries, and long jobs must not block on license prompts or Y/N conf
 
 - Would a new agent session reproduce this workflow from repo files alone?
 - Did we add a second competing happy path?
-- Are errors actionable (`ums queue`, resume, missing dep via `doctor`)?
+- Are errors actionable (`vramd queue`, resume, missing dep via `doctor`)?
 - Is install/batch still non-interactive?
 
 ## Pointers in this repo
@@ -89,5 +89,5 @@ Installers, retries, and long jobs must not block on license prompts or Y/N conf
 - Agent guide: [`AGENTS.md`](../../AGENTS.md)
 - Zero-to-game: [`docs/ZERO_TO_GAME_AI.md`](../ZERO_TO_GAME_AI.md)
 - Testing / coverage floor + CI pitfalls: [`docs/TESTING.md`](../TESTING.md) · [`docs/TESTING_PT.md`](../TESTING_PT.md)
-- UMS agent checklist: [`ModelServer/README.md`](../../ModelServer/README.md) (Agents / anti-patterns)
+- vramd agent checklist: [`Vramd/README.md`](../../Vramd/README.md) (Agents / anti-patterns)
 - CLI-for-agents design notes: [`Materialize/docs/plans/2026-03-15-cli-for-ai-agents-design.md`](../../Materialize/docs/plans/2026-03-15-cli-for-ai-agents-design.md)

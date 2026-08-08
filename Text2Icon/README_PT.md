@@ -13,15 +13,15 @@ text2icon generate "poção de vida vermelha, jogo de fantasia" -o vida.png
 # Ícone transparente
 text2icon generate "ícone de espada, RPG medieval" -o espada.png --transparent
 
-# UMS (fila + modelo quente) — ver ModelServer/README.md
-aigamekit-model-server start
-text2icon generate "espada" -o espada.png --ums-stream
+# vramd (fila + modelo quente) — ver Vramd/README.md
+vramd start
+text2icon generate "espada" -o espada.png --vramd-stream
 
 # Batch
 text2icon batch icones.txt -d icones/ --transparent
 ```
 
-Flags UMS: `--ums-priority`, `--no-ums`, `--ums-stream`. O `text2icon server` per-tool está **deprecated**.
+Flags vramd: `--vramd-priority`, `--no-vramd`, `--vramd-stream`. O `text2icon server` per-tool está **deprecated**.
 
 ## Integração com GameAssets
 

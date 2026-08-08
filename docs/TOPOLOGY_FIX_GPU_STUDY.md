@@ -83,7 +83,7 @@ Notas de fidelidade:
   `wall_gap`, alinhado com ±N da face, normal oposta) — todos vetorizáveis; o
   número prova que a parte espacial (a mais cara) fica sub-segundo.
 - VRAM necessária p/ GPU: < 500 MB para 7M verts — cabe em qualquer GPU alvo
-  sem coordenação UMS (é compute de segundos, não pesos de modelo).
+  sem coordenação vramd (é compute de segundos, não pesos de modelo).
 
 ## 4. Achados estruturais (além da velocidade)
 
@@ -166,8 +166,8 @@ As mesmas kernels em torch CUDA quando `torch.cuda.is_available()`
 - weld / boundary / slivers: mais 2–4× sobre numpy (já medido).
 - Taubin / smooth: ~2000× sobre o loop Python atual (0.074 s) — viabiliza
   ligar `do_taubin` em meshes grandes sem custo relevante.
-- VRAM < 500 MB; duração de segundos → **não precisa de admissão UMS** (não são
-  pesos de modelo); manter fora do fluxo UMS mas documentar o env var.
+- VRAM < 500 MB; duração de segundos → **não precisa de admissão vramd** (não são
+  pesos de modelo); manter fora do fluxo vramd mas documentar o env var.
 
 ### Fase 3 — Bibliotecas dedicadas (só se a Fase 1–2 não chegar)
 

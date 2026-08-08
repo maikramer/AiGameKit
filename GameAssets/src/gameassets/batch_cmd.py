@@ -99,7 +99,7 @@ from .profile import (
 )
 from .prompt_builder import build_audio_prompt, build_prompt
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
-from .ums_batch import (
+from .vramd_batch import (
     run_paint_wave_or_fallback,
     run_shape_wave_or_fallback,
     run_skymap2d_wave_or_fallback,
@@ -109,7 +109,7 @@ from .ums_batch import (
     run_text2sound_wave_or_fallback,
     run_texture2d_wave_or_fallback,
 )
-from .ums_coord import MasterDeferQueue, apply_ums_child_env
+from .vramd_coord import MasterDeferQueue, apply_vramd_child_env
 
 console = Console()
 
@@ -259,16 +259,16 @@ console = Console()
     help="Usar barras de progresso simples em vez do dashboard TUI",
 )
 @click.option(
-    "--ums-stream",
+    "--vramd-stream",
     is_flag=True,
     default=False,
-    help="Propaga AIGAMEKIT_UMS_STREAM=1 aos subprocessos (eventos UMS; só com verbose/ruído OK).",
+    help="Propaga VRAMD_STREAM=1 aos subprocessos (eventos vramd; só com verbose/ruído OK).",
 )
 @click.option(
-    "--no-ums",
+    "--no-vramd",
     is_flag=True,
     default=False,
-    help="Desliga UMS (auto-start off + waves GPU via subprocess CLI; tools recebem --no-ums).",
+    help="Desliga vramd (auto-start off + waves GPU via subprocess CLI; tools recebem --no-vramd).",
 )
 @click.option(
     "--plain",
@@ -300,8 +300,8 @@ def batch_cmd(
     force: bool,
     gpu_ids_str: str | None,
     no_dashboard: bool,
-    ums_stream: bool,
-    no_ums: bool,
+    vramd_stream: bool,
+    no_vramd: bool,
     plain: bool,
 ) -> None:
     """Gera imagens (e opcionalmente meshes) para cada linha do manifest."""
@@ -903,21 +903,21 @@ def batch_cmd(
                 )
             )
 
-    # Garantir que o UMS (Unified Model Server) está a correr — as subprocess
+    # Garantir que o vramd (Unified Model Server) está a correr — as subprocess
     # invocations das tools (text2d, text3d, paint3d, rigging3d) delegam para o
-    # UMS se estiver activo, reutilizando modelos quentes (~7s vs ~20s cold-start).
-    # Graceful: se falhar, continuar sem UMS (cada subprocess carrega do zero).
+    # vramd se estiver activo, reutilizando modelos quentes (~7s vs ~20s cold-start).
+    # Graceful: se falhar, continuar sem vramd (cada subprocess carrega do zero).
     if not skip_gpu_preflight:
         try:
-            from aigamekit_shared.model_server import ensure_ums_running
+            from aigamekit_shared.vramd_client import ensure_vramd_running
 
-            ensure_ums_running()
+            ensure_vramd_running()
         except Exception:
-            pass  # sem UMS — continuar com subprocess cold-start
+            pass  # sem vramd — continuar com subprocess cold-start
 
     child_env = dict(subprocess_gpu_env(gpu_ids=gpu_ids))
-    # Pedidos GPU via UMS ficam atrás de CLIs interactivas (afinidade/prioridade).
-    apply_ums_child_env(child_env, ums_stream=ums_stream, no_ums=no_ums)
+    # Pedidos GPU via vramd ficam atrás de CLIs interactivas (afinidade/prioridade).
+    apply_vramd_child_env(child_env, vramd_stream=vramd_stream, no_vramd=no_vramd)
     if profile_tools:
         child_env["AIGAMEKIT_PROFILE"] = "1"
         child_env["AIGAMEKIT_PROFILE_TOOL"] = "gameassets"
@@ -1040,8 +1040,8 @@ def batch_cmd(
                         ums_ter = run_terrain3d_wave_or_fallback(
                             [ter_item],
                             manifest_dir=manifest_dir,
-                            no_ums=no_ums,
-                            ums_stream=ums_stream,
+                            no_vramd=no_vramd,
+                            vramd_stream=vramd_stream,
                             gpu_ids=gpu_ids,
                         )
                         if ums_ter is None:
@@ -1051,8 +1051,8 @@ def batch_cmd(
                             _append_terrain3d_profile_args(ter_eff, ter_argv)
                             if gpu_ids:
                                 ter_argv.extend(["--device", f"cuda:{gpu_ids[0]}"])
-                            if no_ums:
-                                ter_argv.append("--no-ums")
+                            if no_vramd:
+                                ter_argv.append("--no-vramd")
                             r_ter = run_cmd(ter_argv, extra_env=child_env, cwd=manifest_dir)
                             _timing_append({"id": "terrain"}, "terrain3d_sec", time.perf_counter() - t_ter)
                             if r_ter.returncode != 0:
@@ -1108,8 +1108,8 @@ def batch_cmd(
                         ums_sky = run_skymap2d_wave_or_fallback(
                             [sky_item],
                             manifest_dir=manifest_dir,
-                            no_ums=no_ums,
-                            ums_stream=ums_stream,
+                            no_vramd=no_vramd,
+                            vramd_stream=vramd_stream,
                             gpu_ids=gpu_ids,
                             width=int(sky_eff.width or 2048),
                             height=int(sky_eff.height or 1024),
@@ -1123,8 +1123,8 @@ def batch_cmd(
                         if ums_sky is None:
                             sky_argv = [skymap2d_bin, "generate", sky_eff.prompt or "", "-o", str(sky_out)]
                             _append_skymap2d_profile_args(sky_eff, sky_argv, quality=profile.generation)
-                            if no_ums:
-                                sky_argv.append("--no-ums")
+                            if no_vramd:
+                                sky_argv.append("--no-vramd")
                             r_sky = run_cmd(sky_argv, extra_env=child_env, cwd=manifest_dir)
                             _timing_append({"id": "skymap"}, "skymap2d_sec", time.perf_counter() - t_sky)
                             if r_sky.returncode != 0:
@@ -1178,8 +1178,8 @@ def batch_cmd(
                         ums_icons = run_text2icon_wave_or_fallback(
                             icon_items_d,
                             manifest_dir=manifest_dir,
-                            no_ums=no_ums,
-                            ums_stream=ums_stream,
+                            no_vramd=no_vramd,
+                            vramd_stream=vramd_stream,
                             gpu_ids=gpu_ids,
                             width=int(icon_eff.width or 512),
                             height=int(icon_eff.height or 512),
@@ -1200,8 +1200,8 @@ def batch_cmd(
                                 dash.update_asset(f"icon-{_icon_slug}", "running", f"A gerar {_icon_label}...")
                                 _icon_argv = [text2icon_bin, "generate", _icon_prompt, "-o", str(_icon_out)]
                                 _append_text2icon_profile_args(icon_eff, _icon_argv, quality=profile.generation)
-                                if no_ums:
-                                    _icon_argv.append("--no-ums")
+                                if no_vramd:
+                                    _icon_argv.append("--no-vramd")
                                 _t_icon = time.perf_counter()
                                 _r_icon = run_cmd(_icon_argv, extra_env=child_env, cwd=manifest_dir)
                                 _timing_append(
@@ -1263,8 +1263,8 @@ def batch_cmd(
                             _t2 = profile.text2d
                             _t2d_kw: dict[str, Any] = {
                                 "manifest_dir": manifest_dir,
-                                "no_ums": no_ums,
-                                "ums_stream": ums_stream,
+                                "no_vramd": no_vramd,
+                                "vramd_stream": vramd_stream,
                                 "gpu_ids": gpu_ids,
                                 "quality": profile.generation,
                             }
@@ -1291,8 +1291,8 @@ def batch_cmd(
                                 _append_text2d_profile_args(profile, batch_args_d)
                                 if gpu_ids:
                                     batch_args_d.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
-                                if no_ums:
-                                    batch_args_d.append("--no-ums")
+                                if no_vramd:
+                                    batch_args_d.append("--no-vramd")
                                 r_batch_d = run_cmd(batch_args_d, extra_env=child_env, cwd=manifest_dir)
                                 for _line in (r_batch_d.stdout or "").strip().splitlines():
                                     try:
@@ -1345,8 +1345,8 @@ def batch_cmd(
                             ums_tex = run_texture2d_wave_or_fallback(
                                 tex_items_d,
                                 manifest_dir=manifest_dir,
-                                no_ums=no_ums,
-                                ums_stream=ums_stream,
+                                no_vramd=no_vramd,
+                                vramd_stream=vramd_stream,
                                 gpu_ids=gpu_ids,
                                 width=int(tt_wave.width or 512),
                                 height=int(tt_wave.height or 512),
@@ -1560,8 +1560,8 @@ def batch_cmd(
                                 if seed is not None:
                                     t2d_args.extend(["--seed", str(seed)])
                                 _append_texture2d_profile_args(tt_line, t2d_args, quality=profile.generation)
-                                if no_ums:
-                                    t2d_args.append("--no-ums")
+                                if no_vramd:
+                                    t2d_args.append("--no-vramd")
                                 tool_fail = "texture2d falhou"
                                 tool_empty = "texture2d não produziu ficheiro de imagem"
                             else:
@@ -1571,8 +1571,8 @@ def batch_cmd(
                                 _append_text2d_profile_args(profile, t2d_args)
                                 if gpu_ids:
                                     t2d_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
-                                if no_ums:
-                                    t2d_args.append("--no-ums")
+                                if no_vramd:
+                                    t2d_args.append("--no-vramd")
                                 tool_fail = "text2d falhou"
                                 tool_empty = "text2d não produziu ficheiro de imagem"
 
@@ -1712,8 +1712,8 @@ def batch_cmd(
                             ums_au = run_text2sound_wave_or_fallback(
                                 au_items_d,
                                 manifest_dir=manifest_dir,
-                                no_ums=no_ums,
-                                ums_stream=ums_stream,
+                                no_vramd=no_vramd,
+                                vramd_stream=vramd_stream,
                                 gpu_ids=gpu_ids,
                                 duration=float(ts_line.duration or 10.0),
                                 steps=int(ts_line.steps or 100),
@@ -1759,8 +1759,8 @@ def batch_cmd(
                                     if seed_a is not None:
                                         argv_au.extend(["--seed", str(seed_a)])
                                     _text2sound_args_for_row(ts_line, row, argv_au)
-                                    if no_ums:
-                                        argv_au.append("--no-ums")
+                                    if no_vramd:
+                                        argv_au.append("--no-vramd")
                                     dash.feed_event(row.id, "text2sound", "progress", phase="generating", percent=0)
                                     t_au_d = time.perf_counter()
                                     r_au_d = run_cmd_streaming(
@@ -1892,8 +1892,8 @@ def batch_cmd(
                                 t3 = profile.text3d
                                 _shape_kw: dict[str, Any] = {
                                     "manifest_dir": manifest_dir,
-                                    "no_ums": no_ums,
-                                    "ums_stream": ums_stream,
+                                    "no_vramd": no_vramd,
+                                    "vramd_stream": vramd_stream,
                                     "gpu_ids": gpu_ids,
                                     "quality": getattr(profile, "generation", None),
                                     "export_origin": t3.export_origin if t3 else "feet",
@@ -1927,8 +1927,8 @@ def batch_cmd(
                                     _append_quality(batch_args, profile)
                                     if force:
                                         batch_args.append("--force")
-                                    if no_ums:
-                                        batch_args.append("--no-ums")
+                                    if no_vramd:
+                                        batch_args.append("--no-vramd")
                                     if t3:
                                         if not should_optimize_text3d(t3):
                                             explicit_h = (
@@ -2138,8 +2138,8 @@ def batch_cmd(
                                         p3 = profile.paint3d
                                         _paint_kw: dict[str, Any] = {
                                             "manifest_dir": manifest_dir,
-                                            "no_ums": no_ums,
-                                            "ums_stream": ums_stream,
+                                            "no_vramd": no_vramd,
+                                            "vramd_stream": vramd_stream,
                                             "gpu_ids": gpu_ids,
                                             "texture_size": _quality_paint_texture_cap(profile),
                                         }
@@ -2172,8 +2172,8 @@ def batch_cmd(
                                             _append_quality(batch_args, profile)
                                             if force:
                                                 batch_args.append("--force")
-                                            if no_ums:
-                                                batch_args.append("--no-ums")
+                                            if no_vramd:
+                                                batch_args.append("--no-vramd")
                                             t3 = profile.text3d
                                             if t3:
                                                 if t3.allow_shared_gpu:
@@ -2510,8 +2510,8 @@ def batch_cmd(
                         ums_ter_p = run_terrain3d_wave_or_fallback(
                             [ter_item_p],
                             manifest_dir=manifest_dir,
-                            no_ums=no_ums,
-                            ums_stream=ums_stream,
+                            no_vramd=no_vramd,
+                            vramd_stream=vramd_stream,
                             gpu_ids=gpu_ids,
                         )
                         if ums_ter_p is None:
@@ -2521,8 +2521,8 @@ def batch_cmd(
                             _append_terrain3d_profile_args(ter_eff, ter_argv)
                             if gpu_ids:
                                 ter_argv.extend(["--device", f"cuda:{gpu_ids[0]}"])
-                            if no_ums:
-                                ter_argv.append("--no-ums")
+                            if no_vramd:
+                                ter_argv.append("--no-vramd")
                             r_ter = run_cmd(ter_argv, extra_env=child_env, cwd=manifest_dir)
                             _t_ter_s = time.perf_counter() - t_ter
                             if r_ter.returncode != 0:
@@ -2562,8 +2562,8 @@ def batch_cmd(
                         ums_sky_p = run_skymap2d_wave_or_fallback(
                             [sky_item_p],
                             manifest_dir=manifest_dir,
-                            no_ums=no_ums,
-                            ums_stream=ums_stream,
+                            no_vramd=no_vramd,
+                            vramd_stream=vramd_stream,
                             gpu_ids=gpu_ids,
                             width=int(sky_eff.width or 2048),
                             height=int(sky_eff.height or 1024),
@@ -2577,8 +2577,8 @@ def batch_cmd(
                         if ums_sky_p is None:
                             sky_argv = [skymap2d_bin, "generate", sky_eff.prompt or "", "-o", str(sky_out)]
                             _append_skymap2d_profile_args(sky_eff, sky_argv, quality=profile.generation)
-                            if no_ums:
-                                sky_argv.append("--no-ums")
+                            if no_vramd:
+                                sky_argv.append("--no-vramd")
                             r_sky = run_cmd(sky_argv, extra_env=child_env, cwd=manifest_dir)
                             _t_sky_s = time.perf_counter() - t_sky
                             if r_sky.returncode != 0:
@@ -2619,8 +2619,8 @@ def batch_cmd(
                         ums_icons_p = run_text2icon_wave_or_fallback(
                             icon_items_p,
                             manifest_dir=manifest_dir,
-                            no_ums=no_ums,
-                            ums_stream=ums_stream,
+                            no_vramd=no_vramd,
+                            vramd_stream=vramd_stream,
                             gpu_ids=gpu_ids,
                             width=int(icon_eff.width or 512),
                             height=int(icon_eff.height or 512),
@@ -2634,8 +2634,8 @@ def batch_cmd(
                                 _icon_out = icon_out_dir / f"{_icon_slug}.png"
                                 _icon_argv = [text2icon_bin, "generate", _icon_prompt, "-o", str(_icon_out)]
                                 _append_text2icon_profile_args(icon_eff, _icon_argv, quality=profile.generation)
-                                if no_ums:
-                                    _icon_argv.append("--no-ums")
+                                if no_vramd:
+                                    _icon_argv.append("--no-vramd")
                                 _t_icon = time.perf_counter()
                                 _r_icon = run_cmd(_icon_argv, extra_env=child_env, cwd=manifest_dir)
                                 _t_icon_s = time.perf_counter() - _t_icon
@@ -2730,8 +2730,8 @@ def batch_cmd(
                             _t2p = profile.text2d
                             _t2d_kw_p: dict[str, Any] = {
                                 "manifest_dir": manifest_dir,
-                                "no_ums": no_ums,
-                                "ums_stream": ums_stream,
+                                "no_vramd": no_vramd,
+                                "vramd_stream": vramd_stream,
                                 "gpu_ids": gpu_ids,
                                 "quality": profile.generation,
                             }
@@ -2752,8 +2752,8 @@ def batch_cmd(
                                 _append_text2d_profile_args(profile, batch_args)
                                 if gpu_ids:
                                     batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
-                                if no_ums:
-                                    batch_args.append("--no-ums")
+                                if no_vramd:
+                                    batch_args.append("--no-vramd")
                                 r_batch = run_cmd(batch_args, extra_env=child_env, cwd=manifest_dir)
                                 for _line in (r_batch.stdout or "").strip().splitlines():
                                     try:
@@ -2805,8 +2805,8 @@ def batch_cmd(
                             ums_tex_p = run_texture2d_wave_or_fallback(
                                 tex_items_p,
                                 manifest_dir=manifest_dir,
-                                no_ums=no_ums,
-                                ums_stream=ums_stream,
+                                no_vramd=no_vramd,
+                                vramd_stream=vramd_stream,
                                 gpu_ids=gpu_ids,
                                 width=int(tt_wave_p.width or 512),
                                 height=int(tt_wave_p.height or 512),
@@ -3034,8 +3034,8 @@ def batch_cmd(
                                 if seed is not None:
                                     t2d_args.extend(["--seed", str(seed)])
                                 _append_texture2d_profile_args(tt_line, t2d_args, quality=profile.generation)
-                                if no_ums:
-                                    t2d_args.append("--no-ums")
+                                if no_vramd:
+                                    t2d_args.append("--no-vramd")
                                 tool_fail = "texture2d falhou"
                                 tool_empty = "texture2d não produziu ficheiro de imagem"
                                 tool_short = "texture2d"
@@ -3052,8 +3052,8 @@ def batch_cmd(
                                 _append_text2d_profile_args(profile, t2d_args)
                                 if gpu_ids:
                                     t2d_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
-                                if no_ums:
-                                    t2d_args.append("--no-ums")
+                                if no_vramd:
+                                    t2d_args.append("--no-vramd")
                                 tool_fail = "text2d falhou"
                                 tool_empty = "text2d não produziu ficheiro de imagem"
                                 tool_short = "text2d"
@@ -3174,8 +3174,8 @@ def batch_cmd(
                             ums_au_p = run_text2sound_wave_or_fallback(
                                 au_items_p,
                                 manifest_dir=manifest_dir,
-                                no_ums=no_ums,
-                                ums_stream=ums_stream,
+                                no_vramd=no_vramd,
+                                vramd_stream=vramd_stream,
                                 gpu_ids=gpu_ids,
                                 duration=float(ts_line.duration or 10.0),
                                 steps=int(ts_line.steps or 100),
@@ -3213,8 +3213,8 @@ def batch_cmd(
                                     if seed_a is not None:
                                         argv_au.extend(["--seed", str(seed_a)])
                                     _text2sound_args_for_row(ts_line, row, argv_au)
-                                    if no_ums:
-                                        argv_au.append("--no-ums")
+                                    if no_vramd:
+                                        argv_au.append("--no-vramd")
                                     t_au = time.perf_counter()
                                     r_au = run_cmd(argv_au, extra_env=child_env, cwd=manifest_dir)
                                     _timing_append(rec, "text2sound", time.perf_counter() - t_au)
@@ -3359,8 +3359,8 @@ def batch_cmd(
                                 t3 = profile.text3d
                                 _shape_kw: dict[str, Any] = {
                                     "manifest_dir": manifest_dir,
-                                    "no_ums": no_ums,
-                                    "ums_stream": ums_stream,
+                                    "no_vramd": no_vramd,
+                                    "vramd_stream": vramd_stream,
                                     "gpu_ids": gpu_ids,
                                     "quality": getattr(profile, "generation", None),
                                     "export_origin": t3.export_origin if t3 else "feet",
@@ -3393,8 +3393,8 @@ def batch_cmd(
                                     _append_quality(batch_args, profile)
                                     if force:
                                         batch_args.append("--force")
-                                    if no_ums:
-                                        batch_args.append("--no-ums")
+                                    if no_vramd:
+                                        batch_args.append("--no-vramd")
                                     if t3:
                                         # Global params only when NOT using per-item optimization
                                         if not should_optimize_text3d(t3):
@@ -3641,8 +3641,8 @@ def batch_cmd(
                                     p3 = profile.paint3d
                                     _paint_kw: dict[str, Any] = {
                                         "manifest_dir": manifest_dir,
-                                        "no_ums": no_ums,
-                                        "ums_stream": ums_stream,
+                                        "no_vramd": no_vramd,
+                                        "vramd_stream": vramd_stream,
                                         "gpu_ids": gpu_ids,
                                         "texture_size": _quality_paint_texture_cap(profile),
                                     }
@@ -3674,8 +3674,8 @@ def batch_cmd(
                                         _append_quality(batch_args, profile)
                                         if force:
                                             batch_args.append("--force")
-                                        if no_ums:
-                                            batch_args.append("--no-ums")
+                                        if no_vramd:
+                                            batch_args.append("--no-vramd")
                                         t3 = profile.text3d
                                         if t3:
                                             if t3.allow_shared_gpu:

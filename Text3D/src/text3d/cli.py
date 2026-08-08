@@ -24,7 +24,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
-    add_ums_options,
+    add_vramd_options,
     delegate_or_prepare,
     prepare_gpu_exclusive,
 )
@@ -608,7 +608,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=None,
     help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def generate(
     ctx,
@@ -669,9 +669,9 @@ def generate(
     no_topology_fix,
     quality,
     category,
-    ums_priority,
-    no_ums,
-    ums_stream,
+    vramd_priority,
+    no_vramd,
+    vramd_stream,
 ):
     """Gera 3D: PROMPT (Text2D → Omni) ou --from-image (só Hunyuan3D-Omni)."""
     _ = model_subfolder  # deprecated / ignored (Omni flat repo)
@@ -757,7 +757,7 @@ def generate(
     if not from_image and not (prompt and str(prompt).strip()):
         raise click.UsageError("Indica um PROMPT em texto ou --from-image /path/to/png")
 
-    # GPU prep (ensure_vram / kill) só no path in-process — UMS é a autoridade da fila.
+    # GPU prep (ensure_vram / kill) só no path in-process — vramd é a autoridade da fila.
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
 
@@ -994,7 +994,7 @@ def generate(
                         _ums_request["text2d_model_id"] = text2d_model_id
                     _ums_request["t2d_full_gpu"] = t2d_full_gpu
 
-                # UMS primeiro — nunca ensure_vram/kill antes de enfileirar.
+                # vramd primeiro — nunca ensure_vram/kill antes de enfileirar.
                 if delegate_or_prepare(
                     "text3d",
                     payload={
@@ -1007,9 +1007,9 @@ def generate(
                     t_start=start_time,
                     noun="Mesh",
                     console=console,
-                    enabled=not no_ums,
-                    priority=ums_priority,
-                    stream=ums_stream,
+                    enabled=not no_vramd,
+                    priority=vramd_priority,
+                    stream=vramd_stream,
                     gpu_ids=parsed_gpu_ids,
                     memory_efficient=bool(offload or allow_group_offload) or (sdnq_preset not in (None, "none", "")),
                     sdnq_preset=None if sdnq_preset in (None, "none", "") else sdnq_preset,
@@ -1029,10 +1029,10 @@ def generate(
                         console=console,
                     )
 
-                from text3d.ums_load import map_ums_load_kwargs
+                from text3d.vramd_load import map_vramd_load_kwargs
 
                 with console.status("[bold yellow]A preparar gerador...", spinner="dots"):
-                    _load_kw = map_ums_load_kwargs(
+                    _load_kw = map_vramd_load_kwargs(
                         {
                             "verbose": verbose,
                             "sdnq_preset": "" if sdnq_preset == "none" else sdnq_preset,
@@ -1536,7 +1536,7 @@ def convert(input_file, output, rotate):
     "--ktx2/--no-ktx2",
     default=True,
     show_default=True,
-    help="Aplica compressão KTX2/UASTC via @gltf-transform/cli (npx).",
+    help="KTX2 híbrido via @gltf-transform/cli (ETC1S albedo / UASTC normais).",
 )
 @click.option(
     "--meshopt/--no-meshopt",
@@ -2068,10 +2068,11 @@ def lod_cmd(
 ) -> None:
     """Gera três GLB com níveis de detalhe (LOD0=cheio, LOD1/LOD2 decimados).
 
-    Com ``--painted-mesh``: ``remesh_textured_glb`` (perfil ``pre_decimate_uv``
-    + Decimate COLLAPSE + piso heurístico de faces). Sem painted: decimate
-    geométrico + downscale de textura por nível. ``--meshfix`` só fecha buracos
-    pequenos no caminho geométrico (não é o topology-fix completo).
+    Com ``--painted-mesh``: ``remesh_textured_glb`` (meshopt atlas-preservado /
+    rebake xatlas). Sem painted: ladder geométrica meshopt-first (aceita piso
+    de costuras; COLLAPSE bpy só se o CLI faltar) + downscale de textura por
+    nível. ``--meshfix`` só fecha buracos pequenos no caminho geométrico.
+    ``--no-meshopt`` desliga compressão EXT_meshopt no finish — não o simplify.
     """
     stem = basename_opt if basename_opt else input_mesh.stem
     try:
@@ -2433,7 +2434,12 @@ def split_at_height_cmd(
     default=None,
     help="GLB de saída (default: in-place sobre o input).",
 )
-@click.option("--ktx2/--no-ktx2", default=True, show_default=True, help="Comprime texturas para KTX2/UASTC.")
+@click.option(
+    "--ktx2/--no-ktx2",
+    default=True,
+    show_default=True,
+    help="Comprime texturas KTX2 (ETC1S albedo / UASTC normais).",
+)
 @click.option(
     "--meshopt/--no-meshopt",
     default=True,
@@ -2452,7 +2458,7 @@ def finish_cmd(
     dedup: bool,
     prune: bool,
 ) -> None:
-    """Finaliza GLB: tangents → dedup → prune → KTX2/UASTC → meshopt.
+    """Finaliza GLB: tangents → dedup → prune → KTX2 (ETC1S/UASTC) → meshopt.
 
     Caminho feliz para re-comprimir assets já gerados sem regenerar a pipeline.
 
@@ -2738,7 +2744,7 @@ def align_plus_z_cmd(
     ),
 )
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def generate_batch(
     ctx,
@@ -2772,14 +2778,14 @@ def generate_batch(
     category: str | None,
     no_topology_fix: bool,
     batch_verbose: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Processa lote image-to-3D a partir de manifest JSON (JSONL em stdout).
 
-    Por defeito cada item passa pelo UMS (paridade Paint3D/Text2D batch).
-    Load in-process só se sobrar trabalho após UMS.
+    Por defeito cada item passa pelo vramd (paridade Paint3D/Text2D batch).
+    Load in-process só se sobrar trabalho após vramd.
     """
     mc_level = _parse_mc_level_flag(mc_level)
     from .utils.export import save_mesh
@@ -2864,7 +2870,7 @@ def generate_batch(
     if base_chunks is None:
         base_chunks = _defaults.DEFAULT_NUM_CHUNKS
 
-    # UMS por item primeiro; GPU prep + load só no fallback in-process.
+    # vramd por item primeiro; GPU prep + load só no fallback in-process.
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
     resolved_sdnq = sdnq_preset if sdnq_preset else ""
@@ -2890,10 +2896,10 @@ def generate_batch(
             quant_mode=None if sdnq_preset in (None, "none", "") else sdnq_preset,
             console=_err,
         )
-        from text3d.ums_load import map_ums_load_kwargs
+        from text3d.vramd_load import map_vramd_load_kwargs
 
         with _err.status("[bold yellow]A preparar gerador batch (fallback in-process)...", spinner="dots"):
-            _batch_kw = map_ums_load_kwargs(
+            _batch_kw = map_vramd_load_kwargs(
                 {
                     "verbose": batch_verbose,
                     "sdnq_preset": resolved_sdnq,
@@ -3002,7 +3008,7 @@ def generate_batch(
                 _ctrl = {k: v for k, v in _ctrl.items() if v is not None}
 
                 t0 = time.time()
-                from .ums_payload import build_generate_request
+                from .vramd_payload import build_generate_request
 
                 if delegate_or_prepare(
                     "text3d",
@@ -3048,9 +3054,9 @@ def generate_batch(
                     t_start=t0,
                     noun="Mesh",
                     console=_err,
-                    enabled=not no_ums,
-                    priority=ums_priority or "batch",
-                    stream=ums_stream,
+                    enabled=not no_vramd,
+                    priority=vramd_priority or "batch",
+                    stream=vramd_stream,
                     timeout_sec=1800.0,
                     gpu_ids=parsed_gpu_ids,
                     sdnq_preset=sdnq_preset,
@@ -3351,14 +3357,14 @@ def models():
     "--ums-worker",
     is_flag=True,
     help=(
-        "Modo worker subprocesso do UMS: lê comandos JSONL do stdin (load / "
+        "Modo worker subprocesso do vramd: lê comandos JSONL do stdin (load / "
         "generate / unload / shutdown) e emite eventos no stdout. Usado pelo "
         "SubprocessWorkerPool do ModelServer — text3d corre no seu próprio "
         "venv e o supervisor (ModelServer/.venv) coordena via JSONL."
     ),
 )
 def serve(ums_worker: bool) -> None:
-    """Modo worker subprocesso do UMS (subprocess-per-backend).
+    """Modo worker subprocesso do vramd (subprocess-per-backend).
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico

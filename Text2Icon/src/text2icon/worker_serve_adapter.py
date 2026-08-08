@@ -22,7 +22,7 @@ class Adapter(WorkerAdapter):
     def load(self, **kwargs: Any) -> Any:
         from text2icon.generator import SanaIconGenerator
 
-        # UMS: channels_last on (bench 6GB: ~-13% hot). Compile piora hot — off.
+        # vramd: channels_last on (bench 6GB: ~-13% hot). Compile piora hot — off.
         # low_vram/cpu_offload: só se o request trouxer (CLI hw_auto) — sem re-decidir.
         load_kwargs: dict[str, Any] = {
             "verbose": kwargs.get("verbose", False),

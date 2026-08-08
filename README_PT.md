@@ -68,15 +68,15 @@ Guia completo em português: **[docs/INSTALLING_PT.md](docs/INSTALLING_PT.md)**.
 
 **Lições Hunyuan shape / repair / Part3D (faces vs X-Part, pés de elefante, finos soldados):** [docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md](docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md).
 
-**Hub de descobertas dos modelos** (VRAM, SDNQ, kernels, Omni, UMS, paint/sky/mesh): [docs/MODEL_FINDINGS.md](docs/MODEL_FINDINGS.md) · [docs/findings/](docs/findings/) · Omni [docs/OMNI_SHAPE_FINDINGS.md](docs/OMNI_SHAPE_FINDINGS.md) · benches [docs/KERNEL_OPTS_BENCH.md](docs/KERNEL_OPTS_BENCH.md).
+**Hub de descobertas dos modelos** (VRAM, SDNQ, kernels, Omni, vramd, paint/sky/mesh): [docs/MODEL_FINDINGS.md](docs/MODEL_FINDINGS.md) · [docs/findings/](docs/findings/) · Omni [docs/OMNI_SHAPE_FINDINGS.md](docs/OMNI_SHAPE_FINDINGS.md) · benches [docs/KERNEL_OPTS_BENCH.md](docs/KERNEL_OPTS_BENCH.md).
 
 **Compressão GLB (KTX2 + meshopt, `text3d finish`):** [docs/GLB_FINISH_COMPRESSION.md](docs/GLB_FINISH_COMPRESSION.md).
 
-**Waves UMS no batch** (shape/paint + tools GPU opcionais): [docs/GAMEASSETS_UMS_BATCH.md](docs/GAMEASSETS_UMS_BATCH.md).
+**Waves vramd no batch** (shape/paint + tools GPU opcionais): [docs/GAMEASSETS_UMS_BATCH.md](docs/GAMEASSETS_UMS_BATCH.md).
 
 **Missão / premissas** (facilidade, automação, agent-first, VRAM=infra): [docs/mission/](docs/mission/README.md) · resumo em [AGENTS.md](AGENTS.md).
 
-**Logging em ficheiro** (todas as tools Python + UMS → `~/.cache/aigamekit/logs/`): [docs/LOGGING_PT.md](docs/LOGGING_PT.md) · [English](docs/LOGGING.md).
+**Logging em ficheiro** (todas as tools Python + vramd → `~/.cache/aigamekit/logs/`): [docs/LOGGING_PT.md](docs/LOGGING_PT.md) · [English](docs/LOGGING.md).
 
 **Testes** (piso ≥100/ferramenta, nomes das suites, regras CPU-first): [docs/TESTING_PT.md](docs/TESTING_PT.md) · [English](docs/TESTING.md).
 
@@ -266,41 +266,41 @@ O monorepo usa variáveis de ambiente para localizar binários e configurar comp
 | `PAINT3D_MULTI_GPU` | Paint3D | **Obsoleto** — usar `--gpu-ids 0,1`. Variável de ambiente legada para dividir VAE entre GPUs |
 | `RIGGING3D_ROOT` | Rigging3D | Raiz da árvore de inferência (por defeito: pacote incluído) |
 | `RIGGING3D_PYTHON` | Rigging3D | Interpretador Python do ambiente de inferência |
-| `MODELSERVER_BIN` | Tools GPU | Path para `aigamekit-model-server` (UMS) |
-| `AIGAMEKIT_UMS_AUTO_START` | Tools GPU | `0` desliga auto-start do UMS |
-| `AIGAMEKIT_UMS_PRIORITY` | Tools GPU / GameAssets | Prioridade na fila: `interactive` \| `batch` |
+| `VRAMD_BIN` | Tools GPU | Path para `vramd` (vramd) |
+| `VRAMD_AUTO_START` | Tools GPU | `0` desliga auto-start do vramd |
+| `VRAMD_PRIORITY` | Tools GPU / GameAssets | Prioridade na fila: `interactive` \| `batch` |
 | `AIGAMEKIT_ALLOW_LEGACY_SERVER` | Shared / tools | `1` = servers per-tool + `ensure_vram` legacy (default off) |
 | `AIGAMEKIT_PREFER_MONOREPO` | Shared / GameAssets | Default `1`: `resolve_binary` prefere `<Tool>/.venv/bin` a wrappers stale |
-| `AIGAMEKIT_LOG_DIR` | Todas as tools Python + UMS | Dir de logs diários (default `~/.cache/aigamekit/logs`) |
-| `AIGAMEKIT_LOG_FILE` | Todas as tools Python + UMS | Path exacto do ficheiro de log |
-| `AIGAMEKIT_LOG_TOOL` | Todas as tools Python + UMS | Nome da tool no ficheiro (auto CLI / `ums`) |
-| `AIGAMEKIT_LOG_LEVEL` | Todas as tools Python + UMS | Nível mín.: `DEBUG` \| `INFO` \| `WARN` \| `ERROR` |
-| `AIGAMEKIT_FILE_LOG` | Todas as tools Python + UMS | `0` desliga; `1` força on (preciso sob pytest) |
-| `AIGAMEKIT_NO_FILE_LOG` | Todas as tools Python + UMS | `1` desliga logging em ficheiro |
+| `AIGAMEKIT_LOG_DIR` | Todas as tools Python + vramd | Dir de logs diários (default `~/.cache/aigamekit/logs`) |
+| `AIGAMEKIT_LOG_FILE` | Todas as tools Python + vramd | Path exacto do ficheiro de log |
+| `AIGAMEKIT_LOG_TOOL` | Todas as tools Python + vramd | Nome da tool no ficheiro (auto CLI / `vramd`) |
+| `AIGAMEKIT_LOG_LEVEL` | Todas as tools Python + vramd | Nível mín.: `DEBUG` \| `INFO` \| `WARN` \| `ERROR` |
+| `AIGAMEKIT_FILE_LOG` | Todas as tools Python + vramd | `0` desliga; `1` força on (preciso sob pytest) |
+| `AIGAMEKIT_NO_FILE_LOG` | Todas as tools Python + vramd | `1` desliga logging em ficheiro |
 
-Logs: `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` (UMS → `ums-….log`). Guia: [docs/LOGGING_PT.md](docs/LOGGING_PT.md).
+Logs: `~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log` (vramd → `vramd-….log`). Guia: [docs/LOGGING_PT.md](docs/LOGGING_PT.md).
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
 Todas as ferramentas GPU (Text2D, Text2Icon, Text3D, Paint3D, Part3D, Texture2D, Skymap2D, Text2Sound, Terrain3D) delegam a geração ao **Unified Model Server** — um supervisor único que detém a VRAM da máquina. Um socket (`~/.cache/aigamekit/model-server.sock`), um processo, inventário global de modelos, sem servers por-tool.
 
 **Como funciona:**
 
-1. As CLIs chamam `delegate_to_ums` **antes** de qualquer preparação GPU in-process; o UMS auto-arranca no primeiro generate (desligar com `AIGAMEKIT_UMS_AUTO_START=0`).
+1. As CLIs chamam `delegate_to_vramd` **antes** de qualquer preparação GPU in-process; o vramd auto-arranca no primeiro generate (desligar com `VRAMD_AUTO_START=0`).
 2. Os jobs passam por `JobQueue` → `AffinityScheduler` → `WorkerPool` (`MAX_INFLIGHT=1` — uma geração de cada vez).
-3. Cada backend é um **worker subprocess persistente** no venv da tool (JSONL stdin/stdout) — após editar código de tool, `ums respawn <backend>` recarrega sem reiniciar o supervisor.
-4. Prioridade na fila: `interactive` (CLI) > `batch` (GameAssets define `AIGAMEKIT_UMS_PRIORITY=batch`). Afinidade VRAM salta backends frios (≤3 cuts); evicção **peso + LRU** mantém a VRAM dentro de margens seguras.
-5. O **`hw-auto`** preenche sinais de pico (preset SDNQ, memory-efficient) no payload UMS — sem flag `--low-vram` para o operador.
+3. Cada backend é um **worker subprocess persistente** no venv da tool (JSONL stdin/stdout) — após editar código de tool, `vramd respawn <backend>` recarrega sem reiniciar o supervisor.
+4. Prioridade na fila: `interactive` (CLI) > `batch` (GameAssets define `VRAMD_PRIORITY=batch`). Afinidade VRAM salta backends frios (≤3 cuts); evicção **peso + LRU** mantém a VRAM dentro de margens seguras.
+5. O **`hw-auto`** preenche sinais de pico (preset SDNQ, memory-efficient) no payload vramd — sem flag `--low-vram` para o operador.
 
 ```bash
-ums start | stop | status | submit | queue | wait | cancel | flush | backends | preload | evict | reap | respawn | zero | stats | debug | bench | doctor
-ums status                    # backends + HOLDING/QUEUE
-ums queue                     # jobs + timings
-ums wait <job_id>             # bloqueia até o job terminar
-ums respawn <backend>         # recarrega código de tool editado no worker
+vramd start | stop | status | submit | queue | wait | cancel | flush | backends | preload | evict | reap | respawn | zero | stats | debug | bench | doctor
+vramd status                    # backends + HOLDING/QUEUE
+vramd queue                     # jobs + timings
+vramd wait <job_id>             # bloqueia até o job terminar
+vramd respawn <backend>         # recarrega código de tool editado no worker
 ```
 
-Flags das tools: `--ums-priority interactive|batch`, `--no-ums`, `--ums-stream`. WAL: `~/.cache/aigamekit/ums-jobs.jsonl`. Guia completo: [`ModelServer/README.md`](ModelServer/README.md).
+Flags das tools: `--vramd-priority interactive|batch`, `--no-vramd`, `--vramd-stream`. WAL: `~/.cache/aigamekit/vramd-jobs.jsonl`. Guia completo: [`Vramd/README.md`](Vramd/README.md).
 
 ### Modelos & gates HF
 

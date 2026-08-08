@@ -17,7 +17,7 @@ GPU / bpy / integration tests remain valuable; they must **skip** cleanly withou
 | Package | Kind | How to run | Coverage entry points (examples) |
 |---------|------|------------|----------------------------------|
 | Shared | accessory lib | `make test-shared` | `tests/test_shared_coverage_100.py` |
-| ModelServer (UMS) | accessory | `make test-modelserver` | `tests/test_modelserver_coverage_100.py` |
+| ModelServer (vramd) | accessory | `make test-modelserver` | `tests/test_modelserver_coverage_100.py` |
 | AiGameKitLab | accessory | `make test-aigamekitlab` | `tests/test_aigamekitlab_coverage_suite.py`, `*_100b.py` |
 | Text2D | tool | `make test-text2d` | `test_text2d_coverage_suite.py`, `*_100b.py` |
 | Text2Icon | tool | `make test-text2icon` | `test_text2icon_coverage_suite.py`, `*_100b.py` |
@@ -54,7 +54,7 @@ Full CI Python+Rust: `make check` / `make test`. VibeGame is separate: `make tes
 
 ### What to cover (priority order)
 
-1. **UMS payloads** — `build_*_request` / peak+load opts (wrong keys = admit refuse / silent fallback).
+1. **vramd payloads** — `build_*_request` / peak+load opts (wrong keys = admit refuse / silent fallback).
 2. **Hardware soft profiles** — `profile_from_specs` / `hw_auto_enabled` (pure; no GPU).
 3. **Validators & defaults** — prompts, dimensions, presets, category maps.
 4. **Pure mesh / audio / terrain math** — repair helpers, postprocess, DSP (local `import torch` inside the test if needed).
@@ -65,7 +65,7 @@ Full CI Python+Rust: `make check` / `make test`. VibeGame is separate: `make tes
 
 - **Fluff pads** that only assert “source tree non-empty” — delete; they inflate counts without protecting contracts.
 - **Importing torch/diffusers at module top** in coverage suites — breaks collection; use local imports.
-- **Requiring UMS socket or live GPU** in unit suites — mock / skip.
+- **Requiring vramd socket or live GPU** in unit suites — mock / skip.
 - **Post-hoc binary GLB hacks** as “tests of animation” — regenerate assets; test retarget math instead (see Animator3D / findings).
 - **Editing vendored trees** (`Paint3D/.../hy3dpaint/`, SkinTokens) for testability — test wrappers/adapters only.
 - **Importing native wheels in-process on CI** when the wheel can SIGILL (kills the whole pytest process) — probe in a subprocess first (see Text2Sound below).

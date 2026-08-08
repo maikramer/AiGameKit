@@ -1,16 +1,16 @@
-"""Protocolo JSONL partilhado entre o UMS (supervisor) e os workers subprocesso.
+"""Protocolo JSONL partilhado entre o vramd (supervisor) e os workers subprocesso.
 
-O UMS escreve **comandos** no stdin do worker (uma linha JSON por comando); o
+O vramd escreve **comandos** no stdin do worker (uma linha JSON por comando); o
 worker escreve **eventos** no stdout (uma linha JSON por evento). Logs vão para
-stderr (capturados pelo UMS para um ficheiro por backend).
+stderr (capturados pelo vramd para um ficheiro por backend).
 
 Este módulo é o contrato canónico usado por:
-- ``ModelServer/src/modelserver/subprocess_pool.py`` (lado UMS)
+- ``vramd/src/vramd/subprocess_pool.py`` (lado vramd)
 - ``Shared/src/aigamekit_shared/worker_serve.py`` (lado worker, em cada tool)
 
 Mensagens:
 
-Comandos (UMS → Worker, stdin)::
+Comandos (vramd → Worker, stdin)::
 
     {"cmd": "load", "kwargs": {...}}         # carrega modelo (worker persistente)
     {"cmd": "generate", "request": {...}}    # executa um job
@@ -19,12 +19,12 @@ Comandos (UMS → Worker, stdin)::
     {"cmd": "ping"}                          # health check (worker responde pong)
     {"cmd": "shutdown"}                      # termina o worker graciosamente
 
-Eventos (Worker → UMS, stdout)::
+Eventos (Worker → vramd, stdout)::
 
     {"event": "ready", "vram_mib": 1300}             # após load (modelo carregado)
     {"event": "progress", "pct": 0.25, "msg": "..."}  # progresso do generate
     {"event": "vram_budget", {...}}                   # budget pós refresh_runtime_budget
-    {"event": "done", "result": {...}}                # generate terminou (result = dict UMS)
+    {"event": "done", "result": {...}}                # generate terminou (result = dict vramd)
     {"event": "unloaded"}                             # unload completo
     {"event": "pong"}                                 # resposta a ping
     {"event": "error", "error": "...", "error_code": "..."}  # erro (worker pode continuar)
@@ -33,9 +33,9 @@ Convenções:
 - Uma linha JSON por mensagem (NDJSON); newline à direita obrigatório.
 - ``cmd`` e ``event`` são strings curtas canónicas; o worker ignora comandos
   desconhecidos com ``{"event":"error","error":"unknown cmd"}``.
-- ``error_code`` alinhado com ``modelserver.protocol`` (``ERR_VRAM_INSUFFICIENT``,
+- ``error_code`` alinhado com ``vramd.protocol`` (``ERR_VRAM_INSUFFICIENT``,
   ``ERR_CANCELLED``, ``ERR_GENERATE_FAILED``, ``ERR_BACKEND_VENV_MISSING``).
-- O UMS nunca escreve no stdout do worker (stdout é unidireccional worker→UMS).
+- O vramd nunca escreve no stdout do worker (stdout é unidireccional worker→UMS).
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ import sys
 from typing import Any, TextIO, TypedDict
 
 # ---------------------------------------------------------------------------
-# Comandos (UMS → Worker)
+# Comandos (vramd → Worker)
 # ---------------------------------------------------------------------------
 
 CMD_LOAD = "load"
@@ -69,7 +69,7 @@ class GenerateCmd(TypedDict, total=False):
 
 
 # ---------------------------------------------------------------------------
-# Eventos (Worker → UMS)
+# Eventos (Worker → vramd)
 # ---------------------------------------------------------------------------
 
 EVENT_READY = "ready"
@@ -82,8 +82,8 @@ EVENT_ERROR = "error"
 
 
 # ---------------------------------------------------------------------------
-# Erros canónicos (alinhados com modelserver.protocol; duplicados aqui para o
-# worker não depender do package modelserver)
+# Erros canónicos (alinhados com vramd.protocol; duplicados aqui para o
+# worker não depender do package vramd)
 # ---------------------------------------------------------------------------
 
 ERR_VRAM_INSUFFICIENT = "VRAM_INSUFFICIENT"
@@ -117,7 +117,7 @@ def decode(line: str | bytes) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Helpers para o lado UMS (escrever cmd, ler evento)
+# Helpers para o lado vramd (escrever cmd, ler evento)
 # ---------------------------------------------------------------------------
 
 
@@ -191,7 +191,7 @@ def read_cmd(stream: TextIO | None = None) -> dict[str, Any] | None:
     """Lê um comando do stdin (uma linha JSON).
 
     Returns:
-        Dict do comando, ou ``None`` se EOF (UMS fechou stdin = shutdown).
+        Dict do comando, ou ``None`` se EOF (vramd fechou stdin = shutdown).
     """
     src = stream or sys.stdin
     line = src.readline()

@@ -1,4 +1,4 @@
-"""Cobertura elaborada Text2Sound — funções puras, presets, UMS payload, DSP (sem GPU)."""
+"""Cobertura elaborada Text2Sound — funções puras, presets, vramd payload, DSP (sem GPU)."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from text2sound.prompt_enhancer import (
     enhance_prompt,
     validate_and_correct,
 )
-from text2sound.ums_payload import build_generate_request
+from text2sound.vramd_payload import build_generate_request
 from text2sound.utils import format_duration, generate_output_path
 
 # --- format_duration (35 casos) ---
@@ -229,7 +229,7 @@ def test_profile_from_specs_tiers(
     assert "half=" in prof.summary()
 
 
-# --- UMS payload (12 casos) ---
+# --- vramd payload (12 casos) ---
 
 
 @pytest.mark.parametrize(

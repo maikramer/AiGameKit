@@ -43,11 +43,11 @@ make test-shared
 | Change | Action |
 |--------|--------|
 | Normal Python under `*/src/` | Save → re-run CLI / batch |
-| Running UMS **tool worker** | `ums respawn <backend>` |
-| ModelServer / worker protocol | `aigamekit-model-server stop` |
+| Running vramd **tool worker** | `vramd respawn <backend>` |
+| ModelServer / worker protocol | `vramd stop` |
 | New dep / entry point | `./install.sh <tool>` |
 
-VRAM: **UMS + hw-auto** — no public `--low-vram` / `--memory-efficient`. Legacy
+VRAM: **vramd + hw-auto** — no public `--low-vram` / `--memory-efficient`. Legacy
 per-tool servers: `AIGAMEKIT_ALLOW_LEGACY_SERVER=1` only.
 
 ### Setting Up a Package
@@ -271,8 +271,8 @@ Describe how you tested your changes.
 
 ```
 AiGameKit/
-├── Shared/           # Shared utilities (logging, GPU, HF helpers, UMS client)
-├── ModelServer/      # Unified Model Server (UMS) — GPU/VRAM supervisor
+├── Shared/           # Shared utilities (logging, GPU, HF helpers, vramd client)
+├── Vramd/      # Unified Model Server (vramd) — GPU/VRAM supervisor
 ├── Text2D/           # Text to 2D sprite generation
 ├── Text2Icon/        # Text to UI icon generation (Sana)
 ├── Text3D/           # Text/image to 3D model generation (Hunyuan3D-Omni)
@@ -297,8 +297,8 @@ AiGameKit/
 
 If you get CUDA out of memory errors:
 1. Reduce batch size or use `--quality fast` where available
-2. Leave **hw-auto** on (default); route GPU work through **UMS** — do not add `--low-vram` (removed)
-3. Check `ums status` / `ums queue` before killing anything GPU-related
+2. Leave **hw-auto** on (default); route GPU work through **vramd** — do not add `--low-vram` (removed)
+3. Check `vramd status` / `vramd queue` before killing anything GPU-related
 4. Close other GPU applications
 
 ### Model Download Fails

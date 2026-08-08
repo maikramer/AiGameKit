@@ -1,4 +1,4 @@
-"""Cobertura elaborada Text3D — bbox_tune, ums_payload, defaults, mesh metrics, CLI --help."""
+"""Cobertura elaborada Text3D — bbox_tune, vramd_payload, defaults, mesh metrics, CLI --help."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from text3d.bbox_tune import (
     tune_hunyuan_for_bbox,
     voxel_meters,
 )
-from text3d.ums_payload import build_generate_request
+from text3d.vramd_payload import build_generate_request
 from text3d.utils import mesh_metrics
 
 # --- target_voxel_for (24 casos) ---
@@ -254,7 +254,7 @@ def test_latent_detail_ceiling_env() -> None:
         assert latent_detail_ceiling() == 512
 
 
-# --- ums_payload (14 casos) ---
+# --- vramd_payload (14 casos) ---
 
 
 @pytest.mark.parametrize(

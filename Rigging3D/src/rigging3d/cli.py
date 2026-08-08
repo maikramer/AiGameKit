@@ -620,7 +620,7 @@ def _smooth_shade_glb_or_warn(glb_path: Path) -> None:
             export_tangents=True,
             export_texcoords=True,
             export_materials="EXPORT",
-            export_image_format="AUTO",
+            export_image_format="JPEG",
         )
     except Exception as exc:  # noqa: BLE001
         console.print(f"[yellow]⚠ smooth-shade pós-rig falhou (não fatal): {exc}[/yellow]")

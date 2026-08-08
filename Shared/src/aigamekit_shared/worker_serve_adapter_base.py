@@ -1,7 +1,7 @@
 """Classe base partilhada para adapters de worker subprocesso (Fase 4).
 
-Réplica standalone de :class:`modelserver.adapters.base.BackendAdapter`
-que **não depende do package modelserver`` — cada tool pode herdar desta
+Réplica standalone de :class:`vramd.worker.adapter.BackendAdapter`
+que **não depende do package vramd`` — cada tool pode herdar desta
 classe no seu venv próprio. Tem os mesmos helpers estáticos
 (report_progress / should_abort / cancelled_response / abort_hooks /
 apply_runtime_budget) e o mesmo contrato (load/generate/unload).
@@ -31,7 +31,7 @@ from typing import Any
 class WorkerAdapter(ABC):
     """Contrato canónico do adapter do worker subprocesso (standalone).
 
-    Gémeo de :class:`modelserver.adapters.base.BackendAdapter` mas sem depender
+    Gémeo de :class:`vramd.worker.adapter.BackendAdapter` mas sem depender
     do supervisor — vive no venv da tool e é invocado por
     :func:`aigamekit_shared.worker_serve.run_worker_loop`.
 
@@ -109,7 +109,7 @@ class WorkerAdapter(ABC):
 
     @staticmethod
     def should_abort(request: dict[str, Any]) -> bool:
-        """True se o UMS pediu cancel (``request["_abort"]``)."""
+        """True se o vramd pediu cancel (``request["_abort"]``)."""
         cb = request.get("_abort")
         if not callable(cb):
             return False

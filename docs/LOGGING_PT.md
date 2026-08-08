@@ -1,6 +1,6 @@
-# Logging em ficheiro — tools AiGameKit + UMS
+# Logging em ficheiro — tools AiGameKit + vramd
 
-Todas as CLIs Python e o Unified Model Server (UMS) gravam logs plain-text no
+Todas as CLIs Python e o Unified Model Server (vramd) gravam logs plain-text no
 cache AiGameKit. Consola continua Rich/ANSI; ficheiro é espelho UTC para debug
 offline (GPU falha, fila presa, crash de worker).
 
@@ -15,16 +15,16 @@ offline (GPU falha, fila presa, crash de worker).
 | `$AIGAMEKIT_LOG_DIR/…` | Override do diretório |
 | `$AIGAMEKIT_LOG_FILE` | Path exacto (ignora naming diário) |
 
-Exemplos: `text2d-2026-07-16.log`, `ums-2026-07-16.log`, `gameassets-….log`.
+Exemplos: `text2d-2026-07-16.log`, `vramd-2026-07-16.log`, `gameassets-….log`.
 
 Nome da tool: `setup_rich_click_module(tool=…)` em cada `cli_rich.py`, ou
-`AIGAMEKIT_LOG_TOOL` / argv (`ums` / `aigamekit-model-server` → `ums`).
+`AIGAMEKIT_LOG_TOOL` / argv (`vramd` / `vramd` → `vramd`).
 
 ## Formato
 
 ```
-2026-07-16T20:01:02.123Z [INFO   ] === log start tool=ums pid=12345 ===
-2026-07-16T20:01:03.456Z [INFO   ] [UMS] worker started backend=text3d
+2026-07-16T20:01:02.123Z [INFO   ] === log start tool=vramd pid=12345 ===
+2026-07-16T20:01:03.456Z [INFO   ] [vramd] worker started backend=text3d
 2026-07-16T20:01:10.789Z [WARN   ] gameassets.pipeline: stage paint retry
 ```
 
@@ -35,9 +35,9 @@ Mínimo por omissão: `INFO` (`AIGAMEKIT_LOG_LEVEL`).
 
 1. **`Logger`** Shared — `info` / `warn` / `error` / `step` / …
 2. **stdlib `logging.getLogger`** — bridge uma vez por processo (GameAssets, mesh, …)
-3. **UMS** — `_log()` sempre em ficheiro; consola só com `ums start -v`
+3. **vramd** — `_log()` sempre em ficheiro; consola só com `vramd start -v`
 
-`Logger.info(msg, console=False)` → só ficheiro (UMS sem verbose).
+`Logger.info(msg, console=False)` → só ficheiro (vramd sem verbose).
 
 ## Env
 
@@ -64,7 +64,7 @@ print(current_log_path())
 ```
 
 CLIs: `setup_rich_click_module(..., tool="text2d")` chama `configure_logging`.
-UMS: `configure_logging("ums")` no `ums start` (path no painel de arranque).
+vramd: `configure_logging("vramd")` no `vramd start` (path no painel de arranque).
 
 ## Fora de scope
 
@@ -74,5 +74,5 @@ UMS: `configure_logging("ums")` no `ums start` (path no painel de arranque).
 ## Ver também
 
 - Tabela env raiz: [`README_PT.md`](../README_PT.md) § Variáveis de Ambiente
-- UMS: [`ModelServer/README.md`](../ModelServer/README.md)
+- vramd: [`Vramd/README.md`](../Vramd/README.md)
 - Shared: [`Shared/README_PT.md`](../Shared/README_PT.md)

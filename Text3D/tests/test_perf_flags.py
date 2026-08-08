@@ -38,7 +38,7 @@ def test_defaults_preserve_original_behavior() -> None:
 
 
 def test_refresh_runtime_budget_without_vram_signal(monkeypatch) -> None:
-    """Sem sinal de VRAM (CPU/CI) → None (contrato UMS)."""
+    """Sem sinal de VRAM (CPU/CI) → None (contrato vramd)."""
     import aigamekit_shared.vram_budget as vb
 
     monkeypatch.setattr(vb, "free_vram_bytes", lambda device=None: None)

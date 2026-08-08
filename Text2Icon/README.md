@@ -54,27 +54,27 @@ text2icon generate "shield emblem" --quant-transformer sdnq-fp8
 | `--gpu-ids` | auto | Split multi-GPU (ex: `0,1`) |
 | `--quality` | `medium` | Tier de qualidade (fast/low/medium/high/highest) |
 | `--hw-auto/--no-hw-auto` | on | Auto-detecção de hardware (transformer + SDNQ + offload + clamp) |
-| `--ums-priority` | interactive / env | Prioridade na fila UMS (`interactive` \| `batch`) |
-| `--no-ums` | off | Forçar geração in-process (ignorar UMS) |
-| `--ums-stream` | off | Mostrar eventos de fila/progresso do UMS |
-| `--channels-last/--no-channels-last` | off (`generate`); **on** (`batch`) | NHWC (~−13% hot @ 6 GB); default ON em batch + UMS |
+| `--vramd-priority` | interactive / env | Prioridade na fila vramd (`interactive` \| `batch`) |
+| `--no-vramd` | off | Forçar geração in-process (ignorar vramd) |
+| `--vramd-stream` | off | Mostrar eventos de fila/progresso do vramd |
+| `--channels-last/--no-channels-last` | off (`generate`); **on** (`batch`) | NHWC (~−13% hot @ 6 GB); default ON em batch + vramd |
 | `--compile/--no-compile` | off | `torch.compile` — em 6 GB **piora** hot; deixar OFF |
 | `--compile-mode` | `default` | Modo Inductor (só se `--compile`) |
 
 Kernel opts: [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/findings/KERNEL_OPTS_FINDINGS.md).
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-Preferir `aigamekit-model-server` (supervisor do monorepo). `text2icon generate`
-delega automaticamente (auto-start salvo `AIGAMEKIT_UMS_AUTO_START=0`).
+Preferir `vramd` (supervisor do monorepo). `text2icon generate`
+delega automaticamente (auto-start salvo `VRAMD_AUTO_START=0`).
 
 ```bash
-aigamekit-model-server start
-text2icon generate "sword icon" -o sword.png --ums-stream
+vramd start
+text2icon generate "sword icon" -o sword.png --vramd-stream
 text2icon server   # deprecated — fallback per-tool apenas
 ```
 
-Ver [`ModelServer/README.md`](../ModelServer/README.md).
+Ver [`Vramd/README.md`](../Vramd/README.md).
 
 ## Modelos
 
@@ -122,7 +122,7 @@ Depois `gameassets batch` gera os ícones e `gameassets handoff` copia-os para `
 make test-text2icon
 # ou
 cd Text2Icon && pytest tests/
-# suite de cobertura (payload UMS, utils, hardware, CLI --help):
+# suite de cobertura (payload vramd, utils, hardware, CLI --help):
 pytest tests/test_text2icon_coverage_suite.py tests/test_text2icon_coverage_100b.py -q
 ```
 

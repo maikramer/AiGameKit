@@ -59,8 +59,8 @@ def test_model_footprint_returns_positive(monkeypatch: pytest.MonkeyPatch) -> No
         (1280, 720, 6, 1.5),
     ],
 )
-def test_ums_payload_resolution_matrix(width: int, height: int, steps: int, guidance: float) -> None:
-    from text2d.ums_payload import build_generate_request
+def test_vramd_payload_resolution_matrix(width: int, height: int, steps: int, guidance: float) -> None:
+    from text2d.vramd_payload import build_generate_request
 
     req = build_generate_request(
         prompt="p",
@@ -77,8 +77,8 @@ def test_ums_payload_resolution_matrix(width: int, height: int, steps: int, guid
 
 
 @pytest.mark.parametrize("seed", [None, 0, 1, 999999])
-def test_ums_payload_seed_variants(seed: int | None) -> None:
-    from text2d.ums_payload import build_generate_request
+def test_vramd_payload_seed_variants(seed: int | None) -> None:
+    from text2d.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="p", output="o.png", seed=seed)
     if seed is None:
@@ -95,8 +95,8 @@ def test_ums_payload_seed_variants(seed: int | None) -> None:
         ("none", "none"),
     ],
 )
-def test_ums_payload_quant_triple(quant: str, expect_sdnq: str) -> None:
-    from text2d.ums_payload import build_generate_request
+def test_vramd_payload_quant_triple(quant: str, expect_sdnq: str) -> None:
+    from text2d.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="p", output="o.png", quant_preset=quant)
     assert req.get("quant_preset") == expect_sdnq
@@ -160,9 +160,9 @@ def test_profile_dual_6gb_still_lists_two_gpus_vram() -> None:
     ],
 )
 def test_map_load_kwargs_variants(raw: dict, expected: object) -> None:
-    from text2d.ums_load import map_ums_load_kwargs
+    from text2d.vramd_load import map_vramd_load_kwargs
 
-    out = map_ums_load_kwargs(raw)
+    out = map_vramd_load_kwargs(raw)
     if "sdnq_preset" in raw or "quant_preset" in raw:
         assert out.get("quant_preset") == expected
     else:
@@ -192,7 +192,7 @@ def test_klein_flux_generator_class_importable() -> None:
 
 @pytest.mark.parametrize("mem_eff", [True, False])
 def test_build_request_memory_efficient_sdnq(mem_eff: bool) -> None:
-    from text2d.ums_payload import build_generate_request
+    from text2d.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="p", output="o", memory_efficient=mem_eff)
     assert req["memory_efficient"] is mem_eff
@@ -202,7 +202,7 @@ def test_build_request_memory_efficient_sdnq(mem_eff: bool) -> None:
 
 @pytest.mark.parametrize("flag", [True, False])
 def test_build_request_torch_compile_and_channels(flag: bool) -> None:
-    from text2d.ums_payload import build_generate_request
+    from text2d.vramd_payload import build_generate_request
 
     req = build_generate_request(
         prompt="p",

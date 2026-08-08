@@ -102,18 +102,18 @@ terrain3d --help        # Show all commands
 terrain3d --version     # Print version
 ```
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`terrain3d generate` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `AIGAMEKIT_UMS_AUTO_START=0`.
+`terrain3d generate` auto-delegates to **`vramd`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `VRAMD_AUTO_START=0`.
 
 ```bash
-terrain3d generate "mountain ridge" -o terrain.json --ums-stream
-terrain3d generate "valley" -o valley.json --no-ums        # force in-process
-ums status
-ums respawn terrain3d                                      # reload edited src/ code
+terrain3d generate "mountain ridge" -o terrain.json --vramd-stream
+terrain3d generate "valley" -o valley.json --no-vramd        # force in-process
+vramd status
+vramd respawn terrain3d                                      # reload edited src/ code
 ```
 
-Model: [terrain-diffusion-30m](https://huggingface.co/xandergos/terrain-diffusion-30m) (public; vendored — WorldClim bioclim rasters auto-download on first run). Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
+Model: [terrain-diffusion-30m](https://huggingface.co/xandergos/terrain-diffusion-30m) (public; vendored — WorldClim bioclim rasters auto-download on first run). Full guide: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Quality Presets
 
@@ -211,7 +211,7 @@ Terrain3D/
 ```bash
 cd Terrain3D && pip install -e ".[dev]"
 pytest tests/ -v
-# Coverage floor (UMS payload, postprocess, export, CLI --help):
+# Coverage floor (vramd payload, postprocess, export, CLI --help):
 pytest tests/test_terrain3d_coverage_suite.py tests/test_terrain3d_coverage_100b.py -q
 ruff check .
 ruff format .

@@ -169,19 +169,19 @@ text3d generate "robô" --octree-resolution 256 --num-chunks 8000 --steps 28
 | [docs/PAINT_SETUP.md](docs/PAINT_SETUP.md) | Redireciona para Paint3D (textura Hunyuan) |
 | [docs/PBR_MATERIALIZE.md](docs/PBR_MATERIALIZE.md) | PBR no GLB (Paint 2.1) vs Materialize em textura |
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`text3d generate` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+`text3d generate` delega automaticamente no **`vramd`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `VRAMD_AUTO_START=0`.
 
 ```bash
-text3d generate "um dragão" -o dragao.glb --ums-stream    # eventos de fila/progresso
-text3d generate "um dragão" -o dragao.glb --ums-priority batch
-text3d generate "um dragão" -o dragao.glb --no-ums        # forçar in-process
-ums status                                                # backends + HOLDING/QUEUE
-ums respawn text3d                                        # recarrega código src/ editado
+text3d generate "um dragão" -o dragao.glb --vramd-stream    # eventos de fila/progresso
+text3d generate "um dragão" -o dragao.glb --vramd-priority batch
+text3d generate "um dragão" -o dragao.glb --no-vramd        # forçar in-process
+vramd status                                                # backends + HOLDING/QUEUE
+vramd respawn text3d                                        # recarrega código src/ editado
 ```
 
-Modelos: shape [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (SDNQ INT4 em GPUs pequenas; público, Tencent Community License; controlos bbox/pose/point/voxel) + imagem de referência Text2D FLUX (ver [Text2D/README_PT](../Text2D/README_PT.md) para o gate do 9B). Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
+Modelos: shape [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (SDNQ INT4 em GPUs pequenas; público, Tencent Community License; controlos bbox/pose/point/voxel) + imagem de referência Text2D FLUX (ver [Text2D/README_PT](../Text2D/README_PT.md) para o gate do 9B). Guia completo: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Variáveis de Ambiente
 

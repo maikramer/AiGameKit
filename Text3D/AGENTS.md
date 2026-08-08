@@ -18,7 +18,7 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 | Textured remesh | `utils/mesh_remesh_textured.py` (904 lines) | Isotropic remesh + xatlas UV reprojection |
 | Master bake | `utils/bake_master.py` (288 lines) | LOD0: decimation + tangents + KTX2 + meshopt |
 | Export/format | `utils/export.py` (379 lines) | `save_mesh`, `convert_mesh`, `weld_glb` |
-| GLTF finish | `utils/gltf_finish.py` | Post-LOD: `[ktxdecompress]` → shade+N+T (bpy) → dedup → prune `--keep-attributes` → UASTC → meshopt |
+| GLTF finish | `utils/gltf_finish.py` | Post-LOD: `[ktxdecompress]` → shade+N+T → dedup → prune → **UASTC `*normal*` + ETC1S albedo/MR/AO/emissive** → meshopt |
 | Alignment | `utils/mesh_align_hunyuan.py` (142 lines) | +Z face normal to ground |
 | Base plane | `utils/mesh_base_plane.py` (288 lines) | Base plane detection/removal |
 | Background removal | `utils/bg_removal.py` (98 lines) | BiRefNet |
@@ -29,7 +29,7 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 | Octree soft-tune por size_m | `bbox_tune.py` | `char_m=(L·H·W)^(1/3)`; não passar `octree_resolution` salvo override |
 | Manifest authoring | [`docs/MANIFEST_AUTHORING.md`](../docs/MANIFEST_AUTHORING.md) | Como configurar Omni/size no GameAssets |
 | Octree × faces | [`docs/findings/OCTREE_FACES_FINDINGS.md`](../docs/findings/OCTREE_FACES_FINDINGS.md) | Empírico κ / char_m² |
-| UMS payload builder | `ums_payload.py` | Shared with GameAssets batch waves |
+| vramd payload builder | `ums_payload.py` | Shared with GameAssets batch waves |
 | Findings hub | `docs/MODEL_FINDINGS.md`, `docs/OMNI_SHAPE_FINDINGS.md` | VRAM / Omni / flashvdm |
 
 ## CLI COMMANDS
@@ -45,7 +45,7 @@ Stage 1 — `generate`: Text/Image → raw GLB. Text2D prompt + Hunyuan3D marchi
 
 Stage 2 — `topology-fix`: Shared profile `topology_clean` (reweld → weld → slivers/debris → fill → selective watertight → optional shell strip / morph-close → shade-smooth). See `docs/HUNYUAN_MESH_AND_PARTS_LESSONS_PT.md`. CLI: `--fill-holes-sides`, `--engine arrays|bpy`, `--morph-close*`, `--remove-internal-shells` / `--keep-internal-shells`, `--category`.
 
-Stage 3 — `bake-master`: LOD0 production mesh. Decimation + normal bake from high-poly + **KTX2 (UASTC) + meshopt** (defaults ON). Meshopt: bpy 5.2+ + `libmeshoptimizer-dev`; pós-KTX2 usa gltf-transform. KTX2: Node `npx @gltf-transform/cli` **+** CLI `ktx` (KTX-Software). Ver [`docs/GLB_FINISH_COMPRESSION.md`](../docs/GLB_FINISH_COMPRESSION.md).
+Stage 3 — `bake-master`: LOD0 production mesh. Decimation + normal bake from high-poly + **KTX2 híbrido (ETC1S albedo / UASTC normais) + meshopt** (defaults ON). Meshopt: bpy 5.2+ + `libmeshoptimizer-dev`; pós-KTX2 usa gltf-transform. KTX2: Node `npx @gltf-transform/cli` **+** CLI `ktx`. Intermédios bpy exportam **JPEG** (não PNG). Ver [`docs/GLB_FINISH_COMPRESSION.md`](../docs/GLB_FINISH_COMPRESSION.md).
 
 Stage 4 — `lod`: LOD triplet (LOD0/1/2) with textured or geometry-only paths. Preserves armatures and animations intact.
 
@@ -76,7 +76,7 @@ L=largura (X), H=altura (Y), W=profundidade (Z). Full map:
 | Flag | Path | Decimate |
 |------|------|----------|
 | `--painted-mesh` | `generate_lod_textured_glb_triplet` → `remesh_textured_glb` | **meshoptimizer** (`gltf-transform simplify`, costuras UV bloqueadas, atlas intacto); abaixo do piso de costuras → **rebake** (decimate + xatlas + closest-point). Sem `npx` cai para COLLAPSE legado |
-| (omitido) | `generate_lod_glb_triplet` (Round 3: input = animated/rigged) | weld lod0 (modo B) + simplify LOD1/2 |
+| (omitido) | `generate_lod_glb_triplet` (Round 3: input = animated/rigged) | **meshopt-first** (`weld=False` se skinned); no piso de costuras **aceita faces acima do alvo** (COLLAPSE abaixo rasgaria UVs/weights). Sem CLI → COLLAPSE bpy + weld modo B |
 
 Preserves armatures/animations. Manual rebind: `rigging3d transfer-weights` (fora do DAG Round 3).
 
@@ -97,6 +97,10 @@ Preserves armatures/animations. Manual rebind: `rigging3d transfer-weights` (for
 **FORBIDDEN:** Weld/`remove_doubles` immediately before COLLAPSE on healthy painted meshes (stalls face budget → identical lod1/lod2). Exception: the rebake route welds on purpose — the UVs are discarded there anyway.
 
 **FORBIDDEN:** Decimate COLLAPSE with the original atlas at aggressive ratios — it collapses across UV islands and shreds the texture. Route through `meshopt_simplify_glb` (atlas preserved) or the rebake (atlas repainted). Detector: V/Tri *rises* with decimation. See [`MESH_PIPELINE_FINDINGS`](../docs/findings/MESH_PIPELINE_FINDINGS.md).
+
+**FORBIDDEN:** `gltf-transform weld` before simplify on **skinned** GLBs — merges verts that differ only in `JOINTS`/`WEIGHTS`. Geometric LOD uses `weld=False` when `_glb_has_skins`.
+
+**FORBIDDEN:** Forçar COLLAPSE abaixo do piso de costuras no path geométrico/rigado. Aceitar faces mais altas; rebake+`transfer_weights` está fora do DAG Round 3.
 
 **FORBIDDEN:** Silent exception swallowing in `weld_glb` (`export.py`). Use `try/except` with `log.warning`.
 

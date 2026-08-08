@@ -66,7 +66,7 @@ class Text3DProfile:
     simplify_texture_size: int | None = None
     # Controlos Hunyuan3D-Omni (bbox / pose / point / voxel). Ver ``omni_ctrl.OmniControls``.
     omni: Any | None = None
-    # Peak VRAM UMS (shape wave). None → hw_auto / admit-safe no ums_batch.
+    # Peak VRAM vramd (shape wave). None → hw_auto / admit-safe no vramd_batch.
     # ``memory_efficient`` não é modo de perfil — só sdnq_preset explícito; resto hw_auto.
     sdnq_preset: str | None = None
     # Split stump+top (text3d split-at-height). None = auto (on para category=tree).

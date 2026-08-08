@@ -3,8 +3,8 @@
 This document defines a **reference layout** and **handoff contract** between the asset-generation tools (centered on [GameAssets](../GameAssets/)) and a **browser runtime** ([VibeGame](../VibeGame/)). It complements [INSTALLING.md](INSTALLING.md).
 
 **Runtime findings (models, VRAM, Omni, mesh):** [MODEL_FINDINGS.md](MODEL_FINDINGS.md) · [findings/](findings/README.md).  
-**UMS batch waves:** [GAMEASSETS_UMS_BATCH.md](GAMEASSETS_UMS_BATCH.md) · **Mission:** [mission/](mission/README.md).  
-VRAM: **UMS + hw-auto** (no public `--low-vram`); editable monorepo bins: [INSTALLING.md](INSTALLING.md).
+**vramd batch waves:** [GAMEASSETS_UMS_BATCH.md](GAMEASSETS_UMS_BATCH.md) · **Mission:** [mission/](mission/README.md).  
+VRAM: **vramd + hw-auto** (no public `--low-vram`); editable monorepo bins: [INSTALLING.md](INSTALLING.md).
 
 ## 1. Roles
 
@@ -56,7 +56,7 @@ For the runtime to load content **without** a custom CMS:
 
 1. **Install CLIs** (repo root): `./install.sh` for the tools you need (see [INSTALLING.md](INSTALLING.md)); include `gameassets`, `text2d`/`texture2d`, `text3d`, optional `paint3d`, `text2sound`, `animator3d` (for animated characters), `vibegame`, etc.
 2. **Author** `game.yaml` + `manifest.csv` + presets ([GameAssets README](../GameAssets/README.md)).
-3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv`. GPU stages ride **UMS waves** (shape → paint → optional 2D/audio/terrain; see [GAMEASSETS_UMS_BATCH.md](GAMEASSETS_UMS_BATCH.md)). Master DAG after paint is **Round 3** (rig painted → `game-pack`×1 → `text3d lod`) — [MESH_PIPELINE_FINDINGS](findings/MESH_PIPELINE_FINDINGS.md). Omni knobs / soft-fill by category: [OMNI_SHAPE_FINDINGS.md](OMNI_SHAPE_FINDINGS.md). Stages (3D, rig, animate) auto-detect from manifest + `game.yaml`; `--no-rig` / `--no-animate` / `--no-ums` to opt out.
+3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv`. GPU stages ride **vramd waves** (shape → paint → optional 2D/audio/terrain; see [GAMEASSETS_UMS_BATCH.md](GAMEASSETS_UMS_BATCH.md)). Master DAG after paint is **Round 3** (rig painted → `game-pack`×1 → `text3d lod`) — [MESH_PIPELINE_FINDINGS](findings/MESH_PIPELINE_FINDINGS.md). Omni knobs / soft-fill by category: [OMNI_SHAPE_FINDINGS.md](OMNI_SHAPE_FINDINGS.md). Stages (3D, rig, animate) auto-detect from manifest + `game.yaml`; `--no-rig` / `--no-animate` / `--no-vramd` to opt out.
 4. **Handoff**: **`gameassets handoff --public-dir path/to/public`** copies/symlinks from the profile `output_dir` into `public/assets/…`, writes `assets/gameassets_handoff.json`, and can **prefer animated GLBs** over rigged/base when both exist. Alternatively copy files manually (see [VibeGame/examples/simple-rpg](../VibeGame/examples/simple-rpg/) for a full handoff layout).
 
 **Precompute contract (colisores):** no fim do master pipeline, o batch emite o sidecar `meshes/{id}_precompute.json` (`aigamekit-lab precompute <collision> --stump <stump> --category <cat>`; header-only, sem bpy; falha → skip soft). O handoff **inline** esse bloco na row do `gameassets_handoff.json`:

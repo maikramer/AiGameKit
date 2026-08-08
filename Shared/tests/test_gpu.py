@@ -110,7 +110,7 @@ class TestClearCudaMemoryGuard:
 
     ``torch.cuda.synchronize()`` faz ``_lazy_init()`` incondicionalmente —
     criaria um contexto CUDA primário (~0.3-1.3 GiB) que só morre com o
-    processo. É o que matava a VRAM do supervisor UMS em modo subprocesso.
+    processo. É o que matava a VRAM do supervisor vramd em modo subprocesso.
     """
 
     def _fake_torch(self, calls: list[str], *, available: bool, initialized: bool) -> SimpleNamespace:

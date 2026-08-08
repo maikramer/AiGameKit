@@ -2,13 +2,13 @@
 
 Separação de camadas:
 
-* **UMS admit** (:mod:`modelserver.vram_planner`) — pico estático pesos+act+safety
+* **vramd admit** (:mod:`vramd.vram_planner`) — pico estático pesos+act+safety
   *antes* de aceitar o job.
 * **Runtime budget** (este módulo) — *depois* dos pesos/offload, dimensiona o
   batch de activação pela VRAM **livre** (``mem_get_info``). Evita OOM → CPU.
 
 Text3D usa isto para ``num_chunks`` do decode; Paint3D para views/tiles/DINO;
-qualquer backend UMS pode chamar a mesma fórmula.
+qualquer backend vramd pode chamar a mesma fórmula.
 """
 
 from __future__ import annotations

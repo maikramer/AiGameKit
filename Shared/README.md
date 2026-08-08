@@ -17,7 +17,7 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 | `logging` | Shared `Logger` with Rich/ANSI console **and** daily file logs (`configure_logging`, stdlib bridge). See [docs/LOGGING.md](../docs/LOGGING.md) |
 | `gpu` | GPU detection, VRAM monitoring, `warn_if_vram_occupied()`, `enforce_exclusive_gpu()`, `kill_gpu_compute_processes_aggressive()`, `format_bytes()`, `clear_cuda_memory()` |
 | `subprocess_utils` | `run_cmd()`, `run_cmd_streaming()`, `resolve_binary()` (prefers `<Tool>/.venv/bin` when `AIGAMEKIT_PREFER_MONOREPO=1`), `merge_subprocess_output()`, `RunResult` |
-| `cli_helpers` | UMS opts (`try_ums_delegation`, `with_ums_peak_opts`, `prepare_gpu_exclusive` — GPU prep only after UMS fail / `--no-ums`) |
+| `cli_helpers` | vramd opts (`try_vramd_delegation`, `with_vramd_peak_opts`, `prepare_gpu_exclusive` — GPU prep only after vramd fail / `--no-vramd`) |
 | `env` | Canonical env-var constants (`TOOL_BINS`, `get_tool_bin()`, `prefer_monorepo_tools()`, `ensure_pytorch_cuda_alloc_conf()`, `subprocess_gpu_env()`) |
 | `installer/` | Ponte Clified (`install.sh` → `tools.yaml`); hooks por ferramenta (`clified_hooks`, `*_extras`) |
 | `cli_rich` | `setup_rich_click()` / `setup_rich_click_module(tool=…)` — rich-click config; `tool=` wires file logging |
@@ -27,10 +27,10 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 | `perfstore/` | SQLite perf database (`PerfDB`) for storing and querying profiling records |
 | `progress` | `emit_progress()` / `emit_result()` / `parse_progress_line()` — structured JSONL progress for batch tools |
 | `pipeline_trace` | JSONL pipeline-stage tracing for batch orchestration (`PipelineTracer`) |
-| `model_server` | **UMS client** — `delegate_to_ums()`, `submit_to_ums()`, `wait_ums_job()`, `respawn_ums_backend()`, `ensure_ums_running()`, `ensure_vram_available()`, `discover_server_pids()`; `UMS_DO_NOT_KILL_TIP`. See [ModelServer/README.md](../ModelServer/README.md) |
-| `lowvram` | Model VRAM `FOOTPRINTS` registry (peak accounting for UMS admit) + `get_footprint()`, `plan_offload()` |
-| `vram_budget`, `paint_budget`, `lod_budget` | Per-domain VRAM/face budgets (UMS peak signals, Paint3D views, LOD0 face targets) |
-| `ums_payload`, `ums_load`, `worker_protocol`, `worker_serve`, `worker_serve_adapter_base` | UMS subprocess worker protocol + payload builders (JSONL stdin/stdout workers per tool) |
+| `model_server` | **vramd client** — `delegate_to_vramd()`, `submit_to_ums()`, `wait_ums_job()`, `respawn_ums_backend()`, `ensure_ums_running()`, `ensure_vram_available()`, `discover_server_pids()`; `UMS_DO_NOT_KILL_TIP`. See [Vramd/README.md](../Vramd/README.md) |
+| `lowvram` | Model VRAM `FOOTPRINTS` registry (peak accounting for vramd admit) + `get_footprint()`, `plan_offload()` |
+| `vram_budget`, `paint_budget`, `lod_budget` | Per-domain VRAM/face budgets (vramd peak signals, Paint3D views, LOD0 face targets) |
+| `ums_payload`, `ums_load`, `worker_protocol`, `worker_serve`, `worker_serve_adapter_base` | vramd subprocess worker protocol + payload builders (JSONL stdin/stdout workers per tool) |
 | `base_generator` | `DiffusionGeneratorBase` — shared lifecycle (warmup, unload, `_place_with_planner`, `save_image`, `generate_batch`) for all diffusion tools |
 | `hardware` | `hw-auto` planning (GPU detect → model/quant/offload profile) shared across tools |
 | `model_download` | `ensure_model()` — resumable HF weight download with status callback |
@@ -54,22 +54,35 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 ## Installation
 
 ```bash
-# Editable install (required before any other package).
-# Core deps (torch, rich-click, bitsandbytes/torchao/quanto/sdnq, xformers, psutil, bpy>=5.2.0)
-# are pulled in automatically — there are no optional GPU/CLI/quantization extras.
+# Núcleo (~9 MB): click, rich, rich-click, psutil, nvidia-ml-py, PyYAML.
 cd Shared && pip install -e .
 
-# Development dependencies (pytest, pytest-cov, ruff, mypy, clified, numpy, scipy, trimesh)
-cd Shared && pip install -e ".[dev]"
+# Stack completo + tooling de testes.
+cd Shared && pip install -e ".[all,dev]"
 ```
 
-### Optional Extras
+### Extras
 
-| Extra | Installs | Used by |
-|-------|----------|---------|
-| `dev` | `pytest`, `pytest-cov`, `ruff`, `mypy`, `clified`, `numpy`, `scipy`, `trimesh` | Testing & linting (+ `mesh_repair*` unit deps for CI) |
+Todos os módulos usam **lazy import** do stack pesado, por isso o núcleo chega a
+quem só orquestra. O supervisor vramd instala-se sem torch — 8.7 MB em vez de
+~5 GB — e a suite completa do Shared (1056 testes) passa nesse venv leve.
 
-> Runtime deps (`torch`, `rich-click`, `bitsandbytes`, `torchao`, `optimum-quanto`, `sdnq`, `xformers` on Linux, `psutil`, `bpy>=5.2.0`) are **core** — not behind an extra. There is **no** CLI `--low-vram` / `--memory-efficient` flag; VRAM is managed by **UMS + hw-auto** (see [ModelServer/README.md](../ModelServer/README.md)).
+| Extra | Traz | Quem precisa |
+|-------|------|--------------|
+| *(nenhum)* | núcleo: click, rich, rich-click, psutil, nvidia-ml-py, PyYAML | **ModelServer** (supervisor vramd) |
+| `gpu` | torch, bitsandbytes, torchao, optimum-quanto, sdnq, xformers, transformers, hf-xet, huggingface-hub | tools de inferência |
+| `image` | Pillow | tools 2D e quem grava PNG |
+| `mesh` | bpy>=5.2.0 | tools de malha (`mesh_repair`, `bpy_mesh`) |
+| `all` | `gpu` + `image` + `mesh` | desenvolvimento completo |
+| `dev` | pytest, pytest-cov, ruff, mypy, clified, numpy, scipy, trimesh | testes e lint |
+
+Cada pacote declara o que usa, ex.:
+`aigamekit-shared[gpu,image] @ file:../Shared`. O `[dev]` só pode conter
+**tooling puro** — o instalador (`installer/dev_extras.py`) instala esses specs
+diretamente, e uma self-reference seria procurada no PyPI.
+
+> Não há flag CLI `--low-vram` / `--memory-efficient`; a VRAM é gerida por
+> **vramd + hw-auto** (ver [Vramd/README.md](../Vramd/README.md)).
 
 ## QualityEngine
 
@@ -84,7 +97,30 @@ Centralized quality-preset system used by all Python generation tools.
 - All Python tools expose `--quality <tier>` and optionally `--category <name>`
 - GameAssets uses `generation:` in `game.yaml` → maps to `--quality`
 
-```python
+```p
+### Extras (desde 2026-08)
+
+O `aigamekit-shared` tem um **núcleo leve** (~9 MB: click/rich/psutil/nvidia-ml-py/PyYAML)
+e o stack pesado em extras. Todos os módulos usam lazy import, por isso o núcleo
+chega para quem só orquestra:
+
+| Extra | Traz | Quem precisa |
+|---|---|---|
+| *(nenhum)* | núcleo | **ModelServer** (supervisor vramd) |
+| `gpu` | torch, bitsandbytes, torchao, optimum-quanto, sdnq, xformers, transformers, huggingface-hub | tools de inferência |
+| `image` | Pillow | tools 2D e quem grava PNG |
+| `mesh` | bpy | tools de malha |
+| `all` | os três | desenvolvimento completo |
+
+```bash
+cd Shared && pip install -e .              # núcleo
+cd Shared && pip install -e ".[all,dev]"   # tudo + tooling de testes
+```
+
+Cada pacote declara o que usa (`aigamekit-shared[gpu,image] @ file:../Shared`).
+O supervisor vramd instala-se **sem torch**: 8.7 MB em vez de ~5 GB, e a suite do
+Shared passa inteira (1056 testes) nesse venv leve.
+ython
 from aigamekit_shared.quality import QualityEngine
 
 engine = QualityEngine()
@@ -135,13 +171,13 @@ list_nvidia_compute_apps() # [(pid, name, used_mib), ...]
 detect_gpu_ids()           # [0, 1, ...]
 ```
 
-Used by: UMS `doctor` / admit free-VRAM, GameAssets `info` / GPU preflight, Text3D `gpu-processes`, `detect_low_memory`, exclusive-GPU helpers.
+Used by: vramd `doctor` / admit free-VRAM, GameAssets `info` / GPU preflight, Text3D `gpu-processes`, `detect_low_memory`, exclusive-GPU helpers.
 
-**Not a substitute:** PyPI `hf-vram-calc` estimates LLM/KV-cache peaks — wrong model for diffusion UMS admit (`FOOTPRINTS` + `vram_planner`). Prefer NVML free + calibrated footprints.
+**Not a substitute:** PyPI `hf-vram-calc` estimates LLM/KV-cache peaks — wrong model for diffusion vramd admit (`FOOTPRINTS` + `vram_planner`). Prefer NVML free + calibrated footprints.
 
 ## File logging
 
-Every Python CLI (and UMS) mirrors `Logger` + stdlib logging to:
+Every Python CLI (and vramd) mirrors `Logger` + stdlib logging to:
 
 ```text
 ~/.cache/aigamekit/logs/<tool>-YYYY-MM-DD.log
@@ -234,7 +270,7 @@ cd Shared && pip install -e ".[dev]"
 
 # Run tests
 pytest tests -v
-# Coverage floor (QualityEngine, UMS helpers, path/seed/hardware, …):
+# Coverage floor (QualityEngine, vramd helpers, path/seed/hardware, …):
 pytest tests/test_shared_coverage_100.py -q
 
 # Or via Makefile at monorepo root

@@ -45,7 +45,7 @@ def model_footprint(model_id: str) -> Any:
 
 
 def model_footprint_key(model_id: str) -> str:
-    """Chave de footprint (registry lowvram) do modelo BASE — para peak UMS."""
+    """Chave de footprint (registry lowvram) do modelo BASE — para peak vramd."""
     if model_id == LOW_VRAM_MODEL_ID:
         return "flux-klein-4b"
     return "flux-klein-9b"

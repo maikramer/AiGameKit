@@ -1,4 +1,4 @@
-"""Pós-processo GLB pintado — smooth / upscale / preserve_origin (CLI + UMS)."""
+"""Pós-processo GLB pintado — smooth / upscale / preserve_origin (CLI + vramd)."""
 
 from __future__ import annotations
 

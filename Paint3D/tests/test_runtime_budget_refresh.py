@@ -1,4 +1,4 @@
-"""Testes do refresh_runtime_budget do PaintBatchProcessor (overrides UMS)."""
+"""Testes do refresh_runtime_budget do PaintBatchProcessor (overrides vramd)."""
 
 from __future__ import annotations
 

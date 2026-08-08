@@ -146,18 +146,18 @@ rigging3d transfer-weights -s character_rigged_hi.glb -t character_lod0.glb -t c
 
 ---
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`rigging3d pipeline` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first use unless `AIGAMEKIT_UMS_AUTO_START=0`.
+`rigging3d pipeline` auto-delegates to **`vramd`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first use unless `VRAMD_AUTO_START=0`.
 
 ```bash
-rigging3d pipeline char.glb -o char_rigged.glb --ums-stream
-rigging3d pipeline char.glb -o char_rigged.glb --no-ums   # force in-process
-ums status
-ums respawn rigging3d                                     # reload edited src/ code
+rigging3d pipeline char.glb -o char_rigged.glb --vramd-stream
+rigging3d pipeline char.glb -o char_rigged.glb --no-vramd   # force in-process
+vramd status
+vramd respawn rigging3d                                     # reload edited src/ code
 ```
 
-Model: [SkinTokens](https://huggingface.co/VAST-AI/SkinTokens) (TokenRig; public download, MIT — auto-downloaded ~1.6 GB on first run). Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
+Model: [SkinTokens](https://huggingface.co/VAST-AI/SkinTokens) (TokenRig; public download, MIT — auto-downloaded ~1.6 GB on first run). Full guide: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Quality Presets
 

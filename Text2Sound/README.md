@@ -149,18 +149,18 @@ Install the Cursor agent skill into a game project.
 text2sound skill install -t /path/to/game --force
 ```
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`text2sound generate` auto-delegates to **`aigamekit-model-server`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `AIGAMEKIT_UMS_AUTO_START=0`.
+`text2sound generate` auto-delegates to **`vramd`** — the monorepo GPU supervisor (one process, one socket, job queue with priority + VRAM affinity, weight+LRU eviction, subprocess workers per tool). Auto-starts on first generate unless `VRAMD_AUTO_START=0`.
 
 ```bash
-text2sound generate "sword clash" -o clash.wav --ums-stream
-text2sound generate "drum loop" -o drums.wav --no-ums     # force in-process
-ums status
-ums respawn text2sound                                    # reload edited src/ code
+text2sound generate "sword clash" -o clash.wav --vramd-stream
+text2sound generate "drum loop" -o drums.wav --no-vramd     # force in-process
+vramd status
+vramd respawn text2sound                                    # reload edited src/ code
 ```
 
-Both models are **gated**: accept terms on the Hub and set `HF_TOKEN` before the first download. Full guide: [`ModelServer/README.md`](../ModelServer/README.md).
+Both models are **gated**: accept terms on the Hub and set `HF_TOKEN` before the first download. Full guide: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Quality Presets
 

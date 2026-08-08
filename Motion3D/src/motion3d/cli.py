@@ -13,7 +13,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
-    add_ums_options,
+    add_vramd_options,
     delegate_or_prepare,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
@@ -24,7 +24,7 @@ from . import __version__
 from .cli_rich import RICH_CLICK, click  # noqa: F401
 from .generator import MotionGenerator
 from .hardware import detect_hardware_profile, estimate_peak_mib, hw_auto_enabled
-from .ums_payload import build_generate_request
+from .vramd_payload import build_generate_request
 from .weights import CACHE_DIR, HF_REPO, ensure_weights
 
 console = Console()
@@ -77,14 +77,14 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     is_flag=True,
     help="When writing .glb, also save sibling .npz with joints",
 )
-@click.option("--gpu-ids", type=str, default=None, help="GPU ids (UMS load opts / in-process)")
+@click.option("--gpu-ids", type=str, default=None, help="GPU ids (vramd load opts / in-process)")
 @click.option(
     "--sdnq-preset",
     type=str,
     default=None,
     help="SDNQ preset for DiT (none|sdnq-uint8|sdnq-int4); hw-auto fills when omitted",
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -100,9 +100,9 @@ def generate_cmd(
     also_npz: bool,
     gpu_ids: str | None,
     sdnq_preset: str | None,
-    ums_priority: str,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Generate motion from text → NPZ and/or animated GLB (bpy)."""
     validation_steps: int | None = None
@@ -193,9 +193,9 @@ def generate_cmd(
         t_start=t0,
         noun="Motion",
         console=console,
-        enabled=not no_ums,
-        priority=ums_priority,
-        stream=ums_stream,
+        enabled=not no_vramd,
+        priority=vramd_priority,
+        stream=vramd_stream,
         gpu_ids=gpu_list,
         memory_efficient=mem_eff,
         sdnq_preset=sdnq_preset,
@@ -474,7 +474,7 @@ def pack_rigged_cmd(
 
 @cli.command("doctor")
 def doctor_cmd() -> None:
-    """Check deps, bpy, cache layout, UMS reachability, optional weights."""
+    """Check deps, bpy, cache layout, vramd reachability, optional weights."""
     table = Table(title="Motion3D doctor", show_header=True)
     table.add_column("Check")
     table.add_column("Status")
@@ -498,9 +498,9 @@ def doctor_cmd() -> None:
     table.add_row("Peak estimate (lite/int4)", f"~{peak_lite} MiB")
 
     try:
-        from aigamekit_shared.model_server import fetch_ums_queue_snapshot
+        from aigamekit_shared.vramd_client import fetch_vramd_queue_snapshot
 
-        snap = fetch_ums_queue_snapshot()
+        snap = fetch_vramd_queue_snapshot()
         table.add_row("UMS", "[green]up[/green]" if snap is not None else "[yellow]down[/yellow]")
     except Exception as exc:
         table.add_row("UMS", f"[yellow]n/a[/yellow] ({exc})")
@@ -529,10 +529,10 @@ def doctor_cmd() -> None:
 @click.option(
     "--ums-worker",
     is_flag=True,
-    help="Modo worker subprocesso UMS (JSONL stdin/stdout).",
+    help="Modo worker subprocesso vramd (JSONL stdin/stdout).",
 )
 def serve(ums_worker: bool) -> None:
-    """Modo worker subprocesso do UMS (subprocess-per-backend)."""
+    """Modo worker subprocesso do vramd (subprocess-per-backend)."""
     from aigamekit_shared.worker_serve import run_ums_worker_cli
     from motion3d.worker_serve_adapter import Adapter
 

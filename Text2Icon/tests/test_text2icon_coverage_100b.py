@@ -88,29 +88,29 @@ def test_validate_params_ok_1024x512() -> None:
     assert ok is True and err is None
 
 
-def test_ums_payload_dims_0() -> None:
-    from text2icon.ums_payload import build_generate_request
+def test_vramd_payload_dims_0() -> None:
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="p", output="o.png", width=512, height=512)
     assert req["width"] == 512 and req["height"] == 512
 
 
-def test_ums_payload_dims_1() -> None:
-    from text2icon.ums_payload import build_generate_request
+def test_vramd_payload_dims_1() -> None:
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="p", output="o.png", width=768, height=768)
     assert req["width"] == 768 and req["height"] == 768
 
 
-def test_ums_payload_dims_2() -> None:
-    from text2icon.ums_payload import build_generate_request
+def test_vramd_payload_dims_2() -> None:
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="p", output="o.png", width=1024, height=512)
     assert req["width"] == 1024 and req["height"] == 512
 
 
-def test_ums_payload_dims_3() -> None:
-    from text2icon.ums_payload import build_generate_request
+def test_vramd_payload_dims_3() -> None:
+    from text2icon.vramd_payload import build_generate_request
 
     req = build_generate_request(prompt="p", output="o.png", width=256, height=256)
     assert req["width"] == 256 and req["height"] == 256

@@ -11,7 +11,7 @@ O import principal é relativo (``from .hy3dshape.pipelines import ...``) dentro
 pacote ``text3d``. Esta função utilitária garante que ``import hy3dshape`` absoluto
 também funciona (necessário para módulos internos do upstream que usam import absoluto).
 
-Com ``quiet=True`` (default UMS/adapter): redireciona ``print`` do vendor para o
+Com ``quiet=True`` (default vramd/adapter): redireciona ``print`` do vendor para o
 logger ``hy3dshape`` (nível DEBUG), alinhado ao logging do monorepo.
 """
 
@@ -76,7 +76,7 @@ def ensure_hy3dshape_on_path(*, quiet: bool = True) -> Path:
     work. Idempotent — safe to call multiple times.
 
     Args:
-        quiet: Se True, ``print`` do vendor vai para logger DEBUG (padrão UMS).
+        quiet: Se True, ``print`` do vendor vai para logger DEBUG (padrão vramd).
     """
     parent = str(resolve_hy3dshape_root().parent)
     if parent not in sys.path:

@@ -613,14 +613,14 @@ def test_cli_decompose_ums() -> None:
     runner = CliRunner()
     r = runner.invoke(main, ["decompose", "--help"])
     assert r.exit_code == 0
-    assert "--ums-priority" in r.output
+    assert "--vramd-priority" in r.output
 
 
 def test_cli_decompose_no_ums() -> None:
     runner = CliRunner()
     r = runner.invoke(main, ["decompose", "--help"])
     assert r.exit_code == 0
-    assert "--no-ums" in r.output
+    assert "--no-vramd" in r.output
 
 
 def test_cli_version_flag() -> None:
@@ -710,7 +710,7 @@ def test_decompose_help_has_ums_stream() -> None:
     runner = CliRunner()
     r = runner.invoke(main, ["decompose", "--help"])
     assert r.exit_code == 0
-    assert "--ums-stream" in r.output
+    assert "--vramd-stream" in r.output
 
 
 def test_decompose_help_has_fine_parts() -> None:

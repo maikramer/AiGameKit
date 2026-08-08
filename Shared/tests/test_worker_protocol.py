@@ -1,4 +1,4 @@
-"""Tests do protocolo JSONL partilhado entre UMS e workers subprocesso."""
+"""Tests do protocolo JSONL partilhado entre vramd e workers subprocesso."""
 
 from __future__ import annotations
 

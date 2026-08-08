@@ -349,13 +349,13 @@ def clear_cuda_memory(devices: list[int] | None = None) -> None:
     """Força GC e esvazia cache CUDA — útil entre fases pesadas.
 
     Também tenta ``ipc_collect`` (quando existe) para libertar blocos partilhados
-    que ``empty_cache`` sozinho deixa no processo (VRAM «morta» no UMS).
+    que ``empty_cache`` sozinho deixa no processo (VRAM «morta» no vramd).
 
     Se o processo **nunca inicializou CUDA** (``torch.cuda.is_initialized()``),
     faz apenas ``gc.collect()`` e retorna: não há tensores nem caches para
     limpar, e ``torch.cuda.synchronize()`` chamaria ``_lazy_init()`` — criando
     um contexto CUDA primário (~0.3-1.3 GiB) que **só morre com o processo**.
-    Era assim que o supervisor UMS (modo subprocesso, sem tensores próprios)
+    Era assim que o supervisor vramd (modo subprocesso, sem tensores próprios)
     ficava a segurar VRAM residual para sempre após o primeiro scrub.
 
     Args:
@@ -643,17 +643,17 @@ def warn_if_vram_occupied(threshold_mib: int = 1024) -> list[str]:
             c = None
         tip = ""
         try:
-            from .model_server import (
-                UMS_DO_NOT_KILL_TIP,
-                fetch_ums_queue_snapshot,
-                format_ums_holding_summary,
-                is_ums_running,
+            from .vramd_client import (
+                VRAMD_DO_NOT_KILL_TIP,
+                fetch_vramd_queue_snapshot,
+                format_vramd_holding_summary,
+                is_vramd_running,
             )
 
-            if is_ums_running():
-                snap = fetch_ums_queue_snapshot()
-                hold = format_ums_holding_summary(snap) if snap else "UMS ativo"
-                tip = f"\nUMS: {hold}\n{UMS_DO_NOT_KILL_TIP}"
+            if is_vramd_running():
+                snap = fetch_vramd_queue_snapshot()
+                hold = format_vramd_holding_summary(snap) if snap else "vramd ativo"
+                tip = f"\nvramd: {hold}\n{VRAMD_DO_NOT_KILL_TIP}"
         except Exception:
             tip = ""
         msg = (
@@ -687,12 +687,12 @@ def kill_gpu_compute_processes_aggressive(
         extra_exclude_pids: PIDs adicionais a proteger (além do caller).
         protect_model_servers: Se ``True`` (default), descobre e protege
             automaticamente os PIDs de todos os model servers ativos
-            (``aigamekit_shared.model_server.discover_server_pids``).
+            (``aigamekit_shared.vramd_client.discover_server_pids``).
             Isto evita que o text3d/paint3d matem um model server que está
             a segurar VRAM para outras ferramentas.
         term_wait_seconds: Tempo entre SIGTERM e SIGKILL.
-        respect_ums_queue: Se ``True`` (default) e o UMS tem jobs inflight/queued,
-            **recusa** matar processos — a fila UMS é a autoridade de VRAM.
+        respect_ums_queue: Se ``True`` (default) e o vramd tem jobs inflight/queued,
+            **recusa** matar processos — a fila vramd é a autoridade de VRAM.
 
     Returns:
         Linhas de log legíveis.
@@ -701,30 +701,30 @@ def kill_gpu_compute_processes_aggressive(
 
     if respect_ums_queue:
         try:
-            from .model_server import (
-                UMS_DO_NOT_KILL_TIP,
-                fetch_ums_queue_snapshot,
-                format_ums_holding_summary,
-                is_ums_running,
-                ums_is_busy,
+            from .vramd_client import (
+                VRAMD_DO_NOT_KILL_TIP,
+                fetch_vramd_queue_snapshot,
+                format_vramd_holding_summary,
+                is_vramd_running,
+                vramd_is_busy,
             )
 
-            # UMS up + snapshot falhou → fail-closed (unknown ≠ idle).
-            if is_ums_running():
-                snap = fetch_ums_queue_snapshot()
-                if snap is None or ums_is_busy(snap):
-                    hold = format_ums_holding_summary(snap) if snap else "UMS ativo (snapshot indisponível)"
-                    logs.append(f"[recusado] kill GPU — UMS tem jobs / estado incerto ({hold})")
-                    logs.append(f"[recusado] {UMS_DO_NOT_KILL_TIP}")
+            # vramd up + snapshot falhou → fail-closed (unknown ≠ idle).
+            if is_vramd_running():
+                snap = fetch_vramd_queue_snapshot()
+                if snap is None or vramd_is_busy(snap):
+                    hold = format_vramd_holding_summary(snap) if snap else "vramd ativo (snapshot indisponível)"
+                    logs.append(f"[recusado] kill GPU — vramd tem jobs / estado incerto ({hold})")
+                    logs.append(f"[recusado] {VRAMD_DO_NOT_KILL_TIP}")
                     return logs
         except Exception:
-            # Cliente UMS rebenta: se o socket ainda existir, não matar às cegas.
+            # Cliente vramd rebenta: se o socket ainda existir, não matar às cegas.
             with contextlib.suppress(Exception):
-                from .model_server import UMS_DO_NOT_KILL_TIP, is_ums_running
+                from .vramd_client import VRAMD_DO_NOT_KILL_TIP, is_vramd_running
 
-                if is_ums_running():
-                    logs.append("[recusado] kill GPU — UMS ativo mas cliente falhou")
-                    logs.append(f"[recusado] {UMS_DO_NOT_KILL_TIP}")
+                if is_vramd_running():
+                    logs.append("[recusado] kill GPU — vramd ativo mas cliente falhou")
+                    logs.append(f"[recusado] {VRAMD_DO_NOT_KILL_TIP}")
                     return logs
 
     # Construir set de PIDs a proteger
@@ -733,7 +733,7 @@ def kill_gpu_compute_processes_aggressive(
         protected_pids |= set(extra_exclude_pids)
     if protect_model_servers:
         try:
-            from .model_server import discover_server_pids
+            from .vramd_client import discover_server_pids
 
             server_pids = discover_server_pids()
             if server_pids:
@@ -1005,7 +1005,7 @@ def check_nvidia_driver_match() -> tuple[bool, str]:
     Returns:
         ``(ok, detail)``. ``ok=False`` quando versões diferem (clássico
         ``Driver/library version mismatch`` após apt upgrade sem reboot) —
-        PyTorch/UMS falham no ``nvmlInit`` mesmo com CUDA a times funcionar.
+        PyTorch/vramd falham no ``nvmlInit`` mesmo com CUDA a times funcionar.
     """
     kernel = read_nvidia_kernel_module_version()
     user = read_nvidia_userspace_version()
@@ -1024,6 +1024,6 @@ def check_nvidia_driver_match() -> tuple[bool, str]:
         return True, f"kernel={kernel} userspace={user}"
     tip = (
         f"MISMATCH kernel={kernel} userspace={user} — reboot (ou reload módulos nvidia) "
-        f"após upgrade do driver; PyTorch/UMS falham no nvmlInit até alinhar"
+        f"após upgrade do driver; PyTorch/vramd falham no nvmlInit até alinhar"
     )
     return False, tip

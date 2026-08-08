@@ -29,7 +29,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
-    add_ums_options,
+    add_vramd_options,
     delegate_or_prepare,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
@@ -458,7 +458,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     show_default=True,
     help="Memory format NHWC no VAE/pretransform — Ampere+ conv path.",
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -502,9 +502,9 @@ def generate_cmd(
     torch_compile: bool,
     torch_compile_mode: str,
     channels_last: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Gera áudio a partir do PROMPT de texto."""
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
@@ -800,9 +800,9 @@ def generate_cmd(
         t_start=start,
         noun="Áudio",
         console=console,
-        enabled=not no_ums,
-        priority=ums_priority,
-        stream=ums_stream,
+        enabled=not no_vramd,
+        priority=vramd_priority,
+        stream=vramd_stream,
         gpu_ids=gpu_ids,
         memory_efficient=bool(half_precision),
     ):
@@ -1052,7 +1052,7 @@ def generate_cmd(
     show_default=True,
     help="channels_last NHWC no VAE/pretransform.",
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -1077,9 +1077,9 @@ def batch_cmd(
     torch_compile: bool,
     torch_compile_mode: str,
     channels_last: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Gera áudios em batch a partir de um ficheiro de prompts (um por linha)."""
     verbose = bool(ctx.obj.get("VERBOSE"))
@@ -1181,9 +1181,9 @@ def batch_cmd(
             t_start=item_start,
             noun="Áudio",
             console=err_console,
-            enabled=not no_ums,
-            priority=ums_priority or "batch",
-            stream=ums_stream,
+            enabled=not no_vramd,
+            priority=vramd_priority or "batch",
+            stream=vramd_stream,
             gpu_ids=gpu_ids,
             memory_efficient=half_eff,
         ):
@@ -1407,14 +1407,14 @@ def info_cmd() -> None:
     "--ums-worker",
     is_flag=True,
     help=(
-        "Modo worker subprocesso do UMS: lê comandos JSONL do stdin (load / "
+        "Modo worker subprocesso do vramd: lê comandos JSONL do stdin (load / "
         "generate / unload / shutdown) e emite eventos no stdout. Usado pelo "
         "SubprocessWorkerPool do ModelServer — text2sound corre no seu próprio "
         "venv e o supervisor (ModelServer/.venv) coordena via JSONL."
     ),
 )
 def serve(ums_worker: bool) -> None:
-    """Modo worker subprocesso do UMS (subprocess-per-backend).
+    """Modo worker subprocesso do vramd (subprocess-per-backend).
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico

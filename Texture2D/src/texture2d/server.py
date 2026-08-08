@@ -22,7 +22,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from aigamekit_shared.model_server import (
+from aigamekit_shared.vramd_client import (
     ModelServer,
     get_server_status,
     is_server_running,

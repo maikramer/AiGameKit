@@ -151,7 +151,7 @@ class TestFileLogging:
         assert "gameassets.pipeline" in text
 
     def test_detect_tool_ums_alias(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr("sys.argv", ["aigamekit-model-server", "start"])
+        monkeypatch.setattr("sys.argv", ["vramd", "start"])
         monkeypatch.delenv("AIGAMEKIT_LOG_TOOL", raising=False)
         assert detect_tool_name() == "ums"
 

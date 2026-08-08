@@ -12,7 +12,7 @@ from paint3d import defaults
 from paint3d.hardware import GIB, Paint3DHardwareProfile, profile_from_specs
 from paint3d.procedural_noise import _v01, fbm3, normalize_to_unit_cube
 from paint3d.quick_bake import parse_hex_rgb
-from paint3d.ums_payload import build_texture_request
+from paint3d.vramd_payload import build_texture_request
 
 
 def _gib(n: float) -> int:

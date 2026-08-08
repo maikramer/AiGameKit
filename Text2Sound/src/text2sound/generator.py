@@ -90,7 +90,7 @@ class AudioGenerator:
             if hw is not None and self._device.startswith("cuda"):
                 self._half = hw.half
             else:
-                self._half = self._device == "cuda" and self._should_use_half()
+                self._half = self._device.startswith("cuda") and self._should_use_half()
         else:
             self._half = half_precision
         if chunked_vae is None:
@@ -259,10 +259,15 @@ class AudioGenerator:
         ):
             self._model.pretransform.chunked = True
 
+        # VAE do stable-audio-tools: ~74 Conv com weight_norm. Sem fundir, cada
+        # decode reescreve ``module.weight`` (Tensor novo) e o allocator
+        # acumula ~34 MiB NVML/run — ver ``_fuse_weight_norm``.
+        self._fuse_weight_norm(self._model)
+
         # Colocação unificada via planner: decide multi-GPU (accelerate) / group
         # offload / full-GPU conforme VRAM livre. Footprint do registry centralizado.
         # (Antes o modelo ia para .to(device) primeiro — OOM prematuro em GPUs pequenas.)
-        if self._device == "cuda":
+        if self._device.startswith("cuda"):
             from aigamekit_shared.hardware import cuda_gpu_free_specs
             from aigamekit_shared.lowvram import get_footprint, place_pipeline
 
@@ -332,6 +337,44 @@ class AudioGenerator:
         """Descontinuado — multi-GPU agora tratado por place_pipeline no load()."""
         pass
 
+    @staticmethod
+    def _fuse_weight_norm(root: Any) -> int:
+        """Fundir ``weight_norm`` em Parameters estáticos (inferência).
+
+        O VAE do ``stable-audio-tools`` aplica ``torch.nn.utils.weight_norm`` em
+        dezenas de ``Conv1d`` / ``ConvTranspose1d``. O hook pré-forward
+        reescreve ``module.weight`` com um Tensor novo a cada decode
+        (``weight_v`` * ``weight_g``). Em inferência isso:
+
+        1. mantém uma cópia extra dos pesos enquanto o decode corre;
+        2. provoca churn de alocações que o caching allocator CUDA (com
+           ``expandable_segments:True``) **não devolve** ao driver —
+           medido com ``ums calibrate`` / NVML: residente +34 MiB por
+           geração após as correcções de ``empty_cache``.
+
+        Fundir uma vez no ``load`` remove o hook e congela o peso. Seguro
+        porque Text2Sound nunca treina este modelo.
+
+        Args:
+            root: Módulo raiz (tipicamente o modelo Stable Audio completo).
+
+        Returns:
+            Número de hooks ``WeightNorm`` fundidos.
+        """
+        from torch.nn.utils import remove_weight_norm
+
+        fused = 0
+        for mod in list(root.modules()):
+            for hook in list(mod._forward_pre_hooks.values()):
+                if type(hook).__name__ != "WeightNorm":
+                    continue
+                try:
+                    remove_weight_norm(mod, name=hook.name)
+                except (ValueError, AttributeError):
+                    continue
+                fused += 1
+        return fused
+
     def _decode_latents(self, latents: torch.Tensor) -> torch.Tensor:
         """Decodifica latents → áudio com escada de fallback de memória.
 
@@ -376,7 +419,7 @@ class AudioGenerator:
         self._clear_cuda()
 
     def _clear_cuda(self) -> None:
-        if self._device == "cuda" and torch.cuda.is_available():
+        if self._device.startswith("cuda") and torch.cuda.is_available():
             try:
                 from aigamekit_shared.gpu import clear_cuda_memory
 
@@ -390,7 +433,7 @@ class AudioGenerator:
         try:
             yield
         finally:
-            if self._auto_clear and self._device == "cuda":
+            if self._auto_clear and self._device.startswith("cuda"):
                 self._clear_cuda()
 
     def generate(
@@ -423,8 +466,8 @@ class AudioGenerator:
             negative_prompt: Negative prompt (anti-guidance). Steering away from
                 described concepts via batch CFG. None/empty = sem negative prompt
                 (comportamento clássico do modelo).
-            should_abort: Se devolver True, aborta no próximo step do sampler (UMS cancel).
-            on_step: ``(step_1based, total) -> None`` para progresso UMS.
+            should_abort: Se devolver True, aborta no próximo step do sampler (vramd cancel).
+            on_step: ``(step_1based, total) -> None`` para progresso vramd.
 
         Returns:
             GenerationResult com tensor de áudio raw (float32, 2 canais).
@@ -511,7 +554,14 @@ class AudioGenerator:
                     raise GenerationAborted("cancelled before decode")
                 output = self._decode_latents(output)
 
-        audio = rearrange(output, "b d n -> d (b n)")
+            # Áudio para CPU e tensor CUDA largado **dentro** do contexto: o
+            # ``_generation_context`` limpa a cache no ``finally``, e enquanto
+            # ``output`` estivesse vivo o ``empty_cache`` não devolveria esses
+            # blocos ao driver — era assim que o residente crescia ~42 MiB por
+            # geração (medido com `ums calibrate`). Todos os consumidores só
+            # gravam o áudio, e o ``save_audio`` já fazia ``.cpu()``.
+            audio = rearrange(output, "b d n -> d (b n)").detach().to("cpu")
+            del output
 
         return GenerationResult(
             audio=audio,

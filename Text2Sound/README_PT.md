@@ -105,18 +105,18 @@ text2sound info     # ambiente, GPU, modelo, configuração
 text2sound --help   # ajuda completa
 ```
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`text2sound generate` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+`text2sound generate` delega automaticamente no **`vramd`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `VRAMD_AUTO_START=0`.
 
 ```bash
-text2sound generate "choque de espadas" -o clash.wav --ums-stream
-text2sound generate "loop de bateria" -o drums.wav --no-ums   # forçar in-process
-ums status
-ums respawn text2sound                                        # recarrega código src/ editado
+text2sound generate "choque de espadas" -o clash.wav --vramd-stream
+text2sound generate "loop de bateria" -o drums.wav --no-vramd   # forçar in-process
+vramd status
+vramd respawn text2sound                                        # recarrega código src/ editado
 ```
 
-Ambos os modelos são **gated**: aceitar termos no Hub e definir `HF_TOKEN` antes do primeiro download. Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
+Ambos os modelos são **gated**: aceitar termos no Hub e definir `HF_TOKEN` antes do primeiro download. Guia completo: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Presets disponíveis
 

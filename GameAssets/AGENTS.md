@@ -9,12 +9,12 @@ mesh code itself.
 | Task | File(s) | Notes |
 |------|---------|-------|
 | Master pipeline DAG | `pipeline.py` | Round 3: clean→paint→rig painted→game-pack×1→`text3d lod` |
-| Batch execution | `batch_cmd.py` | Per-row 2D/3D/audio; UMS waves + `MasterDeferQueue` |
-| UMS batch waves | `ums_coord.py`, `ums_batch.py` | `run_gpu_wave` (window≤16, `preload=False`); hw_auto peak |
+| Batch execution | `batch_cmd.py` | Per-row 2D/3D/audio; vramd waves + `MasterDeferQueue` |
+| vramd batch waves | `ums_coord.py`, `ums_batch.py` | `run_gpu_wave` (window≤16, `preload=False`); hw_auto peak |
 | Omni soft-fill / stale | `omni_ctrl.py` | `softfill_omni_from_category`; fallback `_CATEGORY_OMNI_DEFAULTS_FALLBACK` when Text3D missing (CI); `prepare_shape_for_generation`; `shape_omni_stale` |
 | **Manifest authoring** | [`docs/MANIFEST_AUTHORING.md`](../docs/MANIFEST_AUTHORING.md) | `category`/`size_m`/Omni/`text3d:` — happy path + octree×faces |
 | Octree × faces (empírico) | [`docs/findings/OCTREE_FACES_FINDINGS.md`](../docs/findings/OCTREE_FACES_FINDINGS.md) | κ, char_m², simple-rpg n=67 |
-| UMS batch guide | [`docs/GAMEASSETS_UMS_BATCH.md`](../docs/GAMEASSETS_UMS_BATCH.md) | Operator happy path |
+| vramd batch guide | [`docs/GAMEASSETS_UMS_BATCH.md`](../docs/GAMEASSETS_UMS_BATCH.md) | Operator happy path |
 | Model / mesh findings | `docs/MODEL_FINDINGS.md`, `docs/findings/` | VRAM, Omni, Round 3 DAG |
 | Smart resume | `resume_cmd.py` | Checkpoint; looks in `_intermediate/` |
 | Game profiles | `profile.py` | Sub-profiles + `from_dict` |
@@ -29,7 +29,7 @@ mesh code itself.
 ## MASTER PIPELINE (Round 3)
 
 `run_master_pipeline()` in `pipeline.py`. GPU shape/paint usually run first via
-UMS waves; master finalize is deferred (`MasterDeferQueue`) until the wave drains.
+vramd waves; master finalize is deferred (`MasterDeferQueue`) until the wave drains.
 
 1. **generate** — `text3d generate` (raw shape; Omni soft-fill; often `batch_cmd` wave)
 2. **topology-fix** — `text3d topology-fix` (`--export-origin feet|center|none`, `--fill-holes-sides N`)
@@ -76,8 +76,8 @@ gameassets skill install
 ```
 
 `batch` runs the master pipeline by default. `resume` picks up from last checkpoint.
-`dream` goes from text description to playable project. Flags: `--no-ums`,
-`--ums-stream`, `--no-rig`, `--no-animate`, `--redo-split`, …
+`dream` goes from text description to playable project. Flags: `--no-vramd`,
+`--vramd-stream`, `--no-rig`, `--no-animate`, `--redo-split`, …
 
 ## ANTI-PATTERNS
 
@@ -97,7 +97,7 @@ gameassets skill install
 - **Do not Decimate rigged/animated LODs without weld in Text3D.** V/Tri≈3 → moth-eaten LOD1/2. Fix lives in `text3d` / `smooth_shade_scene`, not GameAssets.
 - **Do not enable tree cap (`--cap`) by default.** Cut-only geometry; hole closure is future work. The **version stamp** (`SEAL_VERSION` / `*_split_seal.txt`) is required — do not confuse stamp with mesh caps.
 - **Do not use `animate.preset: creature` for bipedal enemies** that scripts drive with Quaternius clip names — use `humanoid` + `force_preset`.
-- **UMS waves:** no sync preload for shape/paint; do not run master mid-wave (`MasterDeferQueue`).
+- **vramd waves:** no sync preload for shape/paint; do not run master mid-wave (`MasterDeferQueue`).
 - **Profile resolution:** generation (quality) → explicit (`game.yaml`) → defaults. `QualityEngine` fills only `None`.
 - **Softfill without Text3D:** GameAssets CI does not install Text3D — `softfill_omni_from_category` must use the local category fallback, never silently leave Omni empty.
 - **Fragile files:** `batch_cmd.py`, `pipeline.py`, `resume_cmd.py` — read before editing.

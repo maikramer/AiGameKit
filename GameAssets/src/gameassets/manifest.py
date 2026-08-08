@@ -282,7 +282,7 @@ def apply_row_text3d_overrides(item: dict[str, Any], row: ManifestRow) -> dict[s
 
     Corre DEPOIS do optimize_for_target/hw-auto: authoring explícito no manifest
     tem prioridade. ``steps``/``octree_resolution``/``mc_level`` são consumidos
-    por ``ums_batch.shape_specs_from_items`` e ``text3d generate-batch``.
+    por ``vramd_batch.shape_specs_from_items`` e ``text3d generate-batch``.
     """
     rt3 = row.text3d
     if rt3 is None:

@@ -61,7 +61,7 @@ Knobs are a privilege earned after the happy path works.
 
 - **QualityEngine** — one `--quality` dial instead of per-model soup.
 - **Omni soft-fill** — `softfill_omni_from_category` fills pose/bbox when the manifest omits geom controls ([`OMNI_SHAPE_FINDINGS.md`](../OMNI_SHAPE_FINDINGS.md)).
-- **UMS peak** — quant/mem-eff ride in the payload (`resolve_*_vram_opts`); not a public `--low-vram` checklist.
+- **vramd peak** — quant/mem-eff ride in the payload (`resolve_*_vram_opts`); not a public `--low-vram` checklist.
 
 ## Pointers in this repo
 

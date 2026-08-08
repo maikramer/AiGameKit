@@ -9,7 +9,7 @@ pipeline escolher octree/faces, só override quando o lab visual exigir.
 |-----|----------------|
 | [`OMNI_SHAPE_FINDINGS.md`](OMNI_SHAPE_FINDINGS.md) | Knobs Omni, clip, presets bbox/pose, fingerprint |
 | [`findings/OCTREE_FACES_FINDINGS.md`](findings/OCTREE_FACES_FINDINGS.md) | Relação empírica octree × faces (simple-rpg, n=67) |
-| [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md) | `gameassets batch` / waves UMS |
+| [`GAMEASSETS_UMS_BATCH.md`](GAMEASSETS_UMS_BATCH.md) | `gameassets batch` / waves vramd |
 | [`findings/MESH_PIPELINE_FINDINGS.md`](findings/MESH_PIPELINE_FINDINGS.md) | DAG Round 3, LOD0, split árvores |
 | Exemplo vivo | `VibeGame/examples/simple-rpg/sample-gameassets/manifests/characters.yaml` |
 
@@ -24,7 +24,7 @@ tune: `Text3D/src/text3d/bbox_tune.py`.
 2. Soft-fill Omni preenche `control_type` / presets por categoria.
 3. `bbox_tune` escolhe `octree_resolution` a partir de `char_m = (L·H·W)^(1/3)`.
 4. **Não** pôr `text3d.octree_resolution` nem `octree` no `game.yaml` / payload
-   UMS a menos que queiras **bloquear** o tune (override lab).
+   vramd a menos que queiras **bloquear** o tune (override lab).
 
 Ease over knobs: o manifesto declara *intent* (o quê, tamanho, pipeline), não a
 folha de VRAM.
@@ -345,7 +345,7 @@ gameassets batch --manifest manifest.yaml   # ou resume
 | Sítio | Evitar |
 |-------|--------|
 | `game.yaml` → `octree_resolution` global | Bloqueia tune para o batch inteiro |
-| Payload UMS com octree “porque 256” | Idem; deixar quality + tune |
+| Payload vramd com octree “porque 256” | Idem; deixar quality + tune |
 | Runtime VibeGame / `index.html` | Nunca referenciar `_intermediate/` |
 | Compensar octree baixo com weld/morph agressivo | Corrige sintoma; sobe detalhe na fonte |
 

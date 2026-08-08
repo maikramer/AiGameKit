@@ -1,4 +1,4 @@
-"""Tests soft-fill Omni por categoria + shape UMS sdnq defaults."""
+"""Tests soft-fill Omni por categoria + shape vramd sdnq defaults."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from gameassets.omni_ctrl import (
     softfill_omni_from_category,
 )
 from gameassets.profile import GameProfile, Text3DProfile
-from gameassets.ums_batch import shape_specs_from_items
+from gameassets.vramd_batch import shape_specs_from_items
 
 
 class TestSoftfillOmniFromCategory:
@@ -84,9 +84,9 @@ class TestShapeSpecsSdnq:
         mock_build = MagicMock(return_value={"ok": True})
         # CI GameAssets não instala Text3D; inject stub para o import lazy.
         pkg = types.ModuleType("text3d")
-        ums = types.ModuleType("text3d.ums_payload")
+        ums = types.ModuleType("text3d.vramd_payload")
         ums.build_generate_request = mock_build  # type: ignore[attr-defined]
-        with patch.dict(sys.modules, {"text3d": pkg, "text3d.ums_payload": ums}):
+        with patch.dict(sys.modules, {"text3d": pkg, "text3d.vramd_payload": ums}):
             shape_specs_from_items(items, manifest_dir=tmp_path)
         assert mock_build.called
         kw = mock_build.call_args.kwargs

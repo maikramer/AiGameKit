@@ -46,12 +46,12 @@ Requer uma **GPU CUDA** (PyTorch, diffusers, transformers e accelerate são depe
 
 | Comando | Descrição |
 |---------|-----------|
-| `texture2d generate PROMPT` | Gera textura seamless (delega no UMS se disponível) |
+| `texture2d generate PROMPT` | Gera textura seamless (delega no vramd se disponível) |
 | `texture2d presets` | Lista presets de materiais disponíveis |
 | `texture2d batch FILE` | Batch a partir de um ficheiro de prompts (um por linha) |
-| `texture2d server` | **Deprecated** — usar `aigamekit-model-server start` (UMS) |
-| `texture2d server-status` | **Deprecated** — usar `aigamekit-model-server status` |
-| `texture2d server-stop` | **Deprecated** — usar `aigamekit-model-server stop` |
+| `texture2d server` | **Deprecated** — usar `vramd start` (vramd) |
+| `texture2d server-status` | **Deprecated** — usar `vramd status` |
+| `texture2d server-stop` | **Deprecated** — usar `vramd stop` |
 | `texture2d info` | Configuração, sistema e ambiente |
 | `texture2d skill install` | Instala a Agent Skill do Cursor |
 | `texture2d validate-tileable` | Valida a tileability de uma textura |
@@ -145,27 +145,27 @@ Instala a Agent Skill do Cursor (`SKILL.md`) no diretório `.cursor/skills/textu
 texture2d skill install -t /caminho/do/meu-jogo --force
 ```
 
-### Unified Model Server (UMS)
+### Unified Model Server (vramd)
 
-Preferir **`aigamekit-model-server`**: um socket, evicção VRAM inteligente, fila com
+Preferir **`vramd`**: um socket, evicção VRAM inteligente, fila com
 prioridade + afinidade. O `texture2d generate` delega automaticamente (e pode
-auto-arrancar o UMS salvo `AIGAMEKIT_UMS_AUTO_START=0`).
+auto-arrancar o vramd salvo `VRAMD_AUTO_START=0`).
 
 ```bash
-aigamekit-model-server start
-texture2d generate "stone wall" -o stone.png --ums-stream
-texture2d generate "wood" -o wood.png --ums-priority batch
-texture2d generate "test" -o t.png --no-ums
-aigamekit-model-server queue
+vramd start
+texture2d generate "stone wall" -o stone.png --vramd-stream
+texture2d generate "wood" -o wood.png --vramd-priority batch
+texture2d generate "test" -o t.png --no-vramd
+vramd queue
 ```
 
 | Flag | Descrição |
 |------|-----------|
-| `--ums-priority interactive\|batch` | Prioridade na fila |
-| `--no-ums` | Forçar in-process |
-| `--ums-stream` | Eventos de fila/progresso |
+| `--vramd-priority interactive\|batch` | Prioridade na fila |
+| `--no-vramd` | Forçar in-process |
+| `--vramd-stream` | Eventos de fila/progresso |
 
-O `texture2d server` per-tool fica **deprecated**. Ver [`ModelServer/README.md`](../ModelServer/README.md).
+O `texture2d server` per-tool fica **deprecated**. Ver [`Vramd/README.md`](../Vramd/README.md).
 
 ## Quality Presets
 

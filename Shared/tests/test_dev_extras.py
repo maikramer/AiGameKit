@@ -120,9 +120,13 @@ class TestToolsYamlWiring:
 
         root = Path(__file__).resolve().parents[2]
         tools = yaml.safe_load((root / "tools.yaml").read_text(encoding="utf-8"))["tools"]
+        # ``vramd`` é um wrapper de um pacote PyPI sem testes no monorepo — não
+        # precisa de hook (o hook existe para instalar o extra [dev]/pytest).
         missing = [
             name
             for name, spec in tools.items()
-            if spec.get("kind") == "python" and not (spec.get("post_install") or spec.get("custom_install"))
+            if spec.get("kind") == "python"
+            and name != "vramd"
+            and not (spec.get("post_install") or spec.get("custom_install"))
         ]
         assert missing == []

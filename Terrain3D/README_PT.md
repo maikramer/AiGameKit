@@ -132,18 +132,18 @@ Terrain3D/
 └── THIRD_PARTY.md             # Licenças do código vendored
 ```
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`terrain3d generate` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+`terrain3d generate` delega automaticamente no **`vramd`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `VRAMD_AUTO_START=0`.
 
 ```bash
-terrain3d generate "cume de montanha" -o terreno.json --ums-stream
-terrain3d generate "vale" -o vale.json --no-ums        # forçar in-process
-ums status
-ums respawn terrain3d                                  # recarrega código src/ editado
+terrain3d generate "cume de montanha" -o terreno.json --vramd-stream
+terrain3d generate "vale" -o vale.json --no-vramd        # forçar in-process
+vramd status
+vramd respawn terrain3d                                  # recarrega código src/ editado
 ```
 
-Modelo: [terrain-diffusion-30m](https://huggingface.co/xandergos/terrain-diffusion-30m) (público; vendored — rasters bioclimáticos WorldClim descarregados no primeiro run). Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
+Modelo: [terrain-diffusion-30m](https://huggingface.co/xandergos/terrain-diffusion-30m) (público; vendored — rasters bioclimáticos WorldClim descarregados no primeiro run). Guia completo: [`Vramd/README.md`](../Vramd/README.md).
 
 ## Variáveis de ambiente
 
@@ -164,7 +164,7 @@ pip install -e ".[dev]"
 make test-terrain3d
 # ou
 pytest tests/ -v
-# cobertura (UMS payload, postprocess, export, CLI --help):
+# cobertura (vramd payload, postprocess, export, CLI --help):
 pytest tests/test_terrain3d_coverage_suite.py tests/test_terrain3d_coverage_100b.py -q
 ```
 

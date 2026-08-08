@@ -92,7 +92,7 @@ text2d generate "retrato" --gpu-ids 0,1 -o minha.png
 text2d generate "teste" -v          # --verbose no próprio subcomando
 text2d -v generate "teste"          # ou verbose no grupo
 
-# Kernel (opt-in em generate; ON por defeito em generate-batch + UMS)
+# Kernel (opt-in em generate; ON por defeito em generate-batch + vramd)
 text2d generate "retrato" --compile --channels-last -o hot.png
 text2d generate-batch manifest.json -O out/   # compile+CL já ON
 
@@ -111,25 +111,25 @@ Kernel opts (~6 GB): [`docs/findings/KERNEL_OPTS_FINDINGS.md`](../docs/finding
 | `TEXT2D_MODELS_DIR` | Diretório de modelos locais; o instalador grava em `~/.config/text2d/config.env` quando existe `Text2D/models/` com pesos |
 | `TEXT2D_OUTPUT_DIR` | Diretório de saída das imagens (criado pelo instalador em `~/.text2d/outputs`) |
 | `PYTORCH_CUDA_ALLOC_CONF` | Configuração CUDA (auto-definida se vazia) |
-| `AIGAMEKIT_UMS_AUTO_START` | `0` desliga o auto-start do UMS |
+| `VRAMD_AUTO_START` | `0` desliga o auto-start do vramd |
 
 ### Guidance
 
 A base oficial FLUX.2 Klein usa **guidance 1.0** por defeito (compatível com o SDNQ runtime); o BF16 original BFL costuma aceitar valores mais altos (ex. 4.0).
 
-## Unified Model Server (UMS)
+## Unified Model Server (vramd)
 
-`text2d generate` delega automaticamente no **`aigamekit-model-server`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `AIGAMEKIT_UMS_AUTO_START=0`.
+`text2d generate` delega automaticamente no **`vramd`** — o supervisor GPU do monorepo (um processo, um socket, fila com prioridade + afinidade VRAM, evicção peso + LRU, workers subprocess por tool). Auto-arranca no primeiro generate salvo `VRAMD_AUTO_START=0`.
 
 ```bash
-text2d generate "gato" -o gato.png --ums-stream          # eventos de fila/progresso
-text2d generate "gato" -o gato.png --ums-priority batch
-text2d generate "gato" -o gato.png --no-ums              # forçar in-process
-ums status                                               # backends + HOLDING/QUEUE
-ums respawn text2d                                       # recarrega código src/ editado
+text2d generate "gato" -o gato.png --vramd-stream          # eventos de fila/progresso
+text2d generate "gato" -o gato.png --vramd-priority batch
+text2d generate "gato" -o gato.png --no-vramd              # forçar in-process
+vramd status                                               # backends + HOLDING/QUEUE
+vramd respawn text2d                                       # recarrega código src/ editado
 ```
 
-Após editar `*/src/`: `ums respawn text2d`. Guia completo: [`ModelServer/README.md`](../ModelServer/README.md).
+Após editar `*/src/`: `vramd respawn text2d`. Guia completo: [`Vramd/README.md`](../Vramd/README.md).
 
 ## GGUF / Unsloth
 

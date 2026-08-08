@@ -10,23 +10,20 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 authors = [{ name = "AiGameKit" }]
 license = "MIT"
+# Núcleo leve: só o que os módulos importam **sem** lazy import. Todo o stack
+# pesado (torch/quant/bpy/HF) vive em extras — ver [project.optional-dependencies].
+# Sem isto, o supervisor UMS (que deliberadamente nem cria contexto CUDA) puxava
+# ~5 GB de wheels para arrancar; com o núcleo, o venv dele são ~12 MB.
 dependencies = [
     "click>=8.1.0",
     "rich>=13.0.0",
-    "torch>=2.13.0",
     "rich-click>=1.8.0",
-    "bitsandbytes>=0.45.0",
-    "torchao>=0.10.0",
-    "optimum-quanto>=0.2.0",
-    "sdnq>=0.2.1",
-    "xformers>=0.0.28; sys_platform != 'darwin'",
     "psutil>=5.9.0",
     "nvidia-ml-py>=12.535.0",
-    "bpy>=5.2.0",
-    "transformers>=5.14.0",
-    "hf-xet>=1.2.0,<2",
-    "huggingface-hub>=1.5.0,<2",
-    "Pillow>=12.0.0",
+    # ``quality.py`` lê os perfis YAML empacotados. Nunca esteve declarado —
+    # vinha por transitividade do stack pesado, e só apareceu ao separar o
+    # núcleo. Sem isto, ``aigamekit_shared.quality`` falha num venv leve.
+    "PyYAML>=6.0",
 ]
 
 classifiers = [
@@ -35,6 +32,28 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+# Inferência: torch + quantização + HF. Toda a tool GPU pede este extra.
+gpu = [
+    "torch>=2.13.0",
+    "bitsandbytes>=0.45.0",
+    "torchao>=0.10.0",
+    "optimum-quanto>=0.2.0",
+    "sdnq>=0.2.1",
+    "xformers>=0.0.28; sys_platform != 'darwin'",
+    "transformers>=5.14.0",
+    "hf-xet>=1.2.0,<2",
+    "huggingface-hub>=1.5.0,<2",
+]
+# Imagem (PIL) — usado por tools 2D e por quem escreve/lê PNG.
+image = ["Pillow>=12.0.0"]
+# Blender: mesh_repair/bpy_mesh e as tools de malha.
+mesh = ["bpy>=5.2.0"]
+all = ["aigamekit-shared[gpu,image,mesh]"]
+
+# NOTA: o ``[dev]`` só pode conter tooling puro. O instalador
+# (``installer/dev_extras.py``) instala estes specs directamente no venv, e uma
+# self-reference como ``aigamekit-shared[all]`` seria procurada no PyPI, onde o
+# pacote não existe. Para o stack completo: ``pip install -e "Shared/.[all,dev]"``.
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.0.0",

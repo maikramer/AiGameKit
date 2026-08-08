@@ -268,30 +268,30 @@ class BatchDashboard(App):
             self._run_batch_worker()
 
     def _tick_ums(self) -> None:
-        """Actualiza depth/eta/HOLDING da fila UMS no StatsBar (best-effort)."""
+        """Actualiza depth/eta/HOLDING da fila vramd no StatsBar (best-effort)."""
         try:
-            from aigamekit_shared.model_server import (
-                fetch_ums_queue_snapshot,
-                format_ums_holding_summary,
-                is_ums_running,
+            from aigamekit_shared.vramd_client import (
+                fetch_vramd_queue_snapshot,
+                format_vramd_holding_summary,
+                is_vramd_running,
             )
 
-            if not is_ums_running():
+            if not is_vramd_running():
                 stats = self.query_one("#stats-row", StatsBar)
-                stats.ums_line = "UMS off"
+                stats.ums_line = "vramd off"
                 return
-            snap = fetch_ums_queue_snapshot()
+            snap = fetch_vramd_queue_snapshot()
             if not snap:
                 return
             depth = snap.get("queue_depth", 0)
             inflight = snap.get("inflight", 0)
             eta = snap.get("eta_sec")
             eta_s = f" eta={eta:.0f}s" if isinstance(eta, (int, float)) else ""
-            hold = format_ums_holding_summary(snap)
+            hold = format_vramd_holding_summary(snap)
             # Compact: primeiro backend running + q/run/eta
             hold_short = hold.split("|")[0].strip() if hold else ""
             stats = self.query_one("#stats-row", StatsBar)
-            stats.ums_line = f"UMS q={depth} run={inflight}{eta_s} {hold_short}".strip()
+            stats.ums_line = f"vramd q={depth} run={inflight}{eta_s} {hold_short}".strip()
         except Exception:
             pass
 

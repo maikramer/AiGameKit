@@ -120,7 +120,7 @@ def fix_bone_orientation(
         export_tangents=True,
         export_texcoords=True,
         export_materials="EXPORT",
-        export_image_format="AUTO",
+        export_image_format="JPEG",
     )
 
     return BoneRepairResult(input_path=input_glb, output_path=output_glb, bones_total=bones_total, bones_fixed=fixed)

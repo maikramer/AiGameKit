@@ -16,7 +16,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from aigamekit_shared.cli_helpers import (
-    add_ums_options,
+    add_vramd_options,
     delegate_or_prepare,
     needed_mib_for_backend,
     prepare_gpu_exclusive,
@@ -199,7 +199,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     show_default=True,
     help="Memory format NHWC (channels_last) no VAE/transformer — Ampere+ conv path.",
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -226,9 +226,9 @@ def generate_cmd(
     torch_compile_mode: str,
     step_cache: str,
     channels_last: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Gera um skymap equirectangular 360° a partir do PROMPT."""
     from aigamekit_shared.gpu import warn_if_vram_occupied
@@ -317,7 +317,7 @@ def generate_cmd(
 
         start = time.time()
 
-        # UMS-first: não construir generator (nem tocar GPU) antes da delegação.
+        # vramd-first: não construir generator (nem tocar GPU) antes da delegação.
         if not cpu and delegate_or_prepare(
             "skymap2d",
             payload={
@@ -337,9 +337,9 @@ def generate_cmd(
             t_start=start,
             noun="Skymap",
             console=console,
-            enabled=not no_ums,
-            priority=ums_priority,
-            stream=ums_stream,
+            enabled=not no_vramd,
+            priority=vramd_priority,
+            stream=vramd_stream,
             gpu_ids=gpu_ids,
             memory_efficient=mem_eff,
         ):
@@ -515,7 +515,7 @@ def presets_cmd() -> None:
     show_default=True,
     help="channels_last NHWC no VAE/transformer (bench ~0 ganho).",
 )
-@add_ums_options
+@add_vramd_options
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -537,9 +537,9 @@ def batch_cmd(
     torch_compile_mode: str,
     step_cache: str,
     channels_last: bool,
-    ums_priority: str | None,
-    no_ums: bool,
-    ums_stream: bool,
+    vramd_priority: str | None,
+    no_vramd: bool,
+    vramd_stream: bool,
 ) -> None:
     """Gera skymaps em batch a partir de um ficheiro de prompts (um por linha)."""
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
@@ -626,9 +626,9 @@ def batch_cmd(
             t_start=t0,
             noun="Skymap",
             console=err_console,
-            enabled=not no_ums,
-            priority=ums_priority or "batch",
-            stream=ums_stream,
+            enabled=not no_vramd,
+            priority=vramd_priority or "batch",
+            stream=vramd_stream,
             gpu_ids=gpu_ids,
             memory_efficient=mem_eff,
         ):
@@ -722,14 +722,14 @@ def info_cmd() -> None:
     "--ums-worker",
     is_flag=True,
     help=(
-        "Modo worker subprocesso do UMS: lê comandos JSONL do stdin (load / "
+        "Modo worker subprocesso do vramd: lê comandos JSONL do stdin (load / "
         "generate / unload / shutdown) e emite eventos no stdout. Usado pelo "
         "SubprocessWorkerPool do ModelServer — skymap2d corre no seu próprio "
         "venv e o supervisor (ModelServer/.venv) coordena via JSONL."
     ),
 )
 def serve(ums_worker: bool) -> None:
-    """Modo worker subprocesso do UMS (subprocess-per-backend).
+    """Modo worker subprocesso do vramd (subprocess-per-backend).
 
     Sem ``--ums-worker`` não faz nada (futuro: modo server legacy).
     Com ``--ums-worker`` arranca o loop canónico

@@ -77,7 +77,7 @@ Variável útil: `PYTHON_CMD` — interpretador a usar (por defeito `python3`, o
 | `text3d` | Text3D | Python | 3.13 | Depende de Text2D; nvdiffrast pós-venv |
 | `part3d` | Part3D | Python | 3.13 | Decomposição semântica (Hunyuan3D-Part: P3-SAM + X-Part); PyTorch |
 | `gameassets` | GameAssets | Python | 3.13 | Batch + `dream`; orquestra CLIs |
-| `modelserver` | ModelServer | Python | 3.13 | Unified Model Server (`aigamekit-model-server`/`ums`); supervisor VRAM |
+| `modelserver` | ModelServer | Python | 3.13 | Unified Model Server (`vramd`/`vramd`); supervisor VRAM |
 | `aigamekitlab` | AiGameKitLab | Python | 3.13 | Debug 3D, benches, profiling |
 | `text2sound` | Text2Sound | Python | 3.13 | PyTorch/CUDA |
 | `texture2d` | Texture2D | Python | 3.13 | GPU local (SD1.5) |
@@ -123,7 +123,7 @@ KTX2/meshopt) e — por ferramenta — Rust (`materialize`) ou Bun (`vibegame`).
 | Driver NVIDIA + CUDA | todas as tools GPU (text2d/text3d/paint3d/…) | `nvidia-smi` tem de listar uma GPU | NVIDIA App / instalação do driver | manual |
 
 **Ver o que falta na tua máquina:** `text3d doctor` (bpy/meshopt/npx/ktx) ·
-`clified doctor` (receipts/wrappers) · `ums doctor` (UMS/VRAM).
+`clified doctor` (receipts/wrappers) · `vramd doctor` (vramd/VRAM).
 
 ### Máquina limpa — quickstart Linux
 
@@ -183,14 +183,14 @@ SKIP_INFERENCE=1 scripts/docker/ubuntu-clean-test.sh # só instalação + smokes
   `--gpus all` quando o host tem `nvidia-smi` (fallback a CPU só em erros de
   arranque — um teste que falha nunca re-corre sem GPU).
 - O contexto de build é minimizado pelo `.dockerignore` da raiz; o `.git` é
-  incluído (o UMS deteta a raiz do monorepo por `.git` + `Shared/`).
+  incluído (o vramd deteta a raiz do monorepo por `.git` + `Shared/`).
 - Logs em `logs/ubuntu-clean-test/` (um ficheiro por etapa + logs por grupo
   preservados fora dos artefactos limpos); exit code 0 só quando todos os grupos
   têm zero FAILs.
 - **Tolerâncias conhecidas numa GPU de 6 GB** (limites físicos, não bugs de
   instalação): `skymap2d` (o load do FLUX.1-dev SDNQ precisa de ~5.6 GiB; o
   display do laptop reserva ~0.4 GiB) e a stage de paint do `gameassets batch`
-  (resíduo do cache torch do UMS entre stages). Ambos reportam WARN; cada tool
+  (resíduo do cache torch do vramd entre stages). Ambos reportam WARN; cada tool
   individual passa.
 - Ficheiros: `scripts/docker/Dockerfile.ubuntu-clean` (imagem) ·
   `ubuntu-clean-test-inner.sh` (o teste, corre dentro do container) ·
@@ -226,13 +226,13 @@ GameAssets / `resolve_binary` preferem `<Tool>/.venv/bin/<cli>` a wrappers stale
 | Mudança | O que correr |
 |---------|----------------|
 | Nova dep / entry point / metadata no `pyproject.toml` | `./install.sh <tool>` ou `clified update <tool>` |
-| Código usado por um **worker UMS** da tool já a correr | `ums respawn <backend>` (ou `ums respawn`) — apanha `*/src/` sem reiniciar o supervisor |
-| Código do **ModelServer / protocolo worker** (`Shared/.../worker_*.py`) | `aigamekit-model-server stop` (o próximo job auto-arranca) |
+| Código usado por um **worker vramd** da tool já a correr | `vramd respawn <backend>` (ou `vramd respawn`) — apanha `*/src/` sem reiniciar o supervisor |
+| Código do **ModelServer / protocolo worker** (`Shared/.../worker_*.py`) | `vramd stop` (o próximo job auto-arranca) |
 | Clone movido (wrappers com paths partidos) | `./install.sh <tool>` uma vez para reescrever `~/.local/bin` |
 
 Edições Python normais em `*/src/` → guardar → re-correr o CLI / batch. Sem reinstall.
-VRAM: UMS + hw-auto (sem `--low-vram` público); ver
-[`ModelServer/README.md`](../ModelServer/README.md).
+VRAM: vramd + hw-auto (sem `--low-vram` público); ver
+[`Vramd/README.md`](../Vramd/README.md).
 
 ---
 

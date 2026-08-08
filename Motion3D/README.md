@@ -2,7 +2,7 @@
 
 Text-to-motion CLI for AiGameKit using **Tencent HY-Motion-1.0** (Lite default / Full via hw-auto or `--model full`).
 
-Pipeline: prompt → UMS `motion3d` → HY text encoders (CLIP+Qwen) → HunyuanMotionMMDiT → WoodenMesh FK → NPZ `joints (T,22,3) @ 30fps` → optional `apply-rigged` (Animator3D `hml22`) → skinned GLB.
+Pipeline: prompt → vramd `motion3d` → HY text encoders (CLIP+Qwen) → HunyuanMotionMMDiT → WoodenMesh FK → NPZ `joints (T,22,3) @ 30fps` → optional `apply-rigged` (Animator3D `hml22`) → skinned GLB.
 
 ## Install
 
@@ -14,7 +14,7 @@ motion3d doctor
 ## Happy path
 
 ```bash
-# Generate (GPU via UMS by default; hw-auto picks Full on ~6GB with staged text-CPU)
+# Generate (GPU via vramd by default; hw-auto picks Full on ~6GB with staged text-CPU)
 motion3d generate "a person walks forward" -o walk.npz --quality medium
 
 # Apply onto SkinTokens *_rigged.glb (in-place, loopable)
@@ -52,7 +52,7 @@ motion3d apply-rigged chop.npz hero_rigged.glb -o hero_chop.glb \
   --clip chop --max-lean 25 --hands-together 0.10 --plant-feet
 ```
 
-After editing Motion3D code: `ums respawn motion3d`.
+After editing Motion3D code: `vramd respawn motion3d`.
 
 ## Flags
 
@@ -64,14 +64,14 @@ After editing Motion3D code: `ums respawn motion3d`.
 | `--cfg-scale` | CFG guidance |
 | `--sdnq-preset` | DiT quant (`none` / `sdnq-uint8` / `sdnq-int4`) |
 | `--quality` | Soft defaults for duration / cfg / steps / model |
-| `--no-ums` | In-process fallback |
+| `--no-vramd` | In-process fallback |
 
 ## VRAM (Text2D-style hw-auto)
 
 - Planner: `aigamekit_shared.lowvram.plan_offload` + staged load (DiT on GPU, Qwen encode on CPU when tight).
 - On **~6 GB**: prefers **Full** + text-CPU + optional SDNQ; clamps `validation_steps` / duration.
 - Prompt-engineering LLM rewriter is **off** (saves VRAM).
-- UMS footprint keys: `hy-motion-lite` / `hy-motion-full` (DiT-resident, not stacked Qwen).
+- vramd footprint keys: `hy-motion-lite` / `hy-motion-full` (DiT-resident, not stacked Qwen).
 
 ## Weights
 

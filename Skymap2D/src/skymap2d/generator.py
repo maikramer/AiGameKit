@@ -283,12 +283,19 @@ class SkymapGenerator(DiffusionGeneratorBase):
         # O base é FLUX.1-dev pré-quantizado uint4 (~7 GiB pesos); allow_quant=("none",)
         # porque o checkpoint já vem quantizado do hub (não há SDNQ runtime aqui).
         # target_resolution=2048 activa VAE tiling + attention slicing (high-res).
+        # ``force_group_offload`` quando o operador/hw-auto pede memory-efficient:
+        # a pegada declarada (uint4, 2.2 GiB) descreve só o transformer, mas o
+        # que vai para a GPU inclui os text encoders e a LoRA já fundida. Sem
+        # isto o planner via "4.2 de 5.1 GiB, cabe", escolhia full-GPU e o load
+        # rebentava com 5.31 GiB alocados numa placa de 6 GB — e o
+        # ``memory_efficient`` que lhe era passado nem sequer era consultado.
         placement_plan = self._place_with_planner(
             pipe,
             _flux_dev_uint4_footprint(),
             allow_quant=("none",),
             model_attr="transformer",
             target_resolution=2048,
+            force_group_offload=bool(self.memory_efficient),
         )
 
         # Kernel opts: compile + step-cache + channels_last + attention (sage/flash).

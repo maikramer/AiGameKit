@@ -7,7 +7,7 @@ do batch `simple-rpg` (2026-07). Complementa a tabela de flags em
 [`Text3D/README.md`](../Text3D/README.md#omni-geometric-controls) e o bench de pose em
 [`docs/bench_omni/`](bench_omni/README.md).
 
-**Hub VRAM / kernels / UMS (todos os modelos):** [`MODEL_FINDINGS.md`](MODEL_FINDINGS.md).
+**Hub VRAM / kernels / vramd (todos os modelos):** [`MODEL_FINDINGS.md`](MODEL_FINDINGS.md).
 
 **Review por asset (vivo):**  
 `VibeGame/examples/simple-rpg/sample-gameassets/logs/omni_shape_inconsistencies.md`
@@ -131,7 +131,7 @@ eixo longo residual, semântica, ou buracos SDF.
 | `num_chunks` | auto VRAM | Batch do geo-decoder pós-offload |
 | `octree_resolution` / steps | quality + `bbox_tune` | Soft por `size_m` / category |
 | `volume_decoder` | `flashvdm` típico | Preferir surface-focused em octree alto |
-| `sdnq_preset` | `sdnq-int4` em 6 GB | UMS peak; omitir → assume fp16 e pode recusar |
+| `sdnq_preset` | `sdnq-int4` em 6 GB | vramd peak; omitir → assume fp16 e pode recusar |
 
 ### Resume / invalidação
 
@@ -288,13 +288,13 @@ pós-shape (`topology-fix`) vs regen.
 
 ---
 
-## 7. Operação batch / UMS (relevância Omni)
+## 7. Operação batch / vramd (relevância Omni)
 
 - Shape wave: **não** pré-carregar text3d sync longo (timeout → Broken pipe →
   evict → fila VRAM stuck). 1º job carrega o shape certo.
-- Pico VRAM: payload UMS com `sdnq_preset` / `memory_efficient` (hw-auto / `resolve_*_vram_opts` — não CLI `--low-vram`).
-- Erro VRAM transitório: UMS requeue + backoff (`AIGAMEKIT_UMS_MAX_VRAM_RETRIES`).
-- **Nunca** kill GPU enquanto UMS tem jobs.
+- Pico VRAM: payload vramd com `sdnq_preset` / `memory_efficient` (hw-auto / `resolve_*_vram_opts` — não CLI `--low-vram`).
+- Erro VRAM transitório: vramd requeue + backoff (`VRAMD_MAX_VRAM_RETRIES`).
+- **Nunca** kill GPU enquanto vramd tem jobs.
 - Resume: intermediários em `_intermediate/`; fingerprint Omni tem de bater
   senão regenera shape.
 
@@ -368,10 +368,10 @@ Ordem típica em `resolve_row_omni` / shape wave:
 | `expand_omni_world_size` | `height_m` / `footprint_m` → `size_m` |
 | `prepare_shape_for_generation` | Decide regen vs reuse; escreve sidecar |
 | `shape_omni_stale` | Fingerprint sidecar `*_shape.omni.json` vs pedido actual |
-| `omni_to_cli_flags` / `omni_to_batch_item` | CLI subprocess / payload UMS |
+| `omni_to_cli_flags` / `omni_to_batch_item` | CLI subprocess / payload vramd |
 
 Stale: sem sidecar **não** apaga mesh no resume (usar `--force` se mudaste
-Omni sem sidecar). Payload UMS: `text3d.ums_payload.build_generate_request`
+Omni sem sidecar). Payload vramd: `text3d.ums_payload.build_generate_request`
 (campos Omni + `seed_fingerprint` / `bbox_tune`; omitir `octree_resolution`
 quando o soft tune size-based manda).
 
@@ -396,7 +396,7 @@ Código: `GameAssets/src/gameassets/omni_ctrl.py` · testes
 | Data | Nota |
 |------|------|
 | 2026-07-24 | Softfill: fallback `_CATEGORY_OMNI_DEFAULTS_FALLBACK` sem pacote Text3D (CI) |
-| 2026-07-24 | Contrato API softfill / prepare / stale + link UMS batch |
+| 2026-07-24 | Contrato API softfill / prepare / stale + link vramd batch |
 | 2026-07-24 | Soft-fill Omni por categoria + stale sidecar no batch |
-| 2026-07-19 | 1ª versão: max=1 vs 2, knobs, presets, falhas simple-rpg, UMS wave |
+| 2026-07-19 | 1ª versão: max=1 vs 2, knobs, presets, falhas simple-rpg, vramd wave |
 | 2026-07-19 | `height_m`+`footprint_m` = molde bbox (modelo enche); preset `column`/`cactus` |
