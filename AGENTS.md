@@ -481,17 +481,30 @@ text2icon generate "icon" -o out.png --vramd-stream --vramd-priority interactive
 # Deprecated legacy: text2icon server | server-status | server-stop
 ```
 
-**Key APIs in `aigamekit_shared.model_server`:**
+**Calibration is tied to VRAM.** The packaged catalog lives in
+`Shared/src/aigamekit_shared/data/calibrated/` — one file per GPU capacity
+(`backends-6g.yaml`, `backends-16g.yaml`…), generated with `vramd calibrate` on
+a GPU with that VRAM. On auto-start, `ensure_vramd_running` picks the file with
+the **largest label ≤ the GPU's total VRAM** (a 6 GB card uses the 6 GB
+calibration; a 24 GB card with only 16 GB calibrated uses the 16 GB one — the
+most restrictive measured scenario, for safety) and passes it as an overlay
+(`VRAMD_BACKENDS_FILE=base:calibrated`, per-key merge). If no calibration
+exists for the user's hardware (e.g. a GPU smaller than every file), the system
+falls back to **estimates + hw-auto** — `vramd calibrate <backend> --out
+data/calibrated/backends-<N>g.yaml` on real hardware produces a new catalog
+entry.
+
+**Key APIs in `aigamekit_shared.vramd_client`:**
 | Function | Purpose |
 |----------|---------|
 | `delegate_to_vramd(backend, request)` | Sync generate via vramd (main CLI path) |
-| `submit_to_ums` / `poll_ums_job` / `wait_ums_job` / `cancel_ums_job` | Async job API |
-| `respawn_ums_backend(backend, lazy=True)` | Restart a tool's worker subprocess (pick up edited tool code without restarting the supervisor) |
-| `zero_ums_vram()` | Zero ALL vramd-held VRAM (kills idle workers + scrub) without stopping the supervisor; `None` when vramd is down |
-| `fetch_ums_queue_snapshot` / `ums_is_busy` / `format_ums_holding_summary` | Queue introspection |
-| `UMS_DO_NOT_KILL_TIP` | Stable tip string for CLIs/agents |
-| `ensure_vram_available(needed_mib)` | Ask vramd; legacy sockets only if `AIGAMEKIT_ALLOW_LEGACY_SERVER=1` |
-| `ensure_ums_running()` | Auto-start vramd supervisor |
+| `submit_to_vramd` / `poll_vramd_job` / `wait_vramd_job` / `cancel_vramd_job` | Async job API |
+| `respawn_vramd_backend(backend, lazy=True)` | Restart a tool's worker subprocess (pick up edited tool code without restarting the supervisor) |
+| `zero_vramd_vram()` | Zero ALL vramd-held VRAM (kills idle workers + scrub) without stopping the supervisor; `None` when vramd is down |
+| `fetch_vramd_queue_snapshot` / `vramd_is_busy` / `format_vramd_holding_summary` | Queue introspection |
+| `VRAMD_DO_NOT_KILL_TIP` | Stable tip string for CLIs/agents |
+| `ensure_vram_available(needed_mib)` | Ask vramd; legacy sockets only if `VRAMD_ALLOW_LEGACY_SERVER=1` |
+| `ensure_vramd_running()` | Auto-start vramd supervisor |
 | `discover_server_pids()` | Protect server PIDs from GPU kill |
 | `ModelServer(...)` | Legacy per-tool server class (deprecated) |
 

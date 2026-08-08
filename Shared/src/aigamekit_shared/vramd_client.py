@@ -27,6 +27,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import signal
 import socket
 import threading
@@ -324,6 +325,67 @@ def format_vramd_holding_summary(snapshot: dict[str, Any]) -> str:
     return f"HOLDING: {hold} | QUEUE: {depth} waiting / {inflight} inflight"
 
 
+# ---------------------------------------------------------------------------
+# Calibração atrelada à VRAM
+# ---------------------------------------------------------------------------
+
+# Catálogo de calibrações empacotadas: um ficheiro por capacidade de GPU
+# (``backends-6g.yaml``, ``backends-16g.yaml``…), gerado por ``vramd calibrate``
+# numa GPU com essa VRAM. O admit usa os números MEDIDOS quando existe
+# calibração para o hardware do utilizador; sem calibração para a VRAM dele,
+# ficam as estimativas + hw-auto (comportamento normal).
+CALIBRATED_DIR = Path(__file__).resolve().parent / "data" / "calibrated"
+
+
+def _calibration_gb(name: str) -> int | None:
+    """``backends-6g.yaml`` → 6; ``None`` se o nome não for calibrado."""
+    m = re.search(r"backends-(\d+(?:\.\d+)?)g\.ya?ml$", name)
+    return int(float(m.group(1))) if m else None
+
+
+def resolve_vramd_calibration(vram_total_mib: int | None = None) -> Path | None:
+    """Calibração empacotada para a VRAM da GPU, ou ``None`` (hw-auto).
+
+    Regra: o ficheiro com a maior etiqueta **≤ VRAM total** da GPU. Quem tem
+    6 GB usa a calibração de 6 GB; quem tem 24 GB e o maior ficheiro é 16 GB
+    usa o de 16 GB — por segurança, o cenário mais restritivo medido. Se a GPU
+    é mais pequena que todas as calibrações (ou a VRAM não é legível), não há
+    calibração "para o hardware dele" → ``None``, e o sistema segue com
+    estimativas + hw-auto.
+
+    Args:
+        vram_total_mib: VRAM total em MiB (default: NVML do device 0).
+
+    Returns:
+        Path do ficheiro calibrado, ou ``None``.
+    """
+    if not CALIBRATED_DIR.is_dir():
+        return None
+    candidates = [(gb, p) for p in CALIBRATED_DIR.glob("backends-*.yaml") if (gb := _calibration_gb(p.name))]
+    if not candidates:
+        return None
+    candidates.sort()
+    if vram_total_mib is None:
+        try:
+            from .gpu import gpu_total_mib
+
+            vram_total_mib = gpu_total_mib()
+        except Exception:
+            return None
+    if vram_total_mib is None:
+        return None
+    # Comparação em GB arredondados: a etiqueta é a classe NOMINAL da placa
+    # (backends-6g = "calibrado numa GPU de 6 GB") e a VRAM reportada varia
+    # com o driver (NVML total 6141 MiB; utilizável ~5772 MiB numa RTX 4050).
+    # round(5772/1024)=6 → a placa de 6 GB apanha a calibração 6g.
+    user_gb = round(vram_total_mib / 1024)
+    chosen: Path | None = None
+    for gb, path in candidates:
+        if gb <= user_gb:
+            chosen = path
+    return chosen
+
+
 def _discover_vramd_python() -> Path | None:
     """Procura ``Vramd/.venv/bin/python`` relativo ao monorepo / Shared.
 
@@ -476,9 +538,18 @@ def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True) 
         root = try_find_monorepo_root()
         if root is not None:
             env.setdefault("VRAMD_TOOLS_ROOT", str(root))
-            env.setdefault(
-                "VRAMD_BACKENDS_FILE", str(root / "Shared" / "src" / "aigamekit_shared" / "data" / "backends.yaml")
-            )
+            base = root / "Shared" / "src" / "aigamekit_shared" / "data" / "backends.yaml"
+            # Calibração atrelada à VRAM da GPU: se existe um ficheiro calibrado
+            # para este hardware, entra como overlay (merge por chave — o vramd
+            # aceita vários paths em VRAMD_BACKENDS_FILE, o último vence).
+            # Sem calibração para a VRAM do utilizador → estimativas + hw-auto
+            # (comportamento normal).
+            calibrated = resolve_vramd_calibration()
+            if calibrated is not None:
+                env.setdefault("VRAMD_BACKENDS_FILE", f"{base}{os.pathsep}{calibrated}")
+                _logger.info(f"[vramd] Auto-start: calibração {calibrated.name} para a VRAM da GPU")
+            else:
+                env.setdefault("VRAMD_BACKENDS_FILE", str(base))
     except Exception:
         pass
 

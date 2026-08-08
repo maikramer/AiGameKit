@@ -215,3 +215,61 @@ class TestUmsClientAgainstMockSocket:
         assert lines[0]["event"] == "queued"
         assert lines[-1]["status"] == "ok"
         t.join(timeout=3.0)
+
+
+class TestResolveVramdCalibration:
+    """Calibração atrelada à VRAM: escolhe o ficheiro certo para o hardware."""
+
+    def _make_catalog(self, tmp_path: Path, gb_labels: list[int]) -> Path:
+        cal_dir = tmp_path / "calibrated"
+        cal_dir.mkdir()
+        for gb in gb_labels:
+            (cal_dir / f"backends-{gb}g.yaml").write_text("backends: []\n", encoding="utf-8")
+        return cal_dir
+
+    def test_uses_calibration_for_own_vram(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", self._make_catalog(tmp_path, [6]))
+        assert ms.resolve_vramd_calibration(vram_total_mib=6 * 1024).name == "backends-6g.yaml"
+
+    def test_largest_calibration_not_exceeding_vram(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", self._make_catalog(tmp_path, [6, 16]))
+        # 10 GB → 6 GB (o maior que não excede); 24 GB → 16 GB (o maior disponível).
+        assert ms.resolve_vramd_calibration(vram_total_mib=10 * 1024).name == "backends-6g.yaml"
+        assert ms.resolve_vramd_calibration(vram_total_mib=24 * 1024).name == "backends-16g.yaml"
+
+    def test_more_vram_than_largest_uses_largest_for_safety(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """24 GB com só 16 GB calibrado → usa o de 16 GB (cenário mais restritivo)."""
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", self._make_catalog(tmp_path, [6, 16]))
+        assert ms.resolve_vramd_calibration(vram_total_mib=24 * 1024).name == "backends-16g.yaml"
+
+    def test_no_calibration_for_smaller_gpu_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """GPU mais pequena que todas as calibrações → None (hw-auto)."""
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", self._make_catalog(tmp_path, [6, 16]))
+        assert ms.resolve_vramd_calibration(vram_total_mib=4 * 1024) is None
+
+    def test_no_catalog_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", tmp_path / "inexistente")
+        assert ms.resolve_vramd_calibration(vram_total_mib=6 * 1024) is None
+
+    def test_vram_read_from_nvml(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", self._make_catalog(tmp_path, [6, 16]))
+        with patch("aigamekit_shared.gpu.gpu_total_mib", return_value=6 * 1024):
+            assert ms.resolve_vramd_calibration().name == "backends-6g.yaml"
+
+    def test_nominal_label_matches_driver_vram_variants(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A etiqueta é a classe NOMINAL (6 GB): NVML total (6141 MiB) e o
+        utilizável de uma RTX 4050 (~5772 MiB) continuam a casar com 6g."""
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", self._make_catalog(tmp_path, [6]))
+        assert ms.resolve_vramd_calibration(vram_total_mib=6141).name == "backends-6g.yaml"
+        assert ms.resolve_vramd_calibration(vram_total_mib=5772).name == "backends-6g.yaml"
+        # GPU realmente mais pequena continua sem calibração (hw-auto).
+        assert ms.resolve_vramd_calibration(vram_total_mib=4096) is None
+
+    def test_unreadable_vram_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", self._make_catalog(tmp_path, [6]))
+        with patch("aigamekit_shared.gpu.gpu_total_mib", return_value=None):
+            assert ms.resolve_vramd_calibration() is None

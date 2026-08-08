@@ -1,0 +1,367 @@
+# Descriptor de backends calibrado — RTX 4050 Laptop 6 GB (vramd calibrate).
+# NÃO editar à mão. Gerado por `vramd calibrate` em hardware real; os valores
+# em `vram:` são MEDIDOS (driver, por processo), não estimados.
+#
+# Catálogo por VRAM: um ficheiro por capacidade de GPU (backends-6g.yaml,
+# backends-16g.yaml…). O auto-start escolhe o ficheiro com a maior etiqueta
+# ≤ VRAM total da GPU; sem calibração para o hardware, usa estimativas + hw-auto.
+version: 2
+backends:
+
+- name: text2icon
+  adapter: aigamekit_shared.worker_serve_adapter_base
+  vram_mib: 5632
+  priority: 20
+  tool: text2icon
+  footprint_key: sana-sprint-600m
+  runtime:
+    monorepo_tool: text2icon
+  vram:
+    weights_gib: 4.66
+    activation_gib: 0.85
+    context_gib: 0.0
+    peak_mib: 5632
+    safety_mib: 384
+    admit_peak_mib: 6016
+  peak_profile:
+    quant_mode: none
+    unload_frees_vram: false
+    load_kwargs:
+      cpu_offload: true
+  measured:
+    confidence: medium
+    repeats: 3
+    samples: 684
+    load_sec: 14.137
+    generate_sec_median: 2.101
+    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+    gpu_total_mib: 6141
+    driver: '595.84'
+    at: '2026-08-08T19:26:57+00:00'
+    fragmentation_mib: 756
+    warnings:
+    - 'unload devolveu 82 MiB de 4764 MiB: evictar este backend NÃO liberta VRAM; pesos e contexto não
+      separáveis'
+- name: texture2d
+  adapter: aigamekit_shared.worker_serve_adapter_base
+  vram_mib: 3392
+  priority: 20
+  tool: texture2d
+  runtime:
+    monorepo_tool: texture2d
+  vram:
+    weights_gib: 2.01
+    activation_gib: 1.14
+    context_gib: 0.14
+    peak_mib: 3392
+    safety_mib: 384
+    admit_peak_mib: 3776
+  peak_profile:
+    quant_mode: none
+  measured:
+    confidence: high
+    repeats: 3
+    samples: 570
+    load_sec: 4.795
+    generate_sec_median: 3.853
+    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+    gpu_total_mib: 6141
+    driver: '595.84'
+    at: '2026-08-08T19:27:26+00:00'
+    fragmentation_mib: 1164
+- name: terrain3d
+  adapter: aigamekit_shared.worker_serve_adapter_base
+  vram_mib: 3776
+  priority: 40
+  tool: terrain3d
+  runtime:
+    monorepo_tool: terrain3d
+  vram:
+    weights_gib: 0.0
+    activation_gib: 3.63
+    context_gib: 0.0
+    peak_mib: 3776
+    safety_mib: 384
+    admit_peak_mib: 4160
+  peak_profile:
+    quant_mode: none
+    staged_load: true
+  measured:
+    confidence: low
+    repeats: 3
+    samples: 3211
+    load_sec: 1.063
+    generate_sec_median: 33.268
+    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+    gpu_total_mib: 6141
+    driver: '595.84'
+    at: '2026-08-08T19:30:09+00:00'
+    fragmentation_mib: 134
+    warnings:
+    - '134 MiB retidos após o unload sem nada residente após o load: memória da inferência, não contexto
+      CUDA'
+    - 'nada residente após o load e 3714 MiB de pico no generate: o modelo é carregado dentro da inferência
+      (load lazy)'
+    - 'VRAM de terceiros variou 86 MiB durante a medição (baseline 0 → 86): pico possivelmente enviesado'
+- name: text2sound
+  adapter: aigamekit_shared.worker_serve_adapter_base
+  vram_mib: 4096
+  priority: 30
+  tool: text2sound
+  footprint_key: stable-audio-open
+  runtime:
+    monorepo_tool: text2sound
+  vram:
+    weights_gib: 2.54
+    activation_gib: 1.25
+    context_gib: 0.17
+    peak_mib: 4096
+    safety_mib: 384
+    admit_peak_mib: 4480
+  peak_profile:
+    quant_mode: none
+    load_kwargs:
+      half_precision: true
+      chunked_vae: true
+  measured:
+    confidence: high
+    repeats: 3
+    samples: 2209
+    load_sec: 14.031
+    generate_sec_median: 28.572
+    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+    gpu_total_mib: 6141
+    driver: '595.84'
+    at: '2026-08-08T20:30:35+00:00'
+    fragmentation_mib: 278
+- name: part3d
+  adapter: aigamekit_shared.worker_serve_adapter_base
+  vram_mib: 2432
+  priority: 35
+  tool: part3d
+  footprint_key: hunyuan3d-part
+  runtime:
+    monorepo_tool: part3d
+  vram:
+    weights_gib: 0.0
+    activation_gib: 2.33
+    context_gib: 0.0
+    peak_mib: 2432
+    safety_mib: 384
+    admit_peak_mib: 2816
+  peak_profile:
+    quant_mode: sdnq-uint8
+    staged_load: true
+    load_kwargs:
+      memory_efficient: true
+      sdnq_preset: sdnq-uint8
+      cpu_offload: true
+  measured:
+    confidence: high
+    repeats: 3
+    samples: 1097
+    load_sec: 1.499
+    generate_sec_median: 3.071
+    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+    gpu_total_mib: 6141
+    driver: '595.84'
+    at: '2026-08-08T20:23:13+00:00'
+    fragmentation_mib: 570
+    warnings:
+    - '128 MiB retidos após o unload sem nada residente após o load: memória da inferência, não contexto
+      CUDA'
+    - 'nada residente após o load e 2378 MiB de pico no generate: o modelo é carregado dentro da inferência
+      (load lazy)'
+- name: paint3d
+  adapter: aigamekit_shared.worker_serve_adapter_base
+  vram_mib: 5760
+  priority: 40
+  tool: paint3d
+  footprint_key: hunyuan-paint
+  runtime:
+    monorepo_tool: paint3d
+  vram:
+    weights_gib: 1.45
+    activation_gib: 3.89
+    context_gib: 0.25
+    peak_mib: 5760
+    safety_mib: 384
+    admit_peak_mib: 6144
+  peak_profile:
+    quant_mode: none
+    staged_load: true
+    load_kwargs:
+      memory_efficient: true
+      max_num_view: 6
+      view_resolution: 512
+      render_size: 1536
+      texture_size: 3072
+  measured:
+    confidence: low
+    repeats: 3
+    samples: 6386
+    load_sec: 19.946
+    generate_sec_median: 98.539
+    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+    gpu_total_mib: 6141
+    driver: '595.84'
+    at: '2026-08-08T20:28:42+00:00'
+    fragmentation_mib: 3826
+    leak_mib_per_run: -130.0
+    warnings:
+    - 'activação (3982 MiB) > 1.5x pesos (1482 MiB): provável carregamento faseado dentro do generate
+      (peso não residente)'
+    - 'VRAM de terceiros variou 115 MiB durante a medição (baseline 0 → 115): pico possivelmente enviesado'
+- name: motion3d
+  adapter: aigamekit_shared.worker_serve_adapter_base
+  vram_mib: 4224
+  priority: 30
+  tool: motion3d
+  footprint_key: hy-motion-lite
+  runtime:
+    monorepo_tool: motion3d
+  vram:
+    weights_gib: 0.88
+    activation_gib: 1.77
+    context_gib: 0.14
+    peak_mib: 4224
+    safety_mib: 384
+    admit_peak_mib: 4608
+  peak_profile:
+    quant_mode: sdnq-int4
+    staged_load: true
+    load_bound: true
+    load_kwargs:
+      memory_efficient: true
+      model: full
+      offload_text_encoder: true
+      allow_group_offload: false
+      validation_steps: 20
+      sdnq_preset: sdnq-int4
+  measured:
+    confidence: high
+    repeats: 3
+    samples: 3002
+    load_sec: 18.896
+    generate_sec_median: 40.31
+    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+    gpu_total_mib: 6141
+    driver: '595.84'
+    at: '2026-08-08T20:33:09+00:00'
+    fragmentation_mib: 1806
+    warnings:
+    - 'pico no load (4196 MiB) acima do pico de inferência (2836 MiB): admitir só pela inferência causaria
+      OOM ao carregar'
+    - 'activação (1806 MiB) > 1.5x pesos (892 MiB): provável carregamento faseado dentro do generate (peso
+      não residente)'
+- name: text2d
+  adapter: aigamekit_shared.worker_serve_adapter_base
+  vram_mib: 5760
+  priority: 25
+  tool: text2d
+  footprint_key: flux-klein-9b
+  runtime:
+    monorepo_tool: text2d
+  vram:
+    weights_gib: 0.19
+    activation_gib: 5.18
+    context_gib: 0.23
+    peak_mib: 5760
+    safety_mib: 384
+    admit_peak_mib: 6144
+  peak_profile:
+    quant_mode: none
+    staged_load: true
+    load_kwargs:
+      memory_efficient: true
+      quant_preset: sdnq-int4
+      model_id: black-forest-labs/FLUX.2-klein-4B
+  measured:
+    confidence: low
+    repeats: 3
+    samples: 1522
+    load_sec: 30.789
+    generate_sec_median: 9.85
+    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+    gpu_total_mib: 6141
+    driver: '595.84'
+    at: '2026-08-08T19:33:58+00:00'
+    fragmentation_mib: 4678
+    leak_mib_per_run: -53.0
+    warmup_delta_mib: 2
+    warnings:
+    - 'activação (5300 MiB) > 1.5x pesos (188 MiB): provável carregamento faseado dentro do generate (peso
+      não residente)'
+    - 'primeira repetição com +2 MiB de pico (warmup): excluída da estabilidade'
+    - 'maior intervalo entre amostras 0.29s (alvo 0.05s): pico pode ter escapado'
+- name: skymap2d
+  adapter: aigamekit_shared.worker_serve_adapter_base
+  vram_mib: 5440
+  priority: 25
+  tool: skymap2d
+  footprint_key: flux-dev-uint4
+  runtime:
+    monorepo_tool: skymap2d
+  vram:
+    weights_gib: 0.08
+    activation_gib: 5.0
+    context_gib: 0.2
+    peak_mib: 5440
+    safety_mib: 384
+    admit_peak_mib: 5824
+  peak_profile:
+    quant_mode: none
+    staged_load: true
+    load_kwargs:
+      memory_efficient: true
+  measured:
+    confidence: low
+    repeats: 3
+    samples: 19309
+    load_sec: 22.717
+    generate_sec_median: 215.673
+    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+    gpu_total_mib: 6141
+    driver: '595.84'
+    at: '2026-08-08T19:50:32+00:00'
+    fragmentation_mib: 3706
+    warnings:
+    - 'activação (5112 MiB) > 1.5x pesos (78 MiB): provável carregamento faseado dentro do generate (peso
+      não residente)'
+    - 'maior intervalo entre amostras 0.91s (alvo 0.05s): pico pode ter escapado'
+- name: text3d
+  adapter: aigamekit_shared.worker_serve_adapter_base
+  vram_mib: 3904
+  priority: 40
+  tool: text3d
+  footprint_key: hunyuan3d-omni
+  runtime:
+    monorepo_tool: text3d
+  vram:
+    weights_gib: 1.11
+    activation_gib: 2.5
+    context_gib: 0.2
+    peak_mib: 3904
+    safety_mib: 384
+    admit_peak_mib: 4288
+  peak_profile:
+    quant_mode: sdnq-int4
+    staged_load: true
+    load_kwargs:
+      sdnq_preset: sdnq-int4
+      volume_decoder: flashvdm
+  measured:
+    confidence: high
+    repeats: 3
+    samples: 8272
+    load_sec: 76.658
+    generate_sec_median: 110.113
+    gpu: NVIDIA GeForce RTX 4050 Laptop GPU
+    gpu_total_mib: 6141
+    driver: '595.84'
+    at: '2026-08-08T20:22:17+00:00'
+    fragmentation_mib: 2090
+    leak_mib_per_run: -1.0
+    warnings:
+    - 'activação (2550 MiB) > 1.5x pesos (1128 MiB): provável carregamento faseado dentro do generate
+      (peso não residente)'

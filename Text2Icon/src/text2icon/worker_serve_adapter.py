@@ -40,6 +40,9 @@ class Adapter(WorkerAdapter):
             "torch_compile",
             "sdnq_preset",
             "quant_preset",
+            # Perfil da tool (CLI/hw_auto) — o ctor SanaIconGenerator não o
+            # aceita; o offload interno é controlado por ``low_vram`` acima.
+            "cpu_offload",
         }
         load_kwargs.update({k: v for k, v in kwargs.items() if k not in skip})
         if "low_vram" in kwargs:

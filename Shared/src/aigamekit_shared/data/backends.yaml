@@ -19,6 +19,11 @@
 #   de VRAMD_TOOLS_ROOT (o checkout) e corre ``serve --ums-worker``.
 # Env VRAMD_SUBPROCESS=0 desliga o modo subprocesso (rollback, não suportado
 # sem adapters in-process).
+#
+# calibrate_request / calibrate_load_kwargs: o que `vramd calibrate <backend>`
+# usa por default (job representativo). Nomes curtos de inputs (test-mesh.glb,
+# test-image.png) resolvem para o package data do vramd — o utilizador não
+# precisa de ter um modelo de teste.
 
 backends:
   - name: text2icon
@@ -27,12 +32,18 @@ backends:
     footprint_key: sana-sprint-600m
     priority: 20
     tool: text2icon
+    calibrate_request:
+      prompt: "a red cube on a white background"
+      output: "/tmp/vramd-calibrate-text2icon.png"
 
   - name: texture2d
     adapter: aigamekit_shared.worker_serve_adapter_base
     vram_mib: 2500
     priority: 20
     tool: texture2d
+    calibrate_request:
+      prompt: "seamless red brick wall"
+      output: "/tmp/vramd-calibrate-texture2d.png"
 
   - name: text2d
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -43,6 +54,9 @@ backends:
     peak_profile:
       memory_efficient_with_quant: true
       streams_on_load_with_memory_efficient: true
+    calibrate_request:
+      prompt: "a red cube on a white background"
+      output: "/tmp/vramd-calibrate-text2d.png"
 
   - name: skymap2d
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -50,6 +64,9 @@ backends:
     footprint_key: flux-dev-uint4
     priority: 25
     tool: skymap2d
+    calibrate_request:
+      prompt: "stormy sky over mountains"
+      output: "/tmp/vramd-calibrate-skymap2d.png"
 
   - name: text3d
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -60,6 +77,9 @@ backends:
     peak_profile:
       memory_efficient_with_quant: true
       group_offload_with_memory_efficient: true
+    calibrate_request:
+      from_image: "test-image.png"
+      output: "/tmp/vramd-calibrate-text3d.glb"
 
   - name: paint3d
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -69,6 +89,10 @@ backends:
     tool: paint3d
     peak_profile:
       memory_efficient_with_quant: true
+    calibrate_request:
+      mesh_path: "test-mesh.glb"
+      image_path: "test-image.png"
+      output: "/tmp/vramd-calibrate-paint3d.glb"
 
   - name: part3d
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -76,6 +100,10 @@ backends:
     footprint_key: hunyuan3d-part
     priority: 35
     tool: part3d
+    calibrate_request:
+      mesh_path: "test-mesh.glb"
+      output: "/tmp/vramd-calibrate-part3d.glb"
+      output_segmented: "/tmp/vramd-calibrate-part3d-seg.glb"
 
   - name: text2sound
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -83,6 +111,9 @@ backends:
     footprint_key: stable-audio-open
     priority: 30
     tool: text2sound
+    calibrate_request:
+      prompt: "soft pad"
+      output: "/tmp/vramd-calibrate-text2sound.wav"
 
   - name: terrain3d
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -92,6 +123,9 @@ backends:
     vram_mib: 3200
     priority: 40
     tool: terrain3d
+    calibrate_request:
+      prompt: "mountain valley"
+      output: "/tmp/vramd-calibrate-terrain3d.glb"
 
   - name: motion3d
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -104,3 +138,8 @@ backends:
     peak_profile:
       memory_efficient_with_quant: true
       group_offload_with_memory_efficient: true
+    calibrate_request:
+      prompt: "a person walks forward"
+      output: "/tmp/vramd-calibrate-motion3d.glb"
+    calibrate_load_kwargs:
+      sdnq_preset: sdnq-int4

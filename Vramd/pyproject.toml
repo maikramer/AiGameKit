@@ -13,7 +13,7 @@ license = "MIT"
 # O supervisor vem do PyPI; esta pasta só amarra a versão ao venv canónico
 # (Vramd/.venv) que o cliente Shared procura para o auto-start.
 dependencies = [
-    "vramd==0.2.0",
+    "vramd==0.2.3",
 ]
 
 [project.scripts]
