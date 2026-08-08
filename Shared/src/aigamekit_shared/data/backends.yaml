@@ -35,6 +35,8 @@ backends:
     calibrate_request:
       prompt: "a red cube on a white background"
       output: "/tmp/vramd-calibrate-text2icon.png"
+    calibrate_load_kwargs:
+      sdnq_preset: sdnq-int4
 
   - name: texture2d
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -57,6 +59,8 @@ backends:
     calibrate_request:
       prompt: "a red cube on a white background"
       output: "/tmp/vramd-calibrate-text2d.png"
+    calibrate_load_kwargs:
+      quant_preset: sdnq-int4
 
   - name: skymap2d
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -93,6 +97,8 @@ backends:
       mesh_path: "test-mesh.glb"
       image_path: "test-image.png"
       output: "/tmp/vramd-calibrate-paint3d.glb"
+    calibrate_load_kwargs:
+      sdnq_preset: sdnq-fp8
 
   - name: part3d
     adapter: aigamekit_shared.worker_serve_adapter_base
@@ -104,6 +110,8 @@ backends:
       mesh_path: "test-mesh.glb"
       output: "/tmp/vramd-calibrate-part3d.glb"
       output_segmented: "/tmp/vramd-calibrate-part3d-seg.glb"
+    calibrate_load_kwargs:
+      sdnq_preset: sdnq-fp8
 
   - name: text2sound
     adapter: aigamekit_shared.worker_serve_adapter_base

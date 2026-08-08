@@ -386,6 +386,43 @@ def resolve_vramd_calibration(vram_total_mib: int | None = None) -> Path | None:
     return chosen
 
 
+def calibrated_peak_signals(backend: str) -> dict[str, Any] | None:
+    """Sinais de pico do hw-auto vindos da calibração selecionada.
+
+    A calibração guarda o config que FOI medido (``peak_profile.quant_mode`` +
+    ``load_kwargs``). Quando existe calibração para o hardware, a produção deve
+    pedir o **mesmo** config — senão o admit descarta a medição (quant
+    mismatch) e volta às estimativas (ex.: paint3d medido sem SDNQ mas produção
+    a pedir sdnq-uint8 → admit com 4000 em vez de 5760 → risco OOM).
+
+    Returns:
+        ``{"sdnq_preset": ..., "memory_efficient": ...}`` ou ``None`` se não há
+        calibração para o hardware/backend (o hw-auto cai no perfil da tool).
+    """
+    cal = resolve_vramd_calibration()
+    if cal is None:
+        return None
+    try:
+        import yaml
+
+        data = yaml.safe_load(cal.read_text(encoding="utf-8"))
+        for entry in data.get("backends", []):
+            if entry.get("name") != backend:
+                continue
+            pp = entry.get("peak_profile") or {}
+            lk = pp.get("load_kwargs") or {}
+            signals: dict[str, Any] = {}
+            preset = pp.get("quant_mode") or lk.get("sdnq_preset") or lk.get("quant_preset")
+            if preset and str(preset).strip().lower() not in ("", "none", "null"):
+                signals["sdnq_preset"] = str(preset)
+            if lk.get("memory_efficient") is not None:
+                signals["memory_efficient"] = bool(lk["memory_efficient"])
+            return signals or None
+    except Exception:
+        return None
+    return None
+
+
 def _discover_vramd_python() -> Path | None:
     """Procura ``Vramd/.venv/bin/python`` relativo ao monorepo / Shared.
 

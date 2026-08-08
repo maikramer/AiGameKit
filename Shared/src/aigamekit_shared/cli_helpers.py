@@ -473,6 +473,19 @@ def with_vramd_peak_opts(
 
     preset = _norm(sdnq_preset)
     qpreset = _norm(quant_preset)
+    if preset is None and qpreset is None and memory_efficient is None:
+        # hw-auto acertado pela calibração: quando existe calibração para este
+        # hardware, pedir o config que FOI medido (quant match garante que o
+        # admit usa a medição em vez de cair nas estimativas). O explícito do
+        # utilizador/CLI acima continua a ganhar.
+        from .vramd_client import calibrated_peak_signals
+
+        signals = calibrated_peak_signals(backend)
+        if signals:
+            preset = _norm(signals.get("sdnq_preset"))
+            if memory_efficient is None and signals.get("memory_efficient") is not None:
+                memory_efficient = bool(signals["memory_efficient"])
+                out["memory_efficient"] = memory_efficient
     if qpreset is not None:
         out["quant_preset"] = qpreset
         if preset is None:
@@ -480,9 +493,13 @@ def with_vramd_peak_opts(
     if preset is not None:
         out["sdnq_preset"] = preset
     elif out.get("memory_efficient") and "sdnq_preset" not in out:
-        # Defaults honestos por backend quando mem_eff sem preset explícito.
+        # Defaults honestos por backend quando mem_eff sem preset explícito
+        # (nem calibração). uint8 → fp8 quando o hardware suporta: mesma
+        # ocupação de VRAM, melhor qualidade.
+        from .vramd_load import prefer_fp8_preset
+
         if backend in ("paint3d", "text2d", "part3d", "text2icon"):
-            out["sdnq_preset"] = "sdnq-uint8"
+            out["sdnq_preset"] = prefer_fp8_preset("sdnq-uint8")
         elif backend in ("text3d", "motion3d"):
             out["sdnq_preset"] = "sdnq-int4"
         elif backend == "skymap2d":

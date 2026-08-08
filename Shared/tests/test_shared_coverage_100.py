@@ -243,7 +243,10 @@ def test_with_vramd_load_extra(k: str, v: Any) -> None:
         ("text3d", False, None),
     ],
 )
-def test_with_ums_peak_mem_eff(backend: str, mem: bool, exp: str | None) -> None:
+def test_with_ums_peak_mem_eff(backend: str, mem: bool, exp: str | None, monkeypatch) -> None:
+    # Determinístico: sem suporte fp8 (defaults uint8/int4/none). O caso fp8
+    # vive em test_cli_helpers.TestWithUmsPeakOpts.
+    monkeypatch.setattr("aigamekit_shared.gpu.supports_fp8", lambda device=0: False)
     out = with_vramd_peak_opts({}, backend=backend, memory_efficient=mem)
     if exp:
         assert out.get("sdnq_preset") == exp

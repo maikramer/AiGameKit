@@ -282,10 +282,52 @@ class TestTryUmsDelegation:
 class TestWithUmsPeakOpts:
     """with_vramd_peak_opts: sinais honestos de pico VRAM para admit vramd."""
 
-    def test_paint_mem_eff_default_sdnq(self) -> None:
+    def test_paint_mem_eff_default_sdnq(self, monkeypatch) -> None:
+        monkeypatch.setattr("aigamekit_shared.gpu.supports_fp8", lambda device=0: False)
         out = with_vramd_peak_opts({}, backend="paint3d", memory_efficient=True)
         assert out["memory_efficient"] is True
         assert out["sdnq_preset"] == "sdnq-uint8"
+
+    def test_paint_mem_eff_default_prefers_fp8_when_supported(self, monkeypatch) -> None:
+        monkeypatch.setattr("aigamekit_shared.gpu.supports_fp8", lambda device=0: True)
+        out = with_vramd_peak_opts({}, backend="paint3d", memory_efficient=True)
+        assert out["sdnq_preset"] == "sdnq-fp8"
+
+    def test_calibration_signals_used_when_nothing_explicit(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """hw-auto acertado: sem sinais explícitos, a calibração selecionada
+        manda (quant match com o admit)."""
+        from aigamekit_shared import vramd_client as ms
+
+        cal_dir = tmp_path / "calibrated"
+        cal_dir.mkdir()
+        (cal_dir / "backends-6g.yaml").write_text(
+            "version: 2\nbackends:\n- name: paint3d\n  peak_profile:\n"
+            "    quant_mode: sdnq-uint8\n    load_kwargs:\n"
+            "      memory_efficient: true\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", cal_dir)
+        out = with_vramd_peak_opts({}, backend="paint3d")
+        assert out["sdnq_preset"] == "sdnq-uint8"
+        assert out["memory_efficient"] is True
+
+    def test_explicit_wins_over_calibration(self, tmp_path, monkeypatch) -> None:
+        """O explícito do utilizador/CLI continua a ganhar à calibração."""
+        from aigamekit_shared import vramd_client as ms
+
+        cal_dir = tmp_path / "calibrated"
+        cal_dir.mkdir()
+        (cal_dir / "backends-6g.yaml").write_text(
+            "version: 2\nbackends:\n- name: paint3d\n  peak_profile:\n"
+            "    quant_mode: sdnq-uint8\n    load_kwargs:\n"
+            "      memory_efficient: true\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", cal_dir)
+        out = with_vramd_peak_opts({}, backend="paint3d", memory_efficient=True, sdnq_preset="none")
+        assert out["sdnq_preset"] == "none"
 
     def test_text2d_quant_preset_maps_to_sdnq(self) -> None:
         out = with_vramd_peak_opts({}, backend="text2d", quant_preset="sdnq-int4")
@@ -306,7 +348,8 @@ class TestWithUmsPeakOpts:
         assert out["memory_efficient"] is True
         assert out["sdnq_preset"] == "none"
 
-    def test_part3d_mem_eff_default_sdnq(self) -> None:
+    def test_part3d_mem_eff_default_sdnq(self, monkeypatch) -> None:
+        monkeypatch.setattr("aigamekit_shared.gpu.supports_fp8", lambda device=0: False)
         out = with_vramd_peak_opts({}, backend="part3d", memory_efficient=True)
         assert out["sdnq_preset"] == "sdnq-uint8"
 

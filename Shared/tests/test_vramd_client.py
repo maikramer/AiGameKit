@@ -273,3 +273,37 @@ class TestResolveVramdCalibration:
         monkeypatch.setattr(ms, "CALIBRATED_DIR", self._make_catalog(tmp_path, [6]))
         with patch("aigamekit_shared.gpu.gpu_total_mib", return_value=None):
             assert ms.resolve_vramd_calibration() is None
+
+
+class TestCalibratedPeakSignals:
+    """hw-auto acertado: os sinais de pico vêm da calibração selecionada."""
+
+    def _catalog(self, tmp_path: Path, *, backend: str = "paint3d", preset: str = "sdnq-uint8") -> Path:
+        cal_dir = tmp_path / "calibrated"
+        cal_dir.mkdir()
+        (cal_dir / "backends-6g.yaml").write_text(
+            "version: 2\nbackends:\n"
+            f"- name: {backend}\n"
+            f"  peak_profile:\n    quant_mode: {preset}\n    load_kwargs:\n"
+            "      memory_efficient: true\n",
+            encoding="utf-8",
+        )
+        return cal_dir
+
+    def test_signals_from_calibration(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", self._catalog(tmp_path))
+        signals = ms.calibrated_peak_signals("paint3d")
+        assert signals == {"sdnq_preset": "sdnq-uint8", "memory_efficient": True}
+
+    def test_quant_mode_none_means_no_preset(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", self._catalog(tmp_path, preset="none"))
+        signals = ms.calibrated_peak_signals("paint3d")
+        assert signals.get("sdnq_preset") is None
+
+    def test_unknown_backend_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", self._catalog(tmp_path))
+        assert ms.calibrated_peak_signals("text3d") is None
+
+    def test_no_calibration_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ms, "CALIBRATED_DIR", tmp_path / "vazio")
+        assert ms.calibrated_peak_signals("paint3d") is None

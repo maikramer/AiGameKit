@@ -5,6 +5,10 @@
 # Catálogo por VRAM: um ficheiro por capacidade de GPU (backends-6g.yaml,
 # backends-16g.yaml…). O auto-start escolhe o ficheiro com a maior etiqueta
 # ≤ VRAM total da GPU; sem calibração para o hardware, usa estimativas + hw-auto.
+#
+# O hw-auto de produção (with_vramd_peak_opts) pede o config que FOI medido
+# (peak_profile.quant_mode + load_kwargs) — quant match garante que o admit
+# usa estes números. Em hardware com FP8, uint8 → sdnq-fp8 (mesma VRAM).
 version: 2
 backends:
 
@@ -24,24 +28,26 @@ backends:
     safety_mib: 384
     admit_peak_mib: 6016
   peak_profile:
-    quant_mode: none
+    quant_mode: sdnq-int4
     unload_frees_vram: false
     load_kwargs:
       cpu_offload: true
+      sdnq_preset: sdnq-int4
   measured:
-    confidence: medium
+    confidence: low
     repeats: 3
-    samples: 684
-    load_sec: 14.137
-    generate_sec_median: 2.101
+    samples: 660
+    load_sec: 13.014
+    generate_sec_median: 2.291
     gpu: NVIDIA GeForce RTX 4050 Laptop GPU
     gpu_total_mib: 6141
     driver: '595.84'
-    at: '2026-08-08T19:26:57+00:00'
+    at: '2026-08-08T20:50:29+00:00'
     fragmentation_mib: 756
     warnings:
     - 'unload devolveu 82 MiB de 4764 MiB: evictar este backend NÃO liberta VRAM; pesos e contexto não
       separáveis'
+    - 'VRAM de terceiros variou 82 MiB durante a medição (baseline 0 → 82): pico possivelmente enviesado'
 - name: texture2d
   adapter: aigamekit_shared.worker_serve_adapter_base
   vram_mib: 3392
@@ -136,7 +142,7 @@ backends:
     fragmentation_mib: 278
 - name: part3d
   adapter: aigamekit_shared.worker_serve_adapter_base
-  vram_mib: 2432
+  vram_mib: 2368
   priority: 35
   tool: part3d
   footprint_key: hunyuan3d-part
@@ -144,33 +150,33 @@ backends:
     monorepo_tool: part3d
   vram:
     weights_gib: 0.0
-    activation_gib: 2.33
+    activation_gib: 2.31
     context_gib: 0.0
-    peak_mib: 2432
+    peak_mib: 2368
     safety_mib: 384
-    admit_peak_mib: 2816
+    admit_peak_mib: 2752
   peak_profile:
-    quant_mode: sdnq-uint8
+    quant_mode: sdnq-fp8
     staged_load: true
     load_kwargs:
       memory_efficient: true
-      sdnq_preset: sdnq-uint8
+      sdnq_preset: sdnq-fp8
       cpu_offload: true
   measured:
     confidence: high
     repeats: 3
-    samples: 1097
-    load_sec: 1.499
-    generate_sec_median: 3.071
+    samples: 1082
+    load_sec: 1.487
+    generate_sec_median: 3.084
     gpu: NVIDIA GeForce RTX 4050 Laptop GPU
     gpu_total_mib: 6141
     driver: '595.84'
-    at: '2026-08-08T20:23:13+00:00'
+    at: '2026-08-08T21:04:52+00:00'
     fragmentation_mib: 570
     warnings:
     - '128 MiB retidos após o unload sem nada residente após o load: memória da inferência, não contexto
       CUDA'
-    - 'nada residente após o load e 2378 MiB de pico no generate: o modelo é carregado dentro da inferência
+    - 'nada residente após o load e 2358 MiB de pico no generate: o modelo é carregado dentro da inferência
       (load lazy)'
 - name: paint3d
   adapter: aigamekit_shared.worker_serve_adapter_base
@@ -182,13 +188,13 @@ backends:
     monorepo_tool: paint3d
   vram:
     weights_gib: 1.45
-    activation_gib: 3.89
+    activation_gib: 3.9
     context_gib: 0.25
     peak_mib: 5760
     safety_mib: 384
     admit_peak_mib: 6144
   peak_profile:
-    quant_mode: none
+    quant_mode: sdnq-fp8
     staged_load: true
     load_kwargs:
       memory_efficient: true
@@ -196,22 +202,23 @@ backends:
       view_resolution: 512
       render_size: 1536
       texture_size: 3072
+      sdnq_preset: sdnq-fp8
   measured:
     confidence: low
     repeats: 3
-    samples: 6386
-    load_sec: 19.946
-    generate_sec_median: 98.539
+    samples: 6336
+    load_sec: 16.819
+    generate_sec_median: 98.251
     gpu: NVIDIA GeForce RTX 4050 Laptop GPU
     gpu_total_mib: 6141
     driver: '595.84'
-    at: '2026-08-08T20:28:42+00:00'
+    at: '2026-08-08T21:03:55+00:00'
     fragmentation_mib: 3826
-    leak_mib_per_run: -130.0
+    leak_mib_per_run: -360.0
     warnings:
-    - 'activação (3982 MiB) > 1.5x pesos (1482 MiB): provável carregamento faseado dentro do generate
+    - 'activação (3986 MiB) > 1.5x pesos (1482 MiB): provável carregamento faseado dentro do generate
       (peso não residente)'
-    - 'VRAM de terceiros variou 115 MiB durante a medição (baseline 0 → 115): pico possivelmente enviesado'
+    - 'VRAM de terceiros variou 86 MiB durante a medição (baseline 0 → 86): pico possivelmente enviesado'
 - name: motion3d
   adapter: aigamekit_shared.worker_serve_adapter_base
   vram_mib: 4224
@@ -270,7 +277,7 @@ backends:
     safety_mib: 384
     admit_peak_mib: 6144
   peak_profile:
-    quant_mode: none
+    quant_mode: sdnq-int4
     staged_load: true
     load_kwargs:
       memory_efficient: true
@@ -279,21 +286,20 @@ backends:
   measured:
     confidence: low
     repeats: 3
-    samples: 1522
-    load_sec: 30.789
-    generate_sec_median: 9.85
+    samples: 1499
+    load_sec: 30.297
+    generate_sec_median: 9.798
     gpu: NVIDIA GeForce RTX 4050 Laptop GPU
     gpu_total_mib: 6141
     driver: '595.84'
-    at: '2026-08-08T19:33:58+00:00'
-    fragmentation_mib: 4678
-    leak_mib_per_run: -53.0
-    warmup_delta_mib: 2
+    at: '2026-08-08T20:51:46+00:00'
+    fragmentation_mib: 4688
+    leak_mib_per_run: -57.0
     warnings:
-    - 'activação (5300 MiB) > 1.5x pesos (188 MiB): provável carregamento faseado dentro do generate (peso
+    - 'activação (5296 MiB) > 1.5x pesos (188 MiB): provável carregamento faseado dentro do generate (peso
       não residente)'
-    - 'primeira repetição com +2 MiB de pico (warmup): excluída da estabilidade'
-    - 'maior intervalo entre amostras 0.29s (alvo 0.05s): pico pode ter escapado'
+    - 'VRAM de terceiros variou 82 MiB durante a medição (baseline 0 → 82): pico possivelmente enviesado'
+    - 'maior intervalo entre amostras 0.22s (alvo 0.05s): pico pode ter escapado'
 - name: skymap2d
   adapter: aigamekit_shared.worker_serve_adapter_base
   vram_mib: 5440

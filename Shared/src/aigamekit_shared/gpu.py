@@ -433,6 +433,36 @@ def gpu_total_mib(device: int = 0) -> int | None:
     return int(total // (1024 * 1024))
 
 
+def supports_fp8(device: int = 0) -> bool:
+    """True se a GPU suporta FP8 (e4m3fn): Ada (8.9), Hopper (9.x), Blackwell (10.x).
+
+    Usado pelo hw-auto para preferir ``sdnq-fp8`` a ``sdnq-uint8`` — mesma
+    ocupação de VRAM (fator 0.55), melhor qualidade. Ampere (8.0/8.6) e
+    anteriores: ``False``.
+
+    NVML primeiro (sem importar torch); fallback para ``torch.cuda`` quando o
+    NVML não está disponível (ex.: processo sem privilégios).
+    """
+    if _nvml_init():
+        try:
+            import pynvml
+
+            with _nvml_lock:
+                handle = pynvml.nvmlDeviceGetHandleByIndex(device)
+                major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
+            return (int(major), int(minor)) >= (8, 9)
+        except Exception:
+            pass
+    try:
+        torch = _torch()
+        if torch.cuda.is_available():
+            major, minor = torch.cuda.get_device_capability(device)
+            return (int(major), int(minor)) >= (8, 9)
+    except Exception:
+        pass
+    return False
+
+
 def gpu_bytes_in_use(device: int = 0) -> int | None:
     """Bytes de VRAM em uso (total - livre).
 
