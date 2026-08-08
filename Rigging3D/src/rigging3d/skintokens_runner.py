@@ -64,6 +64,14 @@ def ensure_checkpoints(home: Path | None = None) -> Path:
 
     configs_link = root / "configs"
     vendored_configs = _PACKAGE_ROOT / "configs"
+    # Symlink dangling (checkout mudou de path) faz ``exists()`` = False mas a
+    # entrada já existe — re-apontar em vez de rebentar com FileExistsError.
+    if configs_link.is_symlink():
+        try:
+            if configs_link.resolve() != vendored_configs.resolve():
+                configs_link.unlink()
+        except OSError:
+            configs_link.unlink()
     if not configs_link.exists():
         configs_link.symlink_to(vendored_configs, target_is_directory=True)
     return root

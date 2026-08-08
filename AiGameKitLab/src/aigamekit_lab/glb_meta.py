@@ -208,6 +208,7 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
     return {
         "attributes_present": sorted(union_attrs),
         "attributes_per_primitive": attributes_per_primitive,
+        "skin_count": len(chunk.get("skins") or []),
         "extensions_used": extensions_used,
         "extensions_required": extensions_required,
         "texture_mime_types": texture_mime_types,

@@ -210,8 +210,16 @@ def evaluate_inspect_rules(
         ext_used = glb_meta.get("extensions_used") or []
         if wanted == "meshopt":
             if "EXT_meshopt_compression" not in ext_used:
-                failures.append("compression: EXT_meshopt_compression ausente")
-            details["rules_applied"].append("compression(meshopt)")
+                # Assets rigados saem SEM meshopt por decisão do gltf_finish
+                # (a quantização recentra o bbox e tira os pés do y=0 — ver
+                # text3d.utils.gltf_finish). Não é falha: pés no chão > compressão.
+                if glb_meta.get("skin_count") or inspect.get("armatures"):
+                    details["rules_applied"].append("compression(meshopt,skinned-omitido)")
+                else:
+                    failures.append("compression: EXT_meshopt_compression ausente")
+                    details["rules_applied"].append("compression(meshopt)")
+            else:
+                details["rules_applied"].append("compression(meshopt)")
         elif wanted == "draco":
             if "KHR_draco_mesh_compression" not in ext_used:
                 failures.append("compression: KHR_draco_mesh_compression ausente")

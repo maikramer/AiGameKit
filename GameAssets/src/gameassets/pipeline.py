@@ -131,6 +131,24 @@ def _count_faces_glb(path: Path) -> int:
         return -1
 
 
+
+def _release_vramd_before_external_stage(stage_name: str) -> None:
+    """``vramd zero`` antes de stages que NÃO passam pelo supervisor.
+
+    rigging3d/animator3d correm como CLIs externos e precisam da GPU limpa —
+    mas os workers do vramd (ex.: o paint3d, que segura ~4 GiB) ficam vivos a
+    segurar VRAM depois das fases anteriores e o stage externo OOMa numa GPU
+    de 6 GB (medido: rigging3d com 297 MiB livres a falhar).
+    """
+    try:
+        from aigamekit_shared.vramd_client import zero_vramd_vram
+
+        if zero_vramd_vram() is not None:
+            log.info("master: VRAM do vramd zerada antes do stage %s (CLI externo)", stage_name)
+    except Exception:
+        pass
+
+
 def _rigging3d_pipeline_argv(
     rigging3d_bin: str,
     mesh_in: Path,
@@ -2398,6 +2416,7 @@ def run_master_pipeline(
         elif _rigged_ok(rigged_p):
             res.stages.append(StageResult("rigging3d", True, 0.0, "skipped (rigged existente)", rigged_p))
         else:
+            _release_vramd_before_external_stage("rigging3d")
             rig_argv = _rigging3d_pipeline_argv(
                 rigging3d_bin,
                 painted_p,
@@ -2447,6 +2466,7 @@ def run_master_pipeline(
                     procedural=eff_procedural,
                     force_preset=eff_force_preset,
                 )
+                _release_vramd_before_external_stage("animate")
                 s = _run("animate", an_argv, animated_p)
                 res.stages.append(s)
                 if s.ok and not _animated_ok(animated_p):

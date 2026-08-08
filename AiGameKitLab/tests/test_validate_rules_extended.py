@@ -68,6 +68,21 @@ def test_compression_meshopt() -> None:
     assert not ok
 
 
+def test_compression_meshopt_skinned_omission_is_deliberate() -> None:
+    """Assets rigados saem sem meshopt por decisão do gltf_finish (a
+    quantização desloca os pés do y=0) — a regra não falha para skinned."""
+    rules = {"compression": "meshopt"}
+    insp_skinned = _base_inspect(extensions_used=[], skin_count=1)
+    ok, fails, details = evaluate_inspect_rules(insp_skinned, rules)
+    assert ok, fails
+    assert any("skinned" in d for d in details["rules_applied"])
+
+    # Sem skins continua a falhar (não-skinned tem de ter meshopt).
+    insp_bad = _base_inspect(extensions_used=[], skin_count=0)
+    ok, _fails, _ = evaluate_inspect_rules(insp_bad, rules)
+    assert not ok
+
+
 def test_origin_y_min_pass() -> None:
     rules = {"origin": {"y_min": {"near": 0.0, "tol": 0.05}}}
     insp = _base_inspect(world_bounds_y_min=0.01)

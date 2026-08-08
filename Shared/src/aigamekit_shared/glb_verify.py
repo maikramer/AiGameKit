@@ -312,6 +312,7 @@ def extract_glb_meta(path: str | Path) -> dict[str, Any]:
         "has_joints": "JOINTS_0" in union,
         "has_weights": "WEIGHTS_0" in union,
         "mesh_count": len(chunk.get("meshes") or []),
+        "skin_count": len(chunk.get("skins") or []),
         "primitive_count": prim_count,
         "vertex_count_total": total_v,
         "triangle_count_total": tris,

@@ -159,7 +159,11 @@ class TestEvaluateInspectRules:
         assert any("texture_format" in f for f in fails)
 
     def test_compression_meshopt_missing(self) -> None:
+        # Asset SEM skin/armadura tem de ter meshopt (a omissão só é
+        # deliberada para rigged — a quantização desloca os pés).
         insp = self._inspect_ok()
+        insp["armatures"] = []
+        insp["glb_meta"]["skin_count"] = 0
         ok, _, _ = evaluate_inspect_rules(insp, {"compression": "meshopt"})
         assert ok is False
 
