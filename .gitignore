@@ -134,6 +134,11 @@ VibeGame/examples/simple-rpg/public/assets/.assets-version
 
 # Screenshots de teste no exemplo
 VibeGame/examples/simple-rpg/screenshot*.png
+VibeGame/examples/simple-rpg/sky-01.png
+VibeGame/examples/simple-rpg/sample-gameassets/.FULL_REGEN_LOCK
+VibeGame/examples/simple-rpg/sample-gameassets/**/.gameassets_work/
+VibeGame/examples/simple-rpg/sample-gameassets/resume-*.stdout
+VibeGame/examples/simple-rpg/sample-gameassets/resume-*.jsonl
 
 # VibeGame simple-racer — intermediários de pipeline e estado local de batch
 VibeGame/examples/simple-racer/public/assets/meshes/**/_intermediate/
