@@ -116,16 +116,143 @@
       fog-far="900"
       ambient-intensity="0.75"
       resume-audio-on-user-gesture="true"
-      postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.55; bloom-radius: 0.6; bloom-threshold: 0.7; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.15; vignette: 1; vignette-offset: 0.35; vignette-darkness: 0.4; color-grading: 1; saturation: 0.18; contrast: 0.08; film-grain: 1; film-grain-intensity: 0.05; chromatic-aberration: 1; chromatic-aberration-offset: 0.0012; ssao: 1; ssao-intensity: 1.2; ssao-radius: 0.12; god-rays: 1; god-rays-density: 0.96; god-rays-decay: 0.92; god-rays-weight: 0.35; god-rays-exposure: 0.5"
     >
-      <!-- Dusk sun: low, warm, with soft (PCSS) + cascaded shadows so the
-           long shadows read correctly across the whole circuit. -->
+      <!-- Céu equirect + IBL (mesmo pipeline do simple-rpg): o PMREM do
+           equirect vira `scene.environment`, então os materiais PBR refletem
+           o céu real em vez de uma sala neutra. -->
+      <EquirectSky
+        url="/assets/sky/sky.png"
+        environment-intensity="0.5"
+        background-intensity="1.0"
+      ></EquirectSky>
+
+      <!-- Luz + pós-processamento no MESMO GameObject (é assim que a entidade
+           Postprocessing nasce — o runtime só parseia o innerHTML do Scene,
+           um atributo `postprocessing=` no próprio <Scene> é ignorado).
+           Sombras: PCSS soft (sem CSM — cascatas com materiais custom dão a
+           sombra "quadrada"). SSAO ligado para a oclusão ambiente nos
+           objetos. -->
       <GameObject
-        directional-light="color: 0xff9a5c; intensity: 2.2; direction-x: -0.35; direction-y: 0.9; direction-z: -0.28; cast-shadow: 1; shadow-map-size: 2048; csm: 1; csm-cascades: 3; csm-max-far: 120; pcss: 1"
-      ></GameObject>
-      <GameObject
-        ambient-light="sky-color: 0x5a4a7a; ground-color: 0x1c1626; intensity: 0.65"
-      ></GameObject>
+        ambient-light="sky-color: 0xffd9b0; ground-color: 0x2a2038; intensity: 0.7"
+        directional-light="color: 0xff9a5c; intensity: 2.6; direction-x: -0.35; direction-y: 0.9; direction-z: -0.28; cast-shadow: 1; shadow-map-size: 2048; distance: 120; pcss: 0"
+        postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.5; bloom-radius: 0.6; bloom-threshold: 0.72; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.12; vignette: 1; vignette-offset: 0.34; vignette-darkness: 0.4; color-grading: 1; saturation: 0.15; contrast: 0.07; ssao: 1; ssao-intensity: 1.1; ssao-radius: 0.1; film-grain: 0; chromatic-aberration: 0; god-rays: 0; depth-of-field: 0"
+      >
+      </GameObject>
+
+      <!-- Vento global: empurra a grama (VegetationWindSystem lê
+           getWindVector) e as nuvens do céu. -->
+      <Weather
+        wind="0.7 0.25"
+        wind-strength="1.6"
+        clouds="0.35"
+        cloud-height="160"
+        rain="0"
+        cycle="1"
+      ></Weather>
+
+      <!-- Cenário fora do corredor (sistema de spawner do motor, mesmo padrão
+           do simple-rpg): pinheiros e rochas nas colinas do terreno. O
+           avoid-road usa o ground-brush kind:'road' que o <Road flatten>
+           registra com o corredor real (leito + talude) — os spawners ficam
+           fora do corte inteiro, sem buracos entre nós. -->
+      <StaticSpawner
+        count="300"
+        seed="7101"
+        region-min="-620 0 -620"
+        region-max="620 0 620"
+        align-to-terrain="1"
+        ground-align="auto"
+        max-slope-deg="35"
+        scale-min="0.8"
+        scale-max="1.5"
+        avoid-road="1"
+      >
+        <GLTFLoader url="/assets/meshes/props/pine_tree_lod0.glb"></GLTFLoader>
+      </StaticSpawner>
+      <StaticSpawner
+        count="80"
+        seed="7102"
+        region-min="-620 0 -620"
+        region-max="620 0 620"
+        align-to-terrain="1"
+        ground-align="auto"
+        max-slope-deg="40"
+        scale-min="0.5"
+        scale-max="1.2"
+        avoid-road="1"
+      >
+        <GLTFLoader url="/assets/meshes/props/rock_boulder_lod0.glb"></GLTFLoader>
+      </StaticSpawner>
+
+      <!-- Grama com vento na beira da pista (mesmo padrão do simple-rpg). O
+           spawner do motor assenta cada instância no terreno via heightfield;
+           avoid-road mantém o corredor limpo usando o GroundBrush do Road. -->
+      <Vegetation
+        meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_redA.glb"
+        density-per-km2="26000"
+        seed="7"
+        region-min="-640 0 -640"
+        region-max="640 0 640"
+        smart="0"
+        cluster-count="0"
+        cluster-radius="3.2"
+        flower-near-radius="2.2"
+        flower-density-ratio="0.22"
+        plant-density-ratio="0.4"
+        avoid-water="1"
+        avoid-road="1"
+        avoid-overlaps="0"
+        wind="1"
+        max-slope-deg="35"
+        max-distance="160"
+      ></Vegetation>
+
+      <!-- Terreno com relevo derivado do circuito: o corredor da pista fica
+           exatamente na elevação da pista (um pouco abaixo, para o leito
+           assentar), e colinas suaves sobem para fora. O <Road flatten>
+           abaixo afina o leito. TrackGround e TrackApron da pista são
+           escondidos — o terreno faz o papel de chão e grama. -->
+      <Terrain
+        pos="0 0 0"
+        world-size="1400"
+        max-height="30"
+        heightmap="/assets/terrain/heightmap.png"
+        levels="4"
+        resolution="64"
+        collision-resolution="32"
+        base-color="#4a6a2a"
+        color-low="#3a5a22"
+        color-mid="#557a35"
+        color-high="#6a8a45"
+      ></Terrain>
+
+      <!-- Lago no infield: o carve do motor afunda a bacia e a waterline fica
+           ~1m abaixo do nível da pista (que é suspensa pelo embankment), então
+           a água nunca toca o asfalto. -->
+      <Lake
+        at="14 92"
+        radius="11"
+        depth="1.8"
+        color="#2f7a9a"
+      ></Lake>
+
+      <!-- Leito da pista: carve agressivo (flatten) ao longo do circuito.
+           O path é injetado por main.ts (vem do spline, como o centerline).
+           Largura cobre pista + shoulders; falloff curto = corte de auto-
+           estrada em vez de ombro suave. -->
+      <Road
+        id="circuit-bed"
+        path="0 0 1 0"
+        width="26"
+        flatten="1"
+        flatten-falloff="3"
+        flatten-window="48"
+        flatten-max-grade="0.3"
+        texture-url=""
+
+        edge-feather="0.6"
+        edge-noise="0.3"
+      ></Road>
 
       <!-- The circuit. `centerline`, `widths` and `sections` are filled in by
            main.ts; everything else is authored here. `theme="holo"` gives the
@@ -178,7 +305,7 @@
       <!-- The player. Grid slots, orientation and ride height are owned by the
            race director; `pos` is irrelevant for a vehicle. -->
       <PlayerVehicle
-        name="hero"
+        name="player"
         driver="You"
         color="#e03a3a"
         model-url="/assets/meshes/vehicles/kart_hero_lod0.glb"
@@ -271,7 +398,7 @@
       ></AiVehicle>
 
       <ChaseCamera
-        target="hero"
+        target="player"
         distance="7.6"
         height="3.1"
         follow-lag="0.1"
@@ -281,8 +408,67 @@
         fov-boost="13"
       ></ChaseCamera>
 
+      <!-- BGM layers driven by the engine MusicLayerDriver (main.ts):
+           bgm-race while driving, crossfade to bgm-menu over the results. -->
+      <MusicLayer layer="race" sound="bgm-race" base-volume="0.2"></MusicLayer>
+      <MusicLayer layer="menu" sound="bgm-menu" base-volume="0.18"></MusicLayer>
+
       <HudScreenLayer>
         <HudWidget type="race-hud"></HudWidget>
+
+        <!-- Setor à frente: mesma seta screen-space que o simple-rpg usa para
+             as quests, aqui apontando o próximo checkpoint do circuito
+             (CheckpointArrowSystem em main.ts). -->
+        <WaypointArrow margin="64"></WaypointArrow>
+
+        <!-- Pause menu (same TabbedModal widget as simple-rpg): [Q] opens,
+             OptionsTab drives the music/sfx buses via wireOptions (main.ts). -->
+        <TabbedModal
+          id="pause"
+          key="q"
+          title-key="modal.pause"
+        >
+          <OptionsTab label-key="modal.tab.options">
+            <OptionRow
+              id="music-volume"
+              type="slider"
+              label-key="options.music"
+              min="0"
+              max="100"
+              step="5"
+              default="70"
+            ></OptionRow>
+            <OptionRow
+              id="sfx-volume"
+              type="slider"
+              label-key="options.sfx"
+              min="0"
+              max="100"
+              step="5"
+              default="80"
+            ></OptionRow>
+            <OptionRow
+              id="save"
+              type="button"
+              label-key="options.save"
+            ></OptionRow>
+            <OptionRow
+              id="load"
+              type="button"
+              label-key="options.load"
+            ></OptionRow>
+            <OptionRow
+              id="restart"
+              type="button"
+              label-key="options.restart"
+            ></OptionRow>
+            <OptionRow
+              id="controls"
+              type="note"
+              label-key="options.controls"
+            ></OptionRow>
+          </OptionsTab>
+        </TabbedModal>
       </HudScreenLayer>
     </Scene>
 

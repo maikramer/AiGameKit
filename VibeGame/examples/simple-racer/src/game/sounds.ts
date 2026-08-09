@@ -31,6 +31,10 @@ export function registerGameSounds(): void {
     },
     'race-coin': { url: '/assets/audio/sfx_coin.ogg', volume: 0.45 },
 
+    // ── Save / load (same clips as simple-rpg) ─────────────────
+    save: { url: '/assets/audio/sfx_save.ogg', volume: 0.48 },
+    load: { url: '/assets/audio/sfx_load.ogg', volume: 0.44 },
+
     // ── Music (bus 'music', looped, 2D) ────────────────────────
     'bgm-race': {
       url: '/assets/audio/bgm_race.ogg',
@@ -61,6 +65,8 @@ export function preloadGameSounds(): void {
     'race-sidewinder',
     'race-shield',
     'race-respawn',
+    'save',
+    'load',
     'bgm-race',
     'bgm-menu',
   ]);

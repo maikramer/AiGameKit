@@ -28,6 +28,16 @@ export interface TrackNodeDef {
 }
 
 /**
+ * The track bed sits this far below the driving surface. The road flatten
+ * carves the terrain corridor at `y - TRACK_ELEVATION`, and the wall base
+ * (track-geometry `buildWalls`) drops the same amount so the suspended track
+ * reads as a solid embankment instead of a floating ribbon with a hollow
+ * underneath. Applied to every node height — the authored `y` values are the
+ * driving surface, this constant is the bed offset.
+ */
+export const TRACK_ELEVATION = 1;
+
+/**
  * Control nodes.
  *
  * Layout rule that is easy to get wrong: two arms of the circuit must stay far
@@ -81,7 +91,9 @@ export const TRACK_NODES: TrackNodeDef[] = [
 
 /** Flat `x y z x y z …` list for the `<RaceTrack centerline>` attribute. */
 export function centerlineAttribute(): string {
-  return TRACK_NODES.flatMap((n) => [n.x, n.y, n.z]).join(' ');
+  return TRACK_NODES.flatMap((n) => [n.x, n.y + TRACK_ELEVATION, n.z]).join(
+    ' '
+  );
 }
 
 /** Parallel per-node width list for `<RaceTrack widths>`. */

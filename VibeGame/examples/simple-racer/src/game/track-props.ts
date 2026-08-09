@@ -294,6 +294,9 @@ export const TrackPropSpawnSystem: GAME.System = {
     // renderer before the first load or every one of them fails to parse.
     GAME.ensureKTX2LoaderReady(state);
     dressed = true;
+    // The <Road flatten> carve registers its own `kind:'road'` ground brush
+    // (leito + talude) during setup — the spawner's `avoid-road` reads that,
+    // so the corridor stays clean without a hand-rolled duplicate here.
     void dressTrack(
       scene as THREE.Object3D,
       spline,
@@ -325,11 +328,13 @@ async function dressTrack(
     poleIndex++;
     const lateral = (frame.width * 0.5 + shoulder + 0.6) * side;
     const { group: pole, lamp } = buildLightPole();
-    pole.position.set(
-      frame.x + frame.rx * lateral,
-      frame.y + frame.ry * lateral - 0.05,
-      frame.z + frame.rz * lateral
-    );
+    const poleX = frame.x + frame.rx * lateral;
+    const poleZ = frame.z + frame.rz * lateral;
+    // The pole stands on the carved bed / terrain beside the barrier — the
+    // spline height is the driving surface, which now sits above the ground
+    // by the embankment, so ground the pole via the terrain sampler.
+    const groundY = GAME.sampleTerrainHeight(state, poleX, poleZ);
+    pole.position.set(poleX, Number.isFinite(groundY) ? groundY : frame.y, poleZ);
     // Face the pole arm toward the track.
     pole.rotation.y = Math.atan2(frame.tx, frame.tz) + (side > 0 ? Math.PI : 0);
     pole.updateMatrixWorld(true);
@@ -391,10 +396,16 @@ async function dressTrack(
           def.height * (1 + (def.sizeJitter ?? 0) * (Math.random() - 0.5) * 2);
         const holder = instantiate(prototype, size);
         const lateral = (barrier + def.offset + Math.random() * 1.5) * side;
+        const propX = frame.x + frame.rx * lateral;
+        const propZ = frame.z + frame.rz * lateral;
+        // Ground the prop on the terrain: the spline height is the driving
+        // surface (embankment-suspended), so anything off the asphalt must
+        // sample the bed/ground instead of inheriting the road height.
+        const groundY = GAME.sampleTerrainHeight(state, propX, propZ);
         holder.position.set(
-          frame.x + frame.rx * lateral,
-          frame.y + frame.ry * lateral - 0.05,
-          frame.z + frame.rz * lateral
+          propX,
+          Number.isFinite(groundY) ? groundY - 0.05 : frame.y - 0.05,
+          propZ
         );
         holder.rotation.y =
           Math.atan2(frame.tx, frame.tz) +

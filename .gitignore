@@ -160,6 +160,16 @@ VibeGame/simple-racer-*.png
 VibeGame/simple-racer-*.yml
 VibeGame/smoke-*.yml
 VibeGame/menu*.yml
+VibeGame/*-menu.yml
+VibeGame/dusk-*.yml
+VibeGame/dusk-*.png
+VibeGame/veg-*.yml
+VibeGame/nowind.yml
+VibeGame/own-server.yml
+VibeGame/racer-*.png
+VibeGame/terrain-*.png
+VibeGame/light-*.yml
+VibeGame/terrain*-menu.yml
 
 # OpenCode agent workspace (local state, plans, evidence, notepads)
 .omo/
