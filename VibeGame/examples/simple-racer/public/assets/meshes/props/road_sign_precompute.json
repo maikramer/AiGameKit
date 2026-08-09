@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "road_sign",
+  "category": "prop",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -0.0341,
+      0.0,
+      -0.0586
+    ],
+    "max": [
+      0.0341,
+      0.9888,
+      0.0587
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 0.0586,
+    "height": 0.9888,
+    "base_y": 0.0
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

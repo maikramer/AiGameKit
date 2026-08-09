@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "pine_tree",
+  "category": "vegetation",
+  "source": "trunk-slice",
+  "aabb": {
+    "min": [
+      -0.7751,
+      0.0003,
+      -0.7659
+    ],
+    "max": [
+      0.7759,
+      4.9961,
+      0.7658
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 0.8143,
+    "height": 4.9958,
+    "base_y": 0.0003
+  },
+  "collectible_hint": {
+    "kind": "wood"
+  }
+}

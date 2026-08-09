@@ -218,6 +218,63 @@ function instantiate(
 
 let dressed = false;
 
+/** Metres between light poles along the circuit. */
+const POLE_SPACING = 34;
+/** Metres between poles that carry an actual PointLight (the renderer keeps
+ *  the 12 nearest lit, so spare ones are just emissive decoration). */
+const POLE_LIGHT_EVERY = 2;
+/** Warm lamp colour shared by the emissive lamp and its point light. */
+const LAMP_COLOR = 0xffb45e;
+
+/**
+ * One light pole: a dark pillar with an arm, an emissive lamp housing and a
+ * soft glow sprite. Returns the group and the lamp world position (for the
+ * point light to sit at).
+ */
+function buildLightPole(): { group: THREE.Group; lamp: THREE.Vector3 } {
+  const group = new THREE.Group();
+  const poleMat = new THREE.MeshStandardMaterial({
+    color: 0x2a2e3a,
+    roughness: 0.55,
+    metalness: 0.6,
+  });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 4.6, 8), poleMat);
+  pole.position.y = 2.3;
+  group.add(pole);
+
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.09, 0.09), poleMat);
+  arm.position.set(0.75, 4.35, 0);
+  group.add(arm);
+
+  const lampMat = new THREE.MeshStandardMaterial({
+    color: LAMP_COLOR,
+    emissive: LAMP_COLOR,
+    emissiveIntensity: 3.5,
+    roughness: 0.3,
+  });
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.24), lampMat);
+  lamp.position.set(1.4, 4.3, 0);
+  group.add(lamp);
+
+  // Soft halo so the bloom has something to pick up even from a distance.
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: LAMP_COLOR,
+    transparent: true,
+    opacity: 0.35,
+    depthWrite: false,
+  });
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), glowMat);
+  glow.position.copy(lamp.position);
+  group.add(glow);
+
+  group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh) mesh.castShadow = true;
+  });
+
+  return { group, lamp: lamp.position.clone() };
+}
+
 /**
  * Walks the circuit once on the first frame and scatters section-appropriate
  * scenery. Runs off the spline, so it always agrees with the road that was
@@ -240,7 +297,8 @@ export const TrackPropSpawnSystem: GAME.System = {
     void dressTrack(
       scene as THREE.Object3D,
       spline,
-      GAME.RaceTrackComponent.shoulder[trackEid] || 3
+      GAME.RaceTrackComponent.shoulder[trackEid] || 3,
+      state
     );
   },
 };
@@ -248,11 +306,51 @@ export const TrackPropSpawnSystem: GAME.System = {
 async function dressTrack(
   scene: THREE.Object3D,
   spline: GAME.TrackSpline,
-  shoulder: number
+  shoulder: number,
+  state: GAME.State
 ): Promise<void> {
   const group = new THREE.Group();
   group.name = 'TrackDressing';
   scene.add(group);
+
+  // Light poles: alternate sides, every POLE_SPACING metres. Every other pole
+  // carries a real PointLight entity (the renderer lights the 12 nearest).
+  const lightGroup = new THREE.Group();
+  lightGroup.name = 'TrackLampLights';
+  scene.add(lightGroup);
+  let poleIndex = 0;
+  for (let s = 40; s < spline.length - 40; s += POLE_SPACING) {
+    const frame = spline.sampleAt(s);
+    const side = poleIndex % 2 === 0 ? -1 : 1;
+    poleIndex++;
+    const lateral = (frame.width * 0.5 + shoulder + 0.6) * side;
+    const { group: pole, lamp } = buildLightPole();
+    pole.position.set(
+      frame.x + frame.rx * lateral,
+      frame.y + frame.ry * lateral - 0.05,
+      frame.z + frame.rz * lateral
+    );
+    // Face the pole arm toward the track.
+    pole.rotation.y = Math.atan2(frame.tx, frame.tz) + (side > 0 ? Math.PI : 0);
+    group.add(pole);
+
+    if (poleIndex % POLE_LIGHT_EVERY === 0) {
+      const eid = state.createEntity();
+      state.addComponent(eid, GAME.PointLight);
+      state.addComponent(eid, GAME.Transform);
+      GAME.PointLight.color[eid] = LAMP_COLOR;
+      GAME.PointLight.intensity[eid] = 22;
+      GAME.PointLight.distance[eid] = 26;
+      GAME.PointLight.decay[eid] = 2;
+      // Lamp world position = pole world position + local arm offset rotated
+      // by the pole yaw. Cheaper: sample the frame again at the lamp height.
+      const lampWorld = lamp.clone().applyMatrix4(pole.matrixWorld);
+      GAME.Transform.posX[eid] = lampWorld.x;
+      GAME.Transform.posY[eid] = lampWorld.y;
+      GAME.Transform.posZ[eid] = lampWorld.z;
+      GAME.Transform.dirty[eid] = 1;
+    }
+  }
 
   // Start/finish gantry, sized to span the road.
   const startFrame = spline.sampleAt(0);

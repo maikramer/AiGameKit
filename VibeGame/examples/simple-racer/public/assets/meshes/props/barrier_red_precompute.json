@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "barrier_red",
+  "category": "prop",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -0.3768,
+      0.0,
+      -1.5
+    ],
+    "max": [
+      0.3768,
+      0.9364,
+      1.5
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 1.5,
+    "height": 0.9364,
+    "base_y": 0.0
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

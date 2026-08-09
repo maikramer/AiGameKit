@@ -61,6 +61,34 @@
           opacity: 0.45;
         }
       }
+      .menu-buttons {
+        display: flex;
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .menu-buttons button {
+        font: inherit;
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: #fff;
+        background: linear-gradient(150deg, rgba(56, 232, 255, 0.18), rgba(127, 93, 255, 0.22));
+        border: 1px solid rgba(56, 232, 255, 0.5);
+        border-radius: 10px;
+        padding: 12px 22px;
+        cursor: pointer;
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
+      }
+      .menu-buttons button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 18px rgba(56, 232, 255, 0.35);
+      }
+      .menu-buttons.hidden {
+        display: none;
+      }
+      .menu-buttons + .sub {
+        margin-top: 10px;
+      }
     </style>
   </head>
 
@@ -68,6 +96,10 @@
     <div id="loading">
       <div class="title">Sunset Ridge</div>
       <div class="sub">Warming the tyres…</div>
+      <div class="menu-buttons" id="mode-menu">
+        <button data-mode="race">🏁 Race</button>
+        <button data-mode="time-trial">⏱ Time Trial</button>
+      </div>
     </div>
 
     <!--
@@ -78,16 +110,27 @@
     -->
     <Scene
       canvas="#game-canvas"
-      sky="#8fbde8"
-      fog-color="#a8c6e0"
-      fog-near="220"
-      fog-far="1100"
-      ambient-intensity="0.85"
+      sky="#2b1e3a"
+      fog-color="#3a2a4a"
+      fog-near="140"
+      fog-far="900"
+      ambient-intensity="0.75"
       resume-audio-on-user-gesture="true"
-      postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.28; bloom-radius: 0.5; bloom-threshold: 0.85; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.05; vignette: 1; vignette-offset: 0.45; vignette-darkness: 0.3; color-grading: 1; saturation: 0.1; contrast: 0.05"
+      postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.55; bloom-radius: 0.6; bloom-threshold: 0.7; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.15; vignette: 1; vignette-offset: 0.35; vignette-darkness: 0.4; color-grading: 1; saturation: 0.18; contrast: 0.08; film-grain: 1; film-grain-intensity: 0.05; chromatic-aberration: 1; chromatic-aberration-offset: 0.0012; ssao: 1; ssao-intensity: 1.2; ssao-radius: 0.12; god-rays: 1; god-rays-density: 0.96; god-rays-decay: 0.92; god-rays-weight: 0.35; god-rays-exposure: 0.5"
     >
+      <!-- Dusk sun: low, warm, with soft (PCSS) + cascaded shadows so the
+           long shadows read correctly across the whole circuit. -->
+      <GameObject
+        directional-light="color: 0xff9a5c; intensity: 2.2; direction-x: -0.35; direction-y: 0.9; direction-z: -0.28; cast-shadow: 1; shadow-map-size: 2048; csm: 1; csm-cascades: 3; csm-max-far: 120; pcss: 1"
+      ></GameObject>
+      <GameObject
+        ambient-light="sky-color: 0x5a4a7a; ground-color: 0x1c1626; intensity: 0.65"
+      ></GameObject>
+
       <!-- The circuit. `centerline`, `widths` and `sections` are filled in by
-           main.ts; everything else is authored here. -->
+           main.ts; everything else is authored here. `theme="holo"` gives the
+           track a neon grid + emissive rails; `checkpoint-count` arms the
+           time-trial respawn system. -->
       <RaceTrack
         name="circuit"
         width="16"
@@ -96,12 +139,41 @@
         shoulder="3.5"
         walls="true"
         max-bank="9"
+        theme="holo"
+        checkpoint-count="8"
         road-color="#3b3e46"
         apron-color="#5c7f3c"
         shoulder-color="#9c8a63"
         wall-color="#e6e8ee"
         centerline="0 0 0 1 0 0 2 0 0"
       ></RaceTrack>
+
+      <!-- Time-trial hazards + power-up orbs (track-space positions). -->
+      <RaceTrackObstacle
+        name="barrel-1"
+        s="240"
+        lateral="-1.5"
+        radius="0.8"
+        kind="barrel"
+      ></RaceTrackObstacle>
+      <RaceTrackObstacle
+        name="drone-1"
+        s="820"
+        lateral="2"
+        radius="1.0"
+        kind="drone"
+      ></RaceTrackObstacle>
+      <RaceTrackObstacle
+        name="gate-1"
+        s="1290"
+        lateral="0"
+        radius="1.1"
+        kind="gate"
+      ></RaceTrackObstacle>
+      <RaceTrackPickup s="95" lateral="0" kind="pulse" respawn="4"></RaceTrackPickup>
+      <RaceTrackPickup s="540" lateral="-1" kind="sidewinder" respawn="5"></RaceTrackPickup>
+      <RaceTrackPickup s="1010" lateral="1" kind="shield" respawn="5"></RaceTrackPickup>
+      <RaceTrackPickup s="1470" lateral="-1" kind="pulse" respawn="4"></RaceTrackPickup>
 
       <!-- The player. Grid slots, orientation and ride height are owned by the
            race director; `pos` is irrelevant for a vehicle. -->
@@ -113,6 +185,7 @@
         model-length="2.7"
         model-yaw="0"
         half-width="1.25"
+        loadout="pulse:2,sidewinder:2,shield:1"
         max-speed="52"
         accel="27"
         brake="52"
@@ -125,8 +198,9 @@
         boost-recharge="0.28"
       ></PlayerVehicle>
 
-      <!-- Rivals. Same vehicle model as the player; only `skill` and the line
-           offset differ, so beating them is a matter of driving. -->
+      <!-- Rivals (Race mode only — main.ts removes these for Time Trial).
+           Same model as the player; each carries a power-up loadout and the AI
+           collects orbs and fires slots like the player does. -->
       <AiVehicle
         name="rival-1"
         driver="Vega"
@@ -135,6 +209,7 @@
         model-length="2.7"
         model-yaw="180"
         half-width="1.25"
+        loadout="pulse:2,sidewinder:2,shield:1"
         max-speed="52"
         accel="27"
         brake="52"
@@ -151,6 +226,7 @@
         model-length="2.7"
         model-yaw="180"
         half-width="1.25"
+        loadout="pulse:1,sidewinder:2,shield:1"
         max-speed="51"
         accel="26"
         brake="50"
@@ -167,6 +243,7 @@
         model-length="2.7"
         model-yaw="180"
         half-width="1.25"
+        loadout="pulse:2,sidewinder:1,shield:2"
         max-speed="50"
         accel="26"
         brake="49"
@@ -183,6 +260,7 @@
         model-length="2.7"
         model-yaw="180"
         half-width="1.25"
+        loadout="pulse:2,sidewinder:2,shield:2"
         max-speed="50"
         accel="25"
         brake="48"

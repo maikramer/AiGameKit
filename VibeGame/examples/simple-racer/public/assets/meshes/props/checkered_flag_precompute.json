@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "checkered_flag",
+  "category": "prop",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -0.1617,
+      0.0001,
+      -0.0919
+    ],
+    "max": [
+      0.1619,
+      2.5993,
+      0.0915
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 0.1618,
+    "height": 2.5992,
+    "base_y": 0.0001
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

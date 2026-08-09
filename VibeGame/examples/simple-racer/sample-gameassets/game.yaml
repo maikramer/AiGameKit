@@ -40,7 +40,9 @@ text3d:
   # (int4 em GPUs ~6 GB) e o vramd admite/evita conforme a VRAM livre.
 paint3d:
   preserve_origin: true
-  # Sem texture_size explícito: auto-tune ladder size_m ∩ cap do tier (high=4096).
+  # Teto de atlas 2048 (GPU 6 GB): o auto-tune ladder (size_m ∩ cap) continua a
+  # escolher abaixo disto; sem teto, o start_banner (char_m≈3) ia a 4096 e OOM.
+  texture_size: 2048
 audio_subdir: audio
 text2sound:
   quality: medium

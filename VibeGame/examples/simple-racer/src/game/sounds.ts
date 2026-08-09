@@ -17,6 +17,11 @@ export function registerGameSounds(): void {
     'race-finish': { url: '/assets/audio/sfx_finish.ogg', volume: 0.6 },
     'race-nitro': { url: '/assets/audio/sfx_nitro.ogg', volume: 0.5 },
     'race-crash': { url: '/assets/audio/sfx_crash.ogg', volume: 0.55 },
+    'race-pickup': { url: '/assets/audio/sfx_coin.ogg', volume: 0.5 },
+    'race-pulse': { url: '/assets/audio/sfx_nitro.ogg', volume: 0.45 },
+    'race-sidewinder': { url: '/assets/audio/sfx_nitro.ogg', volume: 0.4 },
+    'race-shield': { url: '/assets/audio/sfx_coin.ogg', volume: 0.4 },
+    'race-respawn': { url: '/assets/audio/sfx_crash.ogg', volume: 0.45 },
 
     // ── Extras (kept in the bank for future hooks) ─────────────
     'race-skid': { url: '/assets/audio/sfx_skid.ogg', volume: 0.4 },
@@ -51,6 +56,11 @@ export function preloadGameSounds(): void {
     'race-finish',
     'race-nitro',
     'race-crash',
+    'race-pickup',
+    'race-pulse',
+    'race-sidewinder',
+    'race-shield',
+    'race-respawn',
     'bgm-race',
     'bgm-menu',
   ]);

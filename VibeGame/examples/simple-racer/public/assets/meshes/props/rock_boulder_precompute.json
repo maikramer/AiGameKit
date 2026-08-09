@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "rock_boulder",
+  "category": "terrain",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -0.7511,
+      0.0006,
+      -0.6553
+    ],
+    "max": [
+      0.7495,
+      1.1943,
+      0.6544
+    ]
+  },
+  "collider": {
+    "shape": "cylinder",
+    "radius": 0.7503,
+    "height": 1.1936,
+    "base_y": 0.0006
+  },
+  "collectible_hint": {
+    "kind": "stone"
+  }
+}

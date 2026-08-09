@@ -42,34 +42,82 @@ async function preloadVehicles(): Promise<void> {
   await Promise.all(urls.map((url) => loader.loadAsync(url).catch(() => null)));
 }
 
+export type RaceMode = 'race' | 'time-trial';
+
 /**
- * Wait for the player to click into the game before releasing the grid.
+ * Apply the chosen mode to the scene DOM *before* the engine parses it.
+ *
+ * - Race: keep the `<AiVehicle>` rivals; disable checkpoint respawns (a
+ *   full grid races to the flag, off-track is the driver's problem).
+ * - Time Trial: drop the rivals; enable checkpoint respawn so a crash costs
+ *   time, not the race.
+ */
+export function applyMode(mode: RaceMode): void {
+  const track = document.querySelector('RaceTrack');
+  if (mode === 'time-trial') {
+    // Solo against the clock: drop the rivals, enable checkpoint respawn so
+    // a crash costs time, not the race.
+    for (const rival of document.querySelectorAll('AiVehicle')) {
+      rival.remove();
+    }
+    track?.setAttribute('checkpoint-count', '8');
+  } else {
+    // Full grid: keep the `<AiVehicle>` rivals and disable checkpoint
+    // respawns (off-track is the driver's problem in a race).
+    track?.removeAttribute('checkpoint-count');
+  }
+}
+
+/**
+ * Wait for the player to pick a mode, then release the grid.
  *
  * Two engine facts make this the right gate rather than a nicety: keyboard
  * input is only recorded once the canvas has focus, and browsers refuse to
  * start audio without a user gesture. Starting the countdown before that click
  * gives the player a race they cannot steer and cannot hear.
  */
-function waitForStart(): Promise<void> {
+function waitForMode(): Promise<RaceMode> {
   const overlay = document.getElementById('loading');
   const canvas = document.getElementById(
     'game-canvas'
   ) as HTMLCanvasElement | null;
   const prompt = overlay?.querySelector('.sub');
-  if (prompt) prompt.textContent = 'Click to start';
+  const menu = document.getElementById('mode-menu');
+  if (prompt) prompt.textContent = 'Choose a mode';
   overlay?.classList.add('ready');
-  if (!overlay) return Promise.resolve();
+  menu?.classList.remove('hidden');
+  if (!overlay) return Promise.resolve('race');
 
-  return new Promise<void>((resolve) => {
-    const start = (): void => {
-      overlay.removeEventListener('click', start);
+  return new Promise<RaceMode>((resolve) => {
+    const pick = (mode: RaceMode): void => {
+      for (const btn of menu?.querySelectorAll('button') ?? []) {
+        btn.removeEventListener('click', onPick);
+      }
+      applyMode(mode);
       overlay.classList.add('hidden');
-      // Give the canvas focus so the input plugin starts recording keys.
+      // Give the canvas focus so the input plugin starts recording keys. The
+      // button click would otherwise keep focus on the button and the input
+      // plugin (which gates on `focusedCanvas`) would swallow every key, so
+      // steal focus back on the next animation frame (after the click event
+      // has fully dispatched).
       canvas?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      canvas?.focus();
-      resolve();
+      const stealFocus = (): void => {
+        canvas?.focus();
+        if (document.activeElement !== canvas) {
+          requestAnimationFrame(stealFocus);
+        }
+      };
+      requestAnimationFrame(stealFocus);
+      resolve(mode);
     };
-    overlay.addEventListener('click', start);
+    const onPick = (e: Event): void => {
+      const mode = (e.currentTarget as HTMLElement).dataset
+        .mode as RaceMode | undefined;
+      if (mode) pick(mode);
+    };
+    for (const btn of menu?.querySelectorAll('button') ?? []) {
+      btn.addEventListener('click', onPick);
+    }
   });
 }
 
@@ -109,6 +157,11 @@ async function bootstrap(): Promise<void> {
     if (e.code === 'KeyR') GAME.restartRace();
   });
 
+  // Pick the mode *before* the engine parses the scene: `applyMode` removes
+  // the rivals / toggles checkpoint-count, and the parsers only see the DOM
+  // once.
+  await preloadVehicles();
+  await waitForMode();
   await GAME.run();
 
   // Console handle for debugging: `__race.state()`, `__race.cars()`, …
@@ -144,8 +197,6 @@ async function bootstrap(): Promise<void> {
     },
   };
 
-  await preloadVehicles();
-  await waitForStart();
   GAME.markRaceReady();
 }
 
