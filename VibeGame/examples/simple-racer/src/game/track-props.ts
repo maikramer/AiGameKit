@@ -332,6 +332,7 @@ async function dressTrack(
     );
     // Face the pole arm toward the track.
     pole.rotation.y = Math.atan2(frame.tx, frame.tz) + (side > 0 ? Math.PI : 0);
+    pole.updateMatrixWorld(true);
     group.add(pole);
 
     if (poleIndex % POLE_LIGHT_EVERY === 0) {
@@ -343,7 +344,7 @@ async function dressTrack(
       GAME.PointLight.distance[eid] = 26;
       GAME.PointLight.decay[eid] = 2;
       // Lamp world position = pole world position + local arm offset rotated
-      // by the pole yaw. Cheaper: sample the frame again at the lamp height.
+      // by the pole yaw.
       const lampWorld = lamp.clone().applyMatrix4(pole.matrixWorld);
       GAME.Transform.posX[eid] = lampWorld.x;
       GAME.Transform.posY[eid] = lampWorld.y;
