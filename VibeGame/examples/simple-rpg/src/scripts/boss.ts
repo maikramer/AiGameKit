@@ -1,44 +1,9 @@
 // Boss ogre — same engine MeleeAi FSM as the creatures (one AI brain), with
-// boss extras layered on by the shared presentation: dormant until every normal
-// enemy is dead (gate), an intro roar on reveal, relentless pursuit (huge detect
-// + leash), strafing, and an enrage phase at low HP.
+// boss extras layered on by the shared presentation (gate, roar, enrage).
 import { createCreatureBehaviours } from './creature';
-import { addGold } from '../game/economy';
-import { everSpawned, aliveInBiome } from './enemy-registry';
+import { CREATURE_DEFS } from '../data/creature-defs';
 
-const behaviours = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/characters/boss_ogre_lod2.glb',
-  clips: {
-    idle: 'idle',
-    walk: 'walk',
-    run: 'walk',
-    lunge: 'attack',
-    death: 'death',
-    roar: 'roar',
-    hit: 'hit',
-    attack: 'punch',
-  },
-  hp: 300,
-  chaseSpeed: 3.0,
-  wanderSpeed: 0, // stays put until it spots the hero, then hunts
-  wanderRadius: 1,
-  attackDamage: 25,
-  attackRange: 2.2,
-  attackCooldown: 1.6,
-  detectRange: 120, // relentless — always sees the hero once awake
-  leashRadius: 1000, // never leashes home
-  strafe: true,
-  enrageBelowFrac: 0.3,
-  runTimeScale: 1.5,
-  lootGoldMin: 100,
-  lootGoldMax: 150,
-  defeatedText: 'ORN FOI DESFEITO!',
-  roarSound: 'boss-roar',
-  // Gate: appear only after every enemy in the frozen-peaks biome is dead.
-  gateUntil: () => everSpawned() && aliveInBiome('frozen-peaks') === 0,
-  enemyType: 'boss_ogre',
-  onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
-});
+const behaviours = createCreatureBehaviours(CREATURE_DEFS.boss_ogre);
 
 export const start = behaviours.start;
 export const update = behaviours.update;

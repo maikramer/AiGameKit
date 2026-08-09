@@ -111,7 +111,7 @@
            Editar o XML do domínio — index.html é só shell + Includes.
 
          CONTRATOS COM src/main.ts (não alterar sem sincronizar):
-           · name="hero" / name="boss" / name="merchant"
+           · name="player" / name="boss" / name="merchant"
            · SpawnExclusion at="0 0" radius="84" (espelha villageZones)
            · Portões cardeais na muralha ±64 (RESPAWN_POINTS usa ±78)
            · Banda de goblins do norte começa em z>=80 (segurança do respawn)
@@ -125,7 +125,7 @@
       <!-- Projectile template used by ranged enemies (e.g. the archer). The
            archer script fires this via spawnProjectileFromTemplate. Visual is
            attached by main.ts's projectile watcher; the template only defines
-           kinematics + damage + the 'enemy' faction so hero collision applies. -->
+           kinematics + damage + the 'enemy' faction so player collision applies. -->
       <ProjectileTemplate
         id="enemy-arrow"
         speed="16"
@@ -151,13 +151,13 @@
            o terreno inteiro (o terrain field lê o WorldTransform.posY da
            entidade onde faz merge). -->
       <PlayerGLTF
-        name="hero"
+        name="player"
         pos="0 40 0"
         model-url="/assets/meshes/characters/hero_lod0.glb"
       >
       </PlayerGLTF>
-      <!-- Hold hero until heightmap + heightfield ready, then seat once (CCT). -->
-      <SpawnGate target-entity="hero" y-fallback="40"></SpawnGate>
+      <!-- Hold player until heightmap + heightfield ready, then seat once (CCT). -->
+      <SpawnGate target-entity="player" y-fallback="40"></SpawnGate>
 
       <!-- GRUPO "world-base": terreno (heightfield + NavMesh). O <Terrain>
            é merge:true — o Group TEM de ficar em pos="0 0 0". -->
@@ -260,24 +260,24 @@
         <!-- HUD: camada declarativa screen-space + widgets (engine HudPlugin). -->
         <HudScreenLayer></HudScreenLayer>
         <HealthBar
-          target-entity="hero"
+          target-entity="player"
           icon="/assets/icons/hud_health.png"
         ></HealthBar>
-        <XpBar target-entity="hero"></XpBar>
+        <XpBar target-entity="player"></XpBar>
         <ResourceChip
           resource="gold"
           icon="/assets/icons/hud_gold.png"
-          target-entity="hero"
+          target-entity="player"
         ></ResourceChip>
         <ResourceChip
           resource="wood"
           icon="/assets/icons/hud_wood.png"
-          target-entity="hero"
+          target-entity="player"
         ></ResourceChip>
         <ResourceChip
           resource="stone"
           icon="/assets/icons/hud_stone.png"
-          target-entity="hero"
+          target-entity="player"
         ></ResourceChip>
         <Minimap range="60"></Minimap>
         <Compass></Compass>
@@ -304,7 +304,7 @@
         <TabbedModal
           id="pause"
           key="q"
-          target-entity="hero"
+          target-entity="player"
           title-key="modal.pause"
         >
           <InventoryTab columns="5"></InventoryTab>

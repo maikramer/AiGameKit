@@ -47,7 +47,7 @@ import {
 } from './enemy-registry';
 
 /**
- * Sleep only when far from the hero **and** distance-culled (mesh hidden).
+ * Sleep only when far from the player **and** distance-culled (mesh hidden).
  * Visible-on-camera packs keep AI/anim; near-player always wakes.
  *
  * Grounding: `<Creature>` CCT + heightfield. GLB must ship feet at origin
@@ -152,7 +152,7 @@ export interface CreatureConfig {
   lungeDuration?: number;
   /** Seconds the creature pauses (vulnerable) after a lunge. */
   lungeRecovery?: number;
-  /** Min gap kept between creature and hero during a lunge (anti-overlap). */
+  /** Min gap kept between creature and player during a lunge (anti-overlap). */
   lungeStandoff?: number;
   /** Enrage speed multiplier (default 1.4). */
   enrageSpeedMult?: number;
@@ -171,7 +171,7 @@ export interface CreatureConfig {
   /**
    * Uniform visual scale applied to the loaded model (default 1).
    * The asset pipeline (Hunyuan) normalizes every GLB to a ~2-unit bounding
-   * box — small pests ship as tall as the hero and the ogre *shorter* — so
+   * box — small pests ship as tall as the player and the ogre *shorter* — so
    * each creature declares its real in-world size here. Spawner AABB lift and
    * the health bar follow the scaled group.
    */
@@ -189,7 +189,7 @@ export interface CreatureConfig {
    */
   facingYawOffset?: number;
   /**
-   * When true (default), the creature only acquires the hero when an
+   * When true (default), the creature only acquires the player when an
    * unobstructed line of sight exists (BVH raycast). Set false for sense-based
    * mobs that should aggro through walls.
    */
@@ -222,11 +222,11 @@ export interface CreatureConfig {
 export interface CreatureBehaviorProfile {
   /** Below this HP fraction, flee toward maxRange instead of pressing in. */
   fleeBelowHpFrac?: number;
-  /** Preferred stand-off distance from the hero (m). 0 = body-block (legacy). */
+  /** Preferred stand-off distance from the player (m). 0 = body-block (legacy). */
   standOffRange?: number;
   /** Distance at which the creature stops fleeing and re-engages (m). */
   reengageRange?: number;
-  /** Kite (evade while firing) when the hero is close, vs pure flee. */
+  /** Kite (evade while firing) when the player is close, vs pure flee. */
   kite?: boolean;
   /** Apply separation so the creature does not stack on allies. */
   separate?: boolean;
@@ -380,7 +380,7 @@ export function createCreatureBehaviours(
   // cooldown) and the actual damage is dealt by `spawnProjectileFromTemplate`
   // in the update loop. This keeps all the presentation/sleep/loot machinery.
   const isRanged = !!cfg.rangedTemplate;
-  // One shared FSM config per creature type. `targetEid` (the hero) is resolved
+  // One shared FSM config per creature type. `targetEid` (the player) is resolved
   // lazily — the engine FSM then chases/attacks it without needing a faction
   // hostility matrix set up.
   const meleeConfig: MeleeAiConfig = {
@@ -408,7 +408,7 @@ export function createCreatureBehaviours(
     enrageBelowFrac: cfg.enrageBelowFrac,
     enrageSpeedMult: cfg.enrageSpeedMult,
     enrageCooldownMult: cfg.enrageCooldownMult,
-    // Line-of-sight on by default: creatures must actually see the hero before
+    // Line-of-sight on by default: creatures must actually see the player before
     // aggroing, instead of beelining through walls. Individual wrappers can
     // opt out (cfg.requireLineOfSight === false) for blind/sense-based mobs.
     requireLineOfSight: cfg.requireLineOfSight ?? true,
@@ -466,7 +466,7 @@ export function createCreatureBehaviours(
       return true;
     }
 
-    // Near hero → always awake (even if somehow culled).
+    // Near player → always awake (even if somehow culled).
     const player = resolvePlayer(ctx);
     if (!player) return true;
 
@@ -871,7 +871,7 @@ export function createCreatureBehaviours(
       return;
     }
 
-    // Ensure the FSM always has the hero as explicit target while awake.
+    // Ensure the FSM always has the player as explicit target while awake.
     resolvePlayer(ctx);
 
     if (s.roarTimer > 0 && s.group) {
@@ -891,7 +891,7 @@ export function createCreatureBehaviours(
     }
 
     // ── AI (engine FSM): perception, FSM, navmesh steering, attack damage.
-    // Ranged: hold a long stand-off for arrows, but when the hero closes to
+    // Ranged: hold a long stand-off for arrows, but when the player closes to
     // melee distance re-enable the lunge so they aren't stuck playing fake
     // swings with cooldown ≈ ∞ (bandit-mesh archer bug).
     if (isRanged && cachedPlayer > 0) {
@@ -926,7 +926,7 @@ export function createCreatureBehaviours(
       mode === AI_MODE_LUNGE;
 
     // Ranged attack (casters/archers): fire a projectile on a cooldown when
-    // engaged and the hero is visible. The FSM's lunge is suppressed for
+    // engaged and the player is visible. The FSM's lunge is suppressed for
     // ranged creatures (attackCooldown ≈ ∞), so this is their only offense.
     if (isRanged && cfg.rangedTemplate && inCombat && cachedPlayer > 0) {
       s.rangedCdTimer -= dt;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { defineQuery, loadGltfToSceneWithAnimator, playSound } from 'vibegame';
+import { loadGltfToSceneWithAnimator, playSound } from 'vibegame';
 import type { GltfAnimator, MonoBehaviourContext } from 'vibegame';
-import { Transform, PlayerController } from 'vibegame';
+import { Transform } from 'vibegame';
 import {
   isKeyDown,
   setInputMovementSuppressed,
@@ -13,9 +13,10 @@ import {
 } from 'vibegame';
 import { getGold, spendGold, addGold } from '../game/economy.ts';
 import { isGamePaused, setShopOpen } from '../game/pause.ts';
+import { findPlayer } from '../game/player-query.ts';
 import { getStoneCount, removeStone } from './inventory.ts';
 import { getWoodCount, removeWood } from './wood.ts';
-import { heroStats, RING_SPEED_MULT } from '../game/skills';
+import { playerStats, RING_SPEED_MULT } from '../game/skills';
 
 const TURN_SPEED = 6;
 const MODEL_URL = '/assets/meshes/characters/npc_merchant_lod2.glb';
@@ -36,7 +37,7 @@ const WOOD1_PRICE = 8;
 // Commerce-only items (2D shop icons via text2d, no 3D models).
 const ANTIDOTE_PRICE = 25;
 const ANTIDOTE_HEAL = 35;
-const RING_PRICE = 80; // one-time permanent +15% move speed (applied by HeroStatsSystem)
+const RING_PRICE = 80; // one-time permanent +15% move speed (applied by PlayerStatsSystem)
 const BOMB_PRICE = 20;
 
 const ICON_BASE = '/assets/icons/';
@@ -52,8 +53,6 @@ const ICONS: Record<string, string> = {
   wood1: 'hud_wood.png',
 };
 
-const playerQuery = defineQuery([PlayerController]);
-let cachedPlayer = 0;
 let shopState: MonoBehaviourContext['state'] | null = null;
 
 let group: THREE.Group | null = null;
@@ -94,12 +93,6 @@ const BUTTON_FOCUS_STYLE =
   'border:2px solid #ffd700;box-shadow:0 0 12px rgba(255,215,0,0.4);';
 const BUTTON_DISABLED_STYLE = 'opacity:0.4;cursor:not-allowed;';
 
-function findPlayer(ctx: MonoBehaviourContext): number {
-  if (cachedPlayer && Transform.posX[cachedPlayer] !== undefined)
-    return cachedPlayer;
-  cachedPlayer = playerQuery(ctx.state.world)[0] ?? 0;
-  return cachedPlayer;
-}
 
 function showTradePrompt(state: typeof shopState): void {
   if (promptShown || !merchantEid || !state) return;
@@ -117,7 +110,7 @@ function hideTradePrompt(state: typeof shopState): void {
 }
 
 export function start(ctx: MonoBehaviourContext): void {
-  findPlayer(ctx);
+  findPlayer(ctx.state);
   merchantEid = ctx.entity;
   // Show the "[K] Trade" prompt; the HUD InteractionPrompt widget only renders
   // it while the player is within range, so K-to-open is discoverable.
@@ -241,7 +234,7 @@ function createShopPanel(): void {
   );
   shopButtons.push(
     makeButton(
-      `Melhorar espada (${SWORD_PRICE}g) \u2014 Nv.${heroStats.swordLevel + 1}`,
+      `Melhorar espada (${SWORD_PRICE}g) \u2014 Nv.${playerStats.swordLevel + 1}`,
       'sword',
       buySwordUpgrade
     )
@@ -343,7 +336,7 @@ function refreshShopDisplay(): void {
         btn.disabled = gold < SWORD_PRICE;
         setButtonLabel(
           btn,
-          `Melhorar espada (${SWORD_PRICE}g) \u2014 Nv.${heroStats.swordLevel + 1}`
+          `Melhorar espada (${SWORD_PRICE}g) \u2014 Nv.${playerStats.swordLevel + 1}`
         );
         break;
       case 'antidote':
@@ -354,10 +347,10 @@ function refreshShopDisplay(): void {
         );
         break;
       case 'ring':
-        btn.disabled = heroStats.ringOwned || gold < RING_PRICE;
+        btn.disabled = playerStats.ringOwned || gold < RING_PRICE;
         setButtonLabel(
           btn,
-          heroStats.ringOwned
+          playerStats.ringOwned
             ? 'Anel mágico \u2014 já tem (+15% velocidade)'
             : `Comprar anel mágico (${RING_PRICE}g) \u2014 +15% velocidade`
         );
@@ -397,9 +390,9 @@ function buySwordUpgrade(): void {
     showShopError('Ouro insuficiente!');
     return;
   }
-  // Sword upgrades raise the hero's attack damage: HeroStatsSystem folds
-  // swordLevel into heroStats.attackBonus, which bombs.ts adds to blast damage.
-  heroStats.swordLevel++;
+  // Sword upgrades raise the player's attack damage: PlayerStatsSystem folds
+  // swordLevel into playerStats.attackBonus, which bombs.ts adds to blast damage.
+  playerStats.swordLevel++;
   playSound('buy');
   refreshShopDisplay();
 }
@@ -416,7 +409,7 @@ function buyAntidote(): void {
 }
 
 function buyRing(): void {
-  if (heroStats.ringOwned) {
+  if (playerStats.ringOwned) {
     showShopError('Você já tem este item!');
     return;
   }
@@ -424,11 +417,11 @@ function buyRing(): void {
     showShopError('Ouro insuficiente!');
     return;
   }
-  // Flag only — HeroStatsSystem applies RING_SPEED_MULT to
+  // Flag only — PlayerStatsSystem applies RING_SPEED_MULT to
   // PlayerController.speed each frame. This avoids the old compounding bug
   // where save/load reset ringOwned=false and let the player re-buy and
   // re-multiply the speed.
-  heroStats.ringOwned = true;
+  playerStats.ringOwned = true;
   playSound('buy');
   refreshShopDisplay();
 }
@@ -545,7 +538,7 @@ export function update(ctx: MonoBehaviourContext): void {
   const y = Transform.posY[eid];
   const z = Transform.posZ[eid];
 
-  const player = findPlayer(ctx);
+  const player = findPlayer(ctx.state);
   const dx = player ? Transform.posX[player] - x : 0;
   const dz = player ? Transform.posZ[player] - z : 0;
   const distSq = dx * dx + dz * dz;

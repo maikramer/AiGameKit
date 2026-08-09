@@ -52,9 +52,12 @@
           max-pixel-ratio="1.0"
         ></AdaptiveQuality>
 
-        <!-- Mixer buses only. BGM is owned by BgmSystem (playSound bgm-*) so
-           MusicLayer entities do not double-play explore/battle tracks. -->
+        <!-- Mixer buses + BGM layers. O MusicLayerDriverSystem (engine)
+           crossfada explore/battle conforme aggro; ambas saem na bus 'music'
+           controlada pelo slider de volume. -->
         <AudioMixer master="1" music="0.7" sfx="0.8"></AudioMixer>
+        <MusicLayer layer="explore" sound="bgm-explore" base-volume="0.18"></MusicLayer>
+        <MusicLayer layer="battle" sound="bgm-battle" base-volume="0.22"></MusicLayer>
 
         <!-- Clima global: vento constante de SW, nuvens com ciclo lento
            (cobertura "respira" ao longo de minutos), chuva controlada por

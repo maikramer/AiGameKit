@@ -208,7 +208,7 @@ Catches Include/asset misses and solid footprint overlaps (buildings/walls throu
 
 ## Contracts (sync with `src/main.ts`)
 
-- `name="hero"` / `name="boss"` / `name="merchant"`
+- `name="player"` / `name="boss"` / `name="merchant"`
 - `SpawnExclusion at="0 0" radius="52"` in `cities/discordia.xml`
 - Cardinal gates at wall ±39.8 (`RESPAWN_POINTS` = ±50)
 - Quest `dialogue-id` matches JSON under `src/data/quests/`

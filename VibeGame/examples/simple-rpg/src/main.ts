@@ -27,15 +27,14 @@ import {
   // HUD / loading
   mountLoadingScreen,
   setLoadingScreenLocale,
-  // i18n
-  loadDictionary,
-  loadEngineDefaultDictionary,
-  setLocale,
   // audio
   playSound,
   playSoundAt,
-  setBusVolume,
+  setMusicVolume,
+  setSfxVolume,
   setBusMuted,
+  createMusicLayerDriver,
+  getActiveMusicLayer,
   // input
   addInputMapping,
   isKeyDown,
@@ -51,7 +50,6 @@ import {
   defineQuery,
   Transform,
   WorldTransform,
-  Rigidbody,
   Health,
   isDead,
   PlayerController,
@@ -63,16 +61,12 @@ import {
   addXp,
   getStatModifiers,
   isPaused,
-  onEvent,
-  MODAL_OPTION_CHANGED,
   spawnFloatingText,
   spawnDamageNumber,
   setCombatTarget,
   tickCombatTarget,
   Destructible,
   onDestructibleDestroyed,
-  saveToLocalStorage,
-  loadFromLocalStorage,
   registerSaveSerializer,
   getDataRegistry,
   // physics / terrain
@@ -101,11 +95,16 @@ import {
 setKTX2TranscoderPath('/libs/basis/');
 
 import { registerGameSounds, preloadGameSounds } from './game/sounds';
-import { registerGameSkills, heroStats, RING_SPEED_MULT } from './game/skills';
+import { registerGameSkills, playerStats, RING_SPEED_MULT } from './game/skills';
 import { updateConsumables, clearHotbar } from './game/consumables';
 import { updateAbilities, clearAbilityBar } from './game/abilities';
 import { updateMelee, clearMelee } from './game/melee';
 import { addGold } from './game/economy';
+import { teleportEntity } from '../../shared/src/physics';
+import { setupHmrGuard } from '../../shared/src/hmr';
+import { initI18n, detectLocale } from '../../shared/src/i18n';
+import { wireOptions } from '../../shared/src/options';
+import { registerProfilerDebug } from '../../shared/src/profiler';
 import {
   spawnBomb,
   throwBomb,
@@ -141,82 +140,82 @@ import mountainQuestsData from './data/quests/mountain_quests.json';
 const SAVE_KEY = 'simple-rpg-save';
 const BASE_MAX_HP = 100;
 // Flat bomb-damage bonus per merchant sword-upgrade level (folded into
-// heroStats.attackBonus by HeroStatsSystem; read by bombs.ts).
+// playerStats.attackBonus by PlayerStatsSystem; read by bombs.ts).
 const SWORD_DMG_PER_LEVEL = 10;
 const CHECKPOINT_X = 0;
 const CHECKPOINT_Y = 50;
 const CHECKPOINT_Z = 0;
 const RESPAWN_DELAY = 2.0;
 
-// ── Hero ECS setup: add the engine components the gameplay/HUD read. ─────────
-let heroInit = false;
-const HeroSetupSystem: System = {
+// ── Player ECS setup: add the engine components the gameplay/HUD read. ─────────
+let playerInit = false;
+const PlayerSetupSystem: System = {
   group: 'simulation',
   first: true,
   update(state: State) {
-    if (heroInit) return;
-    const hero = state.getEntityByName('hero');
-    if (hero === null) return;
+    if (playerInit) return;
+    const player = state.getEntityByName('player');
+    if (player === null) return;
 
-    if (!state.hasComponent(hero, Health)) state.addComponent(hero, Health);
-    Health.max[hero] = BASE_MAX_HP;
-    Health.current[hero] = BASE_MAX_HP;
+    if (!state.hasComponent(player, Health)) state.addComponent(player, Health);
+    Health.max[player] = BASE_MAX_HP;
+    Health.current[player] = BASE_MAX_HP;
 
-    if (!state.hasComponent(hero, ProgressionComponent))
-      state.addComponent(hero, ProgressionComponent);
-    ProgressionComponent.level[hero] = 1;
+    if (!state.hasComponent(player, ProgressionComponent))
+      state.addComponent(player, ProgressionComponent);
+    ProgressionComponent.level[player] = 1;
 
-    if (!state.hasComponent(hero, InventoryComponent))
-      state.addComponent(hero, InventoryComponent);
+    if (!state.hasComponent(player, InventoryComponent))
+      state.addComponent(player, InventoryComponent);
 
-    heroInit = true;
+    playerInit = true;
   },
 };
 
-// ── Hero stats: resolve all three progression stat-modifiers (Vitality → max
+// ── Player stats: resolve all three progression stat-modifiers (Vitality → max
 //    HP, Strength → attack damage, Agility → move speed) plus the merchant
-//    ring/sword upgrades. Strength+sword feed heroStats.attackBonus (read by
+//    ring/sword upgrades. Strength+sword feed playerStats.attackBonus (read by
 //    bombs.ts); speed is owned here so the ring multiplier can't compound. ──────
 let baseHeroSpeed = 0;
 let baseHeroSpeedCaptured = false;
-const HeroStatsSystem: System = {
+const PlayerStatsSystem: System = {
   group: 'simulation',
   update(state: State) {
-    const hero = state.getEntityByName('hero');
-    if (hero === null || !state.hasComponent(hero, ProgressionComponent))
+    const player = state.getEntityByName('player');
+    if (player === null || !state.hasComponent(player, ProgressionComponent))
       return;
-    if (!state.hasComponent(hero, Health)) return;
+    if (!state.hasComponent(player, Health)) return;
 
     let hpBonus = 0;
     let attackBonus = 0;
     let moveBonus = 0;
-    for (const mod of getStatModifiers(state, hero)) {
+    for (const mod of getStatModifiers(state, player)) {
       if (mod.stat === 'maxHp') hpBonus += mod.magnitude;
       else if (mod.stat === 'attack') attackBonus += mod.magnitude;
       else if (mod.stat === 'moveSpeed') moveBonus += mod.magnitude;
     }
-    heroStats.attackBonus =
-      attackBonus + heroStats.swordLevel * SWORD_DMG_PER_LEVEL;
+    playerStats.attackBonus =
+      attackBonus + playerStats.swordLevel * SWORD_DMG_PER_LEVEL;
 
     const newMax = BASE_MAX_HP + hpBonus;
-    if (Health.max[hero] !== newMax) {
-      Health.max[hero] = newMax;
-      if (Health.current[hero] > newMax) Health.current[hero] = newMax;
+    if (Health.max[player] !== newMax) {
+      Health.max[player] = newMax;
+      if (Health.current[player] > newMax) Health.current[player] = newMax;
     }
 
     if (!baseHeroSpeedCaptured) {
-      baseHeroSpeed = PlayerController.speed[hero];
+      baseHeroSpeed = PlayerController.speed[player];
       baseHeroSpeedCaptured = true;
     }
-    const ringMult = heroStats.ringOwned ? RING_SPEED_MULT : 1;
+    const ringMult = playerStats.ringOwned ? RING_SPEED_MULT : 1;
     const targetSpeed = (baseHeroSpeed + moveBonus) * ringMult;
-    if (PlayerController.speed[hero] !== targetSpeed) {
-      PlayerController.speed[hero] = targetSpeed;
+    if (PlayerController.speed[player] !== targetSpeed) {
+      PlayerController.speed[player] = targetSpeed;
     }
   },
 };
 
-// ── Respawn: on death, after a delay, return the hero to the nearest checkpoint
+// ── Respawn: on death, after a delay, return the player to the nearest checkpoint
 //    — the city centre or just outside whichever cardinal gate is closest to
 //    where they fell. Beats always trekking back from the city centre after
 //    dying deep in a biome. Each point is just outside the wall (z/x ±50),
@@ -235,15 +234,15 @@ let respawnZ = CHECKPOINT_Z;
 const RespawnSystem: System = {
   group: 'simulation',
   update(state: State) {
-    const hero = state.getEntityByName('hero');
-    if (hero === null || !state.hasComponent(hero, Health)) return;
+    const player = state.getEntityByName('player');
+    if (player === null || !state.hasComponent(player, Health)) return;
 
-    if (isDead(hero) && !deathShown) {
+    if (isDead(player) && !deathShown) {
       deathShown = true;
       respawnAtTime = state.time.elapsed + RESPAWN_DELAY;
-      // Pick the checkpoint nearest to where the hero died.
-      const dx = Transform.posX[hero];
-      const dz = Transform.posZ[hero];
+      // Pick the checkpoint nearest to where the player died.
+      const dx = Transform.posX[player];
+      const dz = Transform.posZ[player];
       let best = RESPAWN_POINTS[0];
       let bestD2 = Infinity;
       for (const p of RESPAWN_POINTS) {
@@ -257,11 +256,10 @@ const RespawnSystem: System = {
       respawnZ = best[1];
     }
     if (deathShown && state.time.elapsed >= respawnAtTime) {
-      Health.current[hero] = Health.max[hero];
-      const body = getBodyForEntity(state, hero);
-      // Place the hero on the actual terrain surface at the respawn point, not
+      Health.current[player] = Health.max[player];
+      // Place the player on the actual terrain surface at the respawn point, not
       // a hardcoded altitude — CHECKPOINT_Y (50) sits *below* most of the world
-      // (plaza ground ≈ 66), so the old path dropped the hero underground and
+      // (plaza ground ≈ 66), so the old path dropped the player underground and
       // relied on the snap system to pop it back up (a visible fall/jerk, and a
       // fall-through into the void whenever that chunk's collider wasn't ready).
       let respawnY = CHECKPOINT_Y;
@@ -276,23 +274,12 @@ const RespawnSystem: System = {
         if (groundY !== null) {
           respawnY = getBodyYForFeetAt(
             state,
-            hero,
+            player,
             groundY + GROUND_CONTACT_SKIN
           );
         }
       }
-      Transform.posX[hero] = respawnX;
-      Transform.posY[hero] = respawnY;
-      Transform.posZ[hero] = respawnZ;
-      Transform.dirty[hero] = 1;
-      Rigidbody.velX[hero] = 0;
-      Rigidbody.velY[hero] = 0;
-      Rigidbody.velZ[hero] = 0;
-      if (body) {
-        body.setTranslation({ x: respawnX, y: respawnY, z: respawnZ }, true);
-        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-        body.wakeUp();
-      }
+      teleportEntity(state, player, respawnX, respawnY, respawnZ);
       deathShown = false;
     }
   },
@@ -338,7 +325,7 @@ const CombatFeedbackSystem: System = {
   group: 'simulation',
   update(state: State) {
     withSpan('rpg/combat-feedback', () => {
-      const hero = state.getEntityByName('hero');
+      const player = state.getEntityByName('player');
       tickCombatTarget(state, state.time.deltaTime);
 
       for (const e of healthFxQuery(state.world)) {
@@ -348,7 +335,7 @@ const CombatFeedbackSystem: System = {
         if (prev === undefined || cur >= prev - 0.01) continue;
         const dmg = Math.round(prev - cur);
         if (dmg <= 0) continue;
-        const isHero = e === hero;
+        const isHero = e === player;
         const big = !isHero && dmg >= 22;
         spawnDamageNumber(state, {
           x: Transform.posX[e],
@@ -374,15 +361,15 @@ const CombatFeedbackSystem: System = {
           setCombatTarget(e, {
             label: getEnemyLabel(e) || state.getEntityName(e) || 'Enemy',
           });
-        } else if (hero !== null) {
-          // When the hero is hit, soft-lock the nearest living foe for the TargetBar.
+        } else if (player !== null) {
+          // When the player is hit, soft-lock the nearest living foe for the TargetBar.
           let best = -1;
           let bestD2 = Infinity;
-          const hx = Transform.posX[hero];
-          const hz = Transform.posZ[hero];
+          const hx = Transform.posX[player];
+          const hz = Transform.posZ[player];
           const merchant = state.getEntityByName('merchant');
           for (const foe of healthFxQuery(state.world)) {
-            if (foe === hero || foe === merchant || Health.current[foe] <= 0)
+            if (foe === player || foe === merchant || Health.current[foe] <= 0)
               continue;
             const dx = Transform.posX[foe] - hx;
             const dz = Transform.posZ[foe] - hz;
@@ -399,11 +386,11 @@ const CombatFeedbackSystem: System = {
             });
           }
         }
-        // Award XP to the hero on the blow that kills a creature.
-        if (!isHero && cur <= 0 && prev > 0 && hero !== null) {
+        // Award XP to the player on the blow that kills a creature.
+        if (!isHero && cur <= 0 && prev > 0 && player !== null) {
           addXp(
             state,
-            hero,
+            player,
             Math.max(2, Math.round((Health.max[e] || 30) / 12))
           );
         }
@@ -431,11 +418,10 @@ const CombatFeedbackSystem: System = {
   },
 };
 
-// ── i18n. Engine HUD widget keys (modal.pause, options.*) live alongside the
-//    game's own strings. ──────────────────────────────────────────────────────
+// ── i18n. The modal.pause / options.* keys shared with the other examples
+//    live in examples/shared (initI18n); only the game's own strings stay
+//    here. ─────────────────────────────────────────────────────────────────
 const dictEN: Record<string, string> = {
-  'modal.pause': 'Paused',
-  'modal.hint': 'Press Q to resume',
   'modal.tab.skills': 'Skills',
   'modal.tab.inventory': 'Inventory',
   'modal.tab.options': 'Options',
@@ -458,10 +444,6 @@ const dictEN: Record<string, string> = {
   'quests.prompt.talk': 'Talk',
   'quests.prompt.progress': 'Ask about the task',
   'quests.prompt.turnin': 'Hand in quest',
-  'options.music': 'Music',
-  'options.sfx': 'Sound FX',
-  'options.save': '💾 Save Game',
-  'options.load': '📂 Load Game',
   'options.controls':
     'Move: WASD   Jump: Space   Sprint: Shift\n' +
     'Attack / Harvest: J   Interact: F   Trade: K\n' +
@@ -471,13 +453,10 @@ const dictEN: Record<string, string> = {
     'Pause menu: Q\n' +
     'Profiler: P (Shift+P deep)   Debug overlay: ?   GPU stats: G',
   'hud.title': 'Discordia',
-  'hud.saved': 'Game saved!',
-  'hud.loaded': 'Save restored.',
 };
 
+
 const dictPT: Record<string, string> = {
-  'modal.pause': 'Pausa',
-  'modal.hint': 'Aperte Q para voltar',
   'modal.tab.skills': 'Habilidades',
   'modal.tab.inventory': 'Inventário',
   'modal.tab.options': 'Opções',
@@ -500,10 +479,6 @@ const dictPT: Record<string, string> = {
   'quests.prompt.talk': 'Falar',
   'quests.prompt.progress': 'Perguntar sobre a missão',
   'quests.prompt.turnin': 'Entregar missão',
-  'options.music': 'Música',
-  'options.sfx': 'Efeitos',
-  'options.save': '💾 Salvar jogo',
-  'options.load': '📂 Carregar jogo',
   'options.controls':
     'Mover: WASD   Pular: Espaço   Correr: Shift\n' +
     'Atacar / Coletar: J   Interagir: F   Comércio: K\n' +
@@ -513,16 +488,16 @@ const dictPT: Record<string, string> = {
     'Menu de pausa: Q\n' +
     'Profiler: P (Shift+P deep)   Overlay debug: ?   GPU: G',
   'hud.title': 'Discordia',
-  'hud.saved': 'Jogo salvo!',
-  'hud.loaded': 'Progresso restaurado.',
 };
+
 
 const MUSIC_VOL = 0.7;
 const SFX_VOL = 0.8;
 
-function initAudioBuses(): void {
-  setBusVolume('music', MUSIC_VOL);
-  setBusVolume('sfx', SFX_VOL);
+function initAudioBuses(state: State): void {
+  // Mixer API (not raw bus volume) so the MusicLayer BGM follows too.
+  setMusicVolume(state, MUSIC_VOL);
+  setSfxVolume(state, SFX_VOL);
   setBusMuted('music', false);
   setBusMuted('sfx', false);
 }
@@ -534,7 +509,7 @@ function initAudioBuses(): void {
 const WEAPON_CLIPS = ['sword', 'axe', 'spear'] as const;
 const MESH_BASE = '/assets/meshes/';
 // Held model per action clip. (Generated by text3d+paint3d; sword reuses the
-// existing hero sword.) Missing GLBs just leave the hand empty (load fails
+// existing player sword.) Missing GLBs just leave the hand empty (load fails
 // silently) until generated.
 const HELD_MODEL: Record<string, string> = {
   sword: MESH_BASE + 'sword_hero_lod0.glb',
@@ -556,8 +531,8 @@ const HARVEST_HINT_RANGE_SQ = 3.6 * 3.6;
 const AttackContextSystem: System = {
   group: 'simulation',
   update(state: State) {
-    const hero = state.getEntityByName('hero');
-    if (hero === null) return;
+    const player = state.getEntityByName('player');
+    if (player === null) return;
 
     const v = isKeyDown('KeyV');
     if (v && !weaponCyclePressed) {
@@ -565,8 +540,8 @@ const AttackContextSystem: System = {
     }
     weaponCyclePressed = v;
 
-    const hx = Transform.posX[hero];
-    const hz = Transform.posZ[hero];
+    const hx = Transform.posX[player];
+    const hz = Transform.posZ[player];
     let near = 0;
     let bestD2 = HARVEST_HINT_RANGE_SQ;
     for (const e of destructibleFxQuery(state.world)) {
@@ -593,13 +568,13 @@ const AttackContextSystem: System = {
     // Show the matching model in hand (unless the bomb-aim owns the hand).
     if (!bombAiming) {
       const url = HELD_MODEL[clip] ?? null;
-      if (!attachHeldItem(state, hero, clip, GRIPS, url))
+      if (!attachHeldItem(state, player, clip, GRIPS, url))
         setPlayerHeldItem(url);
     }
   },
 };
 
-// ── Bombs: tick live fuses every frame; throw one in front of the hero on [B]
+// ── Bombs: tick live fuses every frame; throw one in front of the player on [B]
 //    when a bomb is in the bag (bought from the merchant). ─────────────────────
 let bombPressed = false;
 let bombHoldT = 0;
@@ -614,16 +589,16 @@ const BombSystem: System = {
   group: 'simulation',
   update(state: State) {
     updateBombs(state, state.time.deltaTime);
-    const heroForHud = state.getEntityByName('hero');
-    updateConsumables(state, heroForHud ?? 0);
-    updateAbilities(state, heroForHud ?? 0, state.time.deltaTime);
-    updateMelee(state, heroForHud ?? 0, state.time.deltaTime);
+    const playerForHud = state.getEntityByName('player');
+    updateConsumables(state, playerForHud ?? 0);
+    updateAbilities(state, playerForHud ?? 0, state.time.deltaTime);
+    updateMelee(state, playerForHud ?? 0, state.time.deltaTime);
     const dt = state.time.deltaTime;
     const held = isKeyDown('KeyB');
-    const hero = state.getEntityByName('hero');
-    const haveBomb = hero !== null && getItemQty(state, hero, 'bomb') > 0;
+    const player = state.getEntityByName('player');
+    const haveBomb = player !== null && getItemQty(state, player, 'bomb') > 0;
 
-    if (isPaused(state) || hero === null) {
+    if (isPaused(state) || player === null) {
       if (bombPressed) hideThrowArc();
       if (bombAiming) {
         bombAiming = false;
@@ -639,27 +614,27 @@ const BombSystem: System = {
     // threshold. The bomb is only consumed on release.
     if (held && haveBomb) {
       bombHoldT += dt;
-      _bombFrom.x = Transform.posX[hero];
-      _bombFrom.y = Transform.posY[hero] + 1.0;
-      _bombFrom.z = Transform.posZ[hero];
-      const target = nearestEnemy(state, hero, BOMB_AIM_RANGE);
+      _bombFrom.x = Transform.posX[player];
+      _bombFrom.y = Transform.posY[player] + 1.0;
+      _bombFrom.z = Transform.posZ[player];
+      const target = nearestEnemy(state, player, BOMB_AIM_RANGE);
       if (target) {
         _bombLand.x = Transform.posX[target];
         _bombLand.y = Transform.posY[target];
         _bombLand.z = Transform.posZ[target];
       } else {
-        const rx = WorldTransform.rotX[hero];
-        const ry = WorldTransform.rotY[hero];
-        const rz = WorldTransform.rotZ[hero];
-        const rw = WorldTransform.rotW[hero];
+        const rx = WorldTransform.rotX[player];
+        const ry = WorldTransform.rotY[player];
+        const rz = WorldTransform.rotZ[player];
+        const rw = WorldTransform.rotW[player];
         const fx = 2 * (rx * rz + rw * ry);
         const fz = 1 - 2 * (rx * rx + ry * ry);
-        _bombLand.x = Transform.posX[hero] + fx * BOMB_THROW_RANGE;
-        _bombLand.z = Transform.posZ[hero] + fz * BOMB_THROW_RANGE;
+        _bombLand.x = Transform.posX[player] + fx * BOMB_THROW_RANGE;
+        _bombLand.z = Transform.posZ[player] + fz * BOMB_THROW_RANGE;
         let gy = getBvhSurfaceHeight(state, _bombLand.x, 500, _bombLand.z);
         if (gy == null || !Number.isFinite(gy))
           gy = getTerrainHeightAt(state, _bombLand.x, _bombLand.z);
-        _bombLand.y = Number.isFinite(gy) ? gy : Transform.posY[hero];
+        _bombLand.y = Number.isFinite(gy) ? gy : Transform.posY[player];
       }
       if (bombHoldT > BOMB_AIM_THRESHOLD) {
         updateThrowArc(
@@ -674,7 +649,7 @@ const BombSystem: System = {
         // Bomb to hand + turn the body to face the throw target while aiming.
         if (!bombAiming) {
           bombAiming = true;
-          attachHeldItem(state, hero, 'bomb', GRIPS, BOMB_MODEL);
+          attachHeldItem(state, player, 'bomb', GRIPS, BOMB_MODEL);
         }
         setPlayerFaceTarget(_bombLand.x, _bombLand.z);
       }
@@ -691,10 +666,10 @@ const BombSystem: System = {
         if (bombHoldT <= BOMB_AIM_THRESHOLD) {
           spawnBomb(
             state,
-            Transform.posX[hero],
-            Transform.posY[hero],
-            Transform.posZ[hero],
-            hero
+            Transform.posX[player],
+            Transform.posY[player],
+            Transform.posZ[player],
+            player
           );
         } else {
           throwBomb(
@@ -705,10 +680,10 @@ const BombSystem: System = {
             _bombLand.x,
             _bombLand.y,
             _bombLand.z,
-            hero
+            player
           );
         }
-        removeItem(state, hero, 'bomb', 1);
+        removeItem(state, player, 'bomb', 1);
       }
       bombHoldT = 0;
     }
@@ -716,7 +691,7 @@ const BombSystem: System = {
   },
 };
 
-// ── Procedural bomb-aim torso twist: rotate the hero's Spine on Y to track the
+// ── Procedural bomb-aim torso twist: rotate the player's Spine on Y to track the
 //    camera yaw while aiming. Must run in 'draw' (after 'simulation', where the
 //    engine ticks the AnimationMixer) so the override lands on top of the mixer.
 const MAX_SPINE_TWIST = 0.9; // rad (~51°) clamp for a believable torso twist
@@ -769,9 +744,9 @@ function normalizeAngle(a: number): number {
 const BombAimSpineSystem: System = {
   group: 'draw',
   update(state: State) {
-    const hero = state.getEntityByName('hero');
-    if (hero === null) return;
-    const regIdx = PlayerGltfConfig.animatorRegistryIndex[hero];
+    const player = state.getEntityByName('player');
+    if (player === null) return;
+    const regIdx = PlayerGltfConfig.animatorRegistryIndex[player];
     if (regIdx === 0) return;
     const animator = getAnimator(state, regIdx);
     if (!animator) return;
@@ -792,11 +767,11 @@ const BombAimSpineSystem: System = {
       }
       const cam = getActiveCamera();
       if (cam) {
-        const heroYaw = yawFromQuaternion(animator.root.quaternion);
+        const playerYaw = yawFromQuaternion(animator.root.quaternion);
         const camYaw = yawFromQuaternion(cam.quaternion);
         const delta = Math.max(
           -MAX_SPINE_TWIST,
-          Math.min(MAX_SPINE_TWIST, normalizeAngle(camYaw - heroYaw))
+          Math.min(MAX_SPINE_TWIST, normalizeAngle(camYaw - playerYaw))
         );
         aimSpineDelta += (delta - aimSpineDelta) * k;
         spine.rotation.y = aimSpineBaseY + aimSpineDelta;
@@ -816,61 +791,14 @@ const BombAimSpineSystem: System = {
   },
 };
 
-// ── BGM: explore music on boot, switch to battle when creatures aggro.
-//    Uses Howler playSound (not the engine MusicLayer system) so it routes
-//    through the same 'music' bus as the volume slider.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let bgmCurrentLayer: 'explore' | 'battle' | null = null;
-let bgmStarted = false;
-let bgmLastSwitch = 0;
-
-function switchBgm(layer: 'explore' | 'battle'): void {
-  // Stop every Howl whose source is a BGM track, then start the new layer.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const howler = (window as any).Howler;
-  if (howler?._howls) {
-    for (const h of howler._howls) {
-      if (typeof h._src === 'string' && h._src.includes('bgm_')) {
-        h.stop();
-        h.unload();
-      }
-    }
-  }
-  playSound(`bgm-${layer}`, { origin: 'music' });
-  bgmCurrentLayer = layer;
-}
-
-const BgmSystem: System = {
-  name: 'BgmSystem',
-  group: 'simulation',
-  update(_state: State) {
-    withSpan('rpg/bgm', () => {
-      // Wait for the AudioContext to be running (unlocked by the user gesture)
-      // before starting BGM — Howler queues plays on a suspended context but
-      // they may not resume reliably.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ctxRunning = (window as any).Howler?.ctx?.state === 'running';
-      if (!bgmStarted) {
-        if (!ctxRunning) return; // keep waiting for the user gesture
-        bgmStarted = true;
-        switchBgm('explore');
-        return;
-      }
-      // Only switch if the layer actually changed AND at least 1s passed since
-      // the last switch (prevents rapid oscillation from aggro flapping).
-      const inCombat = anyCreatureAggro();
-      const now = performance.now();
-      if (now - bgmLastSwitch < 1000) return;
-      if (inCombat && bgmCurrentLayer !== 'battle') {
-        switchBgm('battle');
-        bgmLastSwitch = now;
-      } else if (!inCombat && bgmCurrentLayer === 'battle') {
-        switchBgm('explore');
-        bgmLastSwitch = now;
-      }
-    });
-  },
-};
+// ── BGM: explore on boot, crossfade to battle while creatures are aggro.
+//    Driven by the engine MusicLayerDriver against the <MusicLayer> entities
+//    in public/world/environment.xml (both routed through the 'music' bus,
+//    so the volume slider still controls them).
+const BgmSystem = createMusicLayerDriver({
+  resolve: () => (anyCreatureAggro() ? 'battle' : 'explore'),
+  debounceMs: 1000,
+});
 
 // Must register quests before runtime.start() so the scene parser can resolve
 // each <DialogueNPC dialogue-id> to its quest index. JSON import widens
@@ -895,7 +823,7 @@ async function runBootstrap(): Promise<void> {
   // runtime mid-boot — that used to race with Vite full-reload teardown).
   resetBuilder();
 
-  const bootLang = navigator.language.startsWith('pt') ? 'pt' : 'en';
+  const bootLang = detectLocale();
   setLoadingScreenLocale(bootLang);
   mountLoadingScreen({
     title: 'Discordia',
@@ -917,8 +845,8 @@ async function runBootstrap(): Promise<void> {
   withPlugin(DebugPlugin);
   withPlugin(ProfilerPlugin);
 
-  withSystem(HeroSetupSystem);
-  withSystem(HeroStatsSystem);
+  withSystem(PlayerSetupSystem);
+  withSystem(PlayerStatsSystem);
   withSystem(RespawnSystem);
   withSystem(CombatFeedbackSystem);
   withSystem(AttackContextSystem);
@@ -933,7 +861,7 @@ async function runBootstrap(): Promise<void> {
   const state = runtime.getState();
 
   // Pack behavior: hitting one enemy alerts nearby allies with line of sight
-  // to the hero, so a pack fights together instead of each mob aggroing alone.
+  // to the player, so a pack fights together instead of each mob aggroing alone.
   setupAggroChain(state);
 
   GRIPS = await loadHeldItemGrips('/data/held-items.json');
@@ -979,31 +907,31 @@ async function runBootstrap(): Promise<void> {
   // do jogador, mas viaja no mesmo save (contratos-de-dados.md §Estado de A Nota).
   registerSaveSerializer(state, 'simple-rpg-nota', {
     serialize: (s, eid) => {
-      if (s.getEntityByName('hero') !== eid) return null;
+      if (s.getEntityByName('player') !== eid) return null;
       return notaSnapshot();
     },
     deserialize: (s, eid, data) => {
-      if (s.getEntityByName('hero') !== eid) return;
+      if (s.getEntityByName('player') !== eid) return;
       restoreNota(s, (data ?? {}) as Partial<NotaSnapshot>);
     },
   });
 
-  // Persist merchant progress that lives outside ECS (heroStats.ringOwned /
+  // Persist merchant progress that lives outside ECS (playerStats.ringOwned /
   // swordLevel) so re-loading can't re-grant the ring (speed compounding) or
-  // reset sword levels. Attached to the hero entity; other eids are skipped.
+  // reset sword levels. Attached to the player entity; other eids are skipped.
   registerSaveSerializer(state, 'simple-rpg-progress', {
     serialize: (s, eid) => {
-      if (s.getEntityByName('hero') !== eid) return null;
+      if (s.getEntityByName('player') !== eid) return null;
       return {
-        ringOwned: heroStats.ringOwned,
-        swordLevel: heroStats.swordLevel,
+        ringOwned: playerStats.ringOwned,
+        swordLevel: playerStats.swordLevel,
       };
     },
     deserialize: (s, eid, data) => {
-      if (s.getEntityByName('hero') !== eid) return;
+      if (s.getEntityByName('player') !== eid) return;
       const d = data as { ringOwned?: boolean; swordLevel?: number };
-      heroStats.ringOwned = !!d.ringOwned;
-      heroStats.swordLevel = d.swordLevel ?? 0;
+      playerStats.ringOwned = !!d.ringOwned;
+      playerStats.swordLevel = d.swordLevel ?? 0;
     },
   });
 
@@ -1137,31 +1065,16 @@ async function runBootstrap(): Promise<void> {
   //   __VIBEGAME__.debug.callAction('give', 'potion', 3)
   //   __VIBEGAME__.debug.callAction('gold', 500)
   registerDebugAction(state, 'give', (id: string, n: number = 1) => {
-    const h = state.getEntityByName('hero') ?? 0;
+    const h = state.getEntityByName('player') ?? 0;
     if (h) addItem(state, h, id, n);
   });
   registerDebugAction(state, 'gold', (n: number = 100) => addGold(n));
   // Teleporte de QA (vite DEV only): move o body do herói para x y z.
   //   __VIBEGAME__.debug.callAction('tp', -410, 156, 118.5)
   registerDebugAction(state, 'tp', (x: number, y: number, z: number) => {
-    const h = state.getEntityByName('hero') ?? 0;
+    const h = state.getEntityByName('player') ?? 0;
     if (!h) return -1;
-    Transform.posX[h] = x;
-    Transform.posY[h] = y;
-    Transform.posZ[h] = z;
-    Transform.dirty[h] = 1;
-    Rigidbody.posX[h] = x;
-    Rigidbody.posY[h] = y;
-    Rigidbody.posZ[h] = z;
-    Rigidbody.velX[h] = 0;
-    Rigidbody.velY[h] = 0;
-    Rigidbody.velZ[h] = 0;
-    const body = getBodyForEntity(state, h);
-    if (body) {
-      body.setTranslation({ x, y, z }, true);
-      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      body.wakeUp();
-    }
+    teleportEntity(state, h, x, y, z);
     return h;
   });
   // A Nota: __VIBEGAME__.debug.getVar('nota') → { marked, fixed, signed }
@@ -1184,21 +1097,19 @@ async function runBootstrap(): Promise<void> {
     }
   }
 
-  loadEngineDefaultDictionary(state);
-  loadDictionary(state, 'en', dictEN);
-  loadDictionary(state, 'pt', dictPT);
-  setLocale(state, bootLang);
+  // i18n: shared modal/options keys come from examples/shared, game keys here.
+  initI18n(state, { en: dictEN, pt: dictPT });
 
   // Harvest loot: the engine DestructiblePlugin breaks rocks/trees; the game
-  // banks the yield into the hero vault + bag and pops a floating "+1". The
+  // banks the yield into the player vault + bag and pops a floating "+1". The
   // loot joins the harvest stack (engine break popup + hit icon) so the three
   // texts line up instead of overlapping at the prop's origin.
   onDestructibleDestroyed(state, (eid, x, y, z) => {
-    const hero = state.getEntityByName('hero');
-    if (hero === null) return;
+    const player = state.getEntityByName('player');
+    if (player === null) return;
     if (eid !== null && isWoodEntity(eid)) {
       addWood(1);
-      addItem(state, hero, 'wood', 1);
+      addItem(state, player, 'wood', 1);
       notifyResourceHarvested(state, 'wood');
       const flavour = biomeHarvestKind('wood', x, z);
       if (flavour) notifyResourceHarvested(state, flavour);
@@ -1217,7 +1128,7 @@ async function runBootstrap(): Promise<void> {
       });
     } else {
       addStone(1);
-      addItem(state, hero, 'stone', 1);
+      addItem(state, player, 'stone', 1);
       notifyResourceHarvested(state, 'stone');
       const flavour = biomeHarvestKind('stone', x, z);
       if (flavour) notifyResourceHarvested(state, flavour);
@@ -1237,57 +1148,40 @@ async function runBootstrap(): Promise<void> {
     }
   });
 
-  // Engine OptionsTab rows → audio buses + Save/Load buttons.
-  onEvent(state, MODAL_OPTION_CHANGED, (payload) => {
-    const p = payload as { id: string; value: number };
-    if (p.id === 'music-volume') setBusVolume('music', p.value / 100);
-    else if (p.id === 'sfx-volume') setBusVolume('sfx', p.value / 100);
-    else if (p.id === 'save') {
-      saveToLocalStorage(state, SAVE_KEY);
-      playSound('save');
-    } else if (p.id === 'load') {
-      if (loadFromLocalStorage(state, SAVE_KEY)) playSound('load');
-    }
+  // Engine OptionsTab rows → audio buses + Save/Load buttons (shared wiring).
+  wireOptions(state, {
+    saveKey: SAVE_KEY,
+    onSave: () => playSound('save'),
+    onLoad: (restored) => {
+      if (restored) playSound('load');
+    },
   });
 
-  initAudioBuses();
+  initAudioBuses(state);
 
   // QA / debug surface (registered through the engine DebugPlugin overlay;
   // DEV-gated by the registry itself). Invoke via:
-  //   __VIBEGAME__.debug.getVar('heroDebug')
+  //   __VIBEGAME__.debug.getVar('playerDebug')
   //   __VIBEGAME__.debug.callAction('spawnFloatingText', 'hi', 0, 2, 0)
   //   __VIBEGAME__.profiler.top(15)
-  registerDebugAction(
-    state,
-    'profilerTop',
-    (...args: unknown[]) => {
-      const n = typeof args[0] === 'number' ? args[0] : 15;
-      const w = window as unknown as {
-        __VIBEGAME__?: { profiler?: { top: (k?: number) => unknown } };
-      };
-      return w.__VIBEGAME__?.profiler?.top(n);
-    },
-    {
-      description: 'Return top profiler systems (__VIBEGAME__.profiler.top)',
-    }
-  );
-  registerDebugVar(state, 'heroState', () => state);
+  registerProfilerDebug(state);
+  registerDebugVar(state, 'playerState', () => state);
   registerDebugVar(state, 'diagTerrainReady', () => terrainReady(state));
   registerDebugVar(state, 'diagDynamicsBlocking', () =>
     isTerrainDynamicsBlocking(state)
   );
-  registerDebugVar(state, 'diagHeroFeet', () => {
-    const heroEid = state.getEntityByName('hero');
-    if (heroEid === null) return { err: 'no hero' };
-    const x = Transform.posX[heroEid];
-    const z = Transform.posZ[heroEid];
+  registerDebugVar(state, 'diagPlayerFeet', () => {
+    const playerEid = state.getEntityByName('player');
+    if (playerEid === null) return { err: 'no player' };
+    const x = Transform.posX[playerEid];
+    const z = Transform.posZ[playerEid];
     const terrainH = getTerrainHeightAt(state, x, z);
     const bvh = getBvhSurfaceHeight(state, x, 500, z);
-    const body = getBodyForEntity(state, heroEid);
+    const body = getBodyForEntity(state, playerEid);
     return {
       x,
       z,
-      posY: Transform.posY[heroEid],
+      posY: Transform.posY[playerEid],
       terrainH,
       bvh,
       bodyY: body?.translation().y ?? null,
@@ -1317,16 +1211,16 @@ async function runBootstrap(): Promise<void> {
     (text: string, x: number, y: number, z: number) =>
       spawnFloatingText(state, text, { x, y, z, duration: 4 })
   );
-  registerDebugVar(state, 'heroDebug', () => {
-    const hero = state.getEntityByName('hero');
-    if (hero === null) return {};
+  registerDebugVar(state, 'playerDebug', () => {
+    const player = state.getEntityByName('player');
+    if (player === null) return {};
     return {
-      x: Transform.posX[hero],
-      y: Transform.posY[hero],
-      z: Transform.posZ[hero],
-      hp: Health.current[hero] ?? 0,
-      maxHp: Health.max[hero] ?? 0,
-      level: ProgressionComponent.level[hero] ?? 0,
+      x: Transform.posX[player],
+      y: Transform.posY[player],
+      z: Transform.posZ[player],
+      hp: Health.current[player] ?? 0,
+      maxHp: Health.max[player] ?? 0,
+      level: ProgressionComponent.level[player] ?? 0,
     };
   });
   // Grip-tuning: callAction('hold', 'sword') pins a weapon in the hand;
@@ -1394,20 +1288,12 @@ void bootstrap();
 // Soft HMR of this graph leaks WebGL/KTX2/Rapier in Firefox — decline so Vite
 // always full-reloads. Unload path must stay lightweight: heavy destroy() here
 // can hang mid-boot and block location.reload() (dead page after "Disposing").
-if (import.meta.hot) {
-  // decline() exists in runtime Vite; older client typings omit it.
-  (import.meta.hot as unknown as { decline(): void }).decline();
-  import.meta.hot.dispose(() => {
-    try {
-      clearBombs();
-      clearAbilityBar();
-      clearHotbar();
-      clearMelee();
-      clearNota();
-      // GPU only — must not await Rapier/navmesh teardown before reload.
-      releaseRuntimeGpuResources();
-    } catch (e) {
-      console.error('[VibeGame] HMR dispose failed:', e);
-    }
-  });
-}
+setupHmrGuard(() => {
+  clearBombs();
+  clearAbilityBar();
+  clearHotbar();
+  clearMelee();
+  clearNota();
+  // GPU only — must not await Rapier/navmesh teardown before reload.
+  releaseRuntimeGpuResources();
+});

@@ -6,41 +6,17 @@
 // merchant/chest convention).
 
 import * as THREE from 'three';
-import { defineQuery, loadGltfToSceneWithAnimator, playSound } from 'vibegame';
+import { loadGltfToSceneWithAnimator, playSound } from 'vibegame';
 import type { InteractionGesture, MonoBehaviourContext, State } from 'vibegame';
 import {
   Transform,
-  PlayerController,
   isKeyDown,
   registerInteractionTarget,
   unregisterInteractionTarget,
 } from 'vibegame';
+import { showToast } from '../../../shared/src/ui';
+import { findPlayer } from './player-query';
 
-const playerQuery = defineQuery([PlayerController]);
-
-let toast: HTMLDivElement | null = null;
-let toastTimeout: ReturnType<typeof setTimeout> | null = null;
-
-/** Shared centre-screen mystic banner (one DOM node reused by every object). */
-function showMysticToast(message: string, color: string): void {
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.style.cssText =
-      'position:fixed;top:24%;left:50%;transform:translateX(-50%);max-width:60vw;' +
-      'background:rgba(14,10,22,0.95);border:2px solid currentColor;border-radius:10px;' +
-      'padding:16px 26px;z-index:1000;font:italic 19px Georgia,serif;text-align:center;' +
-      'text-shadow:0 0 12px currentColor;box-shadow:0 0 30px rgba(140,90,255,0.35);' +
-      'opacity:0;transition:opacity 0.25s;';
-    document.body.appendChild(toast);
-  }
-  toast.style.color = color;
-  toast.textContent = message;
-  toast.style.opacity = '1';
-  if (toastTimeout) clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => {
-    if (toast) toast.style.opacity = '0';
-  }, 3200);
-}
 
 export interface MysticConfig {
   /** GLB to load (single static prop). */
@@ -86,19 +62,12 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
   let loadStarted = false;
   let read = false;
   let fPressed = false;
-  let cachedPlayer = 0;
-  let entityId = 0;
+    let entityId = 0;
   const emissiveMats: THREE.MeshStandardMaterial[] = [];
 
-  function findPlayer(ctx: MonoBehaviourContext): number {
-    if (cachedPlayer && Transform.posX[cachedPlayer] !== undefined)
-      return cachedPlayer;
-    cachedPlayer = playerQuery(ctx.state.world)[0] ?? 0;
-    return cachedPlayer;
-  }
 
   function start(ctx: MonoBehaviourContext): void {
-    findPlayer(ctx);
+    findPlayer(ctx.state);
     entityId = ctx.entity;
     // Button prompt ("Press F …") shown by the engine InteractionPrompt widget
     // whenever the player is within its range of this entity.
@@ -145,7 +114,7 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
       baseI + pulseI * (0.5 + 0.5 * Math.sin(ctx.state.time.elapsed * 3));
     for (const m of emissiveMats) m.emissiveIntensity = pulse;
 
-    const player = findPlayer(ctx);
+    const player = findPlayer(ctx.state);
     if (!player) return;
     const dx = Transform.posX[player] - x;
     const dz = Transform.posZ[player] - z;
@@ -157,7 +126,18 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
       for (const m of emissiveMats) m.emissiveIntensity = 0;
       unregisterInteractionTarget(ctx.state, entityId);
       cfg.onRead(ctx.state, player);
-      showMysticToast(cfg.message, toastColor);
+      // Shared mystic banner — one DOM node reused by every object in the game.
+      showToast(cfg.message, {
+        color: toastColor,
+        top: '24%',
+        maxWidth: '60vw',
+        font: 'italic 19px Georgia,serif',
+        background: 'rgba(14,10,22,0.95)',
+        borderColor: toastColor,
+        glow: '0 0 30px rgba(140,90,255,0.35)',
+        textGlow: '0 0 12px currentColor',
+        durationMs: 3200,
+      });
       playSound('levelup');
     }
     fPressed = f;

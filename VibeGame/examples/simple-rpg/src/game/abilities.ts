@@ -24,7 +24,8 @@ import {
 import type { State } from 'vibegame';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { isGamePaused } from './pause';
-import { heroStats } from './skills';
+import { createHudSlot } from './hud-slot';
+import { playerStats } from './skills';
 
 interface Ability {
   id: string;
@@ -93,31 +94,17 @@ function buildBar(): void {
     'position:absolute;bottom:18px;left:18px;z-index:12;display:flex;gap:8px;pointer-events:none;';
 
   for (const a of ABILITIES) {
-    const root = document.createElement('div');
-    root.style.cssText =
-      'position:relative;width:50px;height:50px;border-radius:11px;' +
-      'display:flex;align-items:center;justify-content:center;font-size:23px;line-height:1;' +
-      `border:1px solid ${a.color}66;` +
-      'background:linear-gradient(135deg,rgba(14,18,34,0.78),rgba(10,14,26,0.66));' +
-      'backdrop-filter:blur(10px);box-shadow:0 5px 18px rgba(0,0,0,0.3);pointer-events:auto;';
-    // Renderizar ícone como <img> (path PNG) ou emoji (texto)
-    if (a.icon.includes('/')) {
-      const img = document.createElement('img');
-      img.src = a.icon;
-      img.alt = a.label;
-      img.style.cssText = 'width:38px;height:38px;object-fit:contain;';
-      root.appendChild(img);
-    } else {
-      root.textContent = a.icon;
-    }
+    const { root, keyBadge } = createHudSlot({
+      icon: a.icon,
+      label: a.label,
+      key: a.key,
+      color: a.color,
+      size: 50,
+      iconFontSize: 23,
+      iconImgSize: 38,
+    });
     root.title = `[${a.key}] ${a.label} (cooldown ${a.cooldown}s)`;
-
-    const keyBadge = document.createElement('span');
-    keyBadge.textContent = a.key;
-    keyBadge.style.cssText =
-      'position:absolute;top:-7px;left:-7px;min-width:17px;height:17px;padding:0 4px;z-index:2;' +
-      'border-radius:5px;background:#1b2238;color:#cfe;border:1px solid rgba(255,255,255,0.18);' +
-      'font:800 11px system-ui,sans-serif;display:flex;align-items:center;justify-content:center;';
+    keyBadge.style.zIndex = '2';
 
     // Cooldown sweep: a dark cover whose height shrinks from full → 0 as the
     // cooldown elapses, plus the remaining whole seconds.
@@ -130,7 +117,7 @@ function buildBar(): void {
       'position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;' +
       'font:800 16px system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px #000;';
 
-    root.append(cover, secs, keyBadge);
+    root.append(cover, secs);
     barEl.appendChild(root);
     slotEls[a.id] = { cover, secs, root };
   }
@@ -145,12 +132,12 @@ function flash(id: string): void {
 }
 
 // ── Effects ──────────────────────────────────────────────────────────────
-function heroForward(hero: number, out: { x: number; z: number }): void {
-  // Local +Z axis of the hero rotation, projected to the ground plane.
-  const x = WorldTransform.rotX[hero];
-  const y = WorldTransform.rotY[hero];
-  const z = WorldTransform.rotZ[hero];
-  const w = WorldTransform.rotW[hero];
+function playerForward(player: number, out: { x: number; z: number }): void {
+  // Local +Z axis of the player rotation, projected to the ground plane.
+  const x = WorldTransform.rotX[player];
+  const y = WorldTransform.rotY[player];
+  const z = WorldTransform.rotZ[player];
+  const w = WorldTransform.rotW[player];
   let fx = 2 * (x * z + w * y);
   let fz = 1 - 2 * (x * x + y * y);
   const len = Math.hypot(fx, fz) || 1;
@@ -164,17 +151,17 @@ const _fwd = { x: 0, z: 0 };
 
 /**
  * Clamp the dash so it doesn't teleport through walls/rocks: cast a ray forward
- * from chest height (offset past the hero's own capsule) and stop short of the
+ * from chest height (offset past the player's own capsule) and stop short of the
  * first solid hit. Falls back to the full distance when no physics world.
  */
-function clampDashDistance(state: State, hero: number): number {
+function clampDashDistance(state: State, player: number): number {
   const world = getRapierWorld(state);
   if (!world) return DASH_DISTANCE;
-  const startOffset = 0.6; // clear the hero's own ~0.3 m capsule radius
+  const startOffset = 0.6; // clear the player's own ~0.3 m capsule radius
   const origin = {
-    x: Transform.posX[hero] + _fwd.x * startOffset,
-    y: Transform.posY[hero] + 0.9,
-    z: Transform.posZ[hero] + _fwd.z * startOffset,
+    x: Transform.posX[player] + _fwd.x * startOffset,
+    y: Transform.posY[player] + 0.9,
+    z: Transform.posZ[player] + _fwd.z * startOffset,
   };
   const ray = new RAPIER.Ray(origin, { x: _fwd.x, y: 0, z: _fwd.z });
   const hit = world.castRay(
@@ -187,29 +174,29 @@ function clampDashDistance(state: State, hero: number): number {
   return Math.max(0, startOffset + hit.timeOfImpact - 0.4);
 }
 
-function doDash(state: State, hero: number): void {
-  heroForward(hero, _fwd);
-  const dist = clampDashDistance(state, hero);
-  const nx = Transform.posX[hero] + _fwd.x * dist;
-  const nz = Transform.posZ[hero] + _fwd.z * dist;
+function doDash(state: State, player: number): void {
+  playerForward(player, _fwd);
+  const dist = clampDashDistance(state, player);
+  const nx = Transform.posX[player] + _fwd.x * dist;
+  const nz = Transform.posZ[player] + _fwd.z * dist;
   const gy =
     getBvhSurfaceHeight(state, nx, 500, nz, 4000, TERRAIN_LAYER) ??
     getTerrainHeightAt(state, nx, nz) ??
-    Transform.posY[hero];
+    Transform.posY[player];
   // Move both the ECS transform and the kinematic body so the controller keeps it.
-  Transform.posX[hero] = nx;
-  Transform.posZ[hero] = nz;
-  Transform.posY[hero] = gy;
-  Transform.dirty[hero] = 1;
+  Transform.posX[player] = nx;
+  Transform.posZ[player] = nz;
+  Transform.posY[player] = gy;
+  Transform.dirty[player] = 1;
   const RB = state.getComponent('rigidbody') as {
     posX: Float32Array;
     posY: Float32Array;
     posZ: Float32Array;
   } | null;
   if (RB) {
-    RB.posX[hero] = nx;
-    RB.posZ[hero] = nz;
-    RB.posY[hero] = gy;
+    RB.posX[player] = nx;
+    RB.posZ[player] = nz;
+    RB.posY[player] = gy;
   }
   spawnParticleBurst(state, {
     x: nx,
@@ -223,21 +210,21 @@ function doDash(state: State, hero: number): void {
   flash('dash');
 }
 
-function doHeal(state: State, hero: number): void {
-  healHealth(hero, HEAL_AMOUNT);
+function doHeal(state: State, player: number): void {
+  healHealth(player, HEAL_AMOUNT);
   playSound('heal');
   spawnFloatingText(state, `+${HEAL_AMOUNT}`, {
-    x: Transform.posX[hero],
-    y: Transform.posY[hero] + 2.0,
-    z: Transform.posZ[hero],
+    x: Transform.posX[player],
+    y: Transform.posY[player] + 2.0,
+    z: Transform.posZ[player],
     color: '#6ef07a',
     size: 0.6,
     duration: 1.0,
   });
   spawnParticleBurst(state, {
-    x: Transform.posX[hero],
-    y: Transform.posY[hero] + 1.0,
-    z: Transform.posZ[hero],
+    x: Transform.posX[player],
+    y: Transform.posY[player] + 1.0,
+    z: Transform.posZ[player],
     preset: 'sparkle',
     count: 18,
     duration: 0.8,
@@ -245,25 +232,25 @@ function doHeal(state: State, hero: number): void {
   flash('heal');
 }
 
-function doPowerStrike(state: State, hero: number): void {
-  const hx = Transform.posX[hero];
-  const hy = Transform.posY[hero];
-  const hz = Transform.posZ[hero];
+function doPowerStrike(state: State, player: number): void {
+  const hx = Transform.posX[player];
+  const hy = Transform.posY[player];
+  const hz = Transform.posZ[player];
   const merchant = state.getEntityByName('merchant');
   spawnParticleBurst(state, {
     x: hx,
-    y: Transform.posY[hero] + 0.6,
+    y: Transform.posY[player] + 0.6,
     z: hz,
     preset: 'explosion',
     count: 30,
     duration: 0.7,
   });
-  playSoundAt('mine-break', hx, hy, hz, { originEid: hero });
+  playSoundAt('mine-break', hx, hy, hz, { originEid: player });
   const r2 = POWER_RADIUS * POWER_RADIUS;
-  const damage = POWER_DAMAGE + heroStats.attackBonus;
+  const damage = POWER_DAMAGE + playerStats.attackBonus;
   let hits = 0;
   for (const e of healthQuery(state.world)) {
-    if (e === hero || e === merchant || isDead(e)) continue;
+    if (e === player || e === merchant || isDead(e)) continue;
     const dx = Transform.posX[e] - hx;
     const dz = Transform.posZ[e] - hz;
     const dy = Transform.posY[e] - hy;
@@ -274,7 +261,7 @@ function doPowerStrike(state: State, hero: number): void {
   if (hits > 0) {
     spawnFloatingText(state, '💥', {
       x: hx,
-      y: Transform.posY[hero] + 1.6,
+      y: Transform.posY[player] + 1.6,
       z: hz,
       color: '#ffb24a',
       size: 0.8,
@@ -284,25 +271,25 @@ function doPowerStrike(state: State, hero: number): void {
   flash('power');
 }
 
-function activate(state: State, hero: number, id: string): void {
-  if (id === 'dash') doDash(state, hero);
-  else if (id === 'heal') doHeal(state, hero);
-  else if (id === 'power') doPowerStrike(state, hero);
+function activate(state: State, player: number, id: string): void {
+  if (id === 'dash') doDash(state, player);
+  else if (id === 'heal') doHeal(state, player);
+  else if (id === 'power') doPowerStrike(state, player);
 }
 
 /** Poll ability keys, tick cooldowns, update the bar. Call once/frame. */
-export function updateAbilities(state: State, hero: number, dt: number): void {
+export function updateAbilities(state: State, player: number, dt: number): void {
   buildBar();
 
   for (const a of ABILITIES) {
     if (cd[a.id] > 0) cd[a.id] = Math.max(0, cd[a.id] - dt);
   }
 
-  if (!isGamePaused() && hero > 0 && !isDead(hero)) {
+  if (!isGamePaused() && player > 0 && !isDead(player)) {
     for (const a of ABILITIES) {
       const down = isKeyDown(a.keyCode);
       if (down && !pressed[a.keyCode] && cd[a.id] <= 0) {
-        activate(state, hero, a.id);
+        activate(state, player, a.id);
         cd[a.id] = a.cooldown;
       }
       pressed[a.keyCode] = down;

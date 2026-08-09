@@ -1,5 +1,5 @@
 // Resonant crystal (crystal_blue.glb). A glowing shrine; reading it (F) floods the
-// hero with experience toward the next level, then the crystal dims.
+// player with experience toward the next level, then the crystal dims.
 import { createMysticObject } from '../game/mystic.ts';
 import { addXp } from 'vibegame';
 

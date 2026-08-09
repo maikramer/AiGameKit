@@ -1,0 +1,30 @@
+                        Plano de execução                        
+╭─────────────────────────────────┬───────────┬─────────────────╮
+│ Fase                            │ Pendentes │ Ação            │
+├─────────────────────────────────┼───────────┼─────────────────┤
+│ 1. Imagem (text2d)              │         0 │ OK              │
+│ 2. Shape (hunyuan)              │         0 │ OK              │
+│ 3. Paint (textura + PBR no GLB) │         2 │ paint3d texture │
+│ Concluídos                      │         0 │ skip            │
+╰─────────────────────────────────┴───────────┴─────────────────╯
+
+Fase 3: Paint (2 texturas)
+⏳ to_paint river_bridge_wood (386,580 -> ~160,000 faces, atlas=2048)
+✓ to_paint river_bridge_wood -> river_bridge_wood_to_paint.glb (159,999 faces)
+✓ to_paint re-fix river_bridge_wood (159,381 faces, morph=0)
+⏳ to_paint river_bridge_stone (399,970 -> ~160,000 faces, atlas=2048)
+✓ to_paint river_bridge_stone -> river_bridge_stone_to_paint.glb (160,000 faces)
+✓ to_paint re-fix river_bridge_stone (159,888 faces, morph=0)
+  OK river_bridge_wood
+  OK river_bridge_stone
+  Paint (batch) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2/2 0:08:01
+
+{"id": "river_bridge_wood", "tool": "lod", "status": "progress", "phase": "run", "percent": 0}
+{"id": "river_bridge_wood", "tool": "lod", "status": "progress", "phase": "run", "percent": 100, "meta": {"seconds": 28.95}}
+{"id": "river_bridge_wood", "tool": "collision", "status": "progress", "phase": "run", "percent": 0}
+{"id": "river_bridge_wood", "tool": "collision", "status": "progress", "phase": "run", "percent": 100, "meta": {"seconds": 4.31}}
+{"id": "river_bridge_stone", "tool": "lod", "status": "progress", "phase": "run", "percent": 0}
+{"id": "river_bridge_stone", "tool": "lod", "status": "progress", "phase": "run", "percent": 100, "meta": {"seconds": 27.53}}
+{"id": "river_bridge_stone", "tool": "collision", "status": "progress", "phase": "run", "percent": 0}
+{"id": "river_bridge_stone", "tool": "collision", "status": "progress", "phase": "run", "percent": 100, "meta": {"seconds": 4.33}}
+

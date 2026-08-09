@@ -1,0 +1,343 @@
+[
+  {
+    "id": "village_longhouse",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/village_longhouse.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/village_longhouse_shape.glb",
+    "seed": 90210,
+    "seed_fingerprint": 90210,
+    "category": "building",
+    "control_type": "bbox",
+    "bbox_preset": "building",
+    "size_m": [
+      5.5,
+      5.5,
+      10.0
+    ]
+  },
+  {
+    "id": "watchtower",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/watchtower.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/watchtower_shape.glb",
+    "seed": 394207914,
+    "category": "building",
+    "control_type": "bbox",
+    "bbox": [
+      0.3333333333333333,
+      1.0,
+      0.3333333333333333
+    ],
+    "size_m": [
+      3.0,
+      9.0,
+      3.0
+    ],
+    "height_m": 9.0,
+    "footprint_m": 3.0
+  },
+  {
+    "id": "chapel",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/chapel.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/chapel_shape.glb",
+    "seed": 141172943,
+    "category": "building",
+    "control_type": "bbox",
+    "bbox_preset": "chapel",
+    "size_m": [
+      6.0,
+      7.0,
+      4.5
+    ]
+  },
+  {
+    "id": "market_stall",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/market_stall.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/market_stall_shape.glb",
+    "seed": 546186085,
+    "category": "building",
+    "control_type": "bbox",
+    "bbox_preset": "building",
+    "size_m": [
+      3.0,
+      2.5,
+      2.0
+    ]
+  },
+  {
+    "id": "village_forge",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/village_forge.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/village_forge_shape.glb",
+    "seed": 632562616,
+    "category": "building",
+    "control_type": "bbox",
+    "size_m": [
+      6.0,
+      5.5,
+      5.0
+    ]
+  },
+  {
+    "id": "village_house",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/village_house.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/village_house_shape.glb",
+    "seed": 635380681,
+    "category": "building",
+    "control_type": "bbox",
+    "size_m": [
+      5.0,
+      4.2,
+      6.0
+    ]
+  },
+  {
+    "id": "shepherd_cottage",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/shepherd_cottage.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/shepherd_cottage_shape.glb",
+    "seed": 946742523,
+    "category": "building",
+    "control_type": "bbox",
+    "size_m": [
+      5.5,
+      4.0,
+      7.5
+    ]
+  },
+  {
+    "id": "village_barn",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/village_barn.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/village_barn_shape.glb",
+    "seed": 539632456,
+    "category": "building",
+    "control_type": "bbox",
+    "size_m": [
+      8.0,
+      6.0,
+      11.0
+    ]
+  },
+  {
+    "id": "medieval_well",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/medieval_well.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/medieval_well_shape.glb",
+    "seed": 625877948,
+    "category": "prop",
+    "control_type": "bbox",
+    "bbox_preset": "crate",
+    "size_m": [
+      1.4,
+      1.6,
+      1.4
+    ]
+  },
+  {
+    "id": "wooden_barrel",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/wooden_barrel.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/wooden_barrel_shape.glb",
+    "seed": 638854085,
+    "category": "prop",
+    "control_type": "bbox",
+    "bbox_preset": "barrel",
+    "size_m": [
+      0.6,
+      0.9,
+      0.6
+    ]
+  },
+  {
+    "id": "wooden_bench",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/wooden_bench.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/wooden_bench_shape.glb",
+    "seed": 546906957,
+    "category": "furniture",
+    "control_type": "bbox",
+    "bbox_preset": "crate",
+    "size_m": [
+      1.6,
+      0.5,
+      0.45
+    ]
+  },
+  {
+    "id": "wooden_crate",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/wooden_crate.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/wooden_crate_shape.glb",
+    "seed": 550118236,
+    "category": "prop",
+    "control_type": "bbox",
+    "bbox_preset": "crate",
+    "size_m": [
+      0.8,
+      0.8,
+      0.8
+    ]
+  },
+  {
+    "id": "treasure_chest",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/treasure_chest.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/treasure_chest_shape.glb",
+    "seed": 743908419,
+    "category": "chest",
+    "control_type": "bbox",
+    "bbox_preset": "chest",
+    "size_m": [
+      1.0,
+      0.65,
+      0.65
+    ]
+  },
+  {
+    "id": "anvil",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/anvil.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/anvil_shape.glb",
+    "seed": 104996988,
+    "category": "prop",
+    "control_type": "bbox",
+    "bbox_preset": "crate",
+    "size_m": [
+      0.7,
+      0.9,
+      0.45
+    ]
+  },
+  {
+    "id": "weapon_rack",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/weapon_rack.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/weapon_rack_shape.glb",
+    "seed": 462889708,
+    "category": "prop",
+    "control_type": "bbox",
+    "size_m": [
+      1.2,
+      1.6,
+      0.4
+    ]
+  },
+  {
+    "id": "forge_bellows",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/forge_bellows.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/forge_bellows_shape.glb",
+    "seed": 627450828,
+    "category": "prop",
+    "control_type": "bbox",
+    "bbox_preset": "crate",
+    "size_m": [
+      1.0,
+      0.7,
+      0.55
+    ]
+  },
+  {
+    "id": "quench_trough",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/quench_trough.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/quench_trough_shape.glb",
+    "seed": 645931998,
+    "category": "prop",
+    "control_type": "bbox",
+    "size_m": [
+      1.4,
+      0.55,
+      0.6
+    ]
+  },
+  {
+    "id": "horseshoe_pile",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/horseshoe_pile.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/horseshoe_pile_shape.glb",
+    "seed": 744563771,
+    "category": "prop",
+    "control_type": "bbox",
+    "bbox_preset": "cube",
+    "size_m": [
+      0.45,
+      0.25,
+      0.45
+    ]
+  },
+  {
+    "id": "campfire_pit",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/campfire_pit.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/campfire_pit_shape.glb",
+    "seed": 533930837,
+    "category": "prop",
+    "control_type": "bbox",
+    "bbox_preset": "cube",
+    "size_m": [
+      1.4,
+      0.35,
+      1.4
+    ]
+  },
+  {
+    "id": "notice_board",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/notice_board.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/notice_board_shape.glb",
+    "seed": 542647115,
+    "category": "prop",
+    "control_type": "bbox",
+    "size_m": [
+      1.6,
+      2.0,
+      0.22
+    ]
+  },
+  {
+    "id": "torch_post",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/torch_post.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/torch_post_shape.glb",
+    "seed": 393224871,
+    "category": "prop",
+    "control_type": "bbox",
+    "bbox": [
+      0.11363636363636363,
+      1.0,
+      0.11363636363636363
+    ],
+    "size_m": [
+      0.25,
+      2.2,
+      0.25
+    ],
+    "height_m": 2.2,
+    "footprint_m": 0.25
+  },
+  {
+    "id": "iron_brazier",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/iron_brazier.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/iron_brazier_shape.glb",
+    "seed": 547890024,
+    "category": "prop",
+    "control_type": "bbox",
+    "bbox_preset": "crate",
+    "size_m": [
+      0.7,
+      1.1,
+      0.7
+    ]
+  },
+  {
+    "id": "chopping_block",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/chopping_block.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/chopping_block_shape.glb",
+    "seed": 728245284,
+    "category": "prop",
+    "control_type": "bbox",
+    "bbox_preset": "cube",
+    "size_m": [
+      0.7,
+      0.55,
+      0.7
+    ]
+  },
+  {
+    "id": "log_pile",
+    "image": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/images/village/log_pile.png",
+    "output": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/meshes/village/_intermediate/log_pile_shape.glb",
+    "seed": 250487213,
+    "category": "prop",
+    "control_type": "bbox",
+    "size_m": [
+      1.8,
+      0.8,
+      0.9
+    ]
+  }
+]

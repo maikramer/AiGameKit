@@ -1,9 +1,9 @@
 // Real melee attack. The engine resolves damage only for projectiles (bombs)
-// and enemy→hero AI, so the hero's [J] swing previously did nothing to enemies
+// and enemy→player AI, so the player's [J] swing previously did nothing to enemies
 // (it only played the swing clip + harvested trees/rocks via Destructible).
 // This module makes [J] deal damage to enemies in a frontal arc, scaling with
 // the resolved attack bonus (Strength ranks + merchant sword upgrades, folded
-// into heroStats.attackBonus by HeroStatsSystem).
+// into playerStats.attackBonus by PlayerStatsSystem).
 //
 // Swing SFX + damage land near the strike peak of the attack clip (not the
 // key-press edge). Quaternius-style packs are ~1.5s with the cut ~25–40% in
@@ -26,7 +26,7 @@ import {
   spawnParticleBurst,
 } from 'vibegame';
 import type { State } from 'vibegame';
-import { heroStats } from './skills';
+import { playerStats } from './skills';
 import { isGamePaused } from './pause';
 import { getEnemyLabel } from '../scripts/enemy-registry';
 
@@ -45,7 +45,7 @@ const CRIT_MULTIPLIER = 2;
 /** cos(70°) — how far around the target's back the bonus still applies. */
 const BACKSTAB_DOT = Math.cos((70 * Math.PI) / 180);
 const FACE_HOLD = 0.45;
-/** Strike peak ≈27% on hero sword/attack; slightly after for whoosh/hit feel. */
+/** Strike peak ≈27% on player sword/attack; slightly after for whoosh/hit feel. */
 const SWING_IMPACT_FRACTION = 0.35;
 const FALLBACK_IMPACT_DELAY = 0.22;
 
@@ -59,7 +59,7 @@ let meleeOwnsFace = false;
 
 interface PendingSwing {
   delay: number;
-  hero: number;
+  player: number;
   aimX: number;
   aimZ: number;
   dmg: number;
@@ -68,11 +68,11 @@ interface PendingSwing {
 
 let pending: PendingSwing | null = null;
 
-function heroForward(hero: number): void {
-  const x = WorldTransform.rotX[hero];
-  const y = WorldTransform.rotY[hero];
-  const z = WorldTransform.rotZ[hero];
-  const w = WorldTransform.rotW[hero];
+function playerForward(player: number): void {
+  const x = WorldTransform.rotX[player];
+  const y = WorldTransform.rotY[player];
+  const z = WorldTransform.rotZ[player];
+  const w = WorldTransform.rotW[player];
   let fx = 2 * (x * z + w * y);
   let fz = 1 - 2 * (x * x + y * y);
   const len = Math.hypot(fx, fz) || 1;
@@ -85,9 +85,9 @@ function labelFor(state: State, eid: number): string {
 }
 
 /** Seconds until the whoosh/hit frame (strike peak of the attack clip). */
-function swingImpactDelay(state: State, hero: number): number {
-  if (!state.hasComponent(hero, PlayerGltfConfig)) return FALLBACK_IMPACT_DELAY;
-  const regIdx = PlayerGltfConfig.animatorRegistryIndex[hero];
+function swingImpactDelay(state: State, player: number): number {
+  if (!state.hasComponent(player, PlayerGltfConfig)) return FALLBACK_IMPACT_DELAY;
+  const regIdx = PlayerGltfConfig.animatorRegistryIndex[player];
   const animator = regIdx ? getAnimator(state, regIdx) : undefined;
   if (!animator) return FALLBACK_IMPACT_DELAY;
   // Prefer the context clip the engine will play (sword/axe/spear/chop/mine).
@@ -138,9 +138,9 @@ function facingOf(eid: number, out: { x: number; z: number }): void {
 }
 
 /**
- * Backstab test: the blow lands on the target's back when the hero approaches
+ * Backstab test: the blow lands on the target's back when the player approaches
  * along the direction the target is already facing. `apX/apZ` is the normalised
- * hero→target vector, so agreeing with the target's own forward means we are
+ * player→target vector, so agreeing with the target's own forward means we are
  * behind it.
  */
 function isBackstab(target: number, apX: number, apZ: number): boolean {
@@ -149,14 +149,14 @@ function isBackstab(target: number, apX: number, apZ: number): boolean {
 }
 
 function landSwing(state: State, swing: PendingSwing): void {
-  playSound('swing', { originEid: swing.hero });
+  playSound('swing', { originEid: swing.player });
 
-  const hx = Transform.posX[swing.hero];
-  const hy = Transform.posY[swing.hero];
-  const hz = Transform.posZ[swing.hero];
+  const hx = Transform.posX[swing.player];
+  const hy = Transform.posY[swing.player];
+  const hz = Transform.posZ[swing.player];
 
   for (const e of healthQuery(state.world)) {
-    if (e === swing.hero || e === swing.merchant || isDead(e)) continue;
+    if (e === swing.player || e === swing.merchant || isDead(e)) continue;
     const dx = Transform.posX[e] - hx;
     const dz = Transform.posZ[e] - hz;
     const dy = Transform.posY[e] - hy;
@@ -202,7 +202,7 @@ function landSwing(state: State, swing: PendingSwing): void {
  * the nearest enemy and face them. Swing SFX + damage fire near the strike
  * peak (~35% of the attack clip), not on the key edge.
  */
-export function updateMelee(state: State, hero: number, dt: number): void {
+export function updateMelee(state: State, player: number, dt: number): void {
   if (swingTimer > 0) swingTimer = Math.max(0, swingTimer - dt);
   if (faceHoldTimer > 0) {
     faceHoldTimer = Math.max(0, faceHoldTimer - dt);
@@ -217,13 +217,13 @@ export function updateMelee(state: State, hero: number, dt: number): void {
     if (pending.delay <= 0) {
       const swing = pending;
       pending = null;
-      if (!isGamePaused() && swing.hero > 0 && !isDead(swing.hero)) {
+      if (!isGamePaused() && swing.player > 0 && !isDead(swing.player)) {
         landSwing(state, swing);
       }
     }
   }
 
-  if (isGamePaused() || hero <= 0 || isDead(hero)) {
+  if (isGamePaused() || player <= 0 || isDead(player)) {
     jPressed = isKeyDown('KeyJ');
     return;
   }
@@ -233,15 +233,15 @@ export function updateMelee(state: State, hero: number, dt: number): void {
   jPressed = down;
   if (!edge || swingTimer > 0 || pending) return;
 
-  const delay = swingImpactDelay(state, hero);
+  const delay = swingImpactDelay(state, player);
   swingTimer = Math.max(SWING_COOLDOWN, delay + 0.05);
 
   const merchant = state.getEntityByName('merchant');
-  heroForward(hero);
-  const hx = Transform.posX[hero];
-  const hy = Transform.posY[hero];
-  const hz = Transform.posZ[hero];
-  const dmg = BASE_MELEE_DAMAGE + heroStats.attackBonus;
+  playerForward(player);
+  const hx = Transform.posX[player];
+  const hy = Transform.posY[player];
+  const hz = Transform.posZ[player];
+  const dmg = BASE_MELEE_DAMAGE + playerStats.attackBonus;
 
   // Soft-lock: nearest living enemy in lock range (full circle).
   let lockEid = -1;
@@ -249,7 +249,7 @@ export function updateMelee(state: State, hero: number, dt: number): void {
   let lockDx = 0;
   let lockDz = 0;
   for (const e of healthQuery(state.world)) {
-    if (e === hero || e === merchant || isDead(e)) continue;
+    if (e === player || e === merchant || isDead(e)) continue;
     const dx = Transform.posX[e] - hx;
     const dz = Transform.posZ[e] - hz;
     const dy = Transform.posY[e] - hy;
@@ -278,7 +278,7 @@ export function updateMelee(state: State, hero: number, dt: number): void {
 
   pending = {
     delay,
-    hero,
+    player,
     aimX,
     aimZ,
     dmg,

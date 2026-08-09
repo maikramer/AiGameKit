@@ -16,7 +16,7 @@ import {
   playSoundAt,
 } from 'vibegame';
 import type { State } from 'vibegame';
-import { heroStats } from './skills';
+import { playerStats } from './skills';
 
 const FUSE_SECONDS = 1.5;
 const BLAST_RADIUS = 6;
@@ -205,7 +205,7 @@ function explode(state: State, b: Bomb): void {
     duration: 0.8,
   });
   const merchantEid = state.getEntityByName('merchant');
-  const baseDamage = BLAST_DAMAGE + heroStats.attackBonus;
+  const baseDamage = BLAST_DAMAGE + playerStats.attackBonus;
   const r2 = BLAST_RADIUS * BLAST_RADIUS;
   for (const e of healthQuery(state.world)) {
     if (e === b.owner || e === merchantEid || isDead(e)) continue;
@@ -218,19 +218,19 @@ function explode(state: State, b: Bomb): void {
   }
 }
 
-/** Nearest living enemy to `hero` within `maxRange` (XZ). 0 if none. */
+/** Nearest living enemy to `player` within `maxRange` (XZ). 0 if none. */
 export function nearestEnemy(
   state: State,
-  hero: number,
+  player: number,
   maxRange: number
 ): number {
-  const hx = Transform.posX[hero];
-  const hz = Transform.posZ[hero];
+  const hx = Transform.posX[player];
+  const hz = Transform.posZ[player];
   const merchantEid = state.getEntityByName('merchant');
   let best = 0;
   let bestD2 = maxRange * maxRange;
   for (const e of healthQuery(state.world)) {
-    if (e === hero || e === merchantEid || isDead(e)) continue;
+    if (e === player || e === merchantEid || isDead(e)) continue;
     const dx = Transform.posX[e] - hx;
     const dz = Transform.posZ[e] - hz;
     const d2 = dx * dx + dz * dz;

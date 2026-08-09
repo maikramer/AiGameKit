@@ -2,9 +2,7 @@ import { defineQuery } from 'vibegame';
 import type { MonoBehaviourContext, State } from 'vibegame';
 import {
   Transform,
-  Rigidbody,
-  PlayerController,
-  isKeyDown,
+    isKeyDown,
   registerInteractionTarget,
   unregisterInteractionTarget,
   getBodyForEntity,
@@ -12,7 +10,10 @@ import {
   getBodyYForFeetAt,
   terrainReady,
 } from 'vibegame';
+import { teleportEntity } from '../../../shared/src/physics';
+import { showToast } from '../../../shared/src/ui';
 import { getInteriorSpawn, type InteriorId } from '../game/interiors.ts';
+import { findPlayer } from '../game/player-query.ts';
 
 /**
  * Door portal: F → teleport when interior spawn exists, else toast stub.
@@ -26,11 +27,11 @@ const TOAST_MS = 2200;
 /**
  * Landing assist: after a teleport, the destination's terrain colliders may
  * not exist yet — chunks far from the camera are destroyed, and recreation is
- * async (LOD select → mesh build → collider). During that window the hero
+ * async (LOD select → mesh build → collider). During that window the player
  * falls through the void; once below ground level the CCT never catches it
- * again (it only collides from above). Every tick, if the hero has fallen
+ * again (it only collides from above). Every tick, if the player has fallen
  * more than LANDING_ASSIST_FALL_TOLERANCE below the target, re-teleport; when
- * the collider arrives the CCT snaps and holds the hero near the target, and
+ * the collider arrives the CCT snaps and holds the player near the target, and
  * the assist stops.
  */
 const LANDING_ASSIST_TICK_MS = 100;
@@ -39,7 +40,7 @@ const LANDING_ASSIST_MAX_TICKS = 60;
 /**
  * Anti-bounce: after any portal teleport, ignore F for this long. Without it,
  * a single held F press chains through both portals of a pair — entering
- * lands the hero inside the exit portal's range (spawn-to-exit ~2 m < 2.8 m)
+ * lands the player inside the exit portal's range (spawn-to-exit ~2 m < 2.8 m)
  * and the same held key instantly teleports back out; the exterior exit
  * lands exactly on the enter portal. Result: "Entrou" toast, no scene change.
  */
@@ -87,24 +88,12 @@ const PORTAL_DEFS: Record<string, { interior: InteriorId; label: string }> = {
   'portal.exit_house_a': { interior: 'exit_house_a', label: 'Sair da casa' },
 };
 
-const playerQuery = defineQuery([PlayerController]);
 
 type PortalRuntime = {
   fPressed: boolean;
 };
 
 const runtimeByEid = new Map<number, PortalRuntime>();
-let cachedPlayer = 0;
-let toastEl: HTMLDivElement | null = null;
-let toastTimeout: ReturnType<typeof setTimeout> | null = null;
-
-function findPlayer(state: State): number {
-  if (cachedPlayer && Transform.posX[cachedPlayer] !== undefined) {
-    return cachedPlayer;
-  }
-  cachedPlayer = playerQuery(state.world)[0] ?? 0;
-  return cachedPlayer;
-}
 
 function resolveDef(ctx: MonoBehaviourContext): {
   interior: InteriorId;
@@ -113,55 +102,6 @@ function resolveDef(ctx: MonoBehaviourContext): {
   const name = ctx.state.getEntityName(ctx.entity);
   if (!name) return null;
   return PORTAL_DEFS[name] ?? null;
-}
-
-function showToast(message: string): void {
-  if (typeof document === 'undefined') return;
-  if (!toastEl) {
-    toastEl = document.createElement('div');
-    toastEl.style.cssText =
-      'position:fixed;top:18%;left:50%;transform:translateX(-50%);' +
-      'background:rgba(18,14,28,0.94);border:2px solid #8b7cff;' +
-      'border-radius:8px;padding:12px 22px;z-index:1000;' +
-      'font:17px Georgia,serif;color:#e8e0ff;' +
-      'box-shadow:0 0 22px rgba(120,90,255,0.35);opacity:0;transition:opacity 0.2s;';
-    document.body.appendChild(toastEl);
-  }
-  toastEl.textContent = message;
-  toastEl.style.opacity = '1';
-  if (toastTimeout) clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => {
-    if (toastEl) toastEl.style.opacity = '0';
-  }, TOAST_MS);
-}
-
-function teleportPlayer(
-  state: State,
-  player: number,
-  x: number,
-  y: number,
-  z: number
-): void {
-  // Mirror the debug `tp` action: write Transform AND Rigidbody SOA pose plus
-  // zero velocity, then push the Rapier body. `poseDirty` is deliberately NOT
-  // set — the TeleportationSystem re-applies the SOA pose and rewrites
-  // InterpolatedTransform mid-frame.
-  Transform.posX[player] = x;
-  Transform.posY[player] = y;
-  Transform.posZ[player] = z;
-  Transform.dirty[player] = 1;
-  Rigidbody.posX[player] = x;
-  Rigidbody.posY[player] = y;
-  Rigidbody.posZ[player] = z;
-  Rigidbody.velX[player] = 0;
-  Rigidbody.velY[player] = 0;
-  Rigidbody.velZ[player] = 0;
-  const body = getBodyForEntity(state, player);
-  if (body) {
-    body.setTranslation({ x, y, z }, true);
-    body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    body.wakeUp();
-  }
 }
 
 function startLandingAssist(
@@ -194,7 +134,7 @@ function startLandingAssist(
         clearInterval(iv);
         return;
       }
-      teleportPlayer(ctx.state, player, x, y, z);
+      teleportEntity(ctx.state, player, x, y, z);
     }
   }, LANDING_ASSIST_TICK_MS);
 }
@@ -206,7 +146,7 @@ function teleportWithAssist(
   y: number,
   z: number
 ): void {
-  teleportPlayer(ctx.state, player, x, y, z);
+  teleportEntity(ctx.state, player, x, y, z);
   startLandingAssist(ctx, player, x, y, z);
 }
 
@@ -235,7 +175,9 @@ function tryEnter(
   if (now - lastTeleportAt < TELEPORT_COOLDOWN_MS) return;
   const spawn = getInteriorSpawn(def.interior);
   if (!spawn) {
-    showToast('Interior em breve — porta ainda fechada');
+    showToast('Interior em breve — porta ainda fechada', {
+      durationMs: TOAST_MS,
+    });
     return;
   }
   const player = findPlayer(ctx.state);

@@ -1,5 +1,5 @@
-// Aggro chain: when one enemy takes damage from the hero, nearby awake allies
-// with line of sight to the hero are alerted and acquire the hero as target.
+// Aggro chain: when one enemy takes damage from the player, nearby awake allies
+// with line of sight to the player are alerted and acquire the player as target.
 // This is what makes a pack feel like a pack — hit one goblin and the rest
 // turn on you — instead of every creature aggroing in isolation.
 //
@@ -7,10 +7,10 @@
 //   setupAggroChain(state);
 //
 // The chain is intentionally conservative:
-//   - Only the hero counts as an aggressor (this game has no friendly fire).
+//   - Only the player counts as an aggressor (this game has no friendly fire).
 //   - Only awake (non-sleeping) allies within `CALL_RADIUS` are alerted, and
-//     only if they can SEE the hero (LOS) — no calling through walls.
-//   - The alerted ally gets the hero locked as its explicit target, overriding
+//     only if they can SEE the player (LOS) — no calling through walls.
+//   - The alerted ally gets the player locked as its explicit target, overriding
 //     its lazy per-frame acquisition so it commits to the fight immediately.
 
 import {
@@ -46,22 +46,22 @@ export function setupAggroChain(state: State): number {
     const comp = AiStateComponent;
     if (comp.mode[target] === undefined) return;
 
-    const hero = playerQuery(state.world)[0] ?? 0;
-    if (hero <= 0 || Health.current[hero] <= 0) return;
+    const player = playerQuery(state.world)[0] ?? 0;
+    if (player <= 0 || Health.current[player] <= 0) return;
 
-    const hx = Transform.posX[hero];
-    const hz = Transform.posZ[hero];
+    const hx = Transform.posX[player];
+    const hz = Transform.posZ[player];
     const tx = Transform.posX[target];
     const tz = Transform.posZ[target];
 
-    // Wake / re-target every awake ally near the victim that can see the hero.
+    // Wake / re-target every awake ally near the victim that can see the player.
     for (const ally of enemyQuery(state.world)) {
       if (ally === target) continue;
       if (Health.current[ally] <= 0) continue;
       const dx = Transform.posX[ally] - tx;
       const dz = Transform.posZ[ally] - tz;
       if (dx * dx + dz * dz > CALL_RADIUS_SQ) continue;
-      // LOS from the ally to the hero (not to the victim): we want allies that
+      // LOS from the ally to the player (not to the victim): we want allies that
       // can actually join the fight, not ones that hear a scream behind a wall.
       if (
         !hasLineOfSight(
@@ -75,8 +75,8 @@ export function setupAggroChain(state: State): number {
         continue;
       }
       const cfg = getMeleeAiConfig(state, ally);
-      if (cfg) cfg.targetEid = hero;
-      comp.target[ally] = hero;
+      if (cfg) cfg.targetEid = player;
+      comp.target[ally] = player;
       // Nudge a sleeping/IDLE ally out of idle so it commits this frame.
       if (comp.mode[ally] === 0 /* AI_MODE_IDLE */) {
         comp.mode[ally] = 2; /* AI_MODE_CHASE */

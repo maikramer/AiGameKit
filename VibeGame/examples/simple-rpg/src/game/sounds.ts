@@ -5,7 +5,7 @@ import { defineSoundBank, preloadSounds } from 'vibegame';
  *
  * World SFX (hurt/death/harvest/explosions) are ``spatial: true`` and must be
  * fired with ``playSoundAt`` / ``playSoundOn`` so Howler attenuates by distance
- * and the bank culls past ``maxDistance``. UI / hero-local SFX stay 2D.
+ * and the bank culls past ``maxDistance``. UI / player-local SFX stay 2D.
  */
 export function registerGameSounds(): void {
   const worldSfx = {
@@ -16,7 +16,7 @@ export function registerGameSounds(): void {
   };
 
   defineSoundBank({
-    // ── UI / hero-local (2D) ─────────────────────────────────────────
+    // ── UI / player-local (2D) ─────────────────────────────────────────
     save: { url: '/assets/audio/sfx_save.ogg', volume: 0.48 },
     load: { url: '/assets/audio/sfx_load.ogg', volume: 0.44 },
     heal: { url: '/assets/audio/sfx_heal.ogg', volume: 0.48 },

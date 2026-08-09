@@ -15,6 +15,7 @@ import {
 } from 'vibegame';
 import type { State } from 'vibegame';
 import { isGamePaused } from './pause';
+import { createHudSlot } from './hud-slot';
 
 export const POTION_HEAL = 50;
 export const ANTIDOTE_HEAL = 35;
@@ -75,32 +76,13 @@ function buildHotbar(): void {
     'display:flex;gap:10px;pointer-events:none;';
 
   for (const s of SLOTS) {
-    const root = document.createElement('div');
-    root.style.cssText =
-      'position:relative;width:54px;height:54px;border-radius:11px;' +
-      'display:flex;align-items:center;justify-content:center;font-size:26px;line-height:1;' +
-      `border:1px solid ${s.color}55;` +
-      'background:linear-gradient(135deg,rgba(14,18,34,0.78),rgba(10,14,26,0.66));' +
-      'backdrop-filter:blur(10px);box-shadow:0 5px 18px rgba(0,0,0,0.3);transition:transform 0.08s,border-color 0.12s;' +
-      'pointer-events:auto;';
-    // Renderizar ícone como <img> (path PNG) ou emoji (texto)
-    if (s.icon.includes('/')) {
-      const img = document.createElement('img');
-      img.src = s.icon;
-      img.alt = s.label;
-      img.style.cssText = 'width:42px;height:42px;object-fit:contain;';
-      root.appendChild(img);
-    } else {
-      root.textContent = s.icon;
-    }
-    root.title = `[${s.key}] ${s.label}`;
-
-    const keyBadge = document.createElement('span');
-    keyBadge.textContent = s.key;
-    keyBadge.style.cssText =
-      'position:absolute;top:-7px;left:-7px;min-width:17px;height:17px;padding:0 4px;' +
-      'border-radius:5px;background:#1b2238;color:#cfe;border:1px solid rgba(255,255,255,0.18);' +
-      'font:800 11px system-ui,sans-serif;display:flex;align-items:center;justify-content:center;';
+    const { root, keyBadge } = createHudSlot({
+      icon: s.icon,
+      label: s.label,
+      key: s.key,
+      color: s.color,
+    });
+    root.style.transition = 'transform 0.08s,border-color 0.12s';
 
     const count = document.createElement('span');
     count.style.cssText =
@@ -129,23 +111,23 @@ function flash(id: string): void {
 }
 
 /** Apply a consumable's effect, consuming one from the bag. Returns true if used. */
-export function useConsumable(state: State, hero: number, id: string): boolean {
-  if (hero <= 0 || getItemQty(state, hero, id) <= 0) return false;
+export function useConsumable(state: State, player: number, id: string): boolean {
+  if (player <= 0 || getItemQty(state, player, id) <= 0) return false;
 
   if (id === 'potion') {
-    const max = Health.max[hero] ?? 0;
-    if (max > 0 && (Health.current[hero] ?? 0) >= max) return false; // don't waste at full HP
-    removeItem(state, hero, id, 1);
-    healHealth(hero, POTION_HEAL);
+    const max = Health.max[player] ?? 0;
+    if (max > 0 && (Health.current[player] ?? 0) >= max) return false; // don't waste at full HP
+    removeItem(state, player, id, 1);
+    healHealth(player, POTION_HEAL);
     playSound('heal');
     flash(id);
     return true;
   }
 
   if (id === 'antidote') {
-    removeItem(state, hero, id, 1);
-    cancelAllStatuses(state, hero); // cure poison/debuffs, not just heal
-    healHealth(hero, ANTIDOTE_HEAL);
+    removeItem(state, player, id, 1);
+    cancelAllStatuses(state, player); // cure poison/debuffs, not just heal
+    healHealth(player, ANTIDOTE_HEAL);
     playSound('heal');
     flash(id);
     return true;
@@ -154,15 +136,15 @@ export function useConsumable(state: State, hero: number, id: string): boolean {
   return false; // bomb: thrown by BombSystem, not used from the bar
 }
 
-/** Poll hotbar keys + refresh slot counts. Call once per frame with the hero. */
-export function updateConsumables(state: State, hero: number): void {
+/** Poll hotbar keys + refresh slot counts. Call once per frame with the player. */
+export function updateConsumables(state: State, player: number): void {
   buildHotbar();
 
-  if (!isGamePaused() && hero > 0) {
+  if (!isGamePaused() && player > 0) {
     for (const s of SLOTS) {
       if (s.id === 'bomb') continue; // [B] handled by BombSystem
       const down = isKeyDown(s.keyCode);
-      if (down && !pressed[s.keyCode]) useConsumable(state, hero, s.id);
+      if (down && !pressed[s.keyCode]) useConsumable(state, player, s.id);
       pressed[s.keyCode] = down;
     }
   }
@@ -170,7 +152,7 @@ export function updateConsumables(state: State, hero: number): void {
   for (const s of SLOTS) {
     const el = slotEls[s.id];
     if (!el) continue;
-    const q = hero > 0 ? getItemQty(state, hero, s.id) : 0;
+    const q = player > 0 ? getItemQty(state, player, s.id) : 0;
     el.count.textContent = String(q);
     el.root.style.opacity = q > 0 ? '1' : '0.42';
   }

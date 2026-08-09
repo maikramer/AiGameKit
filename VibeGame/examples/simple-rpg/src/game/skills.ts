@@ -1,22 +1,22 @@
-// Skill adapter → engine Progression. Skill points live on the hero's
+// Skill adapter → engine Progression. Skill points live on the player's
 // ProgressionComponent (granted on level-up by the engine, and by the rune
 // pillar). Spending happens in the engine pause menu's SkillsTab; this module
 // only (a) grants points and (b) registers the skill definitions the SkillsTab
 // reads from the data registry.
 import { ProgressionComponent, getDataRegistry } from 'vibegame';
 import type { SkillDef, State } from 'vibegame';
-import { engineState, heroEid } from './engine-bridge';
+import { engineState, playerEid } from './engine-bridge';
 
-// Resolved hero progress shared across gameplay modules.
-//   attackBonus — flat damage added to the hero's bombs (Strength ranks +
+// Resolved player progress shared across gameplay modules.
+//   attackBonus — flat damage added to the player's bombs (Strength ranks +
 //                 merchant sword upgrades); recomputed each frame by
-//                 HeroStatsSystem in main.ts, read by bombs.ts.
-//   ringOwned   — set by the merchant; read by HeroStatsSystem to apply the
+//                 PlayerStatsSystem in main.ts, read by bombs.ts.
+//   ringOwned   — set by the merchant; read by PlayerStatsSystem to apply the
 //                 speed multiplier. Persisted via the save-load serializer
 //                 registered in main.ts so it survives save/load (otherwise
 //                 re-buying the ring would compound the speed bonus).
 //   swordLevel  — set by the merchant; folded into attackBonus.
-export const heroStats = {
+export const playerStats = {
   attackBonus: 0,
   ringOwned: false,
   swordLevel: 0,
@@ -24,14 +24,14 @@ export const heroStats = {
 
 export const RING_SPEED_MULT = 1.15;
 
-/** Grant skill points to the hero (e.g. the rune pillar). */
+/** Grant skill points to the player (e.g. the rune pillar). */
 export function addSkillPoints(n: number): void {
-  const h = heroEid();
+  const h = playerEid();
   if (h) ProgressionComponent.unspentPoints[h] += n;
 }
 
 export function getSkillPoints(): number {
-  const h = heroEid();
+  const h = playerEid();
   return h ? (ProgressionComponent.unspentPoints[h] ?? 0) : 0;
 }
 
@@ -157,7 +157,7 @@ const GAME_SKILLS: readonly SkillDef[] = [
 
 /**
  * Register the skill tree with the engine data registry so the SkillsTab can
- * list them. Stat-modifiers are applied by HeroStatsSystem in main.ts via
+ * list them. Stat-modifiers are applied by PlayerStatsSystem in main.ts via
  * getStatModifiers (maxHp / attack / moveSpeed).
  */
 export function registerGameSkills(state: State = engineState()!): void {
