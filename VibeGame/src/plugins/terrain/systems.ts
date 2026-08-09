@@ -379,6 +379,12 @@ const TERRAIN_VERTEX_SHADER = `
 varying vec2 vWorldXZ;
 varying float vWorldY;
 varying vec3 vGeomNormal;
+// three only declares vMapUv under USE_MAP (map_pars_vertex); the fragment's
+// NAR/sand sampling uses it unconditionally, so without a map the two stages
+// must still share a declared varying for the program to link.
+#ifndef USE_MAP
+varying vec2 vMapUv;
+#endif
 void main() {
   vec4 worldPos = modelMatrix * vec4(position, 1.0);
   vWorldXZ = worldPos.xz;
@@ -453,6 +459,14 @@ uniform float uHeightBlendStrength;
 varying vec2 vWorldXZ;
 varying float vWorldY;
 varying vec3 vGeomNormal;
+// Mirror of the vertex fallback: with no map, three never declares vMapUv in
+// the fragment (uv_pars_fragment guards it with USE_MAP), yet the NAR block
+// below samples vMapUv unconditionally. Declaring it here lets map-less
+// terrain (base-color only) compile; the value is unused garbage but the
+// sampled textures are flat/empty constants, so the result is unchanged.
+#ifndef USE_MAP
+varying vec2 vMapUv;
+#endif
 
 vec4 biomeSplat() {
   return texture2D(uSplatMap, (vWorldXZ - uSplatMin) * uSplatInvSize);

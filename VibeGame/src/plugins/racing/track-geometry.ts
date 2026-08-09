@@ -49,6 +49,13 @@ const WALL_HEIGHT = 1.15;
 /** Thickness of the barrier wall — used for both the mesh and the collision limit. */
 const WALL_THICKNESS = 0.9;
 /**
+ * How far the wall base drops below the driving surface (m). The track is
+ * suspended this far above the carved bed (see TRACK_ELEVATION in the
+ * examples), so the wall's inner face extends down to the bed and reads as a
+ * solid embankment instead of a floating ribbon with a hollow underneath.
+ */
+const EMBANKMENT_DEPTH = 1.1;
+/**
  * How far the embankment slopes away from the barrier (m).
  *
  * Kept modest on purpose: a ribbon wider than the tightest corner radius folds
@@ -370,26 +377,29 @@ function buildWalls(
       const oy = frame.y + frame.ry * outerOff;
       const oz = frame.z + frame.rz * outerOff;
 
-      // Inner face vertices (base, mid rail, top).
-      for (const [x, y, z] of [
-        [ix, iy, iz],
-      ]) {
-        positions.push(x, y, z);
-        positions.push(
-          x + frame.ux * WALL_HEIGHT * 0.72,
-          y + frame.uy * WALL_HEIGHT * 0.72,
-          z + frame.uz * WALL_HEIGHT * 0.72
-        );
-        positions.push(
-          x + frame.ux * WALL_HEIGHT,
-          y + frame.uy * WALL_HEIGHT,
-          z + frame.uz * WALL_HEIGHT
-        );
-        colors.push(wallColor.r, wallColor.g, wallColor.b);
-        colors.push(wallColor.r, wallColor.g, wallColor.b);
-        colors.push(railColor.r, railColor.g, railColor.b);
-        vertexCount += 3;
-      }
+      // Inner face vertices (bed, base, mid rail, top). The bed vertex drops
+      // along -up to the carved bed so the wall doubles as the embankment
+      // under the suspended track.
+      const bedX = ix - frame.ux * EMBANKMENT_DEPTH;
+      const bedY = iy - frame.uy * EMBANKMENT_DEPTH;
+      const bedZ = iz - frame.uz * EMBANKMENT_DEPTH;
+      positions.push(bedX, bedY, bedZ);
+      positions.push(ix, iy, iz);
+      positions.push(
+        ix + frame.ux * WALL_HEIGHT * 0.72,
+        iy + frame.uy * WALL_HEIGHT * 0.72,
+        iz + frame.uz * WALL_HEIGHT * 0.72
+      );
+      positions.push(
+        ix + frame.ux * WALL_HEIGHT,
+        iy + frame.uy * WALL_HEIGHT,
+        iz + frame.uz * WALL_HEIGHT
+      );
+      colors.push(wallColor.r, wallColor.g, wallColor.b);
+      colors.push(wallColor.r, wallColor.g, wallColor.b);
+      colors.push(wallColor.r, wallColor.g, wallColor.b);
+      colors.push(railColor.r, railColor.g, railColor.b);
+      vertexCount += 4;
       // Outer top vertices for the cap only (one Y per ring, no body).
       positions.push(ix, iy, iz);
       positions.push(ox, oy, oz);
@@ -408,26 +418,29 @@ function buildWalls(
       vertexCount += 4;
     }
     for (let i = 0; i < rings - 1; i++) {
-      // Inner face: 3 vertices per ring (base, mid, top).
-      const a = startVertex + i * 7;
-      const b = startVertex + (i + 1) * 7;
+      // Inner face: 4 vertices per ring (bed, base, mid, top).
+      const a = startVertex + i * 8;
+      const b = startVertex + (i + 1) * 8;
       const ib = a;
-      const im = a + 1;
-      const it = a + 2;
-      // Top cap: 4 vertices per ring (inner-base, outer-base, inner-top, outer-top).
-      const ci_bb = a + 3;
-      const co_bb = a + 4;
-      const ci_tt = a + 5;
-      const co_tt = a + 6;
+      const ibs = a + 1;
+      const im = a + 2;
+      const it = a + 3;
+      // Caps: 4 vertices per ring (inner-base, outer-base, inner-top, outer-top).
+      const ci_bb = a + 4;
+      const co_bb = a + 5;
+      const ci_tt = a + 6;
+      const co_tt = a + 7;
 
       // Inner face (DoubleSide covers the outer appearance; we draw one set).
-      indices.push(ib, im, b, im, b + 2, b);
-      indices.push(im, it, b + 2, it, b + 4, b + 2);
-      // Top cap strips: inner-base → outer-base → next inner-base, etc.
-      indices.push(ci_bb, co_bb, b + 3, co_bb, b + 4, b + 3);
-      indices.push(ci_tt, co_tt, b + 5, co_tt, b + 6, b + 5);
+      indices.push(ib, ibs, b, ibs, b + 1, b);
+      indices.push(ibs, im, b + 1, im, b + 2, b + 1);
+      indices.push(im, it, b + 2, it, b + 3, b + 2);
+      // Bottom cap: inner-base → outer-base → next inner-base, etc.
+      indices.push(ci_bb, co_bb, b + 4, co_bb, b + 5, b + 4);
+      // Top cap strips: inner-top → outer-top → next inner-top, etc.
+      indices.push(ci_tt, co_tt, b + 6, co_tt, b + 7, b + 6);
       // Front edge between inner-face top and cap top.
-      indices.push(it, ci_tt, b + 2, ci_tt, b + 5, b + 2);
+      indices.push(it, ci_tt, b + 3, ci_tt, b + 7, b + 3);
     }
   }
 

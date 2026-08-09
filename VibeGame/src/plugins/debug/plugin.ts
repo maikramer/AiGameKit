@@ -630,10 +630,22 @@ export const DebugPlugin: Plugin = {
   initialize(state: State): void {
     if (typeof window === 'undefined') return;
 
-    const w = window as unknown as Record<string, unknown>;
-    if (w.__VIBEGAME__) return;
-
-    w.__VIBEGAME__ = createBridge(state);
+    const w = window as unknown as { __VIBEGAME__?: Record<string, unknown> };
+    // Other plugins (profiler, audio) may have created/attached namespaces
+    // before us depending on registration order — merge instead of bailing,
+    // so `__VIBEGAME__.debug` exists no matter who initialized first.
+    if (w.__VIBEGAME__?.debug) return;
+    if (w.__VIBEGAME__) {
+      Object.assign(
+        w.__VIBEGAME__,
+        createBridge(state) as unknown as Record<string, unknown>
+      );
+    } else {
+      w.__VIBEGAME__ = createBridge(state) as unknown as Record<
+        string,
+        unknown
+      >;
+    }
     bridgeOwnerState = state;
   },
 };

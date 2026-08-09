@@ -1,6 +1,7 @@
 import type * as THREE from 'three';
 import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { getScene } from '../rendering';
+import { Terrain } from '../terrain';
 import { Track } from './components';
 import { getTrackSpline } from './data';
 import {
@@ -9,6 +10,7 @@ import {
   type TrackStyle,
 } from './track-geometry';
 const trackQuery = defineQuery([Track]);
+const terrainQuery = defineQuery([Terrain]);
 const built = new Map<number, TrackMeshes>();
 
 /** Per-track visual style, set by the `<RaceTrack>` parser. */
@@ -41,6 +43,18 @@ export const TrackSpawnSystem: System = defineSystem({
       scene.add(meshes.group);
       built.set(eid, meshes);
       Track.length[eid] = spline.length;
+
+      // A scene that declares a <Terrain> uses it as the ground plane — the
+      // track's own flat `TrackGround` and grass `TrackApron` (same Y) would
+      // z-fight with it.
+      if (terrainQuery(state.world).length > 0) {
+        for (const name of ['TrackGround', 'TrackApron']) {
+          meshes.group.getObjectByName(name)?.traverse((o) => {
+            const mesh = o as THREE.Mesh;
+            if (mesh.isMesh) mesh.visible = false;
+          });
+        }
+      }
     }
   },
 

@@ -920,7 +920,11 @@ function carveRoadBed(
           densityPaths.length === 1
             ? densityPaths[0]!.slice()
             : localPath.slice(),
-        halfWidth: bedWidth / 2,
+        // Exclusion corridor = bed + talus: `avoid-road` spawners must stay
+        // off the full carve footprint (leito + falloff walls), not just the
+        // flat bed — props planted on the cut slope read as "tree on the
+        // road" from the driver's seat. Matches brushReach used for the AABB.
+        halfWidth: bedWidth / 2 + falloff,
       });
     }
     break;
