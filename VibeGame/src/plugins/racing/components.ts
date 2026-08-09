@@ -150,6 +150,8 @@ export const Track = {
   shoulder: new Float32Array(MAX_ENTITIES),
   /** 1 when barriers stop the car at the shoulder edge. */
   walls: new Uint8Array(MAX_ENTITIES),
+  /** Number of checkpoints split across the lap (Time Trial). 0 = disabled. */
+  checkpointCount: new Uint8Array(MAX_ENTITIES),
 } as const;
 
 /**
@@ -187,6 +189,18 @@ export const RaceTracker = {
   wrongWayTimer: new Float32Array(MAX_ENTITIES),
   /** Grid slot (0 = pole) used when placing cars for the start / a restart. */
   gridSlot: new Uint32Array(MAX_ENTITIES),
+  /** Index of the last checkpoint the car has passed (Time Trial). */
+  lastCheckpointIndex: new Int16Array(MAX_ENTITIES),
+  /** Arc position of the last checkpoint the car has passed. */
+  lastCheckpointS: new Float32Array(MAX_ENTITIES),
+  /** 1 if the car has been respawned this step (HUD flash). */
+  respawnFlash: new Uint8Array(MAX_ENTITIES),
+  /** Seconds spent off-track (used by the respawn trigger). */
+  offTrackTimer: new Float32Array(MAX_ENTITIES),
+  /** Seconds spent making no progress along the track (stuck respawn). */
+  stuckTimer: new Float32Array(MAX_ENTITIES),
+  /** Arc position when the stuck check last sampled it (m). */
+  stuckS: new Float32Array(MAX_ENTITIES),
 } as const;
 
 /**
@@ -242,3 +256,93 @@ export const VehicleModelLength = new Map<number, number>();
 
 /** Body tint per vehicle, applied to the procedural chassis. */
 export const VehicleColors = new Map<number, number>();
+
+/**
+ * Power-up loadout a car brings to the race.
+ *
+ * Slots are 0 (Pulse), 1 (Sidewinder), 2 (Shield). Ammos decrement on use and
+ * recharge over time. Cooldown state is read by the HUD and the wire-up system.
+ */
+export const PowerUp = {
+  /** Active ammo per slot (0..capacity). */
+  ammo0: new Float32Array(MAX_ENTITIES),
+  ammo1: new Float32Array(MAX_ENTITIES),
+  ammo2: new Float32Array(MAX_ENTITIES),
+  /** Maximum ammo per slot (HUD cap). */
+  cap0: new Float32Array(MAX_ENTITIES),
+  cap1: new Float32Array(MAX_ENTITIES),
+  cap2: new Float32Array(MAX_ENTITIES),
+  /** Seconds since the slot was used (for the cooldown overlay). */
+  cd0: new Float32Array(MAX_ENTITIES),
+  cd1: new Float32Array(MAX_ENTITIES),
+  cd2: new Float32Array(MAX_ENTITIES),
+  /** Total cooldown duration per slot. */
+  cdTotal0: new Float32Array(MAX_ENTITIES),
+  cdTotal1: new Float32Array(MAX_ENTITIES),
+  cdTotal2: new Float32Array(MAX_ENTITIES),
+  /** 1 if Shield has absorbed a respawn latched for `SHIELD_LATCH_S`. */
+  shieldArmed: new Uint8Array(MAX_ENTITIES),
+  /** Pulse boost time remaining (s). 0 = idle. */
+  pulseBoost: new Float32Array(MAX_ENTITIES),
+} as const;
+
+/** Pickup orb placed on the track surface. 0=Pulse, 1=Sidewinder, 2=Shield. */
+export const PickupKind = {
+  Pulse: 0,
+  Sidewinder: 1,
+  Shield: 2,
+} as const;
+export type PickupKindValue = (typeof PickupKind)[keyof typeof PickupKind];
+
+/**
+ * Active state for a track-placed pickup orb. Orbs are pooled (ring buffer) so
+ * the example can scatter ~20 of them without GC churn.
+ */
+export const PickupOrb = {
+  /** Active lifetime remaining (s). 0 = available in the ring buffer. */
+  ttl: new Float32Array(MAX_ENTITIES),
+  /** Kind index (0/1/2). */
+  kind: new Uint8Array(MAX_ENTITIES),
+  /** Arc position along the track (m). */
+  s: new Float32Array(MAX_ENTITIES),
+  /** Lateral offset from the centerline (m). */
+  lateral: new Float32Array(MAX_ENTITIES),
+  /** Respawn-after-collect period in seconds (0 = single-use). */
+  respawnAfter: new Float32Array(MAX_ENTITIES),
+} as const;
+
+/**
+ * Track-side obstacle kinds. 0 barrel, 1 drone, 2 gate.
+ *
+ * Each kind is just a visual hint for the obstacle visual system; physics is
+ * identical (a circle obstacle). The Sidewinder probe nudges the one nearest
+ * the player forward-and-right.
+ */
+export const ObstacleKind = {
+  Barrel: 0,
+  Drone: 1,
+  Gate: 2,
+} as const;
+export type ObstacleKindValue = (typeof ObstacleKind)[keyof typeof ObstacleKind];
+
+/**
+ * Active state for a track-side obstacle. The position is stored in track
+ * space (`s`, `lateral`) so the visual system and the sidewinder test can
+ * resolve it to world XYZ without re-querying the spline.
+ */
+export const TrackObstacleState = {
+  /** Arc position along the track (m). */
+  s: new Float32Array(MAX_ENTITIES),
+  /** Lateral offset from the centerline (m). */
+  lateral: new Float32Array(MAX_ENTITIES),
+  /** Collision radius (m). */
+  radius: new Float32Array(MAX_ENTITIES),
+  /** Bounce factor (0..1) — speed retained after a hit. */
+  bounce: new Float32Array(MAX_ENTITIES),
+  /** Kind index (0/1/2). */
+  kind: new Uint8Array(MAX_ENTITIES),
+  /** Pitch (rad/s) for spinning decorations (barrel + drone). */
+  spin: new Float32Array(MAX_ENTITIES),
+  /** Vertical hover offset (drone only). */
+  hover: new Float32Array(MAX_ENTITIES),
+} as const;

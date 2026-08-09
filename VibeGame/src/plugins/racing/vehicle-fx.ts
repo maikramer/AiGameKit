@@ -10,6 +10,8 @@ const vehicleQuery = defineQuery([Vehicle]);
 const SMOKE_COUNT = 220;
 /** Ring buffer of skid quads (2 triangles each). */
 const SKID_SEGMENTS = 900;
+/** Boost trail segments per car (each is a small quad at the exhaust). */
+const BOOST_TRAIL_COUNT = 48;
 
 interface FxState {
   smoke: THREE.Points;
@@ -25,6 +27,15 @@ interface FxState {
   skidCursor: number;
   /** Last wheel-contact point per vehicle, so skids draw as continuous strips. */
   lastMark: Map<number, { x: number; y: number; z: number; valid: boolean }>;
+  /** Boost jet trail (one shared pool, per-car segments offset by index). */
+  trail: THREE.Points;
+  trailPos: Float32Array;
+  trailAlpha: Float32Array;
+  trailSize: Float32Array;
+  /** Per-car segment cursor. */
+  trailCursor: Map<number, number>;
+  /** Per-car last emission position + heading (to build a strip). */
+  trailPrev: Map<number, { x: number; y: number; z: number; heading: number }>;
 }
 
 let fx: FxState | null = null;
@@ -129,6 +140,51 @@ function createFx(scene: THREE.Object3D): FxState {
   skid.name = 'SkidMarks';
   scene.add(skid);
 
+  // ---- Boost jet trail -----------------------------------------------------
+  // A shared Points pool; each vehicle owns a stride of segments. When the car
+  // boosts, we emit a quad per frame at the exhaust and fade the whole strip.
+  const trailPos = new Float32Array(BOOST_TRAIL_COUNT * 3);
+  const trailAlpha = new Float32Array(BOOST_TRAIL_COUNT);
+  const trailSize = new Float32Array(BOOST_TRAIL_COUNT);
+  for (let i = 0; i < BOOST_TRAIL_COUNT; i++) {
+    trailPos[i * 3 + 1] = -9999;
+    trailSize[i] = 0.35;
+  }
+  const trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+  trailGeo.setAttribute('aAlpha', new THREE.BufferAttribute(trailAlpha, 1));
+  trailGeo.setAttribute('aSize', new THREE.BufferAttribute(trailSize, 1));
+  const trailMat = new THREE.ShaderMaterial({
+    vertexShader: `
+      attribute float aAlpha;
+      attribute float aSize;
+      varying float vAlpha;
+      void main() {
+        vAlpha = aAlpha;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = aSize * (300.0 / max(1.0, -mv.z));
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      varying float vAlpha;
+      void main() {
+        vec2 d = gl_PointCoord - vec2(0.5);
+        float r = length(d);
+        float core = smoothstep(0.5, 0.0, r);
+        gl_FragColor = vec4(0.2, 0.85, 1.0, core * vAlpha);
+        if (gl_FragColor.a < 0.01) discard;
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const trail = new THREE.Points(trailGeo, trailMat);
+  trail.frustumCulled = false;
+  trail.name = 'BoostTrails';
+  scene.add(trail);
+
   return {
     smoke,
     smokePos,
@@ -142,6 +198,12 @@ function createFx(scene: THREE.Object3D): FxState {
     skidAlpha,
     skidCursor: 0,
     lastMark: new Map(),
+    trail,
+    trailPos,
+    trailAlpha,
+    trailSize,
+    trailCursor: new Map(),
+    trailPrev: new Map(),
   };
 }
 
@@ -241,6 +303,32 @@ export const VehicleFxSystem: System = defineSystem({
       const rearZ = z - Math.cos(heading) * 1.1;
       const rideY = y - (Vehicle.rideHeight[eid] || 0.35) + 0.02;
 
+      // ---- Boost jet trail -------------------------------------------------
+      if (Vehicle.boosting[eid] === 1) {
+        const prev = f.trailPrev.get(eid);
+        let cursor = f.trailCursor.get(eid) ?? 0;
+        // Emit every frame while boosting; skip if the car has not moved since
+        // the last frame (avoids piling segments at the same spot).
+        const moved =
+          !prev ||
+          Math.hypot(prev.x - rearX, prev.z - rearZ) > 0.2 ||
+          Math.abs(prev.heading - heading) > 0.05;
+        if (moved) {
+          const i = cursor;
+          cursor = (cursor + 1) % BOOST_TRAIL_COUNT;
+          f.trailPos[i * 3] = rearX + (Math.random() - 0.5) * 0.2;
+          f.trailPos[i * 3 + 1] = rideY + 0.35;
+          f.trailPos[i * 3 + 2] = rearZ + (Math.random() - 0.5) * 0.2;
+          f.trailAlpha[i] = 1;
+          f.trailSize[i] = 0.5 + Math.random() * 0.4;
+          f.trailCursor.set(eid, cursor);
+        }
+        f.trailPrev.set(eid, { x: rearX, y: rideY, z: rearZ, heading });
+      } else {
+        f.trailPrev.delete(eid);
+        f.trailCursor.delete(eid);
+      }
+
       const prev = f.lastMark.get(eid);
       if (sliding) {
         const strength = Math.min(1, slip * 1.4);
@@ -313,16 +401,39 @@ export const VehicleFxSystem: System = defineSystem({
       f.skid.geometry.getAttribute('position').needsUpdate = true;
       skidAlpha.needsUpdate = true;
     }
+
+    // ---- Fade the boost trail ---------------------------------------------
+    const trailAlphaAttr = f.trail.geometry.getAttribute(
+      'aAlpha'
+    ) as THREE.BufferAttribute;
+    const trailFade = dt * 2.2;
+    let trailDirty = false;
+    for (let i = 0; i < f.trailAlpha.length; i++) {
+      if (f.trailAlpha[i]! > 0) {
+        f.trailAlpha[i] = Math.max(0, f.trailAlpha[i]! - trailFade);
+        trailDirty = true;
+      }
+    }
+    if (trailDirty) {
+      f.trail.geometry.getAttribute('position').needsUpdate = true;
+      trailAlphaAttr.needsUpdate = true;
+    }
   },
 
   dispose() {
     if (!fx) return;
     fx.smoke.parent?.remove(fx.smoke);
     fx.skid.parent?.remove(fx.skid);
+    fx.trail.parent?.remove(fx.trail);
     fx.smoke.geometry.dispose();
     (fx.smoke.material as THREE.Material).dispose();
     fx.skid.geometry.dispose();
     (fx.skid.material as THREE.Material).dispose();
+    fx.trail.geometry.dispose();
+    (fx.trail.material as THREE.Material).dispose();
+    fx.trailCursor.clear();
+    fx.trailPrev.clear();
+    fx.lastMark.clear();
     fx = null;
   },
 });

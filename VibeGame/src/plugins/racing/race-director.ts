@@ -21,7 +21,11 @@ const COUNTDOWN_FROM = 3;
 /** Extra seconds on the grid after everything is ready (engines settle). */
 const GRID_SETTLE = 0.9;
 /** Arc position of pole (m past the start line) and spacing between slots. */
-const GRID_FIRST_S = 6;
+// 35 m, not 6: on a circuit whose closing node pulls the Catmull-Rom sideways
+// at s = 0, a car launched at s = 6 gets a ~9° heading error and drifts into
+// the inside wall before the first corner. By s = 35 most straights have
+// settled to their true tangent.
+const GRID_FIRST_S = 35;
 const GRID_ROW_SPACING = 7;
 /** Lateral offset of the two grid columns (m from the centerline). */
 const GRID_COLUMN_OFFSET = 2.6;
@@ -88,6 +92,12 @@ function formUpGrid(state: State, spline: TrackSpline): void {
     RaceTracker.position[eid] = slot + 1;
     RaceTracker.wrongWay[eid] = 0;
     RaceTracker.wrongWayTimer[eid] = 0;
+    RaceTracker.lastCheckpointIndex[eid] = 0;
+    RaceTracker.lastCheckpointS[eid] = 0;
+    RaceTracker.offTrackTimer[eid] = 0;
+    RaceTracker.stuckTimer[eid] = 0;
+    RaceTracker.stuckS[eid] = Vehicle.trackS[eid];
+    RaceTracker.respawnFlash[eid] = 0;
   });
 }
 

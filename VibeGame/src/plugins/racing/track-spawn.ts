@@ -8,7 +8,6 @@ import {
   type TrackMeshes,
   type TrackStyle,
 } from './track-geometry';
-
 const trackQuery = defineQuery([Track]);
 const built = new Map<number, TrackMeshes>();
 
@@ -59,3 +58,29 @@ export const TrackSpawnSystem: System = defineSystem({
 export function getTrackMeshes(entity: number): TrackMeshes | undefined {
   return built.get(entity);
 }
+
+/**
+ * Holo surface pulse: slowly breathes the emissive intensity of every holo
+ * material on the track so the grid reads as alive rather than static paint.
+ * Only touches materials flagged `userData.holo`, so an asphalt track costs
+ * nothing.
+ */
+export const HoloPulseSystem: System = defineSystem({
+  name: 'HoloPulseSystem',
+  group: 'draw',
+
+  update(state: State) {
+    if (state.headless) return;
+    const t = state.time.elapsed;
+    const intensity = 0.45 + Math.sin(t * 1.6) * 0.18;
+    for (const meshes of built.values()) {
+      meshes.group.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const mat = mesh.material as THREE.MeshStandardMaterial | null;
+        if (!mat || !mat.userData?.holo) return;
+        mat.emissiveIntensity = intensity;
+      });
+    }
+  },
+});

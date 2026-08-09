@@ -561,7 +561,9 @@ function resolveObstacles(
   const o = hit as TrackObstacle;
 
   // Push out along the world contact normal, expressed as a track-space nudge
-  // so the car never leaves the track manifold.
+  // so the car never leaves the track manifold. The push is applied in full
+  // and the closing speed killed, so a car passing close to an obstacle gets
+  // one clean deflection instead of a per-frame shove that reads as vibration.
   const f = spline.sampleAt(Vehicle.trackS[eid], _frameC);
   const d = hitDist || 1e-3;
   const nx = (worldX - o.x) / d;
@@ -569,7 +571,7 @@ function resolveObstacles(
   const push = o.radius + carRadius - d;
   Vehicle.trackLateral[eid] += (nx * f.rx + nz * f.rz) * push;
   Vehicle.trackS[eid] = spline.wrapS(
-    Vehicle.trackS[eid] + (nx * f.tx + nz * f.tz) * push * 0.5
+    Vehicle.trackS[eid] + (nx * f.tx + nz * f.tz) * push * 0.2
   );
   Vehicle.speed[eid] *= o.bounce;
   Vehicle.lateralSpeed[eid] *= -0.3;

@@ -4,8 +4,11 @@ import {
   AiDriver,
   ChaseCamera,
   PlayerVehicle,
+  PowerUp,
+  PickupOrb,
   RaceTracker,
   Track,
+  TrackObstacleState,
   Vehicle,
   VehicleColors,
   VehicleModelLength,
@@ -22,11 +25,22 @@ import {
 import { ChaseCameraSystem } from './chase-camera';
 import { EngineAudioSystem } from './engine-audio';
 import { RaceDirectorSystem, setVehicleName } from './race-director';
-import { TrackSpawnSystem, trackStyles } from './track-spawn';
+import { TrackSpawnSystem, HoloPulseSystem, trackStyles } from './track-spawn';
 import { VehicleControlSystem } from './vehicle-control';
 import { VehicleFxSystem } from './vehicle-fx';
 import { VehicleVisualSystem } from './vehicle-visual';
 import { registerRacingHudFactories } from './hud';
+import { PowerUpSystem } from './powerups';
+import { PickupSystem, PickupVisualSystem } from './pickups';
+import { CheckpointSystem } from './checkpoints';
+import { TrackObstacleVisualSystem } from './obstacles';
+import {
+  addTrackPickup,
+  addTrackObstacleByS,
+  addTrackObstacle,
+  getTrackSpline,
+  getPrimaryTrackEntity,
+} from './data';
 import { disableDefaultPlayer } from '../startup';
 import { logger } from '../../core/utils/logger';
 
@@ -54,6 +68,7 @@ const VEHICLE_ATTRS = [
   'model-length',
   'color',
   'driver',
+  'loadout',
 ] as const;
 
 /**
@@ -63,21 +78,21 @@ const VEHICLE_ATTRS = [
  */
 export const vehicleRecipe: Recipe = {
   name: 'Vehicle',
-  components: ['transform', 'vehicle', 'race-tracker'],
+  components: ['transform', 'vehicle', 'race-tracker', 'power-up'],
   parserAttributes: [...VEHICLE_ATTRS],
 };
 
 /** `<PlayerVehicle>` — the car the local player drives. */
 export const playerVehicleRecipe: Recipe = {
   name: 'PlayerVehicle',
-  components: ['transform', 'vehicle', 'player-vehicle', 'race-tracker'],
+  components: ['transform', 'vehicle', 'player-vehicle', 'race-tracker', 'power-up'],
   parserAttributes: [...VEHICLE_ATTRS],
 };
 
 /** `<AiVehicle skill="0.9" rubber-band="0.6">` — a computer-driven rival. */
 export const aiVehicleRecipe: Recipe = {
   name: 'AiVehicle',
-  components: ['transform', 'vehicle', 'ai-driver', 'race-tracker'],
+  components: ['transform', 'vehicle', 'ai-driver', 'race-tracker', 'power-up'],
   parserAttributes: [...VEHICLE_ATTRS, 'skill', 'rubber-band', 'line-offset'],
 };
 
@@ -104,6 +119,8 @@ export const trackRecipe: Recipe = {
     'walls',
     'step',
     'max-bank',
+    'checkpoint-count',
+    'theme',
     'road-color',
     'apron-color',
     'shoulder-color',
@@ -126,6 +143,20 @@ export const chaseCameraRecipe: Recipe = {
     'fov-boost',
     'mode',
   ],
+};
+
+/** `<RaceTrackPickup s="80" lateral="0" kind="pulse" />` — a power-up orb. */
+export const raceTrackPickupRecipe: Recipe = {
+  name: 'RaceTrackPickup',
+  components: [],
+  parserAttributes: ['s', 'lateral', 'kind', 'respawn'],
+};
+
+/** `<RaceTrackObstacle s="120" lateral="-2" kind="barrel" />` — a hazard. */
+export const raceTrackObstacleRecipe: Recipe = {
+  name: 'RaceTrackObstacle',
+  components: [],
+  parserAttributes: ['s', 'lateral', 'radius', 'bounce', 'kind'],
 };
 
 // ---- Parsers ---------------------------------------------------------------
@@ -192,6 +223,35 @@ const vehicleParser: Parser = ({ entity, element }) => {
   if (a.driver !== undefined) setVehicleName(entity, String(a.driver));
   else if (a.name !== undefined) setVehicleName(entity, String(a.name));
 
+  // Power-up loadout: `loadout="pulse:2,sidewinder:2,shield:1"`.
+  if (a.loadout !== undefined) {
+    const slots: [string, number][] = [
+      ['pulse', 0],
+      ['sidewinder', 1],
+      ['shield', 2],
+    ];
+    const text = String(a.loadout).toLowerCase();
+    for (const [name, idx] of slots) {
+      const m = new RegExp(`${name}\\s*:\\s*(\\d+)`).exec(text);
+      const ammo = m ? Math.max(0, Math.floor(num(m[1]!, 0))) : 0;
+      if (ammo > 0) {
+        if (idx === 0) {
+          PowerUp.cap0[entity] = ammo;
+          PowerUp.ammo0[entity] = ammo;
+          PowerUp.cdTotal0[entity] = 0.6;
+        } else if (idx === 1) {
+          PowerUp.cap1[entity] = ammo;
+          PowerUp.ammo1[entity] = ammo;
+          PowerUp.cdTotal1[entity] = 2.2;
+        } else {
+          PowerUp.cap2[entity] = ammo;
+          PowerUp.ammo2[entity] = ammo;
+          PowerUp.cdTotal2[entity] = 1.4;
+        }
+      }
+    }
+  }
+
   // AI tuning (ignored on player/plain vehicles that lack the component).
   if (a.skill !== undefined) AiDriver.skill[entity] = num(a.skill, 0.8);
   if (a['rubber-band'] !== undefined) {
@@ -234,6 +294,10 @@ const trackParser: Parser = ({ state, entity, element }) => {
   Track.width[entity] = width;
   Track.shoulder[entity] = a.shoulder !== undefined ? num(a.shoulder, 3) : 3;
   Track.walls[entity] = bool(a.walls, true) ? 1 : 0;
+  Track.checkpointCount[entity] =
+    a['checkpoint-count'] !== undefined
+      ? Math.max(0, Math.floor(num(a['checkpoint-count'], 0)))
+      : 0;
 
   trackStyles.set(entity, {
     road:
@@ -252,6 +316,7 @@ const trackParser: Parser = ({ state, entity, element }) => {
       a['wall-color'] !== undefined
         ? color(a['wall-color'], 0xd8dae0)
         : undefined,
+    theme: a.theme === 'holo' ? 'holo' : 'asphalt',
   });
 
   if (nodes.length >= 3) {
@@ -280,6 +345,60 @@ const trackParser: Parser = ({ state, entity, element }) => {
       );
     }
   }
+};
+
+/**
+ * `<RaceTrackPickup s="80" lateral="0" kind="pulse" />` — a power-up orb.
+ *
+ * `s` and `lateral` are in track space; the orb spawns when the track spline
+ * exists (first frame after parse). Kind: pulse | sidewinder | shield.
+ */
+const raceTrackPickupParser: Parser = ({ state, entity, element }) => {
+  const a = element.attributes;
+  const s = num(a.s, 0);
+  const lateral = a.lateral !== undefined ? num(a.lateral, 0) : 0;
+  const kindText = String(a.kind ?? 'pulse').toLowerCase();
+  const kind = kindText === 'shield' ? 2 : kindText === 'sidewinder' ? 1 : 0;
+  const respawn = a.respawn !== undefined ? num(a.respawn, 6) : 6;
+  // Register the pickup in the shared sidecar; the visual system creates the
+  // entity once the track spline is attached.
+  addTrackPickup(s, lateral, kind, respawn);
+  void state;
+  void entity;
+};
+
+/**
+ * `<RaceTrackObstacle s="120" lateral="-2" radius="1.4" kind="barrel" />`.
+ *
+ * A solid track-side obstacle. `kind`: barrel | drone | gate — affects only
+ * the visual; the physics is the same circle.
+ */
+const raceTrackObstacleParser: Parser = ({ state, entity, element }) => {
+  const a = element.attributes;
+  const s = num(a.s, 0);
+  const lateral = a.lateral !== undefined ? num(a.lateral, 0) : 0;
+  const radius = a.radius !== undefined ? num(a.radius, 1.2) : 1.2;
+  const bounce = a.bounce !== undefined ? num(a.bounce, 0.4) : 0.4;
+  const kindText = String(a.kind ?? 'barrel').toLowerCase();
+  const kind =
+    kindText === 'gate' ? 2 : kindText === 'drone' ? 1 : 0;
+  // Resolve the world position from the track spline (first track wins).
+  const trackEid = getPrimaryTrackEntity();
+  if (trackEid === undefined) return;
+  const spline = getTrackSpline(trackEid);
+  if (!spline) return;
+  const f = spline.positionAt(s, lateral);
+  addTrackObstacle(f.x, f.z, radius, bounce);
+  addTrackObstacleByS(s, lateral, radius, bounce, kind);
+  // Attach the TrackObstacleState component for the visual system.
+  state.addComponent(entity, TrackObstacleState);
+  TrackObstacleState.s[entity] = s;
+  TrackObstacleState.lateral[entity] = lateral;
+  TrackObstacleState.radius[entity] = radius;
+  TrackObstacleState.bounce[entity] = bounce;
+  TrackObstacleState.kind[entity] = kind;
+  TrackObstacleState.spin[entity] = kind === 0 ? 2 : kind === 1 ? 1.2 : 0;
+  TrackObstacleState.hover[entity] = kind === 1 ? 1.1 : 0;
 };
 
 const chaseCameraParser: Parser = ({ entity, element }) => {
@@ -314,13 +433,19 @@ const chaseCameraParser: Parser = ({ entity, element }) => {
 export const RacingPlugin: Plugin = {
   systems: [
     AiDriverSystem,
+    PowerUpSystem,
     VehicleControlSystem,
     RaceDirectorSystem,
     ChaseCameraBindSystem,
     TrackSpawnSystem,
+    CheckpointSystem,
+    PickupSystem,
     VehicleVisualSystem,
     ChaseCameraSystem,
     VehicleFxSystem,
+    HoloPulseSystem,
+    PickupVisualSystem,
+    TrackObstacleVisualSystem,
     EngineAudioSystem,
   ],
   recipes: [
@@ -329,6 +454,8 @@ export const RacingPlugin: Plugin = {
     aiVehicleRecipe,
     trackRecipe,
     chaseCameraRecipe,
+    raceTrackPickupRecipe,
+    raceTrackObstacleRecipe,
   ],
   components: {
     vehicle: Vehicle,
@@ -337,6 +464,9 @@ export const RacingPlugin: Plugin = {
     track: Track,
     'race-tracker': RaceTracker,
     'chase-camera': ChaseCamera,
+    'power-up': PowerUp,
+    'pickup-orb': PickupOrb,
+    'track-obstacle': TrackObstacleState,
   },
   config: {
     defaults: {
@@ -436,6 +566,31 @@ export const RacingPlugin: Plugin = {
         orbitAngle: 0,
         initialized: 0,
       },
+      'power-up': {
+        ammo0: 0,
+        ammo1: 0,
+        ammo2: 0,
+        cap0: 0,
+        cap1: 0,
+        cap2: 0,
+        cd0: 0,
+        cd1: 0,
+        cd2: 0,
+        cdTotal0: 0,
+        cdTotal1: 0,
+        cdTotal2: 0,
+        shieldArmed: 0,
+        pulseBoost: 0,
+      },
+      'track-obstacle': {
+        s: 0,
+        lateral: 0,
+        radius: 1.2,
+        bounce: 0.4,
+        kind: 0,
+        spin: 0,
+        hover: 0,
+      },
     },
     parsers: {
       Vehicle: vehicleParser,
@@ -443,6 +598,8 @@ export const RacingPlugin: Plugin = {
       AiVehicle: vehicleParser,
       RaceTrack: trackParser,
       ChaseCamera: chaseCameraParser,
+      RaceTrackPickup: raceTrackPickupParser,
+      RaceTrackObstacle: raceTrackObstacleParser,
     },
   },
   initialize() {

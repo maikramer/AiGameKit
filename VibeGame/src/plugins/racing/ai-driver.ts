@@ -3,6 +3,7 @@ import { Transform } from '../transforms';
 import {
   AiDriver,
   PlayerVehicle,
+  PowerUp,
   RaceTracker,
   Track,
   Vehicle,
@@ -10,6 +11,7 @@ import {
 import { getTrackSpline } from './data';
 import { createFrame, type TrackSpline } from './spline';
 import { isRacingActive } from './race-state';
+import { usePowerUpSlot } from './powerups';
 
 const aiQuery = defineQuery([AiDriver, Vehicle, Transform]);
 const allCarsQuery = defineQuery([Vehicle, Transform]);
@@ -244,5 +246,50 @@ function driveOne(
         AiDriver.progressS[eid] = s;
       }
     }
+  }
+
+  // ---- Power-ups ---------------------------------------------------------
+  // The AI picks its moments like a player would: pulse down the straights,
+  // shield before a hit it cannot avoid, sidewinder at whatever is blocking
+  // the racing line. Use is probabilistic so the pack doesn't fire in
+  // lockstep, and cheap (an ammo check per slot per frame).
+  useAiPowerUps(eid, spline, speed, worstCurve, blocked);
+}
+
+/** AI power-up decisions. Slots: 0 pulse, 1 sidewinder, 2 shield. */
+function useAiPowerUps(
+  eid: number,
+  spline: TrackSpline,
+  speed: number,
+  worstCurve: number,
+  blocked: boolean
+): void {
+  const roll = Math.random();
+  // Pulse: full throttle down a straight with ammo to spare.
+  if (
+    (PowerUp.ammo0[eid] ?? 0) > 0 &&
+    Math.abs(worstCurve) < 0.004 &&
+    speed > (Vehicle.maxSpeed[eid] || 40) * 0.8 &&
+    roll < 0.05
+  ) {
+    usePowerUpSlot(eid, 0, spline);
+  }
+  // Shield: bracing for a crash (blocked by traffic or a barrier nearby).
+  if (
+    (PowerUp.ammo2[eid] ?? 0) > 0 &&
+    PowerUp.shieldArmed[eid] === 0 &&
+    (blocked || Vehicle.impactTimer[eid] < 0.8) &&
+    roll < 0.08
+  ) {
+    usePowerUpSlot(eid, 2, spline);
+  }
+  // Sidewinder: shove whatever is ahead off the racing line.
+  if (
+    (PowerUp.ammo1[eid] ?? 0) > 0 &&
+    (PowerUp.cd1[eid] ?? 0) <= 0 &&
+    blocked &&
+    roll < 0.06
+  ) {
+    usePowerUpSlot(eid, 1, spline);
   }
 }

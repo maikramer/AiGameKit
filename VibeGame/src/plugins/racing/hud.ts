@@ -6,8 +6,9 @@ import type {
 } from '../hud/screen-layer';
 import { registerHudWidgetFactory } from '../hud/screen-layer';
 import { injectWidgetCss, readAttr } from '../hud/widgets/shared';
-import { PlayerVehicle, RaceTracker, Track, Vehicle } from './components';
+import { PlayerVehicle, PowerUp, RaceTracker, Track, Vehicle } from './components';
 import { getTrackSpline } from './data';
+import { getLastPickup } from './pickups';
 import { getRaceState } from './race-state';
 import { getStandings } from './race-director';
 import { defineQuery } from '../../core';
@@ -38,7 +39,7 @@ const CSS = `
   text-transform: uppercase; color: rgba(255,255,255,0.62);
 }
 
-/* Lap + position, top right */
+/* Lap + position, top right (hidden in time-trial — the TT badge takes over) */
 .race-status { top: 16px; right: 16px; text-align: right; min-width: 132px; }
 .race-status .lap { font-size: 1.7rem; font-weight: 800; line-height: 1.05; }
 .race-status .pos { font-size: 1.05rem; font-weight: 700; color: #ffd166; margin-top: 2px; }
@@ -94,14 +95,75 @@ const CSS = `
 .race-results tr.me td { color: #ffd166; font-weight: 800; }
 .race-results .hint { margin-top: 14px; font-size: 0.78rem; color: rgba(255,255,255,0.65); letter-spacing: 0.08em; }
 
+/* Camera label: under the minimap so the bottom row stays clean */
+.race-cam {
+  position: absolute; top: 180px; left: 16px;
+  font-size: 0.66rem; letter-spacing: 0.18em; color: rgba(255,255,255,0.45);
+  text-transform: uppercase;
+}
+.race-hidden { display: none; }
+
+/* Power-up slots: bottom centre, above the hint line */
+.race-powerups {
+  position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px;
+}
+.race-pu {
+  position: relative; width: 56px; height: 56px; border-radius: 10px;
+  background: linear-gradient(150deg, rgba(10,14,22,0.8), rgba(14,20,32,0.65));
+  border: 1px solid rgba(255,255,255,0.18);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem;
+}
+.race-pu .key { position: absolute; top: 2px; left: 5px; font-size: 0.55rem; letter-spacing: 0.08em; color: rgba(255,255,255,0.55); }
+.race-pu .ammo { position: absolute; bottom: 2px; right: 6px; font-size: 0.72rem; font-weight: 700; }
+.race-pu .cd { position: absolute; inset: 0; border-radius: 10px; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 800; }
+.race-pu.ready { border-color: rgba(255,255,255,0.55); box-shadow: 0 0 10px rgba(255,255,255,0.15); }
+.race-pu.pulse { color: #38e8ff; border-color: rgba(56,232,255,0.4); }
+.race-pu.sidewinder { color: #ff5dff; border-color: rgba(255,93,255,0.4); }
+.race-pu.shield { color: #ffe066; border-color: rgba(255,224,102,0.4); }
+
 /* Bottom hint */
 .race-hint {
   position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
   font-size: 0.72rem; letter-spacing: 0.09em; color: rgba(255,255,255,0.5);
+  white-space: nowrap;
 }
-.race-cam { position: absolute; bottom: 62px; left: 50%; transform: translateX(-50%); font-size: 0.66rem; letter-spacing: 0.18em; color: rgba(255,255,255,0.45); text-transform: uppercase; }
-.race-hidden { display: none; }
+
+/* Pickup-collected banner */
+.race-pickup {
+  position: absolute; top: 22%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 1.6rem; font-weight: 900; letter-spacing: 0.14em;
+  text-transform: uppercase; text-shadow: 0 0 22px currentColor;
+  opacity: 0; transition: opacity 0.12s ease-out; pointer-events: none;
+}
+.race-pickup.show { opacity: 1; }
+.race-pickup.pulse { color: #38e8ff; }
+.race-pickup.sidewinder { color: #ff5dff; }
+.race-pickup.shield { color: #ffe066; }
+
+/* Respawn flash banner */
+.race-respawn {
+  position: absolute; top: 30%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 2.4rem; font-weight: 900; color: #ff5dff; letter-spacing: 0.22em;
+  text-transform: uppercase; text-shadow: 0 0 24px rgba(255,93,255,0.8);
+  opacity: 0; transition: opacity 0.15s ease-out; pointer-events: none;
+}
+.race-respawn.show { opacity: 1; }
+
+/* Time-trial badge: replaces the lap/position panel, same corner */
+.race-tt { position: absolute; top: 16px; right: 16px; text-align: right; min-width: 132px; }
+.race-tt .title { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #38e8ff; }
+.race-tt .best { font-size: 1rem; font-weight: 700; color: #7fe7a1; margin-top: 2px; }
+.race-tt .pb { font-size: 0.72rem; color: rgba(255,255,255,0.6); }
 `;
+
+/** Names + icons for the power-up slots, indexed by slot. */
+const PU_META = [
+  { icon: '⚡', name: 'Pulse', cls: 'pulse' },
+  { icon: '🌀', name: 'Sidewinder', cls: 'sidewinder' },
+  { icon: '🛡', name: 'Shield', cls: 'shield' },
+] as const;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '--:--.-';
@@ -150,6 +212,11 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
           <div class="lap">1/3</div>
           <div class="pos">P1</div>
         </div>
+        <div class="race-panel race-tt race-hidden">
+          <div class="title">Time Trial</div>
+          <div class="best">--:--.-</div>
+          <div class="pb">PB --:--.-</div>
+        </div>
         <div class="race-panel race-speed">
           <div class="gear">1</div>
           <div class="value">0</div>
@@ -160,6 +227,13 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
           <div class="race-label">Nitro</div>
           <div class="race-boost-bar"><i></i></div>
         </div>
+        <div class="race-powerups">
+          <div class="race-pu pulse"><span class="key">1</span><span class="icon">⚡</span><span class="ammo">1</span><span class="cd" style="display:none"></span></div>
+          <div class="race-pu sidewinder"><span class="key">2</span><span class="icon">🌀</span><span class="ammo">1</span><span class="cd" style="display:none"></span></div>
+          <div class="race-pu shield"><span class="key">3</span><span class="icon">🛡</span><span class="ammo">1</span><span class="cd" style="display:none"></span></div>
+        </div>
+        <div class="race-pickup"></div>
+        <div class="race-respawn">Respawn</div>
         <div class="race-centre race-hidden">
           <div class="race-count">3</div>
           <div class="race-sub"></div>
@@ -174,7 +248,7 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
           <div class="hint">Press R to race again</div>
         </div>
         <div class="race-cam">Chase</div>
-        <div class="race-hint">WASD / arrows drive · Space handbrake · Shift nitro · C camera · R restart</div>
+        <div class="race-hint">WASD drive · 1/2/3 power-ups · Shift nitro · Space handbrake · C camera · R restart</div>
       `;
       layer.appendChild(root);
 
@@ -198,6 +272,19 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
       const resultsEl = q('.race-results');
       const resultsBody = q('.race-results tbody');
       const camEl = q('.race-cam');
+      const puEls = Array.from(root.querySelectorAll('.race-pu'));
+      const puAmmoEls = puEls.map(
+        (el) => el.querySelector('.ammo') as HTMLElement
+      );
+      const puCdEls = puEls.map((el) => el.querySelector('.cd') as HTMLElement);
+      const ttEl = q('.race-tt');
+      const ttBestEl = q('.race-tt .best');
+      const ttPbEl = q('.race-tt .pb');
+      const respawnEl = q('.race-respawn');
+      const pickupEl = q('.race-pickup');
+      const statusEl = q('.race-status');
+      let pickupFlashUntil = 0;
+      let pickupFlashKind = 0;
 
       let projection: MapProjection | null = null;
       let mapPath: Path2D | null = null;
@@ -280,6 +367,64 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
             wrongEl.classList.toggle(
               'race-hidden',
               RaceTracker.wrongWay[player] !== 1
+            );
+
+            // ---- Power-up slots ----------------------------------------------
+            const ammo = [
+              PowerUp.ammo0[player] || 0,
+              PowerUp.ammo1[player] || 0,
+              PowerUp.ammo2[player] || 0,
+            ];
+            const cd = [
+              PowerUp.cd0[player] || 0,
+              PowerUp.cd1[player] || 0,
+              PowerUp.cd2[player] || 0,
+            ];
+            for (let i = 0; i < 3; i++) {
+              const el = puEls[i];
+              const ammoEl = puAmmoEls[i];
+              const cdEl = puCdEls[i];
+              if (!el || !ammoEl || !cdEl) continue;
+              ammoEl.textContent = String(Math.max(0, Math.round(ammo[i]!)));
+              el.classList.toggle('ready', ammo[i]! > 0);
+              if (cd[i]! > 0) {
+                cdEl.textContent = cd[i]!.toFixed(1);
+                cdEl.style.display = 'flex';
+              } else {
+                cdEl.style.display = 'none';
+              }
+            }
+
+            // ---- Time-trial badge --------------------------------------------
+            // The TT badge replaces the lap/position panel in the same corner;
+            // only one of the two is ever visible.
+            const isTimeTrial =
+              (Track.checkpointCount[trackEid ?? 0] || 0) > 0;
+            ttEl.classList.toggle('race-hidden', !isTimeTrial);
+            statusEl.classList.toggle('race-hidden', isTimeTrial);
+            if (isTimeTrial) {
+              ttBestEl.textContent = `Current ${formatTime(race.raceTime)}`;
+              ttPbEl.textContent = `PB ${formatTime(RaceTracker.bestLapTime[player])}`;
+            }
+
+            // ---- Respawn flash -----------------------------------------------
+            respawnEl.classList.toggle(
+              'show',
+              RaceTracker.respawnFlash[player] === 1
+            );
+
+            // ---- Pickup-collected banner -------------------------------------
+            const lastPickup = getLastPickup(player);
+            if (lastPickup && lastPickup.time > pickupFlashUntil) {
+              pickupFlashUntil = lastPickup.time;
+              pickupFlashKind = lastPickup.kind;
+            }
+            const meta = PU_META[pickupFlashKind] ?? PU_META[0]!;
+            pickupEl.textContent = `${meta.icon} ${meta.name} +1`;
+            pickupEl.className = `race-pickup ${meta.cls}`;
+            pickupEl.classList.toggle(
+              'show',
+              performance.now() - pickupFlashUntil < 1600
             );
           }
 

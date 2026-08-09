@@ -45,6 +45,8 @@ export function clearTrackData(): void {
   splines.clear();
   obstacles.length = 0;
   obstacleGrid.clear();
+  pickups.length = 0;
+  trackObstacles.length = 0;
 }
 
 // ---- Track-side obstacles ---------------------------------------------------
@@ -127,3 +129,89 @@ export function forEachNearbyObstacle(
 
 export type { TrackNode, TrackSplineOptions };
 export { TrackSpline };
+
+// ---- Pickup orbs -----------------------------------------------------------
+
+/**
+ * Pickup orb record, stored in track space so the proximity test can run in
+ * arc-length terms before resolving to world XYZ for the visual.
+ */
+export interface TrackPickup {
+  /** BitECS entity id (the orb visual / PickupOrb component slot). */
+  eid: number;
+  /** Arc position (m). */
+  s: number;
+  /** Lateral offset from the centerline (m). */
+  lateral: number;
+  /** 0=Pulse, 1=Sidewinder, 2=Shield. */
+  kind: number;
+  /** Respawn-after-collect delay (s). 0 = single-use. */
+  respawnAfter: number;
+}
+
+const pickups: TrackPickup[] = [];
+
+/** Register a pickup orb at the given track position. Returns the slot. */
+export function addTrackPickup(
+  s: number,
+  lateral: number,
+  kind: number,
+  respawnAfter = 6
+): number {
+  const index = pickups.length;
+  pickups.push({ eid: -1, s, lateral, kind, respawnAfter });
+  return index;
+}
+
+export function getTrackPickups(): readonly TrackPickup[] {
+  return pickups;
+}
+
+export function clearTrackPickups(): void {
+  pickups.length = 0;
+}
+
+// ---- Track-space obstacles --------------------------------------------------
+
+/**
+ * Track-side obstacle record. The collision side-car uses world XZ, so this
+ * returns both the track-space anchor (used by the sidewinder) and the resolved
+ * world position (used by the existing obstacle collision).
+ */
+export interface TrackSpaceObstacle {
+  /** Obstacle visual / TrackObstacleState component slot. */
+  eid: number;
+  /** Arc position (m). */
+  s: number;
+  /** Lateral offset from the centerline (m). */
+  lateral: number;
+  /** Collision radius (m). */
+  radius: number;
+  /** Speed retained after a hit (0..1). */
+  bounce: number;
+  /** 0 barrel, 1 drone, 2 gate. */
+  kind: number;
+}
+
+const trackObstacles: TrackSpaceObstacle[] = [];
+
+/** Register a track-space obstacle. Returns the slot index. */
+export function addTrackObstacleByS(
+  s: number,
+  lateral: number,
+  radius: number,
+  bounce: number,
+  kind: number
+): number {
+  const index = trackObstacles.length;
+  trackObstacles.push({ eid: -1, s, lateral, radius, bounce, kind });
+  return index;
+}
+
+export function getTrackSpaceObstacles(): readonly TrackSpaceObstacle[] {
+  return trackObstacles;
+}
+
+export function clearTrackSpaceObstacles(): void {
+  trackObstacles.length = 0;
+}

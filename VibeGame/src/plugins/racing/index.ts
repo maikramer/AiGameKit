@@ -5,6 +5,8 @@ export {
   aiVehicleRecipe,
   trackRecipe,
   chaseCameraRecipe,
+  raceTrackPickupRecipe,
+  raceTrackObstacleRecipe,
 } from './plugin';
 export {
   Vehicle,
@@ -13,11 +15,17 @@ export {
   ChaseCamera,
   Track,
   RaceTracker,
+  PowerUp,
+  PickupKind,
+  PickupOrb,
+  ObstacleKind,
+  TrackObstacleState,
   VehicleColors,
   VehicleModelLength,
   VehicleModelUrls,
   VehicleModelYaw,
 } from './components';
+export type { PickupKindValue, ObstacleKindValue } from './components';
 export { TrackSpline, createFrame, nodesFromFlatList } from './spline';
 export type {
   TrackNode,
@@ -36,8 +44,14 @@ export {
   clearTrackObstacles,
   getTrackObstacles,
   forEachNearbyObstacle,
+  addTrackPickup,
+  getTrackPickups,
+  clearTrackPickups,
+  addTrackObstacleByS,
+  getTrackSpaceObstacles,
+  clearTrackSpaceObstacles,
 } from './data';
-export type { TrackObstacle } from './data';
+export type { TrackObstacle, TrackPickup, TrackSpaceObstacle } from './data';
 export {
   getRaceState,
   setRaceState,
@@ -63,10 +77,19 @@ export {
   CAMERA_MODES,
 } from './chase-camera';
 export type { CameraModeName } from './chase-camera';
-export { TrackSpawnSystem, getTrackMeshes, trackStyles } from './track-spawn';
+export {
+  TrackSpawnSystem,
+  HoloPulseSystem,
+  getTrackMeshes,
+  trackStyles,
+} from './track-spawn';
 export { VehicleVisualSystem } from './vehicle-visual';
 export { VehicleFxSystem } from './vehicle-fx';
 export { EngineAudioSystem } from './engine-audio';
+export { PowerUpSystem, grantPowerUpAmmo } from './powerups';
+export { PickupSystem, PickupVisualSystem } from './pickups';
+export { CheckpointSystem, resetCheckpoints } from './checkpoints';
+export { TrackObstacleVisualSystem } from './obstacles';
 export { registerRacingHudFactories } from './hud';
 export { buildTrackMeshes } from './track-geometry';
 export type { TrackMeshes, TrackStyle } from './track-geometry';

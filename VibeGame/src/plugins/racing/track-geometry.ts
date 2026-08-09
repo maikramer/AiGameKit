@@ -29,6 +29,8 @@ export interface TrackStyle {
   wall?: number;
   /** Lane marking colour. */
   line?: number;
+  /** Surface theme: 'asphalt' (default) or 'holo' (neon grid + emissive rails). */
+  theme?: 'asphalt' | 'holo';
 }
 
 const DEFAULT_STYLE: Required<TrackStyle> = {
@@ -37,6 +39,7 @@ const DEFAULT_STYLE: Required<TrackStyle> = {
   shoulderColor: 0x8a7a5c,
   wall: 0xd8dae0,
   line: 0xf2f2f2,
+  theme: 'asphalt',
 };
 
 /** Width of the gravel/kerb strip drawn just outside the racing surface (m). */
@@ -57,11 +60,19 @@ const APRON_WIDTH = 18;
 const KERB_CURVATURE = 0.004;
 
 /**
- * Procedural asphalt texture: dark aggregate noise plus a dashed centre line
- * and solid edge lines. Generating it beats shipping a PNG — it tiles exactly
- * with the arc-length UVs and costs one 256×512 canvas at boot.
+ * Procedural surface texture. Two variants:
+ *
+ * - **asphalt**: dark aggregate noise plus a dashed centre line and solid edge
+ *   lines. Generating it beats shipping a PNG — it tiles exactly with the
+ *   arc-length UVs and costs one 256×512 canvas at boot.
+ * - **holo**: a dark base with a neon hex-ish grid, a glowing centre line and
+ *   emissive edge rails. The road material also uses this as `emissiveMap`, so
+ *   the grid reads as lit-from-within rather than painted on.
  */
-function createRoadTexture(style: Required<TrackStyle>): THREE.Texture | null {
+function createRoadTexture(
+  style: Required<TrackStyle>,
+  holo: boolean
+): THREE.Texture | null {
   if (typeof document === 'undefined') return null;
   const w = 256;
   const h = 512;
@@ -75,28 +86,59 @@ function createRoadTexture(style: Required<TrackStyle>): THREE.Texture | null {
   ctx.fillStyle = `#${base.getHexString()}`;
   ctx.fillRect(0, 0, w, h);
 
-  // Aggregate speckle.
-  for (let i = 0; i < 4200; i++) {
-    const x = Math.random() * w;
-    const y = Math.random() * h;
-    const shade = Math.random() * 0.18 - 0.09;
-    const c = base.clone().offsetHSL(0, 0, shade);
-    ctx.fillStyle = `#${c.getHexString()}`;
-    ctx.fillRect(x, y, 1.6, 1.6);
-  }
+  if (holo) {
+    // Dark road base, brighter than asphalt so the neon reads.
+    ctx.fillStyle = '#10131c';
+    ctx.fillRect(0, 0, w, h);
+    // Hex-ish grid: two families of diagonal lines.
+    ctx.strokeStyle = 'rgba(56,232,255,0.35)';
+    ctx.lineWidth = 1.5;
+    const gap = 34;
+    for (let x = -h; x < w + h; x += gap) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + h, h);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + h, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    // Glowing centre line (the UV runs 0..1 across the road).
+    ctx.strokeStyle = 'rgba(56,232,255,0.85)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.5, 0);
+    ctx.lineTo(w * 0.5, h);
+    ctx.stroke();
+    // Edge rails.
+    ctx.fillStyle = 'rgba(255,93,255,0.7)';
+    ctx.fillRect(w * 0.035, 0, 4, h);
+    ctx.fillRect(w * 0.965 - 4, 0, 4, h);
+  } else {
+    // Aggregate speckle.
+    for (let i = 0; i < 4200; i++) {
+      const x = Math.random() * w;
+      const y = Math.random() * h;
+      const shade = Math.random() * 0.18 - 0.09;
+      const c = base.clone().offsetHSL(0, 0, shade);
+      ctx.fillStyle = `#${c.getHexString()}`;
+      ctx.fillRect(x, y, 1.6, 1.6);
+    }
 
-  const line = new THREE.Color(style.line);
-  ctx.fillStyle = `#${line.getHexString()}`;
-  // Edge lines (the UV runs 0..1 across the road).
-  ctx.globalAlpha = 0.85;
-  ctx.fillRect(w * 0.035, 0, 3, h);
-  ctx.fillRect(w * 0.965 - 3, 0, 3, h);
-  // Dashed centre line.
-  ctx.globalAlpha = 0.7;
-  for (let y = 0; y < h; y += 96) {
-    ctx.fillRect(w * 0.5 - 2, y, 4, 52);
+    const line = new THREE.Color(style.line);
+    ctx.fillStyle = `#${line.getHexString()}`;
+    // Edge lines (the UV runs 0..1 across the road).
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(w * 0.035, 0, 3, h);
+    ctx.fillRect(w * 0.965 - 3, 0, 3, h);
+    // Dashed centre line.
+    ctx.globalAlpha = 0.7;
+    for (let y = 0; y < h; y += 96) {
+      ctx.fillRect(w * 0.5 - 2, y, 4, 52);
+    }
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.ClampToEdgeWrapping;
@@ -201,7 +243,11 @@ function buildRibbon(
  * a 600 m straight is the tell-tale of a generated track; real circuits only
  * kerb the turns.
  */
-function buildKerbs(spline: TrackSpline, shoulder: number): THREE.Mesh {
+function buildKerbs(
+  spline: TrackSpline,
+  shoulder: number,
+  holo = false
+): THREE.Mesh {
   const frame = createFrame();
   const positions: number[] = [];
   const colors: number[] = [];
@@ -218,9 +264,13 @@ function buildKerbs(spline: TrackSpline, shoulder: number): THREE.Mesh {
     const sides =
       Math.abs(curve) > KERB_CURVATURE * 2 ? [-1, 1] : [curve > 0 ? -1 : 1];
     const white = Math.floor(s / blockLength) % 2 === 0;
-    const c: [number, number, number] = white
-      ? [0.92, 0.92, 0.94]
-      : [0.85, 0.13, 0.16];
+    const c: [number, number, number] = holo
+      ? white
+        ? [0.12, 0.02, 0.2]
+        : [0.9, 0.15, 0.95]
+      : white
+        ? [0.92, 0.92, 0.94]
+        : [0.85, 0.13, 0.16];
 
     // Next sample for the block's far edge.
     const nextFrame = createFrame();
@@ -274,29 +324,32 @@ function buildKerbs(spline: TrackSpline, shoulder: number): THREE.Mesh {
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.setIndex(indices);
   geo.computeVertexNormals();
-  return new THREE.Mesh(
-    geo,
-    new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.75,
-      metalness: 0,
-    })
-  );
+  const kerbMat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.75,
+    metalness: 0,
+    ...(holo
+      ? { emissive: 0xff5dff, emissiveIntensity: 0.7 }
+      : {}),
+  });
+  if (holo) kerbMat.userData.holo = true;
+  return new THREE.Mesh(geo, kerbMat);
 }
 
 /** Both barriers as one geometry: a vertical wall with a coloured top rail. */
 function buildWalls(
   spline: TrackSpline,
   shoulder: number,
-  color: number
+  color: number,
+  holo = false
 ): THREE.Mesh {
   const frame = createFrame();
   const positions: number[] = [];
   const colors: number[] = [];
   const indices: number[] = [];
   let vertexCount = 0;
-  const wallColor = new THREE.Color(color);
-  const railColor = new THREE.Color(0xd0242f);
+  const wallColor = new THREE.Color(holo ? 0x0b0e16 : color);
+  const railColor = new THREE.Color(holo ? 0x38e8ff : 0xd0242f);
   const rings = spline.closed ? spline.count + 1 : spline.count;
 
   for (const side of [-1, 1]) {
@@ -383,15 +436,15 @@ function buildWalls(
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.setIndex(indices);
   geo.computeVertexNormals();
-  return new THREE.Mesh(
-    geo,
-    new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.85,
-      metalness: 0.05,
-      side: THREE.DoubleSide,
-    })
-  );
+  const wallMat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.85,
+    metalness: 0.05,
+    side: THREE.DoubleSide,
+    ...(holo ? { emissive: 0x38e8ff, emissiveIntensity: 0.35 } : {}),
+  });
+  if (holo) wallMat.userData.holo = true;
+  return new THREE.Mesh(geo, wallMat);
 }
 
 /**
@@ -587,14 +640,23 @@ export function buildTrackMeshes(
     group.add(left, right);
   }
 
-  // Asphalt.
-  const roadTexture = createRoadTexture(s);
+  // Asphalt / holo surface.
+  const holo = s.theme === 'holo';
+  const roadTexture = createRoadTexture(s, holo);
   const roadMat = new THREE.MeshStandardMaterial({
     color: roadTexture ? 0xffffff : s.road,
     map: roadTexture,
+    ...(holo && roadTexture
+      ? {
+          emissive: 0x38e8ff,
+          emissiveMap: roadTexture,
+          emissiveIntensity: 0.55,
+        }
+      : {}),
     roughness: 0.62,
     metalness: 0.02,
   });
+  if (holo) (roadMat as THREE.MeshStandardMaterial).userData.holo = true;
   const road = buildRibbon(spline, roadMat, {
     from: (f) => -f.width * 0.5,
     to: (f) => f.width * 0.5,
@@ -604,11 +666,11 @@ export function buildTrackMeshes(
   road.name = 'RoadSurface';
   group.add(road);
 
-  const kerbs = buildKerbs(spline, shoulder);
+  const kerbs = buildKerbs(spline, shoulder, holo);
   kerbs.name = 'TrackKerbs';
   group.add(kerbs);
 
-  const walls = buildWalls(spline, shoulder, s.wall);
+  const walls = buildWalls(spline, shoulder, s.wall, holo);
   walls.name = 'TrackWalls';
   group.add(walls);
 
