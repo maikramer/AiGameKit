@@ -150,8 +150,11 @@ export {
   setMasterVolume,
   setMusicVolume,
   setSfxVolume,
+  createMusicLayerDriver,
+  getActiveMusicLayer,
 } from './plugins/audio';
 export type { AudioMix } from './plugins/audio';
+export type { MusicLayerDriverOptions } from './plugins/audio';
 export {
   MonoBehaviour,
   EntityScriptPlugin,
@@ -910,6 +913,8 @@ export {
   getTerrainContext,
   sampleTerrainHeight,
   terrainReady,
+  registerGroundBrush,
+  clearGroundBrushes,
 } from './plugins/terrain';
 export { isTerrainDynamicsBlocking } from './plugins/terrain/utils';
 

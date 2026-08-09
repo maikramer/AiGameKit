@@ -90,3 +90,8 @@ export {
   setSfxVolume,
 } from './mixer';
 export type { AudioMix } from './mixer';
+export {
+  createMusicLayerDriver,
+  getActiveMusicLayer,
+} from './music-driver';
+export type { MusicLayerDriverOptions } from './music-driver';
