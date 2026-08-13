@@ -2,11 +2,11 @@
 
 End-to-end example of the **AiGameKit monorepo workflow**: describe assets in `game.yaml` + `manifest_full.csv`, generate **GLBs** (Text3D + Paint3D), optional **rigging** (Rigging3D) and **animation** (Animator3D), **audio** (Text2Sound), **sky** (Skymap2D), **handoff** to `public/assets/`, and run a playable **VibeGame** scene.
 
-The demo grew past a bare scene into a small but complete action RPG. The world is a central walled city surrounded by **four biome regions** (dark forest, desert, swamp, frozen peaks), each with its own enemies, a boss, and three quest NPCs. That is **12 quests** and **4 bosses** total, plus an XP and skill progression system, a gold economy with a merchant, bombs, consumables, and abilities. Save and load live in the pause menu's Options tab.
+The demo grew past a bare scene into a small but complete action RPG. The world is a central walled city surrounded by **four biome regions** (dark forest, desert, swamp, frozen peaks), each with its own enemies, a boss, and four quest NPCs (three jobs + one survey). That is **16 biome quests** and **4 bosses**, plus **4 repeatable city-watch bounties** on the plaza notice board, a blacksmith job at the forge, a chapel healer, XP and skill progression, a gold economy with a merchant, bombs, consumables, and abilities. Mark a landmark with **F** and the plaza campfire (**G**) will send you back there; death respawns at the nearest gate or marked landmark. Save and load live in the pause menu's Options tab.
 
 On the engine side it exercises the full RPG plugin stack: combat, inventory, progression, economy, status effects, melee-AI (a shared FSM that drives every creature and boss), pause coordination, spawn gating, navmesh, save/load, and i18n. Declarative **sky** (`<EquirectSky url="…">`) and **audio** (`<AudioMixer>` + `<MusicLayer>`, `defineSoundBank` + `playSound`, with `resume-audio-on-user-gesture`) round it out.
 
-**Português:** demo completa do pipeline do monorepo AiGameKit. O GameAssets batch gera GLBs, áudio e imagens; o handoff copia para `public/`; o VibeGame carrega GLBs via `<GLTFLoader>` / `<PlayerGLTF>`, céu equirect com `<EquirectSky>`, e SFX nomeados via `defineSoundBank` / `playSound` (ver [`docs/AUDIO.md`](../../docs/AUDIO.md)). O demo é um RPG completo: **4 biomas** (floresta sombria, deserto, pântano, picos gelados), **12 quests** (3 por bioma), **4 chefes**, XP e árvore de habilidades, economia de ouro com comerciante, bombas, consumíveis e habilidades. Save/load ficam no menu de pausa (aba Opções). Stack de plugins: combate, inventário, progressão, economia, efeitos de status, IA melee, pausa, gating de spawn, navmesh, save/load e i18n (EN/PT).
+**Português:** demo completa do pipeline do monorepo AiGameKit. O GameAssets batch gera GLBs, áudio e imagens; o handoff copia para `public/`; o VibeGame carrega GLBs via `<GLTFLoader>` / `<PlayerGLTF>`, céu equirect com `<EquirectSky>`, e SFX nomeados via `defineSoundBank` / `playSound` (ver [`docs/AUDIO.md`](../../docs/AUDIO.md)). O demo é um RPG completo: **4 biomas** (floresta sombria, deserto, pântano, picos gelados), **16 quests de bioma** (3 jobs + 1 traçado por cunha), **4 recompensas repetíveis** no quadro da praça, **ferreiro** e **curandeira** na cidade, **4 chefes**, XP e árvore de habilidades, economia de ouro com comerciante, bombas, consumíveis e habilidades. Marcos da Nota viram viagem rápida na fogueira da praça (**G**) e respawn na morte. Save/load ficam no menu de pausa (aba Opções). Stack de plugins: combate, inventário, progressão, economia, efeitos de status, IA melee, pausa, gating de spawn, navmesh, save/load e i18n (EN/PT).
 
 ## Getting started
 
@@ -33,7 +33,7 @@ upload a new release, and update `assets.lock.json` (`version` + `url` + `sha256
 | Sky IBL + background                       | Skymap2D (equirect PNG) + `sky` plugin   | `<EquirectSky>` in `public/world/environment.xml`                                                                          |
 | NavMesh                                    | `NavMeshPlugin`                          | `<NavMesh>` in `index.html` (`world-base`)                                                                                 |
 | World layout (city, biomes, spawn)         | `<Include>` + city-layout recipes        | Fragments under `public/world/` (see that folder’s `context.md`)                                                           |
-| Player (animated GLB + WASD)               | Built-in `<PlayerGLTF>`                  | **LOD0 only:** `<PlayerGLTF name="hero" model-url="/assets/meshes/characters/hero_lod0.glb">` (no `lod1-url` / `lod2-url`)            |
+| Player (animated GLB + WASD)               | Built-in `<PlayerGLTF>`                  | **LOD0 only:** `<PlayerGLTF name="hero" model-url="/assets/meshes/characters/hero_lod0.glb">` (no `lod1-url` / `lod2-url`) |
 | Third-person camera + post-fx              | Built-in `<ThirdPersonCamera>`           | Declarative (bloom, vignette, SSAO, AGX tonemap; `<PostFxDebugToggle>` cycles effects on 1-6)                              |
 | Audio mixer + layered music                | Engine audio plugin                      | `<AudioMixer>` + `<MusicLayer layer="explore\|battle">` (crossfaded by biome)                                              |
 | Central walled city                        | `<Composition>` + city-layout + includes | Walls ±32, 4 gates, districts under `public/world/cities/discordia/`                                                       |
@@ -41,6 +41,14 @@ upload a new release, and update `assets.lock.json` (`version` + `url` + `sha256
 | Spawn exclusion (city)                     | `spawner` plugin                         | `<SpawnExclusion at="0 0" radius="42">` (sync `villageZones` in `src/main.ts`)                                             |
 | Peri-urban skirts                          | `cities/discordia/skirts.xml`            | Gardens, bushes, market clutter just outside the walls                                                                     |
 | City merchant                              | Entity script                            | `<GameObject name="merchant" script="merchant.ts">` (press **K** to trade)                                                 |
+| City notice board                          | Entity script                            | `<GameObject name="notice_board" script="notice-board.ts">` (press **F** — repeatable watch bounties)                      |
+| City healer                                | Entity script                            | `<GameObject name="npc_healer" script="healer.ts">` (press **F** — full heal for gold)                                     |
+| City blacksmith                            | `quests` plugin                          | `<DialogueNPC dialogue-id="city_stone">` on `npc_blacksmith` (press **F**)                                                 |
+| Plaza campfire                             | Entity script                            | `<GameObject name="campfire" script="campfire.ts">` (press **G** — rest + travel to marked Nota landmarks)                 |
+| Plaza well                                 | Entity script                            | `<GameObject name="well" script="well.ts">` (press **F** — sip heal, short cooldown)                                       |
+| Forge anvil                                | Entity script                            | `<GameObject name="anvil" script="anvil.ts">` (press **K** — 2 stone + 1 wood → bomb)                                      |
+| Watchtower guard                           | Entity script                            | `<GameObject name="npc_guard" script="watch-guard.ts">` (press **F** — pin the four gates on the compass)                  |
+| Building interiors                         | `interiors.xml` + `building-portal.ts`   | **F** at any city door → authored room (houses, chapel, forge, barn, longhouse, market). **F** at the exit marker returns to that door. |
 | Interactables (rune pillar, shrine, chest) | Entity scripts + trimesh colliders       | `<GameObject script="…">` (press **F** to interact)                                                                        |
 | Valley carpet (grass / flowers)            | Smart `<Vegetation>`                     | Ring ±58 (`spawn/ring.xml`, high `density-per-km2`); biomes in `vegetation/crystal-vale.xml`; wind on                      |
 | Biome clutter (props / debris)             | `<StaticSpawner>` / `<Composition>`      | `public/world/clutter/crystal-vale.xml` — mushrooms, bushes, crates, rocks outside ±58                                     |
@@ -48,7 +56,7 @@ upload a new release, and update `assets.lock.json` (`version` + `url` + `sha256
 | Static resources (trees, rocks, cacti)     | `<StaticSpawner>` + `<ResourceNode>`     | Valley ring ±58; biomes outside ±58. Fall trees: `*_lod0` (`Stump`+`Top`) + `*_stump_collision`; rocks keep full hull      |
 | Biome enemies (animated)                   | `<DynamicSpawner>` + scripts + LOD×3     | Same ground path as trees (`profile="creature"` / AABB); child LOD×3; `creature.ts` = AI/anim only (no boot Y snap)        |
 | Biome regions (fog/ambient/BGM/clouds)     | `biomes` + `weather` plugins             | `<BiomeRegion … clouds rain>` x4; Weather drifts clouds globally, biomes override coverage                                 |
-| Quest NPCs + dialogue (12)                 | `quests` plugin                          | `<DialogueNPC>` inside `<Composition>` + `<DialogueBalloon>`                                                               |
+| Quest NPCs + dialogue (16 biome + 1 smith) | `quests` plugin                          | `<DialogueNPC>` inside `<Composition>` + `<DialogueBalloon>`                                                               |
 | Bosses (4)                                 | Scripts + LOD×3 GLTFLoader               | Same LOD pattern as enemies: witch, sand-worm, bog-warden, ogre (`boss.ts`)                                                |
 | HUD widgets                                | `hud` plugin                             | `<HealthBar>`, `<XpBar>`, `<ResourceChip>` (gold/wood/stone), `<Minimap>`, `<Compass>`, `<BossBar>`, `<InteractionPrompt>` |
 | Pause menu (tabbed modal)                  | `hud` plugin                             | `<TabbedModal key="q">` with Skills, Inventory, Options, Quests tabs                                                       |
@@ -74,7 +82,7 @@ Canonical paths: `/assets/meshes/{id}_lod0.glb` (not `_rigged_animated` for runt
 | Combat             | `CombatPlugin` + `melee.ts` | Melee at **~35%** of attack clip (whoosh + arc damage); bombs; enemy feedback / numbers                                                                                      |
 | Inventory          | `InventoryPlugin`           | Stackable items (wood, stone, bomb, potions, quest rewards); `<InventoryTab>` in pause menu                                                                                  |
 | Progression        | `ProgressionPlugin`         | XP on kill, level up, stat modifiers (Vitality, Strength, Agility); `<SkillsTab>` in pause menu                                                                              |
-| Economy            | `EconomyPlugin`             | Gold counter, merchant buy/sell (ring speed upgrade, sword damage upgrade)                                                                                                   |
+| Economy            | `EconomyPlugin`             | Gold counter, merchant buy/sell, chapel healer (full heal for gold), notice-board bounties                                                                                   |
 | Status effects     | `StatusEffectsPlugin`       | Poison, buffs (consumables and abilities apply them)                                                                                                                         |
 | RPG melee AI       | `RpgAiPlugin`               | One engine FSM (`runMeleeAiFrame`) drives every creature and boss: detect, chase, lunge, strafe, enrage                                                                      |
 | Pause coordination | `PauseCoordinatorPlugin`    | Freezes simulation while the pause modal is open                                                                                                                             |
@@ -97,20 +105,22 @@ Canonical paths: `/assets/meshes/{id}_lod0.glb` (not `_rigged_animated` for runt
 
 ### 1. Review the plan
 
-The scene layout and assets were planned with **`gameassets dream`** (dry-run, no GPU) and then refined per biome. The source manifests live in `sample-gameassets/`:
+The scene layout and assets were planned with **`gameassets dream`** (dry-run, no GPU) and then refined per biome. The source manifests live in `sample-gameassets/`. Forest, village and infra
+are **symlinks** to [`examples/shared-assets/`](../shared-assets/README.md)
+(same packs as simple-racer). Regen those groups from this `cwd`:
 
 ```
 sample-gameassets/
   game.yaml                      # GameAssets profile — só config (estilo, ferramentas, presets)
   manifests/                     # 1 manifesto por grupo (~20 assets); cada um define a sua pasta
     characters.yaml              # herói, NPCs, criaturas e bosses  → meshes/characters/
-    village.yaml                 # Cidade Discordia / aldeia        → meshes/village/
+    village.yaml                 # symlink → examples/shared-assets/manifests/village.yaml
     props.yaml                   # armas, ferramentas, itens        → meshes/props/
-    forest.yaml                  # Floresta                         → meshes/forest/
+    forest.yaml                  # symlink → examples/shared-assets/manifests/forest.yaml
     desert.yaml                  # Deserto                          → meshes/desert/
     swamp.yaml                   # Pântano                          → meshes/swamp/
     terrain.yaml                 # formações rochosas / terreno     → meshes/terrain/
-    infra.yaml                   # muralha, portão e pontes         → meshes/infra/
+    infra.yaml                   # symlink → examples/shared-assets/manifests/infra.yaml
     audio.yaml                   # BGM/SFX (Text2Sound)             → public/assets/audio/
   presets-local.yaml             # Local quality/preset overrides
 # GLB/PNG por grupo em public/assets/{meshes,images}/<grupo>/ (local, gitignored).
@@ -171,7 +181,6 @@ precompute"` sem baixar `*_collision.glb`; o carve do NavMesh é procedural
 AABB-fit (comportamento antigo). Docs:
 [`src/plugins/asset-precompute/context.md`](../../src/plugins/asset-precompute/context.md).
 
-
 `fetch-assets` preserves `meshes/vegetation/` so the release tarball does not restore Kenney stubs over the bpy carpet.
 
 ### Vegetation (smart carpet)
@@ -210,7 +219,7 @@ The scene still runs without GLBs. You see the terrain, the central city geometr
 | Shift            | Sprint                                                          |
 | Space            | Jump                                                            |
 | J                | Attack / harvest — SFX+hit no pico do clip (~35%), não no press |
-| F                | Interact (NPCs, chests, shrines, readables)                     |
+| F                | Interact (doors, NPCs, chests, shrines, readables)              |
 | K                | Trade with the merchant                                         |
 | B                | Bomb (tap to drop, hold to aim and lob)                         |
 | V                | Cycle held weapon (sword / axe / spear)                         |

@@ -10,6 +10,7 @@ Scene fragments loaded via `<Include src="/world/…">` from `index.html`.
 | `cities/discordia/*.xml`    | Districts: `houses`, `utilities`, `walls`, `roads`, `skirts`, … |
 | `cities/town-demo.xml`      | Demo town @ (420,420) — `CityGrid` + prefabs                    |
 | `spawn/ring.xml`            | Valley resource ring 52–116, river, bridges, peri-urban carpet  |
+| `spawn/dressing.xml`        | Cairns `form_stack` no anel do vale (fora da cidade)            |
 | `paths/network.xml`         | Cobble `<RoadNetwork>` cruz + anel periurbano + 4 biomes (~2 m) |
 | `paths/trails.xml`          | Dirt/sand spur `<Road flatten="0">` to landmarks                |
 | `vegetation/<biome>.xml`    | Carpet + canopy + rocks, one file per cardinal wedge            |
@@ -109,13 +110,13 @@ Subir contagens de colhíveis/inimigos custa; subir scenery quase não custa.
 Estes GLB são referenciados pelo pipeline mas o bundle só traz a colisão —
 não deixar `url=` a apontar para eles, o analyze falha:
 
-| Asset                | Estado                             | Substituto em uso                                                 |
-| -------------------- | ---------------------------------- | ----------------------------------------------------------------- |
-| `form_arch_3`        | GLB completo, não ligado           | desert §1 usa `sandstone_arch` (dedicado); form_arch_3 fica livre |
-| `form_cliff_1/20`    | só `_collision.glb`                | relevo do terreno + `moss_rock`                                   |
-| `form_outcrop_2/5/8` | só `_collision.glb`                | `rock_mossy` / `moss_rock` (com escala)                           |
-| `form_stack_6/11`    | só `_collision.glb`                | `stone_pillar`                                                    |
-| `shade_*`            | não existe (só `enemies/shade.ts`) | `bogling` a 1.4×                                                  |
+| Asset                | Estado                             | Substituto em uso                                            |
+| -------------------- | ---------------------------------- | ------------------------------------------------------------ |
+| `form_arch_3`        | GLB completo, ligado               | desert landmark + spawner no deserto                         |
+| `form_cliff_1/20`    | GLB completo, ligado nas cristas   | `frontier/ridges.xml`                                        |
+| `form_outcrop_2/5/8` | GLB completo, ligado nas cristas   | `frontier/ridges.xml`                                        |
+| `form_stack_6/11`    | GLB completo, ligado               | cidade, vale (`spawn/dressing.xml`), cristas, pântano, picos |
+| `shade_*`            | não existe (só `enemies/shade.ts`) | `bogling` a 1.4×                                             |
 
 Regenerar: as `form_*` vêm do `rocks3d formation` (ver `Rocks3D/README.md`);
 `shade` vem do pipeline `gameassets batch`. Depois de regenerar, repor os URLs.
@@ -213,7 +214,7 @@ Catches Include/asset misses and solid footprint overlaps (buildings/walls throu
 - Cardinal gates at wall ±39.8 (`RESPAWN_POINTS` = ±50)
 - Quest `dialogue-id` matches JSON under `src/data/quests/`
 
-Quest/dialogue **data** stays in `src/data/quests/` and `public/data/ai/*.yaml` — not in these Scene XMLs.
+Quest/dialogue **data** stays in `src/data/quests/` and `public/data/ai/*.yaml` — not in these Scene XMLs. City-watch bounties live in `city_quests.json` (`npc: notice_board`, taken via `notice-board.ts`); the blacksmith job is `city_stone` on `npc_blacksmith` in `forge.xml`. Chapel healer is `healer.ts` (gold for a full heal), not a quest. Plaza campfire (`campfire.ts`, [G]) and well (`well.ts`, [F]) are free heals with cooldown; forge anvil (`anvil.ts`, [K]) crafts a bomb; watchtower guard (`watch-guard.ts`, [F]) pins the four gates on the compass.
 
 District detail: [`cities/discordia/context.md`](cities/discordia/context.md).
 Engine: vegetation / spawner / terrain (`TerrainPad`) under `VibeGame/src/plugins/*/context.md`.

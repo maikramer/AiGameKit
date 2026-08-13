@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import {
-    loadGltfToSceneWithAnimator,
+  loadGltfToSceneWithAnimator,
   playSound,
   spawnParticleBurst,
 } from 'vibegame';
 import type { MonoBehaviourContext } from 'vibegame';
 import {
   Transform,
-    isKeyDown,
+  isKeyDown,
   healHealth,
   registerInteractionTarget,
   unregisterInteractionTarget,
@@ -27,7 +27,6 @@ const HEAL_REWARD = 25;
 const LID_OPEN_ANGLE = -0.9; // radians, tip the top back as it opens
 const OPEN_ANIM_SECONDS = 0.4;
 
-
 let group: THREE.Group | null = null;
 let loadStarted = false;
 let opened = false;
@@ -35,7 +34,6 @@ let openProgress = 0; // 0..1 lid-open animation
 let glow = 0; // emissive flash, decays after opening
 let fPressed = false;
 const emissiveMats: THREE.MeshStandardMaterial[] = [];
-
 
 export function start(ctx: MonoBehaviourContext): void {
   findPlayer(ctx.state);

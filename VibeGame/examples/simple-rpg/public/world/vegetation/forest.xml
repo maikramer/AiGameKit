@@ -242,6 +242,7 @@
     max-distance="90"
     random-yaw="true"
     variation="foliage"
+    pick-strategy="random"
   >
     <GameObject role="static">
       <GLTFLoader
@@ -249,6 +250,16 @@
         url="/assets/meshes/props/mushroom_red_lod0.glb"
         lod1-url="/assets/meshes/props/mushroom_red_lod1.glb"
         lod2-url="/assets/meshes/props/mushroom_red_lod2.glb"
+        lod-threshold-near="26"
+        lod-threshold-mid="60"
+      ></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/forest/mushroom_glow_lod0.glb"
+        lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb"
+        lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb"
         lod-threshold-near="26"
         lod-threshold-mid="60"
       ></GLTFLoader>

@@ -203,5 +203,75 @@
       <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
+
+  <!-- Cairns form_stack (órfãos no bundle) — marcam as cristas. -->
+  <StaticSpawner
+    profile="tree" count="28" seed="4110"
+    region-min="190 0 190" region-max="330 0 330"
+    align-to-terrain="1" ground-align="auto" avoid-water="1"
+    max-slope-deg="62" scale-min="0.8" scale-max="1.5"
+    avoid-overlaps="1" footprint-radius="3.6"
+    cluster-count="6" cluster-radius="36"
+    max-distance="260" random-yaw="true" variation="rock"
+    pick-strategy="random"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+  <StaticSpawner
+    profile="tree" count="28" seed="4210"
+    region-min="190 0 -330" region-max="330 0 -190"
+    align-to-terrain="1" ground-align="auto" avoid-water="1"
+    max-slope-deg="62" scale-min="0.8" scale-max="1.5"
+    avoid-overlaps="1" footprint-radius="3.6"
+    cluster-count="6" cluster-radius="36"
+    max-distance="260" random-yaw="true" variation="rock"
+    pick-strategy="random"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+  <StaticSpawner
+    profile="tree" count="28" seed="4310"
+    region-min="-330 0 -330" region-max="-190 0 -190"
+    align-to-terrain="1" ground-align="auto" avoid-water="1"
+    max-slope-deg="62" scale-min="0.8" scale-max="1.5"
+    avoid-overlaps="1" footprint-radius="3.6"
+    cluster-count="6" cluster-radius="36"
+    max-distance="260" random-yaw="true" variation="rock"
+    pick-strategy="random"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+  <StaticSpawner
+    profile="tree" count="28" seed="4410"
+    region-min="-330 0 190" region-max="-190 0 330"
+    align-to-terrain="1" ground-align="auto" avoid-water="1"
+    max-slope-deg="62" scale-min="0.8" scale-max="1.5"
+    avoid-overlaps="1" footprint-radius="3.6"
+    cluster-count="6" cluster-radius="36"
+    max-distance="260" random-yaw="true" variation="rock"
+    pick-strategy="random"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
 </Group>
 <!-- FIM frontier.ridges -->

@@ -52,6 +52,37 @@
       lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
     ></GLTFLoader>
   </GameObject>
+  <GameObject
+    place="at: -90 170; align-to-terrain: 1"
+    transform="rotation: 0 40 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 1.8 0.8 0.9"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/log_pile_lod0.glb" lod1-url="/assets/meshes/village/log_pile_lod1.glb" lod2-url="/assets/meshes/village/log_pile_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: -88 176; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: -80 174; align-to-terrain: 1"
+    transform="rotation: 0 -30 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/weapon_rack_lod0.glb" lod1-url="/assets/meshes/village/weapon_rack_lod1.glb" lod2-url="/assets/meshes/village/weapon_rack_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: -81 176; align-to-terrain: 1"
+    transform="rotation: 0 15 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 0.15 1.0 0.12"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/props/sword_hero_lod0.glb" lod1-url="/assets/meshes/props/sword_hero_lod1.glb" lod2-url="/assets/meshes/props/sword_hero_lod2.glb"></GLTFLoader>
+  </GameObject>
   <!-- Recompensa do posto: tomo do vigia (XP), [F]. -->
   <GameObject
     name="forest-watch-tome"
@@ -266,6 +297,21 @@
     ></PointLight>
   </Composition>
   <SpawnExclusion at="-20 266" radius="24"></SpawnExclusion>
+  <GameObject
+    place="at: -14 264; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cauldron_iron_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/cauldron_iron_lod0.glb" lod1-url="/assets/meshes/interiors/cauldron_iron_lod1.glb" lod2-url="/assets/meshes/interiors/cauldron_iron_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: -24 272; align-to-terrain: 1"
+    transform="rotation: 0 50 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 0.8 0.8 0.8"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
 
   <!-- Bosque encantado: luz + cogumelos brilhantes (mushroom_glow, antes sem
        referência XML) + cogumelos forrageáveis. -->

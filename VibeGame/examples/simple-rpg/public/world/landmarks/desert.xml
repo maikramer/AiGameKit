@@ -50,6 +50,29 @@
   ></GameObject>
   <SpawnExclusion at="190 64" radius="24"></SpawnExclusion>
 
+  <!-- Arco natural menor (form_arch_3) — marco na estrada, não substitui o sandstone_arch. -->
+  <GameObject
+    name="desert-form-arch"
+    place="at: 148 28; align-to-terrain: 1"
+    transform="rotation: 0 55 0"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/terrain/form_arch_3_lod0.glb"
+      lod1-url="/assets/meshes/terrain/form_arch_3_lod1.glb"
+      lod2-url="/assets/meshes/terrain/form_arch_3_lod2.glb"
+      lod-threshold-near="45"
+      lod-threshold-mid="120"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: 152 24; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 0.8 0.8 0.8"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
+
   <!-- ============================================================
        §2 CARAVANA DESTRUÍDA (108, -18)
        Tenda tombada, carga espalhada e uma fogueira fria. Conta a
@@ -84,6 +107,14 @@
     collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: 218 -40; align-to-terrain: 1"
+    transform="rotation: 0 -50 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 0.35 0.9 0.15"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/props/axe_lod0.glb" lod1-url="/assets/meshes/props/axe_lod1.glb" lod2-url="/assets/meshes/props/axe_lod2.glb"></GLTFLoader>
   </GameObject>
   <SpawnExclusion at="216 -36" radius="18"></SpawnExclusion>
 

@@ -7,8 +7,9 @@
 // senão o gesto que dá nome ao jogo seria decorativo, já ticado antes de o
 // jogador carregar na tecla.
 //
-// Fora de escopo na F1 (fica para F2): névoa, respawn em marcos, aba Registro,
-// camadas musicais, gates de chefe. Ver docs/gdd/07-producao/fases/.
+// F2 já no jogo: respawn / viagem nos marcos (src/game/travel.ts + fogueira).
+// Ainda fora: névoa, aba Registro, camadas musicais, gates de chefe.
+// Ver docs/gdd/07-producao/fases/.
 import type { State, System } from 'vibegame';
 import {
   Transform,

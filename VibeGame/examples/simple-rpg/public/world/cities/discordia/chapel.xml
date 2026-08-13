@@ -20,18 +20,13 @@
               lod-threshold-mid="160"
             ></GLTFLoader>
           </GameObject>
+          <!-- Curandeira: [F] cura completa por ouro. O script carrega o GLB
+               com idle (igual ao merchant) — GLTFLoader declarativo + script
+               congelava a pose. -->
           <GameObject
             name="npc_healer"
             place="at: 5 21; align-to-terrain: 1"
             transform="rotation: 0 -20 0"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/characters/npc_healer_lod0.glb"
-              lod1-url="/assets/meshes/characters/npc_healer_lod1.glb"
-              lod2-url="/assets/meshes/characters/npc_healer_lod2.glb"
-              lod-threshold-near="22"
-              lod-threshold-mid="60"
-            ></GLTFLoader>
-          </GameObject>
+            script="healer.ts"
+          ></GameObject>
 </Group>

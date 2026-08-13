@@ -73,11 +73,9 @@ import {
   getBodyForEntity,
   getBvhSurfaceHeight,
   getTerrainHeightAt,
-  getBodyYForFeetAt,
   terrainReady,
   getTerrainContext,
   isTerrainDynamicsBlocking,
-  GROUND_CONTACT_SKIN,
   threeCameras,
   ThirdPersonCamera,
   getScene,
@@ -95,7 +93,11 @@ import {
 setKTX2TranscoderPath('/libs/basis/');
 
 import { registerGameSounds, preloadGameSounds } from './game/sounds';
-import { registerGameSkills, playerStats, RING_SPEED_MULT } from './game/skills';
+import {
+  registerGameSkills,
+  playerStats,
+  RING_SPEED_MULT,
+} from './game/skills';
 import { updateConsumables, clearHotbar } from './game/consumables';
 import { updateAbilities, clearAbilityBar } from './game/abilities';
 import { updateMelee, clearMelee } from './game/melee';
@@ -125,6 +127,13 @@ import {
   restoreNota,
   type NotaSnapshot,
 } from './game/nota';
+import {
+  TravelHomeSystem,
+  nearestRespawn,
+  respawnCandidates,
+  teleportPlayerToGround,
+  travelDestinations,
+} from './game/travel';
 import { isWoodEntity } from './scripts/tree';
 import { addStone } from './scripts/inventory';
 import { addWood } from './scripts/wood';
@@ -136,15 +145,14 @@ import darkForestQuestsData from './data/quests/dark_forest_quests.json';
 import desertQuestsData from './data/quests/desert_quests.json';
 import swampQuestsData from './data/quests/swamp_quests.json';
 import mountainQuestsData from './data/quests/mountain_quests.json';
+import cityQuestsData from './data/quests/city_quests.json';
 
 const SAVE_KEY = 'simple-rpg-save';
 const BASE_MAX_HP = 100;
 // Flat bomb-damage bonus per merchant sword-upgrade level (folded into
 // playerStats.attackBonus by PlayerStatsSystem; read by bombs.ts).
 const SWORD_DMG_PER_LEVEL = 10;
-const CHECKPOINT_X = 0;
 const CHECKPOINT_Y = 50;
-const CHECKPOINT_Z = 0;
 const RESPAWN_DELAY = 2.0;
 
 // ── Player ECS setup: add the engine components the gameplay/HUD read. ─────────
@@ -215,22 +223,14 @@ const PlayerStatsSystem: System = {
   },
 };
 
-// ── Respawn: on death, after a delay, return the player to the nearest checkpoint
-//    — the city centre or just outside whichever cardinal gate is closest to
-//    where they fell. Beats always trekking back from the city centre after
-//    dying deep in a biome. Each point is just outside the wall (z/x ±50),
-//    short of the biome enemy bands, so respawns aren't instant re-deaths.
-const RESPAWN_POINTS: ReadonlyArray<readonly [number, number]> = [
-  [0, 0], // city plaza
-  [0, 50], // north gate (forest) — wall ±38 + margin
-  [0, -50], // south gate (swamp)
-  [50, 0], // east gate (desert)
-  [-50, 0], // west gate (peaks)
-];
+// ── Respawn: nearest of plaza, cardinal gates, and marked Nota landings.
+//    Gates sit just outside the wall (LOOKOUT_GATES, ±50) so a death in a
+//    biome is not a trek from the plaza — and a marked marco closer than
+//    the gate wins, which is the F2 "respawn em marcos" beat.
 let deathShown = false;
 let respawnAtTime = 0;
-let respawnX = CHECKPOINT_X;
-let respawnZ = CHECKPOINT_Z;
+let respawnX = 0;
+let respawnZ = 0;
 const RespawnSystem: System = {
   group: 'simulation',
   update(state: State) {
@@ -240,46 +240,17 @@ const RespawnSystem: System = {
     if (isDead(player) && !deathShown) {
       deathShown = true;
       respawnAtTime = state.time.elapsed + RESPAWN_DELAY;
-      // Pick the checkpoint nearest to where the player died.
-      const dx = Transform.posX[player];
-      const dz = Transform.posZ[player];
-      let best = RESPAWN_POINTS[0];
-      let bestD2 = Infinity;
-      for (const p of RESPAWN_POINTS) {
-        const d2 = (p[0] - dx) ** 2 + (p[1] - dz) ** 2;
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          best = p;
-        }
-      }
+      const best = nearestRespawn(
+        respawnCandidates(state),
+        Transform.posX[player],
+        Transform.posZ[player]
+      );
       respawnX = best[0];
       respawnZ = best[1];
     }
     if (deathShown && state.time.elapsed >= respawnAtTime) {
       Health.current[player] = Health.max[player];
-      // Place the player on the actual terrain surface at the respawn point, not
-      // a hardcoded altitude — CHECKPOINT_Y (50) sits *below* most of the world
-      // (plaza ground ≈ 66), so the old path dropped the player underground and
-      // relied on the snap system to pop it back up (a visible fall/jerk, and a
-      // fall-through into the void whenever that chunk's collider wasn't ready).
-      let respawnY = CHECKPOINT_Y;
-      if (terrainReady(state)) {
-        const terrainH = getTerrainHeightAt(state, respawnX, respawnZ);
-        const bvh = getBvhSurfaceHeight(state, respawnX, 500, respawnZ);
-        const groundY = Number.isFinite(terrainH)
-          ? terrainH
-          : Number.isFinite(bvh)
-            ? (bvh as number)
-            : null;
-        if (groundY !== null) {
-          respawnY = getBodyYForFeetAt(
-            state,
-            player,
-            groundY + GROUND_CONTACT_SKIN
-          );
-        }
-      }
-      teleportEntity(state, player, respawnX, respawnY, respawnZ);
+      teleportPlayerToGround(state, player, respawnX, respawnZ, CHECKPOINT_Y);
       deathShown = false;
     }
   },
@@ -455,7 +426,6 @@ const dictEN: Record<string, string> = {
   'hud.title': 'Discordia',
 };
 
-
 const dictPT: Record<string, string> = {
   'modal.tab.skills': 'Habilidades',
   'modal.tab.inventory': 'Inventário',
@@ -489,7 +459,6 @@ const dictPT: Record<string, string> = {
     'Profiler: P (Shift+P deep)   Overlay debug: ?   GPU: G',
   'hud.title': 'Discordia',
 };
-
 
 const MUSIC_VOL = 0.7;
 const SFX_VOL = 0.8;
@@ -853,6 +822,7 @@ async function runBootstrap(): Promise<void> {
   withSystem(BombSystem);
   withSystem(BombAimSpineSystem);
   withSystem(BgmSystem);
+  withSystem(TravelHomeSystem);
   withSystem(NotaSystem);
 
   configure({ canvas: '#game-canvas' });
@@ -891,6 +861,7 @@ async function runBootstrap(): Promise<void> {
     desertQuestsData,
     swampQuestsData,
     mountainQuestsData,
+    cityQuestsData,
   ]) {
     for (const def of loadQuests(data)) {
       registerQuest(state, def);
@@ -1084,6 +1055,7 @@ async function runBootstrap(): Promise<void> {
       BIOME_IDS.map((b) => [b, `${biomeProgress(b)}/3`])
     ),
   }));
+  registerDebugVar(state, 'travel', () => travelDestinations(state));
 
   // Load data-driven RPG presets (boss/goblin/slime) into the DataRegistry
   // before runtime.start() parses the scene.

@@ -93,7 +93,6 @@ const BUTTON_FOCUS_STYLE =
   'border:2px solid #ffd700;box-shadow:0 0 12px rgba(255,215,0,0.4);';
 const BUTTON_DISABLED_STYLE = 'opacity:0.4;cursor:not-allowed;';
 
-
 function showTradePrompt(state: typeof shopState): void {
   if (promptShown || !merchantEid || !state) return;
   registerInteractionTarget(state, merchantEid, {

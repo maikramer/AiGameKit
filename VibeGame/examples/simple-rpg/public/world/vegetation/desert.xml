@@ -276,5 +276,37 @@
       ></ResourceNode>
     </GameObject>
   </StaticSpawner>
+  <!-- Arcos naturais form_arch_3 (órfão — sandstone_arch fica no landmark). -->
+  <StaticSpawner
+    profile="tree"
+    count="14"
+    seed="7210"
+    region-min="140 0 -160"
+    region-max="340 0 160"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="28"
+    scale-min="0.7"
+    scale-max="1.35"
+    avoid-overlaps="1"
+    footprint-radius="8"
+    cluster-count="5"
+    cluster-radius="40"
+    max-distance="220"
+    random-yaw="true"
+    variation="rock"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/terrain/form_arch_3_lod0.glb"
+        lod1-url="/assets/meshes/terrain/form_arch_3_lod1.glb"
+        lod2-url="/assets/meshes/terrain/form_arch_3_lod2.glb"
+        lod-threshold-near="50"
+        lod-threshold-mid="130"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
 </Group>
 <!-- FIM biome.desert.vegetation -->

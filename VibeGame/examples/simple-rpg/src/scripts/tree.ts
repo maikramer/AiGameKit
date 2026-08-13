@@ -23,4 +23,3 @@ export function onDestroy(ctx: MonoBehaviourContext): void {
   woodEntities.delete(ctx.entity);
   unregisterInteractionTarget(ctx.state, ctx.entity);
 }
-

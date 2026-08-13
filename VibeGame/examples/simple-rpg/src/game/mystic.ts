@@ -17,7 +17,6 @@ import {
 import { showToast } from '../../../shared/src/ui';
 import { findPlayer } from './player-query';
 
-
 export interface MysticConfig {
   /** GLB to load (single static prop). */
   modelUrl: string;
@@ -62,9 +61,8 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
   let loadStarted = false;
   let read = false;
   let fPressed = false;
-    let entityId = 0;
+  let entityId = 0;
   const emissiveMats: THREE.MeshStandardMaterial[] = [];
-
 
   function start(ctx: MonoBehaviourContext): void {
     findPlayer(ctx.state);

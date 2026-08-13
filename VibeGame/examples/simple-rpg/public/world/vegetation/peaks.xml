@@ -360,5 +360,34 @@
       ></ResourceNode>
     </GameObject>
   </StaticSpawner>
+  <!-- Mojões form_stack no corredor dos picos. -->
+  <StaticSpawner
+    profile="tree"
+    count="36"
+    seed="9210"
+    region-min="-380 0 -80"
+    region-max="-140 0 80"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="48"
+    scale-min="0.8"
+    scale-max="1.6"
+    avoid-overlaps="1"
+    footprint-radius="3.6"
+    cluster-count="7"
+    cluster-radius="32"
+    max-distance="220"
+    random-yaw="true"
+    variation="rock"
+    pick-strategy="random"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
 </Group>
 <!-- FIM biome.peaks.vegetation -->

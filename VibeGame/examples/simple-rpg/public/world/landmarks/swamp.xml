@@ -98,6 +98,22 @@
     ></ParticleSystem>
   </GameObject>
   <SpawnExclusion at="-56 -216" radius="18"></SpawnExclusion>
+  <GameObject
+    place="at: -58 -220; align-to-terrain: 1"
+    transform="rotation: 0 22 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: -52 -228; align-to-terrain: 1"
+    transform="rotation: 0 -35 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb"></GLTFLoader>
+  </GameObject>
 
   <!-- ============================================================
        §4 ALTAR DE OSSOS (-48, -132)
@@ -181,5 +197,20 @@
     ></GLTFLoader>
   </GameObject>
   <SpawnExclusion at="20 -260" radius="18"></SpawnExclusion>
+  <GameObject
+    place="at: 26 -256; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 0.55 0.7 0.55"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: 14 -254; align-to-terrain: 1"
+    transform="rotation: 0 18 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 0.8 0.8 0.8"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
 </Group>
 <!-- FIM biome.swamp.landmarks -->

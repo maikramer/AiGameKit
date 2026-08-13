@@ -89,7 +89,7 @@
            frontier.ridges          cristas diagonais entre cunhas
            creatures                inimigos por bioma
            creatures.bosses         4 chefes (name="boss" = final, BossBar)
-           quest-npcs               NPCs de quest + especiais (merchant/chest)
+           quest-npcs               NPCs de quest + especiais (merchant/chest/board)
            atmosphere.ambient       partículas de ambiente
            ui                       câmera, HUD, prompts, menu tabbed
            town                     DEMO — aldeia isolada (420,420)
@@ -208,6 +208,7 @@
 
       <Include src="/world/cities/discordia.xml"></Include>
       <Include src="/world/spawn/ring.xml"></Include>
+      <Include src="/world/spawn/dressing.xml"></Include>
       <Include src="/world/paths/network.xml"></Include>
       <Include src="/world/paths/trails.xml"></Include>
 
@@ -355,8 +356,8 @@
 
     <canvas id="game-canvas"></canvas>
     <div id="controls-hint">
-      WASD mover · Espaço pular · J atacar · F interagir · K comércio · B bomba
-      · Q menu · P profiler (?profiler=1)
+      WASD mover · Espaço pular · J atacar · F interagir · G fogueira · K
+      comércio · B bomba · Q menu · P profiler (?profiler=1)
     </div>
 
     <script type="module" src="/src/main.ts"></script>

@@ -1,0 +1,76 @@
+<!--
+  Vestir o vale (fora da SpawnExclusion r=52) com GLBs que estavam
+  órfãos ou subusados: cairns form_stack no anel 70–160.
+
+  Cidade: cities/discordia/clutter.xml. Cristas: frontier/ridges.xml.
+-->
+<Group name="valley.dressing" pos="0 0 0">
+  <StaticSpawner
+    profile="tree" count="22" seed="5110"
+    region-min="70 0 -70" region-max="160 0 70"
+    align-to-terrain="1" ground-align="auto" avoid-water="1"
+    max-slope-deg="36" scale-min="0.75" scale-max="1.35"
+    avoid-overlaps="1" footprint-radius="3.8"
+    cluster-count="5" cluster-radius="28"
+    max-distance="180" random-yaw="true" variation="rock"
+    pick-strategy="random"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+  <StaticSpawner
+    profile="tree" count="22" seed="5111"
+    region-min="-160 0 -70" region-max="-70 0 70"
+    align-to-terrain="1" ground-align="auto" avoid-water="1"
+    max-slope-deg="36" scale-min="0.75" scale-max="1.35"
+    avoid-overlaps="1" footprint-radius="3.8"
+    cluster-count="5" cluster-radius="28"
+    max-distance="180" random-yaw="true" variation="rock"
+    pick-strategy="random"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+  <StaticSpawner
+    profile="tree" count="22" seed="5112"
+    region-min="-70 0 70" region-max="70 0 160"
+    align-to-terrain="1" ground-align="auto" avoid-water="1"
+    max-slope-deg="36" scale-min="0.75" scale-max="1.35"
+    avoid-overlaps="1" footprint-radius="3.8"
+    cluster-count="5" cluster-radius="28"
+    max-distance="180" random-yaw="true" variation="rock"
+    pick-strategy="random"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+  <StaticSpawner
+    profile="tree" count="22" seed="5113"
+    region-min="-70 0 -160" region-max="70 0 -70"
+    align-to-terrain="1" ground-align="auto" avoid-water="1"
+    max-slope-deg="36" scale-min="0.75" scale-max="1.35"
+    avoid-overlaps="1" footprint-radius="3.8"
+    cluster-count="5" cluster-radius="28"
+    max-distance="180" random-yaw="true" variation="rock"
+    pick-strategy="random"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+</Group>

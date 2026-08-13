@@ -14,9 +14,13 @@ export function isShopOpen(): boolean {
   return s ? getActiveModal(s) === 'shop' : false;
 }
 
-export function setShopOpen(value: boolean): void {
+export function setGameModal(id: string, open: boolean): void {
   const s = engineState();
   if (!s) return;
-  if (value) pushModal(s, 'shop');
-  else popModal(s, 'shop');
+  if (open) pushModal(s, id);
+  else popModal(s, id);
+}
+
+export function setShopOpen(value: boolean): void {
+  setGameModal('shop', value);
 }

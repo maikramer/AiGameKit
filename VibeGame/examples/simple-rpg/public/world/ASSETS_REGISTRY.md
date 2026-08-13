@@ -154,7 +154,7 @@ Texturas principais: `vale_grass`, `forest_floor`, `desert_sand`, `swamp_mud`, `
 
 | id               | paths (lod0→collision)                                                                                                                                                                                                        | região sugerida  | XML hoje   | size_m                  | notas                                      |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------- | ----------------------- | ------------------------------------------ |
-| `player`           | `/assets/meshes/characters/hero_lod0.glb`<br>`/assets/meshes/characters/hero_lod1.glb`<br>`/assets/meshes/characters/hero_lod2.glb`<br>`/assets/meshes/characters/hero_collision.glb`                                         | Global           | GLTFLoader | 0.55×1.55×0.4 m (L×H×W) | coll=sim; index.html PlayerGLTF            |
+| `player`         | `/assets/meshes/characters/hero_lod0.glb`<br>`/assets/meshes/characters/hero_lod1.glb`<br>`/assets/meshes/characters/hero_lod2.glb`<br>`/assets/meshes/characters/hero_collision.glb`                                         | Global           | GLTFLoader | 0.55×1.55×0.4 m (L×H×W) | coll=sim; index.html PlayerGLTF            |
 | `npc_merchant`   | `/assets/meshes/characters/npc_merchant_lod0.glb`<br>`/assets/meshes/characters/npc_merchant_lod1.glb`<br>`/assets/meshes/characters/npc_merchant_lod2.glb`<br>`/assets/meshes/characters/npc_merchant_collision.glb`         | Cidade Discordia | Sem mesh   | 0.65×1.5×0.5 m (L×H×W)  | coll=sim; adicionar GLTFLoader ao merchant |
 | `npc_blacksmith` | `/assets/meshes/characters/npc_blacksmith_lod0.glb`<br>`/assets/meshes/characters/npc_blacksmith_lod1.glb`<br>`/assets/meshes/characters/npc_blacksmith_lod2.glb`<br>`/assets/meshes/characters/npc_blacksmith_collision.glb` | Cidade + quests  | GLTFLoader | 0.75×1.6×0.55 m (L×H×W) | coll=sim; forge.xml + ai/npcs.xml          |
 | `npc_scout`      | `/assets/meshes/characters/npc_scout_lod0.glb`<br>`/assets/meshes/characters/npc_scout_lod1.glb`<br>`/assets/meshes/characters/npc_scout_lod2.glb`<br>`/assets/meshes/characters/npc_scout_collision.glb`                     | Quests           | GLTFLoader | 0.6×1.55×0.45 m (L×H×W) | coll=sim; ai/npcs.xml                      |
@@ -233,25 +233,32 @@ Texturas principais: `vale_grass`, `forest_floor`, `desert_sand`, `swamp_mud`, `
 
 ### Interiores (grupo `manifests/interiors.yaml` — salas em `world/interiors.xml`)
 
-Zona remota (-410, 120), y≈150.6; portais das portas → salas (capela, ferraria,
-casa comum); saída teleporta de volta (`portal.exit_*`). GLBs em
-`/assets/meshes/interiors/` (lod0→collision por id).
+Zona remota: z=120 (capela / forja / casa_a), z=175 (casas b/c, cabana),
+z=230 (celeiro, longhouse, banca). y≈150.6; portais das portas → salas;
+saída teleporta de volta (`portal.exit_*`). GLBs em `/assets/meshes/interiors/`
+(lod0→collision por id). Bancas a/b/c partilham uma sala; F na saída volta à
+porta de entrada.
 
-Layout JRPG: chão visual = `<Pad edge-feather="0">` (primitiva plana); TerrainPad
-só achata heightfield (CCT/place), não é o chão. Shell Composition (chão+paredes)
+Layout dollhouse / sim: chão visual = `<Pad edge-feather="0">`; TerrainPad só
+achata heightfield. Shell = chão + **paredes 0.70 m** (câmara 3ª pessoa vê por
+cima; CCT não sai — autoStep 0.3 m). **Sem teto** (luzes `collider="none"`).
+Vão de porta ~2.8 m em −Z (sill invisível 0.70 m — não se sai a pé). Dimensões shell (L×P): capela **24×18**, forja
+**22×16**, casa **20×16**, celeiro/longhouse **28×20**, banca **18×14**.
+TerrainPads 32×26 / 30×24 / 28×24 / 36×28 / 26×22.
 
-- teto (`collider="none"`). Corredor central exit→landmark. Dimensões shell
-  (L×P / teto): capela **16×12 / 5.6**, forja **14×11 / 5.2**, casa **12×10 / 5.0**.
-  TerrainPads 22×18 / 20×16 / 18×15.
+| Sala      | Assets novos (interiors)                                                                                                                     | Reuso (outros grupos)                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Capela    | `chapel_pew` ×4, `chapel_altar`, `chapel_pulpit`, `chapel_statue`, `candelabra_tall`, `church_organ`, `confessional`                         | `stone_pillar` ×2 (props), `iron_brazier` ×2 (village)                                                             |
+| Ferraria  | `forge_furnace`, `sledge_hammer`                                                                                                             | `anvil`, `weapon_rack`, `forge_bellows`, `quench_trough`, `horseshoe_pile`, `log_pile`, `chopping_block` (village) |
+| Casa A    | `fireplace_hearth`, `dining_table`, `wooden_chair` ×4, `rug_woven`, `bed_simple`, `cupboard`, `bookshelf`, `cauldron_iron`, `spinning_wheel` | `wooden_barrel`, `wooden_crate` (village)                                                                          |
+| Casa B    | lareira, mesa, cadeiras ×3, tapete, cama, armário, estante, banqueta, lanternas na parede                                                    | `wooden_barrel`, `wooden_crate`                                                                                    |
+| Casa C    | lareira, caldeirão, mesa, banquetas ×3, cama, armário, roda de fiar, lanterna                                                                | `wooden_crate`, `wooden_barrel`                                                                                    |
+| Cabana    | roda de fiar, mesa, banquetas, cama, lanterna                                                                                                | `wooden_crate`, `wooden_barrel`, `chopping_block`                                                                  |
+| Celeiro   | banquetas, lanternas na parede                                                                                                               | `log_pile` ×2, `wooden_crate` ×2, `wooden_barrel` ×3, `chopping_block`, `horseshoe_pile`                           |
+| Longhouse | `tavern_bar`, banquetas, mesa, cadeiras, `candelabra_tall` ×2, estante, lanternas                                                            | `wooden_bench` ×2, `wooden_crate`, `wooden_barrel`                                                                 |
+| Banca     | `tavern_bar`, banquetas ×2, lanterna (sala partilhada pelas 3 stalls)                                                                        | `wooden_crate` ×2, `wooden_barrel` ×2                                                                              |
 
-| Sala       | Assets novos (interiors)                                                                                                                     | Reuso (outros grupos)                                                                                              |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Capela     | `chapel_pew` ×4, `chapel_altar`, `chapel_pulpit`, `chapel_statue`, `candelabra_tall`, `church_organ`, `confessional`                         | `stone_pillar` ×2 (props), `iron_brazier` ×2 (village)                                                             |
-| Ferraria   | `forge_furnace`, `sledge_hammer`                                                                                                             | `anvil`, `weapon_rack`, `forge_bellows`, `quench_trough`, `horseshoe_pile`, `log_pile`, `chopping_block` (village) |
-| Casa comum | `fireplace_hearth`, `dining_table`, `wooden_chair` ×4, `rug_woven`, `bed_simple`, `cupboard`, `bookshelf`, `cauldron_iron`, `spinning_wheel` | `wooden_barrel`, `wooden_crate` (village)                                                                          |
-
-Interiores sem sala autorada ainda: `house_b`, `house_c`, `shepherd_cottage`,
-`village_barn`, `longhouse`, `market_stall_*` (portais mostram “em breve”).
+Todas as portas da cidade entram numa sala autorada (já não há stub “em breve”).
 
 ## GLBs em falta (referenciados, ausentes no disco)
 

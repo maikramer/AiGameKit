@@ -19,18 +19,12 @@
               lod-threshold-mid="140"
             ></GLTFLoader>
           </GameObject>
+          <!-- Guarda: [F] pinta os quatro portões na bússola. Script carrega
+               o GLB com idle (igual merchant/healer). -->
           <GameObject
             name="npc_guard"
             place="at: 29 29; align-to-terrain: 1"
             transform="rotation: 0 200 0"
-          >
-            <GLTFLoader
-              role="visual"
-              url="/assets/meshes/characters/npc_guard_lod0.glb"
-              lod1-url="/assets/meshes/characters/npc_guard_lod1.glb"
-              lod2-url="/assets/meshes/characters/npc_guard_lod2.glb"
-              lod-threshold-near="22"
-              lod-threshold-mid="60"
-            ></GLTFLoader>
-          </GameObject>
+            script="watch-guard.ts"
+          ></GameObject>
 </Group>

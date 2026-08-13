@@ -2,20 +2,21 @@
 
 Shell: `../discordia.xml` (Includes). **Editar o XML do distrito**, não o shell.
 
-| Ficheiro        | Group(s)                       | Conteúdo                                                                                                                                                                     |
-| --------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `walls.xml`     | `city.walls`                   | **GERADO** (`scripts/gen_city_walls.py`). Muralha ±38 **GLB** (passo visual 6.38, junta 0.12): 4 corners + 40 segs + 4 portões + 8 tochas                                    |
-| `roads.xml`     | `city.roads`                   | Pad praça (artérias em `paths/network.xml`)                                                                                                                                  |
-| `utilities.xml` | `city.plaza`, `city.landmarks` | Poço **GLB**, fogueira **GLB** `campfire_pit` + brasa/luz, bancos **GLB**, quadro **GLB** `notice_board`, tochas **GLB** `torch_post` + brasa/luz (2 PointLight), santuários |
-| `houses.xml`    | `city.houses`                  | 4 casas **GLB**: 3× `village_house` (A/B/C) + 1× `shepherd_cottage` (Casa do Pastor); barril GLB junto à casa B                                                              |
-| `forge.xml`     | `city.forge`                   | Ferraria **GLB** `village_forge` + brasa/fumo (partículas), `anvil`/`horseshoe_pile`/`quench_trough`/`forge_bellows`/`weapon_rack` **GLB** no pátio, ferreiro (NPC)          |
-| `barn.xml`      | `city.barn`                    | Celeiro **GLB** `village_barn`                                                                                                                                               |
-| `watch.xml`     | `city.watch`                   | Torre de vigia (GLB)                                                                                                                                                         |
-| `chapel.xml`    | `city.chapel`                  | Capela (GLB)                                                                                                                                                                 |
-| `market.xml`    | `city.market`                  | Mercado (bancas GLB); `merchant` já renderiza `npc_merchant` via script próprio (`src/scripts/merchant.ts`), sem `<GLTFLoader>` declarativo                                  |
-| `longhouse.xml` | `city.longhouse`               | Longhouse                                                                                                                                                                    |
-| `skirts.xml`    | `city.skirts`                  | Vazio — vegetação periurbana nos spawners `vegetation/*.xml`                                                                                                                 |
-| `grid.xml`      | `city.grid-district`           | Stub vazio (CityGrid→Box removido; foco GLB)                                                                                                                                 |
+| Ficheiro        | Group(s)                       | Conteúdo                                                                                                                                                      |
+| --------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `walls.xml`     | `city.walls`                   | **GERADO** (`scripts/gen_city_walls.py`). Muralha ±38 **GLB** (passo visual 6.38, junta 0.12): 4 corners + 40 segs + 4 portões + 8 tochas                     |
+| `roads.xml`     | `city.roads`                   | Pad praça (artérias em `paths/network.xml`)                                                                                                                   |
+| `utilities.xml` | `city.plaza`, `city.landmarks` | Poço (`well.ts`, [F] beber), fogueira (`campfire.ts`, [G] descansar + viajar aos marcos da Nota), bancos, quadro (`notice-board.ts`, [F]), tochas, santuários |
+| `houses.xml`    | `city.houses`                  | 4 casas **GLB**: 3× `village_house` (A/B/C) + 1× `shepherd_cottage` (Casa do Pastor); barril GLB junto à casa B                                               |
+| `forge.xml`     | `city.forge`                   | Ferraria **GLB** + pátio; ferreiro (`DialogueNPC` `city_stone`, [F]); bigorna (`anvil.ts`, [K] forjar bomba)                                                  |
+| `barn.xml`      | `city.barn`                    | Celeiro **GLB** `village_barn`                                                                                                                                |
+| `watch.xml`     | `city.watch`                   | Torre de vigia (GLB); guarda `npc_guard` via `watch-guard.ts` ([F] pinta os 4 portões na bússola)                                                             |
+| `chapel.xml`    | `city.chapel`                  | Capela (GLB); curandeira `npc_healer` via `healer.ts` ([F] cura completa por ouro), sem `<GLTFLoader>` declarativo                                            |
+| `market.xml`    | `city.market`                  | Mercado (bancas GLB); `merchant` já renderiza `npc_merchant` via script próprio (`src/scripts/merchant.ts`), sem `<GLTFLoader>` declarativo                   |
+| `longhouse.xml` | `city.longhouse`               | Longhouse                                                                                                                                                     |
+| `skirts.xml`    | `city.skirts`                  | 4 carvalhos no miolo + caixotaria na muralha                                                                                                                  |
+| `clutter.xml`   | `city.clutter`                 | Vestir exterior: barris, caixas, bancos, lenha, pátio de treino, cairns. Sem móvel de interior (armário/cadeira/banqueta)                                     |
+| `grid.xml`      | `city.grid-district`           | Stub vazio (CityGrid→Box removido; foco GLB)                                                                                                                  |
 
 ### Onda composition — migrado (2026-07-29)
 

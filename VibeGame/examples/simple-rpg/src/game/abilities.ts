@@ -278,7 +278,11 @@ function activate(state: State, player: number, id: string): void {
 }
 
 /** Poll ability keys, tick cooldowns, update the bar. Call once/frame. */
-export function updateAbilities(state: State, player: number, dt: number): void {
+export function updateAbilities(
+  state: State,
+  player: number,
+  dt: number
+): void {
   buildBar();
 
   for (const a of ABILITIES) {

@@ -39,6 +39,24 @@
   >
     <GLTFLoader role="visual" url="/assets/meshes/terrain/stone_cairn_lod0.glb" lod1-url="/assets/meshes/terrain/stone_cairn_lod1.glb" lod2-url="/assets/meshes/terrain/stone_cairn_lod2.glb"></GLTFLoader>
   </GameObject>
+  <GameObject
+    name="peaks-stack-a"
+    place="at: -178 -4; align-to-terrain: 1"
+    transform="rotation: 0 18 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="peaks-stack-b"
+    place="at: -222 2; align-to-terrain: 1"
+    transform="rotation: 0 -30 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb"></GLTFLoader>
+  </GameObject>
 
   <!-- ============================================================
        §2 POSTO GOBLIN (-86, 22)

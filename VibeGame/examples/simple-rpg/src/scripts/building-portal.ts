@@ -2,7 +2,7 @@ import { defineQuery } from 'vibegame';
 import type { MonoBehaviourContext, State } from 'vibegame';
 import {
   Transform,
-    isKeyDown,
+  isKeyDown,
   registerInteractionTarget,
   unregisterInteractionTarget,
   getBodyForEntity,
@@ -86,8 +86,35 @@ const PORTAL_DEFS: Record<string, { interior: InteriorId; label: string }> = {
     label: 'Sair da forja',
   },
   'portal.exit_house_a': { interior: 'exit_house_a', label: 'Sair da casa' },
+  'portal.exit_house_b': { interior: 'exit_house_b', label: 'Sair da casa' },
+  'portal.exit_house_c': { interior: 'exit_house_c', label: 'Sair da casa' },
+  'portal.exit_shepherd_cottage': {
+    interior: 'exit_shepherd_cottage',
+    label: 'Sair da cabana',
+  },
+  'portal.exit_village_barn': {
+    interior: 'exit_village_barn',
+    label: 'Sair do celeiro',
+  },
+  'portal.exit_longhouse': {
+    interior: 'exit_longhouse',
+    label: 'Sair do longhouse',
+  },
+  'portal.exit_market': { interior: 'exit_market', label: 'Sair da banca' },
 };
 
+const MARKET_STALLS = new Set<InteriorId>([
+  'market_stall_a',
+  'market_stall_b',
+  'market_stall_c',
+]);
+const MARKET_EXITS: Record<string, InteriorId> = {
+  market_stall_a: 'exit_market_stall_a',
+  market_stall_b: 'exit_market_stall_b',
+  market_stall_c: 'exit_market_stall_c',
+};
+/** Last stall entered — exit_market remaps here so F leaves the same door. */
+let lastMarketExit: InteriorId = 'exit_market_stall_a';
 
 type PortalRuntime = {
   fPressed: boolean;
@@ -173,7 +200,12 @@ function tryEnter(
 ): void {
   const now = performance.now();
   if (now - lastTeleportAt < TELEPORT_COOLDOWN_MS) return;
-  const spawn = getInteriorSpawn(def.interior);
+  if (MARKET_STALLS.has(def.interior)) {
+    lastMarketExit = MARKET_EXITS[def.interior] ?? 'exit_market_stall_a';
+  }
+  const dest: InteriorId =
+    def.interior === 'exit_market' ? lastMarketExit : def.interior;
+  const spawn = getInteriorSpawn(dest);
   if (!spawn) {
     showToast('Interior em breve — porta ainda fechada', {
       durationMs: TOAST_MS,
@@ -185,7 +217,12 @@ function tryEnter(
   const y = resolveFeetY(ctx.state, player, spawn.x, spawn.z, spawn.y);
   teleportWithAssist(ctx, player, spawn.x, y, spawn.z);
   lastTeleportAt = now;
-  showToast('Entrou');
+  const toast = def.label.startsWith('Entrar')
+    ? def.label.replace('Entrar', 'Entrou')
+    : def.label.startsWith('Sair')
+      ? def.label.replace('Sair', 'Saiu')
+      : def.label;
+  showToast(toast);
 }
 
 export function start(ctx: MonoBehaviourContext): void {

@@ -4,7 +4,10 @@
 import { createResourceAdapter } from '../../../shared/src/resources';
 import { engineState, playerEid } from './engine-bridge';
 
-const gold = createResourceAdapter('gold', { state: engineState, player: playerEid });
+const gold = createResourceAdapter('gold', {
+  state: engineState,
+  player: playerEid,
+});
 
 export const addGold = gold.add;
 export const spendGold = gold.remove;

@@ -3,7 +3,10 @@
 import { createResourceAdapter } from '../../../shared/src/resources';
 import { engineState, playerEid } from '../game/engine-bridge';
 
-const wood = createResourceAdapter('wood', { state: engineState, player: playerEid });
+const wood = createResourceAdapter('wood', {
+  state: engineState,
+  player: playerEid,
+});
 
 export const addWood = wood.add;
 export const getWoodCount = wood.get;

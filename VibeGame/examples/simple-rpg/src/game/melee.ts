@@ -86,7 +86,8 @@ function labelFor(state: State, eid: number): string {
 
 /** Seconds until the whoosh/hit frame (strike peak of the attack clip). */
 function swingImpactDelay(state: State, player: number): number {
-  if (!state.hasComponent(player, PlayerGltfConfig)) return FALLBACK_IMPACT_DELAY;
+  if (!state.hasComponent(player, PlayerGltfConfig))
+    return FALLBACK_IMPACT_DELAY;
   const regIdx = PlayerGltfConfig.animatorRegistryIndex[player];
   const animator = regIdx ? getAnimator(state, regIdx) : undefined;
   if (!animator) return FALLBACK_IMPACT_DELAY;

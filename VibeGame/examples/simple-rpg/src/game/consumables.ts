@@ -111,7 +111,11 @@ function flash(id: string): void {
 }
 
 /** Apply a consumable's effect, consuming one from the bag. Returns true if used. */
-export function useConsumable(state: State, player: number, id: string): boolean {
+export function useConsumable(
+  state: State,
+  player: number,
+  id: string
+): boolean {
   if (player <= 0 || getItemQty(state, player, id) <= 0) return false;
 
   if (id === 'potion') {

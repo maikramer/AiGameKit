@@ -1,44 +1,46 @@
 <!--
-  Ambientes internos (portais das portas → salas). Zona remota (-410, 120).
+  Ambientes internos (portais das portas → salas). Zona remota, grelha 60×55 m.
 
   CONTRATO DE COLISÃO:
   - Rigidbodies só em entidades TOP-LEVEL com `place` (TerrainPlaceSystem).
   - Cada sala = <TerrainPad> (só achata heightfield p/ CCT + place — NÃO é o
-    chão visual) + shell Composition (chão=Pad hard + paredes, collider="auto")
-    + teto Composition (collider="none" — evita BVH da ThirdPersonCamera)
-    + mobília GameObject place.
-  - Chão visual: <Pad edge-feather="0"> (primitiva plana opaca), ligeiramente
-    acima do plano do TerrainPad — sem textura/flicker do terreno.
-  - TerrainPad maior que o shell (≥3 m margem) — falloff fora das paredes.
-  - Spawn no CENTRO; exit >3 m do spawn (anti-bounce F, alcance portal 2.8 m).
+    chão visual) + shell Composition (chão=Pad hard + paredes BAIXAS,
+    collider="auto") + luzes Composition (collider="none", SEM teto) +
+    mobília GameObject place.
+  - Paredes ~0.70 m (acima do autoStep 0.3 m, abaixo da câmara 3ª pessoa) —
+    dollhouse: vê-se a sala por cima, CCT não sai. Vão visual ~2.8 m em −Z (sill invisível 0.70 m — jogador não sai a pé; F no portal).
+  - SEM teto: câmara/céu não ficam tapados; lanternas montadas na parede baixa.
+  - Chão visual: <Pad edge-feather="0"> ligeiramente acima do TerrainPad.
+  - TerrainPad maior que o shell (≥6 m margem) — falloff fora das paredes.
+  - Spawn no CENTRO; exit no vão −Z (>3 m do spawn, anti-bounce F 2.8 m).
   - overlap-max="2": overlaps esperados dentro do shell.
 
-  Dimensões shell (L×P / teto útil): capela 16×12 / 5.6 · forja 14×11 / 5.2 ·
-  casa 12×10 / 5.0. Layout estilo JRPG clássico (corredor central livre).
+  Dimensões shell (L×P): capela 24×18 · forja 22×16 · casa 20×16 ·
+  celeiro/longhouse 28×20 · banca 18×14. Paredes 0.70 m. Sem teto.
+  Grelha: z=120 (casa_a / capela / forja) · z=175 (casas b/c, cabana) ·
+  z=230 (celeiro, longhouse, banca).
 -->
 <Group name="interiors" pos="0 0 0">
-
   <!-- ══════════════════════ CAPELA ══════════════════════ -->
-  <!-- Shell 16×12, teto 5.6 m. Pad 22×18. Exit −Z, altar +Z, nave livre. -->
-  <TerrainPad at="-410 120" size="22 18" falloff="4" corner-radius="2"></TerrainPad>
+  <!-- Shell 24×18. Paredes 0.70 m, vão −Z, sem teto. Altar +Z. Pad 32×26. -->
+  <TerrainPad at="-410 120" size="32 26" falloff="4" corner-radius="2"></TerrainPad>
   <Composition place="at: -410 120; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
-    <Pad pos="0 0.12 0" size="16 12" edge-feather="0" corner-radius="0"
+    <Pad pos="0 0.12 0" size="24 18" edge-feather="0" corner-radius="0"
          texture-url="/assets/textures/mountain_stone.png" texture-scale="1.6"></Pad>
-    <Box pos="0 2.6 -6" size="16 5.2 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="6 3"></Box>
-    <Box pos="0 2.6 6" size="16 5.2 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="6 3"></Box>
-    <Box pos="-8 2.6 0" size="0.3 5.2 12" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 3"></Box>
-    <Box pos="8 2.6 0" size="0.3 5.2 12" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 3"></Box>
+    <Box pos="-6.7 0.35 -9" size="10.6 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="4 1"></Box>
+    <Box pos="6.7 0.35 -9" size="10.6 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="4 1"></Box>
+    <Box pos="0 0.35 -9" size="2.8 0.7 0.16" opacity="0"></Box>
+    <Box pos="0 0.35 9" size="24 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="8 1"></Box>
+    <Box pos="-12 0.35 0" size="0.28 0.7 18" texture-url="/assets/textures/wall_plaster.png" texture-repeat="6 1"></Box>
+    <Box pos="12 0.35 0" size="0.28 0.7 18" texture-url="/assets/textures/wall_plaster.png" texture-repeat="6 1"></Box>
   </Composition>
   <Composition place="at: -410 120; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
-    <Box pos="0 5.6 0" size="16 0.3 12" texture-url="/assets/textures/wood_planks.png" texture-repeat="8 6"></Box>
-    <PointLight pos="0 4.2 0" color="#ffd9a0" intensity="12" distance="16"></PointLight>
-    <PointLight pos="0 4.0 3.5" color="#ffe2b0" intensity="10" distance="12"></PointLight>
+    <PointLight pos="0 2.4 0" color="#ffd9a0" intensity="10" distance="18"></PointLight>
+    <PointLight pos="0 2.2 5" color="#ffe2b0" intensity="8" distance="14"></PointLight>
   </Composition>
-
-  <!-- Landmark +Z (altar) — corredor central X≈-410 livre até exit −Z -->
   <GameObject
     name="interior.chapel.altar"
-    place="at: -410 124.6; align-to-terrain: 0"
+    place="at: -410 126.9; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_altar_collision.glb; mesh-anchor: base"
@@ -48,7 +50,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.pulpit"
-    place="at: -405.2 124.2; align-to-terrain: 0"
+    place="at: -402.8 126.3; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pulpit_collision.glb; mesh-anchor: base"
@@ -58,7 +60,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.organ"
-    place="at: -414.8 124.2; align-to-terrain: 0"
+    place="at: -417.2 126.3; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/church_organ_collision.glb; mesh-anchor: base"
@@ -68,7 +70,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.candelabra"
-    place="at: -414.5 122.8; align-to-terrain: 0"
+    place="at: -416.75 124.2; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/candelabra_tall_collision.glb; mesh-anchor: base"
@@ -78,7 +80,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.confessional"
-    place="at: -416.8 119.5; align-to-terrain: 0"
+    place="at: -420.2 119.25; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/confessional_collision.glb; mesh-anchor: base"
@@ -86,10 +88,9 @@
     <GLTFLoader role="visual" url="/assets/meshes/interiors/confessional_lod0.glb"
       lod1-url="/assets/meshes/interiors/confessional_lod1.glb" lod2-url="/assets/meshes/interiors/confessional_lod2.glb"></GLTFLoader>
   </GameObject>
-  <!-- Bancos laterais — nave central (~3 m) livre -->
   <GameObject
     name="interior.chapel.pew_f1"
-    place="at: -405.5 121.8; align-to-terrain: 0"
+    place="at: -403.25 122.7; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base"
@@ -99,7 +100,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.pew_f2"
-    place="at: -414.5 121.8; align-to-terrain: 0"
+    place="at: -416.75 122.7; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base"
@@ -109,7 +110,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.pew_b1"
-    place="at: -405.5 118.6; align-to-terrain: 0"
+    place="at: -403.25 117.9; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base"
@@ -119,7 +120,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.pew_b2"
-    place="at: -414.5 118.6; align-to-terrain: 0"
+    place="at: -416.75 117.9; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base"
@@ -127,10 +128,9 @@
     <GLTFLoader role="visual" url="/assets/meshes/interiors/chapel_pew_lod0.glb"
       lod1-url="/assets/meshes/interiors/chapel_pew_lod1.glb" lod2-url="/assets/meshes/interiors/chapel_pew_lod2.glb"></GLTFLoader>
   </GameObject>
-  <!-- Entrada (−Z): estátua + pilares + braseiros nos cantos -->
   <GameObject
     name="interior.chapel.statue"
-    place="at: -404.8 115.6; align-to-terrain: 0"
+    place="at: -402.2 113.4; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_statue_collision.glb; mesh-anchor: base"
@@ -140,7 +140,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.pillar_e"
-    place="at: -403.2 115.4; align-to-terrain: 0"
+    place="at: -399.8 113.1; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base"
@@ -150,7 +150,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.pillar_w"
-    place="at: -416.8 115.4; align-to-terrain: 0"
+    place="at: -420.2 113.1; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base"
@@ -160,7 +160,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.brazier_e"
-    place="at: -405.2 116.8; align-to-terrain: 0"
+    place="at: -402.8 115.2; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base"
@@ -170,7 +170,7 @@
   </GameObject>
   <GameObject
     name="interior.chapel.brazier_w"
-    place="at: -414.8 116.8; align-to-terrain: 0"
+    place="at: -417.2 115.2; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base"
@@ -178,34 +178,32 @@
     <GLTFLoader role="visual" url="/assets/meshes/village/iron_brazier_lod0.glb"
       lod1-url="/assets/meshes/village/iron_brazier_lod1.glb" lod2-url="/assets/meshes/village/iron_brazier_lod2.glb"></GLTFLoader>
   </GameObject>
-
-  <!-- Saída → porta da capela exterior (portals.xml: 7.46 22.46). Distância spawn ≈5.2 m. -->
+  <!-- Saída no vão −Z. Distância spawn ≈8.1 m. -->
   <GameObject
     name="portal.exit_chapel"
-    place="at: -410 114.8; align-to-terrain: 0"
+    place="at: -410 111.9; align-to-terrain: 0"
     script="building-portal.ts"
   ></GameObject>
-
   <!-- ══════════════════════ FERRARIA ══════════════════════ -->
-  <!-- Shell 14×11, teto 5.2 m. Pad 20×16. Exit −Z, fornalha +Z, eixo livre. -->
-  <TerrainPad at="-388 120" size="20 16" falloff="4" corner-radius="2"></TerrainPad>
-  <Composition place="at: -388 120; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
-    <Pad pos="0 0.12 0" size="14 11" edge-feather="0" corner-radius="0"
+  <!-- Shell 22×16. Paredes 0.70 m, vão −Z, sem teto. Fornalha +Z. Pad 30×24. -->
+  <TerrainPad at="-350 120" size="30 24" falloff="4" corner-radius="2"></TerrainPad>
+  <Composition place="at: -350 120; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
+    <Pad pos="0 0.12 0" size="22 16" edge-feather="0" corner-radius="0"
          texture-url="/assets/textures/mountain_stone.png" texture-scale="1.6"></Pad>
-    <Box pos="0 2.5 -5.5" size="14 5.0 0.3" texture-url="/assets/textures/mountain_stone.png" texture-repeat="6 3"></Box>
-    <Box pos="0 2.5 5.5" size="14 5.0 0.3" texture-url="/assets/textures/mountain_stone.png" texture-repeat="6 3"></Box>
-    <Box pos="-7 2.5 0" size="0.3 5.0 11" texture-url="/assets/textures/mountain_stone.png" texture-repeat="5 3"></Box>
-    <Box pos="7 2.5 0" size="0.3 5.0 11" texture-url="/assets/textures/mountain_stone.png" texture-repeat="5 3"></Box>
+    <Box pos="-6.2 0.35 -8" size="9.6 0.7 0.28" texture-url="/assets/textures/mountain_stone.png" texture-repeat="3 1"></Box>
+    <Box pos="6.2 0.35 -8" size="9.6 0.7 0.28" texture-url="/assets/textures/mountain_stone.png" texture-repeat="3 1"></Box>
+    <Box pos="0 0.35 -8" size="2.8 0.7 0.16" opacity="0"></Box>
+    <Box pos="0 0.35 8" size="22 0.7 0.28" texture-url="/assets/textures/mountain_stone.png" texture-repeat="7 1"></Box>
+    <Box pos="-11 0.35 0" size="0.28 0.7 16" texture-url="/assets/textures/mountain_stone.png" texture-repeat="5 1"></Box>
+    <Box pos="11 0.35 0" size="0.28 0.7 16" texture-url="/assets/textures/mountain_stone.png" texture-repeat="5 1"></Box>
   </Composition>
-  <Composition place="at: -388 120; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
-    <Box pos="0 5.2 0" size="14 0.3 11" texture-url="/assets/textures/wood_planks.png" texture-repeat="7 5"></Box>
-    <PointLight pos="0 3.6 3.2" color="#ff8a40" intensity="16" distance="14"></PointLight>
-    <PointLight pos="0 3.8 -1.5" color="#ffc090" intensity="7" distance="12"></PointLight>
+  <Composition place="at: -350 120; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
+    <PointLight pos="0 2.3 4" color="#ff8a40" intensity="12" distance="16"></PointLight>
+    <PointLight pos="0 2.2 -2" color="#ffc090" intensity="6" distance="12"></PointLight>
   </Composition>
-
   <GameObject
     name="interior.forge.furnace"
-    place="at: -388 124.4; align-to-terrain: 0"
+    place="at: -350 126.4; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/forge_furnace_collision.glb; mesh-anchor: base"
@@ -215,7 +213,7 @@
   </GameObject>
   <GameObject
     name="interior.forge.anvil"
-    place="at: -388 121.6; align-to-terrain: 0"
+    place="at: -350 122.33; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/anvil_collision.glb; mesh-anchor: base"
@@ -225,7 +223,7 @@
   </GameObject>
   <GameObject
     name="interior.forge.sledge"
-    place="at: -390.6 121.2; align-to-terrain: 0"
+    place="at: -354.09 121.75; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/sledge_hammer_collision.glb; mesh-anchor: base"
@@ -234,7 +232,7 @@
   </GameObject>
   <GameObject
     name="interior.forge.weapon_rack"
-    place="at: -382.2 119.2; align-to-terrain: 0"
+    place="at: -340.89 118.84; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base"
@@ -244,7 +242,7 @@
   </GameObject>
   <GameObject
     name="interior.forge.bellows"
-    place="at: -393.4 123.6; align-to-terrain: 0"
+    place="at: -358.49 125.24; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/forge_bellows_collision.glb; mesh-anchor: base"
@@ -254,7 +252,7 @@
   </GameObject>
   <GameObject
     name="interior.forge.quench"
-    place="at: -382.6 123.4; align-to-terrain: 0"
+    place="at: -341.51 124.95; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/quench_trough_collision.glb; mesh-anchor: base"
@@ -264,7 +262,7 @@
   </GameObject>
   <GameObject
     name="interior.forge.horseshoes"
-    place="at: -393.2 124.2; align-to-terrain: 0"
+    place="at: -358.17 126.11; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/horseshoe_pile_collision.glb; mesh-anchor: base"
@@ -274,7 +272,7 @@
   </GameObject>
   <GameObject
     name="interior.forge.log_pile"
-    place="at: -382.4 116.2; align-to-terrain: 0"
+    place="at: -341.2 114.47; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base"
@@ -284,7 +282,7 @@
   </GameObject>
   <GameObject
     name="interior.forge.chopping"
-    place="at: -393.6 116.2; align-to-terrain: 0"
+    place="at: -358.8 114.47; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base"
@@ -292,34 +290,32 @@
     <GLTFLoader role="visual" url="/assets/meshes/village/chopping_block_lod0.glb"
       lod1-url="/assets/meshes/village/chopping_block_lod1.glb" lod2-url="/assets/meshes/village/chopping_block_lod2.glb"></GLTFLoader>
   </GameObject>
-
-  <!-- Saída → porta da forja exterior (portals.xml: -30.47 -29.06). Distância spawn ≈5.2 m. -->
+  <!-- Saída no vão −Z. Distância spawn ≈7.1 m. -->
   <GameObject
     name="portal.exit_village_forge"
-    place="at: -388 114.8; align-to-terrain: 0"
+    place="at: -350 112.9; align-to-terrain: 0"
     script="building-portal.ts"
   ></GameObject>
-
   <!-- ══════════════════════ CASA COMUM ══════════════════════ -->
-  <!-- Shell 12×10, teto 5.0 m. Pad 18×15. Exit −Z; mesa centro; móveis às paredes. -->
-  <TerrainPad at="-432 120" size="18 15" falloff="4" corner-radius="2"></TerrainPad>
-  <Composition place="at: -432 120; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
-    <Pad pos="0 0.12 0" size="12 10" edge-feather="0" corner-radius="0"
-         texture-url="/assets/textures/wood_planks.png" texture-scale="1.5"></Pad>
-    <Box pos="0 2.4 -5" size="12 4.8 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 2"></Box>
-    <Box pos="0 2.4 5" size="12 4.8 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 2"></Box>
-    <Box pos="-6 2.4 0" size="0.3 4.8 10" texture-url="/assets/textures/wall_plaster.png" texture-repeat="4 2"></Box>
-    <Box pos="6 2.4 0" size="0.3 4.8 10" texture-url="/assets/textures/wall_plaster.png" texture-repeat="4 2"></Box>
+  <!-- Shell 20×16. Paredes 0.70 m, vão −Z, sem teto. Pad 28×24. -->
+  <TerrainPad at="-470 120" size="28 24" falloff="4" corner-radius="2"></TerrainPad>
+  <Composition place="at: -470 120; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
+    <Pad pos="0 0.12 0" size="20 16" edge-feather="0" corner-radius="0"
+         texture-url="/assets/textures/wood_planks.png" texture-scale="1.6"></Pad>
+    <Box pos="-5.7 0.35 -8" size="8.6 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1"></Box>
+    <Box pos="5.7 0.35 -8" size="8.6 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1"></Box>
+    <Box pos="0 0.35 -8" size="2.8 0.7 0.16" opacity="0"></Box>
+    <Box pos="0 0.35 8" size="20 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="6 1"></Box>
+    <Box pos="-10 0.35 0" size="0.28 0.7 16" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 1"></Box>
+    <Box pos="10 0.35 0" size="0.28 0.7 16" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 1"></Box>
   </Composition>
-  <Composition place="at: -432 120; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
-    <Box pos="0 5.0 0" size="12 0.3 10" texture-url="/assets/textures/wood_planks.png" texture-repeat="6 5"></Box>
-    <PointLight pos="0 3.6 0.5" color="#ffcf9a" intensity="12" distance="13"></PointLight>
-    <PointLight pos="4.2 3.2 0" color="#ffb070" intensity="6" distance="8"></PointLight>
+  <Composition place="at: -470 120; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
+    <PointLight pos="0 2.3 1" color="#ffcf9a" intensity="10" distance="14"></PointLight>
+    <PointLight pos="5 2.1 0" color="#ffb070" intensity="5" distance="10"></PointLight>
   </Composition>
-
   <GameObject
     name="interior.house_a.hearth"
-    place="at: -427.2 120; align-to-terrain: 0"
+    place="at: -462 120; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/fireplace_hearth_collision.glb; mesh-anchor: base"
@@ -329,7 +325,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.table"
-    place="at: -432 121; align-to-terrain: 0"
+    place="at: -470 121.6; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base"
@@ -339,7 +335,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.chair_n"
-    place="at: -432 122.6; align-to-terrain: 0"
+    place="at: -470 124.16; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base"
@@ -349,7 +345,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.chair_s"
-    place="at: -432 119.4; align-to-terrain: 0"
+    place="at: -470 119.04; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base"
@@ -359,7 +355,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.chair_w"
-    place="at: -433.8 121; align-to-terrain: 0"
+    place="at: -473 121.6; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base"
@@ -369,7 +365,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.chair_e"
-    place="at: -430.2 121; align-to-terrain: 0"
+    place="at: -467 121.6; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base"
@@ -379,7 +375,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.rug"
-    place="at: -432 121; align-to-terrain: 0"
+    place="at: -470 121.6; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/rug_woven_collision.glb; mesh-anchor: base"
@@ -389,7 +385,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.bed"
-    place="at: -436.5 123.6; align-to-terrain: 0"
+    place="at: -477.5 125.76; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bed_simple_collision.glb; mesh-anchor: base"
@@ -399,7 +395,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.cupboard"
-    place="at: -436.6 116.4; align-to-terrain: 0"
+    place="at: -477.67 114.24; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cupboard_collision.glb; mesh-anchor: base"
@@ -409,7 +405,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.bookshelf"
-    place="at: -436.8 119.6; align-to-terrain: 0"
+    place="at: -478 119.36; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base"
@@ -419,7 +415,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.cauldron"
-    place="at: -427.6 122.4; align-to-terrain: 0"
+    place="at: -462.67 123.84; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cauldron_iron_collision.glb; mesh-anchor: base"
@@ -429,7 +425,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.spinning_wheel"
-    place="at: -427.4 116.6; align-to-terrain: 0"
+    place="at: -462.33 114.56; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/interiors/spinning_wheel_collision.glb; mesh-anchor: base"
@@ -439,7 +435,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.barrel"
-    place="at: -435.2 122.2; align-to-terrain: 0"
+    place="at: -475.33 123.52; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
@@ -449,7 +445,7 @@
   </GameObject>
   <GameObject
     name="interior.house_a.crate"
-    place="at: -429.2 116.8; align-to-terrain: 0"
+    place="at: -465.33 114.88; align-to-terrain: 0"
     overlap-max="2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
@@ -457,11 +453,858 @@
     <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb"
       lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
-
-  <!-- Saída → porta da casa exterior (portals.xml: 26.35 8.44). Distância spawn ≈4.7 m. -->
+  <!-- Saída no vão −Z. Distância spawn ≈7.1 m. -->
   <GameObject
     name="portal.exit_house_a"
-    place="at: -432 115.3; align-to-terrain: 0"
+    place="at: -470 112.9; align-to-terrain: 0"
+    script="building-portal.ts"
+  ></GameObject>
+  <!-- ══════════════════════ CASA B ══════════════════════ -->
+  <!-- Shell 20×16. Paredes 0.70 m, vão −Z, sem teto. Pad 28×24. -->
+  <TerrainPad at="-470 175" size="28 24" falloff="4" corner-radius="2"></TerrainPad>
+  <Composition place="at: -470 175; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
+    <Pad pos="0 0.12 0" size="20 16" edge-feather="0" corner-radius="0"
+         texture-url="/assets/textures/wood_planks.png" texture-scale="1.6"></Pad>
+    <Box pos="-5.7 0.35 -8" size="8.6 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1"></Box>
+    <Box pos="5.7 0.35 -8" size="8.6 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1"></Box>
+    <Box pos="0 0.35 -8" size="2.8 0.7 0.16" opacity="0"></Box>
+    <Box pos="0 0.35 8" size="20 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="6 1"></Box>
+    <Box pos="-10 0.35 0" size="0.28 0.7 16" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 1"></Box>
+    <Box pos="10 0.35 0" size="0.28 0.7 16" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 1"></Box>
+  </Composition>
+  <Composition place="at: -470 175; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
+    <PointLight pos="0 2.3 1" color="#ffcf9a" intensity="10" distance="14"></PointLight>
+    <PointLight pos="5 2.1 0" color="#ffb070" intensity="5" distance="10"></PointLight>
+  </Composition>
+  <GameObject
+    name="interior.house_b.hearth"
+    place="at: -462 175; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/fireplace_hearth_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/fireplace_hearth_lod0.glb"
+      lod1-url="/assets/meshes/interiors/fireplace_hearth_lod1.glb" lod2-url="/assets/meshes/interiors/fireplace_hearth_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.table"
+    place="at: -470 177.24; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/dining_table_lod0.glb"
+      lod1-url="/assets/meshes/interiors/dining_table_lod1.glb" lod2-url="/assets/meshes/interiors/dining_table_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.chair_n"
+    place="at: -470 179.48; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb"
+      lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.chair_w"
+    place="at: -473 177.24; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb"
+      lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.chair_e"
+    place="at: -467 177.24; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb"
+      lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.rug"
+    place="at: -470 177.24; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/rug_woven_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/rug_woven_lod0.glb"
+      lod1-url="/assets/meshes/interiors/rug_woven_lod1.glb" lod2-url="/assets/meshes/interiors/rug_woven_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.bed"
+    place="at: -477.5 180.44; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bed_simple_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/bed_simple_lod0.glb"
+      lod1-url="/assets/meshes/interiors/bed_simple_lod1.glb" lod2-url="/assets/meshes/interiors/bed_simple_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.cupboard"
+    place="at: -477.67 169.56; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cupboard_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/cupboard_lod0.glb"
+      lod1-url="/assets/meshes/interiors/cupboard_lod1.glb" lod2-url="/assets/meshes/interiors/cupboard_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.bookshelf"
+    place="at: -478 175.32; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/bookshelf_lod0.glb"
+      lod1-url="/assets/meshes/interiors/bookshelf_lod1.glb" lod2-url="/assets/meshes/interiors/bookshelf_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.stool"
+    place="at: -462.67 169.56; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.barrel"
+    place="at: -475.67 180.12; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.crate"
+    place="at: -462.67 180.44; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.lantern_w"
+    place="at: -478.85 176.6; align-to-terrain: 0; y-offset: 0.82"
+    overlap-max="2"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb"
+      lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_b.lantern_e"
+    place="at: -461.15 176.6; align-to-terrain: 0; y-offset: 0.82"
+    overlap-max="2"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb"
+      lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <!-- Saída no vão −Z. Distância spawn ≈7.1 m. -->
+  <GameObject
+    name="portal.exit_house_b"
+    place="at: -470 167.9; align-to-terrain: 0"
+    script="building-portal.ts"
+  ></GameObject>
+  <!-- ══════════════════════ CASA C ══════════════════════ -->
+  <!-- Shell 20×16. Cozinha. Paredes 0.70 m, vão −Z, sem teto. Pad 28×24. -->
+  <TerrainPad at="-410 175" size="28 24" falloff="4" corner-radius="2"></TerrainPad>
+  <Composition place="at: -410 175; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
+    <Pad pos="0 0.12 0" size="20 16" edge-feather="0" corner-radius="0"
+         texture-url="/assets/textures/wood_planks.png" texture-scale="1.6"></Pad>
+    <Box pos="-5.7 0.35 -8" size="8.6 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1"></Box>
+    <Box pos="5.7 0.35 -8" size="8.6 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1"></Box>
+    <Box pos="0 0.35 -8" size="2.8 0.7 0.16" opacity="0"></Box>
+    <Box pos="0 0.35 8" size="20 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="6 1"></Box>
+    <Box pos="-10 0.35 0" size="0.28 0.7 16" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 1"></Box>
+    <Box pos="10 0.35 0" size="0.28 0.7 16" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 1"></Box>
+  </Composition>
+  <Composition place="at: -410 175; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
+    <PointLight pos="0 2.3 1" color="#ffd0a0" intensity="10" distance="14"></PointLight>
+    <PointLight pos="5 2.1 0" color="#ff8a40" intensity="5" distance="10"></PointLight>
+  </Composition>
+  <GameObject
+    name="interior.house_c.hearth"
+    place="at: -402 175; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/fireplace_hearth_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/fireplace_hearth_lod0.glb"
+      lod1-url="/assets/meshes/interiors/fireplace_hearth_lod1.glb" lod2-url="/assets/meshes/interiors/fireplace_hearth_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.cauldron"
+    place="at: -402.67 178.52; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cauldron_iron_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/cauldron_iron_lod0.glb"
+      lod1-url="/assets/meshes/interiors/cauldron_iron_lod1.glb" lod2-url="/assets/meshes/interiors/cauldron_iron_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.table"
+    place="at: -410 177.08; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/dining_table_lod0.glb"
+      lod1-url="/assets/meshes/interiors/dining_table_lod1.glb" lod2-url="/assets/meshes/interiors/dining_table_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.stool_n"
+    place="at: -410 179.16; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.stool_w"
+    place="at: -412.83 177.08; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.stool_e"
+    place="at: -407.17 177.08; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.bed"
+    place="at: -417.5 180.44; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bed_simple_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/bed_simple_lod0.glb"
+      lod1-url="/assets/meshes/interiors/bed_simple_lod1.glb" lod2-url="/assets/meshes/interiors/bed_simple_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.cupboard"
+    place="at: -417.67 169.56; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cupboard_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/cupboard_lod0.glb"
+      lod1-url="/assets/meshes/interiors/cupboard_lod1.glb" lod2-url="/assets/meshes/interiors/cupboard_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.spinning"
+    place="at: -402.33 169.56; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/spinning_wheel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/spinning_wheel_lod0.glb"
+      lod1-url="/assets/meshes/interiors/spinning_wheel_lod1.glb" lod2-url="/assets/meshes/interiors/spinning_wheel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.crate"
+    place="at: -405.67 169.56; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.barrel"
+    place="at: -417.33 180.12; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.house_c.lantern"
+    place="at: -410 181.85; align-to-terrain: 0; y-offset: 0.82"
+    overlap-max="2"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb"
+      lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <!-- Saída no vão −Z. Distância spawn ≈7.1 m. -->
+  <GameObject
+    name="portal.exit_house_c"
+    place="at: -410 167.9; align-to-terrain: 0"
+    script="building-portal.ts"
+  ></GameObject>
+  <!-- ══════════════════════ CABANA DO PASTOR ══════════════════════ -->
+  <!-- Shell 20×16. Madeira. Paredes 0.70 m, vão −Z, sem teto. Pad 28×24. -->
+  <TerrainPad at="-350 175" size="28 24" falloff="4" corner-radius="2"></TerrainPad>
+  <Composition place="at: -350 175; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
+    <Pad pos="0 0.12 0" size="20 16" edge-feather="0" corner-radius="0"
+         texture-url="/assets/textures/wood_planks.png" texture-scale="1.6"></Pad>
+    <Box pos="-5.7 0.35 -8" size="8.6 0.7 0.28" texture-url="/assets/textures/wood_planks.png" texture-repeat="3 1"></Box>
+    <Box pos="5.7 0.35 -8" size="8.6 0.7 0.28" texture-url="/assets/textures/wood_planks.png" texture-repeat="3 1"></Box>
+    <Box pos="0 0.35 -8" size="2.8 0.7 0.16" opacity="0"></Box>
+    <Box pos="0 0.35 8" size="20 0.7 0.28" texture-url="/assets/textures/wood_planks.png" texture-repeat="6 1"></Box>
+    <Box pos="-10 0.35 0" size="0.28 0.7 16" texture-url="/assets/textures/wood_planks.png" texture-repeat="5 1"></Box>
+    <Box pos="10 0.35 0" size="0.28 0.7 16" texture-url="/assets/textures/wood_planks.png" texture-repeat="5 1"></Box>
+  </Composition>
+  <Composition place="at: -350 175; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
+    <PointLight pos="0 2.2 1" color="#e8c090" intensity="8" distance="14"></PointLight>
+    <PointLight pos="4 2.0 0" color="#d09050" intensity="5" distance="10"></PointLight>
+  </Composition>
+  <GameObject
+    name="interior.shepherd_cottage.spinning"
+    place="at: -343.67 179.48; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/spinning_wheel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/spinning_wheel_lod0.glb"
+      lod1-url="/assets/meshes/interiors/spinning_wheel_lod1.glb" lod2-url="/assets/meshes/interiors/spinning_wheel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.shepherd_cottage.stool"
+    place="at: -346 178.52; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.shepherd_cottage.table"
+    place="at: -350 176.92; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/dining_table_lod0.glb"
+      lod1-url="/assets/meshes/interiors/dining_table_lod1.glb" lod2-url="/assets/meshes/interiors/dining_table_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.shepherd_cottage.stool_w"
+    place="at: -352.83 176.92; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.shepherd_cottage.stool_e"
+    place="at: -347.17 176.92; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.shepherd_cottage.bed"
+    place="at: -357.33 180.12; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bed_simple_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/bed_simple_lod0.glb"
+      lod1-url="/assets/meshes/interiors/bed_simple_lod1.glb" lod2-url="/assets/meshes/interiors/bed_simple_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.shepherd_cottage.crate"
+    place="at: -357.33 169.88; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.shepherd_cottage.barrel"
+    place="at: -343 169.88; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.shepherd_cottage.chopping"
+    place="at: -343 180.12; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/chopping_block_lod0.glb"
+      lod1-url="/assets/meshes/village/chopping_block_lod1.glb" lod2-url="/assets/meshes/village/chopping_block_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.shepherd_cottage.lantern"
+    place="at: -350 181.85; align-to-terrain: 0; y-offset: 0.82"
+    overlap-max="2"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb"
+      lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <!-- Saída no vão −Z. Distância spawn ≈7.1 m. -->
+  <GameObject
+    name="portal.exit_shepherd_cottage"
+    place="at: -350 167.9; align-to-terrain: 0"
+    script="building-portal.ts"
+  ></GameObject>
+  <!-- ══════════════════════ CELEIRO ══════════════════════ -->
+  <!-- Shell 28×20. Paredes 0.70 m, vão −Z, sem teto. Corredor central. Pad 36×28. -->
+  <TerrainPad at="-470 230" size="36 28" falloff="4" corner-radius="2"></TerrainPad>
+  <Composition place="at: -470 230; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
+    <Pad pos="0 0.12 0" size="28 20" edge-feather="0" corner-radius="0"
+         texture-url="/assets/textures/wood_planks.png" texture-scale="1.6"></Pad>
+    <Box pos="-7.7 0.35 -10" size="12.6 0.7 0.28" texture-url="/assets/textures/wood_planks.png" texture-repeat="5 1"></Box>
+    <Box pos="7.7 0.35 -10" size="12.6 0.7 0.28" texture-url="/assets/textures/wood_planks.png" texture-repeat="5 1"></Box>
+    <Box pos="0 0.35 -10" size="2.8 0.7 0.16" opacity="0"></Box>
+    <Box pos="0 0.35 10" size="28 0.7 0.28" texture-url="/assets/textures/wood_planks.png" texture-repeat="9 1"></Box>
+    <Box pos="-14 0.35 0" size="0.28 0.7 20" texture-url="/assets/textures/wood_planks.png" texture-repeat="6 1"></Box>
+    <Box pos="14 0.35 0" size="0.28 0.7 20" texture-url="/assets/textures/wood_planks.png" texture-repeat="6 1"></Box>
+  </Composition>
+  <Composition place="at: -470 230; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
+    <PointLight pos="0 2.4 0" color="#d8b080" intensity="9" distance="18"></PointLight>
+    <PointLight pos="-6 2.2 4" color="#c09050" intensity="5" distance="12"></PointLight>
+  </Composition>
+  <GameObject
+    name="interior.village_barn.log_n"
+    place="at: -480.85 237; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/log_pile_lod0.glb"
+      lod1-url="/assets/meshes/village/log_pile_lod1.glb" lod2-url="/assets/meshes/village/log_pile_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.log_s"
+    place="at: -480.85 223.67; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/log_pile_lod0.glb"
+      lod1-url="/assets/meshes/village/log_pile_lod1.glb" lod2-url="/assets/meshes/village/log_pile_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.crate_w"
+    place="at: -480.5 232; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.crate_e"
+    place="at: -459.5 232; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.barrel_ne"
+    place="at: -459.15 237; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.barrel_se"
+    place="at: -459.15 223.67; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.barrel_n"
+    place="at: -461.25 237; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.chopping"
+    place="at: -480.85 228; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/chopping_block_lod0.glb"
+      lod1-url="/assets/meshes/village/chopping_block_lod1.glb" lod2-url="/assets/meshes/village/chopping_block_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.horseshoes"
+    place="at: -459.5 228; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/horseshoe_pile_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/horseshoe_pile_lod0.glb"
+      lod1-url="/assets/meshes/village/horseshoe_pile_lod1.glb" lod2-url="/assets/meshes/village/horseshoe_pile_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.stool"
+    place="at: -460.9 228.33; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.lantern_w"
+    place="at: -482.85 230; align-to-terrain: 0; y-offset: 0.82"
+    overlap-max="2"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb"
+      lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.lantern_e"
+    place="at: -457.15 230; align-to-terrain: 0; y-offset: 0.82"
+    overlap-max="2"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb"
+      lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.village_barn.lantern_n"
+    place="at: -470 238.85; align-to-terrain: 0; y-offset: 0.82"
+    overlap-max="2"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb"
+      lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <!-- Saída no vão −Z. Distância spawn ≈9.1 m. -->
+  <GameObject
+    name="portal.exit_village_barn"
+    place="at: -470 220.9; align-to-terrain: 0"
+    script="building-portal.ts"
+  ></GameObject>
+  <!-- ══════════════════════ LONGHOUSE ══════════════════════ -->
+  <!-- Shell 28×20. Barra +Z. Paredes 0.70 m, vão −Z, sem teto. Pad 36×28. -->
+  <TerrainPad at="-405 230" size="36 28" falloff="4" corner-radius="2"></TerrainPad>
+  <Composition place="at: -405 230; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
+    <Pad pos="0 0.12 0" size="28 20" edge-feather="0" corner-radius="0"
+         texture-url="/assets/textures/wood_planks.png" texture-scale="1.6"></Pad>
+    <Box pos="-7.7 0.35 -10" size="12.6 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 1"></Box>
+    <Box pos="7.7 0.35 -10" size="12.6 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 1"></Box>
+    <Box pos="0 0.35 -10" size="2.8 0.7 0.16" opacity="0"></Box>
+    <Box pos="0 0.35 10" size="28 0.7 0.28" texture-url="/assets/textures/wall_plaster.png" texture-repeat="9 1"></Box>
+    <Box pos="-14 0.35 0" size="0.28 0.7 20" texture-url="/assets/textures/wall_plaster.png" texture-repeat="6 1"></Box>
+    <Box pos="14 0.35 0" size="0.28 0.7 20" texture-url="/assets/textures/wall_plaster.png" texture-repeat="6 1"></Box>
+  </Composition>
+  <Composition place="at: -405 230; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
+    <PointLight pos="0 2.4 5" color="#ff8a40" intensity="12" distance="18"></PointLight>
+    <PointLight pos="0 2.2 -2" color="#ffc090" intensity="7" distance="14"></PointLight>
+  </Composition>
+  <GameObject
+    name="interior.longhouse.bar"
+    place="at: -405 237.67; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/tavern_bar_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/tavern_bar_lod0.glb"
+      lod1-url="/assets/meshes/interiors/tavern_bar_lod1.glb" lod2-url="/assets/meshes/interiors/tavern_bar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.stool_bar_w"
+    place="at: -407.8 235.67; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.stool_bar_e"
+    place="at: -402.2 235.67; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.table"
+    place="at: -405 232.5; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/dining_table_lod0.glb"
+      lod1-url="/assets/meshes/interiors/dining_table_lod1.glb" lod2-url="/assets/meshes/interiors/dining_table_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.chair_n"
+    place="at: -405 234.83; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb"
+      lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.chair_w"
+    place="at: -408.5 232.5; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb"
+      lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.chair_e"
+    place="at: -401.5 232.5; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb"
+      lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.bench_w"
+    place="at: -415.15 233.33; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_bench_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.bench_e"
+    place="at: -394.85 233.33; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_bench_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.bookshelf"
+    place="at: -416.2 224; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/bookshelf_lod0.glb"
+      lod1-url="/assets/meshes/interiors/bookshelf_lod1.glb" lod2-url="/assets/meshes/interiors/bookshelf_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.candelabra_e"
+    place="at: -394.85 237; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/candelabra_tall_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/candelabra_tall_lod0.glb"
+      lod1-url="/assets/meshes/interiors/candelabra_tall_lod1.glb" lod2-url="/assets/meshes/interiors/candelabra_tall_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.candelabra_w"
+    place="at: -415.15 237; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/candelabra_tall_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/candelabra_tall_lod0.glb"
+      lod1-url="/assets/meshes/interiors/candelabra_tall_lod1.glb" lod2-url="/assets/meshes/interiors/candelabra_tall_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.crate"
+    place="at: -394.15 223.67; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.barrel"
+    place="at: -415.85 223.67; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.lantern_w"
+    place="at: -417.85 230.67; align-to-terrain: 0; y-offset: 0.82"
+    overlap-max="2"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb"
+      lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.longhouse.lantern_e"
+    place="at: -392.15 230.67; align-to-terrain: 0; y-offset: 0.82"
+    overlap-max="2"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb"
+      lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <!-- Saída no vão −Z. Distância spawn ≈9.1 m. -->
+  <GameObject
+    name="portal.exit_longhouse"
+    place="at: -405 220.9; align-to-terrain: 0"
+    script="building-portal.ts"
+  ></GameObject>
+  <!-- ══════════════════════ BANCA DO MERCADO ══════════════════════ -->
+  <!-- Shell 18×14. Sala partilhada stalls a/b/c. Paredes 0.70 m, sem teto. Pad 26×22. -->
+  <TerrainPad at="-340 230" size="26 22" falloff="4" corner-radius="2"></TerrainPad>
+  <Composition place="at: -340 230; align-to-terrain: 0" body="fixed" collider="auto" overlap-max="2">
+    <Pad pos="0 0.12 0" size="18 14" edge-feather="0" corner-radius="0"
+         texture-url="/assets/textures/wood_planks.png" texture-scale="1.6"></Pad>
+    <Box pos="-5.2 0.35 -7" size="7.6 0.7 0.28" texture-url="/assets/textures/wood_planks.png" texture-repeat="3 1"></Box>
+    <Box pos="5.2 0.35 -7" size="7.6 0.7 0.28" texture-url="/assets/textures/wood_planks.png" texture-repeat="3 1"></Box>
+    <Box pos="0 0.35 -7" size="2.8 0.7 0.16" opacity="0"></Box>
+    <Box pos="0 0.35 7" size="18 0.7 0.28" texture-url="/assets/textures/wood_planks.png" texture-repeat="6 1"></Box>
+    <Box pos="-9 0.35 0" size="0.28 0.7 14" texture-url="/assets/textures/wood_planks.png" texture-repeat="4 1"></Box>
+    <Box pos="9 0.35 0" size="0.28 0.7 14" texture-url="/assets/textures/wood_planks.png" texture-repeat="4 1"></Box>
+  </Composition>
+  <Composition place="at: -340 230; align-to-terrain: 0" body="fixed" collider="none" overlap-max="2">
+    <PointLight pos="0 2.2 2" color="#ffcf9a" intensity="9" distance="14"></PointLight>
+    <PointLight pos="0 2.1 -2" color="#ffb070" intensity="5" distance="10"></PointLight>
+  </Composition>
+  <GameObject
+    name="interior.market.bar"
+    place="at: -340 234.55; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/tavern_bar_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/tavern_bar_lod0.glb"
+      lod1-url="/assets/meshes/interiors/tavern_bar_lod1.glb" lod2-url="/assets/meshes/interiors/tavern_bar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.market.stool_w"
+    place="at: -342.7 232.62; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.market.stool_e"
+    place="at: -337.3 232.62; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb"
+      lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.market.crate_w"
+    place="at: -346.48 225.8; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.market.crate_e"
+    place="at: -333.52 225.8; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.market.barrel_w"
+    place="at: -346.48 234.2; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.market.barrel_e"
+    place="at: -333.52 234.2; align-to-terrain: 0"
+    overlap-max="2"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject
+    name="interior.market.lantern"
+    place="at: -332.15 230; align-to-terrain: 0; y-offset: 0.82"
+    overlap-max="2"
+  >
+    <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb"
+      lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <!-- Saída no vão −Z. Distância spawn ≈6.1 m. -->
+  <GameObject
+    name="portal.exit_market"
+    place="at: -340 223.9; align-to-terrain: 0"
     script="building-portal.ts"
   ></GameObject>
 </Group>

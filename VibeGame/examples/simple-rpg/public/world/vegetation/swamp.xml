@@ -315,5 +315,34 @@
       ></ResourceNode>
     </GameObject>
   </StaticSpawner>
+  <!-- Cairns no brejo (form_stack — lápides naturais). -->
+  <StaticSpawner
+    profile="tree"
+    count="32"
+    seed="8210"
+    region-min="-180 0 -380"
+    region-max="180 0 -120"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="28"
+    scale-min="0.7"
+    scale-max="1.4"
+    avoid-overlaps="1"
+    footprint-radius="3.4"
+    cluster-count="8"
+    cluster-radius="28"
+    max-distance="200"
+    random-yaw="true"
+    variation="rock"
+    pick-strategy="random"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
 </Group>
 <!-- FIM biome.swamp.vegetation -->

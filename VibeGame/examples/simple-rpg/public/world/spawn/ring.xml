@@ -111,6 +111,69 @@
             lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"
           ></GLTFLoader>
         </GameObject>
+        <!-- Posto de descanso na ponte SUL (pads 4,-102 / 4,-146). -->
+        <GameObject
+          place="at: 6.4 -100.2; align-to-terrain: 1"
+          transform="rotation: 0 -15 0"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: box; size: 0.8 0.8 0.8"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: 2.2 -104.4; align-to-terrain: 1"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: box; size: 0.55 0.7 0.55"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: -1.6 -101.4; align-to-terrain: 1"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/torch_post_lod0.glb"
+            lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+            lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: 5.2 -148.4; align-to-terrain: 1"
+          transform="rotation: 0 70 0"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: box; size: 1.8 0.8 0.9"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/log_pile_lod0.glb"
+            lod1-url="/assets/meshes/village/log_pile_lod1.glb"
+            lod2-url="/assets/meshes/village/log_pile_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: 1.8 -144.2; align-to-terrain: 1"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: box; size: 0.8 0.8 0.8"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
         <!-- Vitórias-régias no laguinho (-40,52 r=8). -->
         <StaticSpawner
           profile="tree"
