@@ -10,7 +10,7 @@ import {
 } from './components';
 import { getTrackSpline } from './data';
 import { createFrame, type TrackSpline } from './spline';
-import { isRacingActive } from './race-state';
+import { conditionWetness, getRaceState, isRacingActive } from './race-state';
 import { usePowerUpSlot } from './powerups';
 
 const aiQuery = defineQuery([AiDriver, Vehicle, Transform]);
@@ -31,6 +31,64 @@ const AVOID_RANGE = 26;
 
 const _target = { x: 0, y: 0, z: 0 };
 const _frame = createFrame();
+
+export type AiMistakeKind = 'lockup' | 'wide';
+
+interface AiMistake {
+  kind: AiMistakeKind;
+  until: number;
+}
+
+const mistakes = new Map<number, AiMistake>();
+const lastMistakeAt = new Map<number, number>();
+
+/** Force a lock-up or wide moment (tests + rare on-track drama). */
+export function triggerAiMistake(
+  eid: number,
+  kind: AiMistakeKind,
+  seconds: number,
+  now = 0
+): void {
+  mistakes.set(eid, { kind, until: now + seconds });
+  lastMistakeAt.set(eid, now);
+}
+
+/** Drop every pending / cooldown mistake. */
+export function resetAiMistakes(): void {
+  mistakes.clear();
+  lastMistakeAt.clear();
+}
+
+function applyAiMistake(eid: number, now: number, skill: number): void {
+  const active = mistakes.get(eid);
+  if (active) {
+    if (now < active.until) {
+      if (active.kind === 'lockup') {
+        Vehicle.throttle[eid] = 0;
+        Vehicle.brakeInput[eid] = 0.9;
+        Vehicle.boostInput[eid] = 0;
+      } else {
+        Vehicle.steerInput[eid] = clamp(Vehicle.steerInput[eid] + 0.55, -1, 1);
+      }
+      return;
+    }
+    mistakes.delete(eid);
+  }
+
+  const last = lastMistakeAt.get(eid);
+  if (last === undefined) {
+    lastMistakeAt.set(eid, now);
+    return;
+  }
+  const cooldown = 4.5 + skill * 9;
+  if (now - last < cooldown) return;
+  if (Math.random() > 0.4) {
+    lastMistakeAt.set(eid, now);
+    return;
+  }
+  const kind: AiMistakeKind = Math.random() < 0.5 ? 'lockup' : 'wide';
+  triggerAiMistake(eid, kind, 0.45 + Math.random() * 0.35, now);
+}
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -78,6 +136,8 @@ export const AiDriverSystem: System = defineSystem({
 
     for (const eid of drivers) {
       if (!racing || RaceTracker.finished[eid]) {
+        mistakes.delete(eid);
+        lastMistakeAt.delete(eid);
         Vehicle.throttle[eid] = 0;
         Vehicle.brakeInput[eid] = RaceTracker.finished[eid] ? 0.5 : 0;
         Vehicle.steerInput[eid] = 0;
@@ -85,7 +145,16 @@ export const AiDriverSystem: System = defineSystem({
         Vehicle.boostInput[eid] = 0;
         continue;
       }
-      driveOne(eid, spline, dt, shoulder, cars, player, playerDistance);
+      driveOne(
+        eid,
+        spline,
+        dt,
+        shoulder,
+        cars,
+        player,
+        playerDistance,
+        state.time.elapsed
+      );
     }
   },
 });
@@ -97,7 +166,8 @@ function driveOne(
   shoulder: number,
   cars: readonly number[],
   player: number | undefined,
-  playerDistance: number
+  playerDistance: number,
+  now: number
 ): void {
   const skill = clamp(AiDriver.skill[eid] || 0.8, 0.35, 1);
   const speed = Vehicle.speed[eid];
@@ -162,7 +232,9 @@ function driveOne(
     140
   );
   const worstCurve = spline.maxCurvatureAhead(s, brakingDistance);
-  const latBudget = AI_LATERAL_BUDGET * (0.72 + 0.28 * skill);
+  const wet = conditionWetness(getRaceState().condition);
+  const latBudget =
+    AI_LATERAL_BUDGET * (0.72 + 0.28 * skill) * (1 - 0.18 * wet);
   const cornerSpeed =
     Math.abs(worstCurve) > 1e-4
       ? // Never plan to crawl: a hairpin whose curvature asks for 8 km/h turns
@@ -171,7 +243,7 @@ function driveOne(
       : Number.POSITIVE_INFINITY;
 
   let targetSpeed = Math.min(
-    (Vehicle.maxSpeed[eid] || 40) * (0.82 + 0.18 * skill),
+    (Vehicle.maxSpeed[eid] || 40) * (0.82 + 0.18 * skill) * (1 - 0.12 * wet),
     cornerSpeed
   );
 
@@ -210,6 +282,8 @@ function driveOne(
     speed > 12
       ? 1
       : 0;
+
+  applyAiMistake(eid, now, skill);
 
   // ---- Stuck recovery -----------------------------------------------------
   // Measured as progress *along the track*, not as speed. A car wedged against

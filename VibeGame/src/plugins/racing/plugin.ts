@@ -26,6 +26,8 @@ import { ChaseCameraSystem } from './chase-camera';
 import { EngineAudioSystem } from './engine-audio';
 import { RaceDirectorSystem, setVehicleName } from './race-director';
 import { TrackSpawnSystem, HoloPulseSystem, trackStyles } from './track-spawn';
+import { StartLightsSystem } from './start-lights';
+import { RaceConditionsSystem } from './conditions';
 import { VehicleControlSystem } from './vehicle-control';
 import { VehicleFxSystem } from './vehicle-fx';
 import { VehicleVisualSystem } from './vehicle-visual';
@@ -34,6 +36,8 @@ import { PowerUpSystem } from './powerups';
 import { PickupSystem, PickupVisualSystem } from './pickups';
 import { CheckpointSystem } from './checkpoints';
 import { TrackObstacleVisualSystem } from './obstacles';
+import { GhostSystem } from './ghost';
+import { GhostVisualSystem } from './ghost-visual';
 import {
   addTrackPickup,
   addTrackObstacleByS,
@@ -85,7 +89,13 @@ export const vehicleRecipe: Recipe = {
 /** `<PlayerVehicle>` — the car the local player drives. */
 export const playerVehicleRecipe: Recipe = {
   name: 'PlayerVehicle',
-  components: ['transform', 'vehicle', 'player-vehicle', 'race-tracker', 'power-up'],
+  components: [
+    'transform',
+    'vehicle',
+    'player-vehicle',
+    'race-tracker',
+    'power-up',
+  ],
   parserAttributes: [...VEHICLE_ATTRS],
 };
 
@@ -120,6 +130,8 @@ export const trackRecipe: Recipe = {
     'step',
     'max-bank',
     'checkpoint-count',
+    'viaduct-clearance',
+    'pylon-spacing',
     'theme',
     'road-color',
     'apron-color',
@@ -298,6 +310,14 @@ const trackParser: Parser = ({ state, entity, element }) => {
     a['checkpoint-count'] !== undefined
       ? Math.max(0, Math.floor(num(a['checkpoint-count'], 0)))
       : 0;
+  Track.viaductClearance[entity] =
+    a['viaduct-clearance'] !== undefined
+      ? Math.max(0, num(a['viaduct-clearance'], 0))
+      : 0;
+  Track.pylonSpacing[entity] =
+    a['pylon-spacing'] !== undefined
+      ? Math.max(0, num(a['pylon-spacing'], 0))
+      : 0;
 
   trackStyles.set(entity, {
     road:
@@ -380,8 +400,7 @@ const raceTrackObstacleParser: Parser = ({ state, entity, element }) => {
   const radius = a.radius !== undefined ? num(a.radius, 1.2) : 1.2;
   const bounce = a.bounce !== undefined ? num(a.bounce, 0.4) : 0.4;
   const kindText = String(a.kind ?? 'barrel').toLowerCase();
-  const kind =
-    kindText === 'gate' ? 2 : kindText === 'drone' ? 1 : 0;
+  const kind = kindText === 'gate' ? 2 : kindText === 'drone' ? 1 : 0;
   // Resolve the world position from the track spline (first track wins).
   const trackEid = getPrimaryTrackEntity();
   if (trackEid === undefined) return;
@@ -389,7 +408,7 @@ const raceTrackObstacleParser: Parser = ({ state, entity, element }) => {
   if (!spline) return;
   const f = spline.positionAt(s, lateral);
   addTrackObstacle(f.x, f.z, radius, bounce);
-  addTrackObstacleByS(s, lateral, radius, bounce, kind);
+  addTrackObstacleByS(s, lateral, radius, bounce, kind, entity);
   // Attach the TrackObstacleState component for the visual system.
   state.addComponent(entity, TrackObstacleState);
   TrackObstacleState.s[entity] = s;
@@ -436,11 +455,15 @@ export const RacingPlugin: Plugin = {
     PowerUpSystem,
     VehicleControlSystem,
     RaceDirectorSystem,
+    GhostSystem,
     ChaseCameraBindSystem,
     TrackSpawnSystem,
+    RaceConditionsSystem,
+    StartLightsSystem,
     CheckpointSystem,
     PickupSystem,
     VehicleVisualSystem,
+    GhostVisualSystem,
     ChaseCameraSystem,
     VehicleFxSystem,
     HoloPulseSystem,
@@ -513,6 +536,7 @@ export const RacingPlugin: Plugin = {
         wheelSteer: 0,
         roll: 0,
         pitch: 0,
+        draft: 0,
       },
       'ai-driver': {
         skill: 0.82,

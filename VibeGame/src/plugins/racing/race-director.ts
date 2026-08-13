@@ -5,6 +5,8 @@ import { getTrackSpline } from './data';
 import { createFrame, type TrackSpline } from './spline';
 import { placeVehicleOnTrack } from './vehicle-control';
 import {
+  captureQualifyingGrid,
+  getQualifyingGrid,
   getRaceState,
   isRaceReady,
   setRaceState,
@@ -25,7 +27,7 @@ const GRID_SETTLE = 0.9;
 // at s = 0, a car launched at s = 6 gets a ~9° heading error and drifts into
 // the inside wall before the first corner. By s = 35 most straights have
 // settled to their true tangent.
-const GRID_FIRST_S = 35;
+export const GRID_FIRST_S = 35;
 const GRID_ROW_SPACING = 7;
 /** Lateral offset of the two grid columns (m from the centerline). */
 const GRID_COLUMN_OFFSET = 2.6;
@@ -56,19 +58,63 @@ export function getStandings(): readonly number[] {
   return standings;
 }
 
+/** Gap to the car immediately ahead or behind, in seconds. */
+export interface RaceInterval {
+  readonly name: string;
+  readonly seconds: number;
+  readonly entity: number;
+}
+
+/**
+ * Time gap to the neighbour in the live order. Seconds = metres of race
+ * distance divided by the trailing car's speed, so closing up shrinks the
+ * number. `order` defaults to the live standings; tests pass a fake list.
+ */
+export function intervalToNeighbour(
+  player: number,
+  side: 'ahead' | 'behind',
+  order: readonly number[] = standings
+): RaceInterval | null {
+  const idx = order.indexOf(player);
+  if (idx < 0) return null;
+  const other = side === 'ahead' ? order[idx - 1] : order[idx + 1];
+  if (other === undefined) return null;
+  const leader = side === 'ahead' ? other : player;
+  const trailer = side === 'ahead' ? player : other;
+  const dd = RaceTracker.distance[leader] - RaceTracker.distance[trailer];
+  const gapM = Math.max(0, dd);
+  const speed = Math.max(8, Math.abs(Vehicle.speed[trailer]) || 8);
+  return {
+    name: getVehicleName(other),
+    seconds: gapM / speed,
+    entity: other,
+  };
+}
+
 /** Fire a race SFX only when the game actually registered that bank key. */
 function playRaceSfx(key: string): void {
   if (getSoundDef(key)) playSound(key);
+}
+
+function sessionLaps(trackEid: number, session: string): number {
+  if (session === 'qualifying') return 1;
+  return Track.totalLaps[trackEid] || 3;
 }
 
 /** Park every entrant on its grid slot, engines off, facing down the road. */
 function formUpGrid(state: State, spline: TrackSpline): void {
   const cars = trackerQuery(state.world);
   const player = playerQuery(state.world)[0];
-  // Pole goes to the player when there is one, then the rest in entity order:
-  // an arcade racer that starts the human at the back of a 6-car grid on lap 1
-  // of 3 is not a fair fight.
+  const quali = getQualifyingGrid();
+  // After qualifying, pole is whoever set the time. Otherwise the player
+  // starts first: an arcade racer that puts the human at the back of a 6-car
+  // grid on lap 1 of 3 is not a fair fight.
   const ordered = [...cars].sort((a, b) => {
+    if (quali.length > 0) {
+      const ia = quali.indexOf(a);
+      const ib = quali.indexOf(b);
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+    }
     if (a === player) return -1;
     if (b === player) return 1;
     return a - b;
@@ -137,7 +183,7 @@ export const RaceDirectorSystem: System = defineSystem({
       setRaceState({
         track: trackEid,
         playerVehicle: player ?? 0,
-        totalLaps: Track.totalLaps[trackEid] || 3,
+        totalLaps: sessionLaps(trackEid, race.session),
         entrants: cars.length,
         raceTime: 0,
         countdown: COUNTDOWN_FROM,
@@ -157,7 +203,7 @@ export const RaceDirectorSystem: System = defineSystem({
           phase: 'grid',
           track: trackEid,
           playerVehicle: player ?? 0,
-          totalLaps: Track.totalLaps[trackEid] || 3,
+          totalLaps: sessionLaps(trackEid, race.session),
           entrants: cars.length,
           countdown: COUNTDOWN_FROM,
           raceTime: 0,
@@ -211,9 +257,13 @@ export const RaceDirectorSystem: System = defineSystem({
           player !== undefined &&
           RaceTracker.finished[player]
         ) {
+          const results = buildResults(cars, player);
+          if (race.session === 'qualifying') {
+            captureQualifyingGrid(results.map((r) => r.entity));
+          }
           setRaceState({
             phase: 'finished',
-            results: buildResults(cars, player),
+            results,
           });
           playRaceSfx('race-finish');
         }

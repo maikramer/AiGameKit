@@ -22,9 +22,7 @@ import {
   VehicleControlSystem,
   placeVehicleOnTrack,
 } from '../../../src/plugins/racing/vehicle-control';
-import {
-  PickupSystem,
-} from '../../../src/plugins/racing/pickups';
+import { PickupSystem } from '../../../src/plugins/racing/pickups';
 import {
   PowerUpSystem,
   grantPowerUpAmmo,

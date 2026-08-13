@@ -9,8 +9,14 @@ import {
   Track,
   Vehicle,
 } from '../../../src/plugins/racing/components';
-import { attachTrackSpline, clearTrackData } from '../../../src/plugins/racing/data';
-import { TrackSpline, type TrackNode } from '../../../src/plugins/racing/spline';
+import {
+  attachTrackSpline,
+  clearTrackData,
+} from '../../../src/plugins/racing/data';
+import {
+  TrackSpline,
+  type TrackNode,
+} from '../../../src/plugins/racing/spline';
 import {
   VehicleControlSystem,
   placeVehicleOnTrack,

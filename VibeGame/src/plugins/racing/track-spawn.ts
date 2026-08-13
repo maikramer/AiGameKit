@@ -1,13 +1,14 @@
 import type * as THREE from 'three';
 import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { getScene } from '../rendering';
-import { Terrain } from '../terrain';
+import { Terrain, getTerrainHeightAt, terrainReady } from '../terrain';
 import { Track } from './components';
 import { getTrackSpline } from './data';
 import {
   buildTrackMeshes,
   type TrackMeshes,
   type TrackStyle,
+  type ViaductOptions,
 } from './track-geometry';
 const trackQuery = defineQuery([Track]);
 const terrainQuery = defineQuery([Terrain]);
@@ -31,14 +32,32 @@ export const TrackSpawnSystem: System = defineSystem({
     const scene = getScene(state) as THREE.Scene | null;
     if (!scene) return;
 
+    const hasTerrain = terrainQuery(state.world).length > 0;
+
     for (const eid of trackQuery(state.world)) {
       if (built.has(eid)) continue;
       const spline = getTrackSpline(eid);
       if (!spline) continue;
+
+      // A circuit that flies needs pylons standing on the *real* ground, so
+      // wait for the heightmap. Building early would drop every column onto a
+      // flat y=0 placeholder and leave the spans hanging on stumps.
+      const clearance = Track.viaductClearance[eid] || 0;
+      const wantsViaduct = clearance > 0;
+      if (wantsViaduct && hasTerrain && !terrainReady(state)) continue;
+      const viaductOpts: ViaductOptions | undefined = wantsViaduct
+        ? {
+            groundYAt: (x, z) => getTerrainHeightAt(state, x, z),
+            clearance,
+            pylonSpacing: Track.pylonSpacing[eid] || undefined,
+          }
+        : undefined;
+
       const meshes = buildTrackMeshes(
         spline,
         Track.shoulder[eid] || 0,
-        trackStyles.get(eid) ?? {}
+        trackStyles.get(eid) ?? {},
+        viaductOpts
       );
       scene.add(meshes.group);
       built.set(eid, meshes);
@@ -47,7 +66,7 @@ export const TrackSpawnSystem: System = defineSystem({
       // A scene that declares a <Terrain> uses it as the ground plane — the
       // track's own flat `TrackGround` and grass `TrackApron` (same Y) would
       // z-fight with it.
-      if (terrainQuery(state.world).length > 0) {
+      if (hasTerrain) {
         for (const name of ['TrackGround', 'TrackApron']) {
           meshes.group.getObjectByName(name)?.traverse((o) => {
             const mesh = o as THREE.Mesh;

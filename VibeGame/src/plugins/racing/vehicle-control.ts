@@ -8,7 +8,7 @@ import {
   type TrackObstacle,
 } from './data';
 import { createFrame, type TrackSpline } from './spline';
-import { getRaceState, isRacingActive } from './race-state';
+import { conditionGripMul, getRaceState, isRacingActive } from './race-state';
 
 const vehicleQuery = defineQuery([Vehicle, Transform]);
 const playerQuery = defineQuery([Vehicle, PlayerVehicle]);
@@ -18,6 +18,14 @@ const trackQuery = defineQuery([Track]);
 const GRAVITY = 22;
 /** Peak lateral acceleration the tyres can generate on dry asphalt (m/s²). */
 const MAX_LATERAL_ACCEL = 26;
+/** Drafting: extra accel (m/s²) at full slipstream. */
+const DRAFT_ACCEL = 6.5;
+/** How far ahead a lead car still pulls a draft (m). */
+const DRAFT_MAX_S = 16;
+/** Closest useful draft distance (m) — inside this, cars are overlapping. */
+const DRAFT_MIN_S = 3.5;
+/** Max lateral offset still counted as "in the wake" (m). */
+const DRAFT_LAT = 2.2;
 /** Aerodynamic drag (applied to v²). */
 const DRAG = 0.0016;
 /** Rolling resistance (m/s²). */
@@ -204,6 +212,13 @@ export const VehicleControlSystem: System = defineSystem({
     const wallsOn = Track.walls[trackEid] !== 0;
 
     _cars.length = 0;
+    for (const eid of vehicles) {
+      _cars.push({
+        eid,
+        s: Vehicle.trackS[eid],
+        lateral: Vehicle.trackLateral[eid],
+      });
+    }
 
     for (const eid of vehicles) {
       if (!racing) {
@@ -219,13 +234,9 @@ export const VehicleControlSystem: System = defineSystem({
       // a headless test.
       // AI inputs were written by AiDriverSystem earlier in the frame.
 
-      simulateVehicle(eid, spline, dt, shoulder, wallsOn);
-
-      _cars.push({
-        eid,
-        s: Vehicle.trackS[eid],
-        lateral: Vehicle.trackLateral[eid],
-      });
+      const draft = racing ? draftAmount(eid, spline) : 0;
+      Vehicle.draft[eid] = draft;
+      simulateVehicle(eid, spline, dt, shoulder, wallsOn, draft);
     }
 
     resolveCarContacts(spline);
@@ -234,12 +245,30 @@ export const VehicleControlSystem: System = defineSystem({
   },
 });
 
+function draftAmount(eid: number, spline: TrackSpline): number {
+  const myS = Vehicle.trackS[eid];
+  const myLat = Vehicle.trackLateral[eid];
+  let best = 0;
+  for (const other of _cars) {
+    if (other.eid === eid) continue;
+    const ds = spline.deltaS(other.s, myS);
+    if (ds < DRAFT_MIN_S || ds > DRAFT_MAX_S) continue;
+    const dLat = Math.abs(other.lateral - myLat);
+    if (dLat > DRAFT_LAT) continue;
+    const along = 1 - (ds - DRAFT_MIN_S) / (DRAFT_MAX_S - DRAFT_MIN_S);
+    const lat = 1 - dLat / DRAFT_LAT;
+    best = Math.max(best, along * lat);
+  }
+  return best;
+}
+
 function simulateVehicle(
   eid: number,
   spline: TrackSpline,
   dt: number,
   shoulder: number,
-  wallsOn: boolean
+  wallsOn: boolean,
+  draft: number
 ): void {
   const f = spline.sampleAt(Vehicle.trackS[eid], _frameA);
   const halfRoad = f.width * 0.5;
@@ -256,6 +285,8 @@ function simulateVehicle(
   else if (absLat <= edge)
     surfaceGrip = f.grip * 0.6; // gravel shoulder
   else surfaceGrip = f.grip * 0.42; // grass
+  const wetMul = conditionGripMul(getRaceState().condition);
+  surfaceGrip *= wetMul;
   Vehicle.surfaceGrip[eid] = surfaceGrip;
   const offTrack = absLat > halfRoad + 0.6;
 
@@ -285,9 +316,12 @@ function simulateVehicle(
     }
   }
   Vehicle.boosting[eid] = boosting ? 1 : 0;
-  const maxSpeed = boosting
-    ? maxSpeedBase * (Vehicle.boostSpeed[eid] || 1.25)
-    : maxSpeedBase;
+  const maxSpeed =
+    (boosting
+      ? maxSpeedBase * (Vehicle.boostSpeed[eid] || 1.25)
+      : maxSpeedBase) *
+    (1 + 0.07 * draft) *
+    (0.9 + 0.1 * wetMul);
 
   // ---- Longitudinal -------------------------------------------------------
   let speed = Vehicle.speed[eid];
@@ -306,6 +340,7 @@ function simulateVehicle(
       const resistance = ROLLING * (offTrack ? 3.2 : 1) + DRAG * speed * speed;
       speed += (power + (speed < maxSpeed ? resistance * throttle : 0)) * dt;
       if (boosting) speed += (Vehicle.boostAccel[eid] || 10) * dt;
+      if (draft > 0.05) speed += DRAFT_ACCEL * draft * dt;
     } else if (brakeInput > 0) {
       if (speed > 0.2) {
         speed -=
@@ -376,7 +411,8 @@ function simulateVehicle(
     const gripRate =
       (Vehicle.grip[eid] || 6) *
       surfaceGrip *
-      (handbrake ? Vehicle.driftGrip[eid] || 0.35 : 1);
+      (handbrake ? Vehicle.driftGrip[eid] || 0.35 : 1) *
+      (0.75 + 0.25 * wetMul);
     const desired = -lateralSpeed * gripRate;
     const maxLat =
       MAX_LATERAL_ACCEL * surfaceGrip * (handbrake ? 0.5 : 1) +

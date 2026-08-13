@@ -14,7 +14,9 @@ import {
   VehicleModelLength,
   VehicleModelUrls,
   VehicleModelYaw,
+  PowerUp,
 } from './components';
+import { conditionIsNight, getRaceState } from './race-state';
 
 const visualQuery = defineQuery([Vehicle]);
 const built = new Map<number, ChassisVisual>();
@@ -31,6 +33,8 @@ interface ChassisVisual {
   exhaust: THREE.Mesh | null;
   shadow: THREE.Mesh;
   modelRoot: THREE.Group | null;
+  headlights: THREE.SpotLight[];
+  shield: THREE.Mesh;
 }
 
 const WHEEL_COLOR = 0x141416;
@@ -206,12 +210,10 @@ function normaliseModel(
     size: targetLength,
     yawDegrees: yawDeg,
     ground: true,
-    // A car is barely elongated in plan view (a kart is 2.4 m wide and 2.7 m
-    // long), so the measured axis is not trustworthy enough to rotate by: a
-    // wide rear axle is enough to flip it. Chassis models keep the orientation
-    // they were authored with, and `model-yaw` is the knob that corrects it.
-    minElongation: 1.6,
-    standUp: 'never',
+    // Wagons are long enough (L/W ≈ 2) that PCA would auto-yaw them — and then
+    // `model-yaw` would stack a second quarter-turn. Heading is author-only.
+    minElongation: 99,
+    standUp: 'auto',
   });
 }
 
@@ -289,6 +291,22 @@ export const VehicleVisualSystem: System = defineSystem({
       v.shadow.position.y = 0.02 - air;
       const shadowMat = v.shadow.material as THREE.MeshBasicMaterial;
       shadowMat.opacity = Math.max(0.05, 0.32 - air * 0.05);
+
+      const lampsOn = conditionIsNight(getRaceState().condition);
+      for (const lamp of v.headlights) {
+        lamp.intensity = lampsOn ? 9.5 : 0;
+        lamp.visible = lampsOn;
+      }
+
+      const armed =
+        state.hasComponent(eid, PowerUp) && PowerUp.shieldArmed[eid] === 1;
+      v.shield.visible = armed;
+      if (armed) {
+        const pulse = 0.18 + Math.sin(state.time.elapsed * 10) * 0.07;
+        (v.shield.material as THREE.MeshBasicMaterial).opacity = pulse;
+        const s = 1 + Math.sin(state.time.elapsed * 7) * 0.05;
+        v.shield.scale.setScalar(s);
+      }
     }
   },
 
@@ -309,6 +327,38 @@ export const VehicleVisualSystem: System = defineSystem({
   },
 });
 
+function attachHeadlights(group: THREE.Group): THREE.SpotLight[] {
+  const lamps: THREE.SpotLight[] = [];
+  for (const x of [-0.48, 0.48]) {
+    const lamp = new THREE.SpotLight(0xfff1c8, 0, 42, 0.38, 0.5, 1.15);
+    lamp.position.set(x, 0.52, 1.2);
+    lamp.target.position.set(x * 0.4, 0.05, 14);
+    lamp.castShadow = false;
+    group.add(lamp);
+    group.add(lamp.target);
+    lamps.push(lamp);
+  }
+  return lamps;
+}
+
+function buildShieldBubble(): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(1.65, 18, 14),
+    new THREE.MeshBasicMaterial({
+      color: 0x7fd4ff,
+      transparent: true,
+      opacity: 0.2,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    })
+  );
+  mesh.position.y = 0.7;
+  mesh.visible = false;
+  mesh.name = 'ShieldBubble';
+  return mesh;
+}
+
 function createVisual(eid: number): ChassisVisual {
   const group = new THREE.Group();
   group.name = `Vehicle:${eid}`;
@@ -321,6 +371,8 @@ function createVisual(eid: number): ChassisVisual {
 
   const shadow = buildShadow();
   group.add(shadow);
+  const shield = buildShieldBubble();
+  pivot.add(shield);
 
   const visual: ChassisVisual = {
     group,
@@ -332,6 +384,8 @@ function createVisual(eid: number): ChassisVisual {
     exhaust: proc.exhaust,
     shadow,
     modelRoot: null,
+    headlights: attachHeadlights(group),
+    shield,
   };
 
   const url = VehicleModelUrls.get(eid);

@@ -15,8 +15,45 @@ export interface TrackMeshes {
   kerbs: THREE.Mesh;
   walls: THREE.Mesh;
   startLine: THREE.Mesh;
+  /** Deck box + pylons under the elevated spans; null when nothing flies. */
+  viaduct: THREE.Mesh | null;
   dispose: () => void;
 }
+
+/**
+ * Elevated-span support. A circuit that leaves the ground needs something
+ * holding it up: without this the track reads as a ribbon painted on the sky,
+ * and the trees and buildings the span flies over make it worse, not better.
+ */
+export interface ViaductOptions {
+  /** Natural ground height (world Y) at a world XZ — usually the terrain. */
+  groundYAt: (x: number, z: number) => number;
+  /**
+   * Deck-above-ground distance (m) that counts as flying. Keep it equal to the
+   * `<Road flatten-viaduct-clearance>` used for the carve, or the terrain will
+   * be graded under a span that also gets pylons.
+   */
+  clearance?: number;
+  /** Arc spacing between pylons (m). */
+  pylonSpacing?: number;
+  /** Deck / pylon colour. */
+  color?: number;
+}
+
+/** Default deck-above-ground distance that counts as a viaduct (m). */
+export const DEFAULT_VIADUCT_CLEARANCE = 4;
+
+/** Default arc spacing between pylons (m). */
+export const DEFAULT_PYLON_SPACING = 26;
+
+/** Thickness of the deck slab under the road surface (m). */
+const DECK_THICKNESS = 1.1;
+
+/** Half-width of a pylon at the deck (m); the base is 1.6× this. */
+const PYLON_HALF = 1.15;
+
+/** How far a pylon foot sinks under the ground so it never shows a gap (m). */
+const PYLON_EMBED = 1.5;
 
 export interface TrackStyle {
   /** Asphalt tint. */
@@ -335,9 +372,7 @@ function buildKerbs(
     vertexColors: true,
     roughness: 0.75,
     metalness: 0,
-    ...(holo
-      ? { emissive: 0xff5dff, emissiveIntensity: 0.7 }
-      : {}),
+    ...(holo ? { emissive: 0xff5dff, emissiveIntensity: 0.7 } : {}),
   });
   if (holo) kerbMat.userData.holo = true;
   return new THREE.Mesh(geo, kerbMat);
@@ -414,7 +449,8 @@ function buildWalls(
         oz + frame.uz * WALL_HEIGHT
       );
       // Cap colours: rail red on top, white on the underside.
-      for (let k = 0; k < 4; k++) colors.push(railColor.r, railColor.g, railColor.b);
+      for (let k = 0; k < 4; k++)
+        colors.push(railColor.r, railColor.g, railColor.b);
       vertexCount += 4;
     }
     for (let i = 0; i < rings - 1; i++) {
@@ -458,6 +494,224 @@ function buildWalls(
   });
   if (holo) wallMat.userData.holo = true;
   return new THREE.Mesh(geo, wallMat);
+}
+
+/** Push an axis-aligned box as 6 independent quads (flat normals). */
+function pushBox(
+  positions: number[],
+  indices: number[],
+  cx: number,
+  cy: number,
+  cz: number,
+  topHalf: number,
+  halfY: number,
+  bottomHalf: number
+): void {
+  const y0 = cy - halfY;
+  const y1 = cy + halfY;
+  // Corner XZ at the bottom (wider) and at the top.
+  const corners = (h: number): [number, number][] => [
+    [cx - h, cz - h],
+    [cx + h, cz - h],
+    [cx + h, cz + h],
+    [cx - h, cz + h],
+  ];
+  const lo = corners(bottomHalf);
+  const hi = corners(topHalf);
+  const quad = (
+    a: [number, number, number],
+    b: [number, number, number],
+    c: [number, number, number],
+    d: [number, number, number]
+  ) => {
+    const base = positions.length / 3;
+    positions.push(...a, ...b, ...c, ...d);
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    quad(
+      [lo[i]![0], y0, lo[i]![1]],
+      [lo[j]![0], y0, lo[j]![1]],
+      [hi[j]![0], y1, hi[j]![1]],
+      [hi[i]![0], y1, hi[i]![1]]
+    );
+  }
+  quad(
+    [hi[0]![0], y1, hi[0]![1]],
+    [hi[1]![0], y1, hi[1]![1]],
+    [hi[2]![0], y1, hi[2]![1]],
+    [hi[3]![0], y1, hi[3]![1]]
+  );
+}
+
+/**
+ * Deck box + pylons for every stretch that flies above the ground.
+ *
+ * Returns null when the whole circuit sits on the terrain — a normal track pays
+ * nothing for this. Spans are found by comparing the banked track surface with
+ * the ground sampler, so the author only has to draw the centerline high: the
+ * carve leaves the valley alone (`flatten-viaduct-clearance`) and this puts the
+ * structure under it.
+ */
+function buildViaduct(
+  spline: TrackSpline,
+  shoulder: number,
+  opts: ViaductOptions
+): THREE.Mesh | null {
+  const clearance = opts.clearance ?? DEFAULT_VIADUCT_CLEARANCE;
+  const spacing = Math.max(opts.pylonSpacing ?? DEFAULT_PYLON_SPACING, 4);
+  const frame = createFrame();
+  const positions: number[] = [];
+  const indices: number[] = [];
+
+  const rings = spline.closed ? spline.count + 1 : spline.count;
+  // Per-ring deck corners + how high the deck flies here.
+  const deck: {
+    lx: number;
+    ly: number;
+    lz: number;
+    rx: number;
+    ry: number;
+    rz: number;
+    height: number;
+    arc: number;
+    cx: number;
+    cz: number;
+    cy: number;
+  }[] = [];
+  for (let i = 0; i < rings; i++) {
+    const s = (i % spline.count) * spline.step;
+    spline.sampleAt(s, frame);
+    const half = frame.width * 0.5 + shoulder;
+    const lx = frame.x - frame.rx * half;
+    const ly = frame.y - frame.ry * half - DECK_THICKNESS;
+    const lz = frame.z - frame.rz * half;
+    const rx = frame.x + frame.rx * half;
+    const ry = frame.y + frame.ry * half - DECK_THICKNESS;
+    const rz = frame.z + frame.rz * half;
+    const ground = opts.groundYAt(frame.x, frame.z);
+    deck.push({
+      lx,
+      ly,
+      lz,
+      rx,
+      ry,
+      rz,
+      height: frame.y - ground,
+      arc: i * spline.step,
+      cx: frame.x,
+      cz: frame.z,
+      cy: frame.y - DECK_THICKNESS,
+    });
+  }
+
+  const flying = deck.map((d) => d.height > clearance);
+  if (!flying.some(Boolean)) return null;
+
+  // Underside slab + side fascia, emitted only between two flying rings.
+  const strip = (
+    a: [number, number, number],
+    b: [number, number, number],
+    c: [number, number, number],
+    d: [number, number, number]
+  ) => {
+    const base = positions.length / 3;
+    positions.push(...a, ...b, ...c, ...d);
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  for (let i = 0; i + 1 < deck.length; i++) {
+    if (!flying[i] || !flying[i + 1]) continue;
+    const p = deck[i]!;
+    const q = deck[i + 1]!;
+    // Underside (seen from below).
+    strip(
+      [p.lx, p.ly, p.lz],
+      [q.lx, q.ly, q.lz],
+      [q.rx, q.ry, q.rz],
+      [p.rx, p.ry, p.rz]
+    );
+    // Fascia: from the road edge down to the slab, both sides.
+    strip(
+      [p.lx, p.ly + DECK_THICKNESS, p.lz],
+      [q.lx, q.ly + DECK_THICKNESS, q.lz],
+      [q.lx, q.ly, q.lz],
+      [p.lx, p.ly, p.lz]
+    );
+    strip(
+      [p.rx, p.ry, p.rz],
+      [q.rx, q.ry, q.rz],
+      [q.rx, q.ry + DECK_THICKNESS, q.rz],
+      [p.rx, p.ry + DECK_THICKNESS, p.rz]
+    );
+  }
+
+  // A column must not land on the circuit itself. The whole point of flying is
+  // that something passes underneath — on this track the mountain descent dives
+  // under the basin span — and a pylon dropped on that road is a wall in the
+  // middle of a straight. Candidates that would block another pass of the track
+  // are skipped; the next station along carries the load instead.
+  const blocksTrack = (x: number, z: number, arc: number): boolean => {
+    const half = spline.length * 0.5;
+    for (let i = 0; i < spline.count; i++) {
+      const s = i * spline.step;
+      let dArc = Math.abs(s - arc);
+      if (spline.closed && dArc > half) dArc = spline.length - dArc;
+      // Ignore the span's own stations — it is the road overhead, not under.
+      if (dArc < spacing * 2) continue;
+      spline.sampleAt(s, frame);
+      const clear = frame.width * 0.5 + shoulder + PYLON_HALF * 2;
+      const dx = x - frame.x;
+      const dz = z - frame.z;
+      if (dx * dx + dz * dz < clear * clear) return true;
+    }
+    return false;
+  };
+
+  // Pylons: one every `spacing` metres of arc inside each flying run, always
+  // one at the tallest point so a long span is never held by its ends alone.
+  let nextArc = -Infinity;
+  for (let i = 0; i < deck.length; i++) {
+    if (!flying[i]) {
+      nextArc = -Infinity;
+      continue;
+    }
+    const d = deck[i]!;
+    if (nextArc === -Infinity) nextArc = d.arc + spacing * 0.5;
+    if (d.arc < nextArc) continue;
+    if (blocksTrack(d.cx, d.cz, d.arc)) continue;
+    nextArc = d.arc + spacing;
+    const ground = d.cy + DECK_THICKNESS - d.height;
+    const foot = ground - PYLON_EMBED;
+    const halfY = (d.cy - foot) * 0.5;
+    if (halfY <= 0.2) continue;
+    pushBox(
+      positions,
+      indices,
+      d.cx,
+      foot + halfY,
+      d.cz,
+      PYLON_HALF,
+      halfY,
+      PYLON_HALF * 1.6
+    );
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({
+    color: opts.color ?? 0x6f7480,
+    roughness: 0.9,
+    metalness: 0.05,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'TrackViaduct';
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 /**
@@ -607,7 +861,8 @@ function buildStartLine(spline: TrackSpline): THREE.Mesh {
 export function buildTrackMeshes(
   spline: TrackSpline,
   shoulder: number,
-  style: TrackStyle = {}
+  style: TrackStyle = {},
+  viaductOpts?: ViaductOptions
 ): TrackMeshes {
   const s = { ...DEFAULT_STYLE, ...style };
   const group = new THREE.Group();
@@ -691,6 +946,11 @@ export function buildTrackMeshes(
   startLine.name = 'StartLine';
   group.add(startLine);
 
+  const viaduct = viaductOpts
+    ? buildViaduct(spline, shoulder, viaductOpts)
+    : null;
+  if (viaduct) group.add(viaduct);
+
   const dispose = (): void => {
     group.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
@@ -704,5 +964,5 @@ export function buildTrackMeshes(
     roadTexture?.dispose();
   };
 
-  return { group, road, apron, kerbs, walls, startLine, dispose };
+  return { group, road, apron, kerbs, walls, startLine, viaduct, dispose };
 }

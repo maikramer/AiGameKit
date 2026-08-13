@@ -185,6 +185,11 @@ export const ChaseCameraSystem: System = defineSystem({
         ChaseCamera.orbitAngle[cam] += dt * 0.35;
         yaw = ChaseCamera.orbitAngle[cam];
       }
+      // Hold V: sit in front of the car and look back down the road. Does not
+      // change the stored mode — release and the chase rig is still there.
+      const lookBack =
+        isKeyDown('KeyV') && mode !== 'orbit' && phase !== 'finished';
+      if (lookBack) yaw += Math.PI;
 
       // Forward along the camera yaw, flattened onto the track plane.
       _forward.set(Math.sin(yaw), 0, Math.cos(yaw));

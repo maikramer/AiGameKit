@@ -4,6 +4,7 @@ import { getScene } from '../rendering';
 import { Track, TrackObstacleState } from './components';
 import { getTrackSpline } from './data';
 import type { TrackSpline } from './spline';
+import { getSidewinderBolts } from './powerups';
 
 /**
  * Visual representation of track-side obstacles.
@@ -23,13 +24,21 @@ function buildBarrel(): THREE.Group {
   const g = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.CylinderGeometry(0.7, 0.62, 1.4, 12),
-    new THREE.MeshStandardMaterial({ color: 0x8a2be2, roughness: 0.5, metalness: 0.3 })
+    new THREE.MeshStandardMaterial({
+      color: 0x8a2be2,
+      roughness: 0.5,
+      metalness: 0.3,
+    })
   );
   body.position.y = 0.7;
   g.add(body);
   const band1 = new THREE.Mesh(
     new THREE.CylinderGeometry(0.72, 0.72, 0.12, 12),
-    new THREE.MeshStandardMaterial({ color: 0x38e8ff, emissive: 0x38e8ff, emissiveIntensity: 1.2 })
+    new THREE.MeshStandardMaterial({
+      color: 0x38e8ff,
+      emissive: 0x38e8ff,
+      emissiveIntensity: 1.2,
+    })
   );
   band1.position.y = 0.5;
   const band2 = band1.clone();
@@ -42,7 +51,11 @@ function buildDrone(): THREE.Group {
   const g = new THREE.Group();
   const ring = new THREE.Mesh(
     new THREE.TorusGeometry(0.9, 0.12, 10, 24),
-    new THREE.MeshStandardMaterial({ color: 0x2b2b3a, roughness: 0.6, metalness: 0.5 })
+    new THREE.MeshStandardMaterial({
+      color: 0x2b2b3a,
+      roughness: 0.6,
+      metalness: 0.5,
+    })
   );
   g.add(ring);
   const core = new THREE.Mesh(
@@ -109,6 +122,51 @@ interface ObstacleVisual {
 }
 
 const visuals: ObstacleVisual[] = [];
+let boltLine: THREE.LineSegments | null = null;
+
+function syncSidewinderBolts(scene: THREE.Scene): void {
+  const bolts = getSidewinderBolts();
+  if (!boltLine) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(new Float32Array(48), 3)
+    );
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xff5dff,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+    });
+    boltLine = new THREE.LineSegments(geo, mat);
+    boltLine.frustumCulled = false;
+    scene.add(boltLine);
+  }
+  let pos = boltLine.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const need = Math.max(6, bolts.length * 6);
+  if (pos.array.length < need) {
+    boltLine.geometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(new Float32Array(need * 2), 3)
+    );
+    pos = boltLine.geometry.getAttribute('position') as THREE.BufferAttribute;
+  }
+  const arr = pos.array as Float32Array;
+  arr.fill(0);
+  for (let i = 0; i < bolts.length; i++) {
+    const b = bolts[i]!;
+    const o = i * 6;
+    arr[o] = b.ax;
+    arr[o + 1] = b.ay;
+    arr[o + 2] = b.az;
+    arr[o + 3] = b.bx;
+    arr[o + 4] = b.by;
+    arr[o + 5] = b.bz;
+  }
+  boltLine.geometry.setDrawRange(0, bolts.length * 2);
+  pos.needsUpdate = true;
+  boltLine.visible = bolts.length > 0;
+}
 
 const obstacleQuery = defineQuery([TrackObstacleState]);
 const trackQuery = defineQuery([Track]);
@@ -153,12 +211,24 @@ export const TrackObstacleVisualSystem: System = defineSystem({
       spline.positionAt(sReal, lateral, 0, _pos);
       const spin = TrackObstacleState.spin[eid] ?? 0;
       const hover = TrackObstacleState.hover[eid] ?? 0;
-      v.group.position.set(_pos.x, _pos.y + hover + Math.sin(t * 2 + eid) * 0.15, _pos.z);
+      v.group.position.set(
+        _pos.x,
+        _pos.y + hover + Math.sin(t * 2 + eid) * 0.15,
+        _pos.z
+      );
       v.group.rotation.y = t * spin + eid;
     }
+
+    syncSidewinderBolts(scene);
   },
 
   dispose() {
+    if (boltLine) {
+      boltLine.parent?.remove(boltLine);
+      boltLine.geometry.dispose();
+      (boltLine.material as THREE.Material).dispose();
+      boltLine = null;
+    }
     for (const v of visuals) {
       v.group.parent?.remove(v.group);
       v.group.traverse((o) => {

@@ -44,6 +44,7 @@ export {
   clearTrackObstacles,
   getTrackObstacles,
   forEachNearbyObstacle,
+  repositionTrackObstacle,
   addTrackPickup,
   getTrackPickups,
   clearTrackPickups,
@@ -61,16 +62,32 @@ export {
   holdRaceOnGrid,
   markRaceReady,
   isRaceReady,
+  beginRaceFromQualifying,
+  captureQualifyingGrid,
+  getQualifyingGrid,
+  conditionWetness,
+  conditionIsNight,
+  conditionGripMul,
 } from './race-state';
-export type { RacePhase, RaceState, RaceResult } from './race-state';
+export type {
+  RacePhase,
+  RaceState,
+  RaceResult,
+  RaceSession,
+  TrackCondition,
+} from './race-state';
 export { VehicleControlSystem, placeVehicleOnTrack } from './vehicle-control';
-export { AiDriverSystem } from './ai-driver';
+export { AiDriverSystem, triggerAiMistake, resetAiMistakes } from './ai-driver';
+export type { AiMistakeKind } from './ai-driver';
 export {
   RaceDirectorSystem,
   getStandings,
   getVehicleName,
   setVehicleName,
+  intervalToNeighbour,
+  GRID_FIRST_S,
 } from './race-director';
+export type { RaceInterval } from './race-director';
 export {
   ChaseCameraSystem,
   getCameraModeName,
@@ -83,13 +100,45 @@ export {
   getTrackMeshes,
   trackStyles,
 } from './track-spawn';
+export {
+  StartLightsSystem,
+  startLightPattern,
+  START_LIGHT_COUNT,
+} from './start-lights';
+export { RaceConditionsSystem } from './conditions';
 export { VehicleVisualSystem } from './vehicle-visual';
 export { VehicleFxSystem } from './vehicle-fx';
-export { EngineAudioSystem } from './engine-audio';
-export { PowerUpSystem, grantPowerUpAmmo } from './powerups';
+export { EngineAudioSystem, vehicleSfxEdges } from './engine-audio';
+export {
+  PowerUpSystem,
+  grantPowerUpAmmo,
+  usePowerUpSlot,
+  getSidewinderBolts,
+  resetSidewinderBolts,
+} from './powerups';
+export type { SidewinderBolt } from './powerups';
 export { PickupSystem, PickupVisualSystem } from './pickups';
 export { CheckpointSystem, resetCheckpoints } from './checkpoints';
 export { TrackObstacleVisualSystem } from './obstacles';
+export { GhostSystem } from './ghost';
+export { GhostVisualSystem } from './ghost-visual';
+export {
+  getGhostLap,
+  setGhostLap,
+  clearGhost,
+  resetGhostRecording,
+  sampleGhostAtTime,
+  ghostDeltaAt,
+  ghostProgressU,
+  serializeGhostLap,
+  parseGhostLap,
+  ghostWorldPose,
+  GHOST_SECTOR_COUNT,
+  sectorIndex,
+  sectorBoundaryU,
+  completedSector,
+} from './ghost';
+export type { GhostSample, GhostLap, GhostWorldPose } from './ghost';
 export { registerRacingHudFactories } from './hud';
 export { buildTrackMeshes } from './track-geometry';
 export type { TrackMeshes, TrackStyle } from './track-geometry';

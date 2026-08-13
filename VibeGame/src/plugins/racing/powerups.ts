@@ -1,7 +1,17 @@
 import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { isKeyDown } from '../input';
-import { PlayerVehicle, PowerUp, RaceTracker, Vehicle } from './components';
-import { getTrackSpline, getTrackSpaceObstacles } from './data';
+import {
+  PlayerVehicle,
+  PowerUp,
+  RaceTracker,
+  TrackObstacleState,
+  Vehicle,
+} from './components';
+import {
+  getTrackSpline,
+  getTrackSpaceObstacles,
+  repositionTrackObstacle,
+} from './data';
 import type { TrackSpline } from './spline';
 import { getSoundDef, playSound } from '../audio';
 
@@ -20,6 +30,38 @@ const SIDEWINDER_RANGE = 35;
 const SHIELD_LATCH_S = 6;
 /** Distance a sidewinder pushes the obstacle along the track (m). */
 const SIDEWINDER_PUSH_S = 4.5;
+/** How long a sidewinder bolt stays visible (ms). */
+const SIDEWINDER_BOLT_MS = 420;
+
+export interface SidewinderBolt {
+  ax: number;
+  ay: number;
+  az: number;
+  bx: number;
+  by: number;
+  bz: number;
+  born: number;
+}
+
+const bolts: SidewinderBolt[] = [];
+
+function pruneBolts(now: number): void {
+  for (let i = bolts.length - 1; i >= 0; i--) {
+    if (now - bolts[i]!.born > SIDEWINDER_BOLT_MS) bolts.splice(i, 1);
+  }
+}
+
+/** Live sidewinder flashes (obstacle visual system draws them). */
+export function getSidewinderBolts(
+  now = performance.now()
+): readonly SidewinderBolt[] {
+  pruneBolts(now);
+  return bolts;
+}
+
+export function resetSidewinderBolts(): void {
+  bolts.length = 0;
+}
 
 function playBanked(key: string): void {
   if (getSoundDef(key)) playSound(key);
@@ -28,6 +70,9 @@ function playBanked(key: string): void {
 const playerQuery = defineQuery([PlayerVehicle, PowerUp]);
 const powerupQuery = defineQuery([PowerUp, Vehicle]);
 const trackQuery = defineQuery([RaceTracker]);
+
+/** Edge trigger so holding 1/2/3 does not dump the whole magazine. */
+const puHeld = [false, false, false];
 
 /** Sidewinder finds the nearest obstacle ahead of the car and shoves it. */
 function sidewinderHit(
@@ -76,7 +121,8 @@ export const PowerUpSystem: System = defineSystem({
     const powered = powerupQuery(state.world);
     if (powered.length === 0) return;
     const trackEid = trackQuery(state.world)[0];
-    const spline = trackEid !== undefined ? getTrackSpline(trackEid) : undefined;
+    const spline =
+      trackEid !== undefined ? getTrackSpline(trackEid) : undefined;
     const player = playerQuery(state.world)[0];
 
     for (const eid of powered) {
@@ -85,7 +131,12 @@ export const PowerUpSystem: System = defineSystem({
         PowerUp.pulseBoost[eid] = Math.max(0, PowerUp.pulseBoost[eid]! - dt);
       }
       for (let i = 0; i < 3; i++) {
-        const cd = i === 0 ? PowerUp.cd0[eid] : i === 1 ? PowerUp.cd1[eid] : PowerUp.cd2[eid];
+        const cd =
+          i === 0
+            ? PowerUp.cd0[eid]
+            : i === 1
+              ? PowerUp.cd1[eid]
+              : PowerUp.cd2[eid];
         if ((cd ?? 0) > 0) {
           // Cooldowns tick down here. Ammo does NOT auto-recharge: the pickups
           // on the track are the only way to refill a slot, so collecting an
@@ -97,14 +148,17 @@ export const PowerUpSystem: System = defineSystem({
         }
       }
 
-      // ---- Player keys ----------------------------------------------------
+      // ---- Player keys (1/2/3 only — W is throttle, Q is pause) ----------
       if (eid === player) {
-        const activate0 = isKeyDown('Digit1') || isKeyDown('KeyQ');
-        const activate1 = isKeyDown('Digit2') || isKeyDown('KeyW');
-        const activate2 = isKeyDown('Digit3') || isKeyDown('KeyE');
-        if (activate0) usePowerUpSlot(eid, 0, spline);
-        if (activate1) usePowerUpSlot(eid, 1, spline);
-        if (activate2) usePowerUpSlot(eid, 2, spline);
+        const keys = [
+          isKeyDown('Digit1'),
+          isKeyDown('Digit2'),
+          isKeyDown('Digit3'),
+        ];
+        for (let i = 0; i < 3; i++) {
+          if (keys[i] && !puHeld[i]) usePowerUpSlot(eid, i, spline);
+          puHeld[i] = keys[i] ?? false;
+        }
       }
 
       // Pulse boost stacks on top of the vehicle's own boost accumulator as a
@@ -116,6 +170,10 @@ export const PowerUpSystem: System = defineSystem({
         );
       }
     }
+  },
+
+  dispose() {
+    resetPowerUpDefaults();
   },
 });
 
@@ -142,7 +200,11 @@ export function usePowerUpSlot(
     return true;
   }
   if (slot === 1) {
-    if ((PowerUp.cd1[eid] ?? 0) > 0 || (PowerUp.ammo1[eid] ?? 0) <= 0 || !spline)
+    if (
+      (PowerUp.cd1[eid] ?? 0) > 0 ||
+      (PowerUp.ammo1[eid] ?? 0) <= 0 ||
+      !spline
+    )
       return false;
     const hit = sidewinderHit(
       spline,
@@ -156,7 +218,25 @@ export function usePowerUpSlot(
     // system + sidewinder-helper pick this up next step.
     const o = getTrackSpaceObstacles()[hit];
     if (o) {
+      const from = spline.positionAt(
+        Vehicle.trackS[eid],
+        Vehicle.trackLateral[eid],
+        0.7
+      );
+      const to = spline.positionAt(o.s, o.lateral, 0.9);
+      bolts.push({
+        ax: from.x,
+        ay: from.y,
+        az: from.z,
+        bx: to.x,
+        by: to.y,
+        bz: to.z,
+        born: performance.now(),
+      });
       o.s = spline.wrapS(o.s + SIDEWINDER_PUSH_S);
+      const shoved = spline.positionAt(o.s, o.lateral);
+      repositionTrackObstacle(hit, shoved.x, shoved.z);
+      if (o.eid >= 0) TrackObstacleState.s[o.eid] = o.s;
     }
     playBanked('race-sidewinder');
     return true;
@@ -175,16 +255,20 @@ export function usePowerUpSlot(
 
 /** Reset state when the plugin is disposed. */
 export function resetPowerUpDefaults(): void {
-  // No persistent state outside the SOA arrays; nothing to free here.
+  puHeld[0] = puHeld[1] = puHeld[2] = false;
+  resetSidewinderBolts();
 }
 
 /** Add one ammo to a slot (used by the pickup system). */
 export function grantPowerUpAmmo(eid: number, slot: number, amount = 1): void {
   if (slot < 0 || slot > 2) return;
   const cap =
-    slot === 0 ? PowerUp.cap0[eid] || DEFAULT_AMMO[0]!
-    : slot === 1 ? PowerUp.cap1[eid] || DEFAULT_AMMO[1]!
-    : PowerUp.cap2[eid] || DEFAULT_AMMO[2]!;
-  const arr = slot === 0 ? PowerUp.ammo0 : slot === 1 ? PowerUp.ammo1 : PowerUp.ammo2;
+    slot === 0
+      ? PowerUp.cap0[eid] || DEFAULT_AMMO[0]!
+      : slot === 1
+        ? PowerUp.cap1[eid] || DEFAULT_AMMO[1]!
+        : PowerUp.cap2[eid] || DEFAULT_AMMO[2]!;
+  const arr =
+    slot === 0 ? PowerUp.ammo0 : slot === 1 ? PowerUp.ammo1 : PowerUp.ammo2;
   arr[eid] = Math.min(cap, (arr[eid] ?? 0) + amount);
 }

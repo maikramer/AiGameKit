@@ -99,6 +99,31 @@ export function getTrackObstacles(): readonly TrackObstacle[] {
   return obstacles;
 }
 
+/**
+ * Move a world-space obstacle and keep the spatial hash in sync so the next
+ * collision query sees it at the new spot (sidewinder shove).
+ */
+export function repositionTrackObstacle(
+  index: number,
+  x: number,
+  z: number
+): void {
+  const o = obstacles[index];
+  if (!o) return;
+  const oldKey = cellKey(o.x, o.z);
+  const bucket = obstacleGrid.get(oldKey);
+  if (bucket) {
+    const i = bucket.indexOf(index);
+    if (i >= 0) bucket.splice(i, 1);
+  }
+  o.x = x;
+  o.z = z;
+  const newKey = cellKey(x, z);
+  const next = obstacleGrid.get(newKey);
+  if (next) next.push(index);
+  else obstacleGrid.set(newKey, [index]);
+}
+
 export function clearTrackObstacles(): void {
   obstacles.length = 0;
   obstacleGrid.clear();
@@ -201,10 +226,11 @@ export function addTrackObstacleByS(
   lateral: number,
   radius: number,
   bounce: number,
-  kind: number
+  kind: number,
+  eid = -1
 ): number {
   const index = trackObstacles.length;
-  trackObstacles.push({ eid: -1, s, lateral, radius, bounce, kind });
+  trackObstacles.push({ eid, s, lateral, radius, bounce, kind });
   return index;
 }
 

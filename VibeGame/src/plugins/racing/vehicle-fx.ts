@@ -3,6 +3,7 @@ import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { getScene } from '../rendering';
 import { WorldTransform } from '../transforms';
 import { Vehicle } from './components';
+import { conditionWetness, getRaceState } from './race-state';
 
 const vehicleQuery = defineQuery([Vehicle]);
 
@@ -355,6 +356,16 @@ export const VehicleFxSystem: System = defineSystem({
         }
       } else if (prev) {
         prev.valid = false;
+      }
+
+      const spray = conditionWetness(getRaceState().condition);
+      if (
+        spray > 0.3 &&
+        speed > 8 &&
+        Vehicle.airborne[eid] === 0 &&
+        Math.random() < 0.45 * spray
+      ) {
+        emitSmoke(f, rearX, rideY, rearZ, 0.35 + spray * 0.4);
       }
     }
 

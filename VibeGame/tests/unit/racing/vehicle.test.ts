@@ -425,3 +425,82 @@ describe('vehicle: race gating', () => {
     expect(getRaceState().phase).toBe('countdown');
   });
 });
+
+describe('vehicle: slipstream', () => {
+  it('gains speed when drafting a car ahead in the same lane', () => {
+    const solo = makeHarness();
+    Vehicle.throttle[solo.car] = 1;
+    solo.step(1.5);
+    const soloSpeed = Vehicle.speed[solo.car];
+
+    const pack = makeHarness();
+    const lead = pack.state.createEntity();
+    pack.state.addComponent(lead, Transform);
+    pack.state.addComponent(lead, WorldTransform);
+    pack.state.addComponent(lead, Vehicle);
+    pack.state.addComponent(lead, RaceTracker);
+    Vehicle.maxSpeed[lead] = 50;
+    Vehicle.accel[lead] = 26;
+    Vehicle.brake[lead] = 48;
+    Vehicle.engineBrake[lead] = 7;
+    Vehicle.reverseSpeed[lead] = 12;
+    Vehicle.maxSteer[lead] = 2.6;
+    Vehicle.steerSpeed[lead] = 10;
+    Vehicle.grip[lead] = 7;
+    Vehicle.driftGrip[lead] = 0.32;
+    Vehicle.halfLength[lead] = 1.35;
+    Vehicle.halfWidth[lead] = 0.85;
+    Vehicle.rideHeight[lead] = 0.35;
+    placeVehicleOnTrack(lead, pack.spline, 8, 0);
+    Vehicle.throttle[pack.car] = 1;
+    Vehicle.throttle[lead] = 1;
+    pack.step(1.5);
+
+    expect(Vehicle.draft[pack.car]).toBeGreaterThan(0.2);
+    expect(Vehicle.speed[pack.car]).toBeGreaterThan(soloSpeed + 0.4);
+  });
+
+  it('does not draft a car in another lane', () => {
+    const pack = makeHarness();
+    const lead = pack.state.createEntity();
+    pack.state.addComponent(lead, Transform);
+    pack.state.addComponent(lead, WorldTransform);
+    pack.state.addComponent(lead, Vehicle);
+    pack.state.addComponent(lead, RaceTracker);
+    Vehicle.maxSpeed[lead] = 50;
+    Vehicle.accel[lead] = 26;
+    Vehicle.brake[lead] = 48;
+    Vehicle.engineBrake[lead] = 7;
+    Vehicle.reverseSpeed[lead] = 12;
+    Vehicle.maxSteer[lead] = 2.6;
+    Vehicle.steerSpeed[lead] = 10;
+    Vehicle.grip[lead] = 7;
+    Vehicle.driftGrip[lead] = 0.32;
+    Vehicle.halfLength[lead] = 1.35;
+    Vehicle.halfWidth[lead] = 0.85;
+    Vehicle.rideHeight[lead] = 0.35;
+    placeVehicleOnTrack(lead, pack.spline, 8, 6);
+    Vehicle.throttle[pack.car] = 1;
+    Vehicle.throttle[lead] = 1;
+    pack.step(0.5);
+    expect(Vehicle.draft[pack.car]).toBe(0);
+  });
+});
+
+describe('vehicle: wet track', () => {
+  it('is slower when the condition is wet', () => {
+    setRaceState({ phase: 'racing', condition: 'dry' });
+    const dry = makeHarness();
+    Vehicle.throttle[dry.car] = 1;
+    dry.step(3);
+    const drySpeed = Vehicle.speed[dry.car];
+
+    resetRaceState();
+    clearTrackData();
+    setRaceState({ phase: 'racing', condition: 'wet' });
+    const wet = makeHarness();
+    Vehicle.throttle[wet.car] = 1;
+    wet.step(3);
+    expect(Vehicle.speed[wet.car]).toBeLessThan(drySpeed * 0.98);
+  });
+});

@@ -17,12 +17,16 @@ import {
   type TrackNode,
 } from '../../../src/plugins/racing/spline';
 import { VehicleControlSystem } from '../../../src/plugins/racing/vehicle-control';
-import { AiDriverSystem } from '../../../src/plugins/racing/ai-driver';
+import {
+  AiDriverSystem,
+  resetAiMistakes,
+} from '../../../src/plugins/racing/ai-driver';
 import {
   RaceDirectorSystem,
   getStandings,
   getVehicleName,
   setVehicleName,
+  intervalToNeighbour,
 } from '../../../src/plugins/racing/race-director';
 import {
   getRaceState,
@@ -30,6 +34,9 @@ import {
   markRaceReady,
   resetRaceState,
   restartRace,
+  setRaceState,
+  beginRaceFromQualifying,
+  captureQualifyingGrid,
 } from '../../../src/plugins/racing/race-state';
 
 const FIXED_DT = 1 / 60;
@@ -184,6 +191,7 @@ function makeRace(
 afterEach(() => {
   resetRaceState();
   clearTrackData();
+  resetAiMistakes();
 });
 
 describe('race director: phases', () => {
@@ -328,6 +336,26 @@ describe('race director: scoring', () => {
     expect(getVehicleName(h.player)).toBe('Player');
     expect(getVehicleName(h.cars[1]!)).toBe('Rival 1');
   });
+
+  it('reports the time gap to the car ahead and behind', () => {
+    const h = makeRace({ rivals: 2 });
+    const rivalA = h.cars[1]!;
+    const rivalB = h.cars[2]!;
+    RaceTracker.distance[rivalA] = 80;
+    RaceTracker.distance[h.player] = 40;
+    RaceTracker.distance[rivalB] = 10;
+    Vehicle.speed[h.player] = 20;
+    Vehicle.speed[rivalB] = 10;
+    const order = [rivalA, h.player, rivalB];
+    const ahead = intervalToNeighbour(h.player, 'ahead', order);
+    const behind = intervalToNeighbour(h.player, 'behind', order);
+    expect(ahead?.name).toBe('Rival 1');
+    expect(ahead?.seconds).toBeCloseTo(2, 5);
+    expect(behind?.name).toBe('Rival 2');
+    expect(behind?.seconds).toBeCloseTo(3, 5);
+    expect(intervalToNeighbour(rivalA, 'ahead', order)).toBeNull();
+    expect(intervalToNeighbour(rivalB, 'behind', order)).toBeNull();
+  });
 });
 
 describe('rival AI', () => {
@@ -392,5 +420,37 @@ describe('rival AI', () => {
     const slowDistance = RaceTracker.distance[slow.cars[1]!];
 
     expect(fastDistance).toBeGreaterThan(slowDistance);
+  });
+});
+
+describe('race director: weekend', () => {
+  it('qualifying is a single flying lap', () => {
+    setRaceState({ session: 'qualifying' });
+    const h = makeRace({ laps: 3 });
+    h.frame();
+    expect(getRaceState().session).toBe('qualifying');
+    expect(getRaceState().totalLaps).toBe(1);
+  });
+
+  it('starts the race on the qualifying grid', () => {
+    setRaceState({ session: 'qualifying' });
+    const h = makeRace({ laps: 3, rivals: 2 });
+    h.frame();
+    const rival = h.cars[1]!;
+    captureQualifyingGrid([rival, h.player, h.cars[2]!]);
+    setRaceState({ phase: 'finished', session: 'qualifying' });
+    expect(beginRaceFromQualifying()).toBe(true);
+    expect(getRaceState().session).toBe('race');
+    expect(getRaceState().phase).toBe('grid');
+    h.frame();
+    expect(getRaceState().totalLaps).toBe(3);
+    expect(RaceTracker.gridSlot[rival]).toBe(0);
+    expect(RaceTracker.gridSlot[h.player]).toBe(1);
+  });
+
+  it('refuses to start the race before qualifying is done', () => {
+    expect(beginRaceFromQualifying()).toBe(false);
+    setRaceState({ session: 'qualifying', phase: 'racing' });
+    expect(beginRaceFromQualifying()).toBe(false);
   });
 });

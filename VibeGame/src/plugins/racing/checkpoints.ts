@@ -1,9 +1,4 @@
-import {
-  defineSystem,
-  defineQuery,
-  type State,
-  type System,
-} from '../../core';
+import { defineSystem, defineQuery, type State, type System } from '../../core';
 import {
   PlayerVehicle,
   PowerUp,
@@ -120,9 +115,13 @@ export const CheckpointSystem: System = defineSystem({
       const offTrackLimit = sample.width * 0.5 + shoulder + OFF_TRACK_MARGIN;
       const offTrack = Math.abs(lateral) > offTrackLimit;
       if (offTrack && Vehicle.airborne[eid] === 0) {
-        RaceTracker.offTrackTimer[eid] = (RaceTracker.offTrackTimer[eid] ?? 0) + dt;
+        RaceTracker.offTrackTimer[eid] =
+          (RaceTracker.offTrackTimer[eid] ?? 0) + dt;
       } else {
-        RaceTracker.offTrackTimer[eid] = Math.max(0, (RaceTracker.offTrackTimer[eid] ?? 0) - dt * 0.5);
+        RaceTracker.offTrackTimer[eid] = Math.max(
+          0,
+          (RaceTracker.offTrackTimer[eid] ?? 0) - dt * 0.5
+        );
       }
 
       // ---- Stuck detection ----------------------------------------------

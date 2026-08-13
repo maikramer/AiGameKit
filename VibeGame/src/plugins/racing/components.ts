@@ -107,6 +107,8 @@ export const Vehicle = {
   roll: new Float32Array(MAX_ENTITIES),
   /** Body pitch (rad, dives on the brakes). */
   pitch: new Float32Array(MAX_ENTITIES),
+  /** Slipstream strength 0..1 — extra accel when drafting a car ahead. */
+  draft: new Float32Array(MAX_ENTITIES),
 } as const;
 
 /** Tag: the vehicle the local player drives (camera + HUD bind to it). */
@@ -152,6 +154,15 @@ export const Track = {
   walls: new Uint8Array(MAX_ENTITIES),
   /** Number of checkpoints split across the lap (Time Trial). 0 = disabled. */
   checkpointCount: new Uint8Array(MAX_ENTITIES),
+  /**
+   * Deck-above-ground distance (m) that turns a stretch into a viaduct: deck
+   * box + pylons are built under it. `0` = the circuit never leaves the ground.
+   * Match `<Road flatten-viaduct-clearance>` so the terrain is not graded under
+   * a span that also gets columns.
+   */
+  viaductClearance: new Float32Array(MAX_ENTITIES),
+  /** Arc spacing between pylons (m); 0 = engine default. */
+  pylonSpacing: new Float32Array(MAX_ENTITIES),
 } as const;
 
 /**
@@ -323,7 +334,8 @@ export const ObstacleKind = {
   Drone: 1,
   Gate: 2,
 } as const;
-export type ObstacleKindValue = (typeof ObstacleKind)[keyof typeof ObstacleKind];
+export type ObstacleKindValue =
+  (typeof ObstacleKind)[keyof typeof ObstacleKind];
 
 /**
  * Active state for a track-side obstacle. The position is stored in track

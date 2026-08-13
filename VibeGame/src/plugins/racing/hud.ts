@@ -6,14 +6,32 @@ import type {
 } from '../hud/screen-layer';
 import { registerHudWidgetFactory } from '../hud/screen-layer';
 import { injectWidgetCss, readAttr } from '../hud/widgets/shared';
-import { PlayerVehicle, PowerUp, RaceTracker, Track, Vehicle } from './components';
+import {
+  PlayerVehicle,
+  PowerUp,
+  RaceTracker,
+  Track,
+  Vehicle,
+} from './components';
 import { getTrackSpline } from './data';
 import { getLastPickup } from './pickups';
-import { getRaceState } from './race-state';
-import { getStandings } from './race-director';
+import { getRaceState, beginRaceFromQualifying } from './race-state';
+import {
+  getStandings,
+  getVehicleName,
+  intervalToNeighbour,
+} from './race-director';
+import {
+  ghostDeltaAt,
+  ghostProgressU,
+  completedSector,
+  sectorBoundaryU,
+  sampleGhostAtTime,
+} from './ghost';
 import { defineQuery } from '../../core';
 import { ChaseCamera } from './components';
 import { getCameraModeName } from './chase-camera';
+import { isKeyDown } from '../input';
 
 const playerQuery = defineQuery([PlayerVehicle, Vehicle]);
 const trackQuery = defineQuery([Track]);
@@ -43,12 +61,39 @@ const CSS = `
 .race-status { top: 16px; right: 16px; text-align: right; min-width: 132px; }
 .race-status .lap { font-size: 1.7rem; font-weight: 800; line-height: 1.05; }
 .race-status .pos { font-size: 1.05rem; font-weight: 700; color: #ffd166; margin-top: 2px; }
+.race-gap { margin-top: 6px; font-variant-numeric: tabular-nums; font-size: 0.78rem; font-weight: 700; line-height: 1.35; }
+.race-gap .ahead { color: #ffd166; }
+.race-gap .behind { color: rgba(255,255,255,0.72); }
+.race-gap.hidden { display: none; }
+.race-order {
+  margin-top: 8px; padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  font-variant-numeric: tabular-nums; font-size: 0.7rem; font-weight: 700;
+  line-height: 1.45; text-align: left;
+}
+.race-order .me { color: #ffd166; }
+.race-order.hidden { display: none; }
 
 /* Timer, top centre */
 .race-timer { top: 16px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 150px; }
 .race-timer .clock { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .race-timer .laps { font-size: 0.72rem; color: rgba(255,255,255,0.7); font-variant-numeric: tabular-nums; }
 .race-timer .laps b { color: #7fe7a1; font-weight: 700; }
+.race-delta {
+  margin-top: 4px; font-size: 1.15rem; font-weight: 800;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.04em;
+}
+.race-delta.ahead { color: #7fe7a1; }
+.race-delta.behind { color: #ff6b6b; }
+.race-delta.hidden { display: none; }
+.race-split {
+  margin-top: 2px; font-size: 0.82rem; font-weight: 800;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.06em;
+  opacity: 0; transition: opacity 0.12s linear;
+}
+.race-split.show { opacity: 1; }
+.race-split.ahead { color: #7fe7a1; }
+.race-split.behind { color: #ff6b6b; }
 
 /* Speed, bottom right */
 .race-speed { bottom: 18px; right: 18px; text-align: right; min-width: 148px; }
@@ -63,6 +108,12 @@ const CSS = `
 .race-boost-bar { margin-top: 5px; height: 9px; border-radius: 5px; background: rgba(255,255,255,0.14); overflow: hidden; }
 .race-boost-bar > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg,#38e8ff,#7f5dff); transition: width 0.08s linear; }
 .race-boost.ready .race-label { color: #38e8ff; }
+.race-draft {
+  margin-top: 6px; font-size: 0.68rem; font-weight: 800;
+  letter-spacing: 0.22em; color: #38e8ff; text-transform: uppercase;
+  opacity: 0; transition: opacity 0.12s linear;
+}
+.race-draft.show { opacity: 1; }
 
 /* Minimap, top left */
 .race-map { top: 16px; left: 16px; padding: 8px; }
@@ -86,7 +137,7 @@ const CSS = `
 /* Results */
 .race-results {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-  min-width: 420px; padding: 20px 26px; text-align: left;
+  min-width: 480px; padding: 20px 26px; text-align: left;
 }
 .race-results h2 { margin: 0 0 12px; font-size: 1.5rem; letter-spacing: 0.14em; text-transform: uppercase; }
 .race-results table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -151,6 +202,23 @@ const CSS = `
 }
 .race-respawn.show { opacity: 1; }
 
+.race-final {
+  position: absolute; top: 28%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 3.2rem; font-weight: 900; color: #ffd166; letter-spacing: 0.18em;
+  text-transform: uppercase; text-shadow: 0 0 28px rgba(255,209,102,0.85);
+  opacity: 0; transition: opacity 0.18s ease-out; pointer-events: none;
+}
+.race-final.show { opacity: 1; }
+
+.race-condition {
+  margin-top: 4px; font-size: 0.62rem; font-weight: 800;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+.race-condition.wet { color: #7fd4ff; }
+.race-condition.night { color: #c9b6ff; }
+.race-condition.storm { color: #ff8a5c; }
+
 /* Time-trial badge: replaces the lap/position panel, same corner */
 .race-tt { position: absolute; top: 16px; right: 16px; text-align: right; min-width: 132px; }
 .race-tt .title { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #38e8ff; }
@@ -170,6 +238,19 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds - m * 60;
   return `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`;
+}
+
+function formatGap(total: number, winnerTotal: number): string {
+  if (total < 0 || winnerTotal < 0) return '';
+  const d = total - winnerTotal;
+  if (d < 0.05) return '—';
+  return `+${d.toFixed(1)}`;
+}
+
+function formatDelta(delta: number): string {
+  const ahead = delta < -0.04;
+  const behind = delta > 0.04;
+  return `${ahead ? '−' : behind ? '+' : '±'}${Math.abs(delta).toFixed(2)}`;
 }
 
 const MAP_SIZE = 148;
@@ -206,11 +287,16 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
           <div class="race-label">Race</div>
           <div class="clock">0:00.0</div>
           <div class="laps">Last --:--.- · Best <b>--:--.-</b></div>
+          <div class="race-delta hidden">--.-</div>
+          <div class="race-split"></div>
+          <div class="race-condition"></div>
         </div>
         <div class="race-panel race-status">
           <div class="race-label">Lap</div>
           <div class="lap">1/3</div>
           <div class="pos">P1</div>
+          <div class="race-gap hidden"></div>
+          <div class="race-order hidden"></div>
         </div>
         <div class="race-panel race-tt race-hidden">
           <div class="title">Time Trial</div>
@@ -226,6 +312,7 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
         <div class="race-panel race-boost">
           <div class="race-label">Nitro</div>
           <div class="race-boost-bar"><i></i></div>
+          <div class="race-draft">Slipstream</div>
         </div>
         <div class="race-powerups">
           <div class="race-pu pulse"><span class="key">1</span><span class="icon">⚡</span><span class="ammo">1</span><span class="cd" style="display:none"></span></div>
@@ -234,6 +321,7 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
         </div>
         <div class="race-pickup"></div>
         <div class="race-respawn">Respawn</div>
+        <div class="race-final">Final lap</div>
         <div class="race-centre race-hidden">
           <div class="race-count">3</div>
           <div class="race-sub"></div>
@@ -242,13 +330,13 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
         <div class="race-panel race-results race-hidden">
           <h2>Results</h2>
           <table>
-            <thead><tr><th>Pos</th><th>Driver</th><th>Time</th><th>Best lap</th></tr></thead>
+            <thead><tr><th>Pos</th><th>Driver</th><th>Time</th><th>Gap</th><th>Best lap</th></tr></thead>
             <tbody></tbody>
           </table>
           <div class="hint">Press R to race again</div>
         </div>
         <div class="race-cam">Chase</div>
-        <div class="race-hint">WASD drive · 1/2/3 power-ups · Shift nitro · Space handbrake · C camera · R restart</div>
+        <div class="race-hint">WASD drive · 1/2/3 power-ups · Shift nitro · Space handbrake · V look back · C camera · R restart</div>
       `;
       layer.appendChild(root);
 
@@ -257,9 +345,13 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
       const canvas = q<HTMLCanvasElement>('.race-map canvas');
       const ctx = canvas.getContext('2d');
       const clockEl = q('.race-timer .clock');
+      const timerLabelEl = q('.race-timer .race-label');
+      const conditionEl = q('.race-condition');
       const lapsEl = q('.race-timer .laps');
       const lapEl = q('.race-status .lap');
       const posEl = q('.race-status .pos');
+      const gapEl = q('.race-gap');
+      const orderEl = q('.race-order');
       const speedEl = q('.race-speed .value');
       const gearEl = q('.race-speed .gear');
       const speedBar = q('.race-speed-bar > i');
@@ -270,6 +362,8 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
       const subEl = q('.race-sub');
       const wrongEl = q('.race-wrong');
       const resultsEl = q('.race-results');
+      const resultsTitleEl = q('.race-results h2');
+      const resultsHintEl = q('.race-results .hint');
       const resultsBody = q('.race-results tbody');
       const camEl = q('.race-cam');
       const puEls = Array.from(root.querySelectorAll('.race-pu'));
@@ -281,15 +375,28 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
       const ttBestEl = q('.race-tt .best');
       const ttPbEl = q('.race-tt .pb');
       const respawnEl = q('.race-respawn');
+      const finalEl = q('.race-final');
       const pickupEl = q('.race-pickup');
       const statusEl = q('.race-status');
+      const deltaEl = q('.race-delta');
+      const splitEl = q('.race-split');
+      const draftEl = q('.race-draft');
       let pickupFlashUntil = 0;
       let pickupFlashKind = 0;
+      let finalLapUntil = 0;
+      let finalLapGeneration = -1;
+      let splitPrevU = 0;
+      let splitUntil = 0;
+      let splitText = '';
+      let splitAhead = false;
+      let splitGeneration = -1;
+      let splitLap = -1;
 
       let projection: MapProjection | null = null;
       let mapPath: Path2D | null = null;
       let mapTrack = -1;
       let lastResultsGeneration = -1;
+      let enterArmed = true;
 
       const buildMap = (trackEid: number): void => {
         const spline = getTrackSpline(trackEid);
@@ -328,7 +435,26 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
             buildMap(trackEid);
 
           // ---- Timer + laps ------------------------------------------------
-          clockEl.textContent = formatTime(race.raceTime);
+          const playerLapTime =
+            player !== undefined
+              ? Math.max(0, race.raceTime - RaceTracker.lapStartTime[player])
+              : race.raceTime;
+          const showLapClock =
+            (race.phase === 'racing' || race.phase === 'countdown') &&
+            player !== undefined;
+          clockEl.textContent = formatTime(
+            showLapClock ? playerLapTime : race.raceTime
+          );
+          timerLabelEl.textContent =
+            race.session === 'qualifying'
+              ? 'Qualifying'
+              : showLapClock
+                ? 'Lap'
+                : 'Race';
+          const cond = race.condition;
+          conditionEl.textContent =
+            cond === 'dry' ? '' : cond.replace('-', ' ');
+          conditionEl.className = `race-condition ${cond === 'dry' ? '' : cond}`;
           if (player !== undefined) {
             const totalLaps =
               race.totalLaps || Track.totalLaps[trackEid ?? 0] || 3;
@@ -337,9 +463,9 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
             posEl.textContent = `P${RaceTracker.position[player] || 1}${
               race.entrants > 1 ? ` / ${race.entrants}` : ''
             }`;
-            lapsEl.innerHTML = `Last ${formatTime(RaceTracker.lastLapTime[player])} · Best <b>${formatTime(
-              RaceTracker.bestLapTime[player]
-            )}</b>`;
+            lapsEl.innerHTML = `Race ${formatTime(race.raceTime)} · Last ${formatTime(
+              RaceTracker.lastLapTime[player]
+            )} · Best <b>${formatTime(RaceTracker.bestLapTime[player])}</b>`;
 
             // ---- Speed + gear ---------------------------------------------
             const kmh = Math.abs(Vehicle.speed[player]) * 3.6;
@@ -362,6 +488,54 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
             } else {
               boostPanel.classList.add('race-hidden');
             }
+
+            draftEl.classList.toggle('show', Vehicle.draft[player] > 0.28);
+
+            const lapTime = Math.max(
+              0,
+              race.raceTime - RaceTracker.lapStartTime[player]
+            );
+            const u = ghostProgressU(player);
+            const delta = ghostDeltaAt(u, lapTime);
+            if (delta === null || race.phase !== 'racing') {
+              deltaEl.classList.add('hidden');
+            } else {
+              deltaEl.classList.remove('hidden');
+              const ahead = delta < -0.04;
+              const behind = delta > 0.04;
+              deltaEl.classList.toggle('ahead', ahead);
+              deltaEl.classList.toggle('behind', behind);
+              deltaEl.textContent = formatDelta(delta);
+            }
+
+            const lapLen = Track.length[trackEid ?? 0] || 0;
+            const lapIdx = RaceTracker.lap[player];
+            if (race.generation !== splitGeneration || lapIdx !== splitLap) {
+              splitGeneration = race.generation;
+              splitLap = lapIdx;
+              splitPrevU = u;
+              splitUntil = 0;
+              splitText = '';
+            }
+            const crossed = completedSector(splitPrevU, u, lapLen);
+            if (crossed !== null && race.phase === 'racing') {
+              const splitDelta = ghostDeltaAt(
+                sectorBoundaryU(crossed, lapLen),
+                lapTime
+              );
+              if (splitDelta !== null) {
+                splitAhead = splitDelta < -0.04;
+                splitText = `S${crossed} ${formatDelta(splitDelta)}`;
+                splitUntil = performance.now() + 2200;
+              }
+            }
+            splitPrevU = u;
+            const showSplit =
+              splitText !== '' && performance.now() < splitUntil;
+            splitEl.textContent = splitText;
+            splitEl.classList.toggle('show', showSplit);
+            splitEl.classList.toggle('ahead', showSplit && splitAhead);
+            splitEl.classList.toggle('behind', showSplit && !splitAhead);
 
             // ---- Wrong way ---------------------------------------------------
             wrongEl.classList.toggle(
@@ -398,14 +572,72 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
             // ---- Time-trial badge --------------------------------------------
             // The TT badge replaces the lap/position panel in the same corner;
             // only one of the two is ever visible.
-            const isTimeTrial =
-              (Track.checkpointCount[trackEid ?? 0] || 0) > 0;
+            const isTimeTrial = (Track.checkpointCount[trackEid ?? 0] || 0) > 0;
             ttEl.classList.toggle('race-hidden', !isTimeTrial);
             statusEl.classList.toggle('race-hidden', isTimeTrial);
             if (isTimeTrial) {
               ttBestEl.textContent = `Current ${formatTime(race.raceTime)}`;
               ttPbEl.textContent = `PB ${formatTime(RaceTracker.bestLapTime[player])}`;
             }
+
+            // ---- Interval to the cars immediately ahead / behind -------------
+            const showGaps =
+              !isTimeTrial && race.phase === 'racing' && race.entrants > 1;
+            if (showGaps) {
+              const ahead = intervalToNeighbour(player, 'ahead');
+              const behind = intervalToNeighbour(player, 'behind');
+              const lines: string[] = [];
+              if (ahead) {
+                lines.push(
+                  `<div class="ahead">▲ ${ahead.name} +${ahead.seconds.toFixed(1)}</div>`
+                );
+              }
+              if (behind) {
+                lines.push(
+                  `<div class="behind">▼ ${behind.name} −${behind.seconds.toFixed(1)}</div>`
+                );
+              }
+              gapEl.innerHTML = lines.join('');
+              gapEl.classList.toggle('hidden', lines.length === 0);
+            } else {
+              gapEl.classList.add('hidden');
+            }
+
+            const liveOrder = getStandings();
+            const showOrder =
+              !isTimeTrial &&
+              liveOrder.length > 1 &&
+              race.phase !== 'idle' &&
+              race.phase !== 'finished';
+            if (showOrder) {
+              orderEl.innerHTML = liveOrder
+                .map((eid, i) => {
+                  return `<div class="${eid === player ? 'me' : ''}">P${i + 1} ${getVehicleName(eid)}</div>`;
+                })
+                .join('');
+              orderEl.classList.remove('hidden');
+            } else {
+              orderEl.classList.add('hidden');
+            }
+
+            // ---- Final lap banner --------------------------------------------
+            const onFinalLap =
+              race.phase === 'racing' &&
+              RaceTracker.lap[player] === totalLaps - 1 &&
+              RaceTracker.finished[player] !== 1;
+            if (race.generation !== finalLapGeneration) {
+              finalLapGeneration = race.generation;
+              finalLapUntil = 0;
+            }
+            if (onFinalLap) {
+              if (finalLapUntil === 0) finalLapUntil = performance.now() + 2500;
+            } else {
+              finalLapUntil = 0;
+            }
+            finalEl.classList.toggle(
+              'show',
+              onFinalLap && performance.now() < finalLapUntil
+            );
 
             // ---- Respawn flash -----------------------------------------------
             respawnEl.classList.toggle(
@@ -452,8 +684,15 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
           // ---- Results --------------------------------------------------------
           if (race.phase === 'finished') {
             resultsEl.classList.remove('race-hidden');
+            const qualiDone = race.session === 'qualifying';
+            resultsTitleEl.textContent = qualiDone ? 'Qualifying' : 'Results';
+            resultsHintEl.textContent = qualiDone
+              ? 'Press Enter to start the race · R to requalify'
+              : 'Press R to race again';
             if (lastResultsGeneration !== race.generation) {
               lastResultsGeneration = race.generation;
+              const winnerTime =
+                race.results.find((r) => r.totalTime >= 0)?.totalTime ?? -1;
               resultsBody.innerHTML = race.results
                 .map(
                   (r) => `
@@ -461,21 +700,32 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
                       <td>${r.position}</td>
                       <td>${r.name}</td>
                       <td>${r.totalTime >= 0 ? formatTime(r.totalTime) : `Lap ${r.laps + 1}`}</td>
+                      <td>${formatGap(r.totalTime, winnerTime)}</td>
                       <td>${formatTime(r.bestLap)}</td>
                     </tr>`
                 )
                 .join('');
             }
+            const enter = isKeyDown('Enter') || isKeyDown('NumpadEnter');
+            if (qualiDone && enter && enterArmed) {
+              enterArmed = false;
+              beginRaceFromQualifying();
+            } else if (!enter) {
+              enterArmed = true;
+            }
           } else {
             resultsEl.classList.add('race-hidden');
             lastResultsGeneration = -1;
+            enterArmed = true;
           }
 
           // ---- Camera label ----------------------------------------------------
           const cam = camQuery(s.world)[0];
           if (cam !== undefined) {
-            const name = getCameraModeName(cam);
-            camEl.textContent = name;
+            camEl.textContent =
+              isKeyDown('KeyV') && race.phase !== 'finished'
+                ? 'Look back'
+                : getCameraModeName(cam);
           }
 
           // ---- Minimap ----------------------------------------------------------
@@ -487,6 +737,19 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
             ctx.lineWidth = 1.6;
             ctx.strokeStyle = 'rgba(160,220,255,0.75)';
             ctx.stroke(mapPath);
+
+            const splineForMap =
+              trackEid !== undefined ? getTrackSpline(trackEid) : undefined;
+            if (splineForMap) {
+              const sf = splineForMap.positionAt(0, 0);
+              const sx = sf.x * projection.scale + projection.offsetX;
+              const sz = sf.z * projection.scale + projection.offsetZ;
+              ctx.fillStyle = '#f4f4f4';
+              ctx.fillRect(sx - 3.5, sz - 5, 7, 10);
+              ctx.fillStyle = '#1a1a1a';
+              ctx.fillRect(sx - 3.5, sz - 5, 3.5, 5);
+              ctx.fillRect(sx, sz, 3.5, 5);
+            }
 
             const standings = getStandings();
             for (const eid of standings) {
@@ -504,6 +767,28 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
               ctx.arc(px, pz, isPlayer ? 4 : 3, 0, Math.PI * 2);
               ctx.fillStyle = isPlayer ? '#ffd166' : 'rgba(255,120,120,0.85)';
               ctx.fill();
+            }
+
+            if (player !== undefined && race.phase === 'racing') {
+              const ghostLapTime = Math.max(
+                0,
+                race.raceTime - RaceTracker.lapStartTime[player]
+              );
+              const ghostSample = sampleGhostAtTime(ghostLapTime);
+              const spline =
+                trackEid !== undefined ? getTrackSpline(trackEid) : undefined;
+              if (ghostSample && spline) {
+                const pos = spline.positionAt(
+                  ghostSample.s,
+                  ghostSample.lateral
+                );
+                const gx = pos.x * projection.scale + projection.offsetX;
+                const gz = pos.z * projection.scale + projection.offsetZ;
+                ctx.beginPath();
+                ctx.arc(gx, gz, 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(56,232,255,0.85)';
+                ctx.fill();
+              }
             }
           }
         },

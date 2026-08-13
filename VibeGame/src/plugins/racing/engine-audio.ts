@@ -1,6 +1,7 @@
 import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { PlayerVehicle, Vehicle } from './components';
 import { getRaceState } from './race-state';
+import { getSoundDef, playSound } from '../audio';
 
 const playerQuery = defineQuery([Vehicle, PlayerVehicle]);
 
@@ -18,6 +19,36 @@ interface EngineVoice {
 
 let voice: EngineVoice | null = null;
 let failed = false;
+let prevBoosting = false;
+let prevImpactTimer = 10;
+let skidReadyAt = 0;
+
+function playBanked(key: string): void {
+  if (getSoundDef(key)) playSound(key);
+}
+
+/** Edge detector for banked vehicle SFX (crash / nitro / skid). Pure — tests. */
+export function vehicleSfxEdges(input: {
+  boosting: boolean;
+  prevBoosting: boolean;
+  impactTimer: number;
+  prevImpactTimer: number;
+  slip: number;
+  speed: number;
+  now: number;
+  skidReadyAt: number;
+}): { crash: boolean; nitro: boolean; skid: boolean; nextSkidReadyAt: number } {
+  const crash = input.impactTimer < 0.08 && input.prevImpactTimer > 0.22;
+  const nitro = input.boosting && !input.prevBoosting;
+  const sliding = input.slip > 0.55 && input.speed > 8;
+  const skid = sliding && input.now >= input.skidReadyAt;
+  return {
+    crash,
+    nitro,
+    skid,
+    nextSkidReadyAt: skid ? input.now + 0.7 : input.skidReadyAt,
+  };
+}
 
 /** Base frequency of the engine note at idle (Hz). */
 const IDLE_HZ = 46;
@@ -151,9 +182,31 @@ export const EngineAudioSystem: System = defineSystem({
     const wind = (speed / maxSpeed) * 0.02;
     v.noiseFilter.frequency.setTargetAtTime(1400 + slip * 2600, now, 0.05);
     v.noiseGain.gain.setTargetAtTime(audible ? scrub + wind : 0, now, 0.06);
+
+    if (audible) {
+      const edges = vehicleSfxEdges({
+        boosting: Vehicle.boosting[player] === 1,
+        prevBoosting,
+        impactTimer: Vehicle.impactTimer[player],
+        prevImpactTimer,
+        slip,
+        speed,
+        now: state.time.elapsed,
+        skidReadyAt,
+      });
+      if (edges.crash) playBanked('race-crash');
+      if (edges.nitro) playBanked('race-nitro');
+      if (edges.skid) playBanked('race-skid');
+      prevBoosting = Vehicle.boosting[player] === 1;
+      prevImpactTimer = Vehicle.impactTimer[player];
+      skidReadyAt = edges.nextSkidReadyAt;
+    }
   },
 
   dispose() {
+    prevBoosting = false;
+    prevImpactTimer = 10;
+    skidReadyAt = 0;
     if (!voice) return;
     try {
       for (const o of voice.osc) o.stop();
