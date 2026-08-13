@@ -66,6 +66,10 @@
         gap: 14px;
         margin-top: 18px;
       }
+      .menu-buttons.cond-row {
+        gap: 8px;
+        margin-top: 10px;
+      }
       .menu-buttons button {
         font: inherit;
         font-size: 1rem;
@@ -78,6 +82,19 @@
         padding: 12px 22px;
         cursor: pointer;
         transition: transform 0.12s ease, box-shadow 0.12s ease;
+      }
+      .menu-buttons.cond-row button {
+        font-size: 0.78rem;
+        padding: 8px 14px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        border-color: rgba(255, 255, 255, 0.22);
+        background: rgba(14, 20, 32, 0.55);
+      }
+      .menu-buttons.cond-row button.selected {
+        border-color: rgba(56, 232, 255, 0.7);
+        box-shadow: 0 0 12px rgba(56, 232, 255, 0.25);
+        color: #7fd4ff;
       }
       .menu-buttons button:hover {
         transform: translateY(-2px);
@@ -99,15 +116,22 @@
       <div class="menu-buttons" id="mode-menu">
         <button data-mode="race">🏁 Race</button>
         <button data-mode="time-trial">⏱ Time Trial</button>
+        <button data-mode="weekend">🏎 Weekend</button>
+      </div>
+      <div class="menu-buttons cond-row" id="cond-menu">
+        <button data-condition="dry" class="selected">Dry</button>
+        <button data-condition="wet">Wet</button>
+        <button data-condition="night">Night</button>
+        <button data-condition="storm">Storm</button>
+      </div>
+      <div
+        class="sub"
+        style="text-transform: none; letter-spacing: 0.04em; font-size: 0.78rem; color: #9ab"
+      >
+        Weekend = qualifying lap, then the race on that grid
       </div>
     </div>
 
-    <!--
-      The circuit geometry is authored in src/track.ts and injected into
-      <RaceTrack> by src/main.ts before the engine parses the scene (the node
-      list is far too long to hand-write here, and keeping it in TypeScript
-      means the prop dressing reads the same source).
-    -->
     <Scene
       canvas="#game-canvas"
       sky="#2b1e3a"
@@ -117,359 +141,43 @@
       ambient-intensity="0.75"
       resume-audio-on-user-gesture="true"
     >
-      <!-- Céu equirect + IBL (mesmo pipeline do simple-rpg): o PMREM do
-           equirect vira `scene.environment`, então os materiais PBR refletem
-           o céu real em vez de uma sala neutra. -->
-      <EquirectSky
-        url="/assets/sky/sky.png"
-        environment-intensity="0.5"
-        background-intensity="1.0"
-      ></EquirectSky>
+      <!--
+        O mundo vive em `public/world/*.xml`. Este ficheiro é só a casca:
+        canvas, ecrã de arranque e a ordem dos Includes.
 
-      <!-- Luz + pós-processamento no MESMO GameObject (é assim que a entidade
-           Postprocessing nasce — o runtime só parseia o innerHTML do Scene,
-           um atributo `postprocessing=` no próprio <Scene> é ignorado).
-           Sombras: PCSS soft (sem CSM — cascatas com materiais custom dão a
-           sombra "quadrada"). SSAO ligado para a oclusão ambiente nos
-           objetos. -->
-      <GameObject
-        ambient-light="sky-color: 0xffd9b0; ground-color: 0x2a2038; intensity: 0.7"
-        directional-light="color: 0xff9a5c; intensity: 2.6; direction-x: -0.35; direction-y: 0.9; direction-z: -0.28; cast-shadow: 1; shadow-map-size: 2048; distance: 120; pcss: 0"
-        postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.5; bloom-radius: 0.6; bloom-threshold: 0.72; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.12; vignette: 1; vignette-offset: 0.34; vignette-darkness: 0.4; color-grading: 1; saturation: 0.15; contrast: 0.07; ssao: 1; ssao-intensity: 1.1; ssao-radius: 0.1; film-grain: 0; chromatic-aberration: 0; god-rays: 0; depth-of-field: 0"
-      >
-      </GameObject>
+        (Um comentário XML não pode conter dois hífenes seguidos, por isso a
+        tabela vai sem a linha de separação.)
 
-      <!-- Vento global: empurra a grama (VegetationWindSystem lê
-           getWindVector) e as nuvens do céu. -->
-      <Weather
-        wind="0.7 0.25"
-        wind-strength="1.6"
-        clouds="0.35"
-        cloud-height="160"
-        rain="0"
-        cycle="1"
-      ></Weather>
+        | Ficheiro                    | O que editar lá                        |
+        | `world/environment.xml`     | céu, luz, pós-processamento, vento     |
+        | `world/terrain.xml`         | heightmap, cores do terreno, lago      |
+        | `world/circuit/bed.xml`     | terraplanagem: escapatória, berm, viaduto |
+        | `world/circuit/track.xml`   | pista: largura, voltas, tema, pilares  |
+        | `world/circuit/hazards.xml` | obstáculos e power-ups (coords de pista) |
+        | `world/city/downtown.xml`   | os prédios da reta principal           |
+        | `world/nature/forest.xml`   | floresta da bacia, pinhal da montanha  |
+        | `world/grid.xml`            | jogador e rivais                       |
+        | `world/hud.xml`             | câmara, música, HUD, menu de pausa     |
 
-      <!-- Cenário fora do corredor (sistema de spawner do motor, mesmo padrão
-           do simple-rpg): pinheiros e rochas nas colinas do terreno. O
-           avoid-road usa o ground-brush kind:'road' que o <Road flatten>
-           registra com o corredor real (leito + talude) — os spawners ficam
-           fora do corte inteiro, sem buracos entre nós. -->
-      <StaticSpawner
-        count="300"
-        seed="7101"
-        region-min="-620 0 -620"
-        region-max="620 0 620"
-        align-to-terrain="1"
-        ground-align="auto"
-        max-slope-deg="35"
-        scale-min="0.8"
-        scale-max="1.5"
-        avoid-road="1"
-      >
-        <GLTFLoader url="/assets/meshes/props/pine_tree_lod0.glb"></GLTFLoader>
-      </StaticSpawner>
-      <StaticSpawner
-        count="80"
-        seed="7102"
-        region-min="-620 0 -620"
-        region-max="620 0 620"
-        align-to-terrain="1"
-        ground-align="auto"
-        max-slope-deg="40"
-        scale-min="0.5"
-        scale-max="1.2"
-        avoid-road="1"
-      >
-        <GLTFLoader url="/assets/meshes/props/rock_boulder_lod0.glb"></GLTFLoader>
-      </StaticSpawner>
+        O traçado em si está em `src/track.ts` — a lista de nós é injetada nos
+        `<RaceTrack>` / `<Road>` acima por um hook de mundo (`GAME.onWorldXml`),
+        que corre depois dos Includes e antes de existirem entidades.
 
-      <!-- Grama com vento na beira da pista (mesmo padrão do simple-rpg). O
-           spawner do motor assenta cada instância no terreno via heightfield;
-           avoid-road mantém o corredor limpo usando o GroundBrush do Road. -->
-      <Vegetation
-        meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_redA.glb"
-        density-per-km2="26000"
-        seed="7"
-        region-min="-640 0 -640"
-        region-max="640 0 640"
-        smart="0"
-        cluster-count="0"
-        cluster-radius="3.2"
-        flower-near-radius="2.2"
-        flower-density-ratio="0.22"
-        plant-density-ratio="0.4"
-        avoid-water="1"
-        avoid-road="1"
-        avoid-overlaps="0"
-        wind="1"
-        max-slope-deg="35"
-        max-distance="160"
-      ></Vegetation>
+        Ordem importa: terreno antes do circuito (o carve precisa do heightmap),
+        circuito antes da vegetação (os spawners leem os corredores da estrada).
+      -->
+      <Include src="/world/environment.xml"></Include>
+      <Include src="/world/terrain.xml"></Include>
 
-      <!-- Terreno com relevo derivado do circuito: o corredor da pista fica
-           exatamente na elevação da pista (um pouco abaixo, para o leito
-           assentar), e colinas suaves sobem para fora. O <Road flatten>
-           abaixo afina o leito. TrackGround e TrackApron da pista são
-           escondidos — o terreno faz o papel de chão e grama. -->
-      <Terrain
-        pos="0 0 0"
-        world-size="1400"
-        max-height="30"
-        heightmap="/assets/terrain/heightmap.png"
-        levels="4"
-        resolution="64"
-        collision-resolution="32"
-        base-color="#4a6a2a"
-        color-low="#3a5a22"
-        color-mid="#557a35"
-        color-high="#6a8a45"
-      ></Terrain>
+      <Include src="/world/circuit/bed.xml"></Include>
+      <Include src="/world/circuit/track.xml"></Include>
+      <Include src="/world/circuit/hazards.xml"></Include>
 
-      <!-- Lago no infield: o carve do motor afunda a bacia e a waterline fica
-           ~1m abaixo do nível da pista (que é suspensa pelo embankment), então
-           a água nunca toca o asfalto. -->
-      <Lake
-        at="14 92"
-        radius="11"
-        depth="1.8"
-        color="#2f7a9a"
-      ></Lake>
+      <Include src="/world/city/downtown.xml"></Include>
+      <Include src="/world/nature/forest.xml"></Include>
 
-      <!-- Leito da pista: carve agressivo (flatten) ao longo do circuito.
-           O path é injetado por main.ts (vem do spline, como o centerline).
-           Largura cobre pista + shoulders; falloff curto = corte de auto-
-           estrada em vez de ombro suave. -->
-      <Road
-        id="circuit-bed"
-        path="0 0 1 0"
-        width="26"
-        flatten="1"
-        flatten-falloff="3"
-        flatten-window="48"
-        flatten-max-grade="0.3"
-        texture-url=""
-
-        edge-feather="0.6"
-        edge-noise="0.3"
-      ></Road>
-
-      <!-- The circuit. `centerline`, `widths` and `sections` are filled in by
-           main.ts; everything else is authored here. `theme="holo"` gives the
-           track a neon grid + emissive rails; `checkpoint-count` arms the
-           time-trial respawn system. -->
-      <RaceTrack
-        name="circuit"
-        width="16"
-        laps="3"
-        closed="true"
-        shoulder="3.5"
-        walls="true"
-        max-bank="9"
-        theme="holo"
-        checkpoint-count="8"
-        road-color="#3b3e46"
-        apron-color="#5c7f3c"
-        shoulder-color="#9c8a63"
-        wall-color="#e6e8ee"
-        centerline="0 0 0 1 0 0 2 0 0"
-      ></RaceTrack>
-
-      <!-- Time-trial hazards + power-up orbs (track-space positions). -->
-      <RaceTrackObstacle
-        name="barrel-1"
-        s="240"
-        lateral="-1.5"
-        radius="0.8"
-        kind="barrel"
-      ></RaceTrackObstacle>
-      <RaceTrackObstacle
-        name="drone-1"
-        s="820"
-        lateral="2"
-        radius="1.0"
-        kind="drone"
-      ></RaceTrackObstacle>
-      <RaceTrackObstacle
-        name="gate-1"
-        s="1290"
-        lateral="0"
-        radius="1.1"
-        kind="gate"
-      ></RaceTrackObstacle>
-      <RaceTrackPickup s="95" lateral="0" kind="pulse" respawn="4"></RaceTrackPickup>
-      <RaceTrackPickup s="540" lateral="-1" kind="sidewinder" respawn="5"></RaceTrackPickup>
-      <RaceTrackPickup s="1010" lateral="1" kind="shield" respawn="5"></RaceTrackPickup>
-      <RaceTrackPickup s="1470" lateral="-1" kind="pulse" respawn="4"></RaceTrackPickup>
-
-      <!-- The player. Grid slots, orientation and ride height are owned by the
-           race director; `pos` is irrelevant for a vehicle. -->
-      <PlayerVehicle
-        name="player"
-        driver="You"
-        color="#e03a3a"
-        model-url="/assets/meshes/vehicles/kart_hero_lod0.glb"
-        model-length="2.7"
-        model-yaw="0"
-        half-width="1.25"
-        loadout="pulse:2,sidewinder:2,shield:1"
-        max-speed="52"
-        accel="27"
-        brake="52"
-        engine-brake="7"
-        max-steer="2.7"
-        steer-speed="11"
-        grip="7.5"
-        drift-grip="0.3"
-        boost="2.6"
-        boost-recharge="0.28"
-      ></PlayerVehicle>
-
-      <!-- Rivals (Race mode only — main.ts removes these for Time Trial).
-           Same model as the player; each carries a power-up loadout and the AI
-           collects orbs and fires slots like the player does. -->
-      <AiVehicle
-        name="rival-1"
-        driver="Vega"
-        color="#2f6fe0"
-        model-url="/assets/meshes/vehicles/kart_rival_lod0.glb"
-        model-length="2.7"
-        model-yaw="180"
-        half-width="1.25"
-        loadout="pulse:2,sidewinder:2,shield:1"
-        max-speed="52"
-        accel="27"
-        brake="52"
-        skill="0.94"
-        rubber-band="0.45"
-        line-offset="0"
-        boost="2.2"
-      ></AiVehicle>
-      <AiVehicle
-        name="rival-2"
-        driver="Koda"
-        color="#f2a33c"
-        model-url="/assets/meshes/vehicles/kart_rival_lod0.glb"
-        model-length="2.7"
-        model-yaw="180"
-        half-width="1.25"
-        loadout="pulse:1,sidewinder:2,shield:1"
-        max-speed="51"
-        accel="26"
-        brake="50"
-        skill="0.87"
-        rubber-band="0.55"
-        line-offset="1.4"
-        boost="2.2"
-      ></AiVehicle>
-      <AiVehicle
-        name="rival-3"
-        driver="Mira"
-        color="#59c98a"
-        model-url="/assets/meshes/vehicles/kart_rival_lod0.glb"
-        model-length="2.7"
-        model-yaw="180"
-        half-width="1.25"
-        loadout="pulse:2,sidewinder:1,shield:2"
-        max-speed="50"
-        accel="26"
-        brake="49"
-        skill="0.8"
-        rubber-band="0.6"
-        line-offset="-1.4"
-        boost="2.2"
-      ></AiVehicle>
-      <AiVehicle
-        name="rival-4"
-        driver="Rook"
-        color="#b061e0"
-        model-url="/assets/meshes/vehicles/kart_rival_lod0.glb"
-        model-length="2.7"
-        model-yaw="180"
-        half-width="1.25"
-        loadout="pulse:2,sidewinder:2,shield:2"
-        max-speed="50"
-        accel="25"
-        brake="48"
-        skill="0.74"
-        rubber-band="0.65"
-        line-offset="2.6"
-        boost="2.2"
-      ></AiVehicle>
-
-      <ChaseCamera
-        target="player"
-        distance="7.6"
-        height="3.1"
-        follow-lag="0.1"
-        turn-lag="0.15"
-        look-ahead="5"
-        fov="74"
-        fov-boost="13"
-      ></ChaseCamera>
-
-      <!-- BGM layers driven by the engine MusicLayerDriver (main.ts):
-           bgm-race while driving, crossfade to bgm-menu over the results. -->
-      <MusicLayer layer="race" sound="bgm-race" base-volume="0.2"></MusicLayer>
-      <MusicLayer layer="menu" sound="bgm-menu" base-volume="0.18"></MusicLayer>
-
-      <HudScreenLayer>
-        <HudWidget type="race-hud"></HudWidget>
-
-        <!-- Setor à frente: mesma seta screen-space que o simple-rpg usa para
-             as quests, aqui apontando o próximo checkpoint do circuito
-             (CheckpointArrowSystem em main.ts). -->
-        <WaypointArrow margin="64"></WaypointArrow>
-
-        <!-- Pause menu (same TabbedModal widget as simple-rpg): [Q] opens,
-             OptionsTab drives the music/sfx buses via wireOptions (main.ts). -->
-        <TabbedModal
-          id="pause"
-          key="q"
-          title-key="modal.pause"
-        >
-          <OptionsTab label-key="modal.tab.options">
-            <OptionRow
-              id="music-volume"
-              type="slider"
-              label-key="options.music"
-              min="0"
-              max="100"
-              step="5"
-              default="70"
-            ></OptionRow>
-            <OptionRow
-              id="sfx-volume"
-              type="slider"
-              label-key="options.sfx"
-              min="0"
-              max="100"
-              step="5"
-              default="80"
-            ></OptionRow>
-            <OptionRow
-              id="save"
-              type="button"
-              label-key="options.save"
-            ></OptionRow>
-            <OptionRow
-              id="load"
-              type="button"
-              label-key="options.load"
-            ></OptionRow>
-            <OptionRow
-              id="restart"
-              type="button"
-              label-key="options.restart"
-            ></OptionRow>
-            <OptionRow
-              id="controls"
-              type="note"
-              label-key="options.controls"
-            ></OptionRow>
-          </OptionsTab>
-        </TabbedModal>
-      </HudScreenLayer>
+      <Include src="/world/grid.xml"></Include>
+      <Include src="/world/hud.xml"></Include>
     </Scene>
 
     <canvas id="game-canvas"></canvas>

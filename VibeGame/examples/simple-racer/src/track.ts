@@ -1,20 +1,25 @@
 /**
  * Sunset Ridge — the circuit for simple-racer.
  *
- * Authored as 3D control nodes (the engine's `TrackSpline` resamples them at a
- * uniform arc length and derives banking from curvature). The layout is built
- * around one idea per sector so a lap has rhythm rather than being a uniform
- * squiggle:
+ * ~5 km around the whole map, authored as 3D control nodes (the engine's
+ * `TrackSpline` resamples them at a uniform arc length and derives banking from
+ * curvature). Each sector is built on a piece of the real terrain, so the
+ * heightmap is part of the layout rather than scenery behind it:
  *
- *  1. **Start straight** — wide, flat, full throttle; the only place to slipstream.
- *  2. **Turn 1** — long right-hander that rewards an early lift and a late apex.
- *  3. **The climb** — uphill sweep, grip loads up, then a crest that gets the car
- *     properly airborne at speed.
- *  4. **Descent** — downhill and fast; the car is light, so it slides.
- *  5. **The esses** — left/right/left, narrower, all about placement.
- *  6. **Hairpin** — the slowest corner on the lap and the best overtaking spot.
- *  7. **Infield + final sweep** — a long left that spits the car back onto the
- *     straight; carry speed here and the whole lap is worth it.
+ *  1. **Downtown straight** — flat plateau, towers either side, full throttle.
+ *  2. **Turn 1** — long right onto the east plateau.
+ *  3. **The rim** — the ground falls away into the basin; the track does not.
+ *  4. **The flyover** — a viaduct across the basin, ~20 m over the forest. The
+ *     carve leaves the valley alone, so trees grow under the deck and the
+ *     engine puts pylons down to the ground.
+ *  5. **West loop** — back on the plateau, long fast sweepers.
+ *  6. **The climb** — into the south-east mountains, 14 m → 30 m.
+ *  7. **Summit + descent** — hairpin at the top, then a plunge that dives
+ *     **under** the flyover on the way home.
+ *  8. **Return straight** — parallel to the start, back to the line.
+ *
+ * Everything downstream is derived from this list: `<RaceTrack>` geometry, the
+ * `<Road>` bed carve, the prop dressing and the checkpoint arrows.
  */
 
 export interface TrackNodeDef {
@@ -38,55 +43,110 @@ export interface TrackNodeDef {
 export const TRACK_ELEVATION = 1;
 
 /**
+ * How much wider than the racing surface the carved bed is (m).
+ *
+ * The `<RaceTrack shoulder>` strip and the barrier footing live outside the
+ * white lines and still need flat ground under them: carve only the racing
+ * width and the walls end up planted on a slope. This is the bed alone — the
+ * gravel run-off beyond it is `flatten-shoulder` on `<Road>`, and the bank that
+ * catches a car at the end of the run-off is `flatten-berm`.
+ */
+export const BED_MARGIN = 8;
+
+/**
+ * Deck-above-ground distance (m) that turns a stretch into a viaduct.
+ *
+ * One number, two consumers, and they must agree: `<Road
+ * flatten-viaduct-clearance>` stops grading the terrain above it, and
+ * `<RaceTrack viaduct-clearance>` starts building deck and pylons. Set them
+ * apart and you get either a graded scar under a bridge or a span with nothing
+ * holding it up.
+ */
+export const VIADUCT_CLEARANCE = 6;
+
+/**
  * Control nodes.
  *
  * Layout rule that is easy to get wrong: two arms of the circuit must stay far
- * enough apart that their **road corridors** do not overlap — road width plus
- * both shoulders, roughly 25 m here — even where their centerlines are nowhere
- * near each other. `TrackSpline.selfOverlaps()` checks this on every build and
- * warns with the exact arc positions; the first draft of this layout ran the
- * hairpin 14 m from the main straight and drew two roads through each other.
+ * enough apart that their **road corridors** do not overlap — bed plus run-off
+ * and berm, roughly 60 m here — even where their centerlines are nowhere near
+ * each other. `TrackSpline.selfOverlaps()` checks this on every build and warns
+ * with the exact arc positions.
+ *
+ * The one deliberate exception is the flyover: the descent from the mountain
+ * crosses under the basin viaduct with ~13 m of air between the two decks.
+ * That is safe because `TrackSpline.project` measures in 3D and every car
+ * carries its own arc hint, so a car under the bridge is never snapped onto the
+ * deck above it.
  */
 export const TRACK_NODES: TrackNodeDef[] = [
-  // ── Start / finish straight (flat, wide) ──────────────────────────────
-  { x: 0, y: 0, z: 0, width: 18, section: 'main' },
-  { x: 120, y: 0, z: 0, width: 18, section: 'main' },
-  { x: 250, y: 0, z: 0, width: 17, section: 'main' },
-  { x: 350, y: 0, z: 8, width: 16, section: 'main' },
+  // ── 1. Downtown straight (flat plateau at y≈14, towers either side) ────
+  //
+  // Node 0 is the start/finish line and it is the seam of the closed spline:
+  // its tangent comes from the node *before* it (the hairpin exit) and the one
+  // after. Both must already point down the straight, or the lap joins itself
+  // at an angle — which is how the first draft ran the return leg into the
+  // grid head-on and drew the two corridors through each other.
+  { x: -470, y: 14, z: -470, width: 22, section: 'city' },
+  { x: -280, y: 14, z: -460, width: 22, section: 'city' },
+  { x: -100, y: 14, z: -445, width: 20, section: 'city' },
+  { x: 60, y: 14, z: -428, width: 19, section: 'city' },
 
-  // ── Turn 1: long right-hander ─────────────────────────────────────────
-  { x: 440, y: 1, z: 40, width: 16, section: 'turn1' },
-  { x: 490, y: 3, z: 100, width: 15, section: 'turn1' },
+  // ── 2. Turn 1: long right onto the east plateau ───────────────────────
+  { x: 230, y: 14, z: -390, width: 18, section: 'turn1' },
+  { x: 360, y: 14, z: -320, width: 17, section: 'turn1' },
+  { x: 440, y: 15, z: -200, width: 17, section: 'turn1' },
 
-  // ── The climb, into the crest ─────────────────────────────────────────
-  { x: 500, y: 6, z: 165, width: 15, section: 'climb' },
-  { x: 475, y: 10, z: 222, width: 15, section: 'climb' },
-  { x: 415, y: 14, z: 258, width: 15, section: 'climb' },
-  { x: 340, y: 16, z: 272, width: 16, section: 'crest' },
+  // ── 3. The rim: the last of the solid ground before the basin ─────────
+  { x: 470, y: 17, z: -110, width: 17, section: 'rim' },
 
-  // ── Downhill ──────────────────────────────────────────────────────────
-  { x: 265, y: 13, z: 262, width: 16, section: 'descent' },
-  { x: 205, y: 9, z: 235, width: 15, section: 'descent' },
-  { x: 170, y: 6, z: 192, width: 14, section: 'descent' },
+  // ── 4. The flyover: deck held level while the ground drops to ~1 m ────
+  { x: 480, y: 20, z: -20, width: 16, section: 'flyover' },
+  { x: 430, y: 21, z: 70, width: 16, section: 'flyover' },
+  { x: 330, y: 21, z: 140, width: 16, section: 'flyover' },
+  { x: 200, y: 21, z: 165, width: 16, section: 'flyover' },
+  { x: 60, y: 21, z: 140, width: 16, section: 'flyover' },
+  { x: -60, y: 20, z: 90, width: 17, section: 'flyover' },
+  { x: -190, y: 18, z: 40, width: 17, section: 'landing' },
 
-  // ── The esses ─────────────────────────────────────────────────────────
-  { x: 168, y: 4, z: 150, width: 14, section: 'esses' },
-  { x: 200, y: 3, z: 118, width: 13, section: 'esses' },
-  { x: 228, y: 2, z: 86, width: 13, section: 'esses' },
+  // ── 5. West loop: back on the plateau, fast and open ──────────────────
+  { x: -290, y: 15, z: 60, width: 18, section: 'west' },
+  { x: -430, y: 14, z: 120, width: 18, section: 'west' },
+  { x: -520, y: 14, z: 260, width: 18, section: 'west' },
+  { x: -460, y: 14, z: 400, width: 18, section: 'west' },
+  { x: -300, y: 14, z: 490, width: 18, section: 'west' },
+  { x: -120, y: 15, z: 520, width: 18, section: 'west' },
 
-  // ── Hairpin (kept ≥ 40 m clear of the main straight) ──────────────────
-  { x: 212, y: 1, z: 52, width: 14, section: 'hairpin' },
-  { x: 155, y: 0, z: 44, width: 14, section: 'hairpin' },
-  { x: 98, y: 0, z: 62, width: 15, section: 'hairpin' },
+  // ── 6. The climb: into the mountains, 14 m → 30 m ─────────────────────
+  { x: 40, y: 24, z: 540, width: 17, section: 'climb' },
+  { x: 180, y: 27, z: 570, width: 16, section: 'climb' },
+  { x: 320, y: 29, z: 560, width: 16, section: 'climb' },
 
-  // ── Infield + final sweep back onto the straight ──────────────────────
-  { x: 52, y: 0, z: 96, width: 15, section: 'infield' },
-  { x: -10, y: 0, z: 104, width: 16, section: 'infield' },
-  { x: -70, y: 0, z: 88, width: 16, section: 'infield' },
-  { x: -115, y: 0, z: 46, width: 16, section: 'final' },
-  { x: -125, y: 0, z: -6, width: 17, section: 'final' },
-  { x: -90, y: 0, z: -40, width: 18, section: 'final' },
-  { x: -35, y: 0, z: -30, width: 18, section: 'final' },
+  // ── 7. Summit hairpin, then the plunge under the flyover ──────────────
+  { x: 450, y: 30, z: 520, width: 16, section: 'crest' },
+  { x: 540, y: 28, z: 430, width: 17, section: 'hairpin' },
+  { x: 520, y: 22, z: 300, width: 17, section: 'descent' },
+  { x: 470, y: 12, z: 190, width: 17, section: 'descent' },
+  { x: 400, y: 8, z: 110, width: 17, section: 'underpass' },
+  { x: 330, y: 6, z: 30, width: 17, section: 'underpass' },
+  { x: 300, y: 10, z: -60, width: 18, section: 'climbout' },
+
+  // ── 8. Return straight, parallel to the start line ────────────────────
+  { x: 250, y: 14, z: -160, width: 18, section: 'return' },
+  { x: 120, y: 14, z: -230, width: 19, section: 'return' },
+  { x: -60, y: 14, z: -280, width: 20, section: 'return' },
+  { x: -250, y: 14, z: -300, width: 21, section: 'return' },
+  { x: -420, y: 14, z: -300, width: 22, section: 'return' },
+
+  // ── 9. Stadium hairpin: the return leg turns 180° onto the grid ───────
+  //
+  // The two straights are 160 m apart, so this is a real corner with a ~70 m
+  // radius rather than the track folding back on its own corridor. It exits
+  // already pointing down the start straight, which is what keeps the seam at
+  // node 0 smooth.
+  { x: -560, y: 14, z: -330, width: 20, section: 'stadium' },
+  { x: -640, y: 14, z: -390, width: 18, section: 'stadium' },
+  { x: -600, y: 14, z: -450, width: 20, section: 'stadium' },
 ];
 
 /** Flat `x y z x y z …` list for the `<RaceTrack centerline>` attribute. */

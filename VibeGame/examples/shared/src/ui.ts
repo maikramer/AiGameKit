@@ -51,8 +51,7 @@ export function showToast(message: string, opts: ToastOptions = {}): void {
   toastEl.style.background = opts.background ?? 'rgba(18,14,28,0.94)';
   toastEl.style.font = opts.font ?? '17px Georgia,serif';
   toastEl.style.maxWidth = opts.maxWidth ?? '';
-  toastEl.style.boxShadow =
-    opts.glow ?? '0 0 22px rgba(120,90,255,0.35)';
+  toastEl.style.boxShadow = opts.glow ?? '0 0 22px rgba(120,90,255,0.35)';
   toastEl.style.textShadow = opts.textGlow ?? '';
   toastEl.textContent = message;
   toastEl.style.opacity = '1';

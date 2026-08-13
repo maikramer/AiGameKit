@@ -1,0 +1,101 @@
+<!--
+  Vegetação e rochas. Três regiões, cada uma colada a um bloco do heightmap
+  (ver `world/terrain.xml`). Árvores = packs Crystal Vale (`meshes/forest`).
+
+  O bosque da bacia é o ponto alto: fica DEBAIXO do viaduto. Isso só funciona
+  porque o carve da estrada trata o vão como voo — não achata o vale e não
+  regista corredor `avoid-road` por baixo dele — portanto o spawner continua a
+  poder plantar aqui. Copas que furariam o tabuleiro são rejeitadas
+  (`crownHitsFlyingDeck`). `avoid-road` é o leito (asfalto + berma + lombo); o
+  talude é plantável. Se alguém baixar o `flatten-viaduct-clearance` do
+  `circuit/bed.xml`, esta floresta desaparece e fica uma cicatriz de terra.
+-->
+
+<!-- Bacia central: carvalhos densos por baixo do vão (y do terreno ≈ 0–8). -->
+<StaticSpawner
+  count="260"
+  seed="8801"
+  region-min="-160 0 -70"
+  region-max="500 0 210"
+  align-to-terrain="1"
+  ground-align="auto"
+  max-slope-deg="30"
+  scale-min="0.9"
+  scale-max="1.8"
+  avoid-road="1"
+  avoid-water="1"
+>
+  <GLTFLoader url="/assets/meshes/forest/tree_oak_lod0.glb"></GLTFLoader>
+</StaticSpawner>
+
+<!-- Encosta da montanha a sudeste: pinheiros até ao cume. -->
+<StaticSpawner
+  count="320"
+  seed="8802"
+  region-min="-140 0 260"
+  region-max="640 0 650"
+  align-to-terrain="1"
+  ground-align="auto"
+  max-slope-deg="38"
+  scale-min="0.8"
+  scale-max="1.6"
+  avoid-road="1"
+>
+  <GLTFLoader url="/assets/meshes/forest/tree_pine_lod0.glb"></GLTFLoader>
+</StaticSpawner>
+
+<!-- Planalto oeste/norte: pinheiros escuros à volta da cidade e do retorno. -->
+<StaticSpawner
+  count="220"
+  seed="8803"
+  region-min="-660 0 -660"
+  region-max="660 0 260"
+  align-to-terrain="1"
+  ground-align="auto"
+  max-slope-deg="35"
+  scale-min="0.8"
+  scale-max="1.5"
+  avoid-road="1"
+>
+  <GLTFLoader url="/assets/meshes/forest/pine_dark_lod0.glb"></GLTFLoader>
+</StaticSpawner>
+
+<!-- Rochas musgosas por todo o mapa (pack props do RPG). -->
+<StaticSpawner
+  count="150"
+  seed="8804"
+  region-min="-660 0 -660"
+  region-max="660 0 660"
+  align-to-terrain="1"
+  ground-align="auto"
+  max-slope-deg="42"
+  scale-min="0.5"
+  scale-max="1.4"
+  avoid-road="1"
+>
+  <GLTFLoader url="/assets/meshes/props/rock_mossy_lod0.glb"></GLTFLoader>
+</StaticSpawner>
+
+<!-- Grama com vento na beira da pista (kit vegetation do Crystal Vale). O
+     spawner assenta cada instância no terreno; `avoid-road` mantém o corredor
+     limpo usando os GroundBrush do <Road> — e, com o viaduto, só os troços que
+     realmente assentam no chão. -->
+<Vegetation
+  meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_redA.glb"
+  density-per-km2="18000"
+  seed="7"
+  region-min="-660 0 -660"
+  region-max="660 0 660"
+  smart="0"
+  cluster-count="0"
+  cluster-radius="3.2"
+  flower-near-radius="2.2"
+  flower-density-ratio="0.22"
+  plant-density-ratio="0.4"
+  avoid-water="1"
+  avoid-road="1"
+  avoid-overlaps="0"
+  wind="1"
+  max-slope-deg="35"
+  max-distance="160"
+></Vegetation>

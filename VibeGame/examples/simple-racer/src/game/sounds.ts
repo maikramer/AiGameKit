@@ -65,6 +65,7 @@ export function preloadGameSounds(): void {
     'race-sidewinder',
     'race-shield',
     'race-respawn',
+    'race-skid',
     'save',
     'load',
     'bgm-race',

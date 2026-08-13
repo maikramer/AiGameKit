@@ -12,6 +12,7 @@
 import * as GAME from 'vibegame';
 import { registerGameSounds, preloadGameSounds } from './game/sounds';
 import {
+  BED_MARGIN,
   TRACK_ELEVATION,
   TRACK_NODES,
   centerlineAttribute,
@@ -25,19 +26,38 @@ import { wireOptions } from '../../shared/src/options';
 import { registerProfilerDebug } from '../../shared/src/profiler';
 import { showToast } from '../../shared/src/ui';
 
-/** Fill in the `<RaceTrack>` geometry attributes before the engine parses it. */
-function injectTrack(): void {
-  const el = document.querySelector('RaceTrack');
-  if (!el) return;
-  el.setAttribute('centerline', centerlineAttribute());
-  el.setAttribute('widths', widthsAttribute());
-  el.setAttribute('sections', sectionsAttribute());
+/** First element with this tag name anywhere in the assembled world. */
+function findTag(
+  root: GAME.ParsedElement,
+  tagName: string
+): GAME.ParsedElement | undefined {
+  return GAME.findElements(root, (el) => el.tagName === tagName)[0];
+}
 
-  // Fill the road bed `<Road path>` from the same spline (once the engine
-  // builds it later) so the carve follows the circuit exactly. The spline
-  // needs the centerline attributes set above, so this runs after. Heights
-  // carry the same TRACK_ELEVATION as the centerline so the bed carve and
-  // the driving surface stay in the same frame.
+/**
+ * Fill in the generated geometry on the tags authored in `public/world/*.xml`.
+ *
+ * The circuit lives in its own include, so it does not exist in `document`
+ * when this runs — the engine only assembles the world during `GAME.run()`.
+ * `GAME.onWorldXml` hands us the expanded tree at exactly the right moment:
+ * after the includes, before there are entities.
+ */
+function injectTrack(root: GAME.ParsedElement): void {
+  const el = findTag(root, 'RaceTrack');
+  if (!el) return;
+  el.attributes.centerline = centerlineAttribute();
+  el.attributes.widths = widthsAttribute();
+  el.attributes.sections = sectionsAttribute();
+
+  // Fill the road bed `<Road>` from the same spline so the carve follows the
+  // circuit exactly. The spline needs the centerline attributes set above, so
+  // this runs after.
+  //
+  // Four parallel lists, not just the path: the carver grades the bed to the
+  // *authored* elevation (`heights`), matches the per-corner width (`widths`)
+  // and tilts the ground with the banking (`banks`). Surveying the terrain
+  // instead — the default for a village lane — would put the bed wherever the
+  // hills happen to be and leave the circuit hanging over it.
   const spline = new GAME.TrackSpline(
     TRACK_NODES.map((n) => ({
       x: n.x,
@@ -48,13 +68,31 @@ function injectTrack(): void {
     { closed: true, step: 6 }
   );
   const path: number[] = [];
-  for (let s = 0; s < spline.length; s += 6) {
+  const heights: number[] = [];
+  const widths: number[] = [];
+  const banks: number[] = [];
+  const round = (v: number, d = 2) => Number(v.toFixed(d));
+  const pushStation = (s: number) => {
     const f = spline.sampleAt(s);
-    path.push(Number(f.x.toFixed(1)), Number(f.z.toFixed(1)));
-  }
-  const f0 = spline.sampleAt(0);
-  path.push(Number(f0.x.toFixed(1)), Number(f0.z.toFixed(1)));
-  document.querySelector('Road')?.setAttribute('path', path.join(' '));
+    path.push(round(f.x, 1), round(f.z, 1));
+    // Bed = driving surface minus the suspension height, so the track ribbon
+    // sits exactly TRACK_ELEVATION above ground the whole way round.
+    heights.push(round(f.y - TRACK_ELEVATION));
+    // Bed covers the racing surface plus the kerbs and the wall footing.
+    widths.push(round(f.width + BED_MARGIN, 1));
+    banks.push(round((f.bank * 180) / Math.PI));
+  };
+  for (let s = 0; s < spline.length; s += 6) pushStation(s);
+  // Close the loop on the exact start station (flatten-closed needs the
+  // duplicated node) so there is no step across the start/finish line.
+  pushStation(0);
+
+  const road = findTag(root, 'Road');
+  if (!road) return;
+  road.attributes.path = path.join(' ');
+  road.attributes.heights = heights.join(' ');
+  road.attributes.widths = widths.join(' ');
+  road.attributes.banks = banks.join(' ');
 }
 
 /**
@@ -72,29 +110,41 @@ async function preloadVehicles(): Promise<void> {
   await Promise.all(urls.map((url) => loader.loadAsync(url).catch(() => null)));
 }
 
-export type RaceMode = 'race' | 'time-trial';
+export type RaceMode = 'race' | 'time-trial' | 'weekend';
+
+/** Chosen at the menu, read by the world hook when the scene is assembled. */
+let raceMode: RaceMode = 'race';
+
+/** Record the chosen mode; the world hook applies it at parse time. */
+export function applyMode(
+  mode: RaceMode,
+  _condition: GAME.TrackCondition = 'dry'
+): void {
+  raceMode = mode;
+}
 
 /**
- * Apply the chosen mode to the scene DOM *before* the engine parses it.
+ * Apply the chosen mode to the assembled world.
  *
  * - Race: keep the `<AiVehicle>` rivals; disable checkpoint respawns (a
  *   full grid races to the flag, off-track is the driver's problem).
  * - Time Trial: drop the rivals; enable checkpoint respawn so a crash costs
  *   time, not the race.
+ *
+ * The rivals live in `world/grid.xml`, so this prunes the parsed tree rather
+ * than the DOM — the include is never in `document` to begin with.
  */
-export function applyMode(mode: RaceMode): void {
-  const track = document.querySelector('RaceTrack');
-  if (mode === 'time-trial') {
-    // Solo against the clock: drop the rivals, enable checkpoint respawn so
-    // a crash costs time, not the race.
-    for (const rival of document.querySelectorAll('AiVehicle')) {
-      rival.remove();
-    }
-    track?.setAttribute('checkpoint-count', '8');
-  } else {
-    // Full grid: keep the `<AiVehicle>` rivals and disable checkpoint
-    // respawns (off-track is the driver's problem in a race).
-    track?.removeAttribute('checkpoint-count');
+function applyModeToWorld(root: GAME.ParsedElement): void {
+  const track = findTag(root, 'RaceTrack');
+  if (raceMode === 'time-trial') {
+    const prune = (node: GAME.ParsedElement): void => {
+      node.children = node.children.filter((c) => c.tagName !== 'AiVehicle');
+      for (const child of node.children) prune(child);
+    };
+    prune(root);
+    if (track) track.attributes['checkpoint-count'] = '8';
+  } else if (track) {
+    delete track.attributes['checkpoint-count'];
   }
 }
 
@@ -106,30 +156,30 @@ export function applyMode(mode: RaceMode): void {
  * start audio without a user gesture. Starting the countdown before that click
  * gives the player a race they cannot steer and cannot hear.
  */
-function waitForMode(): Promise<RaceMode> {
+function waitForMode(): Promise<{
+  mode: RaceMode;
+  condition: GAME.TrackCondition;
+}> {
   const overlay = document.getElementById('loading');
   const canvas = document.getElementById(
     'game-canvas'
   ) as HTMLCanvasElement | null;
   const prompt = overlay?.querySelector('.sub');
   const menu = document.getElementById('mode-menu');
+  const condMenu = document.getElementById('cond-menu');
   if (prompt) prompt.textContent = 'Choose a mode';
   overlay?.classList.add('ready');
   menu?.classList.remove('hidden');
-  if (!overlay) return Promise.resolve('race');
+  if (!overlay) return Promise.resolve({ mode: 'race', condition: 'dry' });
 
-  return new Promise<RaceMode>((resolve) => {
+  return new Promise((resolve) => {
+    let condition: GAME.TrackCondition = 'dry';
     const pick = (mode: RaceMode): void => {
       for (const btn of menu?.querySelectorAll('button') ?? []) {
         btn.removeEventListener('click', onPick);
       }
-      applyMode(mode);
+      applyMode(mode, condition);
       overlay.classList.add('hidden');
-      // Give the canvas focus so the input plugin starts recording keys. The
-      // button click would otherwise keep focus on the button and the input
-      // plugin (which gates on `focusedCanvas`) would swallow every key, so
-      // steal focus back on the next animation frame (after the click event
-      // has fully dispatched).
       canvas?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
       const stealFocus = (): void => {
         canvas?.focus();
@@ -138,23 +188,34 @@ function waitForMode(): Promise<RaceMode> {
         }
       };
       requestAnimationFrame(stealFocus);
-      resolve(mode);
+      resolve({ mode, condition });
     };
     const onPick = (e: Event): void => {
-      const mode = (e.currentTarget as HTMLElement).dataset
-        .mode as RaceMode | undefined;
+      const mode = (e.currentTarget as HTMLElement).dataset.mode as
+        RaceMode | undefined;
       if (mode) pick(mode);
     };
     for (const btn of menu?.querySelectorAll('button') ?? []) {
       btn.addEventListener('click', onPick);
+    }
+    for (const btn of condMenu?.querySelectorAll('button') ?? []) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = (e.currentTarget as HTMLElement).dataset.condition as
+          GAME.TrackCondition | undefined;
+        if (!next) return;
+        condition = next;
+        for (const b of condMenu?.querySelectorAll('button') ?? []) {
+          b.classList.toggle('selected', b === e.currentTarget);
+        }
+      });
     }
   });
 }
 
 /** Music: the race loop while driving, the menu loop over the results screen. */
 const BgmSystem = GAME.createMusicLayerDriver({
-  resolve: () =>
-    GAME.getRaceState().phase === 'finished' ? 'menu' : 'race',
+  resolve: () => (GAME.getRaceState().phase === 'finished' ? 'menu' : 'race'),
 });
 
 // ── Best lap persistence: same player-scoped save serializer pattern as
@@ -162,19 +223,61 @@ const BgmSystem = GAME.createMusicLayerDriver({
 //    the grid, so a small system re-applies the persisted best (and captures
 //    new records) — the HUD "Best" line reads bestLapTime[player]. ───────────
 const SAVE_KEY = 'simple-racer-save';
+const PB_KEY = 'simple-racer-pb';
 const BEST_LAP_KIND = 'racer-best-lap';
 let persistedBest = 0;
+let lastGhostDuration = 0;
+
+function persistPersonalBest(): void {
+  try {
+    localStorage.setItem(
+      PB_KEY,
+      JSON.stringify({
+        best: persistedBest > 0 ? persistedBest : undefined,
+        ghost: GAME.serializeGhostLap(GAME.getGhostLap()),
+      })
+    );
+  } catch {
+    // Quota / private mode — the in-memory PB still works this session.
+  }
+}
+
+function hydratePersonalBest(): void {
+  try {
+    const raw = localStorage.getItem(PB_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw) as { best?: number; ghost?: unknown };
+    if (typeof d.best === 'number' && d.best > 0) persistedBest = d.best;
+    const ghost = GAME.parseGhostLap(d.ghost);
+    if (ghost) {
+      GAME.setGhostLap(ghost);
+      lastGhostDuration = ghost.duration;
+    }
+  } catch {
+    // Corrupt payload — start a fresh PB rather than crash boot.
+  }
+}
 
 function registerBestLapSerializer(state: GAME.State): void {
   GAME.registerSaveSerializer(state, BEST_LAP_KIND, {
     serialize: (s, eid) => {
       if (s.getEntityByName('player') !== eid) return null;
-      return persistedBest > 0 ? { best: persistedBest } : null;
+      if (persistedBest <= 0 && !GAME.getGhostLap()) return null;
+      return {
+        best: persistedBest > 0 ? persistedBest : undefined,
+        ghost: GAME.serializeGhostLap(GAME.getGhostLap()),
+      };
     },
     deserialize: (s, eid, data) => {
       if (s.getEntityByName('player') !== eid) return;
-      const d = data as { best?: number };
+      const d = data as { best?: number; ghost?: unknown };
       if (typeof d.best === 'number' && d.best > 0) persistedBest = d.best;
+      const ghost = GAME.parseGhostLap(d.ghost);
+      if (ghost) {
+        GAME.setGhostLap(ghost);
+        lastGhostDuration = ghost.duration;
+      }
+      persistPersonalBest();
     },
   });
 }
@@ -186,9 +289,14 @@ const BestLapSyncSystem: GAME.System = {
     const eid = state.getEntityByName('player');
     if (eid === null) return;
     const current = GAME.RaceTracker.bestLapTime[eid];
-    if (current > persistedBest) {
+    if (current <= 0) {
+      if (persistedBest > 0) GAME.RaceTracker.bestLapTime[eid] = persistedBest;
+      return;
+    }
+    let dirty = false;
+    if (persistedBest <= 0 || current < persistedBest - 0.01) {
       persistedBest = current;
-      // New record — same floating-text juice as simple-rpg's combat feedback.
+      dirty = true;
       GAME.spawnFloatingText(state, 'NEW BEST LAP!', {
         x: GAME.Transform.posX[eid],
         y: GAME.Transform.posY[eid] + 2.8,
@@ -196,9 +304,16 @@ const BestLapSyncSystem: GAME.System = {
         duration: 2.4,
         color: '#7fe0a0',
       });
-    } else if (persistedBest > 0 && current < persistedBest) {
-      GAME.RaceTracker.bestLapTime[eid] = persistedBest;
     }
+    const ghostDur = GAME.getGhostLap()?.duration ?? 0;
+    if (
+      ghostDur > 0 &&
+      (lastGhostDuration <= 0 || ghostDur < lastGhostDuration - 0.01)
+    ) {
+      lastGhostDuration = ghostDur;
+      dirty = true;
+    }
+    if (dirty) persistPersonalBest();
   },
 };
 
@@ -263,7 +378,9 @@ async function waitForLoadingDone(): Promise<void> {
   const deadline = performance.now() + 30000;
   while (document.getElementById('vibegame-loading')) {
     if (performance.now() >= deadline) {
-      console.warn('[racer] loading screen never finished — releasing the grid');
+      console.warn(
+        '[racer] loading screen never finished — releasing the grid'
+      );
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -284,14 +401,16 @@ const UiSetupSystem: GAME.System = {
         'options.restart': '🔁 Restart',
         'options.controls':
           'Drive: WASD / Arrows   Handbrake: Space   Nitro: Shift\n' +
-          'Camera: C   Restart: R   Pause: Q',
+          'Power-ups: 1 2 3   Look back: V   Camera: C   Restart: R   Pause: Q\n' +
+          'Slipstream: tuck behind a rival · Ghost: beat your PB lap',
       },
       pt: {
         'modal.tab.options': 'Opções',
         'options.restart': '🔁 Recomeçar',
         'options.controls':
           'Dirigir: WASD / Setas   Freio de mão: Espaço   Nitro: Shift\n' +
-          'Câmera: C   Recomeçar: R   Pausa: Q',
+          'Power-ups: 1 2 3   Olhar atrás: V   Câmera: C   Recomeçar: R   Pausa: Q\n' +
+          'Slipstream: cola no rival · Ghost: bate a tua volta PB',
       },
     });
     registerBestLapSerializer(state);
@@ -341,7 +460,15 @@ async function runBootstrap(): Promise<void> {
 
   registerGameSounds();
   preloadGameSounds();
-  injectTrack();
+  hydratePersonalBest();
+
+  // Everything the world XML cannot say for itself, in one place: the circuit
+  // geometry (generated from src/track.ts) and the race mode chosen at the
+  // menu. The hook fires inside GAME.run(), once the includes are assembled.
+  GAME.onWorldXml((root) => {
+    injectTrack(root);
+    applyModeToWorld(root);
+  });
 
   // The BGM plays through the music mixer (`origin: 'music'` resolves the
   // layer name) — register our layers so the mixer doesn't fall back to
@@ -373,7 +500,7 @@ async function runBootstrap(): Promise<void> {
   // the rivals / toggles checkpoint-count, and the parsers only see the DOM
   // once.
   await preloadVehicles();
-  await waitForMode();
+  const choice = await waitForMode();
 
   // Loading screen (same as simple-rpg): mounts here so the world parses and
   // streams behind an honest progress bar instead of a blank screen; the
@@ -388,6 +515,10 @@ async function runBootstrap(): Promise<void> {
 
   const runtime = await GAME.getBuilder().build();
   const state = runtime.getState();
+  GAME.setRaceState({
+    session: choice.mode === 'weekend' ? 'qualifying' : 'race',
+    condition: choice.condition,
+  });
 
   // QA surface — needs state and must run before runtime.start() parses the
   // scene. (Spawner road exclusion comes from the <Road flatten> ground brush
@@ -395,7 +526,10 @@ async function runBootstrap(): Promise<void> {
   registerProfilerDebug(state);
   GAME.registerDebugVar(state, 'race', () => ({
     phase: GAME.getRaceState().phase,
+    session: GAME.getRaceState().session,
+    condition: GAME.getRaceState().condition,
     bestLap: persistedBest,
+    ghost: GAME.getGhostLap()?.duration ?? null,
     standings: GAME.getStandings().map((eid) => ({
       eid,
       name: GAME.getVehicleName(eid),
@@ -417,6 +551,7 @@ async function runBootstrap(): Promise<void> {
     state: GAME.getRaceState,
     standings: GAME.getStandings,
     restart: GAME.restartRace,
+    ghost: GAME.getGhostLap,
     cars: () =>
       GAME.getStandings().map((eid) => ({
         eid,

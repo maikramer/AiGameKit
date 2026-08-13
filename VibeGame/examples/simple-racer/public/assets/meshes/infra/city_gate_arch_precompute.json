@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "city_gate_arch",
+  "category": "building",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -5.0797,
+      -0.0423,
+      -0.6728
+    ],
+    "max": [
+      5.0792,
+      5.3407,
+      0.6659
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 5.0794,
+    "height": 5.3829,
+    "base_y": -0.0423
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

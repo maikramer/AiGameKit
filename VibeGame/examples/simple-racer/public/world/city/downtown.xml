@@ -1,0 +1,239 @@
+<!--
+  Downtown — aldeia Crystal Vale a ladear a reta principal (planalto liso a 14 m,
+  entre (-470,-470) e (60,-428)). Mesmas âncoras das antigas torres-caixa;
+  GLBs partilhados (village_*), instanced por URL.
+
+  Regra de distância: o corredor do circuito chega a ~30 m do eixo, e as casas
+  ficam a 34 m no mínimo — senão o carve da estrada passa por baixo delas.
+  Quem mexer no traçado em `src/track.ts` tem de reconferir estas posições.
+
+  `place="at: x z"` assenta cada casa no terreno; rigidbody fixed. Top-level
+  (sem <Group> com pos≠0) porque só assim o corpo rígido espelha a pose no Rapier.
+  Visual via <GLTFLoader instanced="true"> — um draw call por tipo, não um clone
+  por torre (PROGRESS.md: 1713 meshes → instancing).
+-->
+<!-- Lado Z mais negativo: frente para +Z (pista). Lado Z maior: yaw 180. -->
+<GameObject
+  name="vale-0"
+  transform="rotation: 0 0 0"
+  place="at: -473 -551"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/village_house_lod0.glb"
+    lod1-url="/assets/meshes/village/village_house_lod1.glb"
+    lod2-url="/assets/meshes/village/village_house_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-1"
+  transform="rotation: 0 180 0"
+  place="at: -470 -409"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/village_longhouse_lod0.glb"
+    lod1-url="/assets/meshes/village/village_longhouse_lod1.glb"
+    lod2-url="/assets/meshes/village/village_longhouse_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-2"
+  transform="rotation: 0 0 0"
+  place="at: -414 -539"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/watchtower_lod0.glb"
+    lod1-url="/assets/meshes/village/watchtower_lod1.glb"
+    lod2-url="/assets/meshes/village/watchtower_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-3"
+  transform="rotation: 0 180 0"
+  place="at: -395 -408"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/chapel_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/chapel_lod0.glb"
+    lod1-url="/assets/meshes/village/chapel_lod1.glb"
+    lod2-url="/assets/meshes/village/chapel_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-4"
+  transform="rotation: 0 0 0"
+  place="at: -332 -513"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/market_stall_lod0.glb"
+    lod1-url="/assets/meshes/village/market_stall_lod1.glb"
+    lod2-url="/assets/meshes/village/market_stall_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-5"
+  transform="rotation: 0 180 0"
+  place="at: -329 -395"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/shepherd_cottage_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/shepherd_cottage_lod0.glb"
+    lod1-url="/assets/meshes/village/shepherd_cottage_lod1.glb"
+    lod2-url="/assets/meshes/village/shepherd_cottage_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-6"
+  transform="rotation: 0 0 0"
+  place="at: -249 -516"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/village_house_lod0.glb"
+    lod1-url="/assets/meshes/village/village_house_lod1.glb"
+    lod2-url="/assets/meshes/village/village_house_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-7"
+  transform="rotation: 0 180 0"
+  place="at: -252 -376"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/village_longhouse_lod0.glb"
+    lod1-url="/assets/meshes/village/village_longhouse_lod1.glb"
+    lod2-url="/assets/meshes/village/village_longhouse_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-8"
+  transform="rotation: 0 0 0"
+  place="at: -204 -509"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/watchtower_lod0.glb"
+    lod1-url="/assets/meshes/village/watchtower_lod1.glb"
+    lod2-url="/assets/meshes/village/watchtower_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-9"
+  transform="rotation: 0 180 0"
+  place="at: -191 -373"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/chapel_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/chapel_lod0.glb"
+    lod1-url="/assets/meshes/village/chapel_lod1.glb"
+    lod2-url="/assets/meshes/village/chapel_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-10"
+  transform="rotation: 0 0 0"
+  place="at: -128 -513"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/market_stall_lod0.glb"
+    lod1-url="/assets/meshes/village/market_stall_lod1.glb"
+    lod2-url="/assets/meshes/village/market_stall_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-11"
+  transform="rotation: 0 180 0"
+  place="at: -112 -378"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/shepherd_cottage_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/shepherd_cottage_lod0.glb"
+    lod1-url="/assets/meshes/village/shepherd_cottage_lod1.glb"
+    lod2-url="/assets/meshes/village/shepherd_cottage_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-12"
+  transform="rotation: 0 0 0"
+  place="at: -71 -491"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/village_house_lod0.glb"
+    lod1-url="/assets/meshes/village/village_house_lod1.glb"
+    lod2-url="/assets/meshes/village/village_house_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-13"
+  transform="rotation: 0 180 0"
+  place="at: -66 -354"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/village_longhouse_lod0.glb"
+    lod1-url="/assets/meshes/village/village_longhouse_lod1.glb"
+    lod2-url="/assets/meshes/village/village_longhouse_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-14"
+  transform="rotation: 0 0 0"
+  place="at: 2 -494"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/watchtower_lod0.glb"
+    lod1-url="/assets/meshes/village/watchtower_lod1.glb"
+    lod2-url="/assets/meshes/village/watchtower_lod2.glb"
+  ></GLTFLoader>
+</GameObject>
+<GameObject
+  name="vale-15"
+  transform="rotation: 0 180 0"
+  place="at: -12 -364"
+  rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/village/chapel_collision.glb; mesh-anchor: base"
+>
+  <GLTFLoader
+    instanced="true"
+    url="/assets/meshes/village/chapel_lod0.glb"
+    lod1-url="/assets/meshes/village/chapel_lod1.glb"
+    lod2-url="/assets/meshes/village/chapel_lod2.glb"
+  ></GLTFLoader>
+</GameObject>

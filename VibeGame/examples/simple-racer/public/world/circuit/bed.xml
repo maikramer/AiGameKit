@@ -1,0 +1,39 @@
+<!--
+  Terraplanagem do circuito — o `<Road>` aqui NÃO pinta nada (`paint="0"`):
+  serve só para preparar o terreno debaixo da pista.
+
+  `path`, `heights`, `widths` e `banks` são injetados por `src/main.ts` a partir
+  do spline (hook `GAME.onWorldXml`, corre depois dos Includes e antes do
+  parse). Tudo o resto é autorado aqui:
+
+    · flatten-viaduct-clearance → acima de 6 m sobre o terreno natural o carve
+      NÃO toca no chão: o vale, a floresta e o lago passam intactos por baixo
+      do vão (e o `<RaceTrack viaduct-clearance>` põe lá os pilares).
+    · flatten-shoulder / -berm    → escapatória plana + lombo que segura o carro.
+    · flatten-falloff             → talude até à berma das árvores (~16 m).
+      Com 5 m o corte vira falésia e o bosque / dressing assentam no cimo,
+      a flutuar sobre a pista.
+    · flatten-closed              → perfil fecha na linha de meta sem degrau.
+    · flatten-bank                → leito inclina com o peralte das curvas.
+    · flatten-overlap-elevation   → onde dois braços passam no mesmo sítio
+      (a descida da montanha por baixo do viaduto) ganha o que está à cota do
+      terreno, em vez do mais próximo em XZ.
+-->
+<Road
+  id="circuit-bed"
+  path="0 0 1 0"
+  width="30"
+  paint="0"
+  flatten="1"
+  flatten-falloff="16"
+  flatten-window="60"
+  flatten-max-grade="0.32"
+  flatten-closed="1"
+  flatten-bank="1"
+  flatten-shoulder="7"
+  flatten-berm="0.9"
+  flatten-berm-width="3.5"
+  flatten-viaduct-clearance="6"
+  flatten-overlap-elevation="1"
+  smoothing="0"
+></Road>

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "chapel",
+  "category": "building",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -2.8423,
+      0.0,
+      -2.2762
+    ],
+    "max": [
+      2.8413,
+      7.0037,
+      2.2758
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 2.8418,
+    "height": 7.0037,
+    "base_y": 0.0
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "notice_board",
+  "category": "prop",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -0.783,
+      0.0,
+      -0.1007
+    ],
+    "max": [
+      0.783,
+      1.9804,
+      0.1007
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 0.783,
+    "height": 1.9804,
+    "base_y": 0.0
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

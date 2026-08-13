@@ -1,0 +1,64 @@
+<!--
+  Obstáculos e power-ups, em coordenadas de PISTA: `s` = metros de arco desde a
+  linha de meta, `lateral` = deslocamento do eixo (+ = direita do condutor).
+  Volta ≈ 5250 m — ver os setores em `src/track.ts`.
+
+  Nada aqui tem coordenadas de mundo: mexer no traçado leva os hazards juntos.
+-->
+<Group name="hazards" pos="0 0 0">
+  <!-- Reta da cidade: barril logo depois da saída de boxes. -->
+  <RaceTrackObstacle
+    name="barrel-downtown"
+    s="420"
+    lateral="-1.5"
+    radius="0.8"
+    kind="barrel"
+  ></RaceTrackObstacle>
+
+  <!-- Curva 1, à entrada do planalto leste. -->
+  <RaceTrackObstacle
+    name="drone-turn1"
+    s="1180"
+    lateral="2"
+    radius="1.0"
+    kind="drone"
+  ></RaceTrackObstacle>
+
+  <!-- Sobre o viaduto: portão no meio do vão, sem escapatória nenhuma. -->
+  <RaceTrackObstacle
+    name="gate-flyover"
+    s="1950"
+    lateral="0"
+    radius="1.1"
+    kind="gate"
+  ></RaceTrackObstacle>
+
+  <!-- Subida da montanha. -->
+  <RaceTrackObstacle
+    name="barrel-climb"
+    s="3450"
+    lateral="1.6"
+    radius="0.8"
+    kind="barrel"
+  ></RaceTrackObstacle>
+
+  <!-- Descida rápida para debaixo do viaduto. -->
+  <RaceTrackObstacle
+    name="drone-underpass"
+    s="4350"
+    lateral="-2"
+    radius="1.0"
+    kind="drone"
+  ></RaceTrackObstacle>
+
+  <RaceTrackPickup s="260" lateral="0" kind="pulse" respawn="4"></RaceTrackPickup>
+  <RaceTrackPickup s="700" lateral="1" kind="pulse" respawn="4"></RaceTrackPickup>
+  <RaceTrackPickup s="1600" lateral="-1" kind="sidewinder" respawn="5"></RaceTrackPickup>
+  <RaceTrackPickup s="2100" lateral="-1" kind="shield" respawn="5"></RaceTrackPickup>
+  <RaceTrackPickup s="2400" lateral="1" kind="shield" respawn="5"></RaceTrackPickup>
+  <RaceTrackPickup s="2800" lateral="0" kind="pulse" respawn="4"></RaceTrackPickup>
+  <RaceTrackPickup s="3100" lateral="0" kind="pulse" respawn="4"></RaceTrackPickup>
+  <RaceTrackPickup s="3900" lateral="1" kind="sidewinder" respawn="5"></RaceTrackPickup>
+  <RaceTrackPickup s="4100" lateral="-1" kind="sidewinder" respawn="5"></RaceTrackPickup>
+  <RaceTrackPickup s="4800" lateral="1" kind="shield" respawn="5"></RaceTrackPickup>
+</Group>

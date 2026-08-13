@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "shepherd_cottage",
+  "category": "building",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -3.3771,
+      0.0,
+      -3.7483
+    ],
+    "max": [
+      3.3809,
+      4.0431,
+      3.7483
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 3.7483,
+    "height": 4.0431,
+    "base_y": 0.0
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

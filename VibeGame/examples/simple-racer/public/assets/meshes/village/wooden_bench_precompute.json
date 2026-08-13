@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "wooden_bench",
+  "category": "furniture",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -0.7998,
+      0.0001,
+      -0.2997
+    ],
+    "max": [
+      0.7996,
+      0.9362,
+      0.2997
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 0.7997,
+    "height": 0.9361,
+    "base_y": 0.0001
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

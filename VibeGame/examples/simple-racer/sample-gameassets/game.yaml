@@ -1,21 +1,18 @@
 title: Simple Racer Demo
-genre: cartoon arcade kart racing
-tone: bright vibrant arcade racing, playful cartoon track, sunny race day
-style_preset: lowpoly
+genre: cartoon fantasy cart racing
+tone: bright cheerful adventure, vibrant colors, playful cartoon world, Crystal Vale
+style_preset: painterly
 output_dir: ../../public/assets
 path_layout: split
 images_subdir: images
 meshes_subdir: meshes
 image_ext: png
 seed_base: 5555
-# Qualidade única: high → text3d preset hq + paint 8 views/4096 (auto-tune
-# ajusta por VRAM) + simplify_face_ratio 2.0 (LOD0 com o dobro de faces —
-# menos decimado). hw-auto/vramd cuidam de caber na VRAM.
 generation: high
 
 # Round 3 — master pipeline (default ON).
 # DAG: topology-fix → bake-master → LOD → collision → promote (lod0=painted) → validate.
-# Sem rig/animate: o kart e os props são estáticos — LOD0 = painted decimado.
+# Sem rig/animate: as carroças são estáticas — LOD0 = painted decimado.
 master_validate: true
 master_bake_normals: false
 negative_keywords:
@@ -26,22 +23,25 @@ negative_keywords:
   - scary
   - damaged
   - rusted
+  - engine
+  - spoiler
+  - exhaust
 text2d:
   width: 768
   height: 768
 text3d:
   export_origin: feet
-  # Decode Omni: bounds anisotrópicos + mc_level ∝ 1/octree (pinholes) — auto.
+  # Decode Omni: bounds anisotrópicos + mc_level ∝ 1/octree (pinholes).
   bounds_mode: auto
   mc_level: auto
-  # Kart/props sem split (só árvores com copa>tronco poderiam querer; aqui não).
   split_at_height: false
-  # Sem sdnq/memory_efficient explícitos: hw-auto decide a quantização
-  # (int4 em GPUs ~6 GB) e o vramd admite/evita conforme a VRAM livre.
+  # Octree: omitido no perfil — override no manifest (vehicles: 320 + mc_level 0,
+  # mesmo contrato do hero RPG). Autotune sozinho caiu em 160 e furou a malha.
+  # Peak VRAM ~6 GB: uint8 recusa; int4 cabe.
+  sdnq_preset: sdnq-int4
+  memory_efficient: true
 paint3d:
   preserve_origin: true
-  # Teto de atlas 2048 (GPU 6 GB): o auto-tune ladder (size_m ∩ cap) continua a
-  # escolher abaixo disto; sem teto, o start_banner (char_m≈3) ia a 4096 e OOM.
   texture_size: 2048
 audio_subdir: audio
 text2sound:
@@ -51,7 +51,8 @@ text2sound:
 # ============================================================
 # ASSETS: em manifests/<grupo>.yaml — 1 manifesto por grupo.
 #   gameassets resume --profile game.yaml --manifest manifests/vehicles
-#   gameassets resume --profile game.yaml --manifest manifests/props
+# forest / village / infra: symlinks → examples/shared-assets/manifests/
+#   (copiar GLBs do RPG com shared-assets/sync-from-rpg.sh; GPU só nas carroças)
 #   gameassets resume --profile game.yaml --manifest manifests/audio
 # Cada grupo declara a própria pasta (output_dir / meshes_subdir / images_subdir).
 # ============================================================

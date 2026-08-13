@@ -1,0 +1,39 @@
+<!--
+  Sky, light, post-processing and weather. Edit here for the look of the whole
+  race — nothing in this file knows about the circuit.
+-->
+<Group name="environment" pos="0 0 0">
+  <!-- Céu equirect + IBL (mesmo pipeline do simple-rpg): o PMREM do equirect
+       vira `scene.environment`, então os materiais PBR refletem o céu real em
+       vez de uma sala neutra. -->
+  <!-- Céu Crystal Vale (copiado do RPG). IBL do equirect; fog/luz alinhados
+       ao vale — menos laranja arcade, mais o céu painterly. -->
+  <EquirectSky
+    url="/assets/sky/sky.png"
+    environment-intensity="0.45"
+    background-intensity="1.0"
+  ></EquirectSky>
+
+  <!-- Luz + pós-processamento no MESMO GameObject (é assim que a entidade
+       Postprocessing nasce — o runtime só parseia o innerHTML do Scene, um
+       atributo `postprocessing=` no próprio <Scene> é ignorado).
+       Sombras: PCSS soft (sem CSM). SSAO ligado. FogExp2 ρ=0.0025 como o Vale
+       (ρ=0.008 virava parede de leite). -->
+  <GameObject
+    ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 0.85"
+    directional-light="color: 0xfff0d0; intensity: 3.2; direction-x: -0.9; direction-y: 1.2; direction-z: -0.5; cast-shadow: 1; shadow-map-size: 2048; distance: 160; pcss: 0"
+    postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.12; bloom-radius: 0.40; bloom-threshold: 0.92; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.10; vignette: 1; vignette-offset: 0.34; vignette-darkness: 0.40; color-grading: 1; saturation: 0.06; contrast: 0.05; brightness: 0.015; ssao: 1; ssao-intensity: 0.55; ssao-radius: 1.0; height-fog: 1; fog-color: 0xd0d6d8; fog-density: 0.0025; fog-height: 96; fog-falloff: 0.10; film-grain: 0; chromatic-aberration: 0; god-rays: 0; depth-of-field: 0"
+  >
+  </GameObject>
+
+  <!-- Vento global: empurra a grama (VegetationWindSystem lê getWindVector) e
+       as nuvens do céu. -->
+  <Weather
+    wind="0.7 0.25"
+    wind-strength="1.6"
+    clouds="0.35"
+    cloud-height="180"
+    rain="0"
+    cycle="1"
+  ></Weather>
+</Group>

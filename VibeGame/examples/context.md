@@ -2,7 +2,7 @@
 
 <!-- LLM:OVERVIEW -->
 
-Shipped examples in this repository: **hello-world** (minimal terrain + physics + deterministic placement) and **simple-rpg** (full AiGameKit pipeline demo). Other paths may exist in forks or history; these two are the maintained references.
+Shipped examples in this repository: **hello-world** (minimal terrain + physics + deterministic placement), **simple-rpg** (full AiGameKit pipeline demo, Crystal Vale), and **simple-racer** (racing plugin + shared Vale packs). Shared GameAssets manifests for forest/village/infra live in [`shared-assets/`](shared-assets/README.md).
 <!-- /LLM:OVERVIEW -->
 
 ## Purpose
@@ -16,18 +16,25 @@ Shipped examples in this repository: **hello-world** (minimal terrain + physics 
 ```
 examples/
 ├── context.md          # This file
+├── shared-assets/      # Crystal Vale forest/village/infra manifests + sync-from-rpg.sh
+├── shared/             # TS helpers (i18n, HUD) — not GLBs
 ├── hello-world/        # Minimal: terrain, dynamic body, <GameObject place="…">
 │   ├── context.md
 │   ├── src/main.ts
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.ts
-└── simple-rpg/         # Full monorepo pipeline + GLBs, NPCs, save/load, i18n
-    ├── README.md
+├── simple-rpg/         # Full monorepo pipeline + GLBs, NPCs, save/load, i18n
+│   ├── README.md
+│   ├── index.html
+│   ├── src/main.ts
+│   ├── public/assets/  # After handoff / batch
+│   └── sample-gameassets/  # game.yaml + manifests (forest/village/infra = symlinks)
+└── simple-racer/       # Racing plugin; Vale carts + copied RPG scenery
+    ├── PROGRESS.md
     ├── index.html
-    ├── src/main.ts
-    ├── public/assets/  # After handoff / batch
-    └── sample-gameassets/  # game.yaml + manifest (sem GLB/PNG; saída em public/assets/)
+    ├── src/
+    └── sample-gameassets/
 ```
 
 ## Deterministic terrain placement (entity-centric)
@@ -48,6 +55,12 @@ bun run dev
 
 ```bash
 cd VibeGame/examples/simple-rpg
+bun install
+bun run dev
+```
+
+```bash
+cd VibeGame/examples/simple-racer
 bun install
 bun run dev
 ```

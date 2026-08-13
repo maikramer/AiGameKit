@@ -1,7 +1,9 @@
-# Simple Racer — Sunset Ridge
+# Simple Racer — Sunset Ridge (Crystal Vale)
 
-Arcade racer built on the VibeGame **racing** plugin: a 1.75 km circuit, five
-karts, three laps, rivals that actually race you.
+Cart racing on the VibeGame **racing** plugin: a 1.75 km circuit, five wooden
+carts, three laps, rivals that actually race you. Art direction matches
+**Crystal Vale** (`style_preset: painterly`) — trees, houses, city gate and
+vegetation are the RPG packs; only the carts are generated for this example.
 
 ```bash
 cd examples/simple-racer
@@ -10,7 +12,34 @@ bun run dev        # http://localhost:3020 — click once to start
 ```
 
 Controls: **WASD / arrows** drive · **Space** handbrake · **Shift** nitro ·
-**C** camera (chase / close / hood) · **R** restart.
+**1/2/3** power-ups · **V** look back · **C** camera (chase / close / hood) ·
+**R** restart · **Enter** (after qualifying) start the race.
+
+Menu: **Race** / **Time Trial** / **Weekend**, plus **Dry / Wet / Night / Storm**.
+Weekend is one flying lap, then the 3-lap race on that grid. Wet cuts grip and
+puts rain on the circuit; night/storm light the headlights.
+
+## What lives where (world XML)
+
+`index.html` é só a casca (canvas + menu + a ordem dos Includes). O mundo está
+em `public/world/`, no mesmo estilo do simple-rpg:
+
+| Ficheiro | Editar lá |
+| `world/environment.xml` | céu, luz, pós-processamento, vento |
+| `world/terrain.xml` | heightmap, cores, lago da bacia |
+| `world/circuit/bed.xml` | terraplanagem: escapatória, berm, viaduto |
+| `world/circuit/track.xml` | pista: largura, voltas, tema, pilares |
+| `world/circuit/hazards.xml` | obstáculos e power-ups (coords de pista) |
+| `world/city/downtown.xml` | os prédios da reta principal |
+| `world/nature/forest.xml` | floresta da bacia, pinhal da montanha |
+| `world/grid.xml` | jogador e rivais |
+| `world/hud.xml` | câmara, música, HUD, pausa |
+
+O traçado continua em `src/track.ts`: o `main.ts` injeta `centerline`/`path`/
+`heights`/`widths`/`banks` nos `<RaceTrack>`/`<Road>` através de
+`GAME.onWorldXml` — um hook que corre depois dos Includes e antes de existirem
+entidades (o `document.querySelector` deixou de funcionar quando o circuito
+passou a viver num include).
 
 ## What lives where
 
@@ -32,31 +61,84 @@ sweep → crest (the car gets light) → downhill → esses → hairpin → infi
 long final left back onto the straight. Elevation runs 0 → 16 m; banking is
 derived from curvature.
 
+### Performance (o que já mordeu)
+
+A pista tem ~5.4 km e o cenário acompanha. Duas coisas mediram-se com o
+profiler (`?profiler=1` ou `__VIBEGAME__.profiler`) enquanto se conduz:
+
+1. **O cenário tem de ser instanciado.** A primeira versão clonava um GLB por
+   prop: **1713 meshes** na cena, grupo `render` a **10.6 ms**. Passando tudo
+   por `GAME.spawnInstancedGltf` (a mesma pool do `<GLTFLoader instanced>`) →
+   **189 meshes**, `render` **2.9 ms**. Os postes de luz seguem o mesmo
+   princípio com quatro `InstancedMesh` (um por peça) em vez de 160 grupos.
+2. **Luzes pontuais só onde se vêem**: um `PointLight` por poste em 5 km são
+   160 luzes para um renderer que acende as 12 mais próximas — agora só a
+   cidade e o grampo do estádio recebem luz real.
+
+Depois disto o custo por frame do jogo vive quase todo no `render` + GPU; os
+sistemas somam ~1.5 ms. Se voltar a cair, medir primeiro (`profiler.top(10)`)
+antes de mexer.
+
+### The ground under the circuit
+
+`main.ts` feeds the shared `<Road flatten>` carver four parallel lists sampled
+off the same spline: `path`, `heights`, `widths` and `banks`. That inverts the
+default relationship — instead of surveying the terrain and terracing whatever
+is there, the carver grades the ground to the **authored** track elevation, so
+the ribbon sits exactly `TRACK_ELEVATION` above the bed for the whole lap and
+the wall footing never floats.
+
+The cross-section is authored on the `<Road>` tag: bed (`widths`, = racing width
+
+- `BED_MARGIN`) → gravel run-off (`flatten-shoulder`) → berm that catches a car
+  (`flatten-berm`) → embankment (`flatten-falloff`). `flatten-closed="1"` wraps
+  the profile through the start/finish line, and `flatten-bank="1"` tilts the bed
+  with the banking so a peralted corner sits in a tilted shelf.
+
+Changing the layout in `src/track.ts` is enough — everything above is derived.
+
 **Layout rule:** two arms of the circuit must stay ~25 m apart (road + both
 shoulders) even where their centerlines are far from crossing.
 `TrackSpline.selfOverlaps()` warns on every build with the exact arc positions —
 the first draft ran the hairpin 14 m from the main straight and drew two roads
 through each other.
 
-## Assets (generated 2026-08-07)
+## Assets
 
-Same manifest format as `examples/simple-rpg/sample-gameassets/`.
+Forest / village / infra manifests are **shared** with simple-rpg
+(`examples/shared-assets/`). Copy the RPG GLBs (no GPU):
 
-| Group | Manifest                                                        | Regenerate                                                            |
-| ----- | --------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Karts | `sample-gameassets/manifests/vehicles.yaml`                     | `gameassets resume --profile game.yaml --manifest manifests/vehicles` |
-| Props | `sample-gameassets/manifests/props.yaml`                        | `gameassets resume --profile game.yaml --manifest manifests/props`    |
-| Audio | `sample-gameassets/manifests/audio.yaml` + `scripts/gen-sfx.sh` | `bash scripts/gen-sfx.sh`                                             |
+```bash
+bash ../shared-assets/sync-from-rpg.sh
+```
+
+Carts are the only GPU step for this example (`style_preset: painterly`):
+
+| Group                    | Manifest                                                        | Regenerate                                                                                    |
+| ------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Carts                    | `sample-gameassets/manifests/vehicles.yaml`                     | `cd sample-gameassets && gameassets resume --profile game.yaml --manifest manifests/vehicles` |
+| Forest / village / infra | symlinks → `examples/shared-assets/manifests/`                  | generate in the RPG, then `sync-from-rpg.sh`                                                  |
+| Audio                    | `sample-gameassets/manifests/audio.yaml` + `scripts/gen-sfx.sh` | `bash scripts/gen-sfx.sh` (race SFX stays; do not mix RPG BGM)                                |
+
+Handoff writes into `../public` (`output_dir: ../../public/assets` from
+`sample-gameassets/`). `model-yaw="0"` — a carroça alongada (L/W > 1.6) já é
+rodada pelo `fitModel`; o yaw 90 dos karts antigos punha o comprimento de
+través (panqueca na pista). `size_m` Omni é `[largura X, altura Y, comprimento Z]`.
 
 Two things about generated models, both of which bit this example:
 
 1. **They arrive at arbitrary scale.** Every model is fitted to a declared
-   real-world size (`model-length` for karts, `height` per prop) via
+   real-world size (`model-length` for carts, `height` per prop) via
    `GAME.fitModel`. Dropping one in untouched is how the first build had a road
    sign taller than the grandstand.
-2. **Their heading is not the engine's.** The engine is +Z forward, +X right;
-   the karts are authored 90° off, hence `model-yaw="90"`. Props are elongated
-   enough for `fitModel` to measure their axis and turn them automatically.
+2. **Their heading is not the engine's.** +Z forward, +X right. Carts with
+   length/width > 1.6 are rotated by `fitModel`; extra `model-yaw="90"` on top
+   of that laid them across the track. Props still auto-align from elongation.
+
+The finish gantry is the RPG `city_gate_arch` (pack `meshes/infra`), scaled
+across the city straight with `measureProp(..., startFrame.width + 8, 'width',
+'across')` — native arch is 10×5.5×1.2 m with an ~8 m opening; the straight is
+22 m wide.
 
 Prop GLBs carry KTX2 textures, so `GAME.ensureKTX2LoaderReady(state)` must run
 before the first load or every model fails to parse.

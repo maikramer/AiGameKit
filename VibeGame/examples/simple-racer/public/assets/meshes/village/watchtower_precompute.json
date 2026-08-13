@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "watchtower",
+  "category": "building",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -1.4577,
+      -0.0,
+      -1.5414
+    ],
+    "max": [
+      1.4577,
+      8.9988,
+      1.5434
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 1.5424,
+    "height": 8.9988,
+    "base_y": -0.0
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

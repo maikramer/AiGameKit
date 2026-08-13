@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "village_forge",
+  "category": "building",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -3.0018,
+      0.0004,
+      -2.2064
+    ],
+    "max": [
+      3.0018,
+      5.8309,
+      2.2058
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 3.0018,
+    "height": 5.8305,
+    "base_y": 0.0004
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

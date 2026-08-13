@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "horseshoe_pile",
+  "category": "prop",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -0.2237,
+      0.0001,
+      -0.2249
+    ],
+    "max": [
+      0.2236,
+      0.2445,
+      0.2249
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 0.2249,
+    "height": 0.2444,
+    "base_y": 0.0001
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

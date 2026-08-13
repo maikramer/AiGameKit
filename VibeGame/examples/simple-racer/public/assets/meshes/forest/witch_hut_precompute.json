@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "witch_hut",
+  "category": "building",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -2.4966,
+      0.0023,
+      -2.4628
+    ],
+    "max": [
+      2.497,
+      3.9701,
+      2.4615
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 2.4968,
+    "height": 3.9679,
+    "base_y": 0.0023
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}

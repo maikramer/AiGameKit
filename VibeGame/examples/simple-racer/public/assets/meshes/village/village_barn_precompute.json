@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "asset_id": "village_barn",
+  "category": "building",
+  "source": "aabb",
+  "aabb": {
+    "min": [
+      -4.2448,
+      0.0024,
+      -5.4975
+    ],
+    "max": [
+      4.2448,
+      6.155,
+      5.4989
+    ]
+  },
+  "collider": {
+    "shape": "capsule",
+    "radius": 5.4982,
+    "height": 6.1527,
+    "base_y": 0.0024
+  },
+  "collectible_hint": {
+    "kind": null
+  }
+}
