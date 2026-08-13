@@ -122,14 +122,25 @@ export {
   BRIDGE_DECK_UNDERCUT_M,
   BRIDGE_RIBBON_CLEARANCE,
   shouldCarveBridgeApproaches,
+  DEFAULT_BERM_WIDTH,
+  DEFAULT_PASS_SEPARATION,
+  DEFAULT_VIADUCT_RAMP,
+  groundedPathRuns,
+  flyingPathRuns,
+  viaductMask,
   DEFAULT_ROAD_MAX_GRADE,
   DEFAULT_ROAD_PLATFORM_SINK,
+  MAX_CORRIDOR_BANK,
   designRoadProfile,
   limitProfileGrade,
   ROAD_PROFILE_SMOOTH_PASSES,
   smoothProfile,
 } from './carve';
-export type { BridgeClearanceOpts, RoadCorridorOpts } from './carve';
+export type {
+  BridgeClearanceOpts,
+  FlyingPathRun,
+  RoadCorridorOpts,
+} from './carve';
 export {
   buildRoadNetworkGraph,
   buildSegmentPathAndWidths,

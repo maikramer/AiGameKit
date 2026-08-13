@@ -1,7 +1,11 @@
 ﻿import * as THREE from 'three';
 import { defineQuery, type State } from '../../core';
 import { Terrain, TerrainPad } from '../terrain/components';
-import { getGroundBrushes, pointInPadCore } from '../terrain/brush-registry';
+import {
+  getGroundBrushes,
+  pointInPadCore,
+  pointInRoadCarve,
+} from '../terrain/brush-registry';
 import { sampleHeightAt, type HeightSampler } from '../terrain/height-sampler';
 import { meshSurfaceResolutionForPoint } from '../terrain/lod-select';
 import { getTerrainContext } from '../terrain/utils';
@@ -18,8 +22,11 @@ const roadPendingQuery = defineQuery([Road]);
  * Any ground mutation (<TerrainPad>, <Lake>, <River>, flatten <Road>) still
  * waiting to stamp into the height sampler. Spawning/placing before they apply
  * races the mutation: an entity sampled on pre-pad ground ends up buried (or
- * floating) once the pad flattens / the carve digs. Callers pair this with a
- * bounded defer budget so a mutation that can never apply doesn't wedge spawning.
+ * floating) once the pad flattens / the carve digs.
+ *
+ * Carve/flatten must never time out — a late Road would leave trees floating.
+ * Only an undecoded heightmap (broken URL, no flatten in the scene) may fall
+ * through after {@link placementDeferDecision}'s frame budget.
  */
 export function isGroundMutationPending(state: State): boolean {
   for (const eid of padPendingQuery(state.world)) {
@@ -36,6 +43,42 @@ export function isGroundMutationPending(state: State): boolean {
     if (Road.flatten[eid] === 1 && Road.applied[eid] !== 1) return true;
   }
   return false;
+}
+
+/** Terrain declares a heightmap URL but the sampler has not decoded yet. */
+export function isTerrainHeightmapPending(state: State): boolean {
+  const tctx = getTerrainContext(state);
+  for (const [, data] of tctx) {
+    if (data.heightmapUrl && data.sampler.data === null) return true;
+  }
+  return false;
+}
+
+/** Heightmap decoded and every pad/lake/river/flatten-road has stamped. */
+export function isGroundReadyForPlacement(state: State): boolean {
+  return !isTerrainHeightmapPending(state) && !isGroundMutationPending(state);
+}
+
+/**
+ * Whether spawn/place may sample the live surface this frame.
+ *
+ * Flatten/carve (`isGroundMutationPending`) always waits — never place on the
+ * pre-carve sampler. An undecoded heightmap may time out so a missing file
+ * does not hang the world forever.
+ */
+export function placementDeferDecision(
+  state: State,
+  heightmapDeferFrames: number,
+  maxHeightmapDeferFrames: number
+): 'wait' | 'place' {
+  if (isGroundMutationPending(state)) return 'wait';
+  if (
+    isTerrainHeightmapPending(state) &&
+    heightmapDeferFrames < maxHeightmapDeferFrames
+  ) {
+    return 'wait';
+  }
+  return 'place';
 }
 
 /**
@@ -130,6 +173,13 @@ export interface TerrainSurfaceSample {
    * (coarse LOD step at distance) and float/sink props by up to ~1 m.
    */
   padPlane?: boolean;
+  /**
+   * True when `worldY` is the analytic carved heightfield along a flatten-road
+   * corridor (bed + talude), not the mesh lattice. Quiet leaf next to a
+   * density-boosted road leaf otherwise samples the uncut plateau while the
+   * camera sees the bank.
+   */
+  roadCarve?: boolean;
 }
 
 /** Slope angle in radians between the surface normal and vertical (+Y). */
@@ -257,6 +307,26 @@ function padCoreWorldY(
   return null;
 }
 
+/**
+ * Analytic heightfield Y on a flatten-road carve (bed + talude), or null
+ * outside every road brush. Same failure mode as {@link padCoreWorldY}: the
+ * mesh lattice on a quiet neighbour leaf interpolates the uncut plateau.
+ */
+function roadCarveWorldY(
+  state: State,
+  localX: number,
+  localZ: number,
+  sampler: HeightSampler,
+  terrainBaseYValue: number
+): number | null {
+  for (const brush of getGroundBrushes(state)) {
+    if (brush.kind !== 'road') continue;
+    if (!pointInRoadCarve(brush, localX, localZ)) continue;
+    return terrainBaseYValue + sampleHeightAt(sampler, localX, localZ);
+  }
+  return null;
+}
+
 export function sampleTerrainSurface(
   state: State,
   wx: number,
@@ -293,6 +363,19 @@ export function sampleTerrainSurface(
       };
     }
 
+    const heightAtRawSlope = (x: number, z: number) =>
+      sampleHeightAt(data.sampler, x - ox, z - oz);
+
+    const carveY = roadCarveWorldY(state, localX, localZ, data.sampler, ty);
+    if (carveY !== null) {
+      return {
+        terrainEntity: entity,
+        worldY: carveY,
+        normal: normalFromHeightSampler(heightAtRawSlope, wx, wz, effectiveEps),
+        roadCarve: true,
+      };
+    }
+
     const meshRes = meshSurfaceResolutionForPoint(
       Terrain.resolution[entity],
       Terrain.levels[entity],
@@ -301,9 +384,6 @@ export function sampleTerrainSurface(
       localZ
     );
     const h = sampleMeshSurfaceHeight(data.sampler, localX, localZ, meshRes);
-
-    const heightAtRawSlope = (x: number, z: number) =>
-      sampleHeightAt(data.sampler, x - ox, z - oz);
 
     const normal = normalFromHeightSampler(
       heightAtRawSlope,
@@ -364,6 +444,45 @@ export function sampleTerrainSurfaceMatrix(
       };
     }
 
+    const heightAtRawSlope = (x: number, z: number) =>
+      sampleHeightAt(data.sampler, x - ox, z - oz);
+
+    const carveY = roadCarveWorldY(state, localX, localZ, data.sampler, ty);
+    if (carveY !== null) {
+      let totalWeight = 0;
+      const avgNormal = _avgSurfaceNormal.set(0, 0, 0);
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+          const w = SURFACE_NORMAL_WEIGHTS[row * 3 + col]!;
+          const sx = wx + (col - 1) * matrixSpacing;
+          const sz = wz + (row - 1) * matrixSpacing;
+          const n = normalFromHeightSampler(
+            heightAtRawSlope,
+            sx,
+            sz,
+            effectiveEps
+          );
+          avgNormal.addScaledVector(n, w);
+          totalWeight += w;
+        }
+      }
+      if (totalWeight > 0) {
+        avgNormal.divideScalar(totalWeight);
+      }
+      if (avgNormal.lengthSq() < 1e-12) {
+        avgNormal.set(0, 1, 0);
+      } else {
+        avgNormal.normalize();
+      }
+      return {
+        terrainEntity: entity,
+        worldY: carveY,
+        normal: avgNormal,
+        slopeAngleRad: slopeAngleRad(avgNormal),
+        roadCarve: true,
+      };
+    }
+
     const meshRes = meshSurfaceResolutionForPoint(
       Terrain.resolution[entity],
       Terrain.levels[entity],
@@ -372,9 +491,6 @@ export function sampleTerrainSurfaceMatrix(
       localZ
     );
     const h = sampleMeshSurfaceHeight(data.sampler, localX, localZ, meshRes);
-
-    const heightAtRawSlope = (x: number, z: number) =>
-      sampleHeightAt(data.sampler, x - ox, z - oz);
 
     let totalWeight = 0;
     const avgNormal = _avgSurfaceNormal.set(0, 0, 0);

@@ -62,32 +62,32 @@ flowchart TD
 
 ### Atributos
 
-| Atributo                            | Default                    | Notas                                                      |
-| ----------------------------------- | -------------------------- | ---------------------------------------------------------- |
-| `meshes`                            | (obrigatório)              | URLs GLB, espaço ou vírgula                                |
-| `density-per-km2`                   | `90000` se omitido `count` | Objetos/km² na projeção XZ                                 |
-| `count`                             | —                          | Alternativa a density (fixo)                               |
-| `seed`                              | `1`                        | PRNG (hubs + layers)                                       |
-| `region-min` / `region-max`         | `±40`                      | Caixa XZ (`y` ignorado)                                    |
-| `smart`                             | `1`                        | `0` = flat legado                                          |
-| `cluster-count`                     | `48`                       | Hubs de grama                                              |
-| `cluster-radius`                    | `3.5`                      | Raio amostra em volta do hub (grama)                       |
-| `flower-near-radius`                | `2.2`                      | Raio da layer flower (mesmos hubs)                         |
-| `flower-density-ratio`              | `0.15`                     | Fração da density base (flower)                            |
-| `plant-density-ratio`               | `0.25`                     | Fração da density base (plant)                             |
-| `mesh-roles`                        | —                          | Override: `url:grass,/b.glb:flower`                        |
-| `scale-min` / `scale-max`           | tiers se omitidos          | Se definidos, substituem ranges de tier em todas as layers |
-| `scale-axis-min` / `scale-axis-max` | perfil foliage             | Escala não-uniforme (spawner)                              |
-| `max-slope-deg`                     | `35`                       | Foliage default no parser                                  |
-| `avoid-water`                       | `1`                        |                                                            |
-| `avoid-road`                        | `1`                        | Skip flatten-road + plaza pad core                         |
-| `avoid-overlaps`                    | `0`                        | Carpet denso: overlaps off por omissão                     |
-| `max-distance`                      | `110`                      | Cull render                                                |
-| `footprint-radius`                  | `0.2`                      |                                                            |
-| `wind`                              | `1`                        | Sway vertex                                                |
-| `align-to-terrain`                  | `1`                        |                                                            |
-| `ground-align`                      | `aabb`                     |                                                            |
-| `random-yaw`                        | `1`                        |                                                            |
+| Atributo                            | Default                    | Notas                                                                                                                     |
+| ----------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `meshes`                            | (obrigatório)              | URLs GLB, espaço ou vírgula                                                                                               |
+| `density-per-km2`                   | `90000` se omitido `count` | Objetos/km² na projeção XZ                                                                                                |
+| `count`                             | —                          | Alternativa a density (fixo)                                                                                              |
+| `seed`                              | `1`                        | PRNG (hubs + layers)                                                                                                      |
+| `region-min` / `region-max`         | `±40`                      | Caixa XZ (`y` ignorado)                                                                                                   |
+| `smart`                             | `1`                        | `0` = flat legado                                                                                                         |
+| `cluster-count`                     | `48`                       | Hubs de grama                                                                                                             |
+| `cluster-radius`                    | `3.5`                      | Raio amostra em volta do hub (grama)                                                                                      |
+| `flower-near-radius`                | `2.2`                      | Raio da layer flower (mesmos hubs)                                                                                        |
+| `flower-density-ratio`              | `0.15`                     | Fração da density base (flower)                                                                                           |
+| `plant-density-ratio`               | `0.25`                     | Fração da density base (plant)                                                                                            |
+| `mesh-roles`                        | —                          | Override: `url:grass,/b.glb:flower`                                                                                       |
+| `scale-min` / `scale-max`           | tiers se omitidos          | Se definidos, substituem ranges de tier em todas as layers                                                                |
+| `scale-axis-min` / `scale-axis-max` | perfil foliage             | Escala não-uniforme (spawner)                                                                                             |
+| `max-slope-deg`                     | `35`                       | Foliage default no parser                                                                                                 |
+| `avoid-water`                       | `1`                        |                                                                                                                           |
+| `avoid-road`                        | `1`                        | Skip flatten-road **bed** + plaza pad core (talude plantável). Viaduct: valley stays; crowns through the deck are culled. |
+| `avoid-overlaps`                    | `0`                        | Carpet denso: overlaps off por omissão                                                                                    |
+| `max-distance`                      | `110`                      | Cull render                                                                                                               |
+| `footprint-radius`                  | `0.2`                      |                                                                                                                           |
+| `wind`                              | `1`                        | Sway vertex                                                                                                               |
+| `align-to-terrain`                  | `1`                        |                                                                                                                           |
+| `ground-align`                      | `aabb`                     |                                                                                                                           |
+| `random-yaw`                        | `1`                        |                                                                                                                           |
 
 ### Variação visual (spawn-variation)
 

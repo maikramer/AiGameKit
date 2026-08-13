@@ -10,8 +10,8 @@ import { PlacePending, SpawnerPending, TerrainSpawned } from './components';
 import { getSpawnGroupSpecs } from './context';
 import { spawnTemplateAtTerrain } from './spawn-template';
 import {
-  isGroundMutationPending,
   isNormalWithinSlopeLimit,
+  placementDeferDecision,
   sampleTerrainSurface,
   type TerrainSurfaceSample,
 } from './surface';
@@ -28,7 +28,7 @@ import {
   isPointOnWaterBank,
   waterBodyAt,
 } from '../water/registry';
-import { isPointOnRoad } from '../terrain/brush-registry';
+import { crownHitsFlyingDeck, isPointOnRoad } from '../terrain/brush-registry';
 import {
   SpawnExclusion,
   isSpawnAreaFree,
@@ -69,6 +69,31 @@ function templateUrls(spec: SpawnGroupSpec): string[] {
   return urls;
 }
 
+/** GameAssets collision precompute is often the stump (~0.6 m), not the crown. */
+const TREE_URL_RE = /(?:^|\/)(?:tree_|pine_)/i;
+const STUMP_AABB_MAX_Y = 2;
+const TREE_CROWN_FALLBACK_M = 10;
+
+/**
+ * Conservative crown height (m) for viaduct clearance. Prefers the visual
+ * AABB; a stump-sized box on a tree URL is treated as ~10 m.
+ */
+function estimatedCrownHeight(spec: SpawnGroupSpec, urls: string[]): number {
+  let maxH = 0;
+  for (const url of urls) {
+    const aabb = getGltfLocalAABB(url);
+    let h = aabb ? aabb.maxY - Math.min(0, aabb.minY) : 0;
+    if (h < STUMP_AABB_MAX_Y && TREE_URL_RE.test(url)) {
+      h = TREE_CROWN_FALLBACK_M;
+    }
+    if (h > maxH) maxH = h;
+  }
+  if (maxH <= 0 && urls.some((u) => TREE_URL_RE.test(u))) {
+    maxH = TREE_CROWN_FALLBACK_M;
+  }
+  return maxH * spec.scaleMax;
+}
+
 const spawnerStateMap = new WeakMap<State, SpawnerState>();
 
 interface SpawnerState {
@@ -88,21 +113,8 @@ function getSpawnerState(state: State): SpawnerState {
 /** Frames a spawn group may wait for an async heightmap before giving up and
  * placing on whatever (possibly flat) sampler exists. ~10s at 60fps — long
  * enough for a slow heightmap decode, short enough to not hang forever if the
- * heightmap genuinely fails to load. */
+ * heightmap genuinely fails to load. Flatten/carve never uses this budget. */
 const MAX_SPAWN_HEIGHTMAP_DEFER_FRAMES = 600;
-
-/**
- * A terrain declares a `heightmapUrl` but its sampler has no data yet — the
- * heightmap is still decoding. Spawning now would place entities on the flat
- * placeholder surface (y≈0) and leave them buried once the real terrain rises.
- */
-function isTerrainHeightmapPending(state: State): boolean {
-  const tctx = getTerrainContext(state);
-  for (const [, data] of tctx) {
-    if (data.heightmapUrl && data.sampler.data === null) return true;
-  }
-  return false;
-}
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -244,18 +256,18 @@ export const TerrainSpawnSystem: System = defineSystem({
     const specs = getSpawnGroupSpecs(state);
     if (specs.size === 0) return;
 
-    // Defer spawning until the terrain heightmap has decoded and pads/water/
-    // road carves have stamped, otherwise entities get placed on the stale
-    // surface and end up buried (or floating) when the real ground settles.
-    if (isTerrainHeightmapPending(state) || isGroundMutationPending(state)) {
-      if (
-        spawnerState.spawnHeightmapDeferFrames <
+    // Defer until the heightmap has decoded and pads/water/road carves have
+    // stamped. Carve never times out — spawning on the pre-carve sampler
+    // leaves trees floating once the road digs. A missing heightmap may.
+    if (
+      placementDeferDecision(
+        state,
+        spawnerState.spawnHeightmapDeferFrames,
         MAX_SPAWN_HEIGHTMAP_DEFER_FRAMES
-      ) {
-        spawnerState.spawnHeightmapDeferFrames++;
-        return;
-      }
-      // Fallback: heightmap is taking too long (or failed) — spawn anyway.
+      ) === 'wait'
+    ) {
+      spawnerState.spawnHeightmapDeferFrames++;
+      return;
     } else if (spawnerState.spawnHeightmapDeferFrames > 0) {
       // Terrain ready: reset so a later heightmap reload gets fresh defer protection.
       spawnerState.spawnHeightmapDeferFrames = 0;
@@ -330,7 +342,9 @@ export const TerrainSpawnSystem: System = defineSystem({
         : 45;
       const acceptAnySlope = maxSlope >= 90 - 1e-6;
 
-      const templateRadiusBase = footprintBaseRadius(spec, templateUrls(spec));
+      const urls = templateUrls(spec);
+      const templateRadiusBase = footprintBaseRadius(spec, urls);
+      const crownH = spec.avoidRoad ? estimatedCrownHeight(spec, urls) : 0;
 
       // Cluster centres (optional): dense patches instead of a uniform carpet.
       // Precomputed hubs (e.g. vegetation flower layer sharing grass hubs) win.
@@ -433,6 +447,15 @@ export const TerrainSpawnSystem: System = defineSystem({
           }
           if (spec.avoidRoad && isPointOnRoad(state, wx, wz)) {
             // Flatten-road corridor + plaza pad core — no trees/rocks on cobble.
+            continue;
+          }
+          if (
+            spec.avoidRoad &&
+            crownH > 0 &&
+            crownHitsFlyingDeck(state, wx, wz, cand.worldY + crownH)
+          ) {
+            // Valley forest is allowed under a viaduct; crowns through the
+            // deck are not. Flying brushes are ignored by isPointOnRoad.
             continue;
           }
           // Always honour SpawnExclusion (+ footprints from earlier groups).
@@ -539,6 +562,13 @@ export const TerrainSpawnBoundsCatchUpSystem: System = defineSystem({
 
       const scaleY = TerrainSpawned.scaleY[eid] || 1;
       const normalY = TerrainSpawned.normalY[eid] || 1;
+      // Origin already at the soles (pipeline GLBs): lifting by a later
+      // centered Three.js box floats the trunk. Skip near-zero minY.
+      if (Math.abs(b.minY) < 0.15) {
+        TerrainSpawned.aabbPending[eid] = 0;
+        urls.delete(eid);
+        continue;
+      }
       const lift = normalY * (-b.minY * scaleY);
       // Lift is part of the foot plant — keep yOffset in sync so resync /
       // creature re-sample don't drop the AABB correction.

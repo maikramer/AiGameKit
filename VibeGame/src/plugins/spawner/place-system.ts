@@ -2,15 +2,15 @@ import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { eulerToQuaternion } from '../../core/math';
 import { defineSystem, defineQuery, type State, type System } from '../../core';
-import { getGroundHeight, getTerrainContext } from '../terrain';
+import { getGroundHeight } from '../terrain';
 import { PlacePending } from './components';
 import { TerrainSpawned } from './components';
 import type { GroupSpawnDefaults } from './profiles';
 import { getPlacementSpecs } from './place-context';
 import { spawnTemplateAtTerrain } from './spawn-template';
 import {
-  isGroundMutationPending,
   isNormalWithinSlopeLimit,
+  placementDeferDecision,
   sampleTerrainSurfaceMatrix,
 } from './surface';
 import { composeSpawnRotation } from './transform-merge';
@@ -27,15 +27,6 @@ const MAX_PLACE_HEIGHTMAP_DEFER_FRAMES = 600;
 // instead of inheriting a maxed-out counter and placing on the flat
 // placeholder surface before the heightmap decodes.
 const _placeDeferByState = new WeakMap<State, number>();
-
-/** Terrain has a heightmap URL but its sampler hasn't decoded yet. */
-function isTerrainHeightmapPending(state: State): boolean {
-  const tctx = getTerrainContext(state);
-  for (const [, data] of tctx) {
-    if (data.heightmapUrl && data.sampler.data === null) return true;
-  }
-  return false;
-}
 
 function terrainWorldGroundY(
   state: State,
@@ -173,15 +164,18 @@ export const TerrainPlaceSystem: System = defineSystem({
     const specs = getPlacementSpecs(state);
     if (specs.size === 0) return;
 
-    // Wait for the heightmap to decode AND for pads/water carves to stamp
-    // before placing, else entities land on the stale surface and get buried
-    // (or float) once the real ground settles.
-    if (isTerrainHeightmapPending(state) || isGroundMutationPending(state)) {
-      const deferred = _placeDeferByState.get(state) ?? 0;
-      if (deferred < MAX_PLACE_HEIGHTMAP_DEFER_FRAMES) {
-        _placeDeferByState.set(state, deferred + 1);
-        return;
-      }
+    // Wait for the heightmap AND pad/water/road carves. Flatten never times
+    // out — placing on the pre-carve sampler leaves houses/trees floating.
+    const deferred = _placeDeferByState.get(state) ?? 0;
+    if (
+      placementDeferDecision(
+        state,
+        deferred,
+        MAX_PLACE_HEIGHTMAP_DEFER_FRAMES
+      ) === 'wait'
+    ) {
+      _placeDeferByState.set(state, deferred + 1);
+      return;
     }
 
     for (const eid of placeQuery(state.world)) {

@@ -3,7 +3,11 @@ import { State } from 'vibegame';
 import { TerrainPad } from '../../../src/plugins/terrain/components';
 import { Lake, River } from '../../../src/plugins/water/components';
 import { Road } from '../../../src/plugins/road/components';
-import { isGroundMutationPending } from '../../../src/plugins/spawner/surface';
+import {
+  isGroundMutationPending,
+  isGroundReadyForPlacement,
+  placementDeferDecision,
+} from '../../../src/plugins/spawner/surface';
 
 describe('isGroundMutationPending', () => {
   let state: State;
@@ -81,5 +85,42 @@ describe('isGroundMutationPending', () => {
     expect(isGroundMutationPending(state)).toBe(true);
     River.applied[river] = 1;
     expect(isGroundMutationPending(state)).toBe(false);
+  });
+});
+
+describe('placementDeferDecision — carve never times out', () => {
+  let state: State;
+
+  beforeEach(() => {
+    state = new State();
+    state.registerComponent('terrainPad', TerrainPad);
+    state.registerComponent('lake', Lake);
+    state.registerComponent('river', River);
+    state.registerComponent('road', Road);
+  });
+
+  it('place when nothing is pending', () => {
+    expect(isGroundReadyForPlacement(state)).toBe(true);
+    expect(placementDeferDecision(state, 0, 600)).toBe('place');
+  });
+
+  it('wait on flatten Road even after the heightmap budget is exhausted', () => {
+    const eid = state.createEntity();
+    state.addComponent(eid, Road);
+    Road.flatten[eid] = 1;
+    Road.applied[eid] = 0;
+    expect(isGroundReadyForPlacement(state)).toBe(false);
+    expect(placementDeferDecision(state, 999, 600)).toBe('wait');
+
+    Road.applied[eid] = 1;
+    expect(isGroundReadyForPlacement(state)).toBe(true);
+    expect(placementDeferDecision(state, 999, 600)).toBe('place');
+  });
+
+  it('wait on unapplied pad forever', () => {
+    const eid = state.createEntity();
+    state.addComponent(eid, TerrainPad);
+    TerrainPad.applied[eid] = 0;
+    expect(placementDeferDecision(state, 10_000, 600)).toBe('wait');
   });
 });

@@ -244,6 +244,22 @@ describe('carveRoadCorridor', () => {
     expect(sampleHeightAt(s, 40, 0)).toBeCloseTo(before, 2);
   });
 
+  it('skipAt leaves a settlement-pad core uncut while the bed still sinks outside', () => {
+    const s = flatSampler(0.5);
+    const before = sampleHeightAt(s, 0, 0);
+    const changed = carveRoadCorridor(s, {
+      path: densePath(-40, 0, 40, 0),
+      width: 8,
+      falloff: 2,
+      window: 8,
+      platformSink: 0.12,
+      skipAt: (wx, wz) => Math.abs(wx) <= 10 && Math.abs(wz) <= 10,
+    });
+    expect(changed).toBe(true);
+    expect(sampleHeightAt(s, 0, 0)).toBeCloseTo(before, 2);
+    expect(sampleHeightAt(s, 30, 0)).toBeLessThan(before - 0.05);
+  });
+
   it('smooths the longitudinal profile: a single-station spike is averaged down', () => {
     // Narrow spike (radius 2) at the midpoint of a long path through flat terrain.
     const s = bumpSampler(0.5, 0.3, 0, 0, 2);

@@ -29,6 +29,24 @@ export interface GroundBrush {
   path?: number[];
   /** River/road: half-width of the waterline / corridor (m). */
   halfWidth?: number;
+  /**
+   * Road: half-width of the carved shelf (bed + talude), metres. Wider than
+   * {@link halfWidth} when `avoid-road` must stay off the asphalt but
+   * placement still anchors to the analytic carve on the bank.
+   */
+  carveHalfWidth?: number;
+  /**
+   * True when this run is a flying span (viaduct). Not paved ground —
+   * {@link isPointOnRoad} ignores it so the valley can keep its forest —
+   * but {@link crownHitsFlyingDeck} rejects trees whose crown would pierce
+   * the deck.
+   */
+  flying?: boolean;
+  /**
+   * Per-vertex deck Y (same space as spawn world Y), one value per path
+   * vertex. Required on flying runs.
+   */
+  pathY?: number[];
 }
 
 const GROUND_BRUSHES = new WeakMap<State, GroundBrush[]>();
@@ -80,6 +98,14 @@ export function pointInPadCore(
   return d <= 0;
 }
 
+/** True when (x, z) lies inside any registered pad brush's flat core. */
+export function pointInAnyPadCore(state: State, x: number, z: number): boolean {
+  for (const brush of getGroundBrushes(state)) {
+    if (pointInPadCore(brush, x, z)) return true;
+  }
+  return false;
+}
+
 /** Shortest XZ distance from a point to a road/river polyline brush path. */
 function distanceToBrushPath(path: number[], x: number, z: number): number {
   let best = Infinity;
@@ -100,17 +126,96 @@ function distanceToBrushPath(path: number[], x: number, z: number): number {
 /**
  * True when (x,z) lies on a roadbed corridor (distance to path ≤ halfWidth).
  * Uses the graded bed width registered by `<Road flatten>` — props stay off
- * the carriageway and its shoulders.
+ * the carriageway and its shoulders. Does **not** include the talude; that
+ * is {@link pointInRoadCarve}.
  */
 export function pointInRoadCorridor(
   brush: GroundBrush,
   x: number,
   z: number
 ): boolean {
-  if (brush.kind !== 'road') return false;
+  if (brush.kind !== 'road' || brush.flying) return false;
   const half = brush.halfWidth ?? 0;
   if (half <= 0 || !brush.path || brush.path.length < 4) return false;
   return distanceToBrushPath(brush.path, x, z) <= half;
+}
+
+/**
+ * True when (x,z) lies on the carved shelf (bed + falloff walls).
+ * Falls back to {@link halfWidth} when `carveHalfWidth` is unset.
+ */
+export function pointInRoadCarve(
+  brush: GroundBrush,
+  x: number,
+  z: number
+): boolean {
+  if (brush.kind !== 'road' || brush.flying) return false;
+  const half = brush.carveHalfWidth ?? brush.halfWidth ?? 0;
+  if (half <= 0 || !brush.path || brush.path.length < 4) return false;
+  return distanceToBrushPath(brush.path, x, z) <= half;
+}
+
+/** Nearest point on a brush polyline: distance plus segment parameter. */
+function nearestOnBrushPath(
+  path: number[],
+  x: number,
+  z: number
+): { dist: number; seg: number; t: number } {
+  let best = { dist: Infinity, seg: 0, t: 0 };
+  let seg = 0;
+  for (let i = 0; i + 3 < path.length; i += 2) {
+    const ax = path[i]!;
+    const az = path[i + 1]!;
+    const dx = path[i + 2]! - ax;
+    const dz = path[i + 3]! - az;
+    const lenSq = dx * dx + dz * dz;
+    let t = lenSq > 0 ? ((x - ax) * dx + (z - az) * dz) / lenSq : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const d = Math.hypot(x - (ax + t * dx), z - (az + t * dz));
+    if (d < best.dist) best = { dist: d, seg, t };
+    seg++;
+  }
+  return best;
+}
+
+/**
+ * Deck Y of a flying road run at (x,z), or null when the point is off the
+ * span. `pathY` is in the same space as spawn `worldY`.
+ */
+export function flyingDeckYAt(
+  brush: GroundBrush,
+  x: number,
+  z: number
+): number | null {
+  if (!brush.flying || brush.kind !== 'road') return null;
+  const half = brush.halfWidth ?? 0;
+  if (half <= 0 || !brush.path || brush.path.length < 4) return null;
+  if (!brush.pathY || brush.pathY.length < 2) return null;
+  const n = nearestOnBrushPath(brush.path, x, z);
+  if (n.dist > half) return null;
+  const y0 = brush.pathY[n.seg] ?? brush.pathY[0]!;
+  const y1 = brush.pathY[n.seg + 1] ?? y0;
+  return y0 + (y1 - y0) * n.t;
+}
+
+/**
+ * True when a prop whose crown sits at `crownY` would pierce a flying
+ * viaduct deck. Valley trees stay; only the ones that grow through the
+ * asphalt are rejected.
+ */
+export function crownHitsFlyingDeck(
+  state: State,
+  x: number,
+  z: number,
+  crownY: number,
+  margin = 0.5
+): boolean {
+  for (const brush of getGroundBrushes(state)) {
+    const deckY = flyingDeckYAt(brush, x, z);
+    if (deckY === null) continue;
+    if (crownY > deckY - margin) return true;
+  }
+  return false;
 }
 
 /**

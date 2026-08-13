@@ -177,4 +177,21 @@ describe('TerrainSpawnBoundsCatchUpSystem', () => {
 
     expect(getAabbPendingUrls(state).has(eid)).toBe(false);
   });
+
+  it('does not lift when the GLB origin is already at the feet', () => {
+    const feetUrl = '/assets/meshes/tree_oak_feet.glb';
+    const surfaceY = 10;
+    const eid = makePendingProp(state, {
+      spawnY: surfaceY,
+      surfaceY,
+      scaleY: 1.8,
+      normalY: 1,
+      url: feetUrl,
+    });
+    registerGltfLocalYBounds(feetUrl, makeRoot(0, 8));
+    tick(state);
+    expect(Transform.posY[eid]).toBeCloseTo(surfaceY, 5);
+    expect(TerrainSpawned.yOffset[eid]).toBeCloseTo(0, 5);
+    expect(TerrainSpawned.aabbPending[eid]).toBe(0);
+  });
 });

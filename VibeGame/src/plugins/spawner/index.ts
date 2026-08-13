@@ -28,8 +28,11 @@ export type { PlacementSpec } from './place-types';
 export { getPlacementSpecs, setPlacementSpec } from './place-context';
 export {
   isGroundMutationPending,
+  isGroundReadyForPlacement,
+  isTerrainHeightmapPending,
   isNormalWithinSlopeLimit,
   normalFromHeightSampler,
+  placementDeferDecision,
   sampleMeshSurfaceHeight,
   sampleTerrainSurface,
   sampleTerrainSurfaceMatrix,

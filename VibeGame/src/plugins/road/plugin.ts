@@ -14,7 +14,9 @@ import { RoadApplySystem } from './systems';
 /**
  * `<Road path="0 4 0 24 6 40" width="2" texture-url="/assets/x.png">` —
  * 1) prepara o leito no heightfield, 2) pinta o ribbon no terreno planado.
- * Path em coords de mundo (`x0 z0 x1 z1 ...`). Optional `widths="w0 w1 ..."`.
+ * Path em coords de mundo (`x0 z0 x1 z1 ...`). Optional `widths="w0 w1 ..."`,
+ * `heights="y0 y1 ..."` (cota de projecto autorada) e `banks="d0 d1 ..."`
+ * (cross-slope em graus) — uma pista de corrida define os três.
  */
 export const roadRecipe: Recipe = {
   name: 'Road',
@@ -22,6 +24,8 @@ export const roadRecipe: Recipe = {
   parserAttributes: [
     'path',
     'widths',
+    'heights',
+    'banks',
     'texture-url',
     'normal-map-url',
     'roughness-map-url',
@@ -125,9 +129,24 @@ const roadParser: Parser = ({ state, entity, element }) => {
       );
     }
   }
+  const perPoint = (attr: unknown, name: string): number[] | undefined => {
+    if (attr === undefined || attr === null) return undefined;
+    const parsed = parseFlatNumbers(attr);
+    if (parsed.length === 0) return undefined;
+    if (parsed.length !== pointCount || pointCount < 2) {
+      throw new Error(
+        `[Road] ${name}= has ${parsed.length} values but path has ${pointCount} points`
+      );
+    }
+    return parsed;
+  };
+  const heights = perPoint(attrs.heights, 'heights');
+  const banks = perPoint(attrs.banks, 'banks');
   setRoadData(state, entity, {
     path,
     widths,
+    heights,
+    banks,
     textureUrl: strAttr(attrs['texture-url']),
     normalMapUrl: strAttr(attrs['normal-map-url']),
     roughnessMapUrl: strAttr(attrs['roughness-map-url']),
@@ -203,12 +222,24 @@ export const RoadPlugin: Plugin = {
         // Default ON: preparar leito → ribbon no sampler planado.
         // flatten="0" = só decal sobre o relevo cru (sem prep).
         flatten: 1,
+        // paint="0" = só terraplanagem (o jogo desenha a superfície).
+        paint: 1,
         // Shoulder blend back to natural relief (m).
         flattenFalloff: 8,
         // Terrace smooth window (m); multi-pass in designRoadProfile.
         flattenWindow: 56,
         // Max |Δh/Δs| on terrace profile (~22%).
         flattenMaxGrade: 0.22,
+        // Open polyline; circuits set flatten-closed="1".
+        flattenClosed: 0,
+        // No run-off apron / berm by default — a village lane is not a circuit.
+        flattenShoulder: 0,
+        flattenBerm: 0,
+        flattenBermWidth: 2.5,
+        flattenBank: 0,
+        flattenOverlapElevation: 0,
+        // Sem viaduto: qualquer cota autorada é escavada no terreno.
+        flattenViaductClearance: 0,
         bridge: 0,
         deckY: 0,
         deckY0: 0,

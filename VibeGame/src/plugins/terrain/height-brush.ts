@@ -139,18 +139,78 @@ export function forEachTexelInAabb(
 }
 
 /**
+ * Undo journal for one carver (`owner`): the texels it wrote and what was
+ * there before. Re-carving the same feature is otherwise **not idempotent** —
+ * a terrace survey reads the terrain it flattened last time and the bed
+ * creeps down by `platformSink` on every regrade (a road that gets regraded
+ * whenever a neighbouring feature carves sinks a little each pass).
+ */
+interface BrushJournal {
+  idx: Int32Array;
+  prev: Float32Array;
+}
+
+const BRUSH_JOURNALS = new WeakMap<HeightSampler, Map<string, BrushJournal>>();
+
+export interface ApplyBrushOpts {
+  /**
+   * Stable id for the carver (e.g. `road:12`). When set, the previous stamp
+   * from the same owner is journalled so {@link revertHeightBrush} can undo it
+   * before a re-carve. Owners are independent: reverting a road does not touch
+   * a lake's writes — but a revert **does** discard whatever another carver
+   * wrote on top of those texels afterwards, so revert then re-stamp in the
+   * same pass (that is what {@link revertHeightBrush} callers do).
+   */
+  owner?: string;
+}
+
+/**
+ * Restore the texels an owner last wrote. Returns true when anything changed.
+ * Call immediately **before** re-surveying + re-stamping the same feature.
+ */
+export function revertHeightBrush(
+  sampler: HeightSampler,
+  owner: string
+): boolean {
+  const journals = BRUSH_JOURNALS.get(sampler);
+  const journal = journals?.get(owner);
+  const data = sampler.data;
+  if (!journal || !data) return false;
+  let changed = false;
+  // Reverse order: a texel written by two stamps of the same owner must end up
+  // with the value it had before the FIRST stamp.
+  for (let i = journal.idx.length - 1; i >= 0; i--) {
+    const idx = journal.idx[i]!;
+    if (idx < 0 || idx >= data.length) continue;
+    if (data[idx] !== journal.prev[i]!) changed = true;
+    data[idx] = journal.prev[i]!;
+  }
+  journals!.delete(owner);
+  return changed;
+}
+
+/** Drop every journal for a sampler (terrain re-decode / field disposed). */
+export function clearHeightBrushJournals(sampler: HeightSampler): void {
+  BRUSH_JOURNALS.delete(sampler);
+}
+
+/**
  * Aplica um pincel de altura ao sampler (in place). Devolve true se alterou
  * pelo menos um texel. O AABB é expandido em 1 texel para os cantos/orlas
  * nunca ficarem de fora por arredondamento.
  */
 export function applyHeightBrush(
   sampler: HeightSampler,
-  brush: HeightBrush
+  brush: HeightBrush,
+  opts?: ApplyBrushOpts
 ): boolean {
   const { data, maxHeight } = sampler;
   if (!data || maxHeight <= 0) return false;
 
   const mode = brush.mode ?? 'blend';
+  const owner = opts?.owner;
+  const journalIdx: number[] | null = owner ? [] : null;
+  const journalPrev: number[] | null = owner ? [] : null;
   let changed = false;
   const ok = forEachTexelInAabb(sampler, brush, (idx, wx, wz) => {
     const s = brush.evalAt(wx, wz);
@@ -162,11 +222,48 @@ export function applyHeightBrush(
     if (mode === 'lower' && next >= cur) return;
     if (mode === 'raise' && next <= cur) return;
     if (next !== cur) {
+      if (journalIdx) {
+        journalIdx.push(idx);
+        journalPrev!.push(cur);
+      }
       data[idx] = next;
       changed = true;
     }
   });
+  if (owner && journalIdx && journalIdx.length > 0) {
+    let journals = BRUSH_JOURNALS.get(sampler);
+    if (!journals) {
+      journals = new Map();
+      BRUSH_JOURNALS.set(sampler, journals);
+    }
+    const existing = journals.get(owner);
+    // Multi-stamp carvers (bridge stubs, banked passes) call apply more than
+    // once per carve: append instead of dropping the earlier stamp's undo.
+    journals.set(owner, {
+      idx: concatInt32(existing?.idx, journalIdx),
+      prev: concatFloat32(existing?.prev, journalPrev!),
+    });
+  }
   return ok && changed;
+}
+
+function concatInt32(head: Int32Array | undefined, tail: number[]): Int32Array {
+  if (!head || head.length === 0) return Int32Array.from(tail);
+  const out = new Int32Array(head.length + tail.length);
+  out.set(head, 0);
+  out.set(tail, head.length);
+  return out;
+}
+
+function concatFloat32(
+  head: Float32Array | undefined,
+  tail: number[]
+): Float32Array {
+  if (!head || head.length === 0) return Float32Array.from(tail);
+  const out = new Float32Array(head.length + tail.length);
+  out.set(head, 0);
+  out.set(tail, head.length);
+  return out;
 }
 
 /**

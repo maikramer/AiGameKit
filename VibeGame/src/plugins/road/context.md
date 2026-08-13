@@ -112,6 +112,17 @@ fundo e a superfície de água corta areia (“lago a vazar”).
   into-span pequeno.
 - Trails `flatten="0"`: ribbon não deve terminar _dentro_ do raio do lago.
 
+### Road × TerrainPad
+
+`RoadApply` corre **depois** do flatten do pad. Artérias da praça (4 braços
+no mesmo Way) cada uma aplica `platformSink` 0.12 m; o cruzamento empilha o
+corte e o CCT afunda enquanto os props ficam no plano congelado do pad.
+
+- Artérias / plaza: `skipAt` → `pointInAnyPadCore` — o core do pad não é
+  re-stampado. O ribbon continua a pintar.
+- Pontes: **sem** skip (abutment tem de terrace até ao lip).
+- Falloff do pad (anel fora do core) continua stampável.
+
 ## Queries (runtime)
 
 | API                              | Uso                                |
@@ -125,26 +136,36 @@ fundo e a superfície de água corta areia (“lago a vazar”).
 
 ## Atributos `<Road>`
 
-| Atributo                                               | Default | Descrição                                                                                          |
-| ------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------- |
-| `path`                                                 | —       | Lista plana `x0 z0 x1 z1 ...` (mundo). ≥ 2 pontos.                                                 |
-| `width`                                                | `2`     | Largura total da faixa (m). Sobrescrito pelo max de `widths` se presente.                          |
-| `widths`                                               | —       | Opcional: um float por ponto do `path` (diâmetro variável).                                        |
-| `texture-scale`                                        | `16`    | Metros de mundo por tile de textura (u e v).                                                       |
-| `edge-feather`                                         | `1.1`   | Fade lateral borda→núcleo (m).                                                                     |
-| `edge-noise`                                           | `0.45`  | Ruído que corrói a borda para dentro (m). Determinístico.                                          |
-| `end-feather-start`                                    | `0`     | Fade na ponta inicial (m). Default sólido — fade+flatten = trincheira (pés).                       |
-| `end-feather-end`                                      | `0`     | Fade na ponta final (m). Usar só sob pads/praças (`>0`).                                           |
-| `y-offset`                                             | `0`     | Elevação acima do heightfield (m). Default 0 — CCT anda no sampler; `polygonOffset` evita z-fight. |
-| `station-spacing`                                      | `0.35`  | Espaçamento base (m). + `densifyPathByHeight` onde o acorde erra o sampler.                        |
-| `smoothing`                                            | `2`     | Iterações Chaikin (0 = cantos vivos).                                                              |
-| `flatten`                                              | `true`  | Prepara o leito (terraço + sink) no heightfield antes do ribbon; `flatten="0"` = só decal.         |
-| `flatten-falloff`                                      | `8`     | Ombro: blend lateral leito→relevo (m).                                                             |
-| `flatten-window`                                       | `56`    | Janela do terraço longitudinal (m) — multi-pass; esmaga morrinhos no leito.                        |
-| `flatten-max-grade`                                    | `0.22`  | Max \|Δh/Δs\| do perfil de projecto (~22%). `0` = sem limite.                                      |
-| `opacity`                                              | `1`     | Opacidade global.                                                                                  |
-| `roughness`/`metalness`                                | `1`/`0` | PBR do material.                                                                                   |
-| `texture-url` / `normal-map-url` / `roughness-map-url` | —       | Texturas (cache por URL).                                                                          |
+| Atributo                                               | Default | Descrição                                                                                                                                                              |
+| ------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`                                                 | —       | Lista plana `x0 z0 x1 z1 ...` (mundo). ≥ 2 pontos.                                                                                                                     |
+| `width`                                                | `2`     | Largura total da faixa (m). Sobrescrito pelo max de `widths` se presente.                                                                                              |
+| `widths`                                               | —       | Opcional: um float por ponto do `path` (diâmetro variável). Usado no ribbon **e** no carve.                                                                            |
+| `heights`                                              | —       | Opcional: cota de projecto (Y mundo) por ponto. Com ela o carve não sonda o terreno — o leito vai exactamente para onde foi desenhado (e o re-carve é idempotente).    |
+| `banks`                                                | —       | Opcional: peralte por ponto (graus, `+` levanta o lado direito, mesma convenção do `TrackSpline`). Precisa de `flatten-bank="1"`.                                      |
+| `texture-scale`                                        | `16`    | Metros de mundo por tile de textura (u e v).                                                                                                                           |
+| `edge-feather`                                         | `1.1`   | Fade lateral borda→núcleo (m).                                                                                                                                         |
+| `edge-noise`                                           | `0.45`  | Ruído que corrói a borda para dentro (m). Determinístico.                                                                                                              |
+| `end-feather-start`                                    | `0`     | Fade na ponta inicial (m). Default sólido — fade+flatten = trincheira (pés).                                                                                           |
+| `end-feather-end`                                      | `0`     | Fade na ponta final (m). Usar só sob pads/praças (`>0`).                                                                                                               |
+| `y-offset`                                             | `0`     | Elevação acima do heightfield (m). Default 0 — CCT anda no sampler; `polygonOffset` evita z-fight.                                                                     |
+| `station-spacing`                                      | `0.35`  | Espaçamento base (m). + `densifyPathByHeight` onde o acorde erra o sampler.                                                                                            |
+| `smoothing`                                            | `2`     | Iterações Chaikin (0 = cantos vivos).                                                                                                                                  |
+| `flatten`                                              | `true`  | Prepara o leito (terraço + sink) no heightfield antes do ribbon; `flatten="0"` = só decal.                                                                             |
+| `flatten-falloff`                                      | `8`     | Ombro: blend lateral leito→relevo (m).                                                                                                                                 |
+| `flatten-window`                                       | `56`    | Janela do terraço longitudinal (m) — multi-pass; esmaga morrinhos no leito.                                                                                            |
+| `flatten-max-grade`                                    | `0.22`  | Max \|Δh/Δs\| do perfil de projecto (~22%). `0` = sem limite.                                                                                                          |
+| `flatten-closed`                                       | `0`     | Path é um circuito fechado (último ponto = primeiro): suavização e clamp de pendente atravessam a junta — sem degrau na linha de meta.                                 |
+| `flatten-shoulder`                                     | `0`     | Run-off plano de cada lado do leito (m), à cota do leito, antes do talude. Escapatória de pista.                                                                       |
+| `flatten-berm`                                         | `0`     | Lombo levantado no bordo do run-off (m). Negativo = vala de drenagem.                                                                                                  |
+| `flatten-berm-width`                                   | `2.5`   | Banda lateral em que o berm sobe (m).                                                                                                                                  |
+| `flatten-bank`                                         | `0`     | Inclina o leito com `banks` (curvas peraltadas assentam num plano inclinado, não num degrau).                                                                          |
+| `flatten-overlap-elevation`                            | `0`     | Quando o corredor passa duas vezes pelo mesmo texel (viaduto, braços lado a lado), ganha a passagem cuja cota está mais perto do terreno em vez da mais próxima em XZ. |
+| `flatten-viaduct-clearance`                            | `0`     | Acima desta folga (m) entre a cota de projecto e o terreno **natural**, o carve não toca no chão: é vão, não corte. `0` = desligado.                                   |
+| `paint`                                                | `1`     | `paint="0"` = só terraplanagem, sem ribbon (o jogo desenha a superfície: pista de corrida, plataforma).                                                                |
+| `opacity`                                              | `1`     | Opacidade global.                                                                                                                                                      |
+| `roughness`/`metalness`                                | `1`/`0` | PBR do material.                                                                                                                                                       |
+| `texture-url` / `normal-map-url` / `roughness-map-url` | —       | Texturas (cache por URL).                                                                                                                                              |
 
 ## Como funciona
 
@@ -153,7 +174,8 @@ fundo e a superfície de água corta areia (“lago a vazar”).
 - **Bordas**: 4 verts/estação com vertex alpha; `edge-noise` 1D.
 - **Terreno**: pipeline partilhado (`terrain/ground-mutation`): density
   (`applyCorridorDensity` + `densityLeafPad`) → `carveRoadCorridor`
-  (`applyHeightBrush` + `nearestOnPolyline`) → `rebuildTerrainDerivatives`.
+  (`applyHeightBrush` + `nearestOnPolyline`, ou `CorridorIndex` a partir de 24
+  segmentos) → `rebuildTerrainDerivatives`.
   Ribbon Y = lattice mesh na **centerline** (mesma que o collider do chunk)
   - seam lift para o nível 1× mais grosso, **cap `ROAD_LOD_CLEARANCE_MAX_M`
     = 0.06 m** + 0.04 de decal. O cap _é_ a flutuação em qualquer encosta
@@ -176,6 +198,49 @@ fundo e a superfície de água corta areia (“lago a vazar”).
    **1 m** cada lado) + ombro `flatten-falloff` (8 m). Density boost + rebuild.
 2. **Ribbon** no sampler já planado.
 
+### Secção transversal (a partir do eixo)
+
+```
+ leito (widths|width)  →  run-off (flatten-shoulder)  →  berm (flatten-berm)  →  talude (flatten-falloff)
+ [------ peso 1 ------][--------- peso 1 -----------][----- peso 1 -------][---- smoothstep 1→0 ----]
+```
+
+`flatten-bank` inclina tudo até ao bordo do berm por `lateral·sin(bank)` (mesma
+fórmula da superfície da pista: `y = eixo + right·lateral`), por isso o chão
+debaixo de uma curva peraltada acompanha o mesh em vez de o cortar de um lado e
+deixar ar do outro.
+
+### Viaduto (`flatten-viaduct-clearance`)
+
+Com uma cota autorada (`heights`), o carve compara cada estação com o terreno
+natural. Onde o leito voa mais alto que a folga:
+
+- **não escreve nada** no sampler — o vale, a floresta, o lago e os prédios por
+  baixo ficam como estavam;
+- a transição desvanece ao longo de `DEFAULT_VIADUCT_RAMP` (24 m de arco), por
+  isso o aterro de acesso continua a existir nas cabeceiras;
+- o **density boost** segue o corredor **inteiro** (incluindo o vão) para a
+  malha LOD debaixo do tabuleiro não interpolar o vale contra o planalto num
+  triângulo grosso que fura o asfalto;
+- o brush `avoid-road` continua só nos troços assentes (`groundedPathRuns`),
+  senão o spawner acharia que o vale inteiro é asfalto e não plantava lá nada;
+- um brush `flying` (com `pathY` da cota do tabuleiro) rejeita copas que
+  atravessariam o vão — a floresta do vale fica, as que furam o leito não.
+
+O «natural» é natural mesmo porque o journal (`owner`) repõe a estampagem
+anterior antes de sondar. Do lado visual, `<RaceTrack viaduct-clearance>` usa o
+mesmo número para construir tabuleiro e pilares — os dois valores têm de bater
+certo.
+
+### Idempotência (journal)
+
+Cada `<Road>` carva com `owner = road:<eid>`: o `applyHeightBrush` guarda os
+texels que escreveu e o carve seguinte faz `revertHeightBrush` antes de voltar a
+sondar. Sem isso, um regrade (disparado por qualquer feature vizinha que carve)
+media o terreno que ele próprio já tinha aplanado e afundava o leito mais um
+`platformSink` por passagem. Com `heights` autoradas o perfil já não depende do
+terreno — o journal só endireita a banda de talude.
+
 - **Perfil**: `designRoadProfile` = **3 passes** smooth + grade 0.22 +
   `platformSink` **0.12 m**.
 - **Density boost**: mesh LOD grosso precisa densificar o corredor (igual
@@ -184,7 +249,18 @@ fundo e a superfície de água corta areia (“lago a vazar”).
 
 ## Gotchas
 
-- `widths=` deve ter o mesmo número de valores que pontos em `path`.
+- `widths=` / `heights=` / `banks=` devem ter o mesmo número de valores que
+  pontos em `path` (senão: erro no parse; listas mais curtas passadas por API
+  são ignoradas e o carve volta à sondagem).
+- As listas são indexadas no path **autorado**; o carve estampa o path suavizado
+  e reamostrado, por isso o mapeamento é por **fracção de arco**
+  (`resampleNodeValues`) — nunca por índice.
+- Num circuito fechado o último ponto tem de repetir o primeiro para o
+  `flatten-closed` fechar o perfil.
+- `flatten-viaduct-clearance` sem `heights` (nem `flatTargetY`) não faz nada: um
+  perfil sondado acompanha o terreno por construção, nunca «voa».
+- `paint="0"` + viaduto andam juntos numa pista de corrida: o decal segue o
+  heightfield, portanto por baixo de um vão desceria até ao fundo do vale.
 - `smoothing` corta cantos — `smoothing="0"` para passar exacto num Way.
 - Preferir `<RoadNetwork>` para artérias; ramos de terra/areia podem ficar
   `<Road flatten="0">` soltos.

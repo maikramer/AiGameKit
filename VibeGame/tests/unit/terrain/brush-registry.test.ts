@@ -5,7 +5,11 @@ import {
   getGroundBrushes,
   isPointOnRoad,
   pointInPadCore,
+  pointInAnyPadCore,
   pointInRoadCorridor,
+  pointInRoadCarve,
+  flyingDeckYAt,
+  crownHitsFlyingDeck,
   registerGroundBrush,
   unregisterGroundBrush,
   type GroundBrush,
@@ -81,6 +85,24 @@ describe('brush-registry', () => {
     expect(pointInPadCore(brush, 20, 0)).toBe(false);
   });
 
+  it('pointInAnyPadCore is true only inside a registered pad core', () => {
+    const state = new State();
+    registerGroundBrush(state, {
+      kind: 'pad',
+      minX: -15,
+      maxX: 15,
+      minZ: -15,
+      maxZ: 15,
+      halfX: 10,
+      halfZ: 10,
+      cornerRadius: 2,
+      targetY: 3,
+    });
+    expect(pointInAnyPadCore(state, 0, 0)).toBe(true);
+    expect(pointInAnyPadCore(state, 12, 0)).toBe(false);
+    expect(pointInAnyPadCore(new State(), 0, 0)).toBe(false);
+  });
+
   it('pointInRoadCorridor follows halfWidth along the path', () => {
     const brush: GroundBrush = {
       kind: 'road',
@@ -94,6 +116,23 @@ describe('brush-registry', () => {
     expect(pointInRoadCorridor(brush, 10, 0)).toBe(true);
     expect(pointInRoadCorridor(brush, 10, 2)).toBe(true);
     expect(pointInRoadCorridor(brush, 10, 3)).toBe(false);
+  });
+
+  it('pointInRoadCarve uses carveHalfWidth; corridor stays on the bed', () => {
+    const brush: GroundBrush = {
+      kind: 'road',
+      minX: 0,
+      maxX: 20,
+      minZ: -20,
+      maxZ: 20,
+      halfWidth: 4,
+      carveHalfWidth: 16,
+      path: [0, 0, 20, 0],
+    };
+    // On the talude: plantable, still on the carved shelf.
+    expect(pointInRoadCorridor(brush, 10, 8)).toBe(false);
+    expect(pointInRoadCarve(brush, 10, 8)).toBe(true);
+    expect(pointInRoadCarve(brush, 10, 17)).toBe(false);
   });
 
   it('isPointOnRoad covers flatten-road corridor and plaza pad core', () => {
@@ -122,5 +161,32 @@ describe('brush-registry', () => {
     expect(isPointOnRoad(state, 10, 3)).toBe(false);
     expect(isPointOnRoad(state, -15, 0)).toBe(true);
     expect(isPointOnRoad(state, -15, 8)).toBe(false);
+  });
+
+  it('flying road is not paved; crownHitsFlyingDeck uses deck Y', () => {
+    const state = new State();
+    registerGroundBrush(state, {
+      kind: 'road',
+      minX: 0,
+      maxX: 40,
+      minZ: -8,
+      maxZ: 8,
+      halfWidth: 6,
+      flying: true,
+      path: [0, 0, 40, 0],
+      pathY: [20, 22],
+    });
+    expect(isPointOnRoad(state, 20, 0)).toBe(false);
+    const brush = getGroundBrushes(state)[0]!;
+    expect(pointInRoadCorridor(brush, 20, 0)).toBe(false);
+    expect(pointInRoadCarve(brush, 20, 0)).toBe(false);
+    expect(flyingDeckYAt(brush, 20, 0)).toBeCloseTo(21, 5);
+    expect(flyingDeckYAt(brush, 20, 10)).toBeNull();
+    // Valley oak ~8 m + plant at y=8 → crown 16, deck 21 → stays.
+    expect(crownHitsFlyingDeck(state, 20, 0, 16)).toBe(false);
+    // Same tree at y=14 → crown 22, pierces deck.
+    expect(crownHitsFlyingDeck(state, 20, 0, 22)).toBe(true);
+    // Off the span: no cull.
+    expect(crownHitsFlyingDeck(state, 20, 20, 40)).toBe(false);
   });
 });

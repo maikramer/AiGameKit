@@ -165,7 +165,7 @@ Nos filhos do `<SpawnGroup>`: **`role="enemy" | "npc" | "creature" | "visual" | 
 - **max-slope-deg** (padrão `45`): inclinação máxima aceite — ângulo entre a **normal do terreno** e **+Y**. A normal é calculada a partir do **heightmap bruto** (sem o mesmo smoothing do shader), para não subestimar encostas íngremes. Se a amostra for mais íngreme, o spawner escolhe **outra posição aleatória** na mesma região e tenta de novo.
 - **max-slope-attempts** (padrão `32`): tentativas por instância. Se **nenhuma** amostra cumprir o declive e `max-slope-deg` for **menor que 90°**, essa instância **não é criada** (o `count` pode ficar abaixo do pedido em regiões muito íngremes). Com `max-slope-deg` ≥ 90° aceita-se qualquer inclinação.
 - **avoid-water** / **in-water** / **near-water**: `avoid-water` rejeita carve (água+barranco); `in-water` só superfície de lago (Y = waterY); `near-water` só anel de barranco/praia (pedras de margem). Não combines `in-water` com `near-water`.
-- **avoid-road** (default ON em `tree`/`foliage`/`creature`/`physics-box`/`gltf-crate`): rejeita corredor de `<Road flatten>` e núcleo de `<TerrainPad>` (praça). Sem isto, erva/árvores nascem em cima do pedregulho.
+- **avoid-road** (default ON em `tree`/`foliage`/`creature`/`physics-box`/`gltf-crate`): rejeita o **leito** de `<Road flatten>` (asfalto + berma + lombo) e o núcleo de `<TerrainPad>`. O talude é plantável — excluir o carve inteiro empurrava árvores para o lábio do corte (planalto alto vs relva do banco). Sob um viaduto o vão **não** conta como leito (floresta no vale), mas copas que furariam o tabuleiro são rejeitadas (`crownHitsFlyingDeck`).
 - **avoid-overlaps** (padrão `1`): rejeita candidatos cujo **footprint** (disco XZ) colide com algo já registado no **registo de ocupação** — instâncias deste e de outros grupos e entidades `place` com collider. A rejeição re-amostra dentro de `max-slope-attempts`; se esgotar, a instância é omitida. Independente de ordem: cada caminho de spawn **regista e consulta**, então quem spawna depois desvia de quem veio antes (ex.: árvores instanciadas carregam async e desviam das rochas já spawnadas).
 - **`<SpawnExclusion>` sempre honrado** — mesmo com `avoid-overlaps="0"` (carpet denso). Só overlaps entre props/grupos é que se desliga.
 - **footprint-radius** (padrão `0` = automático): raio XZ por instância **antes da escala**. Automático = meia-largura do AABB do GLB do template (fallback `0.8` para templates `<GameObject>` sem `url`). O teste usa `raio × scale-max` (conservador); o registo usa a escala real quando conhecida.
@@ -182,12 +182,13 @@ Nos filhos do `<SpawnGroup>`: **`role="enemy" | "npc" | "creature" | "visual" | 
 Antes de amostrar posições:
 
 1. Regista todos os `<SpawnExclusion>` no occupancy.
-2. Se `isTerrainHeightmapPending` **ou** `isGroundMutationPending` → defer (pad / lago / rio / `Road flatten=1` ainda não stampados).
+2. Se `isTerrainHeightmapPending` **ou** `isGroundMutationPending` → defer (pad / lago / rio / `Road flatten=1` ainda não stampados). **Carve nunca faz timeout** (`placementDeferDecision`): só um heightmap que nunca chega pode cair no fallback de 600 frames. Spawn/place no sampler pré-carve = árvores a flutuar.
 3. Após spawn, `registerGroundMutationCallback` + reload do heightmap → `resyncTerrainSpawnedHeights` (só entidades com `TerrainSpawned` — estáticos/`place`).
 
 Aprendizados:
 
 - Spawn em `simulation` sem esperar road flatten → props flutuam/enterram no anel da cidade. Gate + ordem `setup` evitam a corrida.
+- Código de jogo que planta GLBs à mão (`spawnInstancedGltf` no racer) tem de esperar `isGroundReadyForPlacement` e marcar `TerrainSpawned` — senão o resync do carve não os apanha.
 - Inimigos (`<Creature>`): CCT planta Y no heightfield; NavMesh só `desiredVel`. Não reintroduzir snap de sampler / visual lift nos scripts.
 
 Filhos: um ou mais elementos com **recipe** registrada. O parser não usa o fluxo automático de filhos; grava atributos por template (incluindo `role` e **`profile`** no filho — este último só influencia defaults do template).
@@ -204,6 +205,7 @@ Smart carpet: [`../vegetation/context.md`](../vegetation/context.md). Variação
 ## Amostragem do terreno (`surface.ts`)
 
 - **`worldY`**: `sampleMeshSurfaceHeight` — interpola o heightmap no **lattice do mesh** (não o bilinear analítico fino). Evita props a flutuar em cristas que só existem entre vértices LOD.
+- **Excepção pad / road carve**: dentro do núcleo de um `<TerrainPad>` (`padPlane`) ou do shelf esculpido de um `<Road flatten>` (`roadCarve`, leito + talude) o `worldY` é o heightfield **analítico** (`sampleHeightAt` / plano do pad). Lattice dum leaf quieto ao lado do boost da estrada lia o planalto por cortar; a câmara via o banco.
 - **Resolução do lattice**: `meshSurfaceResolutionForPoint` (terrain `lod-select.ts`). Usa o **mesmo** `maxBoostOverAabb` do leaf LOD mais profundo que o chunk visual (não só `boostAt` no ponto — tile quieto ao lado de duna/pad no mesmo leaf fazia float em “algumas” árvores). Sem boost no leaf → `Terrain.resolution` (~31 m em world 2000). Com boost → lattice ~ leaf densificado (~4 m).
 - **Normal para declive e rotação**: diferenças centrais no heightmap **analítico** (`sampleHeightAt`). O teste `max-slope-deg` e o alinhamento usam o relevo real, não o smoothing do shader.
 - **APIs**: `sampleTerrainSurface` / `sampleTerrainSurfaceMatrix` (spawner + place); `getGroundHeight` no terrain usa o mesmo contrato density-aware.

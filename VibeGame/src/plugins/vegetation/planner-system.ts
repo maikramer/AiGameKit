@@ -1,15 +1,8 @@
-import {
-  defineSystem,
-  defineQuery,
-  Parent,
-  type State,
-  type System,
-} from '../../core';
-import { getTerrainContext } from '../terrain';
+import { defineSystem, defineQuery, Parent, type System } from '../../core';
 import { Transform } from '../transforms/components';
 import { SpawnerPending } from '../spawner/components';
 import { setSpawnGroupSpec } from '../spawner/context';
-import { isGroundMutationPending } from '../spawner/surface';
+import { isGroundReadyForPlacement } from '../spawner/surface';
 import { TerrainSpawnSystem } from '../spawner/systems';
 import { LakeApplySystem, RiverApplySystem } from '../water/systems';
 import { RoadApplySystem } from '../road/systems';
@@ -20,14 +13,6 @@ import { getVegetationPatches } from './patch-context';
 import { spawnSpecFromLayer } from './spec-from-plan';
 
 const vegQuery = defineQuery([Vegetation]);
-
-function isTerrainHeightmapPending(state: State): boolean {
-  const tctx = getTerrainContext(state);
-  for (const [, data] of tctx) {
-    if (data.heightmapUrl && data.sampler.data === null) return true;
-  }
-  return false;
-}
 
 /**
  * Materialize smart vegetation layers: shared cluster hubs → child SpawnGroupSpecs
@@ -45,7 +30,7 @@ export const VegetationPlannerSystem: System = defineSystem({
   before: [TerrainSpawnSystem],
   update(state) {
     if (state.headless) return;
-    if (isTerrainHeightmapPending(state) || isGroundMutationPending(state)) {
+    if (!isGroundReadyForPlacement(state)) {
       return;
     }
 

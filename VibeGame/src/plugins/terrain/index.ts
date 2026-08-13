@@ -67,14 +67,17 @@ export { flattenRect } from './flatten';
 export type { FlattenRectOpts } from './flatten';
 export {
   applyHeightBrush,
+  clearHeightBrushJournals,
   forEachTexelInAabb,
   minEffectiveFalloff,
   minEffectiveWidth,
   rebuildTerrainDerivatives,
+  revertHeightBrush,
   samplerTexelStep,
   texelIndexRange,
 } from './height-brush';
 export type {
+  ApplyBrushOpts,
   BrushMode,
   BrushSample,
   HeightBrush,
@@ -82,11 +85,20 @@ export type {
 } from './height-brush';
 export {
   corridorAabb,
+  createCorridorIndex,
   forEachCorridorSegment,
+  nearestCorridorPasses,
+  nearestOnCorridor,
   nearestOnPolyline,
+  pathArcs,
+  resampleNodeValues,
   segmentAabb,
 } from './corridor';
-export type { CorridorAabb, NearestOnPolyline } from './corridor';
+export type {
+  CorridorAabb,
+  CorridorIndex,
+  NearestOnPolyline,
+} from './corridor';
 export {
   applyCorridorDensity,
   applyFeatureDensity,
@@ -100,7 +112,11 @@ export {
   unregisterGroundBrush,
   clearGroundBrushes,
   pointInPadCore,
+  pointInAnyPadCore,
   pointInRoadCorridor,
+  pointInRoadCarve,
+  flyingDeckYAt,
+  crownHitsFlyingDeck,
   isPointOnRoad,
   brushIntersectsBounds,
 } from './brush-registry';

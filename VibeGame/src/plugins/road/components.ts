@@ -28,12 +28,39 @@ export const Road = {
   stationSpacing: new Float32Array(MAX_ENTITIES),
   /** 1 = prepara o leito no sampler (corte+aterro) antes de pavimentar. */
   flatten: new Uint8Array(MAX_ENTITIES),
+  /**
+   * 1 = pinta o ribbon. `paint="0"` = usar `<Road>` só como terraplanagem
+   * (o jogo desenha a superfície: pista de corrida, ponte, plataforma).
+   */
+  paint: new Uint8Array(MAX_ENTITIES),
   /** Ombro: blend lateral leito→relevo natural (m). Curto = carve mínimo. */
   flattenFalloff: new Float32Array(MAX_ENTITIES),
   /** Suavização leve do perfil longitudinal (m) — não é corte de autoestrada. */
   flattenWindow: new Float32Array(MAX_ENTITIES),
   /** Max |Δh/Δs| do perfil de projecto (0 = sem limite de pendente). */
   flattenMaxGrade: new Float32Array(MAX_ENTITIES),
+  /** 1 = path é um circuito fechado (perfil suaviza através da junta). */
+  flattenClosed: new Uint8Array(MAX_ENTITIES),
+  /** Run-off plano de cada lado do leito (m) antes do ombro. */
+  flattenShoulder: new Float32Array(MAX_ENTITIES),
+  /** Altura do berm no bordo do run-off (m; negativo = vala). */
+  flattenBerm: new Float32Array(MAX_ENTITIES),
+  /** Banda lateral em que o berm sobe (m). */
+  flattenBermWidth: new Float32Array(MAX_ENTITIES),
+  /** 1 = leito inclina com {@link RoadData.banks} (cross-slope). */
+  flattenBank: new Uint8Array(MAX_ENTITIES),
+  /**
+   * Viaduto: acima desta folga (m) entre a cota de projecto e o terreno
+   * natural, o carve NÃO toca no chão — o vale/floresta/prédios por baixo
+   * ficam intactos. `0` = desligado (estrada sempre assente).
+   */
+  flattenViaductClearance: new Float32Array(MAX_ENTITIES),
+  /**
+   * 1 = quando o corredor passa duas vezes pelo mesmo texel, ganha a passagem
+   * cuja cota de projecto está mais perto do terreno (viadutos / braços de
+   * circuito lado a lado); 0 = ganha a estação mais próxima.
+   */
+  flattenOverlapElevation: new Uint8Array(MAX_ENTITIES),
   /** Iterações de suavização Chaikin do path (0 = cantos vivos). */
   smoothing: new Uint8Array(MAX_ENTITIES),
   /** Opacidade global 0..1. */
@@ -67,6 +94,18 @@ export interface RoadData {
    * `Road.width`. Length must match `path.length / 2`.
    */
   widths?: number[];
+  /**
+   * Optional authored design elevation (world Y) per path point. When set the
+   * bed is carved exactly there instead of being surveyed from the terrain —
+   * the right way round for a circuit, where the driving surface is authored
+   * in 3D and the ground has to follow it. Length must match `path.length / 2`.
+   */
+  heights?: number[];
+  /**
+   * Optional per-point cross-slope (degrees, `+` raises the right side, same
+   * sign as `TrackSpline`). Requires `Road.flattenBank`.
+   */
+  banks?: number[];
   textureUrl: string | null;
   normalMapUrl: string | null;
   roughnessMapUrl: string | null;

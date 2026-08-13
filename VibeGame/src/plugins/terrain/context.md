@@ -184,6 +184,18 @@ One shared stack — feature plugins own only the **design profile**, then call 
 
 Ribbon/water meshes sample **analytic** `sampleHeightAt` after carve — never mesh-catchup onto LOD geometry. Polyline nearest/AABB live in `corridor.ts`.
 
+**Corridor helpers** (`corridor.ts`) — shared by every polyline carver:
+
+| Helper                                      | Why                                                                                                                                                                                                             |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nearestOnPolyline`                         | O(segments) nearest + **signed** side (`+` = driver's right, engine right vector `(tz,-tx)`) + arc position.                                                                                                    |
+| `createCorridorIndex` / `nearestOnCorridor` | Uniform-grid bucket of segments. A race circuit is hundreds of segments over most of the field: the naive stamp is O(texels × segments) and hitches for seconds. Carvers switch to the index past ~24 segments. |
+| `nearestCorridorPasses`                     | Every **distinct pass** of the corridor near a point (separated by arc), so an overpass / hairpin does not let one arm bulldoze the other.                                                                      |
+| `resampleNodeValues`                        | Maps authored per-node lists (widths, design heights, banks) from the authored polyline onto the smoothed + resampled one, by arc fraction.                                                                     |
+| `pathArcs`                                  | Cumulative arc per node.                                                                                                                                                                                        |
+
+**Idempotent re-carve** (`height-brush.ts`): `applyHeightBrush(sampler, brush, { owner })` journals the texels it wrote; `revertHeightBrush(sampler, owner)` puts them back. Carvers that re-run (a road regrades whenever a neighbour carves) must revert before re-surveying, or a terrace reads back the terrain it already flattened and the bed creeps down every pass. Owners are independent, but a revert also discards whatever another carver wrote on those texels afterwards — revert and re-stamp in the same pass.
+
 ### Density map (featured mesh)
 
 `DensityMap` scores height variance per tile; features stamp boost 255 via the helpers above so leaf chunks refine carves and skirts. Without boost, every LOD level keeps a ~`worldSize/baseResolution` lattice (≈31 m at 2000/64) — features narrower than that never appear on the mesh.
@@ -223,7 +235,7 @@ Levels a rounded rectangle into the shared height sampler so buildings sit flush
 | `corner-radius` | Rounded corners                                                        |
 | `height`        | Optional absolute Y; omit → sample terrain height at pad centre        |
 
-**Order:** `TerrainPadApplySystem` (`setup`) stamps **before** lake/river carve (`after: [TerrainPadApplySystem]` on water). Spawner waits via `isGroundMutationPending` and runs after pad/water/road.
+**Order:** `TerrainPadApplySystem` (`setup`) stamps **before** lake/river carve (`after: [TerrainPadApplySystem]` on water). Spawner waits via `isGroundMutationPending` and runs after pad/water/road. Road flatten **skips pad cores** (`skipAt` / `pointInAnyPadCore`) so overlapping plaza arteries cannot trench the settlement floor under the CCT.
 
 **Density:** pad stamps `applyOverride` on core+falloff (255) + `refreshChunkResolutions` — same contract as road/river. Skirt blend then shows on leaf meshes; spawners that ignore density still float (see Density map above).
 

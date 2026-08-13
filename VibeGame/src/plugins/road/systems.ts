@@ -15,10 +15,14 @@ import {
   applyCorridorDensity,
   densityLeafPad,
 } from '../terrain/ground-mutation';
+import { resampleNodeValues } from '../terrain/corridor';
 import { sampleHeightAt } from '../terrain/height-sampler';
 import { meshSurfaceResolutionForPoint } from '../terrain/lod-select';
 import { TerrainPadApplySystem } from '../terrain/pad-systems';
-import { registerGroundBrush } from '../terrain/brush-registry';
+import {
+  registerGroundBrush,
+  pointInAnyPadCore,
+} from '../terrain/brush-registry';
 import { refreshChunkResolutions } from '../terrain/systems';
 import {
   getTerrainContext,
@@ -31,7 +35,10 @@ import {
   carveBridgeDeckClearance,
   carveRoadApproaches,
   carveRoadCorridor,
+  groundedPathRuns,
+  flyingPathRuns,
   effectiveBridgeApproachMeters,
+  DEFAULT_BERM_WIDTH,
   BRIDGE_APPROACH_METERS,
   BRIDGE_CLEARANCE_WIDTH_BONUS,
   BRIDGE_INTO_SPAN_METERS,
@@ -757,12 +764,24 @@ export function roadJunctionEnds(
   return ends;
 }
 
+/**
+ * Authored per-node design lists, indexed on `path` (the polyline the author
+ * wrote — not the smoothed/resampled one the carve stamps).
+ */
+interface RoadCorridorDesign {
+  path: number[];
+  widths?: number[];
+  heights?: number[];
+  banks?: number[];
+}
+
 /** Phase A only — used by absorbed chain members that do not paint a ribbon. */
 function carveRoadBed(
   state: State,
   eid: number,
   path: number[],
-  width: number
+  width: number,
+  authored?: RoadCorridorDesign | null
 ): void {
   const isBridge = Road.bridge[eid] === 1;
   for (const [fe, fd] of getTerrainContext(state)) {
@@ -785,6 +804,34 @@ function carveRoadBed(
       1.5
     );
     const baseY = terrainBaseY(state, fe);
+    // Authored per-node design lists are indexed on the *authored* polyline;
+    // the stamp runs on the smoothed + resampled one, so map by arc fraction.
+    const onStamp = (values: number[] | undefined) =>
+      values && values.length >= 2 && authored
+        ? resampleNodeValues(authored.path, values, localPath)
+        : undefined;
+    const bedWidths = onStamp(
+      authored?.widths?.map((w) => w + ROADBED_OVERHANG)
+    );
+    // Authored heights are world Y; the sampler works in field-local metres.
+    const bedProfile = onStamp(authored?.heights)?.map((y) => y - baseY);
+    const bedBanks =
+      Road.flattenBank[eid] === 1
+        ? onStamp(authored?.banks)?.map((deg) => (deg * Math.PI) / 180)
+        : undefined;
+    const shoulder = Math.max(0, Road.flattenShoulder[eid] || 0);
+    const bermHeight = Road.flattenBerm[eid] || 0;
+    const bermWidth = Road.flattenBermWidth[eid] || DEFAULT_BERM_WIDTH;
+    const closed = Road.flattenClosed[eid] === 1;
+    const overlapMode =
+      Road.flattenOverlapElevation[eid] === 1
+        ? ('closest-elevation' as const)
+        : ('nearest' as const);
+    // Journal key: a regrade must rewrite this road's stamp, not stack onto it.
+    const owner = `road:${eid}`;
+    const viaductClearance = Road.flattenViaductClearance[eid] || 0;
+    // Filled by the carve: 1 where the bed is on the ground, 0 under a span.
+    let groundMask: number[] | null = null;
     // Lake/river carve first. Arteries: skip wet waterline + no-raise floor so
     // blend cannot re-fill bowls. Bridges: only noRaiseBelowY — preserve discs
     // would skip bank tips that must terrace up to the deck lip (south gap).
@@ -804,6 +851,26 @@ function carveRoadBed(
       noRaiseBelowY: waterZones.noRaiseBelowY,
       preserveDiscs: isBridge ? undefined : waterZones.discs,
       preserveRibbons: isBridge ? undefined : waterZones.ribbons,
+      // Settlement pads own the floor. Plaza arteries each apply platformSink
+      // (0.12 m); four arms meeting at a Way stack that cut under the CCT
+      // while props stay on the frozen pad plane. Skip the core — ribbon
+      // still paints. Bridges keep stamping (abutments must terrace to lip).
+      skipAt: isBridge
+        ? undefined
+        : (wx: number, wz: number) => pointInAnyPadCore(state, wx, wz),
+      widths: bedWidths,
+      profileY: bedProfile,
+      banks: bedBanks,
+      closed,
+      shoulderWidth: shoulder,
+      bermHeight,
+      bermWidth,
+      overlapMode,
+      owner,
+      viaductClearance,
+      onGroundMask: (m: number[]) => {
+        groundMask = m;
+      },
     };
     // Bridge: landward stubs only when texel fine enough; coarse maps skip
     // (minEffectiveWidth would stamp a ~texel-wide sand plug over the river).
@@ -849,6 +916,7 @@ function carveRoadBed(
           width: width + BRIDGE_CLEARANCE_WIDTH_BONUS,
           falloff: Math.max(falloff * 0.35, 1.5),
           deckYAt: (u) => deckContourAt(contour, u) - baseY,
+          owner,
         });
         if (cleared) changed = true;
       }
@@ -865,6 +933,11 @@ function carveRoadBed(
     // Density + brush AABB. Bridges: landward stubs plus the span itself once
     // the deck contour is known — the clearance cut only shows up in the mesh
     // if the chunks under the abutments are refined to the carved lattice.
+    //
+    // Flatten viaduct: density follows the **full** corridor, including the
+    // flying span. A quiet leaf under the deck interpolates the valley floor
+    // to the plateau in one ~30 m triangle and that edge slices the asphalt.
+    // `avoid-road` still uses grounded runs only — the valley is not paved.
     const densityPaths =
       isBridge && !bridgeDeckWorldContour(state, eid)
         ? bridgeApproachStubs(
@@ -882,10 +955,23 @@ function carveRoadBed(
               ),
             ]
           : [localPath];
+    const groundedRuns = groundMask
+      ? groundedPathRuns(localPath, groundMask)
+      : [localPath];
+    // Widest full-weight half-section anywhere on the corridor: per-node widths
+    // plus the run-off apron and the berm band. Density covers the whole
+    // carved shelf; `avoid-road` stays on the solid bed so trees can plant
+    // on the talude instead of the uncut lip.
+    const maxBedWidth = bedWidths
+      ? bedWidths.reduce((a, b) => Math.max(a, b), bedWidth)
+      : bedWidth;
+    const solidHalf =
+      maxBedWidth / 2 + shoulder + (bermHeight !== 0 ? bermWidth : 0);
+    const carveReach = solidHalf + Math.max(falloff, maxBedWidth / 2);
     if (fd.density) {
       const levels = Math.max(1, Terrain.levels[fe] || 1);
       const worldSize = Terrain.worldSize[fe] || fd.sampler.worldSize;
-      const reach = bedWidth / 2 + Math.max(falloff, bedWidth / 2);
+      const reach = carveReach;
       const leafPad = densityLeafPad(worldSize, levels);
       for (const densPath of densityPaths) {
         applyCorridorDensity(fd.density, densPath, reach, 255, leafPad);
@@ -893,39 +979,79 @@ function carveRoadBed(
       refreshChunkResolutions(state, fe, fd);
     }
     if (changed) rebuildTerrainDerivatives(state, fe, fd);
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-    const brushReach = bedWidth / 2 + Math.max(falloff, bedWidth / 2);
-    for (const densPath of densityPaths) {
-      for (let i = 0; i < densPath.length; i += 2) {
-        const px = densPath[i]!;
-        const pz = densPath[i + 1]!;
-        minX = Math.min(minX, px - brushReach);
-        maxX = Math.max(maxX, px + brushReach);
-        minZ = Math.min(minZ, pz - brushReach);
-        maxZ = Math.max(maxZ, pz + brushReach);
+    // One brush per grounded run. A single AABB spanning every run would tell
+    // the spawner the whole bounding box is paved — under a viaduct that means
+    // an empty valley instead of the forest the span flies over.
+    const brushReach = carveReach;
+    const brushPaths = isBridge
+      ? densityPaths.length > 0
+        ? densityPaths
+        : ([localPath] as number[][])
+      : groundedRuns.length > 0
+        ? groundedRuns
+        : [];
+    const registerRibbon = (
+      brushPath: number[],
+      extra: {
+        halfWidth: number;
+        carveHalfWidth?: number;
+        flying?: boolean;
+        pathY?: number[];
+        aabbHalf: number;
       }
-    }
-    if (Number.isFinite(minX)) {
+    ) => {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minZ = Infinity;
+      let maxZ = -Infinity;
+      for (let i = 0; i < brushPath.length; i += 2) {
+        const px = brushPath[i]!;
+        const pz = brushPath[i + 1]!;
+        minX = Math.min(minX, px - extra.aabbHalf);
+        maxX = Math.max(maxX, px + extra.aabbHalf);
+        minZ = Math.min(minZ, pz - extra.aabbHalf);
+        maxZ = Math.max(maxZ, pz + extra.aabbHalf);
+      }
+      if (!Number.isFinite(minX)) return;
       registerGroundBrush(state, {
         kind: 'road',
         minX,
         maxX,
         minZ,
         maxZ,
-        // Brush path = stubs joined for bridges (queries stay bank-local).
-        path:
-          densityPaths.length === 1
-            ? densityPaths[0]!.slice()
-            : localPath.slice(),
-        // Exclusion corridor = bed + talus: `avoid-road` spawners must stay
-        // off the full carve footprint (leito + falloff walls), not just the
-        // flat bed — props planted on the cut slope read as "tree on the
-        // road" from the driver's seat. Matches brushReach used for the AABB.
-        halfWidth: bedWidth / 2 + falloff,
+        path: brushPath.slice(),
+        halfWidth: extra.halfWidth,
+        carveHalfWidth: extra.carveHalfWidth,
+        flying: extra.flying,
+        pathY: extra.pathY,
       });
+    };
+    for (const brushPath of brushPaths) {
+      registerRibbon(brushPath, {
+        // `avoid-road` = bed + shoulder + berm (asphalt / gravel / lombo).
+        // The talude is plantable: pushing trees past `solidHalf + falloff`
+        // sat them on the uncut cliff lip (high plateau) while the camera
+        // saw the green bank — trunks floating over the grass.
+        halfWidth: solidHalf,
+        carveHalfWidth: solidHalf + falloff,
+        aabbHalf: brushReach,
+      });
+    }
+    // Flying span: not paved (isPointOnRoad skips `flying`) but the deck Y
+    // rides along so crowns that would pierce the asphalt are rejected.
+    // `pathY` is world Y (field-local bed + terrain base).
+    if (!isBridge && groundMask && bedProfile && bedProfile.length >= 2) {
+      const worldDeckY = bedProfile.map((y) => y + baseY);
+      const flyHalf = solidHalf + 4;
+      for (const run of flyingPathRuns(localPath, groundMask, worldDeckY)) {
+        if (!run.pathY || run.pathY.length < 2) continue;
+        registerRibbon(run.path, {
+          halfWidth: flyHalf,
+          flying: true,
+          pathY: run.pathY,
+          aabbHalf: flyHalf,
+        });
+      }
     }
     break;
   }
@@ -1032,17 +1158,35 @@ function buildRoadGeometry(
         ? authoredWidths.reduce((a, b) => Math.max(a, b), width)
         : width;
 
+  // Design lists must be indexed on the polyline they were authored against:
+  // a stitch leader carves the whole chain, so it uses the chain's widths and
+  // has no per-node elevation/bank of its own.
+  const design: RoadCorridorDesign =
+    role.role === 'leader' && role.chain
+      ? { path: role.chain.path, widths: role.chain.widths }
+      : {
+          path: data.path,
+          widths: data.widths,
+          heights: data.heights,
+          banks: data.banks,
+        };
+
   // Phase A — prepare roadbed (once). Stitched leader carves the full chain.
   // Bridge: resolve bank heights + approach-only flatten (profile flatten off).
   if (regrade && Road.bridge[eid] === 1) {
     applyBridgeDeckHeights(state, eid, authoredPath);
-    carveRoadBed(state, eid, path, paintWidth);
+    carveRoadBed(state, eid, path, paintWidth, design);
     reseatBridgeDeckToLip(state, eid);
     heightAt = buildRoadHeightAt(state, eid, spacing, paintWidth);
   } else if (regrade && Road.flatten[eid] === 1) {
-    carveRoadBed(state, eid, path, paintWidth);
+    carveRoadBed(state, eid, path, paintWidth, design);
     heightAt = buildRoadHeightAt(state, eid, spacing, paintWidth);
   }
+
+  // Grading-only road: the game paints its own surface (a race track deck, a
+  // platform). Skipping the ribbon is not cosmetic — a decal follows the
+  // heightfield, so under a viaduct span it would drape down the valley.
+  if (Road.paint[eid] === 0) return new THREE.BufferGeometry();
 
   // After carve, densify so chords hug the walk sampler (kills sand
   // wedges) without lifting verts above CCT height.
