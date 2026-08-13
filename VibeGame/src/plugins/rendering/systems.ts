@@ -18,6 +18,10 @@ import {
 import { getOrCreateMesh, hideInstance, updateInstance } from './operations';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import {
+  clearDistanceCullChanges,
+  markDistanceCullChanged,
+} from './cull-changes';
+import {
   applyNeutralEnvironment,
   clearCsmMaterialPatch,
   createRenderer,
@@ -519,6 +523,10 @@ export const DistanceCullSystem: System = defineSystem({
       return;
     }
     distanceCullLastFrame.set(state, frame);
+    // Consumers (the instancing pool) read the previous pass's flips; a new
+    // pass starts a new batch. Clearing here rather than in a consumer keeps
+    // the events alive no matter which order the draw systems run in.
+    clearDistanceCullChanges(state);
 
     const camEntities = mainCameraQuery(state.world);
     if (camEntities.length === 0) return;
@@ -546,6 +554,8 @@ export const DistanceCullSystem: System = defineSystem({
       if (shouldCull === wasCulled) continue;
 
       DistanceCull.culled[eid] = shouldCull ? 1 : 0;
+      // Publish the edge so the instancing pool does not have to poll for it.
+      markDistanceCullChanged(state, eid);
 
       const gltfGroup = getGltfRootGroup(state, eid);
       if (gltfGroup) {

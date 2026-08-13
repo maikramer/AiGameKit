@@ -13,6 +13,7 @@ import {
   maybePatchInstanceVariationMaterial,
 } from '../spawn-variation';
 import { DistanceCull } from '../rendering/components';
+import { getDistanceCullChanges } from '../rendering/cull-changes';
 import { BodyType, Rigidbody } from '../physics/components';
 import { Transform, WorldTransform } from '../transforms/components';
 import { registerGltfLocalYBounds } from './gltf-bounds-cache';
@@ -106,6 +107,14 @@ interface GltfInstancePool {
   pendingAdds: number[];
   loadKicked: boolean;
   boundsDirty: boolean;
+  /**
+   * Round-robin cursor into `slots` for the static rescan. Scanning every slot
+   * on the same frame is what turned this system into a 4 ms spike every
+   * fourth frame once a circuit's worth of props moved into the pool.
+   */
+  scanCursor: number;
+  /** Slots that must be re-checked every frame (parented / non-fixed body). */
+  dynamicSlots: InstanceSlotState[];
   /** LOD thresholds (near = lod0→1, mid = lod1→2). */
   near: number;
   mid: number;
@@ -655,6 +664,8 @@ export function addInstancedGltf(
       pendingAdds: [],
       loadKicked: false,
       boundsDirty: false,
+      scanCursor: 0,
+      dynamicSlots: [],
       near: thresholds.near,
       mid: thresholds.mid,
     };
@@ -670,7 +681,25 @@ export function addInstancedGltf(
   if (!pool.loadKicked) kickLoad(state, pool);
 }
 
-const STATIC_SLOT_SCAN_INTERVAL = 4;
+/**
+ * Frames between full sweeps of the static slots (spread across the window by
+ * the round-robin shard). Every static instance is still re-checked ~8 frames
+ * after anything changes; at 320 m cull distances that latency is invisible,
+ * and it halves what a circuit's worth of roadside props costs per frame.
+ * Slots flagged `dynamic` (parented, or a non-fixed body) are exempt — they
+ * are re-checked every frame.
+ */
+const STATIC_SLOT_SCAN_INTERVAL = 8;
+
+/**
+ * Upper bound on static slots re-examined per pool per frame.
+ *
+ * The sweep only exists to notice an instance that moved without being flagged
+ * dynamic (a script nudging a static prop). Cull flips arrive as events now, so
+ * the sweep can be slow: a world with 30k instanced plants would otherwise pay
+ * thousands of checks a frame for something that almost never happens.
+ */
+const MAX_STATIC_SCAN_PER_POOL = 32;
 
 /**
  * Per-frame slot maintenance: rewrite matrices for entities whose Transform
@@ -687,24 +716,34 @@ export const GltfAutoInstanceSystem: System = defineSystem({
     const pools = poolsByState.get(state);
     if (!pools) return;
 
-    const scanStatic = state.time.frameCount % STATIC_SLOT_SCAN_INTERVAL === 0;
+    const cullChanges = getDistanceCullChanges(state);
 
     for (const [, pool] of pools) {
       if (!pool.primitives) continue;
 
-      for (const slot of pool.slots) {
-        if (!slot.dynamic && !scanStatic) continue;
+      const slots = pool.slots;
+      const primitives = pool.primitives;
+
+      const processSlot = (slot: InstanceSlotState, rescan: boolean): void => {
         const eid = slot.entity;
-        if (scanStatic) slot.dynamic = slotIsDynamic(state, eid);
+        if (rescan) {
+          const dynamic = slotIsDynamic(state, eid);
+          if (dynamic !== slot.dynamic) {
+            slot.dynamic = dynamic;
+            const at = pool.dynamicSlots.indexOf(slot);
+            if (dynamic && at < 0) pool.dynamicSlots.push(slot);
+            else if (!dynamic && at >= 0) pool.dynamicSlots.splice(at, 1);
+          }
+        }
         const culled =
           state.hasComponent(eid, DistanceCull) &&
           DistanceCull.culled[eid] === 1;
 
         const moved = slotSourceChanged(state, slot);
-        if (culled === slot.culled && !moved) continue;
+        if (culled === slot.culled && !moved) return;
 
         if (culled !== slot.culled) {
-          for (const prim of pool.primitives) {
+          for (const prim of primitives) {
             prim.mesh.setVisibilityAt(slot.id, !culled);
           }
         }
@@ -713,7 +752,31 @@ export const GltfAutoInstanceSystem: System = defineSystem({
           snapshotSlotSource(state, slot);
           writeSlotMatrix(state, pool, slot);
         }
+      };
+
+      // Static slots are re-examined on a rolling shard: every slot is still
+      // checked every STATIC_SLOT_SCAN_INTERVAL frames, but only a slice is
+      // touched per frame — a circuit's worth of roadside props used to make
+      // this a full O(instances) sweep on every fourth frame.
+      // Cull flips are edge-triggered: handle exactly the slots that changed.
+      for (const eid of cullChanges) {
+        const at = pool.slotByEntity.get(eid);
+        if (at !== undefined) processSlot(slots[at]!, false);
       }
+
+      if (slots.length > 0) {
+        const shard = Math.min(
+          Math.ceil(slots.length / STATIC_SLOT_SCAN_INTERVAL),
+          MAX_STATIC_SCAN_PER_POOL
+        );
+        const start = pool.scanCursor % slots.length;
+        for (let k = 0; k < shard; k++) {
+          processSlot(slots[(start + k) % slots.length]!, true);
+        }
+        pool.scanCursor = (start + shard) % slots.length;
+      }
+      // Anything that actually moves is checked every frame.
+      for (const slot of pool.dynamicSlots) processSlot(slot, false);
 
       if (pool.boundsDirty) {
         pool.boundsDirty = false;

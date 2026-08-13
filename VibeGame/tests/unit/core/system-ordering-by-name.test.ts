@@ -65,4 +65,12 @@ describe('system ordering by name', () => {
     state.registerSystem(tracer('Q', { after: ['P'] }));
     expect(() => state.step(0.016)).toThrow(/[Cc]ircular/);
   });
+
+  it('rejects an `after` that names a system in another group', () => {
+    state.registerSystem(tracer('Sim'));
+    state.registerSystem(tracer('Draw', { group: 'draw', after: ['Sim'] }));
+    expect(() => state.step(0.016)).toThrow(
+      /Draw.*after.*Sim.*draw vs simulation/
+    );
+  });
 });

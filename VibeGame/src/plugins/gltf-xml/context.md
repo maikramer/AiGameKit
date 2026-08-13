@@ -48,6 +48,20 @@ gltf-xml/
   `maybePatchInstanceVariationMaterial` + depois
   `initUniformsPerInstance(INSTANCE_VARIATION_UNIFORM_SCHEMA)`. Ver
   [`../spawn-variation/context.md`](../spawn-variation/context.md).
+- **`spawnInstancedGltf(state, {...})`** (`spawn.ts`): a mesma pool a partir de
+  código, para props cuja posição é **calculada** (cenário ao longo de uma
+  spline, destroços de um script, muros de um layout gerado). A alternativa —
+  clonar a cena por prop — é a armadilha clássica: 1500 barreiras ao longo de 5
+  km viram 1500 draw calls e 1500 objetos para o three.js percorrer, ordenar e
+  cullar por frame. Aceita `lod1Url`/`lod2Url`, `yaw` ou `quaternion`, `scale` e
+  `cullDistance` (→ `DistanceCull`).
+- **Custo por frame**: os slots estáticos são varridos em **shard rotativo**
+  (`STATIC_SLOT_SCAN_INTERVAL`, máx. `MAX_STATIC_SCAN_PER_POOL` por pool/frame),
+  não todos no mesmo frame — com ~30k plantas instanciadas a varredura completa
+  era um pico de vários ms. Mudanças de `DistanceCull` chegam por **evento**
+  (`rendering/cull-changes.ts`), por isso a varredura só existe para apanhar
+  quem se mexeu sem estar marcado dinâmico. Slots dinâmicos (com `Parent` ou
+  corpo não-fixo) continuam a ser verificados **todos os frames**.
 - **Profiler**: `getInstancePoolStats(state)` → `{ poolCount, slotCount, pendingCount }`
   (painel Counters: `gltfInstances: …`).
 

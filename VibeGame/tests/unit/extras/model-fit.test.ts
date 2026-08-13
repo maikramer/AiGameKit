@@ -166,6 +166,31 @@ describe('fitModel', () => {
     expect(size.z).toBeCloseTo(2.7, 1);
   });
 
+  it('lays down a vehicle whose length was baked into Y', () => {
+    // LOD0 after a bpy Y↔Z swap: 1.2 wide, 2.4 "tall", 1.8 deep.
+    const cart = makeModel(1.2, 2.4, 1.8);
+    fitModel(cart, { fit: 'length', size: 2.4, minElongation: 1.6 });
+    const size = worldSize(cart);
+    expect(size.y).toBeLessThan(size.z);
+    expect(size.z).toBeCloseTo(2.4, 1);
+    expect(size.x).toBeLessThan(size.z);
+  });
+
+  it('does not lay down an upright tree (taller than both plan axes)', () => {
+    // Oak-shaped: ~4×8×4, origin at the feet. The vehicle Y↔Z heuristic
+    // used to rotate it onto its side; measureProp then baked a ~4 m
+    // groundOffset onto an instanced GLB that was still standing.
+    const oak = makeModel(4, 8, 4);
+    fitModel(oak, { fit: 'height', size: 8.5 });
+    const size = worldSize(oak);
+    expect(size.y).toBeCloseTo(8.5, 1);
+    expect(size.y).toBeGreaterThan(size.x);
+    expect(size.y).toBeGreaterThan(size.z);
+    const box = new THREE.Box3().setFromObject(oak);
+    expect(box.min.y).toBeCloseTo(0, 3);
+    expect(oak.rotation.x).toBeCloseTo(0, 5);
+  });
+
   it('honours standUp: never', () => {
     const model = makeModel(2, 2, 9);
     fitModel(model, { standUp: 'never', minElongation: 99 });

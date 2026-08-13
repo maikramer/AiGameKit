@@ -106,6 +106,9 @@ export {
   MAX_INCLUDE_DEPTH,
   createFetchIncludeLoader,
   expandIncludes,
+  applyWorldXmlHooks,
+  clearWorldXmlHooks,
+  onWorldXml,
   unwrapIncludeFragment,
 } from './xml';
 export type {
@@ -113,6 +116,7 @@ export type {
   XMLValue,
   ExpandIncludesOptions,
   IncludeLoader,
+  WorldXmlHook,
 } from './xml';
 
 export {

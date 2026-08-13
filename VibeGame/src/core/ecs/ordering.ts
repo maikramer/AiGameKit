@@ -55,9 +55,11 @@ export function validateGroupConstraints(
       if (!beforeSystem) continue;
       const beforeGroup = beforeSystem.group ?? 'simulation';
       if (beforeGroup !== systemGroup) {
+        const from = system.name ?? '(unnamed)';
+        const to = beforeSystem.name ?? '(unnamed)';
         throw createOrderingError(
           'group-mismatch',
-          `System with before constraint references system in different group (${systemGroup} vs ${beforeGroup})`
+          `System ${from} with before constraint references ${to} in different group (${systemGroup} vs ${beforeGroup})`
         );
       }
     }
@@ -69,9 +71,11 @@ export function validateGroupConstraints(
       if (!afterSystem) continue;
       const afterGroup = afterSystem.group ?? 'simulation';
       if (afterGroup !== systemGroup) {
+        const from = system.name ?? '(unnamed)';
+        const to = afterSystem.name ?? '(unnamed)';
         throw createOrderingError(
           'group-mismatch',
-          `System with after constraint references system in different group (${systemGroup} vs ${afterGroup})`
+          `System ${from} with after constraint references ${to} in different group (${systemGroup} vs ${afterGroup})`
         );
       }
     }

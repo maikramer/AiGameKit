@@ -54,6 +54,13 @@ export function registerGltfLocalYBounds(
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root);
   if (box.isEmpty()) return;
+  const existing = boundsByUrl.get(key);
+  // Keep a feet-at-origin seed (minY ≈ 0) when setFromObject later reports a
+  // centered box (minY deeply negative). Catch-up would add −minY on top of
+  // instanced prim.local and the trunk would float.
+  if (existing && existing.minY >= -0.15 && box.min.y < existing.minY - 0.5) {
+    return;
+  }
   boundsByUrl.set(key, {
     minX: box.min.x,
     minY: box.min.y,

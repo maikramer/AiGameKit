@@ -5,6 +5,7 @@ import {
   TIME_CONSTANTS,
   XMLParser,
   XMLValueParser,
+  applyWorldXmlHooks,
   createFetchIncludeLoader,
   expandIncludes,
 } from './core';
@@ -349,6 +350,12 @@ export class GameRuntime {
             `  Content preview: ${errorText}...`
         );
       }
+
+      // Generated geometry lives in its own XML file too: hooks get the fully
+      // expanded document and can fill in attributes an author cannot type.
+      applyWorldXmlHooks(parseResult.root, (error) => {
+        logger.error('[VibeGame] world XML hook failed:', error);
+      });
 
       parseXMLToEntities(this.state, parseResult.root);
     } catch (error) {

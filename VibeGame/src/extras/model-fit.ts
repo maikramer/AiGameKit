@@ -217,6 +217,20 @@ export function fitModel(
     extent.z > extent.x * 1.5
   ) {
     root.rotation.x -= Math.PI / 2;
+  } else if (
+    standUp !== 'never' &&
+    extent.y > extent.z * 1.2 &&
+    extent.y > extent.x * 1.3 &&
+    // A tree/barrel already standing on +Y is also "taller than wide".
+    // That is a column, not a bpy Y↔Z vehicle. Laying it down made
+    // `measureProp` copy a ~4 m `groundOffset` onto an upright instanced
+    // GLB whose feet were already at the origin — trunks in the air.
+    !(extent.y >= extent.x * 1.5 && extent.y >= extent.z * 1.5)
+  ) {
+    // Length baked into Y (typical bpy glTF Y↔Z swap on a long vehicle).
+    // A correct wagon is longer than it is tall, so this does not fire on a
+    // mesh that already sits on its wheels.
+    root.rotation.x -= Math.PI / 2;
   }
 
   // 2. Point it the right way, measured from the geometry rather than the box.

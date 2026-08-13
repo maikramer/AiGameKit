@@ -6,6 +6,7 @@ import {
   getGltfLocalYBounds,
   normalizeGltfUrlKey,
   registerGltfLocalYBounds,
+  seedGltfPrecomputedBounds,
 } from '../../../src/plugins/gltf-xml/gltf-bounds-cache';
 import {
   getInstancePoolStats,
@@ -53,6 +54,23 @@ describe('registerGltfLocalYBounds + getters', () => {
       });
     }
   }
+
+  it('keeps a feet-at-origin seed when setFromObject later reports a centered box', () => {
+    const url = '/test/oak-seed.glb';
+    seedGltfPrecomputedBounds(url, {
+      min: [-2, 0, -2],
+      max: [2, 8, 2],
+    });
+    const root = new THREE.Group();
+    const geo = new THREE.BoxGeometry(4, 8, 4);
+    // Centered on origin: minY ≈ -4.
+    root.add(new THREE.Mesh(geo));
+    registerGltfLocalYBounds(url, root);
+    const y = getGltfLocalYBounds(url);
+    expect(y).not.toBeNull();
+    expect(y!.minY).toBeCloseTo(0, 5);
+    expect(y!.maxY).toBeCloseTo(8, 5);
+  });
 });
 
 describe('GltfPending / GltfPhysicsPending / GltfLod component arrays', () => {

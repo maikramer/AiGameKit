@@ -18,3 +18,9 @@ export {
   unwrapIncludeFragment,
 } from './include';
 export type { ExpandIncludesOptions, IncludeLoader } from './include';
+export {
+  applyWorldXmlHooks,
+  clearWorldXmlHooks,
+  onWorldXml,
+} from './world-hooks';
+export type { WorldXmlHook } from './world-hooks';

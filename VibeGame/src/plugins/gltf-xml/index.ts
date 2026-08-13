@@ -24,3 +24,5 @@ export {
 } from './gltf-bounds-cache';
 export { describeGltfAssetsPending, gltfAssetsReady } from './ready-gate';
 export { getGltfRootGroup } from './group-registry';
+export { spawnInstancedGltf } from './spawn';
+export type { InstancedGltfSpawn } from './spawn';
