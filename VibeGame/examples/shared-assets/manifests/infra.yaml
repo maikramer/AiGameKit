@@ -1,0 +1,190 @@
+# Grupo infra — muralha, portão e pontes do rio Discordia (Crystal Vale, partilhado).
+# Canónico em examples/shared-assets/. Symlink em cada sample-gameassets/manifests/.
+# Regenerar: cd <exemplo>/sample-gameassets && gameassets resume --profile game.yaml --manifest manifests/infra
+output_dir: ../../public/assets
+meshes_subdir: meshes/infra
+images_subdir: images/infra
+assets:
+  - id: city_gate_arch
+    # Collision: mode envelope (inflate+voxel) — especial p/ arcos côncavos c/ vão.
+    # size L=10 encaixa vão ±5; H≈muro+merlons; W≈muro. Arco redondo + abutments prismáticos.
+    idea:
+      medieval stone city gate arch portal for tiling with curtain wall, classic round
+      semicircular arched opening about eight meters wide between two pillars, left and
+      right abutment pillars are constant-width rectangular stone prisms from ground to
+      top with perfectly flat vertical outer side faces same thickness all the way up,
+      no pedestal no plinth no flared base no wider footing no overhanging cornice no
+      cantilever top corner no stepped buttress, straight outer profile flush for wall
+      join, heavy stone arch voussoirs forming the round opening, simple square merlon
+      battlements on top of lintel above the arch, warm grey stone blocks, no doors no
+      portcullis, bottom flush with ground plane, front view game-ready prop
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    collision:
+      mode: envelope
+      max_faces: 256
+      voxel_size: 0.08
+      inflate: 0.1
+    omni:
+      control_type: bbox
+      size_m:
+        - 10.0
+        - 5.5
+        - 1.2
+  # Muralha Discordia — segmentos tileáveis (~4× = 26 m entre portão e torre).
+  # Lab shapes em sample-gameassets/_wall_lab/ (2026-07-29). size_m = [L,H,W]=[X,Y,Z].
+  - id: city_wall_seg_a
+    idea:
+      modular medieval stone curtain wall segment, straight thin masonry panel,
+      crenellated merlons along top, warm grey stone blocks, flat vertical ends for
+      tiling, solid footing flush to ground, freestanding wall piece, no towers no
+      gates no doors, game-ready prop
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    collision:
+      mode: envelope
+      max_faces: 256
+      voxel_size: 0.08
+      inflate: 0.08
+    omni:
+      control_type: bbox
+      size_m:
+        - 6.5
+        - 5.0
+        - 0.9
+  - id: city_wall_seg_b
+    idea:
+      thin freestanding stone curtain wall panel only, battlement merlons, hollow
+      feel not a solid hut, no building volume inside bbox, flat tileable ends, fantasy
+      village wall, front view
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    collision:
+      mode: envelope
+      max_faces: 256
+      voxel_size: 0.08
+      inflate: 0.08
+    omni:
+      control_type: bbox
+      size_m:
+        - 6.5
+        - 5.0
+        - 0.9
+  - id: city_wall_seg_c
+    idea:
+      modular medieval stone curtain wall segment, straight thin masonry panel,
+      crenellated merlons along top, warm grey stone blocks, flat vertical ends for
+      tiling, solid footing flush to ground, freestanding wall piece, no towers no
+      gates no doors, game-ready prop
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    collision:
+      mode: envelope
+      max_faces: 256
+      voxel_size: 0.08
+      inflate: 0.08
+    omni:
+      control_type: bbox
+      size_m:
+        - 6.5
+        - 5.0
+        - 1.2
+  - id: city_wall_corner
+    idea:
+      square straight medieval stone corner watchtower, prismatic box silhouette,
+      perfectly vertical flat walls on all four sides for tiling with curtain wall
+      segments, square footprint, simple flat-top with square merlon battlements, warm
+      grey stone blocks, solid footing flush to ground, no round tower no cone roof no
+      doors no windows low, game-ready modular prop
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    collision:
+      mode: envelope
+      max_faces: 256
+      voxel_size: 0.08
+      inflate: 0.08
+    omni:
+      control_type: bbox
+      size_m:
+        - 2.4
+        - 6.0
+        - 2.4
+  # Pontes rio Discordia — 2 passagens (S: s_bank↔s_resume, W: w_bank↔w_resume).
+  # Rio: width=8 + bank 3.2×2 = carve 14.4 m; span 18 = +~1.8 m/lado; deck 3.6 (estrada 2).
+  # H baixa (~2.5): deck perto do chão + rampas nas cabeceiras (senão não se sobe).
+  # size_m [L,H,W]=span×altura×largura_deck. Placement: W yaw=0 (span∥X); S yaw=90 (span∥Z).
+  - id: river_bridge_wood
+    idea:
+      low wooden plank river bridge eighteen meters long, orthographic side profile,
+      flat walkable deck about one meter above ground, gentle approach ramps on BOTH ends
+      meeting the ground plane for walk-on access, continuous surface ground-ramp-deck-ramp-ground,
+      four timber posts SYNMMETRIC two-by-two under midspan, low handrails, warm brown boards,
+      freestanding, game-ready
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    collision:
+      mode: envelope
+      max_faces: 256
+      voxel_size: 0.1
+      inflate: 0.08
+    omni:
+      control_type: bbox
+      size_m:
+        - 18.0
+        - 2.5
+        - 3.6
+  - id: river_bridge_stone
+    idea:
+      low stone slab river bridge eighteen meters long, orthographic side profile,
+      flat walkable grey stone deck about one meter above ground, gentle stone approach
+      ramps on BOTH ends meeting the ground plane for walk-on access, continuous surface
+      ground-ramp-deck-ramp-ground, four square stone piers SYNMMETRIC under midspan, low
+      parapets, freestanding, game-ready
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    collision:
+      mode: envelope
+      max_faces: 256
+      voxel_size: 0.1
+      inflate: 0.08
+    omni:
+      control_type: bbox
+      size_m:
+        - 18.0
+        - 2.5
+        - 3.6
