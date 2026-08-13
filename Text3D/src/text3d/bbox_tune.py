@@ -62,6 +62,13 @@ _CATEGORY_FACE_KAPPA: dict[str, float] = {
 }
 # Categories onde buracos MC / detalhe fino pediam +32 manual sobre o auto.
 _HOLE_PRONE_CATEGORIES = frozenset({"terrain", "rock", "environment"})
+# Panqueca/stick (max/min > 2): ``char_m`` volumétrico subestima o eixo fino.
+# O grid MC e cubico no eixo maior, portanto um anel 1.5x0.5 m @160 so leva
+# ~53 células em Y → casca perfurada. Empírico fogueira: +64 (160→224) fecha.
+# Só prop/furniture/chest/item — arma 25:1 iria a 512.
+_ANISO_RATIO_MIN = 2.0
+_ANISO_MIN_THIN_CELLS = 72
+_ANISO_FLOOR_CATEGORIES = frozenset({"prop", "furniture", "chest", "item"})
 # Margem sobre o alvo físico (~um degrau de ladder a 256) — cobria o
 # «auto 224 → 256 ainda fraco → +32» do manifesto.
 _PHYSICS_FLOOR_MARGIN = 1.125
@@ -442,7 +449,8 @@ def small_asset_octree_boost(char_m: float) -> float:
 
     ``MAX * exp(-char_m / τ)`` com MAX=32: ~24 a 0.78 m, ~12 a 2 m, ~1 a 10 m
     (chapel) — anti-pinhole leve; o tecto de faces (:func:`octree_face_budget_cap`)
-    impede props pequenos de subirem a 224+.
+    impede props *isótropos* pequenos de subirem a 224+. Panqueca/stick
+    furam o tecto via :func:`anisotropy_octree_floor`.
     """
     if char_m <= 0:
         return 0.0
@@ -466,6 +474,36 @@ def physics_target_octree(char_m: float, category: str | None = None) -> float:
         return float(_OCTREE_FLOOR)
     kappa = category_face_kappa(category)
     return math.sqrt(_FACE_BUDGET_COEF * (c * c) / kappa)
+
+
+def anisotropy_octree_floor(
+    size_m: list[float] | tuple[float, ...] | None,
+    category: str | None = None,
+) -> int | None:
+    """Piso de octree para bbox panqueca/stick (``max/min > 2``).
+
+    ``char_m = (L·H·W)^(1/3)`` trata um anel 1.5x0.5x1.5 m como um cubo de
+    1.04 m. O marching cubes cobre o eixo maior com ``octree`` células, logo
+    o eixo fino só leva ``octree * min/max`` — @160 a fogueira tinha ~53
+    células em Y e saía furada. Piso = ``72 * (max/min)`` no ladder (fogueira
+    → 216 → 224, o +64 empírico).
+
+    Returns:
+        Octree já no ladder, ou ``None`` se a categoria/aspecto não aplica.
+    """
+    cat = (category or "").strip().lower()
+    if cat not in _ANISO_FLOOR_CATEGORIES:
+        return None
+    if size_m is None or len(size_m) != 3:
+        return None
+    dims = [float(v) for v in size_m]
+    if any(v <= 0 for v in dims):
+        return None
+    lo_m, hi_m = min(dims), max(dims)
+    ratio = hi_m / lo_m
+    if ratio <= _ANISO_RATIO_MIN:
+        return None
+    return _snap_octree(round(_ANISO_MIN_THIN_CELLS * ratio))
 
 
 def octree_face_budget_cap(char_m: float, category: str | None = None) -> int | None:
@@ -574,6 +612,11 @@ def tune_hunyuan_for_bbox(
         face_cap = octree_face_budget_cap(float(char_m), category)
         if face_cap is not None:
             desired = min(desired, int(face_cap))
+    # Panqueca/stick: volume-eq + face-cap deixam o eixo fino sem células.
+    # Corre **depois** do tecto — senão 180 capava a fogueira outra vez a 160.
+    aniso_floor = anisotropy_octree_floor(size_m, category)
+    if aniso_floor is not None:
+        desired = max(desired, int(aniso_floor))
     octree = _snap_octree(desired, lo=lo, hi=hi)
 
     # Steps sobem mais suave que o octree (custo tempo linear-ish).

@@ -149,6 +149,28 @@ class TestTuneHunyuanForBbox:
         assert octree_face_budget_cap(horseshoe.char_m, "prop") is not None
         assert octree_face_budget_cap(5.0) is None  # building: sem cap
 
+    def test_pancake_prop_breaks_face_cap_by_anisotropy(self) -> None:
+        """Fogueira 1.5x0.5x1.5: volume-eq+cap davam 160; eixo fino pede +64."""
+        from text3d.bbox_tune import anisotropy_octree_floor
+
+        pit = tune_hunyuan_for_bbox(
+            base_steps=30,
+            base_octree=256,
+            base_chunks=4,
+            size_m=[1.5, 0.5, 1.5],
+            category="prop",
+            quality="medium",
+            total_vram_gib=6.0,
+            group_offload=True,
+        )
+        assert anisotropy_octree_floor([1.5, 0.5, 1.5], "prop") == 224
+        assert pit.octree >= 224
+        assert (pit.octree - _OCTREE_FLOOR) % _OCTREE_STEP == 0
+        # Cubo / ferradura: sem boost (ratio ≤ 2).
+        assert anisotropy_octree_floor([0.8, 0.8, 0.8], "prop") is None
+        assert anisotropy_octree_floor([0.45, 0.25, 0.45], "prop") is None
+        assert anisotropy_octree_floor([0.12, 1.0, 0.04], "weapon") is None
+
     def test_terrain_hole_prone_matches_former_manual_overrides(self) -> None:
         """Nest/cliff/outcrop: auto ≥ overrides manuais (256/288) sem manifesto."""
         nest = tune_hunyuan_for_bbox(
