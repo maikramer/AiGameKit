@@ -143,7 +143,10 @@ def _pil_to_bpy_image(pil_img: Image.Image, name: str) -> Any:
 
     img = pil_img.convert("RGBA")
     w, h = img.size
-    pixels = np.array(img, dtype=np.float32) / 255.0
+    # bpy.pixels é bottom-up (OpenGL) e o rasterizador de vertex colors produz
+    # top-down — sem o flipud as texturas baked saem espelhadas verticalmente
+    # (convenção documentada em mesh_remesh_textured.py).
+    pixels = np.flipud(np.array(img, dtype=np.float32)) / 255.0
     bpy_img = bpy.data.images.new(name, width=w, height=h)
     bpy_img.pixels[:] = pixels.flatten()
     bpy_img.pack()
@@ -271,7 +274,9 @@ def vertex_color_glb_to_pbr_glb(
         ]
         if verbose:
             cmd.append("-v")
-        subprocess.run(cmd, check=True, capture_output=not verbose)
+        # Timeout defensivo: wgpu/compute pode pendurar num driver problemático —
+        # sem isto o pipeline paint fica eternamente à espera do Materialize.
+        subprocess.run(cmd, check=True, capture_output=not verbose, timeout=600)
         stem_diff = diffuse_path.stem
         p_normal = td / f"{stem_diff}_normal.png"
         p_metallic = td / f"{stem_diff}_metallic.png"

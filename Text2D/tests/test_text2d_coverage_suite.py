@@ -115,12 +115,30 @@ def test_vramd_payload_memory_efficient_false_default() -> None:
     assert req["memory_efficient"] is False
 
 
-def test_vramd_payload_memory_efficient_true() -> None:
+def test_vramd_payload_memory_efficient_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sem hardware fp8 o default memory-efficient é uint8 (patch: GPU do host varia)."""
+    from aigamekit_shared import vramd_load
     from text2d.vramd_payload import build_generate_request
+
+    monkeypatch.setattr(vramd_load, "prefer_fp8_preset", lambda p: p)
 
     req = build_generate_request(prompt="p", output="o.png", memory_efficient=True)
     assert req["memory_efficient"] is True
     assert req.get("sdnq_preset") == "sdnq-uint8"
+
+
+def test_vramd_payload_memory_efficient_fp8_upgrade(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hardware com fp8: mesmo footprint, preset sobe para sdnq-fp8."""
+    from aigamekit_shared import vramd_load
+    from text2d.vramd_payload import build_generate_request
+
+    monkeypatch.setattr(
+        vramd_load, "prefer_fp8_preset", lambda p: "sdnq-fp8" if p == "sdnq-uint8" else p
+    )
+
+    req = build_generate_request(prompt="p", output="o.png", memory_efficient=True)
+    assert req["memory_efficient"] is True
+    assert req.get("sdnq_preset") == "sdnq-fp8"
 
 
 def test_vramd_payload_torch_compile_default_off() -> None:

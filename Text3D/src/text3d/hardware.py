@@ -97,28 +97,16 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
     capacity_gib = total_gib if multi else largest_gib
 
     # Omni ~10 GB fp16; só full precision com margem confortável.
-    if capacity_gib >= 12.0:
+    if capacity_gib >= 10.0:
         tier = hq
         sdnq: str | None = None
         img_w: int | None = None
         img_h: int | None = None
-    elif capacity_gib >= 10.0:
-        tier = hq
-        sdnq = None
-        img_w = None
-        img_h = None
-    elif capacity_gib >= 7.5 or capacity_gib >= 6.0:
-        tier = balanced
-        sdnq = "sdnq-int4"
-        img_w = 1024
-        img_h = 1024
-    elif capacity_gib >= 4.0:
-        tier = fast
-        sdnq = "sdnq-int4"
-        img_w = 1024
-        img_h = 1024
     else:
-        tier = fast
+        # <= 10 GB: quant + resolução de imagem reduzida (todos os tiers por
+        # baixo de 10 GB partilham o mesmo perfil — os antigos `>= 7.5/6.0` e
+        # `>= 4.0` eram ramos duplicados com valores idênticos).
+        tier = balanced if capacity_gib >= 6.0 else fast
         sdnq = "sdnq-int4"
         img_w = 1024
         img_h = 1024

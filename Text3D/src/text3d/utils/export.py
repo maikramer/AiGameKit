@@ -350,7 +350,9 @@ def _apply_origin_only_path(path: Path, *, origin_mode: str | None = None) -> No
             return
         for obj in objs:
             _apply_origin_bpy(obj, origin_mode)
-        ext = path.suffix.lower().lstrip("") or "ply"
+        # lstrip(".") — com "" o ponto ficava e o branch PLY nunca disparava
+        # (um GLB binário era escrito dentro do ficheiro .ply).
+        ext = path.suffix.lower().lstrip(".") or "ply"
         bpy = _require_bpy()
         bpy.ops.object.select_all(action="DESELECT")
         for o in objs:

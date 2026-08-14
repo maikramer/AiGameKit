@@ -931,7 +931,17 @@ def _procedural_action_matches_filter(action_name: str, allowed: set[str]) -> bo
             return True
         if a == "idle" and bare.endswith("idle"):
             return True
+        # Nomes de clip do perfil quaternius-hero: o procedural tem
+        # `SwordAttack`/`AxeAttack`, não `sword`/`axe` — sem estes aliases o
+        # fallback "graceful" morria com "Nenhum clip corresponde ao filtro".
+        if a in ("sword", "axe") and bare == f"{a}attack":
+            return True
+        # `swordidle`/`axeidle`/… só têm o BreatheIdle procedural.
+        if a.endswith("idle") and bare.endswith("idle"):
+            return True
         if a == "roar" and "roar" in bare:
+            return True
+        if a == "punch" and bare == "attack":
             return True
         if a == "dive" and bare.startswith("dive"):
             return True
@@ -1412,7 +1422,14 @@ def _import_retarget_source(source_path: Path, target_arm_name: str):
     target_mesh_names = {o.name for o in target_arm.children if o.type == "MESH"}
 
     bpy_ops.import_asset(source_path)
-    source_arm = next(a for a in bpy_ops.list_armatures() if a.name not in existing_arms)
+    source_arm = next(
+        (a for a in bpy_ops.list_armatures() if a.name not in existing_arms),
+        None,
+    )
+    if source_arm is None:
+        raise click.ClickException(
+            f"Pack source {source_path.name} não trouxe armature nova (existing: {sorted(existing_arms)})"
+        )
     source_arm.name = "Source"
     for obj in list(bpy.data.objects):
         if obj.type == "MESH" and obj.name not in target_mesh_names:

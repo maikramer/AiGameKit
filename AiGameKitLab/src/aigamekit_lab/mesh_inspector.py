@@ -617,7 +617,10 @@ class MeshInspector:
                 engine=engine,
             )
             return [s["path"] for s in report.get("screenshots", []) if s.get("path")]
-        except Exception:
+        except Exception as e:
+            # A falha tem de ser VISÍVEL: devolver [] em silêncio fazia o QA
+            # "passar" sem evidência visual nenhuma.
+            print(f"[render_views] falhou ({e}) — QA degrada para sem evidência visual")
             return []
 
     # ------------------------------------------------------------------

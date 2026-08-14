@@ -54,7 +54,7 @@ def generate(
     erosion: bool,
     bake: bool | None,
 ) -> None:
-    """Generate a procedural 3D rock (pebble or boulder)."""
+    """Generate a procedural 3D rock (pebble, boulder, spire, slab, outcrop)."""
     import time
     from pathlib import Path
 
@@ -84,7 +84,7 @@ def generate(
 
 
 @main.command()
-@click.argument("type_name", type=click.Choice(["pebble", "boulder", "both"]))
+@click.argument("type_name", type=click.Choice([*_ROCK_TYPES, "all"]))
 @click.option("-n", "--count", type=int, default=5, show_default=True, help="Rocks per type")
 @click.option("-o", "--output-dir", type=click.Path(), default="rocks", show_default=True, help="Output directory")
 @click.option("--seed", type=int, default=0, show_default=True, help="Starting seed (incremented per rock)")
@@ -114,15 +114,15 @@ def batch(
 ) -> None:
     """Batch generate rocks with sequential seeds.
 
-    Writes ``<output_dir>/<type>_<seed>.glb`` for each rock. Use ``both`` to
-    generate *count* pebbles and *count* boulders.
+    Writes ``<output_dir>/<type>_<seed>.glb`` for each rock. Use ``all`` to
+    generate *count* of every rock type.
     """
     import time
     from pathlib import Path
 
     from rocks3d.build import build_rock_glb
 
-    types = ["pebble", "boulder"] if type_name == "both" else [type_name]
+    types = list(_ROCK_TYPES) if type_name == "all" else [type_name]
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 

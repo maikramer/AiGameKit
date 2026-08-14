@@ -1160,11 +1160,14 @@ class Part3DPipeline:
         latents_cpu = latents.cpu()
         del latents
 
-        if self.cpu_offload and str(dit_device).startswith("cuda") and not self._secondary_device:
-            if not self._dit_multi_gpu:
+        if self.cpu_offload and not self._secondary_device:
+            if not self._dit_multi_gpu and str(dit_device).startswith("cuda"):
                 self._log("  [B] Offloading DiT para CPU...")
                 _offload_to_cpu(self._model)
-            # Restaurar conditioner para próximo batch
+            # Restaurar conditioner para o próximo batch — SEMPRE que foi
+            # estacionado. O guard antigo (dit_device cuda) deixava o
+            # conditioner em None quando o DiT caía para CPU por OOM, e o
+            # batch seguinte rebentava no _to_device(None).
             if "temp_conditioner" in locals() and temp_conditioner is not None:
                 self._conditioner = temp_conditioner
                 del temp_conditioner

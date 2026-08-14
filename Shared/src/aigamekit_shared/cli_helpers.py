@@ -62,9 +62,7 @@ def add_vramd_options(fn: F) -> F:
         "--vramd-priority",
         type=click.Choice(["interactive", "batch"], case_sensitive=False),
         default=None,
-        help=(
-            "Prioridade na fila vramd (default: interactive, ou VRAMD_PRIORITY). GameAssets batch usa 'batch'."
-        ),
+        help=("Prioridade na fila vramd (default: interactive, ou VRAMD_PRIORITY). GameAssets batch usa 'batch'."),
     )(fn)
     return fn
 

@@ -323,6 +323,10 @@ def generate_cmd(
             payload={
                 "prompt": prompt,
                 "output": str(Path(output).resolve()),
+                # Sem isto o worker construía o SkymapGenerator com o LoRA
+                # default — `--model` só funcionava com --no-vramd (e o
+                # skymap2d delega SEMPRE que o vramd está ativo).
+                "model_id": resolved_model,
                 "width": width,
                 "height": height,
                 "steps": steps,
@@ -616,6 +620,7 @@ def batch_cmd(
             payload={
                 "prompt": prompt_text,
                 "output": str(out_path),
+                "model_id": model_id or default_model_id(),
                 "width": width,
                 "height": height,
                 "steps": steps,

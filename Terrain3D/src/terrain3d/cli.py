@@ -282,7 +282,9 @@ def generate_cmd(
         "terrain3d",
         payload=build_generate_request(
             output=out_resolved,
-            metadata_path=metadata_path,
+            # Absoluto como o heightmap: relativo caía no cwd do worker vramd
+            # (herdado do supervisor) em vez da pasta do caller.
+            metadata_path=str(Path(metadata_path).resolve()) if metadata_path else metadata_path,
             seed=seed,
             size=size,
             world_size=world_size,

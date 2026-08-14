@@ -246,8 +246,11 @@ def generate_cmd(
             mem_eff = True
 
     mem_eff = mem_eff or cpu
-    if mem_eff and width == 2048 and height == 2048:
-        width, height = 1024, 1024
+    # Clamp por MÁXIMO (não só o exato 2048²) e só quando o utilizador não
+    # fixou resolução — "Flags explícitas ganham" (mesmo guard dos siblings).
+    if mem_eff and not (_user_set_width or _user_set_height):
+        width = min(width, 1024)
+        height = min(height, 1024)
     resolved_model = model_id or (hwp.model_id if hwp is not None else _model_id(memory_efficient=mem_eff))
     quant_preset = hwp.quant_preset if hwp is not None else None
     device = "cpu" if cpu else None

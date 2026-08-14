@@ -278,7 +278,7 @@ def test_target_faces_examples() -> None:
 
 
 def _touch(p: Path) -> Path:
-    from tests.glb_fixtures import write_min_glb
+    from glb_fixtures import write_min_glb
 
     return write_min_glb(p)
 
@@ -323,7 +323,7 @@ def test_collision_source_uses_lod0_when_rigged(tmp_path: Path) -> None:
 
 
 def test_collision_alignment_deviation_flags_offset(tmp_path: Path) -> None:
-    from tests.glb_fixtures import write_glb_with_bounds
+    from glb_fixtures import write_glb_with_bounds
 
     from gameassets.pipeline import collision_alignment_deviation
 
@@ -338,7 +338,7 @@ def test_collision_alignment_deviation_flags_offset(tmp_path: Path) -> None:
 
 def test_collision_alignment_skips_skinned(tmp_path: Path) -> None:
     """Skinned: accessors em espaço de bind — sem veredicto."""
-    from tests.glb_fixtures import write_glb_with_bounds
+    from glb_fixtures import write_glb_with_bounds
 
     from gameassets.pipeline import collision_alignment_deviation
 

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use image::DynamicImage;
 use std::time::Instant;
 
@@ -344,10 +344,12 @@ impl Pipeline {
 
         // Read back results
         let t_read = Instant::now();
+        // Propagar (o mesmo `.ok()` do gpu.rs engolia device-lost e o
+        // read_texture a seguir podia ficar pendurado no map_async).
         self.gpu
             .device
             .poll(wgpu::PollType::wait_indefinitely())
-            .ok();
+            .context("GPU device poll failed before readback")?;
 
         let height_data = self.gpu.read_texture(&height_texture).await?;
         let normal_data = if let Some(ref nt) = normal_texture {

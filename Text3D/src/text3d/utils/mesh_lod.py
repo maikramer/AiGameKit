@@ -517,27 +517,38 @@ def _prepare_mesh_topology_impl(
         _input = Path(input_path)
         _output = Path(output_path) if output_path else _input
 
-    mesh_obj, arm_objs = _load_glb_with_armatures(_input)
-    scale_mesh_object_to_meters(mesh_obj, size_m)
-    _prepare_topology_bpy(
-        mesh_obj,
-        fill_holes_sides=fill_holes_sides,
-        watertight=watertight,
-        morph_close=morph_close,
-        remove_internal_shells=remove_internal_shells,
-        category=category,
-        engine=engine,
-        has_armature=bool(arm_objs),
-    )
-    # Smooth vertex normals (não omitir NORMAL): export_normals=False deixava
-    # viewers flat e o save_mesh a seguir reintroduzia V/Tri≈3 faceted.
-    # smooth_shade_scene dentro do export evita split duro / boundary reopen.
-    _export_glb(_output, mesh_obj, arm_objs, export_normals=True)
+    try:
+        mesh_obj, arm_objs = _load_glb_with_armatures(_input)
+        scale_mesh_object_to_meters(mesh_obj, size_m)
+        _prepare_topology_bpy(
+            mesh_obj,
+            fill_holes_sides=fill_holes_sides,
+            watertight=watertight,
+            morph_close=morph_close,
+            remove_internal_shells=remove_internal_shells,
+            category=category,
+            engine=engine,
+            has_armature=bool(arm_objs),
+        )
+        # Smooth vertex normals (não omitir NORMAL): export_normals=False deixava
+        # viewers flat e o save_mesh a seguir reintroduzia V/Tri≈3 faceted.
+        # smooth_shade_scene dentro do export evita split duro / boundary reopen.
+        _export_glb(_output, mesh_obj, arm_objs, export_normals=True)
+    except BaseException:
+        if _was_trimesh:
+            tmp.unlink(missing_ok=True)
+        raise
 
     if _was_trimesh:
         import trimesh
 
-        return trimesh.load(str(_output), force="mesh")
+        # Carregar ANTES de apagar o tmp — quando output_path é None, o
+        # próprio tmp é o output (_output == tmp).
+        loaded = trimesh.load(str(_output), force="mesh")
+        # O GLB temporário do trimesh nunca era apagado — cada chamada batch
+        # deixava um ficheiro lixo em /tmp.
+        tmp.unlink(missing_ok=True)
+        return loaded
     return _output
 
 
@@ -935,6 +946,9 @@ def generate_lod_textured_glb_triplet(
 
     import_gltf(painted)
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    if not mesh_objs:
+        # GLB só com câmaras/empties — max() vazio dava ValueError críptico.
+        raise ValueError(f"No mesh objects found in {painted}")
     model = max(mesh_objs, key=lambda o: len(o.data.polygons))
     n = len(model.data.polygons)
 

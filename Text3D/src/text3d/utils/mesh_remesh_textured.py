@@ -1221,7 +1221,9 @@ def _remesh_textured_session(
         filepath=str(tmp_out),
         export_format="GLB",
         use_selection=True,
-        export_apply=True,
+        # apply=True congela o modificador Armature na rest pose → skins[]
+        # omitidos/anims mortas (mesmo guard do _export_glb em mesh_lod.py).
+        export_apply=not has_armature,
         export_normals=True,
         export_tangents=True,
         export_texcoords=True,

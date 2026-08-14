@@ -22,7 +22,7 @@ def load_pair_same_size(
     path_a: Path,
     path_b: Path,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Carrega dois PNG, redimensiona ao menor lado comum (center crop ou resize)."""
+    """Carrega dois PNG e normaliza ao menor lado comum (center crop)."""
     ia = Image.open(path_a).convert("RGBA")
     ib = Image.open(path_b).convert("RGBA")
     wa, ha = ia.size

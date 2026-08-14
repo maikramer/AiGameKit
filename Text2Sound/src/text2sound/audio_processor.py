@@ -546,30 +546,47 @@ def save_audio(
 
 
 def _write_ogg_with_quality(path: str, audio_np: np.ndarray, sample_rate: int, quality: float) -> None:
-    """Write OGG Vorbis, attempting to set the libsndfile Vorbis quality.
+    """Write OGG Vorbis com qualidade Vorbis explícita (0.0-1.0).
 
-    libsndfile supports per-file Vorbis quality (0.0-1.0) via the
-    ``SFC_SET_VORBIS_QUALITY`` command on the C file handle. soundfile's Python
-    binding does not expose a public setter, so we fall back to the default
-    encoder quality (which is reasonable) and record the requested value in the
-    metadata for traceability. A future version may shell out to ``ffmpeg``/``oggenc``
-    when exact bitrate control is required.
-
-    Args:
-        path: Output ``.ogg`` path.
-        audio_np: shape (samples, channels), float.
-        sample_rate: Hz.
-        quality: Requested Vorbis quality 0.0-1.0 (clamped; recorded in metadata).
+    A via anterior tentava um comando C interno do soundfile que NUNCA existiu
+    na binding Python (``_SoundFile.command``) — o setter nunca corria, o
+    ficheiro saía sempre com a qualidade default e o metadata registava o valor
+    pedido como se aplicado. Agora: re-encode via ``ffmpeg`` (qscale 0-10 ==
+    Vorbis quality 0.0-1.0); sem ffmpeg no sistema, escreve com o default e
+    avisa (não claims silenciosos).
     """
+    import logging
+    import shutil
+    import subprocess
+    import tempfile
+
     quality = max(0.0, min(1.0, quality))
-    # Best-effort: try the internal C-command setter; ignore if unavailable.
-    try:
-        with sf.SoundFile(path, "w", samplerate=sample_rate, channels=audio_np.shape[1], subtype="VORBIS") as f:
-            # SFC_SET_VORBIS_QUALITY == 0x1000 | int(quality*10) per libsndfile docs.
-            cfile = f._file if hasattr(f, "_file") else None
-            if cfile is not None and hasattr(cfile, "command"):
-                cfile.command(0x1000 | int(quality * 10))
-            f.write(audio_np)
-    except Exception:
-        # Fallback: plain write with default encoder quality.
-        sf.write(path, audio_np, sample_rate, subtype="VORBIS")
+    log = logging.getLogger(__name__)
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is not None:
+        try:
+            with tempfile.TemporaryDirectory(prefix="t2s_ogg_") as td:
+                wav = Path(td) / "in.wav"
+                sf.write(str(wav), audio_np, sample_rate, subtype="PCM_16")
+                subprocess.run(
+                    [
+                        ffmpeg,
+                        "-y",
+                        "-i",
+                        str(wav),
+                        "-c:a",
+                        "libvorbis",
+                        "-q:a",
+                        str(round(quality * 10)),
+                        str(path),
+                    ],
+                    capture_output=True,
+                    timeout=180,
+                    check=True,
+                )
+            return
+        except Exception as e:  # ffmpeg falhou — cair para o default com aviso
+            log.warning("ffmpeg falhou no encode OGG (%s) — a usar qualidade default", e)
+    else:
+        log.warning("ffmpeg não encontrado — ogg_quality=%.2f NÃO aplicado (default libsndfile)", quality)
+    sf.write(path, audio_np, sample_rate, subtype="VORBIS")

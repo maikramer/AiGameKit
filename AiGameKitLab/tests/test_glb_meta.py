@@ -315,26 +315,27 @@ class TestMalformedInput:
         path.write_bytes(GLB_MAGIC + b"\x00" * 8)  # 12 bytes < 20-byte guard
         assert "_error" in glb_extract_meta(path)
 
-    def test_bad_chunk_length_raises(self, tmp_path: Path) -> None:
-        # Declared chunk length intentionally extends past the valid JSON into garbage.
+    def test_bad_chunk_length_returns_error_dict(self, tmp_path: Path) -> None:
+        # Declared chunk length intentionally extends past the valid JSON into
+        # garbage — falha CONTROLADA (contrato do check glb), não traceback.
         payload = json.dumps({"asset": {"version": "2.0"}, "meshes": []}).encode() + b"\x00\x00GARBAGE"
         json_len = len(payload)
         total = 12 + 8 + len(payload)
         blob = struct.pack("<4sII", GLB_MAGIC, 2, total) + struct.pack("<II", json_len, JSON_CHUNK_TYPE) + payload
         path = tmp_path / "badlen.glb"
         path.write_bytes(blob)
-        with pytest.raises(json.JSONDecodeError):
-            glb_extract_meta(path)
+        meta = glb_extract_meta(path)
+        assert "_error" in meta
 
-    def test_malformed_json_body_raises(self, tmp_path: Path) -> None:
+    def test_malformed_json_body_returns_error_dict(self, tmp_path: Path) -> None:
         payload = b"{ not valid json"
         json_len = len(payload)
         total = 12 + 8 + len(payload)
         blob = struct.pack("<4sII", GLB_MAGIC, 2, total) + struct.pack("<II", json_len, JSON_CHUNK_TYPE) + payload
         path = tmp_path / "badjson.glb"
         path.write_bytes(blob)
-        with pytest.raises(json.JSONDecodeError):
-            glb_extract_meta(path)
+        meta = glb_extract_meta(path)
+        assert "_error" in meta
 
     def test_empty_file_returns_error_dict(self, tmp_path: Path) -> None:
         path = tmp_path / "empty.glb"

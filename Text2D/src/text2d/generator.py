@@ -235,6 +235,24 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             Metadata inclui prompt, seed, guidance, steps, dimensions.
         """
         from aigamekit_shared.diffusion_control import attach_step_hooks
+        from aigamekit_shared.validation import validate_params
+
+        # Paridade com os siblings (Text2Icon/Skymap2D/Texture2D): erro limpo
+        # por dimensões não múltiplas de 8 / steps-guidance fora do intervalo
+        # em vez de falha críptica no diffusers.
+        is_valid, error = validate_params(
+            {
+                "guidance_scale": guidance_scale,
+                "num_inference_steps": num_inference_steps,
+                "width": width,
+                "height": height,
+            },
+            min_steps=1,
+            default_guidance=1.0,
+            default_steps=4,
+        )
+        if not is_valid:
+            raise ValueError(f"Parâmetros inválidos: {error}")
 
         pipe = self._load_pipeline()
         resolved_seed = self._resolve_seed(seed)

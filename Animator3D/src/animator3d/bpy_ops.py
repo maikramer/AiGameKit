@@ -1571,13 +1571,17 @@ def attack_keyframes(
                 continue
             scale = max(0.25, 1.0 - ci * decay) if decay > 0 else 1.0
             for fi in range(total):
-                td = max(0.0, min(1.0, _strike_t(fi)))
+                # Stagger: cada bone segue o perfil com atraso de 2·ci frames
+                # (whip down-chain — shoulder→forearm→hand). O código antigo
+                # gravava o valor de `fi` no frame `fi-ci*2`, i.e. os ossos
+                # distais corriam À FRENTE do ombro (inverso do
+                # follow-through), e os últimos ci*2 samples nunca eram
+                # gravados (pop no fim do clip).
+                td = max(0.0, min(1.0, _strike_t(max(0, fi - ci * 2))))
                 prof = _attack_strike_profile(td)
-                # Stagger: cada bone da cadeia é animado 2 frames depois do
-                # anterior (whip down-chain — shoulder→forearm→hand).
-                staggered = max(frame_start, frame_start + fi - ci * 2)
-                bpy.context.scene.frame_set(staggered)
-                _key_humanoid_bone(pb, ax, staggered, swing=sign * amp * scale * prof)
+                frame = frame_start + fi
+                bpy.context.scene.frame_set(frame)
+                _key_humanoid_bone(pb, ax, frame, swing=sign * amp * scale * prof)
 
     def _strike_t(fi: int) -> float:
         u = fi / max(total - 1, 1)

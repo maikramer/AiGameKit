@@ -98,6 +98,9 @@ class Adapter(WorkerAdapter):
 
         self.report_progress(request, 0.95, "saving")
         metadata = {"prompt": prompt, "duration": request.get("duration", 30.0)}
+        # Espelhar a chamada in-process do CLI: o payload delegado traz todos
+        # os parâmetros de pós-processamento — lê-los aqui garante que o
+        # resultado pelo vramd é idêntico ao in-process.
         saved = save_audio(
             audio=result.audio,
             sample_rate=result.sample_rate,
@@ -105,6 +108,20 @@ class Adapter(WorkerAdapter):
             fmt=fmt,
             trim=bool(request.get("trim", False)),
             metadata=metadata,
+            trim_buffer_ms=request.get("trim_buffer_ms", 200),
+            trim_threshold_db=request.get("trim_threshold_db", -60.0),
+            seamless_loop=bool(request.get("seamless_loop", False)),
+            crossfade_ms=request.get("crossfade_ms"),
+            loop_edge_trim_s=request.get("loop_edge_trim_s"),
+            crop_seconds=request.get("crop_seconds"),
+            fade_out_seconds=request.get("fade_out_seconds"),
+            lufs_target=request.get("lufs_target"),
+            high_pass_hz=request.get("high_pass_hz"),
+            compressor_preset=request.get("compressor_preset"),
+            compressor_enabled=request.get("compressor_enabled"),
+            true_peak_db=request.get("true_peak_db"),
+            bit_depth=request.get("bit_depth"),
+            ogg_quality=request.get("ogg_quality"),
         )
 
         elapsed = time.perf_counter() - t_start

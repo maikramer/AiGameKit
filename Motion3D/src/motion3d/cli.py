@@ -253,17 +253,16 @@ def generate_cmd(
 )
 def export_glb_cmd(npz_path: str, output: str, fps: int, clip_name: str, in_place: bool) -> None:
     """Convert NPZ ``joints`` → HML22 source GLB (look-at bake, SkinTokens names)."""
-    import numpy as np
-
+    from .apply_rigged import _load_npz_joints
     from .bpy_export import export_joints_glb
 
-    data = np.load(npz_path, allow_pickle=True)
-    if "joints" not in data:
-        console.print("[red]NPZ missing 'joints' array[/red]")
+    try:
+        joints, npz_fps = _load_npz_joints(npz_path)
+    except (ValueError, OSError) as e:
+        console.print(f"[red]{e}[/red]")
         sys.exit(1)
-    joints = np.asarray(data["joints"], dtype=np.float32)
-    if "fps" in data:
-        fps = int(data["fps"])
+    if npz_fps is not None:
+        fps = int(npz_fps)
     saved = export_joints_glb(joints, output, fps=fps, clip_name=clip_name, in_place=in_place)
     console.print(Panel(f"[green]Saved[/green] [cyan]{saved}[/cyan]", title="export-glb"))
 

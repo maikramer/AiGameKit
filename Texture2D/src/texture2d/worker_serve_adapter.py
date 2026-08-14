@@ -23,7 +23,21 @@ class Adapter(WorkerAdapter):
         from texture2d.generator import TextureGenerator
 
         load_kwargs: dict[str, Any] = {"verbose": kwargs.get("verbose", False)}
-        skip = {"verbose", "group_offload", "sequential_offload", "memory_efficient"}
+        # Sinais de peak/admit do vramd que o ctor não aceita — sem este skip,
+        # um backends.yaml calibrado (quant_mode/sdnq_preset) ou preload com
+        # step_cache injectava kwargs no ctor → TypeError → backend broken.
+        skip = {
+            "verbose",
+            "group_offload",
+            "sequential_offload",
+            "memory_efficient",
+            "sdnq_preset",
+            "quant_preset",
+            "quant_mode",
+            "step_cache",
+            "half_precision",
+            "footprint_key",
+        }
         load_kwargs.update({k: v for k, v in kwargs.items() if k not in skip})
         gen = TextureGenerator(**load_kwargs)
         gen.warmup()

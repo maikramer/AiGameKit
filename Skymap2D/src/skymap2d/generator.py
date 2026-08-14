@@ -388,6 +388,12 @@ class SkymapGenerator(DiffusionGeneratorBase):
 
         from aigamekit_shared.diffusion_control import attach_step_hooks
 
+        if str(negative_prompt or "").strip():
+            # FLUX é guidance-distilled: o FluxPipeline não tem negative_prompt
+            # — avisar em vez de aceitar em silêncio (o utilizador acha que
+            # "-n birds" está a funcionar e nunca está).
+            self._log("AVISO: negative_prompt ignorado — o pipeline FLUX não suporta negative guidance.")
+
         self._log("Inferência...")
         call_kwargs: dict[str, Any] = {
             "prompt": prompt,

@@ -112,7 +112,7 @@ _DEFAULT_APPROACH_M = 1.0
 # Voxel-merge (N x voxel_m) por categoria. Rochas/cliffs: 3x default — menos
 # detalhe geométrico, mais fecho de buracos MC / base aberta.
 _CATEGORY_MORPH_VOXELS: dict[str, float] = {
-    "terrain": 3.0 * DEFAULT_MORPH_VOXELS,  # 0.54
+    "terrain": 3.0 * DEFAULT_MORPH_VOXELS,  # 0.72
     "rock": 3.0 * DEFAULT_MORPH_VOXELS,
 }
 
@@ -348,7 +348,7 @@ def morph_close_voxels_for(
     *,
     explicit: float | None = None,
 ) -> float:
-    """N de «voxel merge» (morph-close): explícito > category > default ``0.125``.
+    """N de «voxel merge» (morph-close): explícito > category > default ``0.24``.
 
     ``terrain`` / ``rock`` → 3x default (cliffs/rochas: mais fecho, menos detalhe).
     """

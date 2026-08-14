@@ -85,15 +85,22 @@ def _mesh_world_matrices(chunk: dict[str, Any]) -> dict[int, list[list[float]]]:
 
     result: dict[int, list[list[float]]] = {}
 
-    def walk(idx: int, parent: list[float]) -> None:
+    def walk(idx: int, parent: list[float], seen: set[int] | None = None) -> None:
+        # Guard de ciclos: um GLB malicioso/corrupto com children A→B→A
+        # recursava até RecursionError; o seen também evita contar duas vezes
+        # nós partilhados (DAG) nos bounds.
+        if seen is None:
+            seen = set()
+        if idx in seen or not (0 <= idx < len(nodes)):
+            return
+        seen.add(idx)
         node = nodes[idx]
         world = _mat_mul(parent, _node_local_matrix(node))
         mesh_idx = node.get("mesh")
         if isinstance(mesh_idx, int):
             result.setdefault(mesh_idx, []).append(world)
         for child in node.get("children", []) or []:
-            if 0 <= child < len(nodes):
-                walk(child, world)
+            walk(child, world, seen)
 
     for root in roots:
         walk(root, _IDENTITY)
@@ -127,7 +134,16 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
         return {"_error": "não é GLB"}
 
     json_len = struct.unpack_from("<I", data, 12)[0]
-    chunk = json.loads(data[20 : 20 + json_len])
+    # GLB truncado/corrupto: sem estes guards o check glb morria com
+    # traceback cru em vez de falhar controlado (contrato do precompute.py).
+    if json_len <= 0 or 20 + json_len > len(data):
+        return {"_error": "GLB truncado (chunk JSON incompleto)"}
+    if data[16:20] != b"JSON":
+        return {"_error": "GLB inválido (primeiro chunk não é JSON)"}
+    try:
+        chunk = json.loads(data[20 : 20 + json_len])
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        return {"_error": f"GLB com JSON ilegível: {e}"}
 
     accessors = chunk.get("accessors", []) or []
     images = chunk.get("images", []) or []

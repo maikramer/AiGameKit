@@ -554,8 +554,7 @@ def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True) 
 
     _logger.info(f"[vramd] Auto-start: {' '.join(cmd)}")
     log_path = Path(
-        os.environ.get("VRAMD_AUTO_START_LOG", "").strip()
-        or (Path.home() / ".cache" / "vramd" / "vramd-autostart.log")
+        os.environ.get("VRAMD_AUTO_START_LOG", "").strip() or (Path.home() / ".cache" / "vramd" / "vramd-autostart.log")
     )
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -591,7 +590,7 @@ def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True) 
         pass
 
     try:
-        subprocess.Popen(
+        proc = subprocess.Popen(
             cmd,
             stdout=log_fh,
             stderr=subprocess.STDOUT if log_fh is not subprocess.DEVNULL else subprocess.DEVNULL,
@@ -600,7 +599,11 @@ def ensure_vramd_running(*, timeout_sec: float = 30.0, auto_start: bool = True) 
             start_new_session=True,  # detach: sobrevive ao processo chamador
         )
         if log_fh is not subprocess.DEVNULL:
-            _logger.info(f"[vramd] Auto-start log: {log_path}")
+            _logger.info(f"[vramd] Auto-start log: {log_path} (pid={proc.pid})")
+            # O filho ficou com o seu próprio dup do fd — o pai pode fechar a
+            # sua cópia (sem isto, cada auto-start vaza um fd no processo chamador).
+            with contextlib.suppress(Exception):
+                log_fh.close()
     except OSError as e:
         _logger.warn(f"[vramd] Auto-start falhou: {e}")
         if log_fh is not subprocess.DEVNULL:
@@ -673,8 +676,9 @@ def delegate_to_vramd(
     if not ensure_vramd_running():
         return None
     pri = resolve_vramd_priority(priority if priority is not None else request.get("priority"))
-    req = {"cmd": "generate", "backend": backend, **request}
-    req["priority"] = pri
+    # ``cmd``/``backend`` explícitos por último: o payload do pedido nunca deve
+    # re-rotear a delegação (um dicionário vindo de kwargs do CLI pode ter essas chaves).
+    req = {**request, "cmd": "generate", "backend": backend, "priority": pri}
     # send_request directo (não send_to_vramd): o ensure acima já garantiu o vramd —
     # evita repetir o probe pid-file + os.kill + connect a cada delegação.
     resp = send_request(req, VRAMD_SOCKET, timeout_sec=timeout_sec)
@@ -705,8 +709,8 @@ def submit_to_vramd(
     if not ensure_vramd_running():
         return None
     pri = resolve_vramd_priority(priority if priority is not None else request.get("priority"))
-    req = {"cmd": "submit", "backend": backend, "priority": pri, **request}
-    req["priority"] = pri
+    # Mesma regra do delegate_to_vramd: cmd/backend explícitos vencem o payload.
+    req = {**request, "cmd": "submit", "backend": backend, "priority": pri}
     # send_request directo: ensure já feito acima (ver delegate_to_vramd).
     return send_request(req, VRAMD_SOCKET, timeout_sec=timeout_sec)
 
@@ -980,8 +984,10 @@ class ModelServer:
                 return self._generator(obj, request)
         except Exception as e:
             self._log(f"Erro na geração: {e}")
-            # OOM? Descarregar para próxima tentativa recarregar
-            with contextlib.suppress(Exception):
+            # OOM? Descarregar para próxima tentativa recarregar. Sob a MESMA
+            # lock do load — sem isto, uma thread em _ensure_loaded podia acabar
+            # de carregar um modelo novo e esta linha anulá-lo (VRAM órfã).
+            with self._obj_lock, contextlib.suppress(Exception):
                 unload = getattr(self._obj, "unload", None)
                 if callable(unload):
                     unload()

@@ -855,6 +855,15 @@ def debug_compare(
         if isinstance(ia, dict) and isinstance(ib, dict) and "_error" not in ia and "_error" not in ib:
             diff_report["inspect_diff"] = diff_inspect(ia, ib)
 
+    if fail_below_ssim is not None and not image_metrics:
+        # Sem isto o gate era silenciosamente ignorado e o CI dava exit 0 para
+        # assets visualmente partidos (quem esquece --image-metrics acha que o
+        # limiar está aplicado).
+        console.print(
+            "[red]--fail-below-ssim requer --image-metrics (métricas não calculadas).[/red]"
+        )
+        sys.exit(2)
+
     if image_metrics:
         from aigamekit_lab.compare_images import compare_view_pair
 

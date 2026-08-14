@@ -189,13 +189,13 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=None,
     help="Imagem já gerada: só corre Hunyuan3D (sem Text2D).",
 )
-@click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.glb, .ply, .obj)")
+@click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.glb, .ply)")
 @click.option(
     "--format",
     "-f",
     "output_format",
     default="glb",
-    type=click.Choice(["glb", "ply", "obj"]),
+    type=click.Choice(["glb", "ply"]),
     help="Formato de saída",
 )
 @click.option("--cpu", is_flag=True, help="Forçar CPU (muito mais lento)")
@@ -1472,7 +1472,7 @@ def info():
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída")
 @click.option("--rotate", "-r", is_flag=True, help="Aplicar rotação de orientação")
 def convert(input_file, output, rotate):
-    """Converte mesh entre formatos (PLY, OBJ, GLB)."""
+    """Converte mesh entre formatos (PLY, GLB)."""
     from .utils.export import convert_mesh
 
     input_path = Path(input_file)
@@ -1648,7 +1648,7 @@ def bake_master_cmd(
     type=float,
     default=None,
     help=(
-        "N de «voxel merge» no auto morph-close (default 0.125; terrain/rock=0.375). "
+        "N de «voxel merge» no auto morph-close (default 0.24; terrain/rock=0.72). "
         "Ignorado se --morph-close (metros) for explícito."
     ),
 )

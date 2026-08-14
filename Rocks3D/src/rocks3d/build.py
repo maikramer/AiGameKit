@@ -57,12 +57,20 @@ def build_rock_glb(
     """
     preset = get_preset(type_name, quality)
 
+    # Sortear UMA vez: com seed=None a geometria era aleatória mas erosão/
+    # texturas corriam sempre com seed 0 — cada rocha única com o MESMO padrão
+    # de textura.
+    if seed is None:
+        import random
+
+        seed = random.randrange(0, 2**31 - 1)
+
     mesh = generate_rock(type_name, seed=seed, quality=quality)
 
     if erosion and preset.erosion_passes > 0:
         mesh = apply_erosion(
             mesh,
-            seed=seed or 0,
+            seed=seed,
             passes=preset.erosion_passes,
             strength=preset.erosion_strength,
         )
@@ -73,7 +81,7 @@ def build_rock_glb(
     # Pebbles get the cheap spherical UV; every larger/angular type (boulder and
     # the scenery rocks) needs an atlas unwrap to texture cleanly.
     return _texture_and_export(
-        mesh, preset, output_path, seed=seed or 0, use_bpy=use_bpy, spherical_uv=(type_name == "pebble")
+        mesh, preset, output_path, seed=seed, use_bpy=use_bpy, spherical_uv=(type_name == "pebble")
     )
 
 
@@ -105,12 +113,16 @@ def build_formation_glb(
 
     # Reuse the outcrop preset purely for colour/material; geometry is the union.
     preset = get_preset("outcrop", quality)
+    if seed is None:
+        import random
+
+        seed = random.randrange(0, 2**31 - 1)
     mesh = generate_formation(style, seed=seed, quality=quality, chunks=chunks)
 
     if scale != 1.0:
         mesh.apply_scale(scale)
 
-    summary = _texture_and_export(mesh, preset, output_path, seed=seed or 0, use_bpy=use_bpy, spherical_uv=False)
+    summary = _texture_and_export(mesh, preset, output_path, seed=seed, use_bpy=use_bpy, spherical_uv=False)
     summary["style"] = style
     return summary
 
@@ -143,8 +155,14 @@ def _texture_and_export(
         }
 
     mesh = apply_uv_spherical(mesh) if spherical_uv else apply_uv_xatlas(mesh)
-    textures = generate_pbr_textures(mesh, preset, seed=seed)
-    export_glb(mesh, textures, output_path)
+    # Temp dir com limpeza: as texturas são EMBEDDED no GLB pelo export_glb —
+    # o mkdtemp interno do generate_pbr_textures ficava órfão em /tmp por
+    # cada rocha (batch de 200 = 200 diretórios lixo).
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="rocks3d_pbr_") as tmpdir:
+        textures = generate_pbr_textures(mesh, preset, seed=seed, output_dir=Path(tmpdir))
+        export_glb(mesh, textures, output_path)
     return {
         "vertices": len(mesh.vertices),
         "faces": len(mesh.faces),

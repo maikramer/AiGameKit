@@ -47,6 +47,12 @@ class Adapter(WorkerAdapter):
         load_kwargs.update({k: v for k, v in kwargs.items() if k not in skip})
         if "low_vram" in kwargs:
             load_kwargs["low_vram"] = bool(kwargs["low_vram"])
+        # Quant explícito do CLI (--quant-transformer sdnq-fp8 / hw_auto) chega
+        # como sinal de peak `quant_preset`/`sdnq_preset` — mapear para o ctor
+        # em vez de deixar o worker re-decidir pela VRAM (flag era ignorada).
+        qp = kwargs.get("quant_preset") or kwargs.get("sdnq_preset")
+        if qp and str(qp).strip().lower() not in ("", "none", "null", "auto"):
+            load_kwargs["transformer_quant_preset"] = str(qp).strip()
         gen = SanaIconGenerator(**load_kwargs)
         gen.warmup()
         return gen

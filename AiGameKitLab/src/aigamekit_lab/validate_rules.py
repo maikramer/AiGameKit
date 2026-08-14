@@ -132,6 +132,13 @@ def evaluate_inspect_rules(
                     if isinstance(axis_spec, dict):
                         _check_min_max(axis_val, axis_spec, f"world_bounds.size[{i}]", failures)
                 details["rules_applied"].append("world_bounds.size")
+            else:
+                # Mismatch de eixos: sem falha explícita a regra contava como
+                # "aplicada e passou" no CI sem nunca verificar nada.
+                failures.append(
+                    f"world_bounds.size: esperados {len(sz_spec)} eixos, "
+                    f"modelo tem {len(sz_val) if isinstance(sz_val, list) else 'n/a'}"
+                )
 
     arms_rule = rules.get("armatures")
     if isinstance(arms_rule, list):

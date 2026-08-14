@@ -503,8 +503,11 @@ def decompose(
     if hw_auto and hw_auto_enabled():
         hwp = detect_hardware_profile()
         mem_eff = hwp.memory_efficient
-        if not user_set_no_offload and hwp.cpu_offload:
-            no_cpu_offload = False
+        if not user_set_no_offload:
+            # Derivar DO perfil (o anti-padrão antigo só escrevia False, que
+            # já era o default — GPUs >=10 GB nunca desligavam o offload e
+            # perdiam performance constante em cada generate).
+            no_cpu_offload = not hwp.cpu_offload
         if mem_eff:
             if not user_set_quant:
                 quantization = "auto"

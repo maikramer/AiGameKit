@@ -602,16 +602,22 @@ def _smi_list_compute_apps() -> list[tuple[int, str, int | None]]:
     """Fallback ``nvidia-smi --query-compute-apps``."""
     if not shutil.which("nvidia-smi"):
         return []
-    r = subprocess.run(
-        [
-            "nvidia-smi",
-            "--query-compute-apps=pid,process_name,used_gpu_memory",
-            "--format=csv,noheader,nounits",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=20,
-    )
+    try:
+        r = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-compute-apps=pid,process_name,used_gpu_memory",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        # Um nvidia-smi pendurado não pode rebentar o CLI que só quer
+        # informação (os irmãos _smi_query_free_mib/_smi_gpu_snapshot já
+        # engolem o mesmo erro).
+        return []
     if r.returncode != 0 or not (r.stdout or "").strip():
         return []
     out: list[tuple[int, str, int | None]] = []

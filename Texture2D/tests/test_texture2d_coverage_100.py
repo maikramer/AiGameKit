@@ -362,8 +362,14 @@ def test_vramd_payload_neg_preset() -> None:
 
 
 def test_vramd_payload_model_ground() -> None:
+    """Ground é tri-state ("auto"/"on"/"off") — bool nunca devia chegar ao gerador."""
     req = build_generate_request(prompt="p", output="o.png", model_id="m/id", ground=True)
-    assert req["ground"] is True
+    assert req["ground"] == "on"
+    req_off = build_generate_request(prompt="p", output="o.png", ground=False)
+    assert req_off["ground"] == "off"
+    req_auto = build_generate_request(prompt="p", output="o.png", ground="auto")
+    assert req_auto["ground"] == "auto"
+    # Sem ground: chave omitida → o adapter aplica "auto".
 
 
 def test_vramd_payload_extra() -> None:

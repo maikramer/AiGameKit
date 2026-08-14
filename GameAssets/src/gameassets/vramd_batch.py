@@ -569,7 +569,9 @@ def texture2d_specs_from_items(
             seed=item.get("seed"),
             negative_prompt=item.get("negative_prompt", negative_prompt),
             preset=item.get("preset", preset),
-            ground=bool(item.get("ground", False)),
+            # Tri-state ("auto"/"on"/"off") em bruto — o builder normaliza;
+            # bool() aqui desligava o ground-enhancer no caminho delegado.
+            ground=item.get("ground", "auto"),
             model_id=item.get("model_id", model_id),
             gpu_ids=gpu_ids,
         )

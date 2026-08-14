@@ -149,7 +149,7 @@ pub struct Cli {
 
     #[arg(
         long,
-        help = "Parallel CPU jobs for batch processing",
+        help = "Accepted for compatibility — GPU dispatch stays serial in v2.0",
         default_value = "1"
     )]
     pub jobs: u32,

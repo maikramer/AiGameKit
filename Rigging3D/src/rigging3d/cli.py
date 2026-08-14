@@ -782,8 +782,9 @@ def pipeline_cmd(
     try:
         if gpu_ids:
             os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
-        elif _old_cuda is not None:
-            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+        # Sem --gpu-ids: NÃO tocar na variável. O pop antigo apagava a pinagem
+        # do operador (ex.: CUDA_VISIBLE_DEVICES=1) e o torch via TODAS as GPUs
+        # — o oposto do pretendido.
 
         with ProfilerSession(
             "rigging3d",

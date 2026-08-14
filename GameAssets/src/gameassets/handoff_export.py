@@ -78,13 +78,26 @@ def resolve_handoff_mesh(
 
 def _convert_audio(src: Path, dst: Path, *, sample_rate: int, dry_run: bool) -> bool:
     """Convert audio file using ffmpeg. Returns True on success."""
+    import shutil
     import subprocess
 
     if dry_run:
         return True
+    if not shutil.which("ffmpeg"):
+        print(f"[handoff] ffmpeg não encontrado — {src.name} fica sem conversão", flush=True)
+        return False
     dst.parent.mkdir(parents=True, exist_ok=True)
     argv = ["ffmpeg", "-y", "-i", str(src), "-ar", str(sample_rate), "-vn", "-c:a", "libvorbis", "-q:a", "4", str(dst)]
-    r = subprocess.run(argv, capture_output=True, text=True)
+    try:
+        # Timeout: um input corromputo pode deixar o ffmpeg em loop — sem isto o
+        # handoff trava o batch inteiro.
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        print(f"[handoff] ffmpeg timeout em {src.name}", flush=True)
+        return False
+    if r.returncode != 0:
+        detail = (r.stderr or "").strip().splitlines()
+        print(f"[handoff] ffmpeg falhou em {src.name}: {detail[-1] if detail else r.returncode}", flush=True)
     return r.returncode == 0
 
 

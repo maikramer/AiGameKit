@@ -63,25 +63,48 @@ def parse_motion_spec(spec: str) -> MotionClip:
     return MotionClip(name=name, npz_path=Path(path_s).expanduser())
 
 
+def _load_npz_joints(path: Path | str) -> tuple[np.ndarray, int | None]:
+    """Lê ``joints``/``fps`` de um NPZ com validação defensiva.
+
+    - ``with np.load`` fecha o NpzFile (o handle ficava preso até GC);
+    - ``allow_pickle=False`` — os arrays guardados (joints/fps/prompt/model)
+      são dtypes plain, pickle é desnecessário e é vetor de código arbitrário
+      em NPZ de fonte desconhecida;
+    - NaN/inf em ``joints`` propagariam para bone.head/tail e keyframes —
+      falhar cedo com mensagem clara.
+    """
+    with np.load(path, allow_pickle=False) as data:
+        if "joints" not in data:
+            raise ValueError(f"NPZ missing 'joints': {path}")
+        joints = np.asarray(data["joints"], dtype=np.float64)
+        fps = int(data["fps"]) if "fps" in data else None
+    if joints.ndim != 3 or joints.shape[1] == 0 or joints.shape[2] < 3:
+        raise ValueError(f"NPZ 'joints' com shape inesperado {joints.shape}: {path}")
+    if not np.isfinite(joints).all():
+        raise ValueError(f"NPZ 'joints' contém NaN/inf: {path}")
+    if fps is not None and fps <= 0:
+        raise ValueError(f"NPZ 'fps' inválido ({fps}): {path}")
+    return joints, fps
+
+
 def load_clip_joints(clip: MotionClip) -> tuple[np.ndarray, int | None]:
     """Return ``(joints, fps_or_None)`` from a clip's arrays or NPZ."""
     if clip.joints is not None and clip.npz_path is not None:
         raise ValueError(f"clip {clip.name!r}: set joints or npz_path, not both")
     if clip.joints is not None:
         joints = np.asarray(clip.joints, dtype=np.float64)
+        if not np.isfinite(joints).all():
+            raise ValueError(f"clip {clip.name!r}: joints contêm NaN/inf")
         return joints, clip.fps
     if clip.npz_path is None:
         raise ValueError(f"clip {clip.name!r}: need joints or npz_path")
     path = Path(clip.npz_path).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(path)
-    data = np.load(path, allow_pickle=True)
-    if "joints" not in data:
-        raise ValueError(f"NPZ missing 'joints': {path}")
-    joints = np.asarray(data["joints"], dtype=np.float64)
+    joints, npz_fps = _load_npz_joints(path)
     fps = clip.fps
-    if fps is None and "fps" in data:
-        fps = int(data["fps"])
+    if fps is None:
+        fps = npz_fps
     return joints, fps
 
 
@@ -337,6 +360,22 @@ def apply_motions_to_rigged(
             target.animation_data.action = clip_act
 
         _strip_debug_meshes(bpy)
+        # O glTF exporter converte TODAS as actions com o fps de cena único.
+        # O loop re-definia o fps por clip e o save corria com o do ÚLTIMO —
+        # packs com fps mistos exportavam durações erradas. Voltar ao fps do
+        # primeiro clip (contrato "Scene FPS = first clip") e avisar quando o
+        # pack mistura fps (conversão única não os pode representar a todos).
+        fps_set = {int(f) for _, _, f, _ in prepared}
+        if len(fps_set) > 1:
+            import warnings
+
+            warnings.warn(
+                f"apply_motions_to_rigged: pack com fps mistos {sorted(fps_set)} — "
+                "a exportação usa um fps de cena único; clips com fps diferente "
+                "do primeiro terão duração ajustada no GLB final.",
+                stacklevel=2,
+            )
+        bpy.context.scene.render.fps = int(prepared[0][2])
         objs = [o for o in bpy.context.scene.objects if o.type in ("ARMATURE", "MESH")]
         save_glb(
             objs,
@@ -431,11 +470,11 @@ def apply_npz_to_rigged(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Load NPZ ``joints`` and call :func:`apply_motion_to_rigged`."""
-    data = np.load(npz_path, allow_pickle=True)
-    if "joints" not in data:
-        raise ValueError("NPZ missing 'joints'")
-    joints = np.asarray(data["joints"], dtype=np.float64)
-    fps = int(data["fps"]) if "fps" in data else int(kwargs.pop("fps", 20))
+    joints, npz_fps = _load_npz_joints(Path(npz_path))
+    # pop ANTES de escolher a fonte — o fps do NPZ vem no argumento explícito
+    # e o kwargs ainda o trazia → "multiple values for keyword 'fps'".
+    kwargs_fps = kwargs.pop("fps", None)
+    fps = int(npz_fps if npz_fps is not None else (kwargs_fps if kwargs_fps is not None else 20))
     return apply_motion_to_rigged(joints, rigged_glb, output, fps=fps, **kwargs)
 
 

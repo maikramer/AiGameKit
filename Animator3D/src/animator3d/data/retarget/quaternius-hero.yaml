@@ -10,8 +10,8 @@
 #   axe    ← Sword_Attack (sem axe dedicado no pack; swing genérico de arma branca)
 #   spear  ← Sword_Attack (sem spear dedicado; thrust da espada)
 #   chop   ← Sword_Attack (swing descendente para cortar madeira)
-#   mine   ← Fixing_Kneeling (agachado a bater — perfeito para mineração)
-#   gather ← Interact (gesto de interagir / apanhar)
+#   mine   ← Sword_Attack (não há pickaxe no pack; mesmo ataque de arma)
+#   gather/interact ← Fixing_Kneeling (ajoelhar e pegar no chão)
 #
 # Os inimigos limitam o conjunto via ``animator3d game-pack --clips``; o
 # ``game-pack`` carrega este perfil (superset) e filtra as keys pedidas.

@@ -204,10 +204,11 @@ async fn run_batch_mode(args: &Cli, pipeline: &Pipeline) -> Result<()> {
         println!("Found {} image(s) to process", inputs.len());
     }
 
-    let (resolved_preset, base_params) =
-        resolve_base_params(args, &DynamicImage::ImageRgba8(image::RgbaImage::new(1, 1)));
-
     let result = run_batch(pipeline, inputs, args, &|img: &DynamicImage| {
+        // Classify EACH image (a dummy 1×1 always resolved to Default, so
+        // `-p auto` applied Default's params to every image in the batch —
+        // unlike single-file mode).
+        let (resolved_preset, base_params) = resolve_base_params(args, img);
         apply_overrides_and_auto_scale(args, img, resolved_preset, base_params)
     })?;
 

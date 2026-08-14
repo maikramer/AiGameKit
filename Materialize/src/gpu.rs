@@ -479,7 +479,12 @@ impl GpuContext {
             let _ = sender.send(result);
         });
 
-        self.device.poll(wgpu::PollType::wait_indefinitely()).ok();
+        // Propagar o erro do poll: com `.ok()` um device lost engolia-se e o
+        // receiver.await abaixo ficava pendurado para sempre (hang em vez do
+        // erro tipado do contrato de exit code).
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .context("GPU device poll failed before readback")?;
         receiver.await??;
 
         let data = buffer_slice

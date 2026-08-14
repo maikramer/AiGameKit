@@ -299,28 +299,10 @@ def bake_master(
             apply_meshopt=apply_meshopt,
         )
 
-    # Recontagem de faces (para report)
-    try:
-        import json as _json
-        import struct
-
-        with open(output_lod0_glb, "rb") as f:
-            data = f.read(4096 * 64)
-        if data[:4] == b"glTF":
-            json_len = struct.unpack_from("<I", data, 12)[0]
-            chunk = _json.loads(data[20 : 20 + json_len])
-            faces = 0
-            for m in chunk.get("meshes", []):
-                for p in m.get("primitives", []):
-                    idx = p.get("indices")
-                    if idx is not None:
-                        accs = chunk.get("accessors", [])
-                        if idx < len(accs):
-                            faces += accs[idx].get("count", 0) // 3
-        else:
-            faces = 0
-    except Exception:
-        faces = 0
+    # Recontagem de faces (para report) — parser completo (_count_faces_glb),
+    # não leitura truncada: LOD0 herois têm JSON chunk > 256 KiB e o parser
+    # parcial engolia o erro devolvendo sempre 0.
+    faces = max(0, _count_faces_glb(output_lod0_glb))
 
     return BakeMasterResult(
         output_path=output_lod0_glb,
