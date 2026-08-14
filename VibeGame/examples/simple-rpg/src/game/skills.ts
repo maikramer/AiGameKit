@@ -26,8 +26,12 @@ export const RING_SPEED_MULT = 1.15;
 
 /** Grant skill points to the player (e.g. the rune pillar). */
 export function addSkillPoints(n: number): void {
+  if (!Number.isFinite(n) || n === 0) return;
   const h = playerEid();
-  if (h) ProgressionComponent.unspentPoints[h] += n;
+  if (!h) return;
+  // `undefined + n` is NaN and would lock the SkillsTab forever — seed first.
+  ProgressionComponent.unspentPoints[h] =
+    (ProgressionComponent.unspentPoints[h] ?? 0) + n;
 }
 
 export function getSkillPoints(): number {

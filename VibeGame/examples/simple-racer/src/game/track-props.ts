@@ -389,6 +389,9 @@ function measureProp(
       })
       .catch((err) => {
         console.warn('[track-props] failed to load', pack, file, err);
+        // Do NOT cache the failure: a transient network blip would otherwise
+        // blacklist this prop for the whole session (and every re-dress).
+        fits.delete(key);
         return null;
       });
     fits.set(key, p);
@@ -602,7 +605,11 @@ export const TrackPropSpawnSystem: GAME.System = {
       spline,
       GAME.RaceTrackComponent.shoulder[trackEid] || 3,
       state
-    );
+    ).catch((err) => {
+      // `dressed` is already latched — without this catch a mid-walk throw
+      // rejects unhandled and half the circuit stays bare with no retry.
+      console.error('[track-props] dressing failed mid-circuit:', err);
+    });
   },
 };
 

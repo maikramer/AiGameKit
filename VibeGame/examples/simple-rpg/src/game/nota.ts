@@ -107,8 +107,12 @@ export function notaSnapshot(): NotaSnapshot {
 
 export function restoreNota(state: State, data: Partial<NotaSnapshot>): void {
   marked.clear();
-  for (const name of data.marked ?? []) {
-    if (biomeOfLandmark(name) !== null) marked.add(name);
+  // A hand-edited or old-version save can carry anything in `marked`; throwing
+  // mid-restore would leave the Nota half-cleared and kill the whole load.
+  const names = Array.isArray(data?.marked) ? data.marked : [];
+  for (const name of names) {
+    if (typeof name === 'string' && biomeOfLandmark(name) !== null)
+      marked.add(name);
   }
   recomputeFixed();
   syncVisitedToQuests(state);

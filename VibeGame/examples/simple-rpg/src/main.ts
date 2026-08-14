@@ -421,7 +421,9 @@ const dictEN: Record<string, string> = {
     'Bomb: B (hold to aim)   Cycle weapon: V\n' +
     'Use potion: 1   Use antidote: 2\n' +
     'Dash: C   Heal: E   Power Strike: R\n' +
+    'Campfire (rest + travel): H\n' +
     'Pause menu: Q\n' +
+    'Menus: W/S navigate   L close\n' +
     'Profiler: P (Shift+P deep)   Debug overlay: ?   GPU stats: G',
   'hud.title': 'Discordia',
 };
@@ -455,7 +457,9 @@ const dictPT: Record<string, string> = {
     'Bomba: B (segure p/ mirar)   Trocar arma: V\n' +
     'Usar poção: 1   Usar antídoto: 2\n' +
     'Investida: C   Cura: E   Golpe Forte: R\n' +
+    'Fogueira (descanso + viagem): H\n' +
     'Menu de pausa: Q\n' +
+    'Menus: W/S navega   L fecha\n' +
     'Profiler: P (Shift+P deep)   Overlay debug: ?   GPU: G',
   'hud.title': 'Discordia',
 };
@@ -834,7 +838,15 @@ async function runBootstrap(): Promise<void> {
   // to the player, so a pack fights together instead of each mob aggroing alone.
   setupAggroChain(state);
 
-  GRIPS = await loadHeldItemGrips('/data/held-items.json');
+  try {
+    GRIPS = await loadHeldItemGrips('/data/held-items.json');
+  } catch (err) {
+    // Missing/corrupt grip table must not kill the boot — weapons just attach
+    // without per-clip grip offsets instead of the game hanging on the
+    // loading screen forever.
+    console.warn('[simple-rpg] failed to load held-items.json:', err);
+    GRIPS = {};
+  }
 
   // City exclusion zone — registered directly in the occupancy registry before
   // any StaticSpawner samples positions. Central walled city is at the origin
@@ -900,9 +912,15 @@ async function runBootstrap(): Promise<void> {
     },
     deserialize: (s, eid, data) => {
       if (s.getEntityByName('player') !== eid) return;
-      const d = data as { ringOwned?: boolean; swordLevel?: number };
-      playerStats.ringOwned = !!d.ringOwned;
-      playerStats.swordLevel = d.swordLevel ?? 0;
+      // Saves are untrusted (old versions, hand edits): a NaN/absurd
+      // swordLevel would poison attackBonus — every bomb and swing would deal
+      // NaN damage — and a null payload would throw inside the load pass.
+      const d = (data ?? {}) as { ringOwned?: unknown; swordLevel?: unknown };
+      playerStats.ringOwned = d.ringOwned === true;
+      const lvl = typeof d.swordLevel === 'number' ? d.swordLevel : 0;
+      playerStats.swordLevel = Number.isFinite(lvl)
+        ? Math.min(10, Math.max(0, Math.trunc(lvl)))
+        : 0;
     },
   });
 
@@ -1255,7 +1273,19 @@ async function runBootstrap(): Promise<void> {
   await runtime.start();
 }
 
-void bootstrap();
+void bootstrap().catch((err) => {
+  // Any boot failure (network fetch, parse, WebGL) would otherwise reject
+  // unhandled and leave the loading screen up forever with no clue why.
+  console.error('[simple-rpg] boot failed:', err);
+  const overlay = document.getElementById('vibegame-loading');
+  const title = overlay?.querySelector('.title, h1');
+  const sub = overlay?.querySelector('.sub, p');
+  if (title) (title as HTMLElement).textContent = 'Erro ao iniciar';
+  if (sub)
+    (sub as HTMLElement).textContent =
+      'Falha no boot — vê a consola (F12) e recarrega. ' +
+      `${(err as Error)?.message ?? err}`;
+});
 
 // Soft HMR of this graph leaks WebGL/KTX2/Rapier in Firefox — decline so Vite
 // always full-reloads. Unload path must stay lightweight: heavy destroy() here

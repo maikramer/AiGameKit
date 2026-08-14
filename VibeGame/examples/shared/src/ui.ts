@@ -56,7 +56,13 @@ export function showToast(message: string, opts: ToastOptions = {}): void {
   toastEl.textContent = message;
   toastEl.style.opacity = '1';
   if (toastTimeout) clearTimeout(toastTimeout);
+  // A non-finite duration (undefined leaked from a caller patch) would make
+  // setTimeout fire the fade immediately and the toast flicker.
+  const durationMs = Number.isFinite(opts.durationMs)
+    ? Math.max(0, opts.durationMs as number)
+    : 2200;
   toastTimeout = setTimeout(() => {
+    toastTimeout = null;
     if (toastEl) toastEl.style.opacity = '0';
-  }, opts.durationMs ?? 2200);
+  }, durationMs);
 }

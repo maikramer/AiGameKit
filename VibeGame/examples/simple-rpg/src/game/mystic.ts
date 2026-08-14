@@ -59,6 +59,8 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
 
   let group: THREE.Group | null = null;
   let loadStarted = false;
+  /** Model failed to stream — stop offering interaction over nothing. */
+  let loadFailed = false;
   let read = false;
   let fPressed = false;
   let entityId = 0;
@@ -76,28 +78,40 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
     });
     if (loadStarted) return;
     loadStarted = true;
-    void loadGltfToSceneWithAnimator(ctx.state, cfg.modelUrl).then((result) => {
-      group = result.group;
-      const scale = cfg.modelScale ?? 1;
-      if (scale !== 1) group.scale.setScalar(scale);
-      const col = new THREE.Color(cfg.emissiveColor);
-      group.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        const mat = mesh.material as THREE.MeshStandardMaterial;
-        if (mat && 'emissiveIntensity' in mat) {
-          mat.emissive = col.clone();
-          mat.emissiveIntensity = baseI;
-          // Some source GLBs (the pillar) have inverted/one-sided normals that
-          // make the interior show through; render both sides to avoid it.
-          mat.side = THREE.DoubleSide;
-          emissiveMats.push(mat);
-        }
+    void loadGltfToSceneWithAnimator(ctx.state, cfg.modelUrl)
+      .then((result) => {
+        group = result.group;
+        const scale = cfg.modelScale ?? 1;
+        if (scale !== 1) group.scale.setScalar(scale);
+        const col = new THREE.Color(cfg.emissiveColor);
+        group.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          // Multi-material meshes expose an array; only swap single standard
+          // materials (the glow is cosmetic, skipping is harmless).
+          const mat = mesh.material as THREE.MeshStandardMaterial;
+          if (mat && !Array.isArray(mat) && 'emissiveIntensity' in mat) {
+            mat.emissive = col.clone();
+            mat.emissiveIntensity = baseI;
+            // Some source GLBs (the pillar) have inverted/one-sided normals that
+            // make the interior show through; render both sides to avoid it.
+            mat.side = THREE.DoubleSide;
+            emissiveMats.push(mat);
+          }
+        });
+      })
+      .catch((err) => {
+        // Missing/corrupt GLB: without this the interaction prompt floats over
+        // nothing forever and the rejection goes unhandled. Retire the object
+        // instead — one warn, no ghost prompt.
+        console.warn('[mystic] failed to load', cfg.modelUrl, err);
+        loadFailed = true;
+        unregisterInteractionTarget(ctx.state, entityId);
       });
-    });
   }
 
   function update(ctx: MonoBehaviourContext): void {
+    if (loadFailed) return;
     if (!group) return;
     const eid = ctx.entity;
     const x = Transform.posX[eid];

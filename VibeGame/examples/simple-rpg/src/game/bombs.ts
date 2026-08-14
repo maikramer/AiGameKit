@@ -316,10 +316,14 @@ export function clearBombs(): void {
   bombs.length = 0;
   if (arcLine) {
     arcLine.removeFromParent();
+    arcLine.geometry.dispose();
+    (arcLine.material as THREE.Material).dispose();
     arcLine = null;
   }
   if (arcMarker) {
     arcMarker.removeFromParent();
+    arcMarker.geometry.dispose();
+    (arcMarker.material as THREE.Material).dispose();
     arcMarker = null;
   }
 }

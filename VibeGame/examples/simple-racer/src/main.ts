@@ -116,10 +116,7 @@ export type RaceMode = 'race' | 'time-trial' | 'weekend';
 let raceMode: RaceMode = 'race';
 
 /** Record the chosen mode; the world hook applies it at parse time. */
-export function applyMode(
-  mode: RaceMode,
-  _condition: GAME.TrackCondition = 'dry'
-): void {
+export function applyMode(mode: RaceMode): void {
   raceMode = mode;
 }
 
@@ -167,18 +164,38 @@ function waitForMode(): Promise<{
   const prompt = overlay?.querySelector('.sub');
   const menu = document.getElementById('mode-menu');
   const condMenu = document.getElementById('cond-menu');
+  const buttons = menu ? [...menu.querySelectorAll('button')] : [];
   if (prompt) prompt.textContent = 'Choose a mode';
   overlay?.classList.add('ready');
   menu?.classList.remove('hidden');
-  if (!overlay) return Promise.resolve({ mode: 'race', condition: 'dry' });
+  // DOM drifted from index.html (renamed ids, missing menu): without this the
+  // promise never resolves and the game hangs on "Choose a mode" forever.
+  if (!overlay || buttons.length === 0) {
+    console.warn('[racer] mode menu missing — starting a default race');
+    return Promise.resolve({ mode: 'race', condition: 'dry' });
+  }
 
   return new Promise((resolve) => {
     let condition: GAME.TrackCondition = 'dry';
-    const pick = (mode: RaceMode): void => {
-      for (const btn of menu?.querySelectorAll('button') ?? []) {
-        btn.removeEventListener('click', onPick);
+    const onCond = (e: Event): void => {
+      e.stopPropagation();
+      const next = (e.currentTarget as HTMLElement).dataset.condition as
+        GAME.TrackCondition | undefined;
+      if (!next) return;
+      condition = next;
+      for (const b of condMenu?.querySelectorAll('button') ?? []) {
+        b.classList.toggle('selected', b === e.currentTarget);
       }
-      applyMode(mode, condition);
+    };
+    const cleanup = (): void => {
+      for (const btn of buttons) btn.removeEventListener('click', onPick);
+      for (const btn of condMenu?.querySelectorAll('button') ?? []) {
+        btn.removeEventListener('click', onCond);
+      }
+    };
+    const pick = (mode: RaceMode): void => {
+      cleanup();
+      applyMode(mode);
       overlay.classList.add('hidden');
       canvas?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
       const stealFocus = (): void => {
@@ -195,20 +212,9 @@ function waitForMode(): Promise<{
         RaceMode | undefined;
       if (mode) pick(mode);
     };
-    for (const btn of menu?.querySelectorAll('button') ?? []) {
-      btn.addEventListener('click', onPick);
-    }
+    for (const btn of buttons) btn.addEventListener('click', onPick);
     for (const btn of condMenu?.querySelectorAll('button') ?? []) {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const next = (e.currentTarget as HTMLElement).dataset.condition as
-          GAME.TrackCondition | undefined;
-        if (!next) return;
-        condition = next;
-        for (const b of condMenu?.querySelectorAll('button') ?? []) {
-          b.classList.toggle('selected', b === e.currentTarget);
-        }
-      });
+      btn.addEventListener('click', onCond);
     }
   });
 }
@@ -270,8 +276,14 @@ function registerBestLapSerializer(state: GAME.State): void {
     },
     deserialize: (s, eid, data) => {
       if (s.getEntityByName('player') !== eid) return;
-      const d = data as { best?: number; ghost?: unknown };
-      if (typeof d.best === 'number' && d.best > 0) persistedBest = d.best;
+      // Untrusted payload (old save, hand edit): a null here would throw inside
+      // the load pass and abort every other serializer after this one.
+      const d = (typeof data === 'object' && data !== null ? data : {}) as {
+        best?: unknown;
+        ghost?: unknown;
+      };
+      if (typeof d.best === 'number' && Number.isFinite(d.best) && d.best > 0)
+        persistedBest = d.best;
       const ghost = GAME.parseGhostLap(d.ghost);
       if (ghost) {
         GAME.setGhostLap(ghost);
@@ -358,8 +370,12 @@ const CheckpointArrowSystem: GAME.System = {
     }
     const eid = state.getEntityByName('player');
     if (eid === null) return;
+    // trackS can be negative behind the start line (grid / rollback): a raw
+    // floor%N would produce `cp--1`, an id that matches no waypoint.
     const sector =
-      Math.floor((GAME.Vehicle.trackS[eid] / trackLength) * SECTOR_COUNT) %
+      ((Math.floor((GAME.Vehicle.trackS[eid] / trackLength) * SECTOR_COUNT) %
+        SECTOR_COUNT) +
+        SECTOR_COUNT) %
       SECTOR_COUNT;
     if (sector === lastSector) return;
     lastSector = sector;
@@ -481,6 +497,10 @@ async function runBootstrap(): Promise<void> {
   GAME.withPlugin(GAME.I18nPlugin);
   GAME.withPlugin(GAME.SaveLoadPlugin);
   GAME.withPlugin(GAME.LoadingPlugin);
+  // No `collider="shape: precompute"` anywhere in this world — drop the plugin
+  // so the engine never fetches gameassets_handoff.json (absent here; the
+  // shared Vale GLBs came from the RPG, not a racer-side handoff).
+  GAME.withoutPlugins(GAME.PrecomputePlugin);
   // Debug before Profiler (same order as simple-rpg): DebugPlugin owns
   // window.__VIBEGAME__; the profiler/audio bridges merge into it.
   GAME.withPlugin(GAME.DebugPlugin);
@@ -586,7 +606,17 @@ async function runBootstrap(): Promise<void> {
   GAME.markRaceReady();
 }
 
-void bootstrap();
+void bootstrap().catch((err) => {
+  // Boot failures (fetch, parse, WebGL) must not reject unhandled behind an
+  // eternal "Choose a mode" / loading overlay.
+  console.error('[racer] boot failed:', err);
+  const overlay = document.getElementById('loading');
+  const sub = overlay?.querySelector('.sub');
+  if (sub)
+    (sub as HTMLElement).textContent =
+      'Boot failed — check the console (F12) and reload. ' +
+      `${(err as Error)?.message ?? err}`;
+});
 
 // Soft HMR of this graph leaks WebGL/KTX2/Rapier in Firefox — decline so Vite
 // always full-reloads (same guard as simple-rpg).

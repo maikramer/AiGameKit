@@ -167,4 +167,5 @@ export function clearHotbar(): void {
   hotbarEl?.remove();
   hotbarEl = null;
   for (const k of Object.keys(slotEls)) delete slotEls[k];
+  for (const k of Object.keys(pressed)) delete pressed[k];
 }

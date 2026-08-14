@@ -24,11 +24,25 @@ export interface OptionsConfig {
  * Save/Load buttons). Uses the mixer API (not raw bus volume) so BOTH
  * declarative <MusicLayer> BGM and bank playSound clips follow the sliders.
  */
+/**
+ * Clamp an option slider value (0–100) to a finite number. A malformed payload
+ * (custom UI row, stale event) must never reach the mixer as NaN — a NaN gain
+ * silently kills the whole bus instead of one slider.
+ */
+function sliderPercent(value: unknown): number {
+  const v = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(v)) return 100;
+  return Math.min(100, Math.max(0, v));
+}
+
 export function wireOptions(state: State, cfg: OptionsConfig = {}): void {
   onEvent(state, MODAL_OPTION_CHANGED, (payload) => {
-    const p = payload as { id: string; value: number };
-    if (p.id === 'music-volume') setMusicVolume(state, p.value / 100);
-    else if (p.id === 'sfx-volume') setSfxVolume(state, p.value / 100);
+    const p = payload as { id?: unknown; value?: unknown };
+    const id = typeof p?.id === 'string' ? p.id : '';
+    if (id === 'music-volume')
+      setMusicVolume(state, sliderPercent(p.value) / 100);
+    else if (id === 'sfx-volume')
+      setSfxVolume(state, sliderPercent(p.value) / 100);
     else if (p.id === 'save' && cfg.saveKey) {
       void saveToLocalStorage(state, cfg.saveKey)
         .then(() => cfg.onSave?.())
@@ -38,7 +52,7 @@ export function wireOptions(state: State, cfg: OptionsConfig = {}): void {
         .then((restored) => cfg.onLoad?.(restored))
         .catch((err) => console.error('[options] load failed:', err));
     } else {
-      cfg.onAction?.(p.id);
+      cfg.onAction?.(id);
     }
   });
 }

@@ -1,7 +1,7 @@
 // Active abilities with cooldowns, alongside the passive stat skills (Vitality/
 // Strength/Agility in the pause-menu SkillsTab). Each is a keypress with a
 // cooldown shown on a bottom-left ability bar:
-//   [Q] Dash         — burst forward in your facing direction
+//   [C] Dash         — burst forward in your facing direction
 //   [E] Heal         — instant self-heal
 //   [R] Power Strike — radial damage burst around you
 import {
@@ -179,10 +179,14 @@ function doDash(state: State, player: number): void {
   const dist = clampDashDistance(state, player);
   const nx = Transform.posX[player] + _fwd.x * dist;
   const nz = Transform.posZ[player] + _fwd.z * dist;
-  const gy =
+  const rawGy =
     getBvhSurfaceHeight(state, nx, 500, nz, 4000, TERRAIN_LAYER) ??
-    getTerrainHeightAt(state, nx, nz) ??
-    Transform.posY[player];
+    getTerrainHeightAt(state, nx, nz);
+  // `??` does NOT catch a non-finite sample (missing chunk edge) — a NaN Y here
+  // would fling the body to NaN-land permanently. Same guard as BombSystem.
+  const gy = Number.isFinite(rawGy)
+    ? (rawGy as number)
+    : Transform.posY[player];
   // Move both the ECS transform and the kinematic body so the controller keeps it.
   Transform.posX[player] = nx;
   Transform.posZ[player] = nz;
@@ -316,4 +320,5 @@ export function clearAbilityBar(): void {
   barEl = null;
   for (const k of Object.keys(slotEls)) delete slotEls[k];
   for (const k of Object.keys(cd)) cd[k] = 0;
+  for (const k of Object.keys(pressed)) delete pressed[k];
 }
