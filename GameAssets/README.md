@@ -242,19 +242,21 @@ Resume shows a plan table before execution:
 ### `gameassets dream`
 
 ```bash
-gameassets dream "description" [options]
+gameassets dream "description" [options]        # = dream create
+gameassets dream refine PLAN.json "instruction" # iterate on a plan
+gameassets dream explain PLAN.json [--json]     # audit a plan (CI-ready)
 ```
 
-Idea-to-game: an LLM plans assets + scene from a natural language description, generates everything via batch + skymap, and scaffolds a playable Vite project with `world.xml`, `main.ts`, `index.html`.
+Idea-to-game: an LLM plans assets + scene from a natural language description, generates everything via batch + skymap, and scaffolds a playable Vite project with `world.xml`, `main.ts`, `index.html`. Every plan goes through deterministic lint + auto-repair (`planlint`) before any GPU time is spent.
 
 | Flag | Description |
 |------|-------------|
 | `DESCRIPTION` | Game description in natural language |
 | `--output-dir DIR` | Project root (default: `.`) |
-| `--llm-provider` | `openai` (default), `huggingface`, `stdin` |
-| `--llm-model` | LLM model (e.g., `gpt-4o-mini`, `meta-llama/Llama-3.1-8B-Instruct`) |
+| `--llm-provider` | `openai` (default), `huggingface`, `ollama` (local), `stdin` |
+| `--llm-model` | LLM model (e.g., `gpt-4o-mini`, `llama3.1:8b`) |
 | `--llm-api-key` | API key (overrides `OPENAI_API_KEY`) |
-| `--llm-base-url` | OpenAI-compatible base URL |
+| `--llm-base-url` | OpenAI-compatible base URL / Ollama host |
 | `--style-preset` | Override style preset name |
 | `--max-assets` | Maximum number of assets (default: 8) |
 | `--with-audio / --no-audio` | Include audio assets (default: on) |
@@ -264,6 +266,8 @@ Idea-to-game: an LLM plans assets + scene from a natural language description, g
 | `--terrain-size` | Heightmap resolution (default: 1024) |
 | `--terrain-world-size` | World size in meters (default: 256) |
 | `--terrain-max-height` | Max terrain height (default: 50) |
+| `--seed N` | Pin deterministic seed (`game.yaml seed_base` + terrain) |
+| `--replan` | Skip the plan cache and call the LLM again |
 | `--presets-local FILE` | Custom presets YAML |
 | `--dry-run` | Generate files without running batch/sky (no GPU) |
 | `--plan-json FILE.json` | Export dream plan as JSON |
@@ -274,9 +278,42 @@ Idea-to-game: an LLM plans assets + scene from a natural language description, g
 |----------|--------------|-----|
 | `openai` | gpt-4o-mini | OpenAI SDK (`openai`) |
 | `huggingface` | Llama-3.1-8B | HuggingFace `InferenceClient` |
+| `ollama` | llama3.1:8b | stdlib only — local `ollama serve` (`OLLAMA_HOST`, `DREAM_OLLAMA_MODEL`) |
 | `stdin` | — | Pipe to any CLI LLM |
 
-Fallback: keyword-based plan if LLM call fails.
+Fallback: keyword-based plan if the LLM call fails — the reason (and the fix
+hint) is printed and stored in `dream_plan.json` as `source_detail`; it is
+never silent.
+
+**Plan cache & reproducibility:** identical description + flags reuses the
+cached plan (`~/.cache/aigamekit/dream/plans/`, override with
+`AIGAMEKIT_DREAM_CACHE`; `--replan` forces a fresh call). Plans carry
+provenance (`source`, `source_detail`, `seed`, `repairs`) so agents reproduce
+the same deliverable from the same inputs.
+
+**`dream refine` — conversational iteration:**
+
+```bash
+gameassets dream refine ./my-game/_batch/dream_plan.json "add a dragon boss and make it dusk"
+```
+
+The LLM *edits* the existing plan (keeping ids/placements not touched by the
+instruction), lint re-runs, the previous plan is backed up to
+`dream_plan.json.bak`, and the emitted batch files (`game.yaml`,
+`manifest.yaml`, `world.xml`, …) are regenerated (`--no-emit` to skip). Pinned
+seeds survive; terrain only disappears if explicitly disabled. If the provider
+fails, the original plan is left untouched (exit 1).
+
+**`dream explain` — plan audit:**
+
+```bash
+gameassets dream explain ./my-game/_batch/dream_plan.json        # tables
+gameassets dream explain ./my-game/_batch/dream_plan.json --json # machines
+```
+
+Shows each asset's full stage chain (`3d → paint → rig → animate → lod0 →
+collision → validate`), provenance, seeds, and lint issues. Exit 1 on
+error-severity issues — CI-ready.
 
 **Dream output structure:**
 

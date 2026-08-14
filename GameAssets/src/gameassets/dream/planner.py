@@ -1,12 +1,15 @@
-"""DreamPlan dataclass + LLM-backed planner."""
+"""DreamPlan dataclass + LLM-backed planner (providers, cache, refine)."""
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -66,6 +69,11 @@ class DreamPlan:
     negative_keywords: list[str] = field(default_factory=list)
     terrain: TerrainPlan | None = None
     icon_prompts: list[str] = field(default_factory=list)
+    # Provenance + determinismo (não vão ao LLM; roundtrip em dream_plan.json)
+    seed: int | None = None
+    source: str = ""  # "llm:openai" | "llm:ollama" | "cache" | "fallback" | "refine:openai" | "refine-failed"
+    source_detail: str = ""  # modelo, cache hit ou erro do provider
+    repairs: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -108,6 +116,14 @@ class DreamPlan:
                 "lake_min_area": self.terrain.lake_min_area,
                 "lake_max_count": self.terrain.lake_max_count,
             }
+        if self.seed is not None:
+            result["seed"] = self.seed
+        if self.source:
+            result["source"] = self.source
+        if self.source_detail:
+            result["source_detail"] = self.source_detail
+        if self.repairs:
+            result["repairs"] = list(self.repairs)
         return result
 
     @classmethod
@@ -164,6 +180,10 @@ class DreamPlan:
                 placements=placements,
             ),
             terrain=terrain,
+            seed=d.get("seed"),
+            source=str(d.get("source", "")),
+            source_detail=str(d.get("source_detail", "")),
+            repairs=[str(r) for r in d.get("repairs", [])],
         )
 
 
@@ -413,6 +433,157 @@ def _call_stdin(system_prompt: str, user_prompt: str) -> str:
     return proc.stdout
 
 
+def _ollama_base_url(base_url: str | None) -> str:
+    host = base_url or os.environ.get("OLLAMA_HOST") or "http://127.0.0.1:11434"
+    if not host.startswith(("http://", "https://")):
+        host = f"http://{host}"
+    return host.rstrip("/")
+
+
+def _call_ollama(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    model: str | None,
+    base_url: str | None,
+) -> str:
+    """Ollama local via API nativa ``/api/chat`` (stdlib urllib, sem deps)."""
+    import urllib.request
+
+    url = f"{_ollama_base_url(base_url)}/api/chat"
+    payload = {
+        "model": model or os.environ.get("DREAM_OLLAMA_MODEL", "llama3.1:8b"),
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "stream": False,
+        "format": "json",
+        "options": {"temperature": 0.7},
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    timeout_s = float(os.environ.get("DREAM_OLLAMA_TIMEOUT", "180"))
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    content = (data.get("message") or {}).get("content", "")
+    if not content:
+        raise RuntimeError(f"resposta ollama sem conteúdo: {str(data)[:200]}")
+    return content
+
+
+PROVIDERS = ("openai", "huggingface", "ollama", "stdin")
+
+_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": "gpt-4o-mini",
+    "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
+    "ollama": "llama3.1:8b",
+    "stdin": "",
+}
+
+_PROVIDER_HINTS = {
+    "openai": "define OPENAI_API_KEY (ou --llm-api-key / --llm-base-url)",
+    "huggingface": "pip install huggingface_hub e valida o token HF",
+    "ollama": "corre `ollama serve` e `ollama pull llama3.1:8b` (env: OLLAMA_HOST, DREAM_OLLAMA_MODEL)",
+    "stdin": "pipe a resposta de um LLM CLI via stdin",
+}
+
+
+def _call_provider(
+    provider: str,
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    model: str | None,
+    api_key: str | None,
+    base_url: str | None,
+) -> str:
+    if provider == "openai":
+        return _call_openai(system_prompt, user_prompt, model=model, api_key=api_key, base_url=base_url)
+    if provider == "huggingface":
+        return _call_huggingface(system_prompt, user_prompt, model=model)
+    if provider == "ollama":
+        return _call_ollama(system_prompt, user_prompt, model=model, base_url=base_url)
+    if provider == "stdin":
+        return _call_stdin(system_prompt, user_prompt)
+    raise ValueError(f"Provider desconhecido: {provider}")
+
+
+# ---------------------------------------------------------------------------
+# Cache de planos (mesma descrição + flags ⇒ mesmo plano, sem novo call LLM)
+# ---------------------------------------------------------------------------
+
+_DREAM_CACHE_VERSION = 2
+
+
+def _dream_cache_dir() -> Path:
+    env = os.environ.get("AIGAMEKIT_DREAM_CACHE")
+    if env:
+        return Path(env)
+    return Path.home() / ".cache" / "aigamekit" / "dream" / "plans"
+
+
+def _plan_cache_key(
+    *,
+    description: str,
+    provider: str,
+    model: str | None,
+    max_assets: int,
+    with_audio: bool,
+    with_sky: bool,
+    style_preset: str | None,
+    preset_names: list[str],
+    prompt_version: str,
+) -> str:
+    payload = json.dumps(
+        {
+            "v": _DREAM_CACHE_VERSION,
+            "prompt": prompt_version,
+            "description": description,
+            "provider": provider,
+            "model": model or "",
+            "max_assets": max_assets,
+            "with_audio": with_audio,
+            "with_sky": with_sky,
+            "style_preset": style_preset or "",
+            "presets": sorted(preset_names),
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+    return sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _load_cached_plan(path: Path) -> DreamPlan | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        plan = DreamPlan.from_dict(data)
+    except Exception:
+        return None
+    plan.source = "cache"
+    return plan
+
+
+def _store_cached_plan(path: Path, plan: DreamPlan) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(plan.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass  # cache é best-effort
+
+
+def _export_plan_json(plan: DreamPlan, plan_json_path: str | None) -> None:
+    if not plan_json_path:
+        return
+    p = Path(plan_json_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(plan.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Planner principal
 # ---------------------------------------------------------------------------
@@ -431,11 +602,41 @@ def plan_game(
     api_key: str | None = None,
     base_url: str | None = None,
     plan_json_path: str | None = None,
+    use_cache: bool = True,
 ) -> DreamPlan:
-    """Gera DreamPlan a partir de descrição natural via LLM."""
+    """Gera DreamPlan a partir de descrição natural via LLM.
+
+    Mesma descrição + mesmas flags reutiliza o plano em cache (``--replan``
+    força novo call). Falha do provider → fallback determinístico com o motivo
+    em ``plan.source_detail`` (nunca falha em silêncio). Todo plano passa pelo
+    lint + auto-reparo (``planlint.lint_and_repair``).
+    """
+    from .llm_context import DREAM_PROMPT_VERSION, build_system_prompt
+    from .planlint import lint_and_repair
+
     forced_preset = style_preset or "lowpoly"
 
-    from .llm_context import build_system_prompt
+    cacheable = use_cache and provider in ("openai", "huggingface", "ollama")
+    cache_path: Path | None = None
+    if cacheable:
+        key = _plan_cache_key(
+            description=description,
+            provider=provider,
+            model=model,
+            max_assets=max_assets,
+            with_audio=with_audio,
+            with_sky=with_sky,
+            style_preset=style_preset,
+            preset_names=preset_names,
+            prompt_version=DREAM_PROMPT_VERSION,
+        )
+        cache_path = _dream_cache_dir() / f"{key}.json"
+        if cache_path.is_file():
+            cached = _load_cached_plan(cache_path)
+            if cached is not None:
+                cached.source_detail = f"cache hit {cache_path.name[:12]} (--replan para regenerar)"
+                _export_plan_json(cached, plan_json_path)
+                return cached
 
     system_prompt = build_system_prompt(
         preset_names=preset_names,
@@ -453,27 +654,112 @@ def plan_game(
         f"\nRespond ONLY with the JSON object. No extra text."
     )
 
-    raw_text = ""
+    plan: DreamPlan
     try:
-        if provider == "openai":
-            raw_text = _call_openai(system_prompt, user_prompt, model=model, api_key=api_key, base_url=base_url)
-        elif provider == "huggingface":
-            raw_text = _call_huggingface(system_prompt, user_prompt, model=model)
-        elif provider == "stdin":
-            raw_text = _call_stdin(system_prompt, user_prompt)
-        else:
-            raise ValueError(f"Provider desconhecido: {provider}")
-
+        raw_text = _call_provider(provider, system_prompt, user_prompt, model=model, api_key=api_key, base_url=base_url)
         data = _extract_json(raw_text)
         plan = DreamPlan.from_dict(data)
-    except Exception:
+        plan.source = f"llm:{provider}"
+        plan.source_detail = model or _DEFAULT_MODEL_BY_PROVIDER.get(provider, "")
+    except Exception as exc:
         plan = _fallback_plan(description, forced_preset)
+        plan.source = "fallback"
+        hint = _PROVIDER_HINTS.get(provider, "")
+        plan.source_detail = f"{provider}: {exc}" + (f" — {hint}" if hint else "")
 
-    if plan_json_path:
-        from pathlib import Path
+    plan, repairs, _residual = lint_and_repair(plan, max_assets=max_assets)
+    plan.repairs = repairs
 
-        p = Path(plan_json_path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(plan.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+    if plan.source.startswith("llm:") and cache_path is not None:
+        _store_cached_plan(cache_path, plan)
 
+    _export_plan_json(plan, plan_json_path)
     return plan
+
+
+def refine_plan(
+    plan: DreamPlan,
+    instruction: str,
+    *,
+    preset_names: list[str],
+    provider: str = "openai",
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    max_assets: int = 8,
+    with_audio: bool = True,
+    with_sky: bool = True,
+) -> DreamPlan:
+    """Refina um plano existente com uma instrução natural ("add a dragon").
+
+    Em sucesso devolve o plano refinado (lint + auto-reparo aplicados). Em
+    falha do provider devolve o plano ORIGINAL intocado com
+    ``source="refine-failed"`` e o motivo em ``source_detail`` — refine nunca
+    destrói trabalho. Seeds pinados são preservados; terrain só desaparece se
+    o LLM devolver ``enabled=false`` explicitamente.
+    """
+    from .llm_context import build_refine_prompt
+    from .planlint import lint_and_repair
+
+    old_seed = plan.seed
+    old_terrain = copy.deepcopy(plan.terrain)
+
+    embed = plan.to_dict()
+    for key in ("source", "source_detail", "repairs"):
+        embed.pop(key, None)
+
+    system_prompt = build_refine_prompt(
+        preset_names=preset_names,
+        max_assets=max_assets,
+        with_audio=with_audio,
+        with_sky=with_sky,
+    )
+    user_prompt = (
+        f"CURRENT PLAN JSON:\n{json.dumps(embed, ensure_ascii=False, indent=2)}\n\n"
+        f"INSTRUCTION: {instruction}\n\n"
+        "Respond ONLY with the FULL updated JSON object."
+    )
+
+    try:
+        raw_text = _call_provider(provider, system_prompt, user_prompt, model=model, api_key=api_key, base_url=base_url)
+        data = _extract_json(raw_text)
+        new_plan = DreamPlan.from_dict(data)
+    except Exception as exc:
+        kept = copy.deepcopy(plan)
+        kept.source = "refine-failed"
+        hint = _PROVIDER_HINTS.get(provider, "")
+        kept.source_detail = f"{provider}: {exc}" + (f" — {hint}" if hint else "")
+        return kept
+
+    if new_plan.seed is None:
+        new_plan.seed = old_seed
+    if old_terrain is not None and new_plan.terrain is None:
+        new_plan.terrain = old_terrain  # omitir não é desligar; para remover, enabled=false
+    if (
+        new_plan.terrain is not None
+        and old_terrain is not None
+        and new_plan.terrain.seed is None
+        and old_terrain.seed is not None
+    ):
+        new_plan.terrain.seed = old_terrain.seed
+
+    new_plan, repairs, _residual = lint_and_repair(new_plan, max_assets=max_assets)
+    new_plan.repairs = repairs
+    new_plan.source = f"refine:{provider}"
+    new_plan.source_detail = model or _DEFAULT_MODEL_BY_PROVIDER.get(provider, "")
+    return new_plan
+
+
+def apply_seed(plan: DreamPlan, seed: int) -> DreamPlan:
+    """Pina seed determinístico: ``game.yaml seed_base`` + terrain seed (se não fixado)."""
+    plan.seed = seed
+    if plan.terrain is not None and plan.terrain.seed is None:
+        plan.terrain.seed = seed
+    return plan
+
+
+def load_plan_path(path: str | Path) -> DreamPlan:
+    """Carrega DreamPlan de um dream_plan.json (hand-edit friendly)."""
+    p = Path(path)
+    data = json.loads(p.read_text(encoding="utf-8"))
+    return DreamPlan.from_dict(data)

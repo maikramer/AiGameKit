@@ -1,4 +1,4 @@
-﻿import type { State } from '../../core';
+﻿import { defineQuery, type State } from '../../core';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { TIER_PRESETS } from '../adaptive-quality/quality-tiers';
@@ -21,6 +21,21 @@ export const CameraProjection = {
 } as const;
 
 export const threeCameras = new Map<number, THREE.Camera>();
+
+const mainCameraQuery = defineQuery([MainCamera]);
+
+/**
+ * Camera for screen-space consumers (HUD compass, floating text, waypoints):
+ * the tagged `MainCamera` when present, otherwise the first registered camera.
+ * Picking an arbitrary entry from `threeCameras` breaks in multi-camera
+ * setups (picture-in-picture, cinematic overlays).
+ */
+export function getMainThreeCamera(state: State): THREE.Camera | undefined {
+  const cams = mainCameraQuery(state.world);
+  return cams.length > 0
+    ? threeCameras.get(cams[0])
+    : threeCameras.values().next().value;
+}
 const canvasElements = new Map<number, HTMLCanvasElement>();
 
 function getCanvasAspect(state: State): {

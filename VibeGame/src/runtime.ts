@@ -1,7 +1,10 @@
 import { logger } from './core/utils/logger';
+import { showErrorOverlay, hideErrorOverlay } from './core/utils/error-overlay';
+import { dispatchWindowEvent } from './core/utils/window-event';
 import type { BuilderOptions } from './builder';
 import type { State } from './core';
 import {
+  Scene,
   TIME_CONSTANTS,
   XMLParser,
   XMLValueParser,
@@ -9,13 +12,13 @@ import {
   createFetchIncludeLoader,
   expandIncludes,
 } from './core';
+import type { FetchLike } from './core/xml/include';
 import {
   beginExternalProfilerFrame,
   endExternalProfilerFrame,
   isProfilerEnabled,
   profileRenderPass,
 } from './core/profiler';
-import { parseXMLToEntities } from './core/recipes/parser';
 import {
   RenderContext,
   applyNeutralEnvironment,
@@ -42,6 +45,11 @@ export class GameRuntime {
   private isDestroyed = false;
   private mutationObserver?: MutationObserver;
   private canvasElements = new Set<HTMLCanvasElement>();
+  private worldElements: HTMLElement[] = [];
+  private hotReloadObserver?: MutationObserver;
+  private hotReloadTimer?: ReturnType<typeof setTimeout>;
+  private worldReloadListener?: () => void;
+  private swapping = false;
 
   constructor(state: State, options: BuilderOptions = {}) {
     this.state = state;
@@ -82,6 +90,7 @@ export class GameRuntime {
       this.mutationObserver.disconnect();
       this.mutationObserver = undefined;
     }
+    this.disableHotReload();
   }
 
   /**
@@ -238,6 +247,9 @@ export class GameRuntime {
     await this.state.initializePlugins();
     await this.processWorldElements();
     this.setupMutationObserver();
+    if (this.options.hotReload !== false && isDevEnvironment()) {
+      this.enableHotReload();
+    }
     this.state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
   }
 
@@ -252,6 +264,9 @@ export class GameRuntime {
     if (element.tagName.toLowerCase() !== 'scene') return;
 
     element.style.display = 'none';
+    if (!this.worldElements.includes(element)) {
+      this.worldElements.push(element);
+    }
 
     const canvasSelector = element.getAttribute('canvas');
     if (canvasSelector) {
@@ -313,51 +328,156 @@ export class GameRuntime {
     }
   }
 
+  /**
+   * Re-read every processed `<scene>` element from the DOM, re-expand its
+   * includes (bypassing HTTP cache) and hot-swap the world via Scene.swap.
+   * On failure the previous world keeps running and an error card is shown.
+   */
+  async reloadWorld(): Promise<boolean> {
+    if (this.isDestroyed || this.worldElements.length === 0) return false;
+
+    this.swapping = true;
+    try {
+      for (const element of [...this.worldElements]) {
+        if (!element.isConnected) {
+          this.worldElements = this.worldElements.filter((e) => e !== element);
+          continue;
+        }
+        await this.expandAndSwap(element);
+      }
+      hideErrorOverlay();
+      dispatchWindowEvent('vibegame:world-reloaded');
+      logger.info('[VibeGame] World hot-swapped');
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(
+        '[VibeGame] World reload failed — keeping previous world:',
+        error
+      );
+      showErrorOverlay('World reload failed — previous world kept', message);
+      return false;
+    } finally {
+      this.swapping = false;
+    }
+  }
+
+  /**
+   * Watch the processed `<scene>` elements for DOM edits (devtools, editors,
+   * HMR clients) and hot-swap the world shortly after they settle.
+   */
+  enableHotReload(debounceMs = 120): void {
+    if (this.hotReloadObserver || this.isDestroyed) return;
+    if (
+      typeof MutationObserver === 'undefined' ||
+      typeof window === 'undefined'
+    ) {
+      return;
+    }
+
+    this.hotReloadObserver = new MutationObserver((mutations) => {
+      if (this.swapping) return;
+      if (!mutations.some((m) => this.isInsideWorldElement(m.target))) return;
+      clearTimeout(this.hotReloadTimer);
+      this.hotReloadTimer = setTimeout(() => {
+        if (!this.isDestroyed) void this.reloadWorld();
+      }, debounceMs);
+    });
+    this.hotReloadObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    });
+
+    this.worldReloadListener = () => {
+      if (!this.isDestroyed) void this.reloadWorld();
+    };
+    window.addEventListener('vibegame:world-reload', this.worldReloadListener);
+  }
+
+  disableHotReload(): void {
+    if (this.hotReloadObserver) {
+      this.hotReloadObserver.disconnect();
+      this.hotReloadObserver = undefined;
+    }
+    if (this.worldReloadListener && typeof window !== 'undefined') {
+      window.removeEventListener(
+        'vibegame:world-reload',
+        this.worldReloadListener
+      );
+      this.worldReloadListener = undefined;
+    }
+    clearTimeout(this.hotReloadTimer);
+  }
+
+  private isInsideWorldElement(node: Node): boolean {
+    let current: Node | null = node;
+    while (current) {
+      if (
+        current.nodeType === Node.ELEMENT_NODE &&
+        (current as HTMLElement).tagName?.toLowerCase() === 'scene'
+      ) {
+        return true;
+      }
+      current = current.parentNode;
+    }
+    return false;
+  }
+
+  /** Expand includes, validate and hot-swap the world content. Throws on failure. */
+  private async expandAndSwap(worldElement: HTMLElement): Promise<void> {
+    const originalHTML = worldElement.innerHTML;
+
+    this.validateNoSelfClosingTags(originalHTML);
+
+    // Always revalidate includes from the server: world editing is a live loop.
+    const noStoreFetch: FetchLike = (input, init) =>
+      fetch(input, { ...init, cache: 'no-store' });
+    const expandedHTML = await expandIncludes(originalHTML, {
+      load: createFetchIncludeLoader(noStoreFetch),
+    });
+
+    if (
+      typeof process !== 'undefined' &&
+      process.env?.NODE_ENV !== 'production'
+    ) {
+      this.validateXMLStructure(expandedHTML);
+    }
+
+    const xmlContent = `<Scene>${expandedHTML}</Scene>`;
+    this.state.xmlSource = xmlContent;
+
+    if (/<script\b/i.test(expandedHTML)) {
+      logger.warn(
+        '[VibeGame] <script> tags in world XML are ignored. ' +
+          'Use recipe `script` attributes or entity MonoBehaviour scripts instead.'
+      );
+    }
+
+    const parseResult = XMLParser.parse(xmlContent);
+
+    if (parseResult.root.tagName === 'parsererror') {
+      const errorText = expandedHTML.substring(0, 200);
+      throw new Error(
+        `[XML Parsing] Invalid XML syntax detected.\n` +
+          `  Check your HTML for malformed tags or attributes.\n` +
+          `  Content preview: ${errorText}...`
+      );
+    }
+
+    // Generated geometry lives in its own XML file too: hooks get the fully
+    // expanded document and can fill in attributes an author cannot type.
+    applyWorldXmlHooks(parseResult.root, (error) => {
+      logger.error('[VibeGame] world XML hook failed:', error);
+    });
+
+    Scene.swap(this.state, parseResult.root);
+  }
+
   private async processWorldContent(worldElement: HTMLElement): Promise<void> {
     try {
-      const originalHTML = worldElement.innerHTML;
-
-      this.validateNoSelfClosingTags(originalHTML);
-
-      const expandedHTML = await expandIncludes(originalHTML, {
-        load: createFetchIncludeLoader(),
-      });
-
-      if (
-        typeof process !== 'undefined' &&
-        process.env?.NODE_ENV !== 'production'
-      ) {
-        this.validateXMLStructure(expandedHTML);
-      }
-
-      const xmlContent = `<Scene>${expandedHTML}</Scene>`;
-      this.state.xmlSource = xmlContent;
-
-      if (/<script\b/i.test(expandedHTML)) {
-        logger.warn(
-          '[VibeGame] <script> tags in world XML are ignored. ' +
-            'Use recipe `script` attributes or entity MonoBehaviour scripts instead.'
-        );
-      }
-
-      const parseResult = XMLParser.parse(xmlContent);
-
-      if (parseResult.root.tagName === 'parsererror') {
-        const errorText = expandedHTML.substring(0, 200);
-        throw new Error(
-          `[XML Parsing] Invalid XML syntax detected.\n` +
-            `  Check your HTML for malformed tags or attributes.\n` +
-            `  Content preview: ${errorText}...`
-        );
-      }
-
-      // Generated geometry lives in its own XML file too: hooks get the fully
-      // expanded document and can fill in attributes an author cannot type.
-      applyWorldXmlHooks(parseResult.root, (error) => {
-        logger.error('[VibeGame] world XML hook failed:', error);
-      });
-
-      parseXMLToEntities(this.state, parseResult.root);
+      await this.expandAndSwap(worldElement);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       const errStack = error instanceof Error ? error.stack : undefined;
@@ -365,6 +485,7 @@ export class GameRuntime {
       if (errStack) {
         logger.error(errStack);
       }
+      showErrorOverlay('World parsing failed', errMsg);
       if (
         typeof process !== 'undefined' &&
         process.env?.NODE_ENV !== 'production'
@@ -522,4 +643,12 @@ export class GameRuntime {
       subtree: true,
     });
   }
+}
+
+function isDevEnvironment(): boolean {
+  if (import.meta.env?.DEV === true) return true;
+  if (import.meta.env?.DEV === false) return false;
+  return (
+    typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production'
+  );
 }

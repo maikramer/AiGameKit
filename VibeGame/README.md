@@ -130,6 +130,34 @@ Scene content is defined declaratively in `index.html` using custom XML elements
 
 > **Important:** Content under `<Scene>` is injected as `innerHTML`. The native HTML `<script>` tag does NOT work for engine TypeScript modules — use the `script` attribute on recipes or a custom element name that doesn't collide with HTML.
 
+### Live World Editing & Time Travel
+
+Two engine capabilities turn world authoring into a live loop:
+
+**World hot-swap** — in dev, the runtime watches the `<Scene>` DOM (and the
+`vibegameWorldHmr()` Vite plugin forwards `.xml` file saves). Saving a world
+file hot-swaps its entities via `Scene.swap`: the player, cameras and runtime
+state survive; only entities from the world document are replaced. Invalid XML
+keeps the previous world running and shows an in-page error card that clears
+on the next successful save. Trigger a swap manually with
+`window.dispatchEvent(new Event('vibegame:world-reload'))`.
+
+**Chrono (time travel)** — record the world into a ring buffer and rewind:
+
+```ts
+GAME.withChrono({ seconds: 60, hz: 10 }).run();
+
+chronoRewind(state, 5);   // restore the world to 5s ago
+chronoSeek(state, index); // or jump to an exact frame
+chronoMark(state, 'before-boss');
+```
+
+Named entities keep their `eid` across seeks (three.js cameras, physics
+handles and listeners stay valid); Rapier bodies are teleported back to their
+restored pose. `watchQuery(state, [Enemy, Health], { onAdded, onRemoved })`
+completes the reactive toolkit: it fires when entities enter/exit a query at
+the end of each frame.
+
 ### Recipes
 
 Recipes are predefined entity templates (e.g., `GLTFLoader`, `PlayerGLTF`, `OrbitCamera`, `static-part`) that map XML attributes to ECS components. They simplify entity creation by bundling a set of components with sensible defaults and attribute shorthands.
@@ -549,6 +577,7 @@ Not in `DefaultPlugins`. Add via the [builder API](#builder-api).
 | Plugin              | Description                                                              |
 | ------------------- | ------------------------------------------------------------------------ |
 | `save-load`         | Save/load game state to localStorage (msgpackr)                          |
+| `chrono`            | Time-travel recording: rewind/seek the world (`withChrono`)             |
 | `i18n`              | Internationalization with locale auto-detection (`<I18nText>`)           |
 | `loading`           | Loading screen and asset progress tracking                               |
 | `debug`             | Debug overlays (wireframes, stats, post-FX toggle)                       |

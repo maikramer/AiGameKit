@@ -1,5 +1,6 @@
-// Plaza campfire: [G] opens rest + Nota travel. Key G so [F] on the nearby
-// notice board never double-fires (the two prompts overlap in the gap).
+// Plaza campfire: [H] opens rest + Nota travel. Key H (hearth) so [F] on the
+// nearby notice board never double-fires (the two prompts overlap in the gap)
+// and the engine debug overlay keeps its [G] GPU-stats binding.
 import {
   Transform,
   isKeyDown,
@@ -59,7 +60,7 @@ function showPrompt(state: State): void {
   if (promptShown || !fireEid) return;
   registerInteractionTarget(state, fireEid, {
     label: promptLabel(state.time.elapsed),
-    key: 'G',
+    key: 'H',
   });
   promptShown = true;
 }
@@ -224,7 +225,7 @@ function createPanel(): void {
   root.appendChild(listHost);
 
   const hint = document.createElement('div');
-  hint.textContent = 'W/S navegar · Enter escolher · G/ESC fechar';
+  hint.textContent = 'W/S navegar · Enter escolher · H/ESC fechar';
   hint.style.cssText =
     'margin-top:12px;padding-top:10px;border-top:1px solid rgba(200,160,74,0.3);' +
     'font-size:12px;color:#8a7a5a;text-align:center;';
@@ -287,7 +288,7 @@ function handleKeys(): void {
   }
   enterPressed = confirm;
 
-  const close = isKeyDown('Escape') || isKeyDown('KeyL') || isKeyDown('KeyG');
+  const close = isKeyDown('Escape') || isKeyDown('KeyL') || isKeyDown('KeyH');
   if (close && !closePressed) closePanel();
   closePressed = close;
 }
@@ -327,14 +328,14 @@ export function update(ctx: MonoBehaviourContext): void {
     if (promptShown) {
       registerInteractionTarget(ctx.state, eid, {
         label: promptLabel(ctx.state.time.elapsed),
-        key: 'G',
+        key: 'H',
       });
     }
   } else if (promptShown) {
     hidePrompt(ctx.state);
   }
 
-  const g = isKeyDown('KeyG');
+  const g = isKeyDown('KeyH');
   if (g && !gPressed && player && distSq < RANGE_SQ) {
     openPanel(ctx.state);
   }

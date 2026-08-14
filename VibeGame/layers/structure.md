@@ -179,6 +179,7 @@ All plugins under `src/plugins/*/plugin.ts` (see registry). Related modules with
 | 49  | vegetation        | VegetationPlugin (`<Vegetation>` smart carpet)                           |
 | 50  | water             | WaterPlugin                                                              |
 | 51  | weather           | WeatherPlugin                                                            |
+| 52  | chrono            | ChronoPlugin (opt-in time travel; core API in `core/ecs/chrono.ts`)      |
 
 **Note**: XML recipes and core ECS live under `src/core/recipes/` — not a plugin. Individual plugins define their own recipes in `recipes.ts`.
 
@@ -199,6 +200,12 @@ Bevy-inspired ECS with explicit update phases:
 - Systems contain logic with dependencies declared
 - Recipes enable XML-based entity creation like A-frame
 - Config bundles all parsing-related settings (defaults, shorthands, enums, validations, parsers)
+
+### Live Worlds & Time Travel
+
+- **World hot-swap**: `GameRuntime.reloadWorld()` / `Scene.swap` replace only the entities created by the last world parse — player, cameras and runtime spawns survive. Dev runs auto-watch the `<scene>` DOM; `vibegameWorldHmr()` (Vite) forwards `.xml` saves from disk. Failures keep the previous world and show an in-page error overlay.
+- **Chrono**: `enableChrono(state, {seconds, hz})` records a snapshot ring buffer; `chronoRewind`/`chronoSeek` restore in place (named entities keep their eid) and fire `onChronoSeek` listeners (physics resync) plus the `vibegame:chrono-seek` window event.
+- **Reactive queries**: `watchQuery(state, components, {onAdded, onRemoved})` flushes membership diffs once per frame in `late`.
 
 ## Entry Points
 

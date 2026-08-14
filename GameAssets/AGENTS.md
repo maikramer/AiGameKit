@@ -18,7 +18,7 @@ mesh code itself.
 | Model / mesh findings | `docs/MODEL_FINDINGS.md`, `docs/findings/` | VRAM, Omni, Round 3 DAG |
 | Smart resume | `resume_cmd.py` | Checkpoint; looks in `_intermediate/` |
 | Game profiles | `profile.py` | Sub-profiles + `from_dict` |
-| Dream (idea to game) | `dream/` | planner / emitter / runner |
+| Dream (idea to game) | `dream/` | planner / emitter / runner / llm_context / planlint (lint + auto-reparo); CLI grupo: `dream create` (default), `dream refine`, `dream explain`; providers openai/huggingface/ollama/stdin; cache de planos (`--replan`, `AIGAMEKIT_DREAM_CACHE`) |
 | Quality presets | `generation_profiles.py` | Maps to `--quality` |
 | Asset categories | `categories.py` | Target faces + hints + `lod_ref_m` |
 | Orçamento LOD/atlas | `aigamekit_shared.lod_budget`, `paint_budget` | **Silhueta** `sqrt(d1·d2)`, não volume — ver anti-patterns |
@@ -70,14 +70,18 @@ Alias `{id}_rigged_animated.glb` ← lod0 (`publish_rigged_animated_alias`).
 
 ```
 gameassets init|info|prompts|batch|resume|handoff|validate|dream
+gameassets dream create|refine|explain
 gameassets mesh reorigin-feet
 gameassets debug screenshot|inspect|compare|bundle
 gameassets skill install
 ```
 
 `batch` runs the master pipeline by default. `resume` picks up from last checkpoint.
-`dream` goes from text description to playable project. Flags: `--no-vramd`,
-`--vramd-stream`, `--no-rig`, `--no-animate`, `--redo-split`, …
+`dream` goes from text description to playable project (`dream "<desc>"` ≡
+`dream create "<desc>"`; `dream refine plan.json "instrução"` itera o plano com
+backup `.bak`; `dream explain plan.json --json` audita com exit 1 em erros).
+Flags: `--no-vramd`, `--vramd-stream`, `--no-rig`, `--no-animate`,
+`--redo-split`, `--seed N`, `--replan`, `--llm-provider ollama`, …
 
 ## ANTI-PATTERNS
 
@@ -116,6 +120,7 @@ Run: `make test-gameassets` or `pytest tests/ -v` (package venv).
 
 Key: `test_ums_batch.py` / `test_ums_coord.py`, `test_omni_softfill.py`,
 `test_cli_helpers.py`, `test_profile.py`, `test_resume_master.py`,
-`test_dream_emitter.py`, `test_gameassets_coverage_100.py` (CPU floor).
+`test_dream_emitter.py`, `test_dream_planlint.py`, `test_dream_cli.py`,
+`test_gameassets_coverage_100.py` (CPU floor).
 
 Monorepo guide: [`docs/TESTING.md`](../docs/TESTING.md) · [`docs/TESTING_PT.md`](../docs/TESTING_PT.md).

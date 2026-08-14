@@ -655,6 +655,13 @@ export type {
 } from './plugins/save-load';
 
 export {
+  ChronoPlugin,
+  applyChronoOptions,
+  resyncPhysicsAfterSeek,
+} from './plugins/chrono';
+export type { ChronoPluginOptions } from './plugins/chrono';
+
+export {
   ENGINE_DEFAULT_EN_DICTIONARY,
   ENGINE_DEFAULT_LOCALE,
   I18nPlugin,
@@ -666,6 +673,7 @@ export {
   t,
 } from './plugins/i18n';
 export { initAssetHotReload } from './vite/hot-reload-client';
+export { initWorldHotReload } from './vite/world-hmr-client';
 export { LoadingProgress, loadWithProgress } from './extras/loading-progress';
 
 export {

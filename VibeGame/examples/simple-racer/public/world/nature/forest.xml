@@ -79,10 +79,12 @@
 <!-- Grama com vento na beira da pista (kit vegetation do Crystal Vale). O
      spawner assenta cada instância no terreno; `avoid-road` mantém o corredor
      limpo usando os GroundBrush do <Road> — e, com o viaduto, só os troços que
-     realmente assentam no chão. -->
+     realmente assentam no chão. Densidade medida contra o teto do motor: o
+     spawner corta contagens acima de 12k instâncias (região de 1.74 km² →
+     6800/km² ≈ 11.8k pedidas). -->
 <Vegetation
   meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_redA.glb"
-  density-per-km2="18000"
+  density-per-km2="6800"
   seed="7"
   region-min="-660 0 -660"
   region-max="660 0 660"

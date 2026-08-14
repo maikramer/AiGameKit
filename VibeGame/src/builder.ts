@@ -1,4 +1,5 @@
 import type { Component, Config, Plugin, Recipe, System } from './core';
+import type { ChronoPluginOptions } from './plugins/chrono/plugin';
 import { State } from './core/ecs/state';
 import { GameRuntime } from './runtime';
 
@@ -6,6 +7,8 @@ export interface BuilderOptions {
   canvas?: string;
   autoStart?: boolean;
   dom?: boolean;
+  /** Enable `<scene>` DOM hot-swap watching (defaults to true in dev). */
+  hotReload?: boolean;
 }
 
 export class GameBuilder {
@@ -18,6 +21,7 @@ export class GameBuilder {
   private components: Map<string, Component> = new Map();
   private recipes: Recipe[] = [];
   private configs: Config[] = [];
+  private chronoOptions?: ChronoPluginOptions;
 
   constructor(options: BuilderOptions = {}) {
     this.state = new State();
@@ -71,6 +75,16 @@ export class GameBuilder {
     return this;
   }
 
+  /**
+   * Enable time-travel recording: `GAME.withChrono({ seconds: 60 }).run()`
+   * then `chronoRewind(state, 5)` from anywhere (console, debug overlay,
+   * pause menu) to restore the world to five seconds ago.
+   */
+  withChrono(options: ChronoPluginOptions = {}): GameBuilder {
+    this.chronoOptions = options;
+    return this;
+  }
+
   configure(options: BuilderOptions): GameBuilder {
     this.options = { ...this.options, ...options };
     return this;
@@ -88,6 +102,13 @@ export class GameBuilder {
 
     for (const plugin of this.plugins) {
       this.state.registerPlugin(plugin);
+    }
+
+    if (this.chronoOptions) {
+      const { ChronoPlugin, applyChronoOptions } =
+        await import('./plugins/chrono/plugin');
+      this.state.registerPlugin(ChronoPlugin);
+      applyChronoOptions(this.state, this.chronoOptions);
     }
 
     for (const system of this.systems) {

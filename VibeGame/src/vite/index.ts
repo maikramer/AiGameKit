@@ -1,4 +1,4 @@
-﻿import type { Plugin } from 'vite';
+import type { Plugin } from 'vite';
 import { vibegameForceFullReload } from './force-full-reload';
 import { vibegamePublicLiveServe } from './public-live-serve';
 import { silenceTyprOpentypeNoise } from './silence-typr';
@@ -52,6 +52,8 @@ export {
   vibegameForceFullReload,
 } from './force-full-reload';
 export { vibegameAssetHotReload } from './hot-reload';
+export { initWorldHotReload } from './world-hmr-client';
+export { vibegameWorldHmr } from './world-hmr';
 export { vibegamePublicLiveServe } from './public-live-serve';
 export { silenceTyprOpentypeNoise } from './silence-typr';
 export {

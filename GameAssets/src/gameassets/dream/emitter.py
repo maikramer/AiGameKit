@@ -26,7 +26,7 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
         "images_subdir": "images",
         "meshes_subdir": "meshes",
         "image_ext": "png",
-        "seed_base": 42,
+        "seed_base": plan.seed if plan.seed is not None else 42,
         "generation": "medium",
     }
     if plan.negative_keywords:

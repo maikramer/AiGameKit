@@ -51,6 +51,10 @@
       "types": "./dist/plugins/tweening/index.d.ts",
       "import": "./dist/plugins/tweening/index.js"
     },
+    "./chrono": {
+      "types": "./dist/plugins/chrono/index.d.ts",
+      "import": "./dist/plugins/chrono/index.js"
+    },
     "./vite": {
       "types": "./dist/vite/index.d.ts",
       "import": "./dist/vite/index.js"

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { consoleForwarding, vibegame } from '../../src/vite/index.ts';
 import { defineConfig } from 'vite';
 
-const vibegameRoot = path.resolve(__dirname, '../..');
+const vibegameRoot = path.resolve(import.meta.dirname, '../..');
 
 export default defineConfig({
   resolve: {

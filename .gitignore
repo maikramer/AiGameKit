@@ -195,3 +195,12 @@ graphify-out/
 
 # ZCode agent workspace (estado local da sessão)
 .zcode/
+
+# Artefactos de experimentos locais (trash/bench/runs — não são fonte)
+.trash-*/
+Motion3D/runs/
+docs/bench_kernel_opts/
+docs/bench_omni/
+docs/.debug_axis/
+docs/.paint_mesh_audit_queue.json
+write-test.txt

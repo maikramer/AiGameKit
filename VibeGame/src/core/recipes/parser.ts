@@ -9,6 +9,8 @@ import { parseComponentProperties } from './property-parser';
 import { expandShorthands } from './shorthand-expander';
 import type { EntityCreationResult } from './types';
 
+export type { EntityCreationResult } from './types';
+
 type ComponentWithFields = Record<
   string,
   Float32Array | Int32Array | Uint8Array

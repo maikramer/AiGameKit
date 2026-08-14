@@ -131,7 +131,6 @@ def _count_faces_glb(path: Path) -> int:
         return -1
 
 
-
 def _release_vramd_before_external_stage(stage_name: str) -> None:
     """``vramd zero`` antes de stages que NÃO passam pelo supervisor.
 

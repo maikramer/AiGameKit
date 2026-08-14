@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,7 +50,9 @@ Exemplo rápido:
   gameassets batch --dry-run --dry-run-json plan.json --profile game.yaml --manifest manifest.yaml
   gameassets handoff --profile game.yaml --manifest manifest.yaml --public-dir ../my-game/public
   gameassets dream "platformer 3D com cristais num mundo de nuvens" --dry-run
-  gameassets dream "idle clicker de fazenda" --llm-provider openai --output-dir ./mygame
+  gameassets dream "idle clicker de fazenda" --llm-provider ollama --output-dir ./mygame
+  gameassets dream refine ./mygame/idle-clicker/_batch/dream_plan.json "add a day/night cycle"
+  gameassets dream explain ./mygame/idle-clicker/_batch/dream_plan.json --json
   gameassets mesh reorigin-feet ../my-game/public
 
 Preset só num ficheiro teu (ex.: galaxy_orbital em presets-local.yaml):
@@ -826,15 +829,55 @@ def validate_cmd(
         sys.exit(1)
 
 
-@main.command("dream")
+class _DreamGroup(click.Group):
+    """`gameassets dream "<descrição>"` continua a funcionar (rota para `create`).
+
+    Se o primeiro token não é um subcomando conhecido, é a descrição do jogo
+    (ou uma opção) — encaminhamos tudo para o subcomando default `create`.
+    """
+
+    def resolve_command(
+        self, ctx: click.Context, args: list[str]
+    ) -> tuple[str | None, click.Command | None, list[str]]:
+        head = args[0] if args else None
+        if head is not None and head not in self.commands:
+            return "create", self.get_command(ctx, "create"), args
+        return super().resolve_command(ctx, args)
+
+
+@main.group(
+    "dream",
+    cls=_DreamGroup,
+    invoke_without_command=True,
+    context_settings={"ignore_unknown_options": True},
+    short_help="Da ideia ao jogo: plano LLM → assets → projecto ViteGame.",
+)
+@click.pass_context
+def dream_group(ctx: click.Context) -> None:
+    """Da ideia ao jogo com IA: plano (LLM), geração de assets, cena e projecto.
+
+    `gameassets dream "<descrição>"` é equivalente a `dream create "<descrição>"`.
+
+    Subcomandos: create (default), refine (itera um plano com instrução
+    natural), explain (audita um dream_plan.json).
+    """
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        ctx.exit(0)
+
+
+@dream_group.command("create", short_help="Gera plano + assets + projecto a partir de uma descrição.")
 @click.argument("description")
 @click.option("--output-dir", type=Path, default=".", help="Pasta raiz onde o projecto será criado.")
 @click.option(
-    "--llm-provider", default="openai", type=click.Choice(["openai", "huggingface", "stdin"]), help="Provider LLM."
+    "--llm-provider",
+    default="openai",
+    type=click.Choice(["openai", "huggingface", "ollama", "stdin"]),
+    help="Provider LLM (ollama = local, sem API key).",
 )
-@click.option("--llm-model", default=None, help="Modelo LLM (ex.: gpt-4o-mini, meta-llama/Llama-3.1-8B-Instruct).")
+@click.option("--llm-model", default=None, help="Modelo LLM (ex.: gpt-4o-mini, llama3.1:8b).")
 @click.option("--llm-api-key", default=None, help="API key (override OPENAI_API_KEY).")
-@click.option("--llm-base-url", default=None, help="Base URL (OpenAI-compatible).")
+@click.option("--llm-base-url", default=None, help="Base URL (OpenAI-compatible / Ollama host).")
 @click.option("--style-preset", default=None, help="Override do preset de estilo.")
 @click.option("--max-assets", default=8, type=int, help="Número máximo de assets.")
 @click.option("--with-audio/--no-audio", default=True, help="Incluir assets de áudio.")
@@ -844,10 +887,12 @@ def validate_cmd(
 @click.option("--terrain-size", default=None, type=int, help="Heightmap resolution (default: 1024).")
 @click.option("--terrain-world-size", default=None, type=float, help="World size in meters (default: 256).")
 @click.option("--terrain-max-height", default=None, type=float, help="Max terrain height (default: 50).")
+@click.option("--seed", default=None, type=int, help="Pina seed determinístico (game.yaml seed_base + terrain).")
+@click.option("--replan", is_flag=True, default=False, help="Ignora o cache de planos e chama o LLM de novo.")
 @click.option("--presets-local", type=Path, default=None, help="Ficheiro de presets local.")
 @click.option("--dry-run", is_flag=True, default=False, help="Gerar ficheiros sem executar batch/sky (sem GPU).")
 @click.option("--plan-json", type=Path, default=None, help="Exportar dream_plan.json para este caminho.")
-def dream_cmd(
+def dream_create_cmd(
     description: str,
     output_dir: Path,
     llm_provider: str,
@@ -863,6 +908,8 @@ def dream_cmd(
     terrain_size: int | None,
     terrain_world_size: float | None,
     terrain_max_height: float | None,
+    seed: int | None,
+    replan: bool,
     presets_local: Path | None,
     dry_run: bool,
     plan_json: Path | None,
@@ -871,7 +918,7 @@ def dream_cmd(
 
     DESCRIPTION é a descrição do jogo em linguagem natural.
     """
-    from .dream.planner import plan_game
+    from .dream.planner import apply_seed, plan_game
     from .dream.runner import run_dream
 
     bundle = load_presets_bundle(presets_local)
@@ -889,7 +936,19 @@ def dream_cmd(
         api_key=llm_api_key,
         base_url=llm_base_url,
         plan_json_path=str(plan_json) if plan_json else None,
+        use_cache=not replan,
     )
+
+    if plan.source == "fallback":
+        console.print(
+            f"[yellow]LLM indisponível — a usar plano fallback (keyword-based).[/yellow]\n"
+            f"  Motivo: {plan.source_detail}"
+        )
+    elif plan.source == "cache":
+        console.print(f"[cyan]Plano em cache[/cyan] — {plan.source_detail}")
+
+    if seed is not None:
+        apply_seed(plan, seed)
 
     if terrain is not None:
         from .dream.planner import TerrainPlan
@@ -914,6 +973,7 @@ def dream_cmd(
         with_sky=with_sky,
         with_audio=with_audio,
         dry_run=dry_run,
+        max_assets=max_assets,
     )
 
     if plan_json:
@@ -925,6 +985,158 @@ def dream_cmd(
         ok_count = sum(1 for s in report.get("steps", []) if s.get("ok"))
         total = len(report.get("steps", []))
         console.print(f"[green]{ok_count}/{total} passos OK.[/green]")
+
+
+@dream_group.command("refine", short_help="Itera um dream_plan.json com uma instrução natural.")
+@click.argument("plan_json", type=Path)
+@click.argument("instruction")
+@click.option(
+    "--llm-provider",
+    default="openai",
+    type=click.Choice(["openai", "huggingface", "ollama", "stdin"]),
+    help="Provider LLM (ollama = local, sem API key).",
+)
+@click.option("--llm-model", default=None, help="Modelo LLM.")
+@click.option("--llm-api-key", default=None, help="API key (override OPENAI_API_KEY).")
+@click.option("--llm-base-url", default=None, help="Base URL (OpenAI-compatible / Ollama host).")
+@click.option(
+    "--out",
+    type=Path,
+    default=None,
+    help="Gravar o plano refinado noutro caminho (default: sobrescreve PLAN_JSON com backup .bak).",
+)
+@click.option(
+    "--emit/--no-emit",
+    default=True,
+    help="Regenerar game.yaml/manifest/world.xml/main.ts/index.html do plano refinado (default: on).",
+)
+@click.option("--max-assets", default=8, type=int, help="Número máximo de assets.")
+@click.option("--with-audio/--no-audio", default=True, help="Contexto: plano pode incluir áudio.")
+@click.option("--with-sky/--no-sky", default=True, help="Contexto: plano pode incluir sky.")
+@click.option("--seed", default=None, type=int, help="Pina/re-pina seed determinístico no plano refinado.")
+@click.option("--presets-local", type=Path, default=None, help="Ficheiro de presets local.")
+def dream_refine_cmd(
+    plan_json: Path,
+    instruction: str,
+    llm_provider: str,
+    llm_model: str | None,
+    llm_api_key: str | None,
+    llm_base_url: str | None,
+    out: Path | None,
+    emit: bool,
+    max_assets: int,
+    with_audio: bool,
+    with_sky: bool,
+    seed: int | None,
+    presets_local: Path | None,
+) -> None:
+    """Refina um plano existente: o LLM edita o JSON com a INSTRUCTION.
+
+    PLAN_JSON é um dream_plan.json (ex.: _batch/dream_plan.json); INSTRUCTION é
+    a alteração em linguagem natural (ex.: "add a dragon boss and make it
+    dusk"). Seeds pinados e terrain são preservados; em falha o plano original
+    fica intocado (exit 1). Regenera os ficheiros do batch para o plano novo.
+    """
+    from .dream.emitter import emit_all
+    from .dream.planner import apply_seed, load_plan_path, refine_plan
+
+    if not plan_json.is_file():
+        console.print(f"[red]Plano não encontrado:[/red] {plan_json}")
+        sys.exit(1)
+
+    preset_names = sorted(load_presets_bundle(presets_local).keys())
+    plan = load_plan_path(plan_json)
+    if seed is not None:
+        apply_seed(plan, seed)
+
+    console.print(Panel(f"[bold]{plan.title}[/bold] — refine: {instruction}", title="Dream", border_style="cyan"))
+    refined = refine_plan(
+        plan,
+        instruction,
+        preset_names=preset_names,
+        provider=llm_provider,
+        model=llm_model,
+        api_key=llm_api_key,
+        base_url=llm_base_url,
+        max_assets=max_assets,
+        with_audio=with_audio,
+        with_sky=with_sky,
+    )
+
+    if refined.source == "refine-failed":
+        console.print(f"[red]refine falhou — plano original intocado.[/red]\n  {refined.source_detail}")
+        sys.exit(1)
+
+    if seed is not None:
+        # O flag explícito do utilizador ganha sobre qualquer seed que o LLM devolva.
+        apply_seed(refined, seed)
+
+    target = out if out is not None else plan_json
+    if out is None and plan_json.is_file():
+        backup = plan_json.with_suffix(".json.bak")
+        shutil.copy2(plan_json, backup)
+        console.print(f"[dim]backup do plano anterior: {backup}[/dim]")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(refined.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if emit:
+        emit_dir = plan_json.parent
+        emit_paths = emit_all(refined, emit_dir, with_sky=with_sky, with_audio=with_audio)
+        console.print(f"[green]OK[/green] ficheiros regenerados ({len(emit_paths)}) em {emit_dir}")
+    console.print(f"[green]OK[/green] plano refinado → {target}")
+
+    from .dream.runner import _print_plan_summary
+
+    _print_plan_summary(refined, max_assets=max_assets)
+    batch_dir = plan_json.parent
+    console.print(
+        f"\nPróximos passos:\n"
+        f"  gameassets batch --profile {batch_dir / 'game.yaml'} --manifest {batch_dir / 'manifest.yaml'}\n"
+        f"  gameassets dream explain {target}"
+    )
+
+
+@dream_group.command("explain", short_help="Audita um dream_plan.json: stages, provenance, lint.")
+@click.argument("plan_json", type=Path)
+@click.option("--max-assets", default=8, type=int, help="Limite de assets usado no lint.")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Output JSON (para agentes/CI).")
+def dream_explain_cmd(plan_json: Path, max_assets: int, as_json: bool) -> None:
+    """Explica o plano: assets x cadeia de stages, provenance, seeds, lint.
+
+    Exit 1 se houver issues de severidade error (CI-ready).
+    """
+    from .dream.planlint import SEVERITY_ERROR, asset_artifacts, asset_stage_chain, validate_plan
+    from .dream.planner import load_plan_path
+
+    if not plan_json.is_file():
+        console.print(f"[red]Plano não encontrado:[/red] {plan_json}")
+        sys.exit(1)
+
+    plan = load_plan_path(plan_json)
+    issues = validate_plan(plan, max_assets=max_assets)
+
+    if as_json:
+        payload = {
+            "plan": plan.to_dict(),
+            "stage_chains": {a.id: asset_stage_chain(a) for a in plan.assets},
+            "artifacts": {a.id: asset_artifacts(a) for a in plan.assets},
+            "issues": [i.to_dict() for i in issues],
+        }
+        click.echo(json.dumps(payload, ensure_ascii=False))  # machine output: sem rich/wrapping
+    else:
+        console.print(Panel(f"[bold]{plan.title}[/bold] — {plan.genre}", title="Dream explain", border_style="cyan"))
+        from .dream.runner import _print_plan_summary
+
+        _print_plan_summary(plan, max_assets=max_assets)
+
+    errors = [i for i in issues if i.severity == SEVERITY_ERROR]
+    if not as_json:
+        if errors:
+            console.print(f"[red]{len(errors)} erros no plano[/red] (ver tabela acima)")
+        else:
+            console.print("[green]plano OK[/green]")
+    if errors:
+        sys.exit(1)
 
 
 # --- Register extracted commands ---

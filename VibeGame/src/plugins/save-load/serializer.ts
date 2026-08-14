@@ -7,6 +7,7 @@ import {
   type State,
   type WorldSnapshot,
 } from '../../core';
+import { logger } from '../../core/utils/logger';
 import { Serializable } from './components';
 
 const packr = new Packr();
@@ -26,14 +27,51 @@ export function saveSnapshot(state: State): Uint8Array {
   return packr.pack(payload) as Uint8Array;
 }
 
+type SnapshotPayload = WorldSnapshot & { serializableEids?: number[] };
+
+function isSnapshotPayload(data: unknown): data is SnapshotPayload {
+  if (!data || typeof data !== 'object') return false;
+  const snap = data as Partial<WorldSnapshot>;
+  if (typeof snap.elapsed !== 'number' || !Number.isFinite(snap.elapsed)) {
+    return false;
+  }
+  if (!Array.isArray(snap.entities)) return false;
+  for (const ent of snap.entities) {
+    if (!ent || typeof ent !== 'object') return false;
+    if (
+      typeof ent.eid !== 'number' ||
+      !Number.isInteger(ent.eid) ||
+      ent.eid < 0 ||
+      !ent.components ||
+      typeof ent.components !== 'object'
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function loadSnapshot(
   state: State,
   data: Uint8Array,
   options: { clearExisting?: boolean } = {}
 ): void {
-  const payload = packr.unpack(data) as WorldSnapshot & {
-    serializableEids?: number[];
-  };
+  let payload: SnapshotPayload;
+  try {
+    payload = packr.unpack(data) as SnapshotPayload;
+  } catch (err) {
+    throw new Error(
+      `Save data is not a valid world snapshot: ${err instanceof Error ? err.message : err}`,
+      { cause: err }
+    );
+  }
+  // Validate BEFORE destroying the existing world — a corrupt save must leave
+  // the live session untouched, not brick it half-cleared.
+  if (!isSnapshotPayload(payload)) {
+    throw new Error(
+      'Save data is not a valid world snapshot (elapsed/entities)'
+    );
+  }
 
   if (options.clearExisting) {
     const existing = serializableQuery(state.world);
@@ -90,25 +128,66 @@ async function compress(data: Uint8Array): Promise<string> {
 }
 
 async function decompress(encoded: string): Promise<Uint8Array | null> {
-  if (encoded.startsWith(SAVE_PREFIX)) {
-    if (typeof DecompressionStream === 'undefined') return null;
-    const stream = new Blob([
-      Uint8Array.from(fromBase64(encoded.slice(SAVE_PREFIX.length))),
-    ])
-      .stream()
-      .pipeThrough(new DecompressionStream('gzip'));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+  try {
+    if (encoded.startsWith(SAVE_PREFIX)) {
+      if (typeof DecompressionStream === 'undefined') return null;
+      const stream = new Blob([
+        Uint8Array.from(fromBase64(encoded.slice(SAVE_PREFIX.length))),
+      ])
+        .stream()
+        .pipeThrough(new DecompressionStream('gzip'));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    }
+    // Legacy JSON-array saves: reject anything that isn't a byte array —
+    // a foreign value under this key must never reach the msgpack unpacker.
+    const parsed: unknown = JSON.parse(encoded);
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length === 0 ||
+      !parsed.every(
+        (v) =>
+          typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 255
+      )
+    ) {
+      return null;
+    }
+    return Uint8Array.from(parsed);
+  } catch {
+    return null;
   }
-  return Uint8Array.from(JSON.parse(encoded) as number[]);
 }
 
 export async function saveToLocalStorage(
   state: State,
   key: string
-): Promise<void> {
-  if (typeof localStorage === 'undefined') return;
-  const buf = saveSnapshot(state);
-  localStorage.setItem(key, await compress(buf));
+): Promise<boolean> {
+  if (typeof localStorage === 'undefined') return false;
+  let encoded: string;
+  try {
+    encoded = await compress(saveSnapshot(state));
+  } catch (err) {
+    logger.error(
+      `[save-load] falha ao serializar save "${key}": ${err instanceof Error ? err.message : err}`
+    );
+    return false;
+  }
+  try {
+    localStorage.setItem(key, encoded);
+    return true;
+  } catch {
+    // Quota exceeded: the previous save under this key is superseded anyway —
+    // evict it and retry once before giving up.
+    try {
+      localStorage.removeItem(key);
+      localStorage.setItem(key, encoded);
+      return true;
+    } catch (err) {
+      logger.error(
+        `[save-load] quota de localStorage ao gravar "${key}": ${err instanceof Error ? err.message : err} — save descartado`
+      );
+      return false;
+    }
+  }
 }
 
 export async function loadFromLocalStorage(
@@ -119,8 +198,18 @@ export async function loadFromLocalStorage(
   const raw = localStorage.getItem(key);
   if (!raw) return false;
   const data = await decompress(raw);
-  if (!data) return false;
-  loadSnapshot(state, data);
+  if (!data) {
+    logger.warn(`[save-load] save corrupto em "${key}" — ignorado`);
+    return false;
+  }
+  try {
+    loadSnapshot(state, data);
+  } catch (err) {
+    logger.warn(
+      `[save-load] save ilegível em "${key}" (${err instanceof Error ? err.message : err}) — ignorado`
+    );
+    return false;
+  }
   return true;
 }
 

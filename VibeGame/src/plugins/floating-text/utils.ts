@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import type { State } from '../../core';
-import { threeCameras } from '../rendering/utils';
+import { getMainThreeCamera } from '../rendering/utils';
 import { Transform, WorldTransform } from '../transforms/components';
 import { FloatingText } from './components';
 import { claimStackSlot } from './stacking';
@@ -258,7 +258,7 @@ export function spawnDamageNumber(
   const text = onHero ? `−${amount}` : crit ? `${amount}!` : `${amount}`;
   const color = onHero ? '#ff5a5a' : crit ? '#ff8a2a' : '#fff4b0';
 
-  const cam = threeCameras.values().next().value as
+  const cam = getMainThreeCamera(state) as
     { project: (v: Vector3) => Vector3 } | undefined;
   const hasDom =
     typeof document !== 'undefined' &&

@@ -21,6 +21,12 @@ from gameassets.dream.planner import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolated_dream_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cache de planos isolado por teste (evita hits entre testes e no ~/.cache real)."""
+    monkeypatch.setenv("AIGAMEKIT_DREAM_CACHE", str(tmp_path / "dream-cache"))
+
+
 class TestExtractJson:
     @pytest.mark.parametrize(
         ("text", "expected"),
@@ -274,3 +280,304 @@ class TestPlanGameProviders:
         assert "lowpoly" in captured["system"]
         assert "Maximum total assets: 5" in captured["system"]
         assert "Maximum assets: 5" in captured["user"]
+
+
+class TestProvenanceAndLint:
+    def test_llm_source_tagged(self) -> None:
+        with patch("gameassets.dream.planner._call_openai", return_value=_llm_json_response()):
+            plan = plan_game("a platformer", preset_names=["lowpoly"], provider="openai", model="gpt-4o-mini")
+        assert plan.source == "llm:openai"
+        assert plan.source_detail == "gpt-4o-mini"
+
+    def test_fallback_source_carries_reason_and_hint(self) -> None:
+        with patch("gameassets.dream.planner._call_openai", side_effect=RuntimeError("network down")):
+            plan = plan_game("a hero game", preset_names=["lowpoly"], provider="openai")
+        assert plan.source == "fallback"
+        assert "network down" in plan.source_detail
+        assert "OPENAI_API_KEY" in plan.source_detail
+
+    def test_llm_garbage_plan_autorepaired(self) -> None:
+        garbage = json.dumps(
+            {
+                "title": "Garbage",
+                "genre": "x",
+                "tone": "x",
+                "style_preset": "lowpoly",
+                "assets": [
+                    {"id": "Hero Guy", "idea": "hero", "kind": "npc", "generate_animate": True},
+                    {"id": "Hero Guy", "idea": "dup"},
+                ],
+                "scene": {
+                    "placements": [
+                        {"asset_id": "Hero Guy", "pos": "junk", "scale": "junk"},
+                        {"asset_id": "ghost", "pos": "0 0 0"},
+                    ]
+                },
+            }
+        )
+        with patch("gameassets.dream.planner._call_openai", return_value=garbage):
+            plan = plan_game("a game", preset_names=["lowpoly"], provider="openai")
+        ids = [a.id for a in plan.assets]
+        assert ids == ["hero_guy", "hero_guy_2"]
+        assert plan.assets[0].kind == "character"
+        assert plan.assets[0].generate_rig is True
+        assert [p.asset_id for p in plan.scene.placements] == ["hero_guy"]
+        assert plan.scene.placements[0].pos == "0 0 0"
+        assert plan.repairs
+
+    def test_roundtrip_provenance_fields(self) -> None:
+        plan = DreamPlan(
+            title="T",
+            genre="g",
+            tone="t",
+            style_preset="lowpoly",
+            assets=[AssetEntry(id="a", idea="x")],
+            scene=SceneLayout(placements=[]),
+            seed=99,
+            source="llm:openai",
+            source_detail="gpt-4o-mini",
+            repairs=["fixed x"],
+        )
+        d = plan.to_dict()
+        assert d["seed"] == 99
+        assert d["source"] == "llm:openai"
+        assert d["repairs"] == ["fixed x"]
+        rebuilt = DreamPlan.from_dict(d)
+        assert rebuilt.seed == 99
+        assert rebuilt.source == "llm:openai"
+        assert rebuilt.repairs == ["fixed x"]
+
+    def test_provenance_fields_omitted_when_empty(self) -> None:
+        plan = DreamPlan(title="T", genre="g", tone="t", style_preset="lowpoly", assets=[], scene=SceneLayout())
+        d = plan.to_dict()
+        for key in ("seed", "source", "source_detail", "repairs"):
+            assert key not in d
+
+
+class TestPlanCache:
+    def test_second_call_hits_cache_without_provider(self) -> None:
+        with patch("gameassets.dream.planner._call_openai", return_value=_llm_json_response()):
+            plan_game("cache me", preset_names=["lowpoly"], provider="openai")
+        with patch("gameassets.dream.planner._call_openai") as mock_call2:
+            plan2 = plan_game("cache me", preset_names=["lowpoly"], provider="openai")
+        mock_call2.assert_not_called()
+        assert plan2.source == "cache"
+        assert plan2.title == "Test Game"
+
+    def test_replan_flag_bypasses_cache(self) -> None:
+        with patch("gameassets.dream.planner._call_openai", return_value=_llm_json_response()):
+            plan_game("cache me", preset_names=["lowpoly"], provider="openai")
+        with patch("gameassets.dream.planner._call_openai", return_value=_llm_json_response()) as mock_call:
+            plan2 = plan_game("cache me", preset_names=["lowpoly"], provider="openai", use_cache=False)
+        mock_call.assert_called_once()
+        assert plan2.source == "llm:openai"
+
+    def test_different_model_is_cache_miss(self) -> None:
+        with patch("gameassets.dream.planner._call_openai", return_value=_llm_json_response()):
+            plan_game("cache me", preset_names=["lowpoly"], provider="openai", model="m1")
+        with patch("gameassets.dream.planner._call_openai", return_value=_llm_json_response()) as mock_call:
+            plan_game("cache me", preset_names=["lowpoly"], provider="openai", model="m2")
+        mock_call.assert_called_once()
+
+    def test_fallback_not_cached(self) -> None:
+        with patch("gameassets.dream.planner._call_openai", side_effect=RuntimeError("down")):
+            plan_game("no cache for fallback", preset_names=["lowpoly"], provider="openai")
+        with patch("gameassets.dream.planner._call_openai", side_effect=RuntimeError("down")) as mock_call:
+            plan_game("no cache for fallback", preset_names=["lowpoly"], provider="openai")
+        mock_call.assert_called_once()  # segunda chamada foi ao provider de novo
+
+    def test_stdin_provider_not_cached(self) -> None:
+        with patch("gameassets.dream.planner._call_stdin", return_value=_llm_json_response()):
+            plan_game("stdin no cache", preset_names=["lowpoly"], provider="stdin")
+        with patch("gameassets.dream.planner._call_stdin", return_value=_llm_json_response()) as mock_call:
+            plan_game("stdin no cache", preset_names=["lowpoly"], provider="stdin")
+        mock_call.assert_called_once()
+
+
+class _FakeOllamaResponse:
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def read(self) -> bytes:
+        return json.dumps(self._payload).encode("utf-8")
+
+    def __enter__(self) -> _FakeOllamaResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+
+class TestOllamaProvider:
+    def test_success_via_native_api(self) -> None:
+
+        captured: dict = {}
+
+        def _fake_urlopen(req, timeout=None):
+            captured["url"] = req.full_url
+            captured["data"] = json.loads(req.data.decode("utf-8"))
+            return _FakeOllamaResponse({"message": {"content": '{"title": "Ollama Game"}'}})
+
+        with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
+            plan = plan_game("a game", preset_names=["lowpoly"], provider="ollama")
+        assert captured["url"].endswith("/api/chat")
+        assert captured["data"]["format"] == "json"
+        assert captured["data"]["model"] == "llama3.1:8b"
+        assert plan.title == "Ollama Game"
+        assert plan.source == "llm:ollama"
+
+    def test_host_without_scheme_gets_http(self) -> None:
+        from gameassets.dream.planner import _ollama_base_url
+
+        assert _ollama_base_url(None) == "http://127.0.0.1:11434"
+        assert _ollama_base_url("localhost:11434") == "http://localhost:11434"
+        assert _ollama_base_url("http://x:1/") == "http://x:1"
+
+    def test_connection_failure_falls_back_with_hint(self) -> None:
+        with patch("gameassets.dream.planner._call_ollama", side_effect=RuntimeError("connection refused")):
+            plan = plan_game("a game", preset_names=["lowpoly"], provider="ollama")
+        assert plan.source == "fallback"
+        assert "ollama serve" in plan.source_detail
+
+
+class TestRefinePlan:
+    def _base_plan(self) -> DreamPlan:
+        return DreamPlan(
+            title="Base",
+            genre="rpg",
+            tone="dawn",
+            style_preset="lowpoly",
+            assets=[AssetEntry(id="hero", idea="hero", kind="character", generate_3d=True, generate_rig=True)],
+            scene=SceneLayout(placements=[Placement(asset_id="hero", pos="0 1 0")]),
+            terrain=TerrainPlan(enabled=True, seed=7, prompt="hills"),
+            seed=1234,
+        )
+
+    def _refined_json(self) -> str:
+        return json.dumps(
+            {
+                "title": "Base",
+                "genre": "rpg",
+                "tone": "dusk",
+                "style_preset": "lowpoly",
+                "assets": [
+                    {"id": "hero", "idea": "hero", "kind": "character", "generate_3d": True, "generate_rig": True},
+                    {"id": "dragon", "idea": "dragon boss", "kind": "character", "generate_3d": True},
+                ],
+                "scene": {"placements": [{"asset_id": "dragon", "pos": "8 0 8"}]},
+            }
+        )
+
+    def test_success_sets_source_and_lint(self) -> None:
+        from gameassets.dream.planner import refine_plan
+
+        with patch("gameassets.dream.planner._call_openai", return_value=self._refined_json()) as mock_call:
+            refined = refine_plan(self._base_plan(), "add a dragon", preset_names=["lowpoly"], provider="openai")
+        mock_call.assert_called_once()
+        assert refined.source == "refine:openai"
+        ids = [a.id for a in refined.assets]
+        assert "dragon" in ids
+
+    def test_failure_returns_original_with_refine_failed(self) -> None:
+        from gameassets.dream.planner import refine_plan
+
+        base = self._base_plan()
+        with patch("gameassets.dream.planner._call_openai", side_effect=RuntimeError("boom")):
+            refined = refine_plan(base, "add a dragon", preset_names=["lowpoly"], provider="openai")
+        assert refined.source == "refine-failed"
+        assert "boom" in refined.source_detail
+        assert [a.id for a in refined.assets] == ["hero"]  # original intocado
+        assert base.source == ""  # nem mutamos o input
+
+    def test_seed_preserved(self) -> None:
+        from gameassets.dream.planner import refine_plan
+
+        with patch("gameassets.dream.planner._call_openai", return_value=self._refined_json()):
+            refined = refine_plan(self._base_plan(), "x", preset_names=["lowpoly"], provider="openai")
+        assert refined.seed == 1234
+
+    def test_terrain_preserved_when_omitted(self) -> None:
+        from gameassets.dream.planner import refine_plan
+
+        with patch("gameassets.dream.planner._call_openai", return_value=self._refined_json()):
+            refined = refine_plan(self._base_plan(), "x", preset_names=["lowpoly"], provider="openai")
+        assert refined.terrain is not None
+        assert refined.terrain.seed == 7
+        assert refined.terrain.enabled is True
+
+    def test_terrain_disabled_when_llm_says_so(self) -> None:
+        from gameassets.dream.planner import refine_plan
+
+        payload = json.loads(self._refined_json())
+        payload["terrain"] = {"enabled": False}
+        with patch("gameassets.dream.planner._call_openai", return_value=json.dumps(payload)):
+            refined = refine_plan(self._base_plan(), "remove terrain", preset_names=["lowpoly"], provider="openai")
+        assert refined.terrain is not None
+        assert refined.terrain.enabled is False
+
+    def test_prompt_embeds_current_plan_without_provenance(self) -> None:
+        from gameassets.dream.planner import refine_plan
+
+        captured: dict = {}
+
+        def _capture(system_prompt: str, user_prompt: str, **_kw: object) -> str:
+            captured["user"] = user_prompt
+            return self._refined_json()
+
+        with patch("gameassets.dream.planner._call_openai", side_effect=_capture):
+            refine_plan(self._base_plan(), "add a dragon", preset_names=["lowpoly"], provider="openai")
+        assert "CURRENT PLAN JSON:" in captured["user"]
+        assert "INSTRUCTION: add a dragon" in captured["user"]
+        assert "source_detail" not in captured["user"]
+
+
+class TestApplySeedAndLoad:
+    def test_apply_seed_sets_plan_and_terrain(self) -> None:
+        from gameassets.dream.planner import apply_seed
+
+        plan = DreamPlan(
+            title="T",
+            genre="g",
+            tone="t",
+            style_preset="lowpoly",
+            assets=[],
+            scene=SceneLayout(),
+            terrain=TerrainPlan(enabled=True),
+        )
+        apply_seed(plan, 42)
+        assert plan.seed == 42
+        assert plan.terrain is not None and plan.terrain.seed == 42
+
+    def test_apply_seed_respects_pinned_terrain_seed(self) -> None:
+        from gameassets.dream.planner import apply_seed
+
+        plan = DreamPlan(
+            title="T",
+            genre="g",
+            tone="t",
+            style_preset="lowpoly",
+            assets=[],
+            scene=SceneLayout(),
+            terrain=TerrainPlan(enabled=True, seed=9),
+        )
+        apply_seed(plan, 42)
+        assert plan.terrain is not None and plan.terrain.seed == 9
+
+    def test_load_plan_path_roundtrip(self, tmp_path: Path) -> None:
+        from gameassets.dream.planner import load_plan_path
+
+        plan = DreamPlan(
+            title="T",
+            genre="g",
+            tone="t",
+            style_preset="lowpoly",
+            assets=[AssetEntry(id="a", idea="x")],
+            scene=SceneLayout(),
+            seed=5,
+        )
+        p = tmp_path / "plan.json"
+        p.write_text(json.dumps(plan.to_dict()), encoding="utf-8")
+        loaded = load_plan_path(p)
+        assert loaded.title == "T"
+        assert loaded.seed == 5
+        assert loaded.assets[0].id == "a"

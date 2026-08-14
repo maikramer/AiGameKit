@@ -1,4 +1,8 @@
 import { logger } from '../../core/utils/logger';
+import {
+  fetchBytesResilient,
+  isPermanentFetchError,
+} from '../../core/utils/resilient-net';
 import { createGeometryGLTFLoader } from '../../extras/gltf-bridge';
 import * as THREE from 'three';
 import type { State } from '../../core';
@@ -32,8 +36,22 @@ const urlByState = new WeakMap<State, Map<number, string>>();
 type CacheEntry =
   | { status: 'loading' }
   | { status: 'ready'; data: ColliderMeshData }
-  | { status: 'error' };
+  | {
+      status: 'error';
+      permanent: boolean;
+      attempts: number;
+      retryAtMs: number;
+    };
 const meshCache = new Map<string, CacheEntry>();
+
+/** Delay determinístico entre ciclos de re-tentativa de um GLB transitório. */
+export const MESH_RETRY_BASE_MS = 2_000;
+export const MESH_RETRY_MAX_MS = 30_000;
+export const MAX_MESH_RETRY_CYCLES = 5;
+
+export function meshRetryDelayMs(attempts: number): number {
+  return Math.min(MESH_RETRY_MAX_MS, MESH_RETRY_BASE_MS * 2 ** attempts);
+}
 
 export function setColliderMeshUrl(
   state: State,
@@ -57,33 +75,71 @@ export function getColliderMeshUrl(
 
 /**
  * Returns the parsed collision mesh for `url`, kicking off the fetch on first
- * call. `null` while loading; `'error'` status is sticky (warned once).
+ * call. `null` while loading or waiting out a transient-failure backoff;
+ * permanent failures (404, undecodable GLB, exhausted retries) are sticky.
  */
 export function requestColliderMesh(url: string): ColliderMeshData | null {
   const entry = meshCache.get(url);
   if (entry) {
-    return entry.status === 'ready' ? entry.data : null;
+    if (entry.status === 'ready') return entry.data;
+    if (entry.status === 'loading') return null;
+    if (entry.permanent || Date.now() < entry.retryAtMs) return null;
+    if (entry.attempts >= MAX_MESH_RETRY_CYCLES) {
+      entry.permanent = true;
+      return null;
+    }
+    entry.attempts += 1;
+    entry.retryAtMs = Date.now() + meshRetryDelayMs(entry.attempts);
   }
-
-  meshCache.set(url, { status: 'loading' });
-  void fetch(url)
-    .then(async (res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buf = await res.arrayBuffer();
-      const data = await loadGlbCollisionMesh(buf, url);
-      meshCache.set(url, { status: 'ready', data });
-    })
-    .catch((err: unknown) => {
-      meshCache.set(url, { status: 'error' });
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error(`[mesh-collider] failed to load "${url}": ${msg}`);
-    });
+  void loadColliderMesh(
+    url,
+    entry && entry.status === 'error' ? entry.attempts : 0
+  );
   return null;
 }
 
-/** Whether the URL failed to load (collider creation should give up). */
+/** Whether the URL is permanently unloadable (collider creation should give up). */
 export function colliderMeshFailed(url: string): boolean {
-  return meshCache.get(url)?.status === 'error';
+  const entry = meshCache.get(url);
+  return entry !== undefined && entry.status === 'error' && entry.permanent;
+}
+
+async function loadColliderMesh(url: string, attempts: number): Promise<void> {
+  meshCache.set(url, { status: 'loading' });
+  try {
+    const buf = await fetchBytesResilient(url);
+    const data = await loadGlbCollisionMesh(buf.buffer as ArrayBuffer, url);
+    meshCache.set(url, { status: 'ready', data });
+  } catch (err) {
+    // A fetched GLB that parses but has no geometry is a broken asset, not a
+    // flaky network — retrying will not fix it.
+    const brokenAsset =
+      err instanceof Error && /no triangle geometry/.test(err.message);
+    const permanent = brokenAsset || isPermanentFetchError(err);
+    const nextAttempts = attempts + 1;
+    const giveUp = permanent || nextAttempts >= MAX_MESH_RETRY_CYCLES;
+    meshCache.set(url, {
+      status: 'error',
+      permanent: giveUp,
+      attempts: nextAttempts,
+      retryAtMs: Date.now() + meshRetryDelayMs(nextAttempts),
+    });
+    const msg = err instanceof Error ? err.message : String(err);
+    if (giveUp) {
+      logger.error(
+        `[mesh-collider] failed to load "${url}" permanently: ${msg}`
+      );
+    } else {
+      logger.warn(
+        `[mesh-collider] transient failure for "${url}" (${msg}) — retry ${nextAttempts}/${MAX_MESH_RETRY_CYCLES}`
+      );
+    }
+  }
+}
+
+/** Util para testes: limpa o cache global de meshes de colisão. */
+export function resetColliderMeshCacheForTests(): void {
+  meshCache.clear();
 }
 
 const _aabb = new THREE.Box3();

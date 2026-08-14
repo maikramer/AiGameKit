@@ -33,6 +33,25 @@ export type {
 } from './yield-instructions';
 export { State } from './state';
 export { Scene } from './scene';
+export type { SceneSwapResult } from './scene';
+export {
+  ChronoRecorderSystem,
+  chronoMark,
+  chronoRewind,
+  chronoSeek,
+  disableChrono,
+  enableChrono,
+  getChronoFrames,
+  getChronoMarks,
+  getChronoStatus,
+  isChronoEnabled,
+  offChronoSeek,
+  onChronoSeek,
+  recordChronoFrame,
+} from './chrono';
+export type { ChronoMark, ChronoOptions, ChronoStatus } from './chrono';
+export { QueryWatcherSystem, watchQuery } from './watch';
+export type { QueryWatcherHandle, QueryWatcherHandlers } from './watch';
 export { type InstantiateOptions, type TemplateData } from './prefabs';
 export { Time } from './time';
 export {

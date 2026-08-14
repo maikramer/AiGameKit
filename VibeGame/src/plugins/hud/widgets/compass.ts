@@ -3,7 +3,7 @@ import { wrapAngle } from '../../../shared';
 import { defineQuery } from '../../../core';
 import type { ParserParams, State, XMLValue } from '../../../core';
 import { PlayerController } from '../../player';
-import { threeCameras } from '../../rendering/utils';
+import { getMainThreeCamera } from '../../rendering/utils';
 import { Transform } from '../../transforms';
 import {
   type Waypoint,
@@ -244,8 +244,8 @@ function ensureCompassStyle(): void {
 // internally, which a plain {x,y,z} object does not have.
 const _camDir = new Vector3();
 
-function firstCameraAzimuth(): number | null {
-  const cam = threeCameras.values().next().value as AzimuthCamera | undefined;
+function firstCameraAzimuth(state: State): number | null {
+  const cam = getMainThreeCamera(state) as AzimuthCamera | undefined;
   if (!cam || typeof cam.getWorldDirection !== 'function') return null;
   cam.getWorldDirection(_camDir);
   return cameraAzimuth(_camDir.x, _camDir.z);
@@ -317,7 +317,7 @@ export function createCompassWidget(
       let lastCameraAzimuth = Number.NaN;
       const update = (state: State): void => {
         const now = state.time.elapsed;
-        const camAz = firstCameraAzimuth();
+        const camAz = firstCameraAzimuth(state);
         if (camAz === null) return;
         if (
           now - lastUpdateAt < 1 / 30 &&

@@ -242,6 +242,9 @@ describe('compass — update with camera azimuth', () => {
   beforeEach(() => {
     state = newState();
     camera = makeMockCamera(0, 1);
+    // `threeCameras` is a process-wide registry; earlier suites may leak
+    // entries, and the compass must read OUR mock, not insertion-order luck.
+    threeCameras.clear();
     threeCameras.set(MOCK_CAMERA_EID, camera as unknown as never);
   });
 

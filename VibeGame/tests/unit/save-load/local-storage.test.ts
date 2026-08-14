@@ -92,4 +92,88 @@ describe('localStorage persistence', () => {
     const state = new State();
     expect(await loadFromLocalStorage(state, 'missing')).toBe(false);
   });
+
+  it('returns false on corrupt saves instead of rejecting (garbage base64)', async () => {
+    const store = globalThis.localStorage as unknown as {
+      setItem(k: string, v: string): void;
+    };
+    store.setItem('corrupt-save', 'vg1:!!!not-base64!!!');
+    const state = new State();
+    state.registerComponent('transform', Transform);
+    const eid = state.createEntity();
+    state.addComponent(eid, Transform);
+    Transform.posX[eid] = 99;
+    expect(await loadFromLocalStorage(state, 'corrupt-save')).toBe(false);
+    // Live world untouched by the corrupt save.
+    expect(Transform.posX[eid]).toBe(99);
+  });
+
+  it('returns false when the key holds foreign (non-snapshot) data', async () => {
+    const store = globalThis.localStorage as unknown as {
+      setItem(k: string, v: string): void;
+    };
+    store.setItem('foreign-save', JSON.stringify({ hello: 'world' }));
+    store.setItem('stringy-save', JSON.stringify('just a string'));
+    store.setItem('floaty-save', JSON.stringify([1.5, -2, 300]));
+    const state = new State();
+    expect(await loadFromLocalStorage(state, 'foreign-save')).toBe(false);
+    expect(await loadFromLocalStorage(state, 'stringy-save')).toBe(false);
+    expect(await loadFromLocalStorage(state, 'floaty-save')).toBe(false);
+  });
+
+  it('loadSnapshot rejects msgpack garbage with a clear error and never clears the world first', () => {
+    const { loadSnapshot } =
+      require('../../../src/plugins/save-load/serializer') as typeof import('../../../src/plugins/save-load/serializer');
+    const state = new State();
+    state.registerComponent('transform', Transform);
+    const eid = state.createEntity();
+    state.addComponent(eid, Transform);
+    Transform.posX[eid] = 7;
+    expect(() =>
+      loadSnapshot(state, new Uint8Array([0xc1, 0xff, 0x00]), {
+        clearExisting: true,
+      })
+    ).toThrow(/valid world snapshot/);
+    expect(state.exists(eid)).toBe(true);
+    expect(Transform.posX[eid]).toBe(7);
+  });
+
+  it('save survives a quota error after evicting the previous save', async () => {
+    const store = new Map<string, string>();
+    let quotaHits = 0;
+    (globalThis as Record<string, unknown>).localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        if (quotaHits++ === 0) {
+          throw new DOMException('quota exceeded', 'QuotaExceededError');
+        }
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+    };
+    const state = new State();
+    state.registerComponent('transform', Transform);
+    const eid = state.createEntity();
+    state.addComponent(eid, Transform);
+    Transform.posX[eid] = 3;
+    expect(await saveToLocalStorage(state, 'quota-save')).toBe(true);
+    expect(store.has('quota-save')).toBe(true);
+  });
+
+  it('save returns false (never throws) when the quota is truly exhausted', async () => {
+    (globalThis as Record<string, unknown>).localStorage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException('quota exceeded', 'QuotaExceededError');
+      },
+      removeItem: () => {},
+    };
+    const state = new State();
+    state.registerComponent('transform', Transform);
+    const eid = state.createEntity();
+    state.addComponent(eid, Transform);
+    await expect(saveToLocalStorage(state, 'doomed-save')).resolves.toBe(false);
+  });
 });

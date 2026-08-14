@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { State } from '../../../src/core/ecs/state';
 import {
   BodyType,
@@ -14,10 +14,15 @@ import {
 } from '../../../src/plugins/asset-precompute/systems';
 import {
   getPrecomputeManifestState,
+  getPrecomputeRetryAtMs,
   loadPrecomputeManifest,
   resetPrecomputeManifestForTests,
   resolvePrecompute,
 } from '../../../src/plugins/asset-precompute/manifest';
+import {
+  resetResilientNetForTests,
+  resilientNetConfig,
+} from '../../../src/core/utils/resilient-net';
 import {
   getGltfLocalAABB,
   seedGltfPrecomputedBounds,
@@ -142,6 +147,120 @@ describe('asset-precompute manifest', () => {
     await loadPrecomputeManifest();
     await loadPrecomputeManifest();
     expect(fetches).toBe(1);
+  });
+});
+
+describe('asset-precompute manifest resilience', () => {
+  let realFetch: typeof fetch;
+
+  beforeEach(() => {
+    resetPrecomputeManifestForTests();
+    resetResilientNetForTests();
+    resilientNetConfig.retries = 0;
+    resilientNetConfig.baseDelayMs = 1;
+    realFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    resetResilientNetForTests();
+  });
+
+  it('a transient 503 is NOT memorized as absent — it retries and recovers', async () => {
+    let fetches = 0;
+    globalThis.fetch = (async () => {
+      fetches += 1;
+      return fetches === 1
+        ? new Response('busy', { status: 503 })
+        : new Response(JSON.stringify(MANIFEST_PAYLOAD), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const first = await loadPrecomputeManifest();
+    expect(first).toBeNull();
+    // The defining regression: a flaky boot no longer poisons the session.
+    expect(getPrecomputeManifestState()).toBe('idle');
+    const retryAt = getPrecomputeRetryAtMs();
+    expect(retryAt).toBeGreaterThan(Date.now());
+
+    // During the backoff window calls are served from cache, no refetch.
+    await loadPrecomputeManifest();
+    expect(fetches).toBe(1);
+
+    // Wait out the backoff, then the next kick must succeed.
+    await new Promise<void>((resolve) => {
+      const poll = () =>
+        Date.now() >= retryAt ? resolve() : setTimeout(poll, 25);
+      poll();
+    });
+    const second = await loadPrecomputeManifest();
+    expect(second).not.toBeNull();
+    expect(getPrecomputeManifestState()).toBe('loaded');
+    expect(
+      resolvePrecompute(second, '/assets/models/pine_dark_lod0.glb')?.collider
+        .shape
+    ).toBe('capsule');
+    expect(fetches).toBe(2);
+  });
+
+  it('drops rows with invalid collider specs instead of indexing NaN', async () => {
+    const hostile = {
+      version: 1,
+      rows: [
+        {
+          id: 'string_radius',
+          model: { url: '/assets/models/string_radius.glb' },
+          precompute: {
+            collider: { shape: 'capsule', radius: 'big', height: 5, base_y: 0 },
+          },
+        },
+        {
+          id: 'negative_height',
+          model: { url: '/assets/models/negative_height.glb' },
+          precompute: {
+            collider: { shape: 'cylinder', radius: 0.5, height: -2, base_y: 0 },
+          },
+        },
+        {
+          id: 'mystery_shape',
+          model: { url: '/assets/models/mystery_shape.glb' },
+          precompute: {
+            collider: {
+              shape: 'dodecahedron',
+              radius: 1,
+              height: 2,
+              base_y: 0,
+            },
+          },
+        },
+        {
+          id: 'pine_dark',
+          model: { url: '/assets/models/pine_dark_lod0.glb' },
+          precompute: {
+            collider: { shape: 'capsule', radius: 0.21, height: 5, base_y: 0 },
+          },
+        },
+      ],
+    };
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(hostile), {
+        status: 200,
+      })) as unknown as typeof fetch;
+
+    const index = await loadPrecomputeManifest();
+    expect(index).not.toBeNull();
+    expect(
+      resolvePrecompute(index, '/assets/models/string_radius.glb')
+    ).toBeUndefined();
+    expect(
+      resolvePrecompute(index, '/assets/models/negative_height.glb')
+    ).toBeUndefined();
+    expect(
+      resolvePrecompute(index, '/assets/models/mystery_shape.glb')
+    ).toBeUndefined();
+    expect(
+      resolvePrecompute(index, '/assets/models/pine_dark_lod0.glb')?.collider
+        .radius
+    ).toBe(0.21);
   });
 });
 

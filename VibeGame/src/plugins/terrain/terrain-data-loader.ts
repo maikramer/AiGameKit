@@ -1,3 +1,4 @@
+import { fetchJsonResilient } from '../../core/utils/resilient-net';
 import { createEntityFromRecipe } from '../../core/recipes/parser';
 import { setRiverPath } from '../water/components';
 
@@ -43,33 +44,127 @@ export interface TerrainData {
 }
 
 export async function loadTerrainData(url: string): Promise<TerrainData> {
-  let response: Response;
-  try {
-    response = await fetch(url);
-  } catch (err) {
-    throw new Error(
-      `Failed to fetch terrain data from ${url}: ${(err as Error).message}`,
-      { cause: err }
-    );
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch terrain data from ${url}: HTTP ${response.status}`
-    );
-  }
-
   let json: unknown;
   try {
-    json = await response.json();
+    json = await fetchJsonResilient(url);
   } catch (err) {
-    throw new Error(
-      `Invalid JSON in terrain data from ${url}: ${(err as Error).message}`,
-      { cause: err }
-    );
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to fetch terrain data from ${url}: ${detail}`, {
+      cause: err,
+    });
   }
-
   return parseTerrainData(json);
+}
+
+// Hostile-input guards: a crafted or truncated terrain JSON must fail loudly
+// at parse time, never leak NaN/Infinity into geometry or memory bombs into
+// the sampler.
+const MAX_WATER_ENTITIES = 20_000;
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function finitePoint(value: unknown): [number, number] | null {
+  if (!Array.isArray(value) || value.length !== 2) return null;
+  const x = finiteNumber(value[0]);
+  const z = finiteNumber(value[1]);
+  return x === undefined || z === undefined ? null : [x, z];
+}
+
+function sanitizeRivers(raw: unknown): TerrainData['rivers'] {
+  if (!Array.isArray(raw)) return [];
+  const rivers: TerrainData['rivers'] = [];
+  for (const item of raw) {
+    if (rivers.length >= MAX_WATER_ENTITIES) break;
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const path: Array<[number, number]> = [];
+    if (Array.isArray(row.path)) {
+      for (const point of row.path) {
+        const p = finitePoint(point);
+        if (p) path.push(p);
+      }
+    }
+    if (path.length < 2) continue;
+    rivers.push({
+      id: finiteNumber(row.id) ?? rivers.length,
+      source: finitePoint(row.source) ?? path[0]!,
+      path,
+      length: finiteNumber(row.length) ?? path.length,
+    });
+  }
+  return rivers;
+}
+
+function sanitizeLakes(raw: unknown): TerrainData['lakes'] {
+  if (!Array.isArray(raw)) return [];
+  const lakes: TerrainData['lakes'] = [];
+  for (const item of raw) {
+    if (lakes.length >= MAX_WATER_ENTITIES) break;
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const center = finitePoint(row.center_pixel);
+    const surfaceLevel = finiteNumber(row.surface_level);
+    const surfaceHeight = finiteNumber(row.surface_height);
+    const areaPixels = finiteNumber(row.area_pixels);
+    if (!center || surfaceLevel === undefined || surfaceHeight === undefined) {
+      continue;
+    }
+    const depth = finiteNumber(row.depth);
+    lakes.push({
+      id: finiteNumber(row.id) ?? lakes.length,
+      center_pixel: center,
+      surface_level: surfaceLevel,
+      surface_height: surfaceHeight,
+      area_pixels: areaPixels ?? 0,
+      ...(depth !== undefined ? { depth } : {}),
+    });
+  }
+  return lakes;
+}
+
+function sanitizeLakePlanes(
+  raw: unknown,
+  lakeIds: Set<number>
+): TerrainData['lake_planes'] {
+  if (!Array.isArray(raw)) return [];
+  const planes: TerrainData['lake_planes'] = [];
+  for (const item of raw) {
+    if (planes.length >= MAX_WATER_ENTITIES) break;
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const lakeId = finiteNumber(row.lake_id);
+    const posX = finiteNumber(row.pos_x);
+    const posY = finiteNumber(row.pos_y);
+    const posZ = finiteNumber(row.pos_z);
+    const sizeX = finiteNumber(row.size_x);
+    const sizeZ = finiteNumber(row.size_z);
+    if (
+      lakeId === undefined ||
+      !lakeIds.has(lakeId) ||
+      posX === undefined ||
+      posY === undefined ||
+      posZ === undefined ||
+      sizeX === undefined ||
+      sizeZ === undefined ||
+      sizeX <= 0 ||
+      sizeZ <= 0
+    ) {
+      continue;
+    }
+    planes.push({
+      lake_id: lakeId,
+      pos_x: posX,
+      pos_y: posY,
+      pos_z: posZ,
+      size_x: sizeX,
+      size_z: sizeZ,
+    });
+  }
+  return planes;
 }
 
 export function parseTerrainData(data: unknown): TerrainData {
@@ -88,41 +183,55 @@ export function parseTerrainData(data: unknown): TerrainData {
   }
 
   const terrain = root.terrain as Record<string, unknown>;
-  if (typeof terrain.size !== 'number') {
+  const size = terrain.size;
+  const worldSize = terrain.world_size;
+  const maxHeight = terrain.max_height;
+  if (
+    typeof size !== 'number' ||
+    !Number.isInteger(size) ||
+    size < 1 ||
+    size > 65_536
+  ) {
     throw new Error(
-      'Terrain data missing required field: "terrain.size" (number)'
+      'Terrain data field "terrain.size" must be an integer in [1, 65536]'
     );
   }
-  if (typeof terrain.world_size !== 'number') {
+  if (
+    typeof worldSize !== 'number' ||
+    !Number.isFinite(worldSize) ||
+    worldSize <= 0
+  ) {
     throw new Error(
-      'Terrain data missing required field: "terrain.world_size" (number)'
+      'Terrain data field "terrain.world_size" must be a finite positive number'
     );
   }
-  if (typeof terrain.max_height !== 'number') {
+  if (
+    typeof maxHeight !== 'number' ||
+    !Number.isFinite(maxHeight) ||
+    maxHeight < 0
+  ) {
     throw new Error(
-      'Terrain data missing required field: "terrain.max_height" (number)'
+      'Terrain data field "terrain.max_height" must be a finite non-negative number'
     );
   }
 
-  const rivers = Array.isArray(root.rivers) ? root.rivers : [];
-  const lakes = Array.isArray(root.lakes) ? root.lakes : [];
-  const lakePlanes = Array.isArray(root.lake_planes) ? root.lake_planes : [];
+  const rivers = sanitizeRivers(root.rivers);
+  const lakes = sanitizeLakes(root.lakes);
+  const lakePlanes = sanitizeLakePlanes(
+    root.lake_planes,
+    new Set(lakes.map((lake) => lake.id))
+  );
 
   return {
     version: root.version,
     heightmap_format: root.heightmap_format === 'ahgt' ? 'ahgt' : 'png',
     terrain: {
-      size: terrain.size,
-      world_size: terrain.world_size,
-      max_height: terrain.max_height,
-      height_min:
-        typeof terrain.height_min === 'number' ? terrain.height_min : undefined,
-      height_max:
-        typeof terrain.height_max === 'number' ? terrain.height_max : undefined,
-      height_mean:
-        typeof terrain.height_mean === 'number'
-          ? terrain.height_mean
-          : undefined,
+      size,
+      world_size: worldSize,
+      max_height: maxHeight,
+      height_min: finiteNumber(terrain.height_min),
+      height_max: finiteNumber(terrain.height_max),
+      height_mean: finiteNumber(terrain.height_mean),
     },
     rivers,
     lakes,

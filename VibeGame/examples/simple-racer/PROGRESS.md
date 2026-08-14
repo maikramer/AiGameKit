@@ -1,6 +1,6 @@
 # Simple Racer — Sunset Ridge (Crystal Vale)
 
-Cart racing on the VibeGame **racing** plugin: a 1.75 km circuit, five wooden
+Cart racing on the VibeGame **racing** plugin: a 5.45 km circuit, five wooden
 carts, three laps, rivals that actually race you. Art direction matches
 **Crystal Vale** (`style_preset: painterly`) — trees, houses, city gate and
 vegetation are the RPG packs; only the carts are generated for this example.
@@ -45,7 +45,7 @@ passou a viver num include).
 
 | Piece          | File                      | Notes                                                  |
 | -------------- | ------------------------- | ------------------------------------------------------ |
-| Circuit layout | `src/track.ts`            | 26 control nodes with per-node width and section tag   |
+| Circuit layout | `src/track.ts`            | 39 control nodes with per-node width and section tag   |
 | Scene          | `index.html`              | track, player, four rivals, camera, HUD                |
 | Boot           | `src/main.ts`             | injects the circuit, gates the start on a click, music |
 | Scenery        | `src/game/track-props.ts` | walks the spline, fits each GLB to a real size         |
@@ -56,10 +56,12 @@ engine's `racing` plugin (`VibeGame/src/plugins/racing/`).
 
 ## Circuit
 
-Seven sectors with one idea each: start straight → long right at Turn 1 → uphill
-sweep → crest (the car gets light) → downhill → esses → hairpin → infield and a
-long final left back onto the straight. Elevation runs 0 → 16 m; banking is
-derived from curvature.
+Nine ideas, one per stretch of the real terrain (see the block map in
+`src/track.ts`): downtown straight → long right at Turn 1 → the rim → the
+flyover across the basin (~20 m over the forest) → west loop → the climb into
+the mountains → summit hairpin → a descent that dives **under** the flyover →
+return straight plus the stadium hairpin onto the grid. Elevation runs 6 → 30 m
+and the lap is ~5.45 km; banking is derived from curvature.
 
 ### Performance (o que já mordeu)
 
@@ -121,9 +123,12 @@ Carts are the only GPU step for this example (`style_preset: painterly`):
 | Audio                    | `sample-gameassets/manifests/audio.yaml` + `scripts/gen-sfx.sh` | `bash scripts/gen-sfx.sh` (race SFX stays; do not mix RPG BGM)                                |
 
 Handoff writes into `../public` (`output_dir: ../../public/assets` from
-`sample-gameassets/`). `model-yaw="0"` — a carroça alongada (L/W > 1.6) já é
-rodada pelo `fitModel`; o yaw 90 dos karts antigos punha o comprimento de
-través (panqueca na pista). `size_m` Omni é `[largura X, altura Y, comprimento Z]`.
+`sample-gameassets/`). `model-yaw="90"` — as carroças nascem deitadas ao longo
+de X (bbox 2.40 × 1.68 × 1.14), e o motor **não** roda veículos pelo PCA
+(`normaliseModel` usa `minElongation: 99`: heading é só do autor), por isso o
+yaw 90 é o que põe o eixo comprido em +Z. Empilhar um auto-yaw em cima disso —
+ou deixar o yaw a 0 — põe o comprimento de través (panqueca na pista).
+`size_m` Omni é `[comprimento X, altura Y, largura Z]`.
 
 Two things about generated models, both of which bit this example:
 
@@ -131,9 +136,10 @@ Two things about generated models, both of which bit this example:
    real-world size (`model-length` for carts, `height` per prop) via
    `GAME.fitModel`. Dropping one in untouched is how the first build had a road
    sign taller than the grandstand.
-2. **Their heading is not the engine's.** +Z forward, +X right. Carts with
-   length/width > 1.6 are rotated by `fitModel`; extra `model-yaw="90"` on top
-   of that laid them across the track. Props still auto-align from elongation.
+2. **Their heading is not the engine's.** +Z forward, +X right. Vehicles are
+   author-only: nothing rotates them but `model-yaw`, so the value has to
+   cancel the generator's arbitrary facing. Props still auto-align from
+   elongation (`minElongation` default 1.08).
 
 The finish gantry is the RPG `city_gate_arch` (pack `meshes/infra`), scaled
 across the city straight with `measureProp(..., startFrame.width + 8, 'width',

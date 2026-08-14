@@ -22,17 +22,23 @@ scale 0.9–1.4).
 ## Fluxo
 
 1. `PrecomputeColliderSystem` (bucket `fixed`, antes de
-   `PhysicsInitializationSystem`) dispara o fetch do manifest uma vez.
+   `PhysicsInitializationSystem`) mantém o kick do fetch do manifest enquanto
+   não há resultado definitivo — `loadPrecomputeManifest` cacheia o promise
+   durante backoff, então o kick por frame é barato.
 2. Entidades com shape `Precompute` são resolvidas no frame em que aparecem:
    manifest hit → campos do colisor; miss → fallback AABB-fit do bounds cache;
    sem bounds → cápsula default.
 3. O marker `Precompute` **nunca chega ao Rapier**: enquanto o manifest está
-   `loading`, `PhysicsInitializationSystem` salta essas entidades.
+   `loading`/`idle`, `PhysicsInitializationSystem` salta essas entidades.
 
 ## Fallbacks
 
-- Manifest ausente (404 / release sem `gameassets_handoff.json`): AABB-fit —
-  comportamento pré-existente, sem regressão.
+- Manifest ausente (404 / inválido / 6 ciclos transitórios esgotados):
+  AABB-fit — comportamento pré-existente, sem regressão.
+- Falha transitória (rede/5xx/timeout): volta a `idle` e re-tenta com backoff
+  exponencial (1s→30s); um 502 no boot não desliga o precompute da sessão.
+- Row com `precompute` inválido (shape/numéricos) é descartada no index, não
+  produz collider NaN.
 - XML sem `mesh-url` no colisor: espera 120 frames pela URL, depois cápsula
   default.
 - `collider="shape: cylinder"` explícito também funciona (sem precompute).

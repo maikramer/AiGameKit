@@ -1,7 +1,7 @@
 <!--
   Obstáculos e power-ups, em coordenadas de PISTA: `s` = metros de arco desde a
   linha de meta, `lateral` = deslocamento do eixo (+ = direita do condutor).
-  Volta ≈ 5250 m — ver os setores em `src/track.ts`.
+  Volta ≈ 5450 m — ver os setores em `src/track.ts`.
 
   Nada aqui tem coordenadas de mundo: mexer no traçado leva os hazards juntos.
 -->

@@ -38,7 +38,6 @@ const DEFAULT_FALLBACK_HEIGHT = 1.5;
 /** Frames sem URL conhecida até cair no fallback default (XML sem mesh-url). */
 const MAX_URL_WAIT_FRAMES = 120;
 
-let manifestKicked = false;
 const urlWaitFrames = new Map<number, number>();
 
 function entityScale(eid: number): { radius: number; y: number } {
@@ -95,15 +94,16 @@ export const PrecomputeColliderSystem: System = defineSystem({
   before: [PhysicsInitializationSystem],
   update(state) {
     if (state.headless) return;
-    if (!manifestKicked) {
-      manifestKicked = true;
-      void loadPrecomputeManifest();
-    }
     const index = getPrecomputeIndexSync();
     const absent = getPrecomputeManifestState() === 'absent';
-    // Manifest ainda a carregar: o marker fica e o PhysicsInitializationSystem
-    // salta entidades com shape Precompute (sem collider criado no Rapier).
-    if (!index && !absent) return;
+    // Manifest ainda a carregar (ou em backoff transitório): o kick é barato —
+    // loadPrecomputeManifest cacheia o promise durante a espera e só dispara
+    // fetch quando o cooldown passa. O marker fica e o
+    // PhysicsInitializationSystem salta entidades com shape Precompute.
+    if (!index && !absent) {
+      void loadPrecomputeManifest();
+      return;
+    }
 
     for (const eid of precomputeQuery(state.world)) {
       if (Collider.shape[eid] !== ColliderShape.Precompute) continue;
@@ -128,7 +128,6 @@ export const PrecomputeColliderSystem: System = defineSystem({
 
 /** Util para testes: reposição do estado global (manifest + contadores). */
 export function resetPrecomputeForTests(): void {
-  manifestKicked = false;
   urlWaitFrames.clear();
   resetPrecomputeManifestForTests();
 }

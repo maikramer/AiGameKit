@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+# Bump quando o schema/prompt mudar semanticamente — invalida o cache de planos.
+DREAM_PROMPT_VERSION = "2"
+
 DREAM_PLAN_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["title", "genre", "tone", "style_preset", "assets", "scene"],
@@ -194,4 +197,64 @@ and scene layout for a 3D browser game powered by VibeGame (ECS + Three.js).
 
 ## VibeGame recipes (for reference — used later to build the scene XML)
 {", ".join(VIBEGAME_RECIPES)}
+"""
+
+
+REFINE_RULES = """\
+- You are EDITING an existing game plan, not creating one from scratch.
+- Apply the INSTRUCTION surgically: keep everything that the instruction does not change
+  (ids, ideas, placements, style, sky_prompt, icons) EXACTLY as provided.
+- Return the FULL updated JSON object (same schema) — not a diff, not a partial object.
+- New assets must follow the same rules as the original planner (scene layout rules below).
+- Removing an asset also removes its placements.
+- To disable terrain, include the terrain object with enabled=false (do not omit it).
+- Keep total assets within the stated maximum.
+"""
+
+
+def build_refine_prompt(
+    *,
+    preset_names: list[str],
+    max_assets: int = 8,
+    with_audio: bool = True,
+    with_sky: bool = True,
+) -> str:
+    """System prompt para refinamento incremental de um plano existente."""
+    presets_str = ", ".join(preset_names) if preset_names else "lowpoly"
+    schema_str = json.dumps(DREAM_PLAN_SCHEMA, indent=2)
+
+    audio_note = (
+        "You may include audio assets (generate_audio=true, generate_3d=false)."
+        if with_audio
+        else "Do NOT include audio assets (with_audio is disabled)."
+    )
+    sky_note = (
+        "Keep or add sky_prompt for the 360-degree equirectangular sky."
+        if with_sky
+        else "Do NOT include sky_prompt (sky generation is disabled)."
+    )
+
+    return f"""\
+You are an expert game designer editing an existing asset/scene plan for a 3D browser \
+game powered by VibeGame (ECS + Three.js).
+
+## Available style presets
+{presets_str}
+
+## JSON Schema
+{schema_str}
+
+## Editing rules
+{REFINE_RULES}
+
+## Scene layout rules
+{SCENE_RULES}
+
+## Additional constraints
+- Maximum total assets: {max_assets}
+- {audio_note}
+- {sky_note}
+- style_preset MUST remain one of the available presets unless the instruction asks to change it.
+- The JSON must be valid and parseable. Do NOT wrap it in markdown code fences.
+- Respond ONLY with the JSON object — no explanation, no extra text.
 """

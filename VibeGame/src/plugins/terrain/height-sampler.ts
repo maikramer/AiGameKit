@@ -1,4 +1,5 @@
 import type { State } from '../../core';
+import { fetchBlobResilient } from '../../core/utils/resilient-net';
 import { Terrain } from './components';
 import { meshSurfaceResolutionForPoint } from './lod-select';
 import { getTerrainContext } from './utils';
@@ -110,23 +111,24 @@ async function decodeImageBlob(blob: Blob): Promise<DecodedImage> {
 export async function loadHeightmapFromUrl(
   url: string
 ): Promise<HeightSamplerData> {
-  let response: Response;
+  let blob: Blob;
   try {
-    response = await fetch(url);
+    blob = await fetchBlobResilient(url);
   } catch (e) {
     throw new Error(`Heightmap fetch failed: ${url} — ${e}`, { cause: e });
   }
-  if (!response.ok) {
-    throw new Error(`Heightmap fetch ${response.status}: ${url}`);
-  }
+  return decodeHeightmapBlob(blob, url);
+}
 
-  let blob: Blob;
-  try {
-    blob = await response.blob();
-  } catch (e) {
-    throw new Error(`Heightmap blob failed: ${e}`, { cause: e });
-  }
+// Guards against memory bombs: a hostile or accidental 20000×20000 PNG would
+// otherwise allocate a 1.6 GB Float32Array and take the tab down with it.
+const MAX_HEIGHTMAP_SIDE = 4096;
+const MAX_HEIGHTMAP_PIXELS = MAX_HEIGHTMAP_SIDE ** 2;
 
+export async function decodeHeightmapBlob(
+  blob: Blob,
+  url = 'heightmap'
+): Promise<HeightSamplerData> {
   let image: DecodedImage;
   try {
     image = await decodeImageBlob(blob);
@@ -134,6 +136,19 @@ export async function loadHeightmapFromUrl(
     throw new Error(
       `Heightmap decode failed (${blob.type}, ${blob.size}B): ${e}`,
       { cause: e }
+    );
+  }
+
+  if (
+    image.width <= 0 ||
+    image.height <= 0 ||
+    image.width > MAX_HEIGHTMAP_SIDE ||
+    image.height > MAX_HEIGHTMAP_SIDE ||
+    image.width * image.height > MAX_HEIGHTMAP_PIXELS
+  ) {
+    image.close();
+    throw new Error(
+      `Heightmap ${url} is ${image.width}x${image.height}; each side must be in [1, ${MAX_HEIGHTMAP_SIDE}]`
     );
   }
 
@@ -147,7 +162,11 @@ export async function loadHeightmapFromUrl(
           return c;
         })();
 
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) {
+    image.close();
+    throw new Error(`Heightmap ${url}: 2D canvas context unavailable`);
+  }
   ctx.drawImage(image.source as CanvasImageSource, 0, 0);
   image.close();
 

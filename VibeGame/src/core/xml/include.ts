@@ -148,9 +148,16 @@ async function loadAndExpand(
   return expandIncludes(fragment, options, [...stack, src], depth + 1);
 }
 
+/** Minimal fetch-like signature — avoids `typeof fetch`, whose Bun flavour
+ * carries extra members (e.g. `preconnect`) that plain wrappers lack. */
+export type FetchLike = (
+  input: RequestInfo | URL,
+  init?: RequestInit
+) => Promise<Response>;
+
 /** Browser fetch loader for site-root paths like `/world/cities/x.xml`. */
 export function createFetchIncludeLoader(
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: FetchLike = fetch
 ): IncludeLoader {
   return async (src: string) => {
     const res = await fetchImpl(src);

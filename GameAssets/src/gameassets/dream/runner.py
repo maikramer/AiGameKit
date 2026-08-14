@@ -10,14 +10,73 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
 from .emitter import emit_all
+from .planlint import SEVERITY_ERROR, asset_stage_chain, validate_plan
 from .planner import DreamPlan
 from .terrain_stage import TerrainConfig, TerrainStage
 
 console = Console()
+
+
+def _print_plan_summary(plan: DreamPlan, *, max_assets: int = 8) -> dict[str, Any]:
+    """Header de provenance + tabela de assets com a cadeia completa de stages."""
+    source_badge = {
+        "fallback": "[yellow]fallback[/yellow]",
+        "cache": "[cyan]cache[/cyan]",
+    }.get(plan.source, f"[green]{plan.source or 'plan'}[/green]")
+    if plan.source == "refine-failed":
+        source_badge = "[red]refine-failed[/red]"
+
+    header_bits = [f"source: {source_badge}"]
+    if plan.source_detail:
+        header_bits.append(f"({plan.source_detail})")
+    if plan.seed is not None:
+        header_bits.append(f"seed: [bold]{plan.seed}[/bold]")
+    console.print("  " + " — ".join(header_bits))
+
+    table = Table(title="Plano — assets x stages", box=box.SIMPLE, title_justify="left")
+    table.add_column("id", style="cyan", no_wrap=True)
+    table.add_column("kind", no_wrap=True)
+    table.add_column("stages")
+    for a in plan.assets:
+        chain = " → ".join(asset_stage_chain(a)) or "[dim]—[/dim]"
+        table.add_row(a.id, a.kind, chain)
+    if plan.assets:
+        console.print(table)
+
+    if plan.terrain is not None and plan.terrain.enabled:
+        console.print(
+            f"  terrain: [bold]on[/bold] — {plan.terrain.prompt or '(sem prompt)'}"
+            f" (world {plan.terrain.world_size}m, height {plan.terrain.max_height}m)"
+        )
+
+    lint_report: dict[str, Any] = {"repairs": list(plan.repairs), "issues": []}
+
+    if plan.repairs:
+        rep_table = Table(title="Auto-reparos do plano (pós-LLM)", box=box.SIMPLE, title_justify="left")
+        rep_table.add_column("repair", style="yellow")
+        for r in plan.repairs:
+            rep_table.add_row(r)
+        console.print(rep_table)
+
+    residual = validate_plan(plan, max_assets=max_assets)
+    lint_report["issues"] = [i.to_dict() for i in residual]
+    if residual:
+        issues_table = Table(title="Lint residual (não reparável)", box=box.SIMPLE, title_justify="left")
+        issues_table.add_column("sev", no_wrap=True)
+        issues_table.add_column("código", no_wrap=True)
+        issues_table.add_column("mensagem")
+        for i in residual:
+            sev = "[red]ERROR[/red]" if i.severity == SEVERITY_ERROR else "[yellow]WARN[/yellow]"
+            issues_table.add_row(sev, i.code, (f"[{i.asset_id}] " if i.asset_id else "") + i.message)
+        console.print(issues_table)
+
+    return lint_report
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +128,7 @@ def run_dream(
     with_audio: bool = True,
     dry_run: bool = False,
     fail_fast: bool = True,
+    max_assets: int = 8,
 ) -> dict[str, Any]:
     """Executa o pipeline completo ou dry-run (só ficheiros, sem GPU)."""
     output_dir = output_dir.resolve()
@@ -82,6 +142,13 @@ def run_dream(
         "project_dir": str(project_dir),
         "dry_run": dry_run,
         "steps": [],
+        "plan": {
+            "title": plan.title,
+            "genre": plan.genre,
+            "source": plan.source,
+            "source_detail": plan.source_detail,
+            "seed": plan.seed,
+        },
     }
 
     def _step(name: str, ok: bool = True, detail: str = "") -> None:
@@ -90,6 +157,9 @@ def run_dream(
         console.print(f"  {tag} {name}" + (f" — {detail}" if detail else ""))
 
     console.print(Panel(f"[bold]{plan.title}[/bold] — {plan.genre}", title="Dream", border_style="cyan"))
+
+    # --- 0. Resumo do plano: provenance + stages + lint (antes de queimar GPU) ---
+    report["lint"] = _print_plan_summary(plan, max_assets=max_assets)
 
     # --- 1. Emitir ficheiros do batch ---
     batch_dir.mkdir(parents=True, exist_ok=True)
@@ -112,7 +182,11 @@ def run_dream(
                 "Para gerar assets, corre:\n"
                 f"  cd {batch_dir}\n"
                 f"  gameassets batch --profile game.yaml --manifest manifest.yaml\n"
-                f"  gameassets handoff --profile game.yaml --manifest manifest.yaml --public-dir {public_dir}",
+                f"  gameassets handoff --profile game.yaml --manifest manifest.yaml --public-dir {public_dir}\n"
+                "\n"
+                "Para iterar no plano antes de gerar:\n"
+                f'  gameassets dream refine {plan_path} "add a dragon boss"\n'
+                f"  gameassets dream explain {plan_path}",
                 border_style="green",
                 title="Dream (dry-run)",
             )

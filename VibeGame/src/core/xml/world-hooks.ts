@@ -15,7 +15,6 @@
  */
 
 import type { ParsedElement } from './types';
-import type { findElements } from './traverser';
 
 /**
  * Mutates the expanded world root before entities are created.

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import * as path from 'path';
-import { Parent, State, parseXMLToEntities } from 'vibegame';
+import { Parent, RpgPlugins, State, parseXMLToEntities } from 'vibegame';
 import { DefaultPlugins } from 'vibegame/defaults';
 import { loadWorldFromFile } from '../../../src/cli/headless';
 
@@ -17,7 +17,9 @@ describe('loadWorldFromFile with Includes', () => {
     const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
     global.DOMParser = dom.window.DOMParser;
     state = new State();
-    for (const p of DefaultPlugins) {
+    // Discordia's districts use RPG recipes (e.g. <DialogueNPC>) — mirror the
+    // game's plugin stack: DefaultPlugins + RpgPlugins.
+    for (const p of [...DefaultPlugins, ...RpgPlugins]) {
       state.registerPlugin(p);
     }
   });
