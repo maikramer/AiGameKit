@@ -59,9 +59,7 @@ class TestResolveVramdStartCmd:
     def test_path_lookup_used_when_no_canonical(self) -> None:
         cmd, warning = _resolve_vramd_start_cmd(
             canonical_python=None,
-            path_lookup=lambda name: (
-                "/usr/local/bin/vramd" if name == "vramd" else None
-            ),
+            path_lookup=lambda name: "/usr/local/bin/vramd" if name == "vramd" else None,
             import_probe=lambda: True,
             sys_executable="/wrong/python",
         )

@@ -1,5 +1,3 @@
-
-
 class TestPreferFp8Preset:
     """hw-auto: uint8 → fp8 quando o hardware suporta (mesma VRAM, melhor qualidade)."""
 

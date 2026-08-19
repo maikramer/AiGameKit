@@ -36,7 +36,6 @@ from texture2d.prompt_enhancer import (
     looks_like_ground,
 )
 from texture2d.tileability import TileabilityReport, score_tileability
-from texture2d.vramd_payload import build_generate_request
 from texture2d.utils import (
     ensure_directory,
     format_bytes,
@@ -46,6 +45,7 @@ from texture2d.utils import (
     validate_params,
     validate_prompt,
 )
+from texture2d.vramd_payload import build_generate_request
 
 GIB = 1024**3
 

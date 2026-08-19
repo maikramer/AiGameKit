@@ -258,9 +258,7 @@ class TestResolveVramdCalibration:
         with patch("aigamekit_shared.gpu.gpu_total_mib", return_value=6 * 1024):
             assert ms.resolve_vramd_calibration().name == "backends-6g.yaml"
 
-    def test_nominal_label_matches_driver_vram_variants(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_nominal_label_matches_driver_vram_variants(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A etiqueta é a classe NOMINAL (6 GB): NVML total (6141 MiB) e o
         utilizável de uma RTX 4050 (~5772 MiB) continuam a casar com 6g."""
         monkeypatch.setattr(ms, "CALIBRATED_DIR", self._make_catalog(tmp_path, [6]))

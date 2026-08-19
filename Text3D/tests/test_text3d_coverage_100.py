@@ -27,8 +27,8 @@ from text3d.bbox_tune import (
     tune_hunyuan_for_bbox,
     voxel_meters,
 )
-from text3d.vramd_payload import build_generate_request
 from text3d.utils import mesh_metrics
+from text3d.vramd_payload import build_generate_request
 
 # --- target_voxel_for (24 casos) ---
 

@@ -293,9 +293,7 @@ class TestWithUmsPeakOpts:
         out = with_vramd_peak_opts({}, backend="paint3d", memory_efficient=True)
         assert out["sdnq_preset"] == "sdnq-fp8"
 
-    def test_calibration_signals_used_when_nothing_explicit(
-        self, tmp_path, monkeypatch
-    ) -> None:
+    def test_calibration_signals_used_when_nothing_explicit(self, tmp_path, monkeypatch) -> None:
         """hw-auto acertado: sem sinais explícitos, a calibração selecionada
         manda (quant match com o admit)."""
         from aigamekit_shared import vramd_client as ms

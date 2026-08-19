@@ -132,9 +132,7 @@ def test_vramd_payload_memory_efficient_fp8_upgrade(monkeypatch: pytest.MonkeyPa
     from aigamekit_shared import vramd_load
     from text2d.vramd_payload import build_generate_request
 
-    monkeypatch.setattr(
-        vramd_load, "prefer_fp8_preset", lambda p: "sdnq-fp8" if p == "sdnq-uint8" else p
-    )
+    monkeypatch.setattr(vramd_load, "prefer_fp8_preset", lambda p: "sdnq-fp8" if p == "sdnq-uint8" else p)
 
     req = build_generate_request(prompt="p", output="o.png", memory_efficient=True)
     assert req["memory_efficient"] is True

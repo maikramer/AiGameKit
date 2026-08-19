@@ -23,8 +23,8 @@ from text2sound.prompt_enhancer import (
     enhance_prompt,
     validate_and_correct,
 )
-from text2sound.vramd_payload import build_generate_request
 from text2sound.utils import format_duration, generate_output_path
+from text2sound.vramd_payload import build_generate_request
 
 # --- format_duration (35 casos) ---
 
