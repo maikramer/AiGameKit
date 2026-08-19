@@ -54,15 +54,15 @@ Gerado: 2026-07-29. Inventário factual de `public/assets/` + ligações em `pub
 
 ## Texturas, ícones, céu, terreno
 
-| Pasta                | Conteúdo                                              | Uso                                   |
-| -------------------- | ----------------------------------------------------- | ------------------------------------- |
-| `/assets/textures/`  | 10 albedos + mapas PBR (`pbr_*`)                      | Composition cidade, terreno, estradas |
-| `/assets/terrain/`   | `heightmap.png`, `heightmap.base.png`, `terrain.json` | `<Terrain>` em index.html             |
-| `/assets/sky/`       | `sky.png`                                             | `environment.xml` equirect            |
-| `/assets/icons/`     | 23 ícones HUD/inventário (.png + .json)               | HUD, loot                             |
-| `/assets/images/`    | 82 previews Text2D por asset id                       | UI/wiki, não runtime 3D               |
-| `/assets/particles/` | 52 sprites                                            | `<ParticleSystem preset>`             |
-| `/assets/audio/`     | BGM + SFX (.ogg)                                      | `environment.xml`, combate            |
+| Pasta                | Conteúdo                                | Uso                                   |
+| -------------------- | --------------------------------------- | ------------------------------------- |
+| `/assets/textures/`  | 10 albedos + mapas PBR (`pbr_*`)        | Composition cidade, terreno, estradas |
+| `/assets/terrain/`   | `terrain.ahgt`, `terrain.json`          | `<Terrain>` em index.html             |
+| `/assets/sky/`       | `sky.png`                               | `environment.xml` equirect            |
+| `/assets/icons/`     | 23 ícones HUD/inventário (.png + .json) | HUD, loot                             |
+| `/assets/images/`    | 82 previews Text2D por asset id         | UI/wiki, não runtime 3D               |
+| `/assets/particles/` | 52 sprites                              | `<ParticleSystem preset>`             |
+| `/assets/audio/`     | BGM + SFX (.ogg)                        | `environment.xml`, combate            |
 
 Texturas principais: `vale_grass`, `forest_floor`, `desert_sand`, `swamp_mud`, `snow_peak`, `mountain_stone`, `cobblestone_road`, `wall_plaster`, `wood_planks`, `roof_tiles`.
 
@@ -233,8 +233,9 @@ Texturas principais: `vale_grass`, `forest_floor`, `desert_sand`, `swamp_mud`, `
 
 ### Interiores (grupo `manifests/interiors.yaml` — salas em `world/interiors.xml`)
 
-Zona remota: z=120 (capela / forja / casa_a), z=175 (casas b/c, cabana),
-z=230 (celeiro, longhouse, banca). y≈150.6; portais das portas → salas;
+Cena à parte, fora do terreno (x≈3017..3168, mapa ±2000), fechada numa caixa
+preta: z=120 (capela / forja / casa_a), z=175 (casas b/c, cabana),
+z=230 (celeiro, longhouse, banca). y=0; portais das portas → salas;
 saída teleporta de volta (`portal.exit_*`). GLBs em `/assets/meshes/interiors/`
 (lod0→collision por id). Bancas a/b/c partilham uma sala; F na saída volta à
 porta de entrada.

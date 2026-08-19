@@ -99,10 +99,10 @@
   ></Road>
 
   <!-- ============================================================
-       SUL — Pântano
+       OESTE — Pântano
        ============================================================ -->
   <Road
-    path="0 -184 -16 -208 -48 -214 -76 -244 -92 -260"
+    path="-184 0 -208 16 -214 48 -244 76 -260 92"
     width="4"
     flatten="0"
     texture-scale="6"
@@ -114,7 +114,7 @@
     normal-map-url="/assets/textures/pbr_swamp_mud/swamp_mud_normal.png"
   ></Road>
   <Road
-    path="18 -220 44 -200 52 -188"
+    path="-220 -18 -200 -44 -188 -52"
     width="4"
     flatten="0"
     texture-scale="6"
@@ -127,10 +127,10 @@
   ></Road>
 
   <!-- ============================================================
-       OESTE — Picos Gelados
+       SUL — Picos Gelados
        ============================================================ -->
   <Road
-    path="-208 2 -208 32 -214 54"
+    path="-2 -208 -32 -208 -54 -214"
     width="4"
     flatten="0"
     texture-scale="6"
@@ -143,7 +143,7 @@
   ></Road>
   <!-- Termina na margem N do Lago Gelado (-184,-68 r=22) — não dentro da água. -->
   <Road
-    path="-208 2 -186 -40 -184 -42"
+    path="-2 -208 40 -186 42 -184"
     width="4"
     flatten="0"
     texture-scale="6"
@@ -155,7 +155,7 @@
     normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
   ></Road>
   <Road
-    path="-208 2 -180 26 -174 38"
+    path="-2 -208 -26 -180 -38 -174"
     width="4"
     flatten="0"
     texture-scale="6"

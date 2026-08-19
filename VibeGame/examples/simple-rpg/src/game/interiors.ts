@@ -43,23 +43,26 @@ export type InteriorId =
   | 'exit_market_stall_c';
 
 const REGISTRY: Partial<Record<InteriorId, InteriorSpawn | null>> = {
-  // Salas autoradas em public/world/interiors.xml (zona remota, grelha 60×55).
+  // Salas autoradas em public/world/interiors.xml — cena à parte, FORA do
+  // terreno (x≈3017..3168; o mapa é ±2000) e fechada numa caixa preta.
   // Shells: chapel 24×18, forge 22×16, house 20×16, barn/longhouse 28×20,
-  // market 18×14. Paredes 0.70 m, sem teto, vão −Z. y = fallback; resolveFeetY
-  // + TerrainPad (~150.6) ancoram o spawn. Spawn no CENTRO: anti-bounce F
-  // (alcance portal 2.8 m; exit no vão ≈ 0.9 m para dentro da parede sul).
-  chapel: { x: -410, y: 150.6, z: 120 },
-  village_forge: { x: -350, y: 150.6, z: 120 },
-  house_a: { x: -470, y: 150.6, z: 120 },
-  house_b: { x: -470, y: 150.6, z: 175 },
-  house_c: { x: -410, y: 150.6, z: 175 },
-  shepherd_cottage: { x: -350, y: 150.6, z: 175 },
-  village_barn: { x: -470, y: 150.6, z: 230 },
-  longhouse: { x: -405, y: 150.6, z: 230 },
+  // market 18×14. Paredes 0.70 m, sem teto, vão −Z. y=0 porque fora dos
+  // limites do heightmap `sampleHeightAt` devolve 0 e o chão de cada sala é
+  // o <Pad> a 0.12 m; resolveFeetY ancora o spawn nesse collider (já não há
+  // TerrainPad). Spawn no CENTRO: anti-bounce F (alcance portal 2.8 m;
+  // exit no vão ≈ 0.9 m para dentro da parede sul).
+  chapel: { x: 857, y: 153, z: 226 },
+  village_forge: { x: 917, y: 153, z: 226 },
+  house_a: { x: 797, y: 153, z: 226 },
+  house_b: { x: 797, y: 153, z: 281 },
+  house_c: { x: 857, y: 153, z: 281 },
+  shepherd_cottage: { x: 917, y: 153, z: 281 },
+  village_barn: { x: 797, y: 153, z: 336 },
+  longhouse: { x: 862, y: 153, z: 336 },
   // Três bancas partilham a mesma sala; a saída volta à porta de entrada.
-  market_stall_a: { x: -340, y: 150.6, z: 230 },
-  market_stall_b: { x: -340, y: 150.6, z: 230 },
-  market_stall_c: { x: -340, y: 150.6, z: 230 },
+  market_stall_a: { x: 927, y: 153, z: 336 },
+  market_stall_b: { x: 927, y: 153, z: 336 },
+  market_stall_c: { x: 927, y: 153, z: 336 },
   // Saídas → portas exteriores (portals.xml).
   exit_chapel: { x: 7.46, y: 0, z: 22.46 },
   exit_village_forge: { x: -30.47, y: 0, z: -29.06 },

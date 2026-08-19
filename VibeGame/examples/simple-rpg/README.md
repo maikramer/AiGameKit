@@ -27,42 +27,42 @@ upload a new release, and update `assets.lock.json` (`version` + `url` + `sha256
 
 ## What is in the scene
 
-| Element                                    | Source / Plugin                          | How it loads                                                                                                               |
-| ------------------------------------------ | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Terrain (2 km, quadtree LOD)               | Built-in `<Terrain>`                     | Declarative in `index.html` shell (`world-base`; heightmap under `public/assets/terrain/`)                                 |
-| Sky IBL + background                       | Skymap2D (equirect PNG) + `sky` plugin   | `<EquirectSky>` in `public/world/environment.xml`                                                                          |
-| NavMesh                                    | `NavMeshPlugin`                          | `<NavMesh>` in `index.html` (`world-base`)                                                                                 |
-| World layout (city, biomes, spawn)         | `<Include>` + city-layout recipes        | Fragments under `public/world/` (see that folder’s `context.md`)                                                           |
-| Player (animated GLB + WASD)               | Built-in `<PlayerGLTF>`                  | **LOD0 only:** `<PlayerGLTF name="hero" model-url="/assets/meshes/characters/hero_lod0.glb">` (no `lod1-url` / `lod2-url`) |
-| Third-person camera + post-fx              | Built-in `<ThirdPersonCamera>`           | Declarative (bloom, vignette, SSAO, AGX tonemap; `<PostFxDebugToggle>` cycles effects on 1-6)                              |
-| Audio mixer + layered music                | Engine audio plugin                      | `<AudioMixer>` + `<MusicLayer layer="explore\|battle">` (crossfaded by biome)                                              |
-| Central walled city                        | `<Composition>` + city-layout + includes | Walls ±32, 4 gates, districts under `public/world/cities/discordia/`                                                       |
-| Settlement pad                             | `terrain` plugin                         | `<TerrainPad size="96 96" falloff="16" corner-radius="14">` — soft flatten under the city (not a hard plateau)             |
-| Spawn exclusion (city)                     | `spawner` plugin                         | `<SpawnExclusion at="0 0" radius="42">` (sync `villageZones` in `src/main.ts`)                                             |
-| Peri-urban skirts                          | `cities/discordia/skirts.xml`            | Gardens, bushes, market clutter just outside the walls                                                                     |
-| City merchant                              | Entity script                            | `<GameObject name="merchant" script="merchant.ts">` (press **K** to trade)                                                 |
-| City notice board                          | Entity script                            | `<GameObject name="notice_board" script="notice-board.ts">` (press **F** — repeatable watch bounties)                      |
-| City healer                                | Entity script                            | `<GameObject name="npc_healer" script="healer.ts">` (press **F** — full heal for gold)                                     |
-| City blacksmith                            | `quests` plugin                          | `<DialogueNPC dialogue-id="city_stone">` on `npc_blacksmith` (press **F**)                                                 |
-| Plaza campfire                             | Entity script                            | `<GameObject name="campfire" script="campfire.ts">` (press **H** — rest + travel to marked Nota landmarks)                 |
-| Plaza well                                 | Entity script                            | `<GameObject name="well" script="well.ts">` (press **F** — sip heal, short cooldown)                                       |
-| Forge anvil                                | Entity script                            | `<GameObject name="anvil" script="anvil.ts">` (press **K** — 2 stone + 1 wood → bomb)                                      |
-| Watchtower guard                           | Entity script                            | `<GameObject name="npc_guard" script="watch-guard.ts">` (press **F** — pin the four gates on the compass)                  |
+| Element                                    | Source / Plugin                          | How it loads                                                                                                                            |
+| ------------------------------------------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Terrain (2 km, quadtree LOD)               | Built-in `<Terrain>`                     | Declarative in `index.html` shell (`world-base`; heightmap under `public/assets/terrain/`)                                              |
+| Sky IBL + background                       | Skymap2D (equirect PNG) + `sky` plugin   | `<EquirectSky>` in `public/world/environment.xml`                                                                                       |
+| NavMesh                                    | `NavMeshPlugin`                          | `<NavMesh>` in `index.html` (`world-base`)                                                                                              |
+| World layout (city, biomes, spawn)         | `<Include>` + city-layout recipes        | Fragments under `public/world/` (see that folder’s `context.md`)                                                                        |
+| Player (animated GLB + WASD)               | Built-in `<PlayerGLTF>`                  | **LOD0 only:** `<PlayerGLTF name="hero" model-url="/assets/meshes/characters/hero_lod0.glb">` (no `lod1-url` / `lod2-url`)              |
+| Third-person camera + post-fx              | Built-in `<ThirdPersonCamera>`           | Declarative (bloom, vignette, SSAO, AGX tonemap; `<PostFxDebugToggle>` cycles effects on 1-6)                                           |
+| Audio mixer + layered music                | Engine audio plugin                      | `<AudioMixer>` + `<MusicLayer layer="explore\|battle">` (crossfaded by biome)                                                           |
+| Central walled city                        | `<Composition>` + city-layout + includes | Walls ±32, 4 gates, districts under `public/world/cities/discordia/`                                                                    |
+| Settlement pad                             | `terrain` plugin                         | `<TerrainPad size="96 96" falloff="16" corner-radius="14">` — soft flatten under the city (not a hard plateau)                          |
+| Spawn exclusion (city)                     | `spawner` plugin                         | `<SpawnExclusion at="0 0" radius="42">` (sync `villageZones` in `src/main.ts`)                                                          |
+| Peri-urban skirts                          | `cities/discordia/skirts.xml`            | Gardens, bushes, market clutter just outside the walls                                                                                  |
+| City merchant                              | Entity script                            | `<GameObject name="merchant" script="merchant.ts">` (press **K** to trade)                                                              |
+| City notice board                          | Entity script                            | `<GameObject name="notice_board" script="notice-board.ts">` (press **F** — repeatable watch bounties)                                   |
+| City healer                                | Entity script                            | `<GameObject name="npc_healer" script="healer.ts">` (press **F** — full heal for gold)                                                  |
+| City blacksmith                            | `quests` plugin                          | `<DialogueNPC dialogue-id="city_stone">` on `npc_blacksmith` (press **F**)                                                              |
+| Plaza campfire                             | Entity script                            | `<GameObject name="campfire" script="campfire.ts">` (press **H** — rest + travel to marked Nota landmarks)                              |
+| Plaza well                                 | Entity script                            | `<GameObject name="well" script="well.ts">` (press **F** — sip heal, short cooldown)                                                    |
+| Forge anvil                                | Entity script                            | `<GameObject name="anvil" script="anvil.ts">` (press **K** — 2 stone + 1 wood → bomb)                                                   |
+| Watchtower guard                           | Entity script                            | `<GameObject name="npc_guard" script="watch-guard.ts">` (press **F** — pin the four gates on the compass)                               |
 | Building interiors                         | `interiors.xml` + `building-portal.ts`   | **F** at any city door → authored room (houses, chapel, forge, barn, longhouse, market). **F** at the exit marker returns to that door. |
-| Interactables (rune pillar, shrine, chest) | Entity scripts + trimesh colliders       | `<GameObject script="…">` (press **F** to interact)                                                                        |
-| Valley carpet (grass / flowers)            | Smart `<Vegetation>`                     | Ring ±58 (`spawn/ring.xml`, high `density-per-km2`); biomes in `vegetation/crystal-vale.xml`; wind on                      |
-| Biome clutter (props / debris)             | `<StaticSpawner>` / `<Composition>`      | `public/world/clutter/crystal-vale.xml` — mushrooms, bushes, crates, rocks outside ±58                                     |
-| Ambient atmosphere FX                      | `<ParticleSystem>`                       | `public/world/atmosphere/ambient-fx.xml` — desert `ground-dust`, forest fireflies, witch smoke                             |
-| Static resources (trees, rocks, cacti)     | `<StaticSpawner>` + `<ResourceNode>`     | Valley ring ±58; biomes outside ±58. Fall trees: `*_lod0` (`Stump`+`Top`) + `*_stump_collision`; rocks keep full hull      |
-| Biome enemies (animated)                   | `<DynamicSpawner>` + scripts + LOD×3     | Same ground path as trees (`profile="creature"` / AABB); child LOD×3; `creature.ts` = AI/anim only (no boot Y snap)        |
-| Biome regions (fog/ambient/BGM/clouds)     | `biomes` + `weather` plugins             | `<BiomeRegion … clouds rain>` x4; Weather drifts clouds globally, biomes override coverage                                 |
-| Quest NPCs + dialogue (16 biome + 1 smith) | `quests` plugin                          | `<DialogueNPC>` inside `<Composition>` + `<DialogueBalloon>`                                                               |
-| Bosses (4)                                 | Scripts + LOD×3 GLTFLoader               | Same LOD pattern as enemies: witch, sand-worm, bog-warden, ogre (`boss.ts`)                                                |
-| HUD widgets                                | `hud` plugin                             | `<HealthBar>`, `<XpBar>`, `<ResourceChip>` (gold/wood/stone), `<Minimap>`, `<Compass>`, `<BossBar>`, `<InteractionPrompt>` |
-| Pause menu (tabbed modal)                  | `hud` plugin                             | `<TabbedModal key="q">` with Skills, Inventory, Options, Quests tabs                                                       |
-| Particles                                  | Engine particle system                   | Combat/destructible bursts + ambient `ground-dust` / fireflies (Kenney sprites under `public/assets/particles/`)           |
-| Save / Load                                | `SaveLoadPlugin`                         | Buttons in the pause menu **Options** tab (localStorage + msgpackr)                                                        |
-| Localized messages (EN/PT)                 | `i18n` plugin                            | `loadDictionary` + auto-detected locale                                                                                    |
+| Interactables (rune pillar, shrine, chest) | Entity scripts + trimesh colliders       | `<GameObject script="…">` (press **F** to interact)                                                                                     |
+| Valley carpet (grass / flowers)            | Smart `<Vegetation>`                     | Ring ±58 (`spawn/ring.xml`, high `density-per-km2`); biomes in `vegetation/crystal-vale.xml`; wind on                                   |
+| Biome clutter (props / debris)             | `<StaticSpawner>` / `<Composition>`      | `public/world/clutter/crystal-vale.xml` — mushrooms, bushes, crates, rocks outside ±58                                                  |
+| Ambient atmosphere FX                      | `<ParticleSystem>`                       | `public/world/atmosphere/ambient-fx.xml` — desert `ground-dust`, forest fireflies, witch smoke                                          |
+| Static resources (trees, rocks, cacti)     | `<StaticSpawner>` + `<ResourceNode>`     | Valley ring ±58; biomes outside ±58. Fall trees: `*_lod0` (`Stump`+`Top`) + `*_stump_collision`; rocks keep full hull                   |
+| Biome enemies (animated)                   | `<DynamicSpawner>` + scripts + LOD×3     | Same ground path as trees (`profile="creature"` / AABB); child LOD×3; `creature.ts` = AI/anim only (no boot Y snap)                     |
+| Biome regions (fog/ambient/BGM/clouds)     | `biomes` + `weather` plugins             | `<BiomeRegion … clouds rain>` x4; Weather drifts clouds globally, biomes override coverage                                              |
+| Quest NPCs + dialogue (16 biome + 1 smith) | `quests` plugin                          | `<DialogueNPC>` inside `<Composition>` + `<DialogueBalloon>`                                                                            |
+| Bosses (4)                                 | Scripts + LOD×3 GLTFLoader               | Same LOD pattern as enemies: witch, sand-worm, bog-warden, ogre (`boss.ts`)                                                             |
+| HUD widgets                                | `hud` plugin                             | `<HealthBar>`, `<XpBar>`, `<ResourceChip>` (gold/wood/stone), `<Minimap>`, `<Compass>`, `<BossBar>`, `<InteractionPrompt>`              |
+| Pause menu (tabbed modal)                  | `hud` plugin                             | `<TabbedModal key="q">` with Skills, Inventory, Options, Quests tabs                                                                    |
+| Particles                                  | Engine particle system                   | Combat/destructible bursts + ambient `ground-dust` / fireflies (Kenney sprites under `public/assets/particles/`)                        |
+| Save / Load                                | `SaveLoadPlugin`                         | Buttons in the pause menu **Options** tab (localStorage + msgpackr)                                                                     |
+| Localized messages (EN/PT)                 | `i18n` plugin                            | `loadDictionary` + auto-detected locale                                                                                                 |
 
 ## Mesh LOD policy (hero vs enemies)
 
@@ -105,9 +105,14 @@ Canonical paths: `/assets/meshes/{id}_lod0.glb` (not `_rigged_animated` for runt
 
 ### 1. Review the plan
 
-The scene layout and assets were planned with **`gameassets dream`** (dry-run, no GPU) and then refined per biome. The source manifests live in `sample-gameassets/`. Forest, village and infra
-are **symlinks** to [`examples/shared-assets/`](../shared-assets/README.md)
-(same packs as simple-racer). Regen those groups from this `cwd`:
+The scene layout and assets were planned with **`gameassets dream`** (dry-run, no GPU) and then refined per biome. The source manifests live in `sample-gameassets/`. Forest, village, infra, terrain and the generic props (rock_mossy) are **symlinks** to [`examples/shared-assets/`](../shared-assets/README.md)
+(same packs as simple-racer). Regen those groups from `examples/shared-assets/`
+and copy the binaries with `shared-assets/sync.sh`. On this machine the shared-pack
+binaries themselves resolve via symlinks into `shared-assets/public/assets/`
+(single copy on disk); a fresh clone restores them via `bun run setup`, which
+installs the Release through a staging dir — shared packs go to the
+shared-assets pool in fill-if-missing mode (the Release never overwrites the
+pool) and the symlinks are re-created.
 
 ```
 sample-gameassets/
@@ -115,14 +120,14 @@ sample-gameassets/
   manifests/                     # 1 manifesto por grupo (~20 assets); cada um define a sua pasta
     characters.yaml              # herói, NPCs, criaturas e bosses  → meshes/characters/
     village.yaml                 # symlink → examples/shared-assets/manifests/village.yaml
-    props.yaml                   # armas, ferramentas, itens        → meshes/props/
+    props.yaml                   # symlink → examples/shared-assets (rock_mossy)
+    props-rpg.yaml               # armas, ferramentas, itens RPG    → meshes/props/
     forest.yaml                  # symlink → examples/shared-assets/manifests/forest.yaml
     desert.yaml                  # Deserto                          → meshes/desert/
     swamp.yaml                   # Pântano                          → meshes/swamp/
-    terrain.yaml                 # formações rochosas / terreno     → meshes/terrain/
+    terrain.yaml                 # symlink → examples/shared-assets (formações rochosas)
     infra.yaml                   # symlink → examples/shared-assets/manifests/infra.yaml
     audio.yaml                   # BGM/SFX (Text2Sound)             → public/assets/audio/
-  presets-local.yaml             # Local quality/preset overrides
 # GLB/PNG por grupo em public/assets/{meshes,images}/<grupo>/ (local, gitignored).
 # Only small JSON metadata is committed.
 ```
@@ -137,8 +142,10 @@ cd VibeGame/examples/simple-rpg/sample-gameassets
 # 2D images + 3D meshes + PBR textures + rigging + animation
 # (um comando por grupo; resume é idempotente — só gera o que falta)
 gameassets batch --profile game.yaml --manifest manifests/characters
-gameassets batch --profile game.yaml --manifest manifests/village
-# ... manifests/{props,forest,desert,swamp,terrain,infra,audio}.yaml
+gameassets batch --profile game.yaml --manifest manifests/props-rpg
+# ... manifests/{desert,swamp,interiors,audio}.yaml
+# Packs partilhados (forest/village/infra/terrain/props): regen em
+# examples/shared-assets + bash examples/shared-assets/sync.sh (ver README lá)
 
 # Sky (separate CLI): write directly into public/assets/sky/
 skymap2d generate "bright blue sky with soft clouds over green plains, equirectangular 360" -o ../public/assets/sky/sky.png
@@ -167,7 +174,7 @@ public/
     particles/          # Kenney CC0 sprites (flame, smoke, spark, …) for particle presets
     audio/              # Text2Sound WAV/OGG
     sky/sky.png
-    terrain/            # heightmap.png + terrain.json
+    terrain/            # terrain.ahgt + terrain.json
     gameassets_handoff.json   # URLs + bloco `precompute` por asset (ver abaixo)
 ```
 
@@ -309,7 +316,7 @@ __VIBEGAME__.profiler.worldSnapshot()  // player / camera / nearby
 __VIBEGAME__.profiler.download()
 ```
 
-Filter the systems list for `terrain`, `vegetation`, `render`, or `rpg/` (game-side spans on hero snap, combat feedback, BGM). Audio E2E: `tests/playwright/audio-spatial.spec.ts`.
+Filter the systems list for `terrain`, `vegetation`, `render`, or `rpg/` (game-side spans on hero snap, combat feedback, BGM). Audio E2E: `playwright/audio-spatial.spec.ts`.
 
 ## World maps (`public/world/`)
 

@@ -3,10 +3,25 @@
 
   O corredor |z| ≲ 16 é o caminho até à arena do ogro. Os landmarks marcam
   esse percurso (mojões), premeiam o desvio (mina de cristal, lago gelado) e
-  fecham com a arena. Coordenadas espelhadas em FLAT_ZONES de
-  scripts/sculpt_terrain.py.
+  fecham com a arena. O relevo vem cru do Terrain3D — não há patamares
+  esculpidos por baixo destas coordenadas.
 -->
 <Group name="biome.peaks.landmarks" pos="0 0 0">
+  <!-- ============================================================
+       §0 PATAMARES — substituem o antigo FLAT_ZONES do sculpt
+       O relevo é agora 100% Terrain3D e este bioma caiu no quadrante
+       mais íngreme (19-21° de declive médio). Estes quatro pontos
+       ficavam em encosta de 23-28°, o que punha a arena do chefe
+       inclinada e os props em bico. <TerrainPad> resolve na engine,
+       sem tocar no heightmap: achata só o disco do landmark e faz
+       falloff de volta ao relevo real. Mover um landmark abaixo
+       obriga a mover o seu pad.
+       ============================================================ -->
+  <TerrainPad at="-12 -290" size="76 76" falloff="34" corner-radius="24"></TerrainPad>
+  <TerrainPad at="-28 -300" size="44 44" falloff="26" corner-radius="16"></TerrainPad>
+  <TerrainPad at="12 -244" size="40 40" falloff="24" corner-radius="14"></TerrainPad>
+  <TerrainPad at="-32 -280" size="36 36" falloff="22" corner-radius="12"></TerrainPad>
+
   <!-- ============================================================
        §1 MOJÕES DO CORREDOR (-78,-4) (-100,3) (-122,-6)
        Montes de pedra que marcam o caminho na neblina — a leitura
@@ -14,7 +29,7 @@
        ============================================================ -->
   <GameObject
     name="peaks-cairn-1"
-    place="at: -156 -8; align-to-terrain: 1"
+    place="at: 8 -156; align-to-terrain: 1"
     transform="scale: 1.6 1.6 1.6"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base"
@@ -23,8 +38,8 @@
   </GameObject>
   <GameObject
     name="peaks-cairn-2"
-    place="at: -200 6; align-to-terrain: 1"
-    transform="rotation: 0 40 0; scale: 1.6 1.6 1.6"
+    place="at: -6 -200; align-to-terrain: 1"
+    transform="rotation: 0 310 0; scale: 1.6 1.6 1.6"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base"
   >
@@ -32,8 +47,8 @@
   </GameObject>
   <GameObject
     name="peaks-cairn-3"
-    place="at: -244 -12; align-to-terrain: 1"
-    transform="rotation: 0 -25 0; scale: 1.6 1.6 1.6"
+    place="at: 12 -244; align-to-terrain: 1"
+    transform="rotation: 0 245 0; scale: 1.6 1.6 1.6"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base"
   >
@@ -41,8 +56,8 @@
   </GameObject>
   <GameObject
     name="peaks-stack-a"
-    place="at: -178 -4; align-to-terrain: 1"
-    transform="rotation: 0 18 0"
+    place="at: 4 -178; align-to-terrain: 1"
+    transform="rotation: 0 288 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base"
   >
@@ -50,8 +65,8 @@
   </GameObject>
   <GameObject
     name="peaks-stack-b"
-    place="at: -222 2; align-to-terrain: 1"
-    transform="rotation: 0 -30 0"
+    place="at: -2 -222; align-to-terrain: 1"
+    transform="rotation: 0 240 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base"
   >
@@ -65,8 +80,8 @@
        ============================================================ -->
   <GameObject
     name="peaks-goblin-outpost"
-    place="at: -172 44; align-to-terrain: 0"
-    transform="rotation: 0 -40 0; scale: 0.85 0.85 0.85"
+    place="at: -44 -172; align-to-terrain: 0"
+    transform="rotation: 0 230 0; scale: 0.85 0.85 0.85"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base"
   >
@@ -80,13 +95,13 @@
     ></GLTFLoader>
   </GameObject>
   <GameObject
-    place="at: -172 38; align-to-terrain: 1"
+    place="at: -38 -172; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/village/iron_brazier_lod0.glb" lod1-url="/assets/meshes/village/iron_brazier_lod1.glb" lod2-url="/assets/meshes/village/iron_brazier_lod2.glb"></GLTFLoader>
   </GameObject>
-  <Composition place="at: -172 38; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -38 -172; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 0.9 0" point-light="color: 0xff8a33; intensity: 2.2; distance: 12; decay: 2"></PointLight>
   </Composition>
   <!-- Chama do braseiro. Estava em "at: -86 16.2" — 2.8 m ao lado do braseiro
@@ -94,7 +109,7 @@
        o iron_brazier tem 1.10 m e o bordo da taça é o topo: a chama nascia
        enterrada no metal. Agora coincide em XZ e assenta a y=1.00, dentro da
        taça (raio interior ≈0.30). -->
-  <GameObject place="at: -172 38; align-to-terrain: 1">
+  <GameObject place="at: -38 -172; align-to-terrain: 1">
     <ParticleSystem
       preset="fire"
       transform="pos: 0 1.00 0"
@@ -102,7 +117,7 @@
     ></ParticleSystem>
   </GameObject>
   <GameObject
-    place="at: -178 40; align-to-terrain: 1"
+    place="at: -40 -178; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
   >
@@ -110,14 +125,14 @@
   </GameObject>
   <!-- Afloramento na encosta norte, atrás do posto — ancora a torre à montanha. -->
   <GameObject
-    place="at: -166 54; align-to-terrain: 1"
-    transform="rotation: 0 -15 0; scale: 1.4 1.4 1.4"
+    place="at: -54 -166; align-to-terrain: 1"
+    transform="rotation: 0 255 0; scale: 1.4 1.4 1.4"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_cliff_1_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/terrain/form_cliff_1_lod0.glb" lod1-url="/assets/meshes/terrain/form_cliff_1_lod1.glb" lod2-url="/assets/meshes/terrain/form_cliff_1_lod2.glb"></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="-172 42" radius="20"></SpawnExclusion>
+  <SpawnExclusion at="-42 -172" radius="20"></SpawnExclusion>
 
   <!-- ============================================================
        §3 MINA DE CRISTAL (-108, 30)
@@ -126,8 +141,8 @@
        ============================================================ -->
   <GameObject
     name="peaks-crystal-mine"
-    place="at: -216 60; align-to-terrain: 0"
-    transform="rotation: 0 -55 0"
+    place="at: -60 -216; align-to-terrain: 0"
+    transform="rotation: 0 215 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/terrain/crystal_mine_entrance_collision.glb; mesh-anchor: base"
   >
@@ -140,39 +155,39 @@
   </GameObject>
   <!-- Afloramentos que ancoram a boca de mina à encosta. -->
   <GameObject
-    place="at: -230 68; align-to-terrain: 1"
-    transform="rotation: 0 20 0; scale: 1.6 1.6 1.6"
+    place="at: -68 -230; align-to-terrain: 1"
+    transform="rotation: 0 290 0; scale: 1.6 1.6 1.6"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_cliff_20_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/terrain/form_cliff_20_lod0.glb" lod1-url="/assets/meshes/terrain/form_cliff_20_lod1.glb" lod2-url="/assets/meshes/terrain/form_cliff_20_lod2.glb"></GLTFLoader>
   </GameObject>
   <!-- veio exposto ao lado da boca -->
-  <GameObject place="at: -222 55; align-to-terrain: 1" transform="scale: 3.2 3.2 3.2">
+  <GameObject place="at: -55 -222; align-to-terrain: 1" transform="scale: 3.2 3.2 3.2">
     <GLTFLoader role="visual" url="/assets/meshes/props/crystal_blue_lod0.glb" lod1-url="/assets/meshes/props/crystal_blue_lod1.glb" lod2-url="/assets/meshes/props/crystal_blue_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -211 54; align-to-terrain: 1" transform="scale: 2.4 2.4 2.4">
+  <GameObject place="at: -54 -211; align-to-terrain: 1" transform="scale: 2.4 2.4 2.4">
     <GLTFLoader role="visual" url="/assets/meshes/props/crystal_blue_lod0.glb" lod1-url="/assets/meshes/props/crystal_blue_lod1.glb" lod2-url="/assets/meshes/props/crystal_blue_lod2.glb"></GLTFLoader>
   </GameObject>
-  <Composition place="at: -216 56; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -56 -216; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.6 0" point-light="color: 0x5ab0ff; intensity: 2.4; distance: 20; decay: 2"></PointLight>
   </Composition>
-  <GameObject place="at: -216 56"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -56 -216"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
   <GameObject
-    place="at: -208 64; align-to-terrain: 1"
+    place="at: -64 -208; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
-    place="at: -211 68; align-to-terrain: 1"
+    place="at: -68 -211; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="-216 60" radius="22"></SpawnExclusion>
+  <SpawnExclusion at="-60 -216" radius="22"></SpawnExclusion>
 
   <!-- ============================================================
        §4 LAGO GELADO (-92, -34)
@@ -180,7 +195,7 @@
        cairn de gelo. Recompensa mística ([F]).
        ============================================================ -->
   <Lake
-    at="-184 -68"
+    at="68 -184"
     radius="22"
     depth="2.2"
     water-offset="0.4"
@@ -192,8 +207,8 @@
     profile="tree"
     count="28"
     seed="9201"
-    region-min="-212 0 -96"
-    region-max="-156 0 -40"
+    region-min="40 0 -212"
+    region-max="96 0 -156"
     near-water="1"
     avoid-water="0"
     align-to-terrain="1"
@@ -214,26 +229,26 @@
   </StaticSpawner>
   <GameObject
     name="peaks-frost-cairn"
-    place="at: -176 -60; align-to-terrain: 1"
+    place="at: 60 -176; align-to-terrain: 1"
     script="poi/frost-cairn.ts"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base"
   ></GameObject>
-  <SpawnExclusion at="-184 -68" radius="26"></SpawnExclusion>
+  <SpawnExclusion at="68 -184" radius="26"></SpawnExclusion>
 
   <!-- ============================================================
        §5 JAZIDA DE CRISTAIS (-95, 13) — landmark existente
        ============================================================ -->
-  <GameObject place="at: -190 24; align-to-terrain: 1" transform="scale: 2.6 2.6 2.6">
+  <GameObject place="at: -24 -190; align-to-terrain: 1" transform="scale: 2.6 2.6 2.6">
     <GLTFLoader role="visual" url="/assets/meshes/props/crystal_blue_lod0.glb" lod1-url="/assets/meshes/props/crystal_blue_lod1.glb" lod2-url="/assets/meshes/props/crystal_blue_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -194 29; align-to-terrain: 1" transform="scale: 2.0 2.0 2.0">
+  <GameObject place="at: -29 -194; align-to-terrain: 1" transform="scale: 2.0 2.0 2.0">
     <GLTFLoader role="visual" url="/assets/meshes/props/crystal_blue_lod0.glb" lod1-url="/assets/meshes/props/crystal_blue_lod1.glb" lod2-url="/assets/meshes/props/crystal_blue_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -187 30; align-to-terrain: 1" transform="scale: 2.3 2.3 2.3">
+  <GameObject place="at: -30 -187; align-to-terrain: 1" transform="scale: 2.3 2.3 2.3">
     <GLTFLoader role="visual" url="/assets/meshes/props/crystal_blue_lod0.glb" lod1-url="/assets/meshes/props/crystal_blue_lod1.glb" lod2-url="/assets/meshes/props/crystal_blue_lod2.glb"></GLTFLoader>
   </GameObject>
-  <Composition place="at: -190 27; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -27 -190; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.6 0" point-light="color: 0x5ab0ff; intensity: 1.8; distance: 14; decay: 2"></PointLight>
   </Composition>
 
@@ -242,69 +257,69 @@
        plataforma e mais pilares (o chefe final merece um palco).
        ============================================================ -->
   <!-- Arena do ogro: pilares + braseiros GLB (plataforma Cylinder removida). -->
-  <GameObject place="at: -300 28; align-to-terrain: 0"
+  <GameObject place="at: -28 -300; align-to-terrain: 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -304 -4; align-to-terrain: 0" transform="rotation: 0 30 0"
+  <GameObject place="at: 4 -304; align-to-terrain: 0" transform="rotation: 0 300 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -280 32; align-to-terrain: 0" transform="rotation: 0 -25 0"
+  <GameObject place="at: -32 -280; align-to-terrain: 0" transform="rotation: 0 245 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -276 -8; align-to-terrain: 0" transform="rotation: 0 55 0"
+  <GameObject place="at: 8 -276; align-to-terrain: 0" transform="rotation: 0 325 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -312 12; align-to-terrain: 0" transform="rotation: 0 90 0; scale: 1.2 1.2 1.2"
+  <GameObject place="at: -12 -312; align-to-terrain: 0" transform="rotation: 0 0 0; scale: 1.2 1.2 1.2"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
   <!-- Braseiros -->
   <GameObject
-    place="at: -276 12; align-to-terrain: 1"
+    place="at: -12 -276; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/village/iron_brazier_lod0.glb" lod1-url="/assets/meshes/village/iron_brazier_lod1.glb" lod2-url="/assets/meshes/village/iron_brazier_lod2.glb"></GLTFLoader>
   </GameObject>
-  <Composition place="at: -276 12; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -12 -276; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.0 0" point-light="color: 0xff8a33; intensity: 2.4; distance: 14; decay: 2"></PointLight>
   </Composition>
   <GameObject
-    place="at: -304 12; align-to-terrain: 1"
+    place="at: -12 -304; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/village/iron_brazier_lod0.glb" lod1-url="/assets/meshes/village/iron_brazier_lod1.glb" lod2-url="/assets/meshes/village/iron_brazier_lod2.glb"></GLTFLoader>
   </GameObject>
-  <Composition place="at: -304 12; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -12 -304; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.0 0" point-light="color: 0xff8a33; intensity: 2.4; distance: 14; decay: 2"></PointLight>
   </Composition>
   <!-- Chamas assentes no bordo da taça (y=1.00), não a y=0.9 dentro do metal;
        `align-to-terrain: 1` igual aos braseiros para as duas entidades
        partilharem exactamente a mesma pose. -->
-  <GameObject place="at: -276 12; align-to-terrain: 1">
+  <GameObject place="at: -12 -276; align-to-terrain: 1">
     <ParticleSystem
       preset="fire"
       transform="pos: 0 1.00 0"
       particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: -304 12; align-to-terrain: 1">
+  <GameObject place="at: -12 -304; align-to-terrain: 1">
     <ParticleSystem
       preset="fire"
       transform="pos: 0 1.00 0"
       particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <SpawnExclusion at="-290 12" radius="40"></SpawnExclusion>
+  <SpawnExclusion at="-12 -290" radius="40"></SpawnExclusion>
 </Group>
 <!-- FIM biome.peaks.landmarks -->

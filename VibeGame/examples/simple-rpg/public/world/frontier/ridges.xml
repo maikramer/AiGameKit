@@ -3,8 +3,8 @@
 
   As quatro cunhas de bioma são partidas pelas diagonais, mas as diagonais
   não tinham conteúdo nenhum: quem andasse a 45° atravessava campo vazio até
-  ao fim do mundo. scripts/sculpt_terrain.py levanta aí cristas (≈90 m a
-  r=160, ≈165 m a r=300) e este ficheiro veste-as.
+  ao fim do mundo. Este ficheiro veste as diagonais com cenário; as cristas
+  esculpidas deixaram de existir (relevo cru do Terrain3D).
 
   As regiões são caixas pequenas ENCOSTADAS à diagonal (uma caixa grande de
   canto a canto cairia dentro das cunhas cardeais). Só spawners scenery —
@@ -188,7 +188,7 @@
   <!-- Pedras de margem ao longo da garganta do rio (near-water). -->
   <StaticSpawner
     profile="tree" count="80" seed="4403"
-    region-min="-470 0 120" region-max="-140 0 420"
+    region-min="-420 0 -470" region-max="-120 0 -140"
     near-water="1" avoid-water="0"
     align-to-terrain="1" ground-align="auto"
     max-slope-deg="62" max-slope-attempts="96"

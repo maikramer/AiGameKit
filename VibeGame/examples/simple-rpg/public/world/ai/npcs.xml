@@ -154,7 +154,7 @@
             marker-height="2.5"
           ></DialogueNPC>
         </GameObject>
-        <GameObject name="npc_swamp_bogmoss" place="at: 0 -100; align-to-terrain: 1">
+        <GameObject name="npc_swamp_bogmoss" place="at: -100 0; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
             url="/assets/meshes/characters/npc_elder_lod0.glb"
@@ -204,7 +204,7 @@
             marker-height="2.5"
           ></DialogueNPC>
         </GameObject>
-        <GameObject name="npc_peaks_ogre" place="at: -100 0; align-to-terrain: 1">
+        <GameObject name="npc_peaks_ogre" place="at: 0 -100; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
             url="/assets/meshes/characters/npc_blacksmith_lod0.glb"
@@ -267,7 +267,7 @@
         </GameObject>
         <GameObject
           name="npc_swamp_survey"
-          place="at: -32 -80; align-to-terrain: 1"
+          place="at: -80 32; align-to-terrain: 1"
         >
           <GLTFLoader
             role="visual"
@@ -286,7 +286,7 @@
         </GameObject>
         <GameObject
           name="npc_peaks_survey"
-          place="at: -80 32; align-to-terrain: 1"
+          place="at: -32 -80; align-to-terrain: 1"
         >
           <GLTFLoader
             role="visual"

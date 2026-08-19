@@ -3,8 +3,8 @@
 
   Cada landmark é um destino: vê-se de longe, tem um trilho a ligá-lo
   (paths/trails.xml) e dá alguma coisa ao jogador (recompensa, diálogo ou
-  atalho). Coordenadas espelhadas em FLAT_ZONES de scripts/sculpt_terrain.py —
-  ao mover um landmark, mover lá o patamar também, senão fica numa encosta.
+  atalho). O relevo vem cru do Terrain3D — não há patamares esculpidos, por
+  isso confirmar o declive real de cada coordenada.
 -->
 <Group name="biome.forest.landmarks" pos="0 0 0">
   <!-- ============================================================

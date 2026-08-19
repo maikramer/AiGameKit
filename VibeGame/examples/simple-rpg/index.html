@@ -52,31 +52,34 @@
          VALE DO CRISTAL — MAPA DO MUNDO
          ------------------------------------------------------------------
 
-                    N (+Z) FLORESTA SOMBRIA  (colinas, 36→63 m)
+                    N (+Z) FLORESTA SOMBRIA  (colinas suaves, 131→124 m)
                     pine_dark · lobos · sombras
                     posto avançado · menires · lenhador
                     clareira da bruxa (chefe)
                                    │
-     O (-X) PICOS GELADOS ──── CIDADE MURADA ──── L (+X) DESERTO
-     corredor 49 m entre         (muralha ±32)    dunas 36→57 m
-     encostas de 130 m                            cactus · escorpiões
-     mina · lago gelado                           arco · obelisco
-     mojões · OGRO (final)                        caravana · VERME
+     O (-X) PÂNTANO ────────── CIDADE MURADA ──── L (+X) DESERTO
+     bacias baixas, 120→97 m     (muralha ±32)    planalto seco, 146→165 m
+     dead_willow · boglings                       cactus · escorpiões
+     cemitério · barca · altar                    arco · obelisco
+     choça · BOG WARDEN (chefe)                   caravana · VERME
                                    │
-                    S (-Z) PÂNTANO  (bacia, 36→23 m)
-                    dead_willow · boglings
-                    cemitério · barca · altar de ossos
-                    choça · BOG WARDEN (chefe)
+                    S (-Z) PICOS GELADOS  (encostas, 126→161 m)
+                    mina · lago gelado
+                    mojões · cristais
+                    OGRO (chefe final)
 
-         Diagonais = cristas (90 m a r=160, 165 m a r=300) que separam as
-         cunhas; borda do mundo fecha a 200 m. frontier/ridges.xml veste-as.
+         Os quadrantes seguem a geografia do heightmap, que é 100% Terrain3D
+         (ver public/world/context.md). Pântano e Picos trocaram de lado face
+         ao layout antigo: as bacias reais estão a Oeste (97 m) e as encostas
+         mais íngremes a Sul (19-21° de declive médio). O rio segue a
+         drenagem real e cruza só a artéria norte, em z≈214.
 
-         RELEVO — o heightmap do Terrain3D é praticamente plano na zona
-         jogável, por isso é reesculpido offline por
-         scripts/sculpt_terrain.py (vale central intocado, maciço a oeste
-         com corredor até à arena, bacia a sul, dunas a leste, colinas a
-         norte, cristas nas diagonais e serra na borda). O original fica em
-         public/assets/terrain/heightmap.base.png; --restore repõe-o.
+         RELEVO — 100% Terrain3D, sem pós-processamento. O heightmap é o
+         output cru de `terrain3d generate` (ver public/world/context.md
+         para o comando). Não voltar a esculpir a fórmula por cima: a
+         versão anterior (scripts/sculpt_terrain.py, removido) reescrevia
+         os 4 km todos com cunhas analíticas e deixava cones radiais e
+         costuras a 45° fora da zona jogável.
 
          GRUPOS SEMÂNTICOS (<Group name="..."> — contentores na origem):
            environment              céu, luz, pós-proc, áudio, clima, biomas
@@ -147,17 +150,17 @@
 
       <!-- §3 HERÓI — nasce no centro da praça da cidade. Fora de qualquer
            <Group> porque <PlayerGLTF> é um recipe merge:true: se fosse child
-           de um Group, o seu pos="0 40 0" fundir-se-ia no parent e elevaria
+           de um Group, o seu pos="0 150 0" fundir-se-ia no parent e elevaria
            o terreno inteiro (o terrain field lê o WorldTransform.posY da
            entidade onde faz merge). -->
       <PlayerGLTF
         name="player"
-        pos="0 40 0"
+        pos="0 150 0"
         model-url="/assets/meshes/characters/hero_lod0.glb"
       >
       </PlayerGLTF>
       <!-- Hold player until heightmap + heightfield ready, then seat once (CCT). -->
-      <SpawnGate target-entity="player" y-fallback="40"></SpawnGate>
+      <SpawnGate target-entity="player" y-fallback="150"></SpawnGate>
 
       <!-- GRUPO "world-base": terreno (heightfield + NavMesh). O <Terrain>
            é merge:true — o Group TEM de ficar em pos="0 0 0". -->
@@ -167,19 +170,23 @@
            Quadtree LOD chunks; world-size/max-height batem com
            public/assets/terrain/terrain.json. Física: uma heightfield
            Rapier por chunk visual, criada/libertada dinamicamente.
+           levels 4→5 e resolution 64→128: o mundo mantém os 4 km, mas o
+           ground sampling quadruplica por eixo — chunks-folha 4× (metade do
+           lado) com o dobro de vértices por lado. collision-resolution
+           acompanha (32→64) para a heightfield física seguir a malha.
            ============================================================ -->
         <Terrain
           pos="0 0 0"
           world-size="4000"
           max-height="200"
-          levels="4"
-          resolution="64"
-          collision-resolution="32"
+          levels="5"
+          resolution="128"
+          collision-resolution="64"
           lod-hysteresis="1.3"
           lod-distance-ratio="2.4"
-          height-smoothing="0.3"
+          height-smoothing="1"
           height-smoothing-spread="1.25"
-          heightmap="/assets/terrain/heightmap.png"
+          heightmap="/assets/terrain/terrain.ahgt"
           skirt-width="0.015625"
           roughness="0.82"
           metalness="0"
@@ -188,7 +195,7 @@
           texture="/assets/textures/vale_grass.png"
           ao-strength="0.9"
           height-blend-strength="0.40"
-          snow-height="0.50"
+          snow-height="0.92"
           slope-threshold="0.78"
           slope-softness="0.10"
           color-low="#3a5a2a"
@@ -198,8 +205,8 @@
           noise-sand-strength="0.45"
           noise-sand-scale="0.012"
           noise-sand-threshold="0.56"
-          noise-sand-height-min="0.02"
-          noise-sand-height-max="0.50"
+          noise-sand-height-min="0.42"
+          noise-sand-height-max="0.74"
         ></Terrain>
 
         <NavMesh></NavMesh>

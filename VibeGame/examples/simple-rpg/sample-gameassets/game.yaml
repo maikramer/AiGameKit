@@ -125,7 +125,10 @@ portraits:
 # ============================================================
 # ASSETS: em manifests/<grupo>.yaml — 1 manifesto por grupo (~20 assets).
 #   gameassets resume --profile game.yaml --manifest manifests/characters
-# forest / village / infra são symlinks para examples/shared-assets/manifests/
-# (estilo Crystal Vale partilhado com simple-racer). Regen: este cwd.
-# Cada grupo declara a própria pasta (output_dir / meshes_subdir / images_subdir).
+# forest / village / infra / terrain / props são symlinks para
+# examples/shared-assets/manifests/ (packs Crystal Vale partilhados com
+# simple-racer). Regen e binários canónicos vivem lá; os binários deste
+# exemplo resolvem por symlink direto ao pool em public/assets/
+# (sync.sh distribui cópias só para o racer). Cada grupo local declara a
+# própria pasta (output_dir / meshes_subdir / images_subdir).
 # ============================================================

@@ -6,7 +6,6 @@
   arco natural mais pequeno, ~3.2×2.2×1.6 m) não substitui nenhum dos
   dois: sandstone_arch/desert_obelisk já são os assets dedicados a este
   landmark. cactus, scorpion_nest e ruin_pillar já vinham GLTFLoader.
-  Coordenadas espelhadas em FLAT_ZONES de scripts/sculpt_terrain.py.
 -->
 <Group name="biome.desert.landmarks" pos="0 0 0">
   <!-- ============================================================

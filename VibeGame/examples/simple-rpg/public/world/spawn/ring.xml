@@ -32,39 +32,29 @@
           opacity="0.72"
         ></Lake>
         <!-- Aproches: pads LANDWARD dos Ways (tips fora do mesh de água). -->
+        <!-- Aproches da ponte norte. O rio segue agora a drenagem real do
+             heightmap (nasce a 314,125 e corre para NO), cruzando só a
+             artéria norte por volta de z=214 — as antigas travessias oeste
+             e sul deixaram de ter rio por baixo. Sem `height=`: o pad
+             assenta na cota do terreno no seu centro, em vez de fixar a
+             cota 34.9/33.7 do contrato antigo (o vale está agora a ~134 m). -->
         <TerrainPad
-          at="4 -102"
+          at="2 198"
           size="20 12"
           falloff="8"
           corner-radius="4"
-          height="34.9"
         ></TerrainPad>
         <TerrainPad
-          at="4 -146"
+          at="6 230"
           size="20 12"
           falloff="8"
           corner-radius="4"
-          height="34.9"
-        ></TerrainPad>
-        <TerrainPad
-          at="-94 -3"
-          size="12 20"
-          falloff="8"
-          corner-radius="4"
-          height="33.7"
-        ></TerrainPad>
-        <TerrainPad
-          at="-138 -3"
-          size="12 20"
-          falloff="8"
-          corner-radius="4"
-          height="33.7"
         ></TerrainPad>
         <!-- Rio: sul → oeste (x≲-58) → NW sem passar no laguinho.
            path = [x0 z0 ...] nascente primeiro. -->
         <!-- width = lâmina; carve total = width + 2·bank-width (+ feather). -->
         <River
-          path="410 -124 340 -110 280 -90 220 -76 164 -80 96 -116 24 -124 -40 -124 -90 -132 -116 -116 -116 -40 -116 10 -124 44 -150 64 -180 96 -220 124 -260 160 -310 210 -360 270 -420 330 -482 384"
+          path="314 125 287 121 258 121 236 141 209 162 180 188 150 193 121 199 92 189 62 203 33 209 4 215 -25 213 -55 215 -84 232 -113 260 -133 289 -158 318 -186 340"
           width="16"
           depth="3.7"
           water-offset="1.2"
@@ -73,10 +63,11 @@
           color="#2a6685"
           opacity="0.88"
         ></River>
-        <!-- Pontes: RoadNetwork Segment bridge (wood S / stone W) — sem GameObject. -->
-        <!-- Posto de descanso na margem este (x≈-45): crate/barrel/bench. -->
+        <!-- Ponte: RoadNetwork Segment bridge na artéria norte (z≈214), a única
+             travessia — o rio segue a drenagem real e passa a norte da cidade. -->
+        <!-- Posto de descanso na margem sul da ponte norte: crate/barrel/bench. -->
         <GameObject
-          place="at: -90.8 -4.4; align-to-terrain: 1"
+          place="at: -11.8 196.6; align-to-terrain: 1"
           transform="rotation: 0 20 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
@@ -89,7 +80,7 @@
           ></GLTFLoader>
         </GameObject>
         <GameObject
-          place="at: -93.2 -6.8; align-to-terrain: 1"
+          place="at: -14.2 194.2; align-to-terrain: 1"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
         >
@@ -101,7 +92,7 @@
           ></GLTFLoader>
         </GameObject>
         <GameObject
-          place="at: -89.2 -8; align-to-terrain: 1"
+          place="at: -10.2 193; align-to-terrain: 1"
           transform="rotation: 0 -70 0"
         >
           <GLTFLoader
@@ -113,7 +104,7 @@
         </GameObject>
         <!-- Posto de descanso na ponte SUL (pads 4,-102 / 4,-146). -->
         <GameObject
-          place="at: 6.4 -100.2; align-to-terrain: 1"
+          place="at: 6.4 199.8; align-to-terrain: 1"
           transform="rotation: 0 -15 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: box; size: 0.8 0.8 0.8"
@@ -126,7 +117,7 @@
           ></GLTFLoader>
         </GameObject>
         <GameObject
-          place="at: 2.2 -104.4; align-to-terrain: 1"
+          place="at: 2.2 195.6; align-to-terrain: 1"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: box; size: 0.55 0.7 0.55"
         >
@@ -138,7 +129,7 @@
           ></GLTFLoader>
         </GameObject>
         <GameObject
-          place="at: -1.6 -101.4; align-to-terrain: 1"
+          place="at: -1.6 198.6; align-to-terrain: 1"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
         >
@@ -150,7 +141,7 @@
           ></GLTFLoader>
         </GameObject>
         <GameObject
-          place="at: 5.2 -148.4; align-to-terrain: 1"
+          place="at: 5.2 225.6; align-to-terrain: 1"
           transform="rotation: 0 70 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: box; size: 1.8 0.8 0.9"
@@ -163,7 +154,7 @@
           ></GLTFLoader>
         </GameObject>
         <GameObject
-          place="at: 1.8 -144.2; align-to-terrain: 1"
+          place="at: 1.8 229.8; align-to-terrain: 1"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: box; size: 0.8 0.8 0.8"
         >

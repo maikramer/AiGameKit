@@ -13,7 +13,7 @@
 
   <Vegetation
     meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_yellowA.glb"
-    density-per-km2="176000"
+    density-per-km2="140000"
     seed="702"
     region-min="116 0 -190"
     region-max="370 0 190"

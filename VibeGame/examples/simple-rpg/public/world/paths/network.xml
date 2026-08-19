@@ -1,9 +1,18 @@
 <!--
   Rede cobble interligada (não só cruz +).
+  - flatten-max-grade=0.34 (≈19°) e flatten-window=72: com o relevo cru do
+    Terrain3D as artérias sobem encostas de 13-20° (o setor leste vai de 134 m
+    no vale a 165 m). Com o antigo 0.22 (12.4°) o `limitProfileGrade` prendia
+    o perfil abaixo do terreno e o carve tinha de abrir uma trincheira mais
+    funda do que o falloff alcança — a estrada ficava numa vala de paredes
+    verticais. Deixar a estrada seguir a encosta é mais barato e lê-se melhor.
   - Cruz praça → mid_* (grau 4) → portões / biomas
   - Anel periurbano mid_n→ne→mid_e→se→mid_s→sw→mid_w→nw→mid_n
     (T nos mid_* = cruzamentos programáticos)
-  - Pontes rio: Segment profile=bridge (s_bank↔s_resume, w_bank↔w_resume)
+  - Ponte do rio: Segment profile=bridge (n_bank↔n_resume, artéria norte).
+    O rio segue a drenagem real do heightmap e cruza SÓ o norte, em z≈214
+    (o traçado em spawn/ring.xml passa exactamente por "4 215"). As antigas
+    pontes sul e oeste atravessavam chão seco e foram removidas.
   - via= nos Segments longos (docks de trails.xml)
 -->
 <Group name="paths.network" pos="0 0 0">
@@ -12,9 +21,9 @@
     default-width="4"
     crossing-flare="true"
     flatten="true"
-    flatten-falloff="16"
-    flatten-window="112"
-    flatten-max-grade="0.22"
+    flatten-falloff="26"
+    flatten-window="72"
+    flatten-max-grade="0.34"
     texture-url="/assets/textures/cobblestone_road.png"
     normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
     texture-scale="5"
@@ -33,21 +42,19 @@
     <Way id="ring_sw" xz="-25 -25"></Way>
     <Way id="ring_nw" xz="-25 25"></Way>
 
-    <!-- Norte (floresta) -->
+    <!-- Norte (floresta) — a ponte vive aqui: margens simétricas ao centro
+         do rio (z≈214), tips fora do ribbon de água (198/230), span 32 m.
+         O deck GLB centra na centreline do rio (river-crossing.ts). -->
     <Way id="n_gate" xz="-3 128"></Way>
-    <Way id="n_end" xz="-8 256"></Way>
-    <!-- Sul (ponte madeira) — Ways simétricos ao centro do rio (z≈-124).
-         Mesh de água/carve ≈ ±14 m; tips fora do ribbon (−108/−140),
-         span 32 m. Deck GLB centra na centreline do rio (river-crossing.ts). -->
-    <Way id="s_bank" xz="4 -108"></Way>
-    <Way id="s_resume" xz="4 -140"></Way>
+    <Way id="n_bank" xz="2 198"></Way>
+    <Way id="n_resume" xz="6 230"></Way>
+    <Way id="n_end" xz="-8 286"></Way>
+    <!-- Sul (picos gelados) — sem rio, artéria contínua -->
     <Way id="s_end" xz="-12 -286"></Way>
     <!-- Este (deserto) -->
     <Way id="gate_e" xz="124 2"></Way>
     <Way id="desert_end" xz="290 -4"></Way>
-    <!-- Oeste (ponte pedra) — simétrico ao rio (x≈-116), tips fora do carve -->
-    <Way id="w_bank" xz="-100 -3"></Way>
-    <Way id="w_resume" xz="-132 -3"></Way>
+    <!-- Oeste (pântano) — sem rio, artéria contínua -->
     <Way id="w_end" xz="-292 12"></Way>
 
     <!-- Cruzamento praça → mid (grau 4 em cada mid com anel) -->
@@ -58,11 +65,10 @@
 
     <!-- Artérias além do anel -->
     <Segment a="mid_n" b="n_gate" via="0 60 -2 96"></Segment>
-    <Segment a="n_gate" b="n_end" via="4 156 24 208"></Segment>
-    <Segment a="mid_s" b="s_bank" via="0 -58 2 -84"></Segment>
+    <Segment a="n_gate" b="n_bank" via="0 152 2 176"></Segment>
     <Segment
-      a="s_bank"
-      b="s_resume"
+      a="n_bank"
+      b="n_resume"
       profile="bridge"
       bridge-native-span="18"
       bridge-url="/assets/meshes/infra/river_bridge_wood_lod0.glb"
@@ -70,21 +76,11 @@
       bridge-lod1-url="/assets/meshes/infra/river_bridge_wood_lod1.glb"
       bridge-lod2-url="/assets/meshes/infra/river_bridge_wood_lod2.glb"
     ></Segment>
-    <Segment a="s_resume" b="s_end" via="0 -184 18 -220"></Segment>
+    <Segment a="n_resume" b="n_end" via="2 252 -4 270"></Segment>
+    <Segment a="mid_s" b="s_end" via="0 -58 2 -84 0 -184 18 -220"></Segment>
     <Segment a="mid_e" b="gate_e" via="60 0 96 2"></Segment>
     <Segment a="gate_e" b="desert_end" via="160 6 200 10 240 8"></Segment>
-    <Segment a="mid_w" b="w_bank" via="-58 0 -80 -2"></Segment>
-    <Segment
-      a="w_bank"
-      b="w_resume"
-      profile="bridge"
-      bridge-native-span="18"
-      bridge-url="/assets/meshes/infra/river_bridge_stone_lod0.glb"
-      bridge-collision-url="/assets/meshes/infra/river_bridge_stone_collision.glb"
-      bridge-lod1-url="/assets/meshes/infra/river_bridge_stone_lod1.glb"
-      bridge-lod2-url="/assets/meshes/infra/river_bridge_stone_lod2.glb"
-    ></Segment>
-    <Segment a="w_resume" b="w_end" via="-208 2"></Segment>
+    <Segment a="mid_w" b="w_end" via="-58 0 -80 -2 -208 2"></Segment>
 
     <!-- Anel periurbano (liga os quatro mid_*) -->
     <Segment a="mid_n" b="ring_ne" via="11 32 20 29"></Segment>

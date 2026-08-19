@@ -1,11 +1,9 @@
 <!--
   Vegetação dos PICOS GELADOS (Oeste, x ≲ -58). Loaded via Include.
 
-  Geografia (scripts/sculpt_terrain.py): corredor livre em |z| ≲ 16 do portão
-  oeste até à arena do ogro, flanqueado por encostas que sobem ~80 m. Os
-  spawners com max-slope-deg baixo rejeitam a encosta sozinhos, por isso a
-  vegetação assenta naturalmente no corredor e nos patamares — as rochas
-  (max-slope-deg alto) é que sobem pelos flancos.
+  Geografia: o relevo vem cru do Terrain3D (sem corredor nem flancos
+  esculpidos). Os spawners com max-slope-deg baixo rejeitam encostas
+  sozinhos — as rochas (max-slope-deg alto) é que sobem pelos declives.
 -->
 <Group name="biome.peaks.vegetation" pos="0 0 0">
   <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).
@@ -13,10 +11,10 @@
 
   <Vegetation
     meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_purpleA.glb"
-    density-per-km2="144000"
+    density-per-km2="112000"
     seed="907"
-    region-min="-370 0 -190"
-    region-max="-116 0 190"
+    region-min="-190 0 -370"
+    region-max="190 0 -116"
     scale-min="1.4"
     scale-max="2.8"
     max-slope-deg="34"
@@ -43,8 +41,8 @@
     profile="tree"
     count="240"
     seed="9101"
-    region-min="-380 0 -180"
-    region-max="-116 0 180"
+    region-min="-180 0 -380"
+    region-max="180 0 -116"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -89,8 +87,8 @@
     profile="tree"
     count="32"
     seed="307"
-    region-min="-300 0 -100"
-    region-max="-124 0 100"
+    region-min="-100 0 -300"
+    region-max="100 0 -124"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -134,8 +132,8 @@
     profile="tree"
     count="440"
     seed="9102"
-    region-min="-470 0 -280"
-    region-max="-116 0 280"
+    region-min="-280 0 -470"
+    region-max="280 0 -116"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -203,8 +201,8 @@
     profile="tree"
     count="92"
     seed="9103"
-    region-min="-430 0 -260"
-    region-max="-128 0 260"
+    region-min="-260 0 -430"
+    region-max="260 0 -128"
     align-to-terrain="0"
     ground-align="auto"
     avoid-water="1"
@@ -248,8 +246,8 @@
     profile="tree"
     count="36"
     seed="317"
-    region-min="-320 0 -110"
-    region-max="-124 0 110"
+    region-min="-110 0 -320"
+    region-max="110 0 -124"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -291,8 +289,8 @@
     profile="foliage"
     count="140"
     seed="9104"
-    region-min="-410 0 -220"
-    region-max="-132 0 220"
+    region-min="-220 0 -410"
+    region-max="220 0 -132"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -323,8 +321,8 @@
     profile="tree"
     count="24"
     seed="9105"
-    region-min="-330 0 -92"
-    region-max="-132 0 92"
+    region-min="-92 0 -330"
+    region-max="92 0 -132"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -365,8 +363,8 @@
     profile="tree"
     count="36"
     seed="9210"
-    region-min="-380 0 -80"
-    region-max="-140 0 80"
+    region-min="-80 0 -380"
+    region-max="80 0 -140"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"

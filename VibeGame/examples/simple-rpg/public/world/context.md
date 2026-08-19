@@ -23,34 +23,36 @@ Scene fragments loaded via `<Include src="/world/…">` from `index.html`.
 
 `<biome>` ∈ `forest` (N) · `desert` (E) · `swamp` (S) · `peaks` (O).
 
-## Relevo — `scripts/sculpt_terrain.py`
+## Relevo — 100% Terrain3D
 
-O heightmap do Terrain3D é plano onde interessa: **32→45 m em ±160**, e os
-"Picos Gelados" a oeste até _desciam_ (36→28 m). Sem verticalidade nenhum
-prop salva o mapa. O script relê `public/assets/terrain/heightmap.base.png`
-(cópia intocada, nunca escrita) e reescreve `heightmap.png`:
-
-| Zona                 | Antes | Depois                |
-| -------------------- | ----- | --------------------- |
-| Vale / cidade (r<72) | 36    | 36 (intocado)         |
-| Floresta (N)         | 36→45 | 36→63, colinas        |
-| Deserto (E)          | 36→45 | 36→57, dunas          |
-| Pântano (S)          | 36→34 | 36→23, bacia          |
-| Picos (O) corredor   | 36→28 | 36→52                 |
-| Picos (O) flancos    | 36→28 | até 133               |
-| Diagonais            | ~38   | 90 @160, 165 @300     |
-| Borda do mundo       | vário | 200 (fecha horizonte) |
+O relevo é o output cru do Terrain3D, sem pós-processamento. O antigo
+`scripts/sculpt_terrain.py` (cunhas cardeais + anel de borda + patamares nos
+landmarks) foi removido: escrevia uma fórmula analítica por cima dos 4 km
+todos e só ~3 % do mapa (a zona jogável ±400 m) justificava os parâmetros —
+o resto ficava com cones radiais e costuras a 45°.
 
 ```bash
-python3 scripts/sculpt_terrain.py            # reescreve heightmap.png
-python3 scripts/sculpt_terrain.py --report   # só os perfis, não escreve
-python3 scripts/sculpt_terrain.py --restore  # repõe o original
+cd public/assets/terrain
+terrain3d generate \
+  --prompt "vale fluvial de fantasia RPG — fundo de vale habitável, rio, encostas e montanhas em redor" \
+  --seed 20260818 --size 2048 --offset-i 512 --offset-j 1408 \
+  --world-size 4000 --max-height 200 \
+  --mode continental --format ahgt \
+  --output terrain.ahgt --metadata terrain.json
 ```
 
-**`FLAT_ZONES` no script espelha as coordenadas dos landmarks.** Ao mover um
-landmark no XML, mover lá o patamar também — senão fica numa encosta. O
-corredor `|z| ≲ 16` a oeste é o caminho do portão até à arena do ogro e não
-pode ser fechado.
+`--offset-i/-j` panoram o mundo infinito do mesmo seed. Esta janela foi
+escolhida por scan: a zona jogável (±400 m) cai num sistema de drenagem
+dendrítico — vale habitável ao centro, montanha a sul, descida aberta a
+oeste, ravina a leste. 65 m de relevo com 92 % abaixo dos 25° de declive.
+
+`--size` controla o rácio de escala horizontal (`size × 30 m ÷ world_size`);
+o próprio Terrain3D avisa acima de 32× (declives artificiais). 2048 sobre
+4000 m dá 15,4× e um `.ahgt` de 7,3 MB — 4096 dava 30,7× e 28,5 MB.
+
+`world-size` / `max-height` do `terrain.json` têm de bater com os atributos do
+`<Terrain>` no `index.html`. O formato `.ahgt` (uint16 + deflate) é lido
+nativamente pelo plugin `terrain` — sem o terracing de 0,78 m do PNG 8-bit.
 
 ## Densidade — spawner instanciado vs entidade
 

@@ -3,7 +3,8 @@
   Mesh próprio do bioma: dead_willow (salgueiro morto) — antes o pântano
   usava tree_oak com collider dead_willow_stump_collision, o que dava
   carvalhos verdes num brejo. dead_tree completa a mata morta.
-  O terreno aqui é uma bacia ~13 m abaixo do vale (scripts/sculpt_terrain.py).
+  O terreno vem cru do Terrain3D — sem bacia esculpida; confirmar as cotas
+  reais antes de assumir brejo rebaixado.
 -->
 <Group name="biome.swamp.vegetation" pos="0 0 0">
   <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).
@@ -11,10 +12,10 @@
 
   <Vegetation
     meshes="/assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb"
-    density-per-km2="256000"
+    density-per-km2="200000"
     seed="801"
-    region-min="-200 0 -390"
-    region-max="200 0 -116"
+    region-min="-390 0 -200"
+    region-max="-116 0 200"
     scale-min="1.4"
     scale-max="2.8"
     max-slope-deg="30"
@@ -39,8 +40,8 @@
     profile="tree"
     count="320"
     seed="8101"
-    region-min="-190 0 -380"
-    region-max="190 0 -116"
+    region-min="-380 0 -190"
+    region-max="-116 0 190"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -85,8 +86,8 @@
     profile="tree"
     count="140"
     seed="8102"
-    region-min="-210 0 -430"
-    region-max="210 0 -190"
+    region-min="-430 0 -210"
+    region-max="-190 0 210"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -131,8 +132,8 @@
     profile="tree"
     count="40"
     seed="305"
-    region-min="-116 0 -290"
-    region-max="116 0 -120"
+    region-min="-290 0 -116"
+    region-max="-120 0 116"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -175,8 +176,8 @@
     profile="tree"
     count="68"
     seed="325"
-    region-min="-110 0 -310"
-    region-max="80 0 -124"
+    region-min="-310 0 -80"
+    region-max="-124 0 110"
     in-water="1"
     align-to-terrain="0"
     max-slope-attempts="192"
@@ -206,8 +207,8 @@
     profile="tree"
     count="180"
     seed="8103"
-    region-min="-200 0 -400"
-    region-max="200 0 -116"
+    region-min="-400 0 -200"
+    region-max="-116 0 200"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"
@@ -253,8 +254,8 @@
     profile="tree"
     count="52"
     seed="431"
-    region-min="-190 0 -380"
-    region-max="190 0 -116"
+    region-min="-380 0 -190"
+    region-max="-116 0 190"
     near-water="1"
     avoid-water="0"
     align-to-terrain="1"
@@ -320,8 +321,8 @@
     profile="tree"
     count="32"
     seed="8210"
-    region-min="-180 0 -380"
-    region-max="180 0 -120"
+    region-min="-380 0 -180"
+    region-max="-120 0 180"
     align-to-terrain="1"
     ground-align="auto"
     avoid-water="1"

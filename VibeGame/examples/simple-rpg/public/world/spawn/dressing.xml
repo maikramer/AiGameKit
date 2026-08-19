@@ -24,7 +24,7 @@
   </StaticSpawner>
   <StaticSpawner
     profile="tree" count="22" seed="5111"
-    region-min="-160 0 -70" region-max="-70 0 70"
+    region-min="-70 0 -160" region-max="70 0 -70"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
     max-slope-deg="36" scale-min="0.75" scale-max="1.35"
     avoid-overlaps="1" footprint-radius="3.8"
@@ -58,7 +58,7 @@
   </StaticSpawner>
   <StaticSpawner
     profile="tree" count="22" seed="5113"
-    region-min="-70 0 -160" region-max="70 0 -70"
+    region-min="-160 0 -70" region-max="-70 0 70"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
     max-slope-deg="36" scale-min="0.75" scale-max="1.35"
     avoid-overlaps="1" footprint-radius="3.8"

@@ -63,28 +63,28 @@
   <!-- ============================================================
        PÂNTANO — névoa rasteira na bacia
        ============================================================ -->
-  <GameObject place="at: 0 -170">
+  <GameObject place="at: -170 0">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 0.8 0"
       particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.4; start-color: #93a596; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: -60 -240">
+  <GameObject place="at: -240 60">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 0.8 0"
       particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.4; start-color: #93a596; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: 68 -210">
+  <GameObject place="at: -210 -68">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 0.8 0"
       particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.0; start-color: #93a596; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: 8 -310">
+  <GameObject place="at: -310 -8">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 0.8 0"
@@ -97,27 +97,27 @@
        (emission-rate baixo: 'snow' no default 50/s vira nevão que tapa a
        encosta toda a 40 m de distância)
        ============================================================ -->
-  <GameObject place="at: -170 0">
+  <GameObject place="at: 0 -170">
     <ParticleSystem
       preset="snow"
       transform="pos: 0 9 0"
       particle-emitter="preset: snow; emission-rate: 10; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: -230 8">
+  <GameObject place="at: -8 -230">
     <ParticleSystem
       preset="snow"
       transform="pos: 0 9 0"
       particle-emitter="preset: snow; emission-rate: 10; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: -290 12">
+  <GameObject place="at: -12 -290">
     <ParticleSystem
       preset="snow"
       transform="pos: 0 9 0"
       particle-emitter="preset: snow; emission-rate: 12; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <GameObject place="at: -190 26"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -26 -190"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
 </Group>
 <!-- FIM atmosphere.ambient -->

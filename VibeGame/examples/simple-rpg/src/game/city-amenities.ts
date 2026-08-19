@@ -27,8 +27,10 @@ export interface LookoutGate {
 export const LOOKOUT_GATES: readonly LookoutGate[] = [
   { id: 'lookout:forest', x: 0, z: 50, label: 'Floresta', color: '#6dbf6a' },
   { id: 'lookout:desert', x: 50, z: 0, label: 'Deserto', color: '#e0b050' },
-  { id: 'lookout:swamp', x: 0, z: -50, label: 'Pântano', color: '#7a9a6a' },
-  { id: 'lookout:peaks', x: -50, z: 0, label: 'Picos', color: '#9ec8e8' },
+  // Pântano e Picos trocaram de quadrante quando o relevo passou a ser 100%
+  // Terrain3D: as bacias baixas reais ficam a Oeste, as encostas íngremes a Sul.
+  { id: 'lookout:swamp', x: -50, z: 0, label: 'Pântano', color: '#7a9a6a' },
+  { id: 'lookout:peaks', x: 0, z: -50, label: 'Picos', color: '#9ec8e8' },
 ];
 
 export const LOOKOUT_WAYPOINT_PREFIX = 'lookout:';

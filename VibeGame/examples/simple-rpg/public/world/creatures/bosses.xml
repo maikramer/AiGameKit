@@ -39,7 +39,7 @@
   <!-- Sul — Bog Warden (fundo do pântano). -->
   <GameObject
     name="boss-bogwarden"
-    place="at: -12 -290; align-to-terrain: false"
+    place="at: -290 12; align-to-terrain: false"
     script="bosses/bog-warden.ts"
   >
     <GLTFLoader
@@ -56,7 +56,7 @@
        inimigos normais morrem). name="boss" alimenta a <BossBar>. -->
   <GameObject
     name="boss"
-    place="at: -290 12; align-to-terrain: false"
+    place="at: -12 -290; align-to-terrain: false"
     script="boss.ts"
   >
     <GLTFLoader

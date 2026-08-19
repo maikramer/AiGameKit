@@ -1,15 +1,15 @@
 <!--
   Landmarks do PÂNTANO (Sul). Loaded via Include.
-  O terreno aqui é uma bacia ~13 m abaixo do vale (scripts/sculpt_terrain.py),
-  por isso os <Lake> ficam no fundo e a descida da ponte sul lê-se como
-  entrada num brejo. Coordenadas espelhadas em FLAT_ZONES desse script.
+  O relevo vem cru do Terrain3D — a bacia deixou de ser garantida por
+  sculpt, por isso as cotas dos <Lake> têm de ser confirmadas contra o
+  heightmap atual.
 -->
 <Group name="biome.swamp.landmarks" pos="0 0 0">
   <!-- ============================================================
        §1 LAGOAS (8,-95) e (-34,-78) — landmarks existentes
        ============================================================ -->
   <Lake
-    at="16 -190"
+    at="-190 -16"
     radius="24"
     depth="2.6"
     water-offset="0.5"
@@ -18,7 +18,7 @@
     ripple="0.7"
   ></Lake>
   <Lake
-    at="-68 -156"
+    at="-156 68"
     radius="14"
     depth="2.1"
     water-offset="0.5"
@@ -28,7 +28,7 @@
   ></Lake>
   <!-- Lagoa nova a leste, para o brejo não ser só duas poças no eixo. -->
   <Lake
-    at="84 -236"
+    at="-236 -84"
     radius="18"
     depth="2.3"
     water-offset="0.5"
@@ -44,8 +44,8 @@
        ============================================================ -->
   <GameObject
     name="swamp-wrecked-boat"
-    place="at: 52 -184; align-to-terrain: 1"
-    transform="rotation: 0 24 0"
+    place="at: -184 -52; align-to-terrain: 1"
+    transform="rotation: 0 114 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/swamp/wrecked_boat_collision.glb; mesh-anchor: base"
   >
@@ -59,20 +59,20 @@
     ></GLTFLoader>
   </GameObject>
   <GameObject
-    place="at: 58 -178; align-to-terrain: 1"
+    place="at: -178 -58; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
-    place="at: 42 -174; align-to-terrain: 1"
+    place="at: -174 -42; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="52 -184" radius="16"></SpawnExclusion>
+  <SpawnExclusion at="-184 -52" radius="16"></SpawnExclusion>
 
   <!-- ============================================================
        §3 CEMITÉRIO AFUNDADO (-28, -108)
@@ -80,35 +80,35 @@
        boglings se juntam.
        ============================================================ -->
   <!-- Cemitério: menires GLB (sem lápides Box). -->
-  <GameObject place="at: -62 -224; align-to-terrain: 0" transform="rotation: 0 18 0; scale: 0.85 0.85 0.85"
+  <GameObject place="at: -224 62; align-to-terrain: 0" transform="rotation: 0 108 0; scale: 0.85 0.85 0.85"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -48 -210; align-to-terrain: 0" transform="rotation: 0 -40 0; scale: 0.7 0.7 0.7"
+  <GameObject place="at: -210 48; align-to-terrain: 0" transform="rotation: 0 50 0; scale: 0.7 0.7 0.7"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: -56 -216">
+  <GameObject place="at: -216 56">
     <ParticleSystem
       preset="smoke"
       transform="pos: 0 0.6 0"
       particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 3.0; start-life-max: 5.0; start-speed-min: 0.15; start-speed-max: 0.4; start-size-min: 0.9; start-size-max: 2.0; start-color: #7d8f80; looping: 1; world-space: 1"
     ></ParticleSystem>
   </GameObject>
-  <SpawnExclusion at="-56 -216" radius="18"></SpawnExclusion>
+  <SpawnExclusion at="-216 56" radius="18"></SpawnExclusion>
   <GameObject
-    place="at: -58 -220; align-to-terrain: 1"
-    transform="rotation: 0 22 0"
+    place="at: -220 58; align-to-terrain: 1"
+    transform="rotation: 0 112 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base"
   >
     <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
-    place="at: -52 -228; align-to-terrain: 1"
-    transform="rotation: 0 -35 0"
+    place="at: -228 52; align-to-terrain: 1"
+    transform="rotation: 0 55 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base"
   >
@@ -122,7 +122,7 @@
        ============================================================ -->
   <GameObject
     name="swamp-bone-altar"
-    place="at: -96 -264; align-to-terrain: 1"
+    place="at: -264 96; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/swamp/bone_altar_collision.glb; mesh-anchor: base"
   >
@@ -135,7 +135,7 @@
       lod-threshold-mid="80"
     ></GLTFLoader>
   </GameObject>
-  <Composition place="at: -96 -264; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -264 96; align-to-terrain: 1" body="none" collider="none">
     <PointLight
       pos="0 1.8 0"
       point-light="color: 0x66e878; intensity: 2.4; distance: 16; decay: 2"
@@ -143,47 +143,47 @@
   </Composition>
   <GameObject
     name="swamp-bog-idol"
-    place="at: -88 -268; align-to-terrain: 1"
+    place="at: -268 88; align-to-terrain: 1"
     script="poi/bog-idol.ts"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base"
   ></GameObject>
-  <SpawnExclusion at="-96 -264" radius="18"></SpawnExclusion>
+  <SpawnExclusion at="-264 96" radius="18"></SpawnExclusion>
 
   <!-- ============================================================
        §5 RUÍNA SUBMERSA (34, -120)
        Pilares meio afundados na lagoa leste.
        ============================================================ -->
-  <GameObject place="at: 72 -248; align-to-terrain: 0" transform="rotation: 0 22 0"
+  <GameObject place="at: -248 -72; align-to-terrain: 0" transform="rotation: 0 112 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <GameObject place="at: 62 -253; align-to-terrain: 0" transform="rotation: 0 -35 0; scale: 0.85 0.85 0.85"
+  <GameObject place="at: -253 -62; align-to-terrain: 0" transform="rotation: 0 55 0; scale: 0.85 0.85 0.85"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb"></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="68 -248" radius="16"></SpawnExclusion>
+  <SpawnExclusion at="-248 -68" radius="16"></SpawnExclusion>
 
   <!-- Fogos-fátuos: só luz (sem esferas low-poly). -->
-  <Composition place="at: -60 -180; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -180 60; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.8 0" point-light="color: 0x7dff8a; intensity: 1.2; distance: 8; decay: 2"></PointLight>
   </Composition>
-  <Composition place="at: 52 -144; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -144 -52; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.6 0" point-light="color: 0x7dff8a; intensity: 1.1; distance: 8; decay: 2"></PointLight>
   </Composition>
-  <Composition place="at: -28 -244; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -244 28; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.7 0" point-light="color: 0x7dff8a; intensity: 1.2; distance: 9; decay: 2"></PointLight>
   </Composition>
-  <Composition place="at: 96 -192; align-to-terrain: 1" body="none" collider="none">
+  <Composition place="at: -192 -96; align-to-terrain: 1" body="none" collider="none">
     <PointLight pos="0 1.65 0" point-light="color: 0x7dff8a; intensity: 1.1; distance: 8; decay: 2"></PointLight>
   </Composition>
 
   <!-- Choça do pântano (GLB). Passadiço Composition removido. -->
   <GameObject
     name="swamp-shack"
-    place="at: 20 -260; align-to-terrain: 1"
+    place="at: -260 -20; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/swamp/swamp_shack_collision.glb; mesh-anchor: base"
   >
@@ -196,17 +196,17 @@
       lod-threshold-mid="120"
     ></GLTFLoader>
   </GameObject>
-  <SpawnExclusion at="20 -260" radius="18"></SpawnExclusion>
+  <SpawnExclusion at="-260 -20" radius="18"></SpawnExclusion>
   <GameObject
-    place="at: 26 -256; align-to-terrain: 1"
+    place="at: -256 -26; align-to-terrain: 1"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: box; size: 0.55 0.7 0.55"
   >
     <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
   </GameObject>
   <GameObject
-    place="at: 14 -254; align-to-terrain: 1"
-    transform="rotation: 0 18 0"
+    place="at: -254 -14; align-to-terrain: 1"
+    transform="rotation: 0 108 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: box; size: 0.8 0.8 0.8"
   >

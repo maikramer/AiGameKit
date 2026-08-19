@@ -12,35 +12,41 @@
            AdaptiveQuality pode baixar DPR até 0.55 sob pressão; teto 1.0
            (nativo) quando a dGPU está no jogo.
            ============================================================ -->
-        <!-- sky.png é o equirect real (2048×1024, horizonte na linha média).
-             O ficheiro original do Skymap2D vinha em projeção "tiny planet"
-             (o chão inteiro colapsado num disco por cima da cabeça); está
-             guardado como sky_littleplanet_raw.png e a reconversão vive em
-             scripts/unwarp_little_planet_sky.py.
-             background-intensity 1.4 estourava o céu para branco com AgX +
-             exposure 1.10 — 1.0 mantém o azul e as nuvens legíveis. -->
-        <EquirectSky
-          url="/assets/sky/sky.png"
-          environment-intensity="0.45"
-          background-intensity="1.0"
-        ></EquirectSky>
+        <!-- Céu atmosférico procedural (espalhamento de Preetham + nuvens no
+             shader + disco solar): o sol definido aqui dirige a direcional
+             abaixo e o PMREM vira `scene.environment` — céu, sombras e o
+             ambient PBR compartilham um único sol. O equirect painterly
+             (sky.png) fica disponível em /assets/sky/ para quem preferir
+             céu de imagem (`<EquirectSky>`). Nuvens do shader ficam leves
+             porque os billboards do Weather (crossfade por bioma) são a
+             camada de nuvens "de jogo". -->
+        <Sky
+          sun-elevation="26"
+          sun-azimuth="205"
+          turbidity="2.8"
+          rayleigh="1.7"
+          mie-coefficient="0.004"
+          mie-directional-g="0.85"
+          cloud-coverage="0.15"
+          cloud-density="0.25"
+          cloud-elevation="0.55"
+          environment-intensity="0.26"
+          sun-intensity="5.0"
+          drive-light="1"
+        ></Sky>
 
-        <!-- Sol baixo + ambient. Shadow 1024 + PCSS lean; CA off; SSAO
-           half via AdaptiveQuality. CSM OFF (CustomShaderMaterial).
-
-           NEVOEIRO: o fog é FogExp2 (factor = 1 - exp(-(d·ρ)²)), por isso
-           satura muito mais cedo do que a intuição linear sugere. Com
-           ρ=0.008 e far=840 m, tudo além de ~215 m já estava a 95 % de
-           névoa: o horizonte era uma parede de leite e a serra da borda
-           (400 m+) não existia. Com ρ=0.0025 a serra lê-se a ~60 % de
-           névoa (silhueta) e o far continua coberto (~99 % a 840 m). As
-           cunhas por baixo mantêm as suas densidades relativas — ver
-           <BiomeRegion> abaixo. fog-color segue a banda do horizonte do
-           equirect (#d0d6d8). -->
+        <!-- Ambiente hemisférico baixo: o IBL do céu é quem colore a sombra
+           (azul de céu em cima, quente do chão embaixo); biomas continuam a
+           crossfadar o ambient por região. Sombras 2048 + PCSS (penumbra que
+           abre com a distância ao bloqueador). Height fog com perspectiva
+           aérea + inscattering do sol; as densidades por bioma abaixo
+           continuam a aplicar-se (o efeito lê o componente a cada frame).
+           ACES dá o contraste que o AgX lavava; bloom só no sol/glare
+           (threshold 8 — o céu procedural é HDR). -->
         <GameObject
-          ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 0.85"
-          directional-light="color: 0xfff0d0; intensity: 3.2; direction-x: -0.9; direction-y: 1.2; direction-z: -0.5; cast-shadow: 0; shadow-map-size: 512; distance: 80; pcss: 0"
-          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.12; bloom-radius: 0.40; bloom-threshold: 0.92; chromatic-aberration: 0; vignette: 1; vignette-offset: 0.34; vignette-darkness: 0.40; aa: fxaa; tone-mapping: agx; tone-mapping-exposure: 1.10; ssao: 0; ssao-intensity: 0.55; ssao-radius: 1.0; depth-of-field: 0; god-rays: 0; film-grain: 0; color-grading: 1; saturation: 0.06; contrast: 0.05; brightness: 0.015; height-fog: 1; fog-color: 0xd0d6d8; fog-density: 0.0025; fog-height: 96; fog-falloff: 0.10"
+          ambient-light="sky-color: 0xc8d8e8; ground-color: 0xa89878; intensity: 0.22"
+          directional-light="cast-shadow: 1; shadow-map-size: 2048; distance: 100; pcss: 1"
+          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.15; bloom-radius: 0.55; bloom-threshold: 8.0; chromatic-aberration: 0; vignette: 1; vignette-offset: 0.32; vignette-darkness: 0.36; aa: smaa; tone-mapping: aces; tone-mapping-exposure: 0.95; ssao: 1; ssao-intensity: 1.3; ssao-radius: 2.0; depth-of-field: 0; god-rays: 0; film-grain: 0; color-grading: 1; saturation: 0.12; contrast: 0.08; brightness: 0.0; height-fog: 1; fog-color: 0xd8d0c2; fog-density: 0.0018; fog-height: 132; fog-falloff: 35; fog-noise: 0.3; fog-sun-influence: 1.2; fog-sky-haze: 0.35"
         >
         </GameObject>
 
@@ -51,6 +57,17 @@
           min-pixel-ratio="0.55"
           max-pixel-ratio="1.0"
         ></AdaptiveQuality>
+
+        <!-- Fronteira suave, perto do fim do mapa (terreno ±2000): a serra
+             fecha o horizonte na crista (~560) e o lado de lá desce até à
+             orla. Cruzar r=1800 conta 5 s no ecrã e devolve o herói ao ponto
+             mais próximo DENTRO da fronteira, assente no chão e sem
+             velocidade — em vez de cair do mundo no corte final. -->
+        <WorldBorder
+          radius="1800"
+          warn-seconds="5"
+          margin="80"
+        ></WorldBorder>
 
         <!-- Mixer buses + BGM layers. O MusicLayerDriverSystem (engine)
            crossfada explore/battle conforme aggro; ambas saem na bus 'music'
@@ -65,7 +82,7 @@
         <Weather
           wind="0.7 0.25"
           wind-strength="1.5"
-          clouds="0.5"
+          clouds="0.25"
           cloud-height="150"
           rain="0"
           cycle="1"
@@ -112,11 +129,11 @@
           pp-bloom-strength="0.20"
           terrain-texture="/assets/textures/desert_sand.png"
         ></BiomeRegion>
-        <!-- SUL: Pântano -->
+        <!-- OESTE: Pântano (bacias baixas do relevo real) -->
         <BiomeRegion
           id="swamp"
           type="3"
-          polygon="[-56,-56;56,-56;1040,-1040;-1040,-1040]"
+          polygon="[-56,-56;-56,56;-1040,1040;-1040,-1040]"
           tint="#3a4a30"
           fog-color="#16241a"
           fog-density="0.0050"
@@ -126,11 +143,15 @@
           pp-exposure="0.9"
           terrain-texture="/assets/textures/swamp_mud.png"
         ></BiomeRegion>
-        <!-- OESTE: Picos Gelados -->
+        <!-- SUL: Picos Gelados. Vértice da cunha empurrado de ±56 para ±240:
+             o setor sul só ganha cota a partir de r≈260 (126 m a 80-160 m,
+             161 m a 400-600 m). Com o vértice na muralha, a textura de neve
+             começava a 60 m do portão, em pleno fundo de vale. Entre a
+             cidade e r=240 fica o anel neutro do vale. -->
         <BiomeRegion
           id="frozen-peaks"
           type="4"
-          polygon="[-56,-56;-56,56;-1040,1040;-1040,-1040]"
+          polygon="[-240,-240;240,-240;1040,-1040;-1040,-1040]"
           tint="#cdd9e6"
           fog-color="#dfe8f2"
           fog-density="0.0016"
