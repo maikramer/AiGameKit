@@ -445,6 +445,15 @@ async function gameObjectFootprint(
     }
   }
 
+  // Falling back to the model's visual bounds only makes sense for something
+  // that actually collides. A decoration with neither `collider` nor
+  // `rigidbody` is scenery, and treating its silhouette as solid reports the
+  // colliders deliberately placed *inside* it as overlaps — that is how the
+  // desert arch (visual-only mesh + two pillar boxes for the legs, so the
+  // player can ride through the opening) ended up as two hard errors.
+  const hasPhysics = !!collider || !!attrStr(el.attributes.rigidbody);
+  if (!hasPhysics) return null;
+
   for (const child of el.children) {
     if (child.tagName.toLowerCase() !== 'gltfloader') continue;
     const url = attrStr(child.attributes.url);
