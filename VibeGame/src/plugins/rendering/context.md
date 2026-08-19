@@ -16,8 +16,64 @@ rendering/
 ├── recipes.ts  # Renderer recipe (transform + renderer)
 ├── systems.ts  # Rendering systems
 ├── operations.ts  # Mesh and shadow operations
+├── matrix-freeze.ts  # Stop matrix updates for hidden subtrees (cull / LOD)
+├── surface-detail.ts  # Procedural normal/roughness tiles for flat surfaces
 └── utils.ts  # Canvas, context utilities, and constants
 ```
+
+## O frustum de sombra segue a câmara (e assenta no texel)
+
+`resolveShadowCenter` centra o frustum no alvo da `ThirdPersonCamera` e, **se
+não houver nenhuma, na própria `MainCamera`** (deslocada `0.55 × raio` na
+direção do olhar, para a caixa cobrir o que está no ecrã em vez da metade
+atrás). Sem esse fallback qualquer jogo com câmara própria — a câmara de
+perseguição do `simple-racer`, uma cinemática, um fly-cam — ficava com a caixa
+de 64 m ancorada na origem do mundo: o shadow pass corria na mesma e o jogo
+inteiro renderizava **sem uma única sombra do sol**.
+
+`snapShadowCenterToTexels` quantiza esse centro à grelha de texels do shadow map
+(no referencial da luz). Um centro que anda em frações de texel re-rasteriza
+cada caster para texels ligeiramente diferentes todos os frames e as bordas das
+sombras fervem — a 200 km/h é impossível não ver. Por isso o teste de "moveu-se"
+usa 1e-4 e não 5 cm: com 4096 o texel tem 1,5 cm e um dead-band de 5 cm engolia
+saltos inteiros.
+
+**CSM (`csm: 1`) continua opt-in e não validado visualmente**: no `simple-racer`
+as 3 cascatas montam-se, os materiais são patched (75) e as luzes entram na
+cena, mas o resultado não tem sombra nenhuma. Até isso estar diagnosticado, o
+caminho suportado é o mapa único acima (`pcss: 1` para a penumbra).
+
+## Micro-detalhe de superfície (`surface-detail.ts`)
+
+`applySurfaceDetail(material, kind, options)` sintetiza (uma vez, em
+`DataTexture` 256²) um par normal + roughness a partir de fBm de value noise
+com lattice cíclica — tileável, determinístico e sem assets para distribuir.
+Kinds: `asphalt`, `gravel`, `dirt`, `concrete`, `metal`.
+
+Porque existe: um `MeshStandardMaterial` com cor lisa e roughness escalar tem
+zero variação sub-métrica, portanto uma estrada devolve exatamente o mesmo
+specular em centenas de m² — é isso que lê como plástico, por melhor que seja a
+luz. O mapa de roughness é escrito como **multiplicador** em `[1 - variância,
+1]` e o escalar do material é pré-dividido pela média, para o valor pedido
+continuar a ser a média da superfície.
+
+O `repeat` vive na Texture e não no slot do material, por isso cada par
+(kind, repeatX, repeatY) tem o seu clone: dois materiais a partilhar a mesma
+Texture não podem pedir tilings diferentes — o último a atribuir retilava todos.
+Ribbons (estrada) precisam de eixos separados: o U atravessa a largura da pista
+enquanto o V conta metros de circuito.
+
+## Hidden subtrees cost frames
+
+`visible = false` keeps the renderer out of a subtree, but
+`Object3D.updateMatrixWorld` ignores visibility — every node under it is still
+recomposed each frame. In a dressed world the hidden part of the graph is the
+*majority* (simple-rpg: ~12.3k of 15.4k nodes, most of them bones of culled
+props and of inactive LOD children). `setSubtreeMatrixFrozen` clears
+`matrixAutoUpdate` across such a subtree and restores it — plus one forced
+world-matrix refresh — on the way back. Callers: `DistanceCullSystem` (on cull
+flips) and `GltfLodSystem` (inactive LOD children, and roots whose GLB finished
+loading after the entity was already culled).
 
 ## Scope
 

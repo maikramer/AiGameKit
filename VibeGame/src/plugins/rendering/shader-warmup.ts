@@ -15,6 +15,8 @@ const mainCameraQuery = defineQuery([MainCamera]);
 
 const warmedStates = new WeakMap<State, boolean>();
 const waitAttempts = new WeakMap<State, number>();
+/** Frames spent waiting for a post-processing target (see COMPOSER_GRACE_FRAMES). */
+const composerWaits = new WeakMap<State, number>();
 const startWaits = new WeakMap<State, number>();
 
 const _euler = new THREE.Euler();
@@ -35,6 +37,17 @@ const TOTAL_BUDGET_MS = 3000;
 const MAX_WAIT_FRAMES = 120;
 /** Frames to wait for the sibling gates before warming regardless. */
 const MAX_START_WAIT_FRAMES = 900;
+/**
+ * Grace period for a post-processing pipeline to appear and size its buffers.
+ *
+ * The warmup is ready as soon as the renderer and camera exist, which can be
+ * before the world XML has declared `<Postprocessing>`. Warming that early
+ * compiles every material against the canvas, and the game then renders through
+ * the composer — a different output colour space, so a different program, so
+ * the warmup bought nothing and the scene compiles twice. Short and bounded:
+ * scenes without a pipeline lose a few frames of loading time, never more.
+ */
+const COMPOSER_GRACE_FRAMES = 20;
 
 interface OrbitJob {
   phase: 'compile' | 'orbit' | 'done';
@@ -84,6 +97,17 @@ export function warmupSceneShaders(state: State): boolean {
     return waitOrForceLatch(state, 'MainCamera not in threeCameras yet');
   }
 
+  // Warming against the canvas while the game will render through a composer
+  // compiles the wrong programs (see `bindWarmupTarget`), so give the pipeline
+  // a moment to appear and size its buffers — a freshly built composer starts
+  // at 0×0 until the first `syncComposerSize`. The wait is capped so a scene
+  // with no post-processing at all only loses `COMPOSER_GRACE_FRAMES`.
+  if (!warmupBuffer(context.postProcessing)) {
+    const waited = (composerWaits.get(state) ?? 0) + 1;
+    composerWaits.set(state, waited);
+    if (waited < COMPOSER_GRACE_FRAMES) return false;
+  }
+
   // Firefox reports a 0×0 drawing buffer until the first present; size from CSS
   // so the warmup draws (and any FBO they touch) have real dimensions.
   const canvas = renderer.domElement;
@@ -124,6 +148,40 @@ function now(): number {
 }
 
 /**
+ * Bind the post-processing input buffer for the duration of the warmup.
+ *
+ * Three bakes the *output* colour space into a program's cache key, and it
+ * takes that from the bound render target — `srgb` drawing straight to the
+ * canvas, `srgb-linear` into the composer's half-float buffer. Warming up
+ * against the canvas while the game renders through a composer therefore
+ * compiles a whole second set of programs (simple-racer: 23 of 84) and leaves
+ * the real first frame to compile the variants it actually needs — exactly the
+ * hitch the warmup exists to avoid.
+ *
+ * Returns the render target to restore, or `undefined` when nothing was bound.
+ */
+function warmupBuffer(composer: unknown): THREE.WebGLRenderTarget | undefined {
+  // The rendering context types the pipeline structurally (render/dispose/
+  // setSize) so this plugin need not depend on the `postprocessing` package —
+  // reach for the buffer by duck-typing rather than widening that contract.
+  const buffer = (composer as { inputBuffer?: THREE.WebGLRenderTarget | null })
+    ?.inputBuffer;
+  if (!buffer || buffer.width <= 0 || buffer.height <= 0) return undefined;
+  return buffer;
+}
+
+function bindWarmupTarget(
+  renderer: THREE.WebGLRenderer,
+  composer: unknown
+): { previous: THREE.WebGLRenderTarget | null } | undefined {
+  const buffer = warmupBuffer(composer);
+  if (!buffer) return undefined;
+  const previous = renderer.getRenderTarget();
+  renderer.setRenderTarget(buffer);
+  return { previous };
+}
+
+/**
  * Advance the scheduled warmup by at most {@link ORBIT_BUDGET_MS}.
  *
  * Two rules keep this off the "frozen tab" path:
@@ -156,11 +214,13 @@ export function pumpShaderWarmup(state: State): void {
     // (simple-rpg opts in via directional-light pcss:1).
     applyPcssShadowPatch();
     const restores = forceSceneDrawables(scene);
+    const bound = bindWarmupTarget(renderer, context.postProcessing);
     try {
       renderer.compile(scene, camera);
     } catch (err) {
       logger.warn('[warmup] renderer.compile failed', err);
     } finally {
+      if (bound) renderer.setRenderTarget(bound.previous);
       restoreSceneDrawables(restores);
     }
     // Compile creates programs; don't charge it against the orbit budget —
@@ -174,6 +234,7 @@ export function pumpShaderWarmup(state: State): void {
     return;
   }
 
+  const orbitTarget = bindWarmupTarget(renderer, context.postProcessing);
   while (now() - started < ORBIT_BUDGET_MS) {
     if (job.pitchIndex >= WARMUP_PITCHES.length) break;
     _euler.set(
@@ -199,6 +260,7 @@ export function pumpShaderWarmup(state: State): void {
       job.pitchIndex++;
     }
   }
+  if (orbitTarget) renderer.setRenderTarget(orbitTarget.previous);
 
   job.spentMs += now() - started;
   const exhausted = job.spentMs >= TOTAL_BUDGET_MS;

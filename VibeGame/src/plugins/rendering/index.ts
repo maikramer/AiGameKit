@@ -17,6 +17,13 @@ export {
   TextureRecipeLoadSystem,
 } from './texture-recipe-system';
 export { RenderingPlugin } from './plugin';
+export {
+  applySurfaceDetail,
+  disposeSurfaceDetail,
+  getSurfaceDetailTextures,
+  type SurfaceDetailKind,
+  type SurfaceDetailOptions,
+} from './surface-detail';
 export { rendererRecipe, pointLightRecipe, spotLightRecipe } from './recipes';
 export {
   isSceneShadersWarmed,

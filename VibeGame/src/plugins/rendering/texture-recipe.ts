@@ -1,4 +1,4 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, F32, U8 } from '../../core/ecs/component-storage';
 
 /**
  * Referência a uma textura gerada pelo Texture2D (pipeline Python).
@@ -6,17 +6,17 @@ import { MAX_ENTITIES } from '../../core/ecs/constants';
  *
  * Presets disponíveis no Texture2D: Wood, Fabric, Metal, Stone, Brick, Leather, Concrete, etc.
  */
-export const TextureRecipe = {
-  pending: new Uint8Array(MAX_ENTITIES),
-  repeatMode: new Uint8Array(MAX_ENTITIES),
-  repeatX: new Float32Array(MAX_ENTITIES),
-  repeatY: new Float32Array(MAX_ENTITIES),
-  flipX: new Uint8Array(MAX_ENTITIES),
-  flipY: new Uint8Array(MAX_ENTITIES),
-  anisotropy: new Uint8Array(MAX_ENTITIES),
-  channel: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const TextureRecipe = defineComponent({
+  pending: U8,
+  repeatMode: U8,
+  repeatX: F32,
+  repeatY: F32,
+  flipX: U8,
+  flipY: U8,
+  anisotropy: U8,
+  channel: U8,
+});
 
-export const TextureRecipeLoaded = {
-  ready: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const TextureRecipeLoaded = defineComponent({
+  ready: U8,
+});

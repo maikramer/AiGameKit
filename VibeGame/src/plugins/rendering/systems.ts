@@ -39,6 +39,7 @@ import {
   threeCameras,
 } from './utils';
 import { applyPcssShadowPatch } from './pcss-shadow';
+import { setSubtreeMatrixFrozen } from './matrix-freeze';
 import {
   getAdaptiveQualityTier,
   TIER_PRESETS,
@@ -56,6 +57,10 @@ const _lightDir = new THREE.Vector3();
 const _lightOffset = new THREE.Vector3();
 const _lightPos = new THREE.Vector3();
 const _shadowCenter = new THREE.Vector3();
+const _cameraForward = new THREE.Vector3();
+const _cameraQuat = new THREE.Quaternion();
+/** Fraction of the shadow radius the frustum centre leads the camera by. */
+const SHADOW_CENTER_FORWARD_BIAS = 0.55;
 const _lightPosition = new THREE.Vector3();
 const _lightQuaternion = new THREE.Quaternion();
 const _lightForward = new THREE.Vector3(0, 0, -1);
@@ -287,7 +292,60 @@ const MAX_SPOT_LIGHTS = 2;
 const POINT_SHADOW_MAP_SIZE = 512;
 const SPOT_SHADOW_MAP_SIZE = 1024;
 
-function resolveShadowCenter(state: State): THREE.Vector3 {
+const _shadowBasis = new THREE.Matrix4();
+const _shadowBasisInverse = new THREE.Matrix4();
+const _shadowUp = new THREE.Vector3(0, 1, 0);
+const _shadowUpFallback = new THREE.Vector3(0, 0, 1);
+const _shadowOrigin = new THREE.Vector3();
+const _snappedCenter = new THREE.Vector3();
+
+/**
+ * Quantises the shadow-frustum centre to the shadow map's own texel grid.
+ *
+ * A frustum that follows the camera by sub-texel amounts re-rasterises every
+ * caster into slightly different texels each frame, so every shadow edge in
+ * the scene boils/crawls — the faster the camera moves, the worse it reads
+ * (a racer at 200 km/h is the worst case there is). Snapping the centre to
+ * whole texels in the light's own basis means the depth samples land on the
+ * same grid from frame to frame and the edges stay put.
+ */
+export function snapShadowCenterToTexels(
+  center: THREE.Vector3,
+  lightDir: THREE.Vector3,
+  radius: number,
+  mapSize: number
+): THREE.Vector3 {
+  const texel = (radius * 2) / mapSize;
+  if (!(texel > 0)) return center;
+
+  // A basis looking down the light. `lookAt` degenerates when the light is
+  // exactly vertical, so pick a different up vector in that case.
+  const up = Math.abs(lightDir.y) > 0.999 ? _shadowUpFallback : _shadowUp;
+  _shadowBasis.lookAt(_shadowOrigin.set(0, 0, 0), lightDir, up);
+  _shadowBasisInverse.copy(_shadowBasis).invert();
+
+  _snappedCenter.copy(center).applyMatrix4(_shadowBasisInverse);
+  _snappedCenter.x = Math.round(_snappedCenter.x / texel) * texel;
+  _snappedCenter.y = Math.round(_snappedCenter.y / texel) * texel;
+  _snappedCenter.applyMatrix4(_shadowBasis);
+  return _snappedCenter;
+}
+
+/**
+ * World point the sun's shadow frustum centres on.
+ *
+ * Priority: the third-person camera's target (the classic player recipe), then
+ * the main camera itself, then the fixed anchor.
+ *
+ * The camera fallback matters: a game that drives its own camera (the racer's
+ * chase camera, a cinematic, a fly-cam) has no `ThirdPersonCamera`, and before
+ * this the frustum stayed pinned at the world origin — a 64 m box the player
+ * leaves within seconds, so the whole game rendered with the sun casting **no
+ * shadow at all** while the shadow pass still ran. The centre is pushed
+ * `SHADOW_CENTER_FORWARD_BIAS` of the radius down the camera's view direction
+ * so the box covers what is on screen instead of the empty half behind it.
+ */
+export function resolveShadowCenter(state: State): THREE.Vector3 {
   _shadowCenter.copy(SHADOW_CONFIG.FIXED_FRUSTUM_CENTER);
 
   const thirdPersonCams = thirdPersonCameraQuery(state.world);
@@ -299,6 +357,38 @@ function resolveShadowCenter(state: State): THREE.Vector3 {
         WorldTransform.posY[targetEid],
         WorldTransform.posZ[targetEid]
       );
+      return _shadowCenter;
+    }
+  }
+
+  const cams = mainCameraTransformQuery(state.world);
+  if (cams.length > 0) {
+    const eid = cams[0]!;
+    _shadowCenter.set(
+      WorldTransform.posX[eid],
+      WorldTransform.posY[eid],
+      WorldTransform.posZ[eid]
+    );
+    _cameraForward
+      .set(0, 0, -1)
+      .applyQuaternion(
+        _cameraQuat.set(
+          WorldTransform.rotX[eid],
+          WorldTransform.rotY[eid],
+          WorldTransform.rotZ[eid],
+          WorldTransform.rotW[eid]
+        )
+      );
+    // Only the horizontal heading biases the box — a camera looking at the
+    // ground would otherwise drag the frustum centre under the terrain.
+    _cameraForward.y = 0;
+    if (_cameraForward.lengthSq() > 1e-6) {
+      _cameraForward
+        .normalize()
+        .multiplyScalar(
+          SHADOW_CONFIG.CAMERA_RADIUS * SHADOW_CENTER_FORWARD_BIAS
+        );
+      _shadowCenter.add(_cameraForward);
     }
   }
 
@@ -487,10 +577,11 @@ const distanceCullShadowSaved = new WeakMap<THREE.Object3D, boolean>();
 const distanceCullLastFrame = new WeakMap<State, number>();
 const DISTANCE_CULL_INTERVAL_FRAMES = 3;
 
-function applyDistanceCullCastShadow(
-  root: THREE.Object3D,
-  culled: boolean
-): void {
+/**
+ * Apply / undo the culled state on a whole GLB subtree: drop its shadow
+ * casters and stop paying for its matrix updates while it is hidden.
+ */
+function applyDistanceCullToGroup(root: THREE.Object3D, culled: boolean): void {
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -507,6 +598,7 @@ function applyDistanceCullCastShadow(
       }
     }
   });
+  setSubtreeMatrixFrozen(root, culled);
 }
 
 export const DistanceCullSystem: System = defineSystem({
@@ -560,7 +652,7 @@ export const DistanceCullSystem: System = defineSystem({
       const gltfGroup = getGltfRootGroup(state, eid);
       if (gltfGroup) {
         gltfGroup.visible = !shouldCull;
-        applyDistanceCullCastShadow(gltfGroup, shouldCull);
+        applyDistanceCullToGroup(gltfGroup, shouldCull);
       }
 
       if (state.hasComponent(eid, MeshRenderer)) {
@@ -891,7 +983,11 @@ export const LightSyncSystem: System = defineSystem({
         const normalBias = 0.02;
         // Blur radius for VSMShadowMap soft edges (texel-space, not world units).
         const shadowRadius = 1.5;
-        const radius = SHADOW_CONFIG.CAMERA_RADIUS;
+        // Coverage follows the map size at a fixed sharpness instead of being
+        // a constant: a game that pays for a 4096 map wants a bigger shadowed
+        // area, not the same 64 m box at twice the texel density. The divisor
+        // reproduces the previous 32 m radius at the default 2048.
+        const radius = mapSize / (2 * SHADOW_CONFIG.TEXELS_PER_METER);
         const near = SHADOW_CONFIG.NEAR_PLANE;
         const far = SHADOW_CONFIG.FAR_PLANE;
 
@@ -945,7 +1041,12 @@ export const LightSyncSystem: System = defineSystem({
         if (shadowChanged) shadowCamera.updateProjectionMatrix();
 
         // Shadow frustum follows the player — skip matrix work when still.
-        const shadowCenter = resolveShadowCenter(state);
+        const shadowCenter = snapShadowCenterToTexels(
+          resolveShadowCenter(state),
+          _lightDir,
+          radius,
+          mapSize
+        );
         _lightPos
           .copy(shadowCenter)
           .add(
@@ -954,13 +1055,16 @@ export const LightSyncSystem: System = defineSystem({
               .multiplyScalar(DirectionalLight.distance[entity])
           );
 
+        // The centre is already quantised to whole texels, so any difference
+        // at all is a real move — a 5 cm dead-band here would swallow entire
+        // texel steps on a 4096 map and leave the frustum lagging the camera.
         const centerMoved =
-          Math.abs(light.target.position.x - shadowCenter.x) > 0.05 ||
-          Math.abs(light.target.position.y - shadowCenter.y) > 0.05 ||
-          Math.abs(light.target.position.z - shadowCenter.z) > 0.05 ||
-          Math.abs(light.position.x - _lightPos.x) > 0.05 ||
-          Math.abs(light.position.y - _lightPos.y) > 0.05 ||
-          Math.abs(light.position.z - _lightPos.z) > 0.05;
+          Math.abs(light.target.position.x - shadowCenter.x) > 1e-4 ||
+          Math.abs(light.target.position.y - shadowCenter.y) > 1e-4 ||
+          Math.abs(light.target.position.z - shadowCenter.z) > 1e-4 ||
+          Math.abs(light.position.x - _lightPos.x) > 1e-4 ||
+          Math.abs(light.position.y - _lightPos.y) > 1e-4 ||
+          Math.abs(light.position.z - _lightPos.z) > 1e-4;
         if (centerMoved) {
           light.position.copy(_lightPos);
           light.target.position.copy(shadowCenter);

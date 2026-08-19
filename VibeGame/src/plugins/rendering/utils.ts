@@ -734,6 +734,15 @@ export const SHADOW_CONFIG = {
    * (~1m) vira ruído invisível. 32 (=64 m) dá ~32 texels/m — sombra nítida perto
    * do jogador — à custa de objetos bem distantes perderem sombra mais cedo. */
   CAMERA_RADIUS: 32,
+  /**
+   * Sharpness target for the sun's shadow map, in texels per world metre. The
+   * frustum radius is derived from it and the light's `shadow-map-size`
+   * (`radius = mapSize / (2 × this)`), so 2048 keeps the historical 32 m box
+   * and 4096 buys 64 m of coverage at the same crispness instead of doubling
+   * the density inside the same box. 32 texels/m resolves a 1 m caster
+   * (character, tree trunk, lamp post) as a readable shadow.
+   */
+  TEXELS_PER_METER: 32,
   NEAR_PLANE: 0.5,
   FAR_PLANE: 250,
   /**
