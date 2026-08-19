@@ -407,6 +407,79 @@ def debug_cut_review(
         sys.exit(2)
 
 
+@debug_group.command("texture-check")
+@click.argument("reference", type=click.Path(exists=True, path_type=Path))
+@click.argument("candidate", type=click.Path(exists=True, path_type=Path))
+@click.option("--samples", default=4000, show_default=True, type=int, help="Pontos de amostragem por GLB.")
+@click.option(
+    "--tolerance",
+    default=0.12,
+    show_default=True,
+    type=float,
+    help="Distância RGB linear aceitável por amostra (0..~1.73).",
+)
+@click.option(
+    "--fail-above",
+    default=0.25,
+    show_default=True,
+    type=float,
+    help="Fração de amostras acima da toleração que falha (0..1).",
+)
+@click.option(
+    "--min-matched",
+    default=0.8,
+    show_default=True,
+    type=float,
+    help="Fração mínima de amostras emparelhadas.",
+)
+@click.option("--match-dist", default=None, type=float, help="Raio de emparelhamento em m (default: 0.5% da diagonal).")
+@click.option("--seed", default=0, show_default=True, type=int, help="Seed determinística.")
+@click.option("--report", "-o", default=None, type=click.Path(path_type=Path), help="Guardar relatório JSON.")
+def debug_texture_check(
+    reference: Path,
+    candidate: Path,
+    samples: int,
+    tolerance: float,
+    fail_above: float,
+    min_matched: float,
+    match_dist: float | None,
+    seed: int,
+    report: Path | None,
+) -> None:
+    """Compara a cor de superfície de dois GLBs nos mesmos pontos do mundo.
+
+    Deteta texturas despedaçadas (UVs partidas / re-bake errado) que o atlas
+    isolado não denuncia: amostra a superfície da referência, lê o basecolor
+    no próprio atlas de cada GLB e compara por vizinho-mais-próximo. Exit 1
+    quando a fração de amostras acima da toleração excede --fail-above.
+    """
+    from aigamekit_lab.texture_check import compare_surface_colors, format_texture_check_summary
+
+    try:
+        result = compare_surface_colors(
+            reference,
+            candidate,
+            n_samples=samples,
+            seed=seed,
+            tolerance=tolerance,
+            fail_above=fail_above,
+            min_matched=min_matched,
+            match_dist=match_dist,
+        )
+    except Exception as exc:
+        console.print(f"[red]Erro:[/red] {exc}")
+        sys.exit(1)
+
+    if report:
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
+    color = "green" if result["pass_"] else "red"
+    console.print(f"[{color}]{format_texture_check_summary(result)}[/{color}]")
+    console.print(json.dumps(result, indent=2, ensure_ascii=False))
+    if not result["pass_"]:
+        sys.exit(1)
+
+
 @debug_group.command("inspect")
 @click.argument("input_path", type=click.Path(exists=True, path_type=Path))
 @click.option("--output", "-o", type=click.Path(path_type=Path), default=None, help="Guardar JSON em ficheiro.")
