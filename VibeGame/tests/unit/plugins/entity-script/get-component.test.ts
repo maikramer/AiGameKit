@@ -4,7 +4,7 @@ import { Parent } from '../../../../src/core/ecs/components';
 import { State } from '../../../../src/core/ecs/state';
 import { buildContext } from '../../../../src/plugins/entity-script/system';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../../src/core/ecs/constants';
 
 const TestMarker = { value: new Float32Array(MAX_ENTITIES) };
 const OtherMarker = { flag: new Uint8Array(MAX_ENTITIES) };

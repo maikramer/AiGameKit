@@ -275,8 +275,13 @@ function shouldWaitForGltf(state: State, eid: number): boolean {
  * keeping distant scripts awake.
  */
 function isDistanceCulled(state: State, eid: number): boolean {
+  // Typed-array read first: entities without DistanceCull read 0 and answer
+  // "not culled" without paying for `hasComponent` (entityExists + bitecs
+  // lookup) on every scripted entity, every frame. The membership check is
+  // still required for the 1 case, where a recycled eid could carry a stale
+  // flag from its previous owner.
   return (
-    state.hasComponent(eid, DistanceCull) && DistanceCull.culled[eid] === 1
+    DistanceCull.culled[eid] === 1 && state.hasComponent(eid, DistanceCull)
   );
 }
 

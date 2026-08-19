@@ -1,18 +1,18 @@
+import { defineComponent, F32 } from '../../core/ecs/component-storage';
 import { defineQuery, Parent, type State } from '../../core';
-import { MAX_ENTITIES } from '../../core/ecs/constants';
 import type { VariationSample } from './types';
 
 /**
  * Per-instance visual variation written at spawn; consumed by the GLTF
  * InstancedMesh2 pool (`setColorAt` + brightness/contrast uniforms).
  */
-export const SpawnVariation = {
-  colorR: new Float32Array(MAX_ENTITIES),
-  colorG: new Float32Array(MAX_ENTITIES),
-  colorB: new Float32Array(MAX_ENTITIES),
-  brightness: new Float32Array(MAX_ENTITIES),
-  contrast: new Float32Array(MAX_ENTITIES),
-} as const;
+export const SpawnVariation = defineComponent({
+  colorR: F32,
+  colorG: F32,
+  colorB: F32,
+  brightness: F32,
+  contrast: F32,
+});
 
 const parentQuery = defineQuery([Parent]);
 
