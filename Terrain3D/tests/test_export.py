@@ -92,6 +92,27 @@ class TestExportMetadata:
             data = json.load(f)
         assert data["prompt"] == "test terrain"
 
+    def test_includes_seed_provenance(self, sample_result: TerrainResult, tmp_path: Path) -> None:
+        out = tmp_path / "terrain.json"
+        export_metadata(sample_result, str(out))
+        with open(out) as f:
+            data = json.load(f)
+        assert data["seed"] == 42
+        stats = data["stats"]
+        assert stats["mode"] == "island"
+        assert stats["num_inference_steps"] == 20
+        assert stats["offset_i"] == 0
+        assert stats["offset_j"] == 0
+
+    def test_no_seed_when_none(self, sample_heightmap: np.ndarray, tmp_path: Path) -> None:
+        config = TerrainConfig(size=64)
+        result = TerrainResult(heightmap=sample_heightmap, config=config, stats={})
+        out = tmp_path / "terrain.json"
+        export_metadata(result, str(out))
+        with open(out) as f:
+            data = json.load(f)
+        assert "seed" not in data
+
     def test_no_prompt_when_none(self, sample_heightmap: np.ndarray, tmp_path: Path) -> None:
         config = TerrainConfig(size=64)
         result = TerrainResult(heightmap=sample_heightmap, config=config, stats={})
@@ -127,3 +148,45 @@ class TestNativeResolution:
         from terrain3d.generator import _native_resolution_from_model
 
         assert _native_resolution_from_model("some/other-model") == 30.0
+
+
+class TestExportAhgtCompression:
+    """O payload do `.ahgt` tem de ser deflate RAW.
+
+    O leitor é o `inflateSync` do fflate (VibeGame
+    `src/plugins/terrain/ahgt-format.ts`), que não aceita o wrapper RFC1950.
+    Escrever com `zlib.compress` produzia ficheiros que o browser rejeitava com
+    "invalid block type" — o terreno não carregava e o mundo ficava sem chão.
+    """
+
+    def test_payload_is_raw_deflate(self, sample_heightmap: np.ndarray, tmp_path: Path) -> None:
+        import struct
+        import zlib
+
+        from terrain3d.export import export_ahgt
+
+        out = export_ahgt(sample_heightmap, tmp_path / "t.ahgt", world_size=128.0, max_height=30.0)
+        blob = out.read_bytes()
+        (meta_len,) = struct.unpack("<I", blob[16:20])
+        payload = blob[20 + meta_len :]
+
+        # Descomprime como raw (wbits negativos); com wrapper zlib isto falharia.
+        raw = zlib.decompressobj(-zlib.MAX_WBITS).decompress(payload)
+        assert len(raw) == sample_heightmap.size * 2
+
+        # E o wrapper RFC1950 NÃO pode estar presente.
+        zlib_wrapped = len(payload) >= 2 and payload[0] & 0x0F == 0x08 and (payload[0] << 8 | payload[1]) % 31 == 0
+        assert not zlib_wrapped, "payload tem cabeçalho zlib; fflate.inflateSync só lê raw"
+
+    def test_roundtrip_preserves_heights(self, sample_heightmap: np.ndarray, tmp_path: Path) -> None:
+        import struct
+        import zlib
+
+        from terrain3d.export import export_ahgt
+
+        out = export_ahgt(sample_heightmap, tmp_path / "t.ahgt", world_size=128.0, max_height=30.0)
+        blob = out.read_bytes()
+        (meta_len,) = struct.unpack("<I", blob[16:20])
+        raw = zlib.decompressobj(-zlib.MAX_WBITS).decompress(blob[20 + meta_len :])
+        grid = np.frombuffer(raw, dtype="<u2").reshape(sample_heightmap.shape).astype(np.float64) / 65535.0
+        assert np.allclose(grid, np.clip(sample_heightmap, 0.0, 1.0), atol=2e-5)

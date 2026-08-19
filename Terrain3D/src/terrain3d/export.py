@@ -48,7 +48,11 @@ def export_ahgt(
         raise ValueError(f"AHGT grid exceeds 65535x65535: {w}x{h}")
 
     quantized = np.rint(np.clip(heightmap, 0.0, 1.0) * 65535.0).astype("<u2")
-    compressed = zlib.compress(quantized.tobytes(order="C"), level=6)
+    # Deflate RAW (wbits=-15), sem cabeçalho zlib: o leitor do VibeGame é o
+    # `inflateSync` do fflate, que não aceita o wrapper RFC1950 e falha com
+    # "invalid block type". `zlib.compress` escreveria esse wrapper.
+    deflater = zlib.compressobj(6, zlib.DEFLATED, -zlib.MAX_WBITS)
+    compressed = deflater.compress(quantized.tobytes(order="C")) + deflater.flush()
 
     meta = json.dumps(
         {
@@ -142,6 +146,13 @@ def export_metadata(
     for key in ("native_resolution", "native_extent_m", "horizontal_scale_ratio", "scale_warning"):
         if key in stats and stats[key] is not None:
             metadata["stats"][key] = stats[key]
+
+    # Proveniência para reproduzir a mesma região do mundo infinito — sem o
+    # seed, uma regeneração é irreproduzível (lotaria total do relevo).
+    if config.seed is not None:
+        metadata["seed"] = config.seed
+    for key in ("mode", "num_inference_steps", "offset_i", "offset_j"):
+        metadata["stats"][key] = getattr(config, key)
 
     if config.prompt is not None:
         metadata["prompt"] = config.prompt
