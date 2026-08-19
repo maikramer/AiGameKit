@@ -5,7 +5,9 @@ export {
   aiVehicleRecipe,
   trackRecipe,
   chaseCameraRecipe,
-  raceTrackPickupRecipe,
+  raceTrackItemBoxRecipe,
+  raceTrackRampRecipe,
+  hazardsLayoutRecipe,
   raceTrackObstacleRecipe,
 } from './plugin';
 export {
@@ -15,17 +17,18 @@ export {
   ChaseCamera,
   Track,
   RaceTracker,
-  PowerUp,
-  PickupKind,
-  PickupOrb,
+  HeldItem,
+  ItemKind,
+  ItemBox,
   ObstacleKind,
+  ObstacleMoveMode,
   TrackObstacleState,
   VehicleColors,
   VehicleModelLength,
   VehicleModelUrls,
   VehicleModelYaw,
 } from './components';
-export type { PickupKindValue, ObstacleKindValue } from './components';
+export type { ItemKindValue, ObstacleKindValue } from './components';
 export { TrackSpline, createFrame, nodesFromFlatList } from './spline';
 export type {
   TrackNode,
@@ -43,16 +46,39 @@ export {
   addTrackObstacle,
   clearTrackObstacles,
   getTrackObstacles,
+  removeTrackObstacles,
   forEachNearbyObstacle,
   repositionTrackObstacle,
-  addTrackPickup,
-  getTrackPickups,
-  clearTrackPickups,
+  setWorldObstacleTrackIdx,
+  addItemBox,
+  getItemBoxes,
+  clearItemBoxes,
   addTrackObstacleByS,
   getTrackSpaceObstacles,
+  removeTrackSpaceObstacles,
   clearTrackSpaceObstacles,
+  addTrackRamp,
+  getTrackRamps,
+  rampAt,
+  rampHeightAt,
+  clearTrackRamps,
+  addOilSlick,
+  getOilSlicks,
+  removeOilSlick,
+  clearOilSlicks,
+  addFireball,
+  getFireballs,
+  removeFireball,
+  clearFireballs,
 } from './data';
-export type { TrackObstacle, TrackPickup, TrackSpaceObstacle } from './data';
+export type {
+  TrackObstacle,
+  ItemBoxDef,
+  TrackSpaceObstacle,
+  TrackRamp,
+  OilSlick,
+  Fireball,
+} from './data';
 export {
   getRaceState,
   setRaceState,
@@ -109,17 +135,45 @@ export { RaceConditionsSystem } from './conditions';
 export { VehicleVisualSystem } from './vehicle-visual';
 export { VehicleFxSystem } from './vehicle-fx';
 export { EngineAudioSystem, vehicleSfxEdges } from './engine-audio';
+export { ItemSystem, useHeldItem, rollItem, ITEM_META } from './items';
+export { ItemBoxSystem, ItemBoxVisualSystem } from './item-boxes';
+export { TrickSystem, startTrick, startSpinOut, TrickKind } from './tricks';
+export type { SpinResult } from './tricks';
 export {
-  PowerUpSystem,
-  grantPowerUpAmmo,
-  usePowerUpSlot,
-  getSidewinderBolts,
-  resetSidewinderBolts,
-} from './powerups';
-export type { SidewinderBolt } from './powerups';
-export { PickupSystem, PickupVisualSystem } from './pickups';
+  RacingFxSystem,
+  pushRacingFx,
+  pushRacingBanner,
+  drainRacingBanners,
+  addImpactShake,
+  getImpactShake,
+  resetRacingFx,
+} from './fx-events';
+export type {
+  RacingFxEvent,
+  RacingFxKind,
+  RacingBannerEvent,
+} from './fx-events';
+export { RampVisualSystem } from './ramps';
+export {
+  HazardsLayoutSystem,
+  setHazardsLayout,
+  getHazardsLayout,
+  clearHazardsLayout,
+  mulberry32,
+  generateItemBoxRows,
+  generateObstacles,
+} from './layouts';
+export type {
+  HazardsLayoutOptions,
+  BoxPlacement,
+  ObstacleSpec,
+} from './layouts';
+export {
+  MovingObstacleSystem,
+  TrackObstacleVisualSystem,
+  getObstacleVisuals,
+} from './obstacles';
 export { CheckpointSystem, resetCheckpoints } from './checkpoints';
-export { TrackObstacleVisualSystem } from './obstacles';
 export { GhostSystem } from './ghost';
 export { GhostVisualSystem } from './ghost-visual';
 export {

@@ -2,8 +2,9 @@ import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { Transform } from '../transforms';
 import {
   AiDriver,
+  HeldItem,
+  ItemKind,
   PlayerVehicle,
-  PowerUp,
   RaceTracker,
   Track,
   Vehicle,
@@ -11,7 +12,8 @@ import {
 import { getTrackSpline } from './data';
 import { createFrame, type TrackSpline } from './spline';
 import { conditionWetness, getRaceState, isRacingActive } from './race-state';
-import { usePowerUpSlot } from './powerups';
+import { useHeldItem } from './items';
+import { startTrick, TrickKind } from './tricks';
 
 const aiQuery = defineQuery([AiDriver, Vehicle, Transform]);
 const allCarsQuery = defineQuery([Vehicle, Transform]);
@@ -322,48 +324,79 @@ function driveOne(
     }
   }
 
-  // ---- Power-ups ---------------------------------------------------------
-  // The AI picks its moments like a player would: pulse down the straights,
-  // shield before a hit it cannot avoid, sidewinder at whatever is blocking
-  // the racing line. Use is probabilistic so the pack doesn't fire in
-  // lockstep, and cheap (an ammo check per slot per frame).
-  useAiPowerUps(eid, spline, speed, worstCurve, blocked);
+  // ---- Items + stunts -----------------------------------------------------
+  // The AI picks its moments like a player would: turbo down the straights,
+  // fireball at whoever is ahead, oil when it is being hunted, shield before a
+  // hit it cannot avoid. Use is probabilistic so the pack doesn't fire in
+  // lockstep, and cheap (one item check per frame). Mid-air with time to
+  // spare, skilled rivals show off for the free nitro.
+  useAiItems(eid, spline, cars, speed, blocked);
+  useAiTricks(eid);
 }
 
-/** AI power-up decisions. Slots: 0 pulse, 1 sidewinder, 2 shield. */
-function useAiPowerUps(
+/** AI item decisions on the single held-item slot. */
+function useAiItems(
   eid: number,
   spline: TrackSpline,
+  cars: readonly number[],
   speed: number,
-  worstCurve: number,
   blocked: boolean
 ): void {
+  const item = HeldItem.item[eid] ?? ItemKind.None;
+  if (item === ItemKind.None) return;
   const roll = Math.random();
-  // Pulse: full throttle down a straight with ammo to spare.
-  if (
-    (PowerUp.ammo0[eid] ?? 0) > 0 &&
-    Math.abs(worstCurve) < 0.004 &&
-    speed > (Vehicle.maxSpeed[eid] || 40) * 0.8 &&
-    roll < 0.05
-  ) {
-    usePowerUpSlot(eid, 0, spline);
+
+  if (item === ItemKind.Turbo) {
+    // Full throttle down a straight.
+    if (speed > (Vehicle.maxSpeed[eid] || 40) * 0.72 && roll < 0.06) {
+      useHeldItem(eid, spline);
+    }
+    return;
   }
-  // Shield: bracing for a crash (blocked by traffic or a barrier nearby).
-  if (
-    (PowerUp.ammo2[eid] ?? 0) > 0 &&
-    PowerUp.shieldArmed[eid] === 0 &&
-    (blocked || Vehicle.impactTimer[eid] < 0.8) &&
-    roll < 0.08
-  ) {
-    usePowerUpSlot(eid, 2, spline);
+  if (item === ItemKind.Shield) {
+    // Brace for a crash it cannot avoid.
+    if (
+      HeldItem.shieldArmed[eid] === 0 &&
+      (blocked || (Vehicle.impactTimer[eid] ?? 9) < 0.8) &&
+      roll < 0.08
+    ) {
+      useHeldItem(eid, spline);
+    }
+    return;
   }
-  // Sidewinder: shove whatever is ahead off the racing line.
-  if (
-    (PowerUp.ammo1[eid] ?? 0) > 0 &&
-    (PowerUp.cd1[eid] ?? 0) <= 0 &&
-    blocked &&
-    roll < 0.06
-  ) {
-    usePowerUpSlot(eid, 1, spline);
+  if (item === ItemKind.Fireball) {
+    // Only worth it with a target inside the acquisition range.
+    for (const other of cars) {
+      if (other === eid) continue;
+      const gap = spline.deltaS(Vehicle.trackS[other], Vehicle.trackS[eid]);
+      if (gap > 6 && gap < 70 && roll < 0.1) {
+        useHeldItem(eid, spline);
+        return;
+      }
+    }
+    return;
+  }
+  if (item === ItemKind.Oil) {
+    // Drop it when someone is hunting them down, or on a straight for spacing.
+    for (const other of cars) {
+      if (other === eid) continue;
+      const gap = spline.deltaS(Vehicle.trackS[eid], Vehicle.trackS[other]);
+      if (gap > 2 && gap < 25 && roll < 0.12) {
+        useHeldItem(eid, spline);
+        return;
+      }
+    }
+  }
+}
+
+/** Mid-air stunts: confident rivals take the free nitro. */
+function useAiTricks(eid: number): void {
+  if (Vehicle.airborne[eid] !== 1) return;
+  if (Vehicle.trickActive[eid] === 1) return;
+  if ((Vehicle.spinOutTimer[eid] ?? 0) > 0) return;
+  if ((Vehicle.airHeight[eid] ?? 0) < 1.1) return;
+  const flair = (AiDriver.skill[eid] || 0.8) * 0.035;
+  if (Math.random() < flair) {
+    startTrick(eid, TrickKind.Spin360);
   }
 }

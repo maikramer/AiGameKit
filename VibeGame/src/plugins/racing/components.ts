@@ -1,4 +1,10 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  I16,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
 /**
  * Arcade vehicle state (SOA, indexed by entity id).
@@ -15,155 +21,165 @@ import { MAX_ENTITIES } from '../../core/ecs/constants';
  * the player or the AI each step) and simulation state (owned by the
  * controller, read by camera / HUD / FX).
  */
-export const Vehicle = {
+export const Vehicle = defineComponent({
   // ---- Tunables -----------------------------------------------------------
   /** Top speed on full throttle (m/s). */
-  maxSpeed: new Float32Array(MAX_ENTITIES),
+  maxSpeed: F32,
   /** Engine acceleration at zero speed (m/s²); tapers toward `maxSpeed`. */
-  accel: new Float32Array(MAX_ENTITIES),
+  accel: F32,
   /** Braking deceleration (m/s²). */
-  brake: new Float32Array(MAX_ENTITIES),
+  brake: F32,
   /** Coasting deceleration with no throttle (m/s²). */
-  engineBrake: new Float32Array(MAX_ENTITIES),
+  engineBrake: F32,
   /** Top speed in reverse (m/s). */
-  reverseSpeed: new Float32Array(MAX_ENTITIES),
+  reverseSpeed: F32,
   /** Peak yaw rate at low speed (rad/s). */
-  maxSteer: new Float32Array(MAX_ENTITIES),
+  maxSteer: F32,
   /** How fast the steer input ramps toward the key state (1/s). */
-  steerSpeed: new Float32Array(MAX_ENTITIES),
+  steerSpeed: F32,
   /** Lateral grip: fraction of side-slip killed per second (higher = stickier). */
-  grip: new Float32Array(MAX_ENTITIES),
+  grip: F32,
   /** Grip multiplier while the handbrake is held (lower = slides more). */
-  driftGrip: new Float32Array(MAX_ENTITIES),
+  driftGrip: F32,
   /** Extra acceleration while boosting (m/s²). */
-  boostAccel: new Float32Array(MAX_ENTITIES),
+  boostAccel: F32,
   /** Top-speed multiplier while boosting. */
-  boostSpeed: new Float32Array(MAX_ENTITIES),
+  boostSpeed: F32,
   /** Boost tank capacity (seconds of continuous boost). */
-  boostCapacity: new Float32Array(MAX_ENTITIES),
+  boostCapacity: F32,
   /** Boost refill rate (units/s) while not boosting. */
-  boostRecharge: new Float32Array(MAX_ENTITIES),
+  boostRecharge: F32,
   /** Chassis half-length (m) — collision + grid spacing. */
-  halfLength: new Float32Array(MAX_ENTITIES),
+  halfLength: F32,
   /** Chassis half-width (m). */
-  halfWidth: new Float32Array(MAX_ENTITIES),
+  halfWidth: F32,
   /** Height of the chassis origin above the road surface (m). */
-  rideHeight: new Float32Array(MAX_ENTITIES),
+  rideHeight: F32,
 
   // ---- Driver input (written by player input or the AI) -------------------
   /** Throttle 0..1. */
-  throttle: new Float32Array(MAX_ENTITIES),
+  throttle: F32,
   /** Brake 0..1 (also reverses once stopped). */
-  brakeInput: new Float32Array(MAX_ENTITIES),
+  brakeInput: F32,
   /** Steering -1..1 (positive = right). */
-  steerInput: new Float32Array(MAX_ENTITIES),
+  steerInput: F32,
   /** Handbrake 0/1. */
-  handbrake: new Uint8Array(MAX_ENTITIES),
+  handbrake: U8,
   /** Boost request 0/1. */
-  boostInput: new Uint8Array(MAX_ENTITIES),
+  boostInput: U8,
 
   // ---- Simulation state ---------------------------------------------------
   /** Forward speed along the chassis heading (m/s, signed). */
-  speed: new Float32Array(MAX_ENTITIES),
+  speed: F32,
   /** Sideways speed in chassis space (m/s, positive = sliding right). */
-  lateralSpeed: new Float32Array(MAX_ENTITIES),
+  lateralSpeed: F32,
   /** World heading (yaw, radians; 0 = +Z). */
-  heading: new Float32Array(MAX_ENTITIES),
+  heading: F32,
   /** Current yaw rate (rad/s). */
-  yawRate: new Float32Array(MAX_ENTITIES),
+  yawRate: F32,
   /** Smoothed steer state (-1..1) — the ramped version of `steerInput`. */
-  steer: new Float32Array(MAX_ENTITIES),
+  steer: F32,
   /** Arc position along the track (m). */
-  trackS: new Float32Array(MAX_ENTITIES),
+  trackS: F32,
   /** Signed lateral offset from the centerline (m, positive = right). */
-  trackLateral: new Float32Array(MAX_ENTITIES),
+  trackLateral: F32,
   /** Height above the road surface (m). */
-  airHeight: new Float32Array(MAX_ENTITIES),
+  airHeight: F32,
   /** Vertical velocity while airborne (m/s). */
-  verticalSpeed: new Float32Array(MAX_ENTITIES),
+  verticalSpeed: F32,
   /** 1 while the wheels are off the ground. */
-  airborne: new Uint8Array(MAX_ENTITIES),
+  airborne: U8,
   /** Surface grip multiplier under the wheels (1 = road, <1 = kerb/dirt). */
-  surfaceGrip: new Float32Array(MAX_ENTITIES),
+  surfaceGrip: F32,
   /** Normalised slide amount 0..1 — drives smoke, skid marks and screech. */
-  slip: new Float32Array(MAX_ENTITIES),
+  slip: F32,
   /** Remaining boost (same unit as `boostCapacity`). */
-  boost: new Float32Array(MAX_ENTITIES),
+  boost: F32,
   /** 1 while boost is actually being spent. */
-  boosting: new Uint8Array(MAX_ENTITIES),
+  boosting: U8,
   /** Seconds since the last wall/car impact (impact FX + AI recovery). */
-  impactTimer: new Float32Array(MAX_ENTITIES),
+  impactTimer: F32,
+  /** Active stunt kind (0 none, 1 roll left, 2 roll right, 3 front flip, 4 360). */
+  trickKind: U8,
+  /** Stunt rotation accumulated so far (rad) — drives the chassis visual. */
+  trickSpin: F32,
+  /** 1 while a stunt is in progress mid-air. */
+  trickActive: U8,
+  /** Seconds of spin-out remaining (>0 = out of control). */
+  spinOutTimer: F32,
+  /** Spin-out duration when it triggered (visual progress denominator). */
+  spinOutTotal: F32,
   /** Engine revs 0..1 (audio + HUD). */
-  rpm: new Float32Array(MAX_ENTITIES),
+  rpm: F32,
   /** Current gear (1-based, 0 = reverse) — audio + HUD only. */
-  gear: new Uint8Array(MAX_ENTITIES),
+  gear: U8,
 
   // ---- Visual juice (read by the chassis visual) --------------------------
   /** Accumulated wheel rotation (rad). */
-  wheelSpin: new Float32Array(MAX_ENTITIES),
+  wheelSpin: F32,
   /** Steering angle applied to the front wheels (rad). */
-  wheelSteer: new Float32Array(MAX_ENTITIES),
+  wheelSteer: F32,
   /** Body roll (rad, leans out of the corner). */
-  roll: new Float32Array(MAX_ENTITIES),
+  roll: F32,
   /** Body pitch (rad, dives on the brakes). */
-  pitch: new Float32Array(MAX_ENTITIES),
+  pitch: F32,
   /** Slipstream strength 0..1 — extra accel when drafting a car ahead. */
-  draft: new Float32Array(MAX_ENTITIES),
-} as const;
+  draft: F32,
+});
 
 /** Tag: the vehicle the local player drives (camera + HUD bind to it). */
-export const PlayerVehicle = {
-  tag: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const PlayerVehicle = defineComponent({
+  tag: U8,
+});
 
 /**
  * Tag + tuning for a computer-driven rival. The {@link AiDriverSystem} writes
  * this vehicle's inputs from the racing line.
  */
-export const AiDriver = {
+export const AiDriver = defineComponent({
   /** 0..1 — how hard this rival drives (corner speed, throttle discipline). */
-  skill: new Float32Array(MAX_ENTITIES),
+  skill: F32,
   /** Preferred lateral offset from the racing line (m) — keeps rivals apart. */
-  lineOffset: new Float32Array(MAX_ENTITIES),
+  lineOffset: F32,
   /** Rubber-band strength 0..1 (0 = none, 1 = strongly matches the player). */
-  rubberBand: new Float32Array(MAX_ENTITIES),
+  rubberBand: F32,
   /** Internal: smoothed steering target, and a per-driver noise phase. */
-  steerState: new Float32Array(MAX_ENTITIES),
-  noisePhase: new Float32Array(MAX_ENTITIES),
+  steerState: F32,
+  noisePhase: F32,
   /** Seconds spent making no progress along the track → recovery nudge. */
-  stuckTimer: new Float32Array(MAX_ENTITIES),
+  stuckTimer: F32,
   /** Arc position when the stuck check last sampled it (m). */
-  progressS: new Float32Array(MAX_ENTITIES),
-} as const;
+  progressS: F32,
+});
 
 /**
  * A racing circuit. The polyline lives in a sidecar ({@link getTrackSpline})
  * because bitecs stores only numbers; this component holds the scalars other
  * systems query.
  */
-export const Track = {
+export const Track = defineComponent({
   /** Laps required to finish. */
-  totalLaps: new Uint32Array(MAX_ENTITIES),
+  totalLaps: U32,
   /** Total circuit length (m), filled once the spline is built. */
-  length: new Float32Array(MAX_ENTITIES),
+  length: F32,
   /** Default road width (m). */
-  width: new Float32Array(MAX_ENTITIES),
+  width: F32,
   /** Width of the drivable-but-slow shoulder either side of the road (m). */
-  shoulder: new Float32Array(MAX_ENTITIES),
+  shoulder: F32,
   /** 1 when barriers stop the car at the shoulder edge. */
-  walls: new Uint8Array(MAX_ENTITIES),
+  walls: U8,
   /** Number of checkpoints split across the lap (Time Trial). 0 = disabled. */
-  checkpointCount: new Uint8Array(MAX_ENTITIES),
+  checkpointCount: U8,
   /**
    * Deck-above-ground distance (m) that turns a stretch into a viaduct: deck
    * box + pylons are built under it. `0` = the circuit never leaves the ground.
    * Match `<Road flatten-viaduct-clearance>` so the terrain is not graded under
    * a span that also gets columns.
    */
-  viaductClearance: new Float32Array(MAX_ENTITIES),
+  viaductClearance: F32,
   /** Arc spacing between pylons (m); 0 = engine default. */
-  pylonSpacing: new Float32Array(MAX_ENTITIES),
-} as const;
+  pylonSpacing: F32,
+});
 
 /**
  * Per-vehicle race progress. Owned by {@link RaceDirectorSystem}.
@@ -173,83 +189,83 @@ export const Track = {
  * "fraction jumped from 0.9 to 0.1" heuristic — cannot be fooled by a car
  * reversing over the line or by a projection glitch on a crossover.
  */
-export const RaceTracker = {
+export const RaceTracker = defineComponent({
   /** The track entity this vehicle races on. */
-  track: new Uint32Array(MAX_ENTITIES),
+  track: U32,
   /** Completed laps. */
-  lap: new Uint32Array(MAX_ENTITIES),
+  lap: U32,
   /** Arc position last frame (m) — wrap detector. */
-  lastS: new Float32Array(MAX_ENTITIES),
+  lastS: F32,
   /** Total distance covered (m); the ranking key. */
-  distance: new Float32Array(MAX_ENTITIES),
+  distance: F32,
   /** Race clock when the current lap started (s). */
-  lapStartTime: new Float32Array(MAX_ENTITIES),
+  lapStartTime: F32,
   /** Best lap so far (s); -1 = none yet. */
-  bestLapTime: new Float32Array(MAX_ENTITIES),
+  bestLapTime: F32,
   /** Last completed lap (s); -1 = none yet. */
-  lastLapTime: new Float32Array(MAX_ENTITIES),
+  lastLapTime: F32,
   /** 1 once the car has taken the chequered flag. */
-  finished: new Uint8Array(MAX_ENTITIES),
+  finished: U8,
   /** Race time at the finish (s). */
-  finishTime: new Float32Array(MAX_ENTITIES),
+  finishTime: F32,
   /** Live race position (1 = leading). */
-  position: new Uint32Array(MAX_ENTITIES),
+  position: U32,
   /** 1 while the car is pointing against the racing direction. */
-  wrongWay: new Uint8Array(MAX_ENTITIES),
+  wrongWay: U8,
   /** Seconds spent going the wrong way (debounce for the HUD warning). */
-  wrongWayTimer: new Float32Array(MAX_ENTITIES),
+  wrongWayTimer: F32,
   /** Grid slot (0 = pole) used when placing cars for the start / a restart. */
-  gridSlot: new Uint32Array(MAX_ENTITIES),
+  gridSlot: U32,
   /** Index of the last checkpoint the car has passed (Time Trial). */
-  lastCheckpointIndex: new Int16Array(MAX_ENTITIES),
+  lastCheckpointIndex: I16,
   /** Arc position of the last checkpoint the car has passed. */
-  lastCheckpointS: new Float32Array(MAX_ENTITIES),
+  lastCheckpointS: F32,
   /** 1 if the car has been respawned this step (HUD flash). */
-  respawnFlash: new Uint8Array(MAX_ENTITIES),
+  respawnFlash: U8,
   /** Seconds spent off-track (used by the respawn trigger). */
-  offTrackTimer: new Float32Array(MAX_ENTITIES),
+  offTrackTimer: F32,
   /** Seconds spent making no progress along the track (stuck respawn). */
-  stuckTimer: new Float32Array(MAX_ENTITIES),
+  stuckTimer: F32,
   /** Arc position when the stuck check last sampled it (m). */
-  stuckS: new Float32Array(MAX_ENTITIES),
-} as const;
+  stuckS: F32,
+});
 
 /**
  * Follow camera. Trails the car's heading and rides the track's up vector so it
  * banks with the road instead of staying stubbornly world-up.
  */
-export const ChaseCamera = {
+export const ChaseCamera = defineComponent({
   /** Vehicle entity being followed. */
-  target: new Uint32Array(MAX_ENTITIES),
+  target: U32,
   /** Distance behind the car (m). */
-  distance: new Float32Array(MAX_ENTITIES),
+  distance: F32,
   /** Height above the car (m). */
-  height: new Float32Array(MAX_ENTITIES),
+  height: F32,
   /** Positional follow time constant (s). */
-  followLag: new Float32Array(MAX_ENTITIES),
+  followLag: F32,
   /** Heading trail time constant (s). */
-  turnLag: new Float32Array(MAX_ENTITIES),
+  turnLag: F32,
   /** Look-ahead distance in front of the car (m). */
-  lookAhead: new Float32Array(MAX_ENTITIES),
+  lookAhead: F32,
   /** Resting field of view (deg). */
-  fovBase: new Float32Array(MAX_ENTITIES),
+  fovBase: F32,
   /** Extra FOV at top speed (deg). */
-  fovBoost: new Float32Array(MAX_ENTITIES),
+  fovBoost: F32,
   /** Active view: 0 chase, 1 close chase, 2 hood, 3 orbit (replay/podium). */
-  mode: new Uint8Array(MAX_ENTITIES),
+  mode: U8,
 
   // Smoothed internal state.
-  followX: new Float32Array(MAX_ENTITIES),
-  followY: new Float32Array(MAX_ENTITIES),
-  followZ: new Float32Array(MAX_ENTITIES),
-  smoothYaw: new Float32Array(MAX_ENTITIES),
-  upX: new Float32Array(MAX_ENTITIES),
-  upY: new Float32Array(MAX_ENTITIES),
-  upZ: new Float32Array(MAX_ENTITIES),
-  fov: new Float32Array(MAX_ENTITIES),
-  orbitAngle: new Float32Array(MAX_ENTITIES),
-  initialized: new Uint8Array(MAX_ENTITIES),
-} as const;
+  followX: F32,
+  followY: F32,
+  followZ: F32,
+  smoothYaw: F32,
+  upX: F32,
+  upY: F32,
+  upZ: F32,
+  fov: F32,
+  orbitAngle: F32,
+  initialized: U8,
+});
 
 /** Optional GLB chassis per vehicle (`<Vehicle model-url=…>`). */
 export const VehicleModelUrls = new Map<number, string>();
@@ -269,92 +285,106 @@ export const VehicleModelLength = new Map<number, number>();
 export const VehicleColors = new Map<number, number>();
 
 /**
- * Power-up loadout a car brings to the race.
+ * The single item slot every vehicle carries (Mario-Kart style).
  *
- * Slots are 0 (Pulse), 1 (Sidewinder), 2 (Shield). Ammos decrement on use and
- * recharge over time. Cooldown state is read by the HUD and the wire-up system.
+ * Collecting an item box spins a roulette (`rouletteTimer`); when it stops the
+ * rolled item lands in `item`. One item at a time — collect while holding and
+ * the box is wasted, exactly like the genre expects.
  */
-export const PowerUp = {
-  /** Active ammo per slot (0..capacity). */
-  ammo0: new Float32Array(MAX_ENTITIES),
-  ammo1: new Float32Array(MAX_ENTITIES),
-  ammo2: new Float32Array(MAX_ENTITIES),
-  /** Maximum ammo per slot (HUD cap). */
-  cap0: new Float32Array(MAX_ENTITIES),
-  cap1: new Float32Array(MAX_ENTITIES),
-  cap2: new Float32Array(MAX_ENTITIES),
-  /** Seconds since the slot was used (for the cooldown overlay). */
-  cd0: new Float32Array(MAX_ENTITIES),
-  cd1: new Float32Array(MAX_ENTITIES),
-  cd2: new Float32Array(MAX_ENTITIES),
-  /** Total cooldown duration per slot. */
-  cdTotal0: new Float32Array(MAX_ENTITIES),
-  cdTotal1: new Float32Array(MAX_ENTITIES),
-  cdTotal2: new Float32Array(MAX_ENTITIES),
-  /** 1 if Shield has absorbed a respawn latched for `SHIELD_LATCH_S`. */
-  shieldArmed: new Uint8Array(MAX_ENTITIES),
-  /** Pulse boost time remaining (s). 0 = idle. */
-  pulseBoost: new Float32Array(MAX_ENTITIES),
-} as const;
+export const HeldItem = defineComponent({
+  /** Held item (see {@link ItemKind}). 0 = empty hands. */
+  item: U8,
+  /** >0 while the collected box's roulette is still spinning (s). */
+  rouletteTimer: F32,
+  /** 1 while Shield is latched (absorbs one hit / respawn). */
+  shieldArmed: U8,
+  /** Seconds before a latched Shield drops on its own. */
+  shieldTime: F32,
+  /** Turbo boost time remaining (s). 0 = idle. */
+  turboTime: F32,
+});
 
-/** Pickup orb placed on the track surface. 0=Pulse, 1=Sidewinder, 2=Shield. */
-export const PickupKind = {
-  Pulse: 0,
-  Sidewinder: 1,
-  Shield: 2,
+/** Items an item box can hand out. Keep contiguous — arrays index by this. */
+export const ItemKind = {
+  None: 0,
+  Turbo: 1,
+  Fireball: 2,
+  Oil: 3,
+  Shield: 4,
 } as const;
-export type PickupKindValue = (typeof PickupKind)[keyof typeof PickupKind];
+export type ItemKindValue = (typeof ItemKind)[keyof typeof ItemKind];
 
 /**
- * Active state for a track-placed pickup orb. Orbs are pooled (ring buffer) so
- * the example can scatter ~20 of them without GC churn.
+ * A collectible item box on the track surface. What is inside is only decided
+ * on collection (position-weighted roll), so the box itself carries no kind.
  */
-export const PickupOrb = {
+export const ItemBox = defineComponent({
   /** Active lifetime remaining (s). 0 = available in the ring buffer. */
-  ttl: new Float32Array(MAX_ENTITIES),
-  /** Kind index (0/1/2). */
-  kind: new Uint8Array(MAX_ENTITIES),
+  ttl: F32,
   /** Arc position along the track (m). */
-  s: new Float32Array(MAX_ENTITIES),
+  s: F32,
   /** Lateral offset from the centerline (m). */
-  lateral: new Float32Array(MAX_ENTITIES),
+  lateral: F32,
   /** Respawn-after-collect period in seconds (0 = single-use). */
-  respawnAfter: new Float32Array(MAX_ENTITIES),
-} as const;
+  respawnAfter: F32,
+});
 
 /**
- * Track-side obstacle kinds. 0 barrel, 1 drone, 2 gate.
+ * Track-side obstacle kinds. 0 barrel, 1 drone, 2 gate, 3 crate.
  *
  * Each kind is just a visual hint for the obstacle visual system; physics is
- * identical (a circle obstacle). The Sidewinder probe nudges the one nearest
- * the player forward-and-right.
+ * identical (a circle obstacle), except crates which shatter on the first hit.
  */
 export const ObstacleKind = {
   Barrel: 0,
   Drone: 1,
   Gate: 2,
+  Crate: 3,
 } as const;
 export type ObstacleKindValue =
   (typeof ObstacleKind)[keyof typeof ObstacleKind];
 
+/** How a track obstacle moves. 0 parked, 1 sweeps side to side, 2 travels on. */
+export const ObstacleMoveMode = {
+  Static: 0,
+  Sweep: 1,
+  Travel: 2,
+} as const;
+
 /**
  * Active state for a track-side obstacle. The position is stored in track
- * space (`s`, `lateral`) so the visual system and the sidewinder test can
+ * space (`s`, `lateral`) so the visual system and the collision test can
  * resolve it to world XYZ without re-querying the spline.
  */
-export const TrackObstacleState = {
+export const TrackObstacleState = defineComponent({
   /** Arc position along the track (m). */
-  s: new Float32Array(MAX_ENTITIES),
+  s: F32,
   /** Lateral offset from the centerline (m). */
-  lateral: new Float32Array(MAX_ENTITIES),
+  lateral: F32,
   /** Collision radius (m). */
-  radius: new Float32Array(MAX_ENTITIES),
+  radius: F32,
   /** Bounce factor (0..1) — speed retained after a hit. */
-  bounce: new Float32Array(MAX_ENTITIES),
-  /** Kind index (0/1/2). */
-  kind: new Uint8Array(MAX_ENTITIES),
+  bounce: F32,
+  /** Kind index (see {@link ObstacleKind}). */
+  kind: U8,
   /** Pitch (rad/s) for spinning decorations (barrel + drone). */
-  spin: new Float32Array(MAX_ENTITIES),
+  spin: F32,
   /** Vertical hover offset (drone only). */
-  hover: new Float32Array(MAX_ENTITIES),
-} as const;
+  hover: F32,
+  /** Movement mode (see {@link ObstacleMoveMode}). */
+  moveMode: U8,
+  /** Sweep/travel speed (m/s or rad/s of the sweep phase). */
+  moveSpeed: F32,
+  /** Sweep half-amplitude (m). */
+  moveRange: F32,
+  /** Sweep phase offset (rad). */
+  movePhase: F32,
+  /** Rest arc position the movement oscillates around (m). */
+  baseS: F32,
+  /** Rest lateral offset the movement oscillates around (m). */
+  baseLateral: F32,
+  /** 1 when the obstacle shatters on the first hit (crate). */
+  breakable: U8,
+  /** >0 while broken and waiting to reform (s). */
+  cooldown: F32,
+});

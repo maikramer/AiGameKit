@@ -7,6 +7,7 @@ import { ChaseCamera, Track, Vehicle } from './components';
 import { getTrackSpline } from './data';
 import { createFrame } from './spline';
 import { getRaceState } from './race-state';
+import { getImpactShake } from './fx-events';
 
 const chaseCamQuery = defineQuery([ChaseCamera, MainCamera]);
 const trackQuery = defineQuery([Track]);
@@ -219,6 +220,7 @@ export const ChaseCameraSystem: System = defineSystem({
       let shake = speedFrac > 0.55 ? (speedFrac - 0.55) * 0.06 : 0;
       if (impact < 0.35) shake += (1 - impact / 0.35) * 0.32;
       if (Vehicle.boosting[target]) shake += 0.05;
+      shake += getImpactShake() * 0.55;
       if (shake > 0) {
         _desired.x += (Math.random() - 0.5) * shake;
         _desired.y += (Math.random() - 0.5) * shake * 0.6;

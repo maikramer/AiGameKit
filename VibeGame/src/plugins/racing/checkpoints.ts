@@ -1,7 +1,7 @@
 import { defineSystem, defineQuery, type State, type System } from '../../core';
 import {
+  HeldItem,
   PlayerVehicle,
-  PowerUp,
   RaceTracker,
   Track,
   Vehicle,
@@ -141,13 +141,11 @@ export const CheckpointSystem: System = defineSystem({
         (RaceTracker.offTrackTimer[eid] ?? 0) > OFF_TRACK_THRESHOLD ||
         (RaceTracker.stuckTimer[eid] ?? 0) > STUCK_THRESHOLD;
       if (needRespawn) {
-        // The shield absorbs the respawn only while its latch is still running
-        // (the player pressed the key within the last SHIELD_LATCH_S seconds).
-        const shieldActive =
-          PowerUp.shieldArmed[eid] === 1 && (PowerUp.cd2[eid] ?? 0) > 0;
+        // The shield absorbs the respawn while its latch is still running.
+        const shieldActive = HeldItem.shieldArmed[eid] === 1;
         if (shieldActive) {
-          PowerUp.shieldArmed[eid] = 0;
-          PowerUp.cd2[eid] = 0;
+          HeldItem.shieldArmed[eid] = 0;
+          HeldItem.shieldTime[eid] = 0;
           RaceTracker.offTrackTimer[eid] = 0;
           RaceTracker.stuckTimer[eid] = 0;
           playBanked('race-shield');

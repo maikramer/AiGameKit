@@ -2,23 +2,23 @@ import * as THREE from 'three';
 import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { getScene } from '../rendering';
 import { Track, TrackObstacleState } from './components';
-import { getTrackSpline } from './data';
-import type { TrackSpline } from './spline';
-import { getSidewinderBolts } from './powerups';
+import {
+  getTrackSpline,
+  getTrackSpaceObstacles,
+  repositionTrackObstacle,
+  type TrackSpline,
+} from './data';
 
 /**
- * Visual representation of track-side obstacles.
- *
- * The obstacle physics is a circle test in `data.ts` (via `addTrackObstacle`
- * world XZ); this system renders the mesh per kind and syncs it to the
- * spline position every draw frame. The sidewinder moves the *track-space*
- * record, so the visual simply re-samples the spline at the updated arc —
- * no extra state.
+ * Track-side obstacles: visuals per kind plus the movement system. The physics
+ * is a circle test in `data.ts` (world XZ); this module renders the mesh per
+ * kind and, for moving hazards, advances the track-space record and keeps the
+ * world spatial hash in sync so collision queries see the new spot.
  */
 
 const _pos = { x: 0, y: 0, z: 0 };
 
-const KINDS = ['Barrel', 'Drone', 'Gate'] as const;
+const KINDS = ['Barrel', 'Drone', 'Gate', 'Crate'] as const;
 
 function buildBarrel(): THREE.Group {
   const g = new THREE.Group();
@@ -102,6 +102,28 @@ function buildGate(): THREE.Group {
   return g;
 }
 
+function buildCrate(): THREE.Group {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({
+    color: 0x9c7a4a,
+    roughness: 0.85,
+    metalness: 0.02,
+  });
+  const edge = new THREE.MeshStandardMaterial({
+    color: 0x5c4126,
+    roughness: 0.7,
+  });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.2, 1.5), wood);
+  body.position.y = 0.6;
+  g.add(body);
+  for (const y of [0.18, 1.02]) {
+    const band = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.14, 1.56), edge);
+    band.position.y = y;
+    g.add(band);
+  }
+  return g;
+}
+
 function buildObstacle(kind: number): THREE.Group {
   const g = new THREE.Group();
   g.name = `Obstacle:${KINDS[kind] ?? 'Unknown'}`;
@@ -109,6 +131,8 @@ function buildObstacle(kind: number): THREE.Group {
     g.add(buildBarrel());
   } else if (kind === 1) {
     g.add(buildDrone());
+  } else if (kind === 3) {
+    g.add(buildCrate());
   } else {
     g.add(buildGate());
   }
@@ -122,54 +146,50 @@ interface ObstacleVisual {
 }
 
 const visuals: ObstacleVisual[] = [];
-let boltLine: THREE.LineSegments | null = null;
-
-function syncSidewinderBolts(scene: THREE.Scene): void {
-  const bolts = getSidewinderBolts();
-  if (!boltLine) {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute(
-      'position',
-      new THREE.BufferAttribute(new Float32Array(48), 3)
-    );
-    const mat = new THREE.LineBasicMaterial({
-      color: 0xff5dff,
-      transparent: true,
-      opacity: 0.9,
-      depthWrite: false,
-    });
-    boltLine = new THREE.LineSegments(geo, mat);
-    boltLine.frustumCulled = false;
-    scene.add(boltLine);
-  }
-  let pos = boltLine.geometry.getAttribute('position') as THREE.BufferAttribute;
-  const need = Math.max(6, bolts.length * 6);
-  if (pos.array.length < need) {
-    boltLine.geometry.setAttribute(
-      'position',
-      new THREE.BufferAttribute(new Float32Array(need * 2), 3)
-    );
-    pos = boltLine.geometry.getAttribute('position') as THREE.BufferAttribute;
-  }
-  const arr = pos.array as Float32Array;
-  arr.fill(0);
-  for (let i = 0; i < bolts.length; i++) {
-    const b = bolts[i]!;
-    const o = i * 6;
-    arr[o] = b.ax;
-    arr[o + 1] = b.ay;
-    arr[o + 2] = b.az;
-    arr[o + 3] = b.bx;
-    arr[o + 4] = b.by;
-    arr[o + 5] = b.bz;
-  }
-  boltLine.geometry.setDrawRange(0, bolts.length * 2);
-  pos.needsUpdate = true;
-  boltLine.visible = bolts.length > 0;
-}
 
 const obstacleQuery = defineQuery([TrackObstacleState]);
 const trackQuery = defineQuery([Track]);
+
+/**
+ * MovingObstacleSystem — advances sweeping/travelling hazards and re-forms
+ * broken crates. Sweep oscillates the lateral offset around its rest value;
+ * travel marches the arc position forward and wraps at the finish line.
+ */
+export const MovingObstacleSystem: System = defineSystem({
+  name: 'MovingObstacleSystem',
+  group: 'fixed',
+
+  update(state: State) {
+    const trackEid = trackQuery(state.world)[0];
+    if (trackEid === undefined) return;
+    const spline = getTrackSpline(trackEid);
+    if (!spline) return;
+    const dt = state.time.fixedDeltaTime;
+
+    for (const o of getTrackSpaceObstacles()) {
+      if (o.moveMode === 1) {
+        o.movePhase += o.moveSpeed * dt;
+        o.lateral = o.baseLateral + Math.sin(o.movePhase) * o.moveRange;
+      } else if (o.moveMode === 2) {
+        o.s = spline.wrapS(o.s + o.moveSpeed * dt);
+      } else {
+        continue;
+      }
+      const p = spline.positionAt(o.s, o.lateral);
+      if (o.worldIndex >= 0) repositionTrackObstacle(o.worldIndex, p.x, p.z);
+      if (o.eid >= 0) {
+        TrackObstacleState.s[o.eid] = o.s;
+        TrackObstacleState.lateral[o.eid] = o.lateral;
+      }
+    }
+
+    // Crates re-form a few seconds after shattering.
+    for (const eid of obstacleQuery(state.world)) {
+      const cd = TrackObstacleState.cooldown[eid] ?? 0;
+      if (cd > 0) TrackObstacleState.cooldown[eid] = Math.max(0, cd - dt);
+    }
+  },
+});
 
 export const TrackObstacleVisualSystem: System = defineSystem({
   name: 'TrackObstacleVisualSystem',
@@ -199,6 +219,7 @@ export const TrackObstacleVisualSystem: System = defineSystem({
     for (let i = visuals.length - 1; i >= 0; i--) {
       if (!entities.includes(visuals[i]!.eid)) {
         visuals[i]!.group.parent?.remove(visuals[i]!.group);
+        disposeGroup(visuals[i]!.group);
         visuals.splice(i, 1);
       }
     }
@@ -217,38 +238,43 @@ export const TrackObstacleVisualSystem: System = defineSystem({
         _pos.z
       );
       v.group.rotation.y = t * spin + eid;
+      // A shattered crate is a puddle of debris until it re-forms.
+      v.group.visible = (TrackObstacleState.cooldown[eid] ?? 0) <= 0;
+      if (!v.group.visible) continue;
+      const pop = TrackObstacleState.cooldown[eid] ?? 0;
+      if (pop > 0 && pop < 0.5) {
+        v.group.scale.setScalar(0.2 + (1 - pop / 0.5) * 0.8);
+      } else {
+        v.group.scale.setScalar(1);
+      }
     }
-
-    syncSidewinderBolts(scene);
   },
 
   dispose() {
-    if (boltLine) {
-      boltLine.parent?.remove(boltLine);
-      boltLine.geometry.dispose();
-      (boltLine.material as THREE.Material).dispose();
-      boltLine = null;
-    }
     for (const v of visuals) {
       v.group.parent?.remove(v.group);
-      v.group.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        if (mesh.isMesh) {
-          mesh.geometry?.dispose();
-          (mesh.material as THREE.Material)?.dispose();
-        }
-      });
+      disposeGroup(v.group);
     }
     visuals.length = 0;
   },
 });
+
+function disposeGroup(group: THREE.Group): void {
+  group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh) {
+      mesh.geometry?.dispose();
+      (mesh.material as THREE.Material)?.dispose();
+    }
+  });
+}
 
 /** Get the active obstacle visual groups (tests / debug). */
 export function getObstacleVisuals(): readonly ObstacleVisual[] {
   return visuals;
 }
 
-/** Resolve an obstacle's world position (for the sidewinder). */
+/** Resolve an obstacle's world position (for FX placement). */
 export function obstacleWorldPos(
   spline: TrackSpline,
   s: number,
@@ -256,9 +282,4 @@ export function obstacleWorldPos(
   out = { x: 0, y: 0, z: 0 }
 ): { x: number; y: number; z: number } {
   return spline.positionAt(s, lateral, 0, out);
-}
-
-/** Shared position object for the sidewinder probe. */
-export function obstacleProbe(): { x: number; y: number; z: number } {
-  return _pos;
 }

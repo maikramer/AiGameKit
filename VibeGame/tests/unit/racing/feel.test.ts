@@ -3,17 +3,18 @@ import { State } from '../../../src/core';
 import { Transform, WorldTransform } from '../../../src/plugins/transforms';
 import {
   AiDriver,
+  HeldItem,
+  ItemKind,
   PlayerVehicle,
-  PowerUp,
   RaceTracker,
   Track,
   Vehicle,
 } from '../../../src/plugins/racing/components';
 import {
-  addTrackObstacleByS,
   attachTrackSpline,
+  clearFireballs,
   clearTrackData,
-  getTrackSpaceObstacles,
+  getFireballs,
 } from '../../../src/plugins/racing/data';
 import {
   TrackSpline,
@@ -21,11 +22,8 @@ import {
 } from '../../../src/plugins/racing/spline';
 import { placeVehicleOnTrack } from '../../../src/plugins/racing/vehicle-control';
 import { vehicleSfxEdges } from '../../../src/plugins/racing/engine-audio';
-import {
-  getSidewinderBolts,
-  resetSidewinderBolts,
-  usePowerUpSlot,
-} from '../../../src/plugins/racing/powerups';
+import { ItemSystem, useHeldItem } from '../../../src/plugins/racing/items';
+import { startSpinOut } from '../../../src/plugins/racing/tricks';
 import {
   AiDriverSystem,
   resetAiMistakes,
@@ -72,7 +70,7 @@ function tuneCar(eid: number): void {
 afterEach(() => {
   resetRaceState();
   clearTrackData();
-  resetSidewinderBolts();
+  clearFireballs();
   resetAiMistakes();
 });
 
@@ -158,8 +156,8 @@ describe('vehicle SFX edges', () => {
   });
 });
 
-describe('sidewinder bolt', () => {
-  it('pushes the obstacle ahead and records a bolt flash', () => {
+describe('fireball', () => {
+  it('launches from the held slot and homes onto the kart ahead', () => {
     const state = new State();
     state.registerComponent('transform', Transform);
     state.registerComponent('world-transform', WorldTransform);
@@ -167,7 +165,7 @@ describe('sidewinder bolt', () => {
     state.registerComponent('player-vehicle', PlayerVehicle);
     state.registerComponent('race-tracker', RaceTracker);
     state.registerComponent('track', Track);
-    state.registerComponent('power-up', PowerUp);
+    state.registerComponent('held-item', HeldItem);
 
     const track = state.createEntity();
     state.addComponent(track, Track);
@@ -181,18 +179,61 @@ describe('sidewinder bolt', () => {
     state.addComponent(car, Vehicle);
     state.addComponent(car, PlayerVehicle);
     state.addComponent(car, RaceTracker);
-    state.addComponent(car, PowerUp);
+    state.addComponent(car, HeldItem);
     tuneCar(car);
     placeVehicleOnTrack(car, spline, 0, 0);
 
-    addTrackObstacleByS(20, 0, 0.8, 0.4, 0);
-    PowerUp.ammo1[car] = 1;
-    PowerUp.cd1[car] = 0;
+    const rival = state.createEntity();
+    state.addComponent(rival, Transform);
+    state.addComponent(rival, WorldTransform);
+    state.addComponent(rival, Vehicle);
+    state.addComponent(rival, RaceTracker);
+    state.addComponent(rival, HeldItem);
+    tuneCar(rival);
+    placeVehicleOnTrack(rival, spline, 40, 1.5);
+    Vehicle.speed[rival] = 30;
 
-    expect(usePowerUpSlot(car, 1, spline)).toBe(true);
-    expect(getTrackSpaceObstacles()[0]!.s).toBeGreaterThan(20);
-    expect(getSidewinderBolts().length).toBe(1);
-    expect(PowerUp.ammo1[car]).toBe(0);
+    HeldItem.item[car] = ItemKind.Fireball;
+    expect(useHeldItem(car, spline)).toBe(true);
+    expect(HeldItem.item[car]).toBe(ItemKind.None);
+    expect(getFireballs().length).toBe(1);
+
+    const mutableTime = state.time as { fixedDeltaTime: number };
+    mutableTime.fixedDeltaTime = FIXED_DT;
+    setRaceState({ phase: 'racing', track });
+    // The fireball is faster than the kart it chases: it closes and hits.
+    for (let i = 0; i < 240 && getFireballs().length > 0; i++) {
+      ItemSystem.update?.(state);
+    }
+    expect(getFireballs().length).toBe(0);
+    expect(Vehicle.spinOutTimer[rival]).toBeGreaterThan(0);
+  });
+
+  it('a latched shield eats the spin instead', () => {
+    const state = new State();
+    state.registerComponent('transform', Transform);
+    state.registerComponent('world-transform', WorldTransform);
+    state.registerComponent('vehicle', Vehicle);
+    state.registerComponent('race-tracker', RaceTracker);
+    state.registerComponent('track', Track);
+    state.registerComponent('held-item', HeldItem);
+
+    const track = state.createEntity();
+    state.addComponent(track, Track);
+    const spline = new TrackSpline(ovalNodes(), { step: 2 });
+    attachTrackSpline(track, spline);
+
+    const car = state.createEntity();
+    state.addComponent(car, Transform);
+    state.addComponent(car, Vehicle);
+    state.addComponent(car, RaceTracker);
+    state.addComponent(car, HeldItem);
+
+    HeldItem.shieldArmed[car] = 1;
+    HeldItem.shieldTime[car] = 5;
+    expect(startSpinOut(car)).toBe('blocked');
+    expect(Vehicle.spinOutTimer[car]).toBe(0);
+    expect(HeldItem.shieldArmed[car]).toBe(0);
   });
 });
 

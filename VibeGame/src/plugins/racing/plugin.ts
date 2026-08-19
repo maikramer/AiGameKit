@@ -3,9 +3,12 @@ import type { Parser, Plugin, Recipe, XMLValue } from '../../core';
 import {
   AiDriver,
   ChaseCamera,
+  HeldItem,
+  ItemBox,
+  ItemKind,
+  ObstacleKind,
+  ObstacleMoveMode,
   PlayerVehicle,
-  PowerUp,
-  PickupOrb,
   RaceTracker,
   Track,
   TrackObstacleState,
@@ -15,7 +18,16 @@ import {
   VehicleModelUrls,
   VehicleModelYaw,
 } from './components';
-import { setTrackSpline } from './data';
+import {
+  setTrackSpline,
+  addTrackRamp,
+  addItemBox,
+  addTrackObstacleByS,
+  addTrackObstacle,
+  setWorldObstacleTrackIdx,
+  getTrackSpline,
+  getPrimaryTrackEntity,
+} from './data';
 import type { TrackNode } from './spline';
 import { AiDriverSystem } from './ai-driver';
 import {
@@ -32,19 +44,20 @@ import { VehicleControlSystem } from './vehicle-control';
 import { VehicleFxSystem } from './vehicle-fx';
 import { VehicleVisualSystem } from './vehicle-visual';
 import { registerRacingHudFactories } from './hud';
-import { PowerUpSystem } from './powerups';
-import { PickupSystem, PickupVisualSystem } from './pickups';
-import { CheckpointSystem } from './checkpoints';
-import { TrackObstacleVisualSystem } from './obstacles';
+import { ItemSystem } from './items';
+import { ItemBoxSystem, ItemBoxVisualSystem } from './item-boxes';
+import { TrickSystem } from './tricks';
+import { RampVisualSystem } from './ramps';
+import { RacingFxSystem } from './fx-events';
+import {
+  HazardsLayoutSystem,
+  setHazardsLayout,
+  type HazardsLayoutOptions,
+} from './layouts';
+import { MovingObstacleSystem, TrackObstacleVisualSystem } from './obstacles';
 import { GhostSystem } from './ghost';
 import { GhostVisualSystem } from './ghost-visual';
-import {
-  addTrackPickup,
-  addTrackObstacleByS,
-  addTrackObstacle,
-  getTrackSpline,
-  getPrimaryTrackEntity,
-} from './data';
+import { CheckpointSystem } from './checkpoints';
 import { disableDefaultPlayer } from '../startup';
 import { logger } from '../../core/utils/logger';
 
@@ -72,7 +85,7 @@ const VEHICLE_ATTRS = [
   'model-length',
   'color',
   'driver',
-  'loadout',
+  'start-item',
 ] as const;
 
 /**
@@ -82,7 +95,7 @@ const VEHICLE_ATTRS = [
  */
 export const vehicleRecipe: Recipe = {
   name: 'Vehicle',
-  components: ['transform', 'vehicle', 'race-tracker', 'power-up'],
+  components: ['transform', 'vehicle', 'race-tracker', 'held-item'],
   parserAttributes: [...VEHICLE_ATTRS],
 };
 
@@ -94,7 +107,7 @@ export const playerVehicleRecipe: Recipe = {
     'vehicle',
     'player-vehicle',
     'race-tracker',
-    'power-up',
+    'held-item',
   ],
   parserAttributes: [...VEHICLE_ATTRS],
 };
@@ -102,7 +115,13 @@ export const playerVehicleRecipe: Recipe = {
 /** `<AiVehicle skill="0.9" rubber-band="0.6">` — a computer-driven rival. */
 export const aiVehicleRecipe: Recipe = {
   name: 'AiVehicle',
-  components: ['transform', 'vehicle', 'ai-driver', 'race-tracker', 'power-up'],
+  components: [
+    'transform',
+    'vehicle',
+    'ai-driver',
+    'race-tracker',
+    'held-item',
+  ],
   parserAttributes: [...VEHICLE_ATTRS, 'skill', 'rubber-band', 'line-offset'],
 };
 
@@ -157,18 +176,59 @@ export const chaseCameraRecipe: Recipe = {
   ],
 };
 
-/** `<RaceTrackPickup s="80" lateral="0" kind="pulse" />` — a power-up orb. */
-export const raceTrackPickupRecipe: Recipe = {
-  name: 'RaceTrackPickup',
+/**
+ * `<RaceTrackItemBox s="80" lateral="0" respawn="5" />` — a single item chest.
+ * Layout generators place these in batches; the tag exists for hand-tuning.
+ */
+export const raceTrackItemBoxRecipe: Recipe = {
+  name: 'RaceTrackItemBox',
   components: [],
-  parserAttributes: ['s', 'lateral', 'kind', 'respawn'],
+  parserAttributes: ['s', 'lateral', 'respawn'],
+};
+
+/**
+ * `<RaceTrackRamp s="300" length="12" width="7" height="2.4" lateral="0" />` —
+ * a jump wedge: grounded cars climb the linear profile and launch off the lip.
+ */
+export const raceTrackRampRecipe: Recipe = {
+  name: 'RaceTrackRamp',
+  components: [],
+  parserAttributes: ['s', 'lateral', 'length', 'width', 'height'],
+};
+
+/**
+ * `<HazardsLayout seed="auto" rows="6" per-row="3" obstacles="4" moving="3"
+ * crates="2" />` — generate the item boxes and obstacles procedurally.
+ * `seed="auto"` re-rolls every race; a number keeps the layout fixed.
+ */
+export const hazardsLayoutRecipe: Recipe = {
+  name: 'HazardsLayout',
+  components: [],
+  parserAttributes: [
+    'seed',
+    'rows',
+    'per-row',
+    'obstacles',
+    'moving',
+    'crates',
+  ],
 };
 
 /** `<RaceTrackObstacle s="120" lateral="-2" kind="barrel" />` — a hazard. */
 export const raceTrackObstacleRecipe: Recipe = {
   name: 'RaceTrackObstacle',
   components: [],
-  parserAttributes: ['s', 'lateral', 'radius', 'bounce', 'kind'],
+  parserAttributes: [
+    's',
+    'lateral',
+    'radius',
+    'bounce',
+    'kind',
+    'move',
+    'move-speed',
+    'move-range',
+    'breakable',
+  ],
 };
 
 // ---- Parsers ---------------------------------------------------------------
@@ -235,33 +295,20 @@ const vehicleParser: Parser = ({ entity, element }) => {
   if (a.driver !== undefined) setVehicleName(entity, String(a.driver));
   else if (a.name !== undefined) setVehicleName(entity, String(a.name));
 
-  // Power-up loadout: `loadout="pulse:2,sidewinder:2,shield:1"`.
-  if (a.loadout !== undefined) {
-    const slots: [string, number][] = [
-      ['pulse', 0],
-      ['sidewinder', 1],
-      ['shield', 2],
-    ];
-    const text = String(a.loadout).toLowerCase();
-    for (const [name, idx] of slots) {
-      const m = new RegExp(`${name}\\s*:\\s*(\\d+)`).exec(text);
-      const ammo = m ? Math.max(0, Math.floor(num(m[1]!, 0))) : 0;
-      if (ammo > 0) {
-        if (idx === 0) {
-          PowerUp.cap0[entity] = ammo;
-          PowerUp.ammo0[entity] = ammo;
-          PowerUp.cdTotal0[entity] = 0.6;
-        } else if (idx === 1) {
-          PowerUp.cap1[entity] = ammo;
-          PowerUp.ammo1[entity] = ammo;
-          PowerUp.cdTotal1[entity] = 2.2;
-        } else {
-          PowerUp.cap2[entity] = ammo;
-          PowerUp.ammo2[entity] = ammo;
-          PowerUp.cdTotal2[entity] = 1.4;
-        }
-      }
-    }
+  // Starting item: `start-item="turbo"` — handy for tests and demos.
+  if (a['start-item'] !== undefined) {
+    const text = String(a['start-item']).toLowerCase();
+    const item =
+      text === 'fireball'
+        ? ItemKind.Fireball
+        : text === 'oil'
+          ? ItemKind.Oil
+          : text === 'shield'
+            ? ItemKind.Shield
+            : text === 'none' || text === ''
+              ? ItemKind.None
+              : ItemKind.Turbo;
+    HeldItem.item[entity] = item;
   }
 
   // AI tuning (ignored on player/plain vehicles that lack the component).
@@ -368,30 +415,65 @@ const trackParser: Parser = ({ state, entity, element }) => {
 };
 
 /**
- * `<RaceTrackPickup s="80" lateral="0" kind="pulse" />` — a power-up orb.
- *
- * `s` and `lateral` are in track space; the orb spawns when the track spline
- * exists (first frame after parse). Kind: pulse | sidewinder | shield.
+ * `<RaceTrackItemBox s="80" lateral="0" respawn="5" />` — a single item chest
+ * in track space. The contents are rolled on collection.
  */
-const raceTrackPickupParser: Parser = ({ state, entity, element }) => {
+const raceTrackItemBoxParser: Parser = ({ element }) => {
   const a = element.attributes;
   const s = num(a.s, 0);
   const lateral = a.lateral !== undefined ? num(a.lateral, 0) : 0;
-  const kindText = String(a.kind ?? 'pulse').toLowerCase();
-  const kind = kindText === 'shield' ? 2 : kindText === 'sidewinder' ? 1 : 0;
-  const respawn = a.respawn !== undefined ? num(a.respawn, 6) : 6;
-  // Register the pickup in the shared sidecar; the visual system creates the
-  // entity once the track spline is attached.
-  addTrackPickup(s, lateral, kind, respawn);
-  void state;
-  void entity;
+  const respawn = a.respawn !== undefined ? num(a.respawn, 5) : 5;
+  addItemBox(s, lateral, respawn);
 };
 
 /**
- * `<RaceTrackObstacle s="120" lateral="-2" radius="1.4" kind="barrel" />`.
+ * `<RaceTrackRamp s="300" length="12" width="7" height="2.4" />`.
  *
- * A solid track-side obstacle. `kind`: barrel | drone | gate — affects only
- * the visual; the physics is the same circle.
+ * Grounded cars inside the span climb the wedge; leaving the far end converts
+ * speed into a vertical launch (slope × speed).
+ */
+const raceTrackRampParser: Parser = ({ element }) => {
+  const a = element.attributes;
+  addTrackRamp(
+    num(a.s, 0),
+    a.length !== undefined ? num(a.length, 10) : 10,
+    a.width !== undefined ? num(a.width, 6) : 6,
+    a.height !== undefined ? num(a.height, 2) : 2,
+    a.lateral !== undefined ? num(a.lateral, 0) : 0
+  );
+};
+
+/**
+ * `<HazardsLayout>` — configure the procedural generator. Applied once the
+ * track spline exists and re-rolled on every race restart when `seed="auto"`.
+ */
+const hazardsLayoutParser: Parser = ({ element }) => {
+  const a = element.attributes;
+  const options: Partial<HazardsLayoutOptions> = {};
+  if (a.seed !== undefined) {
+    const text = String(a.seed).toLowerCase();
+    options.seedMode = text === 'auto' ? 'auto' : 'fixed';
+    options.seed = text === 'auto' ? 1 : num(a.seed, 1);
+  }
+  if (a.rows !== undefined) options.rows = Math.max(0, num(a.rows, 6));
+  if (a['per-row'] !== undefined) {
+    options.perRow = Math.max(1, num(a['per-row'], 3));
+  }
+  if (a.obstacles !== undefined) {
+    options.obstacles = Math.max(0, num(a.obstacles, 4));
+  }
+  if (a.moving !== undefined) options.moving = Math.max(0, num(a.moving, 3));
+  if (a.crates !== undefined) options.crates = Math.max(0, num(a.crates, 2));
+  setHazardsLayout(options);
+};
+
+/**
+ * `<RaceTrackObstacle s="120" lateral="-2" radius="1.4" kind="barrel"
+ * move="sweep" move-speed="1.6" move-range="4" breakable="false" />`.
+ *
+ * A solid track-side obstacle. `kind`: barrel | drone | gate | crate — affects
+ * only the visual (crates shatter); `move`: sweep (side to side) | travel
+ * (rolls on down the track).
  */
 const raceTrackObstacleParser: Parser = ({ state, entity, element }) => {
   const a = element.attributes;
@@ -400,24 +482,77 @@ const raceTrackObstacleParser: Parser = ({ state, entity, element }) => {
   const radius = a.radius !== undefined ? num(a.radius, 1.2) : 1.2;
   const bounce = a.bounce !== undefined ? num(a.bounce, 0.4) : 0.4;
   const kindText = String(a.kind ?? 'barrel').toLowerCase();
-  const kind = kindText === 'gate' ? 2 : kindText === 'drone' ? 1 : 0;
+  const kind =
+    kindText === 'crate'
+      ? ObstacleKind.Crate
+      : kindText === 'gate'
+        ? ObstacleKind.Gate
+        : kindText === 'drone'
+          ? ObstacleKind.Drone
+          : ObstacleKind.Barrel;
+  const moveText = String(a.move ?? 'static').toLowerCase();
+  const moveMode =
+    moveText === 'sweep'
+      ? ObstacleMoveMode.Sweep
+      : moveText === 'travel'
+        ? ObstacleMoveMode.Travel
+        : ObstacleMoveMode.Static;
+  const moveSpeed =
+    a['move-speed'] !== undefined
+      ? num(a['move-speed'], moveMode === ObstacleMoveMode.Sweep ? 1.5 : 7)
+      : moveMode === ObstacleMoveMode.Sweep
+        ? 1.5
+        : 7;
+  const moveRange =
+    a['move-range'] !== undefined ? num(a['move-range'], 3.5) : 3.5;
+  const breakable = kind === ObstacleKind.Crate || bool(a.breakable, false);
   // Resolve the world position from the track spline (first track wins).
   const trackEid = getPrimaryTrackEntity();
   if (trackEid === undefined) return;
   const spline = getTrackSpline(trackEid);
   if (!spline) return;
   const f = spline.positionAt(s, lateral);
-  addTrackObstacle(f.x, f.z, radius, bounce);
-  addTrackObstacleByS(s, lateral, radius, bounce, kind, entity);
-  // Attach the TrackObstacleState component for the visual system.
+  const worldIndex = addTrackObstacle(
+    f.x,
+    f.z,
+    radius,
+    bounce,
+    breakable ? 1 : 0
+  );
+  const trackIdx = addTrackObstacleByS(
+    s,
+    lateral,
+    radius,
+    bounce,
+    kind,
+    entity,
+    worldIndex,
+    {
+      moveMode,
+      moveSpeed,
+      moveRange: moveMode === ObstacleMoveMode.Sweep ? moveRange : 0,
+      movePhase: 0,
+    }
+  );
+  setWorldObstacleTrackIdx(worldIndex, trackIdx);
+  // Attach the TrackObstacleState component for the visual + movement systems.
   state.addComponent(entity, TrackObstacleState);
   TrackObstacleState.s[entity] = s;
   TrackObstacleState.lateral[entity] = lateral;
   TrackObstacleState.radius[entity] = radius;
   TrackObstacleState.bounce[entity] = bounce;
   TrackObstacleState.kind[entity] = kind;
-  TrackObstacleState.spin[entity] = kind === 0 ? 2 : kind === 1 ? 1.2 : 0;
-  TrackObstacleState.hover[entity] = kind === 1 ? 1.1 : 0;
+  TrackObstacleState.spin[entity] =
+    kind === ObstacleKind.Barrel ? 2 : kind === ObstacleKind.Drone ? 1.2 : 0;
+  TrackObstacleState.hover[entity] = kind === ObstacleKind.Drone ? 1.1 : 0;
+  TrackObstacleState.moveMode[entity] = moveMode;
+  TrackObstacleState.moveSpeed[entity] = moveSpeed;
+  TrackObstacleState.moveRange[entity] =
+    moveMode === ObstacleMoveMode.Sweep ? moveRange : 0;
+  TrackObstacleState.baseS[entity] = s;
+  TrackObstacleState.baseLateral[entity] = lateral;
+  TrackObstacleState.breakable[entity] = breakable ? 1 : 0;
+  TrackObstacleState.cooldown[entity] = 0;
 };
 
 const chaseCameraParser: Parser = ({ entity, element }) => {
@@ -452,8 +587,11 @@ const chaseCameraParser: Parser = ({ entity, element }) => {
 export const RacingPlugin: Plugin = {
   systems: [
     AiDriverSystem,
-    PowerUpSystem,
     VehicleControlSystem,
+    TrickSystem,
+    ItemSystem,
+    MovingObstacleSystem,
+    ItemBoxSystem,
     RaceDirectorSystem,
     GhostSystem,
     ChaseCameraBindSystem,
@@ -461,14 +599,16 @@ export const RacingPlugin: Plugin = {
     RaceConditionsSystem,
     StartLightsSystem,
     CheckpointSystem,
-    PickupSystem,
+    HazardsLayoutSystem,
     VehicleVisualSystem,
     GhostVisualSystem,
     ChaseCameraSystem,
     VehicleFxSystem,
+    RacingFxSystem,
     HoloPulseSystem,
-    PickupVisualSystem,
+    ItemBoxVisualSystem,
     TrackObstacleVisualSystem,
+    RampVisualSystem,
     EngineAudioSystem,
   ],
   recipes: [
@@ -477,7 +617,9 @@ export const RacingPlugin: Plugin = {
     aiVehicleRecipe,
     trackRecipe,
     chaseCameraRecipe,
-    raceTrackPickupRecipe,
+    raceTrackItemBoxRecipe,
+    raceTrackRampRecipe,
+    hazardsLayoutRecipe,
     raceTrackObstacleRecipe,
   ],
   components: {
@@ -487,8 +629,8 @@ export const RacingPlugin: Plugin = {
     track: Track,
     'race-tracker': RaceTracker,
     'chase-camera': ChaseCamera,
-    'power-up': PowerUp,
-    'pickup-orb': PickupOrb,
+    'held-item': HeldItem,
+    'item-box': ItemBox,
     'track-obstacle': TrackObstacleState,
   },
   config: {
@@ -537,6 +679,11 @@ export const RacingPlugin: Plugin = {
         roll: 0,
         pitch: 0,
         draft: 0,
+        trickKind: 0,
+        trickSpin: 0,
+        trickActive: 0,
+        spinOutTimer: 0,
+        spinOutTotal: 0,
       },
       'ai-driver': {
         skill: 0.82,
@@ -590,21 +737,12 @@ export const RacingPlugin: Plugin = {
         orbitAngle: 0,
         initialized: 0,
       },
-      'power-up': {
-        ammo0: 0,
-        ammo1: 0,
-        ammo2: 0,
-        cap0: 0,
-        cap1: 0,
-        cap2: 0,
-        cd0: 0,
-        cd1: 0,
-        cd2: 0,
-        cdTotal0: 0,
-        cdTotal1: 0,
-        cdTotal2: 0,
+      'held-item': {
+        item: 0,
+        rouletteTimer: 0,
         shieldArmed: 0,
-        pulseBoost: 0,
+        shieldTime: 0,
+        turboTime: 0,
       },
       'track-obstacle': {
         s: 0,
@@ -614,6 +752,14 @@ export const RacingPlugin: Plugin = {
         kind: 0,
         spin: 0,
         hover: 0,
+        moveMode: 0,
+        moveSpeed: 0,
+        moveRange: 0,
+        movePhase: 0,
+        baseS: 0,
+        baseLateral: 0,
+        breakable: 0,
+        cooldown: 0,
       },
     },
     parsers: {
@@ -622,7 +768,9 @@ export const RacingPlugin: Plugin = {
       AiVehicle: vehicleParser,
       RaceTrack: trackParser,
       ChaseCamera: chaseCameraParser,
-      RaceTrackPickup: raceTrackPickupParser,
+      RaceTrackItemBox: raceTrackItemBoxParser,
+      RaceTrackRamp: raceTrackRampParser,
+      HazardsLayout: hazardsLayoutParser,
       RaceTrackObstacle: raceTrackObstacleParser,
     },
   },

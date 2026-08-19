@@ -1,14 +1,24 @@
 import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { isKeyDown } from '../input';
 import { Transform } from '../transforms';
-import { AiDriver, PlayerVehicle, Track, Vehicle } from './components';
+import {
+  AiDriver,
+  PlayerVehicle,
+  Track,
+  TrackObstacleState,
+  Vehicle,
+} from './components';
 import {
   forEachNearbyObstacle,
   getTrackSpline,
+  getTrackSpaceObstacles,
+  rampAt,
   type TrackObstacle,
 } from './data';
 import { createFrame, type TrackSpline } from './spline';
 import { conditionGripMul, getRaceState, isRacingActive } from './race-state';
+import { startSpinOut } from './tricks';
+import { pushRacingBanner, pushRacingFx } from './fx-events';
 
 const vehicleQuery = defineQuery([Vehicle, Transform]);
 const playerQuery = defineQuery([Vehicle, PlayerVehicle]);
@@ -290,6 +300,24 @@ function simulateVehicle(
   Vehicle.surfaceGrip[eid] = surfaceGrip;
   const offTrack = absLat > halfRoad + 0.6;
 
+  // ---- Spin-out ------------------------------------------------------------
+  // Out of control: inputs ignored, speed washes off fast. The heading stays
+  // put so the kart still travels roughly down the track while the chassis
+  // visual does the theatrics.
+  const spinOut = Vehicle.spinOutTimer[eid] ?? 0;
+  if (spinOut > 0) {
+    Vehicle.spinOutTimer[eid] = Math.max(0, spinOut - dt);
+    Vehicle.steerInput[eid] = 0;
+    Vehicle.throttle[eid] = 0;
+    Vehicle.brakeInput[eid] = 0;
+    Vehicle.handbrake[eid] = 0;
+    Vehicle.boostInput[eid] = 0;
+    Vehicle.speed[eid] =
+      (Vehicle.speed[eid] ?? 0) * (1 - Math.min(1, 1.9 * dt));
+    Vehicle.lateralSpeed[eid] =
+      (Vehicle.lateralSpeed[eid] ?? 0) * (1 - Math.min(1, 3 * dt));
+  }
+
   const airborne = Vehicle.airborne[eid] === 1;
   const maxSpeedBase = Vehicle.maxSpeed[eid] || 40;
   const throttle = Vehicle.throttle[eid];
@@ -469,17 +497,34 @@ function simulateVehicle(
       if (landingImpact > 0.25) Vehicle.impactTimer[eid] = 0;
     }
   } else {
-    // A crest taken fast throws the car into the air instead of gluing it to
-    // the geometry: how far the road fell this step tells us the launch rate.
-    const surfaceDrop = f.y - nf.y;
-    const launch = (surfaceDrop / dt) * 0.9;
-    if (launch > 6 && Math.abs(speed) > 8) {
-      Vehicle.airborne[eid] = 1;
-      vertical = clamp(launch * 0.5, 0, 14);
-      height = rideHeight + vertical * dt;
-    } else {
-      height += (rideHeight - height) * Math.min(1, 18 * dt);
+    const oldRamp = rampAt(Vehicle.trackS[eid], lateral);
+    const newRamp = rampAt(newS, newLateral);
+    if (newRamp) {
+      // Climbing the wedge: track the linear profile and let the slope bite.
+      const t = clamp((newS - newRamp.s) / newRamp.length, 0, 1);
+      height = rideHeight + t * newRamp.height;
       vertical = 0;
+      speed -= GRAVITY * 0.45 * (newRamp.height / newRamp.length) * dt;
+    } else if (oldRamp && Math.abs(speed) > 6) {
+      // Off the lip: slope × speed becomes vertical launch, exactly like a
+      // crest taken at pace, just with a guaranteed shape.
+      Vehicle.airborne[eid] = 1;
+      const slope = oldRamp.height / oldRamp.length;
+      vertical = clamp(slope * Math.abs(speed), 2, 14);
+      height = rideHeight + oldRamp.height + vertical * dt;
+    } else {
+      // A crest taken fast throws the car into the air instead of gluing it to
+      // the geometry: how far the road fell this step tells us the launch rate.
+      const surfaceDrop = f.y - nf.y;
+      const launch = (surfaceDrop / dt) * 0.9;
+      if (launch > 6 && Math.abs(speed) > 8) {
+        Vehicle.airborne[eid] = 1;
+        vertical = clamp(launch * 0.5, 0, 14);
+        height = rideHeight + vertical * dt;
+      } else {
+        height += (rideHeight - height) * Math.min(1, 18 * dt);
+        vertical = 0;
+      }
     }
   }
 
@@ -583,6 +628,13 @@ function resolveObstacles(
   let hit: TrackObstacle | null = null;
   let hitDist = 0;
   forEachNearbyObstacle(worldX, worldZ, (o) => {
+    // A broken crate is debris on the road — nothing to collide with until it
+    // reforms.
+    if (o.breakable) {
+      const rec = getTrackSpaceObstacles()[o.trackIdx];
+      if (!rec || rec.eid < 0) return false;
+      if ((TrackObstacleState.cooldown[rec.eid] ?? 0) > 0) return false;
+    }
     const dx = worldX - o.x;
     const dz = worldZ - o.z;
     const d = Math.hypot(dx, dz);
@@ -595,6 +647,24 @@ function resolveObstacles(
   });
   if (hit === null) return;
   const o = hit as TrackObstacle;
+
+  // Crates shatter: a shower of splinters, a light kiss of speed, no
+  // deflection — smashing through them should feel like a shortcut, not a wall.
+  if (o.breakable) {
+    const rec = getTrackSpaceObstacles()[o.trackIdx];
+    if (rec && rec.eid >= 0) TrackObstacleState.cooldown[rec.eid] = 3;
+    Vehicle.speed[eid] *= 0.88;
+    Vehicle.impactTimer[eid] = 0;
+    pushRacingFx({
+      kind: 'crate',
+      x: o.x,
+      y: Transform.posY[eid] ?? 0,
+      z: o.z,
+      severity: 0.5,
+      eid,
+    });
+    return;
+  }
 
   // Push out along the world contact normal, expressed as a track-space nudge
   // so the car never leaves the track manifold. The push is applied in full
@@ -619,6 +689,11 @@ function resolveObstacles(
  * close in arc length *and* in lateral offset, which is cheap and matches how
  * contact actually reads on a circuit (side by side into a corner, nose to tail
  * out of it).
+ *
+ * Contact has weight classes now: a nudge is a nudge, but a hard rear-end (or
+ * any hit from a boosting kart) throws the victim into a spin-out while the
+ * attacker keeps most of their momentum — bullying has a payoff, exactly like
+ * the genre that shall not be named.
  */
 function resolveCarContacts(spline: TrackSpline): void {
   const n = _cars.length;
@@ -647,8 +722,16 @@ function resolveCarContacts(spline: TrackSpline): void {
         b.lateral -= dir * push;
         Vehicle.trackLateral[a.eid] = a.lateral;
         Vehicle.trackLateral[b.eid] = b.lateral;
-        Vehicle.lateralSpeed[a.eid] += dir * 2.5;
-        Vehicle.lateralSpeed[b.eid] -= dir * 2.5;
+        // The slower kart takes the shove: speed is weight in a wheel-to-wheel
+        // scrap, and the lateral kick reads as being muscled out of the way.
+        const [bully, victim] =
+          Math.abs(Vehicle.speed[a.eid] ?? 0) >=
+          Math.abs(Vehicle.speed[b.eid] ?? 0)
+            ? [a.eid, b.eid]
+            : [b.eid, a.eid];
+        Vehicle.lateralSpeed[bully] += dir * 2.5;
+        Vehicle.lateralSpeed[victim] -= dir * 3.4;
+        pushContactFx(a.eid, b.eid, victim, 0.35, 'bump');
       } else {
         const dir = ds >= 0 ? 1 : -1;
         const push = overlapS * 0.5;
@@ -660,14 +743,65 @@ function resolveCarContacts(spline: TrackSpline): void {
         const ahead = dir > 0 ? a.eid : b.eid;
         const closing = Vehicle.speed[behind] - Vehicle.speed[ahead];
         if (closing > 0) {
-          Vehicle.speed[behind] -= closing * 0.35;
-          Vehicle.speed[ahead] += closing * 0.2;
+          const ramming = closing > 10 || Vehicle.boosting[behind] === 1;
+          if (ramming) {
+            // A proper shunt: the victim spins, the attacker drives on.
+            const spin = startSpinOut(ahead);
+            if (spin === 'blocked') {
+              Vehicle.speed[behind] -= closing * 0.35;
+              Vehicle.speed[ahead] += closing * 0.2;
+            } else {
+              Vehicle.speed[behind] -= closing * 0.08;
+            }
+            pushContactFx(
+              a.eid,
+              b.eid,
+              ahead,
+              clamp(closing / 14, 0.55, 1),
+              spin === 'spun' ? 'spin' : 'bump'
+            );
+            if (spin === 'spun') {
+              pushRacingBanner({
+                eid: ahead,
+                text: 'SPUN OUT!',
+                cls: 'spin',
+              });
+            }
+          } else {
+            Vehicle.speed[behind] -= closing * 0.35;
+            Vehicle.speed[ahead] += closing * 0.2;
+            pushContactFx(
+              a.eid,
+              b.eid,
+              ahead,
+              clamp(closing / 14, 0.25, 0.55),
+              'bump'
+            );
+          }
         }
       }
       Vehicle.impactTimer[a.eid] = 0;
       Vehicle.impactTimer[b.eid] = 0;
     }
   }
+}
+
+/** Spark + thud + shake at the contact point, attributed to the victim. */
+function pushContactFx(
+  aEid: number,
+  bEid: number,
+  victim: number,
+  severity: number,
+  kind: 'bump' | 'spin'
+): void {
+  pushRacingFx({
+    kind,
+    x: (Transform.posX[aEid]! + Transform.posX[bEid]!) * 0.5,
+    y: (Transform.posY[aEid]! + Transform.posY[bEid]!) * 0.5 + 0.6,
+    z: (Transform.posZ[aEid]! + Transform.posZ[bEid]!) * 0.5,
+    severity,
+    eid: victim,
+  });
 }
 
 /**

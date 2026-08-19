@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applySurfaceDetail } from '../rendering';
 import { createFrame, type TrackFrame, type TrackSpline } from './spline';
 
 /**
@@ -892,6 +893,13 @@ export function buildTrackMeshes(
     roughness: 1,
     metalness: 0,
   });
+  // The ribbon's V counts metres down the circuit, so the along-track repeat
+  // has to be tiny where the across-track one is single digits.
+  applySurfaceDetail(shoulderMat, 'gravel', {
+    repeatX: 3,
+    repeatY: 0.5,
+    normalScale: 0.9,
+  });
   if (shoulder > 0.05) {
     const left = buildRibbon(spline, shoulderMat, {
       from: (f) => -(f.width * 0.5 + shoulder),
@@ -925,6 +933,18 @@ export function buildTrackMeshes(
     metalness: 0.02,
   });
   if (holo) (roadMat as THREE.MeshStandardMaterial).userData.holo = true;
+  // Asphalt grain + polished wheel tracks. Without it the road is a flat
+  // painted ribbon: the sun's specular lobe is identical over the whole
+  // surface, which is exactly what plastic looks like. The holo theme keeps
+  // its emissive-clean look — grain there would fight the neon.
+  if (!holo) {
+    applySurfaceDetail(roadMat, 'asphalt', {
+      // U spans the full road width (~12 m), V one tile per 14 m.
+      repeatX: 6,
+      repeatY: 1,
+      roughness: 0.58,
+    });
+  }
   const road = buildRibbon(spline, roadMat, {
     from: (f) => -f.width * 0.5,
     to: (f) => f.width * 0.5,
@@ -932,6 +952,13 @@ export function buildTrackMeshes(
     tile: 14,
   });
   road.name = 'RoadSurface';
+  // Tarmac is not a mirror, but it is the largest surface on screen and it
+  // does reflect at grazing angles — which is precisely the angle a chase
+  // camera looks at it from. The reflection pass weights the result by
+  // roughness and Fresnel, so flagging it costs a soft sheen ahead of the car,
+  // not a skating rink. (The auto-detect only picks polished materials, so a
+  // road at roughness 0.58 would never opt itself in.)
+  road.userData.ssrReflective = true;
   group.add(road);
 
   const kerbs = buildKerbs(spline, shoulder, holo);

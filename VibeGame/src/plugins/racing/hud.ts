@@ -7,14 +7,16 @@ import type {
 import { registerHudWidgetFactory } from '../hud/screen-layer';
 import { injectWidgetCss, readAttr } from '../hud/widgets/shared';
 import {
+  HeldItem,
+  ItemKind,
   PlayerVehicle,
-  PowerUp,
   RaceTracker,
   Track,
   Vehicle,
 } from './components';
 import { getTrackSpline } from './data';
-import { getLastPickup } from './pickups';
+import { ITEM_META } from './items';
+import { drainRacingBanners } from './fx-events';
 import { getRaceState, beginRaceFromQualifying } from './race-state';
 import {
   getStandings,
@@ -154,25 +156,25 @@ const CSS = `
 }
 .race-hidden { display: none; }
 
-/* Power-up slots: bottom centre, above the hint line */
-.race-powerups {
+/* Item slot: bottom centre, above the hint line */
+.race-item {
   position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 8px;
 }
-.race-pu {
-  position: relative; width: 56px; height: 56px; border-radius: 10px;
+.race-item .slot {
+  position: relative; width: 64px; height: 64px; border-radius: 12px;
   background: linear-gradient(150deg, rgba(10,14,22,0.8), rgba(14,20,32,0.65));
   border: 1px solid rgba(255,255,255,0.18);
   display: flex; align-items: center; justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.9rem;
 }
-.race-pu .key { position: absolute; top: 2px; left: 5px; font-size: 0.55rem; letter-spacing: 0.08em; color: rgba(255,255,255,0.55); }
-.race-pu .ammo { position: absolute; bottom: 2px; right: 6px; font-size: 0.72rem; font-weight: 700; }
-.race-pu .cd { position: absolute; inset: 0; border-radius: 10px; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 800; }
-.race-pu.ready { border-color: rgba(255,255,255,0.55); box-shadow: 0 0 10px rgba(255,255,255,0.15); }
-.race-pu.pulse { color: #38e8ff; border-color: rgba(56,232,255,0.4); }
-.race-pu.sidewinder { color: #ff5dff; border-color: rgba(255,93,255,0.4); }
-.race-pu.shield { color: #ffe066; border-color: rgba(255,224,102,0.4); }
+.race-item .key { position: absolute; top: 3px; left: 6px; font-size: 0.55rem; letter-spacing: 0.08em; color: rgba(255,255,255,0.55); }
+.race-item .slot.rolling { animation: race-roulette 0.14s steps(2) infinite; }
+.race-item .slot.ready { border-color: rgba(255,255,255,0.6); box-shadow: 0 0 14px rgba(255,255,255,0.2); }
+.race-item .slot.turbo { color: #7fe7a1; border-color: rgba(127,231,161,0.5); }
+.race-item .slot.fireball { color: #ff8a5c; border-color: rgba(255,138,92,0.5); }
+.race-item .slot.oil { color: #b9a7e8; border-color: rgba(185,167,232,0.5); }
+.race-item .slot.shield { color: #ffe066; border-color: rgba(255,224,102,0.5); }
+@keyframes race-roulette { 0% { transform: scale(1); } 50% { transform: scale(1.08) rotate(-2deg); } 100% { transform: scale(1); } }
 
 /* Bottom hint */
 .race-hint {
@@ -181,7 +183,7 @@ const CSS = `
   white-space: nowrap;
 }
 
-/* Pickup-collected banner */
+/* Banner shouts: item rolls, stunts, spin-outs */
 .race-pickup {
   position: absolute; top: 22%; left: 50%; transform: translate(-50%,-50%);
   font-size: 1.6rem; font-weight: 900; letter-spacing: 0.14em;
@@ -189,9 +191,9 @@ const CSS = `
   opacity: 0; transition: opacity 0.12s ease-out; pointer-events: none;
 }
 .race-pickup.show { opacity: 1; }
-.race-pickup.pulse { color: #38e8ff; }
-.race-pickup.sidewinder { color: #ff5dff; }
-.race-pickup.shield { color: #ffe066; }
+.race-pickup.item { color: #ffd166; }
+.race-pickup.trick { color: #7fe7a1; }
+.race-pickup.spin { color: #ff5d5d; }
 
 /* Respawn flash banner */
 .race-respawn {
@@ -225,13 +227,6 @@ const CSS = `
 .race-tt .best { font-size: 1rem; font-weight: 700; color: #7fe7a1; margin-top: 2px; }
 .race-tt .pb { font-size: 0.72rem; color: rgba(255,255,255,0.6); }
 `;
-
-/** Names + icons for the power-up slots, indexed by slot. */
-const PU_META = [
-  { icon: '⚡', name: 'Pulse', cls: 'pulse' },
-  { icon: '🌀', name: 'Sidewinder', cls: 'sidewinder' },
-  { icon: '🛡', name: 'Shield', cls: 'shield' },
-] as const;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '--:--.-';
@@ -314,10 +309,8 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
           <div class="race-boost-bar"><i></i></div>
           <div class="race-draft">Slipstream</div>
         </div>
-        <div class="race-powerups">
-          <div class="race-pu pulse"><span class="key">1</span><span class="icon">⚡</span><span class="ammo">1</span><span class="cd" style="display:none"></span></div>
-          <div class="race-pu sidewinder"><span class="key">2</span><span class="icon">🌀</span><span class="ammo">1</span><span class="cd" style="display:none"></span></div>
-          <div class="race-pu shield"><span class="key">3</span><span class="icon">🛡</span><span class="ammo">1</span><span class="cd" style="display:none"></span></div>
+        <div class="race-item">
+          <div class="slot"><span class="key">1</span><span class="icon"></span></div>
         </div>
         <div class="race-pickup"></div>
         <div class="race-respawn">Respawn</div>
@@ -336,7 +329,7 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
           <div class="hint">Press R to race again</div>
         </div>
         <div class="race-cam">Chase</div>
-        <div class="race-hint">WASD drive · 1/2/3 power-ups · Shift nitro · Space handbrake · V look back · C camera · R restart</div>
+        <div class="race-hint">WASD drive · 1 item · Shift nitro · Space handbrake/trick · V look back · C camera · R restart</div>
       `;
       layer.appendChild(root);
 
@@ -366,11 +359,8 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
       const resultsHintEl = q('.race-results .hint');
       const resultsBody = q('.race-results tbody');
       const camEl = q('.race-cam');
-      const puEls = Array.from(root.querySelectorAll('.race-pu'));
-      const puAmmoEls = puEls.map(
-        (el) => el.querySelector('.ammo') as HTMLElement
-      );
-      const puCdEls = puEls.map((el) => el.querySelector('.cd') as HTMLElement);
+      const itemSlotEl = q('.race-item .slot') as HTMLElement;
+      const itemIconEl = q('.race-item .icon') as HTMLElement;
       const ttEl = q('.race-tt');
       const ttBestEl = q('.race-tt .best');
       const ttPbEl = q('.race-tt .pb');
@@ -382,7 +372,6 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
       const splitEl = q('.race-split');
       const draftEl = q('.race-draft');
       let pickupFlashUntil = 0;
-      let pickupFlashKind = 0;
       let finalLapUntil = 0;
       let finalLapGeneration = -1;
       let splitPrevU = 0;
@@ -543,30 +532,22 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
               RaceTracker.wrongWay[player] !== 1
             );
 
-            // ---- Power-up slots ----------------------------------------------
-            const ammo = [
-              PowerUp.ammo0[player] || 0,
-              PowerUp.ammo1[player] || 0,
-              PowerUp.ammo2[player] || 0,
-            ];
-            const cd = [
-              PowerUp.cd0[player] || 0,
-              PowerUp.cd1[player] || 0,
-              PowerUp.cd2[player] || 0,
-            ];
-            for (let i = 0; i < 3; i++) {
-              const el = puEls[i];
-              const ammoEl = puAmmoEls[i];
-              const cdEl = puCdEls[i];
-              if (!el || !ammoEl || !cdEl) continue;
-              ammoEl.textContent = String(Math.max(0, Math.round(ammo[i]!)));
-              el.classList.toggle('ready', ammo[i]! > 0);
-              if (cd[i]! > 0) {
-                cdEl.textContent = cd[i]!.toFixed(1);
-                cdEl.style.display = 'flex';
-              } else {
-                cdEl.style.display = 'none';
-              }
+            // ---- Item slot + roulette ----------------------------------------
+            const rolling = (HeldItem.rouletteTimer[player] ?? 0) > 0;
+            const held = HeldItem.item[player] ?? ItemKind.None;
+            itemSlotEl.classList.toggle('rolling', rolling);
+            itemSlotEl.classList.toggle('ready', held !== ItemKind.None);
+            if (rolling) {
+              // Cycle the icons while the roulette spins.
+              const spin = Math.floor(performance.now() / 90) % 4;
+              itemIconEl.textContent = ITEM_META[spin + 1]!.icon;
+              itemSlotEl.className = 'slot rolling';
+            } else {
+              itemIconEl.textContent =
+                held === ItemKind.None ? '' : ITEM_META[held]!.icon;
+              itemSlotEl.className = `slot ${
+                held === ItemKind.None ? '' : ITEM_META[held]!.cls
+              }`;
             }
 
             // ---- Time-trial badge --------------------------------------------
@@ -645,18 +626,17 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
               RaceTracker.respawnFlash[player] === 1
             );
 
-            // ---- Pickup-collected banner -------------------------------------
-            const lastPickup = getLastPickup(player);
-            if (lastPickup && lastPickup.time > pickupFlashUntil) {
-              pickupFlashUntil = lastPickup.time;
-              pickupFlashKind = lastPickup.kind;
+            // ---- Banner shouts (items, stunts, spin-outs) ---------------------
+            const banners = drainRacingBanners();
+            const mine = banners.find((b) => b.eid === player);
+            if (mine) {
+              pickupEl.textContent = mine.text;
+              pickupEl.className = `race-pickup ${mine.cls}`;
+              pickupFlashUntil = performance.now() + 1500;
             }
-            const meta = PU_META[pickupFlashKind] ?? PU_META[0]!;
-            pickupEl.textContent = `${meta.icon} ${meta.name} +1`;
-            pickupEl.className = `race-pickup ${meta.cls}`;
             pickupEl.classList.toggle(
               'show',
-              performance.now() - pickupFlashUntil < 1600
+              performance.now() < pickupFlashUntil
             );
           }
 

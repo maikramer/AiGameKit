@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { State } from '../../../src/core';
 import { Transform, WorldTransform } from '../../../src/plugins/transforms';
 import {
-  AiDriver,
+  HeldItem,
   PlayerVehicle,
-  PowerUp,
   RaceTracker,
   Track,
   Vehicle,
@@ -12,7 +11,6 @@ import {
 import {
   attachTrackSpline,
   clearTrackData,
-  addTrackPickup,
 } from '../../../src/plugins/racing/data';
 import {
   TrackSpline,
@@ -22,11 +20,12 @@ import {
   VehicleControlSystem,
   placeVehicleOnTrack,
 } from '../../../src/plugins/racing/vehicle-control';
-import { PickupSystem } from '../../../src/plugins/racing/pickups';
 import {
-  PowerUpSystem,
-  grantPowerUpAmmo,
-} from '../../../src/plugins/racing/powerups';
+  TrickSystem,
+  startSpinOut,
+  startTrick,
+  TrickKind,
+} from '../../../src/plugins/racing/tricks';
 import {
   resetRaceState,
   setRaceState,
@@ -52,7 +51,6 @@ function ovalNodes(width = 16): TrackNode[] {
 function makeHarness(): {
   state: State;
   spline: TrackSpline;
-  track: number;
   car: number;
   step(seconds: number): void;
 } {
@@ -61,18 +59,14 @@ function makeHarness(): {
   state.registerComponent('world-transform', WorldTransform);
   state.registerComponent('vehicle', Vehicle);
   state.registerComponent('player-vehicle', PlayerVehicle);
-  state.registerComponent('ai-driver', AiDriver);
   state.registerComponent('race-tracker', RaceTracker);
   state.registerComponent('track', Track);
-  state.registerComponent('power-up', PowerUp);
+  state.registerComponent('held-item', HeldItem);
 
   const track = state.createEntity();
   state.addComponent(track, Track);
-  Track.totalLaps[track] = 2;
   Track.shoulder[track] = 3;
   Track.walls[track] = 1;
-  Track.checkpointCount[track] = 8;
-
   const spline = new TrackSpline(ovalNodes(), { step: 2 });
   attachTrackSpline(track, spline);
   Track.length[track] = spline.length;
@@ -83,24 +77,22 @@ function makeHarness(): {
   state.addComponent(car, Vehicle);
   state.addComponent(car, PlayerVehicle);
   state.addComponent(car, RaceTracker);
-  state.addComponent(car, PowerUp);
+  state.addComponent(car, HeldItem);
   Vehicle.maxSpeed[car] = 50;
   Vehicle.accel[car] = 26;
   Vehicle.brake[car] = 48;
   Vehicle.engineBrake[car] = 7;
-  Vehicle.reverseSpeed[car] = 12;
   Vehicle.maxSteer[car] = 2.6;
   Vehicle.steerSpeed[car] = 10;
   Vehicle.grip[car] = 7;
-  Vehicle.driftGrip[car] = 0.32;
   Vehicle.halfLength[car] = 1.35;
   Vehicle.halfWidth[car] = 0.85;
   Vehicle.rideHeight[car] = 0.35;
-  Vehicle.boostCapacity[car] = 0;
+  Vehicle.boostCapacity[car] = 2;
+  Vehicle.boost[car] = 0;
   placeVehicleOnTrack(car, spline, 0, 0);
 
   setRaceState({ phase: 'racing', playerVehicle: car, track });
-
   const mutableTime = state.time as {
     fixedDeltaTime: number;
     deltaTime: number;
@@ -111,14 +103,12 @@ function makeHarness(): {
   return {
     state,
     spline,
-    track,
     car,
     step(seconds: number) {
       const steps = Math.round(seconds / FIXED_DT);
       for (let i = 0; i < steps; i++) {
-        PowerUpSystem.update?.(state);
         VehicleControlSystem.update?.(state);
-        PickupSystem.update?.(state);
+        TrickSystem.update?.(state);
       }
     },
   };
@@ -129,59 +119,69 @@ afterEach(() => {
   clearTrackData();
 });
 
-describe('pickups', () => {
-  it('grants ammo when the player drives over an orb', () => {
+describe('stunts', () => {
+  it('only starts mid-air and only one at a time', () => {
     const h = makeHarness();
-    // Put a Pulse orb right at the start.
-    addTrackPickup(2, 0, 0, 4);
-    // The PickupVisualSystem creates the orb entity lazily.
-    const state = h.state;
-    // Manually create the orb entity (as the visual system would).
-    const orb = state.createEntity();
-    // (Simplified: we exercise grantPowerUpAmmo directly + the pickup range.)
-    PowerUp.ammo0[h.car] = 1;
-    PowerUp.cap0[h.car] = 2;
-    grantPowerUpAmmo(h.car, 0, 1);
-    expect(PowerUp.ammo0[h.car]).toBe(2);
-    void orb;
+    expect(startTrick(h.car, TrickKind.Spin360)).toBe(false);
+    Vehicle.airborne[h.car] = 1;
+    expect(startTrick(h.car, TrickKind.Spin360)).toBe(true);
+    expect(startTrick(h.car, TrickKind.RollLeft)).toBe(false);
   });
 
-  it('caps ammo at the slot capacity', () => {
+  it('pays nitro when the rotation completes before landing', () => {
     const h = makeHarness();
-    PowerUp.ammo1[h.car] = 1;
-    PowerUp.cap1[h.car] = 2;
-    grantPowerUpAmmo(h.car, 1, 3);
-    expect(PowerUp.ammo1[h.car]).toBe(2);
+    // Hang the car high enough that the fall (gravity 22) outlasts the 0.75 s
+    // rotation, so the stunt completes in the air before touchdown.
+    Vehicle.airborne[h.car] = 1;
+    Vehicle.airHeight[h.car] = 12;
+    Vehicle.verticalSpeed[h.car] = 0;
+    startTrick(h.car, TrickKind.Spin360);
+    h.step(0.8);
+    expect(Vehicle.trickSpin[h.car]).toBeGreaterThanOrEqual(Math.PI * 2 - 0.03);
+    expect(Vehicle.trickActive[h.car]).toBe(1);
+    expect(Vehicle.airborne[h.car]).toBe(1);
+
+    // Touch down: reward lands, stunt state clears. Zero the tank first so
+    // the reward is unambiguous.
+    Vehicle.boost[h.car] = 0;
+    Vehicle.airHeight[h.car] = 0.36;
+    Vehicle.verticalSpeed[h.car] = -1;
+    h.step(0.2);
+    expect(Vehicle.trickActive[h.car]).toBe(0);
+    expect(Vehicle.boost[h.car]).toBeGreaterThan(0.5);
+  });
+
+  it('punishes a rotation abandoned half-way', () => {
+    const h = makeHarness();
+    Vehicle.airborne[h.car] = 1;
+    Vehicle.airHeight[h.car] = 6;
+    Vehicle.speed[h.car] = 30;
+    startTrick(h.car, TrickKind.RollLeft);
+    h.step(0.2); // less than the 0.75 s the rotation needs
+    Vehicle.airHeight[h.car] = 0.36;
+    Vehicle.verticalSpeed[h.car] = -1;
+    h.step(0.2);
+    expect(Vehicle.trickActive[h.car]).toBe(0);
+    // Bailed out: well under the entry speed after the face-plant.
+    expect(Vehicle.speed[h.car]).toBeLessThan(26);
   });
 });
 
-describe('power-up slots', () => {
-  it('decrements ammo on activation and sets the cooldown', () => {
+describe('spin-out', () => {
+  it('ignores driver input and washes off speed while active', () => {
     const h = makeHarness();
-    PowerUp.ammo0[h.car] = 1;
-    PowerUp.cap0[h.car] = 1;
-    PowerUp.cdTotal0[h.car] = 0.6;
-    // Simulate the system tick: activation happens on key input, which we can't
-    // easily inject; instead verify the cooldown timer decrements over time.
-    PowerUp.cd0[h.car] = 0.6;
-    h.step(0.7);
-    expect(PowerUp.cd0[h.car]).toBeLessThan(0.5);
-  });
-
-  it('pulse boost is spent and expires', () => {
-    const h = makeHarness();
-    PowerUp.pulseBoost[h.car] = 1.2;
+    placeVehicleOnTrack(h.car, h.spline, 400, 0);
+    Vehicle.speed[h.car] = 30;
+    Vehicle.steerInput[h.car] = 1;
+    Vehicle.throttle[h.car] = 1;
+    expect(startSpinOut(h.car)).toBe('spun');
+    const speed0 = Vehicle.speed[h.car];
     h.step(0.5);
-    expect(PowerUp.pulseBoost[h.car]).toBeGreaterThan(0);
-    expect(PowerUp.pulseBoost[h.car]).toBeLessThan(1.2);
-  });
-});
-
-describe('holo track theme', () => {
-  it('builds a holo road material when requested', () => {
-    // The geometry builder is only exercised with real DOM; here we at least
-    // assert the style plumbing accepts the theme key.
-    const style = { theme: 'holo' as const };
-    expect(style.theme).toBe('holo');
+    expect(Vehicle.steerInput[h.car]).toBe(0);
+    expect(Vehicle.throttle[h.car]).toBe(0);
+    expect(Vehicle.speed[h.car]).toBeLessThan(speed0);
+    // It recovers on its own.
+    h.step(1.5);
+    expect(Vehicle.spinOutTimer[h.car]).toBe(0);
   });
 });

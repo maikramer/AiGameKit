@@ -14,7 +14,7 @@ import {
   VehicleModelLength,
   VehicleModelUrls,
   VehicleModelYaw,
-  PowerUp,
+  HeldItem,
 } from './components';
 import { conditionIsNight, getRaceState } from './race-state';
 
@@ -56,6 +56,28 @@ function makeMaterial(
   });
 }
 
+/**
+ * Two-layer car paint: a pigmented base under a thin clear lacquer.
+ *
+ * A single `MeshStandardMaterial` has one specular lobe, so making paint shiny
+ * means making the *pigment* shiny — and metallic red plastic is what that
+ * looks like. `MeshPhysicalMaterial`'s clearcoat adds a second, sharper lobe
+ * with its own roughness on top of the base, which is physically what a
+ * lacquered panel is: the colour stays matte-ish and the sky reflection rides
+ * over it. It is also what makes a car read as a *car* the instant an
+ * environment map exists.
+ */
+function makeCarPaint(color: number): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    roughness: 0.38,
+    metalness: 0.15,
+    clearcoat: 1,
+    clearcoatRoughness: 0.08,
+    envMapIntensity: 1.15,
+  });
+}
+
 /** A readable low-poly kart, used when no GLB is supplied (or while it loads). */
 function buildProceduralChassis(color: number): {
   group: THREE.Group;
@@ -65,7 +87,7 @@ function buildProceduralChassis(color: number): {
   exhaust: THREE.Mesh;
 } {
   const group = new THREE.Group();
-  const bodyMat = makeMaterial(color, { roughness: 0.35, metalness: 0.35 });
+  const bodyMat = makeCarPaint(color);
   const darkMat = makeMaterial(0x1b1d22, { roughness: 0.6, metalness: 0.2 });
 
   const hull = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.42, 3.1), bodyMat);
@@ -175,14 +197,62 @@ function buildProceduralChassis(color: number): {
   return { group, wheels, steerWheels, brakeLights, exhaust };
 }
 
-/** Soft contact shadow: cheap, and it stops cars looking like they hover. */
+/**
+ * Radial falloff used by the contact shadow. A flat quad with a constant alpha
+ * reads as a grey rectangle painted on the track — the single most obvious
+ * "this is a toy" tell in a chase-cam shot. This gradient is opaque under the
+ * chassis and reaches zero at the rim, so what is left is a soft darkening
+ * that only reinforces the real shadow map instead of competing with it.
+ */
+let contactShadowTexture: THREE.Texture | null = null;
+
+function getContactShadowTexture(): THREE.Texture {
+  if (contactShadowTexture) return contactShadowTexture;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const gradient = ctx.createRadialGradient(
+    size / 2,
+    size / 2,
+    0,
+    size / 2,
+    size / 2,
+    size / 2
+  );
+  // White RGB, falling alpha: MeshBasicMaterial multiplies `map.rgb` by the
+  // material colour (black here) and `map.a` by the opacity, so the texture
+  // has to carry the shape in its alpha channel, not in its luminance.
+  // Quadratic-ish falloff: solid core, long soft tail — a penumbra, not a disc.
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.35, 'rgba(255,255,255,0.92)');
+  gradient.addColorStop(0.62, 'rgba(255,255,255,0.5)');
+  gradient.addColorStop(0.85, 'rgba(255,255,255,0.14)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.NoColorSpace;
+  contactShadowTexture = tex;
+  return tex;
+}
+
+/**
+ * Ambient-occlusion contact patch under the car. It is NOT the car's shadow —
+ * the sun's shadow map draws that — it is the darkening a body this close to
+ * the ground occludes out of the sky light, which no 64 m shadow cascade
+ * resolves. Kept subtle on purpose: doubled up with the real shadow it would
+ * read as a smear.
+ */
 function buildShadow(): THREE.Mesh {
-  const geo = new THREE.PlaneGeometry(2.4, 3.6);
+  const geo = new THREE.PlaneGeometry(2.9, 4.1);
   geo.rotateX(-Math.PI / 2);
   const mat = new THREE.MeshBasicMaterial({
     color: 0x000000,
+    map: getContactShadowTexture(),
     transparent: true,
-    opacity: 0.32,
+    opacity: CONTACT_SHADOW_OPACITY,
     depthWrite: false,
   });
   const mesh = new THREE.Mesh(geo, mat);
@@ -190,6 +260,9 @@ function buildShadow(): THREE.Mesh {
   mesh.renderOrder = -1;
   return mesh;
 }
+
+/** Peak alpha of the contact patch directly under a grounded chassis. */
+const CONTACT_SHADOW_OPACITY = 0.55;
 
 /**
  * Normalise a generated GLB into a chassis the game can use.
@@ -260,6 +333,23 @@ export const VehicleVisualSystem: System = defineSystem({
       v.pivot.rotation.z = Vehicle.roll[eid];
       v.pivot.rotation.x = Vehicle.pitch[eid];
 
+      // Stunt rotation: applied on top of the juice pivot, so a completed
+      // rotation (2π) lands back on the identity pose exactly.
+      if (Vehicle.trickActive[eid] === 1) {
+        const spin = Vehicle.trickSpin[eid] ?? 0;
+        const kind = Vehicle.trickKind[eid] ?? 0;
+        if (kind === 1) v.pivot.rotation.z += spin;
+        else if (kind === 2) v.pivot.rotation.z -= spin;
+        else if (kind === 3) v.pivot.rotation.x -= spin;
+        else v.group.rotateY(spin);
+      }
+      // Spin-out: two full turns over the duration, then straight again.
+      const spinOut = Vehicle.spinOutTimer[eid] ?? 0;
+      if (spinOut > 0) {
+        const total = Vehicle.spinOutTotal[eid] || 1.15;
+        v.group.rotateY((1 - spinOut / total) * Math.PI * 4);
+      }
+
       const spin = Vehicle.wheelSpin[eid];
       for (const wheel of v.wheels) wheel.rotation.x = spin;
       for (const steer of v.steerWheels)
@@ -290,7 +380,11 @@ export const VehicleVisualSystem: System = defineSystem({
       );
       v.shadow.position.y = 0.02 - air;
       const shadowMat = v.shadow.material as THREE.MeshBasicMaterial;
-      shadowMat.opacity = Math.max(0.05, 0.32 - air * 0.05);
+      shadowMat.opacity = Math.max(0.05, CONTACT_SHADOW_OPACITY - air * 0.09);
+      // A car in the air occludes less sky over a wider footprint — the patch
+      // spreads as it fades, the way a real penumbra opens up with distance.
+      const spread = 1 + Math.min(air, 3) * 0.22;
+      v.shadow.scale.set(spread, 1, spread);
 
       const lampsOn = conditionIsNight(getRaceState().condition);
       for (const lamp of v.headlights) {
@@ -299,7 +393,7 @@ export const VehicleVisualSystem: System = defineSystem({
       }
 
       const armed =
-        state.hasComponent(eid, PowerUp) && PowerUp.shieldArmed[eid] === 1;
+        state.hasComponent(eid, HeldItem) && HeldItem.shieldArmed[eid] === 1;
       v.shield.visible = armed;
       if (armed) {
         const pulse = 0.18 + Math.sin(state.time.elapsed * 10) * 0.07;

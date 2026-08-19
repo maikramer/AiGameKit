@@ -4,7 +4,9 @@
 
 Arcade kart racing: 3D circuits (`TrackSpline`), vehicles simulated in track
 space, rival AI, a race director (grid → countdown → laps → flag → results), a
-follow camera, tyre FX, synthesised engine audio and a complete HUD.
+follow camera, tyre FX, synthesised engine audio and a complete HUD — plus the
+Mario-Kart layer: jump ramps, mid-air stunts, item-box roulettes (Turbo /
+Fireball / Oil / Shield), kart-to-kart spin-outs and procedural hazard layouts.
 Auto-registered in the default plugin set; a scene only pays for it if it
 declares a `<RaceTrack>` / `<PlayerVehicle>`.
 <!-- /LLM:OVERVIEW -->
@@ -35,9 +37,11 @@ declares a `<RaceTrack>` / `<PlayerVehicle>`.
 <HudScreenLayer><HudWidget type="race-hud"></HudWidget></HudScreenLayer>
 ```
 
-Controls: **WASD / arrows** drive, **Space** handbrake, **Shift** nitro,
-**1 / 2 / 3** power-ups, **V** look back, **C** cycles the camera (chase / close / hood / orbit), and the game decides
-what restarts the race (`restartRace()`).
+Controls: **WASD / arrows** drive, **Space** handbrake (and **stunt** while
+airborne: steer = roll, no steer = 360, brake = front flip), **Shift** nitro,
+**1** fires the held item, **V** look back, **C** cycles the camera (chase /
+close / hood / orbit), and the game decides what restarts the race
+(`restartRace()`).
 
 ## The one idea worth knowing
 
@@ -68,15 +72,19 @@ shoulder`, a clamp — not a collider to outrun at 200 km/h.
 | `Track`         | laps, length, width, shoulder, walls                          |
 | `RaceTracker`   | lap, distance, lap times, position, wrong-way, grid slot      |
 | `ChaseCamera`   | rig, smoothing state, active view mode                        |
+| `HeldItem`      | the single item slot: held item, roulette, shield latch, turbo |
+| `ItemBox`       | a chest on the track (contents rolled on collection)          |
+| `TrackObstacleState` | obstacle position, movement (sweep/travel), breakable crate |
 
 Sidecars (bitecs holds numbers only): `getTrackSpline(entity)` for the circuit,
-`addTrackObstacle(x, z, radius)` for solid scenery.
+`addTrackObstacle(x, z, radius)` for solid scenery, `addTrackRamp` for jump
+wedges, `addItemBox` / `addOilSlick` / `addFireball` for the item game.
 
 ## Systems
 
-`AiDriver → VehicleControl` (both `fixed`), then `RaceDirector → TrackSpawn`
-(`simulation`), then `VehicleVisual → ChaseCamera → VehicleFx → EngineAudio`
-(`draw`).
+`AiDriver → VehicleControl → Trick → Item → MovingObstacle → ItemBox` (all
+`fixed`), then `RaceDirector → TrackSpawn → HazardsLayout` (`simulation`), then
+`VehicleVisual → ChaseCamera → VehicleFx → RacingFx → EngineAudio` (`draw`).
 
 ## Race flow
 
@@ -137,13 +145,56 @@ last lap flashes **FINAL LAP**. Hold **V** to look back down the road (does not
 change the stored camera mode). The results table adds a **Gap** column (time
 behind the winner; DNF blank).
 
-Power-up keys are **1 / 2 / 3** only — W is throttle, Q is pause.
+## Ramps and stunts
+
+`<RaceTrackRamp s length width height lateral>` is a wedge overlay on the
+track: grounded cars inside the span climb the linear profile
+(`rampHeightAt`) and the lip converts `slope × speed` into vertical launch —
+the same crest machinery, just with a guaranteed shape. Mid-air, **Space**
+starts a stunt (`startTrick`): a full rotation before touchdown pays nitro, an
+abandoned one costs speed. `TrickSystem` owns the payout; the AI attempts
+stunts on high jumps according to skill.
+
+## The item game
+
+- **Boxes** (`ItemBox`) live in track space; collecting one starts a ~1.1 s
+  roulette (`HeldItem.rouletteTimer`). A kart already holding (or rolling) an
+  item passes through — the box stays for someone else.
+- **The roll is position-weighted** (`rollItem`): the leader draws defence
+  (Oil / Shield), the stragglers draw offence (Turbo / Fireball).
+- **Turbo**: speed burst (`turboTime`). **Fireball**: a homing projectile in
+  track space that spins out the kart it catches. **Oil**: a slick dropped
+  behind; the first kart over it spins (dropper immune for 2 s). **Shield**:
+  latches and absorbs one hit (spin-out, fireball, oil or a time-trial
+  respawn) or expires on its own.
+- **One slot, key 1** (`useHeldItem`). W is throttle, Q is pause.
+
+## Kart-to-kart contact
+
+`resolveCarContacts` weighs the hit: side-by-side scrapes shove the slower
+kart; a hard rear-end (closing > 10 m/s, or the attacker is boosting) throws
+the victim into a **spin-out** (`startSpinOut` — no control, speed washes off,
+chassis spins twice) while the attacker keeps ~92% of their speed. Sparks,
+banked SFX and the chase-camera impact shake flow through the `fx-events`
+queue (`pushRacingFx` / `pushRacingBanner`), so the simulation never touches
+THREE or the audio graph directly.
+
+## Procedural hazard layouts
+
+`<HazardsLayout seed="auto|<n>" rows per-row obstacles moving crates>`
+configures `layouts.ts`: item-box rows and obstacles (parked, sweeping drones,
+rolling barrels, breakable crates) placed on straights, clear of ramps and of
+each other. `auto` re-rolls every race generation (`restartRace` bumps it);
+a fixed seed reproduces the layout exactly — time-trial uses that so PBs and
+ghosts stay comparable. Generators are pure given a PRNG (`mulberry32`).
 
 ## Race SFX bank keys (optional)
 
 Fired only when the game defines the key (`getSoundDef` guard, silent
-otherwise): `race-countdown`, `race-go`, `race-lap`, `race-finish`. Engine and
-tyre sound are synthesised in `engine-audio.ts` and need no assets.
+otherwise): `race-countdown`, `race-go`, `race-lap`, `race-finish`,
+`race-crash`, `race-pulse`, `race-spin`, `race-box`, `race-roulette`,
+`race-trick`, `race-fireball`, `race-oil`, `race-shield`. Engine and tyre
+sound are synthesised in `engine-audio.ts` and need no assets.
 
 ## Viadutos
 
@@ -181,5 +232,9 @@ folga sobre o terreno. Pontos que só se descobrem à segunda:
 `tests/unit/racing/{spline,vehicle,race,ghost,conditions}.test.ts` — geometry,
 the vehicle model (including slipstream and wet grip), a full headless race,
 qualifying → race grid, ghost record/playback (including sector splits), and
-condition helpers. `tests/unit/racing/start-lights.test.ts` covers the gantry
-clock. `tests/unit/extras/model-fit.test.ts` covers the GLB fitting.
+condition helpers. `ramps.test.ts` (wedge profile + launch), `tricks.test.ts`
+(stunt payout + spin-out), `items.test.ts` (roulette weighting, oil slicks),
+`feel.test.ts` (SFX edges, fireball homing, shield block) and `layout.test.ts`
+(seeded generation rules) cover the arcade layer.
+`tests/unit/racing/start-lights.test.ts` covers the gantry clock.
+`tests/unit/extras/model-fit.test.ts` covers the GLB fitting.
