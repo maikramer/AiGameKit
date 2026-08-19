@@ -6,7 +6,7 @@ import {
   ThirdPersonCamera,
 } from 'vibegame';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 const FLOAT_FIELDS = [
   'distance',

@@ -1,4 +1,9 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F64,
+  U16,
+  U8,
+} from '../../core/ecs/component-storage';
 
 /**
  * Harvestable resource node (wood/stone/ore/...). Compose with `Destructible`,
@@ -13,15 +18,15 @@ import { MAX_ENTITIES } from '../../core/ecs/constants';
  * `respawnAt`. One-shot nodes (`respawn=0`) never deplete — the caller is
  * responsible for removing them after a harvest.
  */
-export const ResourceNode = {
+export const ResourceNode = defineComponent({
   /** Resource kind enum value (see `config.enums['resource-node'].kind`). */
-  kind: new Uint8Array(MAX_ENTITIES),
+  kind: U8,
   /** Amount yielded by a single harvest. */
-  yield: new Uint16Array(MAX_ENTITIES),
+  yield: U16,
   /** Respawn cooldown in seconds; `0` = one-shot (no respawn). */
-  respawn: new Uint16Array(MAX_ENTITIES),
+  respawn: U16,
   /** `0` = available, `1` = depleted (waiting for respawn timer). */
-  depleted: new Uint8Array(MAX_ENTITIES),
+  depleted: U8,
   /** `state.time.elapsed` timestamp at which the node becomes available again. */
-  respawnAt: new Float64Array(MAX_ENTITIES),
-} as const;
+  respawnAt: F64,
+});

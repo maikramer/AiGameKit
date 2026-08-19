@@ -4,7 +4,7 @@ import { State } from 'vibegame';
 import { TransformsPlugin } from 'vibegame/transforms';
 import { PhysicsPlugin } from 'vibegame/physics';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 describe('State Recipe Integration', () => {
   let state: State;

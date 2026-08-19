@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, XMLParser, parseXMLToEntities } from 'vibegame';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 describe('GameObject Container Syntax', () => {
   let state: State;

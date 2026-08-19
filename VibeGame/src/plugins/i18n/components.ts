@@ -1,11 +1,11 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, U32, U8 } from '../../core/ecs/component-storage';
 
-export const I18nText = {
-  keyIndex: new Uint32Array(MAX_ENTITIES),
-  resolved: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const I18nText = defineComponent({
+  keyIndex: U32,
+  resolved: U8,
+});
 
-export const I18nConfig = {
-  autoEngineDefaults: new Uint8Array(MAX_ENTITIES),
-  applied: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const I18nConfig = defineComponent({
+  autoEngineDefaults: U8,
+  applied: U8,
+});

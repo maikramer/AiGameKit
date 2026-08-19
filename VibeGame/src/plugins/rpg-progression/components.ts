@@ -1,4 +1,4 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, F64, U16 } from '../../core/ecs/component-storage';
 import type { State } from '../../core';
 import {
   PROGRESSION_LEVEL_UP,
@@ -10,12 +10,12 @@ import {
 } from '../rpg-core';
 import type { SkillDef, StatModifier } from '../rpg-core/types';
 
-export const ProgressionComponent = {
-  xp: new Float64Array(MAX_ENTITIES),
-  level: new Uint16Array(MAX_ENTITIES),
-  unspentPoints: new Uint16Array(MAX_ENTITIES),
-  spent: new Uint16Array(MAX_ENTITIES),
-} as const;
+export const ProgressionComponent = defineComponent({
+  xp: F64,
+  level: U16,
+  unspentPoints: U16,
+  spent: U16,
+});
 
 export const DEFAULT_SKILL_POINTS_PER_LEVEL = 3;
 const DEFAULT_XP_CURVE_ID = 'default';

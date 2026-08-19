@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { GltfAnimationState } from 'vibegame';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 describe('GltfAnimationState component', () => {
   it('expõe registryIndex como Uint32Array com tamanho MAX_ENTITIES', () => {

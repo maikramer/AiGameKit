@@ -1,17 +1,22 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
-export const AnimatedCharacter = {
-  headEntity: new Uint32Array(MAX_ENTITIES),
-  torsoEntity: new Uint32Array(MAX_ENTITIES),
-  leftArmEntity: new Uint32Array(MAX_ENTITIES),
-  rightArmEntity: new Uint32Array(MAX_ENTITIES),
-  leftLegEntity: new Uint32Array(MAX_ENTITIES),
-  rightLegEntity: new Uint32Array(MAX_ENTITIES),
-  phase: new Float32Array(MAX_ENTITIES),
-  jumpTime: new Float32Array(MAX_ENTITIES),
-  fallTime: new Float32Array(MAX_ENTITIES),
-  animationState: new Uint8Array(MAX_ENTITIES),
-  stateTransition: new Float32Array(MAX_ENTITIES),
-} as const;
+export const AnimatedCharacter = defineComponent({
+  headEntity: U32,
+  torsoEntity: U32,
+  leftArmEntity: U32,
+  rightArmEntity: U32,
+  leftLegEntity: U32,
+  rightLegEntity: U32,
+  phase: F32,
+  jumpTime: F32,
+  fallTime: F32,
+  animationState: U8,
+  stateTransition: F32,
+});
 
 export const HasAnimator = {} as const;

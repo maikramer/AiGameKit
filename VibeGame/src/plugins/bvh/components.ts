@@ -1,4 +1,4 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, U16, U8 } from '../../core/ecs/component-storage';
 
 /**
  * Marks an entity whose meshes participate in the static BVH index used by
@@ -12,8 +12,8 @@ import { MAX_ENTITIES } from '../../core/ecs/constants';
  * added — Rapier still owns dynamic collision. The BVH is for cheap
  * mesh-vs-ray queries against the world.
  */
-export const BvhTarget = {
-  include: new Uint8Array(MAX_ENTITIES),
-  layer: new Uint16Array(MAX_ENTITIES),
-  dirty: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const BvhTarget = defineComponent({
+  include: U8,
+  layer: U16,
+  dirty: U8,
+});

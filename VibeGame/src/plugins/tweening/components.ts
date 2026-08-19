@@ -1,4 +1,9 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
 export enum TweenAxis {
   None = 0,
@@ -16,16 +21,16 @@ export enum EasingType {
   EaseOutQuad = 2,
 }
 
-export const TweenData = {
-  targetEntity: new Uint32Array(MAX_ENTITIES),
-  axis: new Uint8Array(MAX_ENTITIES),
-  from: new Float32Array(MAX_ENTITIES),
-  to: new Float32Array(MAX_ENTITIES),
-  duration: new Float32Array(MAX_ENTITIES),
-  delay: new Float32Array(MAX_ENTITIES),
-  easing: new Uint8Array(MAX_ENTITIES),
-  loop: new Uint8Array(MAX_ENTITIES),
-  pingPong: new Uint8Array(MAX_ENTITIES),
-  elapsed: new Float32Array(MAX_ENTITIES),
-  active: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const TweenData = defineComponent({
+  targetEntity: U32,
+  axis: U8,
+  from: F32,
+  to: F32,
+  duration: F32,
+  delay: F32,
+  easing: U8,
+  loop: U8,
+  pingPong: U8,
+  elapsed: F32,
+  active: U8,
+});

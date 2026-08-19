@@ -102,7 +102,14 @@ export {
   dispatchEvent,
   removeAllListeners,
 } from './ecs';
-export { eulerToQuaternion, lerp, quaternionToEuler, slerp } from './math';
+export {
+  eulerToQuaternion,
+  fbm2,
+  lerp,
+  quaternionToEuler,
+  slerp,
+  valueNoise2,
+} from './math';
 export {
   entityRecipe,
   fromEuler,

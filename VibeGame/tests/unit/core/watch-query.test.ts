@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State, watchQuery } from 'vibegame';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 const MarkerA = { value: new Float32Array(MAX_ENTITIES) };
 const MarkerB = { value: new Float32Array(MAX_ENTITIES) };

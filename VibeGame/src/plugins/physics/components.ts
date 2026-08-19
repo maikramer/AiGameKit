@@ -1,4 +1,10 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U16,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
 export enum BodyType {
   Dynamic = 0,
@@ -24,194 +30,194 @@ export enum ColliderShape {
   Precompute = 6,
 }
 
-export const PhysicsWorld = {
-  gravityX: new Float32Array(MAX_ENTITIES),
-  gravityY: new Float32Array(MAX_ENTITIES),
-  gravityZ: new Float32Array(MAX_ENTITIES),
-} as const;
+export const PhysicsWorld = defineComponent({
+  gravityX: F32,
+  gravityY: F32,
+  gravityZ: F32,
+});
 
-export const Rigidbody = {
-  type: new Uint8Array(MAX_ENTITIES),
-  mass: new Float32Array(MAX_ENTITIES),
-  linearDamping: new Float32Array(MAX_ENTITIES),
-  angularDamping: new Float32Array(MAX_ENTITIES),
-  gravityScale: new Float32Array(MAX_ENTITIES),
-  ccd: new Uint8Array(MAX_ENTITIES),
-  lockRotX: new Uint8Array(MAX_ENTITIES),
-  lockRotY: new Uint8Array(MAX_ENTITIES),
-  lockRotZ: new Uint8Array(MAX_ENTITIES),
+export const Rigidbody = defineComponent({
+  type: U8,
+  mass: F32,
+  linearDamping: F32,
+  angularDamping: F32,
+  gravityScale: F32,
+  ccd: U8,
+  lockRotX: U8,
+  lockRotY: U8,
+  lockRotZ: U8,
 
-  posX: new Float32Array(MAX_ENTITIES),
-  posY: new Float32Array(MAX_ENTITIES),
-  posZ: new Float32Array(MAX_ENTITIES),
-  rotX: new Float32Array(MAX_ENTITIES),
-  rotY: new Float32Array(MAX_ENTITIES),
-  rotZ: new Float32Array(MAX_ENTITIES),
-  rotW: new Float32Array(MAX_ENTITIES),
-  eulerX: new Float32Array(MAX_ENTITIES),
-  eulerY: new Float32Array(MAX_ENTITIES),
-  eulerZ: new Float32Array(MAX_ENTITIES),
+  posX: F32,
+  posY: F32,
+  posZ: F32,
+  rotX: F32,
+  rotY: F32,
+  rotZ: F32,
+  rotW: F32,
+  eulerX: F32,
+  eulerY: F32,
+  eulerZ: F32,
 
-  velX: new Float32Array(MAX_ENTITIES),
-  velY: new Float32Array(MAX_ENTITIES),
-  velZ: new Float32Array(MAX_ENTITIES),
-  rotVelX: new Float32Array(MAX_ENTITIES),
-  rotVelY: new Float32Array(MAX_ENTITIES),
-  rotVelZ: new Float32Array(MAX_ENTITIES),
+  velX: F32,
+  velY: F32,
+  velZ: F32,
+  rotVelX: F32,
+  rotVelY: F32,
+  rotVelZ: F32,
   /** 1 = ECS pose was written; TeleportationSystem pushes to Rapier then clears. */
-  poseDirty: new Uint8Array(MAX_ENTITIES),
-} as const;
+  poseDirty: U8,
+});
 
-export const Collider = {
-  shape: new Uint8Array(MAX_ENTITIES),
-  sizeX: new Float32Array(MAX_ENTITIES),
-  sizeY: new Float32Array(MAX_ENTITIES),
-  sizeZ: new Float32Array(MAX_ENTITIES),
-  radius: new Float32Array(MAX_ENTITIES),
-  height: new Float32Array(MAX_ENTITIES),
-  friction: new Float32Array(MAX_ENTITIES),
-  restitution: new Float32Array(MAX_ENTITIES),
-  density: new Float32Array(MAX_ENTITIES),
-  isSensor: new Uint8Array(MAX_ENTITIES),
-  membershipGroups: new Uint16Array(MAX_ENTITIES),
-  filterGroups: new Uint16Array(MAX_ENTITIES),
+export const Collider = defineComponent({
+  shape: U8,
+  sizeX: F32,
+  sizeY: F32,
+  sizeZ: F32,
+  radius: F32,
+  height: F32,
+  friction: F32,
+  restitution: F32,
+  density: F32,
+  isSensor: U8,
+  membershipGroups: U16,
+  filterGroups: U16,
   // TriMesh/ConvexHull shapes: uniform scale applied to the collision mesh
   // vertices, and anchor mode (0 = as authored, 1 = recenter so the mesh
   // AABB's base center sits at the entity origin — this project's GLB pivot
   // convention).
-  meshScale: new Float32Array(MAX_ENTITIES),
-  meshAnchor: new Uint8Array(MAX_ENTITIES),
-  posOffsetX: new Float32Array(MAX_ENTITIES),
-  posOffsetY: new Float32Array(MAX_ENTITIES),
-  posOffsetZ: new Float32Array(MAX_ENTITIES),
-  rotOffsetX: new Float32Array(MAX_ENTITIES),
-  rotOffsetY: new Float32Array(MAX_ENTITIES),
-  rotOffsetZ: new Float32Array(MAX_ENTITIES),
-  rotOffsetW: new Float32Array(MAX_ENTITIES),
-} as const;
+  meshScale: F32,
+  meshAnchor: U8,
+  posOffsetX: F32,
+  posOffsetY: F32,
+  posOffsetZ: F32,
+  rotOffsetX: F32,
+  rotOffsetY: F32,
+  rotOffsetZ: F32,
+  rotOffsetW: F32,
+});
 
-export const CharacterController = {
-  offset: new Float32Array(MAX_ENTITIES),
-  maxSlope: new Float32Array(MAX_ENTITIES),
-  maxSlide: new Float32Array(MAX_ENTITIES),
-  snapDist: new Float32Array(MAX_ENTITIES),
-  autoStep: new Uint8Array(MAX_ENTITIES),
-  maxStepHeight: new Float32Array(MAX_ENTITIES),
-  minStepWidth: new Float32Array(MAX_ENTITIES),
-  upX: new Float32Array(MAX_ENTITIES),
-  upY: new Float32Array(MAX_ENTITIES),
-  upZ: new Float32Array(MAX_ENTITIES),
-  moveX: new Float32Array(MAX_ENTITIES),
-  moveY: new Float32Array(MAX_ENTITIES),
-  moveZ: new Float32Array(MAX_ENTITIES),
-  grounded: new Uint8Array(MAX_ENTITIES),
-  platform: new Uint32Array(MAX_ENTITIES),
-  platformVelX: new Float32Array(MAX_ENTITIES),
-  platformVelY: new Float32Array(MAX_ENTITIES),
-  platformVelZ: new Float32Array(MAX_ENTITIES),
-} as const;
+export const CharacterController = defineComponent({
+  offset: F32,
+  maxSlope: F32,
+  maxSlide: F32,
+  snapDist: F32,
+  autoStep: U8,
+  maxStepHeight: F32,
+  minStepWidth: F32,
+  upX: F32,
+  upY: F32,
+  upZ: F32,
+  moveX: F32,
+  moveY: F32,
+  moveZ: F32,
+  grounded: U8,
+  platform: U32,
+  platformVelX: F32,
+  platformVelY: F32,
+  platformVelZ: F32,
+});
 
-export const CharacterMovement = {
-  desiredVelX: new Float32Array(MAX_ENTITIES),
-  desiredVelY: new Float32Array(MAX_ENTITIES),
-  desiredVelZ: new Float32Array(MAX_ENTITIES),
-  velocityY: new Float32Array(MAX_ENTITIES),
-  actualMoveX: new Float32Array(MAX_ENTITIES),
-  actualMoveY: new Float32Array(MAX_ENTITIES),
-  actualMoveZ: new Float32Array(MAX_ENTITIES),
+export const CharacterMovement = defineComponent({
+  desiredVelX: F32,
+  desiredVelY: F32,
+  desiredVelZ: F32,
+  velocityY: F32,
+  actualMoveX: F32,
+  actualMoveY: F32,
+  actualMoveZ: F32,
   /**
    * Horizontal movement resistance 0..0.9 (0 = none, so the zeroed default is
    * "no drag"). Written by environment systems (e.g. water submersion) and
    * consumed by applyCharacterMovement as a stride scale of (1 - waterDrag).
    */
-  waterDrag: new Float32Array(MAX_ENTITIES),
-} as const;
+  waterDrag: F32,
+});
 
-export const InterpolatedTransform = {
-  prevPosX: new Float32Array(MAX_ENTITIES),
-  prevPosY: new Float32Array(MAX_ENTITIES),
-  prevPosZ: new Float32Array(MAX_ENTITIES),
-  prevRotX: new Float32Array(MAX_ENTITIES),
-  prevRotY: new Float32Array(MAX_ENTITIES),
-  prevRotZ: new Float32Array(MAX_ENTITIES),
-  prevRotW: new Float32Array(MAX_ENTITIES),
+export const InterpolatedTransform = defineComponent({
+  prevPosX: F32,
+  prevPosY: F32,
+  prevPosZ: F32,
+  prevRotX: F32,
+  prevRotY: F32,
+  prevRotZ: F32,
+  prevRotW: F32,
 
-  posX: new Float32Array(MAX_ENTITIES),
-  posY: new Float32Array(MAX_ENTITIES),
-  posZ: new Float32Array(MAX_ENTITIES),
-  rotX: new Float32Array(MAX_ENTITIES),
-  rotY: new Float32Array(MAX_ENTITIES),
-  rotZ: new Float32Array(MAX_ENTITIES),
-  rotW: new Float32Array(MAX_ENTITIES),
-} as const;
+  posX: F32,
+  posY: F32,
+  posZ: F32,
+  rotX: F32,
+  rotY: F32,
+  rotZ: F32,
+  rotW: F32,
+});
 
-export const CollisionEvents = {
-  activeEvents: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const CollisionEvents = defineComponent({
+  activeEvents: U8,
+});
 
-export const TouchedEvent = {
-  other: new Uint32Array(MAX_ENTITIES),
-  handle1: new Uint32Array(MAX_ENTITIES),
-  handle2: new Uint32Array(MAX_ENTITIES),
-} as const;
+export const TouchedEvent = defineComponent({
+  other: U32,
+  handle1: U32,
+  handle2: U32,
+});
 
-export const TouchEndedEvent = {
-  other: new Uint32Array(MAX_ENTITIES),
-  handle1: new Uint32Array(MAX_ENTITIES),
-  handle2: new Uint32Array(MAX_ENTITIES),
-} as const;
+export const TouchEndedEvent = defineComponent({
+  other: U32,
+  handle1: U32,
+  handle2: U32,
+});
 
-export const ApplyForce = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-} as const;
+export const ApplyForce = defineComponent({
+  x: F32,
+  y: F32,
+  z: F32,
+});
 
-export const ApplyTorque = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-} as const;
+export const ApplyTorque = defineComponent({
+  x: F32,
+  y: F32,
+  z: F32,
+});
 
-export const ApplyImpulse = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-} as const;
+export const ApplyImpulse = defineComponent({
+  x: F32,
+  y: F32,
+  z: F32,
+});
 
-export const ApplyAngularImpulse = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-} as const;
+export const ApplyAngularImpulse = defineComponent({
+  x: F32,
+  y: F32,
+  z: F32,
+});
 
-export const SetLinearVelocity = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-} as const;
+export const SetLinearVelocity = defineComponent({
+  x: F32,
+  y: F32,
+  z: F32,
+});
 
-export const SetAngularVelocity = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-} as const;
+export const SetAngularVelocity = defineComponent({
+  x: F32,
+  y: F32,
+  z: F32,
+});
 
-export const KinematicMove = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-} as const;
+export const KinematicMove = defineComponent({
+  x: F32,
+  y: F32,
+  z: F32,
+});
 
-export const KinematicRotate = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-  w: new Float32Array(MAX_ENTITIES),
-} as const;
+export const KinematicRotate = defineComponent({
+  x: F32,
+  y: F32,
+  z: F32,
+  w: F32,
+});
 
-export const KinematicAngularVelocity = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-} as const;
+export const KinematicAngularVelocity = defineComponent({
+  x: F32,
+  y: F32,
+  z: F32,
+});

@@ -1,4 +1,9 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 import type { State } from '../../core';
 
 let _aiRng: () => number = Math.random;
@@ -37,12 +42,12 @@ export type AiMode =
  * Queryable, serializable AI state (the rich config lives in the per-entity
  * config side-table).
  */
-export const AiStateComponent = {
-  mode: new Uint8Array(MAX_ENTITIES),
-  target: new Uint32Array(MAX_ENTITIES),
-  cooldown: new Float32Array(MAX_ENTITIES),
-  leash: new Float32Array(MAX_ENTITIES),
-} as const;
+export const AiStateComponent = defineComponent({
+  mode: U8,
+  target: U32,
+  cooldown: F32,
+  leash: F32,
+});
 
 /** Melee AI tuning. Defaults mirror the simple-rpg creature prototype. */
 export interface MeleeAiConfig {

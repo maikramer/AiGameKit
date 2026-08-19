@@ -13,7 +13,7 @@ import {
   CoroutineRunnerSystem,
 } from 'vibegame';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 describe('Scene reload', () => {
   let state: State;

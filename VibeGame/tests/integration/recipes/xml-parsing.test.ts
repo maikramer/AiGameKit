@@ -3,7 +3,7 @@ import { JSDOM } from 'jsdom';
 import { State, XMLParser } from 'vibegame';
 import { parseXMLToEntities } from 'vibegame';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 describe('XML Recipe Integration', () => {
   let state: State;

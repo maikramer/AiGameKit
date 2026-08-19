@@ -1,13 +1,18 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
 /** Painel world-space (@pmndrs/uikit Container). */
-export const HudPanel = {
-  width: new Float32Array(MAX_ENTITIES),
-  height: new Float32Array(MAX_ENTITIES),
-  bgR: new Float32Array(MAX_ENTITIES),
-  bgG: new Float32Array(MAX_ENTITIES),
-  bgB: new Float32Array(MAX_ENTITIES),
-  opacity: new Float32Array(MAX_ENTITIES),
-  textIndex: new Uint32Array(MAX_ENTITIES),
-  built: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const HudPanel = defineComponent({
+  width: F32,
+  height: F32,
+  bgR: F32,
+  bgG: F32,
+  bgB: F32,
+  opacity: F32,
+  textIndex: U32,
+  built: U8,
+});

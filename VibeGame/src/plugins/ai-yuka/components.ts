@@ -1,4 +1,10 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  filled,
+  F32,
+  U8,
+  U32,
+} from '../../core/ecs/component-storage';
 
 /**
  * Behavior flags for a yuka-driven agent. They are **bitmask-combinable** so a
@@ -34,21 +40,21 @@ export type YukaBehaviorMask = number;
  * static fallback used when `targetEid` is 0. Both are planar — Y is owned by
  * terrain snap, never by the steerer.
  */
-export const YukaAgentComponent = {
+export const YukaAgentComponent = defineComponent({
   /** When 0 the system skips this entity entirely (sleeping / dead). */
-  active: new Uint8Array(MAX_ENTITIES),
+  active: U8,
   /** OR of {@link YukaBehaviorMask} flags. */
-  behavior: new Uint32Array(MAX_ENTITIES),
+  behavior: U32,
   /** Max planar movement speed (m/s). Passed to the yuka Vehicle each frame. */
-  maxSpeed: new Float32Array(MAX_ENTITIES),
+  maxSpeed: F32,
   /** Max steering force; higher = snappier turns. */
-  maxForce: new Float32Array(MAX_ENTITIES).fill(8),
+  maxForce: filled(F32, 8),
   /** Focus entity (hero). 0 = use static target. */
-  targetEid: new Uint32Array(MAX_ENTITIES),
+  targetEid: U32,
   /** Faction id (so separation/flock only apply to allies, not enemies). */
-  faction: new Uint8Array(MAX_ENTITIES),
+  faction: U8,
   /** Static target X (used when targetEid === 0, e.g. wander anchor). */
-  targetX: new Float32Array(MAX_ENTITIES),
+  targetX: F32,
   /** Static target Z. */
-  targetZ: new Float32Array(MAX_ENTITIES),
-} as const;
+  targetZ: F32,
+});

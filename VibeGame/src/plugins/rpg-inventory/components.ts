@@ -1,7 +1,7 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, U32, U8 } from '../../core/ecs/component-storage';
 
-export const InventoryComponent = {
-  slots: new Uint32Array(MAX_ENTITIES),
-  capacity: new Uint8Array(MAX_ENTITIES),
-  version: new Uint32Array(MAX_ENTITIES),
-} as const;
+export const InventoryComponent = defineComponent({
+  slots: U32,
+  capacity: U8,
+  version: U32,
+});

@@ -1,5 +1,18 @@
-export { NULL_ENTITY, TIME_CONSTANTS } from './constants';
+export { MAX_ENTITIES, NULL_ENTITY, TIME_CONSTANTS } from './constants';
 export { Parent } from './components';
+export {
+  defineComponent,
+  filled,
+  isComponentMaterialized,
+  F32,
+  F64,
+  U8,
+  U16,
+  U32,
+  I16,
+  I32,
+} from './component-storage';
+export type { ComponentOf, FieldKind, FieldSpec } from './component-storage';
 export {
   cleanupEntityCoroutines,
   CoroutineFixedUpdateSystem,

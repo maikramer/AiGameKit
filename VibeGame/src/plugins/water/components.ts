@@ -1,4 +1,9 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 import type { State } from '../../core';
 
 /**
@@ -7,63 +12,63 @@ import type { State } from '../../core';
  * (mesh, physics heightfields, BVH and height queries all read the sampler,
  * so they inherit the depression), then fills it with a local water surface.
  */
-export const Lake = {
+export const Lake = defineComponent({
   /** Bowl radius in metres. */
-  radius: new Float32Array(MAX_ENTITIES),
+  radius: F32,
   /** Bowl depth below the water surface, metres. */
-  depth: new Float32Array(MAX_ENTITIES),
+  depth: F32,
   /** Water surface distance below the lowest rim point, metres. */
-  waterOffset: new Float32Array(MAX_ENTITIES),
+  waterOffset: F32,
   /** Water tint (hex). */
-  color: new Uint32Array(MAX_ENTITIES),
+  color: U32,
   /** Water surface opacity 0..1. */
-  opacity: new Float32Array(MAX_ENTITIES),
+  opacity: F32,
   /** Ripple animation strength (0 = still water). */
-  ripple: new Float32Array(MAX_ENTITIES),
+  ripple: F32,
   /**
    * Wave amplitude in metres. 0 (default) = auto: scales with the lake radius
    * so small ponds barely stir while big lakes visibly swell.
    */
-  waveHeight: new Float32Array(MAX_ENTITIES),
+  waveHeight: F32,
   /** Wave/shimmer animation speed multiplier (1 = default pacing). */
-  waveSpeed: new Float32Array(MAX_ENTITIES),
+  waveSpeed: F32,
   /** Resolved world Y of the water surface (set by the system). */
-  waterY: new Float32Array(MAX_ENTITIES),
+  waterY: F32,
   /** 1 once the carve + surface have been applied. */
-  applied: new Uint8Array(MAX_ENTITIES),
-} as const;
+  applied: U8,
+});
 
 /**
  * `<River>` — a sculpted river channel along a polyline. Shares the water
  * material and registry with lakes; the path generalises the lake disc to a
  * ribbon. The path itself lives in a side-channel (bitecs can't store arrays).
  */
-export const River = {
+export const River = defineComponent({
   /** Waterline width (m) — the visible water; the carve is wider by the banks. */
-  width: new Float32Array(MAX_ENTITIES),
+  width: F32,
   /** Channel depth below the water surface (m). */
-  depth: new Float32Array(MAX_ENTITIES),
+  depth: F32,
   /** Water surface distance below the lowest bank point (m). */
-  waterOffset: new Float32Array(MAX_ENTITIES),
+  waterOffset: F32,
   /** Exposed carved-bank width each side of the waterline (m). */
-  bankWidth: new Float32Array(MAX_ENTITIES),
+  bankWidth: F32,
   /** Bank crest height above the water surface (m) — the freeboard. */
-  bankHeight: new Float32Array(MAX_ENTITIES),
+  bankHeight: F32,
   /** Water tint (hex). */
-  color: new Uint32Array(MAX_ENTITIES),
+  color: U32,
   /** Water surface opacity 0..1. */
-  opacity: new Float32Array(MAX_ENTITIES),
+  opacity: F32,
   /** Ripple animation strength (0 = still water). */
-  ripple: new Float32Array(MAX_ENTITIES),
+  ripple: F32,
   /** Wave amplitude in metres. */
-  waveHeight: new Float32Array(MAX_ENTITIES),
+  waveHeight: F32,
   /** Wave/shimmer animation speed multiplier. */
-  waveSpeed: new Float32Array(MAX_ENTITIES),
+  waveSpeed: F32,
   /** Resolved world Y of the water surface (set by the system). */
-  waterY: new Float32Array(MAX_ENTITIES),
+  waterY: F32,
   /** 1 once the carve + surface have been applied. */
-  applied: new Uint8Array(MAX_ENTITIES),
-} as const;
+  applied: U8,
+});
 
 /** Side-channel for river paths (bitecs can't store arrays). Flat `[x0,z0,...]`. */
 const RIVER_PATHS = new WeakMap<State, Map<number, number[]>>();

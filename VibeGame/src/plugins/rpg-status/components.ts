@@ -1,4 +1,4 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, U32, U8 } from '../../core/ecs/component-storage';
 import type { State } from '../../core';
 import {
   COMBAT_DEATH,
@@ -14,10 +14,10 @@ import type {
   StatusEffectDef,
 } from '../rpg-core/types';
 
-export const StatusEffectComponent = {
-  count: new Uint8Array(MAX_ENTITIES),
-  version: new Uint32Array(MAX_ENTITIES),
-} as const;
+export const StatusEffectComponent = defineComponent({
+  count: U8,
+  version: U32,
+});
 
 export interface ActiveStatusEffect {
   readonly defId: string;

@@ -43,6 +43,7 @@ import {
 import { createEntityFromRecipe } from '../recipes/parser';
 import { Tag, addTag, getTagId, getTagName } from './tags';
 import { Layer } from './layers';
+import { MAX_ENTITIES } from './constants';
 import {
   addEventListener as _addEventListener,
   dispatchEvent as _dispatchEvent,
@@ -63,6 +64,9 @@ export class State {
   public readonly systems = new Set<System>();
   public readonly config = new ConfigRegistry();
   public headless = false;
+  /** One-shot latches for the entity-budget diagnostics in `createEntity`. */
+  private entityBudgetWarned = false;
+  private entityBudgetBlown = false;
   private readonly recipes = new Map<string, Recipe>();
   private readonly components = new Map<string, Component>();
   private readonly componentNames = new WeakMap<Component, string>();
@@ -220,9 +224,39 @@ export class State {
     this.scheduler.step(this, deltaTime);
   }
 
+  /**
+   * Create an entity.
+   *
+   * bitecs hands out ids without an upper bound, but every component in this
+   * engine is a `TypedArray[MAX_ENTITIES]`. An id past that length addresses
+   * nothing: writes to a TypedArray out of range are **silently dropped** and
+   * reads come back `undefined`, so the entity exists, queries match it, and
+   * none of its data sticks. That is unfindable from the symptoms, so the
+   * budget is reported here — a warning while there is still room to act, an
+   * error at the wall.
+   */
   createEntity(): number {
     this.checkDisposed();
-    return addEntity(this.world);
+    const eid = addEntity(this.world);
+    if (eid >= MAX_ENTITIES) {
+      if (!this.entityBudgetBlown) {
+        this.entityBudgetBlown = true;
+        logger.error(
+          `[VibeGame] entity budget exhausted (MAX_ENTITIES=${MAX_ENTITIES}). ` +
+            `Entity ${eid} has no component storage — its data will be dropped. ` +
+            `Spawn fewer entities (vegetation/props density, spawner counts) or ` +
+            `raise MAX_ENTITIES.`
+        );
+      }
+    } else if (!this.entityBudgetWarned && eid >= MAX_ENTITIES * 0.9) {
+      this.entityBudgetWarned = true;
+      logger.warn(
+        `[VibeGame] entity budget at ${Math.round((eid / MAX_ENTITIES) * 100)}% ` +
+          `(${eid}/${MAX_ENTITIES}). Past the cap component data is silently ` +
+          `dropped — check spawner counts / vegetation density.`
+      );
+    }
+    return eid;
   }
 
   getDescendants(eid: number): number[] {

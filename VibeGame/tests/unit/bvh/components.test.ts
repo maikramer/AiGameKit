@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { BvhTarget } from 'vibegame';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 describe('BvhTarget component', () => {
   it('expõe exatamente os campos include, layer e dirty', () => {
@@ -18,7 +18,7 @@ describe('BvhTarget component', () => {
     expect(BvhTarget.dirty).toBeInstanceOf(Uint8Array);
   });
 
-  it('dimensiona cada array para MAX_ENTITIES (100000)', () => {
+  it('dimensiona cada array para MAX_ENTITIES', () => {
     expect(BvhTarget.include.length).toBe(MAX_ENTITIES);
     expect(BvhTarget.layer.length).toBe(MAX_ENTITIES);
     expect(BvhTarget.dirty.length).toBe(MAX_ENTITIES);

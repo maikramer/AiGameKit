@@ -1,8 +1,8 @@
-import { MAX_ENTITIES } from './constants';
+import { defineComponent, U8 } from './component-storage';
 
-export const Tag = {
-  value: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const Tag = defineComponent({
+  value: U8,
+});
 
 const tagById = new Map<number, string>();
 const tagByName = new Map<string, number>();

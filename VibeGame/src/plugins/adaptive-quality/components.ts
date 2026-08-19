@@ -1,4 +1,10 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  F64,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
 /**
  * Adaptive Quality — runtime auto-scaler.
@@ -14,26 +20,26 @@ import { MAX_ENTITIES } from '../../core/ecs/constants';
  * `getAdaptiveQualityTier(state)`. Each lever's enablement per tier lives in
  * `quality-tiers.ts` so the policy is centralized and auditable.
  */
-export const AdaptiveQuality = {
+export const AdaptiveQuality = defineComponent({
   /** 0 = disabled (no measurement, tier stays at 0 = Max). */
-  enabled: new Uint8Array(MAX_ENTITIES),
+  enabled: U8,
   /** Target frame rate; the scaler engages when sustained frame time exceeds
    *  `1000 / targetFps * downscaleHysteresis`. */
-  targetFps: new Float32Array(MAX_ENTITIES),
+  targetFps: F32,
   /** Floor for pixel-ratio downscaling (desktop default 1.0). */
-  minPixelRatio: new Float32Array(MAX_ENTITIES),
+  minPixelRatio: F32,
   /** Ceiling for pixel ratio (matches the renderer's existing cap, 1.5). */
-  maxPixelRatio: new Float32Array(MAX_ENTITIES),
+  maxPixelRatio: F32,
   /** Current applied tier. 0=Max, 1=High, 2=Medium, 3=Low. */
-  currentTier: new Uint8Array(MAX_ENTITIES),
+  currentTier: U8,
   /** EMA of the frame time in milliseconds. */
-  emaFrameMs: new Float32Array(MAX_ENTITIES),
+  emaFrameMs: F32,
   /** Timestamp (ms, performance.now) of the last tier transition. */
-  lastTransitionMs: new Float64Array(MAX_ENTITIES),
+  lastTransitionMs: F64,
   /** Frames continuously over/under threshold since last check — used to avoid
    *  reacting to a single slow frame. */
-  consecutiveHotFrames: new Uint32Array(MAX_ENTITIES),
-  consecutiveColdFrames: new Uint32Array(MAX_ENTITIES),
+  consecutiveHotFrames: U32,
+  consecutiveColdFrames: U32,
   /** Total frame transitions (instrumentation). */
-  transitionCount: new Uint32Array(MAX_ENTITIES),
-} as const;
+  transitionCount: U32,
+});

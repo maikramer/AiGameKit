@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { NavMeshAgent, NavMeshSurface, NavMeshWalkable } from 'vibegame';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 describe('NavMeshSurface component', () => {
   it('exposes enabled/generated as MAX_ENTITIES Uint8Arrays, defaulting to enabled & not generated', () => {

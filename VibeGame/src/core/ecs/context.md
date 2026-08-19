@@ -18,6 +18,7 @@ Entity Component System scheduler and state management. Provides the State class
 ecs/
 ├── context.md  # This file
 ├── components.ts  # Core ECS components
+├── component-storage.ts  # defineComponent: lazy SoA field arrays
 ├── config.ts  # Configuration registry
 ├── constants.ts  # ECS constants and limits
 ├── ordering.ts  # System execution ordering
@@ -32,6 +33,26 @@ ecs/
 
 - **In-scope**: ECS architecture, scheduling, state
 - **Out-of-scope**: Specific components/systems
+
+## Component storage is lazy
+
+Declare components with `defineComponent({ posX: F32, dirty: U8 })` — never with
+`new Float32Array(MAX_ENTITIES)` literals. Every field is a
+`TypedArray[MAX_ENTITIES]`, so eager literals made the barrel import allocate
+**~214 MB** before a single entity existed, in every game, for all ~104
+components whether the plugin was registered or not. `defineComponent` keeps the
+same `Component.field[eid]` access and allocates on the component's first field
+touch (all fields at once, then plain data properties). Note that *enumerating*
+a component counts as a touch. Non-zero defaults: `filled(U8, 1)`.
+
+`MAX_ENTITIES` stays at 100 000, overridable with
+`globalThis.VIBEGAME_MAX_ENTITIES` set **before** importing the engine.
+Raising it is **not** a linear trade: measured on simple-rpg (same scene, heap
+right after boot) 100k → 1781 MB but 150k → 3669 MB, near Chrome's ~4 GB limit.
+`State.createEntity` warns at 90% and throws at the cap; past it, component
+writes fall outside the array and are silently dropped. simple-rpg sits at
+93 194 (93%), so the headroom fix is fewer entities — instanced foliage
+spending one entity per blade — not a bigger cap.
 
 ## Entry Points
 
@@ -135,3 +156,16 @@ const OrderedSystem: GAME.System = {
 ```
 
 <!-- /LLM:EXAMPLES -->
+
+## Orçamento de entidades
+
+bitecs distribui ids sem tecto, mas **todos** os componentes deste motor são
+`TypedArray[MAX_ENTITIES]` (100 000). Um id acima disso não endereça nada:
+escritas fora do range de um TypedArray são **descartadas em silêncio** e as
+leituras devolvem `undefined` — a entidade existe, as queries apanham-na, e os
+dados dela não colam. Como isso é indiagnosticável pelos sintomas,
+`State.createEntity` avisa aos 90 % e emite erro na parede.
+
+Quem bate no aviso tem dois botões: baixar a densidade que gera entidades
+(vegetação, spawners) ou subir `MAX_ENTITIES` — e pagar a memória em todos os
+componentes. O `simple-rpg` corre a ~95,7 k.

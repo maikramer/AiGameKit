@@ -1,13 +1,13 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, U8 } from '../../core/ecs/component-storage';
 
 /**
  * `<Vegetation>` — dense static ground cover (grass clumps, flowers).
  * Placement is driven by a SpawnGroupSpec (same path as StaticSpawner);
  * this component only carries vegetation-specific knobs.
  */
-export const Vegetation = {
+export const Vegetation = defineComponent({
   /** 1 = apply vertex wind sway to spawned instanced materials. */
-  wind: new Uint8Array(MAX_ENTITIES),
+  wind: U8,
   /** 1 once mesh URLs were registered with the wind URL set. */
-  windRegistered: new Uint8Array(MAX_ENTITIES),
-} as const;
+  windRegistered: U8,
+});

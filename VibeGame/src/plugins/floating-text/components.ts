@@ -1,4 +1,4 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, F32, U8 } from '../../core/ecs/component-storage';
 
 /**
  * Floating text — supports two rendering modes that share the same SOA data:
@@ -13,28 +13,28 @@ import { MAX_ENTITIES } from '../../core/ecs/constants';
  * The string payload itself lives in a sidecar map (utils.ts) — SOA fields
  * stay numeric. Color R/G/B floats are shared between both modes.
  */
-export const FloatingText = {
-  elapsed: new Float32Array(MAX_ENTITIES),
+export const FloatingText = defineComponent({
+  elapsed: F32,
   /** Lifetime in seconds; the entity is destroyed when elapsed reaches it. */
-  duration: new Float32Array(MAX_ENTITIES),
+  duration: F32,
   /** Upward drift. World mode: m/s. Screen mode: px/s. */
-  riseSpeed: new Float32Array(MAX_ENTITIES),
+  riseSpeed: F32,
   /** Font size in world meters (world mode). */
-  size: new Float32Array(MAX_ENTITIES),
-  colorR: new Float32Array(MAX_ENTITIES),
-  colorG: new Float32Array(MAX_ENTITIES),
-  colorB: new Float32Array(MAX_ENTITIES),
+  size: F32,
+  colorR: F32,
+  colorG: F32,
+  colorB: F32,
 
   /** 0 = world (troika 3D), 1 = screen (DOM pool). */
-  space: new Uint8Array(MAX_ENTITIES),
+  space: U8,
   /** Initial screen-space X in CSS pixels (screen mode). */
-  screenX: new Float32Array(MAX_ENTITIES),
+  screenX: F32,
   /** Initial screen-space Y in CSS pixels (screen mode). */
-  screenY: new Float32Array(MAX_ENTITIES),
+  screenY: F32,
   /** Font size in CSS pixels (screen mode). */
-  fontSizePx: new Float32Array(MAX_ENTITIES),
+  fontSizePx: F32,
   /** Horizontal drift in CSS pixels (screen mode); signed. */
-  driftX: new Float32Array(MAX_ENTITIES),
+  driftX: F32,
   /** Crit flag (screen mode): bigger font + red-orange tint override. */
-  crit: new Uint8Array(MAX_ENTITIES),
-} as const;
+  crit: U8,
+});

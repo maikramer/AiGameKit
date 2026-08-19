@@ -1,35 +1,40 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
-export const PlayerController = {
-  speed: new Float32Array(MAX_ENTITIES),
-  sprintMultiplier: new Float32Array(MAX_ENTITIES),
-  jumpHeight: new Float32Array(MAX_ENTITIES),
-  rotationSpeed: new Float32Array(MAX_ENTITIES),
-  canJump: new Uint8Array(MAX_ENTITIES),
-  isJumping: new Uint8Array(MAX_ENTITIES),
-  jumpCooldown: new Float32Array(MAX_ENTITIES),
-  lastGroundedTime: new Float32Array(MAX_ENTITIES),
-  jumpBufferTime: new Float32Array(MAX_ENTITIES),
-  cameraEntity: new Uint32Array(MAX_ENTITIES),
-  inheritedVelX: new Float32Array(MAX_ENTITIES),
-  inheritedVelZ: new Float32Array(MAX_ENTITIES),
-  inheritedAngVelX: new Float32Array(MAX_ENTITIES),
-  inheritedAngVelY: new Float32Array(MAX_ENTITIES),
-  inheritedAngVelZ: new Float32Array(MAX_ENTITIES),
-  platformOffsetX: new Float32Array(MAX_ENTITIES),
-  platformOffsetY: new Float32Array(MAX_ENTITIES),
-  platformOffsetZ: new Float32Array(MAX_ENTITIES),
-  lastPlatform: new Uint32Array(MAX_ENTITIES),
-} as const;
+export const PlayerController = defineComponent({
+  speed: F32,
+  sprintMultiplier: F32,
+  jumpHeight: F32,
+  rotationSpeed: F32,
+  canJump: U8,
+  isJumping: U8,
+  jumpCooldown: F32,
+  lastGroundedTime: F32,
+  jumpBufferTime: F32,
+  cameraEntity: U32,
+  inheritedVelX: F32,
+  inheritedVelZ: F32,
+  inheritedAngVelX: F32,
+  inheritedAngVelY: F32,
+  inheritedAngVelZ: F32,
+  platformOffsetX: F32,
+  platformOffsetY: F32,
+  platformOffsetZ: F32,
+  lastPlatform: U32,
+});
 
-export const PlayerGltfConfig = {
-  modelUrlIndex: new Uint32Array(MAX_ENTITIES),
-  loaded: new Uint8Array(MAX_ENTITIES),
-  animatorRegistryIndex: new Uint32Array(MAX_ENTITIES),
-  idleClipIndex: new Uint32Array(MAX_ENTITIES),
-  walkClipIndex: new Uint32Array(MAX_ENTITIES),
-  runClipIndex: new Uint32Array(MAX_ENTITIES),
-  jumpClipIndex: new Uint32Array(MAX_ENTITIES),
-  overrideLock: new Uint8Array(MAX_ENTITIES),
-  overrideClipIndex: new Uint32Array(MAX_ENTITIES),
-} as const;
+export const PlayerGltfConfig = defineComponent({
+  modelUrlIndex: U32,
+  loaded: U8,
+  animatorRegistryIndex: U32,
+  idleClipIndex: U32,
+  walkClipIndex: U32,
+  runClipIndex: U32,
+  jumpClipIndex: U32,
+  overrideLock: U8,
+  overrideClipIndex: U32,
+});

@@ -1,4 +1,4 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, U8 } from '../../core/ecs/component-storage';
 import type { State } from '../../core';
 import { ECONOMY_GAINED, ECONOMY_SPENT, emitEvent } from '../rpg-core/events';
 
@@ -31,9 +31,9 @@ function getVaultState(state: State): VaultState {
 // resource kinds are open-ended strings resolved at runtime via registerResourceKind,
 // which cannot be expressed as fixed typed-array fields. The marker keeps vaults
 // queryable (defineQuery([VaultComponent])) and SOA-compatible as a registered component.
-export const VaultComponent = {
-  active: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const VaultComponent = defineComponent({
+  active: U8,
+});
 
 export function registerResourceKind(state: State, kind: string): number {
   const vs = getVaultState(state);

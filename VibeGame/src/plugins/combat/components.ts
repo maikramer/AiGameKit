@@ -1,3 +1,9 @@
+import {
+  defineComponent,
+  F32,
+  I32,
+  U8,
+} from '../../core/ecs/component-storage';
 import { MAX_ENTITIES } from '../../core/ecs/constants';
 import type { State } from '../../core';
 import {
@@ -8,30 +14,30 @@ import {
 } from '../rpg-core/events';
 import { getDataRegistry } from '../rpg-core/registry';
 
-export const Health = {
-  current: new Float32Array(MAX_ENTITIES),
-  max: new Float32Array(MAX_ENTITIES),
-} as const;
+export const Health = defineComponent({
+  current: F32,
+  max: F32,
+});
 
-export const ProjectileData = {
-  damage: new Float32Array(MAX_ENTITIES),
-  ownerEid: new Int32Array(MAX_ENTITIES),
-  lifetime: new Float32Array(MAX_ENTITIES),
-  age: new Float32Array(MAX_ENTITIES),
-} as const;
+export const ProjectileData = defineComponent({
+  damage: F32,
+  ownerEid: I32,
+  lifetime: F32,
+  age: F32,
+});
 
 // `maxLife` is the authoritative lifetime for `spawnProjectile` entities;
 // `ProjectileCleanupSystem` prefers it over the legacy `ProjectileData.lifetime`.
-export const ProjectileConfig = {
-  speed: new Float32Array(MAX_ENTITIES),
-  maxLife: new Float32Array(MAX_ENTITIES),
-  damage: new Float32Array(MAX_ENTITIES),
-  faction: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const ProjectileConfig = defineComponent({
+  speed: F32,
+  maxLife: F32,
+  damage: F32,
+  faction: U8,
+});
 
-export const FactionComponent = {
-  tag: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const FactionComponent = defineComponent({
+  tag: U8,
+});
 
 export const FACTION_TAG_NAMES: string[] = [
   'player',

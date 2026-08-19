@@ -1,24 +1,29 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
 /** Origem do raio: posição vem de WorldTransform; direção em espaço mundo. */
-export const RaycastSource = {
-  dirX: new Float32Array(MAX_ENTITIES),
-  dirY: new Float32Array(MAX_ENTITIES),
-  dirZ: new Float32Array(MAX_ENTITIES),
-  maxDist: new Float32Array(MAX_ENTITIES),
-  layerMask: new Uint32Array(MAX_ENTITIES),
-  mode: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const RaycastSource = defineComponent({
+  dirX: F32,
+  dirY: F32,
+  dirZ: F32,
+  maxDist: F32,
+  layerMask: U32,
+  mode: U8,
+});
 
 /** Resultado preenchido por RaycastSystem. */
-export const RaycastHit = {
-  hitValid: new Uint8Array(MAX_ENTITIES),
-  hitEntity: new Uint32Array(MAX_ENTITIES),
-  hitDist: new Float32Array(MAX_ENTITIES),
-  hitNormalX: new Float32Array(MAX_ENTITIES),
-  hitNormalY: new Float32Array(MAX_ENTITIES),
-  hitNormalZ: new Float32Array(MAX_ENTITIES),
-  hitPointX: new Float32Array(MAX_ENTITIES),
-  hitPointY: new Float32Array(MAX_ENTITIES),
-  hitPointZ: new Float32Array(MAX_ENTITIES),
-} as const;
+export const RaycastHit = defineComponent({
+  hitValid: U8,
+  hitEntity: U32,
+  hitDist: F32,
+  hitNormalX: F32,
+  hitNormalY: F32,
+  hitNormalZ: F32,
+  hitPointX: F32,
+  hitPointY: F32,
+  hitPointZ: F32,
+});

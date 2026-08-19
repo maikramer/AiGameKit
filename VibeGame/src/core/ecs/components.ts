@@ -1,5 +1,5 @@
-import { MAX_ENTITIES } from './constants';
+import { defineComponent, I32 } from './component-storage';
 
-export const Parent = {
-  entity: new Int32Array(MAX_ENTITIES),
-} as const;
+export const Parent = defineComponent({
+  entity: I32,
+});

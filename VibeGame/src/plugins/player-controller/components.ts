@@ -1,38 +1,43 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
-export const ThirdPersonCamera = {
+export const ThirdPersonCamera = defineComponent({
   // Target entity to follow (usually the player)
-  target: new Uint32Array(MAX_ENTITIES),
+  target: U32,
   // Distance behind the target
-  distance: new Float32Array(MAX_ENTITIES),
+  distance: F32,
   // Height above target
-  height: new Float32Array(MAX_ENTITIES),
+  height: F32,
   // Horizontal angle (yaw) in radians — updated by mouse
-  yaw: new Float32Array(MAX_ENTITIES),
+  yaw: F32,
   // Vertical angle (pitch) in radians — updated by mouse
-  pitch: new Float32Array(MAX_ENTITIES),
+  pitch: F32,
   // How fast the camera follows position (0-1, lower = more lag)
-  positionSmooth: new Float32Array(MAX_ENTITIES),
+  positionSmooth: F32,
   // Mouse sensitivity
-  mouseSensitivity: new Float32Array(MAX_ENTITIES),
+  mouseSensitivity: F32,
   // Current smoothed camera position (internal)
-  currentX: new Float32Array(MAX_ENTITIES),
-  currentY: new Float32Array(MAX_ENTITIES),
-  currentZ: new Float32Array(MAX_ENTITIES),
+  currentX: F32,
+  currentY: F32,
+  currentZ: F32,
   // Whether the camera has been initialized
-  initialized: new Uint8Array(MAX_ENTITIES),
+  initialized: U8,
   // Minimum height above terrain surface (0 = disabled)
-  minTerrainDistance: new Float32Array(MAX_ENTITIES),
+  minTerrainDistance: F32,
   // --- Decoupled follow (internal) ---
   // Smoothed follow point the camera orbits & looks at. Decoupled from the raw
   // character transform so the view never shakes even if the character does.
-  followX: new Float32Array(MAX_ENTITIES),
-  followY: new Float32Array(MAX_ENTITIES),
-  followZ: new Float32Array(MAX_ENTITIES),
+  followX: F32,
+  followY: F32,
+  followZ: F32,
   // Smoothed (lagged) yaw the camera orbits at; trails the steered heading.
-  smoothYaw: new Float32Array(MAX_ENTITIES),
+  smoothYaw: F32,
   // Position follow time constant in seconds (larger = more lag on dashes).
-  followLag: new Float32Array(MAX_ENTITIES),
+  followLag: F32,
   // Yaw follow time constant in seconds (larger = camera turns slower/later).
-  turnLag: new Float32Array(MAX_ENTITIES),
-} as const;
+  turnLag: F32,
+});

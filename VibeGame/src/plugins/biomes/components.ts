@@ -1,4 +1,9 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
 /** Biome type stored on {@link BiomeRegion}.type: 0=vale, 1=floresta, 2=deserto, 3=pântano, 4=montanha. */
 export const BIOME_TYPE_VALE = 0;
@@ -13,41 +18,41 @@ export const BIOME_TYPE_MONTANHA = 4;
  * AABB lives here; the polygon vertices are variable-length and kept in the
  * parser WeakMap (`parser.ts`) for narrow-phase point-in-polygon tests.
  */
-export const BiomeRegion = {
-  polyMinX: new Float32Array(MAX_ENTITIES),
-  polyMinZ: new Float32Array(MAX_ENTITIES),
-  polyMaxX: new Float32Array(MAX_ENTITIES),
-  polyMaxZ: new Float32Array(MAX_ENTITIES),
-  type: new Uint8Array(MAX_ENTITIES),
-  tintR: new Float32Array(MAX_ENTITIES),
-  tintG: new Float32Array(MAX_ENTITIES),
-  tintB: new Float32Array(MAX_ENTITIES),
+export const BiomeRegion = defineComponent({
+  polyMinX: F32,
+  polyMinZ: F32,
+  polyMaxX: F32,
+  polyMaxZ: F32,
+  type: U8,
+  tintR: F32,
+  tintG: F32,
+  tintB: F32,
   // Packed 0xRRGGBB (matches the Postprocessing.fogColor convention).
-  fogColor: new Uint32Array(MAX_ENTITIES),
-  fogDensity: new Float32Array(MAX_ENTITIES),
-  ambientR: new Float32Array(MAX_ENTITIES),
-  ambientG: new Float32Array(MAX_ENTITIES),
-  ambientB: new Float32Array(MAX_ENTITIES),
-  bgmLayer: new Uint8Array(MAX_ENTITIES),
+  fogColor: U32,
+  fogDensity: F32,
+  ambientR: F32,
+  ambientG: F32,
+  ambientB: F32,
+  bgmLayer: U8,
   // Per-biome post-processing overrides (0 = inherit the scene baseline).
-  ppExposure: new Float32Array(MAX_ENTITIES),
-  ppBloomStrength: new Float32Array(MAX_ENTITIES),
-  ppVignetteDarkness: new Float32Array(MAX_ENTITIES),
+  ppExposure: F32,
+  ppBloomStrength: F32,
+  ppVignetteDarkness: F32,
   /** Rain intensity 0..1 while the player is inside this biome. */
-  rain: new Float32Array(MAX_ENTITIES),
+  rain: F32,
   /**
    * Cloud coverage 0..1 while inside this biome.
    * Sentinel `-1` = no override (keep Weather / cycle baseline).
    */
-  clouds: new Float32Array(MAX_ENTITIES),
-} as const;
+  clouds: F32,
+});
 
 /**
  * Per-player biome blend state. `current`/`target` hold BiomeRegion entity ids
  * or {@link NO_BIOME} (default vale); `blend` is the 0..1 crossfade progress.
  */
-export const ActiveBiome = {
-  current: new Uint32Array(MAX_ENTITIES),
-  target: new Uint32Array(MAX_ENTITIES),
-  blend: new Float32Array(MAX_ENTITIES),
-} as const;
+export const ActiveBiome = defineComponent({
+  current: U32,
+  target: U32,
+  blend: F32,
+});

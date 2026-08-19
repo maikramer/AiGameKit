@@ -1,7 +1,7 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, U8 } from '../../core/ecs/component-storage';
 
 /** Marks an entity that runs a TS module from XML `script="…"`. */
-export const MonoBehaviour = {
-  ready: new Uint8Array(MAX_ENTITIES),
-  enabled: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const MonoBehaviour = defineComponent({
+  ready: U8,
+  enabled: U8,
+});

@@ -1,25 +1,30 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
-export const AudioSource = {
-  clipPath: new Uint32Array(MAX_ENTITIES),
-  volume: new Float32Array(MAX_ENTITIES),
-  loop: new Uint8Array(MAX_ENTITIES),
-  pitch: new Float32Array(MAX_ENTITIES),
-  spatial: new Uint8Array(MAX_ENTITIES),
-  minDistance: new Float32Array(MAX_ENTITIES),
-  maxDistance: new Float32Array(MAX_ENTITIES),
-  rolloff: new Float32Array(MAX_ENTITIES),
-  playing: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const AudioSource = defineComponent({
+  clipPath: U32,
+  volume: F32,
+  loop: U8,
+  pitch: F32,
+  spatial: U8,
+  minDistance: F32,
+  maxDistance: F32,
+  rolloff: F32,
+  playing: U8,
+});
 
-export const AudioListener = {
-  posX: new Float32Array(MAX_ENTITIES),
-  posY: new Float32Array(MAX_ENTITIES),
-  posZ: new Float32Array(MAX_ENTITIES),
-} as const;
+export const AudioListener = defineComponent({
+  posX: F32,
+  posY: F32,
+  posZ: F32,
+});
 
-export const MusicLayerComponent = {
-  layer: new Uint8Array(MAX_ENTITIES),
-  volume: new Float32Array(MAX_ENTITIES),
-  fade: new Float32Array(MAX_ENTITIES),
-} as const;
+export const MusicLayerComponent = defineComponent({
+  layer: U8,
+  volume: F32,
+  fade: F32,
+});

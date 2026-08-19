@@ -36,11 +36,14 @@ describe('city amenities', () => {
     expect(byId['lookout:desert']).toEqual(
       expect.objectContaining({ x: 50, z: 0 })
     );
+    // Pântano a Oeste e Picos a Sul: quando o relevo passou a ser 100%
+    // Terrain3D, as bacias baixas reais ficaram a Oeste e as encostas
+    // íngremes a Sul, e os dois biomas trocaram de quadrante.
     expect(byId['lookout:swamp']).toEqual(
-      expect.objectContaining({ x: 0, z: -50 })
+      expect.objectContaining({ x: -50, z: 0 })
     );
     expect(byId['lookout:peaks']).toEqual(
-      expect.objectContaining({ x: -50, z: 0 })
+      expect.objectContaining({ x: 0, z: -50 })
     );
     for (const gate of LOOKOUT_GATES) {
       expect(gate.id.startsWith(LOOKOUT_WAYPOINT_PREFIX)).toBe(true);

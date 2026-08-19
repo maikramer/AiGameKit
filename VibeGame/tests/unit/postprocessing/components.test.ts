@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { Postprocessing } from 'vibegame';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 const UINT8_FIELDS = [
   'enabled',

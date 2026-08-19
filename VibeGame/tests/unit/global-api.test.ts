@@ -13,7 +13,7 @@ import { RenderingPlugin } from 'vibegame/rendering';
 import { StartupPlugin } from 'vibegame/startup';
 import { TransformsPlugin } from 'vibegame/transforms';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../src/core/ecs/constants';
 
 describe('Global API', () => {
   const prev = {

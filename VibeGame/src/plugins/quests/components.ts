@@ -1,4 +1,9 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
 
 /** Maximum number of distinct quests trackable at once (per spec §4.1). */
 export const MAX_QUESTS = 64;
@@ -18,12 +23,12 @@ export const QUEST_STATE_FAILED = 3;
  * can't, because it fires out in the field where the NPC isn't.
  * `markerHeight` is the badge's height above the entity origin (0 = default).
  */
-export const QuestGiver = {
-  questId: new Uint32Array(MAX_ENTITIES),
-  state: new Uint8Array(MAX_ENTITIES),
-  acknowledged: new Uint8Array(MAX_ENTITIES),
-  markerHeight: new Float32Array(MAX_ENTITIES),
-} as const;
+export const QuestGiver = defineComponent({
+  questId: U32,
+  state: U8,
+  acknowledged: U8,
+  markerHeight: F32,
+});
 
 /**
  * Per-NPC dialogue metadata. `linesIndex`/`portraitId`/`voiceId` hold interned
@@ -31,11 +36,11 @@ export const QuestGiver = {
  * shown to the player is sourced from the {@link QuestDef} lines arrays; these
  * fields allow NPC-local overrides of portrait/voice without a registry lookup.
  */
-export const DialogueData = {
-  linesIndex: new Uint32Array(MAX_ENTITIES),
-  portraitId: new Uint32Array(MAX_ENTITIES),
-  voiceId: new Uint32Array(MAX_ENTITIES),
-} as const;
+export const DialogueData = defineComponent({
+  linesIndex: U32,
+  portraitId: U32,
+  voiceId: U32,
+});
 
 /**
  * Global quest-progress singleton, indexed by quest index (0..MAX_QUESTS-1).
