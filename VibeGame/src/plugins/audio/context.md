@@ -105,7 +105,7 @@ follows the main camera / listener `WorldTransform` each frame.
 - Bridge: `bridge.ts` → `__VIBEGAME__.audio` (`snapshot`, `clearLog`, `playSound`, `stopAll`, listener pos)
 - Ring log: `debug-log.ts` — `preload` vs gameplay; stacks when Audio tab armed
 - URL: `?profiler=audio` or `?profilerTab=audio` (see `profiler/url.ts`)
-- E2E: `tests/playwright/audio-spatial.spec.ts`
+- E2E: `playwright/audio-spatial.spec.ts`
 
 ## Entry points
 

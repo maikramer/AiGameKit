@@ -130,7 +130,7 @@
     "test:playwright": "playwright test",
     "test:playwright:ui": "playwright test --ui",
     "test:playwright:debug": "playwright test --debug",
-    "test:debug": "playwright test tests/playwright/debug-cycle.spec.ts tests/playwright/visual-regression.spec.ts --reporter=json"
+    "test:debug": "playwright test playwright/debug-cycle.spec.ts playwright/visual-regression.spec.ts --reporter=json"
   },
   "keywords": [
     "threejs",

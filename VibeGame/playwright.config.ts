@@ -83,7 +83,7 @@ const baseURL = useCdp
   : PLAYWRIGHT_ORIGIN;
 
 export default defineConfig({
-  testDir: 'tests/playwright',
+  testDir: 'playwright',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
