@@ -7,6 +7,7 @@ import { Transform } from '../transforms/components';
 import { GltfLod, GltfPending, GltfPhysicsPending } from './components';
 import { fitColliderFromAabb } from './gltf-dynamic-collider-fit';
 import { getGltfRootGroup } from './group-registry';
+import { getLodChild } from '../../extras/gltf-lod-parking';
 import { GltfXmlLoadSystem } from './systems';
 
 const query = defineQuery([GltfPhysicsPending, GltfPending, Transform]);
@@ -38,10 +39,15 @@ export const GltfDynamicPhysicsSystem: System = defineSystem({
         continue;
       }
 
-      const lodMesh =
-        state.hasComponent(eid, GltfLod) && group.children.length >= 1
-          ? (group.children[0] as THREE.Object3D)
-          : group;
+      // Fit the collider to LOD0 when it is the level on screen. The box below
+      // is read in world space (`getCenter`), so a parked LOD0 — detached, its
+      // matrixWorld missing the root's transform — would place the collider at
+      // the wrong spot; fall back to the root, which always holds whichever
+      // level is active.
+      const lod0 = state.hasComponent(eid, GltfLod)
+        ? getLodChild(group, 0)
+        : undefined;
+      const lodMesh = lod0 && lod0.parent === group ? lod0 : group;
       lodMesh.updateMatrixWorld(true);
       _box.setFromObject(lodMesh);
       if (_box.isEmpty()) {

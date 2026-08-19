@@ -1,6 +1,9 @@
 import { logger } from '../../core/utils/logger';
 import { getLoadingProgress, isWorldReady, type State } from '../../core';
-import { describeGltfAssetsPending } from '../gltf-xml/ready-gate';
+import {
+  describeGltfAssetsPending,
+  releaseStuckPendingEntities,
+} from '../gltf-xml/ready-gate';
 import { describeSpawnPending } from '../spawner/ready-gate';
 import { describeTerrainPending } from '../terrain/ready-gate';
 
@@ -223,6 +226,9 @@ let assetsStallFingerprint = '';
 let assetsStuckSince = 0;
 let lastAssetsStallLog = 0;
 const ASSETS_STALL_LOG_MS = 5_000;
+/** Same frozen hold with zero in-flight loads for this long force-releases
+ *  the assets gate (a wedged load path must not keep the game from booting). */
+const ASSETS_STALL_FORCE_RELEASE_MS = 60_000;
 
 function basenameUrl(url: string): string {
   const clean = url.split('?')[0] ?? url;
@@ -345,6 +351,28 @@ function maybeLogAssetsStall(
     return;
   }
   if (assetsStuckSince === 0) assetsStuckSince = now;
+
+  // Safety valve: the exact same hold (same pending count, nothing critical)
+  // with NOTHING in flight for a full minute means a load path wedged —
+  // force-release the gate so the game boots; the stuck visuals just don't
+  // render. Better a world missing a prop than a world that never opens.
+  if (
+    now - assetsStuckSince >= ASSETS_STALL_FORCE_RELEASE_MS &&
+    d.active === 0 &&
+    d.critical === 0 &&
+    d.pendingEntities > 0
+  ) {
+    logger.warn(
+      `[loading] assets gate wedged ${Math.round(
+        (now - assetsStuckSince) / 1000
+      )}s on ${d.pendingEntities} pending with nothing in flight — releasing the gate; affected visuals are skipped`
+    );
+    releaseStuckPendingEntities(state);
+    assetsStallFingerprint = '';
+    assetsStuckSince = 0;
+    return;
+  }
+
   if (now - assetsStuckSince < ASSETS_STALL_LOG_MS) return;
   if (now - lastAssetsStallLog < ASSETS_STALL_LOG_MS) return;
   lastAssetsStallLog = now;
@@ -358,7 +386,7 @@ function maybeLogAssetsStall(
     `[loading] assets gate stuck for ${Math.round(
       (now - assetsStuckSince) / 1000
     )}s — critical=${d.critical} active=${d.active} ` +
-      `done=${d.done}/${d.total} pendingKick=${d.pendingEntities}${crit}${samples}`
+    `done=${d.done}/${d.total} pendingKick=${d.pendingEntities}${crit}${samples}`
   );
 }
 

@@ -4,6 +4,7 @@ import {
   disposeObject3DResources,
   isGroupOwnedGpu,
 } from '../../extras/gltf-bridge';
+import { clearLodParking } from '../../extras/gltf-lod-parking';
 
 const roots = new WeakMap<State, Map<number, Group>>();
 
@@ -24,8 +25,10 @@ export function registerGltfRootGroup(
   state.onDestroy(entity, () => {
     group.removeFromParent();
     if (isGroupOwnedGpu(group)) {
+      // Reaches the parked LOD levels too — see `disposeObject3DResources`.
       disposeObject3DResources(group);
     }
+    clearLodParking(group);
     const map = roots.get(state);
     if (map && map.get(entity) === group) map.delete(entity);
   });

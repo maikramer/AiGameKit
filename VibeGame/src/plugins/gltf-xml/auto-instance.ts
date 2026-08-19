@@ -106,6 +106,9 @@ interface GltfInstancePool {
   slotByEntity: Map<number, number>;
   pendingAdds: number[];
   loadKicked: boolean;
+  /** One retry after a transient lod0 load failure; a second failure drains
+   *  the pool so the loading gate cannot wedge on a dead URL forever. */
+  loadRetried: boolean;
   boundsDirty: boolean;
   /**
    * Round-robin cursor into `slots` for the static rescan. Scanning every slot
@@ -627,9 +630,25 @@ function kickLoad(state: State, pool: GltfInstancePool): void {
     })
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
+      if (!pool.loadRetried) {
+        // Cold-start loads can lose the 45 s race on the first burst; a single
+        // retry against the now-warm cache almost always succeeds.
+        pool.loadRetried = true;
+        logger.warn(
+          `[gltf-instance] lod0 "${pool.lodUrls[0]}" failed (${msg}) — retrying once`
+        );
+        setTimeout(() => {
+          if (getSceneGeneration(state) !== gen) return;
+          kickLoad(state, pool);
+        }, 1500);
+        return;
+      }
       logger.error(
-        `[gltf-instance] failed to load "${pool.lodUrls[0]}": ${msg}`
+        `[gltf-instance] failed to load "${pool.lodUrls[0]}" (${msg}) — draining ${pool.pendingAdds.length} pending instances`
       );
+      // Give up on this URL: drop the pending instances so the loading gate
+      // can finish (the props simply don't render) instead of wedging forever.
+      pool.pendingAdds = [];
     });
 }
 
@@ -663,6 +682,7 @@ export function addInstancedGltf(
       slotByEntity: new Map(),
       pendingAdds: [],
       loadKicked: false,
+      loadRetried: false,
       boundsDirty: false,
       scanCursor: 0,
       dynamicSlots: [],

@@ -18,6 +18,11 @@ import {
   setupCsmMaterials,
 } from '../plugins/rendering';
 import { getSceneGeneration } from './scene-generation';
+import {
+  forEachLodChild,
+  hasLodChild,
+  registerLodChild,
+} from './gltf-lod-parking';
 import { GltfAnimator } from './gltf-animator';
 
 let _ktx2Loader: KTX2Loader | null | undefined = undefined;
@@ -458,7 +463,7 @@ export function disposeObject3DResources(root: THREE.Object3D): void {
   const disposedGeometries = new Set<THREE.BufferGeometry>();
   const disposedMaterials = new Set<THREE.Material>();
   const disposedTextures = new Set<THREE.Texture>();
-  root.traverse((obj) => {
+  const visit = (obj: THREE.Object3D): void => {
     const mesh = obj as THREE.Mesh;
     if (mesh.isMesh !== true) return;
     const geos = Array.isArray(mesh.geometry) ? mesh.geometry : [mesh.geometry];
@@ -484,6 +489,13 @@ export function disposeObject3DResources(root: THREE.Object3D): void {
       }
       m.dispose();
     }
+  };
+  root.traverse(visit);
+  // A LOD root only has its active level attached; the parked levels are still
+  // this root's clones and own GPU resources of their own when the group is
+  // flagged owned-GPU. Traversing `root` alone would leak them.
+  forEachLodChild(root, (child) => {
+    if (child.parent !== root) child.traverse(visit);
   });
 }
 
@@ -514,6 +526,56 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 /**
+ * How many GLBs may be fetched + parsed at once.
+ *
+ * Without a cap every prop in the world calls `loader.loadAsync` on the same
+ * frame. The browser only opens a handful of connections per origin, so the
+ * rest sit in its queue — while their timeout clock is already running. A world
+ * with a few hundred assets then loses whole batches at once: 175 "GLTF load
+ * timed out after 45000ms" in one millisecond, all of them files that were
+ * never actually started. Holding a slot means the deadline measures the load,
+ * not the wait, and the transcoder is not thrashed by 200 parallel KTX2 jobs.
+ */
+const MAX_CONCURRENT_GLTF_LOADS = 8;
+let gltfLoadsInFlight = 0;
+const gltfLoadWaiters: (() => void)[] = [];
+
+function acquireGltfSlot(): Promise<void> {
+  if (gltfLoadsInFlight < MAX_CONCURRENT_GLTF_LOADS) {
+    gltfLoadsInFlight++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    gltfLoadWaiters.push(() => {
+      gltfLoadsInFlight++;
+      resolve();
+    });
+  });
+}
+
+function releaseGltfSlot(): void {
+  gltfLoadsInFlight = Math.max(0, gltfLoadsInFlight - 1);
+  gltfLoadWaiters.shift()?.();
+}
+
+/**
+ * Queue a GLB load behind {@link MAX_CONCURRENT_GLTF_LOADS} and give it the
+ * timeout once it actually starts. `start` must be the call that kicks off the
+ * request — passing an already-running promise defeats the point.
+ */
+async function runGltfLoad<T>(
+  url: string,
+  start: () => Promise<T>
+): Promise<T> {
+  await acquireGltfSlot();
+  try {
+    return await withTimeout(start(), GLTF_MASTER_LOAD_TIMEOUT_MS, url);
+  } finally {
+    releaseGltfSlot();
+  }
+}
+
+/**
  * Parse a GLB once and cache it. The returned GLTF is the shared master —
  * callers must NOT mutate or add `gltf.scene` to a scene; clone it instead.
  * Mutating a shared material affects every clone.
@@ -523,14 +585,12 @@ export function loadGltfMaster(state: State, url: string): Promise<GLTF> {
   let p = gltfMasterCache.get(url);
   if (!p) {
     const loader = createGLTFLoader();
-    p = withTimeout(
+    p = runGltfLoad(url, () =>
       loader.loadAsync(url).then((gltf) => {
         applyDefaultShadowFlags(gltf.scene);
         _settledMasters.add(url);
         return gltf;
-      }),
-      GLTF_MASTER_LOAD_TIMEOUT_MS,
-      url
+      })
     );
     // Failed loads must not poison the cache (e.g. transient 404 during dev).
     p.catch(() => gltfMasterCache.delete(url));
@@ -621,21 +681,15 @@ export function loadGltfLodToSceneForEntity(
     return child;
   };
 
-  const sortLodChildren = (): void => {
-    root.children.sort(
-      (a, b) =>
-        ((a.userData.lodLevel as number) ?? 0) -
-        ((b.userData.lodLevel as number) ?? 0)
-    );
-  };
-
   // Gate waits on lod0 **master** only — per-entity clone work must not stack
   // thousands of critical credits for the same URL.
   return loadGltfMasterTracked(state, urls[0], 'critical').then((gltf) => {
     if (isOrphaned()) return root;
-    root.add(cloneLodChild(gltf, 0));
+    const lod0 = cloneLodChild(gltf, 0);
+    root.add(lod0);
     scene.add(root);
     setupCsmMaterials(state, root);
+    registerLodChild(root, lod0, 0);
 
     // Stream higher LODs without holding the boot gate.
     for (const level of [1, 2] as const) {
@@ -644,15 +698,17 @@ export function loadGltfLodToSceneForEntity(
       void loadGltfMasterTracked(state, url, 'background')
         .then((gltfLod) => {
           if (isOrphaned()) return;
-          // Skip if this level already attached (retry / cache race).
-          if (
-            root.children.some((c) => (c.userData.lodLevel as number) === level)
-          ) {
-            return;
-          }
-          root.add(cloneLodChild(gltfLod, level));
-          sortLodChildren();
+          // Skip if this level already arrived (retry / cache race). The check
+          // has to ask the registry, not `root.children` — an inactive level is
+          // registered but parked off-graph.
+          if (hasLodChild(root, level)) return;
+          const child = cloneLodChild(gltfLod, level);
+          // Attach + patch materials first, park after: `setupCsmMaterials`
+          // walks the graph, so a level parked too early would never be
+          // patched and would render unshadowed once it becomes active.
+          root.add(child);
           setupCsmMaterials(state, root);
+          registerLodChild(root, child, level);
         })
         .catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err);
@@ -728,7 +784,7 @@ export function loadGltfAnimatedForEntity(
   ensureKTX2FromState(state);
   const loader = createGLTFLoader();
   return trackGltfLoad(
-    withTimeout(
+    runGltfLoad(url, () =>
       loader.loadAsync(url).then((gltf) => {
         applyDefaultShadowFlags(gltf.scene);
         markGroupOwnedGpu(gltf.scene);
@@ -742,9 +798,7 @@ export function loadGltfAnimatedForEntity(
           setupCsmMaterials(state, gltf.scene);
         }
         return gltf;
-      }),
-      GLTF_MASTER_LOAD_TIMEOUT_MS,
-      url
+      })
     ),
     'critical',
     url
@@ -800,40 +854,40 @@ export function loadGltfToSceneWithAnimatorForEntity(
   ensureKTX2FromState(state);
   const loader = createGLTFLoader();
   return trackGltfLoad(
-    withTimeout(
-      new Promise<GltfLoadResult>((resolve, reject) => {
-        loader.load(
-          url,
-          (gltf) => {
-            applyDefaultShadowFlags(gltf.scene);
-            markGroupOwnedGpu(gltf.scene);
-            const orphaned =
-              (entityId !== undefined && !state.exists(entityId)) ||
-              getSceneGeneration(state) !== gen;
-            if (orphaned) {
-              disposeObject3DResources(gltf.scene);
-              resolve({ group: gltf.scene, animator: null });
-              return;
-            }
-            scene.add(gltf.scene);
-            setupCsmMaterials(state, gltf.scene);
-            const animator =
-              gltf.animations.length > 0
-                ? new GltfAnimator(gltf, {
-                    crossfadeDuration: options?.crossfadeDuration,
-                  })
-                : null;
-            resolve({
-              group: gltf.scene,
-              animator,
-            });
-          },
-          undefined,
-          reject
-        );
-      }),
-      GLTF_MASTER_LOAD_TIMEOUT_MS,
-      url
+    runGltfLoad(
+      url,
+      () =>
+        new Promise<GltfLoadResult>((resolve, reject) => {
+          loader.load(
+            url,
+            (gltf) => {
+              applyDefaultShadowFlags(gltf.scene);
+              markGroupOwnedGpu(gltf.scene);
+              const orphaned =
+                (entityId !== undefined && !state.exists(entityId)) ||
+                getSceneGeneration(state) !== gen;
+              if (orphaned) {
+                disposeObject3DResources(gltf.scene);
+                resolve({ group: gltf.scene, animator: null });
+                return;
+              }
+              scene.add(gltf.scene);
+              setupCsmMaterials(state, gltf.scene);
+              const animator =
+                gltf.animations.length > 0
+                  ? new GltfAnimator(gltf, {
+                      crossfadeDuration: options?.crossfadeDuration,
+                    })
+                  : null;
+              resolve({
+                group: gltf.scene,
+                animator,
+              });
+            },
+            undefined,
+            reject
+          );
+        })
     ),
     'critical',
     url

@@ -24,6 +24,26 @@ gltf-xml/
 └── recipes.ts      # gltfLoadRecipe, gltfDynamicRecipe
 ```
 
+## Níveis de LOD fora do grafo
+
+Um `gltf-lod-root` só mantém **o nível activo** parentado; os restantes ficam
+num registo lateral (`extras/gltf-lod-parking.ts`). Motivo: `visible = false`
+tira o nível do render mas não de `updateMatrixWorld`, que percorre e recompõe
+todos os nós por frame — e cada nível de um prop rigado traz o seu esqueleto
+(`simple-rpg`: 12,3k de 15,4k nós da cena escondidos, >11k deles ossos).
+Destacar os inactivos levou a cena de **15 086 → 5 674 nós** e o grupo `render`
+de **7,26 → 4,93 ms**.
+
+Consequência para quem lê o grupo: `root.children` já **não** é a lista de
+níveis. Usar `lodChildCount(root)` e `getLodChild(root, 0)` (BVH bake, fit de
+colisor, mixer de animação). Quem precisa da matriz em **mundo** de um nível
+parqueado tem de o reparentar primeiro — `bvh/static-meshes.ts` faz isso para o
+bake e volta a destacá-lo.
+
+O pipeline complementa isto pelo lado do asset: `text3d lod --rig-max-level`
+(default 1) entrega LOD2 como mesh estático, para o esqueleto nem chegar ao
+browser.
+
 ## Performance de meshes idênticos
 
 - **Cache de master GLB** (`extras/gltf-bridge.ts`): cada URL é baixada/parseada

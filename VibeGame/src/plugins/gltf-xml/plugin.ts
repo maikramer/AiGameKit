@@ -150,6 +150,7 @@ export const GltfXmlPlugin: Plugin = {
     defaults: {
       gltfPending: {
         loaded: 0,
+        retries: 0,
       },
       gltfLod: {
         thresholdNear: 45,

@@ -1,13 +1,16 @@
 import * as THREE from 'three';
-import { defineQuery, type State } from '../../core';
+import { defineQuery, defineQueryLive, type State } from '../../core';
 import { GltfLod, GltfPending } from '../gltf-xml/components';
 import { forEachGltfRootGroup } from '../gltf-xml/group-registry';
+import { getLodChild, lodChildCount } from '../../extras/gltf-lod-parking';
 import { BodyType, Rigidbody } from '../physics/components';
 import { WorldTransform } from '../transforms';
 import { registerBvhMesh, unregisterBvhForEntity } from './utils';
 
 const rigidbodyQuery = defineQuery([Rigidbody, WorldTransform]);
-const gltfPendingQuery = defineQuery([GltfPending]);
+// Read-only count over every dressed prop in the world — iterate the live dense
+// set rather than snapshotting ~91k ids into a fresh array once per frame.
+const gltfPendingQuery = defineQueryLive([GltfPending]);
 
 /** Entity → GLTF root group it was baked from. A different group for the same
  * id means the id was recycled (or the GLTF reloaded) → rebuild. */
@@ -157,14 +160,33 @@ export function syncStaticMeshBvh(state: State): {
         : true;
       if (!shouldInclude) return;
 
-      // LOD roots keep every level as a sibling child with visibility toggled
-      // per frame; bake only LOD0 or each level's triangles would pile up.
+      // A LOD root owns one level per distance band and only keeps the active
+      // one attached; bake LOD0 specifically, or the collision surface would
+      // follow whichever level happens to be on screen.
       let bakeRoot: THREE.Object3D = group;
-      if (state.hasComponent(entity, GltfLod) && group.children.length >= 2) {
-        bakeRoot = group.children[0];
+      let parkedLod0: THREE.Object3D | undefined;
+      if (state.hasComponent(entity, GltfLod) && lodChildCount(group) >= 2) {
+        const lod0 = getLodChild(group, 0);
+        if (lod0) {
+          bakeRoot = lod0;
+          // The bake bakes the *world* matrix chain. A LOD0 parked off-graph
+          // (prop spawned already far away) would bake in local space and put
+          // the collision mesh at the world origin, so re-attach it for the
+          // duration of the bake and hand the root back to the LOD system.
+          if (lod0.parent !== group) {
+            parkedLod0 = lod0;
+            group.add(lod0);
+            lod0.visible = false;
+            group.updateMatrixWorld(true);
+          }
+        }
       }
 
       const geometry = bakeObject3DGeometry(bakeRoot);
+      if (parkedLod0) {
+        group.remove(parkedLod0);
+        parkedLod0.visible = true;
+      }
       if (!geometry) return;
 
       registerBvhMesh(state, `gltf:${entity}`, geometry, {

@@ -1,4 +1,4 @@
-import { defineQuery, type State } from '../../core';
+import { defineQueryLive, type State } from '../../core';
 import {
   getActiveGltfLoadCount,
   getCriticalGltfInflightUrls,
@@ -8,7 +8,10 @@ import {
 import { GltfPending } from './components';
 import { getGltfLodUrls, getGltfUrl, isGltfInFlight } from './context';
 
-const gltfPendingQuery = defineQuery([GltfPending]);
+// Read-only scans over every dressed prop in the world (~91k in simple-rpg) and
+// the loading gate polls them every frame — take the live dense set instead of
+// snapshotting it.
+const gltfPendingQuery = defineQueryLive([GltfPending]);
 
 /**
  * Boot assets readiness for the loading gate.
@@ -31,6 +34,18 @@ export function gltfAssetsReady(state: State): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * Force-release for a wedged assets gate: mark every pending-but-not-in-flight
+ * entity as loaded. The stuck visuals never render, but the game boots — a
+ * loading path that died must not hold the world hostage forever.
+ */
+export function releaseStuckPendingEntities(state: State): void {
+  for (const eid of gltfPendingQuery(state.world)) {
+    if (GltfPending.loaded[eid] === 1) continue;
+    GltfPending.loaded[eid] = 1;
+  }
 }
 
 /** Snapshot for loading UI / stall logs when the `assets` gate is held. */

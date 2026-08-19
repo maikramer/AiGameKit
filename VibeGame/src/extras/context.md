@@ -126,3 +126,19 @@ const gltf = await loadGltfAnimated(state, '/assets/models/hero.glb');
 const animator = new GltfAnimator(gltf);
 animator.play('Animator3D_BreatheIdle');
 ```
+
+## Carregamento de GLB — fila e timeout
+
+`loadGltfMaster` / os loaders de cena passam por `runGltfLoad`, que segura um
+slot (`MAX_CONCURRENT_GLTF_LOADS = 8`) **antes** de arrancar o pedido e só então
+liga o timeout de 45 s.
+
+Sem isso, todos os props do mundo chamam `loader.loadAsync` no mesmo frame: o
+browser abre meia dúzia de ligações e o resto fica na fila dele — com o relógio
+do timeout já a correr. Um mundo com algumas centenas de assets perdia lotes
+inteiros de uma vez (175 erros «GLTF load timed out after 45000ms» no mesmo
+milissegundo, quase todos de ficheiros que nunca chegaram a começar). O
+transcoder KTX2 também agradece não levar 200 jobs em paralelo.
+
+O timeout continua a ser rede de segurança para o caso patológico (basis
+encravado, CDN morto) — não para a fila.

@@ -1,6 +1,11 @@
 import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
-import { defineSystem, defineQuery, type State, type System } from '../../core';
+import {
+  defineSystem,
+  defineQueryLive,
+  type State,
+  type System,
+} from '../../core';
 import { Parent } from '../../core/ecs';
 import {
   disposeGltfBridge,
@@ -34,8 +39,42 @@ import {
   setGltfInFlight,
 } from './context';
 import { getGltfRootGroup, registerGltfRootGroup } from './group-registry';
+import { getLodChild } from '../../extras/gltf-lod-parking';
 
-const gltfLoadQuery = defineQuery([GltfPending]);
+// Zero-copy: `GltfPending` covers every dressed prop in the world (~91k in
+// simple-rpg) and membership never changes inside the loop below — the loads it
+// kicks resolve in `.then()`, on a later frame. Snapshotting that dense set into
+// a fresh array every frame cost more than the pass itself.
+const gltfLoadQuery = defineQueryLive([GltfPending]);
+
+/**
+ * Once every pending GLB has been kicked, this system has nothing left to do,
+ * but the query still holds every prop in the world. Latch that state and skip
+ * the scan entirely; a membership change (spawn/despawn shifts `dense.length`)
+ * or the periodic re-scan below re-arms it, so an entity that is reset to
+ * `loaded = 0` in place is picked up within {@link LOAD_RESCAN_FRAMES}.
+ */
+interface LoadScanLatch {
+  allKicked: boolean;
+  lastCount: number;
+  lastScanFrame: number;
+}
+const loadScanLatch = new WeakMap<State, LoadScanLatch>();
+const LOAD_RESCAN_FRAMES = 30;
+
+/**
+ * Boot GLB kicks race the world setup: a long synchronous spawn/navmesh pass
+ * can starve the event loop past the master load timeout, and the first URLs
+ * in the queue (whole districts, in simple-rpg) would be dropped meshless on
+ * their first miss. A failure keeps `loaded = 0` so the periodic rescan
+ * re-kicks the entity — the boot gate holds honestly through the retry. Real
+ * 404s fail fast, so the cap only costs a few quick rejections.
+ */
+const MAX_GLTF_LOAD_RETRIES = 3;
+
+function shouldRetryGltfLoad(eid: number): boolean {
+  return GltfPending.retries[eid] < MAX_GLTF_LOAD_RETRIES;
+}
 
 function applyTransformToGroup(group: THREE.Object3D, eid: number): void {
   group.position.set(
@@ -105,8 +144,9 @@ async function maybeAutoPlayIdle(
   const group = getGltfRootGroup(state, eid);
   if (!group) return;
   // The skinned mesh lives in the lod0 child (LOD triple) or the group itself
-  // (single GLB) — that is the root the mixer must drive.
-  const root = group.children.find((c) => c.userData.lodLevel === 0) ?? group;
+  // (single GLB) — that is the root the mixer must drive. Ask the LOD registry:
+  // lod0 is detached whenever a farther level is the active one.
+  const root = getLodChild(group, 0) ?? group;
   try {
     // Cache hit: the master was already fetched for the visual clone, so this
     // never re-downloads or re-arms the boot gate (_settledMasters short-circuit).
@@ -142,20 +182,44 @@ export const GltfXmlLoadSystem: System = defineSystem({
     const scene = getScene(state);
     if (!scene) return;
 
-    for (const eid of gltfLoadQuery(state.world)) {
+    const pending = gltfLoadQuery(state.world);
+    const frame = state.time.frameCount;
+    let latch = loadScanLatch.get(state);
+    if (!latch) {
+      latch = { allKicked: false, lastCount: -1, lastScanFrame: -1 };
+      loadScanLatch.set(state, latch);
+    }
+    if (
+      latch.allKicked &&
+      pending.length === latch.lastCount &&
+      frame - latch.lastScanFrame < LOAD_RESCAN_FRAMES
+    ) {
+      return;
+    }
+    latch.lastCount = pending.length;
+    latch.lastScanFrame = frame;
+    let unkicked = 0;
+
+    for (const eid of pending) {
       if (GltfPending.loaded[eid]) {
         continue;
       }
       if (isGltfInFlight(state, eid)) {
+        unkicked++;
         continue;
       }
+      unkicked++;
       const lodTriple = getGltfLodUrls(state, eid);
       const url = getGltfUrl(state, eid);
       if (lodTriple) {
         setGltfInFlight(state, eid, true);
         void loadGltfLodToSceneForEntity(state, lodTriple, eid)
           .then((group) => {
-            registerGltfLocalYBounds(lodTriple[0], group.children[0] ?? group);
+            GltfPending.loaded[eid] = 1;
+            registerGltfLocalYBounds(
+              lodTriple[0],
+              getLodChild(group, 0) ?? group
+            );
             applyTransformToGroup(group, eid);
             if (state.exists(eid)) {
               registerGltfRootGroup(state, eid, group);
@@ -177,16 +241,18 @@ export const GltfXmlLoadSystem: System = defineSystem({
               ? ' — resposta não é GLB (muitas vezes 404 HTML); confirme `public/` e `gameassets handoff`.'
               : '';
             logger.error('[gltf-load lod]', u, base + hint);
+            if (!state.exists(eid)) return;
+            if (shouldRetryGltfLoad(eid)) {
+              GltfPending.retries[eid]++;
+              return;
+            }
             clearGltfLodUrls(state, eid);
-            if (
-              state.exists(eid) &&
-              state.hasComponent(eid, GltfPhysicsPending)
-            ) {
+            if (state.hasComponent(eid, GltfPhysicsPending)) {
               GltfPhysicsPending.ready[eid] = 1;
             }
+            GltfPending.loaded[eid] = 1;
           })
           .finally(() => {
-            GltfPending.loaded[eid] = 1;
             setGltfInFlight(state, eid, false);
           });
         continue;
@@ -216,6 +282,7 @@ export const GltfXmlLoadSystem: System = defineSystem({
       setGltfInFlight(state, eid, true);
       void loadGltfToSceneForEntity(state, url, eid)
         .then((group) => {
+          GltfPending.loaded[eid] = 1;
           registerGltfLocalYBounds(url, group);
           applyTransformToGroup(group, eid);
           if (state.exists(eid)) {
@@ -234,18 +301,22 @@ export const GltfXmlLoadSystem: System = defineSystem({
             ? ' — resposta não é GLB (muitas vezes 404 HTML); confirme `public/` e `gameassets handoff`.'
             : '';
           logger.error('[gltf-load]', failedUrl ?? '(sem url)', base + hint);
-          if (
-            state.exists(eid) &&
-            state.hasComponent(eid, GltfPhysicsPending)
-          ) {
+          if (!state.exists(eid)) return;
+          if (shouldRetryGltfLoad(eid)) {
+            GltfPending.retries[eid]++;
+            return;
+          }
+          if (state.hasComponent(eid, GltfPhysicsPending)) {
             GltfPhysicsPending.ready[eid] = 1;
           }
+          GltfPending.loaded[eid] = 1;
         })
         .finally(() => {
-          GltfPending.loaded[eid] = 1;
           setGltfInFlight(state, eid, false);
         });
     }
+
+    latch.allKicked = unkicked === 0;
   },
 
   dispose(state) {

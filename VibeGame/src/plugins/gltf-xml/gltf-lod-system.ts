@@ -1,6 +1,15 @@
 import * as THREE from 'three';
 import { defineSystem, defineQuery, type System } from '../../core';
 import { DistanceCull, MainCamera } from '../rendering/components';
+import {
+  isSubtreeMatrixFrozen,
+  setSubtreeMatrixFrozen,
+} from '../rendering/matrix-freeze';
+import {
+  getActiveLodLevel,
+  lodChildCount,
+  setActiveLodLevel,
+} from '../../extras/gltf-lod-parking';
 import { CameraSyncSystem } from '../rendering/systems';
 import { Transform, WorldTransform } from '../transforms/components';
 import { GltfLod, GltfPending } from './components';
@@ -48,12 +57,20 @@ export const GltfLodSystem: System = defineSystem({
       if (state.hasComponent(eid, DistanceCull)) {
         const culled = DistanceCull.culled[eid] === 1;
         if (root.visible === culled) root.visible = !culled;
+        // DistanceCullSystem freezes the subtree on its own flips, but a GLB
+        // that finishes loading *after* the entity was already culled never saw
+        // one — its root group did not exist yet. Reconcile here (the walk only
+        // runs when the frozen state actually disagrees).
+        if (isSubtreeMatrixFrozen(root) !== culled) {
+          setSubtreeMatrixFrozen(root, culled);
+        }
         if (culled) continue;
       } else if (!root.visible) {
         root.visible = true;
       }
 
-      const childCount = root.children.length;
+      // Attached + parked: only the active level hangs off the root.
+      const childCount = lodChildCount(root);
       if (childCount < 2) continue;
 
       // Camera barely moved: settled LODs stay valid — skip dist + child scan.
@@ -76,27 +93,21 @@ export const GltfLodSystem: System = defineSystem({
       const raw = pickLodLevel(dist, near, mid, prevLevel);
       // Beyond mid threshold, keep the farthest LOD child visible.
       const level = Math.min(raw, childCount - 1);
-      if (level === prevLevel && GltfLod.settled[eid] === 1) {
+      if (
+        level === prevLevel &&
+        GltfLod.settled[eid] === 1 &&
+        getActiveLodLevel(root) === level
+      ) {
         continue;
       }
-      if (level === prevLevel) {
-        // Load-time: GLTF may arrive with all LOD children visible. One scan
-        // to confirm a single visible child, then mark settled.
-        let visibleCount = 0;
-        for (let i = 0; i < childCount; i++) {
-          if (root.children[i].visible) visibleCount++;
-        }
-        if (visibleCount === 1) {
-          GltfLod.settled[eid] = 1;
-          continue;
-        }
-      }
+
       GltfLod.activeLevel[eid] = level;
       GltfLod.settled[eid] = 1;
-
-      for (let i = 0; i < root.children.length; i++) {
-        root.children[i].visible = i === level;
-      }
+      // Detaches every other level: a rigged prop's inactive LOD children keep
+      // their own skeleton, and `updateMatrixWorld` walks hidden subtrees just
+      // the same, so leaving them parented costs more per frame than the level
+      // actually drawn (simple-rpg: ~11k bones across inactive LOD children).
+      setActiveLodLevel(root, level);
     }
   },
 });
