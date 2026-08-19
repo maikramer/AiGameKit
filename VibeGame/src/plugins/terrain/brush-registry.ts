@@ -1,4 +1,5 @@
 import type { State } from '../../core';
+import { getTerrainContext } from './utils';
 
 /** Kind of height-brush mutation stamped into the terrain sampler. */
 export type GroundBrushKind = 'pad' | 'road' | 'lake' | 'river';
@@ -228,6 +229,48 @@ export function isPointOnRoad(state: State, x: number, z: number): boolean {
     if (brush.kind === 'pad' && pointInPadCore(brush, x, z)) return true;
   }
   return false;
+}
+
+/**
+ * Signed distance (m) from the world XZ point to the nearest road carve edge:
+ * 0 at the carved shelf boundary (bed + talude), negative over the carve,
+ * positive on untouched ground. Flying spans (viaducts) are ignored — the
+ * valley under them is normal ground. Brush paths are field-local, so the
+ * terrain worldOffset is subtracted first. Returns null when no roads exist.
+ */
+export function distanceToRoadAt(
+  state: State,
+  x: number,
+  z: number
+): number | null {
+  const brushes = getGroundBrushes(state);
+  let hasRoad = false;
+  for (const brush of brushes) {
+    if (brush.kind === 'road' && !brush.flying) {
+      hasRoad = true;
+      break;
+    }
+  }
+  if (!hasRoad) return null;
+
+  let offX = 0;
+  let offZ = 0;
+  for (const [, data] of getTerrainContext(state)) {
+    if (!data.initialized) continue;
+    offX = data.worldOffset.x;
+    offZ = data.worldOffset.z;
+    break;
+  }
+
+  let best = Infinity;
+  for (const brush of brushes) {
+    if (brush.kind !== 'road' || brush.flying) continue;
+    if (!brush.path || brush.path.length < 4) continue;
+    const half = brush.carveHalfWidth ?? brush.halfWidth ?? 0;
+    const d = distanceToBrushPath(brush.path, x - offX, z - offZ) - half;
+    if (d < best) best = d;
+  }
+  return best;
 }
 
 /** True when AABB intersects the square bake window |x|,|z| ≤ bounds. */

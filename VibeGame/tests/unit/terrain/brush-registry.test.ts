@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { State } from '../../../src/core/ecs/state';
 import {
   clearGroundBrushes,
+  distanceToRoadAt,
   getGroundBrushes,
   isPointOnRoad,
   pointInPadCore,
@@ -188,5 +189,71 @@ describe('brush-registry', () => {
     expect(crownHitsFlyingDeck(state, 20, 0, 22)).toBe(true);
     // Off the span: no cull.
     expect(crownHitsFlyingDeck(state, 20, 20, 40)).toBe(false);
+  });
+
+  describe('distanceToRoadAt', () => {
+    it('null when no road brushes exist', () => {
+      const state = new State();
+      expect(distanceToRoadAt(state, 0, 0)).toBeNull();
+    });
+
+    it('signed distance to the carve edge (falls back to halfWidth)', () => {
+      const state = new State();
+      registerGroundBrush(state, {
+        kind: 'road',
+        minX: 0,
+        maxX: 40,
+        minZ: -5,
+        maxZ: 5,
+        halfWidth: 4,
+        path: [0, 0, 40, 0],
+      });
+      // No carveHalfWidth → carve edge = bed edge (halfWidth 4).
+      expect(distanceToRoadAt(state, 20, 0)).toBeCloseTo(-4, 5);
+      expect(distanceToRoadAt(state, 20, 4)).toBeCloseTo(0, 5);
+      expect(distanceToRoadAt(state, 20, 12)).toBeCloseTo(8, 5);
+    });
+
+    it('uses carveHalfWidth when present', () => {
+      const state = new State();
+      registerGroundBrush(state, {
+        kind: 'road',
+        minX: 0,
+        maxX: 40,
+        minZ: -10,
+        maxZ: 10,
+        halfWidth: 4,
+        carveHalfWidth: 10,
+        path: [0, 0, 40, 0],
+      });
+      expect(distanceToRoadAt(state, 20, 0)).toBeCloseTo(-10, 5);
+      expect(distanceToRoadAt(state, 20, 10)).toBeCloseTo(0, 5);
+      expect(distanceToRoadAt(state, 20, 16)).toBeCloseTo(6, 5);
+    });
+
+    it('ignores flying spans and keeps the nearest of several roads', () => {
+      const state = new State();
+      registerGroundBrush(state, {
+        kind: 'road',
+        minX: 0,
+        maxX: 40,
+        minZ: -8,
+        maxZ: 8,
+        halfWidth: 6,
+        flying: true,
+        path: [0, 0, 40, 0],
+        pathY: [20, 22],
+      });
+      registerGroundBrush(state, {
+        kind: 'road',
+        minX: 0,
+        maxX: 40,
+        minZ: -5,
+        maxZ: 5,
+        halfWidth: 4,
+        path: [0, 0, 40, 0],
+      });
+      expect(distanceToRoadAt(state, 20, 8)).toBeCloseTo(4, 5);
+    });
   });
 });

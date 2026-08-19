@@ -1,5 +1,23 @@
-import { deflateSync, inflateSync } from 'fflate';
+import { deflateSync, inflateSync, unzlibSync } from 'fflate';
 import type { HeightSampler } from './height-sampler';
+
+/**
+ * Inflate the height payload, accepting both raw deflate (what `serializeAhgt`
+ * writes) and a zlib-wrapped stream. Writers outside this file are easy to get
+ * wrong here — Python's `zlib.compress` emits the RFC1950 wrapper, and feeding
+ * that to a raw inflate fails with "invalid block type", which reads like a
+ * corrupt file rather than a two-byte header mismatch. Sniffing the wrapper
+ * costs nothing and turns a hard failure into a load.
+ */
+function inflatePayload(payload: Uint8Array): Uint8Array {
+  // RFC1950: low nibble of byte 0 is 8 (deflate) and the 2-byte header is a
+  // multiple of 31. Raw deflate blocks effectively never satisfy both.
+  const zlibWrapped =
+    payload.byteLength >= 2 &&
+    (payload[0] & 0x0f) === 0x08 &&
+    ((payload[0] << 8) | payload[1]) % 31 === 0;
+  return zlibWrapped ? unzlibSync(payload) : inflateSync(payload);
+}
 
 /** AHGT magic, "AHGT" little-endian (0x41 0x48 0x47 0x54 → 0x54474841). */
 export const AHGT_MAGIC = 0x54474841;
@@ -127,7 +145,7 @@ export function parseAhgt(bytes: Uint8Array): {
     };
   }
 
-  const raw = inflateSync(bytes.subarray(metaStart + metaLen));
+  const raw = inflatePayload(bytes.subarray(metaStart + metaLen));
   if (raw.byteLength < width * height * 2) {
     throw new Error(
       `AHGT: height payload too small (${raw.byteLength} bytes for ${width}x${height})`

@@ -87,4 +87,32 @@ describe('flattenRect', () => {
       })
     ).toBe(false);
   });
+
+  it('keeps the reconstructed core on the pad plane on a coarse hillside sampler', () => {
+    // Texel step (200/63 ≈ 3.2 m) against a 50 m falloff-side rise: without
+    // the cell guard, the first ring texel above the plane lifts the bilinear
+    // reconstruction over the core edge (a one-texel lip for props/roads).
+    const s = rampSampler(65, 200);
+    flattenRect(s, {
+      centerX: 0,
+      centerZ: 0,
+      halfX: 20,
+      halfZ: 20,
+      targetY: 25,
+      falloff: 10,
+      cornerRadius: 5,
+    });
+    // Core interior reads as the plane; on the cut side (east, ramp above
+    // the plane) the guard keeps the edge ring from lifting the
+    // reconstruction over the plane. The fill side (west) keeps its blended
+    // approach — the guard only ever lowers.
+    for (let x = 3; x <= 19; x += 4) {
+      expect(sampleHeightAt(s, x, 0)).toBeLessThan(25.1);
+      expect(sampleHeightAt(s, x, 0)).toBeGreaterThan(24.9);
+    }
+    for (let x = -19; x <= -3; x += 4) {
+      expect(sampleHeightAt(s, x, 0)).toBeGreaterThan(24.4);
+      expect(sampleHeightAt(s, x, 0)).toBeLessThan(25.1);
+    }
+  });
 });

@@ -1,87 +1,92 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
-export const Terrain = {
-  worldSize: new Float32Array(MAX_ENTITIES),
-  maxHeight: new Float32Array(MAX_ENTITIES),
-  levels: new Uint8Array(MAX_ENTITIES),
-  resolution: new Uint8Array(MAX_ENTITIES),
-  lodDistanceRatio: new Float32Array(MAX_ENTITIES),
-  lodHysteresis: new Float32Array(MAX_ENTITIES),
-  wireframe: new Uint8Array(MAX_ENTITIES),
-  roughness: new Float32Array(MAX_ENTITIES),
-  metalness: new Float32Array(MAX_ENTITIES),
-  normalStrength: new Float32Array(MAX_ENTITIES),
+import {
+  defineComponent,
+  F32,
+  U32,
+  U8,
+} from '../../core/ecs/component-storage';
+export const Terrain = defineComponent({
+  worldSize: F32,
+  maxHeight: F32,
+  levels: U8,
+  resolution: U8,
+  lodDistanceRatio: F32,
+  lodHysteresis: F32,
+  wireframe: U8,
+  roughness: F32,
+  metalness: F32,
+  normalStrength: F32,
   /** Metros por tile de textura (UV em espaço de mundo). 0 = auto (densidade do menor chunk). */
-  textureTileSize: new Float32Array(MAX_ENTITIES),
-  skirtDepth: new Float32Array(MAX_ENTITIES),
-  skirtWidth: new Float32Array(MAX_ENTITIES),
-  baseColor: new Uint32Array(MAX_ENTITIES),
-  heightSmoothing: new Float32Array(MAX_ENTITIES),
-  heightSmoothingSpread: new Float32Array(MAX_ENTITIES),
-  collisionResolution: new Uint8Array(MAX_ENTITIES),
-  showChunkBorders: new Uint8Array(MAX_ENTITIES),
-  snowHeight: new Float32Array(MAX_ENTITIES),
-  colorHigh: new Uint32Array(MAX_ENTITIES),
-  colorMid: new Uint32Array(MAX_ENTITIES),
-  colorLow: new Uint32Array(MAX_ENTITIES),
-  colorRock: new Uint32Array(MAX_ENTITIES),
-  slopeThreshold: new Float32Array(MAX_ENTITIES),
-  slopeSoftness: new Float32Array(MAX_ENTITIES),
+  textureTileSize: F32,
+  skirtDepth: F32,
+  skirtWidth: F32,
+  baseColor: U32,
+  heightSmoothing: F32,
+  heightSmoothingSpread: F32,
+  collisionResolution: U8,
+  showChunkBorders: U8,
+  snowHeight: F32,
+  colorHigh: U32,
+  colorMid: U32,
+  colorLow: U32,
+  colorRock: U32,
+  slopeThreshold: F32,
+  slopeSoftness: F32,
   /** 0 = height/slope colour tint disabled, 1 = full tint override. The tint
    *  is mixed onto the texture albedo by world-space height (snow caps →
    *  valleys) and geometric slope (rock on steep faces). */
-  heightBlendStrength: new Float32Array(MAX_ENTITIES),
+  heightBlendStrength: F32,
   /** 0 = AO map ignored, 1 = full AO multiply. Gates the NAR blue channel. */
-  aoStrength: new Float32Array(MAX_ENTITIES),
+  aoStrength: F32,
   /**
    * Procedural noise overlays (first layer = sand patches). Strength 0 disables
    * the sand overlay; >0 blends the shared sand albedo onto flat mid/low ground
    * via world-XZ fBm. Independent of lake/river shore sand.
    */
-  noiseSandStrength: new Float32Array(MAX_ENTITIES),
+  noiseSandStrength: F32,
   /** World-space frequency of the sand fBm (higher = smaller patches). */
-  noiseSandScale: new Float32Array(MAX_ENTITIES),
+  noiseSandScale: F32,
   /** fBm must exceed this (0..1) before sand appears — higher = sparser. */
-  noiseSandThreshold: new Float32Array(MAX_ENTITIES),
+  noiseSandThreshold: F32,
   /** Normalised height (0..1 of maxHeight) where sand patches may start. */
-  noiseSandHeightMin: new Float32Array(MAX_ENTITIES),
+  noiseSandHeightMin: F32,
   /** Normalised height (0..1 of maxHeight) where sand patches fade out. */
-  noiseSandHeightMax: new Float32Array(MAX_ENTITIES),
-} as const;
+  noiseSandHeightMax: F32,
+});
 
 /**
  * `<TerrainPad>` — a levelled rounded-rect settlement pad stamped into the
  * heightmap (see flatten.ts). Centre comes from Transform posX/posZ.
  */
-export const TerrainPad = {
+export const TerrainPad = defineComponent({
   /** Half-extent of the flat core along X (m). */
-  halfX: new Float32Array(MAX_ENTITIES),
+  halfX: F32,
   /** Half-extent of the flat core along Z (m). */
-  halfZ: new Float32Array(MAX_ENTITIES),
+  halfZ: F32,
   /** Target height (m). 0 = auto: sample the pre-flatten terrain at centre. */
-  height: new Float32Array(MAX_ENTITIES),
+  height: F32,
   /** Blend ring width (m) back to the original terrain. */
-  falloff: new Float32Array(MAX_ENTITIES),
+  falloff: F32,
   /** Corner rounding radius (m). */
-  cornerRadius: new Float32Array(MAX_ENTITIES),
-  applied: new Uint8Array(MAX_ENTITIES),
-} as const;
+  cornerRadius: F32,
+  applied: U8,
+});
 
-export const TerrainChunk = {
-  field: new Uint32Array(MAX_ENTITIES),
-  originX: new Float32Array(MAX_ENTITIES),
-  originZ: new Float32Array(MAX_ENTITIES),
-  size: new Float32Array(MAX_ENTITIES),
-  level: new Uint8Array(MAX_ENTITIES),
-  resolution: new Uint8Array(MAX_ENTITIES),
-  meshDirty: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const TerrainChunk = defineComponent({
+  field: U32,
+  originX: F32,
+  originZ: F32,
+  size: F32,
+  level: U8,
+  resolution: U8,
+  meshDirty: U8,
+});
 
-export const TerrainDebugInfo = {
-  activeChunks: new Uint32Array(MAX_ENTITIES),
-  drawCalls: new Uint32Array(MAX_ENTITIES),
-  totalInstances: new Uint32Array(MAX_ENTITIES),
-  geometryCount: new Uint32Array(MAX_ENTITIES),
-  materialCount: new Uint32Array(MAX_ENTITIES),
-  failedColliderChunks: new Uint32Array(MAX_ENTITIES),
-  lastUpdated: new Float32Array(MAX_ENTITIES),
-} as const;
+export const TerrainDebugInfo = defineComponent({
+  activeChunks: U32,
+  drawCalls: U32,
+  totalInstances: U32,
+  geometryCount: U32,
+  materialCount: U32,
+  failedColliderChunks: U32,
+  lastUpdated: F32,
+});

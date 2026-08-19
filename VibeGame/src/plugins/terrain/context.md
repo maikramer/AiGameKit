@@ -179,10 +179,12 @@ One shared stack — feature plugins own only the **design profile**, then call 
 
 1. **Design profile** — terrace (`road/carve`), bowl/bank (`water/carve`), pad plane (`flatten`).
 2. **Density stamp** — `applyCorridorDensity` / `applyFeatureDensity` (+ `densityLeafPad` = half deepest leaf so chunk borders share boost).
-3. **Stamp sampler** — `applyHeightBrush` or segmented `forEachTexelInAabb` (±1 texel margin always).
+3. **Stamp sampler** — `applyHeightBrush` (primary stamp + cell-aware `guardAt` clamp) or segmented `forEachTexelInAabb` (±1 texel margin always).
 4. **Remesh / collider** — `rebuildTerrainDerivatives` (meshDirty + Rapier + BVH + callbacks).
 
 Ribbon/water meshes sample **analytic** `sampleHeightAt` after carve — never mesh-catchup onto LOD geometry. Polyline nearest/AABB live in `corridor.ts`.
+
+**Cell-aware clamp** (`HeightBrush.guardAt`): the primary stamp describes the design surface at texel **centres**, but every consumer (chunk mesh, Rapier heightfield, ribbon) reconstructs by bilinear interpolation — one texel's value influences every point up to one texel away per axis (`texelInfluenceReach` = √2·step, the 2×2 bilinear stencil). In a deep cut, the first texel outside the full-weight band holds `natural + (design − natural)·w` — metres above the bed in mountain terrain — and its stencil lifts the reconstructed ground over the bed edge: terrain poking through the road/track exactly at the rim. Brushes that expose `guardAt` (road corridor, bridge clearance, pad core) clamp those neighbours to the design surface evaluated at the stencil's corridor-facing edge (`dist − texelInfluenceReach`). The clamp is **lower-only** (valley fills and flats never move), dynamic per texel (acts only where the neighbour actually sits above the design), and journalled by `owner` exactly like the primary stamp.
 
 **Corridor helpers** (`corridor.ts`) — shared by every polyline carver:
 

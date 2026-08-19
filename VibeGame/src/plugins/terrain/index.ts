@@ -118,6 +118,7 @@ export {
   flyingDeckYAt,
   crownHitsFlyingDeck,
   isPointOnRoad,
+  distanceToRoadAt,
   brushIntersectsBounds,
 } from './brush-registry';
 export type { GroundBrush, GroundBrushKind } from './brush-registry';

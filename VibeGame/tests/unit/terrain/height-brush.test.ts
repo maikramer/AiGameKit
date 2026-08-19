@@ -2,8 +2,12 @@ import { describe, expect, it } from 'bun:test';
 import {
   applyHeightBrush,
   minEffectiveFalloff,
+  rebuildTerrainDerivatives,
   samplerTexelStep,
 } from '../../../src/plugins/terrain/height-brush';
+import { State } from '../../../src/core';
+import { getTerrainContext } from '../../../src/plugins/terrain/utils';
+import type { TerrainEntityData } from '../../../src/plugins/terrain/utils';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';
 
 function makeSampler(size = 33, worldSize = 32, fill = 0.5): HeightSampler {
@@ -114,5 +118,32 @@ describe('height-brush: applyHeightBrush', () => {
       evalAt: () => ({ targetY: 9999, weight: 1 }),
     });
     expect(Math.max(...s.data!)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('height-brush: rebuildTerrainDerivatives', () => {
+  it('reseta collisionReady ao esvaziar o conjunto de colliders', () => {
+    const state = new State();
+    const data = {
+      sampler: makeSampler(),
+      chunks: new Set<number>(),
+      heightmapUrl: '/terrain/heightmap.png',
+      initialized: true,
+      collisionReady: true,
+      worldOffset: { x: 0, y: 0, z: 0 },
+      lastWireframe: 0,
+      lastShowChunkBorders: 0,
+      physicsBody: null,
+      physicsCollider: null,
+      chunkColliders: new Map(),
+    } as TerrainEntityData;
+    getTerrainContext(state).set(1, data);
+
+    rebuildTerrainDerivatives(state, 1, data);
+
+    // Sem Rapier world o mapa só é esvaziado, mas o readiness tem de dizer
+    // que não existe collider nenhum até o rebuild do próximo tick.
+    expect(data.chunkColliders.size).toBe(0);
+    expect(data.collisionReady).toBe(false);
   });
 });

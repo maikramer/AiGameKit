@@ -23,6 +23,15 @@ export interface HeightSampler {
   worldSize: number;
   /** Elevation in world units at normalized [0,1] amplitude. */
   maxHeight: number;
+  /**
+   * 0 = bilinear taps, 1 = Catmull-Rom. Bilinear is C0 but not C1: the
+   * derivative jumps at every texel boundary, so a slope reads as a grid of
+   * flat facets the size of one texel (2 m on a 2048 map over 4 km, which is
+   * plainly visible from the ground). Catmull-Rom is C1, so the normals run
+   * continuously across cells and the slope reads smooth. Fed from the
+   * `height-smoothing` attribute of `<Terrain>`; defaults to fully smooth.
+   */
+  smoothing?: number;
 }
 
 export interface HeightSamplerData {
@@ -122,7 +131,9 @@ export async function loadHeightmapFromUrl(
 
 // Guards against memory bombs: a hostile or accidental 20000×20000 PNG would
 // otherwise allocate a 1.6 GB Float32Array and take the tab down with it.
-const MAX_HEIGHTMAP_SIDE = 4096;
+// 8192 is the legitimate ceiling (doubled 4 km heightmap ⇒ 0.5 m/px): its
+// Float32Array is 268 MB + transient decode buffers, desktop-class only.
+const MAX_HEIGHTMAP_SIDE = 8192;
 const MAX_HEIGHTMAP_PIXELS = MAX_HEIGHTMAP_SIDE ** 2;
 
 export async function decodeHeightmapBlob(
@@ -174,13 +185,14 @@ export async function decodeHeightmapBlob(
   const pixels = imageData.data;
   const data = new Float32Array(canvas.width * canvas.height);
 
+  // 16-bit height packed as R = high byte, G = low byte. An 8-bit grayscale
+  // PNG (R = G = v) decodes to v·257/65535 = v/255 — exactly the old
+  // luminance value — so existing single-channel heightmaps are unchanged,
+  // while packed ones get a 200 m / 65535 ≈ 3 mm quantum instead of the
+  // 0.78 m stair-terraces an 8-bit map shows on gentle slopes.
   for (let i = 0; i < data.length; i++) {
     const offset = i * 4;
-    data[i] =
-      (pixels[offset]! * 0.299 +
-        pixels[offset + 1]! * 0.587 +
-        pixels[offset + 2]! * 0.114) /
-      255;
+    data[i] = (pixels[offset]! * 256 + pixels[offset + 1]!) / 65535;
   }
 
   return { width: canvas.width, height: canvas.height, data };
@@ -211,12 +223,90 @@ function sampleNormalized(
   const h01 = data[y1 * width + x0];
   const h11 = data[y1 * width + x1];
 
-  return (
+  const bilinear =
     h00 * (1 - fx) * (1 - fy) +
     h10 * fx * (1 - fy) +
     h01 * (1 - fx) * fy +
-    h11 * fx * fy
-  );
+    h11 * fx * fy;
+
+  const smoothing = sampler.smoothing ?? 1;
+  if (smoothing <= 0) return bilinear;
+
+  const smooth = sampleCatmullRom(data, width, height, x0, y0, fx, fy);
+  return smoothing >= 1 ? smooth : bilinear + (smooth - bilinear) * smoothing;
+}
+
+/** Catmull-Rom weight blend of four consecutive samples at `t` in [0,1). */
+function cubic(
+  p0: number,
+  p1: number,
+  p2: number,
+  p3: number,
+  t: number
+): number {
+  const a = 2 * p1;
+  const b = p2 - p0;
+  const c = 2 * p0 - 5 * p1 + 4 * p2 - p3;
+  const d = -p0 + 3 * p1 - 3 * p2 + p3;
+  return 0.5 * (a + b * t + c * t * t + d * t * t * t);
+}
+
+/**
+ * Bicubic (Catmull-Rom) height at a fractional lattice position. The 4x4
+ * neighbourhood is clamped at the borders, so edge texels degrade to a
+ * one-sided fit instead of wrapping onto the far side of the map.
+ */
+function sampleCatmullRom(
+  data: Float32Array,
+  width: number,
+  height: number,
+  x0: number,
+  y0: number,
+  fx: number,
+  fy: number
+): number {
+  const cx = (i: number) => (i < 0 ? 0 : i > width - 1 ? width - 1 : i);
+  const cy = (j: number) => (j < 0 ? 0 : j > height - 1 ? height - 1 : j);
+  const xm = cx(x0 - 1);
+  const x1 = cx(x0 + 1);
+  const x2 = cx(x0 + 2);
+  const rows: number[] = [];
+  for (let k = -1; k <= 2; k++) {
+    const row = cy(y0 + k) * width;
+    rows.push(
+      monotone(
+        data[row + xm]!,
+        data[row + x0]!,
+        data[row + x1]!,
+        data[row + x2]!,
+        fx
+      )
+    );
+  }
+  return monotone(rows[0]!, rows[1]!, rows[2]!, rows[3]!, fy);
+}
+
+/**
+ * Catmull-Rom clamped to the span of the two central samples.
+ *
+ * The unclamped fit overshoots at a step, and terrain steps are not rare —
+ * every road cut, pad edge and lake carve stamps one deliberately. A 5 m wall
+ * rings into a ~10 cm lip along its whole length, and the carve tests catch it
+ * to the millimetre. Inside smooth terrain the cubic already lands between p1
+ * and p2, so the clamp costs nothing there and only bites where the data is a
+ * cliff — which is exactly where flat is the honest answer.
+ */
+function monotone(
+  p0: number,
+  p1: number,
+  p2: number,
+  p3: number,
+  t: number
+): number {
+  const v = cubic(p0, p1, p2, p3, t);
+  const lo = p1 < p2 ? p1 : p2;
+  const hi = p1 < p2 ? p2 : p1;
+  return v < lo ? lo : v > hi ? hi : v;
 }
 
 /** World-space elevation at a field-local (x, z) position. */

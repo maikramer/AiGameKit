@@ -1092,6 +1092,12 @@ export function applyLoadedSampler(
   data: import('./utils').TerrainEntityData,
   sampler: HeightSampler
 ): void {
+  // `height-smoothing` used to be parsed into the component and read by
+  // nobody, so every field sampled bilinear and showed one flat facet per
+  // texel on slopes. Feed it to the sampler here — this is the only place a
+  // loaded sampler meets its field entity.
+  const smoothing = Terrain.heightSmoothing[field];
+  sampler.smoothing = Number.isFinite(smoothing) ? smoothing : 1;
   data.sampler = sampler;
   data.density = buildDensityMap(sampler, 64);
   refreshChunkResolutions(state, field, data);

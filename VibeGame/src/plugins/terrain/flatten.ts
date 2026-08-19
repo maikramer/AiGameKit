@@ -1,4 +1,8 @@
-import { applyHeightBrush, minEffectiveFalloff } from './height-brush';
+import {
+  applyHeightBrush,
+  minEffectiveFalloff,
+  texelInfluenceReach,
+} from './height-brush';
 import type { HeightSampler } from './height-sampler';
 
 export interface FlattenRectOpts {
@@ -66,6 +70,19 @@ export function flattenRect(
         weight = 1 - t * t * (3 - 2 * t);
       }
       return { targetY, weight };
+    },
+    // Cell-aware core clamp: on a hillside the first falloff texel holds
+    // `natural + (plane − natural)·w`, and its bilinear stencil reaches into
+    // the core — a one-texel lip at the pad edge that props and plaza
+    // arteries have to climb. Clamp it to the pad plane, lower-only,
+    // whenever its stencil touches the core (the rounded-rect SDF is
+    // 1-Lipschitz, so subtracting the stencil reach is exact).
+    guardAt(wx, wz) {
+      const dx = Math.max(Math.abs(wx - centerX) - coreX, 0);
+      const dz = Math.max(Math.abs(wz - centerZ) - coreZ, 0);
+      const d = Math.sqrt(dx * dx + dz * dz) - cr;
+      if (d <= 0 || d >= texelInfluenceReach(sampler)) return null;
+      return { targetY, weight: 1 };
     },
   });
 }

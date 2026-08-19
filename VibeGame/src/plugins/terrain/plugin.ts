@@ -68,7 +68,8 @@ export const TerrainPlugin: Plugin = {
         skirtDepth: 1.0,
         skirtWidth: 0.015625,
         baseColor: 0x4a7a3a,
-        heightSmoothing: 0.35,
+        // 1 = Catmull-Rom no sampler (normais contínuas); 0 = bilinear.
+        heightSmoothing: 1,
         heightSmoothingSpread: 1.25,
         collisionResolution: 64,
         showChunkBorders: 0,

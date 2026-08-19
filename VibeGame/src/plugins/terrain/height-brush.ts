@@ -45,6 +45,22 @@ export function minEffectiveFalloff(
 }
 
 /**
+ * Quanto o valor de um texel alcança em direção ao interior do pincel, em
+ * múltiplos do passo do texel: a diagonal completa do stencil bilinear 2×2
+ * (√2 · step). O stamp primário descreve a superfície no **centro** do
+ * texel, mas mesh/collider/ribbon reconstruem por interpolação bilinear
+ * entre centros — o valor de um texel influencia cada ponto até um texel de
+ * distância em cada eixo, logo um texel vizinho cujo centro ficou fora da
+ * banda de peso total ainda levanta a reconstrução dentro do leito carvado.
+ */
+export const TEXEL_INFLUENCE_REACH = Math.SQRT2;
+
+/** Distância world-space que o stencil bilinear de um texel invade (m). */
+export function texelInfluenceReach(sampler: HeightSampler): number {
+  return samplerTexelStep(sampler) * TEXEL_INFLUENCE_REACH;
+}
+
+/**
  * Full-weight brush width ≥ `minTexels` sampler steps. A `<Road>` bed of ~9 m
  * on a 2000/64 heightmap (texel ≈ 32 m) never covers a texel centre — carve
  * "runs" but the terrain does not move. Expand the **prep** corridor to the
@@ -79,6 +95,25 @@ export interface HeightBrush {
    * baixar/subir, respetivamente (perfis min/max como a água usa).
    */
   evalAt(x: number, z: number): BrushSample | null;
+  /**
+   * Clamp geométrico lower-only, avaliado no **centro** do texel como
+   * `evalAt`, mas descrevendo o stencil bilinear: o valor que o texel não
+   * pode exceder para a reconstrução não subir acima da superfície de
+   * projeto dentro da banda de peso total do pincel.
+   *
+   * Um texel vizinho cujo centro cai na banda de falloff fica em
+   * `atual + (projeto − atual)·w` — num corte profundo isso é metros acima
+   * da cama, e o stencil dele (± {@link texelInfluenceReach}) levanta o
+   * leito: terreno a furar a estrada/pista exatamente na borda. O clamp
+   * avalia o perfil de projeto na borda do stencil voltada ao corredor
+   * (`dist − texelInfluenceReach`) e **só baixa** — nunca aterra aterros
+   * (vale), não mexe em flats (min já satisfeito) e respeita o journal do
+   * owner como qualquer outra escrita.
+   *
+   * null = sem clamp (centro já full-weight — o primário é exato — ou o
+   * stencil não alcança a banda full-weight).
+   */
+  guardAt?: (x: number, z: number) => BrushSample | null;
   /** Default 'blend'. */
   mode?: BrushMode;
 }
@@ -214,21 +249,39 @@ export function applyHeightBrush(
   let changed = false;
   const ok = forEachTexelInAabb(sampler, brush, (idx, wx, wz) => {
     const s = brush.evalAt(wx, wz);
-    if (!s || s.weight <= 0) return;
-    const w = Math.min(1, s.weight);
-    const target = Math.min(1, Math.max(0, s.targetY / maxHeight));
+    const guard = brush.guardAt?.(wx, wz) ?? null;
+    if (!s && !guard) return;
     const cur = data[idx]!;
-    const next = cur + (target - cur) * w;
-    if (mode === 'lower' && next >= cur) return;
-    if (mode === 'raise' && next <= cur) return;
-    if (next !== cur) {
-      if (journalIdx) {
-        journalIdx.push(idx);
-        journalPrev!.push(cur);
+
+    // Primary stamp (blend + mode filters). A mode rejection skips the
+    // primary write but never the guard below — the guard has its own
+    // lower-only direction.
+    let next: number | null = null;
+    if (s && s.weight > 0) {
+      const w = Math.min(1, s.weight);
+      const target = Math.min(1, Math.max(0, s.targetY / maxHeight));
+      const cand = cur + (target - cur) * w;
+      if (mode !== 'lower' || cand < cur) {
+        if (mode !== 'raise' || cand > cur) next = cand;
       }
-      data[idx] = next;
-      changed = true;
     }
+
+    // Cell-aware clamp: only ever lowers, and only when the guard target is
+    // below what the primary (or the natural terrain) left there.
+    if (guard && guard.weight > 0) {
+      const w = Math.min(1, guard.weight);
+      const target = Math.min(1, Math.max(0, guard.targetY / maxHeight));
+      const cand = cur + (target - cur) * w;
+      if (cand < cur && (next === null || cand < next)) next = cand;
+    }
+
+    if (next === null || next === cur) return;
+    if (journalIdx) {
+      journalIdx.push(idx);
+      journalPrev!.push(cur);
+    }
+    data[idx] = next;
+    changed = true;
   });
   if (owner && journalIdx && journalIdx.length > 0) {
     let journals = BRUSH_JOURNALS.get(sampler);
@@ -282,8 +335,12 @@ export function rebuildTerrainDerivatives(
     for (const body of data.chunkColliders.values()) {
       world.removeRigidBody(body);
     }
-    data.chunkColliders.clear();
   }
+  data.chunkColliders.clear();
+  // The collider set is empty until TerrainChunkColliderSystem rebuilds it
+  // (next simulation tick). Readiness must say so: gates and spawners that
+  // poll it would otherwise release entities into a collider-less world.
+  data.collisionReady = false;
   invalidateTerrainBvh(state, fieldEntity);
   fireGroundMutationCallbacks(state);
 }
