@@ -162,15 +162,22 @@ describe('equirectSkyParser', () => {
   });
 });
 
-describe('EquirectSky plugin estrutura', () => {
+describe('Sky plugin estrutura', () => {
   const plugin = findSkyPlugin()!;
 
-  it('tem exactamente 1 recipe e 1 sistema', () => {
-    expect(plugin.recipes).toHaveLength(1);
-    expect(plugin.systems).toHaveLength(1);
+  it('tem os recipes EquirectSky e Sky, e 2 sistemas', () => {
+    expect(plugin.recipes?.map((r: Recipe) => r.name)).toEqual([
+      'EquirectSky',
+      'Sky',
+    ]);
+    expect(plugin.systems).toHaveLength(2);
   });
 
-  it('sistema está no grupo simulation', () => {
+  it('EquirectSkyLoadSystem está no grupo simulation', () => {
     expect(plugin.systems![0].group).toBe('simulation');
+  });
+
+  it('ProceduralSkySystem está no grupo draw', () => {
+    expect(plugin.systems![1].group).toBe('draw');
   });
 });

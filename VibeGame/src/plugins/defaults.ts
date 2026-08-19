@@ -23,18 +23,20 @@ import { SpawnerPlugin } from './spawner/plugin';
 import { TerrainPlugin } from './terrain/plugin';
 import { TransformsPlugin } from './transforms';
 import { AudioPlugin } from './audio/plugin';
-import { EquirectSkyPlugin } from './sky/plugin';
+import { SkyPlugin } from './sky/plugin';
 import { ParticlesPlugin } from './particles/plugin';
 import { FloatingTextPlugin } from './floating-text/plugin';
 import { DestructiblePlugin } from './destructible/plugin';
 import { TweeningPlugin } from './tweening/plugin';
 import { PostprocessingPlugin } from './postprocessing/plugin';
 import { AdaptiveQualityPlugin } from './adaptive-quality/plugin';
+import { WorldBorderPlugin } from './world-border/plugin';
 import { BiomesPlugin } from './biomes/plugin';
 import { RoadPlugin } from './road/plugin';
 import { WaterPlugin } from './water/plugin';
 import { WeatherPlugin } from './weather/plugin';
 import { VegetationPlugin } from './vegetation/plugin';
+import { NaturePlugin } from './nature/plugin';
 import { CityLayoutPlugin } from './city-layout/plugin';
 import { RacingPlugin } from './racing/plugin';
 
@@ -52,6 +54,7 @@ export const DefaultPlugins: Plugin[] = [
   RenderingPlugin,
   PostprocessingPlugin,
   AdaptiveQualityPlugin,
+  WorldBorderPlugin,
   HudPlugin,
   ThirdPersonCameraPlugin,
   OrbitCameraPlugin,
@@ -64,13 +67,14 @@ export const DefaultPlugins: Plugin[] = [
   NavMeshPlugin,
   YukaAiPlugin,
   AudioPlugin,
-  EquirectSkyPlugin,
+  SkyPlugin,
   BiomesPlugin,
   WaterPlugin,
   RoadPlugin,
   CityLayoutPlugin,
   WeatherPlugin,
   VegetationPlugin,
+  NaturePlugin,
   ParticlesPlugin,
   FloatingTextPlugin,
   DestructiblePlugin,

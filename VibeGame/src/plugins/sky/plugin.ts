@@ -1,22 +1,29 @@
 import type { Plugin } from '../../core';
-import { EquirectSky } from './components';
-import { equirectSkyRecipe } from './recipes';
-import { equirectSkyParser } from './parser';
-import { EquirectSkyLoadSystem } from './systems';
+import { EquirectSky, ProceduralSky } from './components';
+import { equirectSkyRecipe, proceduralSkyRecipe } from './recipes';
+import { equirectSkyParser, proceduralSkyParser } from './parser';
+import {
+  EquirectSkyLoadSystem,
+  ProceduralSkySystem,
+} from './systems';
 
 /**
- * Wires the `<EquirectSky>` element to the equirectangular sky/IBL loader
- * ({@link applyEquirectSkyEnvironment}).
+ * Sky plugin. `<EquirectSky>` loads a panoramic image as background + IBL;
+ * `<Sky>` renders a procedural atmospheric sky (scattering, shader clouds,
+ * visible sun) whose sun drives the first directional light and whose PMREM
+ * becomes the scene's IBL.
  */
-export const EquirectSkyPlugin: Plugin = {
-  recipes: [equirectSkyRecipe],
-  systems: [EquirectSkyLoadSystem],
+export const SkyPlugin: Plugin = {
+  recipes: [equirectSkyRecipe, proceduralSkyRecipe],
+  systems: [EquirectSkyLoadSystem, ProceduralSkySystem],
   components: {
     'equirect-sky': EquirectSky,
+    'procedural-sky': ProceduralSky,
   },
   config: {
     parsers: {
       EquirectSky: equirectSkyParser,
+      Sky: proceduralSkyParser,
     },
     defaults: {
       'equirect-sky': {
@@ -28,6 +35,20 @@ export const EquirectSkyPlugin: Plugin = {
         // reflections without editing engine code.
         environmentIntensity: 0,
         backgroundIntensity: 0,
+      },
+      'procedural-sky': {
+        turbidity: 2.8,
+        rayleigh: 1.6,
+        mieCoefficient: 0.004,
+        mieDirectionalG: 0.85,
+        sunElevation: 35,
+        sunAzimuth: 160,
+        cloudCoverage: 0.3,
+        cloudDensity: 0.35,
+        cloudElevation: 0.5,
+        environmentIntensity: 0,
+        sunIntensity: 0,
+        driveLight: 1,
       },
     },
   },

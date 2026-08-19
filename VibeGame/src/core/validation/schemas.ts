@@ -336,6 +336,35 @@ export const skyRecipeSchema = z
   })
   .strict();
 
+export const proceduralSkyRecipeSchema = z
+  .object({
+    turbidity: z.coerce.number().min(0).max(20).optional(),
+    rayleigh: z.coerce.number().min(0).max(4).optional(),
+    'mie-coefficient': z.coerce.number().min(0).max(0.1).optional(),
+    'mie-directional-g': z.coerce.number().min(0).max(0.999).optional(),
+    'sun-elevation': z.coerce.number().min(-10).max(90).optional(),
+    'sun-azimuth': z.coerce.number().min(-360).max(360).optional(),
+    'cloud-coverage': z.coerce.number().min(0).max(1).optional(),
+    'cloud-density': z.coerce.number().min(0).max(1).optional(),
+    'cloud-elevation': z.coerce.number().min(0).max(1).optional(),
+    'environment-intensity': z.coerce.number().min(0).max(4).optional(),
+    'sun-intensity': z.coerce.number().min(0).max(20).optional(),
+    'drive-light': booleanSchema.optional(),
+    id: z.string().optional(),
+    name: z.string().optional(),
+  })
+  .strict();
+
+export const worldBorderRecipeSchema = z
+  .object({
+    radius: z.coerce.number().min(10).optional(),
+    'warn-seconds': z.coerce.number().min(0.5).max(60).optional(),
+    margin: z.coerce.number().min(0).max(500).optional(),
+    id: z.string().optional(),
+    name: z.string().optional(),
+  })
+  .strict();
+
 export const audioClipRecipeSchema = z
   .object({
     url: z.string(),
@@ -454,6 +483,8 @@ export const recipeSchemas = {
   ThirdPersonCamera: thirdPersonCameraRecipeSchema,
   Scene: worldRecipeSchema,
   EquirectSky: skyRecipeSchema,
+  Sky: proceduralSkyRecipeSchema,
+  WorldBorder: worldBorderRecipeSchema,
   AudioSource: audioClipRecipeSchema,
   Fog: fogRecipeSchema,
   Tween: tweenElementSchema,

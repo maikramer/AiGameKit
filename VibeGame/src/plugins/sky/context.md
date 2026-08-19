@@ -2,7 +2,7 @@
 
 <!-- LLM:OVERVIEW -->
 
-Declarative `<EquirectSky>` XML tag for loading an equirectangular sky texture (PNG/JPG/HDR) and applying it as `scene.background` (visual sky dome). This plugin owns the **background-only** path: it loads the texture once the renderer is live, sets `scene.background` + `scene.backgroundIntensity`, and dials `scene.environmentIntensity` down so the existing PMREM `RoomEnvironment` (from the rendering plugin) stays subtle for IBL/PBR. For full PMREM IBL from the sky texture itself (background **and** `scene.environment`), use the imperative `applyEquirectSkyEnvironment()` in [`extras/sky-env.ts`](../../extras/sky-env.ts) — see "Known Limitations" below for why rotation requires pixel-level bitmap manipulation there.
+Two declarative sky modes sharing one job: put a sky in the background and a matching PMREM into `scene.environment` so PBR materials reflect it. `<EquirectSky url>` loads a panoramic image (PNG/JPG/HDR). `<Sky>` renders a procedural atmospheric dome (Preetham scattering, visible sun disc, animated shader clouds) whose sun also drives the first `directional-light` entity — one sun for sky, shadows, god rays and fog inscattering.
 
 <!-- /LLM:OVERVIEW -->
 
@@ -12,112 +12,117 @@ Declarative `<EquirectSky>` XML tag for loading an equirectangular sky texture (
 sky/
 ├── context.md     # This file
 ├── index.ts       # Exports
-├── plugin.ts      # Plugin: EquirectSkyPlugin (recipe + system + component + parser)
-├── components.ts  # EquirectSky (rotationDeg, setBackground, applied) + URL side-map
-├── recipes.ts     # equirectSkyRecipe
-├── parser.ts      # equirectSkyParser (XML element → component + URL map)
-└── systems.ts     # EquirectSkyLoadSystem (load texture → scene.background)
+├── plugin.ts      # Plugin: SkyPlugin (recipes + systems + components + parsers)
+├── components.ts  # EquirectSky (URL side-map + intensities) + ProceduralSky
+├── recipes.ts     # equirectSkyRecipe + proceduralSkyRecipe
+├── parser.ts      # equirectSkyParser + proceduralSkyParser
+└── systems.ts     # EquirectSkyLoadSystem + ProceduralSkySystem
 ```
 
 ## Scope
 
-- **In-scope**: Declarative equirect sky via `<EquirectSky>`, one-shot async load gated on renderer readiness, background texture swap + dispose of previous background.
-- **Out-of-scope**: PMREM generation from the sky texture (imperative API in `extras/sky-env.ts`), sky texture generation (Skymap2D Python tool), HDR EXR decoding internals.
+- **In-scope**: `<EquirectSky>` (async texture load → background + PMREM IBL), `<Sky>` (atmospheric dome → background + PMREM IBL + sun-driven directional light), disposal of previous sky resources on swap/reload.
+- **Out-of-scope**: pixel-level panorama rotation (imperative `extras/sky-env.ts`), sky texture generation (Skymap2D), time-of-day cycling.
 
 ## Entry Points
 
-- **plugin.ts**: `EquirectSkyPlugin` — registered in `DefaultPlugins`.
-- **systems.ts**: `EquirectSkyLoadSystem` (`simulation` group) — loads once renderer exists.
-- **index.ts**: Re-exports `EquirectSkyPlugin`, `EquirectSky`, `getEquirectSkyUrl`, `setEquirectSkyUrl`, `EquirectSkyLoadSystem`.
+- **plugin.ts**: `SkyPlugin` — registered in `DefaultPlugins`.
+- **systems.ts**: `EquirectSkyLoadSystem` (`simulation`), `ProceduralSkySystem` (`draw`, `before: LightSyncSystem`).
+- **index.ts**: Re-exports `SkyPlugin`, `EquirectSky`, `ProceduralSky`, URL side-map helpers, both systems.
 
 ## Dependencies
 
-- **Internal**: Core ECS (`State`, `System`, `defineQuery`), rendering (`getRenderingContext`), `core/utils/logger`.
-- **External**: Three.js (`TextureLoader`, `EquirectangularReflectionMapping`, `SRGBColorSpace`).
-- **Related (not imported)**: [`extras/sky-env.ts`](../../extras/sky-env.ts) — imperative PMREM path (`applyEquirectSkyEnvironment`, `autoLoadSkyEnvironment`, `disposeSkyEnv`).
+- **Internal**: Core ECS (`State`, `System`, `defineQuery`), rendering (`getRenderingContext`, `DirectionalLight` component, `LightSyncSystem`), `core/utils/logger`.
+- **External**: Three.js (`TextureLoader`, `PMREMGenerator`, `Sky` from `three/examples/jsm/objects/Sky.js`).
 
 <!-- LLM:REFERENCE -->
 
-### Component
+### Components
 
 #### EquirectSky
 
-- `rotationDeg`: f32 — horizontal panorama rotation in degrees (reserved for future pixel-level rotation; the declarative path currently applies background directly without rotation).
-- `setBackground`: ui8 — `1` (default) sets `scene.background`; `0` skips the background and only the intensity side-effects apply.
-- `applied`: ui8 — latch; `0` = pending, `1` = load completed/failed. Prevents re-triggering each frame.
-- **URL side-map**: `setEquirectSkyUrl(eid, url)` / `getEquirectSkyUrl(eid)` — strings don't fit in TypedArrays, so the URL is held in a module-level `Map<number, string>`.
+- `rotationDeg`: f32 — reserved (the declarative path applies the texture unrotated).
+- `setBackground`: ui8 — `1` (default) sets `scene.background` to the raw equirect.
+- `applied`: ui8 — load latch (`0` pending, `1` done).
+- `environmentIntensity` / `backgroundIntensity`: f32 — `0` = loader defaults (0.45 / 1.2).
+- **URL side-map**: `setEquirectSkyUrl(eid, url)` / `getEquirectSkyUrl(eid)` — strings don't fit TypedArrays.
 
-### System
+#### ProceduralSky
 
-#### EquirectSkyLoadSystem
+- `turbidity`, `rayleigh`, `mieCoefficient`, `mieDirectionalG`: f32 — atmospheric scattering knobs (Sky.js uniforms).
+- `sunElevation` / `sunAzimuth`: f32 — degrees; define the sun vector (toward the sun).
+- `cloudCoverage` / `cloudDensity` / `cloudElevation`: f32 — shader cloud layer.
+- `environmentIntensity`: f32 — `scene.environmentIntensity` (0 = fallback 0.65).
+- `sunIntensity`: f32 — directional light intensity override (0 = keep the light entity's value).
+- `driveLight`: ui8 — `1` rewrites the first directional-light entity's direction + warm horizon color each frame.
 
-- Group: `simulation`
-- Skips in headless mode and until `renderer` + `scene` exist (texture upload needs a live renderer).
-- For each entity with `EquirectSky` where `applied === 0` and not in-flight:
-  - Reads URL via `getEquirectSkyUrl(eid)`. If empty, marks `applied = 1` and skips.
-  - Loads via `TextureLoader.loadAsync(url)`, sets `EquirectangularReflectionMapping` + `SRGBColorSpace`.
-  - If `setBackground !== 0`: disposes the previous `scene.background` texture (if it was a texture and not the new one), assigns the new texture, sets `scene.backgroundIntensity = 1.2`.
-  - Sets `scene.environmentIntensity = 0.45` (keeps PMREM RoomEnvironment subtle — the scene is already lit by hemisphere + directional lights; a full-strength IBL washes everything out).
-  - Marks `applied = 1` on success or error (logged).
-- `inFlight` Set prevents double-loading the same entity while the async load is pending.
-- **`dispose(state)`**: disposes `scene.background` texture if present, nulls `scene.background`, clears `inFlight`, resets `applied = 0` for all sky entities. Does **not** touch `scene.environment` or the PMREM RT — those belong to `extras/sky-env.ts` (`disposeSkyEnv()`).
+### Systems
 
-### Recipe
+#### EquirectSkyLoadSystem (`simulation`)
 
-- **EquirectSky** — components: `equirect-sky`; parser attributes `url`, `rotation-deg`, `set-background`. Defaults: `rotationDeg: 0`, `setBackground: 1`, `applied: 0`.
+- Gated on renderer + scene existing; loads the texture once (`applied` latch + `inFlight` set).
+- Background: the sharp equirect (`SRGBColorSpace`); env: `PMREMGenerator.fromEquirectangular`.
+- `dispose`: frees the background texture and the PMREM render target.
 
-### Plugin Config
+#### ProceduralSkySystem (`draw`, `before: LightSyncSystem`)
 
-- `parsers.EquirectSky` → `equirectSkyParser`.
-- `defaults['equirect-sky']` → `{ rotationDeg: 0, setBackground: 1, applied: 0 }`.
+- Maintains two `Sky` instances: the visible dome (sun disc on) and an IBL copy with `showSunDisc = 0` — the disc is ~10⁷ nits and would blow every material's diffuse irradiance through the PMREM; the sun's direct light is the directional light's job.
+- On parameter change (signature compare): writes uniforms to both materials, regenerates the PMREM from the IBL copy (one cube render, not per frame), sets `scene.background = null` (the dome is the background).
+- Every frame: advances cloud `time`, and when `driveLight` rewrites the first directional entity's `directionX/Y/Z` (toward-sun convention), warm→white color ramp by elevation, optional intensity override — before `LightSyncSystem` consumes the fields.
+- `dispose`: removes the dome, disposes both materials/geometries and the PMREM target.
+
+### Recipes
+
+- **EquirectSky** — components `transform` + `equirect-sky`; attributes `url`, `rotation-deg`, `set-background`, `environment-intensity`, `background-intensity`.
+- **Sky** — components `transform` + `procedural-sky`; attributes `turbidity`, `rayleigh`, `mie-coefficient`, `mie-directional-g`, `sun-elevation`, `sun-azimuth`, `cloud-coverage`, `cloud-density`, `cloud-elevation`, `environment-intensity`, `sun-intensity`, `drive-light`.
 
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
 
-## Example
+## Examples
 
 ```xml
-<EquirectSky url="/assets/sky/equirect.png" set-background="true"></EquirectSky>
+<!-- Image sky -->
+<EquirectSky url="/assets/sky/sky.png" environment-intensity="0.85"></EquirectSky>
+
+<!-- Procedural sky; the sun drives the scene's directional light -->
+<Sky
+  sun-elevation="28" sun-azimuth="215" turbidity="2.6" rayleigh="1.7"
+  cloud-coverage="0.32" environment-intensity="0.55" sun-intensity="3.0"
+></Sky>
 ```
 
-| Attribute        | Type   | Default | Notes                                                                  |
-| ---------------- | ------ | ------- | ---------------------------------------------------------------------- |
-| `url`            | string | —       | Equirect PNG/JPG/HDR under `public/assets/sky/`.                       |
-| `rotation-deg`   | number | `0`     | Reserved; declarative path applies background unrotated.               |
-| `set-background` | bool   | `true`  | `false` skips `scene.background` (intensity side-effects still apply). |
+Pair `<Sky>` with a directional light for shadows — the light only needs the shadow settings, the sun supplies direction/color/intensity:
 
-For PMREM IBL + rotation, use the imperative API:
-
-```ts
-import { applyEquirectSkyEnvironment, run } from 'vibegame';
-
-const state = await run();
-await applyEquirectSkyEnvironment(state, '/assets/sky/equirect.png', {
-  background: true,
-  rotationDeg: 90,
-  environmentIntensity: 0.15,
-});
+```xml
+<GameObject directional-light="cast-shadow: 1; shadow-map-size: 4096; distance: 160; pcss: 1"></GameObject>
 ```
+
+| Attribute (Sky)      | Type   | Default | Notes                                            |
+| -------------------- | ------ | ------- | ------------------------------------------------ |
+| `sun-elevation`      | number | `35`    | Degrees above the horizon; drives light warmth.  |
+| `sun-azimuth`        | number | `160`   | Degrees around the horizon.                      |
+| `turbidity`          | number | `2.8`   | Haze (2 clear → 10 murky).                       |
+| `rayleigh`           | number | `1.6`   | Higher deepens the blue.                         |
+| `cloud-coverage`     | number | `0.3`   | 0 none → 1 overcast.                             |
+| `cloud-density`      | number | `0.35`  | Cloud opacity.                                   |
+| `environment-intensity` | number | `0.65` fallback | IBL strength (`scene.environmentIntensity`). |
+| `sun-intensity`      | number | keep   | `>0` overrides the directional light intensity.  |
+| `drive-light`        | bool   | `true`  | Sun drives the first directional-light entity.   |
 
 <!-- /LLM:EXAMPLES -->
 
 ## Known Limitations
 
+### HDR sky + bloom
+
+The procedural sky is HDR (luminance ≫ 1 near the sun). Bloom thresholds calibrated for LDR equirects (≈0.85) bloom the whole sky and wash out the frame — use `bloom-threshold` ≥ ~3 with a procedural sky (only the sun disc/glare blooms).
+
 ### PMREM ignores `texture.offset` / `texture.repeat`
 
-Three.js `PMREMGenerator.fromEquirectangular()` samples the source texture through an **internal shader** that does **not** honor `texture.offset`, `texture.repeat`, or `texture.center`. Setting those on the texture has no effect on the generated PMREM cubemap — the panorama appears at its original azimuth.
-
-**Consequence:** to rotate an equirect horizontally before PMREM, the bitmap itself must be shifted at the **pixel level** (canvas drawImage split-and-swap in U), then fed to `PMREMGenerator`. This is what `applyEquirectSkyEnvironment({ rotationDeg })` in [`extras/sky-env.ts`](../../extras/sky-env.ts) does via `rotateEquirectBitmap()`. The declarative `<EquirectSky>` path applies the texture directly to `scene.background` without rotation (background honors `offset`/`repeat` normally, but the plugin does not currently wire `rotation-deg` into a background rotation).
+`PMREMGenerator.fromEquirectangular()` samples through an internal shader that ignores offset/repeat/center. To rotate an equirect before PMREM, shift the bitmap pixels (`rotateEquirectBitmap()` in `extras/sky-env.ts`); the declarative path applies the background unrotated.
 
 ### Equirect must be 2:1 landscape
 
-Three.js equirect convention: `u = atan(dir.z, dir.x)`, `v = asin(dir.y)`. Center of image = horizon, top = zenith, bottom = nadir. Textures should be **2:1 aspect ratio, landscape** (e.g. 2048×1024). `applyEquirectSkyEnvironment()` warns if the ratio deviates by more than ~0.15.
-
-- **Portrait** equirects (height > width) or **axis-swapped** textures map azimuth to the bitmap's vertical axis and produce "pillar" artifacts (vertical seams/bands) in the sky.
-- The Skymap2D Flux-LoRA-Equirectangular model can emit wrong resolutions (e.g. 1024×768 instead of 2048×1024) with poles centered vertically; `Skymap2D/generator.py` auto-resizes and applies a 50% vertical shift to correct this at generation time. Validate the final PNG aspect ratio before handoff.
-
-### Two code paths, two dispose owners
-
-- **Declarative** (`<EquirectSky>` → `EquirectSkyLoadSystem`): owns `scene.background`. `dispose(state)` frees it.
-- **Imperative** (`applyEquirectSkyEnvironment` in `extras/sky-env.ts`): owns the PMREM `WebGLRenderTarget` (`currentSkyRT`) and `scene.environment`. Call `disposeSkyEnv()` to free them — the plugin's `dispose()` does **not** cover this path.
+Center of image = horizon, top = zenith. Portrait/axis-swapped textures produce pillar artifacts; Skymap2D can emit wrong ratios (see its generator for auto-correction).

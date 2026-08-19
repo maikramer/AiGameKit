@@ -11,6 +11,8 @@ import {
   applyWorldXmlHooks,
   createFetchIncludeLoader,
   expandIncludes,
+  isLoadingEnforced,
+  isWorldLoadedLatched,
 } from './core';
 import type { FetchLike } from './core/xml/include';
 import {
@@ -33,6 +35,7 @@ import { defineQueryLive } from './core';
 import { setTargetCanvas } from './plugins/input';
 import { registerRuntime, unregisterRuntime } from './core/runtime-manager';
 import { syncComposerSize } from './plugins/postprocessing/composer';
+import { isPostprocessingPending } from './plugins/postprocessing/pending';
 import { resumeAudioContextOnFirstUserGesture } from './plugins/audio/systems';
 import { cancelLoadingFade } from './plugins/loading/context';
 
@@ -188,9 +191,28 @@ export class GameRuntime {
               // EffectComposer depth targets are incomplete until then.
               if (!syncComposerSize(context.postProcessing, renderer)) return;
               context.postProcessing.render();
-            } else {
-              renderer.render(scene, camera);
+              return;
             }
+            // No composer yet. Drawing the half-built world straight to the
+            // canvas compiles every visible material against the *canvas*
+            // output colour space (three keys programs by it: `srgb` for the
+            // canvas, `srgb-linear` for any render target), and every one of
+            // those programs is thrown away the moment the composer takes
+            // over — pure boot-time compile cost, and the reason the shader
+            // warmup was warming variants the game never used.
+            //
+            // Two cases where waiting costs nothing: the pipeline is declared
+            // but not built yet, and the loading screen is still up (the world
+            // XML assembles across frames as `<Include>`s resolve, and the
+            // overlay covers the canvas the whole time).
+            if (isPostprocessingPending(this.state)) return;
+            if (
+              isLoadingEnforced(this.state) &&
+              !isWorldLoadedLatched(this.state)
+            ) {
+              return;
+            }
+            renderer.render(scene, camera);
           };
           if (profiling) {
             profileRenderPass(draw);

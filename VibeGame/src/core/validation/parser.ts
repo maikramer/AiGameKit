@@ -76,6 +76,8 @@ const hierarchyRules: Record<string, string[]> = {
     'Sequence',
     'Fog',
     'EquirectSky',
+    'Sky',
+    'WorldBorder',
     'AudioSource',
   ],
   GameObject: [
