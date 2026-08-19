@@ -577,7 +577,7 @@ Not in `DefaultPlugins`. Add via the [builder API](#builder-api).
 | Plugin              | Description                                                              |
 | ------------------- | ------------------------------------------------------------------------ |
 | `save-load`         | Save/load game state to localStorage (msgpackr)                          |
-| `chrono`            | Time-travel recording: rewind/seek the world (`withChrono`)             |
+| `chrono`            | Time-travel recording: rewind/seek the world (`withChrono`)              |
 | `i18n`              | Internationalization with locale auto-detection (`<I18nText>`)           |
 | `loading`           | Loading screen and asset progress tracking                               |
 | `debug`             | Debug overlays (wireframes, stats, post-FX toggle)                       |

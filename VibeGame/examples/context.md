@@ -2,7 +2,7 @@
 
 <!-- LLM:OVERVIEW -->
 
-Shipped examples in this repository: **hello-world** (minimal terrain + physics + deterministic placement), **simple-rpg** (full AiGameKit pipeline demo, Crystal Vale), and **simple-racer** (racing plugin + shared Vale packs). Shared GameAssets manifests for forest/village/infra live in [`shared-assets/`](shared-assets/README.md).
+Shipped examples in this repository: **hello-world** (minimal terrain + physics + deterministic placement), **simple-rpg** (full AiGameKit pipeline demo, Crystal Vale), and **simple-racer** (racing plugin + shared Vale packs). Shared GameAssets packs (forest/village/infra/terrain/props manifests + binaries) live in [`shared-assets/`](shared-assets/README.md).
 <!-- /LLM:OVERVIEW -->
 
 ## Purpose
@@ -16,7 +16,7 @@ Shipped examples in this repository: **hello-world** (minimal terrain + physics 
 ```
 examples/
 ├── context.md          # This file
-├── shared-assets/      # Crystal Vale forest/village/infra manifests + sync-from-rpg.sh
+├── shared-assets/      # Crystal Vale shared packs: manifests + binaries + sync.sh
 ├── shared/             # TS helpers (i18n, HUD) — not GLBs
 ├── hello-world/        # Minimal: terrain, dynamic body, <GameObject place="…">
 │   ├── context.md
@@ -29,7 +29,7 @@ examples/
 │   ├── index.html
 │   ├── src/main.ts
 │   ├── public/assets/  # After handoff / batch
-│   └── sample-gameassets/  # game.yaml + manifests (forest/village/infra = symlinks)
+│   └── sample-gameassets/  # game.yaml + manifests (shared packs = symlinks)
 └── simple-racer/       # Racing plugin; Vale carts + copied RPG scenery
     ├── PROGRESS.md
     ├── index.html

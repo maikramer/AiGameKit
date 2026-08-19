@@ -2,7 +2,7 @@
 
 Lightweight Playwright scripts that drive the **simple-rpg** example in a real
 Chromium and assert runtime behaviour (boot, physics body, movement, grounded
-state). They complement the formal specs in `tests/playwright/` — use these for
+state). They complement the formal specs in `playwright/` — use these for
 fast, scriptable diagnosis while iterating on the engine.
 
 ## Run
