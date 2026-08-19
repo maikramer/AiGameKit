@@ -126,7 +126,8 @@ export function applyMode(mode: RaceMode): void {
  * - Race: keep the `<AiVehicle>` rivals; disable checkpoint respawns (a
  *   full grid races to the flag, off-track is the driver's problem).
  * - Time Trial: drop the rivals; enable checkpoint respawn so a crash costs
- *   time, not the race.
+ *   time, not the race — and freeze the hazards seed so every lap (and every
+ *   ghost comparison) runs the same item rows and obstacle set.
  *
  * The rivals live in `world/grid.xml`, so this prunes the parsed tree rather
  * than the DOM — the include is never in `document` to begin with.
@@ -140,6 +141,8 @@ function applyModeToWorld(root: GAME.ParsedElement): void {
     };
     prune(root);
     if (track) track.attributes['checkpoint-count'] = '8';
+    const layout = findTag(root, 'HazardsLayout');
+    if (layout) layout.attributes.seed = '1971';
   } else if (track) {
     delete track.attributes['checkpoint-count'];
   }

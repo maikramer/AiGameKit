@@ -51,8 +51,9 @@ text2sound:
 # ============================================================
 # ASSETS: em manifests/<grupo>.yaml — 1 manifesto por grupo.
 #   gameassets resume --profile game.yaml --manifest manifests/vehicles
-# forest / village / infra: symlinks → examples/shared-assets/manifests/
-#   (copiar GLBs do RPG com shared-assets/sync-from-rpg.sh; GPU só nas carroças)
+# forest / village / infra / props: symlinks → examples/shared-assets/manifests/
+#   (binários canónicos em shared-assets/public/assets; sync.sh copia para cá;
+#    GPU só nas carroças)
 #   gameassets resume --profile game.yaml --manifest manifests/audio
 # Cada grupo declara a própria pasta (output_dir / meshes_subdir / images_subdir).
 # ============================================================

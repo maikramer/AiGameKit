@@ -1,80 +1,188 @@
 <!--
-  Vegetação e rochas. Três regiões, cada uma colada a um bloco do heightmap
-  (ver `world/terrain.xml`). Árvores = packs Crystal Vale (`meshes/forest`).
+  Vegetação, rochas e landmarks por REGRAS (`<NatureSpawner>`): espécies com
+  condições de sítio (altitude/slope/distância à água e à pista/ruído/mancha),
+  bosque misto na bacia e acampamentos compostos. O planner avalia o terreno
+  pós-carve e emite pontos exatos; o spawner cuida de alinhamento, variação,
+  instancing e LOD. Grama segue no `<Vegetation>` abaixo (carpet com vento).
 
-  O bosque da bacia é o ponto alto: fica DEBAIXO do viaduto. Isso só funciona
-  porque o carve da estrada trata o vão como voo — não achata o vale e não
-  regista corredor `avoid-road` por baixo dele — portanto o spawner continua a
-  poder plantar aqui. Copas que furariam o tabuleiro são rejeitadas
-  (`crownHitsFlyingDeck`). `avoid-road` é o leito (asfalto + berma + lombo); o
-  talude é plantável. Se alguém baixar o `flatten-viaduct-clearance` do
-  `circuit/bed.xml`, esta floresta desaparece e fica uma cicatriz de terra.
+  Relevo (ver `world/terrain.xml`): bacia central y≈0–8 (com o lago), planalto
+  oeste/norte y≈14 (cidade + reta), montanha sudeste y≈22–30. As bandas de
+  altitude dos pinheiros/carvalhos reproduzem essas zonas sem regiões manuais.
+
+  O bosque da bacia fica DEBAIXO do viaduto: o carve trata o vão como voo
+  (sem corredor avoid-road por baixo) e `avoid-road=1` nas árvores mantém a
+  rejeição de copas que furariam o tabuleiro (`crownHitsFlyingDeck`). Se
+  baixarem o `flatten-viaduct-clearance` do `circuit/bed.xml`, a floresta
+  some e fica uma cicatriz de terra.
+
+  Landmarks (witch_hut, campfire, crates) são visuais instanciados, sem
+  collider individual — ficam a ≥30 m da pista (`road-dist`), fora da linha
+  de corrida. (engine: src/plugins/nature/context.md)
 -->
 
-<!-- Bacia central: carvalhos densos por baixo do vão (y do terreno ≈ 0–8). -->
-<StaticSpawner
-  count="260"
-  seed="8801"
-  region-min="-160 0 -70"
-  region-max="500 0 210"
-  align-to-terrain="1"
-  ground-align="auto"
-  max-slope-deg="30"
-  scale-min="0.9"
-  scale-max="1.8"
-  avoid-road="1"
-  avoid-water="1"
->
-  <GLTFLoader url="/assets/meshes/forest/tree_oak_lod0.glb"></GLTFLoader>
-</StaticSpawner>
-
-<!-- Encosta da montanha a sudeste: pinheiros até ao cume. -->
-<StaticSpawner
-  count="320"
-  seed="8802"
-  region-min="-140 0 260"
-  region-max="640 0 650"
-  align-to-terrain="1"
-  ground-align="auto"
-  max-slope-deg="38"
-  scale-min="0.8"
-  scale-max="1.6"
-  avoid-road="1"
->
-  <GLTFLoader url="/assets/meshes/forest/tree_pine_lod0.glb"></GLTFLoader>
-</StaticSpawner>
-
-<!-- Planalto oeste/norte: pinheiros escuros à volta da cidade e do retorno. -->
-<StaticSpawner
-  count="220"
-  seed="8803"
-  region-min="-660 0 -660"
-  region-max="660 0 260"
-  align-to-terrain="1"
-  ground-align="auto"
-  max-slope-deg="35"
-  scale-min="0.8"
-  scale-max="1.5"
-  avoid-road="1"
->
-  <GLTFLoader url="/assets/meshes/forest/pine_dark_lod0.glb"></GLTFLoader>
-</StaticSpawner>
-
-<!-- Rochas musgosas por todo o mapa (pack props do RPG). -->
-<StaticSpawner
-  count="150"
-  seed="8804"
+<NatureSpawner
+  seed="9100"
   region-min="-660 0 -660"
   region-max="660 0 660"
-  align-to-terrain="1"
-  ground-align="auto"
-  max-slope-deg="42"
-  scale-min="0.5"
-  scale-max="1.4"
-  avoid-road="1"
+  density-per-km2="1000"
+  min-spacing="5"
+  noise-scale="120"
 >
-  <GLTFLoader url="/assets/meshes/props/rock_mossy_lod0.glb"></GLTFLoader>
-</StaticSpawner>
+
+  <!-- Bacia central: carvalhais densos por baixo do vão do viaduto. -->
+  <Species id="oak" weight="5" cap="520" profile="tree" variation="tree"
+    url="/assets/meshes/forest/tree_oak_lod0.glb"
+    lod1-url="/assets/meshes/forest/tree_oak_lod1.glb"
+    lod2-url="/assets/meshes/forest/tree_oak_lod2.glb"
+    scale-min="0.9" scale-max="1.8" footprint-radius="2.2" max-distance="170"
+    avoid-road="1">
+    <Where altitude-min="0" altitude-max="11" slope-max="28" road-dist-min="14" water-dist-min="6" />
+  </Species>
+
+  <!-- Montanha sudeste: pinheiros pelas encostas até ao cume. -->
+  <Species id="pine" weight="4" cap="560" profile="tree" variation="tree"
+    url="/assets/meshes/forest/tree_pine_lod0.glb"
+    lod1-url="/assets/meshes/forest/tree_pine_lod1.glb"
+    lod2-url="/assets/meshes/forest/tree_pine_lod2.glb"
+    scale-min="0.8" scale-max="1.6" footprint-radius="1.6" max-distance="170"
+    avoid-road="1">
+    <Where altitude-min="17" altitude-max="32" slope-max="34" road-dist-min="14" />
+  </Species>
+
+  <!-- Planalto oeste/norte: pinheiros escuros em manchas (máscara de ruído),
+       à volta da cidade e do retorno. -->
+  <Species id="pine_dark" weight="3" cap="420" profile="tree" variation="tree"
+    url="/assets/meshes/forest/pine_dark_lod0.glb"
+    lod1-url="/assets/meshes/forest/pine_dark_lod1.glb"
+    lod2-url="/assets/meshes/forest/pine_dark_lod2.glb"
+    scale-min="0.8" scale-max="1.5" footprint-radius="1.6" max-distance="170"
+    avoid-road="1">
+    <Where altitude-min="10" altitude-max="17" slope-max="30" road-dist-min="14" noise-min="0.35" />
+  </Species>
+
+  <!-- Árvores mortas: raras, em qualquer zona florestada. -->
+  <Species id="dead_tree" weight="0.25" profile="tree" variation="tree"
+    url="/assets/meshes/forest/dead_tree_lod0.glb"
+    lod1-url="/assets/meshes/forest/dead_tree_lod1.glb"
+    lod2-url="/assets/meshes/forest/dead_tree_lod2.glb"
+    scale-min="0.8" scale-max="1.4" footprint-radius="1.5" max-distance="160"
+    avoid-road="1">
+    <Where slope-max="35" road-dist-min="16" noise-max="0.22" />
+  </Species>
+
+  <!-- Rochas musgosas: encostas íngremes (slope) e anéis de margem do lago
+       (water-dist) — dois sítios naturais distintos, mesma espécie. -->
+  <Species id="rock_field" weight="1.5" variation="rock"
+    url="/assets/meshes/props/rock_mossy_lod0.glb"
+    lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+    lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+    align-to-terrain="1" ground-align="auto" random-yaw="1"
+    scale-min="0.5" scale-max="1.4" footprint-radius="1" max-distance="140"
+    avoid-road="1">
+    <Where slope-max="40" road-dist-min="10" noise-min="0.55" />
+  </Species>
+
+  <!-- Cogumelos bioluminescentes: só à sombra dos carvalhais da bacia. -->
+  <Species id="mushroom" weight="1.5"
+    url="/assets/meshes/forest/mushroom_glow_lod0.glb"
+    lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb"
+    lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb"
+    align-to-terrain="1" ground-align="aabb" random-yaw="1"
+    scale-min="0.7" scale-max="1.3" footprint-radius="0.4" max-distance="90"
+    avoid-road="1">
+    <Where near="oak" near-dist-min="0" near-dist-max="10" altitude-max="14" slope-max="25" />
+  </Species>
+
+  <!-- Bosque misto da bacia: núcleo de carvalhos com mortas na borda. -->
+  <Grove id="oak-grove" count="12" radius="20">
+    <Where altitude-min="0" altitude-max="10" slope-max="22" road-dist-min="16" water-dist-min="12" />
+    <Member species="oak" count-min="5" count-max="8" at-max="1" />
+    <Member species="dead_tree" count-min="0" count-max="1" at-min="0.6" at-max="1" />
+  </Grove>
+
+  <!-- Acampamentos no planalto: cabana no centro, fogueira e suprimentos à
+       volta. Longe da pista e da água. -->
+  <Grove id="campsite" count="4" radius="8">
+    <Where altitude-min="11" altitude-max="17" slope-max="14" road-dist-min="30" water-dist-min="16" />
+    <Member species="witch_hut" count-min="1" count-max="1" />
+    <Member species="campfire" count-min="1" count-max="1" at-min="0.25" at-max="0.55" />
+    <Member species="crate" count-min="2" count-max="3" at-min="0.5" at-max="1" />
+    <Member species="log_pile" count-min="1" count-max="1" at-min="0.6" at-max="1" />
+  </Grove>
+
+  <!-- Membros dos acampamentos (weight=0: só nascem dentro de groves). -->
+  <Species id="witch_hut" weight="0"
+    url="/assets/meshes/forest/witch_hut_lod0.glb"
+    lod1-url="/assets/meshes/forest/witch_hut_lod1.glb"
+    lod2-url="/assets/meshes/forest/witch_hut_lod2.glb"
+    align-to-terrain="1" ground-align="aabb" random-yaw="1"
+    scale-min="0.95" scale-max="1.1" footprint-radius="3.2" max-distance="220"
+    avoid-road="1">
+    <Where slope-max="20" road-dist-min="12" />
+  </Species>
+
+  <Species id="campfire" weight="0"
+    url="/assets/meshes/village/campfire_pit_lod0.glb"
+    lod1-url="/assets/meshes/village/campfire_pit_lod1.glb"
+    lod2-url="/assets/meshes/village/campfire_pit_lod2.glb"
+    align-to-terrain="1" ground-align="aabb" random-yaw="1"
+    scale-min="0.9" scale-max="1.15" footprint-radius="0.8" max-distance="130"
+    avoid-road="1">
+    <Where slope-max="20" road-dist-min="12" />
+  </Species>
+
+  <Species id="crate" weight="0"
+    url="/assets/meshes/village/wooden_crate_lod0.glb"
+    lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+    lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
+    align-to-terrain="1" ground-align="aabb" random-yaw="1"
+    scale-min="0.9" scale-max="1.15" footprint-radius="0.6" max-distance="120"
+    avoid-road="1">
+    <Where slope-max="20" road-dist-min="12" />
+  </Species>
+
+  <Species id="log_pile" weight="0"
+    url="/assets/meshes/village/log_pile_lod0.glb"
+    lod1-url="/assets/meshes/village/log_pile_lod1.glb"
+    lod2-url="/assets/meshes/village/log_pile_lod2.glb"
+    align-to-terrain="1" ground-align="aabb" random-yaw="1"
+    scale-min="0.9" scale-max="1.15" footprint-radius="1.2" max-distance="120"
+    avoid-road="1">
+    <Where slope-max="20" road-dist-min="12" />
+  </Species>
+
+</NatureSpawner>
+
+<!--
+  Margem do lago: micro-habitato com regras próprias. O anel de margem é ~1%
+  da região do spawner principal — densidade concentrada aqui é o que faz a
+  vegetação de margem existir de verdade (juncos + pedras de praia).
+-->
+<NatureSpawner
+  seed="9101"
+  region-min="40 0 -20"
+  region-max="260 0 200"
+  density-per-km2="22000"
+  min-spacing="1.2"
+>
+  <Species id="reed" weight="3"
+    url="/assets/meshes/vegetation/plant_flatTall.glb"
+    align-to-terrain="1" ground-align="aabb" random-yaw="1"
+    scale-min="1.2" scale-max="2.2" footprint-radius="0.3" max-distance="110"
+    avoid-road="1" avoid-overlaps="0">
+    <Where water-dist-min="1" water-dist-max="14" slope-max="25" />
+  </Species>
+
+  <Species id="rock_shore" weight="1" variation="rock"
+    url="/assets/meshes/props/rock_mossy_lod0.glb"
+    lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+    lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+    align-to-terrain="1" ground-align="auto" random-yaw="1"
+    scale-min="0.4" scale-max="1" footprint-radius="0.8" max-distance="140"
+    avoid-road="1">
+    <Where water-dist-min="0" water-dist-max="10" slope-max="30" />
+  </Species>
+</NatureSpawner>
 
 <!-- Grama com vento na beira da pista (kit vegetation do Crystal Vale). O
      spawner assenta cada instância no terreno; `avoid-road` mantém o corredor

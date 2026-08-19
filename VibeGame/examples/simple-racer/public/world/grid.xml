@@ -15,7 +15,6 @@
   model-yaw="90"
   half-length="1.2"
   half-width="0.58"
-  loadout="pulse:2,sidewinder:2,shield:1"
   max-speed="52"
   accel="27"
   brake="52"
@@ -29,8 +28,8 @@
 ></PlayerVehicle>
 
 <!-- Rivals (Race mode only — main.ts removes these for Time Trial).
-     Same model as the player; each carries a power-up loadout and the AI
-     collects orbs and fires slots like the player does. -->
+     Same model as the player; everyone starts empty-handed and cracks item
+     chests on track — the AI rolls and fires items like the player does. -->
 <AiVehicle
   name="rival-1"
   driver="Vega"
@@ -40,7 +39,6 @@
   model-yaw="90"
   half-length="1.2"
   half-width="0.58"
-  loadout="pulse:2,sidewinder:2,shield:1"
   max-speed="52"
   accel="27"
   brake="52"
@@ -58,7 +56,6 @@
   model-yaw="90"
   half-length="1.2"
   half-width="0.58"
-  loadout="pulse:1,sidewinder:2,shield:1"
   max-speed="51"
   accel="26"
   brake="50"
@@ -76,7 +73,6 @@
   model-yaw="90"
   half-length="1.2"
   half-width="0.58"
-  loadout="pulse:2,sidewinder:1,shield:2"
   max-speed="50"
   accel="26"
   brake="49"
@@ -94,7 +90,6 @@
   model-yaw="90"
   half-length="1.2"
   half-width="0.58"
-  loadout="pulse:2,sidewinder:2,shield:2"
   max-speed="50"
   accel="25"
   brake="48"

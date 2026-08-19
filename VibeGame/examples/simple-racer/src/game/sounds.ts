@@ -17,19 +17,43 @@ export function registerGameSounds(): void {
     'race-finish': { url: '/assets/audio/sfx_finish.ogg', volume: 0.6 },
     'race-nitro': { url: '/assets/audio/sfx_nitro.ogg', volume: 0.5 },
     'race-crash': { url: '/assets/audio/sfx_crash.ogg', volume: 0.55 },
-    'race-pickup': { url: '/assets/audio/sfx_coin.ogg', volume: 0.5 },
-    'race-pulse': { url: '/assets/audio/sfx_nitro.ogg', volume: 0.45 },
-    'race-sidewinder': { url: '/assets/audio/sfx_nitro.ogg', volume: 0.4 },
-    'race-shield': { url: '/assets/audio/sfx_coin.ogg', volume: 0.4 },
     'race-respawn': { url: '/assets/audio/sfx_crash.ogg', volume: 0.45 },
-
-    // ── Extras (kept in the bank for future hooks) ─────────────
+    'race-pulse': { url: '/assets/audio/sfx_nitro.ogg', volume: 0.45 },
     'race-skid': { url: '/assets/audio/sfx_skid.ogg', volume: 0.4 },
     'race-engine-rev': {
       url: '/assets/audio/sfx_engine_rev.ogg',
       volume: 0.35,
     },
     'race-coin': { url: '/assets/audio/sfx_coin.ogg', volume: 0.45 },
+
+    // ── Item game (chest → roulette → item → effect) ────────────
+    'race-box': { url: '/assets/audio/sfx_coin.ogg', volume: 0.5, pitch: 0.85 },
+    'race-roulette': {
+      url: '/assets/audio/sfx_coin.ogg',
+      volume: 0.45,
+      pitch: 1.3,
+    },
+    'race-shield': { url: '/assets/audio/sfx_coin.ogg', volume: 0.4 },
+    'race-trick': {
+      url: '/assets/audio/sfx_nitro.ogg',
+      volume: 0.45,
+      pitch: 1.25,
+    },
+    'race-fireball': {
+      url: '/assets/audio/sfx_nitro.ogg',
+      volume: 0.55,
+      pitch: 0.8,
+    },
+    'race-oil': {
+      url: '/assets/audio/sfx_skid.ogg',
+      volume: 0.45,
+      pitch: 0.7,
+    },
+    'race-spin': {
+      url: '/assets/audio/sfx_crash.ogg',
+      volume: 0.6,
+      pitch: 0.85,
+    },
 
     // ── Save / load (same clips as simple-rpg) ─────────────────
     save: { url: '/assets/audio/sfx_save.ogg', volume: 0.48 },
@@ -60,12 +84,16 @@ export function preloadGameSounds(): void {
     'race-finish',
     'race-nitro',
     'race-crash',
-    'race-pickup',
     'race-pulse',
-    'race-sidewinder',
-    'race-shield',
     'race-respawn',
     'race-skid',
+    'race-box',
+    'race-roulette',
+    'race-shield',
+    'race-trick',
+    'race-fireball',
+    'race-oil',
+    'race-spin',
     'save',
     'load',
     'bgm-race',

@@ -3,36 +3,55 @@
   race — nothing in this file knows about the circuit.
 -->
 <Group name="environment" pos="0 0 0">
-  <!-- Céu equirect + IBL (mesmo pipeline do simple-rpg): o PMREM do equirect
-       vira `scene.environment`, então os materiais PBR refletem o céu real em
-       vez de uma sala neutra. -->
-  <!-- Céu Crystal Vale (copiado do RPG). IBL do equirect; fog/luz alinhados
-       ao vale — menos laranja arcade, mais o céu painterly. -->
-  <EquirectSky
-    url="/assets/sky/sky.png"
-    environment-intensity="0.45"
-    background-intensity="1.0"
-  ></EquirectSky>
+  <!-- Céu atmosférico procedural: espalhamento de Preetham com disco solar,
+       nuvens no shader e IBL gerado do próprio céu (PMREM). O sol definido
+       aqui dirige a direcional abaixo — céu, sombras e brilhos de pintura
+       compartilham um único sol. Nuvens ficam no shader do céu (integradas ao
+       gradiente), não nos billboards do Weather. -->
+  <Sky
+    sun-elevation="19"
+    sun-azimuth="215"
+    turbidity="3.2"
+    rayleigh="1.9"
+    mie-coefficient="0.0045"
+    mie-directional-g="0.86"
+    cloud-coverage="0.34"
+    cloud-density="0.32"
+    cloud-elevation="0.55"
+    environment-intensity="0.5"
+    sun-intensity="3.0"
+    drive-light="1"
+  ></Sky>
 
   <!-- Luz + pós-processamento no MESMO GameObject (é assim que a entidade
        Postprocessing nasce — o runtime só parseia o innerHTML do Scene, um
        atributo `postprocessing=` no próprio <Scene> é ignorado).
-       Sombras: PCSS soft (sem CSM). SSAO ligado. FogExp2 ρ=0.0025 como o Vale
-       (ρ=0.008 virava parede de leite). -->
+       A direcional serve de alvo do sol do <Sky>: direção, cor e intensidade
+       vêm dele (drive-light); aqui ficam só os ajustes de sombra — mapa único
+       4096 seguido à câmara (frustum snapped ao texel, senão a sombra
+       "rasteja" a 200 km/h) + PCSS: penumbra que abre com a distância ao
+       bloqueador, contacto duro debaixo do carro.
+       Ambiente hemisférico baixo: o IBL do céu é quem colore a sombra (azul
+       de céu em cima, quente do chão embaixo); hemisférica alta achataria.
+       Tone mapping ACES (punch e contraste que o AgX lava), SSAO forte,
+       height fog com perspectiva aérea + inscattering do sol. -->
   <GameObject
-    ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 0.85"
-    directional-light="color: 0xfff0d0; intensity: 3.2; direction-x: -0.9; direction-y: 1.2; direction-z: -0.5; cast-shadow: 1; shadow-map-size: 2048; distance: 160; pcss: 0"
-    postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.12; bloom-radius: 0.40; bloom-threshold: 0.92; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.10; vignette: 1; vignette-offset: 0.34; vignette-darkness: 0.40; color-grading: 1; saturation: 0.06; contrast: 0.05; brightness: 0.015; ssao: 1; ssao-intensity: 0.55; ssao-radius: 1.0; height-fog: 1; fog-color: 0xd0d6d8; fog-density: 0.0025; fog-height: 96; fog-falloff: 0.10; film-grain: 0; chromatic-aberration: 0; god-rays: 0; depth-of-field: 0"
+    ambient-light="sky-color: 0xbcd3ea; ground-color: 0x9a8a6a; intensity: 0.15"
+    directional-light="cast-shadow: 1; shadow-map-size: 4096; distance: 160; pcss: 1"
+    postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.15; bloom-radius: 0.55; bloom-threshold: 8.0; aa: smaa; tone-mapping: aces; tone-mapping-exposure: 0.78; vignette: 1; vignette-offset: 0.30; vignette-darkness: 0.32; color-grading: 1; saturation: 0.16; contrast: 0.10; brightness: 0.0; ssao: 1; ssao-intensity: 1.45; ssao-radius: 2.2; ssr: 1; ssr-opacity: 0.55; ssr-max-distance: 70; ssr-thickness: 0.6; ssr-resolution-scale: 0.5; height-fog: 1; fog-color: 0xc9bfae; fog-density: 0.0013; fog-height: 1.5; fog-falloff: 40; fog-noise: 0.3; fog-sun-influence: 1.3; fog-sky-haze: 0.35; film-grain: 0; chromatic-aberration: 0; god-rays: 0; depth-of-field: 0"
   >
   </GameObject>
 
-  <!-- Vento global: empurra a grama (VegetationWindSystem lê getWindVector) e
-       as nuvens do céu. -->
+  <!-- Qualidade adaptativa: mantém ~55 fps desenhando o pipeline HDR completo
+       (SSAO/SSR/fog) — em GPU fraca cai resolução e AO antes de perder fps. -->
+  <AdaptiveQuality target-fps="55"></AdaptiveQuality>
+
+  <!-- Vento global: empurra a grama (VegetationWindSystem lê getWindVector).
+       Nuvens ficam no <Sky>; weather aqui é só vento/chuva. -->
   <Weather
     wind="0.7 0.25"
     wind-strength="1.6"
-    clouds="0.35"
-    cloud-height="180"
+    clouds="0"
     rain="0"
     cycle="1"
   ></Weather>

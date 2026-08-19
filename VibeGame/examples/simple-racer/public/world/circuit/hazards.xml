@@ -1,64 +1,64 @@
 <!--
-  Obstáculos e power-ups, em coordenadas de PISTA: `s` = metros de arco desde a
-  linha de meta, `lateral` = deslocamento do eixo (+ = direita do condutor).
-  Volta ≈ 5450 m — ver os setores em `src/track.ts`.
+  Perigos e prêmios da corrida, em coordenadas de PISTA: `s` = metros de arco
+  desde a linha de meta, `lateral` = deslocamento do eixo (+ = direita do
+  condutor). Volta ≈ 5450 m — ver os setores em `src/track.ts`.
 
-  Nada aqui tem coordenadas de mundo: mexer no traçado leva os hazards juntos.
+  Nada aqui tem coordenadas de mundo: mexer no traçado leva os hazards junto.
+
+  Baús de item e obstáculos são PROCEDURAIS: <HazardsLayout> sorteia fileiras
+  de baús e obstáculos (parados, móveis e caixotes) com uma seed. seed="auto"
+  re-sorteada a cada corrida; o modo time-trial congela a seed via main.ts
+  para o PB/ghost continuar justo. Rampas são fixas — são parte do traçado.
 -->
 <Group name="hazards" pos="0 0 0">
-  <!-- Reta da cidade: barril logo depois da saída de boxes. -->
-  <RaceTrackObstacle
-    name="barrel-downtown"
-    s="420"
-    lateral="-1.5"
-    radius="0.8"
-    kind="barrel"
-  ></RaceTrackObstacle>
-
-  <!-- Curva 1, à entrada do planalto leste. -->
-  <RaceTrackObstacle
-    name="drone-turn1"
-    s="1180"
-    lateral="2"
-    radius="1.0"
-    kind="drone"
-  ></RaceTrackObstacle>
-
-  <!-- Sobre o viaduto: portão no meio do vão, sem escapatória nenhuma. -->
-  <RaceTrackObstacle
-    name="gate-flyover"
-    s="1950"
+  <!-- Reta da cidade, saindo dos boxes. -->
+  <RaceTrackRamp
+    name="ramp-downtown"
+    s="300"
     lateral="0"
-    radius="1.1"
-    kind="gate"
-  ></RaceTrackObstacle>
+    length="14"
+    width="7"
+    height="2.6"
+  ></RaceTrackRamp>
 
-  <!-- Subida da montanha. -->
-  <RaceTrackObstacle
-    name="barrel-climb"
-    s="3450"
-    lateral="1.6"
-    radius="0.8"
-    kind="barrel"
-  ></RaceTrackObstacle>
+  <!-- Retão do oeste, entre o pouso do viaduto e a subida. -->
+  <RaceTrackRamp
+    name="ramp-west"
+    s="2400"
+    lateral="0"
+    length="16"
+    width="7"
+    height="3"
+  ></RaceTrackRamp>
 
-  <!-- Descida rápida para debaixo do viaduto. -->
-  <RaceTrackObstacle
-    name="drone-underpass"
-    s="4350"
-    lateral="-2"
-    radius="1.0"
-    kind="drone"
-  ></RaceTrackObstacle>
+  <!-- Planalto leste, reta longa antes da crista. -->
+  <RaceTrackRamp
+    name="ramp-rim"
+    s="3100"
+    lateral="0"
+    length="14"
+    width="6"
+    height="2.4"
+  ></RaceTrackRamp>
 
-  <RaceTrackPickup s="260" lateral="0" kind="pulse" respawn="4"></RaceTrackPickup>
-  <RaceTrackPickup s="700" lateral="1" kind="pulse" respawn="4"></RaceTrackPickup>
-  <RaceTrackPickup s="1600" lateral="-1" kind="sidewinder" respawn="5"></RaceTrackPickup>
-  <RaceTrackPickup s="2100" lateral="-1" kind="shield" respawn="5"></RaceTrackPickup>
-  <RaceTrackPickup s="2400" lateral="1" kind="shield" respawn="5"></RaceTrackPickup>
-  <RaceTrackPickup s="2800" lateral="0" kind="pulse" respawn="4"></RaceTrackPickup>
-  <RaceTrackPickup s="3100" lateral="0" kind="pulse" respawn="4"></RaceTrackPickup>
-  <RaceTrackPickup s="3900" lateral="1" kind="sidewinder" respawn="5"></RaceTrackPickup>
-  <RaceTrackPickup s="4100" lateral="-1" kind="sidewinder" respawn="5"></RaceTrackPickup>
-  <RaceTrackPickup s="4800" lateral="1" kind="shield" respawn="5"></RaceTrackPickup>
+  <!-- Descida rápida para o sub-viaduto: salto cego, passe com fé. -->
+  <RaceTrackRamp
+    name="ramp-descent"
+    s="4300"
+    lateral="0"
+    length="18"
+    width="7"
+    height="3.2"
+  ></RaceTrackRamp>
+
+  <!-- Layout procedural: 6 fileiras de 3 baús, 4 obstáculos parados,
+       3 móveis (drones que varrem + barris rolando) e 2 caixotes. -->
+  <HazardsLayout
+    seed="auto"
+    rows="6"
+    per-row="3"
+    obstacles="4"
+    moving="3"
+    crates="2"
+  ></HazardsLayout>
 </Group>
