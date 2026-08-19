@@ -133,8 +133,9 @@ describe('carveRoadCorridor — per-node widths', () => {
     });
     // Wide end: 25 m off-centre is still full-weight bed.
     expect(sampleHeightAt(s, -150, 25)).toBeCloseTo(10, 0);
-    // Narrow end: the same offset is untouched natural ground.
-    expect(sampleHeightAt(s, 150, 25)).toBeCloseTo(30, 0);
+    // Narrow end: the adaptive cut wall (20 m cut → ~37 m falloff) has blended
+    // back to natural by 55 m off-centre.
+    expect(sampleHeightAt(s, 150, 55)).toBeCloseTo(30, 0);
   });
 });
 
@@ -227,8 +228,9 @@ describe('carveRoadCorridor — run-off shoulder and berm', () => {
     // Bed edge at 10 m, run-off out to 25 m: all of it flat.
     expect(sampleHeightAt(s, 0, 12)).toBeCloseTo(10, 1);
     expect(sampleHeightAt(s, 0, 24)).toBeCloseTo(10, 1);
-    // Past bed + run-off + falloff the natural relief is back.
-    expect(sampleHeightAt(s, 0, 40)).toBeCloseTo(30, 0);
+    // Past bed + run-off + the adaptive cut wall the natural relief is back
+    // (20 m cut widens the 6 m falloff to ~37 m).
+    expect(sampleHeightAt(s, 0, 70)).toBeCloseTo(30, 0);
   });
 
   it('raises a berm at the outer edge of the run-off', () => {
@@ -358,6 +360,10 @@ describe('carveRoadCorridor — self-crossing passes', () => {
       profileY: profile,
       overlapMode: 'closest-elevation',
       passSeparation: 100,
+      // Fixed falloff: the adaptive widening would legitimately stretch the
+      // deep arm's hillside into the strip between the arms, which is not
+      // what this test pins (the overpass-elevation rule with tight walls).
+      maxCutSlope: 0,
     });
     // Both beds are still carved to their own authored height…
     expect(sampleHeightAt(s, 0, 20)).toBeCloseTo(25, 0);

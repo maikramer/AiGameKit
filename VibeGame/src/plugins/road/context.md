@@ -160,8 +160,9 @@ corte e o CCT afunda enquanto os props ficam no plano congelado do pad.
 | `flatten-berm`                                         | `0`     | Lombo levantado no bordo do run-off (m). Negativo = vala de drenagem.                                                                                                  |
 | `flatten-berm-width`                                   | `2.5`   | Banda lateral em que o berm sobe (m).                                                                                                                                  |
 | `flatten-bank`                                         | `0`     | Inclina o leito com `banks` (curvas peraltadas assentam num plano inclinado, não num degrau).                                                                          |
-| `flatten-overlap-elevation`                            | `0`     | Quando o corredor passa duas vezes pelo mesmo texel (viaduto, braços lado a lado), ganha a passagem cuja cota está mais perto do terreno em vez da mais próxima em XZ. |
+| `flatten-overlap-elevation`                            | `0`     | Quando o corredor passa duas vezes pelo mesmo texel (viaduto, braços lado a lado), ganha a passagem cuja cota está mais perto do terreno em vez da mais próxima em XZ. Prioridade de banda: um leito full-weight ganha sempre ao *feather* de uma passagem distante (o reach global do falloff adaptativo expõe trechos longe do local, cuja cama pode estar mais próxima do terreno natural). |
 | `flatten-viaduct-clearance`                            | `0`     | Acima desta folga (m) entre a cota de projecto e o terreno **natural**, o carve não toca no chão: é vão, não corte. `0` = desligado.                                   |
+| `flatten-max-cut-slope`                                | `1.0`   | Declive máximo do talude de corte (m/m, ~45°). Cortes profundos alargam o `flatten-falloff` (`1.875·depth/slope`) e a curva de blend é quíntica C2 — encosta natural em vez de vala artificial. `0` = falloff fixo autorado (aproxes de ponte usam sempre 0). |
 | `paint`                                                | `1`     | `paint="0"` = só terraplanagem, sem ribbon (o jogo desenha a superfície: pista de corrida, plataforma).                                                                |
 | `opacity`                                              | `1`     | Opacidade global.                                                                                                                                                      |
 | `roughness`/`metalness`                                | `1`/`0` | PBR do material.                                                                                                                                                       |
@@ -175,7 +176,14 @@ corte e o CCT afunda enquanto os props ficam no plano congelado do pad.
 - **Terreno**: pipeline partilhado (`terrain/ground-mutation`): density
   (`applyCorridorDensity` + `densityLeafPad`) → `carveRoadCorridor`
   (`applyHeightBrush` + `nearestOnPolyline`, ou `CorridorIndex` a partir de 24
-  segmentos) → `rebuildTerrainDerivatives`.
+  segmentos) → `rebuildTerrainDerivatives`. O stamp inclui um clamp
+  cell-aware (`guardAt`): texels vizinhos cujo stencil bilinear (±
+  `texelInfluenceReach` = √2·step) alcança a banda full-weight são baixados à
+  superfície de projeto avaliada na borda do stencil — lower-only, dinâmico
+  por texel. Sem isto, o primeiro texel do talude fica a
+  `natural + (projeto − natural)·w` e, num corte de montanha, o terreno
+  reconstruído sobe sobre o leito/escapatória exatamente na borda (a faixa
+  de terra a furar a pista). Viaduct ramps não clampeiam (o fade é intencional).
   Ribbon Y = lattice mesh na **centerline** (mesma que o collider do chunk)
   - seam lift para o nível 1× mais grosso, **cap `ROAD_LOD_CLEARANCE_MAX_M`
     = 0.06 m** + 0.04 de decal. O cap _é_ a flutuação em qualquer encosta
@@ -217,6 +225,11 @@ natural. Onde o leito voa mais alto que a folga:
 
 - **não escreve nada** no sampler — o vale, a floresta, o lago e os prédios por
   baixo ficam como estavam;
+- ao longo dos trechos não-assentes (fade + vão) corre um corte
+  **lower-only** de folga do tabuleiro (`carveBridgeDeckClearance` sobre o
+  perfil autorado): um morro que atravesse lateralmente o footprint do deck é
+  cortado até à cota do leito − `BRIDGE_DECK_UNDERCUT_M`. O vale/água/floresta
+  por baixo já estão abaixo do alvo e ficam intactos;
 - a transição desvanece ao longo de `DEFAULT_VIADUCT_RAMP` (24 m de arco), por
   isso o aterro de acesso continua a existir nas cabeceiras;
 - o **density boost** segue o corredor **inteiro** (incluindo o vão) para a

@@ -832,6 +832,9 @@ function carveRoadBed(
     const viaductClearance = Road.flattenViaductClearance[eid] || 0;
     // Filled by the carve: 1 where the bed is on the ground, 0 under a span.
     let groundMask: number[] | null = null;
+    // Filled by the carve: widest lateral reach actually stamped (deep cuts
+    // widen the falloff — density + ground brushes must cover the whole wall).
+    let effectiveReach = 0;
     // Lake/river carve first. Arteries: skip wet waterline + no-raise floor so
     // blend cannot re-fill bowls. Bridges: only noRaiseBelowY — preserve discs
     // would skip bank tips that must terrace up to the deck lip (south gap).
@@ -868,8 +871,12 @@ function carveRoadBed(
       overlapMode,
       owner,
       viaductClearance,
+      maxCutSlope: isBridge ? 0 : Road.flattenMaxCutSlope[eid] || 0,
       onGroundMask: (m: number[]) => {
         groundMask = m;
+      },
+      onEffectiveReach: (r: number) => {
+        effectiveReach = Math.max(effectiveReach, r);
       },
     };
     // Bridge: landward stubs only when texel fine enough; coarse maps skip
@@ -967,7 +974,10 @@ function carveRoadBed(
       : bedWidth;
     const solidHalf =
       maxBedWidth / 2 + shoulder + (bermHeight !== 0 ? bermWidth : 0);
-    const carveReach = solidHalf + Math.max(falloff, maxBedWidth / 2);
+    const carveReach = Math.max(
+      solidHalf + Math.max(falloff, maxBedWidth / 2),
+      effectiveReach
+    );
     if (fd.density) {
       const levels = Math.max(1, Terrain.levels[fe] || 1);
       const worldSize = Terrain.worldSize[fe] || fd.sampler.worldSize;
@@ -1029,11 +1039,11 @@ function carveRoadBed(
     for (const brushPath of brushPaths) {
       registerRibbon(brushPath, {
         // `avoid-road` = bed + shoulder + berm (asphalt / gravel / lombo).
-        // The talude is plantable: pushing trees past `solidHalf + falloff`
+        // The talude is plantable: pushing trees past the carved wall
         // sat them on the uncut cliff lip (high plateau) while the camera
         // saw the green bank — trunks floating over the grass.
         halfWidth: solidHalf,
-        carveHalfWidth: solidHalf + falloff,
+        carveHalfWidth: Math.max(solidHalf + falloff, effectiveReach),
         aabbHalf: brushReach,
       });
     }

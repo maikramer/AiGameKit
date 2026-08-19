@@ -4,6 +4,7 @@ import {
   minEffectiveWidth,
   revertHeightBrush,
   samplerTexelStep,
+  texelInfluenceReach,
 } from '../terrain/height-brush';
 import {
   corridorAabb,
@@ -192,6 +193,22 @@ export interface RoadCorridorOpts {
    * may undo the previous pass, or stub 2 would erase stub 1.
    */
   appendToOwner?: boolean;
+
+  /**
+   * Max |Δh/Δs| of the cut wall (m per m). Deep cuts widen the falloff beyond
+   * the authored minimum so the wall reads as a natural hillslope instead of a
+   * fixed-width trench: `fallEff = max(falloff, easePeak·depth/maxCutSlope)`.
+   * Default {@link DEFAULT_CORRIDOR_MAX_CUT_SLOPE}; `0` keeps the authored
+   * falloff exact (bridge approaches must not widen into the channel).
+   */
+  maxCutSlope?: number;
+
+  /**
+   * Receives the corridor's effective max lateral reach (solid edge + widest
+   * adaptive falloff) so density stamps and ground brushes cover the widened
+   * walls.
+   */
+  onEffectiveReach?: (reach: number) => void;
 }
 
 /** Cross-slope clamp (~34°) — past this a "bank" is a cliff. */
@@ -342,6 +359,24 @@ const INDEX_MIN_SEGMENTS = 24;
 
 /** Default design grade (~22%). Steeper natural slopes get cut/fill. */
 export const DEFAULT_ROAD_MAX_GRADE = 0.22;
+
+/**
+ * Default cut-wall slope cap for the adaptive falloff (~45°, m per m). A deep
+ * mountain cut over a fixed-width falloff reads as an artificial trench; the
+ * adaptive shoulder widens with the cut depth so the wall keeps a natural
+ * hillslope angle. `flatten-max-cut-slope="0"` restores the fixed falloff.
+ */
+export const DEFAULT_CORRIDOR_MAX_CUT_SLOPE = 1.0;
+
+/** Peak |dy/dt| of the quintic falloff ease (1.875 at t = 0.5). */
+const EASE_PEAK_SLOPE = 1.875;
+
+/**
+ * Quintic smootherstep — curvature-continuous (C2) at both ends, the 1D
+ * Bézier equivalent for the shoulder profile: tangent to the flat run-off at
+ * the berm edge and tangent to the natural relief at the outer edge.
+ */
+const ease5 = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10);
 
 /** Default bed sink below terrace (m) — soft bank, not a trench. */
 export const DEFAULT_ROAD_PLATFORM_SINK = 0.12;
@@ -530,7 +565,6 @@ export function carveRoadCorridor(
   // Everything up to `solidReach` is stamped at full weight; the falloff blends
   // from there back to natural relief.
   const maxSolid = maxHalf + shoulder + bermBand;
-  const reach = maxSolid + fall;
 
   const arcs = pathArcs(path);
   const closed = opts.closed === true && nodeCount > 2;
@@ -541,17 +575,27 @@ export function carveRoadCorridor(
   const authored =
     opts.profileY && opts.profileY.length >= nodeCount ? opts.profileY : null;
 
+  // Natural heights per station, sampled once after the journal revert and
+  // before any stamp (shared by the survey, the viaduct mask and the adaptive
+  // cut-wall falloff).
+  let naturalHeights: number[] | null = null;
+  const naturalAt = (): number[] =>
+    (naturalHeights ??= stationProfile(sampler, path).heights);
+
   let profile: readonly number[];
   if (useFlat) {
     profile = arcs.map(() => flatY!);
   } else if (authored) {
     // Authored design elevation wins outright: no survey, no terrace, so the
-    // stamp is a pure function of the input and repeats exactly.
-    profile = authored;
+    // stamp is a pure function of the input and repeats exactly. Trim to the
+    // node count: per-node lists indexed on the flat path (one value per
+    // coordinate instead of per node) would desync every per-station array.
+    profile =
+      authored.length === nodeCount ? authored : authored.slice(0, nodeCount);
   } else {
     profile = designRoadProfile(
       arcs,
-      stationProfile(sampler, path).heights,
+      naturalAt(),
       opts.window,
       maxGrade,
       ROAD_PROFILE_SMOOTH_PASSES,
@@ -564,6 +608,24 @@ export function carveRoadCorridor(
       : opts.platformSink === undefined
         ? DEFAULT_ROAD_PLATFORM_SINK
         : Math.max(0, opts.platformSink);
+
+  // Adaptive cut-wall falloff: the authored `falloff` is the minimum shoulder;
+  // a deep cut widens the blend so the wall slope stays under `maxCutSlope`
+  // (a natural hillslope instead of a fixed-width trench).
+  const cutSlope =
+    opts.maxCutSlope === undefined
+      ? DEFAULT_CORRIDOR_MAX_CUT_SLOPE
+      : Math.max(0, opts.maxCutSlope);
+  const fallAt =
+    cutSlope > 0
+      ? profile.map((y, i) => {
+          const depth = Math.max(0, naturalAt()[i]! - (y - sink) - bermH);
+          return Math.max(fall, (EASE_PEAK_SLOPE * depth) / cutSlope);
+        })
+      : null;
+  const maxFall = fallAt ? Math.max(...fallAt) : fall;
+  const reach = maxSolid + maxFall;
+  opts.onEffectiveReach?.(reach);
 
   const bankLimit = Math.min(
     Math.abs(opts.maxBank ?? MAX_CORRIDOR_BANK),
@@ -580,7 +642,7 @@ export function carveRoadCorridor(
   const clearance = opts.viaductClearance;
   let maskAt: ((arc: number) => number) | null = null;
   if (clearance !== undefined && clearance > 0 && (authored || useFlat)) {
-    const natural = stationProfile(sampler, path).heights;
+    const natural = naturalAt();
     const design = profile.map((y) => y - sink);
     maskAt = viaductMaskFn(arcs, design, natural, clearance, opts.viaductRamp);
   }
@@ -611,22 +673,75 @@ export function carveRoadCorridor(
   /** Design bed height at a station, before the lateral profile. */
   const bedYAt = (n: NearestOnPolyline) => lerpNode(profile, n) - sink;
 
+  /** Bed half-width at a station (authored `widths` lerped, else constant). */
+  const stationHalf = (n: NearestOnPolyline): number =>
+    halfAt ? lerpNode(halfAt, n) : halfWidth;
+
+  /** Full-weight lateral edge at a station: bed + run-off + berm bands. */
+  const solidEdgeAt = (n: NearestOnPolyline): number =>
+    stationHalf(n) + shoulder + bermBand;
+
+  /**
+   * Design surface at `dist` metres off the axis of station `n`: bed plane,
+   * bank tilt (each edge holds the height its side of the bed reached) and
+   * the berm rise. The falloff blend lives in the weight, never in the
+   * target — the same function serves the primary stamp at the texel centre
+   * and the cell guard one half-diagonal inward.
+   */
+  const lateralTargetAt = (n: NearestOnPolyline, dist: number): number => {
+    const half = stationHalf(n);
+    let targetY = bedYAt(n);
+    if (banks) {
+      const bank = Math.max(
+        -bankLimit,
+        Math.min(bankLimit, lerpNode(banks, n))
+      );
+      if (bank !== 0) {
+        // Same sign as the track surface: `y = centre + right·lateral`, and a
+        // positive bank tilts the right vector up.
+        const lat = Math.sign(n.signed) * Math.min(dist, half);
+        targetY += lat * Math.sin(bank);
+      }
+    }
+    const flatEdge = half + shoulder;
+    if (bermBand > 0 && dist > flatEdge) {
+      const t = Math.min(1, (dist - flatEdge) / bermBand);
+      targetY += bermH * (t * t * (3 - 2 * t));
+    }
+    return targetY;
+  };
+
   const pick = (wx: number, wz: number): NearestOnPolyline | null => {
     if (index && overlap === 'closest-elevation') {
       const passes = nearestCorridorPasses(index, wx, wz, passSep);
       if (passes.length === 0) return null;
       if (passes.length === 1) return passes[0]!;
       const cur = sampleHeightAt(sampler, wx, wz);
-      let best = passes[0]!;
-      let bestErr = Math.abs(bedYAt(best) - cur);
-      for (let i = 1; i < passes.length; i++) {
-        const err = Math.abs(bedYAt(passes[i]!) - cur);
-        if (err < bestErr) {
-          bestErr = err;
-          best = passes[i]!;
+      // Band priority: a pass whose full-weight bed contains the texel always
+      // beats a pass that only reaches it through its falloff feather. The
+      // reach grows with the widest adaptive falloff on the circuit, so a
+      // distant arm whose bed sits near the natural ground can otherwise win
+      // by elevation and stamp its feather ON TOP of the local road bed.
+      let bestSolid: NearestOnPolyline | null = null;
+      let bestSolidErr = 0;
+      let bestFeather: NearestOnPolyline | null = null;
+      let bestFeatherErr = 0;
+      for (const p of passes) {
+        const solid = solidEdgeAt(p);
+        const fallSt = fallAt ? lerpNode(fallAt, p) : fall;
+        if (p.dist >= solid + fallSt) continue;
+        const err = Math.abs(bedYAt(p) - cur);
+        if (p.dist < solid) {
+          if (!bestSolid || err < bestSolidErr) {
+            bestSolid = p;
+            bestSolidErr = err;
+          }
+        } else if (!bestFeather || err < bestFeatherErr) {
+          bestFeather = p;
+          bestFeatherErr = err;
         }
       }
-      return best;
+      return bestSolid ?? bestFeather;
     }
     const n = index
       ? nearestOnCorridor(index, wx, wz)
@@ -634,7 +749,7 @@ export function carveRoadCorridor(
     return n && n.dist < reach ? n : null;
   };
 
-  return applyHeightBrush(
+  const carved = applyHeightBrush(
     sampler,
     {
       minX: aabb.minX,
@@ -662,35 +777,11 @@ export function carveRoadCorridor(
         const ground = maskAt ? maskAt(n.arc) : 1;
         if (ground <= 0) return null;
 
-        // Lateral bands at this station: bed | run-off | berm | falloff.
-        const half = halfAt ? lerpNode(halfAt, n) : halfWidth;
-        const flatEdge = half + shoulder;
-        const solid = flatEdge + bermBand;
-        if (n.dist >= solid + fall) return null;
+        const solid = solidEdgeAt(n);
+        const fallSt = fallAt ? lerpNode(fallAt, n) : fall;
+        if (n.dist >= solid + fallSt) return null;
 
-        let targetY = bedYAt(n);
-
-        if (banks) {
-          // Same sign as the track surface: `y = centre + right·lateral`, and a
-          // positive bank tilts the right vector up.
-          const bank = Math.max(
-            -bankLimit,
-            Math.min(bankLimit, lerpNode(banks, n))
-          );
-          if (bank !== 0) {
-            // Tilt across the bed only, then hold each edge's height across the
-            // run-off: continuing the cross-slope to the outside of a 20 m
-            // apron would lift it metres into the air instead of leaving the
-            // flat gravel a car is supposed to land on.
-            const lat = Math.sign(n.signed) * Math.min(n.dist, half);
-            targetY += lat * Math.sin(bank);
-          }
-        }
-
-        if (bermBand > 0 && n.dist > flatEdge) {
-          const t = Math.min(1, (n.dist - flatEdge) / bermBand);
-          targetY += bermH * (t * t * (3 - 2 * t));
-        }
+        const targetY = lateralTargetAt(n, n.dist);
 
         if (guardY !== undefined && Number.isFinite(guardY)) {
           const cur = sampleHeightAt(sampler, wx, wz);
@@ -699,14 +790,178 @@ export function carveRoadCorridor(
 
         let weight = ground;
         if (n.dist > solid) {
-          const t = (n.dist - solid) / fall;
-          weight *= 1 - t * t * (3 - 2 * t);
+          const t = (n.dist - solid) / fallSt;
+          weight *= 1 - ease5(t);
         }
         return { targetY, weight };
+      },
+
+      /**
+       * Cell-aware wall clamp. A texel centred in the falloff band holds
+       * `natural + (design − natural)·w`; in a deep mountain cut that is
+       * metres above the bed, and its bilinear stencil reaches a full texel
+       * diagonal toward the axis — the reconstructed terrain climbs over the
+       * run-off and bed edge (the dirt ridge hugging a track through a
+       * hillside). Pull such texels down to the design surface at the
+       * stencil's corridor-facing edge, lower-only: embankment fills, flats
+       * and below-water texels never move.
+       */
+      guardAt(wx, wz) {
+        if (opts.skipAt?.(wx, wz)) return null;
+        if (discs) {
+          for (const d of discs) {
+            if (Math.hypot(wx - d.x, wz - d.z) <= d.r) return null;
+          }
+        }
+        if (ribbons) {
+          for (const rib of ribbons) {
+            const nRib = nearestOnPolyline(rib.path, wx, wz);
+            if (nRib && nRib.dist <= rib.half) return null;
+          }
+        }
+
+        const n = pick(wx, wz);
+        if (!n) return null;
+        // Viaduct ramps fade the carve on purpose — a hard clamp there would
+        // fight the fade. Only fully grounded stations guarantee the bed.
+        const ground = maskAt ? maskAt(n.arc) : 1;
+        if (ground < 1) return null;
+
+        const solid = solidEdgeAt(n);
+        // Full-weight centres are exact already; clamping them would shave
+        // banked beds (the tilt is part of the design surface).
+        if (n.dist < solid) return null;
+
+        const dNear = Math.max(0, n.dist - texelInfluenceReach(sampler));
+        if (dNear >= solid) return null;
+        return { targetY: lateralTargetAt(n, dNear), weight: 1 };
       },
     },
     opts.owner ? { owner: opts.owner } : undefined
   );
+
+  let any = carved;
+  if (maskAt) {
+    if (
+      carveViaductDeckClearance(sampler, {
+        path,
+        arcs,
+        profile,
+        sink,
+        width: maxHalf * 2,
+        falloff: fall,
+        maskAt,
+        owner: opts.owner,
+      })
+    ) {
+      any = true;
+    }
+  }
+
+  return any;
+}
+
+/**
+ * Deck-height interpolation along one flying run: `u` ∈ [0,1] of the run's
+ * own arc → linear interpolation between the run nodes' design heights.
+ * (`carveBridgeDeckClearance` samples `deckYAt` per texel, so the lookup is a
+ * short advancing scan, not a global binary search.)
+ */
+function runDeckYAt(
+  runArcs: readonly number[],
+  runY: readonly number[]
+): (u: number) => number {
+  const total = runArcs[runArcs.length - 1] ?? 0;
+  return (u: number): number => {
+    const a = Math.min(1, Math.max(0, u)) * total;
+    let i = 1;
+    while (i < runArcs.length - 1 && runArcs[i]! < a) i++;
+    const span = Math.max(runArcs[i]! - runArcs[i - 1]!, 1e-6);
+    const t = Math.min(1, Math.max(0, (a - runArcs[i - 1]!) / span));
+    return runY[i - 1]! + (runY[i]! - runY[i - 1]!) * t;
+  };
+}
+
+/**
+ * Viaduct deck clearance for `<Road flatten-viaduct-clearance>` corridors.
+ *
+ * The bed carve deliberately skips stations that fly above the natural ground
+ * (the valley, forest and lake under the span stay untouched) — but nothing
+ * in that contract keeps **lateral** terrain out of the deck: on a span
+ * crossing a hillside, the mountain beside the centerline pokes through the
+ * deck slab and the ribbon edges. Same for the fade ramps at each abutment,
+ * where the partial carve weight can leave cut-side terrain above the bed.
+ *
+ * This runs a lower-only {@link carveBridgeDeckClearance} along every run of
+ * stations that is not fully grounded (fade + flying): terrain above the
+ * design profile (minus the deck undercut) is cut inside the deck footprint,
+ * everything already below it — the valley floor, the water, the embankment
+ * fills — stays exactly as authored. Guard clamp included (same stencil
+ * contract as the corridor stamp); writes append to the owner journal.
+ */
+function carveViaductDeckClearance(
+  sampler: HeightSampler,
+  opts: {
+    path: number[];
+    arcs: readonly number[];
+    profile: readonly number[];
+    sink: number;
+    width: number;
+    falloff: number;
+    maskAt: (arc: number) => number;
+    owner?: string;
+  }
+): boolean {
+  const { path, arcs, profile, sink, maskAt } = opts;
+  const nodeCount = path.length / 2;
+
+  let runPath: number[] = [];
+  let runArcs: number[] = [];
+  let runY: number[] = [];
+  let any = false;
+
+  const flushRun = (): void => {
+    if (runPath.length < 4) {
+      runPath = [];
+      runArcs = [];
+      runY = [];
+      return;
+    }
+    if (
+      carveBridgeDeckClearance(sampler, {
+        path: runPath,
+        width: opts.width,
+        falloff: opts.falloff,
+        deckYAt: runDeckYAt(runArcs, runY),
+        owner: opts.owner,
+      })
+    ) {
+      any = true;
+    }
+    runPath = [];
+    runArcs = [];
+    runY = [];
+  };
+
+  for (let i = 0; i < nodeCount; i++) {
+    if (maskAt(arcs[i]!) >= 1) {
+      flushRun();
+      continue;
+    }
+    const x = path[i * 2]!;
+    const z = path[i * 2 + 1]!;
+    if (runArcs.length > 0) {
+      const px = runPath[runPath.length - 2]!;
+      const pz = runPath[runPath.length - 1]!;
+      runArcs.push(runArcs[runArcs.length - 1]! + Math.hypot(x - px, z - pz));
+    } else {
+      runArcs.push(0);
+    }
+    runPath.push(x, z);
+    runY.push(profile[i]! - sink);
+  }
+  flushRun();
+  return any;
 }
 
 /** Terrain must stay at least this far under the deck walk surface (m). */
@@ -788,6 +1043,19 @@ export function carveBridgeDeckClearance(
           weight = 1 - t * t * (3 - 2 * t);
         }
         return { targetY, weight };
+      },
+      // Cell-aware: a bank texel left by the feathered weight can still poke
+      // through the fascia/deck edge — clamp it to the deck underside at the
+      // stencil's corridor-facing edge (lower-only, like the primary).
+      guardAt(wx, wz) {
+        const n = nearestOnPolyline(path, wx, wz);
+        if (!n || n.dist >= reach) return null;
+        if (n.dist < halfWidth) return null;
+        const dNear = Math.max(0, n.dist - texelInfluenceReach(sampler));
+        if (dNear >= halfWidth) return null;
+        const segLen = arcs[n.seg + 1]! - arcs[n.seg]!;
+        const u = (arcs[n.seg]! + segLen * n.t) / total;
+        return { targetY: opts.deckYAt(u) - undercut, weight: 1 };
       },
     },
     opts.owner ? { owner: opts.owner } : undefined
@@ -1053,6 +1321,10 @@ export function carveRoadApproaches(
         falloff: tuned.falloff,
         window: tuned.window,
         maxGrade: tuned.maxGrade,
+        // Fixed falloff on bridge seats: the adaptive widening exists for deep
+        // cuts, and the deepest "cut" near a bridge is the river channel — a
+        // widened stub paints a plug over it.
+        maxCutSlope: 0,
         platformSink:
           flatY !== undefined && Number.isFinite(flatY)
             ? 0

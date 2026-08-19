@@ -240,6 +240,8 @@ export const RoadPlugin: Plugin = {
         flattenOverlapElevation: 0,
         // Sem viaduto: qualquer cota autorada é escavada no terreno.
         flattenViaductClearance: 0,
+        // Talude de corte: alarga o falloff em cortes profundos (~45° max).
+        flattenMaxCutSlope: 1.0,
         bridge: 0,
         deckY: 0,
         deckY0: 0,

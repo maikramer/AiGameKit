@@ -1,4 +1,4 @@
-import { MAX_ENTITIES } from '../../core/ecs/constants';
+import { defineComponent, F32, U8 } from '../../core/ecs/component-storage';
 import type { State } from '../../core';
 
 /**
@@ -9,80 +9,86 @@ import type { State } from '../../core';
  * Decal puro: sem colisor. `flatten` = preparação do leito (corte+aterro
  * mínimo) antes do ribbon assentar no terreno já planado — ordem real.
  */
-export const Road = {
+export const Road = defineComponent({
   /** Largura total da faixa / leito (m). */
-  width: new Float32Array(MAX_ENTITIES),
+  width: F32,
   /** Metros de mundo por tile de textura (u e v). */
-  textureScale: new Float32Array(MAX_ENTITIES),
+  textureScale: F32,
   /** Fade lateral de alpha, borda→núcleo (m). */
-  edgeFeather: new Float32Array(MAX_ENTITIES),
+  edgeFeather: F32,
   /** Amplitude do ruído que corrói a borda para dentro (m). */
-  edgeNoise: new Float32Array(MAX_ENTITIES),
+  edgeNoise: F32,
   /** Fade longitudinal no início do path (m; 0 = ponta sólida/enterrada). */
-  endFeatherStart: new Float32Array(MAX_ENTITIES),
+  endFeatherStart: F32,
   /** Fade longitudinal no fim do path (m; 0 = ponta sólida). */
-  endFeatherEnd: new Float32Array(MAX_ENTITIES),
+  endFeatherEnd: F32,
   /** Elevação da faixa acima do terreno (m). */
-  yOffset: new Float32Array(MAX_ENTITIES),
+  yOffset: F32,
   /** Espaçamento entre estações do ribbon (m; menor = curvas mais suaves). */
-  stationSpacing: new Float32Array(MAX_ENTITIES),
+  stationSpacing: F32,
   /** 1 = prepara o leito no sampler (corte+aterro) antes de pavimentar. */
-  flatten: new Uint8Array(MAX_ENTITIES),
+  flatten: U8,
   /**
    * 1 = pinta o ribbon. `paint="0"` = usar `<Road>` só como terraplanagem
    * (o jogo desenha a superfície: pista de corrida, ponte, plataforma).
    */
-  paint: new Uint8Array(MAX_ENTITIES),
+  paint: U8,
   /** Ombro: blend lateral leito→relevo natural (m). Curto = carve mínimo. */
-  flattenFalloff: new Float32Array(MAX_ENTITIES),
+  flattenFalloff: F32,
   /** Suavização leve do perfil longitudinal (m) — não é corte de autoestrada. */
-  flattenWindow: new Float32Array(MAX_ENTITIES),
+  flattenWindow: F32,
   /** Max |Δh/Δs| do perfil de projecto (0 = sem limite de pendente). */
-  flattenMaxGrade: new Float32Array(MAX_ENTITIES),
+  flattenMaxGrade: F32,
   /** 1 = path é um circuito fechado (perfil suaviza através da junta). */
-  flattenClosed: new Uint8Array(MAX_ENTITIES),
+  flattenClosed: U8,
   /** Run-off plano de cada lado do leito (m) antes do ombro. */
-  flattenShoulder: new Float32Array(MAX_ENTITIES),
+  flattenShoulder: F32,
   /** Altura do berm no bordo do run-off (m; negativo = vala). */
-  flattenBerm: new Float32Array(MAX_ENTITIES),
+  flattenBerm: F32,
   /** Banda lateral em que o berm sobe (m). */
-  flattenBermWidth: new Float32Array(MAX_ENTITIES),
+  flattenBermWidth: F32,
   /** 1 = leito inclina com {@link RoadData.banks} (cross-slope). */
-  flattenBank: new Uint8Array(MAX_ENTITIES),
+  flattenBank: U8,
   /**
    * Viaduto: acima desta folga (m) entre a cota de projecto e o terreno
    * natural, o carve NÃO toca no chão — o vale/floresta/prédios por baixo
    * ficam intactos. `0` = desligado (estrada sempre assente).
    */
-  flattenViaductClearance: new Float32Array(MAX_ENTITIES),
+  flattenViaductClearance: F32,
+  /**
+   * Declive máximo (m/m) do talude de corte: cortes profundos alargam o
+   * `flatten-falloff` para o talude ler como encosta natural em vez de vala
+   * artificial. `0` = falloff fixo autorado (aproxes de ponta usam sempre 0).
+   */
+  flattenMaxCutSlope: F32,
   /**
    * 1 = quando o corredor passa duas vezes pelo mesmo texel, ganha a passagem
    * cuja cota de projecto está mais perto do terreno (viadutos / braços de
    * circuito lado a lado); 0 = ganha a estação mais próxima.
    */
-  flattenOverlapElevation: new Uint8Array(MAX_ENTITIES),
+  flattenOverlapElevation: U8,
   /** Iterações de suavização Chaikin do path (0 = cantos vivos). */
-  smoothing: new Uint8Array(MAX_ENTITIES),
+  smoothing: U8,
   /** Opacidade global 0..1. */
-  opacity: new Float32Array(MAX_ENTITIES),
+  opacity: F32,
   /** Roughness do material. */
-  roughness: new Float32Array(MAX_ENTITIES),
+  roughness: F32,
   /** Metalness do material. */
-  metalness: new Float32Array(MAX_ENTITIES),
+  metalness: F32,
   /**
    * 1 = Segment bridge: ribbon at {@link Road.deckY}, approach-only flatten,
    * GLB deck spawn (see RoadData.bridgeUrl).
    */
-  bridge: new Uint8Array(MAX_ENTITIES),
+  bridge: U8,
   /** Mean bank Y (spawn / fallback); ribbon may lerp {@link Road.deckY0}→{@link Road.deckY1}. */
-  deckY: new Float32Array(MAX_ENTITIES),
+  deckY: F32,
   /** Bank height at path start (world Y), resolved at apply. */
-  deckY0: new Float32Array(MAX_ENTITIES),
+  deckY0: F32,
   /** Bank height at path end (world Y), resolved at apply. */
-  deckY1: new Float32Array(MAX_ENTITIES),
+  deckY1: F32,
   /** 1 quando o ribbon foi construído e adicionado à cena. */
-  applied: new Uint8Array(MAX_ENTITIES),
-} as const;
+  applied: U8,
+});
 
 /** Dados não-SOA da estrada (bitecs não guarda arrays/strings). */
 export interface RoadData {
