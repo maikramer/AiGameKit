@@ -1,0 +1,29 @@
+# Grupo props — props genéricos do Crystal Vale partilhados entre jogos.
+# Começa com rock_mossy (beira de pista do racer + cenário RPG). Props de identidade
+# própria de cada jogo ficam no manifest do jogo (ex.: props-rpg.yaml).
+# Canónico em examples/shared-assets/ (manifests + binários em public/assets).
+# Symlink em cada sample-gameassets/manifests/.
+# Regenerar: cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/props
+output_dir: public/assets
+meshes_subdir: meshes/props
+images_subdir: images/props
+assets:
+  - id: rock_mossy
+    idea:
+      round cartoon mossy boulder with firm angular rocky silhouette, mostly bare
+      grey stone visible, bright green moss patches and small mushrooms growing on top,
+      fantasy terrain rock
+    kind: prop
+    category: terrain
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: cube
+      size_m:
+        - 1.4
+        - 1.0
+        - 1.2

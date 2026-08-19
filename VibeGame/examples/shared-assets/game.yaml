@@ -2,7 +2,7 @@ title: Crystal Vale shared packs
 genre: cartoon fantasy
 tone: bright cheerful adventure, vibrant colors, playful cartoon world, Crystal Vale
 style_preset: painterly
-output_dir: ../../public/assets
+output_dir: public/assets
 path_layout: split
 images_subdir: images
 meshes_subdir: meshes
@@ -10,10 +10,10 @@ image_ext: png
 seed_base: 7777
 generation: medium
 
-# Packs canónicos (forest / village / infra). O happy path de regen é
-# `cd <exemplo>/sample-gameassets` — os YAML em manifests/ são symlinks para
-# este directório, e `output_dir: ../../public/assets` resolve para o
-# `public/assets` **desse** exemplo. Não correr o batch a partir daqui.
+# Packs canónicos (forest / village / infra / terrain / props). O happy path de
+# regen é `cd examples/shared-assets` — o batch escreve em public/assets **daqui**
+# (fonte canónica dos binários) e `./sync.sh` distribui para os exemplos. Os jogos
+# nunca regeneram packs partilhados a partir dos symlinks.
 master_validate: true
 master_bake_normals: false
 negative_keywords:

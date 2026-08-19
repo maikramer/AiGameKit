@@ -1,7 +1,8 @@
 # Grupo village — edifícios e props da Cidade Discordia / aldeia (Crystal Vale, partilhado).
-# Canónico em examples/shared-assets/. Symlink em cada sample-gameassets/manifests/.
-# Regenerar: cd <exemplo>/sample-gameassets && gameassets resume --profile game.yaml --manifest manifests/village
-output_dir: ../../public/assets
+# Canónico em examples/shared-assets/ (manifests + binários em public/assets).
+# Symlink em cada sample-gameassets/manifests/.
+# Regenerar: cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/village
+output_dir: public/assets
 meshes_subdir: meshes/village
 images_subdir: images/village
 assets:

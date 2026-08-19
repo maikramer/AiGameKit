@@ -1,7 +1,8 @@
 # Grupo forest — vegetação e construções da Floresta (Crystal Vale, partilhado).
-# Canónico em examples/shared-assets/. Symlink em cada sample-gameassets/manifests/.
-# Regenerar: cd <exemplo>/sample-gameassets && gameassets resume --profile game.yaml --manifest manifests/forest
-output_dir: ../../public/assets
+# Canónico em examples/shared-assets/ (manifests + binários em public/assets).
+# Symlink em cada sample-gameassets/manifests/.
+# Regenerar: cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/forest
+output_dir: public/assets
 meshes_subdir: meshes/forest
 images_subdir: images/forest
 assets:
