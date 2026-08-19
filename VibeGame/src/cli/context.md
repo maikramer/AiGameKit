@@ -54,7 +54,7 @@ From the **VibeGame package root** with devDependencies installed (`bun install`
 Examples:
 
 - `vibegame pw test`
-- `vibegame pw test tests/playwright/simple-rpg-smoke.spec.ts`
+- `vibegame pw test playwright/simple-rpg-smoke.spec.ts`
 - `vibegame pw test --ui` / `vibegame pw test --debug`
 - `vibegame pw install chromium`
 
