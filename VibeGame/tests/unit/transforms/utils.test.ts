@@ -68,9 +68,13 @@ describe('Transform Utilities', () => {
     });
 
     it('should convert Y axis quaternion back to euler', () => {
+      // (0, 0.7071, 0, 0.7071) is a 90° yaw written to four decimals — it is
+      // 0.05% short of unit length. The XYZ extraction runs through `asin`,
+      // which turns that into 89.645° unless the quaternion is normalized
+      // first; this expectation used to encode the artifact.
       const euler = quaternionToEuler(0, 0.7071, 0, 0.7071);
       expect(euler.x).toBeCloseTo(0, 5);
-      expect(euler.y).toBeCloseTo(89.64513, 3);
+      expect(euler.y).toBeCloseTo(90, 3);
       expect(euler.z).toBeCloseTo(0, 5);
     });
 
@@ -101,7 +105,8 @@ describe('Transform Utilities', () => {
       syncEulerFromQuaternion(Transform, entity);
 
       expect(Transform.eulerX[entity]).toBeCloseTo(0, 5);
-      expect(Transform.eulerY[entity]).toBeCloseTo(89.644, 2);
+      // A rounded-to-4-decimals quaternion still means 90° (see above).
+      expect(Transform.eulerY[entity]).toBeCloseTo(90, 2);
       expect(Transform.eulerZ[entity]).toBeCloseTo(0, 5);
     });
 

@@ -86,7 +86,16 @@ export function eulerToQuaternion(
   return { x: _quatOut.x, y: _quatOut.y, z: _quatOut.z, w: _quatOut.w };
 }
 
-/** Write quaternion→euler (degrees) into `out` (no allocation). Returns `out`. */
+/**
+ * Write quaternion→euler (degrees) into `out` (no allocation). Returns `out`.
+ *
+ * The quaternion is re-normalized first. Callers pass values that have been
+ * through `Float32Array` storage and a matrix compose/decompose round trip, so
+ * they arrive slightly off unit length — and the XYZ extraction runs through
+ * `asin`, whose derivative blows up near ±90°. A quaternion 3e-9 short of unit
+ * came back as 89.985° instead of 90; normalizing costs one sqrt and keeps a
+ * right angle a right angle.
+ */
 export function quaternionToEulerInto(
   x: number,
   y: number,
@@ -95,6 +104,8 @@ export function quaternionToEulerInto(
   out: { x: number; y: number; z: number }
 ): { x: number; y: number; z: number } {
   _quat.set(x, y, z, w);
+  const lenSq = x * x + y * y + z * z + w * w;
+  if (lenSq > 0 && Math.abs(lenSq - 1) > 1e-12) _quat.normalize();
   _euler.setFromQuaternion(_quat, 'XYZ');
   out.x = _euler.x * RAD2DEG;
   out.y = _euler.y * RAD2DEG;

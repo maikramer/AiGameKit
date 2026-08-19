@@ -6,3 +6,4 @@ export {
   eulerToQuaternionInto,
   quaternionToEulerInto,
 } from './utils';
+export { fbm2, valueNoise2 } from './noise';

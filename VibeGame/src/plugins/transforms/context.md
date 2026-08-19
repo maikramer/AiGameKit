@@ -176,3 +176,21 @@ GAME.Transform.posY[entity] = startY + (endY - startY) * t;
 GAME.Transform.posZ[entity] = startZ + (endZ - startZ) * t;
 ```
 <!-- /LLM:EXAMPLES -->
+
+## Euler vs quaternião — quem escreveu por último ganha
+
+`Transform` guarda as duas representações e há escritores dos dois lados: o XML
+e o gameplay escrevem `eulerY`, a física e a animação escrevem `rotX..rotW`.
+Comparar uma com a outra **não** diz quem escreveu (uma divergência é igual nos
+dois sentidos), por isso `resolveRotationSource` guarda o par resolvido por
+entidade (`recordRotationShadow`) e o lado que mudou desde então é o autor.
+
+- Sem histórico (ou os dois lados mudaram no mesmo frame — que é o aspeto de um
+  id de entidade reciclado): quaternião identidade + Euler não-zero = alguém a
+  autorar ângulos; caso contrário ganha o quaternião.
+- O shadow é **por `State`**: os arrays de componentes são globais, e um `State`
+  novo reutiliza o id 1 com outra pose — sem o carimbo do dono, a segunda cena
+  (ou o teste seguinte no ficheiro) perdia as rotações autoradas.
+
+Regressão que isto fecha: `<Group rotation="0 90 0">` não rodava e os filhos não
+orbitavam (22 testes de hierarquia).
