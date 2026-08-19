@@ -198,12 +198,13 @@ MESHOPT_SIMPLIFY_SLACK = 1.10
 # costuras originais supera o ganho de manter o atlas — compensa refazer o UV
 # (xatlas empacota com muito menos costura).
 #
-# Medido **no intermédio**, antes do re-export. O `smooth_shade_scene` a 60graus
-# transforma creases em arestas duras e o exporter parte loops: malhas sãs
-# inflacionam 2-3% (V/Tri ~1.0), as cheias de costura 11-15% (spear 1.451 -> 1.662,
-# swamp_shack 1.533 -> 1.702). 1.35 * 1.15 = 1.55, dentro do tecto 1.6 das regras
-# LOD do GameAssets.
-MESHOPT_MAX_V_PER_TRI = 1.35
+# 1.39 (antes 1.35): o rebake por closest-point é sempre com perdas — em
+# assets de pormenor fino (market_stall) media 38-50% da superfície com cor
+# errada (aigamekit-lab debug texture-check), enquanto o atlas preservado é
+# exacto por construção. Fidelidade > bytes: 1.39 ainda cumpre o invariante
+# cap*1.15 (pior inflação observada no re-export) < 1.6 das regras LOD do
+# GameAssets, e aceita meshes tipo market_stall (V/Tri 1.36 no meshopt).
+MESHOPT_MAX_V_PER_TRI = 1.39
 # Passes de refinamento do rácio (o simplificador subestima quando há costuras).
 _MESHOPT_SIMPLIFY_PASSES = 3
 

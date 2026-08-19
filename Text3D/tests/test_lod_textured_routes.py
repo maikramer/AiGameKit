@@ -74,7 +74,7 @@ class TestMeshoptPreserveAtlas:
             "meshopt_simplify_glb",
             lambda src, dst, *, target_faces, weld=True: (Path(dst).write_bytes(b"x"), (True, target_faces, ""))[1],
         )
-        monkeypatch.setattr(gltf_finish, "glb_v_per_tri", lambda p: 1.45)
+        monkeypatch.setattr(gltf_finish, "glb_v_per_tri", lambda p: 1.6)
         out, floored = mrt._meshopt_preserve_atlas(glb, 1440, tmp_path)
 
         assert out is None
@@ -188,3 +188,118 @@ class TestSessionWiring:
         src = inspect.getsource(mrt.remesh_textured_glb)
         assert "mkdtemp" in src
         assert "rmtree" in src
+
+
+class TestClosestPointNumerics:
+    """Regressão do epsilon relativo + gating por normal no closest-point.
+
+    O limiar absoluto ``|denom| < 1e-6`` colapsava triângulos milimétricos
+    (denom ~1e-10 em unidades métricas) para denominador 1.0 — distâncias de
+    candidatas garbage e o rebake escolhia faces a centímetros com UVs de
+    outra região do atlas: a «textura despedaçada» dos LODs village
+    (round-trip da fonte consigo própria media ~15% de amostras erradas;
+    após o fix, 0.3%).
+    """
+
+    def test_millimeter_triangle_closest_point_is_exact(self) -> None:
+        import numpy as np
+
+        from text3d.utils.mesh_remesh_textured import _closest_point_batch
+
+        # dois triângulos de ~5 mm afastados 2 cm — o query está NO primeiro
+        verts = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.005, 0.0, 0.0],
+                [0.0, 0.005, 0.0],
+                [0.0, 0.02, 0.0],
+                [0.005, 0.02, 0.0],
+                [0.0, 0.02, 0.005],
+            ],
+            dtype=np.float64,
+        )
+        faces = np.array([[0, 1, 2], [3, 4, 5]], dtype=np.int32)
+        q = np.array([[0.001, 0.001, 0.0]], dtype=np.float64)
+
+        closest, face_ids = _closest_point_batch(verts, faces, q)
+        assert face_ids[0] == 0
+        assert np.allclose(closest[0], q[0], atol=1e-9)
+
+    def test_degenerate_triangle_does_not_nan(self) -> None:
+        import numpy as np
+
+        from text3d.utils.mesh_remesh_textured import _closest_point_batch
+
+        # segundo triângulo colinear (área zero) — não pode produzir NaN/inf
+        verts = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [2.0, 2.0, 0.0],
+                [3.0, 3.0, 0.0],
+                [4.0, 4.0, 0.0],
+            ],
+            dtype=np.float64,
+        )
+        faces = np.array([[0, 1, 2], [3, 4, 5]], dtype=np.int32)
+        q = np.array([[0.1, 0.1, 0.0]], dtype=np.float64)
+
+        closest, face_ids = _closest_point_batch(verts, faces, q)
+        assert np.all(np.isfinite(closest))
+        assert face_ids[0] == 0
+
+    def test_normal_gate_blocks_opposite_side_of_thin_gap(self) -> None:
+        import numpy as np
+
+        from text3d.utils.mesh_remesh_textured import _closest_point_batch
+
+        # duas placas paralelas afastadas 1 mm; o query está 0.4 mm ACIMA da
+        # placa de cima (mais perto da de baixo? não — mais perto da de cima).
+        # Para forçar o lado errado: query mais perto da placa de BAixo mas
+        # com a normal da de CIMA (drift de decimação atravessa o gap).
+        top = np.array([[0, 0, 0.001], [1, 0, 0.001], [0, 1, 0.001]], dtype=np.float64)
+        bottom = np.array([[0, 0, 0.0], [1, 0, 0.0], [0, 1, 0.0]], dtype=np.float64)
+        verts = np.vstack([top, bottom])
+        # baixo com winding invertido (casca dupla: face virada para -Z)
+        faces = np.array([[0, 1, 2], [5, 4, 3]], dtype=np.int32)
+        q = np.array([[0.2, 0.2, 0.0004]])  # mais perto da placa de baixo (0.0004 < 0.0006)
+        up = np.array([[0.0, 0.0, 1.0]])
+
+        _, face_plain = _closest_point_batch(verts, faces, q)
+        assert face_plain[0] == 1  # sem normal: escolhe a placa de baixo (mais perto)
+
+        _, face_gated = _closest_point_batch(verts, faces, q, query_normals=up)
+        assert face_gated[0] == 0  # com normal: obrigado a ficar na placa de cima
+
+    def test_normal_gate_falls_back_when_no_compatible_candidate(self) -> None:
+        import numpy as np
+
+        from text3d.utils.mesh_remesh_textured import _closest_point_batch
+
+        # só existe a placa de baixo; normal aponta para longe — fallback ao
+        # closest-point cru em vez de devolver lixo
+        verts = np.array([[0, 0, 0.0], [1, 0, 0.0], [0, 1, 0.0]], dtype=np.float64)
+        faces = np.array([[0, 1, 2]], dtype=np.int32)
+        q = np.array([[0.2, 0.2, 0.5]])
+        up = np.array([[0.0, 0.0, 1.0]])
+
+        closest, face_ids = _closest_point_batch(verts, faces, q, query_normals=up)
+        assert face_ids[0] == 0
+        assert np.allclose(closest[0], [0.2, 0.2, 0.0])
+
+    def test_phase4_renormalizes_clipped_bary(self) -> None:
+        """Clip sem renormalizar extrapola a UV para fora do triângulo.
+
+        Quando o closest-point cai fora da face escolhida (~27% das queries em
+        meshes decimadas), os pesos após clip somam >1 e a UV amostrava texels
+        não pintados do atlas — a «textura despedaçada» dos LODs rebakeados
+        (sintético world-continuous: 44.6% → 5.2% de amostras erradas).
+        """
+        import inspect
+
+        from text3d.utils import mesh_remesh_textured as mrt
+
+        src = inspect.getsource(mrt._transfer_texture_direct)
+        assert "s_bary_sum" in src
+        assert "s_bary_u /=" in src

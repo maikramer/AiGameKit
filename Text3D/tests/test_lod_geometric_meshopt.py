@@ -119,7 +119,7 @@ class TestGeometricLadderRouting:
 
         finalize_calls: list[tuple[str, int | None]] = []
 
-        def fake_finalize(s, d, *, texture_size, meshfix):
+        def fake_finalize(s, d, *, texture_size, meshfix, keep_rig=True):
             d = Path(d)
             d.parent.mkdir(parents=True, exist_ok=True)
             d.write_bytes(b"final")

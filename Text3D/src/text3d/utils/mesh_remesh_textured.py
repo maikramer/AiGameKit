@@ -337,15 +337,43 @@ def _closest_point_kdtree(
     source_verts: np.ndarray,
     source_faces: np.ndarray,
     query_points: np.ndarray,
-    k_candidates: int = 32,
+    query_normals: np.ndarray | None = None,
+    k_candidates: int = 64,
     batch_size: int = 50_000,
+    normal_min_dot: float = 0.25,
+    normal_penalty_m: float = 0.004,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """CPU closest-point using scipy KDTree on face centroids + vectorised fine search."""
+    """CPU closest-point using scipy KDTree on face centroids + vectorised fine search.
+
+    Com ``query_normals`` (normal da face de origem do ponto, ex.: face do mesh
+    decimado que o rasterizador está a pintar), a escolha passa a ponderar
+    distância **e** alinhamento de normal: score = dist² + (1-dot)·penalty_m².
+    Um gate duro (dot < ``normal_min_dot`` → inf) só separava cascas opostas;
+    em zonas côncavas finas (toldo↔balcão, ~2-5 mm, normais compatíveis) o
+    closest-point puro pintava o pixel com a UV da superfície vizinha — a
+    «textura despedaçada» dos LODs rebakeados (round-trip da fonte consigo
+    própria: ~15% de amostras com cor errada; perturbação de 2 mm na normal
+    trocava a face em 100% dos saltos).
+    """
     from scipy.spatial import cKDTree
 
     sv = np.ascontiguousarray(source_verts, dtype=np.float32)
     centroids = sv[source_faces].mean(axis=1)
     tree = cKDTree(centroids)
+
+    use_normals = query_normals is not None
+    if use_normals:
+        fn = np.cross(
+            sv[source_faces[:, 1]] - sv[source_faces[:, 0]],
+            sv[source_faces[:, 2]] - sv[source_faces[:, 0]],
+        )
+        fn_norm = np.linalg.norm(fn, axis=1, keepdims=True)
+        fn = np.divide(fn, fn_norm, out=np.zeros_like(fn), where=fn_norm > 1e-12)
+        qn = np.ascontiguousarray(query_normals, dtype=np.float32)
+        qn_len = np.linalg.norm(qn, axis=1)
+        # queries com normal degenerada: sem gating nessa linha (dot 0 mascara tudo)
+        qn_valid = qn_len > 1e-9
+        qn = np.divide(qn, qn_len[:, np.newaxis], out=np.zeros_like(qn), where=qn_valid[:, np.newaxis])
 
     n_queries = len(query_points)
     all_closest: list[np.ndarray] = []
@@ -359,6 +387,10 @@ def _closest_point_kdtree(
         _, topk_idx = tree.query(chunk, k=k_candidates)
         if topk_idx.ndim == 1:
             topk_idx = topk_idx[:, np.newaxis]
+        # k > n_faces: o cKDTree preenche com o sentinel n (fora de bounds) —
+        # clipar e mascarar para não indexar lixo
+        cand_valid = topk_idx < len(centroids)
+        topk_idx = np.clip(topk_idx, 0, len(centroids) - 1)
 
         cand_tris = sv[source_faces[topk_idx]]
         q = chunk[:, np.newaxis, :]
@@ -375,7 +407,14 @@ def _closest_point_kdtree(
         d20 = np.einsum("...i,...i", AP, AB)
         d21 = np.einsum("...i,...i", AP, AC)
         denom = d00 * d11 - d01 * d01
-        denom = np.where(np.abs(denom) < 1e-6, np.float32(1.0), denom)
+        # Epsilon RELATIVO (não absoluto): triângulos milimétricos em metros
+        # têm |denom| ~1e-10; um limiar absoluto 1e-6 colapsava-os para 1.0 e
+        # as distâncias de candidatas saíam garbage — o closest-point escolhia
+        # faces a centímetros com UVs de outra região do atlas («textura
+        # despedaçada» nos LODs rebakeados; round-trip da fonte consigo própria
+        # media ~15% de amostras com cor errada).
+        denom_scale = np.maximum(d00 * d11, np.float32(1e-30))
+        denom = np.where(np.abs(denom) < np.float32(1e-9) * denom_scale, np.float32(1.0), denom)
         bv = (d11 * d20 - d01 * d21) / denom
         bw = (d00 * d21 - d01 * d20) / denom
         bu = np.clip(np.float32(1.0) - bv - bw, np.float32(0.0), np.float32(1.0))
@@ -387,7 +426,23 @@ def _closest_point_kdtree(
         closest = bu[..., np.newaxis] * A + bv[..., np.newaxis] * B_v + bw[..., np.newaxis] * C_v
         diff = q - closest
         dist_sq = np.einsum("...i,...i", diff, diff)
-        best_local = dist_sq.argmin(axis=1)
+        dist_sq = np.where(cand_valid, dist_sq, np.float32(np.inf))
+        if use_normals:
+            dots = np.einsum("ijk,ik->ij", fn[topk_idx], qn[start:end])
+            penalty = np.square(np.float32(normal_penalty_m))
+            score = dist_sq + (1.0 - dots) * penalty
+            # gate duro só para normais opostas (casca do lado de lá) e para
+            # queries de normal degenerada
+            incompatible = (dots < normal_min_dot) & qn_valid[start:end, np.newaxis]
+            score = np.where(incompatible, np.float32(np.inf), score)
+            all_inf = ~np.isfinite(score).any(axis=1)
+            if all_inf.any():
+                # nenhuma candidata compatível: reverter ao closest-point cru
+                # nessa linha — prefere a cor próxima a deixar o pixel sem cor
+                score[all_inf] = dist_sq[all_inf]
+            best_local = score.argmin(axis=1)
+        else:
+            best_local = dist_sq.argmin(axis=1)
         batch_idx = np.arange(b)
         all_closest.append(closest[batch_idx, best_local].astype(np.float64))
         all_face_ids.append(topk_idx[batch_idx, best_local])
@@ -399,12 +454,14 @@ def _closest_point_batch(
     source_verts: np.ndarray,
     source_faces: np.ndarray,
     query_points: np.ndarray,
+    query_normals: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Closest-point query using scipy KDTree (CPU)."""
+    """Closest-point query using scipy KDTree (CPU); ver :func:`_closest_point_kdtree`."""
     return _closest_point_kdtree(
         source_verts=source_verts,
         source_faces=source_faces,
         query_points=query_points,
+        query_normals=query_normals,
     )
 
 
@@ -542,7 +599,20 @@ def _transfer_texture_direct(
 
     log.info("Consultando closest_point na mesh fonte (%d pontos)...", n_pixels)
 
-    closest_pts, src_face_ids = _closest_point_batch(source_verts, source_faces, positions_3d)
+    # Normal da face decimada por pixel: sem ela o closest-point atravessa gaps
+    # finos (toldo↔balcão) e pinta UVs de superfícies vizinhas — é a origem da
+    # textura despedaçada nos LODs rebakeados.
+    rem_tri = remeshed_verts[remeshed_faces]
+    rem_fn = np.cross(rem_tri[:, 1] - rem_tri[:, 0], rem_tri[:, 2] - rem_tri[:, 0])
+    rem_fn_len = np.linalg.norm(rem_fn, axis=1, keepdims=True)
+    rem_fn = np.divide(rem_fn, rem_fn_len, out=np.zeros_like(rem_fn), where=rem_fn_len > 1e-12)
+
+    closest_pts, src_face_ids = _closest_point_batch(
+        source_verts,
+        source_faces,
+        positions_3d,
+        query_normals=rem_fn[pixel_face],
+    )
 
     log.info("Interpolando UVs fonte e amostrando textura...")
 
@@ -560,7 +630,9 @@ def _transfer_texture_direct(
     sd21 = np.sum(sv2 * sv1, axis=1)
 
     s_denom = sd00 * sd11 - sd01 * sd01
-    s_denom = np.where(np.abs(s_denom) < 1e-12, 1.0, s_denom)
+    # Epsilon relativo — ver _closest_point_kdtree (triângulos milimétricos)
+    s_scale = np.maximum(sd00 * sd11, 1e-30)
+    s_denom = np.where(np.abs(s_denom) < 1e-9 * s_scale, 1.0, s_denom)
     s_bary_v = (sd11 * sd20 - sd01 * sd21) / s_denom
     s_bary_w = (sd00 * sd21 - sd01 * sd20) / s_denom
     s_bary_u = 1.0 - s_bary_v - s_bary_w
@@ -568,6 +640,17 @@ def _transfer_texture_direct(
     s_bary_u = np.clip(s_bary_u, 0.0, 1.0)
     s_bary_v = np.clip(s_bary_v, 0.0, 1.0)
     s_bary_w = np.clip(s_bary_w, 0.0, 1.0)
+
+    # Renormalizar após o clip: sem isto os pesos somam >1 quando o closest
+    # cai fora da face (~27% das queries em meshes decimadas) e a UV
+    # EXTRAPOLA para fora do triângulo — amostra texels não pintados do atlas
+    # («textura despedaçada» dos LODs rebakeados; caso market_stall: bary
+    # (0.91, 0.99, -0.90) levava a UV a 3x fora do triângulo).
+    s_bary_sum = s_bary_u + s_bary_v + s_bary_w
+    s_bary_sum = np.where(s_bary_sum < 1e-6, 1.0, s_bary_sum)
+    s_bary_u /= s_bary_sum
+    s_bary_v /= s_bary_sum
+    s_bary_w /= s_bary_sum
 
     # Interpolar UVs fonte
     src_uv_tri = source_uvs[source_faces[src_face_ids]]  # (N, 3, 2)
@@ -1043,7 +1126,7 @@ def _meshopt_preserve_atlas(path_in: Path, target_faces: int, scratch: Path) -> 
     v_per_tri = glb_v_per_tri(out)
     if v_per_tri > MESHOPT_MAX_V_PER_TRI:
         log.info(
-            "meshopt atingiu %d faces mas V/Tri=%.2f > %.1f (atlas com demasiada costura) — refazer atlas",
+            "meshopt atingiu %d faces mas V/Tri=%.2f > %.2f (atlas com demasiada costura) — refazer atlas",
             faces,
             v_per_tri,
             MESHOPT_MAX_V_PER_TRI,
