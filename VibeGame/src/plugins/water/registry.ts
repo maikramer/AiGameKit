@@ -98,6 +98,37 @@ export function unregisterWaterBody(state: State, body: WaterBody): void {
   if (i >= 0) list.splice(i, 1);
 }
 
+interface PathBounds {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/** XZ bounding box of a river polyline — computed once per path array. */
+const riverBoundsCache = new WeakMap<object, PathBounds>();
+
+function getRiverBounds(
+  path: ReadonlyArray<readonly [number, number]>
+): PathBounds {
+  let bounds = riverBoundsCache.get(path as object);
+  if (!bounds) {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const p of path) {
+      if (p[0] < minX) minX = p[0];
+      if (p[0] > maxX) maxX = p[0];
+      if (p[1] < minZ) minZ = p[1];
+      if (p[1] > maxZ) maxZ = p[1];
+    }
+    bounds = { minX, maxX, minZ, maxZ };
+    riverBoundsCache.set(path as object, bounds);
+  }
+  return bounds;
+}
+
 /** True when the world XZ point lies within `reach(body)` of the body centre/axis. */
 function withinReach(
   body: WaterBody,
@@ -110,7 +141,20 @@ function withinReach(
     const dz = z - body.z;
     return dx * dx + dz * dz <= reach * reach;
   }
-  // river: distance to the polyline ≤ reach. Flatten the [x,z] pairs.
+  // river: distance to the polyline ≤ reach. Walking every segment is O(path)
+  // per query and this runs for each wader every fixed step, so reject with the
+  // polyline's bounding box first — a river covers a sliver of the map, and
+  // almost every caller is nowhere near it.
+  const bounds = getRiverBounds(body.path);
+  if (
+    x < bounds.minX - reach ||
+    x > bounds.maxX + reach ||
+    z < bounds.minZ - reach ||
+    z > bounds.maxZ + reach
+  ) {
+    return false;
+  }
+  // Flatten the [x,z] pairs.
   return distanceToPath(getRiverFlatPath(body.path), x, z) <= reach;
 }
 
@@ -174,6 +218,32 @@ export function isPointOnWaterBank(
     if (insideCarve(b, x, z) && !containsPoint(b, x, z)) return true;
   }
   return false;
+}
+
+/**
+ * Signed distance (m) from the world XZ point to the nearest waterline: 0 at
+ * the water's edge, positive on land, negative over the wet surface. Lakes
+ * measure from the waterline disc (`shoreRadius`); rivers from the waterline
+ * channel (`shoreWidth / 2`). Returns null when no water bodies exist — band
+ * rules treat null as "no constraint".
+ */
+export function distanceToWaterAt(
+  state: State,
+  x: number,
+  z: number
+): number | null {
+  const bodies = getWaterBodies(state);
+  if (bodies.length === 0) return null;
+  let best = Infinity;
+  for (const b of bodies) {
+    const d =
+      b.kind === 'lake'
+        ? Math.hypot(x - b.x, z - b.z) - b.shoreRadius
+        : distanceToPath(getRiverFlatPath(b.path), x, z) -
+          (b.shoreWidth ?? b.width) / 2;
+    if (d < best) best = d;
+  }
+  return best;
 }
 
 /** The water body whose surface contains the world XZ point, or null. */

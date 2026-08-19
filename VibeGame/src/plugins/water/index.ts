@@ -5,6 +5,7 @@ export {
   isPointInWater,
   isPointNearWater,
   isPointOnWaterBank,
+  distanceToWaterAt,
   registerWaterBody,
   unregisterWaterBody,
   waterLevelAt,

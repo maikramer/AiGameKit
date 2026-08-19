@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from '../../../src/core/ecs/state';
 import {
+  distanceToWaterAt,
   getWaterBodies,
   isPointInWater,
   registerWaterBody,
@@ -87,5 +88,64 @@ describe('WaterBody registry', () => {
     unregisterWaterBody(state, lake);
     expect(isPointInWater(state, 0, 0)).toBe(false);
     expect(getWaterBodies(state)).toHaveLength(0);
+  });
+
+  describe('distanceToWaterAt', () => {
+    it('null when no water bodies are registered', () => {
+      expect(distanceToWaterAt(state, 0, 0)).toBeNull();
+    });
+
+    it('lake: 0 at the waterline, negative inside, positive on land', () => {
+      registerWaterBody(state, {
+        kind: 'lake',
+        x: 10,
+        z: 20,
+        radius: 9,
+        shoreRadius: 8,
+        carveRadius: 10,
+        waterY: 4,
+      });
+      expect(distanceToWaterAt(state, 10, 20)).toBeCloseTo(-8, 5);
+      expect(distanceToWaterAt(state, 18, 20)).toBeCloseTo(0, 5);
+      expect(distanceToWaterAt(state, 13, 20)).toBeCloseTo(-5, 5);
+      expect(distanceToWaterAt(state, 25, 20)).toBeCloseTo(7, 5);
+    });
+
+    it('river: distance from the waterline channel, falls back to width', () => {
+      registerWaterBody(state, {
+        kind: 'river',
+        path: [
+          [0, 0],
+          [100, 0],
+        ],
+        width: 6,
+        waterY: 3,
+      });
+      // No shoreWidth → waterline half = width/2 = 3.
+      expect(distanceToWaterAt(state, 50, 3)).toBeCloseTo(0, 5);
+      expect(distanceToWaterAt(state, 50, 0)).toBeCloseTo(-3, 5);
+      expect(distanceToWaterAt(state, 50, 9)).toBeCloseTo(6, 5);
+    });
+
+    it('returns the distance to the nearest of several bodies', () => {
+      registerWaterBody(state, {
+        kind: 'lake',
+        x: 0,
+        z: 0,
+        radius: 5,
+        shoreRadius: 4,
+        waterY: 1,
+      });
+      registerWaterBody(state, {
+        kind: 'lake',
+        x: 30,
+        z: 0,
+        radius: 5,
+        shoreRadius: 4,
+        waterY: 1,
+      });
+      // Equidistant edges at x=4 and x=26; from x=20 the second lake wins.
+      expect(distanceToWaterAt(state, 20, 0)).toBeCloseTo(6, 5);
+    });
   });
 });
