@@ -202,6 +202,17 @@ clusterCenters.length > 0             →  spawner usa hubs fornecidos (ignora g
 
 Smart carpet: [`../vegetation/context.md`](../vegetation/context.md). Variação visual (hue/sat): [`../spawn-variation/context.md`](../spawn-variation/context.md).
 
+## Pontos explícitos (`spec.points`)
+
+```
+spec.points não-vazio  →  instanceCount = points.length (sobrepõe count modes)
+                        →  cada instância valida EXATAMENTE no seu ponto (1 tentativa,
+                           sem re-amostra — a posição é semântica)
+                        →  slope/água/estrada/occupancy falhos descartam a instância
+```
+
+Contrato para planners externos (`<NatureSpawner>`): os pontos são XZ **mundo** (sem anchor offset); variação/escala/yaw/alinhamento/instancing seguem o caminho normal. Testes: `tests/unit/spawner/points-mode.test.ts`.
+
 ## Amostragem do terreno (`surface.ts`)
 
 - **`worldY`**: `sampleMeshSurfaceHeight` — interpola o heightmap no **lattice do mesh** (não o bilinear analítico fino). Evita props a flutuar em cristas que só existem entre vértices LOD.
@@ -233,6 +244,7 @@ Esta ordem evita inclinar o modelo de forma errada ao misturar yaw e normal. Com
 ## Extensões fora do spawner
 
 - **`<Vegetation>`**: recipe de carpet (roles + wind + smart layers) que emite um ou mais `SpawnGroupSpec` — ver [`../vegetation/context.md`](../vegetation/context.md).
+- **`<NatureSpawner>`**: planner de regras (espécies + `<Where>` + groves) que emite `SpawnGroupSpec`s com `points` explícitos — ver [`../nature/context.md`](../nature/context.md).
 - **spawn-variation**: presets `tree` / `foliage` / `rock` aplicados por instância — ver [`../spawn-variation/context.md`](../spawn-variation/context.md).
 - **NPCs / IA**: recipes e sistemas de jogo; o spawner só instancia o template.
 - **Baked light / lightmaps**: pipeline de rendering e materiais; quando suportado, use atributos no template ou recipe dedicada.

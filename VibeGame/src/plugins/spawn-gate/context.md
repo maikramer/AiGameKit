@@ -2,7 +2,7 @@
 
 <!-- LLM:OVERVIEW -->
 
-Holds dynamic entities in the air at their spawn Y until the terrain below them is both heightmap-decoded and backed by a Rapier heightfield collider, then snaps them onto the ground in a single fixed tick. Without this gate, gravity can accelerate a body during the gap between the visual surface appearing and the one-sided heightfield collider being built, tunnelling the entity through the floor. The latch is one-shot: once snapped, the entity is released and never re-gated.
+Holds dynamic entities in the air at their spawn Y until the terrain below them is both heightmap-decoded and backed by a Rapier heightfield collider, then snaps them onto the ground in a single fixed tick. Without this gate, gravity can accelerate a body during the gap between the visual surface appearing and the one-sided heightfield collider being built, tunnelling the entity through the floor. The latch is one-shot: once snapped, the entity is released and never re-gated. `CharacterUnburySystem` complements the latch at runtime: any character controller that ends up below the terrain surface (late ground mutation, heightmap reload) is re-seated on the surface in one tick.
 
 <!-- /LLM:OVERVIEW -->
 
@@ -14,12 +14,12 @@ spawn-gate/
 ├── index.ts        # Public re-exports
 ├── plugin.ts       # SpawnGatePlugin, spawnGateRecipe, spawnGateParser
 ├── components.ts   # SpawnGateComponent
-└── systems.ts      # SpawnGateSystem, gateEntity
+└── systems.ts      # SpawnGateSystem, CharacterUnburySystem, gateEntity
 ```
 
 ## Scope
 
-- **In-scope**: Freezing a tagged entity at a hold Y, waiting on terrain data + collision readiness, sampling the surface Y, snapping the Transform and Rapier body to the ground.
+- **In-scope**: Freezing a tagged entity at a hold Y, waiting on terrain data + collision readiness, sampling the surface Y, snapping the Transform and Rapier body to the ground; re-seating character controllers buried under the terrain surface after release.
 - **Out-of-scope**: Terrain generation and heightfield build (see `terrain`), BVH raycast internals (see `bvh`), ongoing ground-follow after release (see `physics/character-ground`).
 
 ## Entry Points
@@ -53,6 +53,11 @@ spawn-gate/
   - If terrain is not ready, calls `freezeAt` to pin the entity at `(x, yOffset, z)` and zero its linear velocity (so gravity cannot build up). The Rapier body translation is forced and `setLinvel({0,0,0})` is called.
   - If terrain is ready, samples the surface Y below the entity via `surfaceHeightAt` (a BVH raycast from `yOffset + 8m`, falling back to `getTerrainHeightAt`), adds `skinDistance`, and (when a `Collider` is present) routes through `getBodyYForFeetAt` so the body origin lands at the correct feet offset. Then it writes the new `Transform`, teleports the Rapier body (`setTranslation(..., wakeUp)`), and sets `ready = 1`.
 
+#### CharacterUnburySystem
+
+- Group: `fixed`. No-op without terrain fields or while any heightmap is still decoding.
+- For every entity with `CharacterController` + `Rigidbody` (still-gated entities excluded — the gate owns their seating): samples the terrain surface at the entity's XZ and computes the feet Y (collider half-extent aware). When the feet sit more than `GROUND_SNAP_MAX` below the surface — inside solid ground, which down-only collider casts can never recover from — it re-seats the body at `surface + skin` (the gate's `skinDistance` when present), zeroes `velocityY`, marks `grounded`, teleports the Rapier body via `teleportEntity`, and logs a warning.
+
 ### Recipe
 
 - **SpawnGate**: parser-only recipe (no components added to the gate element itself). Attributes `target-entity`, `y-fallback`, `skin-distance`. The parser resolves the named target via `state.getEntityByName`, warns and no-ops if it is not found, and calls `gateEntity(state, targetEid, { yFallback, skinDistance })`.
@@ -81,7 +86,7 @@ gateEntity(state, enemyEid, { yFallback: 40, skinDistance: 0.05 });
 
 ### Known Limitations
 
-- **Latch pattern**: once `ready === 1` the entity is never re-gated, even if the terrain later disappears or the entity moves. To re-gate, remove the `SpawnGateComponent` and call `gateEntity` again.
+- **Latch pattern**: once `ready === 1` the entity is never re-gated, even if the terrain later disappears or the entity moves. To re-gate, remove the `SpawnGateComponent` and call `gateEntity` again. A latched character that later ends up *below* the terrain surface is recovered by `CharacterUnburySystem`, not by re-gating.
 - **Document order**: the parser resolves the target by name at parse time. `<SpawnGate>` must appear after the target entity in the XML, otherwise it logs a warning and does nothing.
 - **Single sample point**: the snap uses one BVH/heightmap sample at the entity's XZ. On steep slopes, overhangs, or uneven terrain the snap target may be imperfect, and there is no multi-sample smoothing here.
 - **Fixed-group dependency**: the system runs in the `fixed` group and relies on `getBodyForEntity` returning a Rapier body. Entities without a `Rigidbody` are still snapped at the `Transform` level but cannot be teleported via the body API.

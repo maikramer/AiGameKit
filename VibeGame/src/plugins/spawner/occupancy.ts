@@ -1,5 +1,5 @@
+import { defineComponent, F32, U8 } from '../../core/ecs/component-storage';
 import type { State } from '../../core';
-import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 /**
  * Spawn occupancy registry: every placement (spawn-group instances, instanced
@@ -79,9 +79,9 @@ export function clearSpawnOccupancy(state: State): void {
  * Registered into the occupancy registry by TerrainSpawnSystem before any
  * group samples positions.
  */
-export const SpawnExclusion = {
-  x: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-  radius: new Float32Array(MAX_ENTITIES),
-  registered: new Uint8Array(MAX_ENTITIES),
-} as const;
+export const SpawnExclusion = defineComponent({
+  x: F32,
+  z: F32,
+  radius: F32,
+  registered: U8,
+});

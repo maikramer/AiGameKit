@@ -123,6 +123,14 @@ export interface SpawnGroupSpec {
    * these instead of generating `clusterCount` random hubs (shared grass→flower).
    */
   clusterCenters?: Array<[number, number]>;
+  /**
+   * Explicit per-instance world XZ positions from an external planner (e.g.
+   * `<NatureSpawner>`). When non-empty, the instance count is `points.length`
+   * (overriding count modes) and each instance is validated exactly at its
+   * point — no XZ re-sampling, the position is semantic. A failed validation
+   * (slope/water/road/occupancy) drops that instance.
+   */
+  points?: Array<[number, number]>;
   /** Visual variation (hue/sat/brightness/contrast); geometry uses scale/yaw fields. */
   variation: VariationVisualSpec;
   templates: SpawnTemplateSpec[];

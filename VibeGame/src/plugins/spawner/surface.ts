@@ -280,7 +280,12 @@ function terrainBaseY(state: State, terrainEntity: number): number {
   if (state.hasComponent(terrainEntity, WorldTransform)) {
     return WorldTransform.posY[terrainEntity];
   }
-  return Transform.posY[terrainEntity];
+  // Component arrays are module-global and entity ids restart per State —
+  // never read a field the entity does not actually carry.
+  if (state.hasComponent(terrainEntity, Transform)) {
+    return Transform.posY[terrainEntity];
+  }
+  return 0;
 }
 
 /** Up normal shared by pad-plane samples. */

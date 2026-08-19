@@ -1,7 +1,7 @@
 import { logger } from '../../core/utils/logger';
 import type { Parser, Plugin, Recipe } from '../../core';
 import { SpawnGateComponent } from './components';
-import { SpawnGateSystem, gateEntity } from './systems';
+import { SpawnGateSystem, CharacterUnburySystem, gateEntity } from './systems';
 
 export const spawnGateRecipe: Recipe = {
   name: 'SpawnGate',
@@ -45,7 +45,7 @@ export const spawnGateParser: Parser = ({ element, state }) => {
 };
 
 export const SpawnGatePlugin: Plugin = {
-  systems: [SpawnGateSystem],
+  systems: [SpawnGateSystem, CharacterUnburySystem],
   recipes: [spawnGateRecipe],
   components: { 'spawn-gate': SpawnGateComponent },
   config: {

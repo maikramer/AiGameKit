@@ -26,8 +26,8 @@ describe('SpawnGate plugin defaults matrix', () => {
   }
 
   for (let i = 0; i < 25; i++) {
-    it(`SpawnGatePlugin has one system (i=${i})`, () => {
-      expect(SpawnGatePlugin.systems).toHaveLength(1);
+    it(`SpawnGatePlugin has two systems (i=${i})`, () => {
+      expect(SpawnGatePlugin.systems).toHaveLength(2);
     });
   }
 });

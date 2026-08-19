@@ -335,7 +335,13 @@ export const TerrainSpawnSystem: System = defineSystem({
       const width = Math.abs(maxX - minX);
       const depth = Math.abs(maxZ - minZ);
       const areaKm2 = (width * depth) / 1_000_000;
-      const instanceCount = resolveSpawnInstanceCount(spec, rand, areaKm2);
+      // Planner points (e.g. <NatureSpawner>): count comes from the points
+      // themselves; each instance is validated exactly where the planner put
+      // it, without XZ re-sampling.
+      const points = spec.points && spec.points.length > 0 ? spec.points : null;
+      const instanceCount = points
+        ? points.length
+        : resolveSpawnInstanceCount(spec, rand, areaKm2);
 
       const maxSlope = Number.isFinite(spec.maxSlopeDeg)
         ? spec.maxSlopeDeg
@@ -377,9 +383,16 @@ export const TerrainSpawnSystem: System = defineSystem({
         let s: TerrainSurfaceSample | null = null;
         let foundValidSlope = false;
         let waterSurfaceY: number | null = null;
-        const attempts = Math.max(1, spec.maxSlopePlacementAttempts);
+        // Planner points carry semantic positions — a single validation pass,
+        // no re-sampling budget.
+        const attempts = points
+          ? 1
+          : Math.max(1, spec.maxSlopePlacementAttempts);
         for (let attempt = 0; attempt < attempts; attempt++) {
-          if (clusterCenters.length > 0) {
+          if (points) {
+            wx = points[i]![0];
+            wz = points[i]![1];
+          } else if (clusterCenters.length > 0) {
             const hub =
               clusterCenters[Math.floor(rand() * clusterCenters.length)]!;
             // Uniform disc around hub (sqrt for area-uniform).

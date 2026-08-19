@@ -1,12 +1,21 @@
 import { defineSystem, defineQuery, type State, type System } from '../../core';
+import { logger } from '../../core/utils/logger';
 import { getBvhSurfaceHeight } from '../bvh';
 import { getGroundHeight, getTerrainContext } from '../terrain';
 import { isTerrainDynamicsBlocking } from '../terrain/utils';
 import { Transform } from '../transforms/components';
-import { Rigidbody, Collider } from '../physics/components';
+import {
+  Rigidbody,
+  Collider,
+  CharacterController,
+  CharacterMovement,
+  InterpolatedTransform,
+} from '../physics/components';
 import { getBodyForEntity } from '../physics/systems';
+import { teleportEntity, GROUND_SNAP_MAX } from '../physics/utils';
 import {
   getBodyYForFeetAt,
+  getCharacterFeetY,
   GROUND_CONTACT_SKIN,
 } from '../physics/character-ground';
 import { SpawnGateComponent } from './components';
@@ -157,3 +166,66 @@ function freezeAt(
     body.setLinvel({ x: 0, y: 0, z: 0 }, true);
   }
 }
+
+const characterQuery = defineQuery([CharacterController, Rigidbody]);
+
+/**
+ * Heightmap terrain has no overhangs, so a character whose feet sit further
+ * below the terrain surface than the per-step ground snap can recover is
+ * inside solid ground — a state down-only collider casts never escape. Late
+ * ground mutations (bridge re-grades, heightmap reloads) can create it after
+ * the one-shot spawn gate latched; this re-seats such characters on the
+ * surface in a single tick instead of letting them fall forever.
+ */
+export const CharacterUnburySystem: System = defineSystem({
+  name: 'CharacterUnburySystem',
+  group: 'fixed',
+  update(state: State): void {
+    if (getTerrainContext(state).size === 0) return;
+    // Pre-decode the flat sampler does not describe the real surface.
+    if (!isTerrainDataReady(state)) return;
+
+    for (const eid of characterQuery(state.world)) {
+      if (
+        state.hasComponent(eid, SpawnGateComponent) &&
+        SpawnGateComponent.ready[eid] === 0
+      ) {
+        continue; // still held by the spawn gate — it owns seating
+      }
+
+      const surfaceY = getGroundHeight(
+        state,
+        Rigidbody.posX[eid],
+        Rigidbody.posZ[eid]
+      );
+      const hasCollider = state.hasComponent(eid, Collider);
+      const feetY = hasCollider
+        ? getCharacterFeetY(state, eid, Rigidbody.posY[eid])
+        : Rigidbody.posY[eid];
+      if (feetY >= surfaceY - GROUND_SNAP_MAX) continue;
+
+      const skin = state.hasComponent(eid, SpawnGateComponent)
+        ? SpawnGateComponent.skinDistance[eid]
+        : GROUND_CONTACT_SKIN;
+      const feetTarget = surfaceY + skin;
+      Rigidbody.posY[eid] = hasCollider
+        ? getBodyYForFeetAt(state, eid, feetTarget)
+        : feetTarget;
+      CharacterMovement.velocityY[eid] = 0;
+      CharacterController.grounded[eid] = 1;
+
+      const body = getBodyForEntity(state, eid);
+      if (body) {
+        teleportEntity(
+          eid,
+          body,
+          state.hasComponent(eid, InterpolatedTransform)
+        );
+      }
+
+      logger.warn(
+        `[spawn-gate] re-seated entity ${eid} buried ${(surfaceY - feetY).toFixed(1)}m under the terrain surface`
+      );
+    }
+  },
+});

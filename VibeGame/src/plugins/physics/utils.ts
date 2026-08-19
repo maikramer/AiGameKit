@@ -67,7 +67,7 @@ const interpolatedTransformQuery = defineQuery([InterpolatedTransform]);
 /** Constant gap kept between the character's feet and the ground when snapped. */
 const GROUND_SNAP_SKIN = 0.04;
 /** Max distance the feet may be re-seated downward per step (slopes/step-downs). */
-const GROUND_SNAP_MAX = 0.35;
+export const GROUND_SNAP_MAX = 0.35;
 const _groundCastDown = { x: 0, y: -1, z: 0 };
 const _snapOrigin = { x: 0, y: 0, z: 0 };
 const _desiredTranslation = { x: 0, y: 0, z: 0 };
