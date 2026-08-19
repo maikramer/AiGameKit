@@ -42,7 +42,7 @@ from .utils.memory import (
     format_bytes,
 )
 from .utils.mesh_align_hunyuan import align_glb_plus_z_safe
-from .utils.mesh_lod import generate_lod_glb_triplet
+from .utils.mesh_lod import DEFAULT_RIG_MAX_LEVEL, generate_lod_glb_triplet
 from .utils.mesh_remesh_textured import remesh_geometry_only_glb, remesh_textured_glb
 
 console = Console()
@@ -2048,6 +2048,17 @@ def gpu_processes_cmd() -> None:
     default=None,
     help=("GLB com clips de animação quando --skin-source não tem actions (ex.: rigged_hi + id_animated.glb)."),
 )
+@click.option(
+    "--rig-max-level",
+    type=click.IntRange(0, 2),
+    default=DEFAULT_RIG_MAX_LEVEL,
+    show_default=True,
+    help=(
+        "Último nível de LOD que mantém rig; acima disso sai mesh estático. "
+        "Um esqueleto por nível custa no runtime mesmo escondido (o browser "
+        "percorre e recompõe todos os nós da cena por frame). 0 = só o LOD0 anima."
+    ),
+)
 def lod_cmd(
     input_mesh: Path,
     output_dir: Path,
@@ -2065,6 +2076,7 @@ def lod_cmd(
     meshopt: bool,
     skin_source: Path | None,
     animation_source: Path | None,
+    rig_max_level: int,
 ) -> None:
     """Gera três GLB com níveis de detalhe (LOD0=cheio, LOD1/LOD2 decimados).
 
@@ -2094,6 +2106,7 @@ def lod_cmd(
                 apply_meshopt=meshopt,
                 skin_source=skin_source,
                 animation_source=animation_source,
+                rig_max_level=rig_max_level,
             )
         else:
             paths = generate_lod_glb_triplet(
@@ -2107,6 +2120,7 @@ def lod_cmd(
                 meshfix=meshfix,
                 texture_size_lod0=texture_size,
                 target_faces=target_faces,
+                rig_max_level=rig_max_level,
             )
             # Non-painted path has no finish step — apply meshopt post-hoc to
             # each LOD output so compressed LODs are the default.

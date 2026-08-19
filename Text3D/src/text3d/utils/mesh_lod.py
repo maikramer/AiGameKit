@@ -14,6 +14,23 @@ from aigamekit_shared.bpy_mesh import clear_scene
 
 log = logging.getLogger(__name__)
 
+# Nível de LOD mais distante que ainda carrega rig. LOD0/LOD1 animam; o
+# LOD2 (o nível mais longe) sai como mesh estático — ver `strip_rig_in_scene`
+# para o custo em runtime de esqueletos que ninguém vê animar.
+DEFAULT_RIG_MAX_LEVEL = 1
+
+LOD_LEVELS = (0, 1, 2)
+
+
+def lod_levels_with_rig(rig_max_level: int = DEFAULT_RIG_MAX_LEVEL) -> tuple[int, ...]:
+    """Níveis da ladder que mantêm skin/esqueleto.
+
+    Acima do limite o entregável é mesh estático: um esqueleto por nível custa
+    no runtime mesmo escondido (ver :func:`strip_rig_in_scene`).
+    """
+    return tuple(level for level in LOD_LEVELS if level <= int(rig_max_level))
+
+
 # ---------------------------------------------------------------------------
 # bpy helpers (lazy import inside functions — bpy may not be installed)
 # ---------------------------------------------------------------------------
@@ -600,6 +617,7 @@ def generate_lod_glb_triplet(
     meshfix: bool = False,
     texture_size_lod0: int | None = None,
     target_faces: int | None = None,
+    rig_max_level: int = DEFAULT_RIG_MAX_LEVEL,
 ) -> list[Path]:
     """Gera três GLB: ``{basename}_lod0.glb`` … ``{basename}_lod2.glb``.
 
@@ -633,6 +651,7 @@ def generate_lod_glb_triplet(
             meshfix,
             texture_size_lod0,
             target_faces,
+            rig_max_level,
         )
     except ImportError:
         logging.getLogger(__name__).warning("bpy indisponível — generate_lod_glb_triplet ignorado")
@@ -679,12 +698,42 @@ def _meshopt_simplify_level(
     return faces
 
 
+def strip_rig_in_scene(mesh_obj, arm_objs: list) -> list:
+    """Congela o mesh na pose actual e remove armature + skin data.
+
+    Um LOD distante que carrega o seu próprio esqueleto custa no runtime muito
+    mais do que a geometria que desenha: no VibeGame o browser percorre e
+    recompõe todos os nós da cena por frame, visíveis ou não, e um prop rigado
+    traz ~47 ossos **por nível** (simple-rpg: ~11k ossos, 12.3k de 15.4k nós da
+    cena, quase todos em níveis de LOD que ninguém vê animar).
+
+    Devolve a lista de armatures que sobrou (vazia) para o chamador exportar.
+    """
+    import bpy
+
+    world = mesh_obj.matrix_world.copy()
+    for mod in list(mesh_obj.modifiers):
+        if mod.type == "ARMATURE":
+            mesh_obj.modifiers.remove(mod)
+    mesh_obj.vertex_groups.clear()
+    if mesh_obj.parent is not None:
+        mesh_obj.parent = None
+    # Reparent/modifier removal deixa a matriz local a valer sozinha — repor a
+    # world preserva a pose/escala que o LOD0 tem.
+    mesh_obj.matrix_world = world
+    for arm in list(arm_objs):
+        with contextlib.suppress(Exception):
+            bpy.data.objects.remove(arm, do_unlink=True)
+    return []
+
+
 def _finalize_geometric_lod(
     src: Path,
     dst: Path,
     *,
     texture_size: int | None,
     meshfix: bool,
+    keep_rig: bool = True,
 ) -> None:
     """Importa o GLB simplificado, aplica downscale de atlas / meshfix, re-exporta."""
     mesh_obj, arm_objs = _load_glb_with_armatures(src)
@@ -693,6 +742,8 @@ def _finalize_geometric_lod(
     if texture_size is not None and int(texture_size) > 0:
         _scale_object_textures(mesh_obj, int(texture_size))
     _shade_smooth(mesh_obj)
+    if not keep_rig and arm_objs:
+        arm_objs = strip_rig_in_scene(mesh_obj, arm_objs)
     _export_glb(dst, mesh_obj, arm_objs)
 
 
@@ -707,6 +758,7 @@ def _generate_lod_glb_triplet_impl(
     meshfix,
     texture_size_lod0,
     target_faces,
+    rig_max_level=DEFAULT_RIG_MAX_LEVEL,
 ):
     import shutil
     import tempfile
@@ -814,6 +866,7 @@ def _generate_lod_glb_triplet_impl(
                 path,
                 texture_size=tex_ladder[level] if tex_ladder else None,
                 meshfix=meshfix,
+                keep_rig=level <= rig_max_level,
             )
             out_paths.append(path)
             prev_raw, prev_faces = raw, faces
@@ -830,6 +883,7 @@ def _complete_ladder_bpy_from_lod0(
     targets: dict[int, int],
     meshfix: bool,
     tex_ladder: tuple[int, int, int] | None,
+    rig_max_level: int = DEFAULT_RIG_MAX_LEVEL,
 ) -> list[Path]:
     """Completa lod1/lod2 com Decimate COLLAPSE quando meshopt morre a meio."""
     for level in range(start_level, 3):
@@ -839,6 +893,8 @@ def _complete_ladder_bpy_from_lod0(
             _fill_holes_bpy(mesh_obj_l, sides=30)
         if tex_ladder is not None:
             _scale_object_textures(mesh_obj_l, tex_ladder[level])
+        if level > rig_max_level and arm_objs_l:
+            arm_objs_l = strip_rig_in_scene(mesh_obj_l, arm_objs_l)
         path = Path(output_dir) / f"{basename}_lod{level}.glb"
         _export_glb(path, mesh_obj_l, arm_objs_l)
         out_paths.append(path)
@@ -856,6 +912,7 @@ def _generate_lod_glb_triplet_bpy_collapse(
     meshfix,
     texture_size_lod0,
     target_faces,
+    rig_max_level=DEFAULT_RIG_MAX_LEVEL,
 ):
     """Fallback legado: Decimate COLLAPSE bpy (cego a costuras UV)."""
     from aigamekit_shared.lod_budget import lod_texture_ladder
@@ -893,6 +950,8 @@ def _generate_lod_glb_triplet_bpy_collapse(
             _fill_holes_bpy(mesh_obj_l, sides=30)
         if tex_ladder is not None:
             _scale_object_textures(mesh_obj_l, tex_ladder[level])
+        if level > rig_max_level and arm_objs_l:
+            arm_objs_l = strip_rig_in_scene(mesh_obj_l, arm_objs_l)
         path = Path(output_dir) / f"{basename}_lod{level}.glb"
         _export_glb(path, mesh_obj_l, arm_objs_l)
         out_paths.append(path)
@@ -915,6 +974,7 @@ def generate_lod_textured_glb_triplet(
     apply_meshopt: bool = True,
     skin_source: Path | None = None,
     animation_source: Path | None = None,
+    rig_max_level: int = DEFAULT_RIG_MAX_LEVEL,
 ) -> list[Path]:
     """Gera três GLB texturizados por decimação com preservação de UV.
 
@@ -1026,8 +1086,15 @@ def generate_lod_textured_glb_triplet(
 
         skin_src = Path(skin_source)
         anim_src = Path(animation_source) if animation_source else None
-        for p in out_paths:
+        rigged_levels = lod_levels_with_rig(rig_max_level)
+        for level, p in enumerate(out_paths):
             if not p.is_file():
+                continue
+            # Níveis acima de `rig_max_level` ficam estáticos: rebind punha o
+            # esqueleto inteiro em cada nível, e o runtime paga esses ossos por
+            # frame mesmo com o nível escondido (ver `strip_rig_in_scene`).
+            if level not in rigged_levels:
+                log.info("LOD skin_transfer ignorado em %s (rig_max_level=%d)", p.name, rig_max_level)
                 continue
             tmp = p.with_suffix(".skin_tmp.glb")
             try:

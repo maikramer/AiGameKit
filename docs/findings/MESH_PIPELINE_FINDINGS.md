@@ -455,6 +455,38 @@ Código: `Text3D/src/text3d/utils/gltf_finish.py` (`meshopt_simplify_glb`),
 
 ---
 
+## Rig por nível de LOD — o esqueleto custa no runtime (2026-08-16)
+
+`text3d lod` preservava armature/skin em **todos** os níveis: cada prop rigado
+entregava lod0, lod1 e lod2, cada um com o seu esqueleto. Medido no browser
+(`simple-rpg`, profiler + `scene.traverse`): **11 470 ossos** e **12 308 de
+15 086 nós da cena escondidos** — a esmagadora maioria eram níveis de LOD que
+ninguém vê animar. `Object3D.updateMatrixWorld` ignora `visible` e recompõe tudo
+por frame, por isso esses níveis custavam mais que a geometria desenhada
+(`updateMatrixWorld` ~2,1 ms de um frame de 21 ms).
+
+**Política:** `--rig-max-level` (default **1**) — lod0/lod1 animam, lod2 sai
+mesh estático. `0` = só o lod0 anima (props); `2` = comportamento antigo.
+
+- Caminho **geométrico**: `_finalize_geometric_lod(keep_rig=False)` →
+  `strip_rig_in_scene` (congela a pose, remove modifier Armature, limpa vertex
+  groups, apaga a armature, repõe `matrix_world`) e exporta sem
+  `export_skins`/`export_animations`.
+- Caminho **texturizado**: `lod_levels_with_rig()` decide quais níveis levam
+  `transfer_skin_to_mesh`; os restantes ficam sem rebind.
+- **GameAssets** (`RIG_MAX_LEVEL`, tem de bater certo com `DEFAULT_RIG_MAX_LEVEL`):
+  passa `--rig-max-level` e — importante — o gate `ladder_ok` e o rollback do
+  finish passaram a ser **por nível**. Sem isso, exigir `skins[]` no lod2 punha a
+  ladder a regenerar-se todos os runs e o finish em rollback permanente.
+- As regras `lod1.yaml`/`lod2.yaml` não pedem `JOINTS_0`/`WEIGHTS_0`, logo a
+  validação não muda.
+
+Do lado do motor o complemento é destacar do grafo os níveis inactivos
+(`VibeGame/src/extras/gltf-lod-parking.ts`): cena 15 086 → 5 674 nós, grupo
+`render` 7,26 → 4,93 ms.
+
+---
+
 ## LOD geométrico / rigado — mesmo bug, sem rebake (2026-08)
 
 Round 3: `text3d lod` sobre `_rigged_animated` **sem** `--painted-mesh`. Antes =
@@ -512,6 +544,7 @@ removido de propósito.
 
 | Data | Nota |
 |------|------|
+| 2026-08-16 | Rig por nível: `--rig-max-level` (default 1) — lod2 estático; gate/rollback por nível no GameAssets; motor destaca LODs inactivos do grafo |
 | 2026-08-06 | LOD texturado: meshoptimizer (atlas preservado) + rebake xatlas sem voxel (decimação extrema); COLLAPSE com atlas original rasgava UVs |
 | 2026-08-06 | LOD geométrico/rigado: meshopt-first (`weld=False` skinned); piso de costuras aceite (sem COLLAPSE abaixo; sem rebake no DAG) |
 | 2026-08-06 | Finish KTX2 híbrido: ETC1S albedo/MR/AO/emissive + UASTC `*normal*`; intermédios bpy exportam JPEG (não PNG) |

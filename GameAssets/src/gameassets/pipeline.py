@@ -102,6 +102,13 @@ except ImportError:  # pragma: no cover
 console = Console()
 log = logging.getLogger(__name__)
 
+# Último nível da ladder que ainda leva rig; acima disso o entregável é mesh
+# estático (``text3d lod --rig-max-level``). Um esqueleto por nível custa no
+# runtime mesmo quando o nível está escondido — o VibeGame percorre e recompõe
+# todos os nós da cena por frame, e no simple-rpg isso eram ~11k ossos, 12.3k de
+# 15.4k nós, quase todos em níveis de LOD que ninguém vê animar.
+RIG_MAX_LEVEL = 1
+
 
 def _resolve_animator3d_bin() -> str | None:
     try:
@@ -2493,9 +2500,18 @@ def run_master_pipeline(
 
     # Stage 9 - lod0 + ladder a partir da fonte rigada.
     if rig_source is not None:
-        expect = _glb_is_promoted_animated if promotion_kind == "animated" else _glb_is_promoted_rigged
-        ladder_ok = expect(lod0_p) and (
-            not with_lod or (lod1_p.is_file() and lod2_p.is_file() and expect(lod1_p) and expect(lod2_p))
+        expect_rigged = _glb_is_promoted_animated if promotion_kind == "animated" else _glb_is_promoted_rigged
+
+        def expect(path: Path, level: int = 0) -> bool:
+            # Níveis acima de RIG_MAX_LEVEL saem estáticos de propósito
+            # (``text3d lod --rig-max-level``): exigir skins[] neles punha a
+            # ladder a regenerar-se para sempre e o finish em rollback.
+            if level > RIG_MAX_LEVEL:
+                return path.is_file() and path.stat().st_size >= 64
+            return expect_rigged(path)
+
+        ladder_ok = expect(lod0_p, 0) and (
+            not with_lod or (lod1_p.is_file() and lod2_p.is_file() and expect(lod1_p, 1) and expect(lod2_p, 2))
         )
         if ladder_ok:
             res.stages.append(StageResult("lod", True, 0.0, f"skipped (ladder {promotion_kind} ok)", lod0_p))
@@ -2521,6 +2537,8 @@ def run_master_pipeline(
                 "--no-meshopt",
                 "--texture-size",
                 str(int(lod0_tex)),
+                "--rig-max-level",
+                str(RIG_MAX_LEVEL),
             ]
             if target_faces > 0:
                 lod_argv.extend(["--target-faces", str(max(8, int(target_faces * 1.2)))])
@@ -2532,12 +2550,12 @@ def run_master_pipeline(
             # destruir skins/clips — entregável sem compressão > lod mudo.
             for lvl, p in ((0, lod0_p), (1, lod1_p), (2, lod2_p)):
                 if p.is_file():
-                    _finish_lod_with_rollback(p, lvl, expect, res)
+                    _finish_lod_with_rollback(p, lvl, lambda q, _lvl=lvl: expect(q, _lvl), res)
         else:
             import shutil as _sh
 
             _sh.copy2(rig_source, lod0_p)
-            _finish_lod_with_rollback(lod0_p, 0, expect, res)
+            _finish_lod_with_rollback(lod0_p, 0, lambda q: expect(q, 0), res)
             res.stages.append(StageResult("lod", True, 0.0, f"lod0={promotion_kind} copy (sem ladder)", lod0_p))
         res.lod0_path = lod0_p
     elif wants_split_at_height(profile, row):
