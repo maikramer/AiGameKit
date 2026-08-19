@@ -16,8 +16,13 @@ import {
   disposeSharedSunMesh,
   registerBuiltinEffects,
 } from './builtin-effects';
-import { type EffectDefinition, getEffectDefinitions } from './effect-registry';
+import {
+  type EffectComponentState,
+  type EffectDefinition,
+  getEffectDefinitions,
+} from './effect-registry';
 import { buildComposer } from './composer';
+import type { ReflectionPass } from './reflection-pass';
 import { N8AOPostPass } from 'n8ao';
 import {
   getAdaptiveQualityTier,
@@ -74,10 +79,7 @@ export const PostprocessingBuildSystem: System = defineSystem({
       builtinEffectsRegistered = true;
     }
 
-    const componentState = Postprocessing as unknown as Record<
-      string,
-      Float32Array | Uint8Array
-    >;
+    const componentState = Postprocessing as unknown as EffectComponentState;
 
     const firstPasses: Array<{ pass: Pass; order: number }> = [];
     const regularPasses: Array<{ pass: Pass; order: number }> = [];
@@ -170,10 +172,7 @@ export const PostprocessingEffectUpdateSystem: System = defineSystem({
     if (state.headless) return;
     if (activeEffectInstances.length === 0) return;
     const context = getRenderingContext(state);
-    const componentState = Postprocessing as unknown as Record<
-      string,
-      Float32Array | Uint8Array
-    >;
+    const componentState = Postprocessing as unknown as EffectComponentState;
     for (const { def, pass, entity } of activeEffectInstances) {
       if (!def.update) continue;
       try {
@@ -224,6 +223,7 @@ export const PostprocessingEffectUpdateSystem: System = defineSystem({
  *  - God rays: `godRaysMaterial.samples` (48 → 32 → 24 → 16)
  *  - DoF: `bokehScale` scaled by the tier factor (0 at tier 3 effectively
  *    disables the blur cost)
+ *  - SSR: intensity × tier scale, and the whole pass switched off at tier Low
  *
  * Pixel-ratio scaling is handled directly by the Adaptive Quality apply system
  * (it owns the renderer). Point-shadow throttling is handled by the light sync
@@ -265,6 +265,24 @@ function applyAdaptiveEffectLevers(state: State): void {
           ) {
             gr.godRaysMaterial.samples = preset.godRaysSamples;
           }
+          break;
+        }
+        case 'ssr': {
+          const reflection = pass as unknown as ReflectionPass & {
+            enabled?: boolean;
+          };
+          const base = Postprocessing.ssrOpacity[entity];
+          const intensity = Math.max(0, base * preset.ssrIntensityScale);
+          // At 0 the pass is switched off rather than left marching rays whose
+          // result is multiplied away — the march is the expensive half.
+          const enabled = intensity > 1e-4 && Postprocessing.ssr[entity] === 1;
+          if (reflection.enabled !== enabled) reflection.enabled = enabled;
+          if (!enabled) break;
+          reflection.configure({
+            intensity,
+            maxDistance: Postprocessing.ssrMaxDistance[entity],
+            thickness: Postprocessing.ssrThickness[entity],
+          });
           break;
         }
         case 'depthOfField': {
@@ -310,17 +328,12 @@ function effectOfPass(pass: Pass): unknown {
 }
 
 /**
- * Applies the `Postprocessing` height-fog fields (`fogColor` / `fogDensity`) to
- * `scene.fog`. The biomes plugin crossfades these values every frame as the
- * player crosses biome borders; without this system they were written into the
- * component but never consumed — a half-wired feature. `FogExp2` gives a
- * depth-driven exponential falloff that reads as atmospheric haze and gives
- * `GodRaysEffect` a medium to scatter through.
- *
- * `fogHeight` / `fogFalloff` are kept on the component for future height-based
- * modulation (the three.js core `FogExp2` is density-uniform in world space);
- * for now density is taken as-is, which already matches the values the biomes
- * plugin interpolates.
+ * Applies the `Postprocessing` height-fog fields to the scene. When the
+ * post-processing composer is active the `HeightFogEffect` pass owns the fog
+ * (full height falloff, sun inscattering, sky haze) and `scene.fog` must stay
+ * null so the two don't stack. Without a composer, `FogExp2` is the fallback so
+ * scenes that skip post-processing still get distance haze. The biomes plugin
+ * crossfades `fogColor`/`fogDensity` on the component, which both paths read.
  */
 interface FogCache {
   color: number;
@@ -347,6 +360,14 @@ export const FogSyncSystem: System = defineSystem({
         fogEntity = eid;
         break;
       }
+    }
+
+    // The composer's HeightFogEffect is the one true fog; material-level fog
+    // on top of it would double the haze.
+    if (context.postProcessing) {
+      if (scene.fog) scene.fog = null;
+      fogCacheByScene.delete(scene);
+      return;
     }
 
     if (fogEntity === -1) {

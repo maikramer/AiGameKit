@@ -36,6 +36,9 @@ export interface QualityTierPreset {
   pointShadowRefreshFrames: number;
   /** Water planar mirror enabled (extra full scene render). */
   waterMirror: boolean;
+  /** Multiplier on the configured SSR intensity. 0 disables the pass, which
+   *  also skips its geometry pass and its ray march entirely. */
+  ssrIntensityScale: number;
 }
 
 /**
@@ -47,7 +50,8 @@ export interface QualityTierPreset {
  *  - High trims the heaviest single-pass costs (SSAO half-res, point-shadow
  *    throttle, leaner god-rays) while keeping the look.
  *  - Medium drops water mirror + DPR, softens DoF/god-rays further.
- *  - Low is a survival tier: DPR ~0.55, mirror off, DoF off, SSAO intensity 0.
+ *  - Low is a survival tier: DPR ~0.55, mirror off, DoF off, SSAO intensity 0,
+ *    reflections off (the ray march is the most expensive thing left).
  */
 export const TIER_PRESETS: readonly QualityTierPreset[] = [
   // Tier 0 — Max
@@ -60,6 +64,7 @@ export const TIER_PRESETS: readonly QualityTierPreset[] = [
     godRaysSamples: 48,
     pointShadowRefreshFrames: 1,
     waterMirror: true,
+    ssrIntensityScale: 1.0,
   },
   // Tier 1 — High
   {
@@ -71,6 +76,7 @@ export const TIER_PRESETS: readonly QualityTierPreset[] = [
     godRaysSamples: 32,
     pointShadowRefreshFrames: 4,
     waterMirror: true,
+    ssrIntensityScale: 1.0,
   },
   // Tier 2 — Medium
   {
@@ -82,6 +88,7 @@ export const TIER_PRESETS: readonly QualityTierPreset[] = [
     godRaysSamples: 24,
     pointShadowRefreshFrames: 6,
     waterMirror: false,
+    ssrIntensityScale: 0.6,
   },
   // Tier 3 — Low
   {
@@ -93,6 +100,7 @@ export const TIER_PRESETS: readonly QualityTierPreset[] = [
     godRaysSamples: 16,
     pointShadowRefreshFrames: 8,
     waterMirror: false,
+    ssrIntensityScale: 0.0,
   },
 ];
 

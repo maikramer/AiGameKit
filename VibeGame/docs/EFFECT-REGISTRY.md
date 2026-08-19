@@ -10,7 +10,10 @@ Post-processing system based on the [`postprocessing`](https://www.npmjs.com/pac
 |------|-------------|
 | `components.ts` | ECS SOA component (`Postprocessing`) with all effect fields |
 | `effect-registry.ts` | Registry API (`registerEffect`, `getEffectDefinitions`, `unregisterEffect`) |
-| `builtin-effects.ts` | Built-in effects: Bloom, SMAA, FXAA, Vignette, ChromaticAberration, ToneMapping, SSAO, DepthOfField |
+| `builtin-effects.ts` | Built-in effects: Bloom, SMAA, FXAA, Vignette, ChromaticAberration, ToneMapping, SSAO, DepthOfField, HeightFog, GodRays, SSR |
+| `height-fog-effect.ts` | `HeightFogEffect` — depth-based exponential height fog with sun inscattering and sky haze |
+| `sun-source.ts` | Shared first-directional-light lookup (god rays + height-fog inscattering) |
+| `reflection-pass.ts` | `ReflectionPass` — SSR adapter wrapping three's SSRPass |
 | `composer.ts` | `EffectComposer` builder with HDR (`HalfFloatType`) and effect merging |
 | `systems.ts` | `PostprocessingBuildSystem` — builds the pipeline once renderer + camera are ready |
 | `plugin.ts` | `PostprocessingPlugin` — system, component, config (defaults + enums) |
@@ -60,6 +63,20 @@ Post-processing is declared as a component attribute on any entity (typically a 
 | `dof-focus-distance` | `f32` | 0.01 | Focus distance |
 | `dof-focus-range` | `f32` | 0.5 | Focus range |
 | `dof-bokeh-scale` | `f32` | 3.0 | Bokeh blur scale |
+| `height-fog` | `ui8` | 0 | Height fog on/off (composer: analytic post fog; without composer: `FogExp2` fallback) |
+| `fog-color` | `u32` | `0x10131a` | Fog tint (hex) |
+| `fog-density` | `f32` | 0.06 | Exponential density (1/m) |
+| `fog-height` | `f32` | 2.0 | World Y of maximum density (m) |
+| `fog-falloff` | `f32` | 0.15 | Vertical decay above `fog-height` (m) |
+| `fog-noise` | `f32` | 0.5 | World-space FBM noise modulation (0..1) |
+| `fog-sun-influence` | `f32` | 0.8 | Forward-scattering strength toward the sun |
+| `fog-sky-haze` | `f32` | 0.5 | Horizon haze on sky pixels (aerial perspective) |
+| `god-rays` | `ui8` | 0 | God rays on/off (sun source follows the first directional light) |
+| `ssr` | `ui8` | 0 | Screen-space reflections on shiny meshes |
+| `ssr-opacity` | `f32` | 0.5 | Reflection blend strength |
+| `ssr-max-distance` | `f32` | 180 | Ray march length (m) |
+| `ssr-thickness` | `f32` | 0.018 | Surface thickness tolerance (m) |
+| `ssr-resolution-scale` | `f32` | 0.5 | March buffer scale (perf vs sharpness) |
 
 ## Registry API
 
@@ -72,8 +89,11 @@ interface EffectDefinition {
   create(state, entity, renderer, scene, camera): Effect | null;
   update?(state, entity, effect): void;
   readonly position?: 'first' | 'last';
+  readonly order?: number; // sort key within a position bucket (lower = earlier)
 }
 ```
+
+Regular-pass ordering by `order`: SSAO (`-10`) → height fog (`-5`) → bloom/vignette/DoF/etc. (`0`, registration order). This keeps occlusion under the atmosphere and lets fog bloom: the haze the camera sees is graded and bloomed like the scene behind it.
 
 ### Functions
 

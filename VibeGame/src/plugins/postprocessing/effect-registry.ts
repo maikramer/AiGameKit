@@ -2,18 +2,23 @@ import type { Camera, Scene, WebGLRenderer } from 'three';
 import type { Pass } from 'postprocessing';
 import type { Component } from '../../core';
 
+export type EffectComponentState = Record<
+  string,
+  Float32Array | Uint8Array | Uint32Array
+>;
+
 export interface EffectDefinition {
   readonly key: string;
   readonly component?: Component;
   create(
-    state: Record<string, Float32Array | Uint8Array>,
+    state: EffectComponentState,
     entity: number,
     renderer: WebGLRenderer,
     scene: Scene,
     camera: Camera
   ): Pass | null;
   update?(
-    state: Record<string, Float32Array | Uint8Array>,
+    state: EffectComponentState,
     entity: number,
     pass: Pass
   ): void;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { Postprocessing } from '../../../src/plugins/postprocessing/components';
 
-const MAX_ENTITIES = 100000;
+import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 const ALL_KEYS = Object.keys(Postprocessing).sort();
 

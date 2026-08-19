@@ -1,5 +1,4 @@
 import {
-  DirectionalLight,
   Mesh,
   MeshBasicMaterial,
   SphereGeometry,
@@ -32,9 +31,11 @@ import { N8AOPostPass } from 'n8ao';
 import { getGpuTierForRenderer } from '../rendering/utils';
 import { Postprocessing } from './components';
 import { registerEffect } from './effect-registry';
-import { SSRPassAdapter } from './ssr-adapter';
+import { ReflectionPass } from './reflection-pass';
+import { HeightFogEffect } from './height-fog-effect';
+import { findFirstDirectionalLight } from './sun-source';
 
-type CS = Record<string, Float32Array | Uint8Array>;
+type CS = Record<string, Float32Array | Uint8Array | Uint32Array>;
 
 /**
  * Maps the component's toneMapping enum (0=off,1=AgX,2=ACES,3=Neutral,
@@ -179,6 +180,10 @@ registerEffect({
 
 registerEffect({
   key: 'ssao',
+  // AO darkens creases first so the height fog that follows blends atmosphere
+  // over an already-occluded image (order -10 = first among the regular passes;
+  // the height-fog effect at -5 then runs ahead of bloom and the rest).
+  order: -10,
   create(
     _state: CS,
     entity: number,
@@ -403,44 +408,6 @@ function getOrCreateSunMesh(scene: Scene): Mesh {
  * `GodRaysEffect` projects this world position into screen space each frame to
  * drive the radial blur, so the mesh follows the active light automatically.
  */
-// Cache the directional-light reference per scene so we don't traverse the
-// whole graph every frame. The cache invalidates only when the directional-light
-// count in the scene changes (a light was added/removed) — directional light
-// properties (position/target) are read live from the cached reference.
-const dirLightCache = new WeakMap<
-  Scene,
-  { light: DirectionalLight | null; count: number }
->();
-
-function findFirstDirectionalLight(scene: Scene): DirectionalLight | null {
-  let cached = dirLightCache.get(scene);
-  // Cheap live count: DirectionalLights are direct children of the scene root
-  // (the LightSyncSystem adds them there). Counting root children with the
-  // isDirectionalLight flag is O(children-of-root), not a full traverse.
-  let rootDirCount = 0;
-  for (const child of scene.children) {
-    if ((child as DirectionalLight).isDirectionalLight) rootDirCount++;
-  }
-  if (
-    cached &&
-    cached.count === rootDirCount &&
-    cached.light &&
-    scene === cached.light.parent
-  ) {
-    return cached.light;
-  }
-  // Cache miss (first call, count changed, or light reparented/removed): do one
-  // full traverse to (re)resolve, then stamp the count.
-  let resolved: DirectionalLight | null = null;
-  scene.traverse((obj) => {
-    if (resolved === null && (obj as DirectionalLight).isDirectionalLight) {
-      resolved = obj as DirectionalLight;
-    }
-  });
-  dirLightCache.set(scene, { light: resolved, count: rootDirCount });
-  return resolved;
-}
-
 /** Last sun sync pose — skip rewrite when camera/light barely moved. */
 const _lastSunCam = new Vector3(Number.NaN, Number.NaN, Number.NaN);
 const _lastSunDir = new Vector3(Number.NaN, Number.NaN, Number.NaN);
@@ -573,14 +540,70 @@ function refreshSsrSelects(scene: Scene, selects: Mesh[]): void {
   });
 }
 
+/** Per-pass handles for the height-fog effect: the wrapped effect plus the
+ * scene/camera refs needed to refresh the reconstruction matrices and the sun
+ * inscattering direction every frame. */
+interface HeightFogHandles {
+  effect: HeightFogEffect;
+  scene: Scene;
+  camera: Camera;
+}
+const heightFogHandlesByPass = new WeakMap<Pass, HeightFogHandles>();
+
+registerEffect({
+  key: 'heightFog',
+  // After SSAO (-10), before bloom and friends (order 0): the fog the camera
+  // sees must be bloomed, graded and tone-mapped like the scene behind it.
+  order: -5,
+  create(
+    _state: CS,
+    entity: number,
+    _renderer: WebGLRenderer,
+    scene: Scene,
+    camera: Camera
+  ): Pass | null {
+    const cs = Postprocessing as unknown as CS;
+    if ((cs.heightFog as Uint8Array)[entity] !== 1) return null;
+    const effect = new HeightFogEffect();
+    effect.setFog({
+      color: (cs.fogColor as Uint32Array)[entity],
+      density: (cs.fogDensity as Float32Array)[entity],
+      height: (cs.fogHeight as Float32Array)[entity],
+      falloff: (cs.fogFalloff as Float32Array)[entity],
+      noise: (cs.fogNoise as Float32Array)[entity],
+      sunInfluence: (cs.fogSunInfluence as Float32Array)[entity],
+      skyHaze: (cs.fogSkyHaze as Float32Array)[entity],
+    });
+    const pass = wrap(camera, effect);
+    heightFogHandlesByPass.set(pass, { effect, scene, camera });
+    return pass;
+  },
+  update(state: CS, entity: number, pass: Pass): void {
+    const handles = heightFogHandlesByPass.get(pass);
+    if (!handles) return;
+    handles.effect.setFog({
+      color: (state.fogColor as Uint32Array)[entity],
+      density: (state.fogDensity as Float32Array)[entity],
+      height: (state.fogHeight as Float32Array)[entity],
+      falloff: (state.fogFalloff as Float32Array)[entity],
+      noise: (state.fogNoise as Float32Array)[entity],
+      sunInfluence: (state.fogSunInfluence as Float32Array)[entity],
+      skyHaze: (state.fogSkyHaze as Float32Array)[entity],
+    });
+    handles.effect.syncCameraSun(
+      handles.camera,
+      handles.scene,
+      performance.now() / 1000
+    );
+  },
+});
+
 registerEffect({
   key: 'ssr',
-  // Right after the scene render: SSRPass re-renders the scene itself and
-  // outputs beauty+reflections — placed mid-chain it would overwrite the
-  // earlier effects' work (which read as a milky veil over the whole frame).
-  // First in the chain, every other effect composes on top of its output.
-  // order -10: before the AA passes that also claim 'first', or the SSR
-  // re-render would discard their antialiasing.
+  // Reflections belong on the raw lit frame: run before bloom, grading and
+  // tone mapping so a reflected highlight blooms and grades exactly like the
+  // highlight it is a reflection of. order -10 also puts it ahead of the AA
+  // passes that share `position: 'first'`.
   position: 'first',
   order: -10,
   create(
@@ -595,40 +618,34 @@ registerEffect({
     const size = renderer.getDrawingBufferSize(new Vector2());
     const selects: Mesh[] = [];
     refreshSsrSelects(scene, selects);
-    const adapter = new SSRPassAdapter({
+    const scale = (cs.ssrResolutionScale as Float32Array)[entity];
+    const pass = new ReflectionPass({
       renderer,
       scene,
       camera,
-      width: size.x,
-      height: size.y,
       selects,
+      resolutionScale: scale > 0 ? scale : 0.5,
     });
-    const wrapped = adapter.wrapped;
-    if (wrapped) {
-      wrapped.opacity = (cs.ssrOpacity as Float32Array)[entity];
-      wrapped.maxDistance = (cs.ssrMaxDistance as Float32Array)[entity];
-      wrapped.thickness = (cs.ssrThickness as Float32Array)[entity];
-      const scale = (cs.ssrResolutionScale as Float32Array)[entity];
-      if (scale > 0 && scale < 1) {
-        wrapped.resolutionScale = scale;
-        wrapped.setSize(size.x, size.y);
-      }
-    }
-    const pass = adapter as unknown as Pass;
-    ssrHandlesByPass.set(pass, {
+    pass.setSize(size.x, size.y);
+    pass.configure({
+      intensity: (cs.ssrOpacity as Float32Array)[entity],
+      maxDistance: (cs.ssrMaxDistance as Float32Array)[entity],
+      thickness: (cs.ssrThickness as Float32Array)[entity],
+    });
+    ssrHandlesByPass.set(pass as unknown as Pass, {
       scene,
       selects,
       framesUntilRefresh: SSR_SELECTS_REFRESH_FRAMES,
     });
-    return pass;
+    return pass as unknown as Pass;
   },
   update(state: CS, entity: number, pass: Pass): void {
-    const adapter = pass as unknown as SSRPassAdapter;
-    const wrapped = adapter.wrapped;
-    if (!wrapped) return;
-    wrapped.opacity = (state.ssrOpacity as Float32Array)[entity];
-    wrapped.maxDistance = (state.ssrMaxDistance as Float32Array)[entity];
-    wrapped.thickness = (state.ssrThickness as Float32Array)[entity];
+    const reflection = pass as unknown as ReflectionPass;
+    reflection.configure({
+      intensity: (state.ssrOpacity as Float32Array)[entity],
+      maxDistance: (state.ssrMaxDistance as Float32Array)[entity],
+      thickness: (state.ssrThickness as Float32Array)[entity],
+    });
     const handles = ssrHandlesByPass.get(pass);
     if (handles && --handles.framesUntilRefresh <= 0) {
       handles.framesUntilRefresh = SSR_SELECTS_REFRESH_FRAMES;

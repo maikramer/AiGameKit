@@ -42,6 +42,8 @@ export const PostprocessingPlugin: Plugin = {
         fogHeight: 2.0,
         fogFalloff: 0.15,
         fogNoise: 0.5,
+        fogSunInfluence: 0.8,
+        fogSkyHaze: 0.5,
         colorGrading: 1,
         saturation: 0.08,
         contrast: 0.06,
