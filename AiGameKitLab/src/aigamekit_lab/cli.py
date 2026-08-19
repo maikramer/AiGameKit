@@ -749,7 +749,7 @@ def debug_compare(
     ortho: bool,
 ) -> None:
     """Compara dois modelos lado a lado (screenshots + report JSON)."""
-    from aigamekit_lab.renderer import render_screenshots
+    from aigamekit_lab.renderer import parse_views, render_screenshots
 
     if output_dir is None:
         output_dir = file_a.parent / f"{file_a.stem}_vs_{file_b.stem}"
@@ -786,7 +786,7 @@ def debug_compare(
     try:
         from PIL import Image
 
-        view_list = [v.strip() for v in views.split(",") if v.strip()]
+        view_list = parse_views(views)
         for vn in view_list:
             pa = dir_a / f"{vn}.png"
             pb = dir_b / f"{vn}.png"
@@ -812,7 +812,7 @@ def debug_compare(
 
             from aigamekit_lab.compare_images import load_pair_same_size
 
-            view_list_ov = [v.strip() for v in views.split(",") if v.strip()]
+            view_list_ov = parse_views(views)
             for vn in view_list_ov:
                 pa = dir_a / f"{vn}.png"
                 pb = dir_b / f"{vn}.png"
@@ -859,16 +859,14 @@ def debug_compare(
         # Sem isto o gate era silenciosamente ignorado e o CI dava exit 0 para
         # assets visualmente partidos (quem esquece --image-metrics acha que o
         # limiar está aplicado).
-        console.print(
-            "[red]--fail-below-ssim requer --image-metrics (métricas não calculadas).[/red]"
-        )
+        console.print("[red]--fail-below-ssim requer --image-metrics (métricas não calculadas).[/red]")
         sys.exit(2)
 
     if image_metrics:
         from aigamekit_lab.compare_images import compare_view_pair
 
         metrics_list = []
-        view_list = [v.strip() for v in views.split(",") if v.strip()]
+        view_list = parse_views(views)
         for vn in view_list:
             pa = dir_a / f"{vn}.png"
             pb = dir_b / f"{vn}.png"

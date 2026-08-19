@@ -32,6 +32,33 @@ ALL_VIEWS = list(CAMERA_PRESETS.keys())
 DEFAULT_VIEWS = ["front", "three_quarter", "right", "back"]
 
 
+def parse_views(views: str | None) -> list[str]:
+    """Separa e valida nomes de vista separados por vírgula.
+
+    Substitui o padrão antigo que saltava nomes desconhecidos em silêncio e
+    devolvia "0 screenshots" com exit 0 (um ``--views 2`` produzia um
+    report.json vazio sem qualquer aviso).
+
+    Args:
+        views: Nomes separados por vírgula (ex.: ``front,three_quarter``).
+            Vazio/None devolve as vistas por omissão.
+
+    Returns:
+        Lista de nomes válidos, sem duplicados de whitespace.
+
+    Raises:
+        ValueError: Algum nome não existe em ``CAMERA_PRESETS``; a mensagem
+            lista os inválidos e as vistas válidas.
+    """
+    names = [v.strip() for v in (views or "").split(",") if v.strip()]
+    if not names:
+        return list(DEFAULT_VIEWS)
+    unknown = [v for v in names if v not in CAMERA_PRESETS]
+    if unknown:
+        raise ValueError(f"vista(s) desconhecida(s): {', '.join(unknown)} — válidas: {', '.join(ALL_VIEWS)}")
+    return names
+
+
 def _require_bpy():
     try:
         import bpy
@@ -229,6 +256,9 @@ def render_screenshots(
         Report dict with ``screenshots``, ``world_bounds``, ``mesh``,
         ``animations``, and render settings.
     """
+    # validar vistas antes de tocar na cena/GLB — falhar cedo em --views errado
+    view_names = parse_views(views)
+
     from aigamekit_shared.bpy_mesh import clear_scene
 
     glb_path = Path(glb_path).expanduser().resolve()
@@ -238,10 +268,6 @@ def render_screenshots(
     bpy = _require_bpy()
     clear_scene()
     import_glb(glb_path)
-
-    view_names = [v.strip() for v in views.split(",") if v.strip()]
-    if not view_names:
-        view_names = DEFAULT_VIEWS
 
     frames: list[int | None] = []
     use_frame_list = frame_list is not None
@@ -335,6 +361,9 @@ def render_weight_heatmap(
     Returns:
         Report dict with ``weight_heatmap`` ({bone, screenshots, render_settings}).
     """
+    # validar vistas antes de tocar na cena/GLB — falhar cedo em --views errado
+    view_names = parse_views(views)
+
     from aigamekit_shared.bpy_mesh import clear_scene
 
     glb_path = Path(glb_path).expanduser().resolve()
@@ -373,7 +402,6 @@ def render_weight_heatmap(
     _setup_render(resolution, engine=engine, film_transparent=transparent_film)
     bpy.context.scene.display.shading.color_type = "VERTEX"
 
-    view_names = [v.strip() for v in views.split(",") if v.strip()] or DEFAULT_VIEWS
     safe_bone = bone_name.replace("/", "_").replace(" ", "_")
 
     screenshots: list[dict[str, Any]] = []
@@ -543,6 +571,9 @@ def render_inspect_material(
     Returns:
         Report dict with ``materials``, ``screenshots``, and metadata.
     """
+    # validar vistas antes de tocar na cena/GLB — falhar cedo em --views errado
+    view_names = parse_views(views)
+
     from aigamekit_shared.bpy_mesh import clear_scene
 
     glb_path = Path(glb_path).expanduser().resolve()
@@ -561,7 +592,6 @@ def render_inspect_material(
 
     _setup_render(resolution, engine=engine, film_transparent=transparent_film)
 
-    view_names = [v.strip() for v in views.split(",") if v.strip()] or ["front", "three_quarter", "right"]
     screenshots: list[dict[str, Any]] = []
     for view_name in view_names:
         preset = CAMERA_PRESETS.get(view_name)
