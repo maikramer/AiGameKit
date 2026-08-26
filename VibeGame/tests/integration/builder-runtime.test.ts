@@ -7,7 +7,7 @@ import { RenderingPlugin } from 'vibegame/rendering';
 import { PhysicsPlugin } from 'vibegame/physics';
 import { TransformsPlugin } from 'vibegame/transforms';
 
-import { MAX_ENTITIES } from '../../src/core/ecs/constants';
+import { MAX_ENTITIES } from 'vibegame';
 
 describe('Builder-Runtime Integration', () => {
   beforeEach(() => {

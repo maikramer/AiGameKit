@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
 
-import { MAX_ENTITIES } from '../../src/core/ecs/constants';
+import { MAX_ENTITIES } from 'vibegame';
 
 describe('GameRuntime', () => {
   let runtime: any;

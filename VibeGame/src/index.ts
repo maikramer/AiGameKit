@@ -63,6 +63,68 @@ export {
   PlayerControllerPlugin,
 } from './plugins/player-controller/plugin';
 export { OrbitCamera, OrbitCameraPlugin } from './plugins/orbit-camera';
+export {
+  ISO_PITCH,
+  IsometricCamera,
+  IsometricCameraInputSystem,
+  IsometricCameraPlugin,
+  IsometricCameraSystem,
+  applyZoomInput,
+  isometricCameraRecipe,
+  isometricCameraParser,
+  isometricEyeOffset,
+  rotateYawOnEdge,
+  smoothZoom,
+  snapYawIndex,
+} from './plugins/isometric-camera';
+// Farming tile grids: <FarmPlot>, crop state machine, instanced field render.
+export {
+  FarmGrid,
+  FarmPlotPlugin,
+  FarmTileStates,
+  advanceFarmDay,
+  cellIndex,
+  clearTile,
+  createFarmGrid,
+  deserializeFarmGrid,
+  facingCellFrom,
+  getFacingCell,
+  getFarmGrid,
+  getTileState,
+  harvestTile,
+  onFarmTileChanged,
+  plantSeed,
+  serializeFarmGrid,
+  tillTile,
+  waterTile,
+  worldToCell,
+} from './plugins/farm-plot';
+export type {
+  CropDef,
+  FarmDayReport,
+  FarmGridData,
+  FarmTile,
+  HarvestYield,
+} from './plugins/farm-plot';
+// Day/night calendar: <DayCycle>, sun arc driving <Sky>, <Clock> HUD widget.
+export {
+  DAY_ADVANCED,
+  DayCyclePlugin,
+  GameClock,
+  SEASON_CHANGED,
+  SEASON_NAMES,
+  YEAR_CHANGED,
+  advanceGameDay,
+  formatClock,
+  getClockEntity,
+  getTimeOfDay,
+  onClockEvent,
+  setClockPaused,
+  setClockScale,
+  sleepUntilMorning,
+  sunAngles,
+} from './plugins/daycycle';
+export type { Season, TimeOfDay } from './plugins/daycycle';
 export { getScene } from './plugins/rendering';
 export { MeshRenderer, DistanceCull } from './plugins/rendering';
 export {
@@ -510,6 +572,38 @@ export type {
   TabContent,
   TabDescriptor,
 } from './plugins/hud';
+export {
+  createHudSlot,
+  createHotbarWidget,
+  createStatBarWidget,
+  getHotbarActive,
+  getHudStatSource,
+  hotbarEdgeSlot,
+  hotbarFactory,
+  hotbarParser,
+  hotbarRecipe,
+  HOTBAR_KEYS,
+  HOTBAR_TAG,
+  HOTBAR_WIDGET_TYPE,
+  onHotbarActivate,
+  registerHotbarWidgetFactory,
+  registerHudStatSource,
+  setHotbarActive,
+  setHotbarSlots,
+  statBarFactory,
+  statBarParser,
+  statBarRecipe,
+  STATBAR_TAG,
+  STATBAR_WIDGET_TYPE,
+} from './plugins/hud';
+export type {
+  HotbarActivateListener,
+  HotbarSlotSpec,
+  HudSlot,
+  HudSlotSpec,
+  HudStatSource,
+  HudStatValue,
+} from './plugins/hud';
 
 export {
   LoadingPlugin,
@@ -642,6 +736,7 @@ export {
   deserializeAll,
   loadFromLocalStorage,
   loadSnapshot,
+  registerGlobalSaveSerializer,
   registerRpgSaveSerializers,
   registerSaveSerializer,
   saveSnapshot,
@@ -649,9 +744,11 @@ export {
   serializeAll,
 } from './plugins/save-load';
 export type {
+  GlobalSaveSerializer,
   SaveSnapshot,
   SerializableEntitySnapshot,
   SaveSerializer,
+  SerializedKind,
 } from './plugins/save-load';
 
 export {
@@ -1431,3 +1528,10 @@ export type {
   GhostWorldPose,
   AiMistakeKind,
 } from './plugins/racing';
+export {
+  setQualityMode,
+  getQualityMode,
+  parseQualityQuery,
+  getAdaptiveQualityTier,
+} from './plugins/adaptive-quality';
+export type { QualityModeName } from './plugins/adaptive-quality';

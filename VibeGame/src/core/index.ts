@@ -13,6 +13,7 @@ export type { Component } from './ecs/types';
 export {
   createSnapshot,
   formatSnapshot,
+  MAX_ENTITIES,
   NULL_ENTITY,
   Parent,
   restoreSnapshot,
