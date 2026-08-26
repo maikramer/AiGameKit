@@ -156,7 +156,16 @@ export function serializeAll(state: State): SaveSnapshot {
 export function deserializeAll(state: State, snapshot: SaveSnapshot): void {
   const serializers = getRegistry(state);
   for (const entity of snapshot.entities) {
-    const eid = state.exists(entity.eid) ? entity.eid : state.createEntity();
+    // A load typically runs right after restoreSnapshot re-created entities
+    // under NEW eids — match named rows by name so kinds land on the restored
+    // entity instead of spawning a duplicate. Unnamed rows fall back to the
+    // saved eid (same-session loads reuse it), else a fresh entity.
+    let eid: number | undefined = entity.name
+      ? (state.getEntityByName(entity.name) ?? undefined)
+      : undefined;
+    if (eid === undefined) {
+      eid = state.exists(entity.eid) ? entity.eid : state.createEntity();
+    }
     for (const [kind, data] of Object.entries(entity.kinds)) {
       const serializer = serializers.get(kind);
       if (serializer) serializer.deserialize(state, eid, data);

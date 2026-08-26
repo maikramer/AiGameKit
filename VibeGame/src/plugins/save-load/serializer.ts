@@ -9,6 +9,8 @@ import {
 } from '../../core';
 import { logger } from '../../core/utils/logger';
 import { Serializable } from './components';
+import { deserializeAll, serializeAll } from './serializer-registry';
+import type { SaveSnapshot as RegistrySnapshot } from './serializer-registry';
 
 const packr = new Packr();
 
@@ -18,16 +20,26 @@ let nextSerializationId = 1;
 
 export function saveSnapshot(state: State): Uint8Array {
   const snap = createSnapshot(state);
-  const payload: WorldSnapshot & { serializableEids?: number[] } = { ...snap };
+  const payload: WorldSnapshot & {
+    serializableEids?: number[];
+    registry?: RegistrySnapshot;
+  } = { ...snap };
   const eids: number[] = [];
   for (const eid of serializableQuery(state.world)) {
     if (Serializable.flag[eid]) eids.push(eid);
   }
   payload.serializableEids = eids;
+  // Side-table state (farm tiles, interned inventories, game globals) lives in
+  // the serializer registry, not in raw component arrays — pack it alongside
+  // the core snapshot so one blob round-trips the whole game.
+  payload.registry = serializeAll(state);
   return packr.pack(payload) as Uint8Array;
 }
 
-type SnapshotPayload = WorldSnapshot & { serializableEids?: number[] };
+type SnapshotPayload = WorldSnapshot & {
+  serializableEids?: number[];
+  registry?: RegistrySnapshot;
+};
 
 function isSnapshotPayload(data: unknown): data is SnapshotPayload {
   if (!data || typeof data !== 'object') return false;
@@ -82,6 +94,18 @@ export function loadSnapshot(
   }
 
   restoreSnapshot(state, payload);
+
+  // Side-table state follows the core restore: deserializeAll matches named
+  // rows against the freshly restored entities (see serializer-registry).
+  if (payload.registry) {
+    try {
+      deserializeAll(state, payload.registry);
+    } catch (err) {
+      logger.warn(
+        `[save-load] registry snapshot parcialmente ilegível: ${err instanceof Error ? err.message : err}`
+      );
+    }
+  }
 
   if (
     typeof window !== 'undefined' &&
