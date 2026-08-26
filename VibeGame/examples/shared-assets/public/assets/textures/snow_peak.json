@@ -1,0 +1,10 @@
+{
+  "prompt": "seamless tileable texture, white snow with ice crystals and small rocks, mountain peak surface, frozen ground, frost, top-down flat view, game asset",
+  "negative_prompt": "smooth, polished, grass, green, seams, borders",
+  "width": 1024,
+  "height": 1024,
+  "steps": 28,
+  "guidance": 3.5,
+  "seed": 3370452589,
+  "regenerated_at": "2026-07-12 22:13:36"
+}

@@ -1,0 +1,98 @@
+# Pack audio-sfx-combat — impactos/armas/colheita (Stable Audio 3 Small SFX).
+# Canónico em examples/shared-assets/; exemplos consomem via plugin
+# vibegame({ sharedAssets }). Regenerar:
+#   cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/audio-sfx-combat
+output_dir: ../public/assets
+meshes_subdir: meshes/audio
+images_subdir: images/audio
+assets:
+  - id: sfx/combat/hit
+    idea: Sharp metal sword clash, bright metallic ring, short combat hit impact
+    kind: prop
+    category: weapon
+    pipeline:
+      - audio
+    audio:
+      duration: 2
+      profile: effects
+    seed: 201
+  - id: sfx/combat/swing
+    idea: Whoosh sword swing through air, quick blade swish, fast weapon swing
+    kind: prop
+    category: weapon
+    pipeline:
+      - audio
+    audio:
+      duration: 0.5
+      profile: effects
+    seed: 401
+  - id: sfx/combat/chop_hit
+    idea: Sharp axe chop into wood tree trunk, heavy blade impact on timber
+    kind: prop
+    category: weapon
+    pipeline:
+      - audio
+    audio:
+      duration: 1
+      profile: effects
+    seed: 302
+  - id: sfx/combat/chop_break
+    idea: Large tree falling crashing down, timber cracking and splintering
+    kind: prop
+    category: weapon
+    pipeline:
+      - audio
+    audio:
+      duration: 2
+      profile: effects
+    seed: 303
+  - id: sfx/combat/mine_hit
+    idea: Pickaxe striking stone rock, hard mineral impact, mining chisel hit on ore, sharp crack with resonant ring out
+    kind: prop
+    category: weapon
+    pipeline:
+      - audio
+    audio:
+      duration: 1.5
+      profile: effects
+    seed: 301
+  - id: sfx/combat/mine_break
+    idea: Rock crumbling apart, stone debris falling, boulder breaking into fragments
+    kind: prop
+    category: weapon
+    pipeline:
+      - audio
+    audio:
+      duration: 1.5
+      profile: effects
+    seed: 304
+  - id: sfx/combat/bow_shot
+    idea: Arrow release with bowstring twang, swift arrow flight whoosh, archery shot
+    kind: prop
+    category: weapon
+    pipeline:
+      - audio
+    audio:
+      duration: 1
+      profile: effects
+    seed: 402
+  - id: sfx/combat/arrow_hit
+    idea: Arrow striking wooden target, sharp thunk impact, archery hit with quiver
+    kind: prop
+    category: weapon
+    pipeline:
+      - audio
+    audio:
+      duration: 1
+      profile: effects
+    seed: 403
+  - id: sfx/combat/shield_block
+    idea: Heavy shield block impact, metal on wood thud with brief ring, defensive guard
+    kind: prop
+    category: weapon
+    pipeline:
+      - audio
+    audio:
+      duration: 1.2
+      profile: effects
+    seed: 404

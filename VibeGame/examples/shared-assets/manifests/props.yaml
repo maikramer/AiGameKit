@@ -2,9 +2,9 @@
 # Começa com rock_mossy (beira de pista do racer + cenário RPG). Props de identidade
 # própria de cada jogo ficam no manifest do jogo (ex.: props-rpg.yaml).
 # Canónico em examples/shared-assets/ (manifests + binários em public/assets).
-# Symlink em cada sample-gameassets/manifests/.
+# Exemplos consomem via plugin vibegame({ sharedAssets }) — sem cópias nem symlinks.
 # Regenerar: cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/props
-output_dir: public/assets
+output_dir: ../public/assets
 meshes_subdir: meshes/props
 images_subdir: images/props
 assets:

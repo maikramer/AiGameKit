@@ -1,0 +1,14 @@
+{
+  "prompt": "Arcade car horn beep, cheerful double honk, playful kart horn",
+  "duration": 0.8,
+  "model_id": "stabilityai/stable-audio-3-small-sfx",
+  "mastering": {
+    "lufs_target": -15.0,
+    "high_pass_hz": 25.0,
+    "compressor_preset": "glue",
+    "compressor_enabled": true,
+    "true_peak_db": -0.5,
+    "headroom_db": 0.3
+  },
+  "ogg_quality": 0.8
+}

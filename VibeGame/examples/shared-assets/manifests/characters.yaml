@@ -1,0 +1,525 @@
+# Grupo characters — herói, NPCs, criaturas e bosses.
+# Defs base (estilo, ferramentas, presets) em ../game.yaml.
+# Regenerar: gameassets resume --profile game.yaml --manifest manifests/characters
+output_dir: ../public/assets
+meshes_subdir: meshes/characters
+images_subdir: images/characters
+assets:
+  - id: hero
+    text3d:
+      steps: 40
+      octree_resolution: 384
+      mc_level: 0
+    idea:
+      young cartoon fantasy adventurer wearing leather tunic with rolled-up sleeves,
+      cloth bandana, simple belt with pouch, cheerful determined expression, short boots,
+      no helmet no armor, standing upright in relaxed A-pose with arms angled down at
+      45 degrees away from the body, open hands with spread fingers, hands empty, no
+      weapons, no props, full body visible, front-facing, RPG hero boy
+    kind: character
+    category: humanoid
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.55
+        - 1.55
+        - 0.4
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,sprint,jump,attack,hit,death,sword,axe,spear,chop,swordidle,axeidle,spearidle,chopidle,mine,gather,interact,punch,roar,roll
+  - id: npc_merchant
+    idea:
+      friendly cartoon merchant NPC wearing brown apron over green tunic, round
+      belly, warm smile, short chubby proportions, standing upright in relaxed A-pose
+      with arms angled down at 45 degrees away from the body, visible gap between arms
+      and torso, open hands with spread fingers, hands empty, no weapons, no props,
+      full body visible, front-facing, fantasy shopkeeper
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.65
+        - 1.5
+        - 0.5
+  - id: npc_scout
+    idea:
+      lean cartoon scout NPC wearing hooded green cloak over leather jerkin, map
+      case on belt, short boots, alert friendly expression, standing upright in relaxed
+      A-pose with arms angled down at 45 degrees away from the body, visible gap between
+      arms and torso, open hands with spread fingers, hands empty, no weapons, no props,
+      full body visible, front-facing, fantasy ranger cartographer
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.6
+        - 1.55
+        - 0.45
+  - id: npc_blacksmith
+    idea:
+      burly cartoon blacksmith NPC wearing thick leather apron over sleeveless tunic,
+      broad shoulders, bushy beard, soot smudges, sturdy boots, standing upright in
+      relaxed A-pose with arms angled down at 45 degrees away from the body, visible
+      gap between arms and torso, open hands with spread fingers, hands empty, no weapons,
+      no props, full body visible, front-facing, fantasy village smith
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.75
+        - 1.6
+        - 0.55
+  - id: npc_healer
+    idea:
+      kind cartoon healer NPC wearing pale blue robe with white sash, simple headscarf,
+      gentle smile, soft slippers, standing upright in relaxed A-pose with arms angled
+      down at 45 degrees away from the body, visible gap between arms and torso, open
+      hands with spread fingers, hands empty, no weapons, no props, full body visible,
+      front-facing, fantasy temple cleric
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.6
+        - 1.55
+        - 0.45
+  - id: npc_guard
+    idea:
+      cartoon town guard NPC wearing padded gambeson with chainmail collar and blue
+      tabard, no helmet, short cropped hair, stern friendly face, boots with greaves,
+      standing upright in relaxed A-pose with arms angled down at 45 degrees away from
+      the body, visible gap between arms and torso, open hands with spread fingers,
+      hands empty, no weapons, no props, full body visible, front-facing, fantasy city
+      watchman
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.7
+        - 1.6
+        - 0.5
+  - id: npc_elder
+    idea:
+      old cartoon village elder NPC wearing long brown robe with fur collar, long
+      white beard, slight stoop, wooden sandals, warm wise expression, standing upright
+      in relaxed A-pose with arms angled down at 45 degrees away from the body, visible
+      gap between arms and torso, open hands with spread fingers, hands empty, no weapons,
+      no props, full body visible, front-facing, fantasy village elder
+    kind: character
+    category: humanoid
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.6
+        - 1.5
+        - 0.45
+  - id: goblin
+    idea:
+      small wiry cartoon goblin with big pointy ears, crooked teeth, tattered loincloth,
+      green skin, standing upright in relaxed A-pose with arms angled down at 45 degrees
+      away from the body, open hands with spread fingers, hands empty, no weapons, no
+      props, full body visible, front-facing, fantasy enemy creature
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 2
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose-dwarf
+      size_m:
+        - 0.45
+        - 1.15
+        - 0.35
+  - id: slime
+    seed: 55192
+    idea:
+      cute blue jelly slime dwarf humanoid standing upright in relaxed A-pose,
+      short stout gelatin body, stubby arms angled down at 45 degrees away from the body,
+      open blobby hands with spread fingers, short thick legs and feet planted on the
+      ground, two sparkly eyes and smile on the front, glossy translucent blue slime
+      skin, no weapons no props, full body visible, front-facing, white background
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 2
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose-dwarf
+      size_m:
+        - 0.7
+        - 1.0
+        - 0.55
+  - id: wolf
+    idea:
+      cartoon feral grey wolf walking on all fours, side view, four legs on the
+      ground, horizontal animal body, low head, bushy tail, grey-black fur, yellow glowing
+      eyes, snarling fangs, wild quadruped forest predator animal
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: creature
+      clips: idle,walk,run,jump,attack,hit,death,roar
+      procedural: true
+      force_preset: true
+    omni:
+      control_type: bbox
+      bbox_preset: quadruped
+      size_m:
+        - 1.4
+        - 0.75
+        - 0.45
+  - id: shade
+    idea:
+      cartoon shadow shade creature, floating dark ghostly wraith with glowing purple
+      eyes, tattered cloak, ethereal smoky body, standing upright in relaxed A-pose
+      with arms angled down at 45 degrees away from the body, open hands with spread
+      fingers, hands empty, no weapons, no props, full body visible, front-facing, fantasy
+      undead spirit
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.6
+        - 1.6
+        - 0.4
+  - id: witch_boss
+    idea:
+      menacing cartoon witch boss with long hooked nose, pointed black hat, tattered
+      dark purple robe, glowing green hands, sinister grin, standing upright in relaxed
+      A-pose with arms angled down at 45 degrees away from the body, open hands with
+      spread fingers, hands empty, no weapons, no props, full body visible, front-facing,
+      dark fantasy forest witch, game asset
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    generation: high
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.7
+        - 1.8
+        - 0.5
+  - id: scorpion
+    idea:
+      cartoon desert scorpion with segmented tan-orange tail ending in glowing red
+      stinger, large pincers, eight legs, armored carapace, fantasy desert predator
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: creature
+      clips: idle,walk,run,jump,attack,hit,death,roar
+      procedural: true
+      force_preset: true
+    omni:
+      control_type: bbox
+      bbox:
+        - 1.0
+        - 0.55
+        - 0.75
+      size_m:
+        - 1.2
+        - 0.66
+        - 0.9
+  - id: bandit
+    idea:
+      cartoon desert bandit with tan hood and face mask, leather armor scraps, dark
+      eyes visible, standing upright in relaxed A-pose with arms angled down at 45 degrees
+      away from the body, open hands with spread fingers, hands empty, no weapons, no
+      props, full body visible, front-facing, fantasy rogue enemy
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 0.55
+        - 1.65
+        - 0.4
+  - id: sand_worm
+    idea:
+      cartoon dune sandworm, tall limbless segmented tubular worm body in S-curve,
+      no legs no arms no wings no claws no feet, circular gaping maw with rings of teeth
+      on top, tiny side eyes, sandy armored rings, single continuous worm mesh, white
+      background, no base disk no pedestal no platform no rubble no ground plate no
+      miniature stand
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    generation: high
+    seed: 89133
+    animate:
+      preset: creature
+      clips: idle,walk,run,jump,attack,death,roar
+      procedural: true
+      force_preset: true
+    omni:
+      control_type: bbox
+      bbox:
+        - 0.494
+        - 1.0
+        - 0.32
+      size_m:
+        - 2.6
+        - 5.4
+        - 1.5
+  - id: bogling
+    idea:
+      small cartoon swamp bogling creature with round green-brown body, big yellow
+      eyes, webbed feet, dripping moss on back, standing upright in relaxed A-pose with
+      arms angled down at 45 degrees away from the body, open hands with spread fingers,
+      hands empty, no weapons, no props, full body visible, front-facing, mischievous
+      fantasy amphibian monster
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose-dwarf
+      size_m:
+        - 0.5
+        - 1.1
+        - 0.4
+  - id: bog_warden_boss
+    idea:
+      large cartoon bog warden elemental boss made of swamp mud, vines, and glowing
+      green eyes, mossy stone core, dripping water, standing upright in relaxed A-pose
+      with arms angled down at 45 degrees away from the body, open hands with spread
+      fingers, hands empty, no weapons, no props, full body visible, front-facing, intimidating
+      fantasy swamp boss, game asset
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 1
+    generation: high
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 1.4
+        - 2.6
+        - 1.0
+  - id: boss_ogre
+    idea:
+      menacing large fantasy RPG boss monster, muscular green ogre troll with sharp
+      teeth and small tusks, hunched powerful build, thick dark armor scraps, standing
+      upright in relaxed A-pose with massive arms angled down at 45 degrees away from
+      the body, visible gap between arms and torso, open hands with spread fingers,
+      hands empty, no weapons, no props, full body visible, front-facing, cartoon stylized
+      but bigger and scarier than a goblin, game asset
+    kind: character
+    category: creature
+    pipeline:
+      - 3d
+      - paint
+      - rig
+      - animate
+      - lod
+      - collision
+    lod_levels: 2
+    generation: fast
+    animate:
+      preset: humanoid
+      force_preset: true
+      clips: idle,walk,run,jump,attack,hit,death,punch,roar
+    omni:
+      control_type: pose
+      pose_preset: quaternius-apose
+      size_m:
+        - 1.2
+        - 2.8
+        - 0.9

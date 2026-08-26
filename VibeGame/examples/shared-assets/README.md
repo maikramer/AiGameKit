@@ -1,11 +1,42 @@
-# Shared Crystal Vale assets
+# Shared asset pool
 
-Manifests canónicos dos packs **forest**, **village**, **infra**, **terrain** e
-**props** (estilo Crystal Vale, `style_preset: painterly`) **e** os binários
-finais (GLB/PNG/JSON, sem `_intermediate/`) em `public/assets/`. Esta pasta é a
-fonte canónica: os exemplos recebem cópias via `sync.sh` e nunca regeneram os
-packs partilhados. `examples/shared/` é só TypeScript (i18n, HUD); esta pasta é
-só GameAssets.
+**Uma** pasta com todos os assets gerados do repo — manifests canónicos e os
+binários finais (GLB/PNG/JSON). Nenhum exemplo guarda cópias nem symlinks: o
+plugin `vibegame({ sharedAssets })` serve `public/assets/` daqui a todos eles.
+
+## Packs
+
+`audio-bgm` · `audio-sfx-combat` · `audio-sfx-creatures` · `audio-sfx-ui` ·
+`audio-sfx-vehicles` · `audio-sfx-world` · `characters` · `desert` · `farm` ·
+`forest` · `infra` · `interiors` · `props` · `swamp` · `terrain` ·
+`vegetation` · `vehicles` · `village`
+
+### Áudio (BGM + SFX)
+
+Os clips vivem em `public/assets/audio/` com o rid do manifest como caminho:
+
+```
+audio/bgm/*.ogg              # loops seamless (SA3 Music; -d exacto, @120 BPM)
+audio/sfx/combat/*.ogg       # hits/swings/colheita/arco/escudo
+audio/sfx/creatures/*.ogg    # roars/ferimentos/mortes/slime/lobo
+audio/sfx/player/*.ogg       # hurt/heal do herói
+audio/sfx/ui/*.ogg           # moedas/menus/save/notificações/eventos de corrida
+audio/sfx/vehicles/*.ogg     # motor/nitro/skid/crash/buzina
+audio/sfx/world/*.ogg        # portas/baús/fogo/passos/itens
+```
+
+Regen curado (gate de costura para BGM — re-rola seeds até cauda ≥70%):
+
+```bash
+cd Text2Sound && .venv/bin/python ../VibeGame/examples/shared-assets/regen_audio.py          # só o que falta
+.venv/bin/python ../VibeGame/examples/shared-assets/regen_audio.py --force                   # tudo
+.venv/bin/python ../VibeGame/examples/shared-assets/regen_audio.py --only bgm/boss           # itens específicos
+```
+
+Ou pelo caminho GameAssets (sem gate): `gameassets resume --profile
+game.yaml --manifest manifests/audio-bgm` (um por pack). Os manifests são a
+fonte única de verdade (prompt, categoria, duração, seed); os sidecars
+`.ogg.json` ao lado de cada clip trazem a proveniência da geração.
 
 ## Happy path de regen (GPU)
 
@@ -13,68 +44,41 @@ O batch corre a partir **desta** pasta e escreve em `public/assets/` daqui:
 
 ```bash
 cd VibeGame/examples/shared-assets
-gameassets resume --profile game.yaml --manifest manifests/forest
 gameassets resume --profile game.yaml --manifest manifests/village
-gameassets resume --profile game.yaml --manifest manifests/infra
-gameassets resume --profile game.yaml --manifest manifests/terrain
-gameassets resume --profile game.yaml --manifest manifests/props
+gameassets resume --profile game.yaml --manifest manifests/characters
+# … um por pack; `ls manifests/` lista todos
 ```
 
 `resume` é idempotente: detecta por item o estado em disco (PNG/shape/paint) e
 só gera o que falta — com os binários já presentes, o batch valida e faz skip.
 
-Distribuir para o simple-racer (sem GPU):
+> `output_dir` de cada manifest resolve-se contra a pasta **do manifest**, não
+> contra a do `game.yaml`. Como os manifests vivem em `manifests/`, o valor
+> correto é `../public/assets`; com `public/assets` o resume aponta para
+> `manifests/public/assets`, não encontra nada e marca tudo como `need_image`.
 
-```bash
-bash VibeGame/examples/shared-assets/sync.sh
+## Como os exemplos consomem isto
+
+Cada `vite.config.ts` passa o pool ao plugin da engine:
+
+```ts
+const sharedAssets = path.join(vibegameRoot, 'examples/shared-assets/public/assets');
+export default defineConfig({ plugins: [vibegame({ sharedAssets })] });
 ```
 
-## Layout
+- **dev**: o `public/` do próprio exemplo responde primeiro; o que faltar vem do
+  pool. Um jogo pode portanto sobrepor um asset largando um ficheiro com o mesmo
+  caminho no seu `public/`.
+- **build**: o pool é copiado para `dist/assets/`, sem `_intermediate/`.
 
-```
-shared-assets/
-  README.md
-  game.yaml                 # painterly, tom Crystal Vale (perfil dos packs)
-  manifests/                # canónico; symlinks nos sample-gameassets/ dos exemplos
-    forest.yaml             # árvores, cogumelos, cabana da bruxa
-    village.yaml            # edifícios e props da aldeia / Discordia
-    infra.yaml              # muralha, portão, pontes
-    terrain.yaml            # formações rochosas genéricas
-    props.yaml              # props genéricos (rock_mossy)
-  public/assets/            # binários + _intermediate de resume (~2,6 GB; gitignored)
-  sync.sh                   # rsync pool → simple-racer
-```
+Sem symlinks e sem binários duplicados em disco. Não há passo de sync: editar
+aqui chega a todos os exemplos no reload seguinte.
 
-O `_intermediate/` de cada pack (cache de geração) vive no pool: um
-`gameassets resume` futuro salta shape/paint dos itens já completos.
+## O que **não** vive aqui
 
-## Como cada exemplo aponta para cá
-
-**Manifests** (symlinks em `sample-gameassets/manifests/`):
-
-- `simple-rpg/…/{forest,village,infra,terrain,props}.yaml`
-- `simple-racer/…/{forest,village,infra,props}.yaml`
-
-→ `../../../shared-assets/manifests/<file>.yaml`
-
-**Binários**:
-
-- **simple-rpg** aponta direto ao pool, sem cópias: `public/assets/meshes/{forest,village,infra,terrain}`, `images/{forest,village,infra,terrain}`, `sky/sky.png` e `meshes/props/rock_mossy_*` são symlinks → `../../../../shared-assets/public/assets/…`. (`meshes/vegetation` fica real — bpy carpet versionado.) Fresh clone: `bun run setup` instala a Release num staging e encaminha os packs shared para o pool em modo fill-if-missing — a Release **nunca** sobrescreve o pool (ele é canónico) — e (re)cria os symlinks.
-- **simple-racer** versiona as próprias cópias (clone-friendly) e recebe
-  atualizações do pool via `sync.sh`.
-
-## O que o sync distribui
-
-De `shared-assets/public/assets` para o **simple-racer**:
-
-- `meshes/{forest,village,infra,vegetation}` + `images/{forest,village,infra}`
-- `sky/sky.png` (IBL do vale)
-- `rock_mossy_*` em `meshes/props` + `images/props/rock_mossy.png`
-
-Sem `--delete`: os props de corrida versionados no racer ficam intactos.
-Não distribui: characters, desert, swamp, interiors, armas, veículos, áudio —
-identidade de cada jogo nos manifests próprios (`props-rpg.yaml`,
-`vehicles.yaml`, …).
-
-O pack `vegetation` (grama/flores, GLBs leves) é binário-only, sem manifest
-GameAssets: cada exemplo tem a própria cópia (versionada no git).
+Media específico de cada jogo — `icons/`, `particles/`, `terrain/`
+(heightmaps), `world/*.xml`, `data/` — fica no `public/` do respetivo exemplo.
+O áudio ** vive** aqui desde 2026-08 (packs `audio-*`): os jogos referenciam
+`/assets/audio/...` e o plugin serve do pool; para variante própria de um
+jogo, larga um ficheiro com o mesmo caminho no `public/` desse jogo (o
+`public/` local responde primeiro em dev e build).

@@ -13,3 +13,8 @@ layers/context-template.md
 # gameassets tooling.
 examples/**/public/assets/
 examples/**/sample-gameassets/
+# Work dir do `gameassets resume`, agora ao lado dos manifests do pool.
+**/.gameassets_work/
+# Artefactos do Playwright e rotação de logs do winston.
+examples/**/test-results/
+logs/

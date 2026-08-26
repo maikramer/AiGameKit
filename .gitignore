@@ -215,3 +215,6 @@ write-test.txt
 # Playwright output
 VibeGame/test-results/
 VibeGame/examples/*/test-results/
+
+# Work dir do `gameassets resume` (cache de geração junto aos manifests)
+**/.gameassets_work/

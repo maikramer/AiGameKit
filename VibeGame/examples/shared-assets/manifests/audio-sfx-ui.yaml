@@ -1,0 +1,157 @@
+# Pack audio-sfx-ui — moedas/menus/notificações/eventos de corrida
+# (Stable Audio 3 Small SFX). Canónico em examples/shared-assets/.
+# Regenerar: gameassets resume --profile game.yaml --manifest manifests/audio-sfx-ui
+output_dir: ../public/assets
+meshes_subdir: meshes/audio
+images_subdir: images/audio
+assets:
+  - id: sfx/ui/coin
+    idea: Sparkling coin pickup chime, bright golden coin collect, rewarding currency jingle, short treasure acquire
+    kind: prop
+    category: item
+    pipeline:
+      - audio
+    audio:
+      duration: 1
+      profile: effects
+    seed: 509
+  - id: sfx/ui/buy
+    idea: Satisfying purchase confirmation, coin transaction chime, merchant deal struck, bright purchase success tone
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 1
+      profile: effects
+    seed: 507
+  - id: sfx/ui/error
+    idea: Negative error buzz, declining tone, low rejected action sound, descending failure blip, interface denial
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 0.8
+      profile: effects
+    seed: 508
+  - id: sfx/ui/save
+    idea: Quick save confirmation chime, short success blip, game saved jingle, bright digital confirm
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 0.8
+      profile: effects
+    seed: 512
+  - id: sfx/ui/load
+    idea: Game load whoosh, data loading shimmer, short magical loading sparkle, transition swirl
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 0.8
+      profile: effects
+    seed: 513
+  - id: sfx/ui/levelup
+    idea: Triumphant level up fanfare, bright ascending victory chime, cheerful RPG success jingle
+    kind: prop
+    category: item
+    pipeline:
+      - audio
+    audio:
+      duration: 2
+      profile: effects
+    seed: 400
+  - id: sfx/ui/shop_open
+    idea: Friendly shop door opening chime, welcoming merchant bell, cozy tavern door creak, warm marketplace greeting
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 1.5
+      profile: effects
+    seed: 506
+  - id: sfx/ui/countdown
+    idea: Single short countdown beep, clean digital tone, race start ready signal, brief electronic beep
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 0.6
+      profile: effects
+    seed: 305
+  - id: sfx/ui/go
+    idea: Loud race start horn blast, GO signal klaxon, powerful air horn, short urgent starting signal
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 1
+      profile: effects
+    seed: 306
+  - id: sfx/ui/lap
+    idea: Soft lap completion chime, pleasant two-tone bell, checkpoint confirm sound, gentle success ping
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 1
+      profile: effects
+    seed: 308
+  - id: sfx/ui/finish
+    idea: Triumphant race finish fanfare, short victory jingle, celebratory brass melody, crossing the finish line
+    kind: prop
+    category: item
+    pipeline:
+      - audio
+    audio:
+      duration: 4
+      profile: effects
+    seed: 309
+  - id: sfx/ui/quest_complete
+    idea: Quest complete fanfare, bright triumphant jingle with harp flourish, achievement chime
+    kind: prop
+    category: item
+    pipeline:
+      - audio
+    audio:
+      duration: 2
+      profile: effects
+    seed: 516
+  - id: sfx/ui/notification
+    idea: Soft notification ping, gentle two note message alert, subtle interface chime
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 0.8
+      profile: effects
+    seed: 517
+  - id: sfx/ui/pause
+    idea: Pause menu open whoosh, soft muffled transition sound, game suspended blip
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 0.8
+      profile: effects
+    seed: 518
+  - id: sfx/ui/game_over
+    idea: Game over sting, descending sad notes, defeat resolution motif, slow final cadence
+    kind: prop
+    category: ui
+    pipeline:
+      - audio
+    audio:
+      duration: 2.5
+      profile: effects
+    seed: 519

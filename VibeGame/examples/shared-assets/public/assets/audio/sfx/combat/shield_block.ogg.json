@@ -1,0 +1,14 @@
+{
+  "prompt": "Heavy shield block impact, metal on wood thud with brief ring, defensive guard",
+  "duration": 1.2,
+  "model_id": "stabilityai/stable-audio-3-small-sfx",
+  "mastering": {
+    "lufs_target": -15.0,
+    "high_pass_hz": 25.0,
+    "compressor_preset": "punch",
+    "compressor_enabled": true,
+    "true_peak_db": -0.5,
+    "headroom_db": 0.3
+  },
+  "ogg_quality": 0.8
+}

@@ -1,8 +1,8 @@
 # Grupo forest — vegetação e construções da Floresta (Crystal Vale, partilhado).
 # Canónico em examples/shared-assets/ (manifests + binários em public/assets).
-# Symlink em cada sample-gameassets/manifests/.
+# Exemplos consomem via plugin vibegame({ sharedAssets }) — sem cópias nem symlinks.
 # Regenerar: cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/forest
-output_dir: public/assets
+output_dir: ../public/assets
 meshes_subdir: meshes/forest
 images_subdir: images/forest
 assets:

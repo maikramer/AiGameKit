@@ -1,0 +1,13 @@
+{
+  "prompt": "Triumphant race finish fanfare, short victory jingle, celebratory brass melody, crossing the finish line",
+  "duration": 4.0,
+  "mastering": {
+    "lufs_target": -15.0,
+    "high_pass_hz": 25.0,
+    "compressor_preset": "transparent",
+    "compressor_enabled": true,
+    "true_peak_db": -0.5,
+    "headroom_db": 0.3
+  },
+  "ogg_quality": 0.8
+}
