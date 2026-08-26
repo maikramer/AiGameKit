@@ -2661,12 +2661,16 @@ def run_master_pipeline(
     # mesma regra para LOD0/1/2 (mesmo nível semântico).
     if with_validate:
         rules_dir = _rules_dir()
-        if promotion_kind == "animated":
-            rule_for = {0: "animated.yaml", 1: "animated.yaml", 2: "animated.yaml"}
-        elif promotion_kind == "rigged":
-            rule_for = {0: "rigged.yaml", 1: "rigged.yaml", 2: "rigged.yaml"}
-        else:
-            rule_for = {0: "lod0.yaml", 1: "lod1.yaml", 2: "lod2.yaml"}
+        static_rules = {0: "lod0.yaml", 1: "lod1.yaml", 2: "lod2.yaml"}
+        promoted_rules = {"animated": "animated.yaml", "rigged": "rigged.yaml"}.get(promotion_kind)
+        # Acima de RIG_MAX_LEVEL a ladder sai estática **de propósito**
+        # (``text3d lod --rig-max-level``, ver a helper ``expect`` acima), por
+        # isso validar esses níveis com rigged/animated.yaml exigia armature +
+        # actions + JOINTS_0 que nunca lá estão: validate-lod2 falhava sempre
+        # em qualquer personagem.
+        rule_for = {
+            lvl: (promoted_rules if promoted_rules and lvl <= RIG_MAX_LEVEL else static_rules[lvl]) for lvl in (0, 1, 2)
+        }
 
         for lvl, lod_p in ((0, lod0_p), (1, lod1_p), (2, lod2_p)):
             if lod_p.is_file():
