@@ -52,7 +52,6 @@ test('probe: rede + transcoder + GLB fetch', async ({ page }) => {
 
   await page.waitForTimeout(10000);
   const late = await page.evaluate(() => {
-    const w = window as unknown as Record<string, unknown>;
     const el = document.querySelector('#loading-screen, [class*=loading]');
     return { loadingText: el?.textContent?.slice(0, 200) ?? null };
   });

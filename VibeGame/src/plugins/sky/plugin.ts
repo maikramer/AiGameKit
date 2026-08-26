@@ -2,10 +2,7 @@ import type { Plugin } from '../../core';
 import { EquirectSky, ProceduralSky } from './components';
 import { equirectSkyRecipe, proceduralSkyRecipe } from './recipes';
 import { equirectSkyParser, proceduralSkyParser } from './parser';
-import {
-  EquirectSkyLoadSystem,
-  ProceduralSkySystem,
-} from './systems';
+import { EquirectSkyLoadSystem, ProceduralSkySystem } from './systems';
 
 /**
  * Sky plugin. `<EquirectSky>` loads a panoramic image as background + IBL;

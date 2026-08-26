@@ -50,13 +50,12 @@ test('diagnóstico: estado do player', async ({ page }) => {
     const b = w.__VIBEGAME__ as Bridge | undefined;
 
     // câmera
-    let cam: Record<string, unknown> | null = null;
     const canvases = document.querySelectorAll('canvas');
     for (const c of canvases) {
       const evt = (c as unknown as Record<string, unknown>)[
         '__vibegameCameraProbe'
       ];
-      if (evt) cam = evt as Record<string, unknown>;
+      void evt;
     }
     return {
       bridgeKeys: b ? Object.keys(b) : null,

@@ -5,7 +5,4 @@ export {
   getEquirectSkyUrl,
   setEquirectSkyUrl,
 } from './components';
-export {
-  EquirectSkyLoadSystem,
-  ProceduralSkySystem,
-} from './systems';
+export { EquirectSkyLoadSystem, ProceduralSkySystem } from './systems';

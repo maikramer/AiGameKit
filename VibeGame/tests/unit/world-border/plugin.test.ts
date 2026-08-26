@@ -60,7 +60,13 @@ describe('WorldBorder parser', () => {
   const comp = getComponent();
 
   it('parseia radius, warn-seconds e margin', () => {
-    parser(makeElement('worldborder', { radius: '560', 'warn-seconds': '5', margin: '24' }));
+    parser(
+      makeElement('worldborder', {
+        radius: '560',
+        'warn-seconds': '5',
+        margin: '24',
+      })
+    );
     expect(comp.radius[0]).toBe(560);
     expect(comp.warnSeconds[0]).toBe(5);
     expect(comp.margin[0]).toBe(24);

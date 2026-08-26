@@ -386,7 +386,7 @@ function maybeLogAssetsStall(
     `[loading] assets gate stuck for ${Math.round(
       (now - assetsStuckSince) / 1000
     )}s — critical=${d.critical} active=${d.active} ` +
-    `done=${d.done}/${d.total} pendingKick=${d.pendingEntities}${crit}${samples}`
+      `done=${d.done}/${d.total} pendingKick=${d.pendingEntities}${crit}${samples}`
   );
 }
 

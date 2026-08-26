@@ -1,10 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import { parseBoolAttr, parseNumberAttr, type Parser } from '../../core';
-import {
-  EquirectSky,
-  ProceduralSky,
-  setEquirectSkyUrl,
-} from './components';
+import { EquirectSky, ProceduralSky, setEquirectSkyUrl } from './components';
 
 export const equirectSkyParser: Parser = ({ entity, element }) => {
   if (element.tagName.toLowerCase() !== 'equirectsky') return;
