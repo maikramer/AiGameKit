@@ -2,6 +2,7 @@ import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { ThirdPersonCamera } from '../player-controller';
 import { InputState } from '../input';
 import { OrbitCamera } from '../orbit-camera';
+import { IsometricCamera } from '../isometric-camera';
 import { Rigidbody, CharacterController, CharacterMovement } from '../physics';
 import { Transform } from '../transforms';
 import { PlayerController } from './components';
@@ -16,6 +17,7 @@ const playerMovementQuery = defineQuery([
 ]);
 const orbitCameraQuery = defineQuery([OrbitCamera]);
 const thirdPersonCameraQuery = defineQuery([ThirdPersonCamera]);
+const isometricCameraQuery = defineQuery([IsometricCamera]);
 const playerGroundedQuery = defineQuery([
   PlayerController,
   CharacterMovement,
@@ -31,6 +33,11 @@ const CAMERA_TURN_SPEED = 2.5;
 const SIDE_MOVE_FACTOR = 0.6;
 
 function resolveCameraYaw(world: import('../../core').IWorld): number {
+  // Isometric first: its yaw is the smoothed quadrant heading, and WASD has to
+  // stay screen-relative through a Q/E rotation. An empty query costs nothing,
+  // so the orbit/world fallbacks below are untouched for every other game.
+  const isoCams = isometricCameraQuery(world);
+  if (isoCams.length > 0) return IsometricCamera.yaw[isoCams[0]];
   const orbitCams = orbitCameraQuery(world);
   if (orbitCams.length > 0) return OrbitCamera.currentYaw[orbitCams[0]];
   return 0;
@@ -248,6 +255,21 @@ export const PlayerCameraLinkingSystem: System = defineSystem({
         const cam = unlinkedThirdPerson;
         PlayerController.cameraEntity[player] = cam;
         ThirdPersonCamera.target[cam] = player;
+        ensureCameraInputState(state, cam);
+        continue;
+      }
+
+      // Isometric rigs never steer with the mouse, so they only need the follow
+      // target and an input source for Q/E and the scroll wheel.
+      const isoCams = isometricCameraQuery(state.world);
+      const unlinkedIso = isoCams.find(
+        (cam) => IsometricCamera.target[cam] === 0
+      );
+      if (unlinkedIso !== undefined) {
+        const cam = unlinkedIso;
+        PlayerController.cameraEntity[player] = cam;
+        IsometricCamera.target[cam] = player;
+        IsometricCamera.inputSource[cam] = player;
         ensureCameraInputState(state, cam);
         continue;
       }
