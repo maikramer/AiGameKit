@@ -37,8 +37,12 @@ import {
   SHADOW_CONFIG,
   syncCameraSettings,
   threeCameras,
+  // Aliased: `RenderingContext` is also a DOM global, and the unqualified name
+  // resolves to that one in a type position.
+  type RenderingContext as EngineRenderingContext,
 } from './utils';
 import { applyPcssShadowPatch } from './pcss-shadow';
+import { getShadowFocusEntity } from './shadow-focus';
 import { setSubtreeMatrixFrozen } from './matrix-freeze';
 import {
   getAdaptiveQualityTier,
@@ -108,6 +112,63 @@ function getFreePointLights(state: State): THREE.PointLight[] {
 }
 
 /**
+ * How long the pool has to stay unused before a spare light is released, and
+ * how far apart releases are spaced.
+ *
+ * A light at zero intensity is invisible but not free: three bakes the light
+ * *count* into every program, so an idle slot is a full point-light iteration
+ * in every fragment of the frame (measured at ~1.5 ms per slot in the RPG
+ * village). Releasing a slot recompiles the affected materials, so the pool
+ * only shrinks after it has been idle for a while, and one light at a time —
+ * a player walking out of a lit square pays a little compilation once instead
+ * of the shading forever, and a player pacing across the boundary pays
+ * neither.
+ */
+const POINT_LIGHT_POOL_IDLE_MS = 2000;
+const POINT_LIGHT_POOL_RELEASE_INTERVAL_MS = 500;
+
+interface PointLightPoolTiming {
+  idleSinceMs: number;
+  lastReleaseMs: number;
+}
+const pointLightPoolTiming = new WeakMap<State, PointLightPoolTiming>();
+
+/** Hand one spare light back to the driver once the pool has been idle long
+ *  enough, shortening every material's light loop by one iteration. */
+function releaseIdlePointLight(
+  state: State,
+  context: EngineRenderingContext,
+  scene: THREE.Scene,
+  free: THREE.PointLight[]
+): void {
+  let timing = pointLightPoolTiming.get(state);
+  if (!timing) {
+    timing = { idleSinceMs: 0, lastReleaseMs: 0 };
+    pointLightPoolTiming.set(state, timing);
+  }
+  if (free.length === 0) {
+    timing.idleSinceMs = 0;
+    return;
+  }
+  const now = performance.now();
+  if (timing.idleSinceMs === 0) {
+    timing.idleSinceMs = now;
+    return;
+  }
+  if (now - timing.idleSinceMs < POINT_LIGHT_POOL_IDLE_MS) return;
+  if (now - timing.lastReleaseMs < POINT_LIGHT_POOL_RELEASE_INTERVAL_MS) return;
+
+  const light = free.pop();
+  if (!light) return;
+  scene.remove(light);
+  light.dispose();
+  pointLightCache.delete(light);
+  const index = context.lights.pointLights.indexOf(light);
+  if (index !== -1) context.lights.pointLights.splice(index, 1);
+  timing.lastReleaseMs = now;
+}
+
+/**
  * Picks which `PointLight` entities get one of the `MAX_POINT_LIGHTS` slots.
  *
  * Slots used to be first-come-first-served, which is wrong for an open world:
@@ -124,27 +185,89 @@ function selectActivePointLights(
   entities: ArrayLike<number>,
   holders: Map<number, THREE.PointLight>
 ): Set<number> {
-  if (entities.length <= MAX_POINT_LIGHTS) {
-    return new Set(Array.from(entities));
-  }
-
   const camEntities = mainCameraQuery(state.world);
   const camera =
     camEntities.length > 0 ? threeCameras.get(camEntities[0]) : undefined;
   // No camera yet (first frames): keep whatever is already assigned rather
   // than reshuffling on an arbitrary order.
   if (!camera) {
-    return new Set(Array.from(entities).slice(0, MAX_POINT_LIGHTS));
+    return new Set(
+      Array.from(entities).slice(0, Math.min(entities.length, MAX_POINT_LIGHTS))
+    );
   }
 
+  const reachable = filterPointLightsInView(entities, camera);
+  if (reachable.length <= MAX_POINT_LIGHTS) {
+    return new Set(reachable);
+  }
+
+  const worldPosition = camera.getWorldPosition(_lightCameraPosition);
   return pickNearestLightSlots(
-    entities,
+    reachable,
     holders,
-    camera.position.x,
-    camera.position.y,
-    camera.position.z,
+    worldPosition.x,
+    worldPosition.y,
+    worldPosition.z,
     MAX_POINT_LIGHTS
   );
+}
+
+/** Scratch for the point-light reach test. */
+const _lightSphere = new THREE.Sphere();
+const _lightFrustum = new THREE.Frustum();
+const _lightViewProjection = new THREE.Matrix4();
+const _lightViewInverse = new THREE.Matrix4();
+const _lightCameraPosition = new THREE.Vector3();
+
+/**
+ * Ten percent past the falloff cutoff. The extra radius costs nothing and
+ * keeps a torch from switching slots exactly as its sphere grazes the frustum
+ * plane, which is where a one-frame pop would be most visible.
+ */
+const POINT_LIGHT_REACH_MARGIN = 1.1;
+
+/**
+ * Drops the point lights that cannot reach anything on screen.
+ *
+ * A `PointLight` with a positive `distance` has a hard cutoff there, so a
+ * light whose sphere misses the view frustum contributes exactly zero to every
+ * visible pixel — and still costs a full light iteration in every fragment
+ * shader of the frame. In the RPG village only 5 of the 12 torches can reach
+ * the view at any time, and the other 7 were being paid for on every pixel.
+ *
+ * `distance === 0` means "no cutoff" in three, so those stay eligible.
+ */
+export function filterPointLightsInView(
+  entities: ArrayLike<number>,
+  camera: THREE.Camera
+): number[] {
+  camera.updateMatrixWorld();
+  // `matrixWorldInverse` is the renderer's to maintain and is a frame stale
+  // here; invert the world matrix we just refreshed instead.
+  _lightViewInverse.copy(camera.matrixWorld).invert();
+  _lightViewProjection.multiplyMatrices(
+    (camera as THREE.PerspectiveCamera).projectionMatrix,
+    _lightViewInverse
+  );
+  _lightFrustum.setFromProjectionMatrix(_lightViewProjection);
+
+  const reachable: number[] = [];
+  for (let i = 0; i < entities.length; i++) {
+    const eid = entities[i];
+    const range = PointLight.distance[eid];
+    if (!(range > 0)) {
+      reachable.push(eid);
+      continue;
+    }
+    _lightSphere.center.set(
+      WorldTransform.posX[eid],
+      WorldTransform.posY[eid],
+      WorldTransform.posZ[eid]
+    );
+    _lightSphere.radius = range * POINT_LIGHT_REACH_MARGIN;
+    if (_lightFrustum.intersectsSphere(_lightSphere)) reachable.push(eid);
+  }
+  return reachable;
 }
 
 /** Hysteresis for {@link pickNearestLightSlots}: a holder is scored as if it
@@ -347,6 +470,20 @@ export function snapShadowCenterToTexels(
  */
 export function resolveShadowCenter(state: State): THREE.Vector3 {
   _shadowCenter.copy(SHADOW_CONFIG.FIXED_FRUSTUM_CENTER);
+
+  // An explicit focus entity wins over every heuristic below. Camera rigs that
+  // stand far back from their subject (orthographic isometric, top-down) set
+  // this because the camera-centred fallback would put the box behind the
+  // character. Unset by default → the chain below is unchanged.
+  const focusEid = getShadowFocusEntity(state);
+  if (focusEid > 0 && state.hasComponent(focusEid, WorldTransform)) {
+    _shadowCenter.set(
+      WorldTransform.posX[focusEid],
+      WorldTransform.posY[focusEid],
+      WorldTransform.posZ[focusEid]
+    );
+    return _shadowCenter;
+  }
 
   const thirdPersonCams = thirdPersonCameraQuery(state.world);
   if (thirdPersonCams.length > 0) {
@@ -1264,6 +1401,8 @@ export const PointSpotLightSyncSystem: System = defineSystem({
     // every Nth frame. Moving lights (torches attached to entities that move)
     // are still captured because their position is written above every frame
     // and the periodic refresh re-renders the cube map.
+    releaseIdlePointLight(state, context, scene, freePointLights);
+
     applyPointShadowThrottle(state, entityToPointLight);
     applySpotShadowThrottle(state, entityToSpotLight);
 

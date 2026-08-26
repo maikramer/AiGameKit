@@ -126,6 +126,13 @@ export {
 } from './plugins/daycycle';
 export type { Season, TimeOfDay } from './plugins/daycycle';
 export { getScene } from './plugins/rendering';
+// Directional-light shadow focus: overrides the camera-centred heuristic for
+// rigs that stand far back from their subject (orthographic isometric, etc.).
+export {
+  clearShadowFocusEntity,
+  getShadowFocusEntity,
+  setShadowFocusEntity,
+} from './plugins/rendering';
 export { MeshRenderer, DistanceCull } from './plugins/rendering';
 export {
   AmbientLight,

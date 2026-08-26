@@ -18,6 +18,11 @@ export {
 } from './texture-recipe-system';
 export { RenderingPlugin } from './plugin';
 export {
+  clearShadowFocusEntity,
+  getShadowFocusEntity,
+  setShadowFocusEntity,
+} from './shadow-focus';
+export {
   applySurfaceDetail,
   disposeSurfaceDetail,
   getSurfaceDetailTextures,

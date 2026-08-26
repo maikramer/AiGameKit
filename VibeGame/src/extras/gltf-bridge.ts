@@ -387,6 +387,14 @@ export function normalizeGltfMaterials(root: Object3D): void {
 /**
  * Meshes GLB não carregam `castShadow`/`receiveShadow` por defeito; sem isto o sol direcional não projeta sombras.
  */
+/**
+ * How much bigger than its bind pose a character is allowed to get before the
+ * frustum test can be wrong. A swinging weapon or a cast animation reaches
+ * roughly one body radius past the rest silhouette; doubling covers that with
+ * room to spare while still culling anything genuinely off-screen.
+ */
+const SKINNED_FRUSTUM_MARGIN = 2;
+
 export function applyDefaultShadowFlags(root: Object3D): void {
   normalizeGltfMaterials(root);
   root.traverse((o) => {
@@ -397,8 +405,27 @@ export function applyDefaultShadowFlags(root: Object3D): void {
       // SkinnedMesh frustum tests use the bind-pose sphere, not the posed
       // skeleton. Animated characters then blink out whenever the bind origin
       // leaves the view frustum (common on CCT enemies that turn in place).
+      //
+      // Turning culling OFF fixed the blinking and cost a fortune: in the RPG
+      // village 93 off-screen characters — 1.9M triangles — were submitted
+      // every frame, plus their shadow-map draws. Instead, give the mesh its
+      // own bounding sphere (three prefers `object.boundingSphere` over the
+      // geometry's) inflated by the margin above. The test then stays correct
+      // through any pose, and costs one sphere at load instead of a draw call
+      // per frame forever.
       if (m.isSkinnedMesh === true) {
-        m.frustumCulled = false;
+        const geometry = m.geometry;
+        if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+        const bounds = geometry.boundingSphere;
+        if (bounds && bounds.radius > 0) {
+          m.boundingSphere = bounds.clone();
+          m.boundingSphere.radius *= SKINNED_FRUSTUM_MARGIN;
+          m.frustumCulled = true;
+        } else {
+          // No usable bounds (empty or degenerate geometry): culling it would
+          // be a guess, so keep drawing it.
+          m.frustumCulled = false;
+        }
       }
     }
   });
