@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Regenera todos os 24 sons do simple-rpg com enhance + mastering + negative prompt.
+"""Regenera os 22 sons do simple-rpg com Stable Audio 3 Small (2026-08).
 
-Os 9 sons com metadata reusam seed/prompt original; os 15 sem metadata recebem
-prompts curados derivados do contexto de uso no jogo (sounds.ts + call sites).
+Era SA3: sem flags de steps/cfg/crop da era Open (o quality tier `high` +
+ModelSpec resolvem steps 16, cfg 1.0, pingpong + mastering). BGM usa o
+pipeline seamless exacto (kind music_loop via --category humanoid: crossfade
+equal-power, edge trim adaptativo, comprimento final = -d, mastering em
+buffer dobrado). Durações BGM múltiplo de 2 s @ 120 BPM = compassos exatos.
 
 Uso:
     cd Text2Sound && .venv/bin/python /path/to/regen_sounds.py
@@ -22,287 +25,245 @@ T2S = [".venv/bin/python", "-m", "text2sound", "generate"]
 def _probe_duration(path: Path) -> float | None:
     try:
         r = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=nw=1:nk=1",
-                str(path),
-            ],
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(path)],
             capture_output=True,
             text=True,
             timeout=30,
         )
-        if r.returncode != 0:
-            return None
-        return float(r.stdout.strip())
+        return float(r.stdout.strip()) if r.returncode == 0 else None
     except (OSError, ValueError):
         return None
 
 
-def _hard_trim(path: Path, seconds: float) -> bool:
-    """ffmpeg trim+fade when generator ignored --duration/--crop."""
-    tmp = path.with_suffix(path.suffix + ".trimtmp")
-    try:
-        r = subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-i",
-                str(path),
-                "-t",
-                f"{seconds:.3f}",
-                "-af",
-                f"afade=t=out:st={max(0.0, seconds - 0.05):.3f}:d=0.05",
-                "-c:a",
-                "libvorbis",
-                "-q:a",
-                "5",
-                str(tmp),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if r.returncode != 0 or not tmp.exists():
-            tmp.unlink(missing_ok=True)
-            return False
-        tmp.replace(path)
-        return True
-    except OSError:
-        tmp.unlink(missing_ok=True)
-        return False
-
-
-# Cada spec: (filename, prompt, category, profile, duration, seed, extra_flags)
-# category → audio_kind → negative prompt + compressor preset automáticos.
-# quality high → LUFS -15, enhance ON, mastering chain.
-SPECS: list[tuple[str, str, str, str, float, int, list[str]]] = [
-    # ── BGM (profile music, seamless loop, long) ──────────────────────────
+# (filename, prompt, category, profile, duration, seed)
+# category → audio_kind → trim/negative/compressor automáticos.
+# sfx_player_hurt SEM category: "humanoid" mapeia para music_loop (modelo
+# música) — grunts pertencem ao modelo sfx (bug latente da era Open).
+SPECS: list[tuple[str, str, str | None, str, float, int]] = [
+    # ── BGM (music_loop via humanoid: seamless exacto, loop final = -d) ──
     (
         "bgm_battle",
-        "intense fantasy battle music, driving orchestral combat theme, dramatic action rhythm",
+        "Intense fantasy battle music, driving orchestral combat theme, dramatic action rhythm, 120 BPM",
         "humanoid",
         "music",
-        47.0,
+        32.0,  # 16 compassos @120bpm
         220,
-        ["--cfg-scale", "6.0", "--seamless-loop", "--loop-edge-trim", "8.0", "--crossfade-ms", "2000"],
     ),
     (
         "bgm_explore",
         (
-            "peaceful fantasy village exploration music, gentle acoustic guitar and flute, "
-            "warm ambient adventure melody, calm countryside"
+            "Peaceful fantasy village exploration music, gentle acoustic guitar and flute, "
+            "warm ambient adventure melody, calm countryside, 120 BPM"
         ),
         "humanoid",
         "music",
-        47.0,
+        40.0,  # 20 compassos @120bpm
         300,
-        ["--cfg-scale", "7.0", "--seamless-loop", "--loop-edge-trim", "4.0", "--crossfade-ms", "2000"],
     ),
-    # ── Combat SFX (profile effects) ──────────────────────────────────────
+    # ── Combat SFX ────────────────────────────────────────────────────────
     (
         "sfx_hit",
-        "sharp metal sword clash, bright metallic ring, short combat hit impact",
+        "Sharp metal sword clash, bright metallic ring, short combat hit impact",
         "weapon",
         "effects",
         2.0,
         201,
-        ["--steps", "32", "--cfg-scale", "6.0"],
     ),
     (
         "sfx_swing",
-        "whoosh sword swing through air, quick blade swish, fast weapon swing",
+        "Whoosh sword swing through air, quick blade swish, fast weapon swing",
         "weapon",
         "effects",
         0.5,
         401,
-        ["--steps", "8", "--cfg-scale", "1.0", "--crop", "--fade-out", "0.06"],
     ),
     # ── Gathering SFX ─────────────────────────────────────────────────────
     (
         "sfx_chop_hit",
-        "sharp axe chop into wood tree trunk, heavy blade impact on timber",
+        "Sharp axe chop into wood tree trunk, heavy blade impact on timber",
         "weapon",
         "effects",
         1.0,
         302,
-        ["--steps", "8", "--cfg-scale", "1.0", "--crop", "--fade-out", "0.06"],
     ),
     (
         "sfx_chop_break",
-        "large tree falling crashing down, timber cracking and splintering",
+        "Large tree falling crashing down, timber cracking and splintering",
         "weapon",
         "effects",
         2.0,
         303,
-        ["--steps", "8", "--cfg-scale", "1.0", "--crop"],
     ),
     (
         "sfx_mine_hit",
-        "pickaxe striking stone rock, hard mineral impact, mining chisel hit on ore, sharp crack",
+        "Pickaxe striking stone rock, hard mineral impact, mining chisel hit on ore, sharp crack",
         "weapon",
         "effects",
         1.0,
         301,
-        ["--steps", "8", "--cfg-scale", "1.0", "--crop", "--fade-out", "0.06"],
     ),
     (
         "sfx_mine_break",
-        "rock crumbling apart, stone debris falling, boulder breaking into fragments",
+        "Rock crumbling apart, stone debris falling, boulder breaking into fragments",
         "weapon",
         "effects",
         1.5,
         304,
-        ["--steps", "8", "--cfg-scale", "1.0", "--crop"],
     ),
-    # ── Level up / progression ────────────────────────────────────────────
+    # ── Level up / progression ───────────────────────────────────────────
     (
         "sfx_levelup",
-        "triumphant level up fanfare, bright ascending victory chime, cheerful RPG success jingle",
+        "Triumphant level up fanfare, bright ascending victory chime, cheerful RPG success jingle",
         "item",
         "effects",
         2.0,
         400,
-        ["--steps", "80", "--cfg-scale", "1.0", "--crop"],
     ),
-    # ── SFX sem metadata — prompts curados do contexto do jogo ────────────
+    # ── Vocais / criaturas ───────────────────────────────────────────────
     (
         "sfx_player_hurt",
-        "painful grunt, male warrior taking damage, sharp exhale of pain, short hurt vocalization",
-        "humanoid",
+        "Painful grunt, male warrior taking damage, sharp exhale of pain, short hurt vocalization",
+        None,
         "effects",
         1.0,
         501,
-        ["--steps", "12", "--crop"],
     ),
     (
         "sfx_enemy_hurt",
-        "creature taking damage yelp, short monster pain cry, wounded beast whimper",
+        "Creature taking damage yelp, short monster pain cry, wounded beast whimper",
         "creature",
         "effects",
         0.8,
         502,
-        ["--steps", "12", "--crop"],
     ),
     (
         "sfx_enemy_death",
-        "creature death wail, fading monster cry, dying beast collapse, long final groan",
+        "Creature death wail, fading monster cry, dying beast collapse, long final groan",
         "creature",
         "effects",
         2.0,
         503,
-        ["--steps", "12", "--crop"],
     ),
     (
         "sfx_boss_roar",
         (
-            "massive boss monster roar, deep terrifying beast bellow, "
+            "Massive boss monster roar, deep terrifying beast bellow, "
             "giant creature threatening growl, powerful boss entrance"
         ),
         "creature",
         "effects",
         3.0,
         504,
-        ["--steps", "20", "--cfg-scale", "3.0", "--crop"],
     ),
+    # ── Magia / UI / itens ───────────────────────────────────────────────
     (
         "sfx_heal",
-        "warm healing magic spell, gentle restoration chime, soft glowing energy swell, soothing recovery aura",
+        "Warm healing magic spell, gentle restoration chime, soft glowing energy swell, soothing recovery aura",
         "effects",
         "effects",
         2.0,
         505,
-        ["--steps", "20", "--crop"],
     ),
     (
         "sfx_shop_open",
-        "friendly shop door opening chime, welcoming merchant bell, cozy tavern door creak, warm marketplace greeting",
+        "Friendly shop door opening chime, welcoming merchant bell, cozy tavern door creak, warm marketplace greeting",
         "ui",
         "effects",
         1.5,
         506,
-        ["--steps", "16", "--crop"],
     ),
     (
         "sfx_buy",
-        "satisfying purchase confirmation, coin transaction chime, merchant deal struck, bright purchase success tone",
+        "Satisfying purchase confirmation, coin transaction chime, merchant deal struck, bright purchase success tone",
         "ui",
         "effects",
         1.0,
         507,
-        ["--steps", "16", "--crop"],
     ),
     (
         "sfx_error",
-        "negative error buzz, declining tone, low rejected action sound, descending failure blip, interface denial",
+        "Negative error buzz, declining tone, low rejected action sound, descending failure blip, interface denial",
         "ui",
         "effects",
         0.8,
         508,
-        ["--steps", "16", "--crop"],
     ),
     (
         "sfx_coin",
-        "sparkling coin pickup chime, bright golden coin collect, rewarding currency jingle, short treasure acquire",
+        "Sparkling coin pickup chime, bright golden coin collect, rewarding currency jingle, short treasure acquire",
         "item",
         "effects",
         1.0,
         509,
-        ["--steps", "16", "--crop"],
     ),
     (
         "sfx_item_drop",
-        "item dropping on ground, object landing on stone floor, dull thud with bounce, inventory item fall",
+        "Item dropping on ground, object landing on stone floor, dull thud with bounce, inventory item fall",
         "weapon",
         "effects",
         1.0,
         510,
-        ["--steps", "12", "--crop"],
     ),
     (
         "sfx_bomb_drop",
-        "bomb fuse igniting, sizzling explosive timer, crackling fuse burn, tense countdown hiss",
+        "Bomb fuse igniting, sizzling explosive timer, crackling fuse burn, tense countdown hiss",
         "prop",
         "effects",
         1.0,
         511,
-        ["--steps", "12", "--crop"],
     ),
     (
         "sfx_save",
-        "quick save confirmation chime, short success blip, game saved jingle, bright digital confirm",
+        "Quick save confirmation chime, short success blip, game saved jingle, bright digital confirm",
         "ui",
         "effects",
         0.8,
         512,
-        ["--steps", "16", "--crop"],
     ),
     (
         "sfx_load",
-        "game load whoosh, data loading shimmer, short magical loading sparkle, transition swirl",
+        "Game load whoosh, data loading shimmer, short magical loading sparkle, transition swirl",
         "ui",
         "effects",
         0.8,
         513,
-        ["--steps", "16", "--crop"],
     ),
 ]
 
 
+def _tail_head_pct(path: Path) -> tuple[float, float] | None:
+    """(RMS cauda 500ms, RMS início 500ms) em % da mediana do corpo."""
+    try:
+        import numpy as np
+        import soundfile as sf
+
+        data, sr = sf.read(str(path))
+        m = data.mean(axis=1)
+        w = int(sr * 0.1)
+        prof = np.sqrt((m[: len(m) // w * w].reshape(-1, w) ** 2).mean(axis=1))
+        body = float(np.median(prof))
+        if body <= 0:
+            return None
+        return float(prof[-5:].mean() / body * 100), float(prof[:5].mean() / body * 100)
+    except Exception:
+        return None
+
+
 def main() -> int:
+    # argv[1] opcional: "sfx" (só efeitos) ou "bgm" (só música) — p.ex. para
+    # re-passar só os SFX depois de afinar thresholds de trim por kind.
+    only = sys.argv[1] if len(sys.argv) > 1 else None
+    specs = [s for s in SPECS if only is None or (only == "sfx") == (s[3] != "music")]
+
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     ok, fail = 0, 0
-    total = len(SPECS)
+    total = len(specs)
     start_all = time.time()
 
-    for idx, (name, prompt, category, profile, duration, seed, extra) in enumerate(SPECS, 1):
+    for idx, (name, prompt, category, profile, duration, seed) in enumerate(specs, 1):
         out = AUDIO_DIR / f"{name}.ogg"
-        print(f"\n[{idx}/{total}] {name} ({profile}/{category}, {duration}s, seed {seed})")
-        print(f"  prompt: {prompt[:80]}...")
+        cat_label = category or "-"
+        print(f"\n[{idx}/{total}] {name} ({profile}/{cat_label}, {duration}s, seed {seed})")
 
         cmd = [
             *T2S,
@@ -311,8 +272,12 @@ def main() -> int:
             profile,
             "--quality",
             "high",
-            "--category",
-            category,
+            "--no-enhance",  # prompts curados
+            # prioridade interactiva (default): o scheduler vramd intercala
+            # estes jobs curtos (~10s) à frente do batch por design (cuts<=3),
+            # sem partir a wave text3d em curso.
+            "--vramd-priority",
+            "interactive",
             "--duration",
             str(duration),
             "--seed",
@@ -321,37 +286,51 @@ def main() -> int:
             "ogg",
             "-o",
             str(out),
-            *extra,
         ]
+        if category:
+            cmd.extend(["--category", category])
 
-        t0 = time.time()
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        elapsed = time.time() - t0
+        # BGM: gate de qualidade — outro musical fundo (cauda <70% do corpo)
+        # re-rola com seed+1000 (o outro varia por geração; reserve fixo não converge).
+        attempts = 3 if profile == "music" else 1
+        gen_seed = seed
+        accepted = False
+        for _attempt in range(attempts):
+            cmd[cmd.index("--seed") + 1] = str(gen_seed)
+            t0 = time.time()
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            elapsed = time.time() - t0
+            if result.returncode != 0:
+                break
+            th = _tail_head_pct(out) if profile == "music" else None
+            if profile != "music" or (th and th[0] >= 70.0 and th[1] >= 60.0):
+                accepted = True
+                break
+            print(f"  ↻ seed {gen_seed}: cauda={th[0]:.0f}% início={th[1]:.0f}% — re-roll")
+            gen_seed += 1000
 
-        if result.returncode == 0:
-            ok += 1
-            size = out.stat().st_size if out.exists() else 0
-            # text2sound --crop has historically left ~28s tails; refuse silent
-            # "success" when the file is wildly longer than the requested clip.
+        if accepted or (result.returncode == 0 and profile != "music"):
             dur = _probe_duration(out)
-            limit = max(duration * 1.8, duration + 1.5)
-            if dur is not None and dur > limit and profile != "music":
-                print(
-                    f"  ⚠ {size} bytes in {elapsed:.1f}s but duration={dur:.1f}s "
-                    f"> limit {limit:.1f}s — hard-trimming to {duration:.2f}s"
-                )
-                if not _hard_trim(out, duration + 0.08):
-                    fail += 1
-                    ok -= 1
-                    print("  ✗ trim failed")
-                else:
-                    print(f"  ✓ trimmed → {_probe_duration(out):.2f}s")
+            # SA3 respeita -d: SFX (trim ON) pode vir mais curto; BGM seamless
+            # aterra exacto em -d. Falhar alto se algo estiver grotescamente off.
+            if profile == "music":
+                good = dur is not None and abs(dur - duration) <= 0.25
             else:
-                print(f"  ✓ {size} bytes in {elapsed:.1f}s" + (f" ({dur:.2f}s)" if dur else ""))
-        else:
+                good = dur is not None and dur <= duration + 0.5
+            if good:
+                ok += 1
+                print(f"  ✓ {out.stat().st_size} bytes in {elapsed:.1f}s ({dur:.2f}s)")
+            else:
+                fail += 1
+                print(f"  ✗ duração fora do esperado: {dur}s (pedido {duration}s)")
+        elif result.returncode != 0:
             fail += 1
             print(f"  ✗ FAILED ({elapsed:.1f}s)")
             print(f"    stderr: {result.stderr[-300:]}")
+        else:
+            fail += 1
+            th = _tail_head_pct(out)
+            print(f"  ✗ gate de loop: cauda/início abaixo do limiar após {attempts} seeds ({th})")
 
     total_time = time.time() - start_all
     print(f"\n{'═' * 60}")

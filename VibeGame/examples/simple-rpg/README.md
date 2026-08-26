@@ -10,9 +10,13 @@ On the engine side it exercises the full RPG plugin stack: combat, inventory, pr
 
 ## Getting started
 
-The 3D assets (GLB meshes, textures, terrain, sky, audio) are large binary
-blobs, so they are **not committed to git**. They live in a pinned GitHub
-Release and are fetched on demand:
+The 3D assets (GLB meshes, images, textures, sky) are large binary blobs, so
+they are **not committed to git**. They live once in the **shared pool**
+([`examples/shared-assets/public/assets/`](../shared-assets/README.md)) — every
+example reads them through the `vibegame({ sharedAssets })` plugin — and a
+fresh clone restores them from a pinned GitHub Release on demand. Only
+game-specific media (`audio/`, `icons/`, `particles/`, `terrain/`) stays in
+this example's `public/assets/`:
 
 ```bash
 npm install        # or: bun install
@@ -20,10 +24,12 @@ npm run dev        # predev runs scripts/fetch-assets.mjs automatically
 ```
 
 `scripts/fetch-assets.mjs` downloads the bundle pinned in `assets.lock.json`,
-verifies its sha256, and extracts it into `public/assets/` (idempotent: it
-no-ops once the pinned version is present). Run it directly with `npm run setup`
-if needed. To bump the assets, regenerate them with the GameAssets pipeline,
-upload a new release, and update `assets.lock.json` (`version` + `url` + `sha256`).
+verifies its sha256, fills the shared pool file-by-file (never overwriting
+pool content — the pool is canonical) and merges the game-specific media into
+`public/assets/` (idempotent: it no-ops once the pinned version is present).
+Run it directly with `npm run setup` if needed. To bump the assets, regenerate
+them with the GameAssets pipeline, upload a new release, and update
+`assets.lock.json` (`version` + `url` + `sha256`).
 
 ## What is in the scene
 
@@ -105,77 +111,76 @@ Canonical paths: `/assets/meshes/{id}_lod0.glb` (not `_rigged_animated` for runt
 
 ### 1. Review the plan
 
-The scene layout and assets were planned with **`gameassets dream`** (dry-run, no GPU) and then refined per biome. The source manifests live in `sample-gameassets/`. Forest, village, infra, terrain and the generic props (rock_mossy) are **symlinks** to [`examples/shared-assets/`](../shared-assets/README.md)
-(same packs as simple-racer). Regen those groups from `examples/shared-assets/`
-and copy the binaries with `shared-assets/sync.sh`. On this machine the shared-pack
-binaries themselves resolve via symlinks into `shared-assets/public/assets/`
-(single copy on disk); a fresh clone restores them via `bun run setup`, which
-installs the Release through a staging dir — shared packs go to the
-shared-assets pool in fill-if-missing mode (the Release never overwrites the
-pool) and the symlinks are re-created.
+The scene layout and assets were planned with **`gameassets dream`** (dry-run, no GPU) and then refined per biome. Every pack manifest (characters, desert, forest, infra, interiors, props, props-rpg, swamp, terrain, vehicles, village) is canonical in
+[`examples/shared-assets/manifests/`](../shared-assets/README.md) — one pool,
+shared by all examples, consumed via `vibegame({ sharedAssets })` in
+`vite.config.ts`. No copies and no symlinks inside the examples; only
+game-specific media and manifests live here:
 
 ```
 sample-gameassets/
   game.yaml                      # GameAssets profile — só config (estilo, ferramentas, presets)
-  manifests/                     # 1 manifesto por grupo (~20 assets); cada um define a sua pasta
-    characters.yaml              # herói, NPCs, criaturas e bosses  → meshes/characters/
-    village.yaml                 # symlink → examples/shared-assets/manifests/village.yaml
-    props.yaml                   # symlink → examples/shared-assets (rock_mossy)
-    props-rpg.yaml               # armas, ferramentas, itens RPG    → meshes/props/
-    forest.yaml                  # symlink → examples/shared-assets/manifests/forest.yaml
-    desert.yaml                  # Deserto                          → meshes/desert/
-    swamp.yaml                   # Pântano                          → meshes/swamp/
-    terrain.yaml                 # symlink → examples/shared-assets (formações rochosas)
-    infra.yaml                   # symlink → examples/shared-assets/manifests/infra.yaml
-    audio.yaml                   # BGM/SFX (Text2Sound)             → public/assets/audio/
-# GLB/PNG por grupo em public/assets/{meshes,images}/<grupo>/ (local, gitignored).
-# Only small JSON metadata is committed.
+  manifests/
+    audio.yaml                   # BGM/SFX (Text2Sound) → public/assets/audio/ (local do jogo)
+examples/shared-assets/          # pool canónico
+  game.yaml                      # perfil dos packs partilhados
+  manifests/<pack>.yaml          # 1 manifesto por pack (binários em public/assets/)
+  public/assets/{meshes,images,textures,sky}/   # servido a todos os exemplos
+# Binários do pool: não commitados; fresh clone restaura via `bun run setup`
+# (Release pinado) ou regen GPU. Só JSON metadata pequeno é commitado.
 ```
 
 ### 2. Generate assets (requires GPU)
 
-From the `sample-gameassets/` directory:
+From the shared pool (`resume` é idempotente — só gera o que falta):
 
 ```bash
-cd VibeGame/examples/simple-rpg/sample-gameassets
+cd VibeGame/examples/shared-assets
 
 # 2D images + 3D meshes + PBR textures + rigging + animation
-# (um comando por grupo; resume é idempotente — só gera o que falta)
-gameassets batch --profile game.yaml --manifest manifests/characters
-gameassets batch --profile game.yaml --manifest manifests/props-rpg
-# ... manifests/{desert,swamp,interiors,audio}.yaml
-# Packs partilhados (forest/village/infra/terrain/props): regen em
-# examples/shared-assets + bash examples/shared-assets/sync.sh (ver README lá)
+# (um comando por pack; `ls manifests/` lista todos)
+gameassets resume --profile game.yaml --manifest manifests/characters
+gameassets resume --profile game.yaml --manifest manifests/props-rpg
+# ... manifests/{desert,forest,infra,interiors,props,swamp,terrain,village}
 
-# Sky (separate CLI): write directly into public/assets/sky/
-skymap2d generate "bright blue sky with soft clouds over green plains, equirectangular 360" -o ../public/assets/sky/sky.png
+# Audio específico deste jogo (Text2Sound) — corre a partir do exemplo:
+cd ../simple-rpg/sample-gameassets
+gameassets resume --profile game.yaml --manifest manifests/audio
+
+# Sky (separate CLI): write directly into the pool's sky/
+cd ../../shared-assets
+skymap2d generate "bright blue sky with soft clouds over green plains, equirectangular 360" -o public/assets/sky/sky.png
 ```
 
-### 3. Handoff into public/
+### 3. Handoff
+
+O handoff corre a partir do pool e escreve nele (os exemplos leem via plugin;
+não há passo de cópia para o jogo):
 
 ```bash
+cd VibeGame/examples/shared-assets
 gameassets handoff \
   --profile game.yaml \
   --manifest manifests/characters \
-  --public-dir ../public \
+  --public-dir public \
   --with-textures
-# repetir por grupo, ou usar o agregador: --manifest manifests (não suportado — passar um grupo de cada vez)
+# repetir por pack (passar um de cada vez)
 ```
 
-This creates (or refreshes):
+Layout resultante (pool vs. exemplo):
 
 ```
-public/
-  assets/
-    meshes/             # final GLBs (lod0/…): local, gitignored
-    meshes/vegetation/  # bpy grass/flowers (Y-up): tracked in git; `npm run generate-vegetation`
-    images/             # Text2D PNGs: local, gitignored
-    textures/           # diffuse/PBR textures used by terrain and biomes
-    particles/          # Kenney CC0 sprites (flame, smoke, spark, …) for particle presets
-    audio/              # Text2Sound WAV/OGG
-    sky/sky.png
-    terrain/            # terrain.ahgt + terrain.json
-    gameassets_handoff.json   # URLs + bloco `precompute` por asset (ver abaixo)
+examples/shared-assets/public/assets/     # pool — servido a todos os exemplos
+  meshes/             # final GLBs (lod0/… + vegetation/ bpy carpet): não commitados
+  images/             # Text2D PNGs: não commitadas
+  textures/           # diffuse/PBR textures used by terrain and biomes
+  sky/sky.png
+simple-rpg/public/assets/                 # media específica do jogo
+  audio/              # Text2Sound WAV/OGG
+  icons/              # UI icons
+  particles/          # Kenney CC0 sprites (flame, smoke, spark, …)
+  terrain/            # terrain.ahgt + terrain.json
+  gameassets_handoff.json   # URLs + bloco `precompute` por asset (ver abaixo)
 ```
 
 **Colisores pré-calculados (`precompute`):** o handoff inline o sidecar
@@ -188,7 +193,7 @@ precompute"` sem baixar `*_collision.glb`; o carve do NavMesh é procedural
 AABB-fit (comportamento antigo). Docs:
 [`src/plugins/asset-precompute/context.md`](../../src/plugins/asset-precompute/context.md).
 
-`fetch-assets` preserves `meshes/vegetation/` so the release tarball does not restore Kenney stubs over the bpy carpet.
+`fetch-assets` fills the pool in fill-if-missing mode, so a release tarball never restores Kenney stubs over the bpy vegetation carpet.
 
 ### Vegetation (smart carpet)
 
@@ -343,7 +348,7 @@ Edit the fragment for the domain you care about:
 
 ## Extending
 
-- Add more assets: edit `sample-gameassets/manifest_full.csv` (and the per-biome subset manifests), re-run batch + handoff.
+- Add more assets: add rows to a pack manifest in `examples/shared-assets/manifests/` (or create a new pack there), re-run `gameassets resume` + handoff from the pool.
 - Change layout: edit the matching file under `public/world/` (not the whole `index.html`), or regenerate via `gameassets dream`.
 - Add game logic: edit `src/main.ts` and the entity scripts under `src/scripts/`. Add new systems with `withSystem`.
 - Add quests: drop a new JSON into `src/data/quests/`, import it in `src/main.ts`, and add a matching `<DialogueNPC dialogue-id="…">` in `public/world/ai/npcs.xml`.

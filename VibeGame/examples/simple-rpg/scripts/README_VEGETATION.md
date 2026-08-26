@@ -4,7 +4,9 @@ Grass / plant / flower meshes for the smart `<Vegetation>` carpet.
 
 ## Output
 
-`public/assets/meshes/vegetation/*.glb` (Y-up for Three.js / wind / ground-align).
+`examples/shared-assets/public/assets/meshes/vegetation/*.glb` (Y-up for
+Three.js / wind / ground-align) — the canonical shared pool, served to every
+example by `vibegame({ sharedAssets })`.
 
 Author space in Blender is Z-up; the script exports with `export_yup=True`.
 
@@ -19,7 +21,7 @@ npm run generate-vegetation
 # Animator3D/.venv/bin/python scripts/generate_vegetation_glb.py
 ```
 
-`fetch-assets` preserves this folder so a release tarball does not overwrite local bpy meshes with stubs.
+`fetch-assets` fills the pool in fill-if-missing mode, so a release tarball never overwrites the local bpy meshes with stubs.
 
 ## Scene usage
 

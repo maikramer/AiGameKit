@@ -32,6 +32,11 @@ const nodeStubsPlugin = (): Plugin => ({
   },
 });
 
+const sharedAssets = path.join(
+  vibegameRoot,
+  'examples/shared-assets/public/assets'
+);
+
 export default defineConfig({
   resolve: {
     // Keep engine SoA (Transform, etc.) as a single module instance so entity
@@ -47,7 +52,7 @@ export default defineConfig({
       path: path.resolve(vibegameRoot, 'scripts/node-stub.js'),
     },
   },
-  plugins: [nodeStubsPlugin(), vibegame(), consoleForwarding()],
+  plugins: [nodeStubsPlugin(), vibegame({ sharedAssets }), consoleForwarding()],
   server: {
     port: 3011,
     open: process.env.BROWSER !== 'none',

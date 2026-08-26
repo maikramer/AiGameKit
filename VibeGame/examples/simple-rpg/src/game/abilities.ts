@@ -5,26 +5,26 @@
 //   [E] Heal         — instant self-heal
 //   [R] Power Strike — radial damage burst around you
 import {
-  Health,
-  Transform,
-  WorldTransform,
+  createHudSlot,
   damageHealth,
   defineQuery,
   getBvhSurfaceHeight,
   getRapierWorld,
   getTerrainHeightAt,
   healHealth,
+  Health,
   isDead,
   isKeyDown,
   playSound,
   playSoundAt,
   spawnFloatingText,
   spawnParticleBurst,
+  Transform,
+  WorldTransform,
 } from 'vibegame';
 import type { State } from 'vibegame';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { isGamePaused } from './pause';
-import { createHudSlot } from './hud-slot';
 import { playerStats } from './skills';
 
 interface Ability {

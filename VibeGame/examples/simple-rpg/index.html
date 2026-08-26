@@ -89,7 +89,8 @@
            paths.trails             trilhos dos biomas (cardeais + ramos)
            biome.<b>.vegetation     tapete, dossel, rochas por bioma
            biome.<b>.landmarks      destinos: postos, ruínas, minas, arena
-           frontier.ridges          cristas diagonais entre cunhas
+           frontier.ridges          diagonais entre cunhas
+           frontier.horizon         silhueta 450-840 m (até ao far plane)
            creatures                inimigos por bioma
            creatures.bosses         4 chefes (name="boss" = final, BossBar)
            quest-npcs               NPCs de quest + especiais (merchant/chest/board)
@@ -106,7 +107,8 @@
 
          MAPAS MODULARES (public/world/ — ver context.md lá):
            environment.xml · cities/discordia.xml · cities/town-demo.xml
-           spawn/ring.xml · paths/network.xml · paths/trails.xml · frontier/ridges.xml
+           spawn/ring.xml · paths/network.xml · paths/trails.xml
+           frontier/ridges.xml · frontier/horizon.xml
            vegetation/{forest,desert,swamp,peaks}.xml
            landmarks/{forest,desert,swamp,peaks}.xml
            creatures/enemies.xml · creatures/bosses.xml · ai/npcs.xml
@@ -183,7 +185,7 @@
           resolution="128"
           collision-resolution="64"
           lod-hysteresis="1.3"
-          lod-distance-ratio="2.4"
+          lod-distance-ratio="1.7"
           height-smoothing="1"
           height-smoothing-spread="1.25"
           heightmap="/assets/terrain/terrain.ahgt"
@@ -193,7 +195,7 @@
           normal-strength="2.6"
           base-color="#8cb866"
           texture="/assets/textures/vale_grass.png"
-          ao-strength="0.9"
+          ao-strength="1.1"
           height-blend-strength="0.40"
           snow-height="0.92"
           slope-threshold="0.78"
@@ -235,6 +237,7 @@
       <Include src="/world/interiors.xml"></Include>
 
       <Include src="/world/frontier/ridges.xml"></Include>
+      <Include src="/world/frontier/horizon.xml"></Include>
       <Include src="/world/atmosphere/ambient-fx.xml"></Include>
       <Include src="/world/creatures/enemies.xml"></Include>
       <Include src="/world/creatures/bosses.xml"></Include>
@@ -317,25 +320,7 @@
         >
           <InventoryTab columns="5"></InventoryTab>
           <SkillsTab></SkillsTab>
-          <OptionsTab label-key="modal.tab.system">
-            <OptionRow
-              id="music-volume"
-              type="slider"
-              label-key="options.music"
-              min="0"
-              max="100"
-              step="5"
-              default="70"
-            ></OptionRow>
-            <OptionRow
-              id="sfx-volume"
-              type="slider"
-              label-key="options.sfx"
-              min="0"
-              max="100"
-              step="5"
-              default="80"
-            ></OptionRow>
+          <OptionsTab label-key="modal.tab.system" preset="core">
             <OptionRow
               id="save"
               type="button"

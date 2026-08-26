@@ -73,6 +73,14 @@ const AI_DEFAULTS = {
 };
 
 const aggroEntities = new Set<number>();
+/** Living boss eids — aggro de um deles deve sobrepor-se ao 'battle' normal. */
+const bossEntities = new Set<number>();
+
+/** True enquanto algum boss está vivo E em combate (camada BGM 'boss'). */
+export function anyBossAggro(): boolean {
+  for (const eid of aggroEntities) if (bossEntities.has(eid)) return true;
+  return false;
+}
 export function anyCreatureAggro(): boolean {
   return aggroEntities.size > 0;
 }
@@ -166,6 +174,8 @@ export interface CreatureConfig {
   gateUntil?: () => boolean;
   /** Enemy type identifier for quest kill tracking (e.g. 'wolf', 'shade'). */
   enemyType?: string;
+  /** Boss flag: aggro dele alimenta a camada de BGM 'boss' (anyBossAggro). */
+  isBoss?: boolean;
   /** Time-scale applied to the run clip while chasing (e.g. 1.5 to reuse walk as a jog). */
   runTimeScale?: number;
   /**
@@ -514,6 +524,7 @@ export function createCreatureBehaviours(
     s.deathHandled = true;
     s.deathTimer = 1.6;
     aggroEntities.delete(eid);
+    bossEntities.delete(eid);
     unregisterEnemy(eid);
     // Kill hit-flash so corpses don't sit white/glowing until despawn.
     if (s.flashMats) applyFlash(s, false);
@@ -731,6 +742,7 @@ export function createCreatureBehaviours(
 
   function start(ctx: MonoBehaviourContext): void {
     const eid = ctx.entity;
+    if (cfg.isBoss) bossEntities.add(eid);
     const preferXml =
       cfg.visualFromIndex ??
       (/_lod[0-2]\.glb$/i.test(cfg.modelUrl) ||
@@ -1076,6 +1088,7 @@ export function createCreatureBehaviours(
     unregisterEnemy(ctx.entity);
     presentationMap(ctx.state).delete(ctx.entity);
     aggroEntities.delete(ctx.entity);
+    bossEntities.delete(ctx.entity);
   }
 
   return { start, update, onDestroy };

@@ -48,6 +48,8 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     lungeRecovery: 0.7,
     lungeStandoff: 1.2,
     enemyType: 'wolf',
+    // Rosnido ao activar (primeira detecção do jogador).
+    roarSound: 'wolf-growl',
     behaviorProfile: { separate: true, flock: true },
     onDeathLoot: goldLoot,
   },
@@ -71,6 +73,7 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     lungeRecovery: 0.3,
     lungeStandoff: 0.6,
     enemyType: 'slime',
+    roarSound: 'slime-squish',
     onDeathLoot: goldLoot,
   },
 
@@ -267,6 +270,7 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     runTimeScale: 1.5,
     lootGoldMin: 100,
     lootGoldMax: 150,
+    isBoss: true,
     defeatedText: 'ORN FOI DESFEITO!',
     roarSound: 'boss-roar',
     // Gate: appear only after every enemy in the frozen-peaks biome is dead.
@@ -301,6 +305,7 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     runTimeScale: 1.5,
     lootGoldMin: 80,
     lootGoldMax: 120,
+    isBoss: true,
     defeatedText: 'O CONTADOR FOI DESFEITO!',
     enemyType: 'boss_bogwarden',
     onDeathLoot: goldLoot,
@@ -332,6 +337,7 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     runTimeScale: 1.5,
     lootGoldMin: 90,
     lootGoldMax: 130,
+    isBoss: true,
     defeatedText: 'SARRA FOI DESFEITA!',
     enemyType: 'boss_sandworm',
     onDeathLoot: goldLoot,
@@ -365,6 +371,7 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     runTimeScale: 1.5,
     lootGoldMin: 70,
     lootGoldMax: 110,
+    isBoss: true,
     defeatedText: 'VÉSPER FOI DESFEITA!',
     enemyType: 'boss_witch',
     onDeathLoot: goldLoot,

@@ -49,6 +49,7 @@ import {
   // ecs / gameplay
   defineQuery,
   Transform,
+  QuestState,
   WorldTransform,
   Health,
   isDead,
@@ -137,7 +138,7 @@ import {
 import { isWoodEntity } from './scripts/tree';
 import { addStone } from './scripts/inventory';
 import { addWood } from './scripts/wood';
-import { anyCreatureAggro } from './scripts/creature';
+import { anyBossAggro, anyCreatureAggro } from './scripts/creature';
 import { biomeAtPosition, getEnemyLabel } from './scripts/enemy-registry';
 import { setupAggroChain } from './scripts/aggro-chain';
 
@@ -240,6 +241,7 @@ const RespawnSystem: System = {
     if (isDead(player) && !deathShown) {
       deathShown = true;
       respawnAtTime = state.time.elapsed + RESPAWN_DELAY;
+      playSound('game-over');
       const best = nearestRespawn(
         respawnCandidates(state),
         Transform.posX[player],
@@ -764,14 +766,57 @@ const BombAimSpineSystem: System = {
   },
 };
 
-// ── BGM: explore on boot, crossfade to battle while creatures are aggro.
-//    Driven by the engine MusicLayerDriver against the <MusicLayer> entities
-//    in public/world/environment.xml (both routed through the 'music' bus,
-//    so the volume slider still controls them).
+// ── BGM: camadas por contexto (MusicLayer entities em environment.xml,
+//    todas na bus 'music' para o slider as controlar). Prioridade:
+//    boss (boss em combate) > battle (qualquer aggro) > dungeon (interiores)
+//    > mountain (Picos Gelados) > village (dentro da muralha) > explore.
+//    O driver crossfada com debounce; as zonas são testes geométricos baratos
+//    (interiores: caixa remota x≈797-917/z≈226-336; vila: r<55 da origem,
+//    espelhando o SpawnExclusion; frozen-peaks: wedge sul do BiomeRegion).
+let liveState: State | null = null;
+
+function bgmZone(): string {
+  if (anyBossAggro()) return 'boss';
+  if (anyCreatureAggro()) return 'battle';
+  const s = liveState;
+  const player = s ? s.getEntityByName('player') : null;
+  if (player !== null && player >= 0) {
+    const x = Transform.posX[player];
+    const z = Transform.posZ[player];
+    // Interior rooms (interiors.ts REGISTRY: x 797-917, z 226-336, com margem)
+    if (x > 770 && x < 950 && z > 205 && z < 355) return 'dungeon';
+    // Frozen peaks wedge: z <= -240, |x| abre 240→1040 (BiomeRegion polygon)
+    if (z <= -240 && Math.abs(x) <= 240 + Math.max(0, -z - 240)) return 'mountain';
+    // Walled village at the origin (SpawnExclusion radius 52 + margem)
+    if (x * x + z * z < 55 * 55) return 'village';
+  }
+  return 'explore';
+}
+
 const BgmSystem = createMusicLayerDriver({
-  resolve: () => (anyCreatureAggro() ? 'battle' : 'explore'),
+  resolve: bgmZone,
   debounceMs: 1000,
 });
+
+// ── Quest feedback: a engine (plugin quests) escreve QuestState.completed
+//    quando os objetivos se enchem; um poll leve dispara o jingle uma única
+//    vez por transição (sem hook na engine).
+let questDoneSnapshot: number[] = [];
+const QuestSoundSystem: System = {
+  group: 'simulation',
+  update() {
+    const done = QuestState.completed;
+    if (questDoneSnapshot.length !== done.length) {
+      questDoneSnapshot = new Array<number>(done.length).fill(0);
+    }
+    for (let i = 0; i < done.length; i++) {
+      if (done[i] === 1 && questDoneSnapshot[i] !== 1) {
+        playSound('quest-complete');
+      }
+      questDoneSnapshot[i] = done[i];
+    }
+  },
+};
 
 // Must register quests before runtime.start() so the scene parser can resolve
 // each <DialogueNPC dialogue-id> to its quest index. JSON import widens
@@ -826,6 +871,7 @@ async function runBootstrap(): Promise<void> {
   withSystem(BombSystem);
   withSystem(BombAimSpineSystem);
   withSystem(BgmSystem);
+  withSystem(QuestSoundSystem);
   withSystem(TravelHomeSystem);
   withSystem(NotaSystem);
 
@@ -833,6 +879,7 @@ async function runBootstrap(): Promise<void> {
 
   const runtime = await getBuilder().build();
   const state = runtime.getState();
+  liveState = state; // BGM por contexto (bgmZone) lê a posição do jogador
 
   // Pack behavior: hitting one enemy alerts nearby allies with line of sight
   // to the player, so a pack fights together instead of each mob aggroing alone.

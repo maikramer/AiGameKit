@@ -1,10 +1,21 @@
 <!--
-  Fronteiras do vale — cristas diagonais. Loaded via Include.
+  Fronteiras do vale — diagonais. Loaded via Include.
 
   As quatro cunhas de bioma são partidas pelas diagonais, mas as diagonais
   não tinham conteúdo nenhum: quem andasse a 45° atravessava campo vazio até
-  ao fim do mundo. Este ficheiro veste as diagonais com cenário; as cristas
-  esculpidas deixaram de existir (relevo cru do Terrain3D).
+  ao fim do mundo. Este ficheiro veste-as com cenário de fundo.
+
+  RELEVO REAL (medido no heightmap, cota/declive a 200→470 m do centro):
+    NE  147→159 m,  4-8°    planície suave a subir
+    SE  149→132 m, 14-27°   a única acidentada a sério
+    SO  124→127 m,  4-16°   quase plana
+    NO  118→103 m,  1-7°    descida lisa para a bacia do pântano
+
+  Só o SE justifica leitura de crista. Nas outras três os campos de falésia
+  (form_cliff_*, max-slope-deg 75) plantavam penhascos sobre chão de 1-8° —
+  herança das cristas esculpidas que o sculpt criava e que já não existem.
+  Foram removidos, e os afloramentos passaram de 140 para 55 com
+  max-slope-deg 32 (o antigo 68 era para falésias). 1563 → 960 instâncias.
 
   As regiões são caixas pequenas ENCOSTADAS à diagonal (uma caixa grande de
   canto a canto cairia dentro das cunhas cardeais). Só spawners scenery —
@@ -15,10 +26,10 @@
        NE — entre Floresta e Deserto
        ============================================================ -->
   <StaticSpawner
-    profile="tree" count="140" seed="4101"
+    profile="tree" count="55" seed="4101"
     region-min="190 0 190" region-max="330 0 330"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
-    max-slope-deg="68" max-slope-attempts="40"
+    max-slope-deg="32" max-slope-attempts="40"
     scale-min="0.6" scale-max="2.4" avoid-overlaps="1"
     pick-strategy="random" footprint-radius="3.2"
     cluster-count="8" cluster-radius="44"
@@ -29,19 +40,6 @@
     </GameObject>
     <GameObject role="static">
       <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_8_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_8_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_8_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
-    </GameObject>
-  </StaticSpawner>
-  <StaticSpawner
-    profile="tree" count="110" seed="4102"
-    region-min="300 0 300" region-max="470 0 470"
-    align-to-terrain="0" ground-align="auto" avoid-water="1"
-    max-slope-deg="75" max-slope-attempts="40"
-    scale-min="0.35" scale-max="0.9" avoid-overlaps="1"
-    footprint-radius="4.4" cluster-count="6" cluster-radius="52"
-    max-distance="280" random-yaw="true" variation="rock"
-  >
-    <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_cliff_1_lod0.glb" lod1-url="/assets/meshes/terrain/form_cliff_1_lod1.glb" lod2-url="/assets/meshes/terrain/form_cliff_1_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -109,10 +107,10 @@
        SO — entre Pântano e Picos
        ============================================================ -->
   <StaticSpawner
-    profile="tree" count="140" seed="4301"
+    profile="tree" count="55" seed="4301"
     region-min="-330 0 -330" region-max="-190 0 -190"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
-    max-slope-deg="68" max-slope-attempts="40"
+    max-slope-deg="32" max-slope-attempts="40"
     scale-min="0.6" scale-max="2.4" avoid-overlaps="1"
     pick-strategy="random" footprint-radius="3.2"
     cluster-count="8" cluster-radius="44"
@@ -123,19 +121,6 @@
     </GameObject>
     <GameObject role="static">
       <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_5_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_5_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
-    </GameObject>
-  </StaticSpawner>
-  <StaticSpawner
-    profile="tree" count="110" seed="4302"
-    region-min="-470 0 -470" region-max="-300 0 -300"
-    align-to-terrain="0" ground-align="auto" avoid-water="1"
-    max-slope-deg="75" max-slope-attempts="40"
-    scale-min="0.35" scale-max="0.9" avoid-overlaps="1"
-    footprint-radius="4.4" cluster-count="6" cluster-radius="52"
-    max-distance="280" random-yaw="true" variation="rock"
-  >
-    <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_cliff_1_lod0.glb" lod1-url="/assets/meshes/terrain/form_cliff_1_lod1.glb" lod2-url="/assets/meshes/terrain/form_cliff_1_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
   <StaticSpawner
@@ -156,10 +141,10 @@
        NO — entre Picos e Floresta (o rio corta aqui: garganta)
        ============================================================ -->
   <StaticSpawner
-    profile="tree" count="140" seed="4401"
+    profile="tree" count="55" seed="4401"
     region-min="-330 0 190" region-max="-190 0 330"
     align-to-terrain="1" ground-align="auto" avoid-water="1"
-    max-slope-deg="68" max-slope-attempts="40"
+    max-slope-deg="32" max-slope-attempts="40"
     scale-min="0.6" scale-max="2.4" avoid-overlaps="1"
     pick-strategy="random" footprint-radius="3.2"
     cluster-count="8" cluster-radius="44"
@@ -172,23 +157,15 @@
       <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_5_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_5_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120"></GLTFLoader>
     </GameObject>
   </StaticSpawner>
-  <StaticSpawner
-    profile="tree" count="110" seed="4402"
-    region-min="-470 0 300" region-max="-300 0 470"
-    align-to-terrain="0" ground-align="auto" avoid-water="1"
-    max-slope-deg="75" max-slope-attempts="40"
-    scale-min="0.35" scale-max="0.9" avoid-overlaps="1"
-    footprint-radius="4.4" cluster-count="6" cluster-radius="52"
-    max-distance="280" random-yaw="true" variation="rock"
-  >
-    <GameObject role="static">
-      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_cliff_20_lod0.glb" lod1-url="/assets/meshes/terrain/form_cliff_20_lod1.glb" lod2-url="/assets/meshes/terrain/form_cliff_20_lod2.glb" lod-threshold-near="60" lod-threshold-mid="150"></GLTFLoader>
-    </GameObject>
-  </StaticSpawner>
   <!-- Pedras de margem ao longo da garganta do rio (near-water). -->
+  <!-- Garganta: dispersão `near-water="1"` ao longo do rio. A rotação dos
+       biomas atirou esta caixa para o quadrante SO, onde não há água
+       nenhuma — as 80 instâncias não produziam nada. O rio segue a
+       drenagem real e sai para NO por (-133,289) (-158,318) (-186,340),
+       que é onde a caixa tem de estar. -->
   <StaticSpawner
     profile="tree" count="80" seed="4403"
-    region-min="-420 0 -470" region-max="-120 0 -140"
+    region-min="-420 0 140" region-max="-120 0 470"
     near-water="1" avoid-water="0"
     align-to-terrain="1" ground-align="auto"
     max-slope-deg="62" max-slope-attempts="96"

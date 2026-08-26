@@ -6,7 +6,8 @@ Requires bpy (Animator3D / Blender 5.2+):
   Animator3D/.venv/bin/python \\
     VibeGame/examples/simple-rpg/scripts/generate_vegetation_glb.py
 
-Outputs overwrite public/assets/meshes/vegetation/*.glb.
+Outputs overwrite examples/shared-assets/public/assets/meshes/vegetation/*.glb
+(canonical pool — served to every example by vibegame({ sharedAssets })).
 
 Author in Blender Z-up (+Z = height, feet at z≈0). Export uses export_yup=True so
 glTF/Three.js receive Y-up (height on +Y) for wind and ground-align.
@@ -29,7 +30,7 @@ try:
 except ImportError as e:
     raise SystemExit("bpy required. Run with Animator3D/.venv/bin/python (or Blender's Python).") from e
 
-OUT_DIR = Path(__file__).resolve().parents[1] / "public" / "assets" / "meshes" / "vegetation"
+OUT_DIR = Path(__file__).resolve().parents[2] / "shared-assets" / "public" / "assets" / "meshes" / "vegetation"
 
 # Meadow greens (Principled / glTF linear-ish)
 GREEN_BASE = (0.14, 0.38, 0.09, 1.0)

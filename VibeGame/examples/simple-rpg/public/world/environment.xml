@@ -9,7 +9,7 @@
            Pipeline moderado (stylized): sombras PCSS 1024, SSAO + bloom +
            fog/grading. DoF / god-rays / film-grain OFF (custo alto, pouco
            ganho em jogabilidade). SSR OFF (águas usam mirror planar).
-           AdaptiveQuality pode baixar DPR até 0.55 sob pressão; teto 1.0
+           AdaptiveQuality pode baixar DPR até 0.55 sob pressão; teto 1.5
            (nativo) quando a dGPU está no jogo.
            ============================================================ -->
         <!-- Céu atmosférico procedural (espalhamento de Preetham + nuvens no
@@ -21,17 +21,17 @@
              porque os billboards do Weather (crossfade por bioma) são a
              camada de nuvens "de jogo". -->
         <Sky
-          sun-elevation="26"
+          sun-elevation="17"
           sun-azimuth="205"
-          turbidity="2.8"
-          rayleigh="1.7"
-          mie-coefficient="0.004"
-          mie-directional-g="0.85"
-          cloud-coverage="0.15"
-          cloud-density="0.25"
+          turbidity="3.4"
+          rayleigh="2.0"
+          mie-coefficient="0.006"
+          mie-directional-g="0.86"
+          cloud-coverage="0.45"
+          cloud-density="0.35"
           cloud-elevation="0.55"
-          environment-intensity="0.26"
-          sun-intensity="5.0"
+          environment-intensity="0.3"
+          sun-intensity="5.2"
           drive-light="1"
         ></Sky>
 
@@ -45,8 +45,8 @@
            (threshold 8 — o céu procedural é HDR). -->
         <GameObject
           ambient-light="sky-color: 0xc8d8e8; ground-color: 0xa89878; intensity: 0.22"
-          directional-light="cast-shadow: 1; shadow-map-size: 2048; distance: 100; pcss: 1"
-          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.15; bloom-radius: 0.55; bloom-threshold: 8.0; chromatic-aberration: 0; vignette: 1; vignette-offset: 0.32; vignette-darkness: 0.36; aa: smaa; tone-mapping: aces; tone-mapping-exposure: 0.95; ssao: 1; ssao-intensity: 1.3; ssao-radius: 2.0; depth-of-field: 0; god-rays: 0; film-grain: 0; color-grading: 1; saturation: 0.12; contrast: 0.08; brightness: 0.0; height-fog: 1; fog-color: 0xd8d0c2; fog-density: 0.0018; fog-height: 132; fog-falloff: 35; fog-noise: 0.3; fog-sun-influence: 1.2; fog-sky-haze: 0.35"
+          directional-light="cast-shadow: 1; shadow-map-size: 4096; distance: 140; pcss: 1"
+          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.18; bloom-radius: 0.55; bloom-threshold: 8.0; chromatic-aberration: 1; ca-strength: 0.0006; vignette: 1; vignette-offset: 0.32; vignette-darkness: 0.36; aa: smaa; tone-mapping: aces; tone-mapping-exposure: 0.88; ssao: 1; ssao-intensity: 1.5; ssao-radius: 2.5; depth-of-field: 0; god-rays: 1; god-rays-density: 0.95; god-rays-decay: 0.93; god-rays-weight: 0.38; god-rays-exposure: 0.42; film-grain: 1; film-grain-opacity: 0.03; color-grading: 1; saturation: 0.08; contrast: 0.08; brightness: 0.0; height-fog: 1; fog-color: 0xdac8ae; fog-density: 0.0018; fog-height: 132; fog-falloff: 35; fog-noise: 0.3; fog-sun-influence: 1.4; fog-sky-haze: 0.22"
         >
         </GameObject>
 
@@ -55,7 +55,7 @@
         <AdaptiveQuality
           target-fps="60"
           min-pixel-ratio="0.55"
-          max-pixel-ratio="1.0"
+          max-pixel-ratio="1.5"
         ></AdaptiveQuality>
 
         <!-- Fronteira suave, perto do fim do mapa (terreno ±2000): a serra
@@ -70,11 +70,17 @@
         ></WorldBorder>
 
         <!-- Mixer buses + BGM layers. O MusicLayerDriverSystem (engine)
-           crossfada explore/battle conforme aggro; ambas saem na bus 'music'
-           controlada pelo slider de volume. -->
+             crossfada por contexto (main.ts bgmZone): boss > battle (aggro) >
+             dungeon (interiores) > mountain (Picos Gelados) > village (muralha)
+             > explore. Todas saem na bus 'music' controlada pelo slider. Clips
+             do pool partilhado (shared-assets/public/assets/audio). -->
         <AudioMixer master="1" music="0.7" sfx="0.8"></AudioMixer>
         <MusicLayer layer="explore" sound="bgm-explore" base-volume="0.18"></MusicLayer>
         <MusicLayer layer="battle" sound="bgm-battle" base-volume="0.22"></MusicLayer>
+        <MusicLayer layer="boss" sound="bgm-boss" base-volume="0.24"></MusicLayer>
+        <MusicLayer layer="dungeon" sound="bgm-dungeon" base-volume="0.2"></MusicLayer>
+        <MusicLayer layer="mountain" sound="bgm-mountain" base-volume="0.2"></MusicLayer>
+        <MusicLayer layer="village" sound="bgm-village" base-volume="0.18"></MusicLayer>
 
         <!-- Clima global: vento constante de SW, nuvens com ciclo lento
            (cobertura "respira" ao longo de minutos), chuva controlada por

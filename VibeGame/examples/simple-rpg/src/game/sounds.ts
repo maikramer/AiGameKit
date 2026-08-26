@@ -3,6 +3,10 @@ import { defineSoundBank, preloadSounds } from 'vibegame';
 /**
  * Single source of truth for every sound in the game.
  *
+ * Todos os clips vêm do pool partilhado (`examples/shared-assets/public/assets/audio`)
+ * via plugin vibegame({ sharedAssets }) — nenhum binário local. Um jogo pode
+ * sobrepor um clip largando um ficheiro com o mesmo caminho no seu `public/`.
+ *
  * World SFX (hurt/death/harvest/explosions) are ``spatial: true`` and must be
  * fired with ``playSoundAt`` / ``playSoundOn`` so Howler attenuates by distance
  * and the bank culls past ``maxDistance``. UI / player-local SFX stay 2D.
@@ -17,75 +21,158 @@ export function registerGameSounds(): void {
 
   defineSoundBank({
     // ── UI / player-local (2D) ─────────────────────────────────────────
-    save: { url: '/assets/audio/sfx_save.ogg', volume: 0.48 },
-    load: { url: '/assets/audio/sfx_load.ogg', volume: 0.44 },
-    heal: { url: '/assets/audio/sfx_heal.ogg', volume: 0.48 },
-    'shop-open': { url: '/assets/audio/sfx_shop_open.ogg', volume: 0.45 },
-    buy: { url: '/assets/audio/sfx_buy.ogg', volume: 0.45 },
-    error: { url: '/assets/audio/sfx_error.ogg', volume: 0.4 },
-    'player-hurt': { url: '/assets/audio/sfx_player_hurt.ogg', volume: 0.5 },
-    coin: { url: '/assets/audio/sfx_coin.ogg', volume: 0.42 },
-    levelup: { url: '/assets/audio/sfx_levelup.ogg', volume: 0.55 },
-    swing: { url: '/assets/audio/sfx_swing.ogg', volume: 0.3 },
+    save: { url: '/assets/audio/sfx/ui/save.ogg', volume: 0.48 },
+    load: { url: '/assets/audio/sfx/ui/load.ogg', volume: 0.44 },
+    heal: { url: '/assets/audio/sfx/player/heal.ogg', volume: 0.48 },
+    'shop-open': { url: '/assets/audio/sfx/ui/shop_open.ogg', volume: 0.45 },
+    buy: { url: '/assets/audio/sfx/ui/buy.ogg', volume: 0.45 },
+    error: { url: '/assets/audio/sfx/ui/error.ogg', volume: 0.4 },
+    'player-hurt': { url: '/assets/audio/sfx/player/hurt.ogg', volume: 0.5 },
+    coin: { url: '/assets/audio/sfx/ui/coin.ogg', volume: 0.42 },
+    levelup: { url: '/assets/audio/sfx/ui/levelup.ogg', volume: 0.55 },
+    'quest-complete': {
+      url: '/assets/audio/sfx/ui/quest_complete.ogg',
+      volume: 0.55,
+    },
+    notification: { url: '/assets/audio/sfx/ui/notification.ogg', volume: 0.4 },
+    pause: { url: '/assets/audio/sfx/ui/pause.ogg', volume: 0.45 },
+    'game-over': { url: '/assets/audio/sfx/ui/game_over.ogg', volume: 0.55 },
+    swing: { url: '/assets/audio/sfx/combat/swing.ogg', volume: 0.3 },
+    'bow-shot': { url: '/assets/audio/sfx/combat/bow_shot.ogg', volume: 0.4 },
+    'arrow-hit': {
+      url: '/assets/audio/sfx/combat/arrow_hit.ogg',
+      volume: 0.45,
+      ...worldSfx,
+    },
+    'shield-block': {
+      url: '/assets/audio/sfx/combat/shield_block.ogg',
+      volume: 0.5,
+    },
 
     // ── World SFX (spatial — use playSoundAt) ────────────────────────
     'bomb-drop': {
-      url: '/assets/audio/sfx_bomb_drop.ogg',
+      url: '/assets/audio/sfx/world/bomb_drop.ogg',
       volume: 0.5,
       ...worldSfx,
     },
+    'door-open': {
+      url: '/assets/audio/sfx/world/door_open.ogg',
+      volume: 0.45,
+      ...worldSfx,
+    },
+    'door-close': {
+      url: '/assets/audio/sfx/world/door_close.ogg',
+      volume: 0.5,
+      ...worldSfx,
+    },
+    'chest-open': {
+      url: '/assets/audio/sfx/world/chest_open.ogg',
+      volume: 0.55,
+      ...worldSfx,
+    },
+    'fire-crackle': {
+      url: '/assets/audio/sfx/world/fire_crackle.ogg',
+      volume: 0.35,
+      ...worldSfx,
+      loop: true,
+    },
+    'footsteps-grass': {
+      url: '/assets/audio/sfx/world/footsteps_grass.ogg',
+      volume: 0.3,
+      ...worldSfx,
+    },
     'enemy-hurt': {
-      url: '/assets/audio/sfx_enemy_hurt.ogg',
+      url: '/assets/audio/sfx/creatures/enemy_hurt.ogg',
       volume: 0.42,
       ...worldSfx,
     },
     'enemy-death': {
-      url: '/assets/audio/sfx_enemy_death.ogg',
+      url: '/assets/audio/sfx/creatures/enemy_death.ogg',
       volume: 0.5,
       ...worldSfx,
     },
     'boss-roar': {
-      url: '/assets/audio/sfx_boss_roar.ogg',
+      url: '/assets/audio/sfx/creatures/boss_roar.ogg',
       volume: 0.55,
       ...worldSfx,
       maxDistance: 48,
     },
+    'slime-squish': {
+      url: '/assets/audio/sfx/creatures/slime_squish.ogg',
+      volume: 0.45,
+      ...worldSfx,
+    },
+    'wolf-growl': {
+      url: '/assets/audio/sfx/creatures/wolf_growl.ogg',
+      volume: 0.5,
+      ...worldSfx,
+    },
     'item-drop': {
-      url: '/assets/audio/sfx_item_drop.ogg',
+      url: '/assets/audio/sfx/world/item_drop.ogg',
       volume: 0.4,
       ...worldSfx,
     },
     'mine-hit': {
-      url: '/assets/audio/sfx_mine_hit.ogg',
+      url: '/assets/audio/sfx/combat/mine_hit.ogg',
       volume: 0.45,
       ...worldSfx,
     },
     'chop-hit': {
-      url: '/assets/audio/sfx_chop_hit.ogg',
+      url: '/assets/audio/sfx/combat/chop_hit.ogg',
       volume: 0.45,
       ...worldSfx,
     },
     'mine-break': {
-      url: '/assets/audio/sfx_mine_break.ogg',
+      url: '/assets/audio/sfx/combat/mine_break.ogg',
       volume: 0.5,
       ...worldSfx,
     },
     'chop-break': {
-      url: '/assets/audio/sfx_chop_break.ogg',
+      url: '/assets/audio/sfx/combat/chop_break.ogg',
       volume: 0.5,
       ...worldSfx,
     },
 
     // ── Music (bus 'music', looped, 2D) ──────────────────────────────
     'bgm-battle': {
-      url: '/assets/audio/bgm_battle.ogg',
+      url: '/assets/audio/bgm/battle.ogg',
       volume: 0.22,
       bus: 'music',
       loop: true,
     },
     'bgm-explore': {
-      url: '/assets/audio/bgm_explore.ogg',
+      url: '/assets/audio/bgm/explore.ogg',
       volume: 0.18,
+      bus: 'music',
+      loop: true,
+    },
+    'bgm-boss': {
+      url: '/assets/audio/bgm/boss.ogg',
+      volume: 0.22,
+      bus: 'music',
+      loop: true,
+    },
+    'bgm-village': {
+      url: '/assets/audio/bgm/village.ogg',
+      volume: 0.18,
+      bus: 'music',
+      loop: true,
+    },
+    'bgm-dungeon': {
+      url: '/assets/audio/bgm/dungeon.ogg',
+      volume: 0.18,
+      bus: 'music',
+      loop: true,
+    },
+    'bgm-mountain': {
+      url: '/assets/audio/bgm/mountain.ogg',
+      volume: 0.18,
+      bus: 'music',
+      loop: true,
+    },
+    'bgm-credits': {
+      url: '/assets/audio/bgm/credits.ogg',
+      volume: 0.2,
       bus: 'music',
       loop: true,
     },

@@ -5,17 +5,17 @@
 //   [2] Antidote → cure + small heal
 //   [3] Bomb     → thrown with [B] (BombSystem owns it; slot is display-only)
 import {
-  Health,
   cancelAllStatuses,
+  createHudSlot,
   getItemQty,
   healHealth,
+  Health,
   isKeyDown,
   playSound,
   removeItem,
 } from 'vibegame';
 import type { State } from 'vibegame';
 import { isGamePaused } from './pause';
-import { createHudSlot } from './hud-slot';
 
 export const POTION_HEAL = 50;
 export const ANTIDOTE_HEAL = 35;
