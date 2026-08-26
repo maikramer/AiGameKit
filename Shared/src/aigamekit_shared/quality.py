@@ -7,9 +7,9 @@ Usage::
 
     engine = QualityEngine()
     r = engine.resolve("text2sound", quality="medium", category="weapon")
-    # r.params = {steps: 32, cfg_scale: 8.0, sampler: "pingpong", ...}
+    # r.params = {steps: 12, cfg_scale: 1.0, sampler: "pingpong", ...}
     # r.audio_kind = "sfx_impact"
-    # r.model_id = "stabilityai/stable-audio-open-small"
+    # r.model_id = "stabilityai/stable-audio-3-small-sfx"
     # r.prompt_hints = ["immediate attack, no silence at start"]
 """
 
@@ -26,8 +26,8 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 VALID_QUALITIES = ("fast", "low", "medium", "high", "highest")
 
 # Audio model IDs (kept in-sync with Text2Sound/models.py)
-_MODEL_MUSIC_ID = "stabilityai/stable-audio-open-1.0"
-_MODEL_EFFECTS_ID = "stabilityai/stable-audio-open-small"
+_MODEL_MUSIC_ID = "stabilityai/stable-audio-3-small-music"
+_MODEL_EFFECTS_ID = "stabilityai/stable-audio-3-small-sfx"
 
 
 @dataclass(frozen=True)

@@ -49,23 +49,25 @@ class TestAudioKinds:
 
 class TestResolveText2Sound:
     def test_resolve_text2sound_medium_weapon(self, engine: QualityEngine) -> None:
-        """Weapon + medium quality → sfx_impact, effects model, steps=32, cfg=6.0."""
+        """Weapon + medium quality → sfx_impact, SA3 sfx model, steps=12, cfg=1.0."""
         r = engine.resolve("text2sound", quality="medium", category="weapon")
         assert isinstance(r, QualityResolution)
         assert r.audio_kind == "sfx_impact"
-        assert r.model_id == "stabilityai/stable-audio-open-small"
-        assert r.params["steps"] == 32
-        assert r.params["cfg_scale"] == 6.0
+        assert r.model_id == "stabilityai/stable-audio-3-small-sfx"
+        assert r.params["steps"] == 12
+        assert r.params["cfg_scale"] == 1.0
+        assert r.params["sampler"] == "pingpong"
         assert r.source == "category"
         assert "immediate attack" in r.prompt_hints[0]
 
     def test_resolve_text2sound_high_humanoid(self, engine: QualityEngine) -> None:
-        """Humanoid + high quality → music_loop, music model, steps=50, trim=false."""
+        """Humanoid + high quality → music_loop, SA3 music model, steps=16, trim=false."""
         r = engine.resolve("text2sound", quality="high", category="humanoid")
         assert isinstance(r, QualityResolution)
         assert r.audio_kind == "music_loop"
-        assert r.model_id == "stabilityai/stable-audio-open-1.0"
-        assert r.params["steps"] == 50
+        assert r.model_id == "stabilityai/stable-audio-3-small-music"
+        assert r.params["steps"] == 16
+        assert r.params["sampler"] == "pingpong"
         # Category audio.trim is false for humanoid, but trim is in category
         # metadata not in params — verify via category_info
         cat = engine.category_info("humanoid")
@@ -174,9 +176,10 @@ class TestCategoryInfo:
 
 class TestAudioKindInfo:
     def test_audio_kind_info_sfx_ui(self, engine: QualityEngine) -> None:
-        """sfx_ui has cfg_scale_default=10.0."""
+        """sfx_ui has SA3 defaults (cfg_scale_default=1.0, pingpong)."""
         info = engine.audio_kind_info("sfx_ui")
-        assert info["cfg_scale_default"] == 10.0
+        assert info["cfg_scale_default"] == 1.0
+        assert info["sampler"] == "pingpong"
 
     def test_audio_kind_info_unknown_raises(self, engine: QualityEngine) -> None:
         with pytest.raises(KeyError, match="Unknown audio kind"):

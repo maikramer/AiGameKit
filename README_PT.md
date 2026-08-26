@@ -22,7 +22,7 @@ Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio
 | [**GameAssets**](GameAssets/) | **Batch de prompts/assets**: perfil + CSV → `text2d` ou `texture2d` + opcional `text3d`, rig, **Animator3D** (auto-detetado), **`gameassets dream`** (ideia → scaffold Vite). |
 | [**Texture2D**](Texture2D/) | **Texturas 2D seamless** (tileable) via pattern-diffusion (GPU local) + PBR via Materialize. |
 | [**Skymap2D**](Skymap2D/) | **Skymaps equirectangular 360°** — FLUX.1-dev + LoRA local na GPU (CUDA), skyboxes para game dev. |
-| [**Text2Sound**](Text2Sound/) | CLI **text-to-audio** com Stable Audio Open 1.0: áudio estéreo 44.1 kHz, presets para game dev. |
+| [**Text2Sound**](Text2Sound/) | CLI **text-to-audio** com Stable Audio 3 Small (música/SFX separados): áudio estéreo 44.1 kHz, presets para game dev. |
 | [**Rigging3D**](Rigging3D/) | **rigging3d** — auto-rigging 3D com [**SkinTokens**](https://github.com/VAST-AI-Research/SkinTokens) (skeleton + skinning unificados autoregressivos, sucessor do UniRig); GPU CUDA; Python **3.13**, **bpy** 5.2 LTS. |
 | [**Animator3D**](Animator3D/) | **animator3d** — **bpy** 5.2 LTS; Python **3.13**; clips procedimentais, **`game-pack`** (presets humanoid/creature/flying), export GLB após rigging. |
 | [**Materialize**](Materialize/) | CLI **PBR maps** (Rust/wgpu): gera normal, AO, metallic, smoothness a partir de textura difusa. |
@@ -44,7 +44,7 @@ AiGameKit/
   GameAssets/        ← gameassets (pip) — depende de Shared; chama text2d/texture2d/text3d via subprocess
   Texture2D/         ← texture2d (pip) — depende de Shared; pattern-diffusion local + PBR via Materialize
   Skymap2D/          ← skymap2d (pip) — depende de Shared; skymaps equirectangular (FLUX.1-dev + LoRA local)
-  Text2Sound/        ← text2sound (pip) — depende de Shared; Stable Audio Open 1.0
+  Text2Sound/        ← text2sound (pip) — depende de Shared; Stable Audio 3 Small (music/sfx)
   Rigging3D/         ← rigging3d (pip) — Shared; SkinTokens Py 3.13 + bpy 5.2 LTS
   Animator3D/        ← animator3d (pip) — Shared; Py 3.13 + bpy 5.2 LTS (animação)
   AiGameKitLab/        ← aigamekit-lab (pip) — depende de Shared; debug 3D, benches, profiling
@@ -206,7 +206,7 @@ cd ../Texture2D && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .ve
 # 7. Skymap2D (skymaps equirectangular 360°; FLUX.1-dev + LoRA local)
 cd ../Skymap2D && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && skymap2d --help
 
-# 8. Text2Sound (text-to-audio; Stable Audio Open 1.0; requer CUDA)
+# 8. Text2Sound (text-to-audio; Stable Audio 3 Small music/sfx; requer CUDA)
 cd ../Text2Sound && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && text2sound --help
 
 # 9. Rigging3D (GPU CUDA; Python 3.13; SkinTokens — preferir ./install.sh rigging3d)
@@ -231,7 +231,7 @@ Instruções completas: [docs/INSTALLING_PT.md](docs/INSTALLING_PT.md) (incl. re
 | FLUX.2 Klein (default Text2D: base fp16 + SDNQ runtime) | 4B: Apache 2.0 · 9B: **gated** (aceitar termos no Hub) | O Text2D carrega a base oficial [4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) / [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) e aplica quantização SDNQ **em runtime** — sem checkpoint pré-quantizado por defeito. Mirrors pré-quantizados [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) são opcionais via `TEXT2D_MODEL_ID` (declaram `flux-non-commercial-license`) |
 | Hunyuan3D-Omni (shape Text3D) | Tencent Hunyuan Community License | [tencent/Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) — lê o `LICENSE` no repositório: restrições de território (ex.: UE, Reino Unido, Coreia do Sul), política de uso aceitável e obrigações. SDNQ INT4 em GPUs pequenas |
 | Hunyuan3D-2.1 (paint Paint3D) | Tencent Hunyuan Community License | [tencent/Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) — pesos paint `hunyuan3d-paintpbr-v2-1`; mesmas restrições de território/uso. Código: [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1) |
-| Stable Audio Open 1.0 / Open Small (Text2Sound) | Stability AI Community License | [stabilityai/stable-audio-open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0), [stabilityai/stable-audio-open-small](https://huggingface.co/stabilityai/stable-audio-open-small) — modelos **gated** (aceitar no Hub); uso comercial gratuito com teto de receita anual (ver `LICENSE.md` no repo, atualmente ~USD 1M; alterações: [stability.ai/license](https://stability.ai/license)) |
+| Stable Audio 3 Small Music / SFX (Text2Sound) | Stability AI Community License | [stabilityai/stable-audio-3-small-music](https://huggingface.co/stabilityai/stable-audio-3-small-music), [stabilityai/stable-audio-3-small-sfx](https://huggingface.co/stabilityai/stable-audio-3-small-sfx) — modelos **gated** (aceitar no Hub); uso comercial com teto de receita anual (ver `LICENSE.md` + [stability.ai/license](https://stability.ai/license)); termos Gemma aplicam-se ao T5Gemma embutido. Legado [open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) / [open-small](https://huggingface.co/stabilityai/stable-audio-open-small) via aliases `--model` |
 | Stable Diffusion 1.5 (default Texture2D) + pattern-diffusion (opcional) | SD1.5: CreativeML Open RAIL-M · pattern-diffusion: Apache 2.0 | O default é [stable-diffusion-v1-5/stable-diffusion-v1-5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) (circular padding, sem LoRA); [Arrexel/pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion) (fine-tune de SD2-base em 6,8M padrões tileable) via `TEXTURE2D_MODEL_ID` |
 | Flux-LoRA-Equirectangular-v3 (Skymap2D) | Base FLUX.1 [dev] (NCL) + card HF | [MultiTrickFox/Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) — sem SPDX no README; modelo base [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) está sob licença não comercial BFL; origem Civitai no card |
 | SkinTokens (código em `Rigging3D/…/skintokens/`) | MIT | [VAST-AI-Research/SkinTokens](https://github.com/VAST-AI-Research/SkinTokens) — sucessor do UniRig · [THIRD_PARTY.md](Rigging3D/THIRD_PARTY.md) |
@@ -313,7 +313,7 @@ Flags das tools: `--vramd-priority interactive|batch`, `--no-vramd`, `--vramd-st
 | **Part3D** | [Hunyuan3D-Part](https://huggingface.co/tencent/Hunyuan3D-Part) (P3-SAM + X-Part) | não | Tencent Community License |
 | **Texture2D** | [Stable Diffusion 1.5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) + circular padding | não | Override `TEXTURE2D_MODEL_ID` (ex.: [pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion)) |
 | **Skymap2D** | Base [FLUX.1-dev SDNQ uint4](https://huggingface.co/Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32) + [Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) | não (mirror); o oficial [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) é **gated** | Override `SKYMAP2D_BASE_MODEL_ID` |
-| **Text2Sound** | [Stable Audio Open 1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) (música) / [Open Small](https://huggingface.co/stabilityai/stable-audio-open-small) (efeitos) | **gated** — aceitar termos no Hub + `HF_TOKEN` | Stability AI Community License |
+| **Text2Sound** | [Stable Audio 3 Small Music](https://huggingface.co/stabilityai/stable-audio-3-small-music) / [SFX](https://huggingface.co/stabilityai/stable-audio-3-small-sfx) | **gated** — aceitar termos no Hub + `HF_TOKEN` | Stability AI Community License (+ Gemma Terms no T5Gemma) |
 | **Rigging3D** | [SkinTokens](https://huggingface.co/VAST-AI/SkinTokens) (TokenRig) | não | sucessor do UniRig; MIT |
 | **Terrain3D** | [terrain-diffusion-30m](https://huggingface.co/xandergos/terrain-diffusion-30m) | não | vendored; rasters WorldClim descarregados automaticamente |
 

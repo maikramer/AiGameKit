@@ -38,7 +38,7 @@ from aigamekit_shared.hf import get_hf_token, hf_home_display_rich
 from aigamekit_shared.profiler.session import ProfilerSession, profile_span
 from aigamekit_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_TEXT2SOUND, emit_progress, emit_result
 
-from .audio_processor import SUPPORTED_FORMATS, save_audio
+from .audio_processor import SUPPORTED_FORMATS, save_audio, seamless_generation_duration
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
 from .generator import (
     DEFAULT_CFG_SCALE,
@@ -94,19 +94,28 @@ def _apply_spec_inference_defaults(
     sigma_min: float,
     sigma_max: float,
     sampler: str,
+    preset_filled: set[str] = frozenset(),
 ) -> tuple[float, int, float, float, float, str]:
-    """Aplica defaults do ``ModelSpec`` quando o parâmetro veio do default do Click."""
-    if ctx.get_parameter_source("duration") == ParameterSource.DEFAULT:
-        duration = min(duration, spec.max_seconds)
-    if ctx.get_parameter_source("steps") == ParameterSource.DEFAULT:
+    """Aplica defaults do ``ModelSpec`` quando o parâmetro veio do default do Click.
+
+    ``preset_filled`` indica chaves que um preset já definiu (ex.: ``duration``)
+    — essas não são sobrescritas pelos defaults do modelo.
+    """
+
+    def _is_default(name: str) -> bool:
+        return ctx.get_parameter_source(name) == ParameterSource.DEFAULT and name not in preset_filled
+
+    if _is_default("duration"):
+        duration = spec.default_seconds
+    if _is_default("steps"):
         steps = spec.default_steps
-    if ctx.get_parameter_source("cfg_scale") == ParameterSource.DEFAULT:
+    if _is_default("cfg_scale"):
         cfg_scale = spec.default_cfg
-    if ctx.get_parameter_source("sigma_min") == ParameterSource.DEFAULT:
+    if _is_default("sigma_min"):
         sigma_min = spec.default_sigma_min
-    if ctx.get_parameter_source("sigma_max") == ParameterSource.DEFAULT:
+    if _is_default("sigma_max"):
         sigma_max = spec.default_sigma_max
-    if ctx.get_parameter_source("sampler") == ParameterSource.DEFAULT:
+    if _is_default("sampler"):
         sampler = spec.default_sampler
     return duration, steps, cfg_scale, sigma_min, sigma_max, sampler
 
@@ -115,26 +124,31 @@ def resolve_seamless_loop_params(
     *,
     user_seamless: bool | None,
     user_crossfade_ms: float,
-    category_seamless: bool,
-    category_crossfade_ms: float,
-) -> tuple[bool, float]:
+    user_edge_trim_s: float = 0.0,
+    category_seamless: bool = False,
+    category_crossfade_ms: float = 500.0,
+    category_edge_trim_s: float = 0.0,
+) -> tuple[bool, float, float]:
     """Resolve seamless-loop params with explicit-CLI > category > default precedence.
 
     Args:
         user_seamless: Tri-state from ``--seamless-loop`` (None = not given → defer to category).
         user_crossfade_ms: Value from ``--crossfade-ms`` (honored when loop is forced on/off).
+        user_edge_trim_s: Value from ``--loop-edge-trim`` (honored when loop is forced on/off).
         category_seamless: seamless_loop resolved from QualityEngine ``--category``.
         category_crossfade_ms: crossfade_ms resolved from QualityEngine/kind_info.
+        category_edge_trim_s: loop_edge_trim_s resolved from QualityEngine/kind_info.
 
     Returns:
-        ``(seamless_loop, crossfade_ms)`` after applying precedence. When the user
-        forces the flag, ``user_crossfade_ms`` wins; when deferring, ``category_*`` wins.
+        ``(seamless_loop, crossfade_ms, loop_edge_trim_s)`` after applying
+        precedence. When the user forces the flag, the user values win; when
+        deferring, ``category_*`` wins.
     """
     if user_seamless is True:
-        return True, float(user_crossfade_ms)
+        return True, float(user_crossfade_ms), float(user_edge_trim_s)
     if user_seamless is False:
-        return False, float(user_crossfade_ms)
-    return category_seamless, float(category_crossfade_ms)
+        return False, float(user_crossfade_ms), float(user_edge_trim_s)
+    return category_seamless, float(category_crossfade_ms), float(category_edge_trim_s)
 
 
 @click.group()
@@ -142,7 +156,7 @@ def resolve_seamless_loop_params(
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool) -> None:
-    """Text2Sound — text-to-audio · Open 1.0 (música) ou Open Small (efeitos), 44.1 kHz."""
+    """Text2Sound — text-to-audio · Stable Audio 3 Small Music/SFX, 44.1 kHz."""
     ctx.ensure_object(dict)
     ctx.obj["VERBOSE"] = verbose
 
@@ -195,7 +209,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     type=click.Choice(["music", "effects"]),
     default="music",
     show_default=True,
-    help="music = Open 1.0 (até ~47s); effects = Open Small (até ~11s, efeitos)",
+    help="music = SA3 Music (clips longos); effects = SA3 SFX (efeitos, clips curtos)",
 )
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída")
 @click.option(
@@ -204,7 +218,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=DEFAULT_DURATION,
     show_default=True,
     type=float,
-    help="Duração em segundos (máx. depende do modelo: 47 música, 11 efeitos)",
+    help="Duração em segundos (máx. por modelo: 120 música, 30 efeitos)",
 )
 @click.option(
     "--steps",
@@ -212,7 +226,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=DEFAULT_STEPS,
     show_default=True,
     type=click.IntRange(8, 150),
-    help="Passos de difusão (8+; Open Small usa ~8 por padrão com --profile effects)",
+    help="Passos de difusão (SA3 usa ~8 por padrão — modelo destilado)",
 )
 @click.option(
     "--cfg-scale",
@@ -270,7 +284,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "-m",
     "model_id",
     default=None,
-    help=("Modelo: ID HF ou alias (music, full, effects, small, sfx). Tem prioridade sobre --profile."),
+    help=("Modelo: ID HF ou alias (music, effects, sfx, open-1.0, open-small). Tem prioridade sobre --profile."),
 )
 @click.option(
     "--half/--no-half",
@@ -546,11 +560,11 @@ def generate_cmd(
         prompt = f"{prompt}, {preset_data['prompt']}" if prompt.strip() else preset_data["prompt"]
         # Preset só preenche o que o utilizador não passou: um -d/-s/-c
         # explícito tem de vencer o preset (antes o preset sobrescrevia).
-        if ctx.get_parameter_source("duration") == ParameterSource.DEFAULT:
+        if ctx.get_parameter_source("duration") == ParameterSource.DEFAULT and "duration" in preset_data:
             duration = preset_data.get("duration", duration)
-        if ctx.get_parameter_source("steps") == ParameterSource.DEFAULT:
+        if ctx.get_parameter_source("steps") == ParameterSource.DEFAULT and "steps" in preset_data:
             steps = preset_data.get("steps", steps)
-        if ctx.get_parameter_source("cfg_scale") == ParameterSource.DEFAULT:
+        if ctx.get_parameter_source("cfg_scale") == ParameterSource.DEFAULT and "cfg_scale" in preset_data:
             cfg_scale = preset_data.get("cfg_scale", cfg_scale)
 
     # QualityEngine resolution: merge quality + category params (CLI always wins)
@@ -562,6 +576,7 @@ def generate_cmd(
     # Category-resolved seamless-loop defaults (overridden by explicit --seamless-loop below)
     category_seamless: bool = False
     category_crossfade_ms: float = 500.0
+    category_loop_edge_trim_s: float = 0.0
     # DSP mastering params resolved from quality tier (overridden by explicit CLI flags)
     resolved_lufs: float | None = None
     resolved_high_pass: float | None = None
@@ -570,6 +585,8 @@ def generate_cmd(
     resolved_ogg_quality: float | None = None
     resolved_enhance: bool | None = None
     kind_compressor_preset: str | None = None
+    # Chaves preenchidas pelo quality tier (os defaults do modelo não as pisam)
+    tier_filled: set[str] = set()
 
     try:
         from aigamekit_shared.quality import QualityEngine
@@ -580,14 +597,19 @@ def generate_cmd(
         # Apply resolved params only if CLI used the default
         if ctx.get_parameter_source("steps") == ParameterSource.DEFAULT and "steps" in resolved.params:
             steps = int(resolved.params["steps"])
+            tier_filled.add("steps")
         if ctx.get_parameter_source("cfg_scale") == ParameterSource.DEFAULT and "cfg_scale" in resolved.params:
             cfg_scale = float(resolved.params["cfg_scale"])
+            tier_filled.add("cfg_scale")
         if ctx.get_parameter_source("sigma_min") == ParameterSource.DEFAULT and "sigma_min" in resolved.params:
             sigma_min = float(resolved.params["sigma_min"])
+            tier_filled.add("sigma_min")
         if ctx.get_parameter_source("sigma_max") == ParameterSource.DEFAULT and "sigma_max" in resolved.params:
             sigma_max = float(resolved.params["sigma_max"])
+            tier_filled.add("sigma_max")
         if ctx.get_parameter_source("sampler") == ParameterSource.DEFAULT and "sampler" in resolved.params:
             sampler = str(resolved.params["sampler"])
+            tier_filled.add("sampler")
 
         # DSP mastering params from the quality tier (soft — CLI flags override)
         if ctx.get_parameter_source("lufs_target") == ParameterSource.DEFAULT and "lufs_target" in resolved.params:
@@ -629,6 +651,12 @@ def generate_cmd(
                             category_crossfade_ms = float(resolved.params["crossfade_ms"])
                         elif "crossfade_ms" in kind_info:
                             category_crossfade_ms = float(kind_info["crossfade_ms"])
+                        # loop_edge_trim_s: remove o intro/outro musicais antes do
+                        # fold (mesma precedência profile > kind)
+                        if "loop_edge_trim_s" in resolved.params:
+                            category_loop_edge_trim_s = float(resolved.params["loop_edge_trim_s"])
+                        elif "loop_edge_trim_s" in kind_info:
+                            category_loop_edge_trim_s = float(kind_info["loop_edge_trim_s"])
                 except KeyError:
                     pass
 
@@ -636,11 +664,15 @@ def generate_cmd(
         pass  # QualityEngine unavailable — continue with defaults
 
     # Precedence: explicit --seamless-loop > --category/QualityEngine > default (False)
-    seamless_loop, crossfade_ms = resolve_seamless_loop_params(
+    seamless_loop, crossfade_ms, loop_edge_trim_s = resolve_seamless_loop_params(
         user_seamless=seamless_loop_override,
         user_crossfade_ms=crossfade_ms_override,
+        user_edge_trim_s=loop_edge_trim_s
+        if ctx.get_parameter_source("loop_edge_trim_s") != ParameterSource.DEFAULT
+        else 0.0,
         category_seamless=category_seamless,
         category_crossfade_ms=category_crossfade_ms,
+        category_edge_trim_s=category_loop_edge_trim_s,
     )
 
     # --- DSP mastering: final precedence (explicit flag > resolved tier > None) ---
@@ -696,24 +728,35 @@ def generate_cmd(
         raise click.ClickException(str(e)) from e
     spec = get_spec(resolved_model_id)
 
-    if not preset or preset == "None":
-        duration, steps, cfg_scale, sigma_min, sigma_max, sampler = _apply_spec_inference_defaults(
-            ctx,
-            spec,
-            duration,
-            steps,
-            cfg_scale,
-            sigma_min,
-            sigma_max,
-            sampler,
-        )
-    elif duration > spec.max_seconds:
-        raise click.ClickException(
-            f"Duração {duration}s excede o máximo deste modelo ({spec.max_seconds}s). Use --profile music ou reduza -d."
-        )
+    # Defaults do modelo (SA3: steps 8, cfg 1.0, pingpong) para tudo o que nem
+    # o utilizador, nem o preset, nem o quality tier definiram.
+    preset_filled = {"duration", "steps", "cfg_scale"} & set(preset_data) if (preset and preset != "None") else set()
+    duration, steps, cfg_scale, sigma_min, sigma_max, sampler = _apply_spec_inference_defaults(
+        ctx,
+        spec,
+        duration,
+        steps,
+        cfg_scale,
+        sigma_min,
+        sigma_max,
+        sampler,
+        preset_filled=preset_filled | tier_filled,
+    )
 
     if duration < 0.5 or duration > spec.max_seconds:
         raise click.ClickException(f"Duração deve estar entre 0.5 e {spec.max_seconds}s para {spec.hf_id}.")
+
+    # Seamless loop: gerar D + crossfade + 2·edge para o fold + edge trim
+    # aterrarem o loop FINAL exactamente em -d (loops alinhados a compassos).
+    gen_duration = duration
+    if seamless_loop:
+        gen_duration = seamless_generation_duration(duration, crossfade_ms, loop_edge_trim_s)
+        if gen_duration > spec.max_seconds:
+            raise click.ClickException(
+                f"Duração de geração do loop ({duration}s + {crossfade_ms:.0f}ms crossfade "
+                f"+ 2x{loop_edge_trim_s}s edge = {gen_duration:.1f}s) excede o máximo do modelo "
+                f"({spec.max_seconds}s). Reduz -d, --crossfade-ms ou --loop-edge-trim."
+            )
 
     effective_seed = resolve_effective_seed(seed)
 
@@ -739,7 +782,11 @@ def generate_cmd(
     if quality_audio_kind:
         table.add_row("[bold]Audio Kind[/bold]", quality_audio_kind)
     if seamless_loop:
-        table.add_row("[bold]Seamless Loop[/bold]", f"[green]ON[/green] ({crossfade_ms:.0f}ms crossfade)")
+        table.add_row(
+            "[bold]Seamless Loop[/bold]",
+            f"[green]ON[/green] ({crossfade_ms:.0f}ms crossfade, edge {loop_edge_trim_s:.2f}s, "
+            f"loop final {duration}s ← gera {gen_duration:.1f}s)",
+        )
     if effective_negative:
         table.add_row("[bold]Negative[/bold]", f"[dim]{effective_negative}[/dim]")
     if enhancement_meta:
@@ -788,6 +835,9 @@ def generate_cmd(
             "prompt": prompt,
             "output": str(Path(output).resolve()),
             "duration": duration,
+            # Seamless: gera mais comprido (D + xf + 2·edge); o save no worker
+            # faz edge trim + fold e aterra em "duration" exacto.
+            "generation_duration": gen_duration,
             "steps": steps,
             "cfg_scale": cfg_scale,
             "seed": effective_seed,
@@ -809,6 +859,7 @@ def generate_cmd(
             "seamless_loop": bool(seamless_loop),
             "crossfade_ms": crossfade_ms,
             "loop_edge_trim_s": loop_edge_trim_s,
+            "loop_target_seconds": duration if seamless_loop else None,
             "lufs_target": final_lufs,
             "high_pass_hz": final_high_pass,
             "compressor_preset": final_compressor_preset if final_compressor_enabled else None,
@@ -877,7 +928,7 @@ def generate_cmd(
                 with profile_span("generate"), _quiet_third_party_tqdm(verbose):
                     result = gen.generate(
                         prompt=prompt,
-                        duration=duration,
+                        duration=gen_duration,
                         steps=steps,
                         cfg_scale=cfg_scale,
                         seed=effective_seed,
@@ -940,6 +991,7 @@ def generate_cmd(
                         seamless_loop=seamless_loop,
                         crossfade_ms=crossfade_ms,
                         loop_edge_trim_s=loop_edge_trim_s,
+                        loop_target_seconds=duration if seamless_loop else None,
                         crop_seconds=duration if crop else None,
                         fade_out_seconds=fade_out,
                         lufs_target=final_lufs,
@@ -995,7 +1047,7 @@ def generate_cmd(
     type=click.Choice(["music", "effects"]),
     default="music",
     show_default=True,
-    help="music ou effects (Open Small, até ~11s)",
+    help="music (SA3 Music) ou effects (SA3 SFX, clips curtos)",
 )
 @click.option(
     "--output-dir",
@@ -1018,7 +1070,7 @@ def generate_cmd(
 @click.option("--sampler", default=DEFAULT_SAMPLER, type=str)
 @click.option("--format", "-f", "fmt", default="ogg", type=click.Choice(list(SUPPORTED_FORMATS)))
 @click.option("--trim/--no-trim", default=True)
-@click.option("--model", "-m", "model_id", default=None, help="ID HF ou alias (music, effects, small, …)")
+@click.option("--model", "-m", "model_id", default=None, help="ID HF ou alias (music, effects, sfx, open-1.0, …)")
 @click.option(
     "--half/--no-half",
     "half_precision",
@@ -1133,11 +1185,11 @@ def batch_cmd(
             preset_data = get_preset(preset)
         except KeyError as e:
             raise click.ClickException(str(e)) from e
-        if ctx.get_parameter_source("duration") == ParameterSource.DEFAULT:
+        if ctx.get_parameter_source("duration") == ParameterSource.DEFAULT and "duration" in preset_data:
             duration = preset_data.get("duration", duration)
-        if ctx.get_parameter_source("steps") == ParameterSource.DEFAULT:
+        if ctx.get_parameter_source("steps") == ParameterSource.DEFAULT and "steps" in preset_data:
             steps = preset_data.get("steps", steps)
-        if ctx.get_parameter_source("cfg_scale") == ParameterSource.DEFAULT:
+        if ctx.get_parameter_source("cfg_scale") == ParameterSource.DEFAULT and "cfg_scale" in preset_data:
             cfg_scale = preset_data.get("cfg_scale", cfg_scale)
 
     try:
@@ -1146,19 +1198,18 @@ def batch_cmd(
         raise click.ClickException(str(e)) from e
     spec = get_spec(resolved_model_id)
 
-    if not preset or preset == "None":
-        duration, steps, cfg_scale, sigma_min, sigma_max, sampler = _apply_spec_inference_defaults(
-            ctx,
-            spec,
-            duration,
-            steps,
-            cfg_scale,
-            sigma_min,
-            sigma_max,
-            sampler,
-        )
-    elif duration > spec.max_seconds:
-        raise click.ClickException(f"Duração {duration}s excede o máximo deste modelo ({spec.max_seconds}s).")
+    preset_filled = {"duration", "steps", "cfg_scale"} & set(preset_data) if preset_data is not None else set()
+    duration, steps, cfg_scale, sigma_min, sigma_max, sampler = _apply_spec_inference_defaults(
+        ctx,
+        spec,
+        duration,
+        steps,
+        cfg_scale,
+        sigma_min,
+        sigma_max,
+        sampler,
+        preset_filled=preset_filled,
+    )
 
     if duration < 0.5 or duration > spec.max_seconds:
         raise click.ClickException(f"Duração deve estar entre 0.5 e {spec.max_seconds}s para {spec.hf_id}.")
@@ -1361,8 +1412,6 @@ def presets_cmd() -> None:
             ("Kind", "magenta", "", lambda p: p.get("kind", "—")),
             ("Prompt", "white", "", lambda p: p["prompt"][:47] + "..." if len(p["prompt"]) > 50 else p["prompt"]),
             ("Duração", "green", "right", lambda p: f"{p['duration']}s"),
-            ("Steps", "green", "right", lambda p: str(p["steps"])),
-            ("CFG", "green", "right", lambda p: str(p["cfg_scale"])),
         ],
     )
 
@@ -1381,8 +1430,9 @@ def info_cmd() -> None:
     t.add_column("Item", style="cyan", no_wrap=True)
     t.add_column("Valor", style="green")
 
-    t.add_row("Música (default)", "stabilityai/stable-audio-open-1.0 — até ~47s")
-    t.add_row("Efeitos", "stabilityai/stable-audio-open-small — até ~11s, steps~8, euler")
+    t.add_row("Música (default)", "stabilityai/stable-audio-3-small-music — duração variável (~120s), steps~8, cfg 1.0")
+    t.add_row("Efeitos", "stabilityai/stable-audio-3-small-sfx — clips curtos (~30s), steps~8, cfg 1.0")
+    t.add_row("Legado", "open-1.0 / open-small (aliases --model)")
     t.add_row("Sample rate", "44100 Hz")
     t.add_row("Canais", "Estéreo (2)")
 

@@ -21,9 +21,10 @@ class Adapter(WorkerAdapter):
 
     def load(self, **kwargs: Any) -> Any:
         from text2sound.generator import AudioGenerator
+        from text2sound.models import MODEL_MUSIC_ID
 
         gen = AudioGenerator.get_instance(
-            model_id=kwargs.get("model_id") or kwargs.get("model") or "stabilityai/stable-audio-open-1.0",
+            model_id=kwargs.get("model_id") or kwargs.get("model") or MODEL_MUSIC_ID,
             gpu_ids=kwargs.get("gpu_ids"),
             half_precision=kwargs.get("half_precision"),
             chunked_vae=kwargs.get("chunked_vae"),
@@ -38,7 +39,11 @@ class Adapter(WorkerAdapter):
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
         import time
 
-        error, steps, should_abort, on_step = self.begin_generate(request, default_steps=100)
+        from text2sound.models import SPEC_MUSIC
+
+        # Defaults do modelo SA3 (steps 8, cfg 1.0, pingpong) — o payload do
+        # CLI/vramd traz valores explícitos na prática.
+        error, steps, should_abort, on_step = self.begin_generate(request, default_steps=SPEC_MUSIC.default_steps)
         if error:
             return error
 
@@ -48,18 +53,22 @@ class Adapter(WorkerAdapter):
         ext = out_path.suffix.lower().lstrip(".")
         fmt = ext if ext in ("wav", "flac", "ogg") else "ogg"
 
+        # Seamless loop: o CLI pede geração mais longa (D + xf + 2·edge);
+        # a duração do utilizador fica em "duration" (metadados/save).
+        gen_duration = float(request.get("generation_duration", request.get("duration", SPEC_MUSIC.default_seconds)))
+
         t_start = time.perf_counter()
         try:
             # Preferir generate com hooks se o generator os aceitar.
             gen_kwargs: dict[str, Any] = {
                 "prompt": prompt,
-                "duration": float(request.get("duration", 30.0)),
+                "duration": gen_duration,
                 "steps": steps,
-                "cfg_scale": float(request.get("cfg_scale", 7.0)),
+                "cfg_scale": float(request.get("cfg_scale", SPEC_MUSIC.default_cfg)),
                 "seed": request.get("seed"),
-                "sigma_min": float(request.get("sigma_min", 0.3)),
-                "sigma_max": float(request.get("sigma_max", 500.0)),
-                "sampler_type": request.get("sampler_type", "dpmpp-3m-sde"),
+                "sigma_min": float(request.get("sigma_min", SPEC_MUSIC.default_sigma_min)),
+                "sigma_max": float(request.get("sigma_max", SPEC_MUSIC.default_sigma_max)),
+                "sampler_type": request.get("sampler_type", SPEC_MUSIC.default_sampler),
                 "prompt_hints": request.get("prompt_hints"),
                 "negative_prompt": request.get("negative_prompt"),
             }
@@ -80,13 +89,13 @@ class Adapter(WorkerAdapter):
                 return self.cancelled_response("cancelled before generate")
             result = model.generate(
                 prompt=prompt,
-                duration=float(request.get("duration", 30.0)),
+                duration=gen_duration,
                 steps=steps,
-                cfg_scale=float(request.get("cfg_scale", 7.0)),
+                cfg_scale=float(request.get("cfg_scale", SPEC_MUSIC.default_cfg)),
                 seed=request.get("seed"),
-                sigma_min=float(request.get("sigma_min", 0.3)),
-                sigma_max=float(request.get("sigma_max", 500.0)),
-                sampler_type=request.get("sampler_type", "dpmpp-3m-sde"),
+                sigma_min=float(request.get("sigma_min", SPEC_MUSIC.default_sigma_min)),
+                sigma_max=float(request.get("sigma_max", SPEC_MUSIC.default_sigma_max)),
+                sampler_type=request.get("sampler_type", SPEC_MUSIC.default_sampler),
                 prompt_hints=request.get("prompt_hints"),
                 negative_prompt=request.get("negative_prompt"),
             )
@@ -97,7 +106,11 @@ class Adapter(WorkerAdapter):
         from text2sound.audio_processor import save_audio
 
         self.report_progress(request, 0.95, "saving")
-        metadata = {"prompt": prompt, "duration": request.get("duration", 30.0)}
+        metadata = {
+            "prompt": prompt,
+            "duration": request.get("duration", 30.0),
+            "model_id": getattr(model, "model_id", None),
+        }
         # Espelhar a chamada in-process do CLI: o payload delegado traz todos
         # os parâmetros de pós-processamento — lê-los aqui garante que o
         # resultado pelo vramd é idêntico ao in-process.
@@ -113,6 +126,7 @@ class Adapter(WorkerAdapter):
             seamless_loop=bool(request.get("seamless_loop", False)),
             crossfade_ms=request.get("crossfade_ms"),
             loop_edge_trim_s=request.get("loop_edge_trim_s"),
+            loop_target_seconds=request.get("loop_target_seconds"),
             crop_seconds=request.get("crop_seconds"),
             fade_out_seconds=request.get("fade_out_seconds"),
             lufs_target=request.get("lufs_target"),

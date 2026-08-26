@@ -86,7 +86,7 @@ tools:
     folder: Text2Sound
     cli_name: text2sound
     python_module: text2sound
-    description: "CLI text-to-audio com Stable Audio Open 1.0"
+    description: "CLI text-to-audio com Stable Audio 3 Small (music/sfx)"
     min_python: [3, 13]
     extra_aliases: [text2sound-generate]
     needs_pytorch: true

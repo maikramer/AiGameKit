@@ -2,18 +2,31 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-CLI for stereo **44.1 kHz** audio from text prompts using [Stable Audio Open](https://huggingface.co/stabilityai/stable-audio-open-1.0). Two Hugging Face checkpoints with automatic quality presets, game-dev–focused presets, and full pipeline integration.
+CLI for stereo **44.1 kHz** audio from text prompts using the [Stable Audio 3 Small](https://huggingface.co/stabilityai/stable-audio-3-small-music) family — one checkpoint per domain (music / SFX), distilled rectified-flow diffusion (few steps, no guidance) with T5Gemma text conditioning. Automatic quality presets, game-dev–focused presets, and full pipeline integration.
 
 | Profile | Model | Max Duration | Use Case |
 |---------|-------|-------------|----------|
-| `music` (default) | [Stable Audio Open 1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) | ~47 s | Music, long ambience |
-| `effects` | [Stable Audio Open Small](https://huggingface.co/stabilityai/stable-audio-open-small) | ~11 s | Short SFX, sound effects |
+| `music` (default) | [Stable Audio 3 Small Music](https://huggingface.co/stabilityai/stable-audio-3-small-music) | up to ~120 s (variable) | Music, long ambience |
+| `effects` | [Stable Audio 3 Small SFX](https://huggingface.co/stabilityai/stable-audio-3-small-sfx) | up to ~30 s | Short SFX, sound effects |
+
+Both default to `steps=8`, `cfg_scale=1.0`, sampler `pingpong` (adversarially distilled — more steps only marginally improve quality; guidance is baked in). Legacy Stable Audio Open checkpoints remain available via `--model open-1.0` / `--model open-small`.
+
+### Seamless BGM loops
+
+`--category humanoid` (or any `music_loop`/`ambient_loop` audio kind) enables the full loop pipeline:
+
+- **Exact `-d` length** — the CLI generates `D + crossfade + 2×edge` and the save pipeline (edge trim + fold) lands the final loop at exactly `-d`. Ask for bar multiples (16 s = 8 bars @ 120 BPM) and put the BPM in the prompt.
+- **Equal-power crossfade** (`cos`/`sin` curves) — constant power for uncorrelated loop head/tail material (no −3 dB dip at the seam).
+- **Adaptive tail trim** — SA3 composes a musical outro at `seconds_total`; the tail is trimmed back while energy is below 75% of the body median (reserve: 2.0 s per edge for `music_loop`).
+- **Loop-safe mastering** — compressor/limiter state breaks the seam; the chain renders on a doubled buffer and keeps the 2nd copy so the loop-start state inherits the loop-end state.
+
+Override with `--seamless-loop --crossfade-ms --loop-edge-trim` (explicit flags win). Measurements: [`docs/findings/TEXT2SOUND_SA3_LOOP_FINDINGS.md`](../docs/findings/TEXT2SOUND_SA3_LOOP_FINDINGS.md).
 
 Both models are **gated**: accept terms on the Hub and set `HF_TOKEN`. See [License](#license) for details.
 
 ## Overview
 
-- **Two profiles** — `music` (Open 1.0, up to ~47 s) and `effects` (Open Small, up to ~11 s)
+- **Two profiles** — `music` (SA3 Music, variable length up to ~120 s) and `effects` (SA3 SFX, up to ~30 s)
 - **Quality presets** — 5 tiers (`fast` → `highest`) via QualityEngine, plus 40+ game-dev audio presets
 - **Multiple formats** — WAV, FLAC, OGG output
 - **Batch generation** — one prompt per line, auto-incremented seeds
@@ -306,4 +319,4 @@ ruff format .
 ## License
 
 - **Code:** MIT — [LICENSE](LICENSE).
-- **Weights:** [Stable Audio Open 1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) and [Stable Audio Open Small](https://huggingface.co/stabilityai/stable-audio-open-small) — **Stability AI Community License** (accept terms on Hub; commercial use with revenue cap — see each repo's `LICENSE.md` and [stability.ai/license](https://stability.ai/license)). Summary: [AiGameKit/README.md — Licenses](../README.md).
+- **Weights:** [Stable Audio 3 Small Music](https://huggingface.co/stabilityai/stable-audio-3-small-music) and [Stable Audio 3 Small SFX](https://huggingface.co/stabilityai/stable-audio-3-small-sfx) — **Stability AI Community License** (+ Gemma Terms for the bundled T5Gemma text encoder) (accept terms on Hub; commercial use with revenue cap — see each repo's `LICENSE.md` and [stability.ai/license](https://stability.ai/license)). Summary: [AiGameKit/README.md — Licenses](../README.md).

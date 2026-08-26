@@ -70,7 +70,7 @@ Key APIs: [`gltf-bridge.ts`](VibeGame/src/extras/gltf-bridge.ts) (`loadGltfToSce
 | [**GameAssets**](GameAssets/) | **Prompt/asset batching**: profile + CSV → `text2d` or `texture2d` + optional `text3d`, rig, **Animator3D** (auto-detected), **`gameassets dream`** (idea → Vite scaffold). |
 | [**Texture2D**](Texture2D/) | **Seamless 2D textures** (tileable) via pattern-diffusion (local GPU) + PBR via Materialize. |
 | [**Skymap2D**](Skymap2D/) | **Equirectangular 360° skymaps** — FLUX.1-dev + LoRA locally on GPU (CUDA), skyboxes for game dev. |
-| [**Text2Sound**](Text2Sound/) | **Text-to-audio** CLI with Stable Audio Open 1.0: stereo 44.1 kHz, game-dev presets. |
+| [**Text2Sound**](Text2Sound/) | **Text-to-audio** CLI with Stable Audio 3 Small (music/SFX split): stereo 44.1 kHz, game-dev presets. |
 | [**Rigging3D**](Rigging3D/) | **rigging3d** — 3D auto-rigging with [**SkinTokens**](https://github.com/VAST-AI-Research/SkinTokens) (unified autoregressive skeleton + skinning, successor to UniRig); CUDA GPU; Python **3.13**, **bpy** 5.2 LTS. |
 | [**Animator3D**](Animator3D/) | **animator3d** — **bpy** 5.2 LTS; Python **3.13**; procedural clips, **`game-pack`** (humanoid/creature/flying presets), GLB export after rigging. |
 | [**Materialize**](Materialize/) | **PBR maps** CLI (Rust/wgpu): normal, AO, metallic, smoothness from a diffuse texture. |
@@ -105,7 +105,7 @@ AiGameKit/
   GameAssets/        ← gameassets (pip) — depends on Shared; calls text2d/texture2d/text3d via subprocess
   Texture2D/         ← texture2d (pip) — depende de Shared; pattern-diffusion local + PBR via Materialize
   Skymap2D/          ← skymap2d (pip) — depends on Shared; equirectangular skymaps (local FLUX.1-dev + LoRA)
-  Text2Sound/        ← text2sound (pip) — depends on Shared; Stable Audio Open 1.0
+  Text2Sound/        ← text2sound (pip) — depends on Shared; Stable Audio 3 Small (music/sfx)
   Rigging3D/         ← rigging3d (pip) — Shared; SkinTokens Py 3.13 + bpy 5.2 LTS
   Animator3D/        ← animator3d (pip) — Shared; Py 3.13 + bpy 5.2 LTS (animation)
   AiGameKitLab/        ← aigamekit-lab (pip) — depends on Shared; debug 3D, benches, profiling
@@ -270,7 +270,7 @@ cd ../Texture2D && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .ve
 # 7. Skymap2D (equirectangular 360° skymaps; local FLUX.1-dev + LoRA)
 cd ../Skymap2D && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && skymap2d --help
 
-# 8. Text2Sound (text-to-audio; Stable Audio Open 1.0; needs CUDA)
+# 8. Text2Sound (text-to-audio; Stable Audio 3 Small music/sfx; needs CUDA)
 cd ../Text2Sound && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && text2sound --help
 
 # 9. Rigging3D (CUDA GPU; Python 3.13; SkinTokens — prefer ./install.sh rigging3d)
@@ -301,7 +301,7 @@ Full instructions: [docs/INSTALLING.md](docs/INSTALLING.md) (incl. registering n
 | FLUX.2 Klein (Text2D default: fp16 base + SDNQ runtime) | 4B: Apache 2.0 · 9B: **gated** (accept terms on Hub) | Text2D loads the official [4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) / [9B](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) base and applies SDNQ quantization **at runtime** — no pre-quantized checkpoint by default. Pre-quantized [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) mirrors are optional via `TEXT2D_MODEL_ID` (they declare `flux-non-commercial-license`) |
 | Hunyuan3D-Omni (Text3D shape) | Tencent Hunyuan Community License | [tencent/Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) — read repo `LICENSE`: territory restrictions (e.g. EU, UK, South Korea), acceptable use, downstream obligations. SDNQ INT4 on small GPUs |
 | Hunyuan3D-2.1 (Paint3D paint) | Tencent Hunyuan Community License | [tencent/Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) — paint weights `hunyuan3d-paintpbr-v2-1`; same territory/use restrictions. Code: [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1) |
-| Stable Audio Open 1.0 / Open Small (Text2Sound) | Stability AI Community License | [stabilityai/stable-audio-open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0), [stabilityai/stable-audio-open-small](https://huggingface.co/stabilityai/stable-audio-open-small) — **gated** models (accept on Hub); free commercial use with annual revenue cap (see repo `LICENSE.md`, currently ~USD 1M; changes: [stability.ai/license](https://stability.ai/license)) |
+| Stable Audio 3 Small Music / SFX (Text2Sound) | Stability AI Community License | [stabilityai/stable-audio-3-small-music](https://huggingface.co/stabilityai/stable-audio-3-small-music), [stabilityai/stable-audio-3-small-sfx](https://huggingface.co/stabilityai/stable-audio-3-small-sfx) — **gated** models (accept on Hub); free commercial use with annual revenue cap (see repo `LICENSE.md` and [stability.ai/license](https://stability.ai/license)); Gemma Terms apply to the bundled T5Gemma encoder. Legacy [open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) / [open-small](https://huggingface.co/stabilityai/stable-audio-open-small) remain via `--model` aliases |
 | Stable Diffusion 1.5 (Texture2D default) + pattern-diffusion (optional) | SD1.5: CreativeML Open RAIL-M · pattern-diffusion: Apache 2.0 | Default is [stable-diffusion-v1-5/stable-diffusion-v1-5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) (circular padding, no LoRA); [Arrexel/pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion) (SD2-base fine-tune on 6.8M tileable patterns) via `TEXTURE2D_MODEL_ID` |
 | Flux-LoRA-Equirectangular-v3 (Skymap2D) | FLUX.1 [dev] base (NCL) + HF card | [MultiTrickFox/Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) — no SPDX in README; base [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) is BFL non-commercial; Civitai origin on card |
 | SkinTokens (code under `Rigging3D/…/skintokens/`) | MIT | [VAST-AI-Research/SkinTokens](https://github.com/VAST-AI-Research/SkinTokens) — successor to UniRig · [THIRD_PARTY.md](Rigging3D/THIRD_PARTY.md) |

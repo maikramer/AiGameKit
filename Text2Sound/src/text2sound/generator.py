@@ -1,8 +1,13 @@
 """Text2Sound — núcleo de geração de áudio via difusão condicionada.
 
-Suporta ``stabilityai/stable-audio-open-1.0`` (música, até ~47s) e
-``stabilityai/stable-audio-open-small`` (efeitos, até ~11s), ambos via
-``stable-audio-tools`` e ``get_pretrained_model``.
+Suporta a família **Stable Audio 3 Small** (rectified-flow destilada +
+T5Gemma, checkpoints dedicados por domínio) via ``stable-audio-tools``:
+
+- ``stabilityai/stable-audio-3-small-music`` — música (default do perfil music)
+- ``stabilityai/stable-audio-3-small-sfx``   — efeitos (default do perfil effects)
+
+Os modelos Stable Audio Open (1.0 / small) continuam a funcionar como legado
+(ID HF explícito / aliases ``open-1.0`` / ``open-small``).
 """
 
 from __future__ import annotations
@@ -30,13 +35,39 @@ DEFAULT_DURATION = 30.0
 DEFAULT_SIGMA_MIN = 0.3
 DEFAULT_SIGMA_MAX = 500.0
 
-# Rectified-flow samplers (Open Small) only accept euler/rk4/dpmpp and this
-# lib version's dpmpp path has an unbound `sigma`; euler is the safe default.
-# Map the k-diffusion names so dpmpp-3m-sde doesn't return None from sample_rf.
+# Rectified-flow samplers (Open Small / SA3) only accept euler/rk4/dpmpp/pingpong
+# and older lib versions' dpmpp path had an unbound `sigma`; euler/pingpong are
+# the safe defaults. Map the k-diffusion names so dpmpp-3m-sde doesn't return
+# None from sample_rf.
 _RF_SAMPLER_MAP = {
     "euler": "euler",
     "rk4": "rk4",
+    "dpmpp": "dpmpp",
+    "pingpong": "pingpong",
 }
+
+# De-click fade aplicado no corte do buffer SA3 ao ``-d`` pedido.
+_DECCLICK_FADE_SECONDS = 0.01
+
+
+def _crop_to_duration_declick(audio: torch.Tensor, sample_rate: int, duration: float) -> torch.Tensor:
+    """Corta ``(b, d, n)`` a ``duration`` segundos com micro-fade anti-click.
+
+    No-op quando o tensor já é mais curto que o pedido (ex.: duration acima do
+    buffer do config SA3 — 120 s). O fade de 10 ms só é aplicado quando há
+    corte real: é inaudível e evita um click se o modelo ainda estiver a soar
+    no limite do ``seconds_total``.
+    """
+    max_samples = round(duration * sample_rate)
+    if audio.shape[-1] <= max_samples:
+        return audio
+    cropped = audio[..., :max_samples]
+    fade_len = min(int(_DECCLICK_FADE_SECONDS * sample_rate), max_samples // 2)
+    if fade_len > 0:
+        fade = torch.linspace(1.0, 0.0, fade_len, device=cropped.device, dtype=cropped.dtype)
+        cropped = cropped.clone()
+        cropped[..., -fade_len:] = cropped[..., -fade_len:] * fade
+    return cropped
 
 
 @dataclass
@@ -207,6 +238,28 @@ class AudioGenerator:
         self._ensure_loaded()
         return int(self._model_config["sample_size"])
 
+    def _is_sa3(self) -> bool:
+        """True para checkpoints Stable Audio 3 (``diffusion_cond_inpaint``).
+
+        Estes modelos geram via ``generate_diffusion_cond_inpaint`` com
+        duração adaptada ao ``seconds_total`` (variable-length); os Open usam
+        o caminho clássico ``generate_diffusion_cond``.
+        """
+        return self._model_config.get("model_type") == "diffusion_cond_inpaint"
+
+    def _conditioning_keys(self) -> set[str] | None:
+        """IDs que o conditioner espera no dict de conditioning.
+
+        SA3 (T5Gemma) regista só ``prompt``/``seconds_total``; os modelos Open
+        têm também ``seconds_start``. ``None`` quando o modelo ainda não está
+        carregado ou a introspeção falha — callers assumem o formato Open
+        (chaves extra são ignoradas pelo MultiConditioner; em falta é erro).
+        """
+        try:
+            return set(self._model.conditioner.conditioners.keys())  # type: ignore[union-attr]
+        except AttributeError:
+            return None
+
     def _ensure_loaded(self) -> None:
         if self._loaded:
             return
@@ -289,6 +342,26 @@ class AudioGenerator:
                 primary = plan.primary_gpu or 0
                 self._device = f"cuda:{primary}"
                 self._multi_gpu = True
+
+            # Guard de placement: planos de offload que o ``apply_offload_plan``
+            # não suporta nesta pipeline (ex. group_stream em stable-audio, que
+            # não é diffusers) ficam NO-OP — o modelo permanece na CPU enquanto
+            # o generate correria em cuda → "Expected all tensors to be on the
+            # same device". Verificar onde os pesos ficaram e, se não chegaram
+            # à GPU, degradar honestamente para geração em CPU (o SA3 small de
+            # 0.6B é viável em CPU; medido: ocorre quando um batch vizinho
+            # segura a VRAM no reload pós idle-evict).
+            try:
+                first_device = next(self._model.parameters()).device
+            except (StopIteration, AttributeError):
+                first_device = None
+            if first_device is not None and first_device.type != "cuda":
+                if self._half:
+                    self._model = self._model.float()
+                    self._half = False
+                self._device = "cpu"
+                self._placement_offload = "none"
+                self._multi_gpu = False
         else:
             self._model = self._model.to(self._device)
 
@@ -489,44 +562,45 @@ class AudioGenerator:
         if prompt_hints:
             final_prompt = prompt + ". " + ", ".join(prompt_hints)
 
-        conditioning = [
-            {
-                "prompt": final_prompt,
-                "seconds_start": 0,
-                "seconds_total": duration,
-            }
-        ]
+        # SA3 só condiciona em prompt + seconds_total (sem seconds_start);
+        # os modelos Open usam ambos. Introspeção do conditioner decide.
+        cond_keys = self._conditioning_keys()
+        cond: dict[str, Any] = {"prompt": final_prompt, "seconds_total": duration}
+        if cond_keys is None or "seconds_start" in cond_keys:
+            cond["seconds_start"] = 0
+        conditioning = [cond]
 
         # Negative conditioning: same dict shape as the positive one. Passed
         # straight to generate_diffusion_cond which applies batch CFG. Omit
         # entirely when there's no negative prompt to preserve the classic path.
+        # Com cfg_scale <= 1.0 (default SA3) o guidance é no-op matemático —
+        # passar o negative só duplicaria o compute sem alterar o resultado.
         negative_conditioning: list[dict[str, Any]] | None = None
         effective_negative: str | None = None
-        if negative_prompt and negative_prompt.strip():
+        if negative_prompt and negative_prompt.strip() and cfg_scale > 1.0:
             effective_negative = negative_prompt.strip()
-            negative_conditioning = [
-                {
-                    "prompt": effective_negative,
-                    "seconds_start": 0,
-                    "seconds_total": duration,
-                }
-            ]
+            neg_cond: dict[str, Any] = {"prompt": effective_negative, "seconds_total": duration}
+            if cond_keys is None or "seconds_start" in cond_keys:
+                neg_cond["seconds_start"] = 0
+            negative_conditioning = [neg_cond]
 
         with self._generation_context():
             gen_device = f"cuda:{self._gpu_ids[0]}" if self._multi_gpu and self._gpu_ids else self._device
             rf_sampler = sampler_type
-            if getattr(self._model, "diffusion_objective", "") == "rectified_flow":
+            if getattr(self._model, "diffusion_objective", "") in ("rectified_flow", "rf_denoiser"):
                 rf_sampler = _RF_SAMPLER_MAP.get(sampler_type, "euler")
             has_pretransform = getattr(self._model, "pretransform", None) is not None
+            # A lib re-semeia internamente (seed=-1 → aleatório); passar a seed
+            # explicitamente é o que torna o --seed determinístico de facto.
+            lib_seed = int(seed) if seed is not None else -1
             gen_kwargs: dict[str, Any] = dict(
                 steps=steps,
                 cfg_scale=cfg_scale,
                 conditioning=conditioning,
                 sample_size=self.sample_size,
-                sigma_min=sigma_min,
-                sigma_max=sigma_max,
                 sampler_type=rf_sampler,
                 device=gen_device,
+                seed=lib_seed,
                 # Latents out + decode próprio: o decode do VAE é o passo que
                 # OOMa em GPUs pequenas; separado, dá para re-tentar chunked ou
                 # em CPU sem repetir a difusão inteira.
@@ -548,11 +622,35 @@ class AudioGenerator:
                         raise GenerationAborted("cancelled during diffusion")
 
                 gen_kwargs["callback"] = _sampler_callback
-            output = generate_diffusion_cond(self._model, **gen_kwargs)
+
+            if self._is_sa3():
+                # SA3 = modelo de inpainting: o caminho canónico
+                # (generate_diffusion_cond_inpaint) adapta o tamanho do latent a
+                # seconds_total (+6 s de headroom) em vez de difundir o buffer
+                # inteiro do config (120 s), e aplica o schedule com
+                # effective-length/dist_shift do treino. Sem init_audio é geração
+                # pura. Nota: NÃO passar sigma_min/sigma_max aqui — neste caminho
+                # keywords extra vazam para o forward do modelo.
+                from stable_audio_tools.inference.generation import generate_diffusion_cond_inpaint
+
+                output = generate_diffusion_cond_inpaint(self._model, **gen_kwargs)
+            else:
+                gen_kwargs["sigma_min"] = sigma_min
+                gen_kwargs["sigma_max"] = sigma_max
+                output = generate_diffusion_cond(self._model, **gen_kwargs)
             if has_pretransform:
                 if should_abort is not None and should_abort():
                     raise GenerationAborted("cancelled before decode")
                 output = self._decode_latents(output)
+
+            if self._is_sa3():
+                # SA3 difunde seconds_total + headroom (~6 s de padding que o
+                # treino usa para o schedule/atenção); o conteúdo musical acaba
+                # em seconds_total e a cauda é silêncio de padding. Cortar ao
+                # pedido devolve o contrato "-d = duração do clip" (sem isto,
+                # um -d 15 produzia ~21 s com branco no fim, e o crossfade de
+                # seamless-loop operava sobre o buffer inteiro).
+                output = _crop_to_duration_declick(output, self.sample_rate, duration)
 
             # Áudio para CPU e tensor CUDA largado **dentro** do contexto: o
             # ``_generation_context`` limpa a cache no ``finally``, e enquanto

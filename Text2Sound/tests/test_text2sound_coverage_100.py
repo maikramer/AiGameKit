@@ -10,6 +10,8 @@ import pytest
 from text2sound import presets as presets_mod
 from text2sound.hardware import profile_from_specs
 from text2sound.models import (
+    LEGACY_MODEL_EFFECTS_ID,
+    LEGACY_MODEL_MUSIC_ID,
     MODEL_EFFECTS_ID,
     MODEL_MUSIC_ID,
     get_spec,
@@ -122,8 +124,9 @@ def test_each_preset_has_required_keys(name: str) -> None:
         "sfx_ambient_sfx",
     }
     assert 0.5 <= float(p["duration"]) <= 45.0
-    assert 60 <= int(p["steps"]) <= 120
-    assert 1.0 <= float(p["cfg_scale"]) <= 10.0
+    # steps/cfg não fazem parte do preset: vêm do ModelSpec (SA3) ou do tier.
+    assert "steps" not in p
+    assert "cfg_scale" not in p
 
 
 @pytest.mark.parametrize(
@@ -151,12 +154,15 @@ def test_list_presets_count_and_sorted() -> None:
         ("", MODEL_MUSIC_ID),
         ("music", MODEL_MUSIC_ID),
         ("full", MODEL_MUSIC_ID),
-        ("1.0", MODEL_MUSIC_ID),
         ("effects", MODEL_EFFECTS_ID),
         ("small", MODEL_EFFECTS_ID),
         ("sfx", MODEL_EFFECTS_ID),
-        ("stabilityai/stable-audio-open-1.0", MODEL_MUSIC_ID),
-        ("stabilityai/stable-audio-open-small", MODEL_EFFECTS_ID),
+        ("stabilityai/stable-audio-3-small-music", MODEL_MUSIC_ID),
+        ("stabilityai/stable-audio-3-small-sfx", MODEL_EFFECTS_ID),
+        ("open-1.0", LEGACY_MODEL_MUSIC_ID),
+        ("open-small", LEGACY_MODEL_EFFECTS_ID),
+        ("stabilityai/stable-audio-open-1.0", LEGACY_MODEL_MUSIC_ID),
+        ("stabilityai/stable-audio-open-small", LEGACY_MODEL_EFFECTS_ID),
     ],
 )
 def test_resolve_model_id(user: str | None, expected: str) -> None:
@@ -179,8 +185,9 @@ def test_resolve_model_from_profile(profile: str, override: str | None, expected
 @pytest.mark.parametrize(
     "hf_id,expected_max",
     [
-        (MODEL_MUSIC_ID, 47.0),
-        (MODEL_EFFECTS_ID, 11.0),
+        (MODEL_MUSIC_ID, 120.0),
+        (MODEL_EFFECTS_ID, 30.0),
+        (LEGACY_MODEL_MUSIC_ID, 47.0),
         ("stabilityai/stable-audio-open-small", 11.0),
         ("custom/org-model", 47.0),
     ],
@@ -189,6 +196,23 @@ def test_get_spec_max_seconds(hf_id: str, expected_max: float) -> None:
     spec = get_spec(hf_id)
     assert spec.max_seconds == expected_max
     assert spec.default_steps > 0
+    assert 0.5 <= spec.default_seconds <= spec.max_seconds
+
+
+@pytest.mark.parametrize(
+    "hf_id,steps,cfg,sampler",
+    [
+        (MODEL_MUSIC_ID, 8, 1.0, "pingpong"),
+        (MODEL_EFFECTS_ID, 8, 1.0, "pingpong"),
+        (LEGACY_MODEL_MUSIC_ID, 100, 7.0, "dpmpp-3m-sde"),
+        (LEGACY_MODEL_EFFECTS_ID, 8, 1.0, "euler"),
+    ],
+)
+def test_get_spec_sa3_defaults(hf_id: str, steps: int, cfg: float, sampler: str) -> None:
+    spec = get_spec(hf_id)
+    assert spec.default_steps == steps
+    assert spec.default_cfg == cfg
+    assert spec.default_sampler == sampler
 
 
 def test_resolve_model_id_unknown_raises() -> None:
@@ -469,3 +493,52 @@ def test_save_audio_invalid_format_raises(tmp_path: Path) -> None:
 
 def test_presets_module_reexport_count() -> None:
     assert len(presets_mod.list_presets()) == 60
+
+
+# --- resolve_seamless_loop_params: precedência user > category (edge trim) ---
+
+
+class TestResolveSeamlessLoopParamsEdge:
+    def test_user_forced_uses_user_values(self) -> None:
+        from text2sound.cli import resolve_seamless_loop_params
+
+        assert resolve_seamless_loop_params(
+            user_seamless=True,
+            user_crossfade_ms=800.0,
+            user_edge_trim_s=1.2,
+            category_seamless=True,
+            category_crossfade_ms=500.0,
+            category_edge_trim_s=0.75,
+        ) == (True, 800.0, 1.2)
+
+    def test_user_disabled_ignores_category(self) -> None:
+        from text2sound.cli import resolve_seamless_loop_params
+
+        assert resolve_seamless_loop_params(
+            user_seamless=False,
+            user_crossfade_ms=500.0,
+            user_edge_trim_s=0.0,
+            category_seamless=True,
+            category_crossfade_ms=500.0,
+            category_edge_trim_s=0.75,
+        ) == (False, 500.0, 0.0)
+
+    def test_deferred_uses_category_edge_trim(self) -> None:
+        from text2sound.cli import resolve_seamless_loop_params
+
+        assert resolve_seamless_loop_params(
+            user_seamless=None,
+            user_crossfade_ms=500.0,
+            user_edge_trim_s=0.0,
+            category_seamless=True,
+            category_crossfade_ms=500.0,
+            category_edge_trim_s=0.75,
+        ) == (True, 500.0, 0.75)
+
+    def test_deferred_no_category_defaults_off(self) -> None:
+        from text2sound.cli import resolve_seamless_loop_params
+
+        assert resolve_seamless_loop_params(
+            user_seamless=None,
+            user_crossfade_ms=500.0,
+        ) == (False, 500.0, 0.0)

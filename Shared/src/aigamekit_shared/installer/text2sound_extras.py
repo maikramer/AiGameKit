@@ -12,7 +12,10 @@ if TYPE_CHECKING:
 
 _PIP_BOOTSTRAP = ("pip", "setuptools>=68,<82", "wheel")
 
-_STABLE_AUDIO_TOOLS = "stable-audio-tools==0.0.18"
+# Stable Audio 3 Small (t5gemma conditioner + sampler pingpong) exige o
+# stable-audio-tools do GitHub — o 0.0.19 do PyPI não tem o T5GemmaConditioner.
+# Pin por commit para instalação reprodutível.
+_STABLE_AUDIO_TOOLS = "stable-audio-tools @ git+https://github.com/Stability-AI/stable-audio-tools.git@3241adba4fc2a85cf5b29d9eb68d42f40a28e820"
 
 
 def text2sound_install_in_venv(inst: PythonProjectInstaller) -> None:
@@ -61,8 +64,23 @@ def text2sound_install_in_venv(inst: PythonProjectInstaller) -> None:
         inst.logger.warn(f"Ficheiro em falta: {req_file}")
 
     sat_deps = inst.project_root / "config" / "requirements-stable-audio-deps.txt"
-    inst.logger.info(f"{_STABLE_AUDIO_TOOLS} (--no-deps), depois dependências listadas...")
-    subprocess.run([*pip_cmd, *constr, _STABLE_AUDIO_TOOLS, "--no-deps"], check=True, cwd=_root)
+    inst.logger.info("stable-audio-tools GitHub (--no-deps), depois dependências listadas...")
+    # pip (não uv): o main do GitHub pin Requires-Python <3.11 (stack de treino
+    # deles) — em inferência Py3.13 funciona; uv não tem --ignore-requires-python.
+    subprocess.run(
+        [
+            str(inst.venv_python),
+            "-m",
+            "pip",
+            "install",
+            *constr,
+            "--no-deps",
+            "--ignore-requires-python",
+            _STABLE_AUDIO_TOOLS,
+        ],
+        check=True,
+        cwd=_root,
+    )
     if not sat_deps.is_file():
         msg = f"Ficheiro em falta: {sat_deps}"
         inst.logger.error(msg)

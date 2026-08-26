@@ -14,6 +14,7 @@ from text2sound.audio_processor import (
     apply_seamless_loop_crossfade,
     peak_normalize,
     save_audio,
+    seamless_generation_duration,
     to_int16,
     trim_silence,
 )
@@ -162,15 +163,30 @@ class TestApplySeamlessLoopCrossfade:
         # Loop starts where the blend converged: first sample == audio[:, n]
         assert torch.equal(result[:, 0], audio[:, n])
 
-    def test_equal_power_property(self):
-        """cos^2 + sin^2 should equal ~1.0 for all points."""
+    def test_equal_power_uncorrelated(self):
+        """Equal-power real: material não-correlacionado mantém a potência.
+
+        Head e tail de um loop são trechos musicais distintos (corr ≈ 0.05).
+        Com curvas cos/sin em amplitude a potência soma cos²+sin² = 1 — o
+        ponto médio da costura não pode ter dip (as curvas cos²/sin² antigas
+        somavam cos⁴+sin⁴ → dip de -3 dB, medido a -12.9%).
+        """
         sr = 44100
+        torch.manual_seed(7)
+        audio = torch.randn(2, sr * 6)
+        body_power = audio[:, sr:-sr].pow(2).mean().item()
+        result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
         n = int(sr * 500.0 / 1000)
-        t = torch.linspace(0, torch.pi / 2, n)
-        fade_out = torch.cos(t) ** 2
-        fade_in = torch.sin(t) ** 2
-        energy = fade_out + fade_in
-        assert torch.allclose(energy, torch.ones_like(energy), atol=1e-6)
+        mid = result[:, -n // 2 - 500 : -n // 2 + 500].pow(2).mean().item()
+        assert mid == pytest.approx(body_power, rel=0.15)
+
+    def test_coherent_material_no_clipping_bump(self):
+        """Material coerente (mesma onda) não passa de +3 dB (cos+sin ≤ √2)."""
+        sr = 44100
+        t_ = torch.arange(sr * 4, dtype=torch.float32) / sr
+        audio = (0.5 * torch.sin(2 * torch.pi * 110.0 * t_)).repeat(2, 1)
+        result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=300.0)
+        assert result.abs().max().item() <= 0.5 * 1.42  # √2 + margem
 
     def test_center_unchanged(self):
         """Samples outside crossfade zone should match the input (shifted by n)."""
@@ -526,3 +542,128 @@ class TestConstants:
 
     def test_default_format(self):
         assert DEFAULT_FORMAT == "ogg"
+
+
+class TestSeamlessGenerationDuration:
+    """Duração de geração que aterra o loop final exactamente em -d."""
+
+    def test_plain_crossfade_only(self):
+        # 16 s + 500 ms de fold = gera 16.5 s → loop final 16.0 s
+        assert seamless_generation_duration(16.0, 500.0, 0.0) == pytest.approx(16.5)
+
+    def test_with_edge_trim(self):
+        # 16 + 0.5 (xf) + 2x0.75 (edge) = 18.0 s
+        assert seamless_generation_duration(16.0, 500.0, 0.75) == pytest.approx(18.0)
+
+    def test_negative_edge_clamped(self):
+        assert seamless_generation_duration(10.0, 0.0, -3.0) == pytest.approx(10.0)
+
+    def test_roundtrip_with_save_pipeline(self):
+        """edge trim (2x) + fold (xf) sobre a duração gerada → -d exacto."""
+        sr = 44100
+        d, xf_ms, edge = 4.0, 200.0, 0.5
+        gen = seamless_generation_duration(d, xf_ms, edge)
+        audio = torch.randn(2, int(gen * sr))
+        e = int(edge * sr)
+        audio = audio[:, e:-e]
+        loop = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=xf_ms)
+        assert loop.shape[-1] / sr == pytest.approx(d, abs=1 / sr)
+
+
+class TestShapeSeamlessLoopExact:
+    """Edge trim adaptativo + fold aterram o loop exactamente em -d."""
+
+    def _synth(self, sr, gen, body_level, outro_start, outro_end_level=0.05):
+        t = torch.arange(int(gen * sr)) / sr
+        env = torch.full_like(t, body_level)
+        oi = int(outro_start * sr)
+        env[oi:] = torch.linspace(body_level, outro_end_level, len(t) - oi)
+        return (env * torch.sin(2 * torch.pi * 220.0 * t)).repeat(2, 1)
+
+    def test_exact_length_with_fading_tail(self):
+        """Cauda em decaimento (outro musical) é comida; loop aterra em D."""
+        from text2sound.audio_processor import _shape_seamless_loop_exact
+
+        sr = 44100
+        D, xf_ms, edge = 4.0, 200.0, 0.5
+        gen = seamless_generation_duration(D, xf_ms, edge)  # 5.2 s
+        # outro ocupa o último 0.6 s (dentro do alcance do trim adaptativo)
+        audio = self._synth(sr, gen, 0.6, outro_start=gen - 0.6)
+        out = _shape_seamless_loop_exact(audio, sr, loop_edge_trim_s=edge, crossfade_ms=xf_ms, target_seconds=D)
+        assert out.shape[-1] == int(D * sr)
+
+    def test_fading_tail_removed_energetically(self):
+        """Após o shaping, a cauda do loop não pode estar em decaimento."""
+        from text2sound.audio_processor import _shape_seamless_loop_exact
+
+        sr = 44100
+        D, xf_ms, edge = 4.0, 200.0, 0.5
+        gen = seamless_generation_duration(D, xf_ms, edge)
+        audio = self._synth(sr, gen, 0.6, outro_start=gen - 0.6)
+        out = _shape_seamless_loop_exact(audio, sr, loop_edge_trim_s=edge, crossfade_ms=xf_ms, target_seconds=D)
+        mono = out.abs().max(dim=0).values
+        w = int(0.2 * sr)
+        tail_rms = float(mono[-w:].mean())
+        body_rms = float(mono[w:-w].median())
+        assert tail_rms > body_rms * 0.7
+
+    def test_hot_edges_keep_minimal_trim(self):
+        """Energia constante: trim fica no mínimo e fold = crossfade pedido."""
+        from text2sound.audio_processor import _shape_seamless_loop_exact
+
+        sr = 44100
+        D, xf_ms, edge = 4.0, 200.0, 0.5
+        gen = seamless_generation_duration(D, xf_ms, edge)
+        t = torch.arange(int(gen * sr)) / sr
+        audio = (0.6 * torch.sin(2 * torch.pi * 220.0 * t)).repeat(2, 1)
+        out = _shape_seamless_loop_exact(audio, sr, loop_edge_trim_s=edge, crossfade_ms=xf_ms, target_seconds=D)
+        assert out.shape[-1] == int(D * sr)
+
+    def test_no_edge_trim_still_exact(self):
+        """edge=0: só o fold consome o extra → comprimento exacto."""
+        from text2sound.audio_processor import _shape_seamless_loop_exact
+
+        sr = 44100
+        D, xf_ms = 3.0, 250.0
+        gen = seamless_generation_duration(D, xf_ms, 0.0)
+        t = torch.arange(int(gen * sr)) / sr
+        audio = (0.5 * torch.sin(2 * torch.pi * 180.0 * t)).repeat(2, 1)
+        out = _shape_seamless_loop_exact(audio, sr, loop_edge_trim_s=0.0, crossfade_ms=xf_ms, target_seconds=D)
+        assert out.shape[-1] == int(D * sr)
+
+
+class TestSeamlessMasteringState:
+    """Mastering stateful não pode quebrar a costura do loop (double-render)."""
+
+    def test_mastered_loop_wrap_stays_continuous(self, tmp_path):
+        """Com compressor, o jump no wrap fica na ordem de um passo normal."""
+        import soundfile as sf
+
+        sr = 44100
+        t = torch.arange(sr * 6) / sr
+        # tonal (passos pequenos) + amplitude modulada lenta
+        music = 0.5 * torch.sin(2 * torch.pi * 220.0 * t) * (0.7 + 0.3 * torch.sin(2 * torch.pi * 0.5 * t))
+        audio = music.repeat(2, 1)
+        out = save_audio(
+            audio=audio,
+            sample_rate=sr,
+            output_path=tmp_path / "loop_master.wav",
+            fmt="wav",
+            seamless_loop=True,
+            crossfade_ms=300.0,
+            loop_edge_trim_s=0.5,
+            loop_target_seconds=4.0,
+            lufs_target=-16.0,
+            high_pass_hz=30.0,
+            compressor_preset="glue",
+            compressor_enabled=True,
+            true_peak_db=-1.0,
+        )
+        data, _ = sf.read(str(out))
+        m = data.mean(axis=1)
+        wrap_jump = abs(m[0] - m[-1])
+        import numpy as np
+
+        p99 = np.percentile(np.abs(np.diff(m)), 99)
+        assert len(m) / sr == pytest.approx(4.0, abs=1 / sr)
+        assert wrap_jump <= max(p99 * 2.0, 0.02), (wrap_jump, p99)

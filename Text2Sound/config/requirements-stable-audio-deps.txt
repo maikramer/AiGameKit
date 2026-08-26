@@ -1,6 +1,8 @@
-# Dependências de stable-audio-tools==0.0.18 (METADATA em PyPI), excepto pandas.
-# pandas vem de requirements.txt (>=2.2.3, wheel cp313). Não usar stable-audio-tools
-# >=0.0.13 via resolver: puxa flash-attn (build) ou pandas==2.0.2 (sem wheel 3.13).
+# Dependências de stable-audio-tools (GitHub main @3241adb, instalado --no-deps).
+# Base: METADATA do PyPI 0.0.18 + deps novas do main (dill, torchsde, nnAudio,
+# soxr, scipy) exigidas pelo path SA3 (T5Gemma). pandas vem de requirements.txt
+# (>=2.2.3, wheel cp313). Não resolver stable-audio-tools pelo PyPI: puxa
+# flash-attn (build) ou pandas==2.0.2 (sem wheel 3.13).
 
 # Resolver não pode puxar numpy 1.23.x (build falha em Py3.13 / setuptools isolado).
 # numba<=0.66 ainda exige numpy<2.5 — manter teto 2.4.x neste venv.
@@ -9,6 +11,7 @@ numpy>=1.26.4,<2.5
 alias-free-torch==0.0.6
 auraloss==0.4.0
 descript-audio-codec==1.0.0
+dill
 einops
 einops-exts
 ema-pytorch==0.2.3
@@ -19,14 +22,17 @@ importlib-resources==5.12.0
 k-diffusion==0.1.1
 # laion-clap fixa numpy==1.23.5 (sem wheel cp313) — não necessário para inferência CLI
 local-attention==1.8.6
+nnAudio>=0.3.3
 prefigure==0.0.9
 pytorch_lightning==2.1.0
 # 1.4.1 não tem wheel cp313; stable-audio aceita PyWavelets compatível em runtime
 PyWavelets>=1.6.0
 safetensors
-# 0.1.99 não tem wheel cp313 (build falha)
+scipy
 sentencepiece>=0.2.0
+soxr>=0.5.0
 torchmetrics==0.11.4
+torchsde
 tqdm
 transformers>=5.14.0
 v-diffusion-pytorch==0.0.2

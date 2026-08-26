@@ -189,12 +189,16 @@ audio_kinds:
   music_loop:
     label: "Music Loop"
     model: music
-    sampler: dpmpp-3m-sde
-    cfg_scale_default: 7.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: false
     trim_buffer_ms: 0
     loop_hint: true
     crossfade_ms: 500
+    # Reserve de intro/outro por borda: a geração é estendida em 2×edge +
+    # crossfade; a cauda é cortada adaptativamente (energia < 85% da mediana)
+    # até esse orçamento, para o loop final medir -d exacto em steady-state.
+    loop_edge_trim_s: 4.5
     prompt_hint: "seamless loop, consistent volume throughout"
     negative_prompt_hint: "sudden stops, tempo changes, volume drops, silence, clicks, pops, distortion"
     compressor_preset: master_glue
@@ -202,12 +206,13 @@ audio_kinds:
   ambient_loop:
     label: "Ambient Loop"
     model: music
-    sampler: dpmpp-3m-sde
-    cfg_scale_default: 6.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: false
     trim_buffer_ms: 0
     loop_hint: true
     crossfade_ms: 500
+    loop_edge_trim_s: 1.0
     prompt_hint: "seamless loop, immersive atmosphere"
     negative_prompt_hint: "sudden transients, clicks, harsh noise, abrupt volume changes, pops"
     compressor_preset: glue
@@ -215,8 +220,8 @@ audio_kinds:
   ambient_one_shot:
     label: "Ambient One-Shot"
     model: music
-    sampler: dpmpp-3m-sde
-    cfg_scale_default: 7.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 400
     loop_hint: false
@@ -226,11 +231,11 @@ audio_kinds:
   sfx_impact:
     label: "SFX Impact"
     model: effects
-    sampler: euler
-    cfg_scale_default: 9.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 10
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     prompt_hint: "immediate attack, no silence at start, powerful transient"
     negative_prompt_hint: "music, melody, background music, long reverb tail, echo, ambient pad"
@@ -239,11 +244,11 @@ audio_kinds:
   sfx_short:
     label: "SFX Short"
     model: effects
-    sampler: euler
-    cfg_scale_default: 8.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 10
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     negative_prompt_hint: "music, melody, long decay, reverb, ambient, background noise"
     compressor_preset: punch
@@ -251,11 +256,11 @@ audio_kinds:
   sfx_ui:
     label: "SFX UI"
     model: effects
-    sampler: euler
-    cfg_scale_default: 10.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 5
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     prompt_hint: "clean, short, digital, no reverb tail"
     negative_prompt_hint: "music, long tail, reverb, ambient, environmental noise, organic texture"
@@ -264,11 +269,11 @@ audio_kinds:
   sfx_movement:
     label: "SFX Movement"
     model: effects
-    sampler: euler
-    cfg_scale_default: 8.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 20
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     negative_prompt_hint: "music, melody, reverb tail, ambient background, steady tone"
     compressor_preset: punch
@@ -276,11 +281,11 @@ audio_kinds:
   sfx_creature:
     label: "SFX Creature"
     model: effects
-    sampler: euler
-    cfg_scale_default: 9.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 15
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     negative_prompt_hint: "music, melody, mechanical, synthetic, clean tone, reverb"
     compressor_preset: punch
@@ -288,11 +293,11 @@ audio_kinds:
   sfx_magic:
     label: "SFX Magic"
     model: effects
-    sampler: euler
-    cfg_scale_default: 9.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 20
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     negative_prompt_hint: "music, melody, drums, percussion, voice, organic texture"
     compressor_preset: glue
@@ -300,11 +305,11 @@ audio_kinds:
   sfx_vehicle:
     label: "SFX Vehicle"
     model: effects
-    sampler: euler
-    cfg_scale_default: 8.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 30
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     negative_prompt_hint: "music, melody, voice, clean tone, reverb tail"
     compressor_preset: glue
@@ -312,11 +317,11 @@ audio_kinds:
   sfx_interact:
     label: "SFX Interact"
     model: effects
-    sampler: euler
-    cfg_scale_default: 8.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 10
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     negative_prompt_hint: "music, melody, long decay, ambient, background noise, reverb"
     compressor_preset: punch
@@ -324,11 +329,11 @@ audio_kinds:
   sfx_destruction:
     label: "SFX Destruction"
     model: effects
-    sampler: euler
-    cfg_scale_default: 9.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 30
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     prompt_hint: "sharp break, debris, impact, powerful transient"
     negative_prompt_hint: "music, melody, clean tone, sustained note, ambient pad"
@@ -337,11 +342,11 @@ audio_kinds:
   sfx_weapon:
     label: "SFX Weapon"
     model: effects
-    sampler: euler
-    cfg_scale_default: 8.5
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 15
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     prompt_hint: "metallic, sharp, clean transient, weapon handling"
     negative_prompt_hint: "music, ambient, wind, long decay, reverb, melodic tone"
@@ -350,11 +355,11 @@ audio_kinds:
   sfx_mechanical:
     label: "SFX Mechanical"
     model: effects
-    sampler: euler
-    cfg_scale_default: 8.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 20
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     prompt_hint: "mechanical, gears, metal, machinery"
     negative_prompt_hint: "music, melody, voice, organic texture, reverb tail, ambient pad"
@@ -363,11 +368,11 @@ audio_kinds:
   sfx_elemental:
     label: "SFX Elemental"
     model: effects
-    sampler: euler
-    cfg_scale_default: 8.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 20
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     prompt_hint: "elemental energy, fire, water, electricity, nature force"
     negative_prompt_hint: "music, melody, drums, voice, clean synthetic tone"
@@ -376,11 +381,11 @@ audio_kinds:
   sfx_vocal:
     label: "SFX Vocal"
     model: effects
-    sampler: euler
-    cfg_scale_default: 9.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 15
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     prompt_hint: "human voice, shout, grunt, vocalization, effort"
     negative_prompt_hint: "music, melody, instruments, reverb tail, ambient background"
@@ -389,11 +394,11 @@ audio_kinds:
   sfx_collectible:
     label: "SFX Collectible"
     model: effects
-    sampler: euler
-    cfg_scale_default: 10.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 5
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     prompt_hint: "short, magical sparkle, pickup, rewarding chime"
     negative_prompt_hint: "music, long decay, reverb, ambient, organic texture, noise"
@@ -402,11 +407,11 @@ audio_kinds:
   sfx_alarm:
     label: "SFX Alarm"
     model: effects
-    sampler: euler
-    cfg_scale_default: 9.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 30
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     prompt_hint: "loud, urgent, siren, alarm, warning signal"
     negative_prompt_hint: "music, melody, voice, organic texture, ambient pad"
@@ -415,11 +420,11 @@ audio_kinds:
   sfx_ambient_sfx:
     label: "SFX Ambient Spot"
     model: effects
-    sampler: euler
-    cfg_scale_default: 8.0
+    sampler: pingpong
+    cfg_scale_default: 1.0
     trim_default: true
     trim_buffer_ms: 30
-    trim_threshold_db: -40.0
+    trim_threshold_db: -55.0
     loop_hint: false
     prompt_hint: "environmental spot effect, weather, nature transient"
     negative_prompt_hint: "music, melody, voice, clean tone, synthetic pad"

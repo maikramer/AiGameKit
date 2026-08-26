@@ -79,7 +79,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `GameAssets/` | Python | `gameassets` | Batch asset generation |
 | `Texture2D/` | Python | `texture2d` | Seamless 2D textures (local SD1.5) |
 | `Skymap2D/` | Python | `skymap2d` | 360-degree skymaps (local FLUX.1-dev + LoRA) |
-| `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio Open) |
+| `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio 3 Small: music/sfx; legado Open via `--model`) |
 | `Rigging3D/` | Python | `rigging3d` | Auto-rigging (SkinTokens, Python 3.13) |
 | `Animator3D/` | Python | `animator3d` | Animation (bpy 5.2 LTS, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
 | `Motion3D/` | Python | `motion3d` | Text-to-motion (HY-Motion-1.0 Lite/Full) → NPZ @30fps; `apply-rigged` → SkinTokens via Animator3D `hml22`; vramd |

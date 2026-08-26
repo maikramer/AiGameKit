@@ -86,9 +86,10 @@ class TestGetPreset:
         p = get_preset("ambient")
         assert "prompt" in p
         assert "duration" in p
-        assert "steps" in p
-        assert "cfg_scale" in p
         assert "kind" in p
+        # steps/cfg vêm do ModelSpec (SA3) / quality tier, não do preset
+        assert "steps" not in p
+        assert "cfg_scale" not in p
 
     def test_case_insensitive(self):
         p = get_preset("BATTLE")
@@ -117,8 +118,8 @@ class TestPresetStructure:
         p = AUDIO_PRESETS[name]
         assert isinstance(p["prompt"], str) and len(p["prompt"]) > 0
         assert isinstance(p["duration"], (int, float)) and p["duration"] > 0
-        assert isinstance(p["steps"], int) and p["steps"] > 0
-        assert isinstance(p["cfg_scale"], (int, float)) and p["cfg_scale"] > 0
+        assert "steps" not in p
+        assert "cfg_scale" not in p
         assert "kind" in p
         assert isinstance(p["kind"], str) and len(p["kind"]) > 0
 
@@ -151,18 +152,9 @@ class TestPresetStructure:
 
     @pytest.mark.parametrize("name", list_presets())
     def test_duration_within_model_limits(self, name):
+        # Presets de música até 45s (SA3 music até 180s); sfx até ~5s (SA3 sfx 30s)
         p = AUDIO_PRESETS[name]
         assert 0 < p["duration"] <= 47
-
-    @pytest.mark.parametrize("name", list_presets())
-    def test_steps_reasonable(self, name):
-        p = AUDIO_PRESETS[name]
-        assert 10 <= p["steps"] <= 200
-
-    @pytest.mark.parametrize("name", list_presets())
-    def test_cfg_scale_reasonable(self, name):
-        p = AUDIO_PRESETS[name]
-        assert 1.0 <= p["cfg_scale"] <= 15.0
 
     def test_ambience_durations(self):
         for name in ("ambient", "forest", "ocean", "rain"):

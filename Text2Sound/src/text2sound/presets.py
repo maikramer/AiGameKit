@@ -1,11 +1,9 @@
 """Text2Sound — presets temáticos para desenvolvimento de jogos.
 
-Cada preset define prompt, duração, passos de difusão, CFG scale e *kind*
-(audio_kind do QualityEngine) otimizados para cenários comuns de game audio.
-
-Os presets assumem o modelo **Open 1.0** (música, até ~47s). Com
-``--profile effects`` (Open Small, máx. ~11s), presets com duração
-superior falham na validação — usa ``-d`` explícito ou perfil música.
+Cada preset define prompt, duração e *kind* (audio_kind do QualityEngine)
+otimizados para cenários comuns de game audio. Os parâmetros de inferência
+(steps, cfg, sampler) não fazem parte do preset: vêm do ``ModelSpec`` do
+modelo ativo (SA3: steps 8, cfg 1.0, pingpong) ou do ``--quality`` tier.
 """
 
 from __future__ import annotations
@@ -28,8 +26,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "ambient_loop",
         "duration": 45,
-        "steps": 100,
-        "cfg_scale": 6.0,
     },
     "forest": {
         "prompt": (
@@ -38,15 +34,11 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "ambient_loop",
         "duration": 45,
-        "steps": 100,
-        "cfg_scale": 6.0,
     },
     "ocean": {
         "prompt": "Ocean waves crashing on shore, rhythmic sea surf, coastal seascape with seagulls in distance",
         "kind": "ambient_loop",
         "duration": 45,
-        "steps": 100,
-        "cfg_scale": 6.0,
     },
     "rain": {
         "prompt": (
@@ -55,15 +47,11 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "ambient_loop",
         "duration": 45,
-        "steps": 100,
-        "cfg_scale": 6.0,
     },
     "wind": {
         "prompt": "Strong wind blowing through open landscape, gusty howling wind, atmospheric outdoor wind ambience",
         "kind": "ambient_loop",
         "duration": 30,
-        "steps": 100,
-        "cfg_scale": 6.0,
     },
     "dungeon": {
         "prompt": (
@@ -72,8 +60,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "ambient_loop",
         "duration": 30,
-        "steps": 110,
-        "cfg_scale": 7.0,
     },
     "tavern": {
         "prompt": (
@@ -82,8 +68,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "ambient_loop",
         "duration": 30,
-        "steps": 110,
-        "cfg_scale": 6.0,
     },
     "cave": {
         "prompt": (
@@ -92,8 +76,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "ambient_loop",
         "duration": 30,
-        "steps": 100,
-        "cfg_scale": 6.5,
     },
     "city": {
         "prompt": (
@@ -101,8 +83,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "ambient_loop",
         "duration": 30,
-        "steps": 100,
-        "cfg_scale": 6.0,
     },
     "desert": {
         "prompt": (
@@ -111,8 +91,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "ambient_loop",
         "duration": 30,
-        "steps": 100,
-        "cfg_scale": 6.0,
     },
     "space": {
         "prompt": (
@@ -121,8 +99,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "ambient_loop",
         "duration": 30,
-        "steps": 100,
-        "cfg_scale": 6.5,
     },
     "underwater": {
         "prompt": (
@@ -130,8 +106,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "ambient_loop",
         "duration": 30,
-        "steps": 100,
-        "cfg_scale": 6.0,
     },
     # ── Music (6) ──────────────────────────────────────────────────────
     "battle": {
@@ -141,8 +115,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "music_loop",
         "duration": 30,
-        "steps": 120,
-        "cfg_scale": 7.0,
     },
     "menu": {
         "prompt": (
@@ -151,8 +123,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "music_loop",
         "duration": 30,
-        "steps": 100,
-        "cfg_scale": 7.0,
     },
     "victory": {
         "prompt": (
@@ -160,8 +130,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "music_loop",
         "duration": 8,
-        "steps": 100,
-        "cfg_scale": 7.5,
     },
     "defeat": {
         "prompt": (
@@ -170,8 +138,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "music_loop",
         "duration": 8,
-        "steps": 100,
-        "cfg_scale": 7.0,
     },
     "exploration": {
         "prompt": (
@@ -180,8 +146,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "music_loop",
         "duration": 30,
-        "steps": 100,
-        "cfg_scale": 7.0,
     },
     "boss": {
         "prompt": (
@@ -190,16 +154,12 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "music_loop",
         "duration": 30,
-        "steps": 120,
-        "cfg_scale": 8.0,
     },
     # ── SFX Impact (5) ─────────────────────────────────────────────────
     "explosion": {
         "prompt": "Powerful explosion blast with deep bass impact, debris scattering, cinematic boom sound effect",
         "kind": "sfx_impact",
         "duration": 5,
-        "steps": 80,
-        "cfg_scale": 9.0,
     },
     "sword-clash": {
         "prompt": (
@@ -207,22 +167,16 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_impact",
         "duration": 2,
-        "steps": 80,
-        "cfg_scale": 9.0,
     },
     "punch": {
         "prompt": ("Heavy punch impact with body hit thud, bone crunch, close-range melee combat punch sound effect"),
         "kind": "sfx_impact",
         "duration": 1.5,
-        "steps": 80,
-        "cfg_scale": 9.0,
     },
     "gunshot": {
         "prompt": ("Single gunshot with sharp crack and echo, muzzle blast, realistic firearm discharge sound effect"),
         "kind": "sfx_impact",
         "duration": 1,
-        "steps": 80,
-        "cfg_scale": 9.0,
     },
     "arrow": {
         "prompt": (
@@ -230,8 +184,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_impact",
         "duration": 1.5,
-        "steps": 80,
-        "cfg_scale": 9.0,
     },
     # ── SFX Magic (4) ──────────────────────────────────────────────────
     "magic-spell": {
@@ -241,8 +193,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_magic",
         "duration": 3,
-        "steps": 90,
-        "cfg_scale": 9.0,
     },
     "heal": {
         "prompt": (
@@ -251,8 +201,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_magic",
         "duration": 2,
-        "steps": 90,
-        "cfg_scale": 9.0,
     },
     "teleport": {
         "prompt": (
@@ -260,8 +208,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_magic",
         "duration": 2,
-        "steps": 90,
-        "cfg_scale": 9.0,
     },
     "shield": {
         "prompt": (
@@ -270,16 +216,12 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_magic",
         "duration": 2,
-        "steps": 90,
-        "cfg_scale": 9.0,
     },
     # ── SFX Movement (4) ───────────────────────────────────────────────
     "footsteps-stone": {
         "prompt": "Footsteps walking on stone floor, clear and rhythmic steps on hard surface, indoor stone corridor",
         "kind": "sfx_movement",
         "duration": 4,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     "footsteps-grass": {
         "prompt": (
@@ -287,8 +229,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_movement",
         "duration": 4,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     "footsteps-wood": {
         "prompt": (
@@ -296,8 +236,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_movement",
         "duration": 4,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     "footsteps-water": {
         "prompt": (
@@ -305,37 +243,27 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_movement",
         "duration": 4,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     # ── SFX UI (4) ─────────────────────────────────────────────────────
     "ui-click": {
         "prompt": "Short UI click sound, clean digital button press, crisp interface interaction sound effect",
         "kind": "sfx_ui",
         "duration": 1,
-        "steps": 60,
-        "cfg_scale": 10.0,
     },
     "ui-confirm": {
         "prompt": "Positive confirmation chime, bright ascending tone, success notification sound for game interface",
         "kind": "sfx_ui",
         "duration": 1.5,
-        "steps": 60,
-        "cfg_scale": 10.0,
     },
     "ui-cancel": {
         "prompt": ("Negative cancel sound, descending tone with soft thud, action dismissed interface sound effect"),
         "kind": "sfx_ui",
         "duration": 1,
-        "steps": 60,
-        "cfg_scale": 10.0,
     },
     "ui-hover": {
         "prompt": ("Subtle UI hover sound, very soft tick, gentle interface mouse-over feedback"),
         "kind": "sfx_ui",
         "duration": 0.5,
-        "steps": 60,
-        "cfg_scale": 10.0,
     },
     # ── SFX Creature (3) ───────────────────────────────────────────────
     "creature-growl": {
@@ -344,8 +272,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_creature",
         "duration": 3,
-        "steps": 90,
-        "cfg_scale": 9.0,
     },
     "creature-roar": {
         "prompt": (
@@ -354,8 +280,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_creature",
         "duration": 3,
-        "steps": 90,
-        "cfg_scale": 9.0,
     },
     "creature-death": {
         "prompt": (
@@ -363,8 +287,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_creature",
         "duration": 3,
-        "steps": 90,
-        "cfg_scale": 9.0,
     },
     # ── SFX Destruction (3) ────────────────────────────────────────────
     "glass-break": {
@@ -374,15 +296,11 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_destruction",
         "duration": 1.5,
-        "steps": 80,
-        "cfg_scale": 9.0,
     },
     "wood-break": {
         "prompt": ("Wood splintering and cracking, wooden plank snap with breaking timber, destruction sound effect"),
         "kind": "sfx_destruction",
         "duration": 2,
-        "steps": 80,
-        "cfg_scale": 9.0,
     },
     "stone-crumble": {
         "prompt": (
@@ -390,8 +308,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_destruction",
         "duration": 3,
-        "steps": 80,
-        "cfg_scale": 9.0,
     },
     # ── SFX Weapon (3) ─────────────────────────────────────────────────
     "sword-draw": {
@@ -400,15 +316,11 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_weapon",
         "duration": 1.5,
-        "steps": 80,
-        "cfg_scale": 8.5,
     },
     "bow-draw": {
         "prompt": "Bowstring tension and arrow nock, wooden bow creaking under tension, archery draw sound effect",
         "kind": "sfx_weapon",
         "duration": 2,
-        "steps": 80,
-        "cfg_scale": 8.5,
     },
     "weapon-reload": {
         "prompt": (
@@ -417,16 +329,12 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_weapon",
         "duration": 2,
-        "steps": 80,
-        "cfg_scale": 8.5,
     },
     # ── SFX Mechanical (4) ─────────────────────────────────────────────
     "door-open": {
         "prompt": "Heavy wooden door opening with creaking hinges, dungeon door swing, mechanical door sound effect",
         "kind": "sfx_mechanical",
         "duration": 2,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     "door-close": {
         "prompt": (
@@ -434,8 +342,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_mechanical",
         "duration": 2,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     "lever": {
         "prompt": (
@@ -443,8 +349,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_mechanical",
         "duration": 1.5,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     "clockwork": {
         "prompt": (
@@ -453,8 +357,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_mechanical",
         "duration": 3,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     # ── SFX Elemental (3) ──────────────────────────────────────────────
     "fire-crackle": {
@@ -464,8 +366,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_elemental",
         "duration": 4,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     "water-splash": {
         "prompt": (
@@ -473,8 +373,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_elemental",
         "duration": 2,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     "electricity-zap": {
         "prompt": (
@@ -482,38 +380,28 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_elemental",
         "duration": 1.5,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
     # ── SFX Vocal (3) ──────────────────────────────────────────────────
     "grunt-effort": {
         "prompt": "Short human grunt of physical effort, heavy exertion vocalization, male exertion sound effect",
         "kind": "sfx_vocal",
         "duration": 1,
-        "steps": 90,
-        "cfg_scale": 9.0,
     },
     "battle-cry": {
         "prompt": "Powerful battle cry shout, warrior charging with loud yell, battle vocalization sound effect",
         "kind": "sfx_vocal",
         "duration": 2,
-        "steps": 90,
-        "cfg_scale": 9.0,
     },
     "death-scream": {
         "prompt": "Short death scream, character final cry, human defeat and dying vocalization sound effect",
         "kind": "sfx_vocal",
         "duration": 2,
-        "steps": 90,
-        "cfg_scale": 9.0,
     },
     # ── SFX Collectible (3) ────────────────────────────────────────────
     "coin-pickup": {
         "prompt": "Magical coin pickup chime, short sparkling coin collection, rewarding currency pickup sound effect",
         "kind": "sfx_collectible",
         "duration": 1,
-        "steps": 60,
-        "cfg_scale": 10.0,
     },
     "gem-collect": {
         "prompt": (
@@ -522,8 +410,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_collectible",
         "duration": 1.5,
-        "steps": 60,
-        "cfg_scale": 10.0,
     },
     "item-drop": {
         "prompt": (
@@ -531,23 +417,17 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_collectible",
         "duration": 1.5,
-        "steps": 60,
-        "cfg_scale": 10.0,
     },
     # ── SFX Alarm (2) ──────────────────────────────────────────────────
     "alarm-klaxon": {
         "prompt": "Loud emergency klaxon alarm siren, rotating warning horn, urgent alert signal sound effect",
         "kind": "sfx_alarm",
         "duration": 3,
-        "steps": 80,
-        "cfg_scale": 9.0,
     },
     "bell-toll": {
         "prompt": "Deep bell tolling with resonance decay, church tower bell ring, heavy bell strike sound effect",
         "kind": "sfx_alarm",
         "duration": 4,
-        "steps": 80,
-        "cfg_scale": 9.0,
     },
     # ── SFX Ambient Spot (1) ───────────────────────────────────────────
     "thunder-clap": {
@@ -557,8 +437,6 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         ),
         "kind": "sfx_ambient_sfx",
         "duration": 4,
-        "steps": 80,
-        "cfg_scale": 8.0,
     },
 }
 

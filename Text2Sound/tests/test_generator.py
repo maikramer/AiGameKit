@@ -363,3 +363,153 @@ class TestPretransformFp32:
         gen = AudioGenerator(device="cpu", half_precision=True)
         gen.load()
         assert gen._loaded is True
+
+
+class TestCropToDurationDeclick:
+    """Crop do buffer SA3 (duration + headroom) ao -d pedido."""
+
+    def test_crops_to_requested_duration(self):
+        from text2sound.generator import _crop_to_duration_declick
+
+        audio = torch.ones(1, 2, 44100 * 21)  # 21 s de buffer
+        out = _crop_to_duration_declick(audio, 44100, 15.0)
+        assert out.shape == (1, 2, 44100 * 15)
+
+    def test_noop_when_shorter(self):
+        from text2sound.generator import _crop_to_duration_declick
+
+        audio = torch.ones(1, 2, 1000)
+        out = _crop_to_duration_declick(audio, 44100, 30.0)
+        assert out is audio  # sem corte devolve o tensor original
+
+    def test_fade_applied_only_on_cut_edge(self):
+        from text2sound.generator import _crop_to_duration_declick
+
+        audio = torch.ones(1, 2, 44100 * 2)
+        out = _crop_to_duration_declick(audio, 44100, 1.0)
+        fade_len = int(0.01 * 44100)
+        # Fora da zona de fade o sinal fica intacto; na borda desce até ~0.
+        assert torch.allclose(out[..., : -fade_len - 1], torch.ones(1, 2, 44100 - fade_len - 1))
+        assert out[..., -1].max().item() < 0.01
+
+
+class TestGenerateSA3Path:
+    """Caminho SA3 (diffusion_cond_inpaint): buffer cortado ao -d, sem sigmas."""
+
+    def setup_method(self):
+        AudioGenerator.reset_instance()
+
+    def teardown_method(self):
+        AudioGenerator.reset_instance()
+
+    def _make_gen(self, mock_get):
+        mock_model = MagicMock()
+        mock_model.to.return_value = mock_model
+        mock_model.pretransform = None
+        mock_model.conditioner.conditioners.keys.return_value = ["prompt", "seconds_total"]
+        mock_get.return_value = (
+            mock_model,
+            {"model_type": "diffusion_cond_inpaint", "sample_rate": 44100, "sample_size": 5292032},
+        )
+        return AudioGenerator(device="cpu", auto_clear=False)
+
+    @patch("stable_audio_tools.inference.generation.generate_diffusion_cond_inpaint")
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_sa3_uses_inpaint_and_crops_buffer(self, mock_get, mock_inpaint):
+        # Buffer simulado: 15 s pedidos + 6 s de headroom (21 s no total)
+        mock_inpaint.return_value = torch.randn(1, 2, 44100 * 21)
+        gen = self._make_gen(mock_get)
+        result = gen.generate(prompt="battle theme", duration=15.0, steps=8)
+
+        mock_inpaint.assert_called_once()
+        assert result.audio.shape == (2, 44100 * 15)
+
+    @patch("stable_audio_tools.inference.generation.generate_diffusion_cond_inpaint")
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_sa3_no_sigma_leak_and_no_seconds_start(self, mock_get, mock_inpaint):
+        mock_inpaint.return_value = torch.randn(1, 2, 44100 * 3)
+        gen = self._make_gen(mock_get)
+        gen.generate(prompt="laser", duration=2.0, steps=8, sampler_type="pingpong")
+
+        kwargs = mock_inpaint.call_args.kwargs
+        assert "sigma_min" not in kwargs and "sigma_max" not in kwargs
+        assert kwargs["sampler_type"] == "pingpong"
+        cond = kwargs["conditioning"][0]
+        assert "seconds_start" not in cond
+        assert cond["seconds_total"] == 2.0
+
+    @patch("text2sound.generator.generate_diffusion_cond")
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_legacy_path_keeps_sigmas_and_seconds_start(self, mock_get, mock_gen_diff):
+        mock_model = MagicMock()
+        mock_model.to.return_value = mock_model
+        mock_model.pretransform = None
+        mock_model.conditioner.conditioners.keys.return_value = ["prompt", "seconds_start", "seconds_total"]
+        mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 2097152})
+        mock_gen_diff.return_value = torch.randn(1, 2, 44100)
+
+        gen = AudioGenerator(device="cpu", auto_clear=False)
+        gen.generate(prompt="forest", duration=1.0, steps=10)
+
+        kwargs = mock_gen_diff.call_args.kwargs
+        assert kwargs["sigma_min"] == 0.3 and kwargs["sigma_max"] == 500.0
+        assert kwargs["conditioning"][0]["seconds_start"] == 0
+
+    @patch("stable_audio_tools.inference.generation.generate_diffusion_cond_inpaint")
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_sa3_negative_prompt_skipped_at_cfg1(self, mock_get, mock_inpaint):
+        mock_inpaint.return_value = torch.randn(1, 2, 44100 * 3)
+        gen = self._make_gen(mock_get)
+        result = gen.generate(prompt="boom", duration=2.0, steps=8, cfg_scale=1.0, negative_prompt="music")
+
+        assert "negative_conditioning" not in mock_inpaint.call_args.kwargs
+        assert result.negative_prompt is None
+
+
+class TestPlacementCpuFallback:
+    """Offload plan no-op (modelo fica na CPU) → degrada para CPU em vez de crash."""
+
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_broken_offload_plan_falls_back_to_cpu(self, mock_get):
+        import torch
+        from torch import nn
+
+        mock_model = nn.Linear(4, 4)  # nasce e fica na CPU
+        mock_model.diffusion_objective = "rf_denoiser"
+        mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
+
+        plan = MagicMock()
+        plan.offload = "group_stream"
+        plan.multi_gpu_ids = None
+
+        with (
+            patch("aigamekit_shared.hardware.cuda_gpu_free_specs", return_value=[(0, 8 * 1024**3)]),
+            patch("aigamekit_shared.lowvram.place_pipeline", return_value=plan),
+        ):
+            gen = AudioGenerator(device="cuda", auto_clear=False, half_precision=True)
+            gen.load()
+
+        assert gen.device == "cpu"
+        assert gen.half_precision is False
+        assert next(gen._model.parameters()).dtype == torch.float32
+
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_full_gpu_plan_keeps_cuda(self, mock_get):
+        from torch import nn
+
+        mock_model = nn.Linear(4, 4)
+        mock_model.diffusion_objective = "rf_denoiser"
+        mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
+
+        def fake_place(model, *a, **k):
+            model.cuda()
+            return MagicMock(offload="none", multi_gpu_ids=None)
+
+        with (
+            patch("aigamekit_shared.hardware.cuda_gpu_free_specs", return_value=[(0, 8 * 1024**3)]),
+            patch("aigamekit_shared.lowvram.place_pipeline", side_effect=fake_place),
+        ):
+            gen = AudioGenerator(device="cuda", auto_clear=False, half_precision=False)
+            gen.load()
+
+        assert gen.device.startswith("cuda")

@@ -96,10 +96,17 @@ def test_get_spec_custom_id() -> None:
 
 
 def test_get_spec_open_small_heuristic() -> None:
-    from text2sound.models import SPEC_EFFECTS, get_spec
+    from text2sound.models import SPEC_LEGACY_EFFECTS, get_spec
 
     s = get_spec("stabilityai/stable-audio-open-small")
-    assert s.hf_id == SPEC_EFFECTS.hf_id
+    assert s.hf_id == SPEC_LEGACY_EFFECTS.hf_id
+
+
+def test_get_spec_sa3_heuristics() -> None:
+    from text2sound.models import SPEC_EFFECTS, SPEC_MUSIC, get_spec
+
+    assert get_spec("stabilityai/stable-audio-3-small-music").hf_id == SPEC_MUSIC.hf_id
+    assert get_spec("stabilityai/stable-audio-3-small-sfx").hf_id == SPEC_EFFECTS.hf_id
 
 
 def test_resolve_model_id_strips_whitespace() -> None:

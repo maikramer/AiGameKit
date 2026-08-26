@@ -40,11 +40,10 @@ profiles:
       steps: 14
       guidance: 3.0
     text2sound:
-      steps: 12
-      cfg_scale: 4.0
-      sigma_min: 0.5
-      sigma_max: 500.0
-      sampler: dpmpp-3m-sde
+      # SA3 (rectified-flow destilada): poucos steps, cfg 1.0, pingpong.
+      steps: 8
+      cfg_scale: 1.0
+      sampler: pingpong
       crossfade_ms: 300
       # DSP mastering chain (pedalboard)
       lufs_target: -18       # quieter target for fast previews
@@ -125,11 +124,10 @@ profiles:
       steps: 20
       guidance: 3.5
     text2sound:
-      steps: 20
-      cfg_scale: 5.0
-      sigma_min: 0.4
-      sigma_max: 500.0
-      sampler: dpmpp-3m-sde
+      # SA3 (rectified-flow destilada): poucos steps, cfg 1.0, pingpong.
+      steps: 8
+      cfg_scale: 1.0
+      sampler: pingpong
       crossfade_ms: 400
       # DSP mastering chain (pedalboard)
       lufs_target: -17
@@ -210,11 +208,10 @@ profiles:
       steps: 28
       guidance: 3.5
     text2sound:
-      steps: 32
-      cfg_scale: 6.0
-      sigma_min: 0.3
-      sigma_max: 500.0
-      sampler: dpmpp-3m-sde
+      # SA3 (rectified-flow destilada): poucos steps, cfg 1.0, pingpong.
+      steps: 12
+      cfg_scale: 1.0
+      sampler: pingpong
       crossfade_ms: 500
       # DSP mastering chain (pedalboard)
       lufs_target: -16
@@ -295,11 +292,10 @@ profiles:
       steps: 40
       guidance: 4.0
     text2sound:
-      steps: 50
-      cfg_scale: 7.0
-      sigma_min: 0.2
-      sigma_max: 500.0
-      sampler: dpmpp-3m-sde
+      # SA3 (rectified-flow destilada): poucos steps, cfg 1.0, pingpong.
+      steps: 16
+      cfg_scale: 1.0
+      sampler: pingpong
       crossfade_ms: 600
       # DSP mastering chain (pedalboard)
       lufs_target: -15
@@ -380,11 +376,10 @@ profiles:
       steps: 50
       guidance: 4.5
     text2sound:
-      steps: 100
-      cfg_scale: 7.0
-      sigma_min: 0.1
-      sigma_max: 500.0
-      sampler: dpmpp-3m-sde
+      # SA3 (rectified-flow destilada): poucos steps, cfg 1.0, pingpong.
+      steps: 24
+      cfg_scale: 1.0
+      sampler: pingpong
       crossfade_ms: 800
       # DSP mastering chain (pedalboard)
       lufs_target: -14

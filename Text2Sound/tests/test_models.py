@@ -3,6 +3,8 @@
 import pytest
 
 from text2sound.models import (
+    LEGACY_MODEL_EFFECTS_ID,
+    LEGACY_MODEL_MUSIC_ID,
     MODEL_EFFECTS_ID,
     MODEL_MUSIC_ID,
     get_spec,
@@ -23,7 +25,11 @@ class TestResolveModelId:
         assert resolve_model_id("music") == MODEL_MUSIC_ID
         assert resolve_model_id("MUSIC") == MODEL_MUSIC_ID
         assert resolve_model_id("full") == MODEL_MUSIC_ID
-        assert resolve_model_id("1.0") == MODEL_MUSIC_ID
+
+    def test_aliases_legacy_open(self):
+        assert resolve_model_id("1.0") == LEGACY_MODEL_MUSIC_ID
+        assert resolve_model_id("open-1.0") == LEGACY_MODEL_MUSIC_ID
+        assert resolve_model_id("open-small") == LEGACY_MODEL_EFFECTS_ID
 
     def test_aliases_effects(self):
         assert resolve_model_id("effects") == MODEL_EFFECTS_ID
@@ -31,8 +37,10 @@ class TestResolveModelId:
         assert resolve_model_id("sfx") == MODEL_EFFECTS_ID
 
     def test_hf_id_passthrough(self):
-        assert resolve_model_id("stabilityai/stable-audio-open-1.0") == MODEL_MUSIC_ID
-        assert resolve_model_id("stabilityai/stable-audio-open-small") == MODEL_EFFECTS_ID
+        assert resolve_model_id("stabilityai/stable-audio-3-small-music") == MODEL_MUSIC_ID
+        assert resolve_model_id("stabilityai/stable-audio-3-small-sfx") == MODEL_EFFECTS_ID
+        assert resolve_model_id("stabilityai/stable-audio-open-1.0") == LEGACY_MODEL_MUSIC_ID
+        assert resolve_model_id("stabilityai/stable-audio-open-small") == LEGACY_MODEL_EFFECTS_ID
 
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Modelo desconhecido"):
@@ -52,11 +60,24 @@ class TestResolveModelFromProfile:
 
 
 class TestGetSpec:
-    def test_known_ids(self):
+    def test_known_ids_sa3(self):
         m = get_spec(MODEL_MUSIC_ID)
+        assert m.max_seconds == 120.0
+        assert m.default_steps == 8
+        assert m.default_cfg == 1.0
+        assert m.default_sampler == "pingpong"
+        assert m.default_seconds == 30.0
+        e = get_spec(MODEL_EFFECTS_ID)
+        assert e.max_seconds == 30.0
+        assert e.default_steps == 8
+        assert e.default_sampler == "pingpong"
+        assert e.default_seconds == 10.0
+
+    def test_known_ids_legacy_open(self):
+        m = get_spec(LEGACY_MODEL_MUSIC_ID)
         assert m.max_seconds == 47.0
         assert m.default_steps == 100
-        e = get_spec(MODEL_EFFECTS_ID)
+        e = get_spec(LEGACY_MODEL_EFFECTS_ID)
         assert e.max_seconds == 11.0
         assert e.default_steps == 8
         assert e.default_sampler == "euler"

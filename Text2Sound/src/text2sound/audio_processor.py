@@ -154,10 +154,18 @@ def apply_seamless_loop_crossfade(
     """Apply equal-power crossfade between the end and start of audio for seamless looping.
 
     Blends the last ``crossfade_ms`` milliseconds with the first ``crossfade_ms``
-    milliseconds using cos²/sin² curves (RMS-preserving), then **drops the head**
-    that was folded into the tail: the loop region is ``audio[n:]``. At the wrap
-    point the blended tail has converged onto ``audio[n-1]`` and playback
-    restarts at ``audio[n]`` — sample-continuous.
+    milliseconds, then **drops the head** that was folded into the tail: the
+    loop region is ``audio[n:]``. At the wrap point the blended tail has
+    converged onto ``audio[n-1]`` and playback restarts at ``audio[n]`` —
+    sample-continuous.
+
+    As curvas são ``cos``/``sin`` em **amplitude** (equal-power): para material
+    não-correlacionado (head e tail de um loop são trechos musicais distintos,
+    corr ≈ 0.05 medido) a potência soma ``cos² + sin² = 1`` — constante. As
+    curvas ``cos²/sin²`` anteriores só preservam RMS para material
+    perfeitamente coerente; com material não-correlacionado a potência soma
+    ``cos⁴ + sin⁴`` → dip de -3 dB no meio da costura (medido: -12.9% de dip
+    com cos²/sin² vs +3.6% de bump suave com cos/sin).
 
     Keeping the original length instead (the previous behaviour) is audibly
     wrong: the first ``n`` samples play once at the start *and again* inside
@@ -183,8 +191,8 @@ def apply_seamless_loop_crossfade(
         return audio.clone()
 
     t = torch.linspace(0, torch.pi / 2, n, device=audio.device, dtype=audio.dtype)
-    fade_out = torch.cos(t) ** 2  # (n,)
-    fade_in = torch.sin(t) ** 2  # (n,)
+    fade_out = torch.cos(t)  # (n,)
+    fade_in = torch.sin(t)  # (n,)
 
     tail = audio[:, -n:]  # last n samples
     head = audio[:, :n]  # first n samples
@@ -195,6 +203,115 @@ def apply_seamless_loop_crossfade(
     result = audio[:, n:].clone()
     result[:, -n:] = crossfaded
     return result
+
+
+def seamless_generation_duration(
+    duration: float,
+    crossfade_ms: float,
+    loop_edge_trim_s: float,
+) -> float:
+    """Duração a **gerar** para o loop final medir exactamente ``duration``.
+
+    ``save_audio`` remove ``2x loop_edge_trim_s`` (intro/outro musicais) e o
+    fold do crossfade consome ``crossfade_ms`` (loop = gerado - 2·edge - xf).
+    Inverter a conta devolve o comprimento de geração que aterra em ``-d``
+    exacto — essencial para loops alinhados a compassos (ex.: 16 s = 8
+    compassos a 120 BPM; gerar só 16 s deixaria o loop em 15,5 s = 31 beats,
+    off-grid, deslocando o groove meio compasso por ciclo).
+    """
+    return float(duration) + float(crossfade_ms) / 1000.0 + 2.0 * max(0.0, float(loop_edge_trim_s))
+
+
+# Fold mínimo ao calcular o crossfade dinâmico (protege contra trims excessivos).
+_MIN_LOOP_FOLD_SECONDS = 0.15
+
+# Janela/limiar do tail trim adaptativo. Piso 75% (não 85%: a flutuação
+# natural de música orquestral é ±20% por janela; 85% parava em swells
+# dentro do decaimento). K janelas consecutivas acima do piso para parar —
+# um swell isolado dentro do outro não pode travar o corte.
+_ADAPTIVE_WINDOW_S = 0.25
+_ADAPTIVE_FLOOR_RATIO = 0.75
+_ADAPTIVE_CONSECUTIVE_OK = 3
+
+
+def _adaptive_tail_trim_samples(
+    audio: torch.Tensor,
+    sample_rate: int,
+    min_samples: int,
+    max_samples: int,
+    *,
+    window_s: float = _ADAPTIVE_WINDOW_S,
+    floor_ratio: float = _ADAPTIVE_FLOOR_RATIO,
+    consecutive_ok: int = _ADAPTIVE_CONSECUTIVE_OK,
+) -> int:
+    """Samples a cortar na **cauda** até o material ficar em steady-state.
+
+    O modelo condicionado por ``seconds_total`` compõe um other/outro (fade
+    musical) no fim da geração; um corte fixo deixa escapar material em
+    decaimento que no loop vira um dip de energia periódico (medido: cauda
+    17-50% abaixo do corpo em seeds com outro profundo). Avança janelas de
+    RMS a partir de ``min_samples`` enquanto a energia está abaixo de
+    ``floor_ratio`` x mediana — e só para após ``consecutive_ok`` janelas
+    seguidas acima do piso — com clamp a ``max_samples``.
+    """
+    if max_samples <= min_samples:
+        return min(min_samples, max_samples)
+    mono = audio.abs().max(dim=0).values
+    n = mono.shape[-1]
+    w = max(1, int(window_s * sample_rate))
+    med = mono.median()
+    floor = max(float(med) * floor_ratio, 1e-6)
+    pos = min_samples
+    streak = 0
+    while pos < max_samples:
+        seg = mono[n - pos - w : n - pos]
+        if seg.numel() == 0:
+            break
+        if float(seg.mean()) >= floor:
+            streak += 1
+            if streak >= consecutive_ok:
+                break
+        else:
+            streak = 0
+        pos += w
+    return min(pos, max_samples)
+
+
+def _shape_seamless_loop_exact(
+    audio: torch.Tensor,
+    sample_rate: int,
+    *,
+    loop_edge_trim_s: float,
+    crossfade_ms: float,
+    target_seconds: float,
+) -> torch.Tensor:
+    """Edge trim (cauda adaptativa) + fold que aterra em ``target_seconds``.
+
+    O corte de cabeça é fixo (intros curtas); o de cauda é adaptativo por
+    energia. O fold do crossfade absorve a diferença: ``fold = len - target``
+    (clampado a ≥ 50 ms), garantindo comprimento final exacto mesmo quando a
+    cauda adaptativa come mais do que o mínimo.
+    """
+    target_n = round(target_seconds * sample_rate)
+    total = audio.shape[-1]
+    min_fold = max(int(_MIN_LOOP_FOLD_SECONDS * sample_rate), 2)
+
+    head_edge = int(loop_edge_trim_s * sample_rate) if loop_edge_trim_s > 0 else 0
+    # Orçamento da cauda: manter pelo menos target + fold mínimo após os cortes.
+    max_tail = total - head_edge - target_n - min_fold
+    tail_edge = head_edge
+    if loop_edge_trim_s > 0 and max_tail > head_edge:
+        tail_edge = _adaptive_tail_trim_samples(audio, sample_rate, head_edge, max_tail)
+    elif loop_edge_trim_s > 0 and max_tail > 0:
+        tail_edge = min(head_edge, max_tail)
+
+    if total - head_edge - tail_edge > target_n:
+        audio = audio[:, head_edge : total - tail_edge]
+
+    fold_n = audio.shape[-1] - target_n
+    fold_n = min(max(fold_n, min_fold), audio.shape[-1] // 2)
+    fold_ms = fold_n / sample_rate * 1000.0
+    return apply_seamless_loop_crossfade(audio, sample_rate, crossfade_ms=fold_ms)
 
 
 # Bit-depth → soundfile subtype. 24-bit is only meaningful for lossless
@@ -389,6 +506,7 @@ def save_audio(
     seamless_loop: bool = False,
     crossfade_ms: float = 500.0,
     loop_edge_trim_s: float = 0.0,
+    loop_target_seconds: float | None = None,
     crop_seconds: float | None = None,
     fade_out_seconds: float = 0.06,
     # --- DSP mastering chain (pedalboard) ---
@@ -423,6 +541,11 @@ def save_audio(
         crossfade_ms: Crossfade duration in milliseconds (only used when seamless_loop=True).
         loop_edge_trim_s: Seconds of musical intro/outro removed from each edge
             before the loop crossfade (only used when seamless_loop=True).
+        loop_target_seconds: Comprimento FINAL exacto do loop (normalmente o
+            ``-d`` do CLI). Quando definido, o corte de bordas é adaptativo
+            (a cauda avança enquanto há material abaixo do limiar de energia)
+            e o fold do crossfade é calculado para aterrar exactamente neste
+            valor — loops alinhados a compassos.
         lufs_target: Target integrated LUFS (EBU R128). Ativa a cadeia de
             mastering e desativa o peak-normalize legacy.
         high_pass_hz: Filtro high-pass em Hz (None/0 = desligado).
@@ -451,13 +574,14 @@ def save_audio(
     if normalize and not mastering_active:
         audio = peak_normalize(audio)
 
-    if trim:
-        # For loops the buffer must be 0: it deliberately keeps up to
-        # ``trim_buffer_ms`` of below-threshold audio at each edge, and the
-        # loop crossfade would blend musical tail into near-silence — an
-        # audible dip every cycle.
-        effective_buffer_ms = 0 if seamless_loop else trim_buffer_ms
-        audio = trim_silence(audio, sample_rate, threshold_db=trim_threshold_db, buffer_ms=effective_buffer_ms)
+    if trim and not seamless_loop:
+        # Para loops NÃO corre trim de silêncio: com buffer 0 ele rapa uma
+        # fatia variável das bordas (medido: 87 ms num loop de 16 s) e parte
+        # a matemática de comprimento exacto; as bordas pertencem ao edge
+        # trim + fold, não ao trim de silêncio. O comentário histórico do
+        # buffer (misturar cauda musical com quase-silêncio) também se
+        # resolve aqui — não há trim nenhum no caminho de loop.
+        audio = trim_silence(audio, sample_rate, threshold_db=trim_threshold_db, buffer_ms=trim_buffer_ms)
 
     if crop_seconds is not None:
         audio = crop_to_duration(audio, sample_rate, crop_seconds, fade_out_seconds)
@@ -468,20 +592,27 @@ def save_audio(
         # the outro→intro wrap is an audible energy dip plus a repeated
         # intro transient every cycle. Cutting the musical edges keeps only
         # steady-state material for the loop.
-        if loop_edge_trim_s > 0:
-            edge = int(loop_edge_trim_s * sample_rate)
-            if audio.shape[-1] > edge * 3:
-                audio = audio[:, edge:-edge]
-        audio = apply_seamless_loop_crossfade(audio, sample_rate, crossfade_ms=crossfade_ms)
+        if loop_target_seconds is not None:
+            audio = _shape_seamless_loop_exact(
+                audio,
+                sample_rate,
+                loop_edge_trim_s=loop_edge_trim_s,
+                crossfade_ms=crossfade_ms,
+                target_seconds=loop_target_seconds,
+            )
+        else:
+            if loop_edge_trim_s > 0:
+                edge = int(loop_edge_trim_s * sample_rate)
+                if audio.shape[-1] > edge * 3:
+                    audio = audio[:, edge:-edge]
+            audio = apply_seamless_loop_crossfade(audio, sample_rate, crossfade_ms=crossfade_ms)
     elif apply_fade:
         audio = apply_edge_fade(audio, sample_rate)
 
     # Mastering chain runs AFTER shaping: LUFS/limiter must see the final
     # signal (post-trim, post-loop) to target and protect it correctly.
     if mastering_active or high_pass_hz or compressor_preset or true_peak_db is not None:
-        audio = apply_mastering_chain(
-            audio,
-            sample_rate,
+        chain_kwargs = dict(
             high_pass_hz=high_pass_hz,
             compressor_preset=compressor_preset,
             compressor_enabled=compressor_enabled,
@@ -489,6 +620,18 @@ def save_audio(
             true_peak_db=true_peak_db,
             headroom_db=headroom_db,
         )
+        if seamless_loop:
+            # Compressor/limiter são **stateful**: no início do ficheiro o
+            # envelope parte de zero e no fim está activo — a diferença de
+            # ganho quebra a costura do loop (jump no wrap 0.085 vs p99 0.043
+            # medido). Render em buffer dobrado (loop x2) e extrair a 2ª
+            # cópia: o estado no arranque herda o estado do fim → jump volta
+            # ao nível de um passo normal (0.010). LUFS integrado é idêntico
+            # sobre conteúdo duplicado.
+            half = audio.shape[-1]
+            audio = apply_mastering_chain(torch.cat([audio, audio], dim=1), sample_rate, **chain_kwargs)[:, half:]
+        else:
+            audio = apply_mastering_chain(audio, sample_rate, **chain_kwargs)
 
     output_path = output_path.with_suffix(f".{fmt}")
     output_path.parent.mkdir(parents=True, exist_ok=True)

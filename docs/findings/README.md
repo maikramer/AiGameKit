@@ -10,6 +10,7 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [OCTREE_FACES_FINDINGS.md](OCTREE_FACES_FINDINGS.md) | Empírico simple-rpg: faces ≈ 8×10⁴·char_m²; κ·octree² (κ≈5.5); por categoria |
 | [PAINT_PART_FINDINGS.md](PAINT_PART_FINDINGS.md) | Paint SDNQ/bake; Part3D; payload vramd |
 | [IMAGE_SKY_SOUND_FINDINGS.md](IMAGE_SKY_SOUND_FINDINGS.md) | Text2D, Skymap, audio trim, kernels |
+| [TEXT2SOUND_SA3_LOOP_FINDINGS.md](TEXT2SOUND_SA3_LOOP_FINDINGS.md) | BGM seamless SA3: equal-power, comprimento exacto, mastering dobrado |
 | [VIBEGAME_AUDIO_COMBAT_FINDINGS.md](VIBEGAME_AUDIO_COMBAT_FINDINGS.md) | Cull espacial, profiler Audio, SFX longos, melee impact 0.35 |
 | [VIBEGAME_SPAWN_GROUND_FINDINGS.md](VIBEGAME_SPAWN_GROUND_FINDINGS.md) | Chão: estáticos AABB; creatures CCT; anti-settle / anti-fudge Y |
 | [KERNEL_OPTS_FINDINGS.md](KERNEL_OPTS_FINDINGS.md) | compile / channels-last / flashvdm defaults |

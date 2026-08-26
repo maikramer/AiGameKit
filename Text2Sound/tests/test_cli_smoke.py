@@ -61,8 +61,8 @@ class TestCLISmoke:
     def test_info_command(self, runner):
         result = runner.invoke(cli, ["info"])
         assert result.exit_code == 0
-        assert "stable-audio-open-1.0" in result.output or "44100" in result.output
-        assert "open-small" in result.output or "Efeitos" in result.output
+        assert "stable-audio-3-small-music" in result.output or "44100" in result.output
+        assert "stable-audio-3-small-sfx" in result.output or "Efeitos" in result.output
 
     def test_skill_help(self, runner):
         result = runner.invoke(cli, ["skill", "--help"])
@@ -72,7 +72,7 @@ class TestCLISmoke:
 
 class TestGenerateValidation:
     def test_duration_too_high(self, runner):
-        result = runner.invoke(cli, ["generate", "test", "--duration", "100"])
+        result = runner.invoke(cli, ["generate", "test", "--duration", "500"])
         assert result.exit_code != 0
 
     def test_duration_too_low(self, runner):
@@ -100,11 +100,23 @@ class TestGenerateValidation:
                 "--profile",
                 "effects",
                 "--duration",
-                "12",
+                "45",
             ],
         )
         assert result.exit_code != 0
-        assert "11" in result.output or "excede" in result.output.lower()
+        assert "30" in result.output or "entre 0.5" in result.output.lower()
+
+    def test_music_sa3_defaults_applied(self, runner):
+        """Sem flags explícitas, o CLI adota os defaults SA3 (steps 8, cfg 1.0, pingpong)."""
+        result = runner.invoke(cli, ["generate", "epic battle theme", "--duration", "10"])
+        if result.exit_code == 0:
+            assert "pingpong" in result.output
+            assert "8" in result.output
+
+    def test_effects_model_is_sa3_sfx(self, runner):
+        result = runner.invoke(cli, ["generate", "laser", "--profile", "effects"])
+        if result.exit_code == 0:
+            assert "stable-audio-3-small-sfx" in result.output
 
     @pytest.mark.slow
     def test_effects_duration_ok_reaches_generate(self, runner):

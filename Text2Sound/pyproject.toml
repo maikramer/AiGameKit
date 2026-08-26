@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "text2sound"
 version = "0.1.0"
-description = "CLI Text-to-Audio com Stable Audio Open 1.0 — áudio estéreo 44.1 kHz"
+description = "CLI Text-to-Audio com Stable Audio 3 Small (music/sfx) — áudio estéreo 44.1 kHz"
 readme = "README.md"
 authors = [{ name = "Text2Sound Project" }]
 requires-python = ">=3.13,<3.14"

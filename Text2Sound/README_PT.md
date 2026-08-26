@@ -6,14 +6,27 @@ CLI para geração de áudio estéreo a 44.1 kHz a partir de prompts de texto, c
 
 | Uso | Modelo | Duração máx. | Comando |
 |-----|--------|----------------|---------|
-| Música / ambientes longos | [Stable Audio Open 1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) | ~47 s | `--profile music` (padrão) |
-| Efeitos / SFX curtos | [Stable Audio Open Small](https://huggingface.co/stabilityai/stable-audio-open-small) | ~11 s | `--profile effects` |
+| Música / ambientes longos | [Stable Audio 3 Small Music](https://huggingface.co/stabilityai/stable-audio-3-small-music) | até ~120 s (variável) | `--profile music` (padrão) |
+| Efeitos / SFX curtos | [Stable Audio 3 Small SFX](https://huggingface.co/stabilityai/stable-audio-3-small-sfx) | até ~30 s | `--profile effects` |
+
+Ambos usam por defeito `steps=8`, `cfg_scale=1.0`, sampler `pingpong` (difusão destilada — o guidance está cozido no modelo). Os checkpoints Stable Audio Open legados continuam via `--model open-1.0` / `--model open-small`.
+
+### Loops BGM seamless
+
+`--category humanoid` (ou qualquer audio_kind `music_loop`/`ambient_loop`) liga o pipeline completo de loop:
+
+- **Comprimento exacto `-d`** — o CLI gera `D + crossfade + 2×edge` e o save (edge trim + fold) aterra o loop final exactamente em `-d`. Pedir múltiplos de compasso (16 s = 8 compassos a 120 BPM) e incluir o BPM no prompt.
+- **Crossfade equal-power** (curvas `cos`/`sin`) — potência constante para material não-correlacionado (sem dip de −3 dB na costura).
+- **Tail trim adaptativo** — o SA3 compõe um outro musical no `seconds_total`; a cauda é cortada enquanto a energia está abaixo de 75% da mediana do corpo (reserve de 2,0 s por borda no `music_loop`).
+- **Mastering loop-safe** — o estado do compressor/limiter quebrava a costura; a cadeia renderiza em buffer dobrado e guarda a 2ª cópia.
+
+Overrides: `--seamless-loop --crossfade-ms --loop-edge-trim` (flags explícitas ganham). Medições: [`docs/findings/TEXT2SOUND_SA3_LOOP_FINDINGS.md`](../docs/findings/TEXT2SOUND_SA3_LOOP_FINDINGS.md).
 
 Ambos os repositórios podem ser **gated**: aceita os termos no Hub e define `HF_TOKEN`. **Stability AI Community License** (`LICENSE.md` em cada repo): pesquisa e uso não comercial; uso comercial com **teto de receita** (ver texto atual no repositório e [stability.ai/license](https://stability.ai/license)). Resumo: [AiGameKit/README_PT.md — Licenças](../README_PT.md).
 
 ## Funcionalidades
 
-- **Dois perfis** — `music` (Open 1.0, até ~47 s) e `effects` (Open Small, até ~11 s; defaults ~8 steps, CFG 1.0, sampler `pingpong`)
+- **Dois perfis** — `music` (SA3 Music, duração variável até ~120 s) e `effects` (SA3 SFX, até ~30 s; defaults 8 steps, CFG 1.0, sampler `pingpong`)
 - **Geração text-to-audio** — áudio estéreo conforme o modelo escolhido
 - **Presets para game dev** — ambient, battle, menu, footsteps, weather, UI, nature, dungeon, tavern, etc.
 - **Múltiplos formatos** — WAV, FLAC, OGG
@@ -71,8 +84,9 @@ text2sound generate "rain and thunder" --seed 42 --cfg-scale 8
 
 ### Modelo e aliases
 
-- **`--profile music`** (padrão): `stabilityai/stable-audio-open-1.0`
-- **`--profile effects`**: `stabilityai/stable-audio-open-small`
+- **`--profile music`** (padrão): `stabilityai/stable-audio-3-small-music`
+- **`--profile effects`**: `stabilityai/stable-audio-3-small-sfx`
+- Legado: `--model open-1.0` / `--model open-small`
 - **`--model`** tem prioridade sobre o perfil: aceita o ID HF completo ou aliases `music`, `full`, `effects`, `small`, `sfx`
 
 ```bash
@@ -160,7 +174,7 @@ Ambos os modelos são **gated**: aceitar termos no Hub e definir `HF_TOKEN` ante
 Text2Sound/
 ├── src/text2sound/
 │   ├── cli.py             # CLI Click (generate, batch, presets, info)
-│   ├── generator.py       # Pipeline Stable Audio Open
+│   ├── generator.py       # Pipeline Stable Audio (SA3 + Open legado)
 │   ├── presets.py         # Presets de áudio para game dev
 │   ├── audio_processor.py # Processamento de áudio (trim, etc.)
 │   └── utils.py           # Utilitários
@@ -208,4 +222,4 @@ pytest tests/ -v -m "not slow"
 ## Licença
 
 - **Código:** MIT — [LICENSE](LICENSE).
-- **Pesos:** [Stable Audio Open 1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0) e [Stable Audio Open Small](https://huggingface.co/stabilityai/stable-audio-open-small) — **Stability AI Community License** (aceitar no Hub; condições de uso comercial e limite de receita no `LICENSE.md` de cada repositório e em [stability.ai/license](https://stability.ai/license)).
+- **Pesos:** [Stable Audio 3 Small Music](https://huggingface.co/stabilityai/stable-audio-3-small-music) e [Stable Audio 3 Small SFX](https://huggingface.co/stabilityai/stable-audio-3-small-sfx) — **Stability AI Community License** (+ termos Gemma para o T5Gemma embutido) (aceitar no Hub; condições de uso comercial e limite de receita no `LICENSE.md` de cada repositório e em [stability.ai/license](https://stability.ai/license)).
