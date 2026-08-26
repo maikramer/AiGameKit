@@ -74,7 +74,7 @@ function makeCarPaint(color: number): THREE.MeshPhysicalMaterial {
     metalness: 0.15,
     clearcoat: 1,
     clearcoatRoughness: 0.08,
-    envMapIntensity: 1.15,
+    envMapIntensity: 1.35,
   });
 }
 

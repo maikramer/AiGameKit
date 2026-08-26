@@ -933,6 +933,13 @@ export function buildTrackMeshes(
     metalness: 0.02,
   });
   if (holo) (roadMat as THREE.MeshStandardMaterial).userData.holo = true;
+  // Wet-premium sheen: the sky IBL grazing-angle reflection is what sells
+  // "asphalt" from a chase camera — a touch more of it reads as freshly
+  // sealed tarmac, not a mirror (the surface-detail roughness map keeps the
+  // grain).
+  if (!holo) {
+    (roadMat as THREE.MeshStandardMaterial).envMapIntensity = 1.25;
+  }
   // Asphalt grain + polished wheel tracks. Without it the road is a flat
   // painted ribbon: the sun's specular lobe is identical over the whole
   // surface, which is exactly what plastic looks like. The holo theme keeps
