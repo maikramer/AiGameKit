@@ -15,6 +15,9 @@ import { DebugPlugin } from '../../plugins/debug/plugin';
 import { DefaultPlugins } from '../../plugins/defaults';
 import { RpgPlugins } from '../../plugins/rpg-bundle';
 import { SpawnGatePlugin } from '../../plugins/spawn-gate/plugin';
+import { IsometricCameraPlugin } from '../../plugins/isometric-camera/plugin';
+import { FarmPlotPlugin } from '../../plugins/farm-plot/plugin';
+import { DayCyclePlugin } from '../../plugins/daycycle/plugin';
 import type { AnalyzeIssue, AnalyzePluginSet } from './types';
 
 /** Containers / HTML noise — not recipes. */
@@ -45,7 +48,13 @@ const COMPOSITION_PRIMS = new Set([
 ]);
 
 /** Opt-in engine plugins with recipes used by examples (not in DefaultPlugins). */
-const EXTRA_ENGINE_PLUGINS = [SpawnGatePlugin, DebugPlugin];
+const EXTRA_ENGINE_PLUGINS = [
+  SpawnGatePlugin,
+  DebugPlugin,
+  IsometricCameraPlugin,
+  FarmPlotPlugin,
+  DayCyclePlugin,
+];
 
 export function buildAnalyzeState(pluginSet: AnalyzePluginSet = 'all'): State {
   const plugins =

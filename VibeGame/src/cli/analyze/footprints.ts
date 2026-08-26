@@ -6,7 +6,7 @@ import {
   parseAt,
   parseSemicolonPlaceString,
 } from '../../plugins/spawner/place-fields';
-import { resolveAssetPath } from './assets';
+import { resolveAssetPath, sharedAssetRoots } from './assets';
 import type { AnalyzeIssue, Footprint } from './types';
 
 const SOLID_PRIMS = new Set(['box', 'sphere', 'cylinder']);
@@ -140,7 +140,7 @@ async function glbBounds(
   issues: AnalyzeIssue[],
   label: string
 ): Promise<Bounds3 | null> {
-  const file = resolveAssetPath(publicDir, url);
+  const file = resolveAssetPath(publicDir, url, sharedAssetRoots(publicDir));
   if (!file) return null;
   const cacheKey = file;
   if (boundsCache.has(cacheKey)) return boundsCache.get(cacheKey)!;

@@ -57,17 +57,48 @@ function isRemoteUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
 
-/** Resolve site-root (`/…`) or relative path under publicDir. */
+/**
+ * Find the shared asset pool that serves this example, if there is one.
+ *
+ * Mirrors what `vibegame({ sharedAssets })` does at runtime: assets live once in
+ * `examples/shared-assets/public/assets` and every example reads them from there,
+ * so an offline analyze that only looked under the example's own `public/` would
+ * report every pooled GLB as missing.
+ */
+export function sharedAssetRoots(publicDir: string): string[] {
+  const roots: string[] = [];
+  let dir = path.resolve(publicDir);
+  for (let i = 0; i < 6; i++) {
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    const pool = path.join(parent, 'shared-assets', 'public');
+    if (pool !== path.resolve(publicDir) && existsSync(pool)) roots.push(pool);
+    dir = parent;
+  }
+  return roots;
+}
+
+/**
+ * Resolve site-root (`/…`) or relative path under publicDir.
+ *
+ * `extraRoots` are searched when the example itself does not ship the file —
+ * the example always wins, exactly like the dev-server middleware.
+ */
 export function resolveAssetPath(
   publicDir: string,
-  url: string
+  url: string,
+  extraRoots: readonly string[] = []
 ): string | null {
   const t = url.trim();
   if (!t || isRemoteUrl(t)) return null;
-  if (t.startsWith('/')) {
-    return path.join(publicDir, t.replace(/^\//, ''));
+  const rel = t.startsWith('/') ? t.replace(/^\//, '') : t;
+  const primary = path.join(publicDir, rel);
+  if (existsSync(primary)) return primary;
+  for (const root of extraRoots) {
+    const candidate = path.join(root, rel);
+    if (existsSync(candidate)) return candidate;
   }
-  return path.join(publicDir, t);
+  return primary;
 }
 
 /** `foo_lod1.glb` → `foo_lod0.glb` path string, or null if not a lodN (N≥1) name. */
@@ -84,7 +115,8 @@ export function lod0SiblingUrl(url: string): string | null {
  */
 export function checkAssetUrls(
   root: ParsedElement,
-  publicDir: string
+  publicDir: string,
+  extraRoots: readonly string[] = sharedAssetRoots(publicDir)
 ): AnalyzeIssue[] {
   const issues: AnalyzeIssue[] = [];
   const seen = new Set<string>();
@@ -95,7 +127,7 @@ export function checkAssetUrls(
     const key = `${attr}:${url}`;
     if (seen.has(key)) return;
     seen.add(key);
-    const file = resolveAssetPath(publicDir, url);
+    const file = resolveAssetPath(publicDir, url, extraRoots);
     if (!file) return;
     if (existsSync(file)) return;
     const lod = isLodSecondary(attr);
@@ -128,7 +160,7 @@ export function checkAssetUrls(
 
     const lod0 = lod0SiblingUrl(url);
     if (!lod0) return;
-    const lod0Path = resolveAssetPath(publicDir, lod0);
+    const lod0Path = resolveAssetPath(publicDir, lod0, extraRoots);
     if (!lod0Path || !existsSync(lod0Path)) return;
     issues.push({
       severity: 'warn',
@@ -143,7 +175,12 @@ export function checkAssetUrls(
     const tag = el.tagName;
     for (const attr of URL_ATTRS) {
       const url = attrStr(el.attributes[attr]);
-      if (url) checkUrl(url, attr, tag);
+      if (!url) continue;
+      // HUD `icon` accepts emoji/text as well as paths — same convention as
+      // isIconImagePath (shared.ts): only path-like values are assets.
+      if (attr === 'icon' && !/\.(png|jpe?g|webp|svg|gif)$/i.test(url))
+        continue;
+      checkUrl(url, attr, tag);
     }
     for (const attr of URL_LIST_ATTRS) {
       const raw = attrStr(el.attributes[attr]);

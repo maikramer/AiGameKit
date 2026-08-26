@@ -1,6 +1,10 @@
 import type { Plugin } from 'vite';
 import { vibegameForceFullReload } from './force-full-reload';
 import { vibegamePublicLiveServe } from './public-live-serve';
+import {
+  type SharedAssetsOptions,
+  vibegameSharedAssets,
+} from './shared-assets';
 import { silenceTyprOpentypeNoise } from './silence-typr';
 import { mergeWatchIgnored } from './watch-ignored';
 
@@ -14,9 +18,23 @@ const OPTIMIZE_DEPS_EXCLUDE = [
   '@dimforge/rapier3d',
 ] as const;
 
-export function vibegame(): Plugin[] {
+export interface VibegameOptions {
+  /**
+   * Asset pool shared by every example (`examples/shared-assets/public/assets`).
+   * Served after the example's own `public/` misses, and copied into the build —
+   * one pool, no symlinks and no duplicated binaries per example.
+   */
+  sharedAssets?: SharedAssetsOptions | string;
+}
+
+export function vibegame(options: VibegameOptions = {}): Plugin[] {
+  const shared =
+    typeof options.sharedAssets === 'string'
+      ? { dir: options.sharedAssets }
+      : options.sharedAssets;
   return [
     vibegamePublicLiveServe(),
+    ...(shared ? [vibegameSharedAssets(shared)] : []),
     silenceTyprOpentypeNoise(),
     {
       name: 'vibegame',
@@ -55,6 +73,16 @@ export { vibegameAssetHotReload } from './hot-reload';
 export { initWorldHotReload } from './world-hmr-client';
 export { vibegameWorldHmr } from './world-hmr';
 export { vibegamePublicLiveServe } from './public-live-serve';
+export {
+  collectSharedFiles,
+  DEFAULT_SHARED_EXCLUDE,
+  DEFAULT_SHARED_PREFIXES,
+  isSharedAssetUrl,
+  resolveSharedAsset,
+  type SharedAssetsOptions,
+  sharedAssetsMiddleware,
+  vibegameSharedAssets,
+} from './shared-assets';
 export { silenceTyprOpentypeNoise } from './silence-typr';
 export {
   mergeWatchIgnored,
