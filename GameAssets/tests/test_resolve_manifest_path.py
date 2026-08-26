@@ -54,3 +54,54 @@ def test_resolve_with_subdirectory(tmp_path: Path) -> None:
     (sub / "manifest.desert.yaml").write_text("assets: []", encoding="utf-8")
     resolved = _resolve_manifest_path(sub / "manifest.desert")
     assert resolved == sub / "manifest.desert.yaml"
+
+
+class TestManifestOutputDirIsRelativeToManifest:
+    """``output_dir`` resolve-se contra a pasta do **manifest**, não do perfil.
+
+    Regressão dos packs partilhados: `shared-assets/manifests/*.yaml` traziam
+    `output_dir: public/assets` (herdado de um layout em que o manifest vivia à
+    raiz), o que apontava para `manifests/public/assets`. Resultado: `resume`
+    classificava os 24 assets como `need_image` e o happy path do README
+    regenerava tudo do zero em vez de fazer skip.
+    """
+
+    @staticmethod
+    def _row():
+        from gameassets.manifest import ManifestRow
+
+        return ManifestRow(id="chapel", idea="a chapel", kind="environment", generate_3d=True)
+
+    def test_output_dir_walks_up_from_manifest_subdir(self, tmp_path: Path) -> None:
+        from gameassets.paths import _paths_for_row_manifest
+        from gameassets.profile import GameProfile
+
+        profile = GameProfile(
+            title="t",
+            genre="g",
+            tone="t",
+            style_preset="painterly",
+            output_dir="../public/assets",
+            images_subdir="images/village",
+            meshes_subdir="meshes/village",
+            image_ext="png",
+        )
+        img, mesh = _paths_for_row_manifest(profile, tmp_path / "manifests", self._row())
+        assert img == (tmp_path / "public/assets/images/village/chapel.png").resolve()
+        assert mesh == (tmp_path / "public/assets/meshes/village/chapel.glb").resolve()
+
+    def test_bare_output_dir_stays_under_the_manifest_dir(self, tmp_path: Path) -> None:
+        from gameassets.paths import _paths_for_row_manifest
+        from gameassets.profile import GameProfile
+
+        profile = GameProfile(
+            title="t",
+            genre="g",
+            tone="t",
+            style_preset="painterly",
+            output_dir="public/assets",
+            images_subdir="images",
+            image_ext="png",
+        )
+        img, _mesh = _paths_for_row_manifest(profile, tmp_path / "manifests", self._row())
+        assert img == (tmp_path / "manifests/public/assets/images/chapel.png").resolve()
