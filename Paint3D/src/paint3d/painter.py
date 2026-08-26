@@ -849,7 +849,7 @@ def apply_hunyuan_paint(
                     f"input AABB (antes do pipeline): min={bounds_min_before.tolist()} max={bounds_max_before.tolist()}"
                 )
             # Cascas internas: topology-fix (shape→clean) antes do paint.
-            save_glb(mesh, mesh_in)
+            save_glb(mesh, mesh_in, verify_stage="to_paint")
 
             if isinstance(image, (str, Path)):
                 shutil.copy2(image, ref_path)
@@ -900,9 +900,22 @@ def apply_hunyuan_paint(
             _preflight_paint_model(model_repo, subfolder, verbose=verbose)
             pipe = Hunyuan3DPaintPipeline(config)
             # Skip inpaint em ilhas UV nunca baked (cascas internas / occlusas).
-            from .paint_prep import install_bake_supersampling, install_restricted_inpaint
+            from .paint_prep import (
+                apply_top_view_weight,
+                check_reference_image,
+                install_bake_supersampling,
+                install_depth_bias,
+                install_restricted_inpaint,
+            )
 
-            install_restricted_inpaint(pipe.view_processor)
+            apply_top_view_weight(config, logger=_logger)
+            # Referência cinzenta (blockout / text2d falhado) => asset escuro.
+            check_reference_image(ref_path, logger=_logger)
+
+            install_restricted_inpaint(pipe.view_processor, logger=_logger)
+            # Bake depth bias: recupera os texels visíveis que a tolerância fixa
+            # do back_sample rejeita como auto-oclusão (bake salpicado).
+            install_depth_bias(pipe.render, logger=_logger)
             # Bake supersampled: subdiv SIMPLE só no bake para precisão por-texel.
             install_bake_supersampling(pipe.render, logger=_logger)
 
@@ -1213,9 +1226,19 @@ class PaintBatchProcessor:
         with profile_span("paint_load_pipeline"):
             _preflight_paint_model(self._model_repo, self._subfolder, verbose=self._verbose)
             pipe = Hunyuan3DPaintPipeline(config)
-            from .paint_prep import install_bake_supersampling, install_restricted_inpaint
+            from .paint_prep import (
+                apply_top_view_weight,
+                install_bake_supersampling,
+                install_depth_bias,
+                install_restricted_inpaint,
+            )
 
-            install_restricted_inpaint(pipe.view_processor)
+            apply_top_view_weight(config, logger=_logger)
+
+            install_restricted_inpaint(pipe.view_processor, logger=_logger)
+            # Bake depth bias: recupera os texels visíveis que a tolerância fixa
+            # do back_sample rejeita como auto-oclusão (bake salpicado).
+            install_depth_bias(pipe.render, logger=_logger)
             install_bake_supersampling(pipe.render, logger=_logger)
 
         with profile_span("paint_optimize_pipeline"):
@@ -1339,12 +1362,16 @@ class PaintBatchProcessor:
 
             with profile_span("paint_batch_prepare_io"):
                 bounds_min_before, bounds_max_before = _get_combined_bounds(mesh)
-                save_glb(mesh, mesh_in)
+                save_glb(mesh, mesh_in, verify_stage="to_paint")
                 if isinstance(image, (str, Path)):
                     shutil.copy2(image, ref_path)
                 else:
                     im = image.convert("RGB") if image.mode != "RGB" else image
                     im.save(ref_path)
+                # Referência cinzenta (blockout / text2d falhado) => asset escuro.
+                from .paint_prep import check_reference_image
+
+                check_reference_image(ref_path, logger=_logger)
 
             with profile_span("paint_batch_inference", sync_cuda=True), torch.no_grad():
                 self._pipe(

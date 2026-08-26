@@ -311,6 +311,42 @@ def vertex_coords(mesh: Any) -> Any:
     return co.reshape(-1, 3)
 
 
+def signed_volume(mesh: Any) -> float:
+    """Volume assinado do mesh (teorema da divergência), vetorizado.
+
+    Positivo quando as faces estão com winding para fora. Em malhas abertas ou
+    fragmentadas (marching cubes) o valor é aproximado, mas o **sinal** continua
+    a ser um indicador fiável de qual lado é o exterior.
+
+    Args:
+        mesh: ``bpy.types.Mesh``.
+
+    Returns:
+        Volume assinado em unidades locais ao cubo; ``0.0`` se não há triângulos.
+    """
+    import numpy as np
+
+    mesh.calc_loop_triangles()
+    n_tris = len(mesh.loop_triangles)
+    if n_tris == 0 or len(mesh.vertices) == 0:
+        return 0.0
+    idx = np.empty(n_tris * 3, dtype=np.int32)
+    mesh.loop_triangles.foreach_get("vertices", idx)
+    tri = vertex_coords(mesh)[idx.reshape(-1, 3)]
+    return float(np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2])).sum() / 6.0)
+
+
+def flip_normals(obj: Any) -> None:
+    """Inverte o winding de todas as faces do objeto."""
+    import bpy
+
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.flip_normals()
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
 def mesh_v_per_tri(mesh: Any) -> float | None:
     """V/Tri de um mesh bpy em O(1) (sem iterar polígonos).
 

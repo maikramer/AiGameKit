@@ -26,11 +26,19 @@ def _merge_duplicates_bmesh(obj, threshold: float = _MERGE_THRESHOLD) -> None:
     logging.getLogger("paint3d.save_glb").info("bmesh merge: %d → %d verts", before, before - removed)
 
 
-def save_glb(objects, output_path: str | Path) -> Path:
+def save_glb(objects, output_path: str | Path, *, verify_stage: str = "painted") -> Path:
     """Exporta mesh objects via ``aigamekit_shared.bpy_mesh.save_glb``.
 
     Mesmo contrato que Text3D/Rigging/Animator: shade-smooth + NORMAL+TANGENT
     + JPEG. Merge de duplicados só quando há UVs (costuras de atlas).
+
+    Args:
+        objects: Objecto(s) bpy a exportar.
+        output_path: GLB de saída.
+        verify_stage: Estágio para o ``glb_verify``. A mesma função escreve o
+            **input** do paint (ainda sem UVs — o unwrap é feito dentro do
+            pipeline), e verificá-lo como ``painted`` dava um ERROR ``NO_UV``
+            que não é erro nenhum. Nesse caso passar ``"to_paint"``.
     """
     if not isinstance(objects, (list, tuple)):
         objects = [objects]
@@ -51,7 +59,7 @@ def save_glb(objects, output_path: str | Path) -> Path:
         export_normals=True,
         export_tangents=True,
         export_image_format="JPEG",
-        verify_stage="painted",
+        verify_stage=verify_stage,
     )
     return Path(output_path)
 

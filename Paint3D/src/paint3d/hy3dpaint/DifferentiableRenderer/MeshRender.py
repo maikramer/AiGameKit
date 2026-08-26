@@ -391,6 +391,18 @@ class MeshRender:
         self.max_mip_level = max_mip_level
         self.filter_mode = filter_mode
         self.bake_angle_thres = 85
+        # Tolerância do teste de profundidade do back_sample (ver back_project).
+        # Defaults = comportamento upstream (slope=0 -> tolerância constante);
+        # o Paint3D liga o slope via paint_prep.install_depth_bias.
+        self.depth_bias_base = 3e-3
+        self.depth_bias_slope = 0.0
+        self.depth_bias_max = 0.08
+        # Remap vértice-de-posição -> vértice-de-UV, só usado pelo bake_mode
+        # "mip-map". Upstream lê-o sem nunca o definir (AttributeError); None
+        # significa "índices coincidem". Nota: esse modo também exige
+        # shader_type="vertex" — com o default "face" o vertex_normals que ele
+        # usa nem chega a existir. bake_mode="back_sample" é o caminho testado.
+        self.vtx_map = None
         self.set_boundary_unreliable_scale(2)
         self.bake_mode = bake_mode
         self.shader_type = shader_type
@@ -1312,9 +1324,23 @@ class MeshRender:
             v_z = v_proj[:, 2]
 
             sampled_w = cos_image.reshape(-1)[indices]
-            depth_thres = 3e-3
 
-            # valid_idx = torch.where((torch.abs(v_z - sampled_z) < depth_thres) * (sampled_m*sampled_w>0))[0]
+            # Tolerância de profundidade escalada pelo declive (shadow-map bias).
+            # ``sampled_z`` vem do pixel *mais próximo* do raster: numa superfície
+            # de topo à câmara esse pixel descreve bem a profundidade do texel, mas
+            # numa quase de perfil cobre muita profundidade e o texel é rejeitado
+            # como auto-oclusão — o bake sai salpicado e o resto vira inpaint.
+            # Relaxar só onde o declive é grande recupera essa área sem aceitar
+            # superfícies genuinamente escondidas atrás de geometria de topo.
+            depth_thres = self.depth_bias_base
+            tex_normal = getattr(self, "tex_normal", None)
+            if self.depth_bias_slope > 0 and tex_normal is not None:
+                rot = torch.from_numpy(r_mv[:3, :3]).to(tex_normal)
+                cos_texel = (tex_normal @ rot.T)[:, 2].abs().clamp(min=1e-2)
+                depth_thres = (self.depth_bias_base + self.depth_bias_slope * (1.0 / cos_texel - 1.0)).clamp(
+                    max=self.depth_bias_max
+                )
+
             valid_idx = torch.where((torch.abs(v_z - sampled_z) < depth_thres) & (sampled_m * sampled_w > 0))[0]
 
             intersection_mask = torch.isin(valid_idx, inner_valid_idx)

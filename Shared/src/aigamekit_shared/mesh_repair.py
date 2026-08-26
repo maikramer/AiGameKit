@@ -216,15 +216,50 @@ def triangulate(obj: Any) -> None:
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
-def normals_consistent(obj: Any, inside: bool = False) -> None:
-    """Recalcula normais consistentes (outward por defeito)."""
+# Abaixo deste volume assinado (relativo ao cubo da bbox) a malha é demasiado
+# aberta/plana para o sinal significar alguma coisa — não se força orientação.
+OUTWARD_VOLUME_EPS = 1e-3
+
+
+def normals_consistent(obj: Any, inside: bool = False, *, enforce_outward: bool = True) -> None:
+    """Recalcula normais consistentes (outward por defeito).
+
+    O ``normals_make_consistent`` do Blender decide o "fora" por ray casting.
+    Numa malha marching-cubes com centenas de ilhas e cascas interiores esse
+    heurístico pode escolher o lado errado e inverter a malha **inteira** — o
+    ``back_project`` do paint zera então o ``cos_map`` de quase tudo e o bake
+    colapsa (shepherd_cottage: 97.7% da área invertida → 16.9% de bake trust,
+    contra 45-62% dos irmãos). O volume assinado diz qual é o lado certo, por
+    isso confirma-se e desfaz-se a inversão quando é o caso.
+
+    Args:
+        obj: Objecto MESH do Blender.
+        inside: Recalcular para dentro (desliga a guarda de orientação).
+        enforce_outward: Verificar o volume assinado e inverter se ficou ao contrário.
+    """
     import bpy
+
+    from aigamekit_shared.bpy_mesh import flip_normals, signed_volume
 
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.mesh.normals_make_consistent(inside=inside)
     bpy.ops.object.mode_set(mode="OBJECT")
+
+    if inside or not enforce_outward:
+        return
+
+    vol = signed_volume(obj.data)
+    dims = getattr(obj, "dimensions", None)
+    scale = max((dims[0] * dims[1] * dims[2]) if dims else 0.0, 1e-12)
+    if vol < -OUTWARD_VOLUME_EPS * scale:
+        log.warning(
+            "normals_make_consistent inverteu '%s' (volume assinado %.3f) — a repor winding para fora",
+            getattr(obj, "name", "?"),
+            vol,
+        )
+        flip_normals(obj)
 
 
 def dissolve_degenerate(obj: Any, threshold: float = 1e-6) -> None:
