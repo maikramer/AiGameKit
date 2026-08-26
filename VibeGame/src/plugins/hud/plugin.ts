@@ -35,6 +35,16 @@ import {
   waypointArrowParser,
   waypointArrowRecipe,
 } from './widgets/waypoint-arrow';
+import {
+  hotbarParser,
+  hotbarRecipe,
+  registerHotbarWidgetFactory,
+} from './widgets/hotbar';
+import {
+  registerStatBarWidgetFactory,
+  statBarParser,
+  statBarRecipe,
+} from './widgets/stat-bar';
 
 const minimapRecipe: Recipe = {
   name: 'Minimap',
@@ -83,6 +93,8 @@ export const HudPlugin: Plugin = {
     tabbedModalRecipe,
     minimapRecipe,
     waypointArrowRecipe,
+    hotbarRecipe,
+    statBarRecipe,
     ...coreWidgetRecipes,
   ],
   components: {
@@ -94,6 +106,8 @@ export const HudPlugin: Plugin = {
     if (typeof document === 'undefined') return;
     createHudScreenLayer(state);
     registerMinimapWidgetFactory();
+    registerHotbarWidgetFactory();
+    registerStatBarWidgetFactory();
   },
   config: {
     defaults: {
@@ -121,6 +135,8 @@ export const HudPlugin: Plugin = {
       Minimap: minimapParser,
       InteractionPrompt: interactionPromptParser,
       WaypointArrow: waypointArrowParser,
+      Hotbar: hotbarParser,
+      StatBar: statBarParser,
       TabbedModal: tabbedModalParser,
       ...coreWidgetParsers,
     },

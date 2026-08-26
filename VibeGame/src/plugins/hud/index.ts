@@ -189,3 +189,32 @@ export type { InventoryTabConfig } from './widgets/inventory-tab';
 export { createWikiTab, parseWikiPage } from './widgets/wiki-tab';
 export type { WikiTabConfig } from './widgets/wiki-tab';
 export type { TabContent, TabDescriptor } from './widgets/tabbed-modal-shared';
+export { createHudSlot } from './widgets/slot';
+export type { HudSlot, HudSlotSpec } from './widgets/slot';
+export {
+  createHotbarWidget,
+  getHotbarActive,
+  hotbarEdgeSlot,
+  hotbarFactory,
+  hotbarParser,
+  hotbarRecipe,
+  HOTBAR_KEYS,
+  HOTBAR_TAG,
+  HOTBAR_WIDGET_TYPE,
+  onHotbarActivate,
+  registerHotbarWidgetFactory,
+  setHotbarActive,
+  setHotbarSlots,
+} from './widgets/hotbar';
+export type { HotbarActivateListener, HotbarSlotSpec } from './widgets/hotbar';
+export {
+  createStatBarWidget,
+  getHudStatSource,
+  registerHudStatSource,
+  statBarFactory,
+  statBarParser,
+  statBarRecipe,
+  STATBAR_TAG,
+  STATBAR_WIDGET_TYPE,
+} from './widgets/stat-bar';
+export type { HudStatSource, HudStatValue } from './widgets/stat-bar';
