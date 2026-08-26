@@ -1,0 +1,36 @@
+# Cultures du vale — definitions consumed by the farm-plot plugin (kind: crop).
+# Keys are crop ids; `seasons` are daycycle Season numbers (0 spring … 3 winter).
+crop:
+  turnip:
+    seasons: [0, 1]
+    seedItemId: seed_turnip
+    yieldItemId: turnip
+    yieldMin: 1
+    yieldMax: 3
+    daysPerStage: [1, 2]
+    regrowDays: 0
+    witherAfterDays: 2
+    stageHeights: [0.12, 0.32, 0.5]
+    color: 0x9ecf5a
+  tomato:
+    seasons: [0, 1, 2]
+    seedItemId: seed_tomato
+    yieldItemId: tomato
+    yieldMin: 2
+    yieldMax: 2
+    daysPerStage: [1, 2, 2]
+    regrowDays: 2
+    witherAfterDays: 0
+    stageHeights: [0.15, 0.35, 0.55, 0.75]
+    color: 0xc94f42
+  potato:
+    seasons: [0, 1]
+    seedItemId: seed_potato
+    yieldItemId: potato
+    yieldMin: 1
+    yieldMax: 4
+    daysPerStage: [2, 2, 1]
+    regrowDays: 0
+    witherAfterDays: 3
+    stageHeights: [0.1, 0.28, 0.46, 0.6]
+    color: 0xb7c98a

@@ -1,0 +1,68 @@
+# Bag items and prices for the farm economy. `item` feeds the engine
+# InventoryComponent (stacking/labels); `price` feeds buyItem/sellItem.
+# Seeds cost gold at the market stall; produce sells back at a profit per
+# harvest (yieldMin..yieldMax per crop, see crops.yaml).
+item:
+  wood:
+    name: Wood
+    icon: 🪵
+    maxStack: 99
+    tags: [material]
+  stone:
+    name: Stone
+    icon: 🪨
+    maxStack: 99
+    tags: [material]
+  berry:
+    name: Berries
+    icon: 🫐
+    maxStack: 99
+    tags: [material, produce]
+  ore:
+    name: Ore
+    icon: ⛏️
+    maxStack: 99
+    tags: [material]
+  seed_turnip:
+    name: Turnip Seeds
+    icon: 🌱
+    maxStack: 99
+    tags: [seed]
+  seed_tomato:
+    name: Tomato Seeds
+    icon: 🌿
+    maxStack: 99
+    tags: [seed]
+  seed_potato:
+    name: Potato Seeds
+    icon: 🫘
+    maxStack: 99
+    tags: [seed]
+  turnip:
+    name: Turnip
+    icon: 🥬
+    maxStack: 99
+    tags: [produce]
+  tomato:
+    name: Tomato
+    icon: 🍅
+    maxStack: 99
+    tags: [produce]
+  potato:
+    name: Potato
+    icon: 🥔
+    maxStack: 99
+    tags: [produce]
+
+price:
+  # Materiais colhidos: só se vendem, não se compram.
+  wood: { buy: 0, sell: 4 }
+  stone: { buy: 0, sell: 6 }
+  berry: { buy: 0, sell: 9 }
+  ore: { buy: 0, sell: 18 }
+  seed_turnip: { buy: 20, sell: 8 }
+  seed_tomato: { buy: 30, sell: 12 }
+  seed_potato: { buy: 25, sell: 10 }
+  turnip: { buy: 0, sell: 60 }
+  tomato: { buy: 0, sell: 55 }
+  potato: { buy: 0, sell: 45 }

@@ -1,0 +1,73 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+
+  Relief comes from the heightmap alone. There are no terraces: the previous
+  version abutted four <TerrainPad> plateaux with falloff="0.6", i.e. a ~2 m
+  step over 0.6 m (~75°), well past the CharacterController's 45° limit — four
+  islands joined by three staircases. gen_terrain.py now shapes the zones
+  directly and keeps every interior slope under ~17°.
+
+  world-size MUST match the "worldSize" in farm_valley.ahgt's metadata (512):
+  ahgt-loader.ts ignores this attribute and uses the file's, so a mismatch makes
+  the mesh read the wrong slice of the field (the old 256 read the centre
+  quarter).
+
+  levels=5 over 512 m at resolution=128 → 4 m base lattice. Features narrower
+  than that never reach the mesh unless a pad/road stamps a density boost.
+
+  Only two pads survive, both with a wide falloff so their rim stays walkable.
+-->
+<Terrain
+  pos="0 0 0"
+  world-size="512"
+  max-height="40"
+  levels="5"
+  resolution="128"
+  collision-resolution="64"
+  height-smoothing="1"
+  height-smoothing-spread="1.2"
+  lod-hysteresis="1.3"
+  lod-distance-ratio="1.7"
+  skirt-width="0.015625"
+  roughness="0.9"
+  metalness="0"
+  normal-strength="1.3"
+  base-color="#8cb866"
+  texture="/assets/textures/vale_grass.png"
+  ao-strength="1.15"
+  height-blend-strength="0.35"
+  noise-sand-strength="0"
+  slope-threshold="0.62"
+  slope-softness="0.28"
+  color-low="#3f5c28"
+  color-mid="#7fae57"
+  color-high="#94bb6a"
+  color-rock="#8a7a5c"
+  heightmap="/assets/terrain/farm_valley.ahgt"
+></Terrain>
+
+<!--
+  Town floor. Wide falloff (18 m) keeps the approach ramp at ~7°, so the pad
+  edge is walkable from every direction instead of being a kerb.
+-->
+<TerrainPad
+  at="0 0"
+  size="96 96"
+  falloff="18"
+  corner-radius="14"
+></TerrainPad>
+
+<!--
+  Farm plot floor, west of town. height is explicit because <FarmPlot base-y>
+  is an absolute Y and the tile grid must sit exactly on the pad. 11 m is the
+  local ground here (gen_terrain: ~10.7), so the falloff ramp is a few
+  centimetres over 10 m — invisible, and nothing like a kerb.
+-->
+<TerrainPad
+  at="-86 6"
+  size="60 46"
+  height="11"
+  falloff="10"
+  corner-radius="8"
+></TerrainPad>

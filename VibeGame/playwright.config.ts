@@ -10,6 +10,8 @@ const FLOAT_HARNESS_PORT = 30989;
 const FLOAT_HARNESS_ORIGIN = `http://127.0.0.1:${FLOAT_HARNESS_PORT}`;
 const MINIMAP_HARNESS_PORT = 30988;
 const MINIMAP_HARNESS_ORIGIN = `http://127.0.0.1:${MINIMAP_HARNESS_PORT}`;
+const FARM_DEV_PORT = 30987;
+const FARM_DEV_ORIGIN = `http://127.0.0.1:${FARM_DEV_PORT}`;
 
 /**
  * Modo CDP (browser já em execução com depuração remota):
@@ -134,6 +136,13 @@ export default defineConfig({
           url: MINIMAP_HARNESS_ORIGIN,
           reuseExistingServer: !process.env.CI,
           timeout: 60_000,
+        },
+        {
+          command: `BROWSER=none npx vite dev --host 127.0.0.1 --port ${FARM_DEV_PORT} --strictPort`,
+          cwd: 'examples/simple-farm',
+          url: FARM_DEV_ORIGIN,
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
         },
       ],
 });

@@ -2,7 +2,7 @@
 
 <!-- LLM:OVERVIEW -->
 
-Shipped examples in this repository: **hello-world** (minimal terrain + physics + deterministic placement), **simple-rpg** (full AiGameKit pipeline demo, Crystal Vale), and **simple-racer** (racing plugin + shared Vale packs). Shared GameAssets packs (forest/village/infra/terrain/props manifests + binaries) live in [`shared-assets/`](shared-assets/README.md).
+Shipped examples in this repository: **hello-world** (minimal terrain + physics + deterministic placement), **simple-rpg** (full AiGameKit pipeline demo, Crystal Vale), **simple-racer** (racing plugin + shared Vale packs), and **simple-farm** (isometric Harvest-Moon-style farming: till→plant→water→sleep→harvest→sell). Shared GameAssets packs (forest/village/infra/terrain/props manifests + binaries) live in [`shared-assets/`](shared-assets/README.md).
 <!-- /LLM:OVERVIEW -->
 
 ## Purpose
@@ -16,7 +16,7 @@ Shipped examples in this repository: **hello-world** (minimal terrain + physics 
 ```
 examples/
 ├── context.md          # This file
-├── shared-assets/      # Crystal Vale shared packs: manifests + binaries + sync.sh
+├── shared-assets/      # Crystal Vale shared packs: manifests + binaries (single pool, served via vibegame({ sharedAssets }))
 ├── shared/             # TS helpers (i18n, HUD) — not GLBs
 ├── hello-world/        # Minimal: terrain, dynamic body, <GameObject place="…">
 │   ├── context.md
@@ -29,12 +29,17 @@ examples/
 │   ├── index.html
 │   ├── src/main.ts
 │   ├── public/assets/  # After handoff / batch
-│   └── sample-gameassets/  # game.yaml + manifests (shared packs = symlinks)
-└── simple-racer/       # Racing plugin; Vale carts + copied RPG scenery
-    ├── PROGRESS.md
-    ├── index.html
-    ├── src/
-    └── sample-gameassets/
+│   └── sample-gameassets/  # game.yaml + game-specific manifests (pack manifests live in shared-assets/)
+├── simple-racer/       # Racing plugin; Vale carts + copied RPG scenery
+│   ├── PROGRESS.md
+│   ├── index.html
+│   ├── src/
+│   └── sample-gameassets/
+└── simple-farm/        # Isometric farming loop (farm-plot + daycycle plugins)
+    ├── index.html      # World includes + <IsometricCamera>
+    ├── src/main.ts     # Boot, plugins, debug/QA actions
+    ├── src/game/       # Game layer: tools, stamina, sleep, shop, FarmGameSystem
+    └── public/world/   # environment/terrain/farm/village/vegetation/hud XML
 ```
 
 ## Deterministic terrain placement (entity-centric)

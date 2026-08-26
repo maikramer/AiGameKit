@@ -1,0 +1,178 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+
+  Four destinations, one per zone, each at the end of an artery from paths.xml.
+  They exist to give the roads a reason and the horizon a silhouette; keep the
+  count low so the map reads as "town + wilderness", not a theme park.
+
+  Each carries a SpawnExclusion so the forest/quarry/meadow scatters leave it
+  legible. Exclusions are honoured even by spawners with avoid-overlaps="0"
+  (occupancy.ts) — that is why the dense carpets do not swallow them.
+-->
+<Group name="landmarks" pos="0 0 0">
+  <!-- ── North: the deep-wood hut, end of the forest road ─────────────── -->
+  <SpawnExclusion at="34 152" radius="16"></SpawnExclusion>
+
+  <GameObject
+    name="poi.witch_hut"
+    place="at: 34 152; align-to-terrain: 1"
+    rot="0 -155 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/forest/witch_hut_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/forest/witch_hut_lod0.glb"
+      lod1-url="/assets/meshes/forest/witch_hut_lod1.glb"
+      lod2-url="/assets/meshes/forest/witch_hut_lod2.glb"
+      lod-threshold-near="42"
+      lod-threshold-mid="115"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="poi.witch_cauldron" place="at: 40 148; align-to-terrain: 1">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/interiors/cauldron_iron_lod0.glb"
+      lod1-url="/assets/meshes/interiors/cauldron_iron_lod1.glb"
+      lod2-url="/assets/meshes/interiors/cauldron_iron_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="poi.witch_brazier" place="at: 28 147; align-to-terrain: 1">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/iron_brazier_lod0.glb"
+      lod1-url="/assets/meshes/village/iron_brazier_lod1.glb"
+      lod2-url="/assets/meshes/village/iron_brazier_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <!-- ── South-east: the mine mouth, end of the quarry road ───────────── -->
+  <SpawnExclusion at="160 -126" radius="18"></SpawnExclusion>
+
+  <GameObject
+    name="poi.mine"
+    place="at: 160 -126; align-to-terrain: 1"
+    rot="0 135 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/terrain/crystal_mine_entrance_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/terrain/crystal_mine_entrance_lod0.glb"
+      lod1-url="/assets/meshes/terrain/crystal_mine_entrance_lod1.glb"
+      lod2-url="/assets/meshes/terrain/crystal_mine_entrance_lod2.glb"
+      lod-threshold-near="44"
+      lod-threshold-mid="120"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="poi.mine_crate" place="at: 154 -120; align-to-terrain: 1" rot="0 30 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="poi.mine_barrel" place="at: 166 -120; align-to-terrain: 1">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="poi.mine_cairn" place="at: 148 -132; align-to-terrain: 1">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/terrain/stone_cairn_lod0.glb"
+      lod1-url="/assets/meshes/terrain/stone_cairn_lod1.glb"
+      lod2-url="/assets/meshes/terrain/stone_cairn_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <!-- ── South-west: the lake shore, end of the meadow road ───────────── -->
+  <SpawnExclusion at="-86 -128" radius="14"></SpawnExclusion>
+
+  <GameObject name="poi.shore_fire" place="at: -86 -128; align-to-terrain: 1">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/campfire_pit_lod0.glb"
+      lod1-url="/assets/meshes/village/campfire_pit_lod1.glb"
+      lod2-url="/assets/meshes/village/campfire_pit_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="poi.shore_bench" place="at: -91 -126; align-to-terrain: 1" rot="0 62 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_bench_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_bench_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="poi.shore_boat" place="at: -78 -134; align-to-terrain: 1" rot="0 -40 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/swamp/wrecked_boat_lod0.glb"
+      lod1-url="/assets/meshes/swamp/wrecked_boat_lod1.glb"
+      lod2-url="/assets/meshes/swamp/wrecked_boat_lod2.glb"
+      lod-threshold-near="34"
+      lod-threshold-mid="95"
+    ></GLTFLoader>
+  </GameObject>
+
+  <!-- ── West: the standing stones above the fields ───────────────────── -->
+  <SpawnExclusion at="-128 72" radius="15"></SpawnExclusion>
+
+  <GameObject
+    name="poi.altar"
+    place="at: -128 72; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/terrain/druid_stone_altar_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/terrain/druid_stone_altar_lod0.glb"
+      lod1-url="/assets/meshes/terrain/druid_stone_altar_lod1.glb"
+      lod2-url="/assets/meshes/terrain/druid_stone_altar_lod2.glb"
+      lod-threshold-near="38"
+      lod-threshold-mid="105"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="poi.altar_arch" place="at: -136 78; align-to-terrain: 1" rot="0 25 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/terrain/form_arch_3_lod0.glb"
+      lod1-url="/assets/meshes/terrain/form_arch_3_lod1.glb"
+      lod2-url="/assets/meshes/terrain/form_arch_3_lod2.glb"
+      lod-threshold-near="42"
+      lod-threshold-mid="115"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="poi.altar_cairn_a" place="at: -121 78; align-to-terrain: 1">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/terrain/stone_cairn_lod0.glb"
+      lod1-url="/assets/meshes/terrain/stone_cairn_lod1.glb"
+      lod2-url="/assets/meshes/terrain/stone_cairn_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="poi.altar_cairn_b" place="at: -124 65; align-to-terrain: 1">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/terrain/stone_cairn_lod0.glb"
+      lod1-url="/assets/meshes/terrain/stone_cairn_lod1.glb"
+      lod2-url="/assets/meshes/terrain/stone_cairn_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+</Group>

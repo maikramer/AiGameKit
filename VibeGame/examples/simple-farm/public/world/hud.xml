@@ -1,0 +1,38 @@
+<!--
+  HUD e menu de pausa. Nada aqui conhece o terreno nem a quinta: o <Hotbar> é
+  alimentado pelo game layer (setHotbarSlots) e o <StatBar stat="stamina">
+  lê a fonte registada por registerHudStatSource.
+-->
+<HudScreenLayer>
+  <Clock></Clock>
+  <StatBar
+    stat="stamina"
+    icon="⚡"
+    color="#ffd166"
+    label="Stamina"
+    position="top-left"
+  ></StatBar>
+  <Hotbar position="bottom-center"></Hotbar>
+
+  <InteractionPrompt
+    key="J"
+    range="3.2"
+    position="bottom-center"
+  ></InteractionPrompt>
+
+  <!-- Menu de pausa: mesmo TabbedModal do simple-rpg/simple-racer, mas aberto
+       com [Esc] em vez de [Q] — aqui Q/E rodam a câmara isométrica.
+       `preset="core"` traz música/sfx/qualidade e as linhas save/load são
+       encaminhadas pelo wireOptions (src/main.ts). -->
+  <TabbedModal id="pause" key="escape" title-key="modal.pause">
+    <OptionsTab label-key="modal.tab.options" preset="core">
+      <OptionRow id="save" type="button" label-key="options.save"></OptionRow>
+      <OptionRow id="load" type="button" label-key="options.load"></OptionRow>
+      <OptionRow
+        id="controls"
+        type="note"
+        label-key="options.controls"
+      ></OptionRow>
+    </OptionsTab>
+  </TabbedModal>
+</HudScreenLayer>

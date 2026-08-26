@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simple Farm — VibeGame</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #0b1410;
+        font-family:
+          system-ui,
+          -apple-system,
+          Arial,
+          sans-serif;
+      }
+
+      #game-canvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      #controls-hint {
+        position: fixed;
+        left: 12px;
+        bottom: 12px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: rgba(8, 18, 12, 0.55);
+        color: #cfe8d4;
+        font-size: 12px;
+        letter-spacing: 0.2px;
+        pointer-events: none;
+        user-select: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!--
+      simple-farm — isometric Harvest-Moon-style farming valley.
+
+      Structural contracts (do not "tidy" these away):
+        * <PlayerGLTF> and the camera recipe are `merge: true` — they MUST stay
+          top-level, never nested inside a <Group>.
+        * <Terrain> is also `merge: true` and merges into its parent, so the
+          "world-base" group MUST stay at pos="0 0 0"; moving it lifts the whole
+          terrain field.
+        * Include order matters: environment → terrain (pads carve the height
+            field) → water (carves after pads) → paths (roads carve after water)
+            → farm/village/homestead/landmarks (props sample the carved ground)
+            → vegetation (spawners read the final ground + all exclusions).
+      -->
+    <Scene
+      canvas="#game-canvas"
+      sky="#a8d8f0"
+      resume-audio-on-user-gesture="true"
+    >
+      <Include src="/world/environment.xml"></Include>
+
+      <PlayerGLTF
+        name="player"
+        pos="0 40 18"
+        model-url="/assets/meshes/characters/hero_lod0.glb"
+      ></PlayerGLTF>
+      <SpawnGate target-entity="player" y-fallback="40"></SpawnGate>
+
+      <Group name="world-base" pos="0 0 0">
+        <Include src="/world/terrain.xml"></Include>
+      </Group>
+
+      <!--
+        Order is a contract (spawner/context.md:180): pads carve, then water,
+        then roads, then props sample the finished ground, and vegetation last
+        so its spawners see every SpawnExclusion. Spawning earlier makes props
+        float or sink.
+      -->
+      <Include src="/world/water.xml"></Include>
+      <Include src="/world/paths.xml"></Include>
+      <Include src="/world/town.xml"></Include>
+      <Include src="/world/farm.xml"></Include>
+      <Include src="/world/landmarks.xml"></Include>
+      <Include src="/world/forest.xml"></Include>
+      <Include src="/world/quarry.xml"></Include>
+      <Include src="/world/meadow.xml"></Include>
+
+      <!--
+        True isometric: orthographic projection, pitch pinned at atan(1/√2),
+        yaw locked to the four 45°-offset quadrants. Q/E rotate 90°, the wheel
+        zooms. WASD stays screen-relative because the player plugin reads this
+        camera's yaw (see resolveCameraYaw).
+      -->
+      <IsometricCamera
+        ortho-size="14"
+        distance="46"
+        min-ortho-size="9"
+        max-ortho-size="26"
+        follow-lag="0.14"
+        turn-lag="0.22"
+        offset-y="0.9"
+      ></IsometricCamera>
+
+      <Include src="/world/hud.xml"></Include>
+    </Scene>
+
+    <canvas id="game-canvas"></canvas>
+    <div id="controls-hint">
+      WASD mover · Q/E rodar câmara · roda do rato zoom · 1-6 ferramentas · J
+      usar/interagir · Espaço saltar · Esc pausa
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

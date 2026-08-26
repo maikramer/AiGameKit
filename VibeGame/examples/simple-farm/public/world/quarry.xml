@@ -1,0 +1,209 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+
+  South-east rock field. gen_terrain.py already raises and roughens this corner
+  (a broad shoulder plus 45 m-wavelength noise), so the props sit on ground that
+  reads as broken rather than on a lawn with boulders dropped on it.
+
+  max-slope-deg is deliberately high here (60-68): rocks are the one thing that
+  should cling to the steep shoulders. Note the slope test re-draws a new random
+  position up to max-slope-attempts times and then simply omits the instance, so
+  actual counts on steep ground land below `count`.
+-->
+<Group name="quarry" pos="0 0 0">
+  <!-- Sparse dry grass — the quarry should read as bare compared to the wood. -->
+  <Vegetation
+    meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatShort.glb"
+    density-per-km2="90000"
+    seed="7301"
+    region-min="46 0 -240"
+    region-max="240 0 -24"
+    scale-min="1.0"
+    scale-max="1.9"
+    max-slope-deg="34"
+    avoid-water="1"
+    avoid-road="1"
+    avoid-overlaps="0"
+    max-distance="100"
+    cluster-count="70"
+    cluster-radius="11"
+    plant-density-ratio="0.30"
+    flower-density-ratio="0.05"
+    smart="1"
+    wind="1"
+    random-yaw="true"
+    variation="foliage"
+  ></Vegetation>
+
+  <!-- Harvestable stone: the main reason to come here. -->
+  <StaticSpawner
+    profile="tree"
+    count="900"
+    seed="7307"
+    region-min="46 0 -240"
+    region-max="240 0 -24"
+    pick-strategy="random"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    avoid-road="1"
+    max-slope-deg="65"
+    max-slope-attempts="48"
+    scale-min="0.8"
+    scale-max="2.4"
+    avoid-overlaps="1"
+    footprint-radius="1.8"
+    cluster-count="30"
+    cluster-radius="28"
+    max-distance="220"
+    scale-axis-min="0.85"
+    scale-axis-max="1.2"
+    random-yaw="true"
+    variation="rock"
+  >
+    <GameObject
+      role="static"
+      script="rock.ts"
+      destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/props/rock_mossy_lod0.glb"
+        lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+        lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+        lod-threshold-near="36"
+        lod-threshold-mid="95"
+      ></GLTFLoader>
+      <ResourceNode kind="stone" yield="4" respawn="240"></ResourceNode>
+    </GameObject>
+
+    <GameObject
+      role="static"
+      script="rock.ts"
+      destructible="popup-text: Stone; popup-color: #b8b0a4; preset: dust; burst-count: 22; hits: 4; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/swamp/moss_rock_lod0.glb"
+        lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb"
+        lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb"
+        lod-threshold-near="36"
+        lod-threshold-mid="95"
+      ></GLTFLoader>
+      <ResourceNode kind="stone" yield="5" respawn="300"></ResourceNode>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- Big silhouettes: scenery only, they give the field its skyline. -->
+  <StaticSpawner
+    profile="tree"
+    count="260"
+    seed="7311"
+    region-min="56 0 -236"
+    region-max="238 0 -30"
+    pick-strategy="random"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    avoid-road="1"
+    max-slope-deg="60"
+    max-slope-attempts="40"
+    scale-min="0.9"
+    scale-max="2.2"
+    avoid-overlaps="1"
+    footprint-radius="3.2"
+    cluster-count="16"
+    cluster-radius="30"
+    max-distance="240"
+    random-yaw="true"
+    variation="rock"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/terrain/form_stack_6_lod0.glb"
+        lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb"
+        lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb"
+        lod-threshold-near="40"
+        lod-threshold-mid="110"
+      ></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/terrain/form_stack_11_lod0.glb"
+        lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb"
+        lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb"
+        lod-threshold-near="40"
+        lod-threshold-mid="110"
+      ></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/terrain/form_outcrop_2_lod0.glb"
+        lod1-url="/assets/meshes/terrain/form_outcrop_2_lod1.glb"
+        lod2-url="/assets/meshes/terrain/form_outcrop_2_lod2.glb"
+        lod-threshold-near="40"
+        lod-threshold-mid="110"
+      ></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/terrain/form_outcrop_8_lod0.glb"
+        lod1-url="/assets/meshes/terrain/form_outcrop_8_lod1.glb"
+        lod2-url="/assets/meshes/terrain/form_outcrop_8_lod2.glb"
+        lod-threshold-near="40"
+        lod-threshold-mid="110"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- Cliffs frame the far corner. -->
+  <StaticSpawner
+    profile="tree"
+    count="40"
+    seed="7317"
+    region-min="150 0 -240"
+    region-max="242 0 -90"
+    pick-strategy="random"
+    align-to-terrain="1"
+    ground-align="auto"
+    max-slope-deg="70"
+    max-slope-attempts="48"
+    scale-min="1.4"
+    scale-max="3.0"
+    avoid-overlaps="1"
+    footprint-radius="4.5"
+    max-distance="250"
+    random-yaw="true"
+    variation="rock"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/terrain/form_cliff_1_lod0.glb"
+        lod1-url="/assets/meshes/terrain/form_cliff_1_lod1.glb"
+        lod2-url="/assets/meshes/terrain/form_cliff_1_lod2.glb"
+        lod-threshold-near="55"
+        lod-threshold-mid="140"
+      ></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/terrain/form_cliff_20_lod0.glb"
+        lod1-url="/assets/meshes/terrain/form_cliff_20_lod1.glb"
+        lod2-url="/assets/meshes/terrain/form_cliff_20_lod2.glb"
+        lod-threshold-near="55"
+        lod-threshold-mid="140"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+</Group>

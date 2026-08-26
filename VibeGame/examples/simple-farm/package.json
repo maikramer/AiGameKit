@@ -1,0 +1,19 @@
+{
+  "name": "vibegame-example-simple-farm",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint:world": "node ../../scripts/vibegame-cli.mjs analyze index.html --public-dir public --scripts-dir src/scripts --plugins all --fail-on error"
+  },
+  "dependencies": {
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.1.0"
+  }
+}

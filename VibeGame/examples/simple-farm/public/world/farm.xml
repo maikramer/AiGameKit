@@ -1,0 +1,117 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+
+  COORDINATE GOTCHA — `at` on <FarmPlot> is the centre of cell (0,0), not the
+  centre of the grid (farm-plot/grid.ts:4-5). With cell-size 1 and size 24x18
+  the tiles run from at → at + (23, 17). The old world declared at="0 10" and
+  then drew a SpawnExclusion r=15.5 around (0,10), which left the far corner of
+  the plot (x=23.5) outside the exclusion — vegetation spawned on the crops.
+
+  Here the grid is centred on the farm pad at (-86, 6):
+      at = (-86, 6) - (23/2, 17/2) = (-97.5, -2.5)
+      tiles span x ∈ [-98, -74], z ∈ [-3, 15]
+  The exclusion is centred on the real grid centre with a radius that clears
+  the half-diagonal (√(12² + 9²) = 15) plus the yard.
+
+  base-y must equal the pad height in terrain.xml (11).
+-->
+<Group name="farm" pos="0 0 0">
+  <FarmPlot
+    at="-97.5 -2.5"
+    size="24 18"
+    cell-size="1"
+    base-y="11"
+  ></FarmPlot>
+
+  <SpawnExclusion at="-86 6" radius="30"></SpawnExclusion>
+
+  <!-- Barn yard, north edge of the pad and clear of the tiles. -->
+  <GameObject
+    name="farm.barn"
+    place="at: -92 24; align-to-terrain: 0"
+    rot="0 180 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/village/village_barn_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/village_barn_lod0.glb"
+      lod1-url="/assets/meshes/village/village_barn_lod1.glb"
+      lod2-url="/assets/meshes/village/village_barn_lod2.glb"
+      lod-threshold-near="46"
+      lod-threshold-mid="125"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject
+    name="farm.house"
+    place="at: -66 20; align-to-terrain: 0"
+    rot="0 -120 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/village/village_house_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/village_house_lod0.glb"
+      lod1-url="/assets/meshes/village/village_house_lod1.glb"
+      lod2-url="/assets/meshes/village/village_house_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="farm.log_pile" place="at: -86 20; align-to-terrain: 0" rot="0 40 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/log_pile_lod0.glb"
+      lod1-url="/assets/meshes/village/log_pile_lod1.glb"
+      lod2-url="/assets/meshes/village/log_pile_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="farm.chopping" place="at: -82 22; align-to-terrain: 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/chopping_block_lod0.glb"
+      lod1-url="/assets/meshes/village/chopping_block_lod1.glb"
+      lod2-url="/assets/meshes/village/chopping_block_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="farm.trough" place="at: -100 18; align-to-terrain: 0" rot="0 90 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/quench_trough_lod0.glb"
+      lod1-url="/assets/meshes/village/quench_trough_lod1.glb"
+      lod2-url="/assets/meshes/village/quench_trough_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="farm.crate" place="at: -70 12; align-to-terrain: 0" rot="0 -18 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="farm.barrel" place="at: -72 15; align-to-terrain: 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="farm.torch" place="at: -78 -6; align-to-terrain: 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+</Group>

@@ -1,0 +1,40 @@
+# Hotbar tools (kind: tool). `action` selects what [J] does on the facing
+# farm tile; seed tools additionally bind `cropId` (plant which) and
+# `seedItemId` (which bag item is consumed).
+tool:
+  hoe:
+    name: Hoe
+    icon: ⛏️
+    color: '#c68d54'
+    action: till
+  can:
+    name: Watering Can
+    icon: 💧
+    color: '#5ab7ff'
+    action: water
+  turnip_seeds:
+    name: Turnip Seeds
+    icon: 🌱
+    color: '#9ecf5a'
+    action: plant
+    cropId: turnip
+    seedItemId: seed_turnip
+  tomato_seeds:
+    name: Tomato Seeds
+    icon: 🌿
+    color: '#c94f42'
+    action: plant
+    cropId: tomato
+    seedItemId: seed_tomato
+  potato_seeds:
+    name: Potato Seeds
+    icon: 🫘
+    color: '#b7c98a'
+    action: plant
+    cropId: potato
+    seedItemId: seed_potato
+  hand:
+    name: Basket
+    icon: 🧺
+    color: '#ffd166'
+    action: hand

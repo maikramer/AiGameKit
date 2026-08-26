@@ -1,0 +1,200 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+
+  Open south/south-west: tall grass, flowers, a few lone trees and the lake
+  shore. This is the "breathing" zone between the town and the map edge — the
+  carpet is the densest on the map but there is almost nothing solid in it, so
+  it costs very little.
+
+  Lone trees here are harvestable too: a player who never leaves the meadow
+  should still be able to gather wood.
+-->
+<Group name="meadow" pos="0 0 0">
+  <Vegetation
+    meshes="/assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb"
+    density-per-km2="400000"
+    seed="7401"
+    region-min="-240 0 -240"
+    region-max="40 0 -24"
+    scale-min="1.4"
+    scale-max="2.8"
+    max-slope-deg="36"
+    avoid-water="1"
+    avoid-road="1"
+    avoid-overlaps="0"
+    max-distance="120"
+    cluster-count="170"
+    cluster-radius="10"
+    flower-near-radius="5.2"
+    flower-density-ratio="0.38"
+    plant-density-ratio="0.42"
+    smart="1"
+    wind="1"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="foliage"
+  ></Vegetation>
+
+  <!-- West flank of the town, between farm and meadow. -->
+  <Vegetation
+    meshes="/assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_yellowA.glb"
+    density-per-km2="280000"
+    seed="7403"
+    region-min="-240 0 -24"
+    region-max="-46 0 44"
+    scale-min="1.3"
+    scale-max="2.4"
+    max-slope-deg="36"
+    avoid-water="1"
+    avoid-road="1"
+    avoid-overlaps="0"
+    max-distance="110"
+    cluster-count="90"
+    cluster-radius="9"
+    plant-density-ratio="0.36"
+    flower-density-ratio="0.24"
+    smart="1"
+    wind="1"
+    random-yaw="true"
+    variation="foliage"
+  ></Vegetation>
+
+  <!-- Scattered oaks — sparse enough to keep the horizon open. -->
+  <StaticSpawner
+    profile="tree"
+    count="300"
+    seed="7407"
+    region-min="-234 0 -234"
+    region-max="34 0 -30"
+    pick-strategy="random"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    avoid-road="1"
+    max-slope-deg="36"
+    scale-min="0.9"
+    scale-max="1.6"
+    avoid-overlaps="1"
+    footprint-radius="4.2"
+    cluster-count="14"
+    cluster-radius="38"
+    max-distance="200"
+    random-yaw="true"
+    variation="tree"
+  >
+    <GameObject
+      role="static"
+      script="tree.ts"
+      destructible="popup-text: Wood; popup-color: #6b4a2b; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/forest/tree_oak_lod0.glb"
+        lod1-url="/assets/meshes/forest/tree_oak_lod1.glb"
+        lod2-url="/assets/meshes/forest/tree_oak_lod2.glb"
+        lod-threshold-near="34"
+        lod-threshold-mid="95"
+      ></GLTFLoader>
+      <ResourceNode kind="wood" yield="3" respawn="180"></ResourceNode>
+    </GameObject>
+
+    <GameObject
+      role="static"
+      script="tree.ts"
+      destructible="popup-text: Dry Wood; popup-color: #6a5a44; preset: dust; burst-count: 18; hits: 2; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 10; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.6"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: precompute; mesh-url: /assets/meshes/forest/dead_tree_lod0.glb"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/forest/dead_tree_lod0.glb"
+        lod1-url="/assets/meshes/forest/dead_tree_lod1.glb"
+        lod2-url="/assets/meshes/forest/dead_tree_lod2.glb"
+        lod-threshold-near="32"
+        lod-threshold-mid="90"
+      ></GLTFLoader>
+      <ResourceNode kind="wood" yield="2" respawn="150"></ResourceNode>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- Reeds hugging the lake and the lower river. in-water is off; these want
+       the damp margin, not the water itself. -->
+  <StaticSpawner
+    profile="foliage"
+    count="500"
+    seed="7411"
+    region-min="-160 0 -200"
+    region-max="30 0 -96"
+    pick-strategy="random"
+    align-to-terrain="1"
+    ground-align="auto"
+    near-water="1"
+    max-slope-deg="30"
+    scale-min="1.3"
+    scale-max="2.6"
+    avoid-overlaps="0"
+    cluster-count="40"
+    cluster-radius="10"
+    max-distance="100"
+    random-yaw="true"
+    variation="foliage"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/vegetation/plant_flatTall.glb"
+      ></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/vegetation/grass_leafsLarge.glb"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- A few boulders so the meadow is not entirely soft. -->
+  <StaticSpawner
+    profile="tree"
+    count="180"
+    seed="7417"
+    region-min="-230 0 -230"
+    region-max="30 0 -36"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    avoid-road="1"
+    max-slope-deg="45"
+    scale-min="0.7"
+    scale-max="1.6"
+    avoid-overlaps="1"
+    footprint-radius="1.8"
+    cluster-count="12"
+    cluster-radius="26"
+    max-distance="140"
+    random-yaw="true"
+    variation="rock"
+  >
+    <GameObject
+      role="static"
+      script="rock.ts"
+      destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/props/rock_mossy_lod0.glb"
+        lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+        lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+        lod-threshold-near="36"
+        lod-threshold-mid="95"
+      ></GLTFLoader>
+      <ResourceNode kind="stone" yield="3" respawn="240"></ResourceNode>
+    </GameObject>
+  </StaticSpawner>
+</Group>

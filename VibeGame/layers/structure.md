@@ -68,12 +68,19 @@ vibegame/
 │   │   ├── index.html
 │   │   ├── package.json
 │   │   └── vite.config.ts
-│   └── simple-rpg/  # Full AiGameKit pipeline demo + handoff
-│       ├── README.md
+│   ├── simple-rpg/  # Full AiGameKit pipeline demo + handoff
+│   │   ├── README.md
+│   │   ├── index.html
+│   │   ├── src/main.ts
+│   │   ├── public/assets/
+│   │   └── sample-gameassets/  # perfis batch (binários em public/assets/)
+│   ├── simple-racer/  # Racing plugin demo; Vale carts + shared packs
+│   └── simple-farm/   # Isometric Harvest-Moon-style farming loop
 │       ├── index.html
-│       ├── src/main.ts
-│       ├── public/assets/
-│       └── sample-gameassets/  # perfis batch (binários em public/assets/)
+│       ├── src/main.ts        # boot + plugins + game layer wiring
+│       ├── src/game/          # tools/stamina/sleep/shop game systems
+│       ├── public/world/      # environment/terrain/farm/village/vegetation XML
+│       └── public/data/       # crops/items/tools YAML (DataRegistry)
 ├── layers/
 │   ├── structure.md  # Project-level context (Tier 1)
 │   ├── context-template.md  # Template for context files
@@ -138,6 +145,8 @@ All plugins under `src/plugins/*/plugin.ts` (see registry). Related modules with
 | 8   | composition       | CompositionPlugin                                                                 |
 | 9   | debug             | DebugPlugin                                                                       |
 | 10  | destructible      | DestructiblePlugin                                                                |
+| 10b | daycycle          | DayCyclePlugin (day/night calendar driving sky + ambient; `<Clock>` widget)       |
+| 10c | farm-plot         | FarmPlotPlugin (`<FarmPlot>` tile grid, crops, instanced field render)            |
 | 11  | entity-script     | EntityScriptPlugin                                                                |
 | 12  | floating-text     | FloatingTextPlugin                                                                |
 | 13  | gltf-anim         | GltfAnimPlugin                                                                    |
@@ -146,6 +155,7 @@ All plugins under `src/plugins/*/plugin.ts` (see registry). Related modules with
 | 16  | hud               | HudPlugin (+ `HudRpgPlugin` in `hud/rpg-plugin.ts`)                               |
 | 17  | i18n              | I18nPlugin                                                                        |
 | 18  | input             | InputPlugin                                                                       |
+| 18b | isometric-camera  | IsometricCameraPlugin (true isometric ortho rig; Q/E quadrants, wheel zoom)       |
 | 19  | loading           | LoadingPlugin                                                                     |
 | 20  | navmesh           | NavMeshPlugin                                                                     |
 | 21  | orbit-camera      | OrbitCameraPlugin                                                                 |
@@ -169,7 +179,7 @@ All plugins under `src/plugins/*/plugin.ts` (see registry). Related modules with
 | 39  | rpg-vault         | RpgVaultPlugin                                                                    |
 | 40  | save-load         | SaveLoadPlugin                                                                    |
 | 41  | sky               | SkyPlugin (EquirectSky + procedural Sky)                                          |
-| 41b | world-border      | WorldBorderPlugin                                                                |
+| 41b | world-border      | WorldBorderPlugin                                                                 |
 | 42  | spawn-gate        | SpawnGatePlugin                                                                   |
 | 43  | spawn-variation   | helpers (`resolveVariationSpec`, presets) — used by spawner / vegetation / nature |
 | 44  | spawner           | SpawnerPlugin                                                                     |

@@ -5,6 +5,7 @@
 ## dist/ (build outputs) are excluded.
 check-no-deep-imports:
 	@matches=$$(grep -rn "\.\./\.\./\.\./src/" examples/ \
+		--include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
 		--exclude-dir=node_modules --exclude-dir=dist 2>/dev/null); \
 	if [ -n "$$matches" ]; then \
 		echo "ERROR: examples must not deep-import from ../../src/ (use 'vibegame' barrel):"; \

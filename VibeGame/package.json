@@ -118,7 +118,7 @@
     "build:release": "bun scripts/prepare.ts && vite build && vite build --config vite.config.cdn.ts",
     "dev": "vite build --watch",
     "check": "node ./node_modules/typescript/bin/tsc --noEmit && bun run check:examples",
-    "check:examples": "node ./node_modules/typescript/bin/tsc --noEmit -p examples/simple-rpg/tsconfig.json && node ./node_modules/typescript/bin/tsc --noEmit -p examples/simple-racer/tsconfig.json && node ./node_modules/typescript/bin/tsc --noEmit -p examples/hello-world/tsconfig.json",
+    "check:examples": "node ./node_modules/typescript/bin/tsc --noEmit -p examples/simple-rpg/tsconfig.json && node ./node_modules/typescript/bin/tsc --noEmit -p examples/simple-racer/tsconfig.json && node ./node_modules/typescript/bin/tsc --noEmit -p examples/hello-world/tsconfig.json && node ./node_modules/typescript/bin/tsc --noEmit -p examples/simple-farm/tsconfig.json",
     "example": "bun run build && cd examples/hello-world && bun run dev",
     "clean": "node scripts/clean.mjs",
     "format": "prettier --write .",

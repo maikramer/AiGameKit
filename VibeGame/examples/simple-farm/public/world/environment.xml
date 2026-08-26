@@ -1,0 +1,69 @@
+<!--
+  Céu, luz, pós-processamento e clima. Toda a "cara" do vale está aqui —
+  nada neste ficheiro conhece a quinta.
+
+  O <DayCycle> escreve `sun-elevation`/`sun-azimuth` do <Sky> (quantizados a
+  2° — o ProceduralSkySystem refaz o PMREM a cada mudança) e faz o ramp da
+  luz ambiente. Os valores no <Sky> são só o instante inicial (06:00).
+-->
+<Group name="environment" pos="0 0 0">
+  <!-- Céu procedural de Preetham. `drive-light="1"` faz o sol reescrever a
+       direção e a cor da primeira luz direcional da cena — céu, sombras e
+       IBL partilham um único sol. -->
+  <Sky
+    sun-elevation="30"
+    sun-azimuth="45"
+    turbidity="2.6"
+    rayleigh="1.4"
+    mie-coefficient="0.004"
+    mie-directional-g="0.84"
+    cloud-coverage="0.28"
+    cloud-density="0.3"
+    cloud-elevation="0.6"
+    environment-intensity="0.62"
+    sun-intensity="2.1"
+    drive-light="1"
+  ></Sky>
+
+  <!-- Dia de ~20 minutos (1.2 min/s), amanhecer 05:00, anoitecer 20:00,
+       acordar às 06:00. Calendário Harvest Moon: 28 dias × 4 estações. -->
+  <DayCycle
+    minute-of-day="360"
+    minutes-per-real-second="1.2"
+    days-per-season="28"
+    wake-minute="360"
+    dawn-minute="300"
+    dusk-minute="1200"
+    sun-azimuth-base="135"
+    max-sun-elevation="62"
+    min-sun-elevation="30"
+    sky-step-deg="2"
+    drive-sky="1"
+    drive-ambient="1"
+  ></DayCycle>
+
+  <!-- Luz + pós-processamento no MESMO GameObject: é assim que a entidade
+       Postprocessing nasce. Um atributo `postprocessing=` no próprio <Scene>
+       é ignorado (o runtime só parseia o innerHTML do Scene).
+
+       SSR fica DESLIGADO de propósito: reflection-pass.ts faz cast para
+       THREE.PerspectiveCamera e este exemplo corre com câmara ortográfica. -->
+  <GameObject
+    ambient-light="sky-color: 0xc6ddf0; ground-color: 0x8a9c68; intensity: 0.55"
+    directional-light="cast-shadow: 1; shadow-map-size: 2048; distance: 130; pcss: 1"
+    postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.14; bloom-radius: 0.5; bloom-threshold: 8.0; aa: smaa; tone-mapping: aces; tone-mapping-exposure: 0.98; vignette: 1; vignette-offset: 0.34; vignette-darkness: 0.26; color-grading: 1; saturation: 0.14; contrast: 0.08; brightness: 0.0; ssao: 1; ssao-intensity: 1.1; ssao-radius: 1.6; ssr: 0; height-fog: 1; fog-color: 0xcfe0ea; fog-density: 0.00016; fog-height: 2.4; fog-falloff: 200; fog-noise: 0.16; fog-sun-influence: 0.4; fog-sky-haze: 0.05; film-grain: 1; film-grain-opacity: 0.025; chromatic-aberration: 0; god-rays: 0; depth-of-field: 0"
+  >
+  </GameObject>
+
+  <AdaptiveQuality target-fps="55"></AdaptiveQuality>
+
+  <!-- Vento global: o VegetationWindSystem lê `getWindVector`, portanto a
+       erva (e, na fase 7, as culturas) balançam com este valor. -->
+  <Weather
+    wind="0.55 0.2"
+    wind-strength="1.1"
+    clouds="0"
+    rain="0"
+    cycle="1"
+  ></Weather>
+</Group>

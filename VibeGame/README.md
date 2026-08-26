@@ -706,6 +706,25 @@ End-to-end demo of the AiGameKit monorepo workflow:
 
 See [`examples/simple-rpg/README.md`](examples/simple-rpg/README.md) for the full pipeline walkthrough.
 
+### simple-farm
+
+Farming example: [`VibeGame/examples/simple-farm/`](examples/simple-farm/)
+
+Isometric Harvest-Moon-style loop on a terraced valley — buy seeds at the
+market stall, till/plant/water with the hotbar tools, sleep at the cottage to
+advance the day, harvest and sell.
+
+| Element               | Plugin/Recipe                                             |
+| --------------------- | --------------------------------------------------------- |
+| True isometric camera | `IsometricCameraPlugin` (`<IsometricCamera>`)             |
+| Farm field            | `FarmPlotPlugin` (`<FarmPlot>`) + `/data/crops.yaml`      |
+| Day/night + calendar  | `DayCyclePlugin` (`<DayCycle>`, `<Clock>` widget)         |
+| Tools hotbar          | `<Hotbar>` + `setHotbarSlots`/`onHotbarActivate`          |
+| Stamina               | `<StatBar>` + `registerHudStatSource`                     |
+| Economy (gold/items)  | `RpgPlugins` vault/inventory/economy + `/data/items.yaml` |
+| Save / Load           | `SaveLoadPlugin` (world snapshot + farm tiles + globals)  |
+
+**Controls:** WASD move, Q/E rotate camera, wheel zoom, 1–6 select tool, J use/interact (tool on facing tile, sleep at bed, shop at stall), Space jump, Esc pause (save/load via Options tab).
 ---
 
 ## Development

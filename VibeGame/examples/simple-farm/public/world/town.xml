@@ -1,0 +1,222 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+
+  A small town on the central pad, ~70 m across inside a 96 m floor. Buildings
+  ring a square at the origin so all four arteries arrive at something.
+
+  CONTRACT — src/ resolves these two by name:
+    name="farm_home"    → sleep.ts (bed prompt, 4.5 m)
+    name="farm_market"  → shop.ts  (buy seeds / sell produce, 4 m)
+  Renaming either silently breaks the interaction.
+
+  Buildings use collider="shape: precompute" (read from gameassets_handoff.json)
+  rather than a *_collision.glb fetch — same reason as the trees: it keeps the
+  instanced render path while still giving Rapier a solid.
+-->
+<Group name="town" pos="0 0 0">
+  <!-- Keeps vegetation and rocks out of the streets. Radius covers the pad
+       core plus its falloff ring. -->
+  <SpawnExclusion at="0 0" radius="56"></SpawnExclusion>
+
+  <!-- ════════════════════ Gameplay anchors ════════════════════ -->
+
+  <GameObject
+    name="farm_home"
+    place="at: -14 12; align-to-terrain: 0"
+    rot="0 145 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/village/shepherd_cottage_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/shepherd_cottage_lod0.glb"
+      lod1-url="/assets/meshes/village/shepherd_cottage_lod1.glb"
+      lod2-url="/assets/meshes/village/shepherd_cottage_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject
+    name="farm_market"
+    place="at: 13 9; align-to-terrain: 0"
+    rot="0 -160 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/village/market_stall_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/market_stall_lod0.glb"
+      lod1-url="/assets/meshes/village/market_stall_lod1.glb"
+      lod2-url="/assets/meshes/village/market_stall_lod2.glb"
+      lod-threshold-near="36"
+      lod-threshold-mid="95"
+    ></GLTFLoader>
+  </GameObject>
+
+  <!-- ════════════════════ Town shells ════════════════════ -->
+
+  <GameObject
+    name="town.house_w"
+    place="at: -26 -10; align-to-terrain: 0"
+    rot="0 90 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/village/village_house_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/village_house_lod0.glb"
+      lod1-url="/assets/meshes/village/village_house_lod1.glb"
+      lod2-url="/assets/meshes/village/village_house_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject
+    name="town.longhouse"
+    place="at: 22 -16; align-to-terrain: 0"
+    rot="0 -105 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/village/village_longhouse_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/village_longhouse_lod0.glb"
+      lod1-url="/assets/meshes/village/village_longhouse_lod1.glb"
+      lod2-url="/assets/meshes/village/village_longhouse_lod2.glb"
+      lod-threshold-near="44"
+      lod-threshold-mid="120"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject
+    name="town.forge"
+    place="at: 27 16; align-to-terrain: 0"
+    rot="0 -145 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/village/village_forge_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/village_forge_lod0.glb"
+      lod1-url="/assets/meshes/village/village_forge_lod1.glb"
+      lod2-url="/assets/meshes/village/village_forge_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject
+    name="town.chapel"
+    place="at: -30 24; align-to-terrain: 0"
+    rot="0 120 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/village/chapel_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/chapel_lod0.glb"
+      lod1-url="/assets/meshes/village/chapel_lod1.glb"
+      lod2-url="/assets/meshes/village/chapel_lod2.glb"
+      lod-threshold-near="42"
+      lod-threshold-mid="115"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject
+    name="town.watchtower"
+    place="at: 34 -32; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/village/watchtower_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/watchtower_lod0.glb"
+      lod1-url="/assets/meshes/village/watchtower_lod1.glb"
+      lod2-url="/assets/meshes/village/watchtower_lod2.glb"
+      lod-threshold-near="52"
+      lod-threshold-mid="140"
+    ></GLTFLoader>
+  </GameObject>
+
+  <!-- ════════════════════ Square dressing ════════════════════ -->
+
+  <GameObject
+    name="town.well"
+    place="at: 2 -3; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/village/medieval_well_lod0.glb"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/medieval_well_lod0.glb"
+      lod1-url="/assets/meshes/village/medieval_well_lod1.glb"
+      lod2-url="/assets/meshes/village/medieval_well_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="town.campfire" place="at: -5 -6; align-to-terrain: 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/campfire_pit_lod0.glb"
+      lod1-url="/assets/meshes/village/campfire_pit_lod1.glb"
+      lod2-url="/assets/meshes/village/campfire_pit_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="town.notice" place="at: 6 4; align-to-terrain: 0" rot="0 -35 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/notice_board_lod0.glb"
+      lod1-url="/assets/meshes/village/notice_board_lod1.glb"
+      lod2-url="/assets/meshes/village/notice_board_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="town.bench" place="at: -2 6; align-to-terrain: 0" rot="0 15 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_bench_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_bench_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="town.torch_n" place="at: 8 -10; align-to-terrain: 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="town.torch_s" place="at: -9 1; align-to-terrain: 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="town.crate" place="at: 16 5; align-to-terrain: 0" rot="0 24 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+
+  <GameObject name="town.barrel" place="at: 18 2; align-to-terrain: 0">
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+</Group>

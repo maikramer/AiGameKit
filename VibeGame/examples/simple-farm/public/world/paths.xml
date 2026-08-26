@@ -1,0 +1,106 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+
+  One artery network joining the four destinations to the town square, plus a
+  handful of flatten="0" decal trails that only paint dirt without touching the
+  ground. Road flatten skips pad cores (pointInAnyPadCore), so the artery can
+  cross the town pad without trenching its floor.
+
+  Roads also stamp a terrain density boost along their corridor — without it a
+  2.4 m track is narrower than the 4 m base lattice (512/128) and simply would
+  not appear on the mesh.
+-->
+<Group name="paths" pos="0 0 0">
+  <RoadNetwork
+    default-profile="artery"
+    default-width="2.6"
+    crossing-flare="true"
+    texture-url="/assets/textures/dirt_road_1k.jpg"
+    texture-scale="5"
+    flatten-falloff="6"
+    flatten-window="40"
+    flatten-max-grade="0.28"
+  >
+    <!-- Town square is the hub every road leaves from. -->
+    <Way id="square" xz="0 0" width="4.2"></Way>
+
+    <!-- West: town → farm gate → fields -->
+    <Way id="farm_gate" xz="-42 2"></Way>
+    <Way id="farm_yard" xz="-74 6" width="3.4"></Way>
+
+    <!-- North: town → forest edge → deep wood -->
+    <Way id="north_gate" xz="6 40"></Way>
+    <Way id="wood_edge" xz="18 86"></Way>
+    <Way id="wood_deep" xz="34 148"></Way>
+
+    <!-- East: town → river bank → bridge → quarry -->
+    <Way id="east_gate" xz="40 -6"></Way>
+    <Way id="bank_w" xz="50 -10"></Way>
+    <Way id="bank_e" xz="68 -14"></Way>
+    <Way id="quarry_road" xz="116 -70"></Way>
+    <Way id="quarry_camp" xz="158 -122"></Way>
+
+    <!-- South: town → meadow → lake shore -->
+    <Way id="south_gate" xz="-8 -40"></Way>
+    <Way id="meadow" xz="-46 -86"></Way>
+    <Way id="lake_shore" xz="-84 -124"></Way>
+
+    <Segment a="square" b="farm_gate"></Segment>
+    <Segment a="farm_gate" b="farm_yard"></Segment>
+
+    <Segment a="square" b="north_gate"></Segment>
+    <Segment a="north_gate" b="wood_edge" via="10 62"></Segment>
+    <Segment a="wood_edge" b="wood_deep" via="24 116"></Segment>
+
+    <Segment a="square" b="east_gate"></Segment>
+    <Segment a="east_gate" b="bank_w"></Segment>
+    <!-- Crosses the river at z ≈ -12, where the bed sits at x ≈ 57. -->
+    <Segment
+      a="bank_w"
+      b="bank_e"
+      profile="bridge"
+      bridge-native-span="11.2"
+      bridge-url="/assets/meshes/infra/river_bridge_wood_lod0.glb"
+      bridge-collision-url="/assets/meshes/infra/river_bridge_wood_collision.glb"
+      bridge-lod1-url="/assets/meshes/infra/river_bridge_wood_lod1.glb"
+      bridge-lod2-url="/assets/meshes/infra/river_bridge_wood_lod2.glb"
+    ></Segment>
+    <Segment a="bank_e" b="quarry_road" via="92 -40"></Segment>
+    <Segment a="quarry_road" b="quarry_camp" via="140 -96"></Segment>
+
+    <Segment a="square" b="south_gate"></Segment>
+    <Segment a="south_gate" b="meadow" via="-26 -62"></Segment>
+    <Segment a="meadow" b="lake_shore" via="-64 -106"></Segment>
+  </RoadNetwork>
+
+  <!-- Decal spurs: paint only, flatten="0" leaves the relief untouched. -->
+  <Road
+    flatten="0"
+    width="1.7"
+    texture-url="/assets/textures/dirt_trail_1k.jpg"
+    texture-scale="4"
+    path="52 174  62 200  70 226"
+  ></Road>
+  <Road
+    flatten="0"
+    width="1.6"
+    texture-url="/assets/textures/dirt_trail_1k.jpg"
+    texture-scale="4"
+    path="178 -146  196 -172  206 -204"
+  ></Road>
+  <Road
+    flatten="0"
+    width="1.5"
+    texture-url="/assets/textures/dirt_trail_1k.jpg"
+    texture-scale="4"
+    path="-104 -142  -126 -164  -146 -190"
+  ></Road>
+  <Road
+    flatten="0"
+    width="1.5"
+    texture-url="/assets/textures/dirt_trail_1k.jpg"
+    texture-scale="4"
+    path="-104 40  -112 56  -118 76"
+  ></Road>
+</Group>

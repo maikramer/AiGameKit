@@ -1,0 +1,261 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+
+  Dense wood across the northern half. Two cost tiers (world/context.md:63-73):
+
+    scenery    <GLTFLoader> only        → one slot in the instanced pool
+    harvestable + collider + script + <ResourceNode>
+
+  <StaticSpawner> forces instanced="true" onto its templates, so each URL is ONE
+  draw call however many instances — that is what makes four-figure counts
+  possible. Species variety inside a spawner comes from sibling <GameObject>
+  templates plus pick-strategy="random".
+
+  Colliders are shape: precompute (a trunk capsule read from
+  gameassets_handoff.json), never a *_collision.glb fetch: that keeps the
+  instanced path while still giving Rapier something solid, and it is why every
+  canopy tree here can be chopped.
+
+  break-style: fall cuts the trunk at runtime — it does NOT need the
+  *_stump/_top GLBs, whose visual LODs live in _intermediate/ and never ship.
+-->
+<Group name="forest" pos="0 0 0">
+  <!-- Ground cover. One <Vegetation> patch drives grass → plant → flower as
+       coordinated layers sharing hubs (smart="1"), so tufts read as one plant
+       community instead of three independent scatters. -->
+  <Vegetation
+    meshes="/assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_yellowA.glb"
+    density-per-km2="340000"
+    seed="7101"
+    region-min="-236 0 44"
+    region-max="236 0 240"
+    scale-min="1.3"
+    scale-max="2.6"
+    max-slope-deg="38"
+    avoid-water="1"
+    avoid-road="1"
+    avoid-overlaps="0"
+    max-distance="115"
+    cluster-count="150"
+    cluster-radius="9.5"
+    flower-near-radius="4.6"
+    flower-density-ratio="0.30"
+    plant-density-ratio="0.44"
+    smart="1"
+    wind="1"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="foliage"
+  ></Vegetation>
+
+  <!-- Canopy: every tree is choppable. Four species round-robin at random. -->
+  <StaticSpawner
+    profile="tree"
+    count="2400"
+    seed="7203"
+    region-min="-236 0 50"
+    region-max="236 0 240"
+    pick-strategy="random"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    avoid-road="1"
+    max-slope-deg="40"
+    scale-min="0.85"
+    scale-max="1.5"
+    avoid-overlaps="1"
+    footprint-radius="2.2"
+    cluster-count="30"
+    cluster-radius="34"
+    max-distance="230"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="tree"
+  >
+    <GameObject
+      role="static"
+      script="tree.ts"
+      destructible="popup-text: Wood; popup-color: #6b4a2b; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/forest/tree_oak_lod0.glb"
+        lod1-url="/assets/meshes/forest/tree_oak_lod1.glb"
+        lod2-url="/assets/meshes/forest/tree_oak_lod2.glb"
+        lod-threshold-near="34"
+        lod-threshold-mid="95"
+      ></GLTFLoader>
+      <ResourceNode kind="wood" yield="3" respawn="180"></ResourceNode>
+    </GameObject>
+
+    <GameObject
+      role="static"
+      script="tree.ts"
+      destructible="popup-text: Wood; popup-color: #2e4a30; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_pine_lod0.glb"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/forest/tree_pine_lod0.glb"
+        lod1-url="/assets/meshes/forest/tree_pine_lod1.glb"
+        lod2-url="/assets/meshes/forest/tree_pine_lod2.glb"
+        lod-threshold-near="34"
+        lod-threshold-mid="95"
+      ></GLTFLoader>
+      <ResourceNode kind="wood" yield="3" respawn="180"></ResourceNode>
+    </GameObject>
+
+    <GameObject
+      role="static"
+      script="tree.ts"
+      destructible="popup-text: Wood; popup-color: #1a3320; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: precompute; mesh-url: /assets/meshes/forest/pine_dark_lod0.glb"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/forest/pine_dark_lod0.glb"
+        lod1-url="/assets/meshes/forest/pine_dark_lod1.glb"
+        lod2-url="/assets/meshes/forest/pine_dark_lod2.glb"
+        lod-threshold-near="34"
+        lod-threshold-mid="95"
+      ></GLTFLoader>
+      <ResourceNode kind="wood" yield="4" respawn="180"></ResourceNode>
+    </GameObject>
+
+    <GameObject
+      role="static"
+      script="tree.ts"
+      destructible="popup-text: Dry Wood; popup-color: #6a5a44; preset: dust; burst-count: 18; hits: 2; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 10; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.6"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: precompute; mesh-url: /assets/meshes/forest/dead_tree_lod0.glb"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/forest/dead_tree_lod0.glb"
+        lod1-url="/assets/meshes/forest/dead_tree_lod1.glb"
+        lod2-url="/assets/meshes/forest/dead_tree_lod2.glb"
+        lod-threshold-near="32"
+        lod-threshold-mid="90"
+      ></GLTFLoader>
+      <ResourceNode kind="wood" yield="2" respawn="150"></ResourceNode>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- Understory: pure scenery, no collider, no script. Cheap density. -->
+  <StaticSpawner
+    profile="foliage"
+    count="1600"
+    seed="7211"
+    region-min="-236 0 46"
+    region-max="236 0 240"
+    pick-strategy="random"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    avoid-road="1"
+    max-slope-deg="42"
+    scale-min="1.1"
+    scale-max="2.2"
+    avoid-overlaps="0"
+    cluster-count="140"
+    cluster-radius="12"
+    max-distance="95"
+    random-yaw="true"
+    variation="foliage"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/vegetation/plant_flatTall.glb"
+      ></GLTFLoader>
+    </GameObject>
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/vegetation/grass_leafsLarge.glb"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- Glowing mushrooms mark the deep wood; scenery only. -->
+  <StaticSpawner
+    profile="foliage"
+    count="320"
+    seed="7217"
+    region-min="-180 0 110"
+    region-max="180 0 236"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    max-slope-deg="38"
+    scale-min="0.9"
+    scale-max="1.7"
+    avoid-overlaps="1"
+    footprint-radius="0.6"
+    cluster-count="26"
+    cluster-radius="12"
+    max-distance="80"
+    random-yaw="true"
+    variation="foliage"
+  >
+    <GameObject role="static">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/forest/mushroom_glow_lod0.glb"
+        lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb"
+        lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb"
+        lod-threshold-near="26"
+        lod-threshold-mid="60"
+      ></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+
+  <!-- Mossy rocks scattered through the wood — harvestable stone in the north
+       so the player is not forced across the map for their first stone. -->
+  <StaticSpawner
+    profile="tree"
+    count="340"
+    seed="7223"
+    region-min="-220 0 56"
+    region-max="220 0 236"
+    align-to-terrain="1"
+    ground-align="auto"
+    avoid-water="1"
+    avoid-road="1"
+    max-slope-deg="55"
+    scale-min="0.8"
+    scale-max="1.9"
+    avoid-overlaps="1"
+    footprint-radius="1.8"
+    cluster-count="24"
+    cluster-radius="22"
+    max-distance="150"
+    random-yaw="true"
+    variation="rock"
+  >
+    <GameObject
+      role="static"
+      script="rock.ts"
+      destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+      rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+      collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
+    >
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/props/rock_mossy_lod0.glb"
+        lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+        lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+        lod-threshold-near="36"
+        lod-threshold-mid="95"
+      ></GLTFLoader>
+      <ResourceNode kind="stone" yield="3" respawn="240"></ResourceNode>
+    </GameObject>
+  </StaticSpawner>
+</Group>
