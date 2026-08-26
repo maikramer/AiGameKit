@@ -17,11 +17,7 @@ export interface EffectDefinition {
     scene: Scene,
     camera: Camera
   ): Pass | null;
-  update?(
-    state: EffectComponentState,
-    entity: number,
-    pass: Pass
-  ): void;
+  update?(state: EffectComponentState, entity: number, pass: Pass): void;
   readonly position?: 'first' | 'last';
   /** Sort key within the same `position` bucket (lower runs earlier;
    * default 0, ties keep registration order). Lets a scene-re-rendering pass

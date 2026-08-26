@@ -41,6 +41,11 @@ const REFLECTION_LAYER = 11;
 /** Scratch for reading back the renderer's clear colour. */
 const _clearColor = new THREE.Color();
 
+/** Scratch for the "is anything reflective on screen?" test. */
+const _frustum = new THREE.Frustum();
+const _viewProjection = new THREE.Matrix4();
+const _sphere = new THREE.Sphere();
+
 export interface ReflectionPassOptions {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
@@ -113,7 +118,6 @@ const REFLECTION_FRAGMENT = /* glsl */ `
   uniform sampler2D tNormal;
   uniform mat4 uProjection;
   uniform mat4 uInverseProjection;
-  uniform vec2 uResolution;
   uniform float uNear;
   uniform float uFar;
   uniform float uIntensity;
@@ -124,7 +128,7 @@ const REFLECTION_FRAGMENT = /* glsl */ `
 
   varying vec2 vUv;
 
-  const int MARCH_STEPS = 28;
+  const int MARCH_STEPS = 32;
   const int REFINE_STEPS = 5;
 
   float readDepth(vec2 uv) {
@@ -144,21 +148,22 @@ const REFLECTION_FRAGMENT = /* glsl */ `
     return view.xyz / view.w;
   }
 
-  vec2 projectToUv(vec3 viewPos) {
-    vec4 clip = uProjection * vec4(viewPos, 1.0);
-    return (clip.xy / clip.w) * 0.5 + 0.5;
-  }
-
-  /** Cheap per-pixel hash, used to decorrelate the cone jitter. */
-  float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+  /**
+   * Interleaved gradient noise. Unlike a sin-hash it is *structured*: the
+   * values form a fine repeating lattice, so neighbouring pixels take
+   * neighbouring offsets and the composite blur averages them back into a
+   * smooth gradient. A white-noise hash here is what turned the road into
+   * salt-and-pepper — a 4-tap blur cannot integrate uncorrelated samples.
+   */
+  float dither(vec2 pixel) {
+    return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
   }
 
   void main() {
     vec4 normalSample = texture2D(tNormal, vUv);
     // Alpha 0 = nothing reflective rendered here. Bail before any texture
     // fetch that would cost us on the 95% of the screen that is not road.
-    if (normalSample.a <= 0.0 && length(normalSample.rgb) < 0.001) {
+    if (normalSample.a <= 0.0 && dot(normalSample.rgb, normalSample.rgb) < 1e-6) {
       gl_FragColor = vec4(0.0);
       return;
     }
@@ -175,15 +180,19 @@ const REFLECTION_FRAGMENT = /* glsl */ `
     vec3 viewDir = normalize(origin);
     vec3 rayDir = normalize(reflect(viewDir, normal));
 
+    float noise = dither(gl_FragCoord.xy);
+
     // A rough surface scatters the reflected lobe: jitter the ray inside a
     // cone whose width follows roughness, and let the blur in the composite
-    // average the neighbours back together.
+    // average the neighbours back together. Both the angle and the radius come
+    // from the same structured dither, so the cone is sampled evenly across a
+    // pixel neighbourhood instead of randomly per pixel.
     float jitterAmount = roughness * roughness * uJitter;
     if (jitterAmount > 0.0) {
       vec3 tangent = normalize(cross(normal, vec3(0.0, 0.0, 1.0) + 0.001));
       vec3 bitangent = cross(normal, tangent);
-      float a = hash(vUv * uResolution) * 6.2831853;
-      float r = hash(vUv * uResolution + 17.0) * jitterAmount;
+      float a = noise * 6.2831853;
+      float r = sqrt(dither(gl_FragCoord.yx + 23.7)) * jitterAmount;
       rayDir = normalize(rayDir + (tangent * cos(a) + bitangent * sin(a)) * r);
     }
 
@@ -193,31 +202,76 @@ const REFLECTION_FRAGMENT = /* glsl */ `
       return;
     }
 
-    float stepSize = uMaxDistance / float(MARCH_STEPS);
-    // Offset the first sample off the surface, or every ray self-intersects
-    // the pixel it started from.
-    vec3 position = origin + rayDir * stepSize * (0.5 + hash(vUv * 91.7) * 0.5);
+    // Schlick, hoisted ahead of the march. Every term in it comes from the
+    // surface and the view, none from the hit, and a ray whose reflection
+    // could not survive its own Fresnel weight is not worth 37 depth fetches.
+    // (Grazing angles, where reflections live, keep the full march.)
+    float fresnel = pow(1.0 - max(dot(-viewDir, normal), 0.0), uFresnelPower);
+    // A mirror reflects at any angle; a matte surface only at the very edge.
+    fresnel = mix(1.0, fresnel, clamp(roughness * 1.4, 0.0, 1.0));
+    // Rays pointing back at the camera mirror the near plane.
+    float backFade = clamp(-rayDir.z * 2.0 + 1.0, 0.0, 1.0);
+    // The hit-dependent fades below only ever scale this down, so anything
+    // under a thousandth of a tone-mapped step here is already invisible.
+    float preStrength = uIntensity * fresnel * backFade;
+    if (preStrength < 1e-4) {
+      gl_FragColor = vec4(0.0);
+      return;
+    }
+
+    // Lift the ray off its own surface before marching. The bias grows with
+    // distance because the depth buffer's own precision does: a fixed 1 cm
+    // offset that clears the road under the car is inside the noise floor
+    // 200 m out, and the ray starts self-intersecting.
+    float originDepth = -origin.z;
+    float bias = max(0.02, originDepth * 0.004);
+    vec3 rayStart = origin + normal * bias;
+
+    // The march needs uProjection * (rayStart + rayDir * d) at every sample,
+    // and that expression is linear in d. Projecting the origin and the
+    // direction once turns a mat4 product per step into a single mad — same
+    // arithmetic, 37 times cheaper across the march and the refine.
+    vec4 clipStart = uProjection * vec4(rayStart, 1.0);
+    vec4 clipDir = uProjection * vec4(rayDir, 0.0);
 
     bool hit = false;
-    vec3 hitPosition = position;
+    float hitDistance = 0.0;
+    float hitDelta = 0.0;
+    float previousDistance = 0.0;
+    float previousStep = 0.0;
     vec2 hitUv = vUv;
 
-    for (int i = 0; i < MARCH_STEPS; i++) {
-      position += rayDir * stepSize;
-      vec2 uv = projectToUv(position);
+    // Quadratic distribution: dense near the surface (where the reflection is
+    // sharp and the geometry it hits is small on screen), coarse far away
+    // (where a hit is a smear anyway). A uniform 2 m stride skipped everything
+    // close to the car and made the hit test a coin flip between neighbours.
+    for (int i = 1; i <= MARCH_STEPS; i++) {
+      float t = (float(i) + noise - 0.5) / float(MARCH_STEPS);
+      float distance = uMaxDistance * t * t;
+      float stepLength = distance - previousDistance;
+      vec4 clip = clipStart + clipDir * distance;
+      vec2 uv = (clip.xy / clip.w) * 0.5 + 0.5;
       if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) break;
 
       float sceneDepth = linearDepth(readDepth(uv));
       // View space looks down -Z, so the ray's distance is -position.z.
-      float rayDepth = -position.z;
+      float rayDepth = -(rayStart.z + rayDir.z * distance);
       float delta = rayDepth - sceneDepth;
 
-      if (delta > 0.0 && delta < uThickness + stepSize) {
-        hit = true;
-        hitPosition = position;
+      if (delta > 0.0) {
+        // The ray went behind something. Close behind = a surface it actually
+        // hit; far behind = it dived under a foreground occluder, and anything
+        // found past that point is geometry the reflection cannot see. Both
+        // end the march — continuing was the other half of the speckle, since
+        // it let occluded rays keep hunting until they found a stray hit.
+        hit = delta < uThickness + stepLength;
+        hitDistance = distance;
+        hitDelta = delta;
+        previousStep = stepLength;
         hitUv = uv;
         break;
       }
+      previousDistance = distance;
     }
 
     if (!hit) {
@@ -227,64 +281,164 @@ const REFLECTION_FRAGMENT = /* glsl */ `
 
     // Binary refine: halve back and forth around the crossing so the hit lands
     // on the surface instead of up to one whole step past it.
-    vec3 lo = hitPosition - rayDir * stepSize;
-    vec3 hi = hitPosition;
+    float lo = hitDistance - previousStep;
+    float hi = hitDistance;
     for (int i = 0; i < REFINE_STEPS; i++) {
-      vec3 mid = (lo + hi) * 0.5;
-      vec2 uv = projectToUv(mid);
-      float sceneDepth = linearDepth(readDepth(uv));
-      if (-mid.z > sceneDepth) hi = mid; else lo = mid;
+      float mid = (lo + hi) * 0.5;
+      vec4 midClip = clipStart + clipDir * mid;
+      vec2 midUv = (midClip.xy / midClip.w) * 0.5 + 0.5;
+      float sceneDepth = linearDepth(readDepth(midUv));
+      if (-(rayStart.z + rayDir.z * mid) > sceneDepth) hi = mid; else lo = mid;
     }
-    hitUv = projectToUv(hi);
+    vec4 hitClip = clipStart + clipDir * hi;
+    hitUv = (hitClip.xy / hitClip.w) * 0.5 + 0.5;
 
     vec3 reflected = texture2D(tColor, hitUv).rgb;
 
     // Fade wherever the reflection stops being trustworthy:
     //  - screen edges, because the ray left the only data we have;
-    //  - long rays, whose hit is increasingly likely to be wrong geometry;
-    //  - rays pointing back at the camera, which mirror the near plane.
+    //  - long rays, whose hit is increasingly likely to be wrong geometry.
+    // (Fresnel and the back-facing fade are already in preStrength.)
     vec2 edge = smoothstep(vec2(0.0), vec2(0.12), hitUv) *
                 (1.0 - smoothstep(vec2(0.88), vec2(1.0), hitUv));
     float edgeFade = edge.x * edge.y;
-    float distanceFade = 1.0 - clamp(length(hi - origin) / uMaxDistance, 0.0, 1.0);
-    float backFade = clamp(-rayDir.z * 2.0 + 1.0, 0.0, 1.0);
+    float distanceFade = 1.0 - clamp(hi / uMaxDistance, 0.0, 1.0);
+    // A hit found several metres behind the surface it was tested against is a
+    // guess, not a reflection — fade it out rather than committing to it. The
+    // depth at the crossing sample is the honest measure here; the refined
+    // interval has converged by construction and says nothing about confidence.
+    float thicknessFade =
+      1.0 - smoothstep(uThickness * 0.5, uThickness + previousStep, hitDelta);
 
-    // Schlick: reflections belong at grazing angles, not head-on.
-    float fresnel = pow(1.0 - max(dot(-viewDir, normal), 0.0), uFresnelPower);
-    // A mirror reflects at any angle; a matte surface only at the very edge.
-    fresnel = mix(1.0, fresnel, clamp(roughness * 1.4, 0.0, 1.0));
-
-    float strength = uIntensity * fresnel * edgeFade * distanceFade * backFade;
-    gl_FragColor = vec4(reflected, clamp(strength, 0.0, 1.0));
+    float strength = preStrength * edgeFade * distanceFade * thicknessFade;
+    strength = clamp(strength, 0.0, 1.0);
+    // PREMULTIPLIED. The composite blurs this buffer, and blurring colour and
+    // coverage separately is wrong: a tap that missed contributes rgb 0 with
+    // weight, so a 4-tap average over a half-hit neighbourhood dragged the
+    // reflection toward black and painted the road with dark specks. With the
+    // colour already weighted, a miss contributes nothing to either channel.
+    gl_FragColor = vec4(reflected * strength, strength);
   }
 `;
 
-const COMPOSITE_FRAGMENT = /* glsl */ `
+/**
+ * Roughness-scaled blur of the marched reflection, run at the reflection
+ * buffer's own resolution.
+ *
+ * The taps are spaced in reflection texels either way, so doing this here
+ * instead of during the composite is the same filter over the same data — but
+ * a quarter of the pixels, and it leaves the full-resolution pass with a single
+ * fetch instead of thirteen.
+ */
+const BLUR_FRAGMENT = /* glsl */ `
   precision highp float;
 
-  uniform sampler2D tColor;
   uniform sampler2D tReflection;
   uniform sampler2D tNormal;
   uniform vec2 uReflectionTexel;
 
   varying vec2 vUv;
 
+  /** One tap of the disc. Written as a function because GLSL ES 1.00 has no
+   *  array initialisers, and the pass has to compile on the same profile as
+   *  the rest of the engine's effects. */
+  vec4 tap(vec2 uv, vec2 offset, vec2 radius, float weight) {
+    return texture2D(tReflection, uv + offset * radius) * weight;
+  }
+
   void main() {
-    vec4 base = texture2D(tColor, vUv);
-    float roughness = texture2D(tNormal, vUv).a;
+    vec4 mask = texture2D(tNormal, vUv);
+
+    // Nothing reflective here, so nothing to filter. Writing the zero keeps the
+    // buffer's coverage channel authoritative for the composite, which reads
+    // only this texture.
+    if (mask.a <= 0.0 && dot(mask.rgb, mask.rgb) < 1e-6) {
+      gl_FragColor = vec4(0.0);
+      return;
+    }
+
+    float roughness = mask.a;
 
     // Blur radius follows roughness: a mirror keeps the marched detail, a
     // rough surface averages its jittered neighbours into a soft sheen.
     vec2 radius = uReflectionTexel * (1.0 + roughness * 6.0);
-    vec4 reflection = texture2D(tReflection, vUv) * 0.4;
-    reflection += texture2D(tReflection, vUv + vec2(radius.x, 0.0)) * 0.15;
-    reflection += texture2D(tReflection, vUv - vec2(radius.x, 0.0)) * 0.15;
-    reflection += texture2D(tReflection, vUv + vec2(0.0, radius.y)) * 0.15;
-    reflection += texture2D(tReflection, vUv - vec2(0.0, radius.y)) * 0.15;
 
-    gl_FragColor = vec4(mix(base.rgb, reflection.rgb, reflection.a), base.a);
+    // Two hexagonal rings around the centre tap — 13 samples instead of 5, so
+    // a half-resolution buffer reads as a surface finish rather than as a dot
+    // screen. The old 4-tap cross at a 4-texel radius sampled four isolated
+    // pixels and left every gap between them visible.
+    const float W0 = 0.34;
+    const float W1 = 0.075;
+    const float W2 = 0.035;
+    vec4 reflection = texture2D(tReflection, vUv) * W0;
+    reflection += tap(vUv, vec2( 0.500,  0.000), radius, W1);
+    reflection += tap(vUv, vec2( 0.250,  0.433), radius, W1);
+    reflection += tap(vUv, vec2(-0.250,  0.433), radius, W1);
+    reflection += tap(vUv, vec2(-0.500,  0.000), radius, W1);
+    reflection += tap(vUv, vec2(-0.250, -0.433), radius, W1);
+    reflection += tap(vUv, vec2( 0.250, -0.433), radius, W1);
+    reflection += tap(vUv, vec2( 1.000,  0.000), radius, W2);
+    reflection += tap(vUv, vec2( 0.500,  0.866), radius, W2);
+    reflection += tap(vUv, vec2(-0.500,  0.866), radius, W2);
+    reflection += tap(vUv, vec2(-1.000,  0.000), radius, W2);
+    reflection += tap(vUv, vec2(-0.500, -0.866), radius, W2);
+    reflection += tap(vUv, vec2( 0.500, -0.866), radius, W2);
+    gl_FragColor = reflection / (W0 + 6.0 * W1 + 6.0 * W2);
   }
 `;
+
+/**
+ * The composite, in two builds.
+ *
+ * `blendInPlace` is the fast one: it never reads the frame, it blends the
+ * reflection onto it with the hardware blender and leaves every other pixel
+ * physically untouched. `false` produces the read-modify-write build, needed
+ * only when this pass is last in the chain and has to write the finished frame
+ * to the screen — there is no frame buffer to blend into then.
+ */
+function compositeFragment(blendInPlace: boolean): string {
+  return /* glsl */ `
+  precision highp float;
+
+  ${blendInPlace ? '' : 'uniform sampler2D tColor;'}
+  uniform sampler2D tReflection;
+
+  varying vec2 vUv;
+
+  void main() {
+    // One fetch. The blur already happened at reflection resolution, and the
+    // premultiplied coverage in alpha is the only mask this pass needs — zero
+    // coverage means "no reflection here", whatever the surface underneath is.
+    vec4 reflection = texture2D(tReflection, vUv);
+
+    if (reflection.a <= 0.0) {
+      ${
+        blendInPlace
+          ? // discard alone is not a jump in GLSL ES 1.00; without the return
+            // the shader would run on for a fragment it has already thrown away.
+            'discard;\n      return;'
+          : 'gl_FragColor = texture2D(tColor, vUv);\n      return;'
+      }
+    }
+
+    // The buffer is premultiplied, so this is a plain source-over: a partial
+    // reflection darkens the base by its own coverage and adds exactly the
+    // light it carries. No mix(), which would have replaced the surface with
+    // an unweighted colour wherever coverage was patchy.
+    ${
+      blendInPlace
+        ? `// Blend factors ONE / ONE_MINUS_SRC_ALPHA do the same arithmetic in
+    // the ROP, on the reflective pixels only.
+    gl_FragColor = vec4(reflection.rgb, clamp(reflection.a, 0.0, 1.0));`
+        : `vec4 base = texture2D(tColor, vUv);
+    gl_FragColor = vec4(
+      base.rgb * (1.0 - clamp(reflection.a, 0.0, 1.0)) + reflection.rgb,
+      base.a
+    );`
+    }
+  }
+`;
+}
 
 const FULLSCREEN_VERTEX = /* glsl */ `
   varying vec2 vUv;
@@ -309,9 +463,17 @@ export class ReflectionPass extends Pass {
 
   private readonly reflectionTarget: THREE.WebGLRenderTarget;
 
+  /** Blurred copy of `reflectionTarget`; the only thing the composite reads. */
+  private readonly blurTarget: THREE.WebGLRenderTarget;
+
   private readonly reflectionMaterial: THREE.ShaderMaterial;
 
+  private readonly blurMaterial: THREE.ShaderMaterial;
+
   private readonly compositeMaterial: THREE.ShaderMaterial;
+
+  /** Composite that blends straight into the frame instead of copying it. */
+  private readonly blendMaterial: THREE.ShaderMaterial;
 
   private readonly fullscreenScene: THREE.Scene;
 
@@ -320,6 +482,9 @@ export class ReflectionPass extends Pass {
   private readonly fullscreenQuad: THREE.Mesh;
 
   private readonly layeredMeshes = new Set<THREE.Mesh>();
+
+  /** Scratch membership set for `syncLayers`, reused to avoid per-frame GC. */
+  private readonly selectSet = new Set<THREE.Mesh>();
 
   private resolutionScale: number;
 
@@ -363,6 +528,12 @@ export class ReflectionPass extends Pass {
       type: THREE.HalfFloatType,
       depthBuffer: false,
     });
+    this.blurTarget = new THREE.WebGLRenderTarget(1, 1, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      type: THREE.HalfFloatType,
+      depthBuffer: false,
+    });
 
     this.reflectionMaterial = new THREE.ShaderMaterial({
       vertexShader: FULLSCREEN_VERTEX,
@@ -375,7 +546,6 @@ export class ReflectionPass extends Pass {
         tNormal: { value: this.normalTarget.texture },
         uProjection: { value: new THREE.Matrix4() },
         uInverseProjection: { value: new THREE.Matrix4() },
-        uResolution: { value: new THREE.Vector2(1, 1) },
         uNear: { value: 0.1 },
         uFar: { value: 1000 },
         uIntensity: { value: 0.6 },
@@ -393,16 +563,45 @@ export class ReflectionPass extends Pass {
       },
     });
 
+    this.blurMaterial = new THREE.ShaderMaterial({
+      vertexShader: FULLSCREEN_VERTEX,
+      fragmentShader: BLUR_FRAGMENT,
+      depthTest: false,
+      depthWrite: false,
+      uniforms: {
+        tReflection: { value: this.reflectionTarget.texture },
+        tNormal: { value: this.normalTarget.texture },
+        uReflectionTexel: { value: new THREE.Vector2(1, 1) },
+      },
+    });
+
     this.compositeMaterial = new THREE.ShaderMaterial({
       vertexShader: FULLSCREEN_VERTEX,
-      fragmentShader: COMPOSITE_FRAGMENT,
+      fragmentShader: compositeFragment(false),
       depthTest: false,
       depthWrite: false,
       uniforms: {
         tColor: { value: null },
-        tReflection: { value: this.reflectionTarget.texture },
-        tNormal: { value: this.normalTarget.texture },
-        uReflectionTexel: { value: new THREE.Vector2(1, 1) },
+        tReflection: { value: this.blurTarget.texture },
+      },
+    });
+
+    this.blendMaterial = new THREE.ShaderMaterial({
+      vertexShader: FULLSCREEN_VERTEX,
+      fragmentShader: compositeFragment(true),
+      depthTest: false,
+      depthWrite: false,
+      transparent: true,
+      blending: THREE.CustomBlending,
+      // Source-over for a premultiplied source, in the blend unit.
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+      // Alpha is left exactly as the frame had it: the composer's buffer alpha
+      // belongs to whatever wrote it, and a reflection is not an opacity.
+      blendSrcAlpha: THREE.ZeroFactor,
+      blendDstAlpha: THREE.OneFactor,
+      uniforms: {
+        tReflection: { value: this.blurTarget.texture },
       },
     });
 
@@ -440,8 +639,13 @@ export class ReflectionPass extends Pass {
    * three, so the mesh still renders normally in the beauty pass.
    */
   private syncLayers(): void {
+    // Membership through a Set, not `selects.includes`: the list is rebuilt
+    // wholesale twice a second, so the linear scan ran once per already-layered
+    // mesh per frame — quadratic in the number of reflective surfaces.
+    this.selectSet.clear();
+    for (const mesh of this.selects) this.selectSet.add(mesh);
     for (const mesh of this.layeredMeshes) {
-      if (!this.selects.includes(mesh)) {
+      if (!this.selectSet.has(mesh)) {
         mesh.layers.disable(REFLECTION_LAYER);
         this.layeredMeshes.delete(mesh);
       }
@@ -454,6 +658,46 @@ export class ReflectionPass extends Pass {
     }
   }
 
+  /**
+   * True when at least one reflective mesh is inside the camera frustum.
+   *
+   * Three culls the same meshes a moment later in the normal pass, but by then
+   * the frame has already paid for the render-list build, the buffer clear and
+   * — far more expensive — the full-resolution composite. A handful of sphere
+   * tests up front lets an indoor scene, or a circuit section with the road
+   * off-screen, skip the pass entirely.
+   */
+  private anythingVisible(camera: THREE.Camera): boolean {
+    _viewProjection.multiplyMatrices(
+      camera.projectionMatrix,
+      camera.matrixWorldInverse
+    );
+    _frustum.setFromProjectionMatrix(_viewProjection);
+    for (const mesh of this.selects) {
+      if (mesh.visible === false) continue;
+      // An InstancedMesh's geometry sphere covers one instance at the origin,
+      // not the spread of the instances; three keeps the real one on the mesh.
+      const instanced = mesh as THREE.Mesh & {
+        isInstancedMesh?: boolean;
+        boundingSphere?: THREE.Sphere | null;
+      };
+      let source: THREE.Sphere | null | undefined;
+      if (instanced.isInstancedMesh === true) {
+        source = instanced.boundingSphere;
+        // Not computed yet: assume visible rather than skip a real reflection.
+        if (!source) return true;
+      } else {
+        const geometry = mesh.geometry;
+        if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+        source = geometry.boundingSphere;
+        if (!source) return true;
+      }
+      _sphere.copy(source).applyMatrix4(mesh.matrixWorld);
+      if (_frustum.intersectsSphere(_sphere)) return true;
+    }
+    return false;
+  }
+
   override setSize(width: number, height: number): void {
     this.width = Math.max(1, width);
     this.height = Math.max(1, height);
@@ -461,8 +705,8 @@ export class ReflectionPass extends Pass {
     const h = Math.max(1, Math.round(this.height * this.resolutionScale));
     this.normalTarget.setSize(w, h);
     this.reflectionTarget.setSize(w, h);
-    this.reflectionMaterial.uniforms.uResolution.value.set(w, h);
-    this.compositeMaterial.uniforms.uReflectionTexel.value.set(1 / w, 1 / h);
+    this.blurTarget.setSize(w, h);
+    this.blurMaterial.uniforms.uReflectionTexel.value.set(1 / w, 1 / h);
   }
 
   override render(
@@ -470,7 +714,8 @@ export class ReflectionPass extends Pass {
     inputBuffer: THREE.WebGLRenderTarget,
     outputBuffer: THREE.WebGLRenderTarget | null
   ): void {
-    if (this.selects.length === 0) {
+    const camera = this.sceneCamera as THREE.PerspectiveCamera;
+    if (this.selects.length === 0 || !this.anythingVisible(camera)) {
       // Nothing reflective on screen: forward the frame untouched rather than
       // paying for two passes that would composite a black buffer.
       this.copy(renderer, inputBuffer, outputBuffer);
@@ -479,7 +724,6 @@ export class ReflectionPass extends Pass {
 
     this.syncLayers();
 
-    const camera = this.sceneCamera as THREE.PerspectiveCamera;
     // Copy the *world* matrices rather than re-deriving them: the game camera
     // is usually a child of a rig (chase arm, orbit pivot), so its local
     // position is not where it is in the world, and `updateMatrixWorld()` on a
@@ -499,6 +743,10 @@ export class ReflectionPass extends Pass {
     const previousBackground = this.targetScene.background;
     const previousClearColor = renderer.getClearColor(_clearColor).getHex();
     const previousClearAlpha = renderer.getClearAlpha();
+    // Every clear in this pass is explicit. Left on, `autoClear` would wipe the
+    // frame out of the input buffer right before the blend draws into it.
+    const previousAutoClear = renderer.autoClear;
+    renderer.autoClear = false;
 
     // Alpha 0 everywhere = "not reflective"; the shader's early-out depends on
     // the clear, so it has to be explicit and not inherit the scene's sky.
@@ -506,10 +754,22 @@ export class ReflectionPass extends Pass {
     // engine's sky colour, and leaving it black would flash the whole frame.
     this.targetScene.background = null;
     this.targetScene.overrideMaterial = this.normalMaterial;
+    // The beauty pass walked this graph a few microseconds ago and every world
+    // matrix in it is current. `renderer.render` would walk all of it again for
+    // the sake of the handful of meshes on the reflection layer — on a dressed
+    // circuit that traversal, not the draw calls, is what this pass costs the
+    // CPU. Sorting is equally pointless: the buffer stores normals, so draw
+    // order cannot change the result.
+    const previousMatrixAutoUpdate = this.targetScene.matrixWorldAutoUpdate;
+    const previousSortObjects = renderer.sortObjects;
+    this.targetScene.matrixWorldAutoUpdate = false;
+    renderer.sortObjects = false;
     renderer.setRenderTarget(this.normalTarget);
     renderer.setClearColor(0x000000, 0);
     renderer.clear(true, true, false);
     renderer.render(this.targetScene, this.normalCamera);
+    renderer.sortObjects = previousSortObjects;
+    this.targetScene.matrixWorldAutoUpdate = previousMatrixAutoUpdate;
     this.targetScene.overrideMaterial = previousOverride;
     this.targetScene.background = previousBackground;
     renderer.setClearColor(previousClearColor, previousClearAlpha);
@@ -523,39 +783,81 @@ export class ReflectionPass extends Pass {
 
     this.fullscreenQuad.material = this.reflectionMaterial;
     renderer.setRenderTarget(this.reflectionTarget);
-    renderer.clear(true, false, false);
+    // No clear: the quad covers the target and every path through the march
+    // shader writes gl_FragColor, so a clear would only be a second full write
+    // of the same pixels.
+    renderer.render(this.fullscreenScene, this.fullscreenCamera);
+
+    // Filter at reflection resolution, once, instead of at screen resolution
+    // for every reflective pixel.
+    this.fullscreenQuad.material = this.blurMaterial;
+    renderer.setRenderTarget(this.blurTarget);
     renderer.render(this.fullscreenScene, this.fullscreenCamera);
     this.reflectionCleared = false;
 
-    this.compositeMaterial.uniforms.tColor.value = inputBuffer.texture;
-    this.fullscreenQuad.material = this.compositeMaterial;
-    renderer.setRenderTarget(this.renderToScreen ? null : outputBuffer);
+    if (this.renderToScreen) {
+      // Last pass in the chain: nothing downstream will show the input buffer,
+      // so the frame has to be read and written out whole.
+      this.needsSwap = true;
+      this.compositeMaterial.uniforms.tColor.value = inputBuffer.texture;
+      this.fullscreenQuad.material = this.compositeMaterial;
+      renderer.setRenderTarget(null);
+    } else {
+      // Blend the reflection *into* the frame that is already in the input
+      // buffer and hand that same buffer on. The old path copied 1600×725
+      // pixels into the output buffer so that the ~5% of them carrying a
+      // reflection could be modified; now the untouched 95% are never written
+      // at all, and the pass costs one blend over the reflective pixels.
+      this.needsSwap = false;
+      this.fullscreenQuad.material = this.blendMaterial;
+      renderer.setRenderTarget(inputBuffer);
+    }
     renderer.render(this.fullscreenScene, this.fullscreenCamera);
 
+    renderer.autoClear = previousAutoClear;
     renderer.setRenderTarget(previousTarget);
   }
 
-  /** Straight blit, used when there is nothing to reflect. */
+  /** Nothing to reflect: leave the frame exactly as it arrived. */
   private copy(
     renderer: THREE.WebGLRenderer,
     inputBuffer: THREE.WebGLRenderTarget,
     outputBuffer: THREE.WebGLRenderTarget | null
   ): void {
-    // The composite still samples the reflection buffer, so it has to be empty
-    // — otherwise the last frame that *did* have a reflective mesh stays
-    // smeared over the scene for as long as none is on screen.
+    if (!this.renderToScreen) {
+      // Free: the frame is already in the input buffer, and telling the
+      // composer not to swap hands it to the next pass untouched. No clear of
+      // the reflection buffers is needed either — nothing samples them on this
+      // path. An indoor scene with no reflective surface in view pays nothing.
+      this.needsSwap = false;
+      return;
+    }
+
+    // Rendering to screen, so the frame still has to be moved there. The blur
+    // buffer is what the composite reads, and it must be empty first, or the
+    // last frame that *did* have a reflective mesh stays smeared over the scene
+    // for as long as none is on screen.
+    this.needsSwap = true;
     if (!this.reflectionCleared) {
       const target = renderer.getRenderTarget();
-      renderer.setRenderTarget(this.reflectionTarget);
+      const previousClear = renderer.getClearColor(_clearColor).getHex();
+      const previousAlpha = renderer.getClearAlpha();
+      renderer.setClearColor(0x000000, 0);
+      renderer.setRenderTarget(this.blurTarget);
       renderer.clear(true, false, false);
+      renderer.setClearColor(previousClear, previousAlpha);
       renderer.setRenderTarget(target);
       this.reflectionCleared = true;
     }
+    void outputBuffer;
     this.compositeMaterial.uniforms.tColor.value = inputBuffer.texture;
     this.fullscreenQuad.material = this.compositeMaterial;
     const previousTarget = renderer.getRenderTarget();
-    renderer.setRenderTarget(this.renderToScreen ? null : outputBuffer);
+    const previousAutoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.setRenderTarget(null);
     renderer.render(this.fullscreenScene, this.fullscreenCamera);
+    renderer.autoClear = previousAutoClear;
     renderer.setRenderTarget(previousTarget);
   }
 
@@ -573,9 +875,12 @@ export class ReflectionPass extends Pass {
     this.layeredMeshes.clear();
     this.normalTarget.dispose();
     this.reflectionTarget.dispose();
+    this.blurTarget.dispose();
     this.normalMaterial.dispose();
     this.reflectionMaterial.dispose();
+    this.blurMaterial.dispose();
     this.compositeMaterial.dispose();
+    this.blendMaterial.dispose();
     this.fullscreenQuad.geometry.dispose();
     super.dispose();
   }

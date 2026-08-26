@@ -14,7 +14,9 @@ const dirLightCache = new WeakMap<
  * height-fog inscattering both key off this light so every sun-driven effect
  * converges on the same position in the sky.
  */
-export function findFirstDirectionalLight(scene: Scene): DirectionalLight | null {
+export function findFirstDirectionalLight(
+  scene: Scene
+): DirectionalLight | null {
   let cached = dirLightCache.get(scene);
   // Cheap live count: DirectionalLights are direct children of the scene root
   // (the LightSyncSystem adds them there). Counting root children with the

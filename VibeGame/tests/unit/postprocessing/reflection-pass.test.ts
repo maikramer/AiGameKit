@@ -74,13 +74,14 @@ describe('ReflectionPass', () => {
     pass.dispose();
   });
 
-  it('derives the composite blur texel from the reflection buffer, not the screen', () => {
+  it('derives the blur texel from the reflection buffer, not the screen', () => {
     const pass = makePass([], 0.5);
     pass.setSize(1600, 900);
-    const composite = (
-      pass as unknown as { compositeMaterial: THREE.ShaderMaterial }
-    ).compositeMaterial;
-    const texel = composite.uniforms.uReflectionTexel.value as THREE.Vector2;
+    // The blur runs at reflection resolution, so it is the material that owns
+    // the tap spacing; the composite downstream is a single fetch.
+    const blur = (pass as unknown as { blurMaterial: THREE.ShaderMaterial })
+      .blurMaterial;
+    const texel = blur.uniforms.uReflectionTexel.value as THREE.Vector2;
     expect(texel.x).toBeCloseTo(1 / 800, 6);
     expect(texel.y).toBeCloseTo(1 / 450, 6);
     pass.dispose();
@@ -159,6 +160,90 @@ describe('ReflectionPass', () => {
       pass as unknown as { reflectionMaterial: THREE.ShaderMaterial }
     ).reflectionMaterial;
     expect(material.uniforms.tDepth.value).toBe(depth);
+    pass.dispose();
+  });
+
+  it('writes the reflection premultiplied by its own coverage', () => {
+    // Blurring colour and coverage independently is what put dark speckles all
+    // over the road: a tap that missed contributed rgb 0 at full weight.
+    const pass = makePass([]);
+    const source = (
+      pass as unknown as { reflectionMaterial: THREE.ShaderMaterial }
+    ).reflectionMaterial.fragmentShader;
+    expect(source).toContain('vec4(reflected * strength, strength)');
+    pass.dispose();
+  });
+
+  it('feeds the composite from the blurred buffer, not the raw march', () => {
+    const pass = makePass([]) as unknown as {
+      blurTarget: THREE.WebGLRenderTarget;
+      compositeMaterial: THREE.ShaderMaterial;
+      blendMaterial: THREE.ShaderMaterial;
+      dispose(): void;
+    };
+    expect(pass.compositeMaterial.uniforms.tReflection.value).toBe(
+      pass.blurTarget.texture
+    );
+    expect(pass.blendMaterial.uniforms.tReflection.value).toBe(
+      pass.blurTarget.texture
+    );
+    pass.dispose();
+  });
+
+  it('blends the reflection in with premultiplied source-over factors', () => {
+    // The in-place path relies on the blend unit for the composite, and on the
+    // alpha factors leaving the frame's own alpha untouched.
+    const pass = makePass([]) as unknown as {
+      blendMaterial: THREE.ShaderMaterial;
+      dispose(): void;
+    };
+    const material = pass.blendMaterial;
+    expect(material.blending).toBe(THREE.CustomBlending);
+    expect(material.blendSrc).toBe(THREE.OneFactor);
+    expect(material.blendDst).toBe(THREE.OneMinusSrcAlphaFactor);
+    expect(material.blendSrcAlpha).toBe(THREE.ZeroFactor);
+    expect(material.blendDstAlpha).toBe(THREE.OneFactor);
+    pass.dispose();
+  });
+
+  it('reports nothing visible when every reflective mesh is behind the camera', () => {
+    const road = makeMesh('road', 0.6);
+    road.position.set(0, 0, 50); // behind a camera looking down -Z
+    road.updateMatrixWorld(true);
+    const pass = makePass([road]);
+    const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.1, 1000);
+    camera.updateMatrixWorld(true);
+    const visible = (
+      pass as unknown as { anythingVisible(c: THREE.Camera): boolean }
+    ).anythingVisible(camera);
+    expect(visible).toBe(false);
+    pass.dispose();
+  });
+
+  it('reports visible for a reflective mesh in front of the camera', () => {
+    const road = makeMesh('road', 0.6);
+    road.position.set(0, 0, -20);
+    road.updateMatrixWorld(true);
+    const pass = makePass([road]);
+    const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.1, 1000);
+    camera.updateMatrixWorld(true);
+    const visible = (
+      pass as unknown as { anythingVisible(c: THREE.Camera): boolean }
+    ).anythingVisible(camera);
+    expect(visible).toBe(true);
+    pass.dispose();
+  });
+
+  it('drops a mesh from the layer set without a linear scan of the selects', () => {
+    const road = makeMesh('road', 0.6);
+    const glass = makeMesh('glass', 0.05);
+    const selects = [road, glass];
+    const pass = makePass(selects);
+    syncLayers(pass);
+    selects.splice(0, 1); // the effect rebuilds this array in place
+    syncLayers(pass);
+    expect(road.layers.isEnabled(11)).toBe(false);
+    expect(glass.layers.isEnabled(11)).toBe(true);
     pass.dispose();
   });
 });

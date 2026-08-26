@@ -5,6 +5,7 @@ import {
   Vector2,
   Vector3,
   type Camera,
+  type Object3D,
   type Scene,
   type WebGLRenderer,
 } from 'three';
@@ -531,13 +532,25 @@ function isSsrReflective(mesh: Mesh): boolean {
   return false;
 }
 
+/** Reused traversal stack — the rescan runs twice a second and would otherwise
+ *  hand the GC a fresh closure chain over the whole scene graph each time. */
+const ssrScanStack: Object3D[] = [];
+
 function refreshSsrSelects(scene: Scene, selects: Mesh[]): void {
   selects.length = 0;
-  scene.traverse((obj) => {
-    const mesh = obj as Mesh;
-    if (mesh.isMesh !== true) return;
-    if (isSsrReflective(mesh)) selects.push(mesh);
-  });
+  ssrScanStack.length = 0;
+  ssrScanStack.push(scene);
+  while (ssrScanStack.length > 0) {
+    const node = ssrScanStack.pop() as Object3D;
+    // A hidden subtree cannot reflect anything, and skipping it here prunes
+    // whole chunk hierarchies instead of testing every mesh inside them —
+    // `Object3D.traverse` has no way to say "not this branch".
+    if (node !== scene && node.visible === false) continue;
+    const mesh = node as Mesh;
+    if (mesh.isMesh === true && isSsrReflective(mesh)) selects.push(mesh);
+    const children = node.children;
+    for (let i = 0; i < children.length; i++) ssrScanStack.push(children[i]);
+  }
 }
 
 /** Per-pass handles for the height-fog effect: the wrapped effect plus the

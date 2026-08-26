@@ -160,10 +160,7 @@ export class HeightFogEffect extends Effect {
     const light = findFirstDirectionalLight(scene);
     if (!light) return;
     const dir = u.get('sunDirection')!.value as Vector3;
-    dir
-      .copy(light.position)
-      .sub(light.target.position)
-      .normalize();
+    dir.copy(light.position).sub(light.target.position).normalize();
     (u.get('sunColor')!.value as Color).copy(light.color);
   }
 }
