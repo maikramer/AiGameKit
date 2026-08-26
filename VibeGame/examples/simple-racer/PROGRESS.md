@@ -139,24 +139,21 @@ through each other.
 
 ## Assets
 
-Forest / village / infra / props (rock_mossy) manifests are **shared** with
-simple-rpg (`examples/shared-assets/` — canonical manifests + binaries). Copy
-the shared GLBs (no GPU):
+Every mesh/image pack (forest, village, infra, props, vehicles included) is
+canonical in `examples/shared-assets/` — manifests + binaries in one pool.
+This game reads them from the pool via `vibegame({ sharedAssets })` (see
+`vite.config.ts`): no copies and no symlinks inside the example, no sync step.
+Only race audio stays local (`public/assets/audio/`).
 
-```bash
-bash ../shared-assets/sync.sh
-```
+| Group                            | Manifest                                                        | Regenerate                                                                                         |
+| -------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Carts (vehicles)                 | `examples/shared-assets/manifests/vehicles.yaml`                | `cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/vehicles` |
+| Forest / village / infra / props | `examples/shared-assets/manifests/<pack>.yaml`                  | `cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/<pack>`   |
+| Audio                            | `sample-gameassets/manifests/audio.yaml` + `scripts/gen-sfx.sh` | `bash scripts/gen-sfx.sh` (race SFX stays; do not mix RPG BGM)                                     |
 
-Carts are the only GPU step for this example (`style_preset: painterly`):
-
-| Group                    | Manifest                                                        | Regenerate                                                                                    |
-| ------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Carts                    | `sample-gameassets/manifests/vehicles.yaml`                     | `cd sample-gameassets && gameassets resume --profile game.yaml --manifest manifests/vehicles` |
-| Forest / village / infra | symlinks → `examples/shared-assets/manifests/`                  | regen in `examples/shared-assets`, then `sync.sh`                                             |
-| Audio                    | `sample-gameassets/manifests/audio.yaml` + `scripts/gen-sfx.sh` | `bash scripts/gen-sfx.sh` (race SFX stays; do not mix RPG BGM)                                |
-
-Handoff writes into `../public` (`output_dir: ../../public/assets` from
-`sample-gameassets/`). `model-yaw="90"` — as carroças nascem deitadas ao longo
+Handoff for the vehicles pack runs from the pool (`cd examples/shared-assets
+&& gameassets handoff --profile game.yaml --manifest manifests/vehicles
+--public-dir public`). `model-yaw="90"` — as carroças nascem deitadas ao longo
 de X (bbox 2.40 × 1.68 × 1.14), e o motor **não** roda veículos pelo PCA
 (`normaliseModel` usa `minElongation: 99`: heading é só do autor), por isso o
 yaw 90 é o que põe o eixo comprido em +Z. Empilhar um auto-yaw em cima disso —

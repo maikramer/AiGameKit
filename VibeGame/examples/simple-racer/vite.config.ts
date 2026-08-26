@@ -4,6 +4,11 @@ import { defineConfig } from 'vite';
 
 const vibegameRoot = path.resolve(import.meta.dirname, '../..');
 
+const sharedAssets = path.join(
+  vibegameRoot,
+  'examples/shared-assets/public/assets'
+);
+
 export default defineConfig({
   resolve: {
     dedupe: ['three', 'vibegame'],
@@ -12,7 +17,7 @@ export default defineConfig({
       'vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),
     },
   },
-  plugins: [vibegame(), consoleForwarding()],
+  plugins: [vibegame({ sharedAssets }), consoleForwarding()],
   server: {
     port: 3020,
     open: process.env.BROWSER !== 'none',

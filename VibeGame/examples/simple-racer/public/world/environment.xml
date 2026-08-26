@@ -9,8 +9,8 @@
        compartilham um único sol. Nuvens ficam no shader do céu (integradas ao
        gradiente), não nos billboards do Weather. -->
   <Sky
-    sun-elevation="19"
-    sun-azimuth="215"
+    sun-elevation="17"
+    sun-azimuth="80"
     turbidity="3.2"
     rayleigh="1.9"
     mie-coefficient="0.0045"
@@ -36,9 +36,9 @@
        Tone mapping ACES (punch e contraste que o AgX lava), SSAO forte,
        height fog com perspectiva aérea + inscattering do sol. -->
   <GameObject
-    ambient-light="sky-color: 0xbcd3ea; ground-color: 0x9a8a6a; intensity: 0.15"
+    ambient-light="sky-color: 0xbcd3ea; ground-color: 0x9a8a6a; intensity: 0.3"
     directional-light="cast-shadow: 1; shadow-map-size: 4096; distance: 160; pcss: 1"
-    postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.15; bloom-radius: 0.55; bloom-threshold: 8.0; aa: smaa; tone-mapping: aces; tone-mapping-exposure: 0.78; vignette: 1; vignette-offset: 0.30; vignette-darkness: 0.32; color-grading: 1; saturation: 0.16; contrast: 0.10; brightness: 0.0; ssao: 1; ssao-intensity: 1.45; ssao-radius: 2.2; ssr: 1; ssr-opacity: 0.55; ssr-max-distance: 70; ssr-thickness: 0.6; ssr-resolution-scale: 0.5; height-fog: 1; fog-color: 0xc9bfae; fog-density: 0.0013; fog-height: 1.5; fog-falloff: 40; fog-noise: 0.3; fog-sun-influence: 1.3; fog-sky-haze: 0.35; film-grain: 0; chromatic-aberration: 0; god-rays: 0; depth-of-field: 0"
+    postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.18; bloom-radius: 0.55; bloom-threshold: 8.0; aa: smaa; tone-mapping: aces; tone-mapping-exposure: 0.92; vignette: 1; vignette-offset: 0.30; vignette-darkness: 0.32; color-grading: 1; saturation: 0.16; contrast: 0.10; brightness: 0.0; ssao: 1; ssao-intensity: 1.45; ssao-radius: 2.2; ssr: 1; ssr-opacity: 0.55; ssr-max-distance: 70; ssr-thickness: 0.6; ssr-resolution-scale: 0.5; height-fog: 1; fog-color: 0xc9bfae; fog-density: 0.0013; fog-height: 1.5; fog-falloff: 40; fog-noise: 0.3; fog-sun-influence: 1.3; fog-sky-haze: 0.35; film-grain: 1; film-grain-opacity: 0.03; chromatic-aberration: 1; ca-strength: 0.001; god-rays: 1; god-rays-density: 0.98; god-rays-decay: 0.94; god-rays-weight: 0.45; god-rays-exposure: 0.8; depth-of-field: 0"
   >
   </GameObject>
 

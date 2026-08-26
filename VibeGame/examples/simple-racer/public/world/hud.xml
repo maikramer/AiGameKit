@@ -33,25 +33,7 @@
     key="q"
     title-key="modal.pause"
   >
-    <OptionsTab label-key="modal.tab.options">
-      <OptionRow
-        id="music-volume"
-        type="slider"
-        label-key="options.music"
-        min="0"
-        max="100"
-        step="5"
-        default="70"
-      ></OptionRow>
-      <OptionRow
-        id="sfx-volume"
-        type="slider"
-        label-key="options.sfx"
-        min="0"
-        max="100"
-        step="5"
-        default="80"
-      ></OptionRow>
+    <OptionsTab label-key="modal.tab.options" preset="core">
       <OptionRow
         id="save"
         type="button"

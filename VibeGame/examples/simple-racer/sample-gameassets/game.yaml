@@ -49,11 +49,11 @@ text2sound:
   audio_format: ogg
 
 # ============================================================
-# ASSETS: em manifests/<grupo>.yaml — 1 manifesto por grupo.
-#   gameassets resume --profile game.yaml --manifest manifests/vehicles
-# forest / village / infra / props: symlinks → examples/shared-assets/manifests/
-#   (binários canónicos em shared-assets/public/assets; sync.sh copia para cá;
-#    GPU só nas carroças)
+# ASSETS — só o audio é específico deste jogo:
 #   gameassets resume --profile game.yaml --manifest manifests/audio
-# Cada grupo declara a própria pasta (output_dir / meshes_subdir / images_subdir).
+# Todos os packs de meshes/imagens (vehicles incluído) são canónicos em
+# examples/shared-assets/manifests/ — regen a partir de lá (ver README do
+# pool); os binários vivem em shared-assets/public/assets e chegam ao jogo
+# via plugin vibegame({ sharedAssets }) no vite.config.ts. Sem symlinks e
+# sem passo de sync.
 # ============================================================
