@@ -303,7 +303,13 @@ function padCoreWorldY(
   localZ: number,
   terrainBaseYValue: number
 ): number | null {
-  for (const brush of getGroundBrushes(state)) {
+  // Pads stamp the sampler in registration order (XML order), so the LAST
+  // brush whose core contains the point is the one that won the write — a
+  // ramp or knoll overlapping a terrace core overwrites the terrace. Any
+  // earlier brush would describe ground that no longer exists.
+  const brushes = getGroundBrushes(state);
+  for (let i = brushes.length - 1; i >= 0; i--) {
+    const brush = brushes[i]!;
     if (brush.kind !== 'pad' || brush.targetY === undefined) continue;
     if (pointInPadCore(brush, localX, localZ)) {
       return terrainBaseYValue + brush.targetY;

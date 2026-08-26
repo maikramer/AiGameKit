@@ -99,12 +99,25 @@ const spawnerStateMap = new WeakMap<State, SpawnerState>();
 interface SpawnerState {
   callbackRegistered: boolean;
   spawnHeightmapDeferFrames: number;
+  /** At least one group has been planted, so the frame budget may kick in. */
+  spawnedAnyGroup: boolean;
 }
+
+/**
+ * Wall-clock a single frame may spend planting groups. Only checked *between*
+ * groups, so one dense carpet still runs to completion — the point is to stop
+ * eighty of them from landing in the same frame, not to interleave one.
+ */
+const SPAWN_FRAME_BUDGET_MS = 8;
 
 function getSpawnerState(state: State): SpawnerState {
   let s = spawnerStateMap.get(state);
   if (!s) {
-    s = { callbackRegistered: false, spawnHeightmapDeferFrames: 0 };
+    s = {
+      callbackRegistered: false,
+      spawnHeightmapDeferFrames: 0,
+      spawnedAnyGroup: false,
+    };
     spawnerStateMap.set(state, s);
   }
   return s;
@@ -273,8 +286,23 @@ export const TerrainSpawnSystem: System = defineSystem({
       spawnerState.spawnHeightmapDeferFrames = 0;
     }
 
+    // Planting the RPG village is ~97k instances across 80 groups. Doing it in
+    // one call held the main thread for seconds: the loading screen froze and
+    // every GLB already in flight ran out its timeout while the thread was
+    // busy, so the world came up with holes in it. Groups are independent and
+    // seeded, so stopping between two of them and resuming next frame is the
+    // same world — it just lets the loader and the screen breathe.
+    const budgetStart = performance.now();
+
     for (const eid of spawnerQuery(state.world)) {
       if (SpawnerPending.spawned[eid]) continue;
+      if (
+        spawnerState.spawnedAnyGroup &&
+        performance.now() - budgetStart > SPAWN_FRAME_BUDGET_MS
+      ) {
+        // Out of budget: the rest keep their pending flag and run next frame.
+        break;
+      }
 
       const spec = specs.get(eid);
       if (!spec) {
@@ -533,6 +561,7 @@ export const TerrainSpawnSystem: System = defineSystem({
       }
 
       SpawnerPending.spawned[eid] = 1;
+      spawnerState.spawnedAnyGroup = true;
     }
   },
 });
