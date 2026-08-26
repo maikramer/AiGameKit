@@ -4,9 +4,10 @@ import {
   saveToLocalStorage,
   setMusicVolume,
   setSfxVolume,
+  setQualityMode,
   MODAL_OPTION_CHANGED,
 } from 'vibegame';
-import type { State } from 'vibegame';
+import type { QualityModeName, State } from 'vibegame';
 
 export interface OptionsConfig {
   /** LocalStorage key that enables the Save/Load option rows. */
@@ -43,7 +44,10 @@ export function wireOptions(state: State, cfg: OptionsConfig = {}): void {
       setMusicVolume(state, sliderPercent(p.value) / 100);
     else if (id === 'sfx-volume')
       setSfxVolume(state, sliderPercent(p.value) / 100);
-    else if (p.id === 'save' && cfg.saveKey) {
+    else if (id === 'quality-mode') {
+      const mode = String(p.value) as QualityModeName;
+      setQualityMode(state, mode);
+    } else if (p.id === 'save' && cfg.saveKey) {
       void saveToLocalStorage(state, cfg.saveKey)
         .then(() => cfg.onSave?.())
         .catch((err) => console.error('[options] save failed:', err));

@@ -4,6 +4,7 @@ import { AdaptiveQuality } from './components';
 import {
   QualityTier,
   TIER_PRESETS,
+  applyPendingQualityOverride,
   getAdaptiveQualityTier,
 } from './quality-tiers';
 
@@ -26,11 +27,14 @@ const COLD_FRAMES_TO_UPSCALE = 300; // ~5s — require sustained headroom to upg
 
 /** Hysteresis: downscale when frame time exceeds target by this factor, upgrade
  *  when it drops below target by this factor (we want clear headroom). */
-const DOWNSCALE_HYSTERESIS = 1.08;
-const UPSCALE_HYSTERESIS = 0.72;
+const DOWNSCALE_HYSTERESIS = 1.35;
+const UPSCALE_HYSTERESIS = 0.55;
 
-/** Cooldown (ms) between any two tier transitions to avoid rapid oscillation. */
-const TRANSITION_COOLDOWN_MS = 3500;
+/** Cooldown (ms) between any two tier transitions to avoid rapid oscillation.
+ *  A tier flip resizes every render buffer (composer, AO, reflections) — at
+ *  ~3.5 s a machine sitting on the threshold band visibly churned, one noisy
+ *  resize frame every few seconds. Longer cooldown + wider hysteresis band. */
+const TRANSITION_COOLDOWN_MS = 10_000;
 
 /**
  * Measurement system: samples the real (unscaled) frame delta each frame and
@@ -47,6 +51,10 @@ export const AdaptiveQualityMeasureSystem: System = defineSystem({
     if (entities.length === 0) return;
     const eid = entities[0];
     if (!AdaptiveQuality.enabled[eid]) return;
+
+    // The `?quality=` page query was captured at plugin initialize — before
+    // this component entity existed. Apply it on the first update and clear.
+    applyPendingQualityOverride(state);
 
     // state.time.unscaledDeltaTime is the real wall-clock delta of the last
     // frame (seconds), set by the scheduler BEFORE systems run.
@@ -79,6 +87,29 @@ export const AdaptiveQualityApplySystem: System = defineSystem({
     if (entities.length === 0) return;
     const eid = entities[0];
     if (!AdaptiveQuality.enabled[eid]) return;
+
+    // Forced mode (Low/Medium/High/Max): the tier is derived from the mode —
+    // no auto transitions and `currentTier` stays untouched so Auto can resume
+    // from where the scaler left it. The pixel-ratio lever still applies so
+    // the renderer follows the forced tier.
+    if (AdaptiveQuality.mode[eid] > 0) {
+      const forcedTier = getAdaptiveQualityTier(state);
+      const clampedRatio = Math.min(
+        AdaptiveQuality.maxPixelRatio[eid],
+        Math.max(
+          AdaptiveQuality.minPixelRatio[eid],
+          TIER_PRESETS[forcedTier]?.pixelRatioScale ?? 1.0
+        )
+      );
+      const renderer = getRenderingContext(state).renderer;
+      if (
+        renderer &&
+        Math.abs(renderer.getPixelRatio() - clampedRatio) > 1e-3
+      ) {
+        renderer.setPixelRatio(clampedRatio);
+      }
+      return;
+    }
 
     const targetMs = 1000 / AdaptiveQuality.targetFps[eid];
     const ema = AdaptiveQuality.emaFrameMs[eid];

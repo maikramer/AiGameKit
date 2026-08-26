@@ -10,8 +10,10 @@ import type { Recipe } from '../../core';
  * full visual fidelity while the GPU has headroom and degrades gracefully
  * under sustained load.
  *
- * Usage:
+ * Usage (Auto — the default — lets the scaler drive the tier):
  *   <AdaptiveQuality target-fps="50" min-pixel-ratio="0.75"></AdaptiveQuality>
+ * Force a tier for testing (or pin via `?quality=` on the page URL):
+ *   <AdaptiveQuality mode="low"></AdaptiveQuality>  <!-- low|medium|high|max|auto -->
  *
  * Place anywhere under `<Scene>`. There should be at most one per scene.
  */

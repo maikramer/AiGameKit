@@ -17,6 +17,7 @@ import type { InventoryTabConfig } from './inventory-tab';
 import { createQuestsTab } from '../../quests/hud/quests-tab';
 import type { QuestsTabConfig } from '../../quests/hud/quests-tab';
 import {
+  CORE_OPTION_DEFS,
   createOptionsTab,
   parseOptionDef,
   registerOptionDef,
@@ -400,7 +401,7 @@ export function buildTabsFromChildren(
         build: (s) => createQuestsTab(s, { targetEntity }),
       });
     } else if (tag === 'optionstab') {
-      const defs = (
+      const childDefs = (
         child.children as readonly {
           tagName: string;
           attributes: Record<string, XMLValue>;
@@ -408,6 +409,11 @@ export function buildTabsFromChildren(
       )
         .filter((c) => String(c.tagName).toLowerCase() === 'optionrow')
         .map((c) => parseOptionDef(c.attributes));
+      // `preset="core"` prepends the standard rows (quality mode + audio
+      // buses) so every example shares them without copy-pasting XML.
+      const preset = readAttr(child.attributes, 'preset');
+      const defs =
+        preset === 'core' ? [...CORE_OPTION_DEFS, ...childDefs] : childDefs;
       for (const d of defs) registerOptionDef(state, d);
       tabs.push({
         id: tabId,

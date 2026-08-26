@@ -104,25 +104,112 @@ export const TIER_PRESETS: readonly QualityTierPreset[] = [
   },
 ];
 
-/** Read the current tier for the active AdaptiveQuality entity (0 if none). */
-export function getAdaptiveQualityTier(state: State): number {
+/** Quality mode names as used by the options UI and the `?quality=` query. */
+export type QualityModeName = 'auto' | 'low' | 'medium' | 'high' | 'max';
+
+/** Component value for each mode name (order matches `AdaptiveQuality.mode`). */
+export const QUALITY_MODE_VALUES = {
+  auto: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  max: 4,
+} as const satisfies Record<QualityModeName, number>;
+
+/** Inverse mapping: component value → mode name. */
+const QUALITY_MODE_NAMES = ['auto', 'low', 'medium', 'high', 'max'] as const;
+
+/** Tier each forced mode pins (0=Max … 3=Low); Auto has no fixed tier. */
+const MODE_PINNED_TIER = [-1, 3, 2, 1, 0] as const;
+
+/** Find the active AdaptiveQuality entity id (single-entity component). */
+function activeQualityEntity(
+  state: State
+): { arr: typeof AdaptiveQuality; eid: number } | null {
   const arr = state.getComponent('adaptive-quality') as
     typeof AdaptiveQuality | undefined;
-  if (!arr) return QualityTier.Max;
-  // There is at most one AdaptiveQuality entity per scene; read its tier.
+  if (!arr) return null;
   for (let i = 0; i < arr.enabled.length; i++) {
-    if (arr.enabled[i]) return arr.currentTier[i];
+    if (arr.enabled[i]) return { arr, eid: i };
   }
-  return QualityTier.Max;
+  return null;
+}
+
+/** Read the current tier for the active AdaptiveQuality entity (0 if none).
+ *  A forced mode (Low/Medium/High/Max) pins its tier; Auto returns the tier
+ *  the auto-scaler settled on. */
+export function getAdaptiveQualityTier(state: State): number {
+  const active = activeQualityEntity(state);
+  if (!active) return QualityTier.Max;
+  const mode = active.arr.mode[active.eid];
+  if (mode > 0) return MODE_PINNED_TIER[mode] ?? QualityTier.Max;
+  return active.arr.currentTier[active.eid];
+}
+
+/** Read the current quality mode name ('auto' when no entity exists). */
+export function getQualityMode(state: State): QualityModeName {
+  const active = activeQualityEntity(state);
+  if (!active) return 'auto';
+  return QUALITY_MODE_NAMES[active.arr.mode[active.eid]] ?? 'auto';
+}
+
+/** Force a quality mode at runtime (options UI, tests). The forced tier is
+ *  DERIVED (never written into `currentTier`), so returning to Auto resumes
+ *  from the tier the scaler had chosen. Returns false when the scene has no
+ *  active `<AdaptiveQuality>` entity to configure. */
+export function setQualityMode(state: State, mode: QualityModeName): boolean {
+  const active = activeQualityEntity(state);
+  if (!active) return false;
+  const value = QUALITY_MODE_VALUES[mode];
+  active.arr.mode[active.eid] = value;
+  if (value > 0) {
+    // A forced tier is immediately authoritative — reset the transition
+    // cooldown so returning to Auto later starts a fresh evaluation window.
+    active.arr.lastTransitionMs[active.eid] = performance.now();
+  }
+  return true;
+}
+
+/** `?quality=` override captured once at boot (the plugin initializes before
+ *  the world XML creates the component entity, so the measure system applies
+ *  this on its first update and clears it). */
+let pendingQueryMode: QualityModeName | null = null;
+
+/** Read `?quality=auto|low|medium|high|max` (alias: `aq`) from the page URL.
+ *  Invalid values are ignored. Exported for tests. */
+export function parseQualityQuery(url: string): QualityModeName | null {
+  const q = url.indexOf('?');
+  if (q === -1) return null;
+  for (const pair of url.slice(q + 1).split('&')) {
+    const eq = pair.indexOf('=');
+    if (eq === -1) continue;
+    const key = pair.slice(0, eq);
+    if (key !== 'quality' && key !== 'aq') continue;
+    const value = pair.slice(eq + 1).toLowerCase();
+    if ((QUALITY_MODE_NAMES as readonly string[]).includes(value)) {
+      return value as QualityModeName;
+    }
+  }
+  return null;
+}
+
+/** Capture the query override (called from the plugin initialize). */
+export function captureQualityQueryOverride(): void {
+  if (typeof window === 'undefined' || typeof location === 'undefined') return;
+  pendingQueryMode = parseQualityQuery(location.href);
+}
+
+/** Apply the captured query override once an entity exists. Returns true when
+ *  an override was pending and got applied. */
+export function applyPendingQualityOverride(state: State): boolean {
+  if (!pendingQueryMode) return false;
+  const mode = pendingQueryMode;
+  pendingQueryMode = null;
+  return setQualityMode(state, mode);
 }
 
 /** True when adaptive quality is present AND enabled (i.e. tiers may be > 0). */
 export function isAdaptiveQualityActive(state: State): boolean {
-  const arr = state.getComponent('adaptive-quality') as
-    typeof AdaptiveQuality | undefined;
-  if (!arr) return false;
-  for (let i = 0; i < arr.enabled.length; i++) {
-    if (arr.enabled[i]) return true;
-  }
-  return false;
+  const active = activeQualityEntity(state);
+  return active !== null;
 }

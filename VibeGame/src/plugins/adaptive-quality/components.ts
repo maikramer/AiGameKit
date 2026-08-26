@@ -23,6 +23,10 @@ import {
 export const AdaptiveQuality = defineComponent({
   /** 0 = disabled (no measurement, tier stays at 0 = Max). */
   enabled: U8,
+  /** Quality mode. 0 = Auto (the auto-scaler drives the tier), 1 = Low,
+   *  2 = Medium, 3 = High, 4 = Max — a forced mode pins the tier and skips
+   *  the auto-scaler entirely (options UI / `?quality=` query override). */
+  mode: U8,
   /** Target frame rate; the scaler engages when sustained frame time exceeds
    *  `1000 / targetFps * downscaleHysteresis`. */
   targetFps: F32,

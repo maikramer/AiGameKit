@@ -48,6 +48,41 @@ function defaultValue(def: OptionDef): string {
   return def.values?.[0] ?? '';
 }
 
+/**
+ * Standard option rows every example shares: quality mode (Auto/Low/Medium/
+ * High/Max — AdaptiveQuality) and the audio mixer buses. `<OptionsTab
+ * preset="core">` registers these so each game's XML only declares its own
+ * rows (Save/Load, Restart, controls note…). The shared wiring lives in
+ * `examples/shared/src/options.ts`.
+ */
+export const CORE_OPTION_DEFS: readonly OptionDef[] = [
+  {
+    id: 'quality-mode',
+    labelKey: 'options.quality',
+    type: 'cycle',
+    values: ['auto', 'low', 'medium', 'high', 'max'],
+    default: 'auto',
+  },
+  {
+    id: 'music-volume',
+    labelKey: 'options.music',
+    type: 'slider',
+    min: 0,
+    max: 100,
+    step: 5,
+    default: 70,
+  },
+  {
+    id: 'sfx-volume',
+    labelKey: 'options.sfx',
+    type: 'slider',
+    min: 0,
+    max: 100,
+    step: 5,
+    default: 80,
+  },
+];
+
 export function registerOptionDef(state: State, def: OptionDef): void {
   const m = optionMap(state);
   if (!m.has(def.id)) {
