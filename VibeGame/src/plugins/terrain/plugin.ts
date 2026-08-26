@@ -49,6 +49,7 @@ export const TerrainPlugin: Plugin = {
         halfX: 8,
         halfZ: 8,
         height: 0,
+        heightMode: 0,
         falloff: 8,
         cornerRadius: 4,
         applied: 0,
@@ -107,6 +108,14 @@ export const TerrainPlugin: Plugin = {
         'color-mid': terrainColorAdapter('colorMid') as Adapter,
         'color-low': terrainColorAdapter('colorLow') as Adapter,
         'color-rock': terrainColorAdapter('colorRock') as Adapter,
+      },
+    },
+    enums: {
+      'terrain-pad': {
+        heightMode: {
+          auto: 0,
+          absolute: 1,
+        },
       },
     },
     parsers: {

@@ -62,8 +62,24 @@ export const TerrainPad = defineComponent({
   halfX: F32,
   /** Half-extent of the flat core along Z (m). */
   halfZ: F32,
-  /** Target height (m). 0 = auto: sample the pre-flatten terrain at centre. */
+  /**
+   * Target height (m).
+   *
+   * Read together with {@link TerrainPad.heightMode}: in `auto` mode this is an
+   * output (the apply system writes the sampled height back so navmesh and
+   * placement can read the resolved pad plane), in `absolute` mode it is the
+   * input the caller asked for.
+   */
   height: F32,
+  /**
+   * `0` = auto (sample the pre-flatten terrain at the pad centre), `1` =
+   * absolute (use `height` verbatim).
+   *
+   * Needed because `height` alone cannot express intent: a pad explicitly
+   * pinned to sea level (`height="0"`) is indistinguishable from an unset one,
+   * and terraces stacked from a zero baseline want exactly that.
+   */
+  heightMode: U8,
   /** Blend ring width (m) back to the original terrain. */
   falloff: F32,
   /** Corner rounding radius (m). */

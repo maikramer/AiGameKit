@@ -51,9 +51,11 @@ export const TerrainPadApplySystem: System = defineSystem({
       const lz = Transform.posZ[eid] - data.worldOffset.z;
       const halfX = TerrainPad.halfX[eid] || 8;
       const halfZ = TerrainPad.halfZ[eid] || 8;
-      // Auto height: the untouched terrain at the pad centre.
+      // Absolute height when the author gave one, else the untouched terrain at
+      // the pad centre. The mode flag (not `height !== 0`) is what lets a pad
+      // be pinned to exactly 0 — a legitimate terrace baseline.
       const targetY =
-        TerrainPad.height[eid] !== 0
+        TerrainPad.heightMode[eid] === 1
           ? TerrainPad.height[eid]
           : sampleHeightAt(data.sampler, lx, lz);
       const falloff = TerrainPad.falloff[eid] || 8;
@@ -93,8 +95,12 @@ export const TerrainPadApplySystem: System = defineSystem({
       if (changed) rebuildTerrainDerivatives(state, field.entity, data);
 
       // Persist resolved height so navmesh / consumers can read the pad plane
-      // even when the recipe used auto height (height=0 before apply).
+      // even when the recipe used auto height (height=0 before apply). The mode
+      // is promoted to `absolute` alongside it: the pad is now stamped, so a
+      // re-apply must reuse this plane rather than re-sample terrain it has
+      // already flattened.
       TerrainPad.height[eid] = targetY;
+      TerrainPad.heightMode[eid] = 1;
       registerGroundBrush(state, {
         kind: 'pad',
         minX: lx - reachX,
@@ -117,6 +123,11 @@ export const TerrainPadApplySystem: System = defineSystem({
 
 /** Parses `<TerrainPad at="x z" size="w d">` into Transform + TerrainPad. */
 export const terrainPadParser: Parser = ({ entity, element }) => {
+  // Presence of the attribute — not its value — is what marks the height as
+  // authored, so `height="0"` pins the pad to zero instead of auto-sampling.
+  if (element.attributes.height != null) {
+    TerrainPad.heightMode[entity] = 1;
+  }
   const at = element.attributes.at;
   if (at != null) {
     const v = at as { x?: number; y?: number } | string;

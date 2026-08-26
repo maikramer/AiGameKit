@@ -107,6 +107,173 @@ export function pointInAnyPadCore(state: State, x: number, z: number): boolean {
   return false;
 }
 
+/**
+ * Uniform grid over one brush polyline, so "is this point on the road?" reads
+ * the handful of segments near it instead of the whole path.
+ *
+ * The spawner asks that question hundreds of thousands of times while planting
+ * a world (every candidate position, every attempt, for the corridor, the carve
+ * and the surface sample). Walking a kilometre of road polyline for each of
+ * them cost 17 s of a 47 s spawn pass in the RPG demo, with the main thread
+ * blocked the whole time — long enough for every in-flight GLB to hit its
+ * timeout. The grid turns each query into one bucket lookup.
+ */
+interface BrushPathIndex {
+  cell: number;
+  minX: number;
+  minZ: number;
+  cols: number;
+  rows: number;
+  /** CSR layout: bucket i owns `segs[starts[i] .. starts[i + 1])`. */
+  starts: Int32Array;
+  /** Index into `path` of each segment's first point (step 2). */
+  segs: Int32Array;
+}
+
+/** Ceiling on grid cells per brush, so a long thin road cannot allocate a
+ *  million empty buckets for its diagonal bounding box. */
+const MAX_PATH_INDEX_CELLS = 1 << 16;
+
+/** One index per (brush, half-width) — corridor and carve widths differ. */
+const pathIndexCache = new WeakMap<
+  GroundBrush,
+  Map<number, BrushPathIndex | null>
+>();
+
+function buildPathIndex(path: number[], half: number): BrushPathIndex | null {
+  const points = path.length >> 1;
+  if (points < 2) return null;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i < path.length; i += 2) {
+    const x = path[i]!;
+    const z = path[i + 1]!;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (z < minZ) minZ = z;
+    if (z > maxZ) maxZ = z;
+  }
+  // Segments are inserted with their AABB grown by `half`, so a point within
+  // `half` of a segment always lands in a bucket that holds it.
+  minX -= half;
+  maxX += half;
+  minZ -= half;
+  maxZ += half;
+
+  let cell = Math.max(half * 2, 4);
+  let cols = Math.max(1, Math.ceil((maxX - minX) / cell));
+  let rows = Math.max(1, Math.ceil((maxZ - minZ) / cell));
+  if (cols * rows > MAX_PATH_INDEX_CELLS) {
+    const scale = Math.sqrt((cols * rows) / MAX_PATH_INDEX_CELLS);
+    cell *= scale;
+    cols = Math.max(1, Math.ceil((maxX - minX) / cell));
+    rows = Math.max(1, Math.ceil((maxZ - minZ) / cell));
+  }
+
+  const bucketCount = cols * rows;
+  const counts = new Int32Array(bucketCount + 1);
+  const segCount = points - 1;
+
+  const forEachCell = (seg: number, visit: (bucket: number) => void): void => {
+    const i = seg * 2;
+    const ax = path[i]!;
+    const az = path[i + 1]!;
+    const bx = path[i + 2]!;
+    const bz = path[i + 3]!;
+    const x0 = Math.floor((Math.min(ax, bx) - half - minX) / cell);
+    const x1 = Math.floor((Math.max(ax, bx) + half - minX) / cell);
+    const z0 = Math.floor((Math.min(az, bz) - half - minZ) / cell);
+    const z1 = Math.floor((Math.max(az, bz) + half - minZ) / cell);
+    for (let cz = Math.max(0, z0); cz <= Math.min(rows - 1, z1); cz++) {
+      for (let cx = Math.max(0, x0); cx <= Math.min(cols - 1, x1); cx++) {
+        visit(cz * cols + cx);
+      }
+    }
+  };
+
+  for (let seg = 0; seg < segCount; seg++) {
+    forEachCell(seg, (bucket) => {
+      counts[bucket + 1]!++;
+    });
+  }
+  for (let i = 0; i < bucketCount; i++) counts[i + 1]! += counts[i]!;
+
+  const segs = new Int32Array(counts[bucketCount]!);
+  const cursor = counts.slice(0, bucketCount);
+  for (let seg = 0; seg < segCount; seg++) {
+    forEachCell(seg, (bucket) => {
+      segs[cursor[bucket]!++] = seg * 2;
+    });
+  }
+
+  return { cell, minX, minZ, cols, rows, starts: counts, segs };
+}
+
+function getPathIndex(brush: GroundBrush, half: number): BrushPathIndex | null {
+  const path = brush.path;
+  if (!path || path.length < 4 || half <= 0) return null;
+  let byHalf = pathIndexCache.get(brush);
+  if (!byHalf) {
+    byHalf = new Map();
+    pathIndexCache.set(brush, byHalf);
+  }
+  let index = byHalf.get(half);
+  if (index === undefined) {
+    index = buildPathIndex(path, half);
+    byHalf.set(half, index);
+  }
+  return index;
+}
+
+/** Squared XZ distance from a point to one polyline segment. */
+function segmentDistanceSq(
+  path: number[],
+  i: number,
+  x: number,
+  z: number
+): number {
+  const ax = path[i]!;
+  const az = path[i + 1]!;
+  const dx = path[i + 2]! - ax;
+  const dz = path[i + 3]! - az;
+  const lenSq = dx * dx + dz * dz;
+  let t = lenSq > 0 ? ((x - ax) * dx + (z - az) * dz) / lenSq : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const ox = x - (ax + t * dx);
+  const oz = z - (az + t * dz);
+  return ox * ox + oz * oz;
+}
+
+/**
+ * True when (x, z) is within `half` of the brush path — the same answer as
+ * `distanceToBrushPath(...) <= half`, reached through the grid.
+ */
+function pathWithinDistance(
+  brush: GroundBrush,
+  x: number,
+  z: number,
+  half: number
+): boolean {
+  const path = brush.path!;
+  const index = getPathIndex(brush, half);
+  if (!index) return distanceToBrushPath(path, x, z) <= half;
+
+  const cx = Math.floor((x - index.minX) / index.cell);
+  const cz = Math.floor((z - index.minZ) / index.cell);
+  if (cx < 0 || cz < 0 || cx >= index.cols || cz >= index.rows) return false;
+
+  const bucket = cz * index.cols + cx;
+  const end = index.starts[bucket + 1]!;
+  const halfSq = half * half;
+  for (let k = index.starts[bucket]!; k < end; k++) {
+    if (segmentDistanceSq(path, index.segs[k]!, x, z) <= halfSq) return true;
+  }
+  return false;
+}
+
 /** Shortest XZ distance from a point to a road/river polyline brush path. */
 function distanceToBrushPath(path: number[], x: number, z: number): number {
   let best = Infinity;
@@ -138,7 +305,7 @@ export function pointInRoadCorridor(
   if (brush.kind !== 'road' || brush.flying) return false;
   const half = brush.halfWidth ?? 0;
   if (half <= 0 || !brush.path || brush.path.length < 4) return false;
-  return distanceToBrushPath(brush.path, x, z) <= half;
+  return pathWithinDistance(brush, x, z, half);
 }
 
 /**
@@ -153,7 +320,7 @@ export function pointInRoadCarve(
   if (brush.kind !== 'road' || brush.flying) return false;
   const half = brush.carveHalfWidth ?? brush.halfWidth ?? 0;
   if (half <= 0 || !brush.path || brush.path.length < 4) return false;
-  return distanceToBrushPath(brush.path, x, z) <= half;
+  return pathWithinDistance(brush, x, z, half);
 }
 
 /** Nearest point on a brush polyline: distance plus segment parameter. */
