@@ -288,18 +288,32 @@ class TestCalibratedPeakSignals:
         )
         return cal_dir
 
+    def _stub_vram(self, monkeypatch: pytest.MonkeyPatch, mib: int = 6144) -> None:
+        """`resolve_vramd_calibration` também sonda a VRAM total (torch/NVML).
+
+        Sem GPU — CI e venvs sem CUDA — o probe devolve ``None`` e nenhuma
+        calibração é escolhida, mesmo com o catálogo apontado. Fixa 6 GB
+        (classe nominal do ficheiro ``backends-6g.yaml`` dos testes).
+        """
+        from aigamekit_shared import gpu as gpu_mod
+
+        monkeypatch.setattr(gpu_mod, "gpu_total_mib", lambda *a, **k: mib)
+
     def test_signals_from_calibration(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(ms, "CALIBRATED_DIR", self._catalog(tmp_path))
+        self._stub_vram(monkeypatch)
         signals = ms.calibrated_peak_signals("paint3d")
         assert signals == {"sdnq_preset": "sdnq-uint8", "memory_efficient": True}
 
     def test_quant_mode_none_means_no_preset(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(ms, "CALIBRATED_DIR", self._catalog(tmp_path, preset="none"))
+        self._stub_vram(monkeypatch)
         signals = ms.calibrated_peak_signals("paint3d")
         assert signals.get("sdnq_preset") is None
 
     def test_unknown_backend_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(ms, "CALIBRATED_DIR", self._catalog(tmp_path))
+        self._stub_vram(monkeypatch)
         assert ms.calibrated_peak_signals("text3d") is None
 
     def test_no_calibration_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

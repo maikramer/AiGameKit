@@ -307,6 +307,11 @@ class TestWithUmsPeakOpts:
             encoding="utf-8",
         )
         monkeypatch.setattr(ms, "CALIBRATED_DIR", cal_dir)
+        # resolve_vramd_calibration sonda a VRAM total (torch/NVML); sem GPU
+        # devolve None e a calibração nunca é escolhida. Fixa 6 GB.
+        from aigamekit_shared import gpu as gpu_mod
+
+        monkeypatch.setattr(gpu_mod, "gpu_total_mib", lambda *a, **k: 6144)
         out = with_vramd_peak_opts({}, backend="paint3d")
         assert out["sdnq_preset"] == "sdnq-uint8"
         assert out["memory_efficient"] is True
