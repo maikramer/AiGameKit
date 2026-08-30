@@ -20,10 +20,23 @@ from typing import Any
 
 import torch
 from einops import rearrange
-from stable_audio_tools import get_pretrained_model
-from stable_audio_tools.inference.generation import generate_diffusion_cond
 
 from aigamekit_shared.diffusion_control import GenerationAborted
+
+# stable_audio_tools é pesado e opcional em ambientes de teste (CI não o
+# instala): importar com fallback mantém este módulo importável e os nomes
+# presentes ao nível do módulo — os testes fazem @patch sobre eles.
+try:
+    from stable_audio_tools import get_pretrained_model
+    from stable_audio_tools.inference.generation import generate_diffusion_cond
+except ImportError:
+
+    def get_pretrained_model(*args: object, **kwargs: object) -> object:
+        raise ImportError("stable_audio_tools não instalado — necessário para carregar e gerar modelos")
+
+    def generate_diffusion_cond(*args: object, **kwargs: object) -> object:
+        raise ImportError("stable_audio_tools não instalado — necessário para gerar áudio")
+
 
 from .models import MODEL_MUSIC_ID
 
