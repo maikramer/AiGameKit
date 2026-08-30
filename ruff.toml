@@ -47,6 +47,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 "Materialize/installer/installer.py" = ["E402"]
 "Text2Sound/tests/test_audio_processor.py" = ["E402"]
 "Text2Sound/tests/test_generator.py" = ["E402"]
+"Text2Sound/tests/test_vram_release.py" = ["E402"]
 
 # Vendored code (Tencent Hunyuan3D) - only critical errors
 "**/hunyuan3d-2.1/**" = ["E722", "E711", "E713", "E714", "UP", "B006", "RUF", "SIM", "W293", "W291", "F811", "E501", "E402", "B007", "F401"]

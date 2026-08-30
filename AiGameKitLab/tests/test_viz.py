@@ -1,12 +1,17 @@
 """Testes do módulo viz — funções puras (sem bpy) + contratos CLI + smoke bpy.
 
 Segue a convenção de ``test_renderer_native.py``: lógica pura e contratos CLI
-correm sem bpy; o smoke real com bpy é auto-skip quando bpy não está instalado.
+correm sem bpy; o smoke real com bpy é auto-skip quando bpy não está instalado
+ou quando o ambiente não consegue renderizar (CI headless: o primeiro render
+WORKBENCH sem GL/EGL aborta nativamente e matava o processo pytest inteiro).
 """
 
 from __future__ import annotations
 
 import inspect
+import subprocess
+import sys
+import textwrap
 
 import pytest
 from click.testing import CliRunner
@@ -23,6 +28,40 @@ from aigamekit_lab.viz import (
     make_legend,
     normal_to_rgb,
     sample_indices,
+)
+
+
+def _gpu_render_available() -> bool:
+    """Renderiza 4x4 em WORKBENCH num subprocesso e devolve o resultado.
+
+    O abort do bpy é nativo — try/except não apanha —, pelo que a sonda corre
+    num processo separado: returncode 0 = pode renderizar.
+    """
+    probe = textwrap.dedent(
+        """
+        import sys
+
+        import bpy
+
+        scene = bpy.context.scene
+        scene.render.engine = "BLENDER_WORKBENCH"
+        scene.render.resolution_x = 4
+        scene.render.resolution_y = 4
+        bpy.ops.render.render(write_still=False)
+        sys.exit(0)
+        """
+    )
+    try:
+        result = subprocess.run([sys.executable, "-c", probe], capture_output=True, timeout=300)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+RENDER_OK = _gpu_render_available()
+requires_bpy_render = pytest.mark.skipif(
+    not RENDER_OK,
+    reason="render bpy indisponível neste ambiente (headless sem GL/EGL aborta nativamente)",
 )
 
 # ---------------------------------------------------------------------------
@@ -217,6 +256,7 @@ def cube_glb(tmp_path_factory) -> str:
 
 
 class TestVizSmoke:
+    @requires_bpy_render
     @pytest.mark.parametrize("mode", ["normals", "normals-arrows", "orientation", "uv", "edges"])
     def test_static_modes_produce_pngs(self, mode: str, cube_glb: str, tmp_path) -> None:
         pytest.importorskip("bpy")
@@ -230,6 +270,7 @@ class TestVizSmoke:
         assert Path(shots[0]["path"]).stat().st_size > 0
         assert report["mode"] == mode
 
+    @requires_bpy_render
     def test_edges_metrics_closed_cube(self, cube_glb: str, tmp_path) -> None:
         pytest.importorskip("bpy")
         from aigamekit_lab.viz import render_viz
@@ -245,6 +286,7 @@ class TestVizSmoke:
         with pytest.raises(ValueError, match="vertex groups"):
             render_viz(cube_glb, tmp_path / "w", "weights", views="front", resolution=64)
 
+    @requires_bpy_render
     def test_wireframe_overlay_renders(self, cube_glb: str, tmp_path) -> None:
         pytest.importorskip("bpy")
         from pathlib import Path
