@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { State } from '../../../src/core';
+import { HOWLER_GLOBAL_STUB } from '../../helpers/howler-stub';
 
 mock.module('howler', () => ({
   Howl: class MockHowl {
@@ -13,7 +14,7 @@ mock.module('howler', () => ({
     once = mock(() => {});
     unload = mock(() => {});
   },
-  Howler: { pos: () => {}, ctx: { state: 'running', resume: () => {} } },
+  Howler: { ...HOWLER_GLOBAL_STUB },
 }));
 
 const { AudioSource } = await import('../../../src/plugins/audio/components');

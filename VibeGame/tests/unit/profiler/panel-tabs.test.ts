@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { JSDOM } from 'jsdom';
+import { HOWLER_GLOBAL_STUB } from '../../helpers/howler-stub';
 
 mock.module('howler', () => ({
   Howl: class {
@@ -14,7 +15,10 @@ mock.module('howler', () => ({
     fade() {}
     pos() {}
   },
-  Howler: { ctx: { state: 'suspended' } },
+  Howler: {
+    ...HOWLER_GLOBAL_STUB,
+    ctx: { state: 'suspended', resume: () => {} },
+  },
 }));
 
 const { createProfilerPanel, setProfilerPanelTab } =

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { HOWLER_GLOBAL_STUB } from '../../helpers/howler-stub';
 
 mock.module('howler', () => ({
   Howl: class {},
-  Howler: { ctx: { state: 'running' } },
+  Howler: { ...HOWLER_GLOBAL_STUB },
 }));
 
 const debug = await import('../../../src/plugins/audio/debug-log');

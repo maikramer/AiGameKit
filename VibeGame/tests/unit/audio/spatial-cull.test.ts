@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { HOWLER_GLOBAL_STUB } from '../../helpers/howler-stub';
 
 let nextId = 1;
 const howlInstances: { spatial?: boolean; play: ReturnType<typeof mock> }[] =
@@ -28,7 +29,7 @@ class MockHowl {
 
 mock.module('howler', () => ({
   Howl: MockHowl,
-  Howler: { pos: () => {}, ctx: { state: 'running' } },
+  Howler: { ...HOWLER_GLOBAL_STUB },
 }));
 
 const bank = await import('../../../src/plugins/audio/bank');

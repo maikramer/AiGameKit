@@ -10,6 +10,7 @@ import {
 import { State } from 'aigamekit-vibegame';
 import { AudioSource } from '../../../src/plugins/audio/components';
 import { AudioPlugin } from '../../../src/plugins/audio/plugin';
+import { HOWLER_GLOBAL_STUB } from '../../helpers/howler-stub';
 
 const originalWarn = console.warn;
 beforeAll(() => {
@@ -45,7 +46,10 @@ class MockHowl {
   }
 }
 
-mock.module('howler', () => ({ Howl: MockHowl }));
+mock.module('howler', () => ({
+  Howl: MockHowl,
+  Howler: { ...HOWLER_GLOBAL_STUB },
+}));
 
 const {
   registerAudioClip,
