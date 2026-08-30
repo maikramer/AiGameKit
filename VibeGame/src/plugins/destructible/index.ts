@@ -1,4 +1,4 @@
-export { Destructible } from './components';
+export { Destructible, HarvestSuppressed } from './components';
 export { DestructiblePlugin } from './plugin';
 export { DestructibleSystem } from './systems';
 export {

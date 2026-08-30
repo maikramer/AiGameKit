@@ -10,7 +10,7 @@ import { Rigidbody } from '../physics/components';
 import { getBodyForEntity } from '../physics/systems';
 import { PlayerController, PlayerGltfConfig } from '../player/components';
 import { Transform } from '../transforms/components';
-import { Destructible } from './components';
+import { Destructible, HarvestSuppressed } from './components';
 import {
   applyCrackAmount,
   startHitShake,
@@ -231,6 +231,10 @@ export const DestructibleSystem: System = defineSystem({
     }
 
     if (!player || InputState.primaryAction[player] !== 1) return;
+
+    // The game flags combat (hostiles nearby) on the player — a swing must
+    // never land on a tree mid-fight.
+    if (state.hasComponent(player, HarvestSuppressed)) return;
 
     const now = state.time.elapsed;
     const last = lastSwingAt.get(state) ?? -Infinity;

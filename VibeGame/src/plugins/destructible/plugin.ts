@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Adapter, Plugin } from '../../core';
-import { Destructible } from './components';
+import { Destructible, HarvestSuppressed } from './components';
 import { DestructibleFxSystem } from './fx';
 import { DestructibleSystem } from './systems';
 import { setDestructiblePopupText } from './utils';
@@ -25,7 +25,10 @@ const PARTICLE_PRESET_ENUM = {
 
 export const DestructiblePlugin: Plugin = {
   systems: [DestructibleSystem, DestructibleFxSystem],
-  components: { destructible: Destructible },
+  components: {
+    destructible: Destructible,
+    harvestSuppressed: HarvestSuppressed,
+  },
   config: {
     defaults: {
       destructible: {

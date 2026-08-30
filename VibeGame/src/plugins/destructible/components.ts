@@ -44,3 +44,10 @@ export const Destructible = defineComponent({
   popupColorB: F32,
   popupSize: F32,
 });
+
+/**
+ * Marker on the player: gathering is off right now (the game sets it while
+ * hostiles are nearby) — {@link DestructibleSystem} commits no swings to
+ * props while the player carries it, so the primary attack stays combat-only.
+ */
+export const HarvestSuppressed = defineComponent({});
