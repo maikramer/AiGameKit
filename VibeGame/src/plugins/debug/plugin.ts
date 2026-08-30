@@ -22,6 +22,30 @@ import {
   getDebugRegistryHandle,
   type DebugRegistryHandle,
 } from './registry';
+import {
+  installDiagnostics,
+  getDiagnostics,
+  diagnosticsCursor as getDiagnosticsCursor,
+  type DiagnosticEntry,
+  type DiagnosticsFilter,
+} from './diagnostics';
+import {
+  buildAgentReport,
+  buildAssetsSummary,
+  extractAllComponents,
+  extractComponentFields,
+  formatDebugValue,
+  type AgentReport,
+  type AgentReportOptions,
+  type AssetsSummary,
+} from './report';
+import {
+  describeParticleEmitters,
+  findEntitiesNear,
+  listScripts,
+  readWorldPosition,
+  summarizeScene,
+} from './introspect';
 
 export interface VibeGameDebugBridge {
   state: State;
@@ -40,66 +64,63 @@ export interface VibeGameDebugBridge {
   query(...componentNames: string[]): number[];
   componentNames(): string[];
   namedEntities(): Array<{ name: string; eid: number }>;
+  /** Live world position of an entity (world-transform; local fallback). */
+  position(target: number | string): { x: number; y: number; z: number } | null;
+  /** Entities within `radius` metres of (x, z), nearest first. */
+  entitiesNear(
+    x: number,
+    z: number,
+    radius: number,
+    options?: { limit?: number; with?: string[] }
+  ): Array<{
+    eid: number;
+    name: string | null;
+    pos: { x: number; y: number; z: number };
+    dist: number;
+    components: string[];
+  }>;
+  /** Scripted entities: resolved module file + lifecycle state. */
+  scripts(): Array<{
+    eid: number;
+    name: string | null;
+    file: string | null;
+    ready: boolean;
+    enabled: boolean;
+  }>;
+  /** Particle emitters vs the batch cap and the distance cull. */
+  particles(): ReturnType<typeof describeParticleEmitters>;
+  /** Census of the rendered scene (counts + every light). */
+  sceneSummary(): ReturnType<typeof summarizeScene>;
   step(dt?: number): void;
   terrain(): Record<string, unknown>;
   rendering(): unknown;
   physics(): unknown;
+  /** Complete bounded dump for AI-agent debugging over browser MCP. */
+  report(options?: AgentReportOptions): AgentReport;
+  /** Captured console messages; poll with `{ since: cursor }` for zero loss. */
+  logs(filter?: DiagnosticsFilter): DiagnosticEntry[];
+  /** Captured uncaught/unhandledrejection/webgl/resource failures. */
+  errors(): DiagnosticEntry[];
+  /** Resource-load summary: failed, slow, oversized and zero-byte loads. */
+  assets(): AssetsSummary;
+  /** Highest `seq` emitted so far (cursor for `logs({ since })`). */
+  diagnosticsCursor(): number;
   debug: DebugRegistryHandle;
   /** Present when {@link ProfilerPlugin} is registered (installed onto this object). */
   profiler?: import('../profiler').VibeGameProfilerHandle;
 }
 
-type TypedArrayField =
-  | Float32Array
-  | Float64Array
-  | Int32Array
-  | Uint8Array
-  | Uint16Array
-  | Uint32Array;
-
-function isTypedArrayField(v: unknown): v is TypedArrayField {
-  return (
-    v instanceof Float32Array ||
-    v instanceof Float64Array ||
-    v instanceof Int32Array ||
-    v instanceof Uint8Array ||
-    v instanceof Uint16Array ||
-    v instanceof Uint32Array
-  );
-}
-
-function extractComponentFields(
-  state: State,
-  eid: number,
-  compName: string
-): Record<string, number> | null {
-  const comp = state.getComponent(compName);
-  if (!comp || !state.hasComponent(eid, comp)) return null;
-  const fields: Record<string, number> = {};
-  for (const key in comp) {
-    if (key.startsWith('_')) continue;
-    const field = (comp as Record<string, unknown>)[key];
-    if (isTypedArrayField(field)) {
-      fields[key] = field[eid];
-    }
-  }
-  return fields;
-}
-
-function extractAllComponents(
-  state: State,
-  eid: number
-): Record<string, Record<string, number>> {
-  const result: Record<string, Record<string, number>> = {};
-  for (const compName of state.getComponentNames()) {
-    const fields = extractComponentFields(state, eid, compName);
-    if (fields) result[compName] = fields;
-  }
-  return result;
-}
-
 /** State that installed `window.__VIBEGAME__` (cleared on dispose). */
 let bridgeOwnerState: State | null = null;
+
+function buildPerfSummary(state: State): {
+  fps?: number;
+  frameMs?: { min: number; avg: number; max: number };
+} {
+  const runtime = overlayByState.get(state);
+  if (!runtime || !runtime.fpsReady) return {};
+  return { fps: +runtime.fps.toFixed(1), frameMs: ringStats(runtime) };
+}
 
 function createBridge(state: State): VibeGameDebugBridge {
   return {
@@ -142,6 +163,24 @@ function createBridge(state: State): VibeGameDebugBridge {
       const entries = Array.from(state.getNamedEntities().entries());
       return entries.map(([name, eid]) => ({ name, eid }));
     },
+    position(target) {
+      const eid =
+        typeof target === 'number' ? target : state.getEntityByName(target);
+      if (eid == null) return null;
+      return readWorldPosition(state, eid);
+    },
+    entitiesNear(x, z, radius, options) {
+      return findEntitiesNear(state, x, z, radius, options);
+    },
+    scripts() {
+      return listScripts(state);
+    },
+    particles() {
+      return describeParticleEmitters(state);
+    },
+    sceneSummary() {
+      return summarizeScene(state);
+    },
     step(dt) {
       state.step(dt);
     },
@@ -158,6 +197,28 @@ function createBridge(state: State): VibeGameDebugBridge {
     },
     physics() {
       return getPhysicsContext(state);
+    },
+    report(options) {
+      return buildAgentReport(state, {
+        perf: buildPerfSummary(state),
+        ...options,
+      });
+    },
+    logs(filter) {
+      return getDiagnostics({ kinds: ['console'], ...filter });
+    },
+    errors() {
+      return getDiagnostics({
+        kinds: ['uncaught', 'unhandledrejection', 'webgl', 'resource'],
+        newestFirst: true,
+        limit: 100,
+      });
+    },
+    assets() {
+      return buildAssetsSummary();
+    },
+    diagnosticsCursor() {
+      return getDiagnosticsCursor();
     },
     debug: getDebugRegistryHandle(state),
   };
@@ -437,43 +498,6 @@ function ringStats(runtime: OverlayRuntime): {
   return { min, avg: sum / count, max };
 }
 
-function truncate(value: string, max: number): string {
-  return value.length > max ? value.slice(0, max - 3) + '...' : value;
-}
-
-function formatDebugValue(value: unknown): string {
-  if (value === null) return 'null';
-  if (value === undefined) return 'undefined';
-  if (typeof value === 'string') return truncate(value, 40);
-  if (
-    typeof value === 'number' ||
-    typeof value === 'boolean' ||
-    typeof value === 'bigint'
-  ) {
-    return String(value);
-  }
-  if (typeof value === 'function') return 'ƒ';
-  if (isTypedArrayField(value)) {
-    return `${value.constructor.name}(${value.length})`;
-  }
-  if (Array.isArray(value)) {
-    if (value.length === 0) return '[]';
-    return value.length > 8
-      ? `Array(${value.length})`
-      : truncate(safeStringify(value), 40);
-  }
-  const ctor = (value as { constructor?: { name?: string } }).constructor;
-  return ctor && ctor.name && ctor.name !== 'Object' ? ctor.name : '{obj}';
-}
-
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
 function renderRegistrySection(state: State, visible: boolean): string {
   if (!visible) return '';
   const reg = getDebugRegistry(state);
@@ -628,6 +652,9 @@ export const DebugPlugin: Plugin = {
     },
   },
   initialize(state: State): void {
+    // Lossless in-page capture for MCP-driven debugging (console, uncaught
+    // errors, WebGL failures, resource 404s) — page-global, survives reloads.
+    installDiagnostics();
     if (typeof window === 'undefined') return;
 
     const w = window as unknown as { __VIBEGAME__?: Record<string, unknown> };

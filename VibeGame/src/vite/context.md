@@ -57,13 +57,19 @@ Development plugin that forwards browser console output to terminal:
 - Formats output with timestamps and ANSI color codes
 - Uses Vite's HMR WebSocket for message transport
 - Only active in serve mode with enforce: 'post'
+- Persists every warn/error message to `<root>/.vibegame/console.log`
+  (rotates to `.console.log.1` at 512 KB) so AI agents can read the durable
+  record from disk even after the page crashed or reloaded — engine-captured
+  diagnostics (uncaught errors, WebGL failures, resource 404s) forwarded by
+  the debug plugin over the same channel land in the same file
 - Transform matcher is substring-based (`/src/main.ts` / `/src/main.js`) — near-miss paths may also inject
-- Sends are gated on the HMR socket state (`vite:ws:connect`/`disconnect`): while
-  disconnected (e.g. right after a reload) messages queue instead of calling
-  `import.meta.hot.send` — Vite 8's module-runner client throws
-  `SendBeforeConnectError` there, and the client's error log would re-enter the
-  console override and cascade. `SendBeforeConnectError` is never surfaced or
-  forwarded; a bounded boot self-heal covers the connect event racing module eval.
+- Every message attempts `import.meta.hot.send` directly and only queues on
+  failure: the `vite:ws:connect` event routinely fires before main.ts is
+  evaluated, so gating on a connected flag stranded all post-boot messages in
+  the queue. Vite 8's module-runner client throws `SendBeforeConnectError`
+  when the socket is down; that error is caught and never surfaced or
+  forwarded (the client's own error log would otherwise re-enter the console
+  override and cascade). Queued messages flush on the next `vite:ws:connect`.
 
 ### vibegameAssetHotReload()
 

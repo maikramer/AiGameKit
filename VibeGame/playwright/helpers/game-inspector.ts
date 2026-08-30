@@ -20,6 +20,11 @@ type Bridge = {
   componentNames: () => string[];
   namedEntities: () => Array<{ name: string; eid: number }>;
   step: (dt?: number) => void;
+  report: (options?: Record<string, unknown>) => Record<string, unknown>;
+  logs: (filter?: Record<string, unknown>) => unknown[];
+  errors: () => unknown[];
+  assets: () => Record<string, unknown>;
+  diagnosticsCursor: () => number;
 };
 
 export class GameInspector {
@@ -109,6 +114,47 @@ export class GameInspector {
     return this.page.evaluate(() => {
       const w = window as unknown as Record<string, unknown>;
       return (w.__VIBEGAME_CONSOLE_ERRORS as string[]) ?? [];
+    });
+  }
+
+  /** Complete bounded dump: world, errors, logs, assets, entities, registry. */
+  async report(
+    options?: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    return this.page.evaluate((o) => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.report(o);
+    }, options);
+  }
+
+  /** Captured console entries; poll `{ since: cursor() }` for zero loss. */
+  async logs(filter?: Record<string, unknown>): Promise<unknown[]> {
+    return this.page.evaluate((f) => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.logs(f);
+    }, filter);
+  }
+
+  /** Uncaught / unhandledrejection / webgl / resource failures, newest first. */
+  async errors(): Promise<unknown[]> {
+    return this.page.evaluate(() => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.errors();
+    });
+  }
+
+  /** Failed / slow / oversized / zero-byte asset loads. */
+  async assets(): Promise<Record<string, unknown>> {
+    return this.page.evaluate(() => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.assets();
+    });
+  }
+
+  async diagnosticsCursor(): Promise<number> {
+    return this.page.evaluate(() => {
+      const b = (window as unknown as { __VIBEGAME__: Bridge }).__VIBEGAME__;
+      return b.diagnosticsCursor();
     });
   }
 

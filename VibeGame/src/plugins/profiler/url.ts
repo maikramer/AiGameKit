@@ -4,10 +4,11 @@
  *   ?profiler=audio              → enable sample + open Audio tab
  *   ?profiler=world              → enable sample + open World tab
  *   ?profiler=physics            → enable sample + open Physics tab
- *   ?profilerTab=systems|audio|world|physics
+ *   ?profilerTab=systems|audio|world|physics|extras
  */
 
-export type ProfilerTabId = 'systems' | 'audio' | 'world' | 'physics';
+export type ProfilerTabId =
+  'systems' | 'audio' | 'world' | 'physics' | 'extras';
 
 export interface ProfilerUrlConfig {
   /** null = do not auto-open / leave disabled */
@@ -17,7 +18,13 @@ export interface ProfilerUrlConfig {
   audioDebug: boolean;
 }
 
-const TABS: readonly ProfilerTabId[] = ['systems', 'audio', 'world', 'physics'];
+const TABS: readonly ProfilerTabId[] = [
+  'systems',
+  'audio',
+  'world',
+  'physics',
+  'extras',
+];
 
 export function isProfilerTabId(v: string): v is ProfilerTabId {
   return (TABS as readonly string[]).includes(v);

@@ -445,7 +445,7 @@ describe('consoleForwarding matrix — transform injection contracts', () => {
     "['log', 'warn', 'error', 'debug']",
     'window.location.origin',
     'serializedArgs',
-    'Best-effort forwarding',
+    'Not connected yet',
     'console-override',
   ];
 

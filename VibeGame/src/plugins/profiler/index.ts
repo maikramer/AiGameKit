@@ -33,3 +33,10 @@ export {
   renderPhysicsTab,
   type PhysicsDebugSnapshot,
 } from './physics-debug';
+
+export {
+  registerProfilerExtra,
+  unregisterProfilerExtra,
+  getProfilerExtras,
+} from './extras';
+export type { ProfilerExtra } from './extras';

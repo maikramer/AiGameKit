@@ -27,6 +27,7 @@ import {
 } from '../audio/debug-log';
 import { isBusMuted, setBusMuted, stopAllBankPlays } from '../audio/bank';
 import { syncProfilerTabToUrl, type ProfilerTabId } from './url';
+import { getProfilerExtras, type ProfilerExtra } from './extras';
 import {
   bindWorldDebugState,
   DEFAULT_NEARBY_RADIUS,
@@ -69,6 +70,7 @@ export interface ProfilerPanelRuntime {
   worldBodyEl: HTMLPreElement;
   physicsPane: HTMLDivElement;
   physicsBodyEl: HTMLPreElement;
+  extrasPane: HTMLDivElement;
   tabButtons: Record<ProfilerTabId, HTMLButtonElement>;
   tab: ProfilerTabId;
   visible: boolean;
@@ -495,7 +497,14 @@ export function setProfilerPanelTab(
   runtime.audioPane.style.display = tab === 'audio' ? 'block' : 'none';
   runtime.worldPane.style.display = tab === 'world' ? 'block' : 'none';
   runtime.physicsPane.style.display = tab === 'physics' ? 'block' : 'none';
-  for (const id of ['systems', 'audio', 'world', 'physics'] as const) {
+  runtime.extrasPane.style.display = tab === 'extras' ? 'block' : 'none';
+  for (const id of [
+    'systems',
+    'audio',
+    'world',
+    'physics',
+    'extras',
+  ] as const) {
     styleTabBtn(runtime.tabButtons[id], id === tab);
   }
   if (tab === 'audio') armAudioDebug(true);
@@ -530,6 +539,9 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   const physicsTabBtn = document.createElement('button');
   physicsTabBtn.type = 'button';
   physicsTabBtn.textContent = 'Physics';
+  const extrasTabBtn = document.createElement('button');
+  extrasTabBtn.type = 'button';
+  extrasTabBtn.textContent = 'Extras';
 
   const statusEl = document.createElement('span');
   statusEl.style.opacity = '0.8';
@@ -541,6 +553,7 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
     audioTabBtn,
     worldTabBtn,
     physicsTabBtn,
+    extrasTabBtn,
     statusEl
   );
 
@@ -551,6 +564,8 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   worldPane.style.display = 'none';
   const physicsPane = document.createElement('div');
   physicsPane.style.display = 'none';
+  const extrasPane = document.createElement('div');
+  extrasPane.style.display = 'none';
 
   const header = document.createElement('div');
   header.style.display = 'flex';
@@ -807,9 +822,17 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   hint.style.marginTop = '8px';
   hint.style.opacity = '0.55';
   hint.textContent =
-    '[P] toggle  [Shift+P] sample↔deep  [Pause] freeze  · ?profiler=audio|world|physics  · ?profilerTab=systems|audio|world|physics';
+    '[P] toggle  [Shift+P] sample↔deep  [Pause] freeze  · ?profiler=audio|world|physics  · ?profilerTab=systems|audio|world|physics|extras';
 
-  root.append(tabBar, systemsPane, audioPane, worldPane, physicsPane, hint);
+  root.append(
+    tabBar,
+    systemsPane,
+    audioPane,
+    worldPane,
+    physicsPane,
+    extrasPane,
+    hint
+  );
 
   const runtime: ProfilerPanelRuntime = {
     root,
@@ -829,11 +852,13 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
     worldBodyEl,
     physicsPane,
     physicsBodyEl,
+    extrasPane,
     tabButtons: {
       systems: systemsTabBtn,
       audio: audioTabBtn,
       world: worldTabBtn,
       physics: physicsTabBtn,
+      extras: extrasTabBtn,
     },
     tab: 'systems',
     visible: false,
@@ -852,6 +877,7 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   styleTabBtn(audioTabBtn, false);
   styleTabBtn(worldTabBtn, false);
   styleTabBtn(physicsTabBtn, false);
+  styleTabBtn(extrasTabBtn, false);
 
   systemsTabBtn.addEventListener('click', () => {
     setProfilerPanelTab(runtime, 'systems');
@@ -864,6 +890,9 @@ export function createProfilerPanel(): ProfilerPanelRuntime {
   });
   physicsTabBtn.addEventListener('click', () => {
     setProfilerPanelTab(runtime, 'physics');
+  });
+  extrasTabBtn.addEventListener('click', () => {
+    setProfilerPanelTab(runtime, 'extras');
   });
   radiusSelect.addEventListener('change', () => {
     const n = Number(radiusSelect.value);
@@ -980,6 +1009,54 @@ export function setProfilerPanelVisible(
   runtime.root.style.display = visible ? 'block' : 'none';
 }
 
+/** Rebuild the Extras tab buttons from the game's registered extras. */
+function renderExtrasTab(state: State, runtime: ProfilerPanelRuntime): void {
+  const pane = runtime.extrasPane;
+  pane.textContent = '';
+  const extras: ProfilerExtra[] = getProfilerExtras(state);
+  const title = document.createElement('div');
+  title.style.marginBottom = '4px';
+  title.style.opacity = '0.7';
+  title.textContent =
+    'Game debug tools — registered by the game via registerProfilerExtra().';
+  pane.append(title);
+  if (extras.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.opacity = '0.55';
+    empty.style.marginTop = '6px';
+    empty.textContent = '(none registered)';
+    pane.append(empty);
+    return;
+  }
+  const grid = document.createElement('div');
+  grid.style.display = 'flex';
+  grid.style.flexWrap = 'wrap';
+  grid.style.gap = '6px';
+  grid.style.marginTop = '6px';
+  for (const extra of extras) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = extra.label;
+    if (extra.description) btn.title = extra.description;
+    styleButton(btn);
+    btn.addEventListener('click', () => {
+      extra.onClick();
+      runtime.statusEl.textContent = ` ${extra.id} invoked`;
+    });
+    grid.append(btn);
+  }
+  pane.append(grid);
+  const desc = document.createElement('div');
+  desc.style.marginTop = '8px';
+  desc.style.opacity = '0.6';
+  desc.style.whiteSpace = 'pre';
+  desc.textContent = extras
+    .filter((e) => e.description)
+    .map((e) => `${e.label} — ${e.description}`)
+    .join('\n');
+  if (desc.textContent) pane.append(desc);
+}
+
 export function refreshProfilerPanel(
   state: State,
   runtime: ProfilerPanelRuntime
@@ -1001,6 +1078,12 @@ export function refreshProfilerPanel(
         : ''
     }`;
     runtime.physicsBodyEl.textContent = renderPhysicsTab(physicsSnap);
+    return;
+  }
+
+  if (runtime.tab === 'extras') {
+    renderExtrasTab(state, runtime);
+    runtime.statusEl.textContent = ` ${getProfilerMode()} · extras${isProfilerFrozen() ? ' · frozen' : ''} · ${getProfilerExtras(state).length} tool(s)`;
     return;
   }
 

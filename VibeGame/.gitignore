@@ -57,6 +57,8 @@ sandbox/
 /playwright-report/
 /test-results/
 /blob-report/
+.playwright-mcp/
+.vibegame/
 debug-errors.ts
 package-lock.json
 

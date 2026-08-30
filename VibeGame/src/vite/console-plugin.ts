@@ -1,8 +1,40 @@
 import type { Plugin, ViteDevServer } from 'vite';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  statSync,
+} from 'node:fs';
+import { join } from 'node:path';
 import { formatLogMessage, type LogMessage } from '../core/utils/logger';
+
+/**
+ * Durable record of browser warn/error messages for AI-agent debugging: the
+ * agent reads the file with its file tools even after the page crashed or
+ * reloaded. Rotates at {@link MAX_LOG_BYTES} (`.log` → `.log.1`).
+ */
+const LOG_DIR = '.vibegame';
+const MAX_LOG_BYTES = 512 * 1024;
 
 export function consoleForwarding(): Plugin {
   let server: ViteDevServer;
+  let logFile = '';
+
+  function appendToLogFile(formatted: string, level: string): void {
+    if (level !== 'warn' && level !== 'error') return;
+    try {
+      const dir = join(server.config.root, LOG_DIR);
+      if (!logFile) logFile = join(dir, 'console.log');
+      mkdirSync(dir, { recursive: true });
+      if (existsSync(logFile) && statSync(logFile).size > MAX_LOG_BYTES) {
+        renameSync(logFile, `${logFile}.1`);
+      }
+      appendFileSync(logFile, `${new Date().toISOString()} ${formatted}\n`);
+    } catch {
+      // Never break the dev server over log IO.
+    }
+  }
 
   return {
     name: 'vibegame:console-forwarding',
@@ -25,6 +57,7 @@ export function consoleForwarding(): Plugin {
           }
 
           const formatted = formatLogMessage(data);
+          appendToLogFile(formatted, data.level);
 
           switch (data.level) {
             case 'debug':
@@ -71,12 +104,12 @@ if (import.meta.hot) {
   // Vite 8's HMR client (module-runner transport) throws SendBeforeConnectError
   // when import.meta.hot.send runs before the socket connects, and the client
   // logs that rejection via console.error — which this override would re-forward
-  // and re-send, cascading until the socket opens. Gate sends on the socket
-  // state (vite:ws:connect/disconnect), queue while disconnected, and never
-  // surface SendBeforeConnectError itself.
+  // and re-send, cascading until the socket opens. Always attempt the send and
+  // queue only on failure: the connect event routinely fires before main.ts is
+  // evaluated, so gating on a wsConnected flag left every post-boot message
+  // stuck in the queue forever (the self-heal window covered only the first
+  // seconds). SendBeforeConnectError itself is never surfaced or forwarded.
   const MAX_QUEUED = 200;
-  let wsConnected = false;
-  let selfHealTries = 0;
   let flushTimer = 0;
   const pending = [];
 
@@ -92,29 +125,19 @@ if (import.meta.hot) {
       try {
         import.meta.hot.send('vibegame:console', message);
       } catch (e) {
-        // Socket closed mid-flush: drop the rest; the next connect re-opens.
+        // Socket closed mid-flush: stop; the next send attempt re-queues.
+        pending.unshift(message);
         return;
       }
     }
   }
 
   import.meta.hot.on('vite:ws:connect', () => {
-    wsConnected = true;
     scheduleFlush();
   });
   import.meta.hot.on('vite:ws:disconnect', () => {
-    wsConnected = false;
-  });
-
-  // The connect event can fire before this module evaluated (the client script
-  // runs before main.ts). Self-heal at boot with a few blind flushes; a send on
-  // a still-disconnected socket just rejects (guarded below, not forwarded).
-  function bootSelfHeal() {
-    if (wsConnected || selfHealTries++ >= 10) return;
     scheduleFlush();
-    setTimeout(bootSelfHeal, 300);
-  }
-  setTimeout(bootSelfHeal, 300);
+  });
 
   function getStackInfo() {
     const stack = new Error().stack;
@@ -155,16 +178,15 @@ if (import.meta.hot) {
       message.context.stack = args[0].stack;
     }
     
-    if (wsConnected) {
-      try {
-        import.meta.hot.send('vibegame:console', message);
-      } catch (e) {
-        // Best-effort forwarding: never throw out of the console override. An
-        // uncaught throw here re-enters console.error via the browser's
-        // uncaught-error path and loops while the HMR socket is still connecting.
+    try {
+      import.meta.hot.send('vibegame:console', message);
+    } catch (e) {
+      // Not connected yet (or mid-reconnect): queue for the next flush. Never
+      // throw out of the console override — an uncaught throw here re-enters
+      // console.error via the browser's uncaught-error path and loops.
+      if (pending.length < MAX_QUEUED) {
+        pending.push(message);
       }
-    } else if (pending.length < MAX_QUEUED) {
-      pending.push(message);
     }
   }
   
