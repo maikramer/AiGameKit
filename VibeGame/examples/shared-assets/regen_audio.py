@@ -85,12 +85,18 @@ def main() -> int:
     force = "--force" in sys.argv
     only: set[str] | None = None
     if "--only" in sys.argv:
+        # aceita ids exatos, sufixos (hit) ou prefixos de pasta (sfx, bgm, sfx/ui)
         only = set(sys.argv[sys.argv.index("--only") + 1].split(","))
 
     AUDIO_ROOT.mkdir(parents=True, exist_ok=True)
     rows = load_rows()
     if only is not None:
-        rows = [r for r in rows if r["id"] in only or r["id"].split("/")[-1] in only]
+
+        def matches(rid: str) -> bool:
+            tail = rid.split("/")[-1]
+            return any(rid == o or tail == o or rid.startswith(o + "/") for o in only)
+
+        rows = [r for r in rows if matches(r["id"])]
 
     ok, skip, fail = 0, 0, 0
     total = len(rows)
@@ -152,9 +158,13 @@ def main() -> int:
         if accepted or (result is not None and result.returncode == 0 and row["profile"] != "music"):
             dur = _probe_duration(out)
             if row["profile"] == "music":
+                # BGM seamless: contrato exacto (-d).
                 good = dur is not None and abs(dur - row["duration"]) <= 0.25
             else:
-                good = dur is not None and dur <= row["duration"] + 0.5
+                # SFX: o trim por kind acha o comprimento NATURAL do evento
+                # (o -d é alvo/conditioning, não contrato — ver findings SA3).
+                # Só rejeitar patologia grosseira (janelas não trimmadas).
+                good = dur is not None and dur <= max(row["duration"] * 2.5, 4.5)
             if good:
                 ok += 1
                 print(f"  ✓ {out.stat().st_size} bytes in {elapsed:.1f}s ({dur:.2f}s)")

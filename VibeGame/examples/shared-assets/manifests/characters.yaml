@@ -36,7 +36,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,sprint,jump,attack,hit,death,sword,axe,spear,chop,swordidle,axeidle,spearidle,chopidle,mine,gather,interact,punch,roar,roll
+      clips: idle,walk,run,sprint,jump,fall,jumpland,roll,attack,hit,hithead,death,punch,sword,sworda,swordb,swordc,swordheavy,axe,spear,chop,swordidle,axeidle,spearidle,chopidle,mine,gather,interact,harvest,fixing,roar,dance,talk,yes,no,crouchidle,chestopen
   - id: npc_merchant
     idea:
       friendly cartoon merchant NPC wearing brown apron over green tunic, round
@@ -57,7 +57,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,talk,call,foldarms,yes,no,eat
     omni:
       control_type: pose
       pose_preset: quaternius-apose
@@ -85,7 +85,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,run,talk,lean,call,carrywalk,yes,no
     omni:
       control_type: pose
       pose_preset: quaternius-apose
@@ -113,7 +113,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,talk,fixing,yes,no
     omni:
       control_type: pose
       pose_preset: quaternius-apose
@@ -141,7 +141,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,talk,yes,no,foldarms
     omni:
       control_type: pose
       pose_preset: quaternius-apose
@@ -170,7 +170,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,talk,lantern,yes,no
     omni:
       control_type: pose
       pose_preset: quaternius-apose
@@ -198,7 +198,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,talk,yes,no,sit,sittalk
     omni:
       control_type: pose
       pose_preset: quaternius-apose
@@ -225,7 +225,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,run,jump,attack,sworda,swordb,hit,knockback,death,roar,roll
     omni:
       control_type: pose
       pose_preset: quaternius-apose-dwarf
@@ -309,7 +309,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,run,jump,attack,zombieidle,zombiewalk,hit,death
     omni:
       control_type: pose
       pose_preset: quaternius-apose
@@ -338,7 +338,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,attack,spellcast,spellidle,spellstart,hit,knockback,death,roar
     omni:
       control_type: pose
       pose_preset: quaternius-apose
@@ -394,7 +394,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,run,jump,attack,swordb,swordc,hit,knockback,death,roar
     omni:
       control_type: pose
       pose_preset: quaternius-apose
@@ -456,7 +456,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,run,jump,attack,zombiescratch,zombieidle,zombiewalk,hit,death
     omni:
       control_type: pose
       pose_preset: quaternius-apose-dwarf
@@ -485,7 +485,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death
+      clips: idle,walk,jump,attack,hook,swordheavy,hit,knockback,death,roar
     omni:
       control_type: pose
       pose_preset: quaternius-apose
@@ -515,7 +515,7 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
-      clips: idle,walk,run,jump,attack,hit,death,punch,roar
+      clips: idle,walk,jump,attack,swordheavy,hook,punch,hit,knockback,death,roar
     omni:
       control_type: pose
       pose_preset: quaternius-apose

@@ -46,8 +46,9 @@ assets:
         - 0.05
   - id: spear
     idea:
-      cartoon fantasy spear with thin leaf-shaped steel tip, long slender wooden
-      shaft, leather grip, hero weapon, clean simple design, not a thick pole
+      cartoon fantasy spear with leaf-shaped steel tip and sturdy wooden shaft,
+      visible shaft thickness, leather grip wrap, hero weapon, clean simple
+      design, proportions readable at game distance
     kind: prop
     category: weapon
     pipeline:
@@ -57,9 +58,14 @@ assets:
     omni:
       control_type: bbox
       size_m:
-        - 0.08
-        - 1.8
-        - 0.05
+        - 0.14
+        - 1.65
+        - 0.14
+    # A haste é mais fina que o voxel merge por omissão (N=0.24) — o
+    # morph-close derretia a lança inteira no clean (shape 743 KB → 49 KB).
+    # Merge suave: sela micro-rachas sem engrossar/perder a haste.
+    text3d:
+      morph_close_voxels: 0.08
   - id: felling_axe
     seed: 90612
     idea:

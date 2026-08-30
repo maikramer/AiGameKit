@@ -1,10 +1,10 @@
 {
-  "prompt": "seamless tileable texture, bright green mossy forest floor with brown fallen autumn leaves, visible tree bark pieces, small green plants, dappled sunlight, vibrant colors, top-down flat view, high detail game asset",
-  "negative_prompt": "black, dark, shadow, night, mud, swamp, monotone, grayscale, seams, borders",
+  "prompt": "seamless tileable texture, dark damp forest floor, deep green moss over brown humus soil, scattered pine needles and small twigs, muted desaturated earthy palette, soft even lighting, top-down orthographic flat view, stylized game ground texture",
+  "negative_prompt": "autumn leaves, red leaves, orange, yellow, colorful, saturated, confetti, flowers, grass lawn, high contrast, harsh shadows, seams, borders, frame, watermark",
   "width": 1024,
   "height": 1024,
-  "steps": 28,
+  "steps": 30,
   "guidance": 3.5,
-  "seed": 2027365508,
-  "regenerated_at": "2026-07-12 22:10:45"
+  "seed": 1297102855,
+  "regenerated_at": "2026-08-29 21:52:37"
 }

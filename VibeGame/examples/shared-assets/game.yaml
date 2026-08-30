@@ -36,6 +36,15 @@ text3d:
   split_at_height: true
   sdnq_preset: sdnq-int4
   memory_efficient: true
+# Personagens: retarget encadeado villager + UAL1+UAL2 — trabalhos kevdev
+# (mining/hammer/pesca por-ficheiro) com a UAL por cima em idle/gather/combos.
+animator3d:
+  preset: humanoid
+  anim_pack: all
+# Criaturas animam a partir de *_lod2.glb — o rig tem de sobreviver a todos os
+# níveis (default 1 deixaria o lod2 estático = inimigos congelados).
+lod:
+  rig_max_level: 2
 paint3d:
   preserve_origin: true
   texture_size: 2048
