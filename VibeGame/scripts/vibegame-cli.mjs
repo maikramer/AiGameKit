@@ -573,7 +573,7 @@ function help() {
     '  vibegame run --skip-app-install   Não roda bun install na pasta do app (node_modules já ok)'
   );
   console.log(
-    '  vibegame run --fetch-assets  Força re-download dos assets da release (overwrites locais)'
+    '  vibegame run --fetch-assets  Re-download dos assets da release (fill-if-missing, não sobrescreve locais)'
   );
   console.log(
     '  vibegame run -- --port 5174       Repassa argumentos ao `bun run dev`'
