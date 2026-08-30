@@ -102,3 +102,24 @@ Ficheiros-chave: `Text2Sound/src/text2sound/audio_processor.py`
   caminho in-process; sidecars `.ogg.json` completos).
 - Nota: `dist/` dos exemplos fica com áudio antigo até um rebuild
   (`vibegame build`); a fonte de verdade é `public/assets/audio/`.
+
+## Apêndice 2 — SFX "metálicos" (2026-08-25, pós-pool)
+
+Sintoma: one-shots curtos (swing 0.5 s, enemy_hurt 0.8 s) saíam metálicos/
+agudos, sem relação com o prompt. Causas ambas no conditioning SA3-sfx:
+
+1. **`seconds_total` < 1 s → NaN.** O NumberConditioner (fourier features)
+   degenera abaixo de ~1 s e o buffer vem não-finito; o peak-normalize
+   transformava o NaN em ruído áspero. Varredura: 0.5/0.8 s → NaN; ≥1 s são.
+2. **Crop cego ao `-d` cortava o transiente.** Com conditioning são, o
+   one-shot vive ~0.4 s dentro do buffer (ex.: cond 2 s → pico @0.4 s);
+   cortar o buffer exactamente em `-d` apanhava só o ataque.
+
+Fix (Text2Sound/generator + models): `ModelSpec.min_condition_seconds`
+(sfx: **2.0**, música: 0) — o conditioning passa a `max(-d, floor)`, o crop
+SA3 usa `cond + 1.5 s` de folga para SFX (música mantém crop exacto — a
+matemática do seamless depende do comprimento) e o **trim por kind decide o
+comprimento final natural** (o `-d` de SFX é alvo, não contrato). Pós-fix
+(medido): enemy_hurt 1.26 s centróide 1666 Hz / 2% HF (vocalização), swing
+0.35 s de swish, horn 1.33 s, engine_rev 4.0 s. Nota: `hit` continua
+brilhante (7.4 kHz) — embate de metal é metálico por natureza.

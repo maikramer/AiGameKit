@@ -513,3 +513,53 @@ class TestPlacementCpuFallback:
             gen.load()
 
         assert gen.device.startswith("cuda")
+
+
+class TestSfxConditioningFloor:
+    """SA3-sfx: seconds_total < 1s → NaN; floor 2s + crop com folga."""
+
+    @patch("stable_audio_tools.inference.generation.generate_diffusion_cond_inpaint")
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_sfx_floor_applies_and_crop_has_headroom(self, mock_get, mock_inpaint):
+        mock_model = MagicMock()
+        mock_model.to.return_value = mock_model
+        mock_model.pretransform = None
+        mock_model.conditioner.conditioners.keys.return_value = ["prompt", "seconds_total"]
+        mock_get.return_value = (
+            mock_model,
+            {"model_type": "diffusion_cond_inpaint", "sample_rate": 44100, "sample_size": 5292032},
+        )
+        # buffer simulado de 8s (cond 2 + 6 headroom)
+        mock_inpaint.return_value = torch.randn(1, 2, 44100 * 8)
+        gen = AudioGenerator(
+            model_id="stabilityai/stable-audio-3-small-sfx",
+            device="cpu",
+            auto_clear=False,
+        )
+        result = gen.generate(prompt="swish", duration=0.5, steps=16)
+
+        kwargs = mock_inpaint.call_args.kwargs
+        # conditioning usa o floor (0.5 pedido → 2.0 condicionado)
+        assert kwargs["conditioning"][0]["seconds_total"] == 2.0
+        # crop com folga: cond 2.0 + 1.5 = 3.5s (não os 0.5 pedidos)
+        assert result.audio.shape[-1] == int(44100 * 3.5)
+
+    @patch("stable_audio_tools.inference.generation.generate_diffusion_cond_inpaint")
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_music_crop_stays_exact(self, mock_get, mock_inpaint):
+        mock_model = MagicMock()
+        mock_model.to.return_value = mock_model
+        mock_model.pretransform = None
+        mock_get.return_value = (
+            mock_model,
+            {"model_type": "diffusion_cond_inpaint", "sample_rate": 44100, "sample_size": 5292032},
+        )
+        mock_inpaint.return_value = torch.randn(1, 2, 44100 * 21)
+        gen = AudioGenerator(
+            model_id="stabilityai/stable-audio-3-small-music",
+            device="cpu",
+            auto_clear=False,
+        )
+        result = gen.generate(prompt="theme", duration=15.0, steps=16)
+        # música: crop exacto ao pedido (matemática do seamless loop)
+        assert result.audio.shape[-1] == int(44100 * 15.0)

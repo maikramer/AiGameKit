@@ -38,6 +38,11 @@ class ModelSpec:
     default_sampler: str
     default_sigma_min: float
     default_sigma_max: float
+    # Floor de conditioning ``seconds_total``: o SA3-sfx produz **NaN** com
+    # valores <1 s (fourier features do NumberConditioner) e compõe one-shots
+    # naturais a partir de ~2 s. O ``-d`` pedido fica como alvo; o trim por
+    # kind acha o comprimento real do evento.
+    min_condition_seconds: float = 0.0
 
 
 # Defaults do model card SA3: steps=8, cfg=1.0, sampler "pingpong"
@@ -67,6 +72,7 @@ SPEC_EFFECTS = ModelSpec(
     default_sampler="pingpong",
     default_sigma_min=0.3,
     default_sigma_max=500.0,
+    min_condition_seconds=2.0,
 )
 
 # Defaults alinhados com o model card do Open 1.0 (difusão condicionada).
@@ -155,6 +161,8 @@ def get_spec(hf_id: str) -> ModelSpec:
         return SPEC_MUSIC
     if "stable-audio-3-small-sfx" in hf_id or "stable-audio-3-small" in hf_id:
         return SPEC_EFFECTS
+    if "sfx" in hf_id:
+        return ModelSpec(**{**SPEC_EFFECTS.__dict__, "hf_id": hf_id, "label": f"Custom ({hf_id})"})
     if "open-small" in hf_id or "stable-audio-open-small" in hf_id:
         return SPEC_LEGACY_EFFECTS
     # Modelo desconhecido: limites do SA3 (mais permissivos) e defaults SA3.

@@ -238,6 +238,12 @@ class AudioGenerator:
         self._ensure_loaded()
         return int(self._model_config["sample_size"])
 
+    @property
+    def _spec(self):
+        from .models import get_spec
+
+        return get_spec(self._model_id)
+
     def _is_sa3(self) -> bool:
         """True para checkpoints Stable Audio 3 (``diffusion_cond_inpaint``).
 
@@ -564,8 +570,12 @@ class AudioGenerator:
 
         # SA3 só condiciona em prompt + seconds_total (sem seconds_start);
         # os modelos Open usam ambos. Introspeção do conditioner decide.
+        # Floor de conditioning: SA3-sfx devolve NaN com seconds_total < 1 s
+        # e compõe one-shots naturais a partir de ~2 s — o ``duration``
+        # pedido continua a ser o alvo (o trim por kind acha o evento real).
+        cond_duration = max(duration, self._spec.min_condition_seconds)
         cond_keys = self._conditioning_keys()
-        cond: dict[str, Any] = {"prompt": final_prompt, "seconds_total": duration}
+        cond: dict[str, Any] = {"prompt": final_prompt, "seconds_total": cond_duration}
         if cond_keys is None or "seconds_start" in cond_keys:
             cond["seconds_start"] = 0
         conditioning = [cond]
@@ -579,7 +589,7 @@ class AudioGenerator:
         effective_negative: str | None = None
         if negative_prompt and negative_prompt.strip() and cfg_scale > 1.0:
             effective_negative = negative_prompt.strip()
-            neg_cond: dict[str, Any] = {"prompt": effective_negative, "seconds_total": duration}
+            neg_cond: dict[str, Any] = {"prompt": effective_negative, "seconds_total": cond_duration}
             if cond_keys is None or "seconds_start" in cond_keys:
                 neg_cond["seconds_start"] = 0
             negative_conditioning = [neg_cond]
@@ -645,12 +655,20 @@ class AudioGenerator:
 
             if self._is_sa3():
                 # SA3 difunde seconds_total + headroom (~6 s de padding que o
-                # treino usa para o schedule/atenção); o conteúdo musical acaba
-                # em seconds_total e a cauda é silêncio de padding. Cortar ao
-                # pedido devolve o contrato "-d = duração do clip" (sem isto,
-                # um -d 15 produzia ~21 s com branco no fim, e o crossfade de
-                # seamless-loop operava sobre o buffer inteiro).
-                output = _crop_to_duration_declick(output, self.sample_rate, duration)
+                # treino usa para o schedule/atenção); o conteúdo acaba em
+                # seconds_total (+ eventos ligeiramente tardios).
+                #
+                # SFX (floor > 0): cortar ao conditioning + 1.5 s de folga —
+                # NÃO ao ``duration`` pedido. Um one-shot de 0.5 s vive ~0.4 s
+                # dentro de um buffer de 2 s, e um corte cego a meio do
+                # transiente deixa só o ataque (metálico/agudo). O comprimento
+                # final pertence ao trim por kind (-55 dB) ou ao ``--crop``.
+                #
+                # Música (floor 0): corte EXACTO ao pedido — a matemática do
+                # seamless loop (gen = D + xf + 2·edge → fold aterra em D)
+                # depende do comprimento exacto do buffer.
+                crop_len = cond_duration + 1.5 if self._spec.min_condition_seconds > 0 else duration
+                output = _crop_to_duration_declick(output, self.sample_rate, crop_len)
 
             # Áudio para CPU e tensor CUDA largado **dentro** do contexto: o
             # ``_generation_context`` limpa a cache no ``finally``, e enquanto
