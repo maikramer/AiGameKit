@@ -12,6 +12,7 @@ import {
   allowSoundPreload,
   fireClipMarkers,
   getClipSounds,
+  isAudioUnlocked,
   pruneFollowingPlays,
   setAudioListenerWorldPos,
   syncFollowingPlayPositions,
@@ -143,16 +144,26 @@ export function resumeAudioContextIfSuspended(): void {
 }
 
 /**
- * No browser, regista um `pointerdown` único para desbloquear preload Howl +
- * retomar o AudioContext (política de autoplay). Sem efeito fora de DOM.
+ * No browser, regista um gesto único (`pointerdown`/`keydown`) para
+ * desbloquear preload + plays enfileirados e retomar o AudioContext (política
+ * de autoplay). Sem efeito fora de DOM.
  */
 /** Minimal silent WAV so Howler can spawn AudioContext inside a user gesture. */
 const SILENT_WAV =
   'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
+/** Pointer press and keyboard both count as user activation for autoplay. */
+const UNLOCK_EVENTS = ['pointerdown', 'keydown'] as const;
+
 export function resumeAudioContextOnFirstUserGesture(): void {
   if (typeof document === 'undefined') return;
   const handler = () => {
+    for (const type of UNLOCK_EVENTS) {
+      document.removeEventListener(type, handler);
+    }
+    // Howler's 30s auto-suspend re-parks the context when idle; later plays
+    // would then issue failed resume() attempts (autoplay warnings again).
+    Howler.autoSuspend = false;
     // Create/warm Howls inside the gesture so AudioContext is not born suspended.
     allowSoundPreload();
     if (!Howler.ctx) {
@@ -160,9 +171,10 @@ export function resumeAudioContextOnFirstUserGesture(): void {
       unlock.unload();
     }
     resumeAudioContextIfSuspended();
-    document.removeEventListener('pointerdown', handler);
   };
-  document.addEventListener('pointerdown', handler, { once: true });
+  for (const type of UNLOCK_EVENTS) {
+    document.addEventListener(type, handler);
+  }
 }
 
 /** Garante AudioListener na entidade da câmara (MainCamera + Transform). */
@@ -203,6 +215,10 @@ export const AudioSystem: System = defineSystem({
       let howl = howlMap.get(eid);
 
       if (playing === 1 && wasPlaying === 0) {
+        // Autoplay policy: no Howl creation/play until the user-gesture
+        // unlock. prevPlaying stays 0, so this transition re-fires on the
+        // first unlocked tick and loops (ambience, MusicLayer) start there.
+        if (!isAudioUnlocked()) continue;
         if (!howl) {
           const url = clipRegistry.get(clipId);
           if (!url) continue;

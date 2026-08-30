@@ -121,6 +121,25 @@ let soundPreloadAllowed =
   typeof document.addEventListener !== 'function';
 const pendingSoundPreload = new Set<string>();
 
+/**
+ * Plays fired before the first user gesture (boot BGM, ambience, clip
+ * markers). Howler would create the AudioContext outside the gesture and
+ * attempt a doomed resume() per play — browsers log an autoplay warning for
+ * each. Replayed FIFO by {@link allowSoundPreload}.
+ */
+interface PendingPlay {
+  key: string;
+  opts?: PlayOptions;
+  followEid?: number;
+  pos?: [number, number, number];
+}
+const pendingPlays: PendingPlay[] = [];
+
+/** True once the first user gesture unblocked audio (always true headless). */
+export function isAudioUnlocked(): boolean {
+  return soundPreloadAllowed;
+}
+
 /** Last listener world pose (written by AudioSystem). Used to cull far SFX. */
 let listenerX = 0;
 let listenerY = 0;
@@ -394,6 +413,27 @@ function playInternal(
     return NULL_HANDLE;
   }
 
+  // Browsers block audio until a user gesture; queue instead of letting
+  // Howler create the AudioContext (autoplay warning) or fail resume() per play.
+  if (!soundPreloadAllowed) {
+    pendingPlays.push({ key, opts, followEid, pos });
+    recordAudioDebugEvent({
+      kind: 'queue',
+      key,
+      source: 'bank',
+      bus: busName,
+      loop,
+      spatial,
+      followEid,
+      originEid: originInfo.originEid,
+      originName: originInfo.originName,
+      origin: originInfo.origin,
+      pos,
+      detail: 'queued until user gesture',
+    });
+    return NULL_HANDLE;
+  }
+
   const h = ensureHowl(key, def, spatial);
   if (!h) return NULL_HANDLE;
 
@@ -458,16 +498,24 @@ function playInternal(
 }
 
 /**
- * Allow Howl construction for preloads (call from a user-gesture handler).
- * Flushes any keys queued by {@link preloadSounds} before unlock.
+ * Allow Howl construction for preloads and queued plays (call from a
+ * user-gesture handler). Flushes everything queued by {@link preloadSounds}
+ * and pre-gesture {@link playSound}/{@link playSoundAt}/{@link playSoundOn}
+ * calls — FIFO, after the preload cache warm.
  */
 export function allowSoundPreload(): void {
   if (soundPreloadAllowed) return;
   soundPreloadAllowed = true;
-  if (pendingSoundPreload.size === 0) return;
-  const keys = [...pendingSoundPreload];
-  pendingSoundPreload.clear();
-  preloadSounds(keys);
+  // Warm the decode cache first so replayed plays start instantly.
+  if (pendingSoundPreload.size > 0) {
+    const keys = [...pendingSoundPreload];
+    pendingSoundPreload.clear();
+    preloadSounds(keys);
+  }
+  const plays = pendingPlays.splice(0);
+  for (const p of plays) {
+    playInternal(p.key, p.opts, p.followEid, p.pos);
+  }
 }
 
 /**
@@ -641,6 +689,8 @@ export function listBusDebugState(): {
 
 /** Stop every active bank play (profiler / panic mute). */
 export function stopAllBankPlays(): void {
+  // Also drop pre-gesture plays so a panic mute silences them for good.
+  pendingPlays.length = 0;
   for (const ap of [...active]) {
     ap.howl.stop(ap.id);
     active.delete(ap);
@@ -725,6 +775,7 @@ export function _resetSoundBank(): void {
   active.clear();
   clipMarkers.clear();
   pendingSoundPreload.clear();
+  pendingPlays.length = 0;
   soundPreloadAllowed =
     typeof document === 'undefined' ||
     typeof document.addEventListener !== 'function';

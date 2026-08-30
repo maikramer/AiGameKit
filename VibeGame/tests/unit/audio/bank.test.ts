@@ -34,6 +34,12 @@ const bank = await import('../../../src/plugins/audio/bank');
 
 describe('Sound bank', () => {
   beforeEach(() => {
+    // DOM suites stub globalThis.document/window and whichever ran earlier in
+    // this bun worker would silently arm the bank's autoplay gate on reset,
+    // turning every playSound below into a queued no-op. This file owns the
+    // gate: run headless regardless of what leaked.
+    delete (globalThis as any).document;
+    delete (globalThis as any).window;
     bank._resetSoundBank();
     bank.setAudioEnabled(true);
     howlInstances.length = 0;
@@ -153,6 +159,70 @@ describe('Sound bank', () => {
     bank.allowSoundPreload();
     expect(howlInstances).toHaveLength(1);
     expect(howlInstances[0]._opts.src).toEqual(['/coin.ogg']);
+
+    if (!hadDocument) {
+      delete (globalThis as any).document;
+    }
+  });
+
+  it('queues plays fired before the user gesture and replays them FIFO on unlock', () => {
+    const hadDocument = typeof document !== 'undefined';
+    if (!hadDocument) {
+      (globalThis as any).document = {
+        addEventListener() {},
+        removeEventListener() {},
+      };
+    }
+    bank._resetSoundBank();
+    bank.setAudioEnabled(true);
+    bank.defineSoundBank({
+      bgm: { url: '/bgm.ogg', loop: true, bus: 'music' },
+      coin: { url: '/coin.ogg' },
+    });
+
+    expect(bank.isAudioUnlocked()).toBe(false);
+    const first = bank.playSound('bgm');
+    bank.playSoundAt('coin', 1, 2, 3);
+    // Nothing constructed or started pre-gesture: Howler must not spawn the
+    // AudioContext (autoplay warning) nor attempt a doomed resume().
+    expect(howlInstances).toHaveLength(0);
+    expect(first.id).toBe(-1);
+
+    bank.allowSoundPreload();
+    expect(bank.isAudioUnlocked()).toBe(true);
+    expect(howlInstances).toHaveLength(2);
+    expect(howlInstances[0]._opts.src).toEqual(['/bgm.ogg']);
+    expect(howlInstances[1]._opts.src).toEqual(['/coin.ogg']);
+    expect(howlInstances[0].play).toHaveBeenCalledTimes(1);
+    expect(howlInstances[1].play).toHaveBeenCalledTimes(1);
+    expect(howlInstances[1].pos).toHaveBeenCalledWith(1, 2, 3, 2);
+
+    // Post-unlock plays go straight through (2D and spatial Howls cache apart).
+    bank.playSound('bgm');
+    expect(howlInstances).toHaveLength(2);
+    expect(howlInstances[0].play).toHaveBeenCalledTimes(2);
+
+    if (!hadDocument) {
+      delete (globalThis as any).document;
+    }
+  });
+
+  it('drops queued pre-gesture plays on stopAllBankPlays', () => {
+    const hadDocument = typeof document !== 'undefined';
+    if (!hadDocument) {
+      (globalThis as any).document = {
+        addEventListener() {},
+        removeEventListener() {},
+      };
+    }
+    bank._resetSoundBank();
+    bank.setAudioEnabled(true);
+    bank.defineSoundBank({ bgm: { url: '/bgm.ogg', loop: true } });
+
+    bank.playSound('bgm');
+    bank.stopAllBankPlays();
+    bank.allowSoundPreload();
+    expect(howlInstances).toHaveLength(0);
 
     if (!hadDocument) {
       delete (globalThis as any).document;

@@ -16,6 +16,7 @@ export {
 } from './sfx-registry';
 export {
   allowSoundPreload,
+  isAudioUnlocked,
   defineSoundBank,
   getSoundDef,
   preloadSounds,

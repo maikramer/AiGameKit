@@ -51,16 +51,25 @@ Volume routing is **master × bus × clip**:
 - `preloadSounds()` — silent cache warm (`kind: preload` in debug log; not gameplay).
   **Browser:** queues keys until `allowSoundPreload()` so Howler does not create
   an `AudioContext` before a user gesture (autoplay policy warning).
-- `allowSoundPreload()` — unlock + flush queued preloads (called from
-  `resumeAudioContextOnFirstUserGesture` on first `pointerdown`)
+- `allowSoundPreload()` — unlock + flush queued preloads, then replay queued
+  pre-gesture plays FIFO (called from `resumeAudioContextOnFirstUserGesture`
+  on first `pointerdown`/`keydown`)
+- `isAudioUnlocked()` — true once the gesture happened (always headless); the
+  `AudioSystem` defers Howl creation/play on `AudioSource` emitters until then
 - **Separate Howl caches** for 2D vs spatial — never reuse a 2D preload Howl for `playSoundAt`
 - `PlayOptions.originEid` / `origin` — profiler attribution (`topOrigins`)
 
 ### Autoplay / user gesture
 
 - Prefer `<Scene resume-audio-on-user-gesture="true">` (runtime wires the listener).
-- Gesture path: `allowSoundPreload()` → optional silent-WAV Howl if `Howler.ctx`
-  still null → `resumeAudioContextIfSuspended()`.
+- Gesture path: `Howler.autoSuspend = false` (no 30s idle re-suspend → no late
+  failed-resume warnings) → `allowSoundPreload()` (flush preloads + replay
+  queued plays) → optional silent-WAV Howl if `Howler.ctx` still null →
+  `resumeAudioContextIfSuspended()`.
+- Everything that reaches Howler pre-gesture goes through the queue: bank plays
+  (`kind: queue` event) and `AudioSource` emitter starts (`AudioSystem` skips
+  while locked, `prevPlaying` stays 0 so the 0→1 transition fires post-unlock).
+  Zero `new Howl` / `play()` / `resume()` happen before the gesture.
 - Headless / no-DOM: preload allowed immediately (tests, CI).
 
 ### Spatial cull

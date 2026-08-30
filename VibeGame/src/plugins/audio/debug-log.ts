@@ -7,7 +7,15 @@
 import { Howler } from 'howler';
 
 export type AudioDebugEventKind =
-  'play' | 'stop' | 'end' | 'unknown' | 'fade' | 'busMute' | 'skip' | 'preload';
+  | 'play'
+  | 'stop'
+  | 'end'
+  | 'unknown'
+  | 'fade'
+  | 'busMute'
+  | 'skip'
+  | 'preload'
+  | 'queue';
 
 export type AudioDebugSource = 'bank' | 'audio-source' | 'emitter' | 'music';
 

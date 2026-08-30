@@ -202,6 +202,7 @@ export {
   playNamedSfx,
   registerNamedSfx,
   allowSoundPreload,
+  isAudioUnlocked,
   defineSoundBank,
   getSoundDef,
   preloadSounds,
