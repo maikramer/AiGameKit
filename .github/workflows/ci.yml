@@ -25,7 +25,10 @@ jobs:
           key: pip-lint-${{ runner.os }}-${{ hashFiles('ruff.toml', '.pre-commit-config.yaml') }}
           restore-keys: pip-lint-${{ runner.os }}-
       - name: Install tools
-        run: pip install --upgrade pip && pip install ruff pre-commit
+        # ruff pinado à linha do pre-commit (ruff-pre-commit v0.15.x): o
+        # format não é estável entre minors e o job corria o ruff solto,
+        # quebrando a cada release nova do ruff.
+        run: pip install --upgrade pip && pip install "ruff==0.15.8" pre-commit
       - name: Ruff check
         run: ruff check .
       - name: Ruff format
