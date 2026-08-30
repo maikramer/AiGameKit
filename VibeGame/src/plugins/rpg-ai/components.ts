@@ -30,6 +30,12 @@ export const AI_MODE_ATTACK = 3;
 export const AI_MODE_LUNGE = 4;
 export const AI_MODE_DEAD = 5;
 
+/** Presentation-facing mirror of `AiInstanceState.lungePhase`. */
+export const AI_LUNGE_PHASE_READY = 0;
+export const AI_LUNGE_PHASE_WINDUP = 1;
+export const AI_LUNGE_PHASE_LUNGE = 2;
+export const AI_LUNGE_PHASE_RECOVERY = 3;
+
 export type AiMode =
   | typeof AI_MODE_IDLE
   | typeof AI_MODE_DETECT
@@ -47,6 +53,10 @@ export const AiStateComponent = defineComponent({
   target: U32,
   cooldown: F32,
   leash: F32,
+  /** Hit-stagger countdown (seconds) — the FSM pauses while > 0. */
+  staggerTimer: F32,
+  /** Lunge phase (AI_LUNGE_PHASE_*) so presentation can telegraph the windup. */
+  lungePhase: U8,
 });
 
 /** Melee AI tuning. Defaults mirror the simple-rpg creature prototype. */
@@ -123,6 +133,8 @@ export interface AiInstanceState {
   /** Current orbit direction (+1/-1), flipped on a timer for strafe. */
   strafeDir: number;
   strafeTimer: number;
+  /** Hit-stagger countdown — while > 0 the FSM ticks nothing but this. */
+  staggerTimer: number;
 }
 
 export function createAiInstanceState(): AiInstanceState {
@@ -141,6 +153,7 @@ export function createAiInstanceState(): AiInstanceState {
     wanderZ: 0,
     strafeDir: aiRandom() < 0.5 ? -1 : 1,
     strafeTimer: 0,
+    staggerTimer: 0,
   };
 }
 

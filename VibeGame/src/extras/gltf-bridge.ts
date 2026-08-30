@@ -639,6 +639,19 @@ export function loadGltfMasterTracked(
   return trackGltfLoad(loadGltfMaster(state, url), priority, url);
 }
 
+/**
+ * Cached master for `url`, but only when its parse already succeeded this
+ * session — the promise settles on the next microtask, no download. Returns
+ * null when the URL was never requested or is still in flight, so callers can
+ * fall back to a tracked load. Animators riding on a visual that already
+ * loaded (creature LOD children) use this to attach from the master the visual
+ * was cloned from instead of waiting on a colder master.
+ */
+export function loadSettledGltfMaster(url: string): Promise<GLTF> | null {
+  if (!url || !_settledMasters.has(url)) return null;
+  return gltfMasterCache.get(url) ?? null;
+}
+
 /** Test helper: wrap an arbitrary promise with the GLTF load tracker. */
 export function _trackGltfLoadForTests<T>(
   p: Promise<T>,

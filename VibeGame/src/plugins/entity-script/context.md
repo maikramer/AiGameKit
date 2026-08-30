@@ -195,10 +195,14 @@ visual lifts so distant enemies “touch ground when close.” See
   `<MonoBehaviour>` wins. To compose behaviors, put the logic in one module.
 - **No `onInteract` hook.** Interaction is implemented in `update` via input
   polling (`isKeyDown`) plus `registerInteractionTarget` / `unregisterInteractionTarget`.
-- **Module load and `start` errors** are caught and logged; `ready` is set so
-  the entity does not retry. `update` / `fixedUpdate` / `lateUpdate` / collision
-  hooks are not wrapped in try/catch, so a thrown error propagates to the system
-  runner for that frame.
+- **Module load and `start` errors** are caught and logged. `start` errors set
+  `ready` so the entity does not retry. A failed **module load** (dev-server
+  restart, Vite dep re-optimization "Outdated Optimize Dep", transient network)
+  retries with backoff — 5 attempts per glob key (0.5 s doubling to 8 s), shared
+  by every entity referencing that module — and only latches `ready` (skip
+  forever) once the attempts are exhausted. `update` / `fixedUpdate` /
+  `lateUpdate` / collision hooks are not wrapped in try/catch, so a thrown
+  error propagates to the system runner for that frame.
 - **GLB wait.** If the entity has `gltf-pending`, `start` is deferred until the
   GLB loads, so `object3d` is populated when `start` runs.
 - **Glob resolution** matches by basename. Two files with the same basename are

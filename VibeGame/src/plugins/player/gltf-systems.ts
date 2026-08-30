@@ -8,6 +8,12 @@ import {
 } from '../../extras/gltf-bridge';
 import { GltfAnimator, matchClipKeyword } from '../../extras/gltf-animator';
 import {
+  WeaponTrail,
+  bladeEndpoints,
+  type WeaponTrailOptions,
+} from '../../extras/weapon-trail';
+import { getScene } from '../rendering/utils';
+import {
   getAnimator,
   registerAnimator,
   unregisterAnimator,
@@ -91,7 +97,32 @@ function setYOffset(state: State, eid: number, y: number): void {
 const DEFAULT_LOCOMOTION_SET = 'default';
 
 const ATTACK_RANGE = 3.0; // m — forgiving reach so swings connect
+const ATTACK_VERTICAL = 2.5; // m — swing cone is local; no hits through floors
 const ATTACK_DAMAGE = 25;
+// Damage of the engine's built-in melee hit. Games that own their swing
+// damage (crit/backstab/bonus — see simple-rpg `src/game/melee.ts`) set this
+// to 0 so the two paths don't double-dip on the same blow. The attack clip
+// and the Destructible harvest are unaffected either way.
+let playerMeleeDamage = ATTACK_DAMAGE;
+
+/**
+ * Playback speed of the player's attack clips. Quaternius-style packs swing
+ * in ~1.5s with a long settle; values > 1 tighten the attack into a snappier
+ * read. Impact scheduling (engine `pendingMelee` and the game's own swing
+ * delay) must divide the clip-relative delay by this so the blow still lands
+ * on the strike peak — use {@link getPlayerAttackTimeScale}.
+ */
+let attackTimeScale = 1.4;
+
+/** Override the player's attack-clip playback speed (clamped to >= 0.1). */
+export function setPlayerAttackTimeScale(scale: number): void {
+  attackTimeScale = Math.max(0.1, scale);
+}
+
+/** Current attack-clip playback speed (default 1.4). */
+export function getPlayerAttackTimeScale(): number {
+  return attackTimeScale;
+}
 // Fraction of the attack clip after which the blow lands. Quaternius-style
 // packs peak the cut ~25–40% in (then long recovery); 0.7 lands in the settle.
 const ATTACK_IMPACT_FRACTION = 0.35;
@@ -108,23 +139,121 @@ const prevLocoSig = new Map<number, string>();
 
 // Context hint for the attack clip: the game sets a keyword (e.g. 'mine',
 // 'chop', 'sword', 'axe', 'spear') based on tool/target; the attack picks the
-// matching clip, falling back to a generic 'attack' swing.
-let attackClipHint: string | null = null;
+// matching clip, falling back to a generic 'attack' swing. A string[] is a
+// combo pool — successive attacks advance through it per `comboMode`.
+let attackClipHint: string | string[] | null = null;
+// Next index into the combo pool (advances after each landed strike).
+let attackComboIdx = 0;
+/**
+ * How a combo pool advances per strike.
+ * - `cycle` — 0,1,2,… (fixed sequence)
+ * - `random` — any entry except the one just played
+ * - `alternating` — bases are played in random order, and every strike
+ *   swaps the swing side by appending the `_m` mirrored variant (built
+ *   on demand by the animator) — reads as a natural left↔right chain.
+ */
+let comboMode: PlayerAttackComboMode = 'cycle';
+/** Pre-computed keyword of the NEXT strike (pure reads via getPlayerAttackClip). */
+let nextComboKeyword: string | null = null;
+/** Side flag for `alternating` (true = mirrored `_m` swing). */
+let comboSide = false;
+/** Index/base just played — `random`/`alternating` avoid repeating it. */
+let lastComboPick = -1;
 
 // Context hint for the idle clip: when the hero has a weapon/tool equipped, the
 // game sets a keyword (e.g. 'swordidle', 'axeidle') to use a combat-guard idle
 // instead of the default relaxed idle. null = use default idle.
 let idleClipHint: string | null = null;
 
-/** Choose which attack animation the player plays next (by keyword). Pass null
- * to fall back to the generic attack/swing clip. */
-export function setPlayerAttackClip(hint: string | null): void {
-  attackClipHint = hint;
+export type PlayerAttackComboMode = 'cycle' | 'random' | 'alternating';
+
+export interface PlayerAttackComboOptions {
+  /** Pool advance policy. Default `cycle`. */
+  mode?: PlayerAttackComboMode;
 }
 
-/** Current attack-clip keyword (e.g. ``sword`` / ``chop``), or null. */
+/** Random int in [0, n) that avoids `avoid` when possible (n > 1). */
+function pickComboIndex(n: number, avoid: number): number {
+  if (n <= 0) return 0;
+  if (n === 1) return 0;
+  let i = avoid;
+  while (i === avoid) i = Math.floor(Math.random() * n);
+  return i;
+}
+
+/** (Re)compute the keyword the next strike will play, honouring `comboMode`. */
+function refreshNextComboKeyword(): void {
+  if (!Array.isArray(attackClipHint) || attackClipHint.length === 0) {
+    nextComboKeyword = null;
+    return;
+  }
+  const pool = attackClipHint;
+  if (comboMode === 'cycle') {
+    nextComboKeyword = pool[attackComboIdx % pool.length] ?? null;
+    return;
+  }
+  if (comboMode === 'random') {
+    lastComboPick = pickComboIndex(pool.length, lastComboPick);
+    nextComboKeyword = pool[lastComboPick] ?? null;
+    return;
+  }
+  // alternating: random base (not the last one), side flips every strike.
+  lastComboPick = pickComboIndex(pool.length, lastComboPick);
+  comboSide = !comboSide;
+  const base = pool[lastComboPick] ?? '';
+  nextComboKeyword = comboSide ? `${base}_m` : base;
+}
+
+/** Choose which attack animation the player plays next. Pass a keyword
+ * (e.g. 'sword'), a combo pool (e.g. ['sword', 'sworda', 'swordb']) with an
+ * advance `mode` (`cycle` default, `random`, or `alternating` mirrored
+ * left↔right chains), or null for the generic attack/swing clip. Re-registering
+ * the same hint is a no-op (does not reset an in-progress combo). */
+export function setPlayerAttackClip(
+  hint: string | string[] | null,
+  opts?: PlayerAttackComboOptions
+): void {
+  const mode = opts?.mode ?? 'cycle';
+  if (
+    hint === attackClipHint &&
+    mode === comboMode &&
+    nextComboKeyword !== null
+  ) {
+    return; // same pool + mode: keep the combo position
+  }
+  attackClipHint = hint;
+  comboMode = mode;
+  attackComboIdx = 0;
+  comboSide = true; // first alternating strike flips to the un-mirrored base
+  lastComboPick = -1;
+  refreshNextComboKeyword();
+}
+
+/**
+ * Advance the combo after a strike (exported for tests). `advanced` is true
+ * only when the hinted clip actually played — a generic-swing fallback must
+ * not burn a combo step.
+ */
+export function advancePlayerAttackCombo(advanced: boolean): void {
+  if (!advanced) return;
+  if (!Array.isArray(attackClipHint) || attackClipHint.length <= 1) return;
+  if (comboMode === 'cycle') {
+    attackComboIdx = (attackComboIdx + 1) % attackClipHint.length;
+  }
+  refreshNextComboKeyword();
+}
+
+/** Resolve the keyword the NEXT strike will try to play (combo-aware). */
+function nextAttackKeyword(): string | null {
+  if (!attackClipHint) return null;
+  if (typeof attackClipHint === 'string') return attackClipHint;
+  return nextComboKeyword;
+}
+
+/** Current attack-clip keyword (e.g. ``sword`` / ``chop``), or null. With a
+ * combo pool, returns the keyword of the upcoming strike. */
 export function getPlayerAttackClip(): string | null {
-  return attackClipHint;
+  return nextAttackKeyword();
 }
 
 /** Override the idle clip (e.g. 'swordidle' for a combat-guard stance when a
@@ -161,13 +290,64 @@ const heldCache = new Map<string, import('three').Object3D>();
 const heldLoading = new Set<string>();
 
 /** Attach a GLB to the hero's hand (follows the animation). null = empty hand.
- * `grip` is the local offset/rotation/scale on the RightHand bone. */
+ * `grip` is the local offset/rotation/scale on the right-hand bone. */
 export function setPlayerHeldItem(
   url: string | null,
   grip?: Partial<HeldItemGrip>
 ): void {
   heldItemUrl = url;
   heldGrip = grip ? { ...DEFAULT_GRIP, ...grip } : DEFAULT_GRIP;
+}
+
+// ── Weapon trail (ribbon swept by the held weapon during a swing) ────────────
+// A swing lasts ~0.2s: without a trail the arc is gone before the eye finds
+// it, and the impact particles that follow say nothing about where the blade
+// went. Enabled by default and only ever visible while an attack override is
+// running with something in hand — pass `false` to opt out.
+let weaponTrailOptions: WeaponTrailOptions | null = {};
+let weaponTrail: WeaponTrail | null = null;
+/** True between the start of an attack override and its 'finished' event. */
+let swingActive = false;
+
+/**
+ * Configure (or disable) the trail the player's held weapon sweeps while
+ * attacking. `false` removes it; an options object rebuilds it with new
+ * colour/length/opacity on the next swing.
+ */
+export function setPlayerWeaponTrail(
+  options: WeaponTrailOptions | false
+): void {
+  weaponTrailOptions = options === false ? null : options;
+  if (weaponTrail) {
+    weaponTrail.dispose();
+    weaponTrail = null;
+  }
+}
+
+function updateWeaponTrail(state: State, swinging: boolean): void {
+  if (!weaponTrailOptions) return;
+  const now = state.time.elapsed;
+
+  if (!swinging || !heldObj) {
+    // Keep ageing so the tail dissolves after the swing instead of hanging in
+    // the air until the next one.
+    if (weaponTrail && weaponTrail.sampleCount > 0) weaponTrail.update(now);
+    return;
+  }
+
+  // Overshoot the modelled tip a little: the ribbon then reads as the edge's
+  // sweep rather than a decal glued to the blade mesh.
+  const ends = bladeEndpoints(heldObj, { extend: 0.12, inset: 0.45 });
+  if (!ends) return;
+
+  const scene = getScene(state);
+  if (!scene) return;
+  if (!weaponTrail) weaponTrail = new WeaponTrail(weaponTrailOptions);
+  // Re-parent after a scene swap (runtime teardown drops the old scene's
+  // children), otherwise the ribbon silently stops rendering.
+  if (weaponTrail.object3D.parent !== scene) scene.add(weaponTrail.object3D);
+
+  weaponTrail.push(ends.base, ends.tip, now);
 }
 
 // ── Aim facing: while set, the visual body yaws toward (x,z) instead of the
@@ -182,6 +362,59 @@ export function setPlayerFaceTarget(x: number | null, z = 0): void {
   faceTargetZ = z;
 }
 
+/**
+ * Resolve the hero's right-hand bone across skeleton naming conventions.
+ * Different asset pipelines name it differently — Quaternius/UMA rigs use
+ * `RightHand`, the retargeted/pool heroes use Mixamo-ish `hand_r` — and a
+ * held weapon silently vanishes when the hard-coded name misses.
+ */
+const HAND_BONE_CANDIDATES = [
+  'RightHand',
+  'hand_r',
+  'Hand_R',
+  'right_hand',
+  'righthand',
+] as const;
+
+let handBoneNameCache: string | null = null;
+
+/**
+ * Resolve an object's right-hand bone across skeleton naming conventions
+ * (`RightHand` Quaternius/UMA, `hand_r` Mixamo-style pool heroes, plus a
+ * fuzzy fallback). Exported for games/tests; the held-item system uses it to
+ * keep weapons attached regardless of which pipeline produced the hero GLB.
+ */
+export function findRightHandBone(
+  root: import('three').Object3D
+): import('three').Object3D | null {
+  if (handBoneNameCache) {
+    const cached = root.getObjectByName(handBoneNameCache);
+    if (cached) return cached;
+    handBoneNameCache = null;
+  }
+  for (const name of HAND_BONE_CANDIDATES) {
+    const bone = root.getObjectByName(name);
+    if (bone) {
+      handBoneNameCache = name;
+      return bone;
+    }
+  }
+  // Fuzzy last resort: a bone named like a right hand but not a finger
+  // (covers `R_hand`, `thumb_01_r`-style rigs without listing every scheme).
+  const found: { bone: import('three').Object3D | null } = { bone: null };
+  root.traverse((o) => {
+    if (found.bone || !o.name) return;
+    const n = o.name.toLowerCase();
+    if (!n.includes('hand')) return;
+    if (n.includes('finger') || n.includes('thumb')) return;
+    if (n.includes('_r') || n.startsWith('r_') || n.includes('right')) {
+      found.bone = o;
+    }
+  });
+  if (found.bone) handBoneNameCache = found.bone.name;
+  return found.bone;
+}
+
 function applyHeldItem(animator: GltfAnimator, state: State): void {
   // Swap the attached model when the requested url changes.
   if (heldCurrentUrl !== heldItemUrl) {
@@ -192,7 +425,7 @@ function applyHeldItem(animator: GltfAnimator, state: State): void {
     heldCurrentUrl = null;
     const want = heldItemUrl;
     if (want) {
-      const bone = animator.root.getObjectByName('RightHand');
+      const bone = findRightHandBone(animator.root);
       if (!bone) return; // skeleton not ready — retry next frame
       const cached = heldCache.get(want);
       if (cached) {
@@ -208,7 +441,12 @@ function applyHeldItem(animator: GltfAnimator, state: State): void {
             gltf.scene.removeFromParent(); // we parent it to the bone instead
             heldCache.set(want, gltf.scene);
           })
-          .catch(() => heldLoading.delete(want));
+          .catch((err) => {
+            heldLoading.delete(want);
+            // A wrong URL silently leaves the hand empty — log it once per
+            // url so a moved/missing GLB is findable in the console.
+            console.warn('[player-gltf] held-item load failed', want, err);
+          });
       }
     }
   }
@@ -346,14 +584,28 @@ function isRunModifier(): boolean {
   return isKeyDown('ShiftLeft') || isKeyDown('ShiftRight');
 }
 
+/** Damage dealt by the engine's built-in primary-action melee hit. Pass 0 to
+ * disable it entirely (the game's own swing code becomes the sole damage
+ * source); values > 0 override the default flat damage. */
+export function setPlayerMeleeDamage(dmg: number): void {
+  playerMeleeDamage = Math.max(0, dmg);
+}
+
+/** Damage dealt by the engine's built-in melee hit (0 = disabled). */
+export function getPlayerMeleeDamage(): number {
+  return playerMeleeDamage;
+}
+
 let meleeQuery: ReturnType<typeof defineQuery> | null = null;
 
 /** Damage Health entities within a forward cone when an attack lands. */
 function meleeHit(state: State, attacker: number): void {
+  if (playerMeleeDamage <= 0) return;
   if (!state.hasComponent(attacker, WorldTransform)) return;
-  if (!meleeQuery) meleeQuery = defineQuery([Health, Transform]);
+  if (!meleeQuery) meleeQuery = defineQuery([Health, WorldTransform]);
 
   const ax = WorldTransform.posX[attacker];
+  const ay = WorldTransform.posY[attacker];
   const az = WorldTransform.posZ[attacker];
   _fwd
     .set(0, 0, 1)
@@ -368,17 +620,21 @@ function meleeHit(state: State, attacker: number): void {
 
   for (const target of meleeQuery(state.world)) {
     if (target === attacker) continue;
-    const dx = Transform.posX[target] - ax;
-    const dz = Transform.posZ[target] - az;
+    // World space on both sides: a nested target's local Transform would
+    // measure against the attacker's world position and whiff/hit ghosts.
+    const dx = WorldTransform.posX[target] - ax;
+    const dy = WorldTransform.posY[target] - ay;
+    const dz = WorldTransform.posZ[target] - az;
     const dist = Math.hypot(dx, dz);
     if (dist > ATTACK_RANGE || dist < 0.001) continue;
+    if (Math.abs(dy) > ATTACK_VERTICAL) continue; // no hits through floors
     // in front hemisphere (~90° each side) — forgiving so the swing lands
     // without pixel-perfect facing.
     if ((dx * _fwd.x + dz * _fwd.z) / dist < 0.0) continue;
     // Route through the combat helper so COMBAT_DAMAGED / COMBAT_KILLED fire
     // and death-triggered systems (save-state, quest kills, death FX) see the
     // player's attacks. The old inline write bypassed all of that.
-    damageHealth(target, ATTACK_DAMAGE);
+    damageHealth(target, playerMeleeDamage, attacker);
   }
 }
 
@@ -428,6 +684,10 @@ export const PlayerGltfSetupSystem: System = defineSystem({
         pendingMelee.delete(eid);
         prevInteract.delete(eid);
         prevLocoSig.delete(eid);
+        // Death mid-swing: the override's 'finished' never fires, so the trail
+        // flag must not outlive the attacker (a later override would sweep a
+        // ribbon with no weapon moving).
+        swingActive = false;
         clearLocomotionCache(state, eid);
       });
 
@@ -550,6 +810,10 @@ export const PlayerGltfAnimStateSystem: System = defineSystem({
 
       // Keep the held weapon/tool attached to the hand bone (follows the rig).
       applyHeldItem(animator, state);
+      // The trail samples the blade *after* the attach, so the first frame of a
+      // swing already has the hand's pose (a frame-late sample starts the
+      // ribbon behind the blade).
+      updateWeaponTrail(state, swingActive && animator.overrideLock);
 
       const grounded =
         !state.hasComponent(eid, CharacterController) ||
@@ -567,9 +831,14 @@ export const PlayerGltfAnimStateSystem: System = defineSystem({
       prevPrimary.set(eid, primary);
       if (primary && !wasPrimary && grounded && !animator.overrideLock) {
         // Tool/context clip first (mine/chop/sword/axe/spear), else a generic
-        // swing. Don't gate the hit on the clip existing.
+        // swing. Don't gate the hit on the clip existing. "<clip>_m" hints are
+        // mirrored variants (alternating-hand combos) — built here on demand.
+        const hintKeyword = nextAttackKeyword();
+        if (hintKeyword?.endsWith('_m'))
+          animator.ensureMirroredClip(hintKeyword);
+        const hinted = hintKeyword ? findClipFuzzy(animator, hintKeyword) : '';
         const attackClip =
-          (attackClipHint && findClipFuzzy(animator, attackClipHint)) ||
+          hinted ||
           findClipFuzzy(
             animator,
             'attack',
@@ -580,17 +849,33 @@ export const PlayerGltfAnimStateSystem: System = defineSystem({
             'melee',
             'strike'
           );
+        // Advance the combo pool only when the hinted clip actually played —
+        // falling back to a generic swing must not burn a combo step.
+        advancePlayerAttackCombo(
+          !!hinted && Array.isArray(attackClipHint) && attackClipHint.length > 1
+        );
         let clipDur = 0;
         if (attackClip) {
-          const action = animator.playOverride(attackClip, { loop: false });
+          const action = animator.playOverride(attackClip, {
+            loop: false,
+            timeScale: attackTimeScale,
+            onFinished: () => {
+              swingActive = false;
+            },
+          });
+          // The trail follows *swings*, not any override: a roll, a gather or
+          // an emote also lock locomotion, and a ribbon on those reads as the
+          // weapon firing off on its own.
+          swingActive = !!action;
           clipDur = action?.getClip()?.duration ?? 0;
         }
         // Schedule the blow for the impact frame instead of landing it now —
-        // always, even when the rig has no attack clip.
+        // always, even when the rig has no attack clip. The clip plays at
+        // `attackTimeScale`, so the wall-clock delay shrinks by the same rate.
         pendingMelee.set(
           eid,
           clipDur > 0
-            ? clipDur * ATTACK_IMPACT_FRACTION
+            ? (clipDur * ATTACK_IMPACT_FRACTION) / attackTimeScale
             : ATTACK_IMPACT_FALLBACK
         );
       }
@@ -672,14 +957,17 @@ export const PlayerGltfAnimStateSystem: System = defineSystem({
       } else if (translating) {
         let clip = run ? loco.run : loco.walk;
         if (moveY < 0 && loco.back) clip = loco.back; // walking backward
-        if (clip && animator.activeClipName !== clip) animator.play(clip);
+        // phaseSync: gait cuts blend footfall-to-footfall (no foot slide/pop).
+        if (clip && animator.activeClipName !== clip) {
+          animator.play(clip, { phaseSync: true });
+        }
       } else {
         // Idle — use a combat-guard idle when a weapon is equipped (idleClipHint),
         // falling back to the default relaxed idle.
         const idleClip =
           (idleClipHint && findClip(animator, idleClipHint)) || loco.idle;
         if (idleClip && animator.activeClipName !== idleClip) {
-          animator.play(idleClip);
+          animator.play(idleClip, { phaseSync: true });
         }
       }
 

@@ -299,3 +299,74 @@ describe('GltfAnimator locomotion', () => {
     expect(anim.resolveClipName('idle')).toBe('idle');
   });
 });
+
+describe('GltfAnimator interpolation upgrades', () => {
+  function makeTimedAnimator() {
+    // Clips with different durations prove the phase mapping (0.4 × 1.0 = 0.4
+    // on walk; 0.4 × 2.0 = 0.8 on a 2 s run clip).
+    const anim = makeAnimator(['idle', 'walk', 'run']);
+    anim.clips.set('run', new AnimationClip('run', 2, []));
+    anim.registerLocomotionSet('default', {
+      idle: 'idle',
+      walk: 'walk',
+      run: 'run',
+    } as LocomotionSet);
+    return anim;
+  }
+
+  it('phaseSync starts the incoming clip at the outgoing phase', () => {
+    const anim = makeTimedAnimator();
+    anim.play('idle');
+    // Advance idle (1 s clip) to 40% phase.
+    anim.update(0.4);
+    expect(anim.currentNormalizedTime).toBeCloseTo(0.4, 5);
+    // Cut to walk with phase sync.
+    const walkAction = anim.play('walk', { phaseSync: true });
+    expect(walkAction).not.toBeNull();
+    expect(walkAction!.time).toBeCloseTo(0.4, 5);
+    // Cut to a 2 s run clip: walk advanced to 0.45 s (45% phase) → run starts
+    // at the same phase, doubled time (0.9 s).
+    anim.update(0.05);
+    const runAction = anim.play('run', { phaseSync: true });
+    expect(runAction!.time).toBeCloseTo(0.9, 5);
+  });
+
+  it('without phaseSync the incoming clip starts at its own time', () => {
+    const anim = makeTimedAnimator();
+    anim.play('idle');
+    anim.update(0.4);
+    const walkAction = anim.play('walk');
+    expect(walkAction!.time).not.toBeCloseTo(0.4, 5);
+  });
+
+  it('playLocomotion phase-syncs cyclic gaits by default', () => {
+    const anim = makeTimedAnimator();
+    anim.playLocomotion('idle');
+    anim.update(0.7);
+    const walkAction = anim.playLocomotion('walk');
+    expect(walkAction!.time).toBeCloseTo(0.7, 5);
+  });
+
+  it('one-shot overrides fade in fast by default (snappy attacks)', () => {
+    expect(GltfAnimator.DEFAULT_OVERRIDE_FADE).toBeLessThanOrEqual(0.15);
+    const anim = makeTimedAnimator();
+    anim.play('idle');
+    const overrideAction = anim.playOverride('walk');
+    expect(overrideAction).not.toBeNull();
+    expect(anim.overrideLock).toBe(true);
+  });
+
+  it('override with a missing clip does not arm the override lock', () => {
+    const anim = makeAnimator(['idle', 'walk']);
+    anim.play('idle');
+    const action = anim.playOverride('foldarms');
+    expect(action).toBeNull();
+    // Nothing is playing for the override — the lock must stay released or a
+    // typo'd clip name freezes locomotion overrides forever.
+    expect(anim.overrideLock).toBe(false);
+    // And a subsequent valid override still works.
+    const ok = anim.playOverride('walk');
+    expect(ok).not.toBeNull();
+    expect(anim.overrideLock).toBe(true);
+  });
+});

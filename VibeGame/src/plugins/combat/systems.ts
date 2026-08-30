@@ -34,7 +34,7 @@ export const DamageResolutionSystem: System = defineSystem({
 
       if (state.hasComponent(other, Health)) {
         const damage = ProjectileData.damage[eid];
-        damageHealth(other, damage);
+        damageHealth(other, damage, ownerEid);
       }
 
       state.destroyEntity(eid);
@@ -52,6 +52,10 @@ export const ProjectileCleanupSystem: System = defineSystem({
       _projectileConfigSet.add(e);
     }
     for (const eid of entities) {
+      // Snapshot staleness: DamageResolutionSystem may have destroyed this
+      // projectile earlier in the same frame — don't age/destroy dead slots
+      // (a recycled eid would get its fresh state corrupted).
+      if (!state.exists(eid)) continue;
       const newAge = ProjectileData.age[eid] + state.time.deltaTime;
       ProjectileData.age[eid] = newAge;
       const maxLife = _projectileConfigSet.has(eid)
@@ -71,10 +75,28 @@ export const CombatDeathCleanupSystem: System = defineSystem({
     const entities = healthQuery(state.world);
     const deathEmitted = getDeathFlags(state);
     for (const eid of entities) {
+      // A same-frame COMBAT_DAMAGED listener may have destroyed the victim;
+      // a cleared slot reads current=0/flag=0 and would emit a death event
+      // for an entity that no longer exists.
+      if (!state.exists(eid)) continue;
       if (Health.current[eid] <= 0 && deathEmitted[eid] === 0) {
         deathEmitted[eid] = 1;
         emitEvent(state, COMBAT_DEATH, { target: eid });
       }
+    }
+  },
+});
+
+/** Countdown for `Health.invulnTimer` (i-frames granted by games on hit). */
+export const CombatInvulnSystem: System = defineSystem({
+  name: 'CombatInvulnSystem',
+  group: 'simulation',
+  update(state: State): void {
+    const dt = state.time.deltaTime;
+    for (const eid of healthQuery(state.world)) {
+      if (!state.exists(eid)) continue; // snapshot may hold same-frame dead
+      if (Health.invulnTimer[eid] <= 0) continue;
+      Health.invulnTimer[eid] = Math.max(0, Health.invulnTimer[eid] - dt);
     }
   },
 });

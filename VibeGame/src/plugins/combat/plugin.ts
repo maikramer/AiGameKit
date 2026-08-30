@@ -15,6 +15,7 @@ import {
 } from './projectile';
 import {
   CombatDeathCleanupSystem,
+  CombatInvulnSystem,
   DamageResolutionSystem,
   ProjectileCleanupSystem,
 } from './systems';
@@ -64,6 +65,7 @@ export const CombatPlugin: Plugin = {
     DamageResolutionSystem,
     ProjectileCleanupSystem,
     CombatDeathCleanupSystem,
+    CombatInvulnSystem,
   ],
   recipes: [factionRecipe, projectileTemplateRecipe],
   components: {

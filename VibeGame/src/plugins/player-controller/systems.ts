@@ -10,6 +10,7 @@ import {
 import { ThirdPersonCamera } from './components';
 import { castBvhRay, getBvhSurfaceHeight, type BvhRaycastHit } from '../bvh';
 import { shortestAngleDelta } from '../transforms/utils';
+import { cameraShakeSample, tickCameraShake } from './fx';
 
 const thirdPersonCameraQuery = defineQuery([
   ThirdPersonCamera,
@@ -46,6 +47,8 @@ const _camHit3: BvhRaycastHit = {
   normal: new THREE.Vector3(),
   key: '',
 };
+const _shakeRoll = new THREE.Quaternion();
+const _zAxis = new THREE.Vector3(0, 0, 1);
 
 export const ThirdPersonCameraSystem: System = defineSystem({
   name: 'ThirdPersonCameraSystem',
@@ -251,18 +254,25 @@ export const ThirdPersonCameraSystem: System = defineSystem({
           (safeZ - ThirdPersonCamera.currentZ[cam]) * smoothFactor;
       }
 
+      // --- Screen shake (trauma decay + layered-sine offset) ---
+      // Unscaled time on purpose: the shake must keep trembling through a
+      // hit-stop freeze. The offset never feeds back into the smoothed follow
+      // state above (current* stays clean), so it cannot accumulate.
+      tickCameraShake(state.time.unscaledDeltaTime);
+      const shake = cameraShakeSample(state.time.realtimeSinceStartup);
+
       // Update ECS Transform
-      Transform.posX[cam] = ThirdPersonCamera.currentX[cam];
-      Transform.posY[cam] = ThirdPersonCamera.currentY[cam];
-      Transform.posZ[cam] = ThirdPersonCamera.currentZ[cam];
+      Transform.posX[cam] = ThirdPersonCamera.currentX[cam] + shake.x;
+      Transform.posY[cam] = ThirdPersonCamera.currentY[cam] + shake.y;
+      Transform.posZ[cam] = ThirdPersonCamera.currentZ[cam] + shake.z;
 
       // Look at target (slightly above feet)
       const lookTargetY = targetY + 1.5;
 
-      // Set rotation via lookAt matrix
-      const camPos = ThirdPersonCamera.currentX[cam];
-      const camPosY = ThirdPersonCamera.currentY[cam];
-      const camPosZ = ThirdPersonCamera.currentZ[cam];
+      // Set rotation via look-at matrix
+      const camPos = Transform.posX[cam];
+      const camPosY = Transform.posY[cam];
+      const camPosZ = Transform.posZ[cam];
 
       // Calculate look-at quaternion
       const dx = targetX - camPos;
@@ -290,6 +300,35 @@ export const ThirdPersonCameraSystem: System = defineSystem({
           Transform.rotY[cam] = ry / mag;
           Transform.rotZ[cam] = rz / mag;
           Transform.rotW[cam] = rw / mag;
+          if (shake.roll !== 0) {
+            // Roll around the camera's local view axis (post-multiplied =
+            // local space) so the horizon tilts without changing the aim.
+            _shakeRoll.setFromAxisAngle(_zAxis, shake.roll);
+            const qx = Transform.rotX[cam];
+            const qy = Transform.rotY[cam];
+            const qz = Transform.rotZ[cam];
+            const qw = Transform.rotW[cam];
+            Transform.rotX[cam] =
+              qx * _shakeRoll.w +
+              qw * _shakeRoll.x -
+              qy * _shakeRoll.z +
+              qz * _shakeRoll.y;
+            Transform.rotY[cam] =
+              qy * _shakeRoll.w +
+              qw * _shakeRoll.y -
+              qz * _shakeRoll.x +
+              qx * _shakeRoll.z;
+            Transform.rotZ[cam] =
+              qz * _shakeRoll.w +
+              qw * _shakeRoll.z -
+              qx * _shakeRoll.y +
+              qy * _shakeRoll.x;
+            Transform.rotW[cam] =
+              qw * _shakeRoll.w -
+              qx * _shakeRoll.x -
+              qy * _shakeRoll.y -
+              qz * _shakeRoll.z;
+          }
         }
       }
 
@@ -301,6 +340,9 @@ export const ThirdPersonCameraSystem: System = defineSystem({
       if (threeCamera) {
         threeCamera.position.set(camPos, camPosY, camPosZ);
         threeCamera.lookAt(targetX, lookTargetY, targetZ);
+        if (shake.roll !== 0) {
+          threeCamera.rotateZ(shake.roll);
+        }
       }
     }
   },

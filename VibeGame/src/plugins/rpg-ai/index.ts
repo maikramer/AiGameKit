@@ -1,4 +1,8 @@
 export {
+  AI_LUNGE_PHASE_LUNGE,
+  AI_LUNGE_PHASE_READY,
+  AI_LUNGE_PHASE_RECOVERY,
+  AI_LUNGE_PHASE_WINDUP,
   AI_MODE_ATTACK,
   AI_MODE_CHASE,
   AI_MODE_DEAD,
@@ -18,7 +22,7 @@ export {
   setMeleeAiConfig,
 } from './components';
 export type { AiInstanceState, AiMode, MeleeAiConfig } from './components';
-export { acquireTarget, runMeleeAiFrame } from './behaviour';
+export { acquireTarget, runMeleeAiFrame, staggerAi } from './behaviour';
 export { RpgAiSystem } from './systems';
 export { RpgAiPlugin } from './plugin';
 export { meleeAiRecipe } from './plugin';

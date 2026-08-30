@@ -52,10 +52,10 @@ export function getAnimator(
 const gltfAnimQuery = defineQueryLive([GltfAnimationState]);
 const mainCameraQuery = defineQueryLive([MainCamera]);
 
-/** Beyond this: skip mixer entirely (pose frozen until closer). */
-const ANIM_SKIP_DIST_SQ = 220 * 220;
+/** Beyond this: skip mixer entirely (pose parked on the clip's first frame). */
+const ANIM_SKIP_DIST_SQ = 660 * 660;
 /** Beyond this: update mixer every other frame. */
-const ANIM_HALF_DIST_SQ = 140 * 140;
+const ANIM_HALF_DIST_SQ = 420 * 420;
 
 export const GltfAnimationUpdateSystem: System = defineSystem({
   name: 'GltfAnimationUpdateSystem',
@@ -94,6 +94,8 @@ export const GltfAnimationUpdateSystem: System = defineSystem({
         const dz = WorldTransform.posZ[eid] - camZ;
         const distSq = dx * dx + dz * dz;
         if (distSq > ANIM_SKIP_DIST_SQ) {
+          // Park on the current clip's first frame instead of bind pose.
+          animator.poseFrozenFrame();
           continue;
         }
         if (distSq > ANIM_HALF_DIST_SQ && (frame & 1) === 1) {

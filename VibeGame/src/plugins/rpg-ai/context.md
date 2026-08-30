@@ -46,11 +46,13 @@ rpg-ai/
 - `target` (ui32): currently targeted entity eid (0 when none).
 - `cooldown` (f32): seconds remaining before the next lunge can begin.
 - `leash` (f32): max pursuit radius from spawn origin (copied from config on first tick).
+- `staggerTimer` (f32): hit-stagger countdown — the FSM ticks nothing (no perception, steering or attack) while it is > 0. Set via `staggerAi(state, eid, seconds)` (interrupts an in-flight lunge: phase resets to ready, LUNGE mode demotes to ATTACK). Boss poise is caller-side: never call it (or pass 0).
+- `lungePhase` (ui8): mirror of the side-table phase for presentation/telegraphs. Constants: `AI_LUNGE_PHASE_READY`=0, `AI_LUNGE_PHASE_WINDUP`=1, `AI_LUNGE_PHASE_LUNGE`=2, `AI_LUNGE_PHASE_RECOVERY`=3. Updated at the top of `runMeleeAiFrame`, so a phase change is visible one frame after the tick that transitioned it.
 
 ### Side tables (per-State WeakMaps, not queryable)
 
 - `MeleeAiConfig`: full tuning (detectRange, attackRange, attackCooldown, attackDamage, chaseSpeed, wanderSpeed, wanderRadius, leashRadius, lungeWindup, lungeDuration, lungeRecovery, lungeStandoff, hoverMin, hoverMax, optional targetEid, strafe, lowHpKiteFrac, enrageBelowFrac, enrageSpeedMult, enrageCooldownMult). Access via `getMeleeAiConfig`, `setMeleeAiConfig`, `removeMeleeAiConfig`.
-- `AiInstanceState`: runtime scratch (origin, lunge phase/timer/direction, detect/idle timers, hover/wander point, strafe direction/timer). Access via `getOrCreateAiInstanceState`, `removeAiInstanceState`, `createAiInstanceState`.
+- `AiInstanceState`: runtime scratch (origin, lunge phase/timer/direction, detect/idle timers, hover/wander point, strafe direction/timer, staggerTimer). Access via `getOrCreateAiInstanceState`, `removeAiInstanceState`, `createAiInstanceState`.
 
 ### System
 

@@ -17,6 +17,8 @@ import { getDataRegistry } from '../rpg-core/registry';
 export const Health = defineComponent({
   current: F32,
   max: F32,
+  /** Invulnerability countdown (seconds) — `damageHealth` ignores blows while > 0. */
+  invulnTimer: F32,
 });
 
 export const ProjectileData = defineComponent({
@@ -77,15 +79,69 @@ export function getDeathFlags(state: State): Uint8Array {
   return flags;
 }
 
-export function damageHealth(eid: number, amount: number): void {
+/** Grant temporary invulnerability (i-frames). New grants extend, never shorten. */
+export function grantInvulnerability(eid: number, seconds: number): void {
+  if (seconds <= 0) return;
+  Health.invulnTimer[eid] = Math.max(Health.invulnTimer[eid], seconds);
+}
+
+/**
+ * Damage-pipeline hook: receives `(targetEid, amount, sourceEid)` and returns
+ * the adjusted damage. Returning `<= 0` negates the blow entirely (no HP
+ * change, no events) — blocks, parries and armors are built on this. Order of
+ * registration is the order of application; each modifier sees the previous
+ * modifier's output.
+ */
+export type DamageModifier = (
+  eid: number,
+  amount: number,
+  source: number
+) => number;
+
+const damageModifiers: DamageModifier[] = [];
+
+/** Register a damage modifier; returns an unregister function. */
+export function registerDamageModifier(fn: DamageModifier): () => void {
+  damageModifiers.push(fn);
+  return () => {
+    const idx = damageModifiers.indexOf(fn);
+    if (idx >= 0) damageModifiers.splice(idx, 1);
+  };
+}
+
+/** Drop every registered modifier (tests / HMR teardown). */
+export function clearDamageModifiers(): void {
+  damageModifiers.length = 0;
+}
+
+export function damageHealth(
+  eid: number,
+  amount: number,
+  source: number = 0
+): void {
   const current = Health.current[eid];
   if (current <= 0) return;
+  // i-frames: the blow is ignored outright (no HP change, no events) so
+  // watcher systems never read phantom hits during the grace window.
+  if (Health.invulnTimer[eid] > 0) return;
+  for (const modify of damageModifiers) {
+    amount = modify(eid, amount, source);
+  }
+  if (amount <= 0) return;
   const newHp = Math.max(0, current - amount);
   Health.current[eid] = newHp;
   if (!activeState) return;
-  emitEvent(activeState, COMBAT_DAMAGED, { target: eid, amount, newHp });
+  // `attacker` only rides along when known (source !== 0) so legacy payload
+  // consumers doing strict payload equality keep seeing the old shape.
+  const attackerFields = source > 0 ? { attacker: source } : {};
+  emitEvent(activeState, COMBAT_DAMAGED, {
+    target: eid,
+    amount,
+    newHp,
+    ...attackerFields,
+  });
   if (newHp <= 0) {
-    emitEvent(activeState, COMBAT_KILLED, { target: eid });
+    emitEvent(activeState, COMBAT_KILLED, { target: eid, ...attackerFields });
   }
 }
 

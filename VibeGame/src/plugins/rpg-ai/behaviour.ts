@@ -21,6 +21,10 @@ import { NavMeshAgent } from '../navmesh/components';
 import { Rigidbody } from '../physics/components';
 import { markRigidbodyPoseDirty } from '../physics/utils';
 import {
+  AI_LUNGE_PHASE_LUNGE,
+  AI_LUNGE_PHASE_READY,
+  AI_LUNGE_PHASE_RECOVERY,
+  AI_LUNGE_PHASE_WINDUP,
   AI_MODE_ATTACK,
   AI_MODE_CHASE,
   AI_MODE_DEAD,
@@ -29,6 +33,7 @@ import {
   AI_MODE_LUNGE,
   AiStateComponent,
   aiRandom,
+  getOrCreateAiInstanceState,
   type AiInstanceState,
   type MeleeAiConfig,
 } from './components';
@@ -232,6 +237,37 @@ function beginReturnHome(inst: AiInstanceState): void {
   inst.idleTimer = 2.5 + aiRandom() * 1.5;
 }
 
+/** Mirror the string phase into the queryable U8 for presentation layers. */
+function syncLungePhase(eid: number, inst: AiInstanceState): void {
+  AiStateComponent.lungePhase[eid] =
+    inst.lungePhase === 'windup'
+      ? AI_LUNGE_PHASE_WINDUP
+      : inst.lungePhase === 'lunge'
+        ? AI_LUNGE_PHASE_LUNGE
+        : inst.lungePhase === 'recovery'
+          ? AI_LUNGE_PHASE_RECOVERY
+          : AI_LUNGE_PHASE_READY;
+}
+
+/**
+ * Stagger a melee-AI creature: interrupts an in-flight lunge (windup, burst or
+ * recovery) and freezes the FSM — no perception, steering or attack ticks —
+ * for `seconds`. Boss poise lives in the caller: it simply never calls this.
+ */
+export function staggerAi(state: State, eid: number, seconds: number): void {
+  if (seconds <= 0) return;
+  const inst = getOrCreateAiInstanceState(state, eid);
+  if (inst.lungePhase !== 'ready') {
+    resetLungeState(state, eid, inst);
+    if (AiStateComponent.mode[eid] === AI_MODE_LUNGE) {
+      AiStateComponent.mode[eid] = AI_MODE_ATTACK;
+    }
+  }
+  inst.staggerTimer = Math.max(inst.staggerTimer, seconds);
+  AiStateComponent.staggerTimer[eid] = inst.staggerTimer;
+  syncLungePhase(eid, inst);
+}
+
 /**
  * Advance the melee AI FSM one frame for `eid`. Reads/writes {@link Transform},
  * {@link AiStateComponent} and {@link AiInstanceState}; applies damage via the
@@ -274,6 +310,16 @@ export function runMeleeAiFrame(
     NavMeshAgent.radius[eid] = DEFAULT_NAVMESH_AGENT_RADIUS;
     NavMeshAgent.height[eid] = DEFAULT_NAVMESH_AGENT_HEIGHT;
     NavMeshAgent.enabled[eid] = 1;
+  }
+
+  // Publish the lunge phase for presentation (telegraph glow) before this
+  // frame's transitions, then handle the stagger freeze: a reeling creature
+  // perceives nothing and steers nowhere.
+  syncLungePhase(eid, inst);
+  if (inst.staggerTimer > 0) {
+    inst.staggerTimer -= dt;
+    AiStateComponent.staggerTimer[eid] = Math.max(0, inst.staggerTimer);
+    return;
   }
 
   if (entityDead(eid)) {
@@ -582,7 +628,7 @@ function tickAttack(
       const dx = Transform.posX[targetEid] - Transform.posX[eid];
       const dz = Transform.posZ[targetEid] - Transform.posZ[eid];
       if (dx * dx + dz * dz <= hitRange * hitRange) {
-        damageHealth(targetEid, config.attackDamage);
+        damageHealth(targetEid, config.attackDamage, eid);
       }
       inst.lungePhase = 'recovery';
       inst.lungeTimer = config.lungeRecovery;

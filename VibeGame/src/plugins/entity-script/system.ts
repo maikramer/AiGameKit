@@ -25,6 +25,7 @@ import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import { MonoBehaviour } from './components';
 import {
   addActiveCollisionPair,
+  deleteEntityScriptCleanupRegistered,
   deletePrevEnabled,
   deleteScriptFile,
   deleteScriptRuntime,
@@ -36,8 +37,10 @@ import {
   getScriptFile,
   getScriptRuntime,
   isEntityScriptSetupInflight,
+  markEntityScriptCleanupRegistered,
   removeActiveCollisionPair,
   resolveEntityScriptGlobKey,
+  scriptLoadRetryGate,
   setEntityScriptSetupInflight,
   setPrevEnabled,
   setScriptRuntime,
@@ -333,6 +336,18 @@ export const EntityScriptSystem: System = defineSystem({
           continue;
         }
 
+        // Transient load failures (dev-server restart / dep re-optimization)
+        // retry with backoff; only a module that burned all attempts is
+        // permanently skipped.
+        const gate = scriptLoadRetryGate(state, globKey, state.time.elapsed);
+        if (gate === 'cooldown') {
+          continue;
+        }
+        if (gate === 'exhausted') {
+          MonoBehaviour.ready[eid] = 1;
+          continue;
+        }
+
         if (isEntityScriptSetupInflight(state, eid)) {
           continue;
         }
@@ -341,27 +356,42 @@ export const EntityScriptSystem: System = defineSystem({
         // Register cleanup BEFORE the async load: a destroy while the module
         // loads or `start()` awaits would otherwise never run onDisable/
         // onDestroy and would leak the scriptFile side-table entry (the old
-        // registration happened only after the load completed).
+        // registration happened only after the load completed). Load retries
+        // re-enter this block — register the callback only on the first one;
+        // on a retry success the module still resolves via the glob-key cache.
         let loadedModule: MonoBehaviourModule | undefined;
         let loadedCtx: MonoBehaviourContext | undefined;
-        state.onDestroy(eid, () => {
-          const mod =
-            loadedModule ?? getCachedMonoBehaviourModule(state, globKey);
-          if (mod) {
-            const destroyCtx = loadedCtx ?? buildContext(state, eid);
-            if (MonoBehaviour.enabled[eid] === 1 && mod.onDisable) {
-              mod.onDisable(destroyCtx);
+        if (!markEntityScriptCleanupRegistered(state, eid)) {
+          state.onDestroy(eid, () => {
+            deleteEntityScriptCleanupRegistered(state, eid);
+            const mod =
+              loadedModule ?? getCachedMonoBehaviourModule(state, globKey);
+            if (mod) {
+              const destroyCtx = loadedCtx ?? buildContext(state, eid);
+              if (MonoBehaviour.enabled[eid] === 1 && mod.onDisable) {
+                mod.onDisable(destroyCtx);
+              }
+              if (mod.onDestroy) {
+                mod.onDestroy(destroyCtx);
+              }
             }
-            if (mod.onDestroy) {
-              mod.onDestroy(destroyCtx);
-            }
+            deletePrevEnabled(state, eid);
+            deleteScriptRuntime(state, eid);
+            deleteScriptFile(state, eid);
+          });
+        }
+        void (async () => {
+          let mod: MonoBehaviourModule | null;
+          try {
+            mod = await getOrLoadMonoBehaviourModule(state, glob, globKey);
+          } catch {
+            // Load failure — already logged + recorded by the module loader
+            // (shared per glob key). Leave ready=0: the retry gate re-attempts
+            // with backoff, or latches exhausted on a later setup pass.
+            setEntityScriptSetupInflight(state, eid, false);
+            return;
           }
-          deletePrevEnabled(state, eid);
-          deleteScriptRuntime(state, eid);
-          deleteScriptFile(state, eid);
-        });
-        void getOrLoadMonoBehaviourModule(state, glob, globKey)
-          .then(async (mod) => {
+          try {
             if (!state.exists(eid)) {
               setEntityScriptSetupInflight(state, eid, false);
               return;
@@ -393,15 +423,17 @@ export const EntityScriptSystem: System = defineSystem({
               // Runtime em cache: o loop por frame usa ctx+mod sem lookups.
               setScriptRuntime(state, eid, { mod, ctx, file });
             }
-            setEntityScriptSetupInflight(state, eid, false);
-          })
-          .catch((err: unknown) => {
-            logger.error(`[entity-script] Failed to load "${file}":`, err);
+          } catch (err) {
+            // The module loaded fine — the error is in the script's own
+            // lifecycle (typically `start`). Latch ready so start side
+            // effects are not re-run on every retry cycle.
+            logger.error(`[entity-script] start failed for "${file}":`, err);
             if (state.exists(eid)) {
               MonoBehaviour.ready[eid] = 1;
             }
-            setEntityScriptSetupInflight(state, eid, false);
-          });
+          }
+          setEntityScriptSetupInflight(state, eid, false);
+        })();
         continue;
       }
 

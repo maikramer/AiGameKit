@@ -3,6 +3,7 @@ export {
   FactionComponent,
   getDeathFlags,
   damageHealth,
+  grantInvulnerability,
   healHealth,
   isAlive,
   isDead,
@@ -17,8 +18,10 @@ export {
   getFaction,
   setFaction,
   isHostile,
+  registerDamageModifier,
+  clearDamageModifiers,
 } from './components';
-export type { FactionHostilityMatrix } from './components';
+export type { FactionHostilityMatrix, DamageModifier } from './components';
 export {
   clearCombatTarget,
   getCombatTarget,
@@ -40,6 +43,7 @@ export type {
 export { CombatPlugin } from './plugin';
 export {
   CombatDeathCleanupSystem,
+  CombatInvulnSystem,
   DamageResolutionSystem,
   ProjectileCleanupSystem,
 } from './systems';

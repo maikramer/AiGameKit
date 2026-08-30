@@ -160,8 +160,10 @@ export function applyFallAnimation(
 
   const windSway =
     Math.sin(adjustedFallTime * 2.5) * ANIMATION_CONFIG.fall.windSwayAmount;
-  Transform.posX[torsoEntity] = windSway;
-  Transform.posX[headEntity] = windSway * 0.5;
+  // Sway is a delta on top of the part's rest offset (reset writes the offset
+  // each frame; an absolute write would snap non-centred parts to the axis).
+  Transform.posX[torsoEntity] = BODY_PARTS.torso.offset.x + windSway;
+  Transform.posX[headEntity] = BODY_PARTS.head.offset.x + windSway * 0.5;
 
   Transform.dirty[headEntity] = 1;
   Transform.dirty[torsoEntity] = 1;

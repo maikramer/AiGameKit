@@ -9,6 +9,7 @@ const globByState = new WeakMap<
   Record<string, () => Promise<unknown>>
 >();
 const setupInflightByState = new WeakMap<State, Set<number>>();
+const cleanupRegisteredByState = new WeakMap<State, Set<number>>();
 /** Resolved modules keyed by glob path (e.g. `./scripts/cristal.ts`). */
 const moduleByGlobKey = new WeakMap<State, Map<string, MonoBehaviourModule>>();
 const moduleLoadPromises = new WeakMap<
@@ -30,6 +31,98 @@ export interface EntityScriptRuntime {
 }
 /** Tracks previous enabled state per entity for onEnable/onDisable transitions. */
 const prevEnabledByState = new WeakMap<State, Map<number, number>>();
+
+/**
+ * Load-failure retry bookkeeping, shared per glob key: every entity pointing
+ * at the same script backs off together instead of one import() per entity.
+ * A dynamic import can fail transiently — the classic dev case is a Vite
+ * dep re-optimization ("Outdated Optimize Dep", 504) right after a server
+ * restart — and latching the entity as failed turned a 1-second hiccup into
+ * a brainless enemy until a manual page reload.
+ */
+export interface ScriptLoadRetry {
+  attempts: number;
+  nextAttemptAt: number;
+}
+
+/** Give-up threshold after which the module is considered genuinely broken. */
+export const SCRIPT_LOAD_MAX_ATTEMPTS = 5;
+
+const scriptLoadRetriesByState = new WeakMap<
+  State,
+  Map<string, ScriptLoadRetry>
+>();
+
+export function getScriptLoadRetry(
+  state: State,
+  globKey: string
+): ScriptLoadRetry | undefined {
+  return scriptLoadRetriesByState.get(state)?.get(globKey);
+}
+
+export function setScriptLoadRetry(
+  state: State,
+  globKey: string,
+  retry: ScriptLoadRetry
+): void {
+  let m = scriptLoadRetriesByState.get(state);
+  if (!m) {
+    m = new Map();
+    scriptLoadRetriesByState.set(state, m);
+  }
+  m.set(globKey, retry);
+}
+
+export function deleteScriptLoadRetry(state: State, globKey: string): void {
+  scriptLoadRetriesByState.get(state)?.delete(globKey);
+}
+
+export type ScriptLoadGate = 'load' | 'cooldown' | 'exhausted';
+
+/**
+ * May a new load attempt for `globKey` start now?
+ *
+ * - `load`: no failure on record, or the backoff expired and attempts remain.
+ * - `cooldown`: a failed attempt is still backing off — skip this frame.
+ * - `exhausted`: max attempts burned; the module is broken for this session.
+ */
+export function scriptLoadRetryGate(
+  state: State,
+  globKey: string,
+  elapsed: number
+): ScriptLoadGate {
+  const retry = scriptLoadRetriesByState.get(state)?.get(globKey);
+  if (!retry) return 'load';
+  if (retry.attempts >= SCRIPT_LOAD_MAX_ATTEMPTS) return 'exhausted';
+  if (elapsed < retry.nextAttemptAt) return 'cooldown';
+  return 'load';
+}
+
+/** Record one failed load of `globKey` and log the shared outcome once. */
+function noteScriptLoadFailure(
+  state: State,
+  globKey: string,
+  err: unknown
+): void {
+  const prev = getScriptLoadRetry(state, globKey);
+  const attempts = (prev?.attempts ?? 0) + 1;
+  const backoff = Math.min(8, 0.5 * 2 ** (attempts - 1));
+  setScriptLoadRetry(state, globKey, {
+    attempts,
+    nextAttemptAt: state.time.elapsed + backoff,
+  });
+  if (attempts >= SCRIPT_LOAD_MAX_ATTEMPTS) {
+    logger.error(
+      `[entity-script] Failed to load script module "${globKey}" after ${attempts} attempts — giving up for this session:`,
+      err
+    );
+  } else {
+    logger.warn(
+      `[entity-script] Failed to load script module "${globKey}" (attempt ${attempts}/${SCRIPT_LOAD_MAX_ATTEMPTS}, retrying in ${backoff}s):`,
+      err
+    );
+  }
+}
 
 /** Active collision pairs per entity: entity → (other → isTrigger). */
 const activeCollisionPairsByState = new WeakMap<
@@ -107,6 +200,33 @@ export function isEntityScriptSetupInflight(
   entity: number
 ): boolean {
   return setupInflightByState.get(state)?.has(entity) ?? false;
+}
+
+/**
+ * Mark the destroy-cleanup as registered for `entity`, returning whether it
+ * was already registered. Load retries re-enter setup for the same entity;
+ * without this guard each attempt would stack another `state.onDestroy`
+ * callback and a post-retry destroy would fire `onDestroy` once per attempt.
+ */
+export function markEntityScriptCleanupRegistered(
+  state: State,
+  entity: number
+): boolean {
+  let s = cleanupRegisteredByState.get(state);
+  if (!s) {
+    s = new Set();
+    cleanupRegisteredByState.set(state, s);
+  }
+  const had = s.has(entity);
+  s.add(entity);
+  return had;
+}
+
+export function deleteEntityScriptCleanupRegistered(
+  state: State,
+  entity: number
+): void {
+  cleanupRegisteredByState.get(state)?.delete(entity);
 }
 
 export function setEntityScriptSetupInflight(
@@ -291,12 +411,15 @@ export function getOrLoadMonoBehaviourModule(
     .then((mod) => {
       if (mod) {
         setCachedMonoBehaviourModule(state, globKey, mod);
+        // A previously failing module that now loads clears its backoff.
+        deleteScriptLoadRetry(state, globKey);
       }
       byKey!.delete(globKey);
       return mod;
     })
     .catch((err: unknown) => {
       byKey!.delete(globKey);
+      noteScriptLoadFailure(state, globKey, err);
       throw err;
     });
 

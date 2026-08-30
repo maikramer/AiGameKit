@@ -17,6 +17,7 @@ extras/
  # This file
 ├── gltf-bridge.ts    # Core loading functions (loaders.gl → Three.js → GLTFLoader)
 ├── gltf-animator.ts   # Runtime animation controller (GltfAnimator (AnimationMixer wrapper)
+├── weapon-trail.ts    # Ribbon swept by a swinging weapon (WeaponTrail, bladeEndpoints)
 ├── sky-env.ts          # Equirect sky environment map
 gltf-xml/
 │   ├── context.ts      # Runtime state storage (WeakMap)
@@ -82,6 +83,35 @@ const animator = new GltfAnimator(gltf);
 console.log(animator.clipNames); // ['Animator3D_BreatheIdle', 'Animator3D_Walk']
 animator.play('Animator3D_BreatheIdle');
  ```
+
+#### GltfAnimator.playFlinch(clip, options?)
+
+Additive hit reaction: punches `clip` in as a second, additive layer over
+whatever is playing, then decays it (`weight` peak, `attack` ramp, `release`
+fade — 0.7 / 0.05s / 0.28s by default). Nothing it does touches `play()` or the
+override lock, so a reaction can land in the middle of a swing.
+
+A full-clip `hit` reaction cannot: it cancels the creature's own attack (trading
+blows then looks like the mob never swings) and a boss with poise gets no
+reaction at all, since interrupting it is not an option. Re-triggering keeps the
+higher peak, so a flurry reads as sustained recoil rather than a stutter.
+`flinchWeightNow()` / `flinching` inspect it; `clearFlinch()` drops it (death,
+teardown).
+
+#### WeaponTrail (weapon-trail.ts)
+
+Ribbon that follows a swinging blade and fades behind it. The caller pushes the
+blade's two world-space endpoints per frame (`push(base, tip, time)`); samples
+live in a ring buffer and rebuild into one triangle strip whose per-vertex alpha
+decays with age. `update(time)` ages it with no new sample (the frames after the
+swing), `clear()` empties it. `bladeEndpoints(object, { extend, inset })`
+measures the endpoints off the object's own longest local axis — `extend`
+overshoots the modelled tip so the ribbon reads as a swept edge, `inset` anchors
+the hilt end partway up the blade so it stays an edge trail instead of a wide
+sheet.
+
+The player plugin drives one automatically while an attack override runs with
+something in hand — see `setPlayerWeaponTrail`.
 
 ### Functions
 #### registerAnimator(animator): number

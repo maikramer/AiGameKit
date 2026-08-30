@@ -38,6 +38,9 @@ export type {
   GltfAnimatorOptions,
   LocomotionSet,
 } from './extras/gltf-animator';
+export { mirrorAnimationClip, mirrorBoneName } from './extras/anim-mirror';
+export { WeaponTrail, bladeEndpoints } from './extras/weapon-trail';
+export type { WeaponTrailOptions } from './extras/weapon-trail';
 export { attachHeldItem, loadHeldItemGrips } from './extras/held-item';
 export type { HeldItemGrip, HeldItemGripRegistry } from './extras/held-item';
 export {
@@ -53,11 +56,32 @@ export {
   playerGltfRecipe,
   setPlayerAttackClip,
   getPlayerAttackClip,
+  advancePlayerAttackCombo,
   setPlayerIdleClip,
   setPlayerHeldItem,
+  setPlayerWeaponTrail,
   setPlayerFaceTarget,
+  setPlayerMeleeDamage,
+  getPlayerMeleeDamage,
+  setPlayerAttackTimeScale,
+  getPlayerAttackTimeScale,
+  findRightHandBone,
+} from './plugins/player';
+export type {
+  PlayerAttackComboMode,
+  PlayerAttackComboOptions,
 } from './plugins/player';
 export { ThirdPersonCamera } from './plugins/player-controller/components';
+// Trauma-based screen shake, layered on the third-person camera by the
+// ThirdPersonCameraSystem (decays on unscaled time so it survives hit-stop).
+export {
+  addCameraShake,
+  cameraShakeSample,
+  getCameraShakeTrauma,
+  resetCameraShake,
+  tickCameraShake,
+} from './plugins/player-controller/fx';
+export type { CameraShakeSample } from './plugins/player-controller/fx';
 export {
   ThirdPersonCameraPlugin,
   PlayerControllerPlugin,
@@ -256,6 +280,7 @@ export type { ParticleBurstOptions } from './plugins/particles';
 export {
   DestructiblePlugin,
   Destructible,
+  HarvestSuppressed,
   onDestructibleDestroyed,
   applyCrackAmount,
   CRACK_STYLE_VERTICAL,
@@ -629,10 +654,12 @@ export {
   getCriticalGltfLoadProgress,
   hasAnyGltfLoadStarted,
   loadGltfMasterTracked,
+  loadSettledGltfMaster,
   _resetGltfLoadTrackingForTests,
   _trackGltfLoadForTests,
 } from './extras/gltf-bridge';
 export type { GltfLoadPriority } from './extras/gltf-bridge';
+export { forEachLodChild, lodChildCount } from './extras/gltf-lod-parking';
 
 export {
   COMBAT_DAMAGED,
@@ -808,6 +835,18 @@ export {
   meleeAiScriptRecipe,
 } from './extras/melee-ai-base';
 
+// Combat feel: impact freeze frames + CCT pushback (games tick these once
+// per frame from a small system; see examples/simple-rpg GameFeelSystem).
+export {
+  applyCctKnockback,
+  clearCctKnockbacks,
+  hitStop,
+  hitStopActive,
+  isCctKnockbackActive,
+  tickCctKnockbacks,
+  tickHitStop,
+} from './extras/game-feel';
+
 export {
   createTurretAi,
   TurretAiBehaviour,
@@ -816,6 +855,10 @@ export {
 export type { TurretAiConfig } from './extras/turret-ai-base';
 
 export {
+  AI_LUNGE_PHASE_LUNGE,
+  AI_LUNGE_PHASE_READY,
+  AI_LUNGE_PHASE_RECOVERY,
+  AI_LUNGE_PHASE_WINDUP,
   AI_MODE_ATTACK,
   AI_MODE_CHASE,
   AI_MODE_DEAD,
@@ -843,6 +886,7 @@ export {
   runMeleeAiFrame,
   setAiRng,
   setMeleeAiConfig,
+  staggerAi,
 } from './plugins/rpg-ai';
 export type {
   AiInstanceState,
@@ -958,9 +1002,13 @@ export {
   PROJECTILE_TEMPLATE_KIND,
   ProjectileConfig,
   ProjectileData,
+  CombatInvulnSystem,
   damageHealth,
+  grantInvulnerability,
   healHealth,
   isDead,
+  registerDamageModifier,
+  clearDamageModifiers,
   setCombatTarget,
   setFaction,
   spawnProjectile,
@@ -969,6 +1017,7 @@ export {
 } from './plugins/combat';
 export type {
   FactionHostilityMatrix,
+  DamageModifier,
   ProjectileSpawnConfig,
   ProjectileTarget,
   ProjectileTemplate,
@@ -1083,7 +1132,11 @@ export {
   ProfilerPlugin,
   ProfilerPanelSystem,
   parseProfilerUrl,
+  registerProfilerExtra,
+  unregisterProfilerExtra,
+  getProfilerExtras,
 } from './plugins/profiler';
+export type { ProfilerExtra } from './plugins/profiler';
 export type { VibeGameProfilerHandle, ProfilerTabId } from './plugins/profiler';
 
 /**

@@ -52,7 +52,26 @@ targets (portals, chests, readables) keep locomotion — no crouch. Gather plays
 at `GATHER_TIME_SCALE` (~1.85×) so the clip finishes faster.
 
 API: `setPlayerAttackClip` / `getPlayerAttackClip` / `setPlayerIdleClip` /
-`setPlayerHeldItem` / `setPlayerFaceTarget` (exported from `gltf-systems.ts`).
+`setPlayerHeldItem` / `setPlayerWeaponTrail` / `setPlayerFaceTarget` (exported
+from `gltf-systems.ts`).
+
+## Weapon trail
+
+While an attack override is running with something in the hand, the held
+object's blade is sampled every frame into a `WeaponTrail` ribbon
+(`extras/weapon-trail.ts`, `extend: 0.12` / `inset: 0.45`), which fades on its
+own once the swing ends. A swing lasts ~0.2 s: without the ribbon the arc is
+gone before the eye finds it, and the impact particles that follow say nothing
+about where the blade went.
+
+The trail keys off an *attack* override specifically (`swingActive`, armed when
+the attack clip starts and cleared on its `finished` event), not on
+`overrideLock` — rolls, gathers and emotes also lock locomotion, and a ribbon on
+those reads as the weapon firing off by itself.
+
+`setPlayerWeaponTrail(false)` removes it; `setPlayerWeaponTrail({ color,
+opacity, lifetime, segments })` rebuilds it (games swap colour per weapon —
+see `simple-rpg` `TRAIL_BY_WEAPON`).
 
 Game example (SFX + arc damage at the same fraction):
 `examples/simple-rpg/src/game/melee.ts`. See also [`docs/AUDIO.md`](../../../docs/AUDIO.md).
