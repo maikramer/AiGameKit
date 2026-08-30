@@ -20,6 +20,12 @@ import torch
 from torch import nn
 from torch.nn.utils import weight_norm
 
+# Importar o generator puxa stable_audio_tools (pesado); sem o stack de áudio
+# — CI — o módulo inteiro salta, como no test_generator.py.
+from tests._heavy_deps import require_audio_stack
+
+require_audio_stack()
+
 from text2sound.generator import AudioGenerator
 
 
