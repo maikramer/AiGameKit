@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Connect, Plugin, ViteDevServer } from 'vite';
-import { resolvePublicFile } from './public-live-serve';
+import { resolvePublicFile } from './public-live-serve.ts';
 
 /** Directory names inside the pool that never reach a build. */
 export const DEFAULT_SHARED_EXCLUDE = ['_intermediate', '.gameassets_work'];

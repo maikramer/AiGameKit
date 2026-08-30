@@ -1,12 +1,12 @@
 import type { Plugin } from 'vite';
-import { vibegameForceFullReload } from './force-full-reload';
-import { vibegamePublicLiveServe } from './public-live-serve';
+import { vibegameForceFullReload } from './force-full-reload.ts';
+import { vibegamePublicLiveServe } from './public-live-serve.ts';
 import {
   type SharedAssetsOptions,
   vibegameSharedAssets,
-} from './shared-assets';
-import { silenceTyprOpentypeNoise } from './silence-typr';
-import { mergeWatchIgnored } from './watch-ignored';
+} from './shared-assets.ts';
+import { silenceTyprOpentypeNoise } from './silence-typr.ts';
+import { mergeWatchIgnored } from './watch-ignored.ts';
 
 /** WASM glue breaks Vite prebundle sourcemaps in Firefox DevTools. */
 const OPTIMIZE_DEPS_EXCLUDE = [
@@ -64,15 +64,15 @@ export function vibegame(options: VibegameOptions = {}): Plugin[] {
   ];
 }
 
-export { consoleForwarding } from './console-plugin';
+export { consoleForwarding } from './console-plugin.ts';
 export {
   shouldForceFullReload,
   vibegameForceFullReload,
-} from './force-full-reload';
-export { vibegameAssetHotReload } from './hot-reload';
-export { initWorldHotReload } from './world-hmr-client';
-export { vibegameWorldHmr } from './world-hmr';
-export { vibegamePublicLiveServe } from './public-live-serve';
+} from './force-full-reload.ts';
+export { vibegameAssetHotReload } from './hot-reload.ts';
+export { initWorldHotReload } from './world-hmr-client.ts';
+export { vibegameWorldHmr } from './world-hmr.ts';
+export { vibegamePublicLiveServe } from './public-live-serve.ts';
 export {
   collectSharedFiles,
   DEFAULT_SHARED_EXCLUDE,
@@ -82,9 +82,9 @@ export {
   type SharedAssetsOptions,
   sharedAssetsMiddleware,
   vibegameSharedAssets,
-} from './shared-assets';
-export { silenceTyprOpentypeNoise } from './silence-typr';
+} from './shared-assets.ts';
+export { silenceTyprOpentypeNoise } from './silence-typr.ts';
 export {
   mergeWatchIgnored,
   VIBEGAME_SERVER_WATCH_IGNORED,
-} from './watch-ignored';
+} from './watch-ignored.ts';

@@ -58,6 +58,9 @@ export default defineConfig({
         'fs',
         'path',
       ],
+      // O plugin dts domina o tempo de build por desenho (gera .d.ts de ~1000
+      // módulos); o advisory do rolldown dispararia em todos os builds.
+      checks: { pluginTimings: false },
       output: {
         globals: {
           three: 'THREE',

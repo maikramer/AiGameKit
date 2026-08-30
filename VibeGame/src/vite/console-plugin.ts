@@ -7,7 +7,7 @@ import {
   statSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { formatLogMessage, type LogMessage } from '../core/utils/logger';
+import { formatLogMessage, type LogMessage } from '../core/utils/logger.ts';
 
 /**
  * Durable record of browser warn/error messages for AI-agent debugging: the

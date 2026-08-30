@@ -46,7 +46,7 @@ export default defineConfig({
     // scripts and main.ts share the same component arrays.
     dedupe: ['three', 'aigamekit-vibegame'],
     alias: {
-      vibegame: path.join(vibegameRoot, 'src/index.ts'),
+      'aigamekit-vibegame': path.join(vibegameRoot, 'src/index.ts'),
       'aigamekit-vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),
       '@interverse/three-terrain-lod': terrainLodPath,
       'node:fs': path.resolve(vibegameRoot, 'scripts/node-stub.js'),

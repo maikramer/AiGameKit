@@ -12,9 +12,10 @@ export const VIBEGAME_SERVER_WATCH_IGNORED: readonly string[] = [
   // Knowledge-graph / agent caches (huge AST trees)
   '**/graphify-out/**',
 
-  // VCS + package installs (re-include linked vibegame for HMR)
+  // VCS + package installs (re-include linked engine for HMR)
   '**/.git/**',
   '**/node_modules/**',
+  '!**/node_modules/aigamekit-vibegame/**',
   '!**/node_modules/vibegame/**',
 
   // Build / tool caches

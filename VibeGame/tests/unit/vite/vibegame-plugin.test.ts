@@ -227,6 +227,7 @@ describe('VIBEGAME_SERVER_WATCH_IGNORED patterns', () => {
     '**/graphify-out/**',
     '**/.git/**',
     '**/node_modules/**',
+    '!**/node_modules/aigamekit-vibegame/**',
     '!**/node_modules/vibegame/**',
     '**/dist/**',
     '**/build/**',

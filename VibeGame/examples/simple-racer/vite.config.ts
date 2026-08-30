@@ -13,7 +13,7 @@ export default defineConfig({
   resolve: {
     dedupe: ['three', 'aigamekit-vibegame'],
     alias: {
-      vibegame: path.join(vibegameRoot, 'src/index.ts'),
+      'aigamekit-vibegame': path.join(vibegameRoot, 'src/index.ts'),
       'aigamekit-vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),
     },
   },
