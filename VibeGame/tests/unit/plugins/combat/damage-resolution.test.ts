@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from '../../../../src/core/ecs/state';
 import {
   Health,
+  clearDamageModifiers,
   ProjectileData,
 } from '../../../../src/plugins/combat/components';
 import { DamageResolutionSystem } from '../../../../src/plugins/combat/systems';
@@ -12,6 +13,9 @@ describe('DamageResolutionSystem', () => {
   let state: State;
 
   beforeEach(() => {
+    // modificadores registados por outros ficheiros do worker alterariam o
+    // dano esperado — o suite assume dano puro
+    clearDamageModifiers();
     state = new State();
     state.registerComponent('touchedEvent', TouchedEvent);
     state.registerComponent('projectileData', ProjectileData);

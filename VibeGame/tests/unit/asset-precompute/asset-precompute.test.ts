@@ -1,4 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
+// Os mocks abaixo substituem globalThis.fetch dentro dos testes; sem restore
+// o último mock vazava para os ficheiros seguintes no mesmo worker do bun test
+// (CI a 2 cores co-loca ficheiros diferentes dos locais) e o FileLoader do
+// three recebia JSON em vez do binário — HttpError no gltf-master-cache.
+const realFetchAtModuleLoad = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = realFetchAtModuleLoad;
+});
 import { State } from '../../../src/core/ecs/state';
 import {
   BodyType,

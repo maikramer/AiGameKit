@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'aigamekit-vibegame';
 import {
   Health,
+  clearDamageModifiers,
   damageHealth,
   healHealth,
   isAlive,
@@ -14,11 +15,14 @@ describe('Health Component', () => {
   let eid: number;
 
   beforeEach(() => {
+    // registries globais partilhados por todos os ficheiros do worker
+    clearDamageModifiers();
     state = new State();
     eid = state.createEntity();
     state.addComponent(eid, Health);
     Health.current[eid] = 100;
     Health.max[eid] = 100;
+    Health.invulnTimer[eid] = 0;
   });
 
   it('should have correct default structure', () => {

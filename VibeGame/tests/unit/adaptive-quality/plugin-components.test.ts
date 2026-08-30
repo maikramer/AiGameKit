@@ -28,6 +28,9 @@ describe('AdaptiveQuality component buffers', () => {
 
   beforeEach(() => {
     eid = 1;
+    // o índice 1 dos buffers singleton é partilhado com outros ficheiros do
+    // worker — repõe os defaults antes de cada asserção
+    for (const field of ADAPTIVE_FIELDS) AdaptiveQuality[field][eid] = 0;
   });
 
   for (const field of ADAPTIVE_FIELDS) {
