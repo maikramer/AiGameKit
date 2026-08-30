@@ -41,8 +41,11 @@ must be reproduced on load so indices round-trip across save/load.
   enemy death. There is no engine enemy-registry event API, so this engine-side
   notifier is the integration point (Track C wires it into enemy death
   handlers). `notifyResourceHarvested(state, kind)` covers `collect` objectives.
-- On match with an active quest objective, `progress` increments; at the goal
-  the quest completes, the giver flips to `completed`, `quest:completed` is
+  Both accept an optional `{x, y, z}` — the spot is remembered per
+  `kind:target` (`getLastSeenTarget`) as the only world position a
+  kill/collect objective has, and the anchor for its map marker.
+- On match with an active quest objective, `progress` increments; at the
+  goal the quest completes, the giver flips to `completed`, `quest:completed` is
   emitted on the EventBus, and rewards are applied (gold via vault, xp via
   progression, items via inventory — each guarded by component presence).
 
@@ -104,16 +107,27 @@ só esses são podados, marcadores do jogo ficam intactos.
 - giver `progress` é **mudo** no mapa: enquanto o objetivo está no mundo,
   mandar o jogador de volta ao NPC é errado.
 - objetivos `visit` activos → um marcador por marco ainda não visitado
-  (`getVisitedTargets`); `kill`/`collect` não têm posição fixa, logo não geram
-  marcador.
+  (`getVisitedTargets`).
+- objetivos `kill`/`collect` activos → um marcador de campo (kind `objective`)
+  na área do último abate/recolha reportado (`getLastSeenTarget`); antes do
+  primeiro evento não há posição honesta e o marcador não existe. Eventos a
+  menos de `LAST_SEEN_REANCHOR_DISTANCE` (40 m) da âncora não a movem — o
+  marcador assinala uma área de caça, não um cadáver, e a seta não dança
+  enquanto um bando morre aos poucos.
 
 O mesmo sistema regista cada giver como `InteractionTarget` — sem isso não
 aparecia prompt `[F]` nenhum e o NPC era indistinguível de uma estátua. A label
 muda com o estado (`quests.prompt.talk` / `.progress` / `.turnin`).
 
-**Rastrear:** `setTrackedQuest(state, id)` (botão na `QuestsTab`) fixa a seta e
-o tracker. A resolução quest→waypoint corre a cada tick, com o objetivo a ganhar
-ao giver, por isso o alvo acompanha a quest de aceitar → cumprir → entregar.
+**Rastrear:** `setTrackedQuest(state, id)` (botão na `QuestsTab`) fixa a seta
+numa quest; `resolveTrackedQuestId` devolve a quest seguida — o pin explícito
+ou, sem pin, a primeira quest activa. Enquanto há quest seguida, o
+auto-select da seta fica desligado (`setWaypointAutoSelect`): um
+matar/colectar ainda sem marcador deixa a seta **silenciosa**, nunca escorrega
+para o badge "quest nova aqui" de outro NPC. A resolução quest→waypoint corre a
+cada tick, com o objetivo a ganhar ao giver, por isso o alvo acompanha a quest
+de aceitar → cumprir → entregar (na entrega o pin cai e o auto-select devolve a
+seta ao `quest-turnin`, prioridade máxima).
 
 ### Virar-se para o jogador (`facing.ts`)
 

@@ -100,9 +100,74 @@ interface PendingKill {
   /** Objective kind the report may advance — kill reports never advance
    * `collect` objectives and vice-versa, even on name collisions. */
   readonly kind: 'kill' | 'collect';
+  /** Where the event happened, when the caller knows it. */
+  readonly at?: QuestTargetSpot;
+}
+
+/** World position of the latest kill/harvest of one target, for map markers. */
+export interface QuestTargetSpot {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
 }
 
 const stateToKillQueue = new WeakMap<State, PendingKill[]>();
+const stateToLastSeen = new WeakMap<State, Map<string, QuestTargetSpot>>();
+
+function lastSeenMap(state: State): Map<string, QuestTargetSpot> {
+  let m = stateToLastSeen.get(state);
+  if (!m) {
+    m = new Map();
+    stateToLastSeen.set(state, m);
+  }
+  return m;
+}
+
+function lastSeenKey(
+  kind: 'kill' | 'collect',
+  target: string
+): `${'kill' | 'collect'}:${string}` {
+  return `${kind}:${target}`;
+}
+
+/**
+ * The field marker reads as "your quarry is around here", so events inside the
+ * same hunt area must not drag it around — a pack dying one by one would
+ * otherwise swing the arrow with every kill. Only an event clearly beyond the
+ * current anchor re-anchors it.
+ */
+export const LAST_SEEN_REANCHOR_DISTANCE = 40;
+
+function recordLastSeen(
+  state: State,
+  kind: 'kill' | 'collect',
+  target: string,
+  at: QuestTargetSpot
+): void {
+  const map = lastSeenMap(state);
+  const key = lastSeenKey(kind, target);
+  const prev = map.get(key);
+  if (prev) {
+    const dx = at.x - prev.x;
+    const dz = at.z - prev.z;
+    if (dx * dx + dz * dz < LAST_SEEN_REANCHOR_DISTANCE ** 2) return;
+  }
+  map.set(key, at);
+}
+
+/**
+ * Where a target was last hunted or harvested — the only world position a
+ * `kill`/`collect` objective has, and the anchor for its map marker. Moves
+ * only when an event lands beyond {@link LAST_SEEN_REANCHOR_DISTANCE} of the
+ * current anchor, so the marker marks an area, not a corpse.
+ */
+export function getLastSeenTarget(
+  state: State,
+  kind: 'kill' | 'collect',
+  target: string
+): QuestTargetSpot | null {
+  return lastSeenMap(state).get(lastSeenKey(kind, target)) ?? null;
+}
 
 function killQueue(state: State): PendingKill[] {
   let q = stateToKillQueue.get(state);
@@ -117,14 +182,23 @@ function killQueue(state: State): PendingKill[] {
  * Report an enemy kill so active `kill` objectives can advance. Called by game
  * scripts (e.g. enemy death handlers) — engine-side replacement for a missing
  * enemy-registry event API. Matches are processed next QuestProgressSystem tick.
+ * Passing `at` anchors the objective's map marker to that hunt area.
  */
-export function notifyEnemyKilled(state: State, target: string): void {
-  killQueue(state).push({ target, kind: 'kill' });
+export function notifyEnemyKilled(
+  state: State,
+  target: string,
+  at?: QuestTargetSpot
+): void {
+  killQueue(state).push({ target, kind: 'kill', at });
 }
 
 /** Report a harvested resource so active `collect` objectives can advance. */
-export function notifyResourceHarvested(state: State, kind: string): void {
-  killQueue(state).push({ target: kind, kind: 'collect' });
+export function notifyResourceHarvested(
+  state: State,
+  kind: string,
+  at?: QuestTargetSpot
+): void {
+  killQueue(state).push({ target: kind, kind: 'collect', at });
 }
 
 function markGiverCompleted(state: State, questId: string): void {
@@ -173,6 +247,7 @@ export const QuestProgressSystem: System = defineSystem({
     const defs = getAllQuestDefs(state);
     const batch = queue.splice(0, queue.length);
     for (const item of batch) {
+      if (item.at) recordLastSeen(state, item.kind, item.target, item.at);
       for (const def of defs) {
         if (def.objective.type !== 'kill' && def.objective.type !== 'collect') {
           continue;

@@ -23,7 +23,9 @@ import {
 } from '../../../../src/plugins/quests/components';
 import { acceptQuest } from '../../../../src/plugins/quests/dialogue';
 import {
+  LAST_SEEN_REANCHOR_DISTANCE,
   QuestProgressSystem,
+  getLastSeenTarget,
   notifyEnemyKilled,
   notifyResourceHarvested,
 } from '../../../../src/plugins/quests/systems';
@@ -153,6 +155,50 @@ describe('QuestProgressSystem kill matching + rewards', () => {
     expect(QuestState.progress[wolfIdx]).toBe(2);
     expect(QuestState.completed[wolfIdx]).toBe(1);
     expect(QuestGiver.state[npc]).toBe(2);
+  });
+
+  it('remembers the hunt area, not each individual kill', () => {
+    expect(getLastSeenTarget(state, 'kill', 'wolf')).toBeNull();
+
+    notifyEnemyKilled(state, 'wolf', { x: 1, y: 2, z: 3 });
+    QuestProgressSystem.update!(state);
+    expect(getLastSeenTarget(state, 'kill', 'wolf')).toEqual({
+      x: 1,
+      y: 2,
+      z: 3,
+    });
+
+    // A kill inside the same area must not swing the marker around — the
+    // arrow would change direction with every hit of a dying pack.
+    notifyEnemyKilled(state, 'wolf', { x: 30, y: 0, z: 10 });
+    QuestProgressSystem.update!(state);
+    expect(getLastSeenTarget(state, 'kill', 'wolf')).toEqual({
+      x: 1,
+      y: 2,
+      z: 3,
+    });
+
+    // A kill clearly beyond the current area re-anchors it.
+    notifyEnemyKilled(state, 'wolf', {
+      x: 1 + LAST_SEEN_REANCHOR_DISTANCE + 5,
+      y: 0,
+      z: 3,
+    });
+    QuestProgressSystem.update!(state);
+    expect(getLastSeenTarget(state, 'kill', 'wolf')!.x).toBe(
+      LAST_SEEN_REANCHOR_DISTANCE + 6
+    );
+    expect(getLastSeenTarget(state, 'collect', 'wolf')).toBeNull();
+  });
+
+  it('records harvest sites under the collect kind', () => {
+    notifyResourceHarvested(state, 'stone', { x: 4, y: 0, z: 2 });
+    QuestProgressSystem.update!(state);
+    expect(getLastSeenTarget(state, 'collect', 'stone')).toEqual({
+      x: 4,
+      y: 0,
+      z: 2,
+    });
   });
 });
 

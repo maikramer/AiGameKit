@@ -13,6 +13,7 @@ import {
   removeWaypoint,
   setTrackedWaypointId,
   setWaypoint,
+  setWaypointAutoSelect,
   waypointColor,
   waypointDistance,
   waypointGlyph,
@@ -137,6 +138,21 @@ describe('waypoint tracking', () => {
     setTrackedWaypointId(state, 'never-registered');
     setWaypoint(state, { id: 'real', x: 0, y: 0, z: 0, kind: 'objective' });
     expect(getTrackedWaypoint(state)!.id).toBe('real');
+  });
+
+  it('hides instead of auto-selecting while a pin awaits its marker', () => {
+    setWaypoint(state, {
+      id: 'new-quest',
+      x: 0,
+      y: 0,
+      z: 0,
+      kind: 'quest-available',
+    });
+    setWaypointAutoSelect(state, false);
+    expect(getTrackedWaypoint(state)).toBeNull();
+
+    setWaypointAutoSelect(state, true);
+    expect(getTrackedWaypoint(state)!.id).toBe('new-quest');
   });
 });
 

@@ -64,7 +64,9 @@ describe('collectQuestTrackerEntries', () => {
     expect(entry.title).toBe('Title quest_a');
     expect(entry.progress).toBe(2);
     expect(entry.goal).toBe(5);
-    expect(entry.tracked).toBe(false);
+    // With no explicit pin, the beacon follows the first active quest —
+    // the tracker highlights whichever quest the arrow is on.
+    expect(entry.tracked).toBe(true);
     expect(entry.distance).toBeNull();
   });
 

@@ -5,6 +5,7 @@ import {
   removeWaypoint,
   setTrackedWaypointId,
   setWaypoint,
+  setWaypointAutoSelect,
   getWaypoints,
 } from '../hud/waypoints';
 import {
@@ -25,7 +26,7 @@ import {
   getQuestIndex,
   type QuestDef,
 } from './registry';
-import { getVisitedTargets } from './systems';
+import { getVisitedTargets, getLastSeenTarget } from './systems';
 
 /**
  * Turns quest state into navigation: head-badge state becomes map/compass
@@ -55,18 +56,34 @@ export function questPromptKey(giverState: number): string {
 const stateToTrackedQuest = new WeakMap<State, string | null>();
 
 /**
- * Pin the HUD arrow to one quest (by quest id), or `null` for automatic
- * "most urgent marker" selection. The waypoint the arrow ends up on is
- * resolved each tick, so it follows the quest through accept → objective →
- * hand-in without the caller re-pinning.
+ * Pin the HUD arrow to one quest (by quest id), or `null` to let the beacon
+ * choose (see {@link resolveTrackedQuestId}). The waypoint the arrow ends up
+ * on is resolved each tick, so it follows the quest through accept →
+ * objective → hand-in without the caller re-pinning.
  */
 export function setTrackedQuest(state: State, questId: string | null): void {
   stateToTrackedQuest.set(state, questId);
-  if (questId === null) setTrackedWaypointId(state, null);
+  if (questId === null) {
+    setTrackedWaypointId(state, null);
+    setWaypointAutoSelect(state, true);
+  }
 }
 
 export function getTrackedQuest(state: State): string | null {
   return stateToTrackedQuest.get(state) ?? null;
+}
+
+/**
+ * The quest navigation actually follows: the player's explicit pin when set,
+ * otherwise the first active quest. With a quest running, "where do I go"
+ * means that quest — never the next one to pick up.
+ */
+export function resolveTrackedQuestId(state: State): string | null {
+  return (
+    stateToTrackedQuest.get(state) ??
+    getAllActiveQuestDefs(state)[0]?.def.id ??
+    null
+  );
 }
 
 function objectiveLabel(def: QuestDef): string {
@@ -137,6 +154,34 @@ function publishGiverWaypoint(
   live.add(id);
 }
 
+/**
+ * Waypoint for an active `kill`/`collect` quest: the spot where that target
+ * was last reported killed or harvested. The targets themselves roam or are
+ * scattered — the last event site is the only honest world position, and
+ * before the first report there is nothing to point at.
+ */
+function publishFieldWaypoint(
+  state: State,
+  def: QuestDef,
+  questIndex: number,
+  live: Set<string>
+): void {
+  if (def.objective.type !== 'kill' && def.objective.type !== 'collect') return;
+  const at = getLastSeenTarget(state, def.objective.type, def.objective.target);
+  if (!at) return;
+  const id = `${OBJECTIVE_WAYPOINT}${def.id}:last-seen`;
+  setWaypoint(state, {
+    id,
+    x: at.x,
+    y: at.y,
+    z: at.z,
+    kind: 'objective',
+    label: def.title,
+    questIndex,
+  });
+  live.add(id);
+}
+
 function resolveTrackedWaypointId(
   state: State,
   trackedQuest: string | null
@@ -177,6 +222,7 @@ export const QuestBeaconSystem: System = defineSystem({
 
     for (const def of getAllActiveQuestDefs(state)) {
       publishObjectiveWaypoints(state, def.def, def.index, live);
+      publishFieldWaypoint(state, def.def, def.index, live);
     }
 
     for (const id of [...getWaypoints(state).keys()]) {
@@ -185,11 +231,12 @@ export const QuestBeaconSystem: System = defineSystem({
       removeWaypoint(state, id);
     }
 
-    const trackedId = resolveTrackedWaypointId(
-      state,
-      stateToTrackedQuest.get(state) ?? null
-    );
-    setTrackedWaypointId(state, trackedId);
+    const tracked = resolveTrackedQuestId(state);
+    // While a quest is being followed, auto-selection is off: an active
+    // kill/collect quest can legitimately have no world marker yet, and the
+    // arrow going quiet must not let it slide onto a "new quest here" badge.
+    setWaypointAutoSelect(state, tracked === null);
+    setTrackedWaypointId(state, resolveTrackedWaypointId(state, tracked));
   },
 
   dispose(state: State): void {

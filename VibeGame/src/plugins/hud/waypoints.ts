@@ -63,6 +63,7 @@ export interface Waypoint {
 
 const stateToWaypoints = new WeakMap<State, Map<string, Waypoint>>();
 const stateToTracked = new WeakMap<State, string | null>();
+const stateToAutoSelect = new WeakMap<State, boolean>();
 
 function waypointMap(state: State): Map<string, Waypoint> {
   let m = stateToWaypoints.get(state);
@@ -105,6 +106,7 @@ export function clearWaypoints(state: State, prefix?: string): void {
   if (prefix === undefined) {
     map.clear();
     stateToTracked.set(state, null);
+    stateToAutoSelect.set(state, true);
     return;
   }
   for (const id of [...map.keys()]) {
@@ -153,9 +155,20 @@ export function getTrackedWaypointId(state: State): string | null {
 }
 
 /**
+ * Whether the arrow may pick its own marker when nothing is pinned. Off while
+ * a pin exists whose marker is temporarily gone — "the tracked quest has no
+ * world position right now" must read as a hidden arrow, not as permission to
+ * point at whatever marker is loudest.
+ */
+export function setWaypointAutoSelect(state: State, enabled: boolean): void {
+  stateToAutoSelect.set(state, enabled);
+}
+
+/**
  * The marker the arrow should point at: the pinned one when it still exists,
- * otherwise the highest-priority marker, ties broken by distance to
- * (`fromX`,`fromZ`). Returns `null` when there is nothing to point at.
+ * otherwise — when auto-selection is allowed — the highest-priority marker,
+ * ties broken by distance to (`fromX`,`fromZ`). Returns `null` when there is
+ * nothing to point at.
  */
 export function getTrackedWaypoint(
   state: State,
@@ -170,6 +183,7 @@ export function getTrackedWaypoint(
     const pinned = map.get(pinnedId);
     if (pinned) return pinned;
   }
+  if (stateToAutoSelect.get(state) === false) return null;
 
   let best: Waypoint | null = null;
   let bestPriority = -Infinity;

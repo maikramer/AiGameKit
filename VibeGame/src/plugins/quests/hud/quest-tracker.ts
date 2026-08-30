@@ -14,7 +14,7 @@ import {
 import { t } from '../../i18n/utils';
 import { PlayerController } from '../../player';
 import { Transform } from '../../transforms';
-import { getAllActiveQuestDefs, getTrackedQuest } from '../beacon';
+import { getAllActiveQuestDefs, resolveTrackedQuestId } from '../beacon';
 import { QuestState } from '../components';
 import { getQuestIndex } from '../registry';
 
@@ -78,7 +78,9 @@ export function collectQuestTrackerEntries(
   const player = players[0];
   const px = player === undefined ? 0 : Transform.posX[player];
   const pz = player === undefined ? 0 : Transform.posZ[player];
-  const tracked = getTrackedQuest(state);
+  // The highlight mirrors what the arrow follows: the explicit pin, or the
+  // active quest the beacon picked on its own.
+  const tracked = resolveTrackedQuestId(state);
 
   const entries: QuestTrackerEntry[] = [];
   for (const { def, index } of getAllActiveQuestDefs(state)) {

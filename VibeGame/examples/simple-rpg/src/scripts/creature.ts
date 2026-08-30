@@ -44,6 +44,7 @@ import {
   markRigidbodyPoseDirty,
   spawnProjectileFromTemplate,
   hasLineOfSight,
+  isCctKnockbackActive,
   Rigidbody,
 } from 'aigamekit-vibegame';
 import type { MeleeAiConfig } from 'aigamekit-vibegame';
@@ -700,7 +701,7 @@ export function createCreatureBehaviours(
     );
     cfg.onDeathLoot?.(ctx.state, gold, x, y, z);
     if (cfg.enemyType) {
-      notifyEnemyKilled(ctx.state, cfg.enemyType);
+      notifyEnemyKilled(ctx.state, cfg.enemyType, { x, y, z });
     }
     playSoundAt('item-drop', x, y, z, { originEid: eid });
     spawnParticleBurst(ctx.state, {
@@ -1405,7 +1406,8 @@ export function createCreatureBehaviours(
     const visualY = Transform.posY[eid];
 
     // Facing policy (single writer — navmesh faceVelocity is off):
-    //   chase / move → face displacement; attack / lunge → face target.
+    //   staggered / shoved → square up to the attacker and hold
+    //   attack / lunge → face target; chase / move → face displacement.
     // Heading eases toward the target yaw (exponential damping, shortest
     // angular path) — instant snaps are what read as "robotic". Mirrors the
     // hero's dampQ turn (VISUAL_TURN_RATE 10 ≈ tau 0.1s).
@@ -1414,8 +1416,16 @@ export function createCreatureBehaviours(
     const moveSpeed = dt > 0 ? Math.hypot(vx, vz) / dt : 0;
     const yawOff = cfg.facingYawOffset ?? 0;
     const faceTarget = mode === AI_MODE_ATTACK || mode === AI_MODE_LUNGE;
+    // Knockback displacement is not the creature's own motion — facing it
+    // spins the mob's back to the player on every blow and right back after.
+    // While reeling (hit-stagger, the same window that freezes the FSM) or
+    // mid-shove, keep the guard turned toward the attacker instead.
+    const reeling =
+      AiStateComponent.staggerTimer[eid] > 0 ||
+      isCctKnockbackActive(ctx.state, eid);
+    const facePlayer = cachedPlayer > 0 && (reeling || faceTarget);
     let targetHeading = s.heading;
-    if (faceTarget && cachedPlayer > 0) {
+    if (facePlayer) {
       targetHeading =
         planarYawRadians(
           Transform.posX[cachedPlayer] - x,
@@ -1425,7 +1435,7 @@ export function createCreatureBehaviours(
       targetHeading = planarYawRadians(vx, vz) + yawOff;
     }
     if (targetHeading !== s.heading) {
-      const turnTau = faceTarget ? 0.09 : 0.14;
+      const turnTau = facePlayer ? 0.09 : 0.14;
       s.heading +=
         shortestAngleDelta(s.heading, targetHeading) *
         (1 - Math.exp(-dt / turnTau));

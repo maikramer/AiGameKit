@@ -1367,9 +1367,9 @@ async function runBootstrap(): Promise<void> {
     if (eid !== null && isWoodEntity(eid)) {
       addWood(1);
       addItem(state, player, 'wood', 1);
-      notifyResourceHarvested(state, 'wood');
+      notifyResourceHarvested(state, 'wood', { x, y, z });
       const flavour = biomeHarvestKind('wood', x, z);
-      if (flavour) notifyResourceHarvested(state, flavour);
+      if (flavour) notifyResourceHarvested(state, flavour, { x, y, z });
       spawnFloatingText(state, '+1 Wood', {
         x,
         y: y + 1.5,
@@ -1386,9 +1386,9 @@ async function runBootstrap(): Promise<void> {
     } else {
       addStone(1);
       addItem(state, player, 'stone', 1);
-      notifyResourceHarvested(state, 'stone');
+      notifyResourceHarvested(state, 'stone', { x, y, z });
       const flavour = biomeHarvestKind('stone', x, z);
-      if (flavour) notifyResourceHarvested(state, flavour);
+      if (flavour) notifyResourceHarvested(state, flavour, { x, y, z });
       spawnFloatingText(state, '+1 Stone', {
         x,
         y: y + 1.2,

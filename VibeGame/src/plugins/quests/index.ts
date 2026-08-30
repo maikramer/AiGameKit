@@ -36,6 +36,7 @@ export {
   QuestProgressSystem,
   QuestTriggerSystem,
   QuestVisitSystem,
+  getLastSeenTarget,
   getQuestVisitMode,
   getVisitedTargets,
   notifyEnemyKilled,
@@ -43,6 +44,7 @@ export {
   notifyResourceHarvested,
   setQuestVisitMode,
   setVisitedTargets,
+  type QuestTargetSpot,
   type QuestVisitMode,
 } from './systems';
 export {
@@ -51,6 +53,7 @@ export {
   getAllActiveQuestDefs,
   getTrackedQuest,
   questPromptKey,
+  resolveTrackedQuestId,
   setTrackedQuest,
 } from './beacon';
 export {

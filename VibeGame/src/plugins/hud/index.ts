@@ -98,6 +98,7 @@ export {
   removeWaypoint,
   setTrackedWaypointId,
   setWaypoint,
+  setWaypointAutoSelect,
   waypointColor,
   waypointDistance,
   waypointGlyph,

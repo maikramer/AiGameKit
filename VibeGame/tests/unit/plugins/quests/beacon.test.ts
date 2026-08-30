@@ -4,6 +4,7 @@ import { State } from '../../../../src/core/ecs/state';
 import { PlayerController } from '../../../../src/plugins/player';
 import { Transform } from '../../../../src/plugins/transforms';
 import {
+  getTrackedWaypoint,
   getWaypoints,
   getTrackedWaypointId,
   setWaypoint,
@@ -15,6 +16,7 @@ import {
   getAllActiveQuestDefs,
   getTrackedQuest,
   questPromptKey,
+  resolveTrackedQuestId,
   setTrackedQuest,
 } from '../../../../src/plugins/quests/beacon';
 import {
@@ -29,6 +31,10 @@ import {
   registerQuest,
   type QuestDef,
 } from '../../../../src/plugins/quests/registry';
+import {
+  QuestProgressSystem,
+  notifyEnemyKilled,
+} from '../../../../src/plugins/quests/systems';
 
 function killDef(id: string): QuestDef {
   return {
@@ -286,5 +292,106 @@ describe('getAllActiveQuestDefs', () => {
     const active = getAllActiveQuestDefs(state);
     expect(active.map((e) => e.def.id)).toEqual(['a']);
     expect(active[0].index).toBe(a);
+  });
+});
+
+describe('quest navigation while a quest is active', () => {
+  it('keeps the arrow quiet instead of pointing at new quests', () => {
+    const state = makeState();
+    const activeIdx = registerQuest(state, killDef('forest_wolves'));
+    const otherIdx = registerQuest(state, killDef('city_wolves'));
+    const takenNpc = addGiver(state, activeIdx, 10, 20);
+    QuestGiver.state[takenNpc] = QUEST_STATE_TAKEN;
+    QuestState.active[activeIdx] = 1;
+    addGiver(state, otherIdx, -30, -40);
+
+    QuestBeaconSystem.update!(state);
+
+    // The only published marker is the other quest's giver badge; neither the
+    // tracked waypoint nor the arrow may land on it.
+    expect(questWaypointIds(state).length).toBe(1);
+    expect(getTrackedWaypointId(state)).toBeNull();
+    expect(getTrackedWaypoint(state, 0, 0)).toBeNull();
+    expect(resolveTrackedQuestId(state)).toBe('forest_wolves');
+  });
+
+  it('follows the first active quest without an explicit pin', () => {
+    const state = makeState();
+    const idx = registerQuest(state, visitDef('peaks_survey', 'cairn-a'));
+    const landmark = state.createEntity();
+    state.addComponent(landmark, Transform);
+    Transform.posX[landmark] = 12;
+    state.setEntityName('cairn-a', landmark);
+    QuestState.active[idx] = 1;
+
+    QuestBeaconSystem.update!(state);
+
+    expect(getTrackedQuest(state)).toBeNull();
+    expect(getTrackedWaypointId(state)).toContain('objective:');
+  });
+
+  it('anchors an active kill quest to the last kill site', () => {
+    const state = makeState();
+    const idx = registerQuest(state, killDef('forest_wolves'));
+    const npc = addGiver(state, idx, 10, 20);
+    QuestGiver.state[npc] = QUEST_STATE_TAKEN;
+    QuestState.active[idx] = 1;
+
+    notifyEnemyKilled(state, 'wolf', { x: 33, y: 1, z: 44 });
+    QuestProgressSystem.update!(state);
+    QuestBeaconSystem.update!(state);
+
+    const field = getWaypoints(state).get(
+      `${QUEST_WAYPOINT_PREFIX}objective:forest_wolves:last-seen`
+    );
+    expect(field).toBeDefined();
+    expect(field!.kind).toBe('objective');
+    expect(field!.x).toBe(33);
+    expect(field!.z).toBe(44);
+    expect(getTrackedWaypointId(state)).toBe(field!.id);
+  });
+
+  it('hands the arrow to the turn-in once the objective is met', () => {
+    const state = makeState();
+    const idx = registerQuest(state, killDef('forest_wolves'));
+    const npc = addGiver(state, idx, 10, 20);
+    QuestGiver.state[npc] = QUEST_STATE_TAKEN;
+    QuestState.active[idx] = 1;
+
+    notifyEnemyKilled(state, 'wolf', { x: 33, y: 1, z: 44 });
+    notifyEnemyKilled(state, 'wolf', { x: 35, y: 1, z: 46 });
+    QuestProgressSystem.update!(state);
+    QuestBeaconSystem.update!(state);
+
+    expect(questWaypointIds(state)).toEqual([
+      `${QUEST_WAYPOINT_PREFIX}giver:${npc}`,
+    ]);
+    expect(getWaypoints(state).get(questWaypointIds(state)[0])!.kind).toBe(
+      'quest-turnin'
+    );
+    // The pin is gone with the completed quest; the arrow lands on the
+    // hand-in through auto-selection, which outranks every other badge.
+    expect(getTrackedWaypoint(state, 0, 0)!.id).toBe(
+      questWaypointIds(state)[0]
+    );
+  });
+
+  it('an explicit pin overrides the first-active pick', () => {
+    const state = makeState();
+    const firstIdx = registerQuest(state, visitDef('peaks_survey', 'cairn-a'));
+    const landmark = state.createEntity();
+    state.addComponent(landmark, Transform);
+    state.setEntityName('cairn-a', landmark);
+    QuestState.active[firstIdx] = 1;
+    const secondIdx = registerQuest(state, killDef('forest_wolves'));
+    QuestState.active[secondIdx] = 1;
+
+    setTrackedQuest(state, 'forest_wolves');
+    QuestBeaconSystem.update!(state);
+
+    // Pinned kill quest has no world marker yet, so the arrow stays quiet
+    // even though the first active quest has an objective to point at.
+    expect(resolveTrackedQuestId(state)).toBe('forest_wolves');
+    expect(getTrackedWaypoint(state, 0, 0)).toBeNull();
   });
 });

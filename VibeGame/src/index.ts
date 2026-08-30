@@ -491,6 +491,7 @@ export {
   removeWaypoint,
   setTrackedWaypointId,
   setWaypoint,
+  setWaypointAutoSelect,
   waypointArrowFactory,
   waypointArrowParser,
   waypointArrowRecipe,
@@ -1220,6 +1221,7 @@ export {
   getQuestVisitMode,
   getTrackedQuest,
   getVisitedTargets,
+  getLastSeenTarget,
   MAX_QUESTS,
   notifyEnemyKilled,
   notifyLandmarkVisited,
@@ -1248,6 +1250,7 @@ export {
   registerQuest,
   resetQuestState,
   resolveQuestMarkerKind,
+  resolveTrackedQuestId,
   serializeQuestState,
   setQuestVisitMode,
   setTrackedQuest,
@@ -1265,9 +1268,10 @@ export type {
   QuestObjective,
   QuestObjectiveType,
   QuestRewards,
-  QuestVisitMode,
   QuestStateSnapshot,
+  QuestTargetSpot,
   QuestTrackerEntry,
+  QuestVisitMode,
 } from './plugins/quests';
 
 let globalBuilder: GameBuilder | null = null;
