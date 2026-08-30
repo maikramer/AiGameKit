@@ -258,7 +258,8 @@ class ManifestRow:
     animate_preset: str | None = None  # humanoid | creature | flying
     animate_procedural: bool | None = None
     animate_force_preset: bool | None = None
-    animate_anim_pack: str | None = None  # quaternius | quaternius2 | villager | both | all | lista (ex.: both,villager)
+    # anim_pack: quaternius | quaternius2 | villager | both | all | lista (ex.: both,villager)
+    animate_anim_pack: str | None = None
     # Controlos Omni por asset (override de ``text3d.omni`` no game.yaml).
     omni: Any | None = None
     # Seed absoluto por asset (re-roll cirúrgico). Omitido → determinístico

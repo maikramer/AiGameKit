@@ -1566,8 +1566,7 @@ def _stage(
     import time as _time
 
     from aigamekit_shared.profiler.session import ProfilerSession
-    from aigamekit_shared.anim_packs import AnimPackError, expand_anim_packs
-from aigamekit_shared.progress import emit_progress
+    from aigamekit_shared.progress import emit_progress
 
     profiler_tool = name.replace("-", "_")
 
@@ -2467,6 +2466,8 @@ def run_master_pipeline(
                 eff_force_preset = (
                     row.animate_force_preset if row.animate_force_preset is not None else anim_prof.force_preset
                 )
+                from aigamekit_shared.anim_packs import AnimPackError, expand_anim_packs
+
                 eff_anim_pack = (row.animate_anim_pack or anim_prof.anim_pack or "quaternius").strip().lower()
                 try:
                     expand_anim_packs(eff_anim_pack)

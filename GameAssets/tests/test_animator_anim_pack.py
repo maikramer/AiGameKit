@@ -63,9 +63,7 @@ class TestProfileAnimPack:
 
 class TestLodRigMaxLevel:
     def _lod(self, lod: dict):
-        p = GameProfile.from_dict(
-            {"title": "A", "genre": "B", "tone": "C", "style_preset": "lowpoly", "lod": lod}
-        )
+        p = GameProfile.from_dict({"title": "A", "genre": "B", "tone": "C", "style_preset": "lowpoly", "lod": lod})
         assert p.lod is not None
         return p.lod
 

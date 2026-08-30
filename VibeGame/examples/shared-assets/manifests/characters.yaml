@@ -36,6 +36,9 @@ assets:
     animate:
       preset: humanoid
       force_preset: true
+      # all = villager + UAL1 + UAL2: mine/gather vêm do villager (KevDev) e a
+      # UAL substitui locomoção/combate; ver Animator3D data/retarget/*.yaml.
+      anim_pack: all
       clips: idle,walk,run,sprint,jump,fall,jumpland,roll,attack,hit,hithead,death,punch,sword,sworda,swordb,swordc,swordheavy,axe,spear,chop,swordidle,axeidle,spearidle,chopidle,mine,gather,interact,harvest,fixing,roar,dance,talk,yes,no,crouchidle,chestopen
   - id: npc_merchant
     idea:

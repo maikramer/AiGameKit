@@ -98,7 +98,7 @@ animator3d game-pack hero.glb hero_anim.glb --preset humanoid --draco
 | `OUTPUT` | path | **required** | Output animated GLB path |
 | `--preset` | choice | `humanoid` | Preset: `humanoid`, `creature`, `flying` |
 | `--clips` | str | (all) | Filter clips by comma-separated names (e.g. `walk,run`) |
-| `--anim-pack` | choice | `quaternius` | Retarget pack: `quaternius` (UAL1), `quaternius2` (UAL2), `both` (UAL2 replaces UAL1 keys), `villager` (Kevin Iglesias jobs) |
+| `--anim-pack` | str | `quaternius` | Retarget pack(s): `quaternius`, `quaternius2`, `villager`, `both`, `all`, or a comma list (order defines replacements, e.g. `both,villager`) |
 | `--force-preset` | flag | `false` | Skip auto-detect (humanoid→creature) |
 | `--procedural` | flag | `false` | Force procedural clips even for humanoids |
 | `--draco/--no-draco` | flag | `false` | Draco mesh compression |
