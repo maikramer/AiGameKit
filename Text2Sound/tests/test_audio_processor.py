@@ -637,6 +637,11 @@ class TestSeamlessMasteringState:
 
     def test_mastered_loop_wrap_stays_continuous(self, tmp_path):
         """Com compressor, o jump no wrap fica na ordem de um passo normal."""
+        # save_audio com mastering puxa pedalboard — roda nativo e pode SIGILL
+        # em CPUs sem o ISA dos wheels; sonda antes (padrão require_mastering_stack)
+        from tests._heavy_deps import require_mastering_stack
+
+        require_mastering_stack()
         import soundfile as sf
 
         sr = 44100
