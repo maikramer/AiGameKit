@@ -54,6 +54,10 @@ test.describe('audio spatial cull (simple-rpg)', () => {
     const heroT = await gameInspector.component(eid, 'transform');
     expect(heroT).not.toBeNull();
 
+    // Autoplay policy: bank plays queue until a real user gesture. A trusted
+    // click unlocks the stack so QA plays start (and return ids) immediately.
+    await vibegamePage.mouse.click(320, 240);
+
     const result = await vibegamePage.evaluate(
       ([hx, hy, hz]) => {
         const audio = (

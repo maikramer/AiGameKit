@@ -1,4 +1,9 @@
-import type { System, State, QuestDef, HeldItemGripRegistry } from 'aigamekit-vibegame';
+import type {
+  System,
+  State,
+  QuestDef,
+  HeldItemGripRegistry,
+} from 'aigamekit-vibegame';
 import {
   configure,
   getBuilder,

@@ -13,7 +13,11 @@ import {
   playSound,
   playSoundAt,
 } from 'aigamekit-vibegame';
-import type { MonoBehaviourContext, SoundHandle, State } from 'aigamekit-vibegame';
+import type {
+  MonoBehaviourContext,
+  SoundHandle,
+  State,
+} from 'aigamekit-vibegame';
 import { isGamePaused, setGameModal } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';
 import { showToast } from '../../../shared/src/ui';

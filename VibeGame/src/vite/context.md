@@ -10,6 +10,8 @@ Vite plugins for VibeGame development and build tooling.
 - **hot-reload.ts** / **hot-reload-client.ts** — Optional asset HMR via `fs.watch` + client listener
 - **public-live-serve.ts** — Serve `public/` live helpers (examples)
 - **silence-typr.ts** — Neutralize Typr OpenType `console.debug` noise (GPOS/GSUB)
+- **silence-rapier-sourcemap.ts** — Strip `//# sourceMappingURL` from Rapier glue
+  (Firefox tries to base-resolve the map against the `wasm:` pseudo-source URL)
 
 ## Plugins
 
@@ -29,7 +31,7 @@ Vite plugins for VibeGame development and build tooling.
   — soft HMR orphans WebGL/KTX2/Rapier. Unload uses **lightweight**
   `releaseRuntimeGpuResources` on `pagehide` only (never heavy `destroy()` on
   `vite:beforeFullReload` — that can hang mid-boot and block `location.reload`)
-- Includes `silenceTyprOpentypeNoise()` (see below)
+- Includes `silenceTyprOpentypeNoise()` and `silenceRapierWasmSourcemapNoise()` (see below)
 
 Examples may still list the same excludes locally (e.g. simple-rpg) for clarity;
 `vibegame()` merges without dropping app-specific entries (`vibegame`,
@@ -46,6 +48,15 @@ Transform-time noop for Typr (via `troika-three-text`) messages:
 Harmless skipped OpenType lookups; Firefox surfaces them as console noise when
 FloatingText / other troika `Text` loads Roboto (or any font with those tables).
 Tests: `tests/unit/vite/silence-typr.test.ts`.
+
+### silenceRapierWasmSourcemapNoise()
+
+Strips `//# sourceMappingURL=…` comments from `@dimforge/rapier*` modules at
+transform time. Firefox DevTools resolves a source map for the WASM
+pseudo-source (`wasm:<glue url> line 1 > WebAssembly.instantiate`) using the
+glue's sourcemap comment; the `wasm:` base cannot resolve it and every dev load
+logs `Error: URL constructor: is not a valid URL` / `URL do mapa de código:
+null`. The comment only maps minified dist output, so nothing of value is lost.
 
 ### consoleForwarding()
 

@@ -103,7 +103,10 @@ export function start(ctx: MonoBehaviourContext): void {
   }).then((result) => {
     const animator = result.animator;
     if (!animator) return;
-    const idle = new NpcIdleAnimator({ idle: 'idle', gestures: route.gestures });
+    const idle = new NpcIdleAnimator({
+      idle: 'idle',
+      gestures: route.gestures,
+    });
     animator.play('idle');
     idle.start(animator);
     result.group.position.set(
@@ -167,7 +170,11 @@ export function update(ctx: MonoBehaviourContext): void {
   walker.yaw += Math.min(maxTurn, Math.max(-maxTurn, err));
   walker.animator.play('walk');
 
-  walker.group.position.set(Transform.posX[eid], Transform.posY[eid], Transform.posZ[eid]);
+  walker.group.position.set(
+    Transform.posX[eid],
+    Transform.posY[eid],
+    Transform.posZ[eid]
+  );
   walker.group.rotation.set(0, walker.yaw, 0);
 }
 
