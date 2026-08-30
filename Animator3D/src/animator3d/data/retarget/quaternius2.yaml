@@ -1,0 +1,104 @@
+# Perfil de retarget: Quaternius Universal Animation Library 2 (CC0)
+#
+# Pack: https://quaternius.itch.io/universal-animation-library-2
+# Tier Standard (gratuito, 43 tracks): farming, chopping, combos de espada,
+# shield, zombie, climb, slide, ninja, emotes. O rig é IDÊNTICO ao da UAL1
+# (65 bones, naming UE5 mannequin) — o bone_map é o mesmo do quaternius.yaml.
+# Complementar à UAL1: a UAL2 free NÃO tem locomoção base (idle/walk/run) —
+# usar ``game-pack --anim-pack both`` para combinar os dois catálogos.
+#
+# Em modo ``both``, este perfil corre DEPOIS da UAL1 e as keys que colidem
+# (ex.: ``gather``) SUBSTITUEM a versão UAL1 — a UAL2 tem clips dedicados onde
+# a UAL1 usava aproximações (Farm_Harvest vs Fixing_Kneeling genérico).
+
+profile: quaternius2
+
+# Pack source para auto-download (aigamekit_shared.quaternius_fetch).
+source_pack: quaternius2
+
+bone_map:
+  # Idêntico ao quaternius.yaml — mesmo rig universal (ver comentários lá).
+  pelvis: [pelvis, Hips]
+  spine_01: [spine_01, Spine]
+  spine_02: [spine_02, Chest]
+  spine_03: [spine_03, UpperChest]
+  neck_01: [neck_01, Neck]
+  Head: [Head]
+  clavicle_l: [clavicle_l, LeftShoulder]
+  upperarm_l: [upperarm_l, LeftArm]
+  lowerarm_l: [lowerarm_l, LeftForeArm]
+  hand_l: [hand_l, LeftHand]
+  clavicle_r: [clavicle_r, RightShoulder]
+  upperarm_r: [upperarm_r, RightArm]
+  lowerarm_r: [lowerarm_r, RightForeArm]
+  hand_r: [hand_r, RightHand]
+  thigh_l: [thigh_l, LeftUpLeg]
+  calf_l: [calf_l, LeftLeg]
+  foot_l: [foot_l, LeftFoot]
+  ball_l: [ball_l, LeftToeBase]
+  thigh_r: [thigh_r, RightUpLeg]
+  calf_r: [calf_r, RightLeg]
+  foot_r: [foot_r, RightFoot]
+  ball_r: [ball_r, RightToeBase]
+
+clip_map:
+  # --- Armas (substituem as aproximações UAL1 em modo ``both``) ---
+  # axe: swings pesados overhand (combos pesados) — lê-se como machado.
+  axe: Sword_Heavy_Combo
+  # spear: dash/thrust com avanço — lê-se como estocada de lança.
+  spear: Sword_Dash
+  # gather: colheita de colo (bend & pick) para cogumelos/cristais/loot.
+  gather: Farm_Harvest
+  # --- Farming (simple-farm) ---
+  harvest: Farm_Harvest
+  plant: Farm_PlantSeed
+  water: Farm_Watering
+  # --- Colheita de madeira ---
+  # chop: não é definido aqui — para derrubar árvore o pipeline prefere o
+  #   swing LATERAL do Sword_Attack (perfil quaternius-hero) ao chops cíclicos
+  #   overhand (TreeChopping_Loop); quem define 'chop' na cadeia é a UAL1.
+  # --- Combate espada (variações além do attack base da UAL1) ---
+  sworda: Sword_Regular_A
+  swordarec: Sword_Regular_A_Rec
+  swordb: Sword_Regular_B
+  swordbrec: Sword_Regular_B_Rec
+  swordc: Sword_Regular_C
+  swordcombo: Sword_Regular_Combo
+  swordheavy: Sword_Heavy_Combo
+  sworddash: Sword_Dash
+  swordblock: Sword_Block
+  # --- Escudo ---
+  shield: Idle_Shield_Loop
+  shieldbreak: Idle_Shield_Break
+  shielddash: Shield_Dash
+  shieldbash: Shield_OneShot
+  # --- Melee misc ---
+  hook: Melee_Hook
+  hookrec: Melee_Hook_Rec
+  throw: OverhandThrow
+  knockback: Hit_Knockback
+  # --- Movimento avançado ---
+  climb: ClimbUp_1m
+  slidestart: Slide_Start
+  slide: Slide_Loop
+  slideexit: Slide_Exit
+  ninjajump: NinjaJump_Start
+  ninjaair: NinjaJump_Idle_Loop
+  ninjaland: NinjaJump_Land
+  carrywalk: Walk_Carry_Loop
+  # --- Zombie ---
+  zombieidle: Zombie_Idle_Loop
+  zombiewalk: Zombie_Walk_Fwd_Loop
+  zombiescratch: Zombie_Scratch
+  # --- Emotes / interação ---
+  # NOTA: "yes"/"no" precisam de aspas — em YAML 1.1 são booleanos.
+  eat: Consume
+  "yes": "Yes"
+  "no": Idle_No_Loop
+  chestopen: Chest_Open
+  getup: LayToIdle
+  lantern: Idle_Lantern_Loop
+  foldarms: Idle_FoldArms_Loop
+  lean: Idle_Rail_Loop
+  call: Idle_Rail_Call
+  phone: Idle_TalkingPhone_Loop

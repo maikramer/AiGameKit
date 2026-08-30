@@ -40,13 +40,15 @@ class TestRiggedLadderWiring:
         source = self._master_source()
 
         assert '"--rig-max-level"' in source
-        assert "str(RIG_MAX_LEVEL)" in source
+        # O limite vem do perfil (LODProfile.rig_max_level; default = constante).
+        assert "str(rig_max_level)" in source
+        assert "profile.lod.rig_max_level" in source
 
     def test_gate_accepts_a_static_far_level(self) -> None:
         """Sem isto, exigir skins[] no lod2 punha a ladder a regenerar-se sempre."""
         source = self._master_source()
 
-        assert "if level > RIG_MAX_LEVEL:" in source
+        assert "if level > rig_max_level:" in source
         assert "expect_rigged" in source
 
     def test_finish_rollback_is_level_aware(self) -> None:

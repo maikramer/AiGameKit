@@ -258,6 +258,7 @@ class ManifestRow:
     animate_preset: str | None = None  # humanoid | creature | flying
     animate_procedural: bool | None = None
     animate_force_preset: bool | None = None
+    animate_anim_pack: str | None = None  # quaternius | quaternius2 | villager | both | all | lista (ex.: both,villager)
     # Controlos Omni por asset (override de ``text3d.omni`` no game.yaml).
     omni: Any | None = None
     # Seed absoluto por asset (re-roll cirúrgico). Omitido → determinístico
@@ -388,6 +389,7 @@ def _rows_from_doc(doc: Any, path: Path) -> list[ManifestRow]:
                 animate_preset=animate_cfg.get("preset"),
                 animate_procedural=animate_cfg.get("procedural"),
                 animate_force_preset=animate_cfg.get("force_preset"),
+                animate_anim_pack=animate_cfg.get("anim_pack"),
                 omni=row_omni,
                 seed=row_seed,
                 text3d=row_text3d,

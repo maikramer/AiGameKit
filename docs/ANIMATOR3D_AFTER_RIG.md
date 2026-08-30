@@ -12,6 +12,10 @@ Clip inventory: [`quaternius_inventory.md`](quaternius_inventory.md).
 ## CLI (canonical)
 
 ```bash
+# Catálogo de animações disponíveis nos packs UAL1/UAL2 (sem bpy/GPU/download):
+animator3d list-animations            # tabela agrupada; --pack quaternius|quaternius2|both
+animator3d list-animations --json     # máquina-legível (agentes/pipelines)
+
 animator3d game-pack rigged.glb animated.glb --preset humanoid --force-preset \
   --clips idle,walk,run,jump,attack,hit,death
 ```
@@ -22,6 +26,7 @@ GameAssets batch/resume runs this **once** on `_intermediate/{id}_rigged.glb`
 | Path | When | Clip names in GLB |
 |------|------|-------------------|
 | **Quaternius** (default `humanoid`) | Bipeds, humanoids, “fantasma” bipeds | `idle`, `walk`, `run`, `jump`, `attack`, `hit`, `death`, … |
+| **Villager** (`--anim-pack villager`) | Trabalhos/crafting (arado, pesca, mining, martelo — Kevin Iglesias, FBX por clip, EULA free) | `plow`, `fish`, `gather`, `hammer`, `mineground`, `minewall`, … |
 | **Procedural** (`creature` / `flying` / `--procedural`) | Non-humanoid / multi-limb | `Animator3D_BreatheIdle`, `Animator3D_Walk`, … |
 
 VibeGame enemy scripts (`creature.ts`, `enemies/*.ts`) expect the **clean**

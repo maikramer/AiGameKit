@@ -194,6 +194,7 @@ def _animator3d_game_pack_argv(
     clips: str | None = None,
     procedural: bool = False,
     force_preset: bool = False,
+    anim_pack: str = "quaternius",
 ) -> list[str]:
     args = [
         animator3d_bin,
@@ -209,6 +210,8 @@ def _animator3d_game_pack_argv(
         args.append("--procedural")
     if force_preset:
         args.append("--force-preset")
+    if anim_pack and anim_pack != "quaternius":
+        args.extend(["--anim-pack", anim_pack])
     return args
 
 
@@ -1563,7 +1566,8 @@ def _stage(
     import time as _time
 
     from aigamekit_shared.profiler.session import ProfilerSession
-    from aigamekit_shared.progress import emit_progress
+    from aigamekit_shared.anim_packs import AnimPackError, expand_anim_packs
+from aigamekit_shared.progress import emit_progress
 
     profiler_tool = name.replace("-", "_")
 
@@ -2463,6 +2467,12 @@ def run_master_pipeline(
                 eff_force_preset = (
                     row.animate_force_preset if row.animate_force_preset is not None else anim_prof.force_preset
                 )
+                eff_anim_pack = (row.animate_anim_pack or anim_prof.anim_pack or "quaternius").strip().lower()
+                try:
+                    expand_anim_packs(eff_anim_pack)
+                except AnimPackError:
+                    log.warning("animate.anim_pack inválido (%s) — a usar quaternius", eff_anim_pack)
+                    eff_anim_pack = "quaternius"
                 an_argv = _animator3d_game_pack_argv(
                     animator3d_bin,
                     rigged_p,
@@ -2471,6 +2481,7 @@ def run_master_pipeline(
                     clips=eff_clips,
                     procedural=eff_procedural,
                     force_preset=eff_force_preset,
+                    anim_pack=eff_anim_pack,
                 )
                 _release_vramd_before_external_stage("animate")
                 s = _run("animate", an_argv, animated_p)
@@ -2499,6 +2510,9 @@ def run_master_pipeline(
         promotion_kind = "animated" if lod0_promoted_anim else "rigged"
 
     # Stage 9 - lod0 + ladder a partir da fonte rigada.
+    # rig_max_level do perfil (default 1: só lod0/lod1 rigados; criaturas
+    # que animam em *_lod2 precisam de 2 — meshes sem weights não animam).
+    rig_max_level = profile.lod.rig_max_level if profile.lod else RIG_MAX_LEVEL
     if rig_source is not None:
         expect_rigged = _glb_is_promoted_animated if promotion_kind == "animated" else _glb_is_promoted_rigged
 
@@ -2506,7 +2520,7 @@ def run_master_pipeline(
             # Níveis acima de RIG_MAX_LEVEL saem estáticos de propósito
             # (``text3d lod --rig-max-level``): exigir skins[] neles punha a
             # ladder a regenerar-se para sempre e o finish em rollback.
-            if level > RIG_MAX_LEVEL:
+            if level > rig_max_level:
                 return path.is_file() and path.stat().st_size >= 64
             return expect_rigged(path)
 
@@ -2538,7 +2552,7 @@ def run_master_pipeline(
                 "--texture-size",
                 str(int(lod0_tex)),
                 "--rig-max-level",
-                str(RIG_MAX_LEVEL),
+                str(rig_max_level),
             ]
             if target_faces > 0:
                 lod_argv.extend(["--target-faces", str(max(8, int(target_faces * 1.2)))])
@@ -2669,7 +2683,7 @@ def run_master_pipeline(
         # actions + JOINTS_0 que nunca lá estão: validate-lod2 falhava sempre
         # em qualquer personagem.
         rule_for = {
-            lvl: (promoted_rules if promoted_rules and lvl <= RIG_MAX_LEVEL else static_rules[lvl]) for lvl in (0, 1, 2)
+            lvl: (promoted_rules if promoted_rules and lvl <= rig_max_level else static_rules[lvl]) for lvl in (0, 1, 2)
         }
 
         for lvl, lod_p in ((0, lod0_p), (1, lod1_p), (2, lod2_p)):

@@ -163,6 +163,7 @@ Coverage floor (≥100 cases/tool), suite naming, and CPU-first rules:
 Animator3D CLI (see [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md)):
 
 ```bash
+animator3d list-animations   # catálogo UAL1/UAL2 (--pack quaternius|quaternius2|both; --json; sem bpy)
 animator3d game-pack rigged.glb animated.glb --preset humanoid
 animator3d run
 animator3d jump

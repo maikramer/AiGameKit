@@ -12,6 +12,9 @@
 
 profile: quaternius
 
+# Pack source para auto-download (aigamekit_shared.quaternius_fetch).
+source_pack: quaternius
+
 # Mapeamento de bones: source (Quaternius) -> target. O naming canónico dos
 # rigs do pipeline (Rigging3D) É o naming Quaternius/UE5, logo o mapeamento é
 # identidade; os aliases seguintes (Mixamo-like) cobrem rigs antigos. O valor
@@ -47,17 +50,58 @@ bone_map:
   ball_r: [ball_r, RightToeBase]
 
 # Mapeamento de clips: nome limpo de saída -> nome da action/track no pack source.
-# Apenas os clips listados são retargetizados; outros no pack são ignorados.
+# Catálogo completo do UAL1 Standard (43 tracks; A_TPose é o bind pose de
+# referência e fica de fora). Os nomes limpos são keywords que o jogo procura
+# por substring (findClip/findClipFuzzy no VibeGame) — matches exatos ganham.
 clip_map:
+  # --- Locomoção ---
   idle: Idle_Loop
   walk: Walk_Loop
+  walkformal: Walk_Formal_Loop
   run: Jog_Fwd_Loop
   sprint: Sprint_Loop
+  crouchidle: Crouch_Idle_Loop
+  crouchwalk: Crouch_Fwd_Loop
+  swimidle: Swim_Idle_Loop
+  swim: Swim_Fwd_Loop
+  # --- Salto / queda ---
   jump: Jump_Start
+  jumpland: Jump_Land
+  # Jump_Loop é o pose airborne em ciclo — serve de "fall" para jogos
+  # (o VibeGame procura 'fall' para o estado de queda).
+  fall: Jump_Loop
+  roll: Roll
+  # --- Combate ---
   attack: Sword_Attack
   punch: Punch_Cross
+  punchjab: Punch_Jab
   hit: Hit_Chest
+  hithead: Hit_Head
   death: Death01
-  roar: Dance_Loop
-  roll: Roll
+  # --- Arma de fogo ---
+  pistolidle: Pistol_Idle_Loop
+  aimdown: Pistol_Aim_Down
+  aim: Pistol_Aim_Neutral
+  aimup: Pistol_Aim_Up
+  reload: Pistol_Reload
+  shoot: Pistol_Shoot
+  # --- Feitiço ---
+  spellstart: Spell_Simple_Enter
+  spellidle: Spell_Simple_Idle_Loop
+  spellcast: Spell_Simple_Shoot
+  spellend: Spell_Simple_Exit
+  # --- Interação / social ---
   interact: Interact
+  pickup: PickUp_Table
+  fixing: Fixing_Kneeling
+  push: Push_Loop
+  talk: Idle_Talking_Loop
+  torch: Idle_Torch_Loop
+  dance: Dance_Loop
+  roar: Dance_Loop
+  drive: Driving_Loop
+  # --- Sentar ---
+  sitdown: Sitting_Enter
+  sit: Sitting_Idle_Loop
+  sittalk: Sitting_Talking_Loop
+  situp: Sitting_Exit

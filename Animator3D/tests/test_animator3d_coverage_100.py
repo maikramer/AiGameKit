@@ -190,6 +190,98 @@ def test_load_profile_quaternius_hero() -> None:
     assert isinstance(prof.extra, dict)
 
 
+def test_load_profile_quaternius2() -> None:
+    from animator3d.retarget import load_profile
+
+    prof = load_profile("quaternius2")
+    assert prof.name == "quaternius2"
+    assert "pelvis" in prof.bone_map
+    # chop não é da UAL2: o pipeline derruba árvore com o swing lateral do
+    # Sword_Attack (perfil quaternius-hero) e mine vem do pack villager.
+    assert "chop" not in prof.clip_map
+    assert "mine" not in prof.clip_map
+    assert prof.clip_map["harvest"] == "Farm_Harvest"
+    assert prof.extra.get("source_pack") == "quaternius2"
+
+
+def test_quaternius2_bone_map_matches_ual1() -> None:
+    """UAL2 usa o MESMO rig universal (65 bones, naming UE5) que a UAL1."""
+    from animator3d.retarget import load_profile
+
+    p1 = load_profile("quaternius")
+    p2 = load_profile("quaternius2")
+    assert p1.bone_map == p2.bone_map
+
+
+@pytest.mark.parametrize("name", ["quaternius", "quaternius-hero", "quaternius2"])
+def test_profile_declares_source_pack(name: str) -> None:
+    from animator3d.retarget import load_profile
+
+    prof = load_profile(name)
+    assert prof.extra.get("source_pack") in ("quaternius", "quaternius2")
+
+
+def test_anim_pack_profile_map() -> None:
+    from animator3d.cli import _ANIM_PACK_PROFILE
+
+    assert _ANIM_PACK_PROFILE["quaternius"] == "quaternius-hero"
+    assert _ANIM_PACK_PROFILE["quaternius2"] == "quaternius2"
+
+
+@pytest.mark.parametrize(
+    ("clip", "track"),
+    [
+        ("fall", "Jump_Loop"),
+        ("crouchidle", "Crouch_Idle_Loop"),
+        ("swim", "Swim_Fwd_Loop"),
+        ("shoot", "Pistol_Shoot"),
+        ("spellcast", "Spell_Simple_Shoot"),
+        ("sitdown", "Sitting_Enter"),
+    ],
+)
+def test_quaternius_extended_clip_map(clip: str, track: str) -> None:
+    from animator3d.retarget import load_profile
+
+    prof = load_profile("quaternius")
+    assert prof.clip_map.get(clip) == track
+
+
+@pytest.mark.parametrize(
+    ("clip", "track"),
+    [
+        ("plant", "Farm_PlantSeed"),
+        ("zombiewalk", "Zombie_Walk_Fwd_Loop"),
+        ("climb", "ClimbUp_1m"),
+        ("getup", "LayToIdle"),
+    ],
+)
+def test_quaternius2_clip_map(clip: str, track: str) -> None:
+    from animator3d.retarget import load_profile
+
+    prof = load_profile("quaternius2")
+    assert prof.clip_map.get(clip) == track
+
+
+def test_quaternius2_available_in_profiles_dir() -> None:
+    from animator3d.retarget import available_profiles
+
+    assert "quaternius2" in available_profiles()
+
+
+def test_load_profile_rejects_yaml_bool_clip_names(tmp_path: Path) -> None:
+    """``yes``/``no`` sem aspas em YAML 1.1 viram bool — o perfil deve falhar cedo."""
+    import pytest
+    from animator3d.retarget import load_profile
+
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "profile: bad\nbone_map: {}\nclip_map:\n  yes: Yes\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="não-string"):
+        load_profile(bad)
+
+
 def test_retarget_profile_dataclass_fields() -> None:
     from animator3d.retarget import RetargetProfile
 
@@ -198,11 +290,13 @@ def test_retarget_profile_dataclass_fields() -> None:
     assert p.source_path is None
 
 
-def test_location_src_bones_frozen() -> None:
-    from animator3d.retarget import _LOCATION_SRC_BONES
+def test_location_pair_role_based() -> None:
+    from animator3d.retarget import _resolve_location_pair
 
-    assert "pelvis" in _LOCATION_SRC_BONES
-    assert "root" not in _LOCATION_SRC_BONES
+    # pelvis (Quaternius) e B-hips (KevDev) ambos plantam o gait; root nunca.
+    assert _resolve_location_pair({"pelvis": "pelvis"}) == ("pelvis", "pelvis")
+    assert _resolve_location_pair({"pelvis": "B-hips"}) == ("pelvis", "B-hips")
+    assert _resolve_location_pair({"thigh_l": "thigh_l"}) == (None, None)
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +437,7 @@ def test_procedural_filter_with_multiple_tokens(clip_filter: str | None) -> None
     assert _procedural_action_matches_filter("Animator3D_Walk", allowed) is ("walk" in allowed)
 
 
-@pytest.mark.parametrize("name", ["quaternius", "quaternius-hero"])
+@pytest.mark.parametrize("name", ["quaternius", "quaternius-hero", "quaternius2"])
 def test_profile_clip_map_nonempty(name: str) -> None:
     from animator3d.retarget import load_profile
 
@@ -365,11 +459,11 @@ def test_mix_pose_intermediate(pose_a, pose_b, t: float) -> None:
     assert "x" in m
 
 
-def test_quaternius_core_bones_tuple() -> None:
-    from animator3d.cli import _QUATERNIUS_CORE_BONES
+def test_core_target_bones_tuple() -> None:
+    from animator3d.cli import _CORE_TARGET_BONES
 
-    assert len(_QUATERNIUS_CORE_BONES) == 5
-    assert "pelvis" in _QUATERNIUS_CORE_BONES
+    assert len(_CORE_TARGET_BONES) == 5
+    assert "pelvis" in _CORE_TARGET_BONES
 
 
 @pytest.mark.parametrize(

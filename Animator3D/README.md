@@ -98,6 +98,7 @@ animator3d game-pack hero.glb hero_anim.glb --preset humanoid --draco
 | `OUTPUT` | path | **required** | Output animated GLB path |
 | `--preset` | choice | `humanoid` | Preset: `humanoid`, `creature`, `flying` |
 | `--clips` | str | (all) | Filter clips by comma-separated names (e.g. `walk,run`) |
+| `--anim-pack` | choice | `quaternius` | Retarget pack: `quaternius` (UAL1), `quaternius2` (UAL2), `both` (UAL2 replaces UAL1 keys), `villager` (Kevin Iglesias jobs) |
 | `--force-preset` | flag | `false` | Skip auto-detect (humanoid→creature) |
 | `--procedural` | flag | `false` | Force procedural clips even for humanoids |
 | `--draco/--no-draco` | flag | `false` | Draco mesh compression |
@@ -110,8 +111,17 @@ animator3d game-pack hero.glb hero_anim.glb --preset humanoid --draco
 | `creature` | breathe-idle, walk, attack, roar |
 | `flying` | breathe-idle, hover, soar, dive, land |
 
-Quaternius clean names for humanoids: see `quaternius.yaml` / inventory (`idle`,
-`walk`, `run`, `jump`, `attack`, `hit`, `death`, …).
+Quaternius clean names for humanoids: run `animator3d list-animations` (see
+[Utility Commands](#animator3d-list-animations)) — no need to read the YAML by
+hand (`idle`, `walk`, `run`, `jump`, `attack`, `hit`, `death`, …).
+
+**Villager pack** (`--anim-pack villager`): [Kevin Iglesias' Human Villager
+Animations FREE](https://kevdev.itch.io/human-villager-animations-free) — jobs
+and crafting: `plow`/`fish`/`fishfight`/`gather`/`hammer`/`mineground`/`minewall`
+(+ start/stop/left/right variants, see the catalog). Ships as one FBX per clip
+(male/female); the retarget imports each file and discards it. Free but **EULA
+licensed** (not CC0). Female variant: `--profile villager-f` on
+`retarget-batch`/`list-animations`.
 
 ---
 
@@ -340,6 +350,35 @@ List animation clips (NLA actions) as JSON — useful for pipeline scripts.
 ```bash
 animator3d list-clips animated.glb
 ```
+
+#### `animator3d list-animations`
+
+List the animation catalog available for generation: the Quaternius Universal
+Animation Library packs used by `game-pack` / `retarget-batch` — UAL1
+(`quaternius-hero` profile), UAL2 (`quaternius2`), or both merged (UAL2 keys
+replace UAL1 on collision, same semantics as `--anim-pack both`). Light read of
+the retarget YAML profiles only: no `bpy`, no GPU, no download. Clean names are
+what you pass to `--clips` and what the engine looks up in the GLB.
+
+```bash
+# Full catalog, grouped by section, with source track + pack:
+animator3d list-animations
+
+# Only one pack:
+animator3d list-animations --pack quaternius2
+
+# Any retarget profile (name or YAML path):
+animator3d list-animations --profile hml22
+
+# Machine-readable:
+animator3d list-animations --json
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--pack` | choice | `both` | Catalog: `quaternius` (UAL1), `quaternius2` (UAL2), `both` |
+| `--profile` | str | (none) | List a specific profile (name in `data/retarget/` or YAML path) instead of `--pack` |
+| `--json` | flag | `false` | Output as JSON to stdout |
 
 #### `animator3d export INPUT OUTPUT`
 

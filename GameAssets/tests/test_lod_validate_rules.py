@@ -54,4 +54,4 @@ class TestLodRuleSelection:
         src = inspect.getsource(pipeline)
         assert 'rule_for = {0: "rigged.yaml", 1: "rigged.yaml", 2: "rigged.yaml"}' not in src
         assert 'rule_for = {0: "animated.yaml", 1: "animated.yaml", 2: "animated.yaml"}' not in src
-        assert "lvl <= RIG_MAX_LEVEL" in src
+        assert "lvl <= rig_max_level" in src

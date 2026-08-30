@@ -1,0 +1,93 @@
+# Perfil de retarget: Human Villager Animations FREE — Kevin Iglesias (kevdev)
+#
+# Pack: https://kevdev.itch.io/human-villager-animations-free  (gratuito, EULA
+# do autor — uso em jogos OK; NÃO é CC0, não redistribuir os FBX). Upload
+# "Godot/Unreal": um FBX por clip (Animations/Male|Female, rig naming B-*),
+# sem GLB único — o retarget corre por-ficheiro (retarget_batch_files) com o
+# pack resolvido por aigamekit_shared.quaternius_fetch.fetch_itch_pack("villager").
+#
+# Rig source: 55 bones (B-root, B-hips, B-spine, B-chest, B-shoulder.L/R,
+# B-upperArm.L/R, ..., B-thigh.L/R, B-shin.L/R, B-foot.L/R, B-toe.L/R), rest
+# T-pose, escala cm no FBX (o retarget normaliza via ratio de altura de rest).
+# ``B-root`` NÃO entra no map (mesma política do Quaternius: root estático nos
+# pés; só ``B-hips`` recebe location/gait).
+#
+# Variante feminina: mesmo esqueleto e mesmos clean names — ver villager-f.yaml
+# (muda a raiz para Animations/Female e o prefixo dos FBX para HumanF@).
+
+profile: villager
+
+# Pack source para auto-download (fetch_itch_pack).
+source_pack: villager
+
+# Clips vivem em FBX individuais sob esta raiz do pack extraído.
+source_files:
+  root: Animations/Male
+
+# Combinação de packs (anim_pack all / both,villager): este perfil é "add-on"
+# de trabalhos — só SUBSTITUI os clips autorizados aqui; o resto ACRESCENTA.
+# Sem isto, o idle do villager pisaria o idle da UAL no modo all.
+replace_keys: [mine, gather]
+
+bone_map:
+  B-hips: [pelvis, Hips]
+  B-spine: [spine_01, Spine]
+  B-chest: [spine_02, Chest]
+  B-neck: [neck_01, Neck]
+  B-head: [Head]
+  B-shoulder.L: [clavicle_l, LeftShoulder]
+  B-upperArm.L: [upperarm_l, LeftArm]
+  B-forearm.L: [lowerarm_l, LeftForeArm]
+  B-hand.L: [hand_l, LeftHand]
+  B-shoulder.R: [clavicle_r, RightShoulder]
+  B-upperArm.R: [upperarm_r, RightArm]
+  B-forearm.R: [lowerarm_r, RightForeArm]
+  B-hand.R: [hand_r, RightHand]
+  B-thigh.L: [thigh_l, LeftUpLeg]
+  B-shin.L: [calf_l, LeftLeg]
+  B-foot.L: [foot_l, LeftFoot]
+  B-toe.L: [ball_l, LeftToeBase]
+  B-thigh.R: [thigh_r, RightUpLeg]
+  B-shin.R: [calf_r, RightLeg]
+  B-foot.R: [foot_r, RightFoot]
+  B-toe.R: [ball_r, RightToeBase]
+
+clip_map:
+  # --- Idle ---
+  idle: "Idles/HumanM@Idle01"
+  # --- Farming (arado) ---
+  plowstart: "Work/Farming/HumanM@FarmingWithPlow01_R - Begin"
+  plow: "Work/Farming/HumanM@FarmingWithPlow01_R - Loop"
+  plowstop: "Work/Farming/HumanM@FarmingWithPlow01_R - Stop"
+  # --- Pesca ---
+  fishstart: "Work/Fishing/HumanM@Fishing01 - Begin"
+  fish: "Work/Fishing/HumanM@Fishing01 - Loop"
+  fishstop: "Work/Fishing/HumanM@Fishing01 - Stop"
+  fishfight: "Work/Fishing/HumanM@FishingFighting01"
+  fishpull: "Work/Fishing/HumanM@FishingPullOut01"
+  fishthrow: "Work/Fishing/HumanM@FishingThrow01"
+  fishpull2start: "Work/Fishing/HumanM@FishingPullOut02 - Begin"
+  fishpull2: "Work/Fishing/HumanM@FishingPullOut02 - Loop"
+  fishpull2stop: "Work/Fishing/HumanM@FishingPullOut02 - Stop"
+  # --- Colheita (bagas) ---
+  gather: "Work/Gathering/HumanM@Gathering01"
+  gather2: "Work/Gathering/HumanM@Gathering02"
+  gather3: "Work/Gathering/HumanM@Gathering03"
+  # --- Martelo no chão (mão esquerda/direita) ---
+  hammerstart: "Work/Hammering/HumanM@HammeringGround01_L - Begin"
+  hammer: "Work/Hammering/HumanM@HammeringGround01_L - Loop"
+  hammerstop: "Work/Hammering/HumanM@HammeringGround01_L - Stop"
+  hammerstartr: "Work/Hammering/HumanM@HammeringGround01_R - Begin"
+  hammerr: "Work/Hammering/HumanM@HammeringGround01_R - Loop"
+  hammerstopr: "Work/Hammering/HumanM@HammeringGround01_R - Stop"
+  # Sem swing lateral de machado no pack free — o chop do pipeline continua
+  # no perfil quaternius-hero (Sword_Attack, swing horizontal).
+  # --- Mina (uma mão; chão/parede, L/R) ---
+  # mine: swing de picareta contra o chão — é o clip que o VibeGame procura
+  # por keyword ('mine') no contexto de minerar pedra; no modo all do
+  # game-pack sobrevive à cadeia (nenhum perfil Quaternius define 'mine').
+  mine: "Work/Mining/HumanM@MiningOneHand01_R - Ground"
+  mineground: "Work/Mining/HumanM@MiningOneHand01_R - Ground"
+  minewall: "Work/Mining/HumanM@MiningOneHand01_R - Wall"
+  minegroundl: "Work/Mining/HumanM@MiningOneHand01_L - Ground"
+  minewalll: "Work/Mining/HumanM@MiningOneHand01_L - Wall"

@@ -7,16 +7,21 @@
 # tem um clip para cada keyword, reusing o catálogo Quaternius:
 #
 #   sword  ← Sword_Attack (swing horizontal)
-#   axe    ← Sword_Attack (sem axe dedicado no pack; swing genérico de arma branca)
-#   spear  ← Sword_Attack (sem spear dedicado; thrust da espada)
-#   chop   ← Sword_Attack (swing descendente para cortar madeira)
-#   mine   ← Sword_Attack (não há pickaxe no pack; mesmo ataque de arma)
+#   axe    ← Sword_Heavy_Combo (UAL2 substitui em both/all: swing pesado overhand)
+#   spear  ← Sword_Dash (UAL2 substitui em both/all: thrust com avanço)
+#   chop   ← Sword_Attack (o MESMO swing lateral da espada — preferência do
+#            pipeline para derrubar árvore; UAL2 já não o sobrescreve)
+#   mine   ← fora deste perfil — vem do pack villager (MiningOneHand01) em
+#            all/villager; um 'mine' UAL lê-se como "abaixar e colher"
 #   gather/interact ← Fixing_Kneeling (ajoelhar e pegar no chão)
 #
 # Os inimigos limitam o conjunto via ``animator3d game-pack --clips``; o
 # ``game-pack`` carrega este perfil (superset) e filtra as keys pedidas.
 
 profile: quaternius-hero
+
+# Pack source para auto-download (aigamekit_shared.quaternius_fetch).
+source_pack: quaternius
 
 bone_map:
   # Ver quaternius.yaml — root estático nos pés; só pelvis no map (+ location).
@@ -44,19 +49,20 @@ bone_map:
   ball_r: [ball_r, RightToeBase]
 
 clip_map:
-  # Locomoção
+  # --- Locomoção e base ---
   idle: Idle_Loop
   walk: Walk_Loop
   run: Jog_Fwd_Loop
   sprint: Sprint_Loop
   jump: Jump_Start
   death: Death01
-  # Ataque genérico
+  # --- Combate genérico ---
   attack: Sword_Attack
   hit: Hit_Chest
-  # Armas (V cycle) — o pack Quaternius só tem Sword_Attack como animação de arma.
-  # Todas as armas usam o mesmo swing (é o melhor disponível); Punch_* pareciam
-  # socos nus. Quando houver um pack com axe/spear dedicados, substituir aqui.
+  # --- Armas ---
+  # UAL1 baseia tudo em Sword_Attack; em modo ``both`` a UAL2 SUBSTITUI axe
+  # (Sword_Heavy_Combo), spear (Sword_Dash), chop (TreeChopping_Loop) e
+  # gather (Farm_Harvest) por clips dedicados.
   sword: Sword_Attack
   axe: Sword_Attack
   spear: Sword_Attack
@@ -67,14 +73,48 @@ clip_map:
   axeidle: Sword_Idle
   spearidle: Sword_Idle
   chopidle: Sword_Idle
-  # Ferramentas de coleta
-  # mine:.swing de espada (mesmo ataque — não há pickaxe no pack)
-  # gather/interact: ajoelhar e pegar no chão (Fixing_Kneeling) — ideal para
-  #   recolher cogumelos, cristais, loot; o Interact era genérico demais.
-  mine: Sword_Attack
+  # --- Ferramentas de coleta ---
+  # mine: não é definido aqui — o swing de picareta vem do pack villager
+  #   (Kevin Iglesias, MiningOneHand01), disponível em --anim-pack all/villager.
+  #   Um 'mine' UAL (Fixing_Kneeling/Sword_Attack) lê-se como "abaixar e
+  #   colher", não como minerar.
+  # gather/interact: Fixing_Kneeling na UAL1; gather passa a Farm_Harvest
+  #   (bend & pick) com a UAL2 em modo both.
   gather: Fixing_Kneeling
   interact: Fixing_Kneeling
-  # Extras
+  # Nome limpo alternativo para o mesmo gesto (NPCs que "martelam"/reparam).
+  fixing: Fixing_Kneeling
+  # --- Extras ---
   punch: Punch_Cross
+  punchjab: Punch_Jab
   roar: Dance_Loop
+  dance: Dance_Loop
   roll: Roll
+  # --- Catálogo UAL1 estendido (ver quaternius.yaml) ---
+  walkformal: Walk_Formal_Loop
+  crouchidle: Crouch_Idle_Loop
+  crouchwalk: Crouch_Fwd_Loop
+  swimidle: Swim_Idle_Loop
+  swim: Swim_Fwd_Loop
+  jumpland: Jump_Land
+  fall: Jump_Loop
+  hithead: Hit_Head
+  pistolidle: Pistol_Idle_Loop
+  aimdown: Pistol_Aim_Down
+  aim: Pistol_Aim_Neutral
+  aimup: Pistol_Aim_Up
+  reload: Pistol_Reload
+  shoot: Pistol_Shoot
+  spellstart: Spell_Simple_Enter
+  spellidle: Spell_Simple_Idle_Loop
+  spellcast: Spell_Simple_Shoot
+  spellend: Spell_Simple_Exit
+  pickup: PickUp_Table
+  push: Push_Loop
+  talk: Idle_Talking_Loop
+  torch: Idle_Torch_Loop
+  drive: Driving_Loop
+  sitdown: Sitting_Enter
+  sit: Sitting_Idle_Loop
+  sittalk: Sitting_Talking_Loop
+  situp: Sitting_Exit

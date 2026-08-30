@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import re
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
+from aigamekit_shared.anim_packs import AnimPackError, expand_anim_packs
 from aigamekit_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_ANIMATOR3D, emit_progress, emit_result
 from rich.console import Console
 from rich.json import JSON
+from rich.table import Table
 
 from . import __version__
 from .cli_rich import click
@@ -44,6 +49,15 @@ def _require_bpy() -> None:
             "O módulo `bpy` não está disponível. Instala: `pip install -e .` dentro de Animator3D "
             "(requer wheel `bpy` compatível com o teu Python; ver README)."
         ) from e
+
+
+def _validate_anim_pack_opt(_ctx: click.Context, _param: click.Parameter, value: str) -> str:
+    """Valida a gramática composta de ``--anim-pack`` cedo (erro de uso, não de execução)."""
+    try:
+        expand_anim_packs(value)
+    except AnimPackError as e:
+        raise click.BadParameter(str(e)) from e
+    return str(value).strip().lower()
 
 
 @click.group()
@@ -1023,7 +1037,10 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
     "clip_filter",
     default=None,
     type=str,
-    help="Lista de clips separada por vírgulas (ex: idle,walk,run). Filtra o preset/perfil.",
+    help=(
+        "Clips separados por vírgulas (ex: idle,walk,run), filtrando o preset/perfil. "
+        "Catálogo: animator3d list-animations."
+    ),
 )
 @click.option(
     "--force-preset",
@@ -1038,6 +1055,21 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
     default=False,
     help="Força clips procedurais mesmo em humanoides (sem retarget Quaternius).",
 )
+@click.option(
+    "--anim-pack",
+    "anim_pack",
+    default="quaternius",
+    show_default=True,
+    callback=_validate_anim_pack_opt,
+    help=(
+        "Pack(s) de retarget: quaternius (UAL1), quaternius2 (UAL2, sem "
+        "locomoção base), villager (Kevin Iglesias: farming/pesca/mining — "
+        "FBX por clip), both (UAL1+UAL2) ou all (villager + UAL1 + UAL2: a "
+        "UAL substitui idle/gather e os trabalhos exclusivos do villager "
+        "ficam). Aceita lista por vírgulas — a ordem define quem substitui "
+        "quem (ex.: both,villager). Catálogo: animator3d list-animations."
+    ),
+)
 def cmd_game_pack(
     input_path: Path,
     output_path: Path,
@@ -1046,13 +1078,19 @@ def cmd_game_pack(
     draco: bool,
     force_preset: bool,
     procedural: bool,
+    anim_pack: str,
 ) -> None:
     """Gera todas as animações de um rig num único comando.
 
     Humanoides: retarget do pack Quaternius (CC0) por defeito — o naming
     canónico dos rigs do pipeline é o do Quaternius, logo o mapeamento é
-    directo. Criaturas (aranha, mosquito, ...) e rigs sem cobertura caem
-    automaticamente no caminho procedural (presets).
+    directo. ``--anim-pack both`` combina UAL1 + UAL2 (farming, chopping
+    dedicado, combos, zombie, climb...); ``--anim-pack villager`` traz os
+    trabalhos do Kevin Iglesias (arado, pesca, mining, martelo — pack
+    por-ficheiro, EULA gratuita); ``--anim-pack all`` encadeia os três
+    (villager primeiro; a UAL substitui os clips partilhados). Criaturas
+    (aranha, mosquito, ...) e rigs sem cobertura caem automaticamente no
+    caminho procedural (presets).
     """
     item_id = input_path.stem
     t0 = time.monotonic()
@@ -1101,7 +1139,7 @@ def cmd_game_pack(
     # Caminho primário (humanoides): retarget do pack Quaternius.
     if preset.lower() == "humanoid" and not procedural:
         done = _game_pack_quaternius_retarget(
-            item_id, arm_name, output_path, clip_filter=clip_filter, draco=draco, t0=t0
+            item_id, arm_name, output_path, clip_filter=clip_filter, draco=draco, t0=t0, anim_pack=anim_pack.lower()
         )
         if done:
             return
@@ -1190,6 +1228,147 @@ def cmd_list_clips(input_path: Path) -> None:
         ],
     }
     sys.stdout.write(json.dumps(out, indent=2, ensure_ascii=False) + "\n")
+
+
+_ANIM_PACK_LABEL: dict[str, str] = {"quaternius": "UAL1", "quaternius2": "UAL2", "villager": "Villager"}
+
+
+def _short_group_title(group: str) -> str:
+    """Título curto de uma secção do catálogo (corta notas entre parênteses/travessões)."""
+    return re.split(r"\s\(|\s[—–-]\s|--", group, maxsplit=1)[0].strip() or group
+
+
+@main.command("list-animations")
+@click.option(
+    "--pack",
+    "pack",
+    default="both",
+    show_default=True,
+    callback=_validate_anim_pack_opt,
+    help=(
+        "Catálogo a listar — mesma gramática do game-pack --anim-pack: "
+        "quaternius (UAL1), quaternius2 (UAL2), villager (Kevin Iglesias; "
+        "variante feminina: --profile villager-f), both (UAL1+UAL2), all "
+        "(cadeia completa do game-pack: villager + UAL1 + UAL2) ou lista por "
+        "vírgulas (ex.: both,villager). A fusão segue a mesma semântica de "
+        "substituições do retarget."
+    ),
+)
+@click.option(
+    "--profile",
+    "profile_name",
+    default=None,
+    help="Listar um perfil específico (nome em data/retarget/ ou path YAML) em vez de --pack.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Saída em JSON (stdout) — útil para agentes/pipelines.")
+def cmd_list_animations(pack: str, profile_name: str | None, as_json: bool) -> None:
+    """Lista as animações disponíveis nos packs de animação (UAL1/UAL2/villager).
+
+    Leitura leve: só os YAML de retarget — sem bpy, sem GPU, sem download.
+    Os nomes limpos são o que se passa a ``game-pack --clips`` /
+    ``retarget-batch --clips`` e o que o VibeGame procura nos clips do GLB
+    (findClip/findClipFuzzy). Para clips DENTRO de um GLB já gerado, usa
+    ``list-clips``.
+    """
+    from . import retarget as rt
+
+    if profile_name:
+        specs: list[tuple[str | None, str]] = [(None, profile_name)]
+    else:
+        names = expand_anim_packs(pack)
+        specs = [(name, _ANIM_PACK_PROFILE[name]) for name in names]
+
+    loaded: list[tuple[str | None, str, Any]] = []
+    for label_key, prof_name in specs:
+        try:
+            prof = rt.load_profile(prof_name)
+        except FileNotFoundError as e:
+            raise click.ClickException(str(e)) from e
+        loaded.append((label_key, prof_name, prof))
+    plan = rt.plan_pack_passes([prof for _, _, prof in loaded])
+
+    merged: list[dict[str, Any]] = []
+    index: dict[str, dict[str, Any]] = {}
+    overrides: dict[str, str] = {}
+    profiles: list[dict[str, Any]] = []
+    for (label_key, prof_name, prof), (_plan_prof, eff) in zip(loaded, plan):
+        groups = rt.profile_clip_groups(prof_name)
+        label = _ANIM_PACK_LABEL.get(label_key or "", prof.name)
+        profiles.append(
+            {
+                "profile": prof.name,
+                "label": label,
+                "pack": prof.extra.get("source_pack"),
+                "clips": len(prof.clip_map),
+            }
+        )
+        for clean, src in prof.clip_map.items():
+            if clean not in eff:
+                # Este pass não retargetiza a key (colisão que o perfil não
+                # pode substituir) — o catálogo mostra o vencedor real.
+                continue
+            prev = index.get(clean)
+            if prev is not None:
+                overrides[clean] = str(prev["source_track"])
+                prev["replaces"] = prev["source_track"]
+                prev["source_track"] = src
+                prev["profile"] = prof.name
+                prev["label"] = label
+                if groups.get(clean):
+                    prev["group"] = groups[clean]
+                continue
+            entry: dict[str, Any] = {
+                "clip": clean,
+                "source_track": src,
+                "profile": prof.name,
+                "label": label,
+                "group": groups.get(clean, ""),
+            }
+            index[clean] = entry
+            merged.append(entry)
+
+    if as_json:
+        out = {
+            "mode": profile_name if profile_name else pack.lower(),
+            "profiles": profiles,
+            "total": len(merged),
+            "overrides": overrides,
+            "clips": merged,
+        }
+        sys.stdout.write(json.dumps(out, indent=2, ensure_ascii=False) + "\n")
+        return
+
+    multi = len(specs) > 1
+    title = " + ".join(f"{p['label']} ({p['profile']}, {p['clips']} clips)" for p in profiles)
+    console.print(f"[bold]Catálogo de animações[/bold] — {title} · [green]{len(merged)} clips únicos[/green]")
+    if overrides:
+        console.print(
+            f"[yellow]Substituições entre packs[/yellow] ({len(overrides)}): "
+            f"{', '.join(f'{k} → {v}' for k, v in overrides.items())}"
+        )
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for entry in merged:
+        grouped.setdefault(entry["group"], []).append(entry)
+    for group, entries in grouped.items():
+        heading = _short_group_title(group) if group else "Sem secção"
+        console.print(f"\n[cyan]── {heading} ({len(entries)})[/cyan]")
+        table = Table(box=None, show_header=False, padding=(0, 2))
+        table.add_column(style="bold white")
+        table.add_column(style="dim")
+        if multi:
+            table.add_column(style="yellow")
+        for e in entries:
+            row: list[str] = [str(e["clip"]), f"← {e['source_track']}"]
+            if multi:
+                row.append(str(e["label"]))
+            table.add_row(*row)
+        console.print(table)
+
+    console.print(
+        "\n[dim]Usa os nomes limpos em:[/dim] animator3d game-pack rig.glb out.glb "
+        "--anim-pack both --clips idle,walk,chop"
+    )
 
 
 @main.command("texture-project")
@@ -1389,27 +1568,46 @@ def cmd_inspect_rig(
 #            sobre um rig target (humanoides do simple-rpg). Ver retarget.py.
 # ---------------------------------------------------------------------------
 
-# Bones source cujo mapeamento tem de existir no rig para o retarget Quaternius
-# fazer sentido (tronco + braços + pernas).
-_QUATERNIUS_CORE_BONES = ("pelvis", "upperarm_l", "upperarm_r", "thigh_l", "thigh_r")
+# Papéis core do rig TARGET para o retarget fazer sentido (tronco/braços/pernas).
+# Os perfis mapeiam sources diferentes (Quaternius ``pelvis`` vs KevDev
+# ``B-hips``) mas todos apontam para estes candidatos canónimos — a validação
+# é por candidato, não por nome de source.
+_CORE_TARGET_BONES = ("pelvis", "upperarm_l", "upperarm_r", "thigh_l", "thigh_r")
 
 
-def _quaternius_core_missing(arm_name: str, profile) -> list[str]:
-    """Bones core do perfil sem candidato presente no rig target."""
+def _core_bones_missing(arm_name: str, profile) -> list[str]:
+    """Papéis core sem qualquer candidato presente no rig target (ou sem source mapeado)."""
     from . import bpy_ops
 
     bpy = bpy_ops._bpy()
     bones = {b.name for b in bpy.data.objects[arm_name].data.bones}
-    return [src for src in _QUATERNIUS_CORE_BONES if not any(c in bones for c in profile.bone_map.get(src, []))]
+    missing = []
+    for tgt in _CORE_TARGET_BONES:
+        srcs = [src for src, cands in profile.bone_map.items() if tgt in cands]
+        if not srcs:
+            missing.append(tgt)
+            continue
+        if not any(c in bones for src in srcs for c in profile.bone_map[src]):
+            missing.append(tgt)
+    return missing
 
 
-def _fetch_quaternius_source() -> Path:
-    """Garante o pack Quaternius em cache e devolve o path do GLB."""
+def _fetch_pack_source(pack: str = "quaternius") -> Path:
+    """Garante um pack de ficheiro único em cache e devolve o path do GLB (Quaternius)."""
     from aigamekit_shared.quaternius_fetch import fetch_quaternius_pack
 
-    console.print("[cyan]Pack Quaternius:[/cyan] a garantir o cache...")
-    pack = fetch_quaternius_pack(on_status=lambda m: console.print(f"  [dim]{m}[/dim]"))
-    return Path(pack.glb)
+    console.print(f"[cyan]Pack de animação ({pack}):[/cyan] a garantir o cache...")
+    pk = fetch_quaternius_pack(pack=pack, on_status=lambda m: console.print(f"  [dim]{m}[/dim]"))
+    return Path(pk.glb)
+
+
+def _fetch_pack_root(pack: str) -> Path:
+    """Garante um pack itch.io em cache e devolve a raiz extraída (packs por-ficheiro)."""
+    from aigamekit_shared.quaternius_fetch import fetch_itch_pack
+
+    console.print(f"[cyan]Pack de animação ({pack}):[/cyan] a garantir o cache...")
+    pk = fetch_itch_pack(pack=pack, on_status=lambda m: console.print(f"  [dim]{m}[/dim]"))
+    return Path(pk.root)
 
 
 def _import_retarget_source(source_path: Path, target_arm_name: str):
@@ -1467,6 +1665,16 @@ def _print_retarget_result(res: dict) -> None:
         console.print(f"     [yellow]não mapeados:[/yellow] {', '.join(res['skipped_bones'])}")
 
 
+# Pack de animação -> perfil de retarget usado no game-pack. ``quaternius-hero``
+# é superset da UAL1 (armas/ferramentas); ``quaternius2`` é o catálogo UAL2;
+# ``villager`` é o pack por-ficheiro do Kevin Iglesias (FBX por clip).
+_ANIM_PACK_PROFILE: dict[str, str] = {
+    "quaternius": "quaternius-hero",
+    "quaternius2": "quaternius2",
+    "villager": "villager",
+}
+
+
 def _game_pack_quaternius_retarget(
     item_id: str,
     arm_name: str,
@@ -1475,8 +1683,17 @@ def _game_pack_quaternius_retarget(
     clip_filter: str | None,
     draco: bool,
     t0: float,
+    anim_pack: str = "quaternius",
 ) -> bool:
-    """Caminho primário do game-pack: retarget do pack Quaternius.
+    """Caminho primário do game-pack: retarget da combinação de packs.
+
+    ``anim_pack`` segue a gramática partilhada
+    (:func:`aigamekit_shared.anim_packs.expand_anim_packs`): packs individuais,
+    aliases ``both``/``all`` ou lista por vírgulas. A ORDEM define quem
+    substitui quem: cada pass pode substituir as colisões autorizadas no seu
+    perfil (``replace_keys``; None = substitui tudo) e as restantes keys
+    são apenas acrescentadas — nunca há duas tracks com o mesmo nome limpo
+    (:func:`animator3d.retarget.plan_pack_passes`).
 
     Returns:
         True se exportou o GLB (fluxo terminado); False para cair no
@@ -1485,33 +1702,92 @@ def _game_pack_quaternius_retarget(
     from . import bpy_ops
     from . import retarget as rt
 
-    # quaternius-hero é superset (armas/ferramentas). Inimigos limitam via --clips.
-    profile = rt.load_profile("quaternius-hero")
-    missing = _quaternius_core_missing(arm_name, profile)
+    try:
+        packs = expand_anim_packs(anim_pack)
+    except AnimPackError as e:
+        console.print(f"[red]anim-pack inválido:[/red] {e}")
+        return False
+    profiles = {p: rt.load_profile(_ANIM_PACK_PROFILE[p]) for p in packs}
+    plan = rt.plan_pack_passes([profiles[p] for p in packs])
+
+    # bone_map: os candidatos target são canónicos em todos os perfis — valida
+    # uma vez com o primeiro perfil da cadeia.
+    missing = _core_bones_missing(arm_name, profiles[packs[0]])
     if missing:
         console.print(
-            f"[yellow]Retarget Quaternius indisponível:[/yellow] bones core sem candidato no rig: {', '.join(missing)}"
+            f"[yellow]Retarget de animações indisponível:[/yellow] bones core sem candidato no rig: "
+            f"{', '.join(missing)}"
         )
         return False
 
-    only_clips: list[str] | None = None
+    # Filtro de clips casado contra os clips EFETIVOS de cada pass (uma key
+    # que o pass não vai retargetizar não pode entrar no only_clips dele).
+    only_clips: dict[str, list[str]] = {}
     if clip_filter:
         wanted = [s.strip() for s in clip_filter.split(",") if s.strip()]
-        only_clips = [c for c in wanted if c in profile.clip_map]
-        if not only_clips:
-            console.print(f"[yellow]Nenhum clip do filtro existe no perfil quaternius-hero:[/yellow] {clip_filter}")
+        matched: set[str] = set()
+        for (prof, eff), pack_key in zip(plan, packs):
+            only_clips[pack_key] = [c for c in wanted if c in eff]
+            matched.update(only_clips[pack_key])
+        unmatched = [c for c in wanted if c not in matched]
+        if unmatched:
+            console.print(
+                f"[yellow]Clips do filtro sem correspondência nos perfis ({'/'.join(packs)}):[/yellow] {unmatched} "
+                "[dim]— catálogo: animator3d list-animations[/dim]"
+            )
+        if not matched:
+            console.print(
+                f"[yellow]Nenhum clip do filtro existe nos perfis ({'/'.join(packs)}):[/yellow] {clip_filter} "
+                "[dim]— catálogo: animator3d list-animations[/dim]"
+            )
             return False
 
-    try:
-        source_path = _fetch_quaternius_source()
-    except Exception as e:
-        console.print(f"[yellow]Pack Quaternius indisponível:[/yellow] {e}")
-        return False
+    results: list[dict] = []
+    already: set[str] = set()
+    first = True
+    for (prof, eff), p in zip(plan, packs):
+        only = only_clips.get(p) or None
+        if clip_filter and not only:
+            continue  # este pack não contribui para o filtro pedido
+        if prof.source_files_root:
+            # Pack POR-FICHEIRO (ex.: villager): cada clip é um FBX importado,
+            # retargetizado e descartado. Não há source único na cena.
+            try:
+                pack_root = _fetch_pack_root(pack=p)
+            except Exception as e:
+                console.print(f"[yellow]Pack {p} indisponível:[/yellow] {e}")
+                if first:
+                    return False
+                continue
+            emit_progress(item_id, TOOL_ANIMATOR3D, phase="retarget", percent=0)
+            if not first:
+                # Substituir SÓ as keys que este pass vai retargetizar por cima
+                # de clips anteriores — remover mais apagava clips que o
+                # efectivo deste pass decidiu PRESERVAR (ex.: idle da UAL).
+                rt.remove_clips(arm_name, [k for k in eff if k in already])
+            eff_prof = dataclasses.replace(prof, clip_map=eff)
+            results.extend(rt.retarget_batch_files(arm_name, eff_prof, pack_root, only_clips=only, replace=first))
+            first = False
+            already.update(eff)
+            continue
+        try:
+            source_path = _fetch_pack_source(pack=p)
+        except Exception as e:
+            console.print(f"[yellow]Pack de animação {p} indisponível:[/yellow] {e}")
+            if first:
+                return False
+            continue
+        emit_progress(item_id, TOOL_ANIMATOR3D, phase="retarget", percent=0)
+        source_arm = _import_retarget_source(source_path, arm_name)
+        if not first:
+            rt.remove_clips(arm_name, [k for k in eff if k in already])
+        eff_prof = dataclasses.replace(prof, clip_map=eff)
+        results.extend(rt.retarget_batch(arm_name, source_arm.name, eff_prof, only_clips=only, replace=first))
+        _cleanup_retarget_source(source_arm)
+        first = False
+        already.update(eff)
 
-    emit_progress(item_id, TOOL_ANIMATOR3D, phase="retarget", percent=0)
-    source_arm = _import_retarget_source(source_path, arm_name)
-    results = rt.retarget_batch(arm_name, source_arm.name, profile, only_clips=only_clips, replace=True)
-    total = len(only_clips) if only_clips else len(profile.clip_map)
+    total = len(results)
     ok = 0
     for i, res in enumerate(results):
         pct = round(((i + 1) / total) * 100) if total else 100
@@ -1519,7 +1795,6 @@ def _game_pack_quaternius_retarget(
         if "error" not in res:
             ok += 1
         _print_retarget_result(res)
-    _cleanup_retarget_source(source_arm)
     if ok == 0:
         console.print("[yellow]Retarget não produziu clips.[/yellow]")
         return False
@@ -1531,7 +1806,7 @@ def _game_pack_quaternius_retarget(
     nclips = bpy_ops.count_nla_tracks(arm_name)
     elapsed = time.monotonic() - t0
     console.print(
-        f"[green]game-pack[/green] retarget=quaternius armature={arm_name!r} "
+        f"[green]game-pack[/green] retarget={anim_pack} armature={arm_name!r} "
         f"· {nclips} clip(s) no GLB → {output_path.resolve()}"
     )
     emit_result(item_id, TOOL_ANIMATOR3D, STATUS_OK, output=str(output_path.resolve()), seconds=elapsed)
@@ -1618,7 +1893,7 @@ def cmd_retarget(
     "--clips",
     "clip_filter",
     default=None,
-    help="Subconjunto de nomes limpos separados por vírgula (ex: idle,walk,run).",
+    help="Subconjunto de nomes limpos separados por vírgula (ex: idle,walk,run). Catálogo: animator3d list-animations.",
 )
 @click.option(
     "--replace", is_flag=True, default=True, show_default=True, help="Limpar clips existentes no target (default: on)."
@@ -1644,19 +1919,33 @@ def cmd_retarget_batch(
     from . import retarget as rt
 
     profile = rt.load_profile(profile_name)
+    per_file = profile.source_files_root is not None
 
-    # Resolver source: path explícito > profile.source_path > auto-download Quaternius.
-    if source_path is None:
-        source_path = profile.source_path
-    if source_path is None and not no_fetch:
-        if profile.name == "quaternius":
-            source_path = _fetch_quaternius_source()
-        else:
+    # Resolver source: path explícito > profile.source_path > auto-download do
+    # pack indicado pelo perfil (source_pack) ou UAL1 para perfis quaternius*.
+    # Packs por-ficheiro (ex.: villager) em vez de source único trazem pack_root.
+    pack_root: Path | None = None
+    if source_path is None and per_file:
+        pack = profile.extra.get("source_pack")
+        if pack is None or no_fetch:
             raise click.ClickException(
-                f"Sem --source e o perfil {profile.name!r} não define source_path. Indica --source <pack.fbx/glb>."
+                f"Perfil por-ficheiro {profile.name!r} precisa do pack em cache: "
+                "usa fetch_itch_pack ou remove --no-fetch."
             )
-    if source_path is None or not Path(source_path).is_file():
-        raise click.ClickException(f"Ficheiro source não encontrado: {source_path}")
+        pack_root = _fetch_pack_root(pack=pack)
+    else:
+        if source_path is None:
+            source_path = profile.source_path
+        if source_path is None and not no_fetch:
+            pack = profile.extra.get("source_pack") or ("quaternius" if profile.name.startswith("quaternius") else None)
+            if pack:
+                source_path = _fetch_pack_source(pack=pack)
+            else:
+                raise click.ClickException(
+                    f"Sem --source e o perfil {profile.name!r} não define source_path. Indica --source <pack.fbx/glb>."
+                )
+        if source_path is None or not Path(source_path).is_file():
+            raise click.ClickException(f"Ficheiro source não encontrado: {source_path}")
 
     only_clips = [s.strip() for s in clip_filter.split(",")] if clip_filter else None
     if only_clips:
@@ -1673,16 +1962,17 @@ def cmd_retarget_batch(
     target_arm = bpy_ops.list_armatures()[0]
     target_arm.name = "Target"
 
-    source_arm = _import_retarget_source(Path(source_path), "Target")
-
     total = len(profile.clip_map)
-    results = rt.retarget_batch("Target", source_arm.name, profile, only_clips=only_clips, replace=replace)
+    if per_file:
+        results = rt.retarget_batch_files("Target", profile, pack_root, only_clips=only_clips, replace=replace)
+    else:
+        source_arm = _import_retarget_source(Path(source_path), "Target")
+        results = rt.retarget_batch("Target", source_arm.name, profile, only_clips=only_clips, replace=replace)
+        _cleanup_retarget_source(source_arm)
     for i, res in enumerate(results):
         pct = round(((i + 1) / total) * 100) if total else 100
         emit_progress(item_id, TOOL_ANIMATOR3D, phase="clips", percent=pct, clip=res.get("clip"))
         _print_retarget_result(res)
-
-    _cleanup_retarget_source(source_arm)
 
     emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=0)
     bpy_ops.export_glb(output_path, draco=draco)

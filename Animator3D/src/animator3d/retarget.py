@@ -20,7 +20,9 @@ interpolação pelo caminho longo (trambolhão no viewer).
 Location / root: Quaternius tem ``root`` + ``pelvis.location`` (bob). O target
 ganha um ``root`` estático nos pés (nunca animado — retargetar a rotação do
 root Quaternius injecta ±90° Y↔Z e a origem salta para a cintura no play).
-Só ``pelvis`` recebe location (+ rotações dos ossos mapeados).
+A location do gait vai para o osso do target que é o hips, a partir do source
+a que estiver mapeado — resolvido POR PAPEL (``pelvis``, ``B-hips`` do KevDev,
+``Hips`` do Mixamo), nunca por nome fixo de source (ver _resolve_location_pair).
 
 Não é retargeting universal (ex.: não resolve rigs com topologias muito diferentes),
 mas é robusto e simples para humanoides. Alternativas mais complexas (constraints
@@ -35,15 +37,33 @@ Fontes: docs/quaternius_inventory.md, protótipos validados visualmente no brows
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 _DATA_DIR = Path(__file__).resolve().parent / "data" / "retarget"
 
-# Só pelvis: root fica identidade fixa (ver ensure_feet_root_bone).
-_LOCATION_SRC_BONES = frozenset({"pelvis"})
+# Só o osso mapeado para o hips do target recebe location — resolvido por PAPEL
+# (_resolve_location_pair), não por nome: o source pode chamar-se ``pelvis``
+# (Quaternius), ``B-hips`` (KevDev) ou ``Hips`` (Mixamo). O root fica sempre
+# estático (ver ensure_feet_root_bone).
 _HIPS_CANDIDATES = ("pelvis", "Hips")
+
+
+def _resolve_location_pair(tgt_to_src: dict[str, str]) -> tuple[str | None, str | None]:
+    """Par ``(tgt_hips, src_hips)`` que recebe location (gait/bob); ``(None, None)`` sem hips.
+
+    Procura o osso do target que é o hips (``pelvis``/``Hips``) e devolve o
+    source a que está mapeado. Transferir por nome de source fixo partia rigs
+    com naming diferente (KevDev ``B-hips``): sem a location do source, o
+    tronco fica preso à altura de rest enquanto as pernas dobram — "hang from
+    waist", pés a levantar do chão em clips agachados (mining, farming...).
+    """
+    tgt_hips = next((tgt for tgt in tgt_to_src if tgt in _HIPS_CANDIDATES), None)
+    if tgt_hips is None:
+        return None, None
+    return tgt_hips, tgt_to_src[tgt_hips]
 
 
 def _bpy():
@@ -61,7 +81,38 @@ class RetargetProfile:
     bone_map: dict[str, list[str]]
     clip_map: dict[str, str]  # clean_name -> source_track_name
     source_path: Path | None = None  # opcional: override do ficheiro source
+    # Packs POR-FICHEIRO (ex.: KevDev, um FBX por clip): subpasta do pack onde
+    # vivem os ficheiros de clip; os valores do clip_map passam a caminhos
+    # relativos a esta raiz (sem extensão). None = pack de ficheiro único
+    # (Quaternius: um GLB com todas as actions).
+    source_files_root: str | None = None
+    # Combinação de packs (multi-pass): keys deste perfil autorizadas a
+    # SUBSTITUIR clips de packs anteriores. None = substitui tudo (comportamento
+    # UAL1→UAL2). Lista vazia = só acrescenta, nunca substitui (pack "add-on").
+    # Ver plan_pack_passes.
+    replace_keys: list[str] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+
+
+def _resolve_profile_path(name_or_path: str | Path) -> Path:
+    """Resolve um perfil de retarget para o path do YAML.
+
+    Args:
+        name_or_path: nome do perfil (ex.: ``"quaternius"``) ou path absoluto
+            para um YAML custom.
+
+    Raises:
+        FileNotFoundError: perfil não encontrado.
+    """
+    p = Path(name_or_path)
+    if not p.is_absolute() and not p.is_file():
+        candidate = _DATA_DIR / f"{name_or_path}.yaml"
+        if not candidate.is_file():
+            raise FileNotFoundError(f"Perfil de retarget não encontrado: {name_or_path} (procurei em {candidate})")
+        return candidate
+    if not p.is_file():
+        raise FileNotFoundError(p)
+    return p
 
 
 def load_profile(name_or_path: str | Path) -> RetargetProfile:
@@ -76,33 +127,122 @@ def load_profile(name_or_path: str | Path) -> RetargetProfile:
     """
     import yaml
 
-    p = Path(name_or_path)
-    if not p.is_absolute() and not p.is_file():
-        candidate = _DATA_DIR / f"{name_or_path}.yaml"
-        if not candidate.is_file():
-            raise FileNotFoundError(f"Perfil de retarget não encontrado: {name_or_path} (procurei em {candidate})")
-        p = candidate
-    if not p.is_file():
-        raise FileNotFoundError(p)
+    p = _resolve_profile_path(name_or_path)
 
     raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     bone_map = {
         src: [cand] if isinstance(cand, str) else [str(c) for c in cand]
         for src, cand in dict(raw.get("bone_map", {})).items()
     }
+    extra: dict[str, Any] = {}
+    if raw.get("source_pack"):
+        extra["source_pack"] = str(raw["source_pack"])
+    clip_map_raw = dict(raw.get("clip_map", {}))
+    # Guarda YAML 1.1: ``yes``/``no``/``on``/``off`` sem aspas viram bool e
+    # rebentam o retarget a meio (actions.get(True)). Falhar cedo com mensagem clara.
+    bad = [k for k, v in clip_map_raw.items() if not isinstance(k, str) or not isinstance(v, str)]
+    if bad:
+        raise ValueError(
+            f'clip_map do perfil {p.name!r} tem keys/valores não-string ({bad!r}) — usa aspas (ex.: "yes": "Yes")'
+        )
+    replace_keys_raw = raw.get("replace_keys")
+    replace_keys: list[str] | None
+    if replace_keys_raw is None:
+        replace_keys = None
+    else:
+        if not isinstance(replace_keys_raw, list) or not all(isinstance(k, str) for k in replace_keys_raw):
+            raise ValueError(f"replace_keys do perfil {p.name!r} tem de ser uma lista de nomes limpos")
+        replace_keys = list(replace_keys_raw)
     return RetargetProfile(
         name=raw.get("profile", p.stem),
         bone_map=bone_map,
-        clip_map=dict(raw.get("clip_map", {})),
+        clip_map=clip_map_raw,
         source_path=Path(raw["source_path"]) if raw.get("source_path") else None,
+        source_files_root=(str(raw["source_files"]["root"]) if raw.get("source_files", {}).get("root") else None),
+        replace_keys=replace_keys,
+        extra=extra,
     )
 
 
-def _available_profiles() -> list[str]:
-    """Lista nomes de perfis YAML disponíveis em data/retarget/."""
+def plan_pack_passes(profiles: list[RetargetProfile]) -> list[tuple[RetargetProfile, dict[str, str]]]:
+    """Plano de passes para uma combinação ordenada de packs (multi-pack).
+
+    Cada pack corre por inteiro sobre o rig; a questão é que keys SUBSTITUEM
+    clips de packs anteriores e quais só se acrescentam:
+
+    - ``replace_keys is None`` (UAL): substitui todas as colisões — mantém o
+      comportamento histórico do ``--anim-pack both`` (UAL2 dedicado > UAL1);
+    - ``replace_keys`` definida (villager): substitui SÓ essas keys; restantes
+      colisões são ignoradas (o ``idle`` do villager NÃO pisaria o da UAL) e
+      as demais keys acrescentam-se.
+
+    Sem este plano, duas tracks NLA com o mesmo nome chegariam ao glTF
+    (duplicado no engine).
+
+    Returns:
+        ``[(profile, clip_map_efetivo)]`` — o 2.º elemento é o clip_map
+        filtrado que esse pass deve retargetizar.
+    """
+    plan: list[tuple[RetargetProfile, dict[str, str]]] = []
+    already: set[str] = set()
+    for prof in profiles:
+        if prof.replace_keys is None:
+            replacing: set[str] = set(prof.clip_map)
+        else:
+            replacing = {k for k in prof.replace_keys if k in prof.clip_map}
+        eff = {k: v for k, v in prof.clip_map.items() if k not in already or k in replacing}
+        plan.append((prof, eff))
+        already.update(eff)
+    return plan
+
+
+def available_profiles() -> list[str]:
+    """Nomes de perfis YAML disponíveis em data/retarget/."""
     if not _DATA_DIR.is_dir():
         return []
     return sorted(p.stem for p in _DATA_DIR.glob("*.yaml"))
+
+
+# Cabeçalho de secção dentro do bloco ``clip_map:`` (ex.: ``# --- Locomoção ---``).
+_SECTION_HEADER_RE = re.compile(r"^#\s*-{2,}\s*(.+?)\s*-{2,}\s*$")
+# Entrada ``clean_name:`` (com ou sem aspas) — só a key, para agrupar por texto.
+_CLIP_KEY_RE = re.compile(r'^\s+("([^"]+)"|\'([^\']+)\'|[^:#\s][^:]*):')
+
+
+def profile_clip_groups(name_or_path: str | Path) -> dict[str, str]:
+    """Grupos (secções) dos clips de um perfil, lidos do texto do YAML.
+
+    As secções vêm dos comentários ``# --- Nome ---`` dentro do bloco
+    ``clip_map:`` — é documentação do catálogo, não schema: se os comentários
+    faltarem, os clips ficam com grupo ``""`` e o catálogo continua válido.
+
+    Args:
+        name_or_path: nome do perfil (ex.: ``"quaternius2"``) ou path YAML.
+
+    Returns:
+        ``{clean_name: grupo}`` na ordem do YAML; grupo ``""`` fora de secções.
+    """
+    path = _resolve_profile_path(name_or_path)
+    groups: dict[str, str] = {}
+    in_clips = False
+    section = ""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        if not line[0].isspace():
+            in_clips = line.strip() == "clip_map:"
+            continue
+        if not in_clips:
+            continue
+        header = _SECTION_HEADER_RE.match(line.strip())
+        if header:
+            section = header.group(1).strip()
+            continue
+        entry = _CLIP_KEY_RE.match(line)
+        if entry:
+            key = entry.group(2) or entry.group(3) or entry.group(1)
+            groups[key] = section
+    return groups
 
 
 def _bone_rest_height(arm: Any, names: tuple[str, ...] = _HIPS_CANDIDATES) -> float:
@@ -350,9 +490,17 @@ def retarget_animation(
     full_order = _armature_topo_order(target)
     tgt_rest_quat = {b.name: b.matrix_local.to_quaternion() for b in target.data.bones}
     tgt_parent = {b.name: (b.parent.name if b.parent else None) for b in target.data.bones}
-    loc_scale = _bone_rest_height(target) / _bone_rest_height(source)
-    # tgt bones que recebem location (root + pelvis/Hips).
-    loc_targets = {tgt for tgt, src in tgt_to_src.items() if src in _LOCATION_SRC_BONES}
+    # Location: role-based (ver _resolve_location_pair). A escala usa as
+    # ALTURAS DOS BONES MAPEADOS — o naming do source não é fixo e packs como
+    # o KevDev vêm em cm no FBX: com candidatos fixos (pelvis/Hips ausentes),
+    # _bone_rest_height devolvia 1.0 e os ~38 cm do clip entravam como metros.
+    tgt_hips, src_hips = _resolve_location_pair(tgt_to_src)
+    if tgt_hips is not None and src_hips is not None:
+        loc_scale = _bone_rest_height(target, (tgt_hips,)) / _bone_rest_height(source, (src_hips,))
+        loc_targets = {tgt_hips}
+    else:
+        loc_scale = 1.0
+        loc_targets: set[str] = set()
     # ``pose.bone.location`` vive no frame de REST do próprio osso, e esses
     # frames diferem entre rigs (Quaternius pelvis ≈ +104° X vs target
     # identidade). Copiar componentes cruas troca vertical↔horizontal: o
@@ -498,6 +646,100 @@ def retarget_batch(
     return results
 
 
+def retarget_batch_files(
+    target_arm_name: str,
+    profile: RetargetProfile,
+    pack_root: Path,
+    *,
+    only_clips: list[str] | None = None,
+    replace: bool = False,
+) -> list[dict[str, Any]]:
+    """Retarget de packs POR-FICHEIRO (um FBX por clip, ex.: KevDev villager).
+
+    Diferença de :func:`retarget_batch`: aqui não há um ficheiro source único
+    com todas as actions — cada valor do ``clip_map`` é um caminho relativo a
+    ``pack_root/profile.source_files_root`` (sem extensão) para um FBX com o
+    rig do pack + UMA action. Cada ficheiro é importado, retargetizado e
+    descartado antes do clip seguinte (a cena fica só com o target).
+
+    Args:
+        target_arm_name: nome do armature alvo.
+        profile: perfil com ``bone_map``, ``clip_map`` e ``source_files_root``.
+        pack_root: diretório do pack extraído (``ItchPack.root``).
+        only_clips: se dado, retargetiza apenas estes nomes limpos.
+        replace: se True, limpa as NLA tracks existentes no target antes de começar.
+
+    Returns:
+        Lista de resultados por clip (ver :func:`retarget_animation`).
+    """
+    bpy = _bpy()
+    target = bpy.data.objects.get(target_arm_name)
+    if target is None:
+        raise ValueError(f"Target armature não encontrado: {target_arm_name!r}")
+    ensure_feet_root_bone(target)
+    if "root" in target.pose.bones:
+        pb = target.pose.bones["root"]
+        pb.matrix_basis.identity()
+    if replace:
+        _clear_nla_tracks(target_arm_name)
+
+    clips = profile.clip_map
+    if only_clips:
+        clips = {k: v for k, v in clips.items() if k in set(only_clips)}
+
+    root = pack_root / (profile.source_files_root or "")
+    results = []
+    for clean_name, rel in clips.items():
+        fbx_path = root / f"{rel}.fbx"
+        if not fbx_path.is_file():
+            results.append(
+                {"clip": clean_name, "source_track": rel, "error": f"Ficheiro do pack não encontrado: {fbx_path}"}
+            )
+            continue
+        try:
+            results.append(_retarget_from_file(target_arm_name, fbx_path, profile.bone_map, clean_name))
+        except ValueError as e:
+            results.append({"clip": clean_name, "source_track": rel, "error": str(e)})
+    return results
+
+
+def _retarget_from_file(
+    target_arm_name: str,
+    fbx_path: Path,
+    bone_map: dict[str, str | list[str]],
+    clean_name: str,
+) -> dict[str, Any]:
+    """Importa um FBX de animação, retargetiza a sua action única e limpa a cena.
+
+    O nome da action nos FBX do pack varia com o nome do objecto importado
+    (``Armature[.NNN]|<Take>|Base Layer``) — descobre-se por diferença aos
+    actions/objects presentes antes do import.
+    """
+    from . import bpy_ops
+
+    bpy = _bpy()
+    before_objects = set(bpy.data.objects.keys())
+    before_actions = {a.name for a in bpy.data.actions}
+
+    bpy_ops.import_asset(fbx_path)
+    source = next((o for o in bpy.data.objects if o.type == "ARMATURE" and o.name not in before_objects), None)
+    take_actions = [a for a in bpy.data.actions if a.name not in before_actions]
+    if source is None:
+        raise ValueError(f"FBX sem armature novo: {fbx_path.name}")
+    if not take_actions:
+        raise ValueError(f"FBX sem action de animação: {fbx_path.name}")
+
+    try:
+        return retarget_animation(target_arm_name, source.name, bone_map, take_actions[0].name, clean_name)
+    finally:
+        # Descartar o source e os actions do take (a action nova do target
+        # chama-se ``clean_name`` e não está em take_actions).
+        for obj in [o for o in bpy.data.objects if o.name not in before_objects]:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        for act in take_actions:
+            bpy.data.actions.remove(act)
+
+
 def rename_existing_clips(
     armature_name: str,
     rename_map: dict[str, str],
@@ -549,3 +791,39 @@ def _clear_nla_tracks(armature_name: str) -> None:
     arm.animation_data.action = None
     for act in own_actions:
         bpy.data.actions.remove(act)
+
+
+def remove_clips(armature_name: str, names: Any) -> list[str]:
+    """Remove NLA tracks (e as suas actions) cujo nome está em ``names``.
+
+    Usado no retarget multi-pack (``--anim-pack both``): o segundo pack corre
+    depois do primeiro e as keys que colidem (ex.: ``chop``) devem SUBSTITUIR a
+    versão anterior, não acumular tracks duplicadas. Só remove actions que
+    ficam órfãs (a mesma action pode estar em uso noutra track).
+    """
+    bpy = _bpy()
+    arm = bpy.data.objects.get(armature_name)
+    if arm is None or arm.animation_data is None:
+        return []
+    wanted = {str(n) for n in names}
+    removed: list[str] = []
+    doomed: list[Any] = []
+    for t in list(arm.animation_data.nla_tracks):
+        # Nome/acções lidos ANTES do remove: referências RNA de tracks removidas
+        # ficam inválidas (StructRNA has been removed).
+        track_name = t.name
+        if track_name in wanted:
+            doomed.extend(s.action for s in t.strips if s.action)
+            arm.animation_data.nla_tracks.remove(t)
+            removed.append(track_name)
+    for act in doomed:
+        used = any(
+            s.action == act
+            for a in bpy.data.objects
+            if a.type == "ARMATURE" and a.animation_data
+            for tr in a.animation_data.nla_tracks
+            for s in tr.strips
+        )
+        if not used:
+            bpy.data.actions.remove(act)
+    return removed

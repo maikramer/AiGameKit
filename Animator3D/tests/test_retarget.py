@@ -42,7 +42,142 @@ def test_load_profile_missing_raises() -> None:
 
 
 def test_available_profiles_includes_quaternius() -> None:
-    assert "quaternius" in rt._available_profiles()
+    assert "quaternius" in rt.available_profiles()
+    assert "quaternius2" in rt.available_profiles()
+
+
+def test_profile_clip_groups_matches_clip_map_keys() -> None:
+    """Todos os perfis bundled: grupos cobrem exactamente as keys do clip_map."""
+    for name in rt.available_profiles():
+        profile = rt.load_profile(name)
+        groups = rt.profile_clip_groups(name)
+        assert set(groups) == set(profile.clip_map), f"perfil {name}: keys de grupos != clip_map"
+
+
+def test_profile_clip_groups_parses_sections() -> None:
+    """Secções ``# --- X ---`` viram grupos; keys com aspas são lidas corretamente."""
+    groups = rt.profile_clip_groups("quaternius2")
+    assert groups["harvest"].startswith("Farming")
+    assert groups["sworda"].startswith("Combate espada")
+    assert groups["yes"].startswith("Emotes")  # "yes" com aspas no YAML
+    assert groups["no"].startswith("Emotes")
+    hero = rt.profile_clip_groups("quaternius-hero")
+    assert hero["idle"].startswith("Locomoção")
+    assert hero["sit"].startswith("Catálogo UAL1 estendido")
+
+
+def test_profile_clip_groups_without_sections(tmp_path: Path) -> None:
+    """YAML sem comentários de secção -> grupos vazios (catálogo continua válido)."""
+    p = tmp_path / "plain.yaml"
+    p.write_text(
+        "profile: plain\nbone_map: {}\nclip_map:\n  idle: Idle_Loop\n  walk: Walk_Loop\n",
+        encoding="utf-8",
+    )
+    assert rt.profile_clip_groups(p) == {"idle": "", "walk": ""}
+
+
+def test_profile_clip_groups_ignores_prose_comments(tmp_path: Path) -> None:
+    """Comentários de prosa (e antes da 1.ª secção) não criam grupos espúrios."""
+    p = tmp_path / "prose.yaml"
+    p.write_text(
+        "# comentário fora do clip_map: não conta\n"
+        "profile: prose\nbone_map: {}\n"
+        "clip_map:\n"
+        "  # nota: primeiro clip fora de qualquer secção\n"
+        "  idle: Idle_Loop\n"
+        "  # --- Combate ---\n"
+        "  attack: Sword_Attack  # comentário inline não estraga a key\n"
+        "  # mine: linha de prosa que parece entrada mas é comentário\n"
+        "  roll: Roll\n",
+        encoding="utf-8",
+    )
+    groups = rt.profile_clip_groups(p)
+    assert groups == {"idle": "", "attack": "Combate", "roll": "Combate"}
+
+
+def test_profile_clip_groups_missing_profile_raises() -> None:
+    import pytest
+
+    with pytest.raises(FileNotFoundError):
+        rt.profile_clip_groups("definitely-not-a-profile-xyz")
+
+
+# ---------------------------------------------------------------------------
+# remove_clips — substituição de clips no multi-pack (both)
+# ---------------------------------------------------------------------------
+
+
+class _FakeAction:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class _FakeStrip:
+    def __init__(self, action: _FakeAction) -> None:
+        self.action = action
+
+
+class _FakeTrack:
+    def __init__(self, name: str, actions: list[_FakeAction]) -> None:
+        self.name = name
+        self.strips = [_FakeStrip(a) for a in actions]
+
+
+class _FakeObjects:
+    def __init__(self, objs: list) -> None:
+        self._objs = objs
+
+    def get(self, name: str):
+        return next((o for o in self._objs if o.name == name), None)
+
+    def __iter__(self):
+        return iter(self._objs)
+
+
+def _fake_bpy_for(arm) -> SimpleNamespace:
+    removed_actions: list[_FakeAction] = []
+    fake = SimpleNamespace(
+        data=SimpleNamespace(
+            objects=_FakeObjects([arm]),
+            actions=SimpleNamespace(remove=removed_actions.append),
+        ),
+        _removed_actions=removed_actions,
+    )
+    return fake
+
+
+def test_remove_clips_removes_named_tracks_and_orphan_actions(monkeypatch) -> None:
+    act_chop, act_idle = _FakeAction("chop"), _FakeAction("idle")
+    arm = SimpleNamespace(
+        name="Arm",
+        type="ARMATURE",
+        animation_data=SimpleNamespace(
+            nla_tracks=[_FakeTrack("chop", [act_chop]), _FakeTrack("idle", [act_idle])],
+        ),
+    )
+    fake = _fake_bpy_for(arm)
+    monkeypatch.setattr(rt, "_bpy", lambda: fake)
+
+    removed = rt.remove_clips("Arm", ["chop"])
+
+    assert removed == ["chop"]
+    assert [t.name for t in arm.animation_data.nla_tracks] == ["idle"]
+    # a action 'chop' ficou órfã e foi removida; a 'idle' continua em uso
+    assert fake._removed_actions == [act_chop]
+
+
+def test_remove_clips_no_animation_data(monkeypatch) -> None:
+    arm = SimpleNamespace(name="Arm", type="ARMATURE", animation_data=None)
+    fake = _fake_bpy_for(arm)
+    monkeypatch.setattr(rt, "_bpy", lambda: fake)
+    assert rt.remove_clips("Arm", ["chop"]) == []
+
+
+def test_remove_clips_missing_armature(monkeypatch) -> None:
+    empty_arm = SimpleNamespace(name="Other", type="ARMATURE", animation_data=None)
+    fake = _fake_bpy_for(empty_arm)
+    monkeypatch.setattr(rt, "_bpy", lambda: fake)
+    assert rt.remove_clips("Arm", ["chop"]) == []
 
 
 def test_load_profile_normalizes_string_values_to_lists(tmp_path: Path) -> None:

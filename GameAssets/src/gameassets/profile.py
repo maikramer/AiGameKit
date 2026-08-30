@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from aigamekit_shared.anim_packs import AnimPackError, expand_anim_packs
+
 
 def _parse_output_dir(raw: Any) -> str:
     """Raiz dos assets (defeito: diretório atual - só `images/` e `meshes/`, sem pasta `outputs/`)."""
@@ -137,12 +139,19 @@ class Animator3DProfile:
     - ``clips``: filtro CSV (ex: ``"idle,walk,run"``); None = todos os clips do preset/retarget.
     - ``procedural``: força clips procedurais mesmo em humanoides (sem retarget Quaternius mocap).
     - ``force_preset``: desativa auto-deteção humanoid vs creature.
+    - ``anim_pack``: catálogo de retarget — ``quaternius`` (UAL1), ``quaternius2``
+      (UAL2: farming/chopping/combos, sem locomoção base), ``both`` (UAL1+UAL2;
+      keys da UAL2 substituem as da UAL1, ex.: ``chop`` dedicado), ``villager``
+      (Kevin Iglesias: farming/pesca/mining — FBX por clip) ou ``all``
+      (villager + UAL1 + UAL2 nessa ordem; os clips exclusivos do villager —
+      mine, hammer, pesca — sobrevivem, os partilhados ficam com a UAL).
     """
 
     preset: str = "humanoid"
     clips: str | None = None
     procedural: bool = False
     force_preset: bool = False
+    anim_pack: str = "quaternius"
 
 
 @dataclass
@@ -166,6 +175,11 @@ class LODProfile:
     min_faces_lod1: int = 500
     min_faces_lod2: int = 150
     meshfix: bool = False
+    # Último nível de LOD que mantém rig/animações (níveis acima saem estáticos
+    # — meshes sem weights NÃO podem ser animadas em runtime). Props estáticos
+    # usam 1 (default); personagens que animam à distância (criaturas em
+    # ``*_lod2.glb``) precisam de 2.
+    rig_max_level: int = 1
 
 
 @dataclass
@@ -702,11 +716,20 @@ class GameProfile:
             clips_s = str(clips_raw).strip() if clips_raw not in (None, "") else None
             procedural = bool(raw_anim.get("procedural", False))
             force_preset = bool(raw_anim.get("force_preset", False))
+            anim_pack_raw = raw_anim.get("anim_pack")
+            anim_pack = str(anim_pack_raw).strip().lower() if anim_pack_raw not in (None, "") else "quaternius"
+            # Gramática canónica (packs individuais, both/all, listas por
+            # vírgulas) — partilhada com o CLI animator3d.
+            try:
+                expand_anim_packs(anim_pack)
+            except AnimPackError as e:
+                raise ValueError(f"animator3d.{e}") from e
             anim3 = Animator3DProfile(
                 preset=pr_as,
                 clips=clips_s,
                 procedural=procedural,
                 force_preset=force_preset,
+                anim_pack=anim_pack,
             )
         lod: LODProfile | None = None
         raw_lod = data.get("lod")
@@ -724,12 +747,19 @@ class GameProfile:
                 raise ValueError("lod.lod1_ratio, lod2_ratio, min_faces_lod1, min_faces_lod2 devem ser números") from e
             if not 0 < lr2_f < lr1_f <= 1.0:
                 raise ValueError("lod: esperado 0 < lod2_ratio < lod1_ratio <= 1.0")
+            try:
+                rig_max = int(raw_lod.get("rig_max_level", 1))
+            except (TypeError, ValueError) as e:
+                raise ValueError("lod.rig_max_level deve ser inteiro 0-2") from e
+            if rig_max not in (0, 1, 2):
+                raise ValueError("lod.rig_max_level deve ser 0, 1 ou 2")
             lod = LODProfile(
                 lod1_ratio=lr1_f,
                 lod2_ratio=lr2_f,
                 min_faces_lod1=mf1_i,
                 min_faces_lod2=mf2_i,
                 meshfix=bool(raw_lod.get("meshfix", False)),
+                rig_max_level=rig_max,
             )
         coll: CollisionProfile | None = None
         raw_coll = data.get("collision")

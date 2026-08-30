@@ -1,0 +1,19 @@
+{
+  "version": "2.2-free",
+  "name": "Human Villager Animations FREE (Godot/Unreal)",
+  "author": "Kevin Iglesias (kevdev)",
+  "license": "Kevin Iglesias EULA — versão gratuita (uso em jogos OK; não revender/redistribuir)",
+  "homepage": "https://kevdev.itch.io/human-villager-animations-free",
+  "itch_base": "https://kevdev.itch.io",
+  "game_slug": "human-villager-animations-free",
+  "game_id": 3331005,
+  "upload_id": 17364905,
+  "upload_filename": "Human Crafting Animations FREE Godot-Unreal.zip",
+  "expected_sha256": "5892f529b0fcf5b72354716747c77ce70843baff1b38f5815902f7687dd512cb",
+  "expected_size": 10787283,
+  "inner_dir": "",
+  "cache_dir": "itch/villager",
+  "marker": "Models/HumanM_Model.fbx",
+  "files": {},
+  "notes": "FBX individuais por clip (Animations/Male|Female, naming B-*). Sem GLB único: o retarget por-ficheiro vive no Animator3D (perfis villager/villager-f). Upload Unity (18766271) não usado."
+}

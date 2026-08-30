@@ -1,8 +1,28 @@
 # Animator3D retarget (Quaternius) — descobertas
 
 Hub: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).  
-Inventário pack: [`../quaternius_inventory.md`](../quaternius_inventory.md).  
+Inventário packs: [`../quaternius_inventory.md`](../quaternius_inventory.md).  
 Código: `Animator3D` `retarget.py` · clips via `animator3d game-pack`.
+
+---
+
+## Multi-pack UAL1 + UAL2 (2026-08)
+
+- `quaternius_fetch` suporta dois packs: `quaternius` (UAL1, 43 clips) e
+  `quaternius2` (UAL2, 43 clips) — locks em `Shared/.../data/quaternius*.lock.json`,
+  fetch anónimo idêntico (POST `/file/<upload_id>`). O rig da UAL2 é **idêntico**
+  ao da UAL1 (65 bones UE5) — o `bone_map` é partilhado.
+- `game-pack --anim-pack quaternius|quaternius2|both`. Em `both`, a UAL2 corre
+  depois e as keys que colidem **substituem** via `rt.remove_clips` (ex.:
+  `chop` = `TreeChopping_Loop` dedicado em vez de `Sword_Attack`). GLB de saída:
+  92 clips (~5 MB).
+- GameAssets: `game.yaml` → `animator3d: { anim_pack: both }` ou por-asset
+  `animate: { anim_pack: both }`.
+- Armadilhas encontradas: (1) ler `track.name` depois de
+  `nla_tracks.remove(track)` → `ReferenceError` (RNA removida — capturar o nome
+  antes); (2) `yes:`/`no:` sem aspas num `clip_map` YAML viram **bool** e
+  rebentam `actions.get(True)` a meio do batch — `load_profile` valida agora
+  keys/valores string e falha cedo.
 
 ---
 
@@ -23,6 +43,24 @@ horizontal/para baixo → pose roda 90–180°, “bunda empinada”).
 
 **Fix:** `_bone_rest_dir` — geometria do esqueleto: filho de tronco mapeado →
 média dos filhos mapeados → direção desde o pai → tail só como último recurso.
+
+### 3. Location do gait é POR PAPEL, não por nome de source (2026-08)
+
+`_LOCATION_SRC_BONES = {"pelvis"}` partia com o pack KevDev villager
+(`B-hips`): sem a location do source, o tronco fica preso à altura de rest
+enquanto as pernas dobram com as rotações do source (que assumem o quadril
+descido) — “hang from waist”, pés a levantar do chão em clips agachados
+(mining descia ~37 cm). Segundo bug na mesma linha: `_bone_rest_height(source)`
+procurava só `pelvis`/`Hips`; no rig KevDev devolvia 1.0 e os location keys em
+**cm** do FBX entrariam tal qual (≈38 m!). Medido no FBX: `B-hips` Y varia
+-1.3..-38.4 (cm), `B-root` a zero (sem root motion).
+
+**Fix:** `_resolve_location_pair(tgt_to_src)` devolve o par
+`(tgt_hips, src_hips)` — o osso do target que é o hips (`pelvis`/`Hips`) e o
+source a que estiver mapeado, seja `pelvis` (Quaternius), `B-hips` (KevDev) ou
+`Hips` (Mixamo); a escala usa as alturas DESSES bones. Regressão:
+`test_retarget_root.py::TestProfileMapsRoot` (QA numérico E2E: sola dos pés
+≤1.5 cm do chão ao longo do `mineground` retargetado).
 
 ---
 
