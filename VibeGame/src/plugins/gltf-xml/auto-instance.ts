@@ -547,6 +547,42 @@ function buildLevelPrimitives(
   pool.lodLevelsBuilt = 1;
 }
 
+/** Minimal shape of what {@link attachInstancedLodGeometry} drives — keeps the
+ *  rule testable without standing up an `InstancedMesh2` and a GL context. */
+export interface InstancedLodTarget {
+  castShadow: boolean;
+  addLOD(
+    geometry: THREE.BufferGeometry,
+    material: THREE.Material | THREE.Material[],
+    distance: number
+  ): unknown;
+  addShadowLOD(geometry: THREE.BufferGeometry, distance: number): unknown;
+}
+
+/**
+ * Register one LOD level on a pool primitive, for the camera and for the
+ * shadow map both.
+ *
+ * The shadow map only ever resolves a silhouette, blurred further by PCSS, so
+ * an instance that renders as lod1 has no business costing lod0 triangles a
+ * second time in the depth pass — in simple-rpg the depth pass is a quarter of
+ * all GPU time and redraws the same instanced props the camera already
+ * simplified.
+ *
+ * Only pools that already cast get a shadow level: `addShadowLOD` force-sets
+ * `castShadow` on the pool, which would hand shadows to props the author
+ * deliberately left shadowless.
+ */
+export function attachInstancedLodGeometry(
+  primitive: InstancedLodTarget,
+  geometry: THREE.BufferGeometry,
+  material: THREE.Material | THREE.Material[],
+  distance: number
+): void {
+  primitive.addLOD(geometry, material, distance);
+  if (primitive.castShadow) primitive.addShadowLOD(geometry, distance);
+}
+
 function attachLodLevel(
   state: State,
   pool: GltfInstancePool,
@@ -585,7 +621,8 @@ function attachLodLevel(
       );
       maybePatchInstanceVariationMaterial(mat);
     }
-    pool.primitives[i].mesh.addLOD(
+    attachInstancedLodGeometry(
+      pool.primitives[i]!.mesh,
       meshes[i].geometry,
       meshes[i].material,
       distance

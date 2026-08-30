@@ -58,6 +58,11 @@ export const DirectionalLight = defineComponent({
    * shadow sampling, point/spot lights keep stock PCF. Applied globally to
    * the shader chunk when the first opted-in light is created. */
   pcss: U8,
+  /** Angular size (`radius / distance`) under which a caster stops casting
+   * into this light's shadow map — a shadow too small for the map to resolve
+   * costs a full extra draw for a couple of blurred texels. 0 disables the
+   * cull; objects closer than `MIN_CULL_DISTANCE` always cast. */
+  shadowCullRatio: F32,
 });
 
 export const PointLight = defineComponent({

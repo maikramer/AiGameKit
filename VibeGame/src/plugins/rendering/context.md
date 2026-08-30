@@ -17,6 +17,7 @@ rendering/
 ├── systems.ts  # Rendering systems
 ├── operations.ts  # Mesh and shadow operations
 ├── matrix-freeze.ts  # Stop matrix updates for hidden subtrees (cull / LOD)
+├── shadow-caster-cull.ts  # Drop casters too small to resolve in the shadow map
 ├── surface-detail.ts  # Procedural normal/roughness tiles for flat surfaces
 └── utils.ts  # Canvas, context utilities, and constants
 ```
@@ -70,10 +71,32 @@ enquanto o V conta metros de circuito.
 recomposed each frame. In a dressed world the hidden part of the graph is the
 *majority* (simple-rpg: ~12.3k of 15.4k nodes, most of them bones of culled
 props and of inactive LOD children). `setSubtreeMatrixFrozen` clears
-`matrixAutoUpdate` across such a subtree and restores it — plus one forced
-world-matrix refresh — on the way back. Callers: `DistanceCullSystem` (on cull
-flips) and `GltfLodSystem` (inactive LOD children, and roots whose GLB finished
-loading after the entity was already culled).
+`matrixAutoUpdate` across such a subtree **and `matrixWorldAutoUpdate` on its
+root**, which is the part that actually removes the work: the parent's child
+loop skips a root with that flag cleared, so the nodes below are never visited
+at all (the flag walk alone still paid one call per node per frame, and
+`updateMatrixWorld` was the hottest JS frame in a simple-rpg CPU profile at ~4%
+of the main thread). Thawing restores both flags and forces one world-matrix
+refresh, so a subtree posed while skipped lands correct. Callers:
+`DistanceCullSystem` (on cull flips) and `GltfLodSystem` (inactive LOD
+children, and roots whose GLB finished loading after the entity was already
+culled).
+
+## Shadows: the second draw of everything
+
+The shadow map redraws the caster set from the light — in simple-rpg ~250 draw
+calls and 3.4M triangles per frame, a fifth of all GPU time (measured with
+`EXT_disjoint_timer_query_webgl2`: ~33ms/frame GPU, ~6.6ms of it shadows). Much
+of that is props whose shadow lands on a couple of texels and is then blurred
+away by PCSS. `ShadowCasterCullSystem` drops those: a caster is switched off
+when its **angular size** (`world radius / distance to camera`) falls under
+`DirectionalLight.shadowCullRatio` (default 0.01), with hysteresis so nothing
+flickers on the threshold, and never inside `MIN_CULL_DISTANCE` (25m). It walks
+only the *visible* graph — hidden subtrees belong to `DistanceCull`, which owns
+their `castShadow` — and skips instanced pools, whose single flag covers every
+instance and whose per-instance culling/LOD already makes that call. Measured
+on simple-rpg: 619 → 363 visible casters, GPU 31.5ms → 30.0ms. Set
+`shadow-cull-ratio="0"` on the light to disable.
 
 ## Scope
 
@@ -181,6 +204,13 @@ ordem de criação:
 
 - Group: draw
 - Updates Three.js lights
+
+#### ShadowCasterCullSystem
+
+- Group: draw, every 10 frames
+- Clears `castShadow` on visible, non-instanced meshes whose angular size is
+  below `DirectionalLight.shadowCullRatio`; restores it (with hysteresis) when
+  they grow back. `shadowCullRatio = 0` restores everything and idles.
 
 #### CameraSyncSystem
 

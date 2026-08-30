@@ -97,4 +97,45 @@ describe('setSubtreeMatrixFrozen', () => {
     setSubtreeMatrixFrozen(root, false);
     expect(isSubtreeMatrixFrozen(root)).toBe(false);
   });
+
+  test('the parent walk skips a frozen subtree entirely', () => {
+    const parent = new THREE.Object3D();
+    const { root, child } = buildSubtree();
+    parent.add(root);
+    parent.updateMatrixWorld(true);
+
+    setSubtreeMatrixFrozen(root, true);
+    // Moving the parent normally propagates into every descendant; a frozen
+    // root is not visited at all, so the subtree keeps its stale world matrix.
+    parent.position.set(9, 0, 0);
+    parent.updateMatrixWorld();
+
+    expect(root.matrixWorldAutoUpdate).toBe(false);
+    expect(child.matrixWorld.elements[12]).toBe(0);
+  });
+
+  test('thaw resyncs the subtree the parent walk skipped', () => {
+    const parent = new THREE.Object3D();
+    const { root, child } = buildSubtree();
+    parent.add(root);
+    parent.updateMatrixWorld(true);
+
+    setSubtreeMatrixFrozen(root, true);
+    parent.position.set(9, 0, 0);
+    parent.updateMatrixWorld();
+    setSubtreeMatrixFrozen(root, false);
+
+    expect(root.matrixWorldAutoUpdate).toBe(true);
+    expect(child.matrixWorld.elements[12]).toBe(9);
+  });
+
+  test('a root that was already world-manual stays manual after thaw', () => {
+    const { root } = buildSubtree();
+    root.matrixWorldAutoUpdate = false;
+
+    setSubtreeMatrixFrozen(root, true);
+    setSubtreeMatrixFrozen(root, false);
+
+    expect(root.matrixWorldAutoUpdate).toBe(false);
+  });
 });

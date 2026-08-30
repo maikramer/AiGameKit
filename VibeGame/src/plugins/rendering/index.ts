@@ -18,6 +18,15 @@ export {
 } from './texture-recipe-system';
 export { RenderingPlugin } from './plugin';
 export {
+  cullShadowCastersInSubtree,
+  DEFAULT_SHADOW_CULL_RATIO,
+  MIN_CULL_DISTANCE,
+  restoreCulledShadowCasters,
+  ShadowCasterCullSystem,
+  SHADOW_CULL_HYSTERESIS,
+  shouldKeepShadow,
+} from './shadow-caster-cull';
+export {
   clearShadowFocusEntity,
   getShadowFocusEntity,
   setShadowFocusEntity,

@@ -13,12 +13,20 @@ import * as THREE from 'three';
  *
  * Clearing `matrixAutoUpdate` removes the per-node `compose()`; with no local
  * change to propagate, `matrixWorldNeedsUpdate` stays false and the world
- * matrix multiply is skipped too. The traversal itself remains, which is cheap.
+ * matrix multiply is skipped too.
+ *
+ * Clearing `matrixWorldAutoUpdate` on the *root* removes the rest: the parent's
+ * child loop skips a subtree whose root has it cleared, so the nodes below are
+ * never visited at all. That is the part that actually costs — the flag walk
+ * alone still paid one call per node per frame across ~12k hidden nodes, and
+ * `updateMatrixWorld` was the single hottest JS frame in a simple-rpg profile
+ * (~4% of the main thread).
  *
  * Thawing restores each node's original flag and forces one world-matrix
  * refresh, so a subtree that was posed/moved while frozen pops back correct.
  */
 const savedMatrixAutoUpdate = new WeakMap<THREE.Object3D, boolean>();
+const savedMatrixWorldAutoUpdate = new WeakMap<THREE.Object3D, boolean>();
 
 export function setSubtreeMatrixFrozen(
   root: THREE.Object3D,
@@ -38,6 +46,25 @@ export function setSubtreeMatrixFrozen(
     savedMatrixAutoUpdate.delete(obj);
     obj.matrixWorldNeedsUpdate = true;
   });
+
+  if (frozen) {
+    if (!savedMatrixWorldAutoUpdate.has(root)) {
+      savedMatrixWorldAutoUpdate.set(root, root.matrixWorldAutoUpdate);
+    }
+    // Parent traversal now stops here: `Object3D.updateMatrixWorld` only
+    // recurses into children whose `matrixWorldAutoUpdate` is set (or on a
+    // forced update, which still reaches the subtree when something needs it).
+    root.matrixWorldAutoUpdate = false;
+    return;
+  }
+
+  const previousWorld = savedMatrixWorldAutoUpdate.get(root);
+  if (previousWorld === undefined) return;
+  root.matrixWorldAutoUpdate = previousWorld;
+  savedMatrixWorldAutoUpdate.delete(root);
+  // The subtree was skipped entirely while frozen, so one forced pass brings
+  // every descendant's world matrix back in sync with the pose it thawed into.
+  root.updateMatrixWorld(true);
 }
 
 /** True when the subtree root is currently frozen by {@link setSubtreeMatrixFrozen}. */

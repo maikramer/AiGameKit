@@ -57,7 +57,10 @@ browser.
   um draw call para o conjunto inteiro. Slots dinâmicos: destruir a entidade
   faz swap-remove do slot (props destrutíveis OK); `DistanceCull` →
   `setVisibilityAt`; matrizes só re-escrevem quando o Transform muda.
-  LOD via `lod1-url` / `lod2-url` + `addLOD` na mesma pool. Entidades
+  LOD via `lod1-url` / `lod2-url` + `addLOD` na mesma pool (e `addShadowLOD`
+  à mesma distância quando a pool projeta sombra — o depth pass é silhueta, não
+  precisa dos triângulos do lod0; `addShadowLOD` liga `castShadow` à força, daí
+  o guard). Entidades
   instanciadas não têm grupo próprio na cena (sem registo no group-registry →
   fora do BVH de meshes estáticos).
   **Armadilha:** `url === lod1-url` (mesma geometria partilhada) faz

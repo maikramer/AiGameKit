@@ -10,6 +10,7 @@ import {
   SpotLight,
 } from './components';
 import { pointLightRecipe, rendererRecipe, spotLightRecipe } from './recipes';
+import { ShadowCasterCullSystem } from './shadow-caster-cull';
 import { ShaderWarmupSystem } from './shader-warmup';
 import {
   CameraSyncSystem,
@@ -30,6 +31,7 @@ export const RenderingPlugin: Plugin = {
   systems: [
     TextureRecipeLoadSystem,
     DistanceCullSystem,
+    ShadowCasterCullSystem,
     MeshInstanceSystem,
     LightSyncSystem,
     PointSpotLightSyncSystem,
@@ -72,6 +74,9 @@ export const RenderingPlugin: Plugin = {
         csmCascades: 3,
         csmMaxFar: 100,
         pcss: 0,
+        // ~1% of the view: a 1m prop stops casting past 100m, a 10m rock past
+        // 1km (i.e. never, inside any sane shadow frustum).
+        shadowCullRatio: 0.01,
       },
       meshRenderer: {
         visible: 1,
