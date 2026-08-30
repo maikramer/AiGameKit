@@ -4,7 +4,8 @@ import {
   type State,
   type XMLValue,
 } from '../../../core';
-import { Transform } from '../../transforms';
+import { Transform, yawRadiansFromQuaternion } from '../../transforms';
+import { radToDeg } from '../../../shared';
 import { PlayerController } from '../../player';
 import { FACTION_TAG_NAMES, FactionComponent, Health } from '../../combat';
 import { NavMeshAgent } from '../../navmesh';
@@ -174,7 +175,18 @@ export function collectMinimapDots(
     player = {
       x: Transform.posX[eid],
       z: Transform.posZ[eid],
-      heading: Transform.eulerY[eid] || 0,
+      // Read the live quaternion, not `eulerY`: physics-driven bodies only
+      // refresh the euler mirror on frames where the rotation changed between
+      // fixed steps, so walking straight leaves `eulerY` at the last turning
+      // frame's value and the arrow would point somewhere stale.
+      heading: radToDeg(
+        yawRadiansFromQuaternion(
+          Transform.rotX[eid],
+          Transform.rotY[eid],
+          Transform.rotZ[eid],
+          Transform.rotW[eid]
+        )
+      ),
     };
     break;
   }
@@ -263,7 +275,8 @@ export function drawMinimap(
 
   for (const dot of collection.dots) {
     const rx = (dot.x - originX) * scale;
-    // North (-Z world) renders up: canvas Y grows downward, so negate world Z.
+    // North-up disc: world -Z renders up. Canvas Y also grows downward, so a
+    // world +Z delta simply maps to a downward offset — no negation needed.
     const rz = (dot.z - originZ) * scale;
     const dist = Math.hypot(rx, rz);
     let dx = rx;
@@ -328,20 +341,32 @@ export function drawMinimap(
   }
 
   if (collection.player) {
+    const playerColor = options.colors.player ?? DEFAULT_MINIMAP_COLORS.player;
     ctx.save();
     ctx.translate(cx, cy);
-    // `heading` is Transform.eulerY — degrees, yaw 0 = local +Z (south, since
-    // north is -Z). In the north-up canvas frame, facing (sin h, cos h) maps
-    // to canvas (sin h, -cos h), so the arrow rotation is atan2(sin h, -cos h)
-    // = PI - h. rotate() takes radians.
+    // `heading` is the entity yaw in degrees: yaw 0 = local +Z (south, since
+    // north is -Z), so the facing world direction is (sin h, cos h). In the
+    // north-up canvas frame that direction maps 1:1 to canvas (sin h, cos h)
+    // with canvas Y growing downward, and rotating the up-pointing arrow by
+    // PI - h lands exactly on it.
     ctx.rotate(Math.PI - (collection.player.heading * Math.PI) / 180);
+    // Soft view cone behind the arrow: at a glance the wedge reads "which way
+    // am I facing" even when the disc is crowded with dots.
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, 15, -Math.PI / 2 - 0.6, -Math.PI / 2 + 0.6);
+    ctx.closePath();
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = playerColor;
+    ctx.fill();
+    ctx.globalAlpha = 1;
     ctx.beginPath();
     ctx.moveTo(0, -7);
     ctx.lineTo(5, 6);
     ctx.lineTo(0, 3);
     ctx.lineTo(-5, 6);
     ctx.closePath();
-    ctx.fillStyle = options.colors.player ?? DEFAULT_MINIMAP_COLORS.player;
+    ctx.fillStyle = playerColor;
     ctx.strokeStyle = 'rgba(0,0,0,0.55)';
     ctx.lineWidth = 1;
     ctx.fill();
@@ -431,28 +456,53 @@ export class MinimapWidget implements HudWidget {
     wrapper.dataset.minimapId = MINIMAP_WIDGET_TYPE;
     wrapper.style.cssText = wrapperStyle(this.resolved.anchor);
 
+    // Back the canvas with device pixels so the disc stays crisp on HiDPI
+    // displays; the drawing code keeps working in CSS pixels via one scale.
+    const dpr = Math.max(1, Math.min(globalThis.devicePixelRatio || 1, 3));
     const canvas = document.createElement('canvas');
     canvas.className = 'vibe-hud-minimap-canvas';
-    canvas.width = this.resolved.size;
-    canvas.height = this.resolved.size;
+    canvas.width = this.resolved.size * dpr;
+    canvas.height = this.resolved.size * dpr;
     canvas.style.cssText = `width:${this.resolved.size}px;height:${this.resolved.size}px;border-radius:50%;display:block;`;
     wrapper.appendChild(canvas);
     layer.appendChild(wrapper);
 
     const ctx = canvas.getContext('2d');
     let lastDrawAt = -1;
+    // The character slerps its facing while the widget redraws at a fixed cadence,
+    // so raw sampling makes the arrow step. Ease along the shortest arc instead.
+    let drawnHeading: number | null = null;
 
     return {
       root: wrapper,
       update: (state: State): void => {
         if (state.headless) return;
         if (!ctx) return;
-        // ~8 Hz redraw — minimap is tactical, not pixel-critical.
+        // ~12 Hz redraw — minimap is tactical, not pixel-critical.
         const now = state.time.elapsed;
-        if (now - lastDrawAt < 0.12) return;
+        if (now - lastDrawAt < 0.08) return;
         lastDrawAt = now;
         const collection = collectMinimapDots(state, this.resolved);
-        drawMinimap(ctx, collection, this.resolved);
+        let smoothed = collection;
+        if (collection.player) {
+          const target = collection.player.heading;
+          if (drawnHeading === null) {
+            drawnHeading = target;
+          } else {
+            const delta = target - drawnHeading;
+            const shortest = Math.atan2(
+              Math.sin((delta * Math.PI) / 180),
+              Math.cos((delta * Math.PI) / 180)
+            );
+            drawnHeading += shortest * (180 / Math.PI) * 0.45;
+          }
+          smoothed = {
+            ...collection,
+            player: { ...collection.player, heading: drawnHeading },
+          };
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        drawMinimap(ctx, smoothed, this.resolved);
       },
       unmount: (): void => {
         if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);

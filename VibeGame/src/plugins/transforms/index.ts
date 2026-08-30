@@ -6,6 +6,7 @@ export {
   syncEulerFromQuaternion,
   syncQuaternionFromEuler,
   planarYawRadians,
+  yawRadiansFromQuaternion,
   setTransformYawRadians,
   setTransformFacingXZ,
   copyTransform,

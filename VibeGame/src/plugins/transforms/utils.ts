@@ -154,6 +154,22 @@ export function planarYawRadians(dx: number, dz: number): number {
 }
 
 /**
+ * Planar yaw (radians) encoded by a quaternion — the live pose of
+ * physics-driven entities. Their `eulerY` mirror is only refreshed on frames
+ * where the rotation changed between fixed steps, so a body walking straight
+ * keeps the euler of its last turning frame; the quaternion is what the
+ * renderer draws. Convention matches {@link planarYawRadians}: yaw 0 = local +Z.
+ */
+export function yawRadiansFromQuaternion(
+  x: number,
+  y: number,
+  z: number,
+  w: number
+): number {
+  return Math.atan2(2 * (w * y + x * z), 1 - 2 * (y * y + x * x));
+}
+
+/**
  * Shortest signed angle from `from` to `to`, in radians — the wrapped
  * difference so steering never spins the long way around.
  */

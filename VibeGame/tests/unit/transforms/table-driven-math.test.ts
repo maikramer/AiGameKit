@@ -12,6 +12,7 @@ import {
   setTransformYawRadians,
   syncEulerFromQuaternion,
   syncQuaternionFromEuler,
+  yawRadiansFromQuaternion,
 } from 'vibegame/transforms';
 
 const entity = 42;
@@ -28,6 +29,32 @@ describe('transforms table-driven — planarYawRadians', () => {
       expect(Math.cos(got)).toBeCloseTo(Math.cos(rad), 4);
     });
   }
+});
+
+describe('transforms table-driven — yawRadiansFromQuaternion', () => {
+  for (let deg = 0; deg < 360; deg += 3) {
+    const rad = deg * DEG;
+    it(`yawRadiansFromQuaternion deg=${deg}`, () => {
+      setTransformIdentity(Transform, entity);
+      setTransformYawRadians(Transform, entity, rad);
+      const got = yawRadiansFromQuaternion(
+        Transform.rotX[entity],
+        Transform.rotY[entity],
+        Transform.rotZ[entity],
+        Transform.rotW[entity]
+      );
+      expect(Math.sin(got)).toBeCloseTo(Math.sin(rad), 3);
+      expect(Math.cos(got)).toBeCloseTo(Math.cos(rad), 3);
+    });
+  }
+
+  it('degenerate quaternion resolves to yaw 0 instead of NaN', () => {
+    expect(yawRadiansFromQuaternion(0, 0, 0, 0)).toBe(0);
+  });
+
+  it('identity quaternion resolves to yaw 0', () => {
+    expect(yawRadiansFromQuaternion(0, 0, 0, 1)).toBe(0);
+  });
 });
 
 describe('transforms table-driven — setTransformFacingXZ', () => {

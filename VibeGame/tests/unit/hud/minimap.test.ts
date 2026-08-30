@@ -357,6 +357,41 @@ describe('collectMinimapDots', () => {
     const result = collectMinimapDots(state, defaultOptions());
     expect(result.dots.find((d) => d.category === 'player')).toBeUndefined();
   });
+
+  it('derives player heading from the live quaternion, not the stale eulerY', () => {
+    const eid = place(state, [0, 0, 0], [PlayerController]);
+    // Physics keeps `rot*` live while the `eulerY` mirror freezes on the last
+    // turning frame — walking straight with a stale euler of 0 must still
+    // report the real yaw (180° = facing -Z/north here).
+    Transform.rotY[eid] = 1;
+    Transform.rotW[eid] = 0;
+    Transform.eulerY[eid] = 0;
+    const result = collectMinimapDots(state, defaultOptions());
+    expect(Math.abs(result.player!.heading)).toBeCloseTo(180, 1);
+  });
+
+  it('player heading sweeps the full circle from the quaternion', () => {
+    const eid = place(state, [0, 0, 0], [PlayerController]);
+    for (let deg = 0; deg < 360; deg += 30) {
+      const rad = (deg * Math.PI) / 180;
+      Transform.rotY[eid] = Math.sin(rad / 2);
+      Transform.rotW[eid] = Math.cos(rad / 2);
+      Transform.eulerY[eid] = 999; // stale mirror must be ignored
+      const result = collectMinimapDots(state, defaultOptions());
+      const got = ((result.player!.heading % 360) + 360) % 360;
+      expect(got).toBeCloseTo(deg, 1);
+    }
+  });
+
+  it('player heading falls back to 0 for an unset (degenerate) quaternion', () => {
+    const eid = place(state, [0, 0, 0], [PlayerController]);
+    Transform.rotX[eid] = 0;
+    Transform.rotY[eid] = 0;
+    Transform.rotZ[eid] = 0;
+    Transform.rotW[eid] = 0;
+    const result = collectMinimapDots(state, defaultOptions());
+    expect(result.player!.heading).toBe(0);
+  });
 });
 
 describe('drawMinimap', () => {
