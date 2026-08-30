@@ -621,13 +621,26 @@ void main() {
     }
     if (uLayerCount > 0.5) {
       vec4 splat = biomeSplat();
-      groundCol = mix(groundCol, texture2D(uLayer0, vMapUv), splat.r);
-      if (uLayerCount > 1.5)
-        groundCol = mix(groundCol, texture2D(uLayer1, vMapUv), splat.g);
-      if (uLayerCount > 2.5)
-        groundCol = mix(groundCol, texture2D(uLayer2, vMapUv), splat.b);
-      if (uLayerCount > 3.5)
-        groundCol = mix(groundCol, texture2D(uLayer3, vMapUv), splat.a);
+      // Biome layers get the same cliff treatment as the base albedo: on
+      // slopes the side projection replaces the top UV, otherwise the layer
+      // texture (leaf litter, sand grains) smears along the grade.
+      vec4 l0 = texture2D(uLayer0, vMapUv);
+      vec4 l1 = uLayerCount > 1.5 ? texture2D(uLayer1, vMapUv) : l0;
+      vec4 l2 = uLayerCount > 2.5 ? texture2D(uLayer2, vMapUv) : l0;
+      vec4 l3 = uLayerCount > 3.5 ? texture2D(uLayer3, vMapUv) : l0;
+      if (triWeight > 0.001) {
+        l0 = mix(l0, texture2D(uLayer0, triSideUv), triWeight);
+        if (uLayerCount > 1.5)
+          l1 = mix(l1, texture2D(uLayer1, triSideUv), triWeight);
+        if (uLayerCount > 2.5)
+          l2 = mix(l2, texture2D(uLayer2, triSideUv), triWeight);
+        if (uLayerCount > 3.5)
+          l3 = mix(l3, texture2D(uLayer3, triSideUv), triWeight);
+      }
+      groundCol = mix(groundCol, l0, splat.r);
+      if (uLayerCount > 1.5) groundCol = mix(groundCol, l1, splat.g);
+      if (uLayerCount > 2.5) groundCol = mix(groundCol, l2, splat.b);
+      if (uLayerCount > 3.5) groundCol = mix(groundCol, l3, splat.a);
     }
     float sand = sandMask();
     if (sand > 0.001) {

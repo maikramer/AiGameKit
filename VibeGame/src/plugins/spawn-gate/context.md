@@ -2,7 +2,7 @@
 
 <!-- LLM:OVERVIEW -->
 
-Holds dynamic entities in the air at their spawn Y until the terrain below them is both heightmap-decoded and backed by a Rapier heightfield collider, then snaps them onto the ground in a single fixed tick. Without this gate, gravity can accelerate a body during the gap between the visual surface appearing and the one-sided heightfield collider being built, tunnelling the entity through the floor. The latch is one-shot: once snapped, the entity is released and never re-gated. `CharacterUnburySystem` complements the latch at runtime: any character controller that ends up below the terrain surface (late ground mutation, heightmap reload) is re-seated on the surface in one tick.
+Holds dynamic entities in the air at their spawn Y until the terrain below them is both heightmap-decoded and backed by a Rapier heightfield collider, then snaps them onto the ground in a single fixed tick. Without this gate, gravity can accelerate a body during the gap between the visual surface appearing and the one-sided heightfield collider being built, tunnelling the entity through the floor. The latch is one-shot: once snapped, the entity is released and never re-gated. `CharacterUnburySystem` complements the latch at runtime: any character controller that ends up below the terrain surface (late ground mutation, heightmap reload) is re-seated on the surface in one tick. It also *carries* characters standing outside the terrain's collider ring (`PHYSICS_COLLIDER_RADIUS` around the camera), which have no heightfield under them at all.
 
 <!-- /LLM:OVERVIEW -->
 
@@ -55,8 +55,10 @@ spawn-gate/
 
 #### CharacterUnburySystem
 
-- Group: `fixed`. No-op without terrain fields or while any heightmap is still decoding.
-- For every entity with `CharacterController` + `Rigidbody` (still-gated entities excluded — the gate owns their seating): samples the terrain surface at the entity's XZ and computes the feet Y (collider half-extent aware). When the feet sit more than `GROUND_SNAP_MAX` below the surface — inside solid ground, which down-only collider casts can never recover from — it re-seats the body at `surface + skin` (the gate's `skinDistance` when present), zeroes `velocityY`, marks `grounded`, teleports the Rapier body via `teleportEntity`, and logs a warning.
+- Group: `fixed`, `after: [CharacterMovementSystem]` (so a carried character is put back on the surface in the same step gravity pulled it off). No-op without terrain fields or while any heightmap is still decoding.
+- For every entity with `CharacterController` + `Rigidbody` (still-gated entities excluded — the gate owns their seating): samples the terrain surface at the entity's XZ and computes the feet Y (collider half-extent aware). Feet on or above the surface (within 2 cm) are left to the CCT. Below that, `isTerrainColliderAt` decides who is responsible:
+  - **No chunk collider under the entity** (outside the camera's `PHYSICS_COLLIDER_RADIUS` ring — where most creatures in an open-world scene stand): nothing holds the character up, so the sampler carries it — pinned at `surface + skin` with `velocityY = 0` and `grounded = 1`, silently. Without this the CCT reported airborne, gravity sank the character ~0.35 m, the unbury check re-seated it, and the cycle repeated ~3×/s per creature (hundreds of `re-seated entity … buried` warnings in `simple-rpg`).
+  - **Collider present and feet more than `GROUND_SNAP_MAX` below the surface** — inside solid ground, which down-only collider casts can never recover from: same re-seat, plus a warning (rate-limited to one line per entity per 10 s). This is the real anomaly the system was written for.
 
 ### Recipe
 
@@ -88,6 +90,7 @@ gateEntity(state, enemyEid, { yFallback: 40, skinDistance: 0.05 });
 
 - **Latch pattern**: once `ready === 1` the entity is never re-gated, even if the terrain later disappears or the entity moves. To re-gate, remove the `SpawnGateComponent` and call `gateEntity` again. A latched character that later ends up *below* the terrain surface is recovered by `CharacterUnburySystem`, not by re-gating.
 - **Document order**: the parser resolves the target by name at parse time. `<SpawnGate>` must appear after the target entity in the XML, otherwise it logs a warning and does nothing.
+- **Carried ≠ simulated**: a character outside the collider ring is held on the sampler surface, not physically simulated — it cannot collide with props, fall into holes, or be pushed. Its Y drifts a few centimetres between pins (gravity integrates until the 2 cm slop is exceeded). Physics resumes as soon as the camera brings a chunk collider under it.
 - **Single sample point**: the snap uses one BVH/heightmap sample at the entity's XZ. On steep slopes, overhangs, or uneven terrain the snap target may be imperfect, and there is no multi-sample smoothing here.
 - **Fixed-group dependency**: the system runs in the `fixed` group and relies on `getBodyForEntity` returning a Rapier body. Entities without a `Rigidbody` are still snapped at the `Transform` level but cannot be teleported via the body API.
 

@@ -1,7 +1,11 @@
 import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { logger } from '../../core/utils/logger';
 import { getBvhSurfaceHeight } from '../bvh';
-import { getGroundHeight, getTerrainContext } from '../terrain';
+import {
+  getGroundHeight,
+  getTerrainContext,
+  isTerrainColliderAt,
+} from '../terrain';
 import { isTerrainDynamicsBlocking } from '../terrain/utils';
 import { Transform } from '../transforms/components';
 import {
@@ -11,7 +15,7 @@ import {
   CharacterMovement,
   InterpolatedTransform,
 } from '../physics/components';
-import { getBodyForEntity } from '../physics/systems';
+import { CharacterMovementSystem, getBodyForEntity } from '../physics/systems';
 import { teleportEntity, GROUND_SNAP_MAX } from '../physics/utils';
 import {
   getBodyYForFeetAt,
@@ -176,10 +180,45 @@ const characterQuery = defineQuery([CharacterController, Rigidbody]);
  * ground mutations (bridge re-grades, heightmap reloads) can create it after
  * the one-shot spawn gate latched; this re-seats such characters on the
  * surface in a single tick instead of letting them fall forever.
+ *
+ * Terrain collision is a ring of chunk heightfields around the camera
+ * (`PHYSICS_COLLIDER_RADIUS`), not the whole field. Every character outside
+ * that ring — in an RPG, most of the roster — has literally nothing under it:
+ * the CCT reports airborne, gravity integrates, and the character sinks
+ * through the visual surface. Re-seating those is not an anomaly recovery, it
+ * is the steady state, and doing it only past `GROUND_SNAP_MAX` produced a
+ * 0.35 m sawtooth (fall → snap → fall) plus one warning per creature per
+ * ~0.3 s. Off-collider characters are instead *carried* by the height
+ * sampler: pinned flush on the surface with a centimetre of slop, silently.
+ * A character that is buried while a collider does cover it is the real
+ * anomaly the system was written for, and still warns.
  */
+
+/** Vertical slop tolerated before an off-collider character is re-pinned. */
+const UNSUPPORTED_PIN_EPSILON = 0.02;
+/** Minimum gap between two warnings about the same entity (seconds). */
+const RESEAT_WARN_COOLDOWN = 10;
+/** Cap on the cooldown book-keeping so recycled eids cannot grow it forever. */
+const RESEAT_WARN_MAX_TRACKED = 512;
+
+const reseatWarnedAt = new Map<number, number>();
+
+function warnReseat(eid: number, depth: number, elapsed: number): void {
+  const last = reseatWarnedAt.get(eid);
+  if (last !== undefined && elapsed - last < RESEAT_WARN_COOLDOWN) return;
+  if (reseatWarnedAt.size >= RESEAT_WARN_MAX_TRACKED) reseatWarnedAt.clear();
+  reseatWarnedAt.set(eid, elapsed);
+  logger.warn(
+    `[spawn-gate] re-seated entity ${eid} buried ${depth.toFixed(1)}m under the terrain surface`
+  );
+}
+
 export const CharacterUnburySystem: System = defineSystem({
   name: 'CharacterUnburySystem',
   group: 'fixed',
+  // After gravity integration, so a carried character is put back on the
+  // surface in the same step it was pulled off it (no visible dip).
+  after: [CharacterMovementSystem],
   update(state: State): void {
     if (getTerrainContext(state).size === 0) return;
     // Pre-decode the flat sampler does not describe the real surface.
@@ -193,16 +232,24 @@ export const CharacterUnburySystem: System = defineSystem({
         continue; // still held by the spawn gate — it owns seating
       }
 
-      const surfaceY = getGroundHeight(
-        state,
-        Rigidbody.posX[eid],
-        Rigidbody.posZ[eid]
-      );
+      const x = Rigidbody.posX[eid];
+      const z = Rigidbody.posZ[eid];
+      const surfaceY = getGroundHeight(state, x, z);
       const hasCollider = state.hasComponent(eid, Collider);
       const feetY = hasCollider
         ? getCharacterFeetY(state, eid, Rigidbody.posY[eid])
         : Rigidbody.posY[eid];
-      if (feetY >= surfaceY - GROUND_SNAP_MAX) continue;
+      const depth = surfaceY - feetY;
+
+      // On or above the surface: the CCT (or free fall) owns the character.
+      if (depth <= UNSUPPORTED_PIN_EPSILON) continue;
+
+      // Below it: who is responsible depends on whether physics ground exists
+      // here at all. Only ask once the character actually looks low, so the
+      // per-chunk lookup stays off the common path.
+      const supported = isTerrainColliderAt(state, x, z);
+      // Supported and within snap range — `applyCharacterMovement` re-seats it.
+      if (supported && depth <= GROUND_SNAP_MAX) continue;
 
       const skin = state.hasComponent(eid, SpawnGateComponent)
         ? SpawnGateComponent.skinDistance[eid]
@@ -223,9 +270,7 @@ export const CharacterUnburySystem: System = defineSystem({
         );
       }
 
-      logger.warn(
-        `[spawn-gate] re-seated entity ${eid} buried ${(surfaceY - feetY).toFixed(1)}m under the terrain surface`
-      );
+      if (supported) warnReseat(eid, depth, state.time.elapsed);
     }
   },
 });

@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeEach } from 'bun:test';
 import { State, Transform, Rigidbody, getTerrainContext } from 'vibegame';
+import { TerrainChunk } from '../../../src/plugins/terrain/components';
+import { getPhysicsContext } from '../../../src/plugins/physics/systems';
 import {
   CharacterController,
   CharacterMovement,
@@ -56,6 +58,25 @@ function makeCharacter(state: State, y: number): number {
   return eid;
 }
 
+/**
+ * Give the field one chunk heightfield covering the origin, plus a stub Rapier
+ * world so `isTerrainColliderAt` can see it. Mirrors the collider ring the
+ * terrain builds around the camera.
+ */
+function withChunkCollider(state: State, terrainEid: number): number {
+  getPhysicsContext(state).physicsWorld = {} as never;
+  const chunk = state.createEntity();
+  state.addComponent(chunk, TerrainChunk);
+  TerrainChunk.originX[chunk] = 0;
+  TerrainChunk.originZ[chunk] = 0;
+  TerrainChunk.size[chunk] = 64;
+  const field = getTerrainContext(state).get(terrainEid)!;
+  field.chunkColliders.set(chunk, {
+    numColliders: () => 1,
+  } as never);
+  return chunk;
+}
+
 function tick(state: State): void {
   CharacterUnburySystem.update!(state);
 }
@@ -71,6 +92,7 @@ describe('CharacterUnburySystem — buried character recovery', () => {
     state.registerComponent('rigidbody', Rigidbody);
     state.registerComponent('character-controller', CharacterController);
     state.registerComponent('character-movement', CharacterMovement);
+    state.registerComponent('terrain-chunk', TerrainChunk);
     getTerrainContext(state).set(terrainEid, makeTerrainField());
     surfaceY = getGroundHeight(state, 0, 0);
   });
@@ -87,14 +109,11 @@ describe('CharacterUnburySystem — buried character recovery', () => {
 
   it('leaves characters at or above the surface alone', () => {
     const airborne = makeCharacter(state, surfaceY + 2);
-    const grazing = makeCharacter(state, surfaceY - 0.1); // within snap margin
 
     tick(state);
 
     expect(Rigidbody.posY[airborne]).toBeCloseTo(surfaceY + 2, 5);
     expect(CharacterMovement.velocityY[airborne]).toBe(-90);
-    expect(Rigidbody.posY[grazing]).toBeCloseTo(surfaceY - 0.1, 4);
-    expect(CharacterMovement.velocityY[grazing]).toBe(-90);
   });
 
   it('does nothing without terrain fields (interiors/platform worlds)', () => {
@@ -137,5 +156,38 @@ describe('CharacterUnburySystem — buried character recovery', () => {
     tick(state);
 
     expect(Rigidbody.posY[hero]).toBeCloseTo(surfaceY + 0.2, 5);
+  });
+
+  it('carries a character with no chunk collider under it flush on the surface', () => {
+    // Terrain collision is a ring around the camera: a creature outside it has
+    // nothing to stand on, so the sampler carries it instead of letting gravity
+    // sink it (the old 0.35 m sawtooth + one warning per creature per tick).
+    const creature = makeCharacter(state, surfaceY - 0.1);
+
+    tick(state);
+
+    expect(Rigidbody.posY[creature]).toBeCloseTo(surfaceY + 0.05, 5);
+    expect(CharacterController.grounded[creature]).toBe(1);
+    expect(CharacterMovement.velocityY[creature]).toBe(0);
+  });
+
+  it('leaves a lightly sunk character to the CCT when a collider covers it', () => {
+    withChunkCollider(state, terrainEid);
+    const hero = makeCharacter(state, surfaceY - 0.1); // within GROUND_SNAP_MAX
+
+    tick(state);
+
+    expect(Rigidbody.posY[hero]).toBeCloseTo(surfaceY - 0.1, 4);
+    expect(CharacterMovement.velocityY[hero]).toBe(-90);
+  });
+
+  it('still re-seats a character buried past the snap limit under a collider', () => {
+    withChunkCollider(state, terrainEid);
+    const hero = makeCharacter(state, surfaceY - 3);
+
+    tick(state);
+
+    expect(Rigidbody.posY[hero]).toBeCloseTo(surfaceY + 0.05, 5);
+    expect(CharacterController.grounded[hero]).toBe(1);
   });
 });

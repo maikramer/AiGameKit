@@ -379,10 +379,16 @@ export function sampleTerrainSurface(
 
     const carveY = roadCarveWorldY(state, localX, localZ, data.sampler, ty);
     if (carveY !== null) {
+      // The normal must follow the CARVE surface: finite-differencing the raw
+      // heightfield here reads the pre-cut hill (gentle), so slope gates pass
+      // and carpets plant sprites up the near-vertical cut faces.
+      const carveAt = (x: number, z: number) =>
+        roadCarveWorldY(state, x - ox, z - oz, data.sampler, ty) ??
+        heightAtRawSlope(x, z);
       return {
         terrainEntity: entity,
         worldY: carveY,
-        normal: normalFromHeightSampler(heightAtRawSlope, wx, wz, effectiveEps),
+        normal: normalFromHeightSampler(carveAt, wx, wz, effectiveEps),
         roadCarve: true,
       };
     }
@@ -416,6 +422,11 @@ export function sampleTerrainSurface(
  * compute a weighted-average normal. The center probe (1,1) has 2× weight,
  * giving the actual spawn point more influence on the final normal.
  * Also returns the slope angle in radians.
+ *
+ * `matrixSpacing` defaults to the heightfield cell size (auto): probes 1 m
+ * apart on a ~2 m/cell heightfield can all land in the same cells, reading a
+ * steep ravine wall as a gentle ramp — grass carpets then pass the slope gate
+ * and smear sprites up the cliff. Cell-sized probes see the real gradient.
  */
 export function sampleTerrainSurfaceMatrix(
   state: State,
@@ -423,11 +434,23 @@ export function sampleTerrainSurfaceMatrix(
   wz: number,
   eps: number,
   surfaceEpsilonAuto = false,
-  matrixSpacing = 1.0
+  matrixSpacing = 0
 ): (TerrainSurfaceSample & { slopeAngleRad: number }) | null {
   const context = getTerrainContext(state);
   for (const [entity, data] of context) {
     if (!data.initialized) continue;
+    const spacing =
+      matrixSpacing > 0
+        ? matrixSpacing
+        : Math.max(
+            1,
+            Number.isFinite(
+              (data.sampler as { worldSize?: number }).worldSize
+            ) && Number.isFinite((data.sampler as { width?: number }).width)
+              ? (data.sampler as { worldSize: number }).worldSize /
+                  (data.sampler as { width: number }).width
+              : 1
+          );
     const ox = data.worldOffset.x;
     const oz = data.worldOffset.z;
 
@@ -460,19 +483,19 @@ export function sampleTerrainSurfaceMatrix(
 
     const carveY = roadCarveWorldY(state, localX, localZ, data.sampler, ty);
     if (carveY !== null) {
+      // Carve-aware probes: raw-height normals read the pre-cut hill, so cut
+      // faces pass slope gates and carpets smear sprites up them.
+      const carveAt = (x: number, z: number) =>
+        roadCarveWorldY(state, x - ox, z - oz, data.sampler, ty) ??
+        heightAtRawSlope(x, z);
       let totalWeight = 0;
       const avgNormal = _avgSurfaceNormal.set(0, 0, 0);
       for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
           const w = SURFACE_NORMAL_WEIGHTS[row * 3 + col]!;
-          const sx = wx + (col - 1) * matrixSpacing;
-          const sz = wz + (row - 1) * matrixSpacing;
-          const n = normalFromHeightSampler(
-            heightAtRawSlope,
-            sx,
-            sz,
-            effectiveEps
-          );
+          const sx = wx + (col - 1) * spacing;
+          const sz = wz + (row - 1) * spacing;
+          const n = normalFromHeightSampler(carveAt, sx, sz, effectiveEps);
           avgNormal.addScaledVector(n, w);
           totalWeight += w;
         }
@@ -509,8 +532,8 @@ export function sampleTerrainSurfaceMatrix(
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 3; col++) {
         const w = SURFACE_NORMAL_WEIGHTS[row * 3 + col]!;
-        const sx = wx + (col - 1) * matrixSpacing;
-        const sz = wz + (row - 1) * matrixSpacing;
+        const sx = wx + (col - 1) * spacing;
+        const sz = wz + (row - 1) * spacing;
         const n = normalFromHeightSampler(
           heightAtRawSlope,
           sx,
