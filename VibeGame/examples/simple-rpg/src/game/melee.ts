@@ -11,6 +11,7 @@
 import {
   Health,
   PlayerGltfConfig,
+  Rigidbody,
   Transform,
   WorldTransform,
   addCameraShake,
@@ -24,6 +25,7 @@ import {
   hitStop,
   isDead,
   isKeyDown,
+  markRigidbodyPoseDirty,
   playSound,
   setCombatTarget,
   setPlayerFaceTarget,
@@ -56,6 +58,14 @@ const LOCK_RANGE_SQ = (MELEE_RANGE + 0.6) * (MELEE_RANGE + 0.6);
 // Frontal cone: hit anything within ~90° of the swing direction (faces target).
 const MELEE_ARC_DOT = Math.cos((90 * Math.PI) / 180);
 const MELEE_VERTICAL = 2.5;
+// Where the blade visually reaches the target (center-to-center): a locked
+// swing steps the hero in to this distance so the impact lands on the weapon's
+// reach instead of anywhere inside the hit circle.
+const STRIKE_DISTANCE = 1.9;
+/** Longest attack step — a committed lunge, not a glide across the arena. */
+const MAX_LUNGE = 1.6;
+/** Never press closer than this to the target while stepping in. */
+const LUNGE_STANDOFF = 1.2;
 // Tightened to match the accelerated attack clip (engine default 1.4×).
 const SWING_COOLDOWN = 0.36;
 /** Chance of a critical on any swing; a hit from behind is always critical. */
@@ -127,6 +137,10 @@ interface PendingSwing {
   merchant: number | null;
   /** Position of this swing in the [J][J][J] escalation chain. */
   chain: ChainStep;
+  /** Soft-locked enemy this swing is committed to (-1 = free swing). */
+  target: number;
+  /** Attack-step meters still to walk toward the target before impact. */
+  lungeLeft: number;
 }
 
 let pending: PendingSwing | null = null;
@@ -218,6 +232,55 @@ function facingOf(eid: number, out: { x: number; z: number }): void {
 function isBackstab(target: number, apX: number, apZ: number): boolean {
   facingOf(target, _targetFwd);
   return _targetFwd.x * apX + _targetFwd.z * apZ >= BACKSTAB_DOT;
+}
+
+/**
+ * Keep a locked swing glued to its target through the whole windup: the aim is
+ * recomputed every frame, the body keeps facing the enemy, and the hero steps
+ * in until the blade reaches — so the blow lands along the target's current
+ * direction at weapon distance, not wherever it stood when [J] was pressed.
+ */
+function trackPendingSwing(
+  state: State,
+  swing: PendingSwing,
+  delayLeft: number,
+  dt: number
+): void {
+  if (swing.target < 0 || !state.exists(swing.target) || isDead(swing.target))
+    return;
+  const px = Transform.posX[swing.player];
+  const pz = Transform.posZ[swing.player];
+  const dx = Transform.posX[swing.target] - px;
+  const dz = Transform.posZ[swing.target] - pz;
+  const dist = Math.hypot(dx, dz) || 1;
+  swing.aimX = dx / dist;
+  swing.aimZ = dz / dist;
+  setPlayerFaceTarget(
+    Transform.posX[swing.target],
+    Transform.posZ[swing.target]
+  );
+  meleeOwnsFace = true;
+  faceHoldTimer = FACE_HOLD;
+
+  // Attack step sized to land exactly at weapon reach by the impact frame
+  // (capped so a late press reads as a step, not a rocket). Mirrors the
+  // melee-AI lunge contract: XZ goes into Transform AND Rigidbody with
+  // poseDirty, else the physics sync rolls the hero back to the old spot.
+  if (swing.lungeLeft > 0 && dist > LUNGE_STANDOFF) {
+    const speed = Math.min(9, swing.lungeLeft / Math.max(delayLeft, 1 / 60));
+    const step = Math.min(swing.lungeLeft, speed * dt, dist - LUNGE_STANDOFF);
+    if (step > 0 && state.hasComponent(swing.player, Rigidbody)) {
+      const nx = px + swing.aimX * step;
+      const nz = pz + swing.aimZ * step;
+      Transform.posX[swing.player] = nx;
+      Transform.posZ[swing.player] = nz;
+      Transform.dirty[swing.player] = 1;
+      Rigidbody.posX[swing.player] = nx;
+      Rigidbody.posZ[swing.player] = nz;
+      markRigidbodyPoseDirty(swing.player);
+      swing.lungeLeft -= step;
+    }
+  }
 }
 
 function landSwing(state: State, swing: PendingSwing): void {
@@ -379,8 +442,9 @@ function landSwing(state: State, swing: PendingSwing): void {
 
 /**
  * Poll [J] and, on the press edge (rate-limited by a swing cooldown), soft-lock
- * the nearest enemy and face them. Swing SFX + damage fire near the strike
- * peak (~35% of the attack clip), not on the key edge.
+ * the nearest enemy, face them and step into weapon reach. The locked swing
+ * tracks its target every frame through the windup; swing SFX + damage fire
+ * near the strike peak (~35% of the attack clip), not on the key edge.
  */
 export function updateMelee(state: State, player: number, dt: number): void {
   timeSinceAttack += dt;
@@ -394,6 +458,11 @@ export function updateMelee(state: State, player: number, dt: number): void {
   }
 
   if (pending) {
+    // Track the locked target while the windup runs: re-aim + face + attack
+    // step happen every frame up to (and including) the impact frame.
+    if (!isGamePaused() && pending.player > 0 && !isDead(pending.player)) {
+      trackPendingSwing(state, pending, pending.delay, dt);
+    }
     // Whoosh first: the blade cuts the air slightly before contact — a swing
     // SFX landing on the hit frame (or worse, on the key edge) reads late.
     if (pending.soundIn > 0) {
@@ -463,10 +532,14 @@ export function updateMelee(state: State, player: number, dt: number): void {
   // Swing direction: toward soft-lock target when one exists, else body forward.
   let aimX = _fwd.x;
   let aimZ = _fwd.z;
+  let lockTarget = -1;
+  let lungeLeft = 0;
   if (lockEid >= 0) {
     const dist = Math.sqrt(lockBest) || 1;
     aimX = lockDx / dist;
     aimZ = lockDz / dist;
+    lockTarget = lockEid;
+    lungeLeft = Math.min(Math.max(dist - STRIKE_DISTANCE, 0), MAX_LUNGE);
     setPlayerFaceTarget(Transform.posX[lockEid], Transform.posZ[lockEid]);
     meleeOwnsFace = true;
     faceHoldTimer = FACE_HOLD;
@@ -482,6 +555,8 @@ export function updateMelee(state: State, player: number, dt: number): void {
     dmg,
     merchant,
     chain: advanceChain(),
+    target: lockTarget,
+    lungeLeft,
   };
   diag.swings++;
   notePlayerAttacked();
