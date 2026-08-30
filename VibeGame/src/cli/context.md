@@ -36,7 +36,14 @@ Reports:
   warn if `url` aliases `lod1-url` or skips an existing `*_lod0.glb`
 - missing entity `script=` / `<MonoBehaviour>` under `--scripts-dir` (auto `src/scripts`)
 - empty spawners, duplicate `name=`, missing Player/camera, Terrain without heightmap
-- RoadNetwork issues; solid overlaps (XZ **and** Y); solid∩Pad/Road as warn
+- RoadNetwork issues (orphan Ways, bridge-url, span ratio) + road geometry
+  (`road-geometry.ts`): roads crossing Lake/River **water surfaces** without a
+  bridge profile (warn, with arc-length span; waterline radius/width mirrors the
+  runtime `shoreFraction`), bridges crossing no water at all (info, stale
+  `bridge-url`), authored `heights` grade above `flatten-max-grade` (warn),
+  per-point list mismatches (`heights`/`widths`/`banks` vs path points, error),
+  hairpin reversals and near-zero segments (warn)
+- solid overlaps (XZ **and** Y); solid∩Pad/Road as warn
 - GLB bounds via meshopt/quantized path (`loadGlbCollisionMesh`) — LOD deliverables OK
 
 Pads/Roads are ground — not solid↔solid errors. Exit `1` on errors (or warns with `--fail-on warn`).

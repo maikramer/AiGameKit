@@ -11,6 +11,7 @@ import {
   checkCommaCellCoords,
 } from './parse-checks';
 import { checkRoadNetworks } from './roads';
+import { checkRoadGeometry } from './road-geometry';
 import { buildAnalyzeState, checkSchema } from './schema';
 import { checkScripts, resolveScriptsDir } from './scripts';
 import type { AnalyzeOptions, AnalyzeResult, AnalyzeIssue } from './types';
@@ -122,6 +123,7 @@ export async function analyzeWorld(
   issues.push(...checkSchema(root, state));
   issues.push(...checkCityChildrenOutsideGrid(root));
   issues.push(...checkRoadNetworks(root));
+  issues.push(...checkRoadGeometry(root));
   issues.push(...checkWorld(root));
   issues.push(...checkScripts(root, scriptsDir));
 

@@ -132,7 +132,14 @@ corte e o CCT afunda enquanto os props ficam no plano congelado do pad.
 | `pathToWay(state, fromId, toId)` | BFS nos Ways da rede               |
 | `wayPathPolyline(state, ids)`    | XZ world ao longo do path          |
 
-`vibegame analyze` corre `checkRoadNetworks` (Ways órfãos, plaza↛tip gaps).
+`vibegame analyze` corre `checkRoadNetworks` (Ways órfãos, plaza↛tip gaps) e
+`checkRoadGeometry` (`cli/analyze/road-geometry.ts`): estradas a cruzar a
+superfície de água de `<Lake>`/`<River>` sem perfil bridge (warn, com span em
+arc-length; a waterline usa o mesmo `shoreFraction(depth, water-offset)` do
+runtime), pontes que não cruzam água nenhuma (info, `bridge-url` velho), grade
+dos `heights` autorados acima de `flatten-max-grade` (warn), contagens
+`heights=`/`widths=`/`banks=` ≠ pontos do path (error), hairpins e segmentos de
+comprimento ~zero (warn).
 
 ## Atributos `<Road>`
 
