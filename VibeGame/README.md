@@ -2,14 +2,6 @@
 
 A browser-based 3D game engine designed for vibe coding. Declarative HTML-like scene syntax, ECS architecture with bitecs, Three.js rendering, and game-ready features including physics, terrain, animation, audio, particles, and player controls — all out of the box.
 
-<div align="center">
-
-[![npm](https://img.shields.io/npm/v/vibegame)](https://www.npmjs.com/package/vibegame)
-[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/dylanebert/VibeGame)
-[![JSFiddle](https://img.shields.io/badge/JSFiddle-Try%20It-blue)](https://jsfiddle.net/keLsxh5t/)
-
-</div>
-
 ## Overview
 
 VibeGame is a browser-based 3D game engine built on bitecs (ECS), Three.js (rendering), and Vite (build tooling). It supports declarative scene definition via XML, GLB loading with animation, equirectangular skybox environment maps (PMREM/IBL), terrain with LOD, particle effects, 3D audio, AI steering, save/load, i18n, and more.
@@ -29,7 +21,7 @@ VibeGame is a browser-based 3D game engine built on bitecs (ECS), Three.js (rend
 ### npm / Bun
 
 ```bash
-bun install vibegame
+bun install aigamekit-vibegame
 ```
 
 ### Unified Installer (AiGameKit monorepo)
@@ -184,7 +176,7 @@ export interface Plugin {
 Plugins are registered via `DefaultPlugins` in `defaults.ts`, or added at runtime with the builder API:
 
 ```ts
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 GAME.withPlugin(SaveLoadPlugin)
   .withPlugin(I18nPlugin)
@@ -272,7 +264,7 @@ Only recipes that exist in source are listed. See the [Plugin Reference](#plugin
 <canvas id="game-canvas"></canvas>
 
 <script type="module">
-  import * as GAME from 'vibegame';
+  import * as GAME from 'aigamekit-vibegame';
   GAME.run();
 </script>
 ```
@@ -294,7 +286,7 @@ A component is a plain object literal of typed arrays (Struct-of-Arrays), declar
 </Scene>
 
 <script type="module">
-  import * as GAME from 'vibegame';
+  import * as GAME from 'aigamekit-vibegame';
 
   // Component = plain object of typed arrays (one slot per entity), `as const`.
   // Size arrays to the engine's MAX_ENTITIES capacity (100000).
@@ -333,7 +325,7 @@ The GLTF bridge (`vibegame/extras/gltf-bridge`) provides functions for loading G
 Load a static GLB into the scene. Returns a `Promise<Group>` (Three.js root object).
 
 ```ts
-import { loadGltfToScene, run } from 'vibegame';
+import { loadGltfToScene, run } from 'aigamekit-vibegame';
 
 const state = await run();
 const group = await loadGltfToScene(state, '/assets/models/prop.glb');
@@ -344,7 +336,7 @@ const group = await loadGltfToScene(state, '/assets/models/prop.glb');
 Load a GLB with embedded animation clips. Returns a `Promise<GLTF>` containing `{ scene, animations }`. Prefer this when using `GltfAnimator`.
 
 ```ts
-import { loadGltfAnimated, run } from 'vibegame';
+import { loadGltfAnimated, run } from 'aigamekit-vibegame';
 
 const state = await run();
 const gltf = await loadGltfAnimated(state, '/assets/models/hero.glb');
@@ -356,7 +348,7 @@ console.log('Clips:', gltf.animations.map(a => a.name));
 Load a GLB and wrap any embedded clips in a `GltfAnimator`. Returns `{ group, animator }` where `animator` is `null` if no clips are found.
 
 ```ts
-import { loadGltfToSceneWithAnimator, run } from 'vibegame';
+import { loadGltfToSceneWithAnimator, run } from 'aigamekit-vibegame';
 
 const state = await run();
 const { group, animator } = await loadGltfToSceneWithAnimator(state, '/assets/models/hero.glb', {
@@ -373,7 +365,7 @@ if (animator) {
 Load three LOD variants (LOD0/1/2), group them in a single `Group`, and add to the scene. Children are named `lod0`–`lod2`; only one is visible at a time.
 
 ```ts
-import { loadGltfLodToScene, run } from 'vibegame';
+import { loadGltfLodToScene, run } from 'aigamekit-vibegame';
 
 const state = await run();
 const root = await loadGltfLodToScene(state, [
@@ -388,7 +380,7 @@ const root = await loadGltfLodToScene(state, [
 Runtime animation controller for GLTF models with embedded clips. Wraps Three.js `AnimationMixer` with crossfade and state management.
 
 ```ts
-import { GltfAnimator } from 'vibegame';
+import { GltfAnimator } from 'aigamekit-vibegame';
 
 // Create from a loaded GLTF result
 const animator = new GltfAnimator(gltf, { crossfadeDuration: 0.25 });
@@ -420,7 +412,7 @@ animator.dispose();
 Load an equirectangular image (PNG/JPG/HDR), generate a PMREM environment map, and apply as scene background and environment for PBR lighting.
 
 ```ts
-import { applyEquirectSkyEnvironment, run } from 'vibegame';
+import { applyEquirectSkyEnvironment, run } from 'aigamekit-vibegame';
 
 const state = await run();
 await applyEquirectSkyEnvironment(state, '/assets/sky/equirect.png', {
@@ -437,7 +429,7 @@ await applyEquirectSkyEnvironment(state, '/assets/sky/equirect.png', {
 Auto-discover a sky texture by probing common paths (`/assets/sky/`, `/assets/skymaps/`, etc.) for files named `sky`, `environment`, `skybox`, or `equirect` with common extensions. Returns `true` if a sky was found and applied.
 
 ```ts
-import { autoLoadSkyEnvironment, run } from 'vibegame';
+import { autoLoadSkyEnvironment, run } from 'aigamekit-vibegame';
 
 const state = await run();
 const found = await autoLoadSkyEnvironment(state);
@@ -455,7 +447,7 @@ The report exposes `valid` (no error-severity issues), plus `errors`, `warnings`
 > **Note:** This is a focused engine-bundled structural validator, not the full Khronos `gltf-validator`. For exhaustive spec validation use `aigamekit-lab check glb` or the `gltf-validator` CLI.
 
 ```ts
-import { validateGltf } from 'vibegame';
+import { validateGltf } from 'aigamekit-vibegame';
 
 const report = await validateGltf('/assets/models/hero.glb');
 if (!report.valid) {
@@ -642,7 +634,7 @@ import {
   preloadSounds,
   playSound,
   resumeAudioContextOnFirstUserGesture,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 defineSoundBank({ jump: { url: '/assets/audio/jump.ogg', volume: 0.5 } });
 preloadSounds(['jump']); // queued until gesture in the browser
@@ -858,7 +850,7 @@ VibeGame/
 The `GameBuilder` provides a fluent API for configuring and running the engine:
 
 ```ts
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Add plugins
 GAME.withPlugin(SaveLoadPlugin)
@@ -927,16 +919,10 @@ See [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md) and [`docs/MONOREPO_GAME_
 
 ## Links
 
-**Upstream VibeGame (original project):** [dylanebert/vibegame on GitHub](https://github.com/dylanebert/vibegame) | [npm package](https://www.npmjs.com/package/vibegame) | [Hugging Face Space](https://huggingface.co/spaces/dylanebert/VibeGame) | [JSFiddle](https://jsfiddle.net/keLsxh5t/)
-
-**This fork in the AiGameKit monorepo:** [maikramer/AiGameKit — VibeGame/](https://github.com/maikramer/AiGameKit/tree/main/VibeGame)
-
-- [Shallot Context Manager](https://github.com/dylanebert/shallot) — AI context management for vibe coding sessions
+**Repositório:** [maikramer/AiGameKit — VibeGame/](https://github.com/maikramer/AiGameKit/tree/main/VibeGame)
 
 ---
 
 ## License
 
 MIT
-
-VibeGame is based on [vibegame](https://github.com/dylanebert/vibegame) by [dylanebert](https://github.com/dylanebert).

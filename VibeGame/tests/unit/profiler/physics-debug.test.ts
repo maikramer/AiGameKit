@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { State, Transform } from 'vibegame';
+import { State, Transform } from 'aigamekit-vibegame';
 import {
   BodyType,
   CharacterController,

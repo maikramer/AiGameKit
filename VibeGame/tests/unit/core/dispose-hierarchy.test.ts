@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { Parent, State } from 'vibegame';
+import { Parent, State } from 'aigamekit-vibegame';
 
 describe('State.dispose hierarchy', () => {
   it('invokes onDestroyAll once per entity when disposing a parent/child tree', () => {

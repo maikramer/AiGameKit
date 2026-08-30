@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { DebugPlugin } from '../../../src/plugins/debug/plugin';
 
 /**

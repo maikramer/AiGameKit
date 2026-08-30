@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { Scene, State, XMLParser, getAllEntities } from 'vibegame';
+import { Scene, State, XMLParser, getAllEntities } from 'aigamekit-vibegame';
 
 function parse(xml: string) {
   return XMLParser.parse(xml).root;

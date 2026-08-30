@@ -5,7 +5,7 @@ import {
   type Scene,
   type WebGLRenderer,
 } from 'three';
-import { Postprocessing } from 'vibegame';
+import { Postprocessing } from 'aigamekit-vibegame';
 // Side-effect import: builtin effects self-register at module load.
 import '../../../src/plugins/postprocessing/builtin-effects';
 import { getEffectDefinitions } from '../../../src/plugins/postprocessing/effect-registry';

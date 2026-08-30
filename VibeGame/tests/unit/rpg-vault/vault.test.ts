@@ -17,7 +17,7 @@ import {
   registerResourceKind,
   setCapacity,
   spendResource,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 beforeAll(() => {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');

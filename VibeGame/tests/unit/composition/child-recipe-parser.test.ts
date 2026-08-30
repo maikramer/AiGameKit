@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
-import type { Parser, Recipe } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
+import type { Parser, Recipe } from 'aigamekit-vibegame';
 import { compositionParser } from '../../../src/plugins/composition/parser';
 
 /**

@@ -10,7 +10,7 @@
 // F2 já no jogo: respawn / viagem nos marcos (src/game/travel.ts + fogueira).
 // Ainda fora: névoa, aba Registro, camadas musicais, gates de chefe.
 // Ver docs/gdd/07-producao/fases/.
-import type { State, System } from 'vibegame';
+import type { State, System } from 'aigamekit-vibegame';
 import {
   Transform,
   PlayerController,
@@ -24,7 +24,7 @@ import {
   setVisitedTargets,
   spawnFloatingText,
   unregisterInteractionTarget,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   BIOME_IDS,
   NOTA_LANDMARKS,

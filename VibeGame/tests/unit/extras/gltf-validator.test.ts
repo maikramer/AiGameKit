@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { Document, NodeIO } from '@gltf-transform/core';
-import { validateGltf } from 'vibegame';
+import { validateGltf } from 'aigamekit-vibegame';
 
 const textEncoder = new TextEncoder();
 

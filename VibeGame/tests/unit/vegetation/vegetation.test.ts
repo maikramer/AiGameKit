@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, parseXMLToEntities } from 'vibegame';
-import { TransformsPlugin } from 'vibegame/transforms';
+import { State, XMLParser, parseXMLToEntities } from 'aigamekit-vibegame';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
 import { SpawnerPlugin } from '../../../src/plugins/spawner/plugin';
 import { GltfXmlPlugin } from '../../../src/plugins/gltf-xml/plugin';
 import { VegetationPlugin } from '../../../src/plugins/vegetation/plugin';

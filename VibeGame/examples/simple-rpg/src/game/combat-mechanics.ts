@@ -34,8 +34,8 @@ import {
   spawnFloatingText,
   spawnParticleBurst,
   staggerAi,
-} from 'vibegame';
-import type { State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 import { isGamePaused } from './pause';
 import { isBossCreature } from '../scripts/creature';
 import { playerStats } from './skills';

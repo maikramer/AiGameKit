@@ -7,7 +7,7 @@ import {
   glbNeedsGeometryLoader,
   loadGlbCollisionMesh,
   parseGlbCollisionMesh,
-} from 'vibegame/physics';
+} from 'aigamekit-vibegame/physics';
 
 /**
  * Builds a minimal valid GLB: one triangle (0,0,0)/(1,0,0)/(0,1,0) with u16

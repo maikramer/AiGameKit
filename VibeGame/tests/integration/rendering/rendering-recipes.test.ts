@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, defineQuery, parseXMLToEntities } from 'vibegame';
+import { State, XMLParser, defineQuery, parseXMLToEntities } from 'aigamekit-vibegame';
 import {
   MainCamera,
   RenderContext,
   MeshRenderer,
   RenderingPlugin,
   setCanvasElement,
-} from 'vibegame/rendering';
-import { Transform, TransformsPlugin } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/rendering';
+import { Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
 describe('Rendering Recipes', () => {
   let state: State;

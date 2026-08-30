@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { YukaAiPlugin } from '../../../src/plugins/ai-yuka/plugin';
 import { CombatPlugin } from '../../../src/plugins/combat/plugin';
 import { CityLayoutPlugin } from '../../../src/plugins/city-layout/plugin';

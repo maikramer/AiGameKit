@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import type { State } from 'vibegame';
-import { Transform } from 'vibegame';
+import type { State } from 'aigamekit-vibegame';
+import { Transform } from 'aigamekit-vibegame';
 import {
   applyCctKnockback,
   clearCctKnockbacks,
   isCctKnockbackActive,
   tickCctKnockbacks,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const EID = 7;
 

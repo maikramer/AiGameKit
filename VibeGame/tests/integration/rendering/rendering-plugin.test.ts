@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, defineQuery } from 'vibegame';
+import { State, defineQuery } from 'aigamekit-vibegame';
 import {
   AmbientLight,
   DirectionalLight,
   MainCamera,
   MeshRenderer,
   RenderingPlugin,
-} from 'vibegame/rendering';
+} from 'aigamekit-vibegame/rendering';
 import {
   Transform,
   TransformsPlugin,
   WorldTransform,
-} from 'vibegame/transforms';
+} from 'aigamekit-vibegame/transforms';
 
 describe('Rendering Plugin Integration', () => {
   let state: State;

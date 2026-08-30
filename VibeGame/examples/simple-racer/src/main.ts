@@ -9,7 +9,7 @@
  *     models have actually streamed in,
  *  3. wires restart (R) and the music layer.
  */
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 import { registerGameSounds, preloadGameSounds } from './game/sounds';
 import {
   BED_MARGIN,

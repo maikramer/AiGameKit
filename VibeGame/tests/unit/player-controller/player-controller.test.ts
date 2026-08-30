@@ -4,7 +4,7 @@ import {
   PlayerControllerPlugin,
   State,
   ThirdPersonCamera,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 

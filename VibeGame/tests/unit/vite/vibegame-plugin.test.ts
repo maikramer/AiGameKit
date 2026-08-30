@@ -8,7 +8,7 @@ import {
 
 function getVibegamePlugin(): Plugin {
   const plugins = vibegame();
-  const named = plugins.find((p) => p.name === 'vibegame');
+  const named = plugins.find((p) => p.name === 'aigamekit-vibegame');
   expect(named).toBeDefined();
   return named!;
 }
@@ -34,12 +34,12 @@ describe('vibegame() plugin structure', () => {
 
   it('includes core vibegame + full-reload helpers', () => {
     const names = vibegame().map((p) => p.name);
-    expect(names).toContain('vibegame');
+    expect(names).toContain('aigamekit-vibegame');
     expect(names).toContain('vibegame-force-full-reload');
   });
 
   it('names the config plugin vibegame', () => {
-    expect(getVibegamePlugin().name).toBe('vibegame');
+    expect(getVibegamePlugin().name).toBe('aigamekit-vibegame');
   });
 
   it('exposes a config hook', () => {

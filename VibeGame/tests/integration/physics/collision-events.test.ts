@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
+import { State, TIME_CONSTANTS, defineQuery } from 'aigamekit-vibegame';
 import {
   Rigidbody,
   BodyType,
@@ -10,8 +10,8 @@ import {
   PhysicsWorld,
   TouchedEvent,
   TouchEndedEvent,
-} from 'vibegame/physics';
-import { Transform } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { Transform } from 'aigamekit-vibegame/transforms';
 
 describe('Collision Events Integration', () => {
   let state: State;

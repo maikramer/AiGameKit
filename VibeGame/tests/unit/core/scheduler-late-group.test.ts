@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import type { System } from 'vibegame';
-import { State } from 'vibegame';
+import type { System } from 'aigamekit-vibegame';
+import { State } from 'aigamekit-vibegame';
 
 describe('Scheduler late group', () => {
   let state: State;

@@ -13,7 +13,7 @@ import {
   syncEulerFromQuaternion,
   syncQuaternionFromEuler,
   yawRadiansFromQuaternion,
-} from 'vibegame/transforms';
+} from 'aigamekit-vibegame/transforms';
 
 const entity = 42;
 const DEG = Math.PI / 180;

@@ -20,9 +20,9 @@ import {
   AiStateComponent,
   getMeleeAiConfig,
   hasLineOfSight,
-} from 'vibegame';
-import type { State } from 'vibegame';
-import { defineQuery, PlayerController, Health } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
+import { defineQuery, PlayerController, Health } from 'aigamekit-vibegame';
 import { aliveEnemyCount } from './enemy-registry';
 
 const playerQuery = defineQuery([PlayerController]);

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
-import { fromEuler } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
+import { fromEuler } from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 

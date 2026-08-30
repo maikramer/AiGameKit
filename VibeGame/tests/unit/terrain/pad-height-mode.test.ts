@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { Terrain, TerrainPad } from '../../../src/plugins/terrain/components';
 import { TerrainPadApplySystem } from '../../../src/plugins/terrain/pad-systems';
 import { TerrainPlugin } from '../../../src/plugins/terrain/plugin';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';
 import { sampleHeightAt } from '../../../src/plugins/terrain/height-sampler';
 import { getTerrainContext } from '../../../src/plugins/terrain/utils';
-import { Transform, TransformsPlugin } from 'vibegame/transforms';
+import { Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
 const RES = 257;
 const WORLD = 512;

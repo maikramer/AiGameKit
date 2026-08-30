@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { ParticlesPlugin } from 'vibegame';
+import { ParticlesPlugin } from 'aigamekit-vibegame';
 import {
   createPresetParams,
   presetIndex,

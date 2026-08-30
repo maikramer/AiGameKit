@@ -3,7 +3,7 @@ import { JSDOM } from 'jsdom';
 import {
   validateRecipeAttributes,
   validateXMLContent,
-} from 'vibegame/core/validation';
+} from 'aigamekit-vibegame/core/validation';
 
 describe('Recipe Validation Integration', () => {
   beforeEach(() => {

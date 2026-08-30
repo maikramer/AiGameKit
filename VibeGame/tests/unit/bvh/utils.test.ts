@@ -9,8 +9,8 @@ import {
   registerBvhMesh,
   unregisterBvhForEntity,
   unregisterBvhMesh,
-} from 'vibegame';
-import type { BvhRaycastHit } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { BvhRaycastHit } from 'aigamekit-vibegame';
 
 function makeTriangleGeometry(): THREE.BufferGeometry {
   const geo = new THREE.BufferGeometry();

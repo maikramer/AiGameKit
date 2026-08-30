@@ -20,8 +20,8 @@ import {
   registerGlobalSaveSerializer,
   registerHudStatSource,
   t,
-} from 'vibegame';
-import type { State, System } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State, System } from 'aigamekit-vibegame';
 import { showToast } from '../../../shared/src/ui';
 import { regenStamina, staminaValue } from './stamina';
 import {

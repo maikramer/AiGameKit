@@ -8,7 +8,7 @@ import {
   getBvhSurfaceHeight,
   registerBvhMesh,
   unregisterBvhMesh,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 function flatPlane(y: number, size: number): THREE.BufferGeometry {
   const h = size / 2;

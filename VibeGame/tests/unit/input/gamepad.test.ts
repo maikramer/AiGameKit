@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   InputPlugin,
   InputState,
   GamepadInput,
   applyDeadzone,
-} from 'vibegame/input';
-import { setRenderingCanvas } from 'vibegame/rendering';
+} from 'aigamekit-vibegame/input';
+import { setRenderingCanvas } from 'aigamekit-vibegame/rendering';
 import {
   setTargetCanvas,
   setFocusedCanvas,

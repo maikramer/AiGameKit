@@ -20,7 +20,7 @@ import { I18nAutoDefaultsSystem, I18nResolveSystem } from './systems';
  * @example
  * ```ts
  * // Register hud first, then i18n:
- * import { withPlugin } from 'vibegame';
+ * import { withPlugin } from 'aigamekit-vibegame';
  * withPlugin(HudPlugin).withPlugin(I18nPlugin).run();
  * ```
  *

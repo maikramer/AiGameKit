@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, TIME_CONSTANTS } from 'vibegame';
+import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
 
-import { MAX_ENTITIES } from 'vibegame';
+import { MAX_ENTITIES } from 'aigamekit-vibegame';
 
 describe('GameBuilder', () => {
   let builder: any;

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { GltfAnimationState, State } from 'vibegame';
+import { GltfAnimationState, State } from 'aigamekit-vibegame';
 import { matchClipKeyword } from '../../../src/extras/gltf-animator';
 import {
   getAnimator,

@@ -2,7 +2,7 @@
 // Tocar (F) cura o herói por inteiro: é o único ponto de cura entre a ponte
 // sul e o Bog Warden. Módulo próprio por POI: ver nota em poi/watch-tome.ts.
 import { createMysticObject } from '../../game/mystic.ts';
-import { healHealth } from 'vibegame';
+import { healHealth } from 'aigamekit-vibegame';
 
 const HEAL_REWARD = 70;
 

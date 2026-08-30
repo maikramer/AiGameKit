@@ -17,8 +17,8 @@ import {
   onEvent,
   parseXMLToEntities,
   spendSkillPoint,
-} from 'vibegame';
-import type { SkillDef } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { SkillDef } from 'aigamekit-vibegame';
 
 beforeAll(() => {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');

@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import * as THREE from 'three';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   AmbientLight,
   DirectionalLight,
   MainCamera,
   MeshRenderer,
   PointLight,
-} from 'vibegame/rendering';
+} from 'aigamekit-vibegame/rendering';
 import {
   findAvailableInstanceSlot,
   initializeInstancedMesh,

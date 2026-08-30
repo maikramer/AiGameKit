@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Importing the barrel first is load-order, not decoration: reaching straight
 // into `rendering/systems` pulls the plugin module in mid-initialisation and
 // it throws on its own system list.
-import 'vibegame';
+import 'aigamekit-vibegame';
 import { snapShadowCenterToTexels } from '../../../src/plugins/rendering/systems';
 
 /**

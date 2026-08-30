@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
-import { Rigidbody, BodyType, Collider, ColliderShape } from 'vibegame/physics';
+import { State } from 'aigamekit-vibegame';
+import { Rigidbody, BodyType, Collider, ColliderShape } from 'aigamekit-vibegame/physics';
 
 describe('Physics Component Behavior', () => {
   let state: State;

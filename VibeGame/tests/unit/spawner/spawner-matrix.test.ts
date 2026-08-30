@@ -11,7 +11,7 @@ import {
   roleToProfile,
   type SpawnGroupProfileId,
   yawAnglesFromStepDeg,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { normalizeChildTemplateProfileId } from '../../../src/plugins/spawner/profiles';
 import type { XMLValue } from '../../../src/core/xml/types';
 import {

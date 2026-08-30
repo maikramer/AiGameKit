@@ -4,8 +4,8 @@ import {
   validateXMLContent,
   validateHTMLContent,
   validateParsedElement,
-} from 'vibegame/core/validation';
-import { XMLParser } from 'vibegame';
+} from 'aigamekit-vibegame/core/validation';
+import { XMLParser } from 'aigamekit-vibegame';
 
 describe('XML Validation Integration', () => {
   beforeEach(() => {

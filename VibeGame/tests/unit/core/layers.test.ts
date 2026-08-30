@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, LayerMask } from 'vibegame';
+import { State, LayerMask } from 'aigamekit-vibegame';
 
 describe('Layer system', () => {
   let state: State;

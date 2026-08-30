@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { Object3D } from 'three';
-import { findRightHandBone } from 'vibegame';
+import { findRightHandBone } from 'aigamekit-vibegame';
 
 function rigWith(name: string): Object3D {
   const root = new Object3D();

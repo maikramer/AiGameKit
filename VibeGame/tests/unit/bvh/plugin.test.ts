@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { beforeEach } from 'bun:test';
-import { State } from 'vibegame';
-import { BvhPlugin, BvhTarget } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
+import { BvhPlugin, BvhTarget } from 'aigamekit-vibegame';
 
 describe('BvhPlugin shape', () => {
   it('registra dois sistemas (terrain + static mesh) no grupo simulation', () => {

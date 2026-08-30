@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { I18nText } from '../../../src/plugins/i18n/components';
 
 const I18N_FIELDS = ['keyIndex', 'resolved'] as const;

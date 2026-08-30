@@ -7,9 +7,9 @@ import {
   setRoadData,
   getRoadData,
   type RoadGeometryOptions,
-} from 'vibegame/road';
+} from 'aigamekit-vibegame/road';
 import { deleteRoadData } from '../../../src/plugins/road/components';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 
 function baseOpts(
   overrides: Partial<RoadGeometryOptions> = {}

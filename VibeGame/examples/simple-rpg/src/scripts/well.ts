@@ -6,8 +6,8 @@ import {
   healHealth,
   registerInteractionTarget,
   playSound,
-} from 'vibegame';
-import type { MonoBehaviourContext } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { MonoBehaviourContext } from 'aigamekit-vibegame';
 import { isGamePaused } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';
 import { showToast } from '../../../shared/src/ui';

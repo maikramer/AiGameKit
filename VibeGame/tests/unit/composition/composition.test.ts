@@ -8,7 +8,7 @@ import {
   isPrimitiveTag,
   parsePrimitiveSpec,
   type PrimitiveSpec,
-} from 'vibegame/composition';
+} from 'aigamekit-vibegame/composition';
 
 type StandardMat = {
   color: { r: number; g: number; b: number };

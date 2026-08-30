@@ -2,18 +2,18 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import * as GAME from 'vibegame';
-import { DefaultPlugins } from 'vibegame/defaults';
-import { AnimationPlugin } from 'vibegame/animation';
-import { InputPlugin } from 'vibegame/input';
-import { OrbitCameraPlugin } from 'vibegame/orbit-camera';
-import { PhysicsPlugin } from 'vibegame/physics';
-import { PlayerPlugin } from 'vibegame/player';
-import { RenderingPlugin } from 'vibegame/rendering';
-import { StartupPlugin } from 'vibegame/startup';
-import { TransformsPlugin } from 'vibegame/transforms';
+import * as GAME from 'aigamekit-vibegame';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
+import { AnimationPlugin } from 'aigamekit-vibegame/animation';
+import { InputPlugin } from 'aigamekit-vibegame/input';
+import { OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
+import { PhysicsPlugin } from 'aigamekit-vibegame/physics';
+import { PlayerPlugin } from 'aigamekit-vibegame/player';
+import { RenderingPlugin } from 'aigamekit-vibegame/rendering';
+import { StartupPlugin } from 'aigamekit-vibegame/startup';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
-import { MAX_ENTITIES } from 'vibegame';
+import { MAX_ENTITIES } from 'aigamekit-vibegame';
 
 describe('Global API', () => {
   const prev = {

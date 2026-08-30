@@ -13,7 +13,7 @@ import {
   levelUp,
   onEvent,
   setProgressionConfig,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   applyProgressionEntitySnapshot,
   getProgressionEntitySnapshot,

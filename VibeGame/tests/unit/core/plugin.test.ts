@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 
-import type { ParsedElement, Plugin, ParserParams } from 'vibegame';
-import { State, TIME_CONSTANTS, ParseContext } from 'vibegame';
+import type { ParsedElement, Plugin, ParserParams } from 'aigamekit-vibegame';
+import { State, TIME_CONSTANTS, ParseContext } from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 

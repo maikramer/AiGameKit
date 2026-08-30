@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, TIME_CONSTANTS, XMLParser, parseXMLToEntities } from 'vibegame';
+import { State, TIME_CONSTANTS, XMLParser, parseXMLToEntities } from 'aigamekit-vibegame';
 import {
   TransformsPlugin,
   Transform,
   WorldTransform,
   Parent,
-} from 'vibegame/transforms';
+} from 'aigamekit-vibegame/transforms';
 
 describe('Transform XML Behavior', () => {
   let state: State;

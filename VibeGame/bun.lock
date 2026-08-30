@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "vibegame",
+      "name": "aigamekit-vibegame",
       "dependencies": {
         "@dimforge/rapier3d-compat": "^0.20.0",
         "@gltf-transform/core": "^4.4.2",

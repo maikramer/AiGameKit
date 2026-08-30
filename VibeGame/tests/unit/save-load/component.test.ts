@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { Serializable } from '../../../src/plugins/save-load/components';
 
 const SERIALIZABLE_FIELDS = ['flag', 'serializationId'] as const;

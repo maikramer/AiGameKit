@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import * as THREE from 'three';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   clearGltfBoundsCache,
   getGltfLocalYBounds,

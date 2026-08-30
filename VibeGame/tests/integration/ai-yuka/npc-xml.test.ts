@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, parseXMLToEntities } from 'vibegame';
+import { State, XMLParser, parseXMLToEntities } from 'aigamekit-vibegame';
 import {
   YukaAgentComponent,
   YUKA_BEHAVIOR_FLEE,

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   DirectionalLight,
   RenderingPlugin,
   getRenderingContext,
-} from 'vibegame/rendering';
-import { TransformsPlugin } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/rendering';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
 import { LightSyncSystem } from '../../../src/plugins/rendering/systems';
 
 describe('Shadow camera sync', () => {

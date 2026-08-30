@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from 'bun:test';
-import { normalFromHeightSampler } from 'vibegame';
+import { normalFromHeightSampler } from 'aigamekit-vibegame';
 
 describe('normalFromHeightSampler', () => {
   it('plano inclinado h = 0.1*x + 0.2*z', () => {

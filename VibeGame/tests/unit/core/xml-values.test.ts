@@ -7,7 +7,7 @@ import {
   parseVec3Attr,
   splitNumbers,
   splitTokens,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('parseNumberAttr', () => {
   it('returns the fallback for missing / null / empty values', () => {

@@ -12,8 +12,8 @@ import {
   setTrackedQuest,
   setInputMovementSuppressed,
   playSound,
-} from 'vibegame';
-import type { MonoBehaviourContext, QuestDef, State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { MonoBehaviourContext, QuestDef, State } from 'aigamekit-vibegame';
 import { isGamePaused, setGameModal } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';
 import { showToast } from '../../../shared/src/ui';

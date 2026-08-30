@@ -19,7 +19,7 @@ import {
   setLoadingScreenText,
   _resetGltfLoadTrackingForTests,
   _trackGltfLoadForTests,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   cancelLoadingFade,
   getLoadingScreenText as getTextDirect,

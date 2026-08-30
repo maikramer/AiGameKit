@@ -6,12 +6,12 @@ import {
   XMLParser,
   parseXMLToEntities,
   getAllEntities,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   startCoroutine,
   getActiveCoroutines,
   CoroutineRunnerSystem,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 

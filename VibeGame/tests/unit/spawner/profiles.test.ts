@@ -8,7 +8,7 @@ import {
   resolveGroupSpawnFields,
   roleToProfile,
   yawAnglesFromStepDeg,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('spawn profiles', () => {
   it('tree define align, offset e escala', () => {

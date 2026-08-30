@@ -15,7 +15,7 @@
  * with the racing plugin, so hitting one costs you the corner.
  */
 import * as THREE from 'three';
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 /** Pack folder under `/assets/meshes/` (Crystal Vale shared GLBs). */
 type MeshPack = 'village' | 'forest' | 'infra' | 'props';

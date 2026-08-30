@@ -37,7 +37,7 @@ export function vibegame(options: VibegameOptions = {}): Plugin[] {
     ...(shared ? [vibegameSharedAssets(shared)] : []),
     silenceTyprOpentypeNoise(),
     {
-      name: 'vibegame',
+      name: 'aigamekit-vibegame',
       config: (config) => {
         config.resolve = config.resolve || {};
         config.resolve.alias = {

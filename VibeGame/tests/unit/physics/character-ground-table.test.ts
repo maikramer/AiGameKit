@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   Collider,
   ColliderShape,
   GROUND_CONTACT_SKIN,
   getBodyYForFeetAt,
   getCharacterFeetY,
-} from 'vibegame/physics';
+} from 'aigamekit-vibegame/physics';
 
 describe('physics character-ground table-driven', () => {
   let state: State;

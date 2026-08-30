@@ -8,14 +8,14 @@ import {
   State,
   clearShadowFocusEntity,
   getShadowFocusEntity,
-} from 'vibegame';
-import { InputState, InputPlugin } from 'vibegame/input';
-import { MainCamera, RenderingPlugin } from 'vibegame/rendering';
+} from 'aigamekit-vibegame';
+import { InputState, InputPlugin } from 'aigamekit-vibegame/input';
+import { MainCamera, RenderingPlugin } from 'aigamekit-vibegame/rendering';
 import {
   Transform,
   TransformsPlugin,
   WorldTransform,
-} from 'vibegame/transforms';
+} from 'aigamekit-vibegame/transforms';
 
 /** Drive the draw-group pose system a fixed number of times. */
 function tick(state: State, frames: number, dt = 1 / 60): void {

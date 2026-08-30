@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 import { WeatherComponent } from '../../../src/plugins/weather/components';
 import {

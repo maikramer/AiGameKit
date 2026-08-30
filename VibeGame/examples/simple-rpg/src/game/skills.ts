@@ -3,8 +3,8 @@
 // pillar). Spending happens in the engine pause menu's SkillsTab; this module
 // only (a) grants points and (b) registers the skill definitions the SkillsTab
 // reads from the data registry.
-import { ProgressionComponent, getDataRegistry } from 'vibegame';
-import type { SkillDef, State } from 'vibegame';
+import { ProgressionComponent, getDataRegistry } from 'aigamekit-vibegame';
+import type { SkillDef, State } from 'aigamekit-vibegame';
 import { engineState, playerEid } from './engine-bridge';
 
 // Resolved player progress shared across gameplay modules.

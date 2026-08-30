@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
-import type { Plugin, System } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
+import type { Plugin, System } from 'aigamekit-vibegame';
 import { RaycastPlugin } from '../../../src/plugins/raycast/plugin';
 
 describe('State.registerPlugin dedupe', () => {

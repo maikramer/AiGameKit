@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, defineQuery, parseXMLToEntities } from 'vibegame';
-import { AnimatedCharacter, AnimationPlugin } from 'vibegame/animation';
-import { CharacterController, PhysicsPlugin } from 'vibegame/physics';
-import { Transform, TransformsPlugin } from 'vibegame/transforms';
+import { State, XMLParser, defineQuery, parseXMLToEntities } from 'aigamekit-vibegame';
+import { AnimatedCharacter, AnimationPlugin } from 'aigamekit-vibegame/animation';
+import { CharacterController, PhysicsPlugin } from 'aigamekit-vibegame/physics';
+import { Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
 describe('Animation Plugin', () => {
   let state: State;

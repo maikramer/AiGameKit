@@ -5,7 +5,7 @@ import {
   type NavMeshBakeConfig,
   prefetchNavmeshObstacles,
   State,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const FLAT_CONFIG: NavMeshBakeConfig = {
   cs: 0.5,

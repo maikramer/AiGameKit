@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
-import { InputState } from 'vibegame/input';
-import { OrbitCamera, OrbitCameraPlugin } from 'vibegame/orbit-camera';
-import { ThirdPersonCamera, ThirdPersonCameraPlugin } from 'vibegame';
-import { PlayerController, PlayerPlugin } from 'vibegame/player';
+import { State } from 'aigamekit-vibegame';
+import { InputState } from 'aigamekit-vibegame/input';
+import { OrbitCamera, OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
+import { ThirdPersonCamera, ThirdPersonCameraPlugin } from 'aigamekit-vibegame';
+import { PlayerController, PlayerPlugin } from 'aigamekit-vibegame/player';
 import { PlayerCameraLinkingSystem } from '../../../src/plugins/player/systems';
-import { MainCamera } from 'vibegame/rendering';
-import { Transform, TransformsPlugin } from 'vibegame/transforms';
+import { MainCamera } from 'aigamekit-vibegame/rendering';
+import { Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
 describe('PlayerCameraLinkingSystem', () => {
   let state: State;

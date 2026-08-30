@@ -14,21 +14,21 @@
     "test": "node index.js test-project"
   },
   "keywords": [
-    "vibegame",
+    "aigamekit-vibegame",
     "game-engine",
     "create",
     "scaffold",
     "template"
   ],
-  "author": "dylanebert",
+  "author": "AiGameKit Project",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dylanebert/vibegame.git"
+    "url": "git+https://github.com/maikramer/AiGameKit.git"
   },
-  "homepage": "https://github.com/dylanebert/vibegame#readme",
+  "homepage": "https://github.com/maikramer/AiGameKit/tree/main/VibeGame#readme",
   "bugs": {
-    "url": "https://github.com/dylanebert/vibegame/issues"
+    "url": "https://github.com/maikramer/AiGameKit/issues"
   },
   "dependencies": {
     "kolorist": "^1.8.0"

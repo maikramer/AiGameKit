@@ -3,7 +3,7 @@ import {
   getGroupSpawnDefaults,
   isKnownGroupProfileForTests,
   resolveGroupSpawnFields,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('place profile (entity place= + perfil place)', () => {
   it('place define align, escala fixa e declive permissivo', () => {

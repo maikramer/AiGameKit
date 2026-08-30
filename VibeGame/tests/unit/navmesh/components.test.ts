@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { NavMeshAgent, NavMeshSurface, NavMeshWalkable } from 'vibegame';
+import { NavMeshAgent, NavMeshSurface, NavMeshWalkable } from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 

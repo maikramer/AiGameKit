@@ -5,7 +5,7 @@ import {
   getTerrainContext,
   sampleTerrainHeight,
   getGroundHeight,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import type { TerrainEntityData } from '../../../src/plugins/terrain/utils';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';
 

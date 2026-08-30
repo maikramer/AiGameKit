@@ -8,7 +8,7 @@ import {
   GltfPending,
   gltfAssetsReady,
   State,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('gltf boot assets gate', () => {
   afterEach(() => {

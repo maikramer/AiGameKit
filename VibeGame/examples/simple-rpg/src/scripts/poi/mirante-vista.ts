@@ -1,7 +1,7 @@
 // O Cairn do Mirante — no alto da borda sul da caldeira (-605,-725).
 // Contemplar (F) rende experiência: ver o mundo inteiro também é anotar.
 import { createMysticObject } from '../../game/mystic.ts';
-import { addXp } from 'vibegame';
+import { addXp } from 'aigamekit-vibegame';
 
 const XP_REWARD = 80;
 

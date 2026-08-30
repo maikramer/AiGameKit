@@ -1,25 +1,25 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, defineQuery, parseXMLToEntities } from 'vibegame';
-import { DefaultPlugins } from 'vibegame/defaults';
+import { State, XMLParser, defineQuery, parseXMLToEntities } from 'aigamekit-vibegame';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
 import {
   AmbientLight,
   DirectionalLight,
   MainCamera,
   RenderingPlugin,
-} from 'vibegame/rendering';
-import { AnimatedCharacter, HasAnimator } from 'vibegame/animation';
+} from 'aigamekit-vibegame/rendering';
+import { AnimatedCharacter, HasAnimator } from 'aigamekit-vibegame/animation';
 import {
   Rigidbody,
   CharacterController,
   CharacterMovement,
   Collider,
-} from 'vibegame/physics';
-import { InputState } from 'vibegame/input';
-import { OrbitCamera } from 'vibegame/orbit-camera';
-import { Parent, Transform, TransformsPlugin } from 'vibegame/transforms';
-import { PlayerController } from 'vibegame/player';
-import { StartupPlugin } from 'vibegame/startup';
+} from 'aigamekit-vibegame/physics';
+import { InputState } from 'aigamekit-vibegame/input';
+import { OrbitCamera } from 'aigamekit-vibegame/orbit-camera';
+import { Parent, Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
+import { PlayerController } from 'aigamekit-vibegame/player';
+import { StartupPlugin } from 'aigamekit-vibegame/startup';
 
 describe('Startup Plugin - Auto-Creation', () => {
   beforeEach(() => {

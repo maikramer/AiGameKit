@@ -24,6 +24,6 @@ export default defineConfig({
     sourcemap: true,
   },
   optimizeDeps: {
-    exclude: ['vibegame'],
+    exclude: ['aigamekit-vibegame'],
   },
 });

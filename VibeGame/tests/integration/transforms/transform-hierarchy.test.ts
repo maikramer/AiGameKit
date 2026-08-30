@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS } from 'vibegame';
+import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
 import {
   Parent,
   Transform,
   TransformsPlugin,
   WorldTransform,
-} from 'vibegame/transforms';
+} from 'aigamekit-vibegame/transforms';
 
 describe('Transform Hierarchy System', () => {
   let state: State;

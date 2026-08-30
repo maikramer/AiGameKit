@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { GltfAnimator } from 'vibegame';
+import type { GltfAnimator } from 'aigamekit-vibegame';
 import { NpcIdleAnimator } from '../../../examples/simple-rpg/src/game/npc-anims';
 
 /**

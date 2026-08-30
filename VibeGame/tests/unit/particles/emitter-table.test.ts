@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { ParticleEmitter } from '../../../src/plugins/particles/components';
 
 const DEG = Math.PI / 180;

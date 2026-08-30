@@ -7,7 +7,7 @@ import {
   it,
   mock,
 } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { AudioSource } from '../../../src/plugins/audio/components';
 import { AudioPlugin } from '../../../src/plugins/audio/plugin';
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { getAllEntities } from 'bitecs';
-import { State, defineQuery } from 'vibegame';
+import { State, defineQuery } from 'aigamekit-vibegame';
 import { StartupPlugin } from '../../../src/plugins/startup';
 import {
   CameraStartupSystem,

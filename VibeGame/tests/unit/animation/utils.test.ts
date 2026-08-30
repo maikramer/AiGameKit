@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, Parent } from 'vibegame';
+import { State, Parent } from 'aigamekit-vibegame';
 import { Transform } from '../../../src/plugins/transforms';
 import { MeshRenderer } from '../../../src/plugins/rendering';
 import {

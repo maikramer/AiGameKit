@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, addTag, getTagId, getTagName } from 'vibegame';
+import { State, addTag, getTagId, getTagName } from 'aigamekit-vibegame';
 
 describe('Tag system', () => {
   let state: State;

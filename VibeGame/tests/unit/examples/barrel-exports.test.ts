@@ -132,7 +132,7 @@ describe('examples import only real vibegame exports', () => {
     if (imports.length === 0) continue;
     const rel = path.relative(EXAMPLES_ROOT, file);
 
-    it(`${rel} — every 'vibegame' import resolves to a real export`, () => {
+    it(`${rel} — every 'aigamekit-vibegame' import resolves to a real export`, () => {
       const missing = imports
         .filter(({ subpath }) => subpath === '')
         .filter(({ name }) => !exports.has(name))

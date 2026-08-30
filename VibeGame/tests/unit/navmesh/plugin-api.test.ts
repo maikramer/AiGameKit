@@ -15,7 +15,7 @@ import {
   navMeshWalkableRecipe,
   resetLoadingGate,
   State,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('NavMesh recipes', () => {
   it('declares the surface recipe standalone and the walkable/agent recipes as merge components', () => {

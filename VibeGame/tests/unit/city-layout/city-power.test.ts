@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, parseXMLToEntities } from 'vibegame';
-import { DefaultPlugins } from 'vibegame/defaults';
+import { State, XMLParser, parseXMLToEntities } from 'aigamekit-vibegame';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
 import { listAllPrefabs } from '../../../src/plugins/city-layout/prefabs';
 import { getCompositionData } from '../../../src/plugins/composition/primitives';
 import { getRoadData } from '../../../src/plugins/road';

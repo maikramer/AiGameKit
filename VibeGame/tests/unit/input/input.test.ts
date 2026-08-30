@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, System, defineQuery } from 'vibegame';
+import { State, System, defineQuery } from 'aigamekit-vibegame';
 import {
   InputPlugin,
   InputState,
@@ -14,8 +14,8 @@ import {
   handleWheel,
   setTargetCanvas,
   setFocusedCanvas,
-} from 'vibegame/input';
-import { setRenderingCanvas } from 'vibegame/rendering';
+} from 'aigamekit-vibegame/input';
+import { setRenderingCanvas } from 'aigamekit-vibegame/rendering';
 import { handleKeyDown, clearAllInput } from '../../../src/plugins/input/utils';
 
 const prevPerformance = global.performance;

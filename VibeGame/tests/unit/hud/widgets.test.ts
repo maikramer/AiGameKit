@@ -19,7 +19,7 @@ import {
   VaultComponent,
   getXpToNextLevel,
   loadEngineDefaultDictionary,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { TransformsPlugin } from '../../../src/plugins/transforms';
 import {
   createBossBarWidget,

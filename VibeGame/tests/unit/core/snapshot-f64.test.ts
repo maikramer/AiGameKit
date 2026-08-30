@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { State, createSnapshot, restoreSnapshot } from 'vibegame';
+import { State, createSnapshot, restoreSnapshot } from 'aigamekit-vibegame';
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
 describe('snapshot with Float64Array fields', () => {

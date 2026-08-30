@@ -1,7 +1,7 @@
 // O Coração de Orm — relíquia no centro da ruína ancestral (1700,-810).
 // Tocar (F) rende ouro e experiência; o cristal apaga depois de lido.
 import { createMysticObject } from '../../game/mystic.ts';
-import { addXp } from 'vibegame';
+import { addXp } from 'aigamekit-vibegame';
 import { addGold } from '../../game/economy.ts';
 
 const GOLD_REWARD = 150;

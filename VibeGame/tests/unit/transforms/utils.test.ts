@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   Transform,
   WorldTransform,
@@ -12,8 +12,8 @@ import {
   setTransformIdentity,
   composeTransformMatrix,
   decomposeTransformMatrix,
-} from 'vibegame/transforms';
-import { eulerToQuaternion, quaternionToEuler } from 'vibegame';
+} from 'aigamekit-vibegame/transforms';
+import { eulerToQuaternion, quaternionToEuler } from 'aigamekit-vibegame';
 import * as THREE from 'three';
 
 describe('Transform Utilities', () => {

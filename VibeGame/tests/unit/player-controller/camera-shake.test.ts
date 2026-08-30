@@ -5,7 +5,7 @@ import {
   getCameraShakeTrauma,
   resetCameraShake,
   tickCameraShake,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('camera shake — trauma model', () => {
   it('accumulates trauma and clamps at 1', () => {

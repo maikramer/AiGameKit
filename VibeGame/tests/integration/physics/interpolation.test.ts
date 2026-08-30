@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
+import { State, TIME_CONSTANTS, defineQuery } from 'aigamekit-vibegame';
 import {
   Rigidbody,
   BodyType,
@@ -8,8 +8,8 @@ import {
   InterpolatedTransform,
   PhysicsPlugin,
   PhysicsWorld,
-} from 'vibegame/physics';
-import { Transform, WorldTransform } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { Transform, WorldTransform } from 'aigamekit-vibegame/transforms';
 
 describe('Physics Interpolation', () => {
   let state: State;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   bumpSceneGeneration,
   getSceneGeneration,

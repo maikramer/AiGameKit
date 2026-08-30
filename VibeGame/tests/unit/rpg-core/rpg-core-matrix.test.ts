@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { DataRegistry } from 'vibegame';
+import { DataRegistry } from 'aigamekit-vibegame';
 import { LOOT_TABLE_KIND } from '../../../src/plugins/rpg-core/loot';
 
 describe('rpg-core matrix: DataRegistry bulk', () => {

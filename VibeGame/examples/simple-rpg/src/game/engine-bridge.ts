@@ -3,7 +3,7 @@
 // (RpgVault / Progression / PauseCoordinator) so there is ONE source of truth —
 // the player entity's components — instead of legacy module-global counters.
 
-import type { State } from 'vibegame';
+import type { State } from 'aigamekit-vibegame';
 
 let boundState: State | null = null;
 let cachedPlayer = 0;

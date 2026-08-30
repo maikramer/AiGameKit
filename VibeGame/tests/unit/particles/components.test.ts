@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { ParticleEmitter } from 'vibegame';
+import { ParticleEmitter } from 'aigamekit-vibegame';
 
 describe('ParticleEmitter component', () => {
   it('expõe todos os campos esperados', () => {

@@ -23,8 +23,8 @@ import {
   spawnFloatingText,
   tillTile,
   waterTile,
-} from 'vibegame';
-import type { HotbarSlotSpec, State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { HotbarSlotSpec, State } from 'aigamekit-vibegame';
 import { trySpendStamina } from './stamina';
 
 export type ToolAction = 'till' | 'water' | 'plant' | 'hand';

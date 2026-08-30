@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, parseXMLToEntities } from 'vibegame';
-import { PlayerController, PlayerPlugin } from 'vibegame/player';
-import { InputState, InputPlugin } from 'vibegame/input';
+import { State, XMLParser, parseXMLToEntities } from 'aigamekit-vibegame';
+import { PlayerController, PlayerPlugin } from 'aigamekit-vibegame/player';
+import { InputState, InputPlugin } from 'aigamekit-vibegame/input';
 import {
   Rigidbody,
   BodyType,
@@ -11,8 +11,8 @@ import {
   Collider,
   ColliderShape,
   PhysicsPlugin,
-} from 'vibegame/physics';
-import { Transform, TransformsPlugin } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
 describe('Player Recipes and XML', () => {
   let state: State;

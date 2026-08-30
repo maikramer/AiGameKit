@@ -6,7 +6,7 @@ import {
   Scene,
   VectorKeyframeTrack,
 } from 'three';
-import { GltfAnimator } from 'vibegame';
+import { GltfAnimator } from 'aigamekit-vibegame';
 
 /** A clip with one real track — `makeClipAdditive` needs a first keyframe. */
 function clip(name: string, target: string): AnimationClip {

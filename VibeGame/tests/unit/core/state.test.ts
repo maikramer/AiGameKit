@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, defineQuery, defineQueryLive } from 'vibegame';
+import { State, defineQuery, defineQueryLive } from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 

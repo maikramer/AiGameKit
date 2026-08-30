@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import type { State } from 'vibegame';
-import { hitStop, hitStopActive, tickHitStop } from 'vibegame';
+import type { State } from 'aigamekit-vibegame';
+import { hitStop, hitStopActive, tickHitStop } from 'aigamekit-vibegame';
 
 function makeState(timeScale = 1): State {
   return {

@@ -11,10 +11,10 @@ const sharedAssets = path.join(
 
 export default defineConfig({
   resolve: {
-    dedupe: ['three', 'vibegame'],
+    dedupe: ['three', 'aigamekit-vibegame'],
     alias: {
       vibegame: path.join(vibegameRoot, 'src/index.ts'),
-      'vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),
+      'aigamekit-vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),
     },
   },
   plugins: [vibegame({ sharedAssets }), consoleForwarding()],
@@ -25,6 +25,6 @@ export default defineConfig({
   },
   build: { target: 'esnext', sourcemap: true },
   optimizeDeps: {
-    exclude: ['vibegame', '@dimforge/rapier3d-compat'],
+    exclude: ['aigamekit-vibegame', '@dimforge/rapier3d-compat'],
   },
 });

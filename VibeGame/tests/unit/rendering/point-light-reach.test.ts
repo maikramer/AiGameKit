@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import * as THREE from 'three';
-import { PointLight, WorldTransform } from 'vibegame';
+import { PointLight, WorldTransform } from 'aigamekit-vibegame';
 import { filterPointLightsInView } from '../../../src/plugins/rendering/systems';
 
 /**

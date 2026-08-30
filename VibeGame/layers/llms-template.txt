@@ -36,7 +36,7 @@ Bevy-inspired modular architecture:
 ## Instant Playable Game
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/vibegame@latest/dist/cdn/vibegame.standalone.iife.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/aigamekit-vibegame@latest/dist/cdn/vibegame.standalone.iife.js"></script>
 
 <world canvas="#game-canvas" sky="#87ceeb">
   <!-- Ground (REQUIRED to prevent player falling) -->
@@ -182,7 +182,7 @@ While auto-creation is recommended, you can manually create these for customizat
 
 Requires including the PostprocessingPlugin in the builder, as it is not included in the DefaultPlugins.
 ```typescript
-import { PostprocessingPlugin } from 'vibegame/postprocessing';
+import { PostprocessingPlugin } from 'aigamekit-vibegame/postprocessing';
 
 GAME
   .withPlugin(PostprocessingPlugin)
@@ -193,7 +193,7 @@ GAME
 
 Requires including the TextPlugin in the builder, as it is not included in the DefaultPlugins.
 ```typescript
-import { TextPlugin } from 'vibegame/text';
+import { TextPlugin } from 'aigamekit-vibegame/text';
 
 GAME
   .withPlugin(TextPlugin)
@@ -218,7 +218,7 @@ GAME
 
 Requires including the LinePlugin in the builder, as it is not included in the DefaultPlugins.
 ```typescript
-import { LinePlugin } from 'vibegame/line';
+import { LinePlugin } from 'aigamekit-vibegame/line';
 
 GAME
   .withPlugin(LinePlugin)
@@ -397,7 +397,7 @@ Shorthands expand to 3 tweens (one per axis):
 ### TypeScript Tween Examples
 
 ```typescript
-import { createTween } from 'vibegame/tweening';
+import { createTween } from 'aigamekit-vibegame/tweening';
 
 // Single field
 createTween(state, entity, 'transform.pos-x', { from: 0, to: 10, duration: 2, easing: 'sine-out' });
@@ -447,7 +447,7 @@ Sequences orchestrate multiple tweens with timing control. Tweens before `<pause
 ### TypeScript Sequence Control
 
 ```typescript
-import { completeSequence, playSequence, resetSequence, stopSequence } from 'vibegame/tweening';
+import { completeSequence, playSequence, resetSequence, stopSequence } from 'aigamekit-vibegame/tweening';
 
 // Get sequence by name and trigger
 const bounce = state.getEntityByName('bounce');
@@ -807,7 +807,7 @@ const health = Health.current[entity];
 
 ### Creating a Health System
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Define the component
 const Health = GAME.defineComponent({
@@ -881,11 +881,11 @@ Available in all systems via the `state` parameter:
 
 ### Using Specific Plugins
 ```typescript
-import * as GAME from 'vibegame';
-import { TransformsPlugin } from 'vibegame/transforms';
-import { RenderingPlugin } from 'vibegame/rendering';
-import { PhysicsPlugin } from 'vibegame/physics';
-import { AnimationPlugin } from 'vibegame/animation';
+import * as GAME from 'aigamekit-vibegame';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
+import { RenderingPlugin } from 'aigamekit-vibegame/rendering';
+import { PhysicsPlugin } from 'aigamekit-vibegame/physics';
+import { AnimationPlugin } from 'aigamekit-vibegame/animation';
 
 // Start with no defaults, add specific plugins
 GAME
@@ -929,8 +929,8 @@ import {
   getAllSequences,
   getSequenceInfo,
   toJSON,
-} from 'vibegame/cli';
-import { playSequence, resetSequence } from 'vibegame/tweening';
+} from 'aigamekit-vibegame/cli';
+import { playSequence, resetSequence } from 'aigamekit-vibegame/tweening';
 
 // Setup headless state
 const state = createHeadlessState({ plugins: DefaultPlugins });

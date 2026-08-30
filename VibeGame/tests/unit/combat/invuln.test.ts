@@ -5,8 +5,8 @@ import {
   damageHealth,
   grantInvulnerability,
   healHealth,
-} from 'vibegame';
-import type { State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 
 const EID = 3;
 

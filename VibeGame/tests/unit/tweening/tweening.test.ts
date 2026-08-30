@@ -5,7 +5,7 @@ import {
   TweenData,
   TweeningPlugin,
   TweenProcessingSystem,
-} from 'vibegame/tweening';
+} from 'aigamekit-vibegame/tweening';
 
 describe('tweening: TweenAxis', () => {
   it('None começa em 0 e cada eixo tem valor distinto', () => {

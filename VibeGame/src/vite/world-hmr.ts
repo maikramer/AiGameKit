@@ -77,7 +77,7 @@ export function vibegameWorldHmr(options?: WorldHmrOptions): Plugin {
 
     load(id) {
       if (id !== RESOLVED_VIRTUAL_ID) return null;
-      return `import { initWorldHotReload } from 'vibegame'; initWorldHotReload();`;
+      return `import { initWorldHotReload } from 'aigamekit-vibegame'; initWorldHotReload();`;
     },
 
     transformIndexHtml() {

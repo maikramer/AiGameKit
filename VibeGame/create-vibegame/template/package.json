@@ -7,8 +7,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "node ./node_modules/typescript/bin/tsc --noEmit",
-    "update": "cp node_modules/vibegame/llms.txt ./llms.txt && echo '✓ Updated llms.txt from vibegame'",
-    "postinstall": "test -f node_modules/vibegame/llms.txt && cp node_modules/vibegame/llms.txt ./llms.txt || true",
+    "update": "cp node_modules/aigamekit-vibegame/llms.txt ./llms.txt && echo '✓ Updated llms.txt from vibegame'",
+    "postinstall": "test -f node_modules/aigamekit-vibegame/llms.txt && cp node_modules/aigamekit-vibegame/llms.txt ./llms.txt || true",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "node --require ./scripts/register-ts6.cjs ./node_modules/eslint/bin/eslint.js .",
@@ -28,6 +28,6 @@
     "vite": "^8.2.2"
   },
   "dependencies": {
-    "vibegame": "latest"
+    "aigamekit-vibegame": "latest"
   }
 }

@@ -11,7 +11,7 @@ import {
   WaitForFixedUpdate,
   WaitUntil,
   WaitWhile,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('yield instructions', () => {
   let state: State;

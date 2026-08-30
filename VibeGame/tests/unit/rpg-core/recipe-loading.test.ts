@@ -6,7 +6,7 @@ import {
   XMLParser,
   getDataRegistry,
   parseXMLToEntities,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { join } from 'node:path';
 
 beforeAll(() => {

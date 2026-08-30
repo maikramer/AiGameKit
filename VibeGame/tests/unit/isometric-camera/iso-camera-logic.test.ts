@@ -11,8 +11,8 @@ import {
   rotateYawOnEdge,
   smoothZoom,
   snapYawIndex,
-} from 'vibegame';
-import { TransformsPlugin } from 'vibegame/transforms';
+} from 'aigamekit-vibegame';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
 const TAU = Math.PI * 2;
 

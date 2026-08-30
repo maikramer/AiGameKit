@@ -5,7 +5,7 @@ import {
   State,
   WaitForEndOfFrame,
   WaitForFixedUpdate,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('EntityScriptPlugin coroutine systems', () => {
   it('advances WaitForEndOfFrame via registered late system', () => {

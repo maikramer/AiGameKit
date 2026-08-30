@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { HudPlugin } from '../../../src/plugins/hud/plugin';
 import { FloatingTextPlugin } from '../../../src/plugins/floating-text/plugin';
 import { FloatingText } from '../../../src/plugins/floating-text/components';

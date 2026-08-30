@@ -18,7 +18,7 @@ import {
   onEvent,
   setFaction,
   State,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 interface DamagedPayload {
   target: number;

@@ -1,7 +1,7 @@
 // Glowing mushroom (mushroom_red.glb). A faintly pulsing forage; reading it (F)
 // restores health once, then it stops glowing.
 import { createMysticObject } from '../game/mystic.ts';
-import { healHealth } from 'vibegame';
+import { healHealth } from 'aigamekit-vibegame';
 
 const HEAL = 40;
 

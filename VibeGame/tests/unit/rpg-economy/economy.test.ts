@@ -25,8 +25,8 @@ import {
   onEvent,
   parseXMLToEntities,
   sellItem,
-} from 'vibegame';
-import type { ItemDef, PriceEntry } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { ItemDef, PriceEntry } from 'aigamekit-vibegame';
 
 beforeAll(() => {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');

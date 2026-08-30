@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   ENGINE_DEFAULT_EN_DICTIONARY,
   loadEngineDefaultDictionary,

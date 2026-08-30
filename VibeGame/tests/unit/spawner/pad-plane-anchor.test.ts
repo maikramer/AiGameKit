@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { sampleTerrainSurfaceMatrix } from '../../../src/plugins/spawner/surface';
 import { registerGroundBrush } from '../../../src/plugins/terrain/brush-registry';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';

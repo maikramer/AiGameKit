@@ -18,7 +18,7 @@ import {
   setTimeScale,
   suppressInput,
   isPaused,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('PauseCoordinatorPlugin', () => {
   let state: State;

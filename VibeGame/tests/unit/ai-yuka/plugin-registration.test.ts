@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { YukaAiPlugin } from '../../../src/plugins/ai-yuka/plugin';
 import {
   YukaAgentComponent,

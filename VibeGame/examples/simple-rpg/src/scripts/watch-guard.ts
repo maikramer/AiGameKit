@@ -2,8 +2,8 @@
 // so a new player sees where the biomes start. Loads its own GLB + idle
 // (merchant/healer pattern) because script= skips gltf-xml auto-idle.
 import * as THREE from 'three';
-import { loadGltfToSceneWithAnimator, playSound } from 'vibegame';
-import type { GltfAnimator, MonoBehaviourContext } from 'vibegame';
+import { loadGltfToSceneWithAnimator, playSound } from 'aigamekit-vibegame';
+import type { GltfAnimator, MonoBehaviourContext } from 'aigamekit-vibegame';
 import {
   Transform,
   isKeyDown,
@@ -11,7 +11,7 @@ import {
   unregisterInteractionTarget,
   setWaypoint,
   clearWaypoints,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { isGamePaused } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';
 import { NpcIdleAnimator } from '../game/npc-anims.ts';

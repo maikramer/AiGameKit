@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
+import { State, TIME_CONSTANTS, defineQuery } from 'aigamekit-vibegame';
 
-import { MAX_ENTITIES } from 'vibegame';
+import { MAX_ENTITIES } from 'aigamekit-vibegame';
 
 describe('GameRuntime', () => {
   let runtime: any;

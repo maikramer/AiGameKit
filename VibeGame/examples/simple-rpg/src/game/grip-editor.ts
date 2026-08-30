@@ -4,8 +4,8 @@
 // Arrow keys/QE move, 123 pick a rotation axis, Tab switches pos/rot, N cycles
 // the weapon, X exports every tuned grip as held-items.json-ready JSON
 // (console + clipboard + a copy button on the panel).
-import { getAnimator, isKeyDown, playSound, setPlayerHeldItem } from 'vibegame';
-import type { HeldItemGrip, State } from 'vibegame';
+import { getAnimator, isKeyDown, playSound, setPlayerHeldItem } from 'aigamekit-vibegame';
+import type { HeldItemGrip, State } from 'aigamekit-vibegame';
 
 /** Weapon ids in held-items.json — the editor cycles through these. */
 export const GRIP_WEAPONS = [

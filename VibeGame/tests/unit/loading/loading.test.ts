@@ -7,7 +7,7 @@ import {
   getLoadingScreenText,
   setLoadingScreenLocale,
   setLoadingScreenText,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const DEFAULT_TEXT: LoadingScreenText = { title: 'Loading…', subtitle: '' };
 

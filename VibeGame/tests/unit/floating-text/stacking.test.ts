@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { claimStackSlot } from '../../../src/plugins/floating-text/stacking';
 import { spawnFloatingText } from '../../../src/plugins/floating-text/utils';
 import { Transform } from '../../../src/plugins/transforms/components';

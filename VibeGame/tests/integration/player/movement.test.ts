@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
+import { State, TIME_CONSTANTS, defineQuery } from 'aigamekit-vibegame';
 import {
   Rigidbody,
   BodyType,
@@ -8,15 +8,15 @@ import {
   Collider,
   ColliderShape,
   PhysicsPlugin,
-} from 'vibegame/physics';
-import { InputState } from 'vibegame/input';
-import { OrbitCamera, OrbitCameraPlugin } from 'vibegame/orbit-camera';
-import { PlayerController, PlayerPlugin } from 'vibegame/player';
+} from 'aigamekit-vibegame/physics';
+import { InputState } from 'aigamekit-vibegame/input';
+import { OrbitCamera, OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
+import { PlayerController, PlayerPlugin } from 'aigamekit-vibegame/player';
 import {
   Transform,
   TransformsPlugin,
   WorldTransform,
-} from 'vibegame/transforms';
+} from 'aigamekit-vibegame/transforms';
 
 describe('Player Movement', () => {
   let state: State;

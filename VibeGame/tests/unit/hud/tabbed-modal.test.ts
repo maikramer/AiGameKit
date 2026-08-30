@@ -13,7 +13,7 @@ import {
   Transform,
   I18nPlugin,
   onEvent,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { TransformsPlugin } from '../../../src/plugins/transforms';
 import type { ParserParams } from '../../../src/core';
 import { getDataRegistry } from '../../../src/plugins/rpg-core';

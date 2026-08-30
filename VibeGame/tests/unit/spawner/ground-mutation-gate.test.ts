@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { TerrainPad } from '../../../src/plugins/terrain/components';
 import { Lake, River } from '../../../src/plugins/water/components';
 import { Road } from '../../../src/plugins/road/components';

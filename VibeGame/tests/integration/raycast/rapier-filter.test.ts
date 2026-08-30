@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS } from 'vibegame';
+import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
 import {
   BodyType,
   Collider,
   ColliderShape,
   PhysicsPlugin,
   Rigidbody,
-} from 'vibegame/physics';
-import { Transform } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { Transform } from 'aigamekit-vibegame/transforms';
 import { castRapierRay } from '../../../src/plugins/raycast/utils';
 
 describe('castRapierRay layer filtering', () => {

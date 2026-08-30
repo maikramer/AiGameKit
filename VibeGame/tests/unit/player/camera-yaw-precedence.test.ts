@@ -5,12 +5,12 @@ import {
   State,
   ThirdPersonCamera,
   ThirdPersonCameraPlugin,
-} from 'vibegame';
-import { InputState } from 'vibegame/input';
-import { OrbitCamera, OrbitCameraPlugin } from 'vibegame/orbit-camera';
-import { PlayerController, PlayerPlugin } from 'vibegame/player';
-import { MainCamera } from 'vibegame/rendering';
-import { Transform, TransformsPlugin } from 'vibegame/transforms';
+} from 'aigamekit-vibegame';
+import { InputState } from 'aigamekit-vibegame/input';
+import { OrbitCamera, OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
+import { PlayerController, PlayerPlugin } from 'aigamekit-vibegame/player';
+import { MainCamera } from 'aigamekit-vibegame/rendering';
+import { Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
 import { PlayerCameraLinkingSystem } from '../../../src/plugins/player/systems';
 
 /**

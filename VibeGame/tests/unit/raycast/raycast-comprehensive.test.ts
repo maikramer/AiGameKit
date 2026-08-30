@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import * as THREE from 'three';
-import { RaycastHit, RaycastSource } from 'vibegame';
+import { RaycastHit, RaycastSource } from 'aigamekit-vibegame';
 import { screenToWorldRay } from '../../../src/plugins/raycast/utils';
 
 describe('raycast RaycastSource field table-driven', () => {

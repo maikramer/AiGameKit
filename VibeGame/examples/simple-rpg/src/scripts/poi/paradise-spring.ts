@@ -2,7 +2,7 @@
 // Beber (F) cura tudo de graça, uma vez só: o refúgio recompensa quem
 // atravessou o pântano até aqui.
 import { createMysticObject } from '../../game/mystic.ts';
-import { healHealth, Health } from 'vibegame';
+import { healHealth, Health } from 'aigamekit-vibegame';
 
 const spring = createMysticObject({
   modelUrl: '/assets/meshes/props/crystal_blue_lod1.glb',

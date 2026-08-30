@@ -6,7 +6,7 @@ import {
   XMLParser,
   defineQuery,
   parseXMLToEntities,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   ApplyForce,
   ApplyImpulse,
@@ -17,9 +17,9 @@ import {
   CollisionEvents,
   PhysicsPlugin,
   TouchedEvent,
-} from 'vibegame/physics';
-import { RenderingPlugin } from 'vibegame/rendering';
-import { TransformsPlugin } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { RenderingPlugin } from 'aigamekit-vibegame/rendering';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
 describe('Physics XML Declarative API', () => {
   let state: State;

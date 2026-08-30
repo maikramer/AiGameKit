@@ -11,7 +11,7 @@ import {
   emitEvent,
   getEventBus,
   onEvent,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('EventBus / rpg-core events', () => {
   let state: State;

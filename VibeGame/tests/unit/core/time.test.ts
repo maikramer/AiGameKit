@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, Time } from 'vibegame';
+import { State, Time } from 'aigamekit-vibegame';
 
 describe('Time', () => {
   let state: State;

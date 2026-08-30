@@ -1,5 +1,5 @@
-import { defineQuery, playSound } from 'vibegame';
-import type { MonoBehaviourContext, State } from 'vibegame';
+import { defineQuery, playSound } from 'aigamekit-vibegame';
+import type { MonoBehaviourContext, State } from 'aigamekit-vibegame';
 import {
   Transform,
   isKeyDown,
@@ -9,7 +9,7 @@ import {
   getTerrainHeightAt,
   getBodyYForFeetAt,
   terrainReady,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { teleportEntity } from '../../../shared/src/physics';
 import { showToast } from '../../../shared/src/ui';
 import { getInteriorSpawn, type InteriorId } from '../game/interiors.ts';

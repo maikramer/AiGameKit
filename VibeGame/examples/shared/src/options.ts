@@ -6,8 +6,8 @@ import {
   setSfxVolume,
   setQualityMode,
   MODAL_OPTION_CHANGED,
-} from 'vibegame';
-import type { QualityModeName, State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { QualityModeName, State } from 'aigamekit-vibegame';
 
 export interface OptionsConfig {
   /** LocalStorage key that enables the Save/Load option rows. */

@@ -6,14 +6,14 @@
 // merchant/chest convention).
 
 import * as THREE from 'three';
-import { loadGltfToSceneWithAnimator, playSound } from 'vibegame';
-import type { InteractionGesture, MonoBehaviourContext, State } from 'vibegame';
+import { loadGltfToSceneWithAnimator, playSound } from 'aigamekit-vibegame';
+import type { InteractionGesture, MonoBehaviourContext, State } from 'aigamekit-vibegame';
 import {
   Transform,
   isKeyDown,
   registerInteractionTarget,
   unregisterInteractionTarget,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { showToast } from '../../../shared/src/ui';
 import { findPlayer } from './player-query';
 

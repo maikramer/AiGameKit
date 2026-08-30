@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { Postprocessing } from 'vibegame';
+import { Postprocessing } from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 

@@ -35,8 +35,8 @@ import {
   // loading screen
   mountLoadingScreen,
   setLoadingScreenLocale,
-} from 'vibegame';
-import type { State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 
 setKTX2TranscoderPath('/libs/basis/');
 

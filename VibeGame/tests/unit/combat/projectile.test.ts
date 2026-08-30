@@ -12,7 +12,7 @@ import {
   spawnProjectileFromTemplate,
   State,
   Transform,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('Projectile spawn + lifetime (T15)', () => {
   let state: State;

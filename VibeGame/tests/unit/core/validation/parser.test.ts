@@ -4,7 +4,7 @@ import {
   isValidRecipeName,
   safeValidateRecipeAttributes,
   validateRecipeAttributes,
-} from 'vibegame/core/validation';
+} from 'aigamekit-vibegame/core/validation';
 
 describe('Validation Parser', () => {
   describe('validateRecipeAttributes', () => {

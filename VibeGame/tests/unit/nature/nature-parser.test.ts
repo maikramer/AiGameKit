@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import type { ParsedElement, XMLValue } from '../../../src/core';
 import { ParseContext } from '../../../src/core';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { SpawnerPending } from '../../../src/plugins/spawner/components';
 import { natureSpawnerParser } from '../../../src/plugins/nature/parser';
 import { getNaturePlans } from '../../../src/plugins/nature/context';

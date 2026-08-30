@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
-import { OrbitCamera } from 'vibegame/orbit-camera';
-import { OrbitCameraPlugin } from 'vibegame/orbit-camera';
+import { State } from 'aigamekit-vibegame';
+import { OrbitCamera } from 'aigamekit-vibegame/orbit-camera';
+import { OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
 
 describe('OrbitCamera default field matrix', () => {
   const defaultsBlock = OrbitCameraPlugin.config?.defaults?.['orbit-camera'];

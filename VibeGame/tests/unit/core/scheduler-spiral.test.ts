@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import type { System } from 'vibegame';
-import { State, TIME_CONSTANTS } from 'vibegame';
+import type { System } from 'aigamekit-vibegame';
+import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
 
 describe('Scheduler spiral-of-death cap (A3)', () => {
   let state: State;

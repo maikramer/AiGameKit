@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { lerp, slerp } from 'vibegame';
+import { lerp, slerp } from 'aigamekit-vibegame';
 
 describe('Math Utilities', () => {
   describe('lerp', () => {

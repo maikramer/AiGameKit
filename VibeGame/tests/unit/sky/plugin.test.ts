@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { DefaultPlugins } from 'vibegame/defaults';
-import type { Parser, ParserParams, Plugin, Recipe } from 'vibegame';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
+import type { Parser, ParserParams, Plugin, Recipe } from 'aigamekit-vibegame';
 
 interface EquirectSkyComponent {
   rotationDeg: Float32Array;

@@ -1,3 +1,3 @@
-import { run } from 'vibegame';
+import { run } from 'aigamekit-vibegame';
 
 run();

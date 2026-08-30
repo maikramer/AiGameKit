@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, defineQuery } from 'vibegame';
+import { State, defineQuery } from 'aigamekit-vibegame';
 import {
   Destructible,
   DestructiblePlugin,
@@ -8,7 +8,7 @@ import {
   PlayerController,
   InputState,
   Transform,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const STEP = 1 / 60;
 

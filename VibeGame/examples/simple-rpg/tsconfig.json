@@ -12,8 +12,8 @@
     "resolveJsonModule": true,
     "types": ["vite/client", "bun-types"],
     "paths": {
-      "vibegame": ["../../src/index.ts"],
-      "vibegame/*": ["../../src/*"]
+      "aigamekit-vibegame": ["../../src/index.ts"],
+      "aigamekit-vibegame/*": ["../../src/*"]
     }
   },
   "include": ["src/**/*.ts", "../../src/**/*.d.ts"]

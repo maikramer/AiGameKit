@@ -6,13 +6,13 @@ import {
   clearShadowFocusEntity,
   getShadowFocusEntity,
   setShadowFocusEntity,
-} from 'vibegame';
-import { MainCamera, RenderingPlugin } from 'vibegame/rendering';
+} from 'aigamekit-vibegame';
+import { MainCamera, RenderingPlugin } from 'aigamekit-vibegame/rendering';
 import {
   Transform,
   TransformsPlugin,
   WorldTransform,
-} from 'vibegame/transforms';
+} from 'aigamekit-vibegame/transforms';
 import { resolveShadowCenter } from '../../../src/plugins/rendering/systems';
 
 /**

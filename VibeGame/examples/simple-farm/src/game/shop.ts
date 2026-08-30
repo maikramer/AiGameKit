@@ -16,8 +16,8 @@ import {
   sellItem,
   registerInteractionTarget,
   t,
-} from 'vibegame';
-import type { State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 import { showToast } from '../../../shared/src/ui';
 
 const STALL_ENTITY_NAME = 'farm_market';

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
-import type { System } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
+import type { System } from 'aigamekit-vibegame';
 
 /**
  * `before`/`after` accept a system object **or** its `name`. The name form

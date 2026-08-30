@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, TIME_CONSTANTS, XMLParser, parseXMLToEntities } from 'vibegame';
+import { State, TIME_CONSTANTS, XMLParser, parseXMLToEntities } from 'aigamekit-vibegame';
 import {
   Rigidbody,
   BodyType,
@@ -9,9 +9,9 @@ import {
   CharacterMovement,
   Collider,
   ColliderShape,
-} from 'vibegame/physics';
-import { RenderingPlugin } from 'vibegame/rendering';
-import { TransformsPlugin } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { RenderingPlugin } from 'aigamekit-vibegame/rendering';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
 describe('Physics Recipes', () => {
   let state: State;

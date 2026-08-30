@@ -3,7 +3,7 @@ import {
   advancePlayerAttackCombo,
   getPlayerAttackClip,
   setPlayerAttackClip,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const POOL: string[] = ['sword', 'sworda', 'swordb', 'swordc'];
 

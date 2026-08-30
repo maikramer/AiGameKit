@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, System, TIME_CONSTANTS } from 'vibegame';
+import { State, System, TIME_CONSTANTS } from 'aigamekit-vibegame';
 
 describe('System Ordering Integration', () => {
   let state: State;

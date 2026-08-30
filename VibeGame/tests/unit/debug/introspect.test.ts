@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { TransformsPlugin, Transform } from '../../../src/plugins/transforms';
 import { DebugPlugin } from '../../../src/plugins/debug/plugin';
 import { setScriptFile } from '../../../src/plugins/entity-script/context';

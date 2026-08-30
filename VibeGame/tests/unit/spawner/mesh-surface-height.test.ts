@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { sampleMeshSurfaceHeight } from 'vibegame';
+import { sampleMeshSurfaceHeight } from 'aigamekit-vibegame';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';
 import { sampleHeightAt } from '../../../src/plugins/terrain/height-sampler';
 

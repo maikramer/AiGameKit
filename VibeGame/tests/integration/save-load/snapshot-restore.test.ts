@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { Packr } from 'msgpackr';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { Serializable } from '../../../src/plugins/save-load/components';
 import { SaveLoadPlugin } from '../../../src/plugins/save-load/plugin';
 import {

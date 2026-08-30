@@ -25,7 +25,7 @@ import {
   parseSemicolonPlaceString,
   parseTransformAttr,
   slopeAngleRad,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   defineSoundBank,
   getSoundDef,
@@ -34,7 +34,7 @@ import {
   setBusVolume,
   getBusVolume,
   _resetSoundBank,
-} from 'vibegame/audio/bank';
+} from 'aigamekit-vibegame/audio/bank';
 
 describe('coverage-100 pure helpers', () => {
   beforeEach(() => {

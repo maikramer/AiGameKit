@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
@@ -140,7 +140,7 @@ describe('prefab/template system', () => {
         parent: parentEid,
       });
 
-      const { Parent } = require('vibegame');
+      const { Parent } = require('aigamekit-vibegame');
       expect(state.hasComponent(childEid, Parent)).toBe(true);
       expect(Parent.entity[childEid]).toBe(parentEid);
     });
@@ -159,7 +159,7 @@ describe('prefab/template system', () => {
         overrides: { 'test-pos': { x: 3, y: 0, z: 0 } },
       });
 
-      const { Parent } = require('vibegame');
+      const { Parent } = require('aigamekit-vibegame');
       expect(state.hasComponent(eid, Parent)).toBe(true);
       expect(Parent.entity[eid]).toBe(parentEid);
       expect(TestPos.x[eid]).toBe(3);

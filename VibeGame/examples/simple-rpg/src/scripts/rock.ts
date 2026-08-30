@@ -1,8 +1,8 @@
-import type { MonoBehaviourContext } from 'vibegame';
+import type { MonoBehaviourContext } from 'aigamekit-vibegame';
 import {
   registerInteractionTarget,
   unregisterInteractionTarget,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 // Harvestable rock: the engine DestructiblePlugin handles the hits/break; this
 // script only shows the "[J] Mine" prompt while the player is in range.

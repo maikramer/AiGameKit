@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createSnapshot, restoreSnapshot, State } from 'vibegame';
+import { createSnapshot, restoreSnapshot, State } from 'aigamekit-vibegame';
 
 describe('snapshot time restore', () => {
   it('keeps elapsed coherent with realtime after the next step', () => {

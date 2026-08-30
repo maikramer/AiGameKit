@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { GroupPlugin, groupRecipe } from 'vibegame/group';
+import { GroupPlugin, groupRecipe } from 'aigamekit-vibegame/group';
 
 describe('group: groupRecipe', () => {
   it('expõe o nome "Group"', () => {

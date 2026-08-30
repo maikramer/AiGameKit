@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, Transform, Rigidbody } from 'vibegame';
+import { State, Transform, Rigidbody } from 'aigamekit-vibegame';
 import {
   SpawnGateComponent,
   SpawnGatePlugin,

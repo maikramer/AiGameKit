@@ -15,7 +15,7 @@ import {
   setClockScale,
   sleepUntilMorning,
   sunAngles,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 // Systems live one level below the public barrel (API-only surface).
 import {
   DayCycleSkySystem,

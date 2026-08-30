@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
+import { State, TIME_CONSTANTS, defineQuery } from 'aigamekit-vibegame';
 import {
   Rigidbody,
   BodyType,
@@ -7,8 +7,8 @@ import {
   ColliderShape,
   PhysicsPlugin,
   PhysicsWorld,
-} from 'vibegame/physics';
-import { Transform } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { Transform } from 'aigamekit-vibegame/transforms';
 
 describe('Static Bodies Integration', () => {
   let state: State;

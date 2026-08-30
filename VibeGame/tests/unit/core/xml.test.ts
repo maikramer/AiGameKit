@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import type { ParsedElement, Parser } from 'vibegame';
+import type { ParsedElement, Parser } from 'aigamekit-vibegame';
 import {
   findElements,
   ParseContext,
@@ -8,7 +8,7 @@ import {
   traverseElements,
   XMLParser,
   XMLValueParser,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('XML Parser', () => {
   beforeEach(() => {

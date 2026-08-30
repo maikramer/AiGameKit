@@ -1,8 +1,8 @@
-import type { MonoBehaviourContext } from 'vibegame';
+import type { MonoBehaviourContext } from 'aigamekit-vibegame';
 import {
   registerInteractionTarget,
   unregisterInteractionTarget,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const woodEntities = new Set<number>();
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { HudPlugin } from '../../../src/plugins/hud/plugin';
 import { HudPanel } from '../../../src/plugins/hud/components';
 

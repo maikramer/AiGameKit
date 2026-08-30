@@ -14,8 +14,8 @@ import {
   getPrice,
   getResource,
   sellItem,
-} from 'vibegame';
-import type { ItemDef, PriceEntry } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { ItemDef, PriceEntry } from 'aigamekit-vibegame';
 
 function newState(): State {
   const state = new State();

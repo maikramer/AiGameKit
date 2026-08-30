@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS } from 'vibegame';
+import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
 import {
   createHeadlessState,
   parseWorldXml,
   queryEntities,
-} from 'vibegame/cli';
-import { DefaultPlugins } from 'vibegame/defaults';
-import { Parent, Transform, WorldTransform } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/cli';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
+import { Parent, Transform, WorldTransform } from 'aigamekit-vibegame/transforms';
 
 describe('E2E: Nested Entity Transform Hierarchy', () => {
   let state: State;

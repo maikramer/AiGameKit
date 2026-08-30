@@ -4,7 +4,7 @@ import {
   createAiInstanceState,
   resetAiRng,
   setAiRng,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 function makeLcg(seed: number): () => number {
   let s = seed;

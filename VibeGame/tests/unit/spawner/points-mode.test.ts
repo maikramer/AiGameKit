@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { defineQuery, State } from 'vibegame';
+import { defineQuery, State } from 'aigamekit-vibegame';
 import { Transform } from '../../../src/plugins/transforms/components';
 import {
   PlacePending,

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { AnimationClip, LoopRepeat, Scene } from 'three';
-import { GltfAnimator, type LocomotionSet } from 'vibegame';
+import { GltfAnimator, type LocomotionSet } from 'aigamekit-vibegame';
 import { matchClipKeyword } from '../../../src/extras/gltf-animator';
 
 function makeGltf(clipNames: string[]) {

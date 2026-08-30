@@ -3,8 +3,8 @@
 // mesmo contrato do crepitar da fogueira (campfire.ts). Um script só serve
 // N entidades: cada uma adota a âncora cujo ponto está mais perto do seu
 // spawn (sem atributos XML, sem estado por ficheiro).
-import { Transform, playSoundAt } from 'vibegame';
-import type { MonoBehaviourContext, SoundHandle } from 'vibegame';
+import { Transform, playSoundAt } from 'aigamekit-vibegame';
+import type { MonoBehaviourContext, SoundHandle } from 'aigamekit-vibegame';
 import { isGamePaused } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';
 

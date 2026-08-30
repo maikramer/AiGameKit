@@ -11,7 +11,7 @@ import {
   serializeFarmGrid,
   tillTile,
   waterTile,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { getDataRegistry } from '../../../src/plugins/rpg-core/registry';
 import { FarmGridSetupSystem } from '../../../src/plugins/farm-plot/systems';
 

@@ -2,8 +2,8 @@
 // Loads its own GLB + idle (same pattern as the merchant) so the entity can
 // keep a MonoBehaviour without freezing in T-pose.
 import * as THREE from 'three';
-import { loadGltfToSceneWithAnimator, playSound } from 'vibegame';
-import type { GltfAnimator, MonoBehaviourContext } from 'vibegame';
+import { loadGltfToSceneWithAnimator, playSound } from 'aigamekit-vibegame';
+import type { GltfAnimator, MonoBehaviourContext } from 'aigamekit-vibegame';
 import {
   Transform,
   isKeyDown,
@@ -11,7 +11,7 @@ import {
   healHealth,
   registerInteractionTarget,
   unregisterInteractionTarget,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { spendGold } from '../game/economy.ts';
 import { isGamePaused } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';

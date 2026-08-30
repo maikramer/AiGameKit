@@ -4,7 +4,7 @@
 // marked marco returns to the plaza, and death picks the nearest of plaza,
 // cardinal gates, and those landings. Pure helpers stay testable; the
 // TravelHomeSystem owns the return prompt so NotaSystem can keep marking.
-import type { State, System } from 'vibegame';
+import type { State, System } from 'aigamekit-vibegame';
 import {
   Transform,
   PlayerController,
@@ -20,7 +20,7 @@ import {
   terrainReady,
   GROUND_CONTACT_SKIN,
   playSound,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { teleportEntity } from '../../../shared/src/physics';
 import { showToast } from '../../../shared/src/ui';
 import { LOOKOUT_GATES } from './city-amenities';

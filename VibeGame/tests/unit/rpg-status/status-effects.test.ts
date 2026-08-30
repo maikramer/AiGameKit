@@ -18,8 +18,8 @@ import {
   getActiveStatuses,
   getStatusModifiers,
   getDataRegistry,
-} from 'vibegame';
-import type { StatusEffectDef } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { StatusEffectDef } from 'aigamekit-vibegame';
 
 beforeAll(() => {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');

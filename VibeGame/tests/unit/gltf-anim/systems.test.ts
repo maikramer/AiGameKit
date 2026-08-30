@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import type { GltfAnimator } from '../../../src/extras/gltf-animator';
 import {
   getAnimator,

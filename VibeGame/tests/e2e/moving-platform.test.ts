@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS } from 'vibegame';
+import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
 import {
   createHeadlessState,
   parseWorldXml,
   queryEntities,
-} from 'vibegame/cli';
-import { DefaultPlugins } from 'vibegame/defaults';
-import { Rigidbody, BodyType, CharacterController } from 'vibegame/physics';
+} from 'aigamekit-vibegame/cli';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
+import { Rigidbody, BodyType, CharacterController } from 'aigamekit-vibegame/physics';
 
 describe('E2E: Moving Platform Character Controller', () => {
   let state: State;

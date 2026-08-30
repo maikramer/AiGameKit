@@ -2,7 +2,7 @@
 // caminho da arena do ogro. Dá experiência antes do chefe final.
 // Módulo próprio por POI: ver nota em poi/watch-tome.ts.
 import { createMysticObject } from '../../game/mystic.ts';
-import { addXp } from 'vibegame';
+import { addXp } from 'aigamekit-vibegame';
 
 const XP_REWARD = 60;
 

@@ -45,7 +45,7 @@ import {
   registerDebugAction,
   registerDebugVar,
   getDebugRegistry,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('Public API surface — promoted symbols', () => {
   it('exports combat gameplay helpers (Health, damage/heal/isDead, ProjectileData)', () => {
@@ -129,7 +129,7 @@ describe('Public API surface — promoted symbols', () => {
 });
 
 describe('Examples must not deep-import engine internals', () => {
-  // Examples (games built on the engine) must import from the public 'vibegame'
+  // Examples (games built on the engine) must import from the public 'aigamekit-vibegame'
   // barrel only. Reaching into ../../src/plugins/* couples games to internal
   // module layout and breaks when the engine is reorganised. This test is the
   // CI gate that enforces the boundary; the equivalent shell check is

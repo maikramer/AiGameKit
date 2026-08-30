@@ -1,5 +1,5 @@
-import { defineQuery, PlayerController, Transform } from 'vibegame';
-import type { State } from 'vibegame';
+import { defineQuery, PlayerController, Transform } from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 
 const playerQuery = defineQuery([PlayerController]);
 let cachedPlayer = 0;

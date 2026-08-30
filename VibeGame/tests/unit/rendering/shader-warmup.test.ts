@@ -4,7 +4,7 @@ import {
   isSceneShadersWarmed,
   resetShaderWarmup,
   warmupSceneShaders,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('shader-warmup', () => {
   let state: State;

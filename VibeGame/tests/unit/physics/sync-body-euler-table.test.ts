@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { Rigidbody } from 'vibegame/physics';
+import { Rigidbody } from 'aigamekit-vibegame/physics';
 import {
   syncBodyEulerFromQuaternion,
   syncBodyQuaternionFromEuler,

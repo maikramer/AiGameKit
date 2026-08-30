@@ -1,3 +1,3 @@
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 GAME.run();

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State } from 'vibegame';
-import { TransformsPlugin } from 'vibegame/transforms';
-import { PhysicsPlugin } from 'vibegame/physics';
+import { State } from 'aigamekit-vibegame';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
+import { PhysicsPlugin } from 'aigamekit-vibegame/physics';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 
@@ -60,8 +60,8 @@ describe('State Recipe Integration', () => {
       transform: 'pos: 1 2 3',
     });
 
-    const { parseXMLToEntities } = require('vibegame');
-    const { XMLParser } = require('vibegame');
+    const { parseXMLToEntities } = require('aigamekit-vibegame');
+    const { XMLParser } = require('aigamekit-vibegame');
 
     const xml = '<root><GameObject transform="pos: 1 2 3"></GameObject></root>';
     const parsed = XMLParser.parse(xml);

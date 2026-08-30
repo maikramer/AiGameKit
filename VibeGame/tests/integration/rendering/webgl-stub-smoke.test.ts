@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import * as THREE from 'three';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   MeshRenderer,
   RenderingPlugin,
   RenderContext,
   getRenderingContext,
   setCanvasElement,
-} from 'vibegame/rendering';
-import { TransformsPlugin } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/rendering';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
 import { installWebGLStub, uninstallWebGLStub } from '../../helpers/webgl-stub';
 
 describe('WebGL stub smoke (rendering under Bun/JSDOM)', () => {

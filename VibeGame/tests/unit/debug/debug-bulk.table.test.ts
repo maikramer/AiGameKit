@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   applyPostFxToggle,
   DEFAULT_POSTFX_BINDINGS,

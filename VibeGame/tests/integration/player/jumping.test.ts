@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS } from 'vibegame';
-import { InputState } from 'vibegame/input';
-import { OrbitCameraPlugin } from 'vibegame/orbit-camera';
+import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
+import { InputState } from 'aigamekit-vibegame/input';
+import { OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
 import {
   Rigidbody,
   BodyType,
@@ -10,13 +10,13 @@ import {
   Collider,
   ColliderShape,
   PhysicsPlugin,
-} from 'vibegame/physics';
-import { PlayerController, PlayerPlugin } from 'vibegame/player';
+} from 'aigamekit-vibegame/physics';
+import { PlayerController, PlayerPlugin } from 'aigamekit-vibegame/player';
 import {
   Transform,
   TransformsPlugin,
   WorldTransform,
-} from 'vibegame/transforms';
+} from 'aigamekit-vibegame/transforms';
 
 describe('Player Jumping', () => {
   let state: State;

@@ -1,5 +1,5 @@
-import { registerDebugAction } from 'vibegame';
-import type { State } from 'vibegame';
+import { registerDebugAction } from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 
 /**
  * Wire the engine ProfilerPlugin into the game's QA surface (DEV-gated by the

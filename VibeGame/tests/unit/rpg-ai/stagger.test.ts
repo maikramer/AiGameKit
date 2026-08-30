@@ -13,7 +13,7 @@ import {
   runMeleeAiFrame,
   staggerAi,
   type MeleeAiConfig,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const HERO_EID = 1;
 const CREATURE_EID = 2;

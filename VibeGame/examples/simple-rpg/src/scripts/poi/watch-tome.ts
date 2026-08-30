@@ -5,7 +5,7 @@
 // estado (lido/por ler, grupo Three.js) em variáveis de módulo, por isso dois
 // POIs compartilhando o mesmo arquivo compartilhariam o "já lido".
 import { createMysticObject } from '../../game/mystic.ts';
-import { addXp } from 'vibegame';
+import { addXp } from 'aigamekit-vibegame';
 
 const XP_REWARD = 40;
 

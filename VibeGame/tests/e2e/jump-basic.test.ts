@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS } from 'vibegame';
+import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
 import {
   createHeadlessState,
   parseWorldXml,
   queryEntities,
-} from 'vibegame/cli';
-import { DefaultPlugins } from 'vibegame/defaults';
-import { InputState } from 'vibegame/input';
+} from 'aigamekit-vibegame/cli';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
+import { InputState } from 'aigamekit-vibegame/input';
 import {
   Rigidbody,
   CharacterController,
   CharacterMovement,
-} from 'vibegame/physics';
-import { PlayerController } from 'vibegame/player';
+} from 'aigamekit-vibegame/physics';
+import { PlayerController } from 'aigamekit-vibegame/player';
 
 describe('E2E: Player Jump Mechanics', () => {
   let state: State;

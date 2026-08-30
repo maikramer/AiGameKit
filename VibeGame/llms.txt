@@ -36,7 +36,7 @@ Bevy-inspired modular architecture:
 ## Instant Playable Game
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/vibegame@latest/dist/cdn/vibegame.standalone.iife.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/aigamekit-vibegame@latest/dist/cdn/vibegame.standalone.iife.js"></script>
 
 <world canvas="#game-canvas" sky="#87ceeb">
   <!-- Ground (REQUIRED to prevent player falling) -->
@@ -182,7 +182,7 @@ While auto-creation is recommended, you can manually create these for customizat
 
 Requires including the PostprocessingPlugin in the builder, as it is not included in the DefaultPlugins.
 ```typescript
-import { PostprocessingPlugin } from 'vibegame/postprocessing';
+import { PostprocessingPlugin } from 'aigamekit-vibegame/postprocessing';
 
 GAME
   .withPlugin(PostprocessingPlugin)
@@ -193,7 +193,7 @@ GAME
 
 Requires including the TextPlugin in the builder, as it is not included in the DefaultPlugins.
 ```typescript
-import { TextPlugin } from 'vibegame/text';
+import { TextPlugin } from 'aigamekit-vibegame/text';
 
 GAME
   .withPlugin(TextPlugin)
@@ -218,7 +218,7 @@ GAME
 
 Requires including the LinePlugin in the builder, as it is not included in the DefaultPlugins.
 ```typescript
-import { LinePlugin } from 'vibegame/line';
+import { LinePlugin } from 'aigamekit-vibegame/line';
 
 GAME
   .withPlugin(LinePlugin)
@@ -397,7 +397,7 @@ Shorthands expand to 3 tweens (one per axis):
 ### TypeScript Tween Examples
 
 ```typescript
-import { createTween } from 'vibegame/tweening';
+import { createTween } from 'aigamekit-vibegame/tweening';
 
 // Single field
 createTween(state, entity, 'transform.pos-x', { from: 0, to: 10, duration: 2, easing: 'sine-out' });
@@ -447,7 +447,7 @@ Sequences orchestrate multiple tweens with timing control. Tweens before `<pause
 ### TypeScript Sequence Control
 
 ```typescript
-import { completeSequence, playSequence, resetSequence, stopSequence } from 'vibegame/tweening';
+import { completeSequence, playSequence, resetSequence, stopSequence } from 'aigamekit-vibegame/tweening';
 
 // Get sequence by name and trigger
 const bounce = state.getEntityByName('bounce');
@@ -807,7 +807,7 @@ const health = Health.current[entity];
 
 ### Creating a Health System
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Define the component
 const Health = GAME.defineComponent({
@@ -881,11 +881,11 @@ Available in all systems via the `state` parameter:
 
 ### Using Specific Plugins
 ```typescript
-import * as GAME from 'vibegame';
-import { TransformsPlugin } from 'vibegame/transforms';
-import { RenderingPlugin } from 'vibegame/rendering';
-import { PhysicsPlugin } from 'vibegame/physics';
-import { AnimationPlugin } from 'vibegame/animation';
+import * as GAME from 'aigamekit-vibegame';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
+import { RenderingPlugin } from 'aigamekit-vibegame/rendering';
+import { PhysicsPlugin } from 'aigamekit-vibegame/physics';
+import { AnimationPlugin } from 'aigamekit-vibegame/animation';
 
 // Start with no defaults, add specific plugins
 GAME
@@ -929,8 +929,8 @@ import {
   getAllSequences,
   getSequenceInfo,
   toJSON,
-} from 'vibegame/cli';
-import { playSequence, resetSequence } from 'vibegame/tweening';
+} from 'aigamekit-vibegame/cli';
+import { playSequence, resetSequence } from 'aigamekit-vibegame/tweening';
 
 // Setup headless state
 const state = createHeadlessState({ plugins: DefaultPlugins });
@@ -1015,7 +1015,7 @@ World container managing entities, components, systems, and plugins. See main co
 ### System Execution Order
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 const EarlySystem: GAME.System = {
   group: 'setup',
@@ -1086,10 +1086,10 @@ Tag component (no properties)
 ### Basic Usage
 
 ```typescript
-import * as GAME from 'vibegame';
-import { AnimatedCharacter } from 'vibegame/animation';
-import { CharacterController } from 'vibegame/physics';
-import { Transform } from 'vibegame/transforms';
+import * as GAME from 'aigamekit-vibegame';
+import { AnimatedCharacter } from 'aigamekit-vibegame/animation';
+import { CharacterController } from 'aigamekit-vibegame/physics';
+import { Transform } from 'aigamekit-vibegame/transforms';
 
 // Add animated character to a player entity
 const player = state.createEntity();
@@ -1104,8 +1104,8 @@ state.addComponent(player, Transform);
 ### Accessing Animation State
 
 ```typescript
-import * as GAME from 'vibegame';
-import { AnimatedCharacter } from 'vibegame/animation';
+import * as GAME from 'aigamekit-vibegame';
+import { AnimatedCharacter } from 'aigamekit-vibegame/animation';
 
 const characterQuery = GAME.defineQuery([AnimatedCharacter]);
 const MySystem: GAME.System = {
@@ -1218,7 +1218,7 @@ All systems run in the `simulation` group.
 ```
 
 ```ts
-import { spawnProjectile, spawnProjectileFromTemplate, damageHealth, setMaxHealth } from 'vibegame';
+import { spawnProjectile, spawnProjectileFromTemplate, damageHealth, setMaxHealth } from 'aigamekit-vibegame';
 
 // Direct spawn: fire from caster toward a target entity
 spawnProjectile(state, casterEid, targetEid, {
@@ -1365,7 +1365,7 @@ Active only when the plugin is registered and the page is not headless, and igno
 
 ```ts
 // Register a dev-only action and var from your own system.
-import { registerDebugAction, registerDebugVar } from 'vibegame';
+import { registerDebugAction, registerDebugVar } from 'aigamekit-vibegame';
 
 registerDebugAction(state, 'respawn-player', () => spawnPlayer(state), {
   description: 'Teleport the player back to spawn',
@@ -1510,7 +1510,7 @@ Fellable tree (`break-style: fall`) — visual split mesh + stump collider:
 ```
 
 ```ts
-import { onDestructibleDestroyed } from 'vibegame';
+import { onDestructibleDestroyed } from 'aigamekit-vibegame';
 
 onDestructibleDestroyed(state, (eid, x, y, z) => {
   addStone(1, x, y, z); // inventory, SFX, quest counters…
@@ -1628,8 +1628,8 @@ XML placements from `simple-rpg/index.html`:
 Script module from `simple-rpg/src/scripts/chest.ts` (real exports, trimmed):
 
 ```ts
-import { loadGltfToSceneWithAnimator, registerInteractionTarget } from 'vibegame';
-import type { MonoBehaviourContext } from 'vibegame';
+import { loadGltfToSceneWithAnimator, registerInteractionTarget } from 'aigamekit-vibegame';
+import type { MonoBehaviourContext } from 'aigamekit-vibegame';
 
 export function start(ctx: MonoBehaviourContext): void {
   registerInteractionTarget(ctx.state, ctx.entity, { label: 'Open chest', key: 'F' });
@@ -1772,7 +1772,7 @@ spawnFloatingTextScreen(state, text, {
 ## Examples
 
 ```ts
-import { spawnFloatingText, spawnFloatingTextScreen } from 'vibegame';
+import { spawnFloatingText, spawnFloatingTextScreen } from 'aigamekit-vibegame';
 
 // World-space (3D troika text)
 spawnFloatingText(state, '+1 Pedra!', {
@@ -1852,8 +1852,8 @@ Teardown is layered so animators are released even when entities die mid-frame o
 Register an animator from a loaded GLTF and let the plugin tick it:
 
 ```ts
-import { GltfAnimator, registerAnimator } from 'vibegame';
-import { loadGltfAnimated, run } from 'vibegame';
+import { GltfAnimator, registerAnimator } from 'aigamekit-vibegame';
+import { loadGltfAnimated, run } from 'aigamekit-vibegame';
 
 const state = await run();
 const gltf = await loadGltfAnimated(state, '/assets/models/hero.glb');
@@ -1990,7 +1990,7 @@ The built-in `ENGINE_DEFAULT_EN_DICTIONARY` covers HUD labels (`hud.health`, `hu
 ```
 
 ```ts
-import { setLocale, loadDictionary, t, I18nText } from 'vibegame';
+import { setLocale, loadDictionary, t, I18nText } from 'aigamekit-vibegame';
 
 // Register a Portuguese dictionary.
 loadDictionary(state, 'pt', {
@@ -2073,8 +2073,8 @@ Default input mappings and sensitivity settings
 ### Basic Plugin Registration
 
 ```typescript
-import * as GAME from 'vibegame';
-import { InputPlugin } from 'vibegame/input';
+import * as GAME from 'aigamekit-vibegame';
+import { InputPlugin } from 'aigamekit-vibegame/input';
 
 GAME
   .withPlugin(InputPlugin)
@@ -2084,8 +2084,8 @@ GAME
 ### Reading Input in a Custom System
 
 ```typescript
-import * as GAME from 'vibegame';
-import { Player, InputState } from 'vibegame/input';
+import * as GAME from 'aigamekit-vibegame';
+import { Player, InputState } from 'aigamekit-vibegame/input';
 
 const playerQuery = GAME.defineQuery([Player, InputState]);
 const PlayerControlSystem: GAME.System = {
@@ -2114,7 +2114,7 @@ const PlayerControlSystem: GAME.System = {
 ### Consuming Buffered Actions
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 const CombatSystem: GAME.System = {
   update: (state) => {
@@ -2136,7 +2136,7 @@ const CombatSystem: GAME.System = {
 ### Custom Input Mappings
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Modify before starting the game
 GAME.INPUT_CONFIG.mappings.jump = ['Space', 'KeyX'];
@@ -2149,7 +2149,7 @@ GAME.run();
 ### Manual Event Handling
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Use the exported handlers directly if needed
 canvas.addEventListener('mousedown', GAME.handleMouseDown);
@@ -2171,7 +2171,7 @@ import {
   IsometricCameraPlugin,
   ISO_PITCH,
   withPlugin,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 withPlugin(IsometricCameraPlugin);
 
@@ -2219,7 +2219,7 @@ None.
 Earliest possible paint, before the runtime exists (`simple-rpg/src/main.ts`):
 
 ```ts
-import { mountLoadingScreen, LoadingPlugin, withPlugin } from 'vibegame';
+import { mountLoadingScreen, LoadingPlugin, withPlugin } from 'aigamekit-vibegame';
 
 mountLoadingScreen({
   title: 'Crystal Vale',
@@ -2329,7 +2329,7 @@ Standalone orbital camera controller with direct input handling for third-person
 ### Dynamic Target Switching
 
 ```typescript
-import { OrbitCamera } from 'vibegame/orbit-camera';
+import { OrbitCamera } from 'aigamekit-vibegame/orbit-camera';
 
 const switchTarget = (state, cameraEntity, newTargetEntity) => {
   OrbitCamera.target[cameraEntity] = newTargetEntity;
@@ -2566,8 +2566,8 @@ Initializes Rapier WASM physics engine
 ##### Create Physics Entity
 
 ```typescript
-import * as GAME from 'vibegame';
-import { Rigidbody, Collider, BodyType, ColliderShape } from 'vibegame/physics';
+import * as GAME from 'aigamekit-vibegame';
+import { Rigidbody, Collider, BodyType, ColliderShape } from 'aigamekit-vibegame/physics';
 
 // Create a dynamic physics box
 const entity = state.createEntity();
@@ -2592,9 +2592,9 @@ state.addComponent(entity, Collider, {
 ##### Moving Physics Bodies
 
 ```typescript
-import * as GAME from 'vibegame';
-import { Rigidbody, BodyType, ApplyForce, ApplyImpulse, KinematicMove, SetLinearVelocity } from 'vibegame/physics';
-import { Transform } from 'vibegame/transforms';
+import * as GAME from 'aigamekit-vibegame';
+import { Rigidbody, BodyType, ApplyForce, ApplyImpulse, KinematicMove, SetLinearVelocity } from 'aigamekit-vibegame/physics';
+import { Transform } from 'aigamekit-vibegame/transforms';
 
 // Dynamic bodies - Use forces/impulses for movement
 if (Rigidbody.type[entity] === BodyType.Dynamic) {
@@ -2624,8 +2624,8 @@ if (Rigidbody.type[entity] === BodyType.KinematicVelocityBased) {
 ##### Apply Forces
 
 ```typescript
-import * as GAME from 'vibegame';
-import { ApplyImpulse, ApplyForce, SetLinearVelocity } from 'vibegame/physics';
+import * as GAME from 'aigamekit-vibegame';
+import { ApplyImpulse, ApplyForce, SetLinearVelocity } from 'aigamekit-vibegame/physics';
 
 // Apply upward impulse (jump)
 state.addComponent(entity, ApplyImpulse, {
@@ -2646,8 +2646,8 @@ state.addComponent(entity, SetLinearVelocity, {
 ##### Handle Collisions
 
 ```typescript
-import * as GAME from 'vibegame';
-import { TouchedEvent, ApplyImpulse } from 'vibegame/physics';
+import * as GAME from 'aigamekit-vibegame';
+import { TouchedEvent, ApplyImpulse } from 'aigamekit-vibegame/physics';
 
 const touchedQuery = GAME.defineQuery([TouchedEvent]);
 const CollisionSystem: GAME.System = {
@@ -2669,8 +2669,8 @@ const CollisionSystem: GAME.System = {
 ##### Character Movement
 
 ```typescript
-import * as GAME from 'vibegame';
-import { CharacterMovement, CharacterController } from 'vibegame/physics';
+import * as GAME from 'aigamekit-vibegame';
+import { CharacterMovement, CharacterController } from 'aigamekit-vibegame/physics';
 
 const PlayerMovementSystem: GAME.System = {
   update: (state) => {
@@ -2692,7 +2692,7 @@ const PlayerMovementSystem: GAME.System = {
 ##### Custom Plugin Integration
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Initialize physics before running
 await GAME.initializePhysics();
@@ -2803,7 +2803,7 @@ Smooth rotation towards movement
 ### Accessing Player Component (JavaScript)
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 const playerQuery = GAME.defineQuery([GAME.Player]);
 const MySystem: GAME.System = {
@@ -2825,7 +2825,7 @@ const MySystem: GAME.System = {
 ### Creating Player Programmatically
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 const PlayerSpawnSystem: GAME.System = {
   setup: (state) => {
@@ -2862,7 +2862,7 @@ Note: Camera controls are handled by OrbitCameraPlugin, not PlayerPlugin.
 ### Plugin Registration
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 GAME
   .withPlugin(GAME.PlayerPlugin)  // Included in defaults
@@ -2997,7 +2997,7 @@ Associates canvas with RenderContext
 ### Imperative Usage
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Create rendered entity programmatically
 const entity = state.createEntity();
@@ -3027,7 +3027,7 @@ GAME.setCanvasElement(contextEntity, canvas);
 ### Shape Types
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Available shape enums
 const shapes = {
@@ -3045,7 +3045,7 @@ const shapes = {
 ### Visibility Control
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Hide/show entities
 GAME.Renderer.visible[entity] = 0; // Hide
@@ -3131,7 +3131,7 @@ import {
   presetToMeleeAiConfig,
   createBossAi,
   AI_MODE_CHASE,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 // Programmatic tuning
 setMeleeAiConfig(state, enemyEid, {
@@ -3221,7 +3221,7 @@ Synchronous pub/sub. Handlers fire in subscription order during `emit`; exceptio
 Register `ItemDef`s programmatically (the simple-rpg `main.ts` pattern; without a registered `ItemDef`, `rpg-inventory` caps every stack at 1):
 
 ```ts
-import { getDataRegistry, withPlugin, RpgCorePlugin } from 'vibegame';
+import { getDataRegistry, withPlugin, RpgCorePlugin } from 'aigamekit-vibegame';
 
 withPlugin(RpgCorePlugin);
 // ...after runtime build:
@@ -3262,7 +3262,7 @@ loot-table:
 ```
 
 ```ts
-import { rollLoot, applyLootResult } from 'vibegame';
+import { rollLoot, applyLootResult } from 'aigamekit-vibegame';
 const drops = rollLoot(state, 'goblin-drops');
 for (const r of drops) applyLootResult(state, heroEid, r);
 ```
@@ -3270,7 +3270,7 @@ for (const r of drops) applyLootResult(state, heroEid, r);
 Subscribe with auto-cleanup on entity death:
 
 ```ts
-import { onEvent, COMBAT_DAMAGED } from 'vibegame';
+import { onEvent, COMBAT_DAMAGED } from 'aigamekit-vibegame';
 onEvent(state, COMBAT_DAMAGED, (p) => { /* ... */ }, { entityRef: heroEid });
 ```
 
@@ -3325,7 +3325,7 @@ price:
 Buy and sell from code:
 
 ```ts
-import { buyItem, sellItem, getPrice } from 'vibegame';
+import { buyItem, sellItem, getPrice } from 'aigamekit-vibegame';
 
 const unit = getPrice(state, 'health_potion', 'buy'); // 25
 const ok = buyItem(state, heroEid, shopEid, 'health_potion', 3, unit); // false if not enough gold/stock/room
@@ -3387,7 +3387,7 @@ Events are queued rather than emitted inline so a single frame's batch of `addIt
 Register item definitions first (without this, every item stacks to 1):
 
 ```ts
-import { getDataRegistry, InventoryPlugin } from 'vibegame';
+import { getDataRegistry, InventoryPlugin } from 'aigamekit-vibegame';
 
 withPlugin(InventoryPlugin);
 // ...after runtime build:
@@ -3405,7 +3405,7 @@ Declarative inventory (capacity defaults to 20):
 Add, query, and remove (matches the simple-rpg `main.ts` pattern):
 
 ```ts
-import { addItem, getItemQty, removeItem, InventoryComponent } from 'vibegame';
+import { addItem, getItemQty, removeItem, InventoryComponent } from 'aigamekit-vibegame';
 
 const overflow = addItem(state, heroEid, 'bomb', 5); // 0 if all 5 fit
 const have = getItemQty(state, heroEid, 'bomb');     // 5
@@ -3427,7 +3427,7 @@ Save and restore one entity's inventory:
 import {
   getInventoryEntitySnapshot,
   applyInventoryEntitySnapshot,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const snap = getInventoryEntitySnapshot(state, heroEid);
 if (snap) applyInventoryEntitySnapshot(state, heroEid, snap);
@@ -3471,7 +3471,7 @@ None. Pause state lives in the module-scoped `WeakMap`, exposed via `getPauseSta
 Game code (from `simple-rpg/src/game/pause.ts`) opens the shop as a pausing modal:
 
 ```ts
-import { pushModal, popModal, isPaused } from 'vibegame';
+import { pushModal, popModal, isPaused } from 'aigamekit-vibegame';
 
 setShopOpen(true);   // internally: pushModal(state, 'shop')  -> sim freezes
 setShopOpen(false);  // popModal(state, 'shop')               -> sim resumes
@@ -3527,7 +3527,7 @@ Declarative entity with a custom XP curve and 5 skill points per level:
 Granting XP and reading modifiers from code:
 
 ```ts
-import { addXp, getXpToNextLevel, getStatModifiers } from 'vibegame';
+import { addXp, getXpToNextLevel, getStatModifiers } from 'aigamekit-vibegame';
 
 addXp(state, heroEid, 50);
 console.log('XP to next:', getXpToNextLevel(state, heroEid));
@@ -3537,8 +3537,8 @@ const mods = getStatModifiers(state, heroEid); // [{ stat, magnitude, stackMode,
 Buying a skill rank and reacting to level-up:
 
 ```ts
-import { spendSkillPoint } from 'vibegame';
-import { onEvent, PROGRESSION_LEVEL_UP } from 'vibegame';
+import { spendSkillPoint } from 'aigamekit-vibegame';
+import { onEvent, PROGRESSION_LEVEL_UP } from 'aigamekit-vibegame';
 
 spendSkillPoint(state, heroEid, 'toughness'); // false if no points, max rank, or missing def
 onEvent(state, PROGRESSION_LEVEL_UP, ({ eid, level }) => { /* ... */ });
@@ -3661,8 +3661,8 @@ Apply poison to an entity on contact, declaratively on self:
 From code, with explicit stacking and cleanup hooks:
 
 ```ts
-import { applyStatus, cancelStatus, getStatusModifiers } from 'vibegame';
-import { onEvent, STATUS_EXPIRED, STATUS_APPLIED } from 'vibegame';
+import { applyStatus, cancelStatus, getStatusModifiers } from 'aigamekit-vibegame';
+import { onEvent, STATUS_EXPIRED, STATUS_APPLIED } from 'aigamekit-vibegame';
 
 applyStatus(state, enemyEid, 'poison', { stackMode: 'stack' });
 applyStatus(state, enemyEid, 'speed-buff'); // replace by default
@@ -3735,7 +3735,7 @@ import {
   spendResource,
   getResource,
   setCapacity,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 withPlugin(RpgVaultPlugin);
 // ...after runtime build, for the hero entity:
@@ -3754,7 +3754,7 @@ Save and restore a single entity's resources:
 import {
   getVaultEntitySnapshot,
   applyVaultEntitySnapshot,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const snap = getVaultEntitySnapshot(state, heroEid); // null if nothing stored
 if (snap) applyVaultEntitySnapshot(state, heroEid, snap);
@@ -3828,7 +3828,7 @@ Call `registerTransientExclusion({ name, component, matches? })` to add more fro
 ## Examples
 
 ```ts
-import { saveToLocalStorage, loadFromLocalStorage, serializeAll, deserializeAll } from 'vibegame';
+import { saveToLocalStorage, loadFromLocalStorage, serializeAll, deserializeAll } from 'aigamekit-vibegame';
 
 // Simple: whole-world bytes in localStorage under a fixed key.
 saveToLocalStorage(state, 'my-game-save');
@@ -3973,7 +3973,7 @@ Holds dynamic entities in the air at their spawn Y until the terrain below them 
 ```
 
 ```ts
-import { gateEntity } from 'vibegame';
+import { gateEntity } from 'aigamekit-vibegame';
 
 // Programmatic gating (e.g. after spawning an entity at runtime)
 gateEntity(state, enemyEid, { yFallback: 40, skinDistance: 0.05 });
@@ -4029,7 +4029,7 @@ Auto-creates player, camera, and lighting entities at startup if missing.
 
 ```typescript
 // The plugin automatically creates defaults when included
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // This will create player, camera, and lighting automatically
 GAME.run(); // Uses DefaultPlugins which includes StartupPlugin
@@ -4050,7 +4050,7 @@ GAME.run(); // Uses DefaultPlugins which includes StartupPlugin
 ### Manual Plugin Registration
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Use startup plugin without other defaults
 GAME.withoutDefaultPlugins()
@@ -4065,7 +4065,7 @@ GAME.withoutDefaultPlugins()
 The startup systems are idempotent - they check for existing entities before creating:
 
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // First run: Creates player, camera, lights
 const playerQuery = GAME.defineQuery([GAME.Player]);
@@ -4323,7 +4323,7 @@ Omit the attrs to use plugin defaults; set `noise-sand-strength="0"` to disable.
 ### JavaScript API
 
 ```typescript
-import { getGroundHeight, getTerrainHeightAt, setTerrainWireframe, reloadTerrainHeightmap } from 'vibegame/terrain';
+import { getGroundHeight, getTerrainHeightAt, setTerrainWireframe, reloadTerrainHeightmap } from 'aigamekit-vibegame/terrain';
 
 const height = getGroundHeight(state, playerX, playerZ);
 const analytic = getTerrainHeightAt(state, playerX, playerZ);
@@ -4383,7 +4383,7 @@ Never write `Math.atan2(...)` directly into `Transform.eulerY` (radians vs degre
 
 #### JavaScript API
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // In a system
 const MySystem = {
@@ -4423,7 +4423,7 @@ const MySystem = {
 
 #### Accessing World Transform
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 const transformQuery = GAME.defineQuery([GAME.Transform, GAME.WorldTransform]);
 const WorldTransformSystem = {
@@ -4448,7 +4448,7 @@ const WorldTransformSystem = {
 
 #### Setting Transform Values
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Direct property access (bitECS style)
 GAME.Transform.posX[entity] = 10;
@@ -4469,7 +4469,7 @@ GAME.Transform.scaleZ[entity] = 2;
 
 #### Transform Interpolation
 ```typescript
-import * as GAME from 'vibegame';
+import * as GAME from 'aigamekit-vibegame';
 
 // Interpolate between two positions
 const t = 0.5; // 50% between start and end

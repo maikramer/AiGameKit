@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { ParticlesPlugin } from 'vibegame';
-import type { Recipe } from 'vibegame';
+import { ParticlesPlugin } from 'aigamekit-vibegame';
+import type { Recipe } from 'aigamekit-vibegame';
 import {
   PRESET_NAMES,
   presetIndex,

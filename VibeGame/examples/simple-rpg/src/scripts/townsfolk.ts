@@ -3,9 +3,9 @@
 // serve N entidades: cada uma adota a rota cujo primeiro ponto está mais
 // perto do seu spawn — sem atributos XML, sem estado por ficheiro.
 import * as THREE from 'three';
-import { loadGltfToSceneWithAnimator } from 'vibegame';
-import type { GltfAnimator, MonoBehaviourContext } from 'vibegame';
-import { Transform } from 'vibegame';
+import { loadGltfToSceneWithAnimator } from 'aigamekit-vibegame';
+import type { GltfAnimator, MonoBehaviourContext } from 'aigamekit-vibegame';
+import { Transform } from 'aigamekit-vibegame';
 import { isGamePaused } from '../game/pause.ts';
 import { NpcIdleAnimator } from '../game/npc-anims.ts';
 

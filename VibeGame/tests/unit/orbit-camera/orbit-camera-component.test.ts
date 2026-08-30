@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, defineQuery } from 'vibegame';
-import { OrbitCamera } from 'vibegame/orbit-camera';
+import { State, defineQuery } from 'aigamekit-vibegame';
+import { OrbitCamera } from 'aigamekit-vibegame/orbit-camera';
 
 describe('OrbitCamera Component', () => {
   let state: State;

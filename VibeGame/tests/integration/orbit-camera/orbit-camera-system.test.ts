@@ -1,11 +1,11 @@
-import { State, TIME_CONSTANTS } from 'vibegame';
-import { OrbitCamera, OrbitCameraPlugin } from 'vibegame/orbit-camera';
+import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
+import { OrbitCamera, OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
 import {
   Transform,
   TransformsPlugin,
   WorldTransform,
-} from 'vibegame/transforms';
-import { threeCameras } from 'vibegame/rendering';
+} from 'aigamekit-vibegame/transforms';
+import { threeCameras } from 'aigamekit-vibegame/rendering';
 import { beforeEach, describe, expect, it } from 'bun:test';
 import * as THREE from 'three';
 

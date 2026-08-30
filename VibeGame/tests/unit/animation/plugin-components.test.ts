@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { State, NULL_ENTITY, defineQuery } from 'vibegame';
+import { State, NULL_ENTITY, defineQuery } from 'aigamekit-vibegame';
 import {
   AnimatedCharacter,
   HasAnimator,

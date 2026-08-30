@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import type { ParserParams } from '../../../src/core';
 import { loadDictionary } from '../../../src/plugins/i18n/utils';
 import { HudPlugin } from '../../../src/plugins/hud/plugin';

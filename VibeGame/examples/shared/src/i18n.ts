@@ -2,8 +2,8 @@ import {
   loadDictionary,
   loadEngineDefaultDictionary,
   setLocale,
-} from 'vibegame';
-import type { State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 
 export interface GameDictionary {
   en: Record<string, string>;

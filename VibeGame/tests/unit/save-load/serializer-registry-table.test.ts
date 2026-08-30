@@ -4,7 +4,7 @@ import {
   State,
   Serializable,
   SaveLoadPlugin,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   deserializeAll,
   getSaveSerializer,

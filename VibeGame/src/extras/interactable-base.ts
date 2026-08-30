@@ -218,7 +218,7 @@ export function createInteractable(
  * `script="…"` module:
  *
  * ```ts
- * import { createPickup, toMonoBehaviourModule } from 'vibegame';
+ * import { createPickup, toMonoBehaviourModule } from 'aigamekit-vibegame';
  * const inst = new (createPickup({ pickupRange: 2, onPickup: healOnPickup }))();
  * export const { start, update, onDestroy } = toMonoBehaviourModule(inst);
  * ```

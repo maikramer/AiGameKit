@@ -13,7 +13,7 @@ import {
   YUKA_BEHAVIOR_SEPARATION,
   YUKA_BEHAVIOR_WANDER,
   type CreatureDecisionProfile,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const HERO_EID = 1;
 const CREATURE_EID = 2;

@@ -5,11 +5,11 @@
  * This is the "smoke test" for the full XML → ECS → simulation pipeline.
  */
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
-import { createHeadlessState, parseWorldXml } from 'vibegame/cli';
-import { DefaultPlugins } from 'vibegame/defaults';
-import { Transform } from 'vibegame/transforms';
-import { Rigidbody } from 'vibegame/physics';
+import { State, TIME_CONSTANTS, defineQuery } from 'aigamekit-vibegame';
+import { createHeadlessState, parseWorldXml } from 'aigamekit-vibegame/cli';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
+import { Transform } from 'aigamekit-vibegame/transforms';
+import { Rigidbody } from 'aigamekit-vibegame/physics';
 
 // Polyfill browser APIs for Bun (GSAP uses these internally)
 globalThis.requestAnimationFrame = ((cb: any) => setTimeout(cb, 16)) as any;

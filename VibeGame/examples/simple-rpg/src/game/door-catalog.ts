@@ -3,7 +3,7 @@
  * Omni eye-level 3/4 “front” is local +Z; some meshes put the door on a side.
  * Measured from lod0 screenshots + mesh recess (aigamekit-lab front/left/right/back).
  */
-import type { DoorLocal } from 'vibegame';
+import type { DoorLocal } from 'aigamekit-vibegame';
 
 export type BuildingDoorAsset =
   | 'village_house'

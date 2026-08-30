@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createGLTFLoader, createGeometryGLTFLoader } from 'vibegame';
+import { createGLTFLoader, createGeometryGLTFLoader } from 'aigamekit-vibegame';
 
 /**
  * Minimal GLB with one triangle whose material points at a KTX2 (basisu)

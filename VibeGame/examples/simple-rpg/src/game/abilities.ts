@@ -23,8 +23,8 @@ import {
   spawnParticleBurst,
   Transform,
   WorldTransform,
-} from 'vibegame';
-import type { State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { isGamePaused } from './pause';
 import { playerAttackPower, playerStats } from './skills';

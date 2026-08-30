@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { cellIndex, facingCellFrom, worldToCell } from 'vibegame';
+import { cellIndex, facingCellFrom, worldToCell } from 'aigamekit-vibegame';
 // `cellToWorld` is not on the main barrel — the road plugin owns that name.
 import {
   cellToWorld,

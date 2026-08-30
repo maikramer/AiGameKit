@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { ColliderShape } from 'vibegame/physics';
+import { ColliderShape } from 'aigamekit-vibegame/physics';
 import { applyPlayerColliderFromAabb } from '../../../src/plugins/player/player-collider-fit';
 
 describe('applyPlayerColliderFromAabb', () => {

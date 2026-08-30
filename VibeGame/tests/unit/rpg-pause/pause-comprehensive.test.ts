@@ -13,7 +13,7 @@ import {
   setInputMovementSuppressed,
   setTimeScale,
   suppressInput,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('rpg-pause table-driven', () => {
   let state: State;

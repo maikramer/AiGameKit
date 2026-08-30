@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   Rigidbody,
   BodyType,
@@ -10,7 +10,7 @@ import {
   CollisionEvents,
   InterpolatedTransform,
   PhysicsWorld,
-} from 'vibegame/physics';
+} from 'aigamekit-vibegame/physics';
 
 describe('Physics Components', () => {
   let state: State;

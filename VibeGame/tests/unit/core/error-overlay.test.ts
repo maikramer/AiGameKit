@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { hideErrorOverlay, showErrorOverlay } from 'vibegame';
+import { hideErrorOverlay, showErrorOverlay } from 'aigamekit-vibegame';
 
 const OVERLAY_ID = 'vibegame-error-overlay';
 

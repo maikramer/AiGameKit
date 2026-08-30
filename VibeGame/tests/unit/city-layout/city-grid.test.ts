@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { Parent, State, XMLParser, parseXMLToEntities } from 'vibegame';
-import { DefaultPlugins } from 'vibegame/defaults';
+import { Parent, State, XMLParser, parseXMLToEntities } from 'aigamekit-vibegame';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
 import {
   cellToWorld,
   parseCell,

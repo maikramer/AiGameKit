@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import * as THREE from 'three';
-import { eulerToQuaternion } from 'vibegame';
+import { eulerToQuaternion } from 'aigamekit-vibegame';
 import { composeSpawnRotation } from '../../../src/plugins/spawner/transform-merge';
 
 function localUpAfterEuler(euler: {

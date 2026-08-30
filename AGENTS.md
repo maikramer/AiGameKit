@@ -88,11 +88,11 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Terrain3D/` | Python | `terrain3d` | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
 | `Rocks3D/` | Python | `rocks3d` | Procedural 3D rock generation (no PyTorch) |
 | `Vramd/` | Python | `modelserver` (CLI `vramd`/`vramd`) | Unified Model Server (vramd) — single-process GPU/VRAM supervisor |
-| `VibeGame/` | TypeScript | `vibegame` (npm) | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `PlayerGLTF` recipe |
+| `VibeGame/` | TypeScript | `aigamekit-vibegame` (npm) | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `PlayerGLTF` recipe |
 
 All Python packages depend on `aigamekit-shared` (install Shared first). VibeGame is standalone (Bun + Vite); it does not use `aigamekit-shared`.
 
-**Upstream references:** [Materialize](https://github.com/BoundingBoxSoftware/Materialize) (Bounding Box Software) — see `Materialize/README.md`. [VibeGame](https://github.com/dylanebert/vibegame) (dylanebert) — see `VibeGame/README.md`. Root `README.md` / `README_PT.md` have a **References** section.
+**Upstream references:** [Materialize](https://github.com/BoundingBoxSoftware/Materialize) (Bounding Box Software) — see `Materialize/README.md`. Root `README.md` / `README_PT.md` have a **References** section.
 
 ## Build / Lint / Test Commands
 

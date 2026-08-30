@@ -41,10 +41,10 @@ export default defineConfig({
   resolve: {
     // Keep engine SoA (Transform, etc.) as a single module instance so entity
     // scripts and main.ts share the same component arrays.
-    dedupe: ['three', 'vibegame'],
+    dedupe: ['three', 'aigamekit-vibegame'],
     alias: {
       vibegame: path.join(vibegameRoot, 'src/index.ts'),
-      'vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),
+      'aigamekit-vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),
       '@interverse/three-terrain-lod': terrainLodPath,
       'node:fs': path.resolve(vibegameRoot, 'scripts/node-stub.js'),
       'node:path': path.resolve(vibegameRoot, 'scripts/node-stub.js'),
@@ -72,7 +72,7 @@ export default defineConfig({
     // @gltf-transform/core lazy-imports node:fs/node:path for I/O; never prebundle
     // it in the browser (the engine only calls the validator on explicit demand).
     exclude: [
-      'vibegame',
+      'aigamekit-vibegame',
       'recast-navigation',
       '@recast-navigation/three',
       '@pmndrs/uikit',

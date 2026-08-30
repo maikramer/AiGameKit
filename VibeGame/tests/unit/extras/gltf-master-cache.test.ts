@@ -6,7 +6,7 @@ import {
   loadGltfMasterTracked,
   loadSettledGltfMaster,
   State,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { hasAnyGltfLoadStarted } from '../../../src/extras/gltf-bridge';
 
 /** Minimal valid GLB (one empty scene) so the loader parses without network. */

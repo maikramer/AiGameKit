@@ -25,7 +25,7 @@ import {
   saveSnapshot,
   spendResource,
   tillTile,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { FarmGridSetupSystem } from '../../../src/plugins/farm-plot/systems';
 
 /**

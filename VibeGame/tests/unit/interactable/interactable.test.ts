@@ -9,7 +9,7 @@ import {
   Transform,
   toMonoBehaviourModule,
   type PickupConfig,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 interface StubState {
   time: { deltaTime: number; elapsed: number };

@@ -25,7 +25,7 @@ import {
   registerRpgSaveSerializers,
   serializeAll,
   spendSkillPoint,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 function makeState(): State {
   const state = new State();

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { loadGltfToSceneWithAnimator, playSound } from 'vibegame';
-import type { GltfAnimator, MonoBehaviourContext } from 'vibegame';
-import { Transform } from 'vibegame';
+import { loadGltfToSceneWithAnimator, playSound } from 'aigamekit-vibegame';
+import type { GltfAnimator, MonoBehaviourContext } from 'aigamekit-vibegame';
+import { Transform } from 'aigamekit-vibegame';
 import {
   isKeyDown,
   setInputMovementSuppressed,
@@ -10,7 +10,7 @@ import {
   getItemQty,
   registerInteractionTarget,
   unregisterInteractionTarget,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import { getGold, spendGold, addGold } from '../game/economy.ts';
 import { isGamePaused, setShopOpen } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';

@@ -18,7 +18,7 @@ import {
   getDataRegistry,
   setFaction,
   type TurretAiConfig,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 const ARROW_TEMPLATE = 'arrow';
 const projectileQuery = defineQuery([ProjectileData]);

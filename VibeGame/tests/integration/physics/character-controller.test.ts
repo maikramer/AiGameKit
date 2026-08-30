@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { NULL_ENTITY, State, TIME_CONSTANTS, defineQuery } from 'vibegame';
+import { NULL_ENTITY, State, TIME_CONSTANTS, defineQuery } from 'aigamekit-vibegame';
 import {
   Rigidbody,
   BodyType,
@@ -9,8 +9,8 @@ import {
   ColliderShape,
   PhysicsPlugin,
   PhysicsWorld,
-} from 'vibegame/physics';
-import { Transform } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { Transform } from 'aigamekit-vibegame/transforms';
 
 describe('Character Controller Integration', () => {
   let state: State;

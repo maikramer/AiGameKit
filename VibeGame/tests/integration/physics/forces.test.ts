@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
+import { State, TIME_CONSTANTS, defineQuery } from 'aigamekit-vibegame';
 import {
   ApplyAngularImpulse,
   ApplyForce,
@@ -14,8 +14,8 @@ import {
   PhysicsWorld,
   SetAngularVelocity,
   SetLinearVelocity,
-} from 'vibegame/physics';
-import { Transform } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { Transform } from 'aigamekit-vibegame/transforms';
 
 describe('Physics Forces and Impulses', () => {
   let state: State;

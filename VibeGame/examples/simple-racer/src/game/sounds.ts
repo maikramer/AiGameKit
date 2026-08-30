@@ -1,4 +1,4 @@
-import { defineSoundBank, preloadSounds } from 'vibegame';
+import { defineSoundBank, preloadSounds } from 'aigamekit-vibegame';
 
 /**
  * Single source of truth for every sound in the racer.

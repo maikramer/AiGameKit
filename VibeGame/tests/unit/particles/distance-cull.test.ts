@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { ParticleEmitter } from 'vibegame';
+import { ParticleEmitter } from 'aigamekit-vibegame';
 import { applyParticleDistanceCull } from '../../../src/plugins/particles/systems';
 import type { ParticleSystem } from 'three.quarks';
 import type { BatchedRenderer } from 'three.quarks';

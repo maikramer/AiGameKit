@@ -6,8 +6,8 @@ import {
   addItem,
   registerInteractionTarget,
   playSound,
-} from 'vibegame';
-import type { MonoBehaviourContext } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { MonoBehaviourContext } from 'aigamekit-vibegame';
 import { isGamePaused } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';
 import { getStoneCount, removeStone } from './inventory.ts';

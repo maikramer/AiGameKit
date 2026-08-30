@@ -9,12 +9,12 @@ import {
   getInventory,
   getItemQty,
   removeItem,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   applyInventoryEntitySnapshot,
   getInventoryEntitySnapshot,
 } from '../../../src/plugins/rpg-inventory/systems';
-import type { ItemDef } from 'vibegame';
+import type { ItemDef } from 'aigamekit-vibegame';
 
 function newState(): State {
   const state = new State();

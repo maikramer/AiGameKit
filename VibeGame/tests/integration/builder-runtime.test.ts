@@ -2,12 +2,12 @@
 
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import * as GAME from 'vibegame';
-import { RenderingPlugin } from 'vibegame/rendering';
-import { PhysicsPlugin } from 'vibegame/physics';
-import { TransformsPlugin } from 'vibegame/transforms';
+import * as GAME from 'aigamekit-vibegame';
+import { RenderingPlugin } from 'aigamekit-vibegame/rendering';
+import { PhysicsPlugin } from 'aigamekit-vibegame/physics';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
-import { MAX_ENTITIES } from 'vibegame';
+import { MAX_ENTITIES } from 'aigamekit-vibegame';
 
 describe('Builder-Runtime Integration', () => {
   beforeEach(() => {

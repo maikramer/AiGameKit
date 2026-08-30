@@ -7,7 +7,7 @@ import {
   it,
 } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import type { XMLValue } from '../../../src/core';
 import { HudPlugin } from '../../../src/plugins/hud/plugin';
 import {

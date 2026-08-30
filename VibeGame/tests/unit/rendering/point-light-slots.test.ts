@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { WorldTransform } from 'vibegame';
+import { WorldTransform } from 'aigamekit-vibegame';
 import { pickNearestLightSlots } from '../../../src/plugins/rendering/systems';
 
 /**

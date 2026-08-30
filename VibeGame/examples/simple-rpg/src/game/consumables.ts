@@ -13,8 +13,8 @@ import {
   isKeyDown,
   playSound,
   removeItem,
-} from 'vibegame';
-import type { State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 import { isGamePaused } from './pause';
 
 export const POTION_HEAL = 50;

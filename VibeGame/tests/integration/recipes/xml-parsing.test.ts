@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser } from 'vibegame';
-import { parseXMLToEntities } from 'vibegame';
+import { State, XMLParser } from 'aigamekit-vibegame';
+import { parseXMLToEntities } from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 

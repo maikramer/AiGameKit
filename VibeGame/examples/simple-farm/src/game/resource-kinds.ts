@@ -7,7 +7,7 @@
 //
 // `config.enums` merges per component but ASSIGNS the whole `kind` mapping, so
 // the engine's three have to be repeated here or they disappear.
-import type { Plugin } from 'vibegame';
+import type { Plugin } from 'aigamekit-vibegame';
 
 export const RESOURCE_KINDS = {
   wood: 0,

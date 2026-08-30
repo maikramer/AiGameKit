@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { TerrainLodSelectSystem } from 'vibegame/terrain';
+import { TerrainLodSelectSystem } from 'aigamekit-vibegame/terrain';
 
 describe('TerrainLodSelectSystem', () => {
   it('is a draw-group system', () => {

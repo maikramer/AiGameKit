@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
-import { PlayerController } from 'vibegame/player';
+import { State } from 'aigamekit-vibegame';
+import { PlayerController } from 'aigamekit-vibegame/player';
 
 describe('Player Components', () => {
   let state: State;

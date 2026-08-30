@@ -459,7 +459,7 @@ Existing `setup.py` files remain for legacy installer compatibility.
 Some components trace their design to external projects:
 
 - **[Materialize](Materialize/)** (Rust CLI): inspired by the original [Materialize](https://github.com/BoundingBoxSoftware/Materialize) from Bounding Box Software (Unity/Windows). See [`Materialize/README.md`](Materialize/README.md).
-- **[VibeGame](VibeGame/)** (TypeScript engine): upstream project [dylanebert/VibeGame](https://github.com/dylanebert/vibegame). See [`VibeGame/README.md`](VibeGame/README.md).
+- **[VibeGame](VibeGame/)** (TypeScript engine): 3D engine own package `aigamekit-vibegame`. See [`VibeGame/README.md`](VibeGame/README.md).
 
 ## Contributing
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'bun:test';
-import { State, Transform, Rigidbody, getTerrainContext } from 'vibegame';
+import { State, Transform, Rigidbody, getTerrainContext } from 'aigamekit-vibegame';
 import { TerrainChunk } from '../../../src/plugins/terrain/components';
 import { getPhysicsContext } from '../../../src/plugins/physics/systems';
 import {

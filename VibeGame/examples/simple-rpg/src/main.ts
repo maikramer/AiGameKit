@@ -1,4 +1,4 @@
-import type { System, State, QuestDef, HeldItemGripRegistry } from 'vibegame';
+import type { System, State, QuestDef, HeldItemGripRegistry } from 'aigamekit-vibegame';
 import {
   configure,
   getBuilder,
@@ -95,7 +95,7 @@ import {
   ThirdPersonCamera,
   getScene,
   registerSpawnFootprint,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   Euler,
   Vector3,

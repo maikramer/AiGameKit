@@ -12,8 +12,8 @@ import {
   getItemQty,
   onEvent,
   removeItem,
-} from 'vibegame';
-import type { ItemDef } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { ItemDef } from 'aigamekit-vibegame';
 
 const POTION: ItemDef = {
   id: 'potion',

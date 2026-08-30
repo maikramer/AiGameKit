@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   getLoadingProgress,
   isPhysicsHeld,
@@ -7,7 +7,7 @@ import {
   isWorldReady,
   registerReadyGate,
   setLoadingEnforcement,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('loading-gate registry', () => {
   let state: State;

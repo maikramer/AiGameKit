@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { fbm2, valueNoise2 } from 'vibegame';
+import { fbm2, valueNoise2 } from 'aigamekit-vibegame';
 
 describe('noise (core/math)', () => {
   describe('valueNoise2', () => {

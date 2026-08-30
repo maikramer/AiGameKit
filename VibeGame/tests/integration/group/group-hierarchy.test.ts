@@ -6,9 +6,9 @@ import {
   WorldTransform,
   XMLParser,
   parseXMLToEntities,
-} from 'vibegame';
-import { GroupPlugin } from 'vibegame/group';
-import { Parent, TransformHierarchySystem } from 'vibegame/transforms';
+} from 'aigamekit-vibegame';
+import { GroupPlugin } from 'aigamekit-vibegame/group';
+import { Parent, TransformHierarchySystem } from 'aigamekit-vibegame/transforms';
 
 describe('Group hierarchy', () => {
   let state: State;

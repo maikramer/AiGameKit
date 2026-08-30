@@ -4,7 +4,7 @@ import {
   formatZodError,
   formatValidationSuccess,
   formatBuildValidationSummary,
-} from 'vibegame/core/validation';
+} from 'aigamekit-vibegame/core/validation';
 
 describe('Error Formatter', () => {
   describe('formatZodError', () => {

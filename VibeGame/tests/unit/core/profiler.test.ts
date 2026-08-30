@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { System } from 'vibegame';
+import type { System } from 'aigamekit-vibegame';
 import {
   State,
   _resetProfilerForTests,
@@ -11,7 +11,7 @@ import {
   isProfilerEnabled,
   resetProfiler,
   withSpan,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('ProfilerSession', () => {
   beforeEach(() => {

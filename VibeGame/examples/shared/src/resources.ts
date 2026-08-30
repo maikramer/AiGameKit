@@ -1,5 +1,5 @@
-import { addResource, getResource, spendResource } from 'vibegame';
-import type { State } from 'vibegame';
+import { addResource, getResource, spendResource } from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 
 export interface ResourceAccess {
   state(): State | null;

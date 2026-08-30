@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, parseXMLToEntities } from 'vibegame';
-import { TransformsPlugin } from 'vibegame/transforms';
+import { State, XMLParser, parseXMLToEntities } from 'aigamekit-vibegame';
+import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
 import { WaterPlugin } from '../../../src/plugins/water/plugin';
 import { River, getRiverPath } from '../../../src/plugins/water/components';
 

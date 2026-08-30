@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { vibegame, consoleForwarding, vibegameWorldHmr } from 'vibegame/vite';
+import { vibegame, consoleForwarding, vibegameWorldHmr } from 'aigamekit-vibegame/vite';
 
 export default defineConfig({
   plugins: [vibegame(), consoleForwarding(), vibegameWorldHmr()],

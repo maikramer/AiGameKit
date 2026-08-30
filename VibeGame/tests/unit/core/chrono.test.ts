@@ -11,7 +11,7 @@ import {
   getChronoStatus,
   isChronoEnabled,
   onChronoSeek,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 

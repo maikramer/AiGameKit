@@ -17,8 +17,8 @@ import {
   onDestructibleDestroyed,
   spawnFloatingText,
   t,
-} from 'vibegame';
-import type { State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 import { isWoodEntity } from '../scripts/tree';
 import { isStoneEntity } from '../scripts/rock';
 import { isFoodEntity } from '../scripts/bush';

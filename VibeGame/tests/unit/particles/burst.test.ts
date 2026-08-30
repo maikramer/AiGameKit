@@ -4,8 +4,8 @@ import {
   Transform,
   WorldTransform,
   spawnParticleBurst,
-} from 'vibegame';
-import type { ParticleBurstOptions, State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { ParticleBurstOptions, State } from 'aigamekit-vibegame';
 
 function makeMockState(): State {
   let nextEid = 0;

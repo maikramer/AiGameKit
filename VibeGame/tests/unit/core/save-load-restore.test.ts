@@ -6,7 +6,7 @@ import {
   State,
   loadSnapshot,
   saveSnapshot,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 function freshState(): State {
   const state = new State();

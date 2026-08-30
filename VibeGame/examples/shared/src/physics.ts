@@ -1,5 +1,5 @@
-import { Transform, Rigidbody, getBodyForEntity } from 'vibegame';
-import type { State } from 'vibegame';
+import { Transform, Rigidbody, getBodyForEntity } from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 
 /**
  * Teleport an entity: write the Transform AND Rigidbody SOA pose plus zero

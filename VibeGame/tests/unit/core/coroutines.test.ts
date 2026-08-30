@@ -8,7 +8,7 @@ import {
   stopAllCoroutines,
   stopCoroutine,
   State,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 describe('coroutine scheduler', () => {
   let state: State;

@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import { HudPlugin } from '../../../src/plugins/hud/plugin';
 import {
   DEFAULT_MINIMAP_COLORS,

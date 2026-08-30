@@ -1,7 +1,7 @@
 // NPC idle variety: periodic one-shot gestures (talk/foldarms/lean/call/…)
 // between idle loops, plus interaction reactions (yes/no head nods). Keeps
 // villages feeling alive without bespoke per-NPC state machines.
-import type { GltfAnimator } from 'vibegame';
+import type { GltfAnimator } from 'aigamekit-vibegame';
 
 export interface NpcIdleConfig {
   /** Base loop clip (default 'idle'). */

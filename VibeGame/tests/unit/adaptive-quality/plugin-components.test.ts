@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, defineQuery } from 'vibegame';
+import { State, defineQuery } from 'aigamekit-vibegame';
 import {
   AdaptiveQuality,
   AdaptiveQualityPlugin,

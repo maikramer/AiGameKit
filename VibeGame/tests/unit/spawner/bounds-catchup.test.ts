@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'bun:test';
 import * as THREE from 'three';
-import { State, Transform, getGltfLocalYBounds } from 'vibegame';
+import { State, Transform, getGltfLocalYBounds } from 'aigamekit-vibegame';
 import { registerGltfLocalYBounds } from '../../../src/plugins/gltf-xml';
 import {
   TerrainSpawnBoundsCatchUpSystem,

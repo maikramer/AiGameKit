@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { BvhTarget } from 'vibegame';
+import { BvhTarget } from 'aigamekit-vibegame';
 
 import { MAX_ENTITIES } from '../../../src/core/ecs/constants';
 

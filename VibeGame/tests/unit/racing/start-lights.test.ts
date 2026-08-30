@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
-import { DefaultPlugins } from 'vibegame/defaults';
+import { State } from 'aigamekit-vibegame';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
 import { RacingPlugin } from '../../../src/plugins/racing/plugin';
 import { RaceConditionsSystem } from '../../../src/plugins/racing/conditions';
 import {

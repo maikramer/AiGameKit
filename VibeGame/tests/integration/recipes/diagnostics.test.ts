@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { parseXMLToEntities, State, XMLParser } from 'vibegame';
-import { DefaultPlugins } from 'vibegame/defaults';
+import { parseXMLToEntities, State, XMLParser } from 'aigamekit-vibegame';
+import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
 
 describe('Parser Diagnostics', () => {
   let state: State;

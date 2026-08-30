@@ -13,8 +13,8 @@ import {
   playSoundAt,
   spawnFloatingText,
   threeCameras,
-} from 'vibegame';
-import type { MonoBehaviourContext, State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { MonoBehaviourContext, State } from 'aigamekit-vibegame';
 import {
   Transform,
   Parent,
@@ -45,8 +45,8 @@ import {
   spawnProjectileFromTemplate,
   hasLineOfSight,
   Rigidbody,
-} from 'vibegame';
-import type { MeleeAiConfig } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { MeleeAiConfig } from 'aigamekit-vibegame';
 import {
   registerEnemy,
   setEnemyLabel,

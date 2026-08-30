@@ -10,7 +10,7 @@ import {
   setCapacity,
   VaultComponent,
   RpgVaultPlugin,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   applyVaultEntitySnapshot,
   DEFAULT_VAULT_CAPACITY,

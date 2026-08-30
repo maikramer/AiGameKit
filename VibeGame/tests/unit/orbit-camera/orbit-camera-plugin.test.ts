@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, defineQuery } from 'vibegame';
+import { State, defineQuery } from 'aigamekit-vibegame';
 import {
   OrbitCameraPlugin,
   OrbitCamera,
   orbitCameraRecipe,
-} from 'vibegame/orbit-camera';
+} from 'aigamekit-vibegame/orbit-camera';
 import {
   getCameraControls,
   removeCameraControls,

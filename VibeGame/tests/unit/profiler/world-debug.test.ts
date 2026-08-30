@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { Parent, State, Transform } from 'vibegame';
+import { Parent, State, Transform } from 'aigamekit-vibegame';
 import { setGltfUrl } from '../../../src/plugins/gltf-xml/context';
 import { Health } from '../../../src/plugins/combat/components';
 import { TerrainSpawned } from '../../../src/plugins/spawner/components';

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { XMLParser, parseXMLToEntities, State } from 'vibegame';
+import { XMLParser, parseXMLToEntities, State } from 'aigamekit-vibegame';
 import { RoadPlugin } from '../../../src/plugins/road';
 import { getRoadData } from '../../../src/plugins/road/components';
 import { Transform } from '../../../src/plugins/transforms/components';

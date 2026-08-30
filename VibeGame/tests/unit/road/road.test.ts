@@ -16,7 +16,7 @@ import {
   stitchEndToEndChains,
   type RoadGeometryOptions,
   type RoadJunctionInput,
-} from 'vibegame/road';
+} from 'aigamekit-vibegame/road';
 
 function opts(
   overrides: Partial<RoadGeometryOptions> = {}

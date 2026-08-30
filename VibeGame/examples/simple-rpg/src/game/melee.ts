@@ -29,8 +29,8 @@ import {
   setPlayerFaceTarget,
   spawnFloatingText,
   spawnParticleBurst,
-} from 'vibegame';
-import type { State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 import { playerStats } from './skills';
 import { isGamePaused } from './pause';
 import { getEnemyLabel } from '../scripts/enemy-registry';

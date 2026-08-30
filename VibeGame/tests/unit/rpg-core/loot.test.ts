@@ -15,8 +15,8 @@ import {
   onEvent,
   LOOT_ROLLED,
   LOOT_DROPPED,
-} from 'vibegame';
-import type { LootResult, LootTable, RngFn } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { LootResult, LootTable, RngFn } from 'aigamekit-vibegame';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

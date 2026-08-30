@@ -10,7 +10,7 @@ import {
   onEvent,
   resolveResourceNodeKind,
   type NodeHarvestedPayload,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 
 beforeAll(() => {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');

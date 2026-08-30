@@ -11,7 +11,7 @@ import {
   staticPartRecipeSchema,
   dynamicPartRecipeSchema,
   playerRecipeSchema,
-} from 'vibegame/core/validation';
+} from 'aigamekit-vibegame/core/validation';
 
 describe('Validation Schemas', () => {
   describe('vector3Schema', () => {

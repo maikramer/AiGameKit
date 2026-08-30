@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import { State } from 'vibegame';
+import { State } from 'aigamekit-vibegame';
 import {
   buildPrimitiveMesh,
   computePadAlphaData,
   isPrimitiveTag,
   parsePrimitiveSpec,
   type PrimitiveSpec,
-} from 'vibegame/composition';
+} from 'aigamekit-vibegame/composition';
 import {
   deleteCompositionGroup,
   forEachCompositionGroup,

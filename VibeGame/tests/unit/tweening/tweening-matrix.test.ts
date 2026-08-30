@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { EasingType, TweenAxis } from 'vibegame/tweening';
+import { EasingType, TweenAxis } from 'aigamekit-vibegame/tweening';
 
 /** Mirror of TweenProcessingSystem.applyEasing for unit verification. */
 function applyEasing(t: number, easing: number): number {

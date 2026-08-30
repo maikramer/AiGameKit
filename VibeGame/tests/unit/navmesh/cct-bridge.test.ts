@@ -7,14 +7,14 @@ import {
   NavMeshPlugin,
   needsCrowdResync,
   State,
-} from 'vibegame';
+} from 'aigamekit-vibegame';
 import {
   CharacterController,
   CharacterMovement,
   PhysicsPlugin,
   Rigidbody,
-} from 'vibegame/physics';
-import { Transform, TransformsPlugin } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
 describe('navmesh CCT bridge', () => {
   let state: State;

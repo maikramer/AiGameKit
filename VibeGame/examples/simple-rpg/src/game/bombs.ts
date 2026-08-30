@@ -14,8 +14,8 @@ import {
   spawnFloatingText,
   playSound,
   playSoundAt,
-} from 'vibegame';
-import type { State } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { State } from 'aigamekit-vibegame';
 import { playerStats } from './skills';
 
 const FUSE_SECONDS = 1.5;

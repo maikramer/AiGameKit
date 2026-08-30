@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS } from 'vibegame';
+import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
 import {
   BodyType,
   Collider,
   ColliderShape,
   PhysicsPlugin,
   Rigidbody,
-} from 'vibegame/physics';
-import { Transform, WorldTransform } from 'vibegame/transforms';
+} from 'aigamekit-vibegame/physics';
+import { Transform, WorldTransform } from 'aigamekit-vibegame/transforms';
 
 function makeBox(state: State, type: BodyType, y: number): number {
   const box = state.createEntity();

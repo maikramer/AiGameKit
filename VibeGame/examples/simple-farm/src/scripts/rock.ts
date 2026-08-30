@@ -9,8 +9,8 @@ import {
   registerInteractionTarget,
   t,
   unregisterInteractionTarget,
-} from 'vibegame';
-import type { MonoBehaviourContext } from 'vibegame';
+} from 'aigamekit-vibegame';
+import type { MonoBehaviourContext } from 'aigamekit-vibegame';
 
 const stoneEntities = new Set<number>();
 

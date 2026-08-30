@@ -266,7 +266,7 @@ interface AdvisoryGroup {
  *
  * @example
  * ```ts
- * import { validateGltf } from 'vibegame';
+ * import { validateGltf } from 'aigamekit-vibegame';
  *
  * const report = await validateGltf('/assets/models/hero.glb');
  * if (!report.valid) {
