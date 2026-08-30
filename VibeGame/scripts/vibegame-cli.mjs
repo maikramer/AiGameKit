@@ -44,10 +44,14 @@ function isDescendantDir(child, parent) {
 }
 
 /**
- * Sobe diretórios a partir de `fromDir` e devolve a raiz do pacote `vibegame` (engine).
+ * Sobe diretórios a partir de `fromDir` e devolve a raiz do pacote da engine.
+ * Aceita o nome actual (`aigamekit-vibegame`) e o legado (`vibegame`) —
+ * checkouts antigos continuam a funcionar.
  * @param {string} fromDir
  * @returns {string | null}
  */
+const ENGINE_PACKAGE_NAMES = new Set(['aigamekit-vibegame', 'vibegame']);
+
 function findEngineRoot(fromDir) {
   let dir = resolve(fromDir);
   let guard = 0;
@@ -57,7 +61,7 @@ function findEngineRoot(fromDir) {
       try {
         const j = readJsonFile(pkgPath);
         if (
-          j.name === 'vibegame' &&
+          ENGINE_PACKAGE_NAMES.has(j.name) &&
           existsSync(join(dir, 'scripts', 'vibegame-cli.mjs'))
         ) {
           return dir;
@@ -69,6 +73,22 @@ function findEngineRoot(fromDir) {
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
+  }
+  return null;
+}
+
+/**
+ * Dep do engine num package.json (`aigamekit-vibegame` ou legado `vibegame`),
+ * como string `file:` — ou null.
+ * @param {Record<string, any>} j package.json parseado
+ * @returns {string | null}
+ */
+function engineFileDep(j) {
+  for (const name of ENGINE_PACKAGE_NAMES) {
+    for (const section of [j.dependencies, j.devDependencies]) {
+      const value = section?.[name];
+      if (typeof value === 'string' && value.startsWith('file:')) return value;
+    }
   }
   return null;
 }
@@ -86,12 +106,8 @@ function resolveEngineFromFileVibegameDep(cwd) {
   } catch {
     return null;
   }
-  const dep =
-    (typeof j.dependencies?.vibegame === 'string' && j.dependencies.vibegame) ||
-    (typeof j.devDependencies?.vibegame === 'string' &&
-      j.devDependencies.vibegame) ||
-    null;
-  if (!dep || !dep.startsWith('file:')) return null;
+  const dep = engineFileDep(j);
+  if (!dep) return null;
   const raw = dep.slice('file:'.length).trim();
   return resolve(dirname(pkgPath), raw);
 }
@@ -859,10 +875,10 @@ if (first === 'run' || first === 'r') {
   const engineRoot = resolveEngineRootForRun(process.cwd());
   if (!engineRoot) {
     console.error(
-      '[vibegame run] Não encontrei a engine VibeGame (pacote `vibegame` no disco).'
+      '[vibegame run] Não encontrei a engine VibeGame (pacote `aigamekit-vibegame` no disco).'
     );
     console.error(
-      '  Rode a partir da pasta do repositório da engine, de `examples/...`, ou de um projeto com `"vibegame": "file:…"` no package.json.'
+      '  Rode a partir da pasta do repositório da engine, de `examples/...`, ou de um projeto com `"aigamekit-vibegame": "file:…"` no package.json.'
     );
     process.exit(1);
   }
