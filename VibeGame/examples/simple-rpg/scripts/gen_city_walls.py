@@ -53,7 +53,9 @@ def gltf(mesh: str, near: int = 70, mid: int = 160, mesh_dir: str = "infra") -> 
             ></GLTFLoader>"""
 
 
-def obj(name: str, x: float, z: float, rot: int | None, mesh: str, near: int = 70, mid: int = 160, mesh_dir: str = "infra") -> str:
+def obj(
+    name: str, x: float, z: float, rot: int | None, mesh: str, near: int = 70, mid: int = 160, mesh_dir: str = "infra"
+) -> str:
     rot_attr = f'\n            transform="rotation: 0 {rot} 0"' if rot is not None else ""
     return f"""          <GameObject
             name="{name}"
@@ -68,11 +70,16 @@ def obj(name: str, x: float, z: float, rot: int | None, mesh: str, near: int = 7
 
 def torch_flame(x: float, z: float) -> str:
     """Chama + luz sobre um torch_post (haste sólida até y=2.15, como na praça)."""
+    emitter = (
+        "preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; "
+        "start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; "
+        "looping: 1; world-space: 1"
+    )
     return f"""          <GameObject place="at: {fmt(x)} {fmt(z)}; align-to-terrain: 0">
             <ParticleSystem
               preset="fire"
               transform="pos: 0 2.14 0"
-              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+              particle-emitter="{emitter}"
             ></ParticleSystem>
           </GameObject>
           <Composition

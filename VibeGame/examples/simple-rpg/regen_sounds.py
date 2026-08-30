@@ -278,9 +278,7 @@ def main() -> int:
     # re-passar só os SFX depois de afinar thresholds de trim por kind.
     only = sys.argv[1] if len(sys.argv) > 1 else None
     if only in (None, "sfx", "bgm"):
-        specs = [
-            s for s in SPECS if only is None or (only == "sfx") == (s[3] != "music")
-        ]
+        specs = [s for s in SPECS if only is None or (only == "sfx") == (s[3] != "music")]
     else:
         # Filtro por prefixo de nome — p.ex. "water_" regenera só a ambiência.
         specs = [s for s in SPECS if s[0].startswith(only)]
