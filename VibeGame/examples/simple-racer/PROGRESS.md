@@ -21,6 +21,22 @@ Menu: **Race** / **Time Trial** / **Weekend**, plus **Dry / Wet / Night / Storm*
 Weekend is one flying lap, then the 3-lap race on that grid. Wet cuts grip and
 puts rain on the circuit; night/storm light the headlights.
 
+## Drift com carga (mini-turbo) e arranque foguete
+
+Técnicas dos clássicos, agora na engine (`VibeGame/src/plugins/racing/`):
+
+- **Derrapagem carregada (Mario Kart)**: **Espaço** + direção acima de ~43 km/h
+  compromete a derrapagem numa direção e começa a carregar. Faíscas **azuis**
+  (~1 s) = mini-turbo à soltura; **laranja** (~2,1 s) = super turbo. Direção
+  _para dentro_ fecha o arco, contra-esterço abre — o drift é uma linha que se
+  conduz, não um travão. Saltar pausa a carga; rodar perde-a. Rivais hábeis
+  derrapam curvas fechadas com a mesma técnica.
+- **Arranque foguete (Ridge Racer / Daytona)**: segurar **W** na grelha sobe as
+  revs (o motor canta; o medidor sob o contador mostra a zona verde). Luzes
+  fora com revs na zona = **ROCKET START** (pontapé + mini-turbo); revs no
+  limite demasiado tempo = **WHEELSPIN** (meia potência, fumo). Cada rival tem
+  o seu momento de acelerador sorteado pelo skill — o arranque é um duelo.
+
 ## The item game (baús-surpresa)
 
 - **Baús com runa "?"** em fileiras transversais, posicionados

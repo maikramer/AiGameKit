@@ -237,7 +237,10 @@ export const ItemSystem: System = defineSystem({
 
       // ---- Player fire key --------------------------------------------------
       if (eid === player) {
-        const held = isKeyDown('Digit1');
+        // J joins Digit1: the home row is the command cluster (J item, H horn,
+        // K/L reserved), so firing never lifts a finger off WASD mid-corner —
+        // which is what reaching for the number row cost.
+        const held = isKeyDown('Digit1') || isKeyDown('KeyJ');
         if (held && !itemKeyHeld) useHeldItem(eid, spline);
         itemKeyHeld = held;
       }

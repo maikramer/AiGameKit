@@ -37,6 +37,11 @@ import {
   resetRaceState,
   setRaceState,
 } from '../../../src/plugins/racing/race-state';
+import {
+  clearAllInput,
+  handleKeyDown,
+  setFocusedCanvas,
+} from '../../../src/plugins/input/utils';
 
 const FIXED_DT = 1 / 60;
 
@@ -125,6 +130,8 @@ afterEach(() => {
   clearTrackData();
   clearOilSlicks();
   clearItemBoxes();
+  clearAllInput();
+  setFocusedCanvas(null);
 });
 
 describe('item boxes', () => {
@@ -218,6 +225,44 @@ describe('held items', () => {
     expect(HeldItem.item[h.car]).toBe(ItemKind.None);
     expect(HeldItem.turboTime[h.car]).toBeGreaterThan(0);
     expect(useHeldItem(h.car, h.spline)).toBe(false);
+  });
+
+  it('fires the held item from the home row (J), not just Digit1', () => {
+    setFocusedCanvas({} as HTMLCanvasElement);
+    const h = makeHarness();
+    // The fire-key edge latch is module state — a previous test that ended
+    // with the key held would swallow this one's first press.
+    ItemSystem.dispose?.(h.state);
+    HeldItem.item[h.car] = ItemKind.Turbo;
+
+    handleKeyDown({ code: 'KeyJ', preventDefault: () => {} } as KeyboardEvent);
+    h.step(FIXED_DT);
+    // J must consume the slot exactly like the number-row key — firing a
+    // power-up should never lift a finger off WASD.
+    expect(HeldItem.item[h.car]).toBe(ItemKind.None);
+    expect(HeldItem.turboTime[h.car]).toBeGreaterThan(0);
+
+    // Holding J does not double-fire: the burst counts down, the slot stays
+    // empty.
+    const burst = HeldItem.turboTime[h.car]!;
+    h.step(FIXED_DT);
+    expect(HeldItem.item[h.car]).toBe(ItemKind.None);
+    expect(HeldItem.turboTime[h.car]).toBeLessThan(burst);
+  });
+
+  it('still fires the held item from Digit1', () => {
+    setFocusedCanvas({} as HTMLCanvasElement);
+    const h = makeHarness();
+    ItemSystem.dispose?.(h.state);
+    HeldItem.item[h.car] = ItemKind.Turbo;
+
+    handleKeyDown({
+      code: 'Digit1',
+      preventDefault: () => {},
+    } as KeyboardEvent);
+    h.step(FIXED_DT);
+    expect(HeldItem.item[h.car]).toBe(ItemKind.None);
+    expect(HeldItem.turboTime[h.car]).toBeGreaterThan(0);
   });
 
   it('oil drops a slick behind that spins the first kart over it', () => {

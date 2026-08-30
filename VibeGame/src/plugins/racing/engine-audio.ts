@@ -167,12 +167,15 @@ export const EngineAudioSystem: System = defineSystem({
       o.frequency.setTargetAtTime(freq, now, 0.04);
     }
 
-    // Volume: idle hum, more on throttle, a touch more while boosting.
+    // Volume: idle hum, more on throttle, a touch more while boosting or
+    // riding a mini-turbo burst.
     const target = audible
       ? 0.035 +
         throttle * 0.05 +
         rpm * 0.03 +
-        (Vehicle.boosting[player] ? 0.03 : 0)
+        (Vehicle.boosting[player] === 1 || (Vehicle.miniTurbo[player] ?? 0) > 0
+          ? 0.03
+          : 0)
       : 0;
     v.master.gain.setTargetAtTime(target, now, 0.08);
 

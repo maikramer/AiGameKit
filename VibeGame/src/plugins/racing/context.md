@@ -5,7 +5,8 @@
 Arcade kart racing: 3D circuits (`TrackSpline`), vehicles simulated in track
 space, rival AI, a race director (grid → countdown → laps → flag → results), a
 follow camera, tyre FX, synthesised engine audio and a complete HUD — plus the
-Mario-Kart layer: jump ramps, mid-air stunts, item-box roulettes (Turbo /
+Mario-Kart layer: chargeable drifts that pay mini-turbos, a rocket-start launch
+game on the grid, jump ramps, mid-air stunts, item-box roulettes (Turbo /
 Fireball / Oil / Shield), kart-to-kart spin-outs and procedural hazard layouts.
 Auto-registered in the default plugin set; a scene only pays for it if it
 declares a `<RaceTrack>` / `<PlayerVehicle>`.
@@ -42,6 +43,31 @@ airborne: steer = roll, no steer = 360, brake = front flip), **Shift** nitro,
 **1** fires the held item, **V** look back, **C** cycles the camera (chase /
 close / hood / orbit), and the game decides what restarts the race
 (`restartRace()`).
+
+## Drift charge (mini-turbo)
+
+Mario-Kart commitment: handbrake + steering above ~12 m/s locks a drift
+direction (`Vehicle.driftDir`) and starts charging (`driftCharge`, seconds).
+Tier 1 (~1 s) pays a **mini-turbo** on release, tier 2 (~2.1 s) a **super
+turbo** — `Vehicle.miniTurbo` seconds of burst that raises both acceleration
+and the speed ceiling. Steering *into* the drift tightens the arc,
+counter-steer opens it. The slide itself is stable: sideways speed is clamped
+(`DRIFT_SLIP_MAX`) so a drift holds a readable angle and can be steered down a
+corner; airtime pauses the charge, a spin-out forfeits it. Skilled rivals
+drift tight corners too (`AiDriverSystem`), so the pack uses the same
+technique. Sparks (blue → orange) at the rear wheels and the HUD drift meter
+show the tier.
+
+## Rocket start
+
+The countdown is a launch game (Ridge Racer / Daytona): holding throttle on
+the grid builds `Vehicle.launchRev` (the car stays planted; the engine note
+follows). Arrive at the lights with revs ≥ 0.72 without having been pinned at
+the limiter for > 1.6 s → **rocket start** (a kick plus a short mini-turbo);
+pin it too long → **wheelspin** (half power for ~1.4 s, smoke); too few revs →
+plain getaway. `evaluateLaunch(rev, holdAtRedline)` is the pure judge; the HUD
+launch meter shows the same zones. Each rival draws its own throttle moment at
+grid formation (`drawLaunchDelay`, skill-scaled) so the getaway is a contest.
 
 ## The one idea worth knowing
 
@@ -193,7 +219,8 @@ ghosts stay comparable. Generators are pure given a PRNG (`mulberry32`).
 Fired only when the game defines the key (`getSoundDef` guard, silent
 otherwise): `race-countdown`, `race-go`, `race-lap`, `race-finish`,
 `race-crash`, `race-pulse`, `race-spin`, `race-box`, `race-roulette`,
-`race-trick`, `race-fireball`, `race-oil`, `race-shield`. Engine and tyre
+`race-trick`, `race-drift` (mini-turbo / rocket start), `race-fireball`,
+`race-oil`, `race-shield`. Engine and tyre
 sound are synthesised in `engine-audio.ts` and need no assets.
 
 ## Viadutos
@@ -232,7 +259,10 @@ folga sobre o terreno. Pontos que só se descobrem à segunda:
 `tests/unit/racing/{spline,vehicle,race,ghost,conditions}.test.ts` — geometry,
 the vehicle model (including slipstream and wet grip), a full headless race,
 qualifying → race grid, ghost record/playback (including sector splits), and
-condition helpers. `ramps.test.ts` (wedge profile + launch), `tricks.test.ts`
+condition helpers. `drift.test.ts` (charge tiers, payout on release, spin-out
+forfeit, asymmetric steering return) and `launch.test.ts` (rev build on the
+grid, rocket start vs wheelspin, the rival launch plan) cover the control
+layer. `ramps.test.ts` (wedge profile + launch), `tricks.test.ts`
 (stunt payout + spin-out), `items.test.ts` (roulette weighting, oil slicks),
 `feel.test.ts` (SFX edges, fireball homing, shield block) and `layout.test.ts`
 (seeded generation rules) cover the arcade layer.

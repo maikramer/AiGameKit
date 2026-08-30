@@ -17,6 +17,8 @@
      bgm-race while driving, crossfade to bgm-menu over the results. -->
 <MusicLayer layer="race" sound="bgm-race" base-volume="0.2"></MusicLayer>
 <MusicLayer layer="menu" sound="bgm-menu" base-volume="0.18"></MusicLayer>
+<!-- Créditos no pódio final (pool partilhado). -->
+<MusicLayer layer="credits" sound="bgm-credits" base-volume="0.18"></MusicLayer>
 
 <HudScreenLayer>
   <HudWidget type="race-hud"></HudWidget>

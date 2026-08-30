@@ -1,9 +1,15 @@
 import { defineSystem, defineQuery, type State, type System } from '../../core';
 import { getSoundDef, playSound } from '../audio';
-import { Vehicle, PlayerVehicle, RaceTracker, Track } from './components';
+import {
+  AiDriver,
+  Vehicle,
+  PlayerVehicle,
+  RaceTracker,
+  Track,
+} from './components';
 import { getTrackSpline } from './data';
 import { createFrame, type TrackSpline } from './spline';
-import { placeVehicleOnTrack } from './vehicle-control';
+import { drawLaunchDelay, placeVehicleOnTrack } from './vehicle-control';
 import {
   captureQualifyingGrid,
   getQualifyingGrid,
@@ -126,6 +132,11 @@ function formUpGrid(state: State, spline: TrackSpline): void {
     const column = slot % 2 === 0 ? -1 : 1;
     const s = GRID_FIRST_S + row * GRID_ROW_SPACING;
     placeVehicleOnTrack(eid, spline, s, column * GRID_COLUMN_OFFSET);
+    // Each rival gets its own launch moment (skill-scaled) so the getaway is
+    // a contest, not a formation start.
+    if (state.hasComponent(eid, AiDriver)) {
+      AiDriver.launchDelay[eid] = drawLaunchDelay(AiDriver.skill[eid] || 0.8);
+    }
 
     RaceTracker.lap[eid] = 0;
     RaceTracker.lastS[eid] = Vehicle.trackS[eid];

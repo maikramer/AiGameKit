@@ -114,6 +114,22 @@ export const Vehicle = defineComponent({
   /** Current gear (1-based, 0 = reverse) — audio + HUD only. */
   gear: U8,
 
+  // ---- Drift charge (Mario-Kart mini-turbo) --------------------------------
+  /** Locked drift direction while a committed slide is charging (-1/0/+1). */
+  driftDir: F32,
+  /** Seconds of drift charge accumulated (tier 1 ~1 s, tier 2 ~2.1 s). */
+  driftCharge: F32,
+  /** Seconds of mini-turbo burst remaining (0 = idle). */
+  miniTurbo: F32,
+
+  // ---- Launch (rocket start / wheelspin) ------------------------------------
+  /** Revs built during the countdown, 0..1 (throttle in, car held). */
+  launchRev: F32,
+  /** Seconds the revs have been pinned at the limiter (over-rev detector). */
+  launchHold: F32,
+  /** Seconds of launch wheelspin remaining (>0 = bogged down off the line). */
+  wheelspin: F32,
+
   // ---- Visual juice (read by the chassis visual) --------------------------
   /** Accumulated wheel rotation (rad). */
   wheelSpin: F32,
@@ -150,6 +166,8 @@ export const AiDriver = defineComponent({
   stuckTimer: F32,
   /** Arc position when the stuck check last sampled it (m). */
   progressS: F32,
+  /** Seconds into the countdown before this rival pins the launch throttle. */
+  launchDelay: F32,
 });
 
 /**

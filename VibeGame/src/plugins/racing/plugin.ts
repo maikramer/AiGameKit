@@ -684,6 +684,12 @@ export const RacingPlugin: Plugin = {
         trickActive: 0,
         spinOutTimer: 0,
         spinOutTotal: 0,
+        driftDir: 0,
+        driftCharge: 0,
+        miniTurbo: 0,
+        launchRev: 0,
+        launchHold: 0,
+        wheelspin: 0,
       },
       'ai-driver': {
         skill: 0.82,
@@ -693,6 +699,7 @@ export const RacingPlugin: Plugin = {
         noisePhase: 0,
         stuckTimer: 0,
         progressS: 0,
+        launchDelay: 1.2,
       },
       'race-tracker': {
         track: 0,

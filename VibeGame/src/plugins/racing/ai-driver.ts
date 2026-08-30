@@ -14,6 +14,7 @@ import { createFrame, type TrackSpline } from './spline';
 import { conditionWetness, getRaceState, isRacingActive } from './race-state';
 import { useHeldItem } from './items';
 import { startTrick, TrickKind } from './tricks';
+import { COUNTDOWN_LENGTH } from './vehicle-control';
 
 const aiQuery = defineQuery([AiDriver, Vehicle, Transform]);
 const allCarsQuery = defineQuery([Vehicle, Transform]);
@@ -145,6 +146,17 @@ export const AiDriverSystem: System = defineSystem({
         Vehicle.steerInput[eid] = 0;
         Vehicle.handbrake[eid] = 0;
         Vehicle.boostInput[eid] = 0;
+        // The countdown is playable for the rivals too: each one pins its
+        // launch throttle at its own drawn moment, so the grid doesn't launch
+        // as one block and a skilled player can win the start outright.
+        if (
+          getRaceState().phase === 'countdown' &&
+          !RaceTracker.finished[eid]
+        ) {
+          const elapsed = COUNTDOWN_LENGTH - getRaceState().countdown;
+          Vehicle.throttle[eid] =
+            elapsed >= (AiDriver.launchDelay[eid] ?? 1.2) ? 1 : 0;
+        }
         continue;
       }
       driveOne(
@@ -272,10 +284,22 @@ function driveOne(
     Vehicle.brakeInput[eid] = 0;
   }
 
-  // Handbrake only to rotate the car when it is badly out of shape — the AI
-  // should not be drifting for style, it should be making the apex.
+  // Handbrake: recovery when badly out of shape, and — for the confident — a
+  // charged drift through a tight corner. The slide is not for style: holding
+  // it past the apex pays a mini-turbo on release, exactly what the player is
+  // entitled to, so skilled rivals use the same technique to stay honest.
+  const curveNear = Math.abs(
+    spline.curvatureAt(s + clamp(Math.abs(speed) * 0.35, 4, 14))
+  );
+  const cornerDrift =
+    skill > 0.68 &&
+    curveNear > 0.024 &&
+    Math.abs(speed) > 17 &&
+    Math.abs(Vehicle.steerInput[eid] ?? 0) > 0.6;
   Vehicle.handbrake[eid] =
-    Math.abs(headingErr) > 0.75 && Math.abs(speed) > 12 ? 1 : 0;
+    cornerDrift || (Math.abs(headingErr) > 0.75 && Math.abs(speed) > 12)
+      ? 1
+      : 0;
 
   // Boost down the straights when there is nothing to brake for.
   Vehicle.boostInput[eid] =

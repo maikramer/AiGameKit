@@ -224,7 +224,10 @@ function waitForMode(): Promise<{
 
 /** Music: the race loop while driving, the menu loop over the results screen. */
 const BgmSystem = GAME.createMusicLayerDriver({
-  resolve: () => (GAME.getRaceState().phase === 'finished' ? 'menu' : 'race'),
+  // Pódio 'finished' → tema de créditos do pool; grid/countdown/racing
+  // mantêm a faixa de corrida (comportamento anterior).
+  resolve: () =>
+    GAME.getRaceState().phase === 'finished' ? 'credits' : 'race',
 });
 
 // ── Best lap persistence: same player-scoped save serializer pattern as
@@ -420,7 +423,9 @@ const UiSetupSystem: GAME.System = {
         'options.restart': '🔁 Restart',
         'options.controls':
           'Drive: WASD / Arrows   Handbrake: Space   Nitro: Shift\n' +
-          'Power-ups: 1 2 3   Look back: V   Camera: C   Restart: R   Pause: Q\n' +
+          'Item: J or 1   Horn: H   Look back: V   Camera: C   Restart: R   Pause: Q\n' +
+          'Drift: hold Space through the corner, release for a mini-turbo\n' +
+          'Launch: hold W on the grid — green zone = rocket start\n' +
           'Slipstream: tuck behind a rival · Ghost: beat your PB lap',
       },
       pt: {
@@ -428,7 +433,9 @@ const UiSetupSystem: GAME.System = {
         'options.restart': '🔁 Recomeçar',
         'options.controls':
           'Dirigir: WASD / Setas   Freio de mão: Espaço   Nitro: Shift\n' +
-          'Power-ups: 1 2 3   Olhar atrás: V   Câmera: C   Recomeçar: R   Pausa: Q\n' +
+          'Item: J ou 1   Buzina: H   Olhar atrás: V   Câmera: C   Recomeçar: R   Pausa: Q\n' +
+          'Drift: segura Espaço na curva, larga para o mini-turbo\n' +
+          'Arranque: segura W na grelha — zona verde = arranque foguete\n' +
           'Slipstream: cola no rival · Ghost: bate a tua volta PB',
       },
     });
@@ -517,6 +524,16 @@ async function runBootstrap(): Promise<void> {
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyR') GAME.restartRace();
+    // Buzina (pool partilhado) — só com a corrida em curso e sem modais.
+    // KeyH faz parte do cluster de comandos da home row (H buzina, J item),
+    // dedicado a ações para não tirar a mão do WASD.
+    if (
+      e.code === 'KeyH' &&
+      GAME.getRaceState().phase === 'racing' &&
+      !e.repeat
+    ) {
+      GAME.playSound('race-horn');
+    }
   });
 
   // Pick the mode *before* the engine parses the scene: `applyMode` removes
@@ -587,6 +604,13 @@ async function runBootstrap(): Promise<void> {
         distance: GAME.RaceTracker.distance[eid],
         best: GAME.RaceTracker.bestLapTime[eid],
         finished: GAME.RaceTracker.finished[eid] === 1,
+        driftDir: GAME.Vehicle.driftDir[eid],
+        driftCharge: GAME.Vehicle.driftCharge[eid],
+        miniTurbo: GAME.Vehicle.miniTurbo[eid],
+        airborne: GAME.Vehicle.airborne[eid] === 1,
+        spin: GAME.Vehicle.spinOutTimer[eid],
+        launchRev: GAME.Vehicle.launchRev[eid],
+        wheelspin: GAME.Vehicle.wheelspin[eid],
         pos: [
           GAME.Transform.posX[eid],
           GAME.Transform.posY[eid],

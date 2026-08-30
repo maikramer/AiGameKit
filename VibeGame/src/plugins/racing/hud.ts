@@ -34,6 +34,7 @@ import { defineQuery } from '../../core';
 import { ChaseCamera } from './components';
 import { getCameraModeName } from './chase-camera';
 import { isKeyDown } from '../input';
+import { driftTier, evaluateLaunch, DRIFT_TIER2_S } from './vehicle-control';
 
 const playerQuery = defineQuery([PlayerVehicle, Vehicle]);
 const trackQuery = defineQuery([Track]);
@@ -117,6 +118,14 @@ const CSS = `
 }
 .race-draft.show { opacity: 1; }
 
+/* Drift-charge meter, under the nitro bar: blue at tier 1, orange at tier 2 */
+.race-drift-meter { margin-top: 7px; }
+.race-drift-meter .race-label { color: #38d1ff; }
+.race-drift-bar { margin-top: 4px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.race-drift-bar > i { display: block; height: 100%; width: 0%; background: #38d1ff; }
+.race-drift-meter.t2 .race-drift-bar > i { background: #ffb347; }
+.race-drift-meter.t2 .race-label { color: #ffb347; }
+
 /* Minimap, top left */
 .race-map { top: 16px; left: 16px; padding: 8px; }
 .race-map canvas { display: block; }
@@ -129,6 +138,20 @@ const CSS = `
 .race-count { font-size: 8rem; font-weight: 900; line-height: 1; letter-spacing: -0.03em; }
 .race-count.go { color: #7fe7a1; }
 .race-sub { font-size: 1rem; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(255,255,255,0.8); }
+
+/* Launch rev meter: revs fill the bar, the tick marks the rocket window,
+   red means the engine has been pinned too long (wheelspin incoming). */
+.race-launch { margin-top: 14px; width: 230px; }
+.race-launch .race-label { font-size: 0.58rem; }
+.race-launch-bar { position: relative; margin-top: 4px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.16); overflow: hidden; }
+.race-launch-bar::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 72%;
+  width: 2px; background: rgba(127,231,161,0.95);
+}
+.race-launch-bar > i { display: block; height: 100%; width: 0%; background: rgba(255,255,255,0.75); }
+.race-launch.sweet > .race-launch-bar > i { background: #7fe7a1; }
+.race-launch.over > .race-launch-bar > i { background: #ff5d5d; }
+.race-launch.over .race-label { color: #ff5d5d; }
 .race-wrong {
   position: absolute; top: 46%; left: 50%; transform: translate(-50%,-50%);
   font-size: 2rem; font-weight: 900; color: #ff5d5d; letter-spacing: 0.1em;
@@ -308,6 +331,10 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
           <div class="race-label">Nitro</div>
           <div class="race-boost-bar"><i></i></div>
           <div class="race-draft">Slipstream</div>
+          <div class="race-drift-meter race-hidden">
+            <div class="race-label">Drift</div>
+            <div class="race-drift-bar"><i></i></div>
+          </div>
         </div>
         <div class="race-item">
           <div class="slot"><span class="key">1</span><span class="icon"></span></div>
@@ -318,6 +345,10 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
         <div class="race-centre race-hidden">
           <div class="race-count">3</div>
           <div class="race-sub"></div>
+          <div class="race-launch race-hidden">
+            <div class="race-label">Hold W to rev</div>
+            <div class="race-launch-bar"><i></i></div>
+          </div>
         </div>
         <div class="race-wrong race-hidden">WRONG WAY</div>
         <div class="race-panel race-results race-hidden">
@@ -329,7 +360,7 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
           <div class="hint">Press R to race again</div>
         </div>
         <div class="race-cam">Chase</div>
-        <div class="race-hint">WASD drive · 1 item · Shift nitro · Space handbrake/trick · V look back · C camera · R restart</div>
+        <div class="race-hint">WASD drive · Space hold a drift, release for turbo · Shift nitro · 1 item · V look back · C camera · R restart</div>
       `;
       layer.appendChild(root);
 
@@ -371,6 +402,10 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
       const deltaEl = q('.race-delta');
       const splitEl = q('.race-split');
       const draftEl = q('.race-draft');
+      const driftMeterEl = q('.race-drift-meter');
+      const driftBarEl = q('.race-drift-bar > i');
+      const launchEl = q('.race-launch');
+      const launchBarEl = q('.race-launch-bar > i');
       let pickupFlashUntil = 0;
       let finalLapUntil = 0;
       let finalLapGeneration = -1;
@@ -479,6 +514,18 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
             }
 
             draftEl.classList.toggle('show', Vehicle.draft[player] > 0.28);
+
+            // ---- Drift charge meter ------------------------------------------
+            // Visible the moment a slide starts charging; the fill is the
+            // charge, the colour is the tier the driver will be paid.
+            const charge = Vehicle.driftCharge[player] ?? 0;
+            const meterActive = charge > 0.02;
+            driftMeterEl.classList.toggle('race-hidden', !meterActive);
+            if (meterActive) {
+              const tier = driftTier(charge);
+              driftBarEl.style.width = `${Math.min(100, (charge / DRIFT_TIER2_S) * 100)}%`;
+              driftMeterEl.classList.toggle('t2', tier === 2);
+            }
 
             const lapTime = Math.max(
               0,
@@ -647,16 +694,31 @@ function createRaceHud(attributes: Record<string, XMLValue>): HudWidget {
             countEl.textContent = n > 0 ? String(n) : 'GO!';
             countEl.classList.toggle('go', n <= 0);
             subEl.textContent = 'Get ready';
+            // Launch meter: revs fill, green in the rocket window, red when
+            // the engine has been pinned long enough to wheelspin.
+            if (player !== undefined) {
+              const rev = Vehicle.launchRev[player] ?? 0;
+              const quality = evaluateLaunch(
+                rev,
+                Vehicle.launchHold[player] ?? 0
+              );
+              launchEl.classList.remove('race-hidden');
+              launchBarEl.style.width = `${rev * 100}%`;
+              launchEl.classList.toggle('sweet', quality === 'rocket');
+              launchEl.classList.toggle('over', quality === 'wheelspin');
+            }
           } else if (race.phase === 'grid') {
             centre.classList.remove('race-hidden');
             countEl.textContent = '';
             countEl.classList.remove('go');
             subEl.textContent = 'On the grid';
+            launchEl.classList.add('race-hidden');
           } else if (race.phase === 'racing' && race.raceTime < 1.1) {
             centre.classList.remove('race-hidden');
             countEl.textContent = 'GO!';
             countEl.classList.add('go');
             subEl.textContent = '';
+            launchEl.classList.add('race-hidden');
           } else {
             centre.classList.add('race-hidden');
           }

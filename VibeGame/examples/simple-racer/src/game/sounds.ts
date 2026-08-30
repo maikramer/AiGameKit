@@ -54,6 +54,11 @@ export function registerGameSounds(): void {
       volume: 0.45,
       pitch: 1.25,
     },
+    'race-drift': {
+      url: '/assets/audio/sfx/vehicles/nitro.ogg',
+      volume: 0.5,
+      pitch: 1.4,
+    },
     'race-fireball': {
       url: '/assets/audio/sfx/vehicles/nitro.ogg',
       volume: 0.55,
@@ -119,6 +124,7 @@ export function preloadGameSounds(): void {
     'race-roulette',
     'race-shield',
     'race-trick',
+    'race-drift',
     'race-fireball',
     'race-oil',
     'race-spin',

@@ -4,6 +4,7 @@ import { getScene } from '../rendering';
 import { WorldTransform } from '../transforms';
 import { Vehicle } from './components';
 import { conditionWetness, getRaceState } from './race-state';
+import { driftTier } from './vehicle-control';
 
 const vehicleQuery = defineQuery([Vehicle]);
 
@@ -13,6 +14,10 @@ const SMOKE_COUNT = 220;
 const SKID_SEGMENTS = 900;
 /** Boost trail segments per car (each is a small quad at the exhaust). */
 const BOOST_TRAIL_COUNT = 48;
+/** Drift-spark particles across every car (tier-coloured, short-lived). */
+const SPARK_COUNT = 96;
+/** Tier spark colours: [blue, orange] — the Mario-Kart charge tells. */
+const SPARK_COLORS = [new THREE.Color('#38d1ff'), new THREE.Color('#ffb347')];
 
 interface FxState {
   smoke: THREE.Points;
@@ -37,6 +42,13 @@ interface FxState {
   trailCursor: Map<number, number>;
   /** Per-car last emission position + heading (to build a strip). */
   trailPrev: Map<number, { x: number; y: number; z: number; heading: number }>;
+  /** Drift charge sparks (shared pool, per-particle colour). */
+  sparks: THREE.Points;
+  sparkPos: Float32Array;
+  sparkColor: Float32Array;
+  sparkLife: Float32Array;
+  sparkVel: Float32Array;
+  sparkCursor: number;
 }
 
 let fx: FxState | null = null;
@@ -186,6 +198,54 @@ function createFx(scene: THREE.Object3D): FxState {
   trail.name = 'BoostTrails';
   scene.add(trail);
 
+  // ---- Drift-charge sparks --------------------------------------------------
+  // Same Points trick as the trail, plus a per-particle colour: blue at the
+  // first charge tier, orange at the second — the driver's only feedback that
+  // the drift is loaded, so it has to be readable at race speed.
+  const sparkPos = new Float32Array(SPARK_COUNT * 3);
+  const sparkColor = new Float32Array(SPARK_COUNT * 3);
+  const sparkLife = new Float32Array(SPARK_COUNT);
+  const sparkVel = new Float32Array(SPARK_COUNT * 3);
+  for (let i = 0; i < SPARK_COUNT; i++) sparkPos[i * 3 + 1] = -9999;
+  const sparkGeo = new THREE.BufferGeometry();
+  sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+  sparkGeo.setAttribute('aColor', new THREE.BufferAttribute(sparkColor, 3));
+  sparkGeo.setAttribute('aLife', new THREE.BufferAttribute(sparkLife, 1));
+  const sparkMat = new THREE.ShaderMaterial({
+    vertexShader: `
+      attribute vec3 aColor;
+      attribute float aLife;
+      varying vec3 vColor;
+      varying float vLife;
+      void main() {
+        vColor = aColor;
+        vLife = aLife;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = (2.5 + 3.5 * aLife) * (300.0 / max(1.0, -mv.z));
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vLife;
+      void main() {
+        vec2 d = gl_PointCoord - vec2(0.5);
+        float r = length(d);
+        float core = smoothstep(0.5, 0.0, r);
+        vec3 c = mix(vColor, vec3(1.0), core * 0.6);
+        gl_FragColor = vec4(c, core * vLife);
+        if (gl_FragColor.a < 0.01) discard;
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const sparks = new THREE.Points(sparkGeo, sparkMat);
+  sparks.frustumCulled = false;
+  sparks.name = 'DriftSparks';
+  scene.add(sparks);
+
   return {
     smoke,
     smokePos,
@@ -205,7 +265,35 @@ function createFx(scene: THREE.Object3D): FxState {
     trailSize,
     trailCursor: new Map(),
     trailPrev: new Map(),
+    sparks,
+    sparkPos,
+    sparkColor,
+    sparkLife,
+    sparkVel,
+    sparkCursor: 0,
   };
+}
+
+/** One drift spark at a rear wheel, tinted by the charge tier. */
+function emitSpark(
+  f: FxState,
+  x: number,
+  y: number,
+  z: number,
+  color: THREE.Color
+): void {
+  const i = f.sparkCursor;
+  f.sparkCursor = (f.sparkCursor + 1) % SPARK_COUNT;
+  f.sparkPos[i * 3] = x + (Math.random() - 0.5) * 0.3;
+  f.sparkPos[i * 3 + 1] = y + 0.12;
+  f.sparkPos[i * 3 + 2] = z + (Math.random() - 0.5) * 0.3;
+  f.sparkVel[i * 3] = (Math.random() - 0.5) * 2.6;
+  f.sparkVel[i * 3 + 1] = 0.8 + Math.random() * 2.4;
+  f.sparkVel[i * 3 + 2] = (Math.random() - 0.5) * 2.6;
+  f.sparkColor[i * 3] = color.r;
+  f.sparkColor[i * 3 + 1] = color.g;
+  f.sparkColor[i * 3 + 2] = color.b;
+  f.sparkLife[i] = 1;
 }
 
 function emitSmoke(
@@ -304,8 +392,10 @@ export const VehicleFxSystem: System = defineSystem({
       const rearZ = z - Math.cos(heading) * 1.1;
       const rideY = y - (Vehicle.rideHeight[eid] || 0.35) + 0.02;
 
-      // ---- Boost jet trail -------------------------------------------------
-      if (Vehicle.boosting[eid] === 1) {
+      // ---- Boost jet trail (also lit while a mini-turbo burst pays out) ----
+      const bursting =
+        Vehicle.boosting[eid] === 1 || (Vehicle.miniTurbo[eid] ?? 0) > 0;
+      if (bursting) {
         const prev = f.trailPrev.get(eid);
         let cursor = f.trailCursor.get(eid) ?? 0;
         // Emit every frame while boosting; skip if the car has not moved since
@@ -328,6 +418,34 @@ export const VehicleFxSystem: System = defineSystem({
       } else {
         f.trailPrev.delete(eid);
         f.trailCursor.delete(eid);
+      }
+
+      // ---- Drift-charge sparks ----------------------------------------------
+      // From the first tier on, the charged tyres throw coloured sparks at
+      // both rear wheels: the colour is the tier, the rate is the charge.
+      const charge = Vehicle.driftCharge[eid] ?? 0;
+      const tier = driftTier(charge);
+      if (tier > 0 && speed > 4 && Vehicle.airborne[eid] === 0) {
+        const color = SPARK_COLORS[tier - 1]!;
+        const rate = tier === 2 ? 0.85 : 0.55;
+        const rightX = Math.cos(heading);
+        const rightZ = -Math.sin(heading);
+        for (const side of [-1, 1]) {
+          if (Math.random() < rate * dt * 60) {
+            emitSpark(
+              f,
+              rearX + rightX * side * 0.7,
+              rideY,
+              rearZ + rightZ * side * 0.7,
+              color
+            );
+          }
+        }
+      }
+
+      // A botched launch: tyres lit up from a standstill.
+      if ((Vehicle.wheelspin[eid] ?? 0) > 0 && Math.random() < 0.75) {
+        emitSmoke(f, rearX, rideY, rearZ, 0.4);
       }
 
       const prev = f.lastMark.get(eid);
@@ -429,6 +547,28 @@ export const VehicleFxSystem: System = defineSystem({
       f.trail.geometry.getAttribute('position').needsUpdate = true;
       trailAlphaAttr.needsUpdate = true;
     }
+
+    // ---- Integrate the drift sparks -----------------------------------------
+    let sparkDirty = false;
+    for (let i = 0; i < SPARK_COUNT; i++) {
+      const life = f.sparkLife[i] ?? 0;
+      if (life <= 0) continue;
+      f.sparkLife[i] = Math.max(0, life - dt * 2.8);
+      f.sparkPos[i * 3] += (f.sparkVel[i * 3] ?? 0) * dt;
+      f.sparkPos[i * 3 + 1] += (f.sparkVel[i * 3 + 1] ?? 0) * dt;
+      f.sparkPos[i * 3 + 2] += (f.sparkVel[i * 3 + 2] ?? 0) * dt;
+      f.sparkVel[i * 3 + 1] = (f.sparkVel[i * 3 + 1] ?? 0) - 5.5 * dt;
+      sparkDirty = true;
+    }
+    if (sparkDirty) {
+      f.sparks.geometry.getAttribute('position').needsUpdate = true;
+      (
+        f.sparks.geometry.getAttribute('aColor') as THREE.BufferAttribute
+      ).needsUpdate = true;
+      (
+        f.sparks.geometry.getAttribute('aLife') as THREE.BufferAttribute
+      ).needsUpdate = true;
+    }
   },
 
   dispose() {
@@ -436,12 +576,15 @@ export const VehicleFxSystem: System = defineSystem({
     fx.smoke.parent?.remove(fx.smoke);
     fx.skid.parent?.remove(fx.skid);
     fx.trail.parent?.remove(fx.trail);
+    fx.sparks.parent?.remove(fx.sparks);
     fx.smoke.geometry.dispose();
     (fx.smoke.material as THREE.Material).dispose();
     fx.skid.geometry.dispose();
     (fx.skid.material as THREE.Material).dispose();
     fx.trail.geometry.dispose();
     (fx.trail.material as THREE.Material).dispose();
+    fx.sparks.geometry.dispose();
+    (fx.sparks.material as THREE.Material).dispose();
     fx.trailCursor.clear();
     fx.trailPrev.clear();
     fx.lastMark.clear();

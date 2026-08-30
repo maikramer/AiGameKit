@@ -26,6 +26,12 @@ import {
   resetRaceState,
   setRaceState,
 } from '../../../src/plugins/racing/race-state';
+import {
+  clearAllInput,
+  handleKeyDown,
+  handleKeyUp,
+  setFocusedCanvas,
+} from '../../../src/plugins/input/utils';
 
 const FIXED_DT = 1 / 60;
 
@@ -79,6 +85,7 @@ function makeHarness(
     shoulder?: number;
     walls?: boolean;
     spline?: TrackSpline;
+    player?: boolean;
   } = {}
 ): Harness {
   const state = new State();
@@ -104,11 +111,14 @@ function makeHarness(
 
   // Deliberately *not* a PlayerVehicle: the controller reads a player car's
   // inputs from the keyboard, which would overwrite whatever a test wrote.
+  // (The keyboard-bindings tests opt in via `player: true` — they inject keys
+  // through the input plugin's own handlers.)
   const car = state.createEntity();
   state.addComponent(car, Transform);
   state.addComponent(car, WorldTransform);
   state.addComponent(car, Vehicle);
   state.addComponent(car, RaceTracker);
+  if (options.player) state.addComponent(car, PlayerVehicle);
   Vehicle.maxSpeed[car] = 50;
   Vehicle.accel[car] = 26;
   Vehicle.brake[car] = 48;
@@ -258,29 +268,34 @@ describe('vehicle: steering and drift', () => {
   });
 
   it('slides more with the handbrake than without, and recovers when released', () => {
-    // Same corner, same speed, same steering — the only difference is the
-    // handbrake. Grip results are read before the next harness reuses the slot.
-    const gripped = makeHarness();
+    // Under the drift model the handbrake doesn't raise the *peak* slip — it
+    // makes the slide persist (grip recovers ~3x slower). Unwind the wheel
+    // and compare a beat later: gripped hooks up, handbrake keeps sliding.
+    // Wall-free so the arcs never become a barrier grind.
+    const gripped = makeHarness({ walls: false });
     Vehicle.throttle[gripped.car] = 1;
-    gripped.step(6);
+    gripped.step(1);
     Vehicle.steerInput[gripped.car] = 1;
-    gripped.step(1.2);
+    gripped.step(0.8);
+    Vehicle.steerInput[gripped.car] = 0;
+    gripped.step(0.5);
     const grippedSlip = Vehicle.slip[gripped.car];
 
-    const sliding = makeHarness();
+    const sliding = makeHarness({ walls: false });
     Vehicle.throttle[sliding.car] = 1;
-    sliding.step(6);
+    sliding.step(1);
     Vehicle.steerInput[sliding.car] = 1;
     Vehicle.handbrake[sliding.car] = 1;
-    sliding.step(1.2);
+    sliding.step(0.8);
+    Vehicle.steerInput[sliding.car] = 0;
+    sliding.step(0.5);
     const slidingSlip = Vehicle.slip[sliding.car];
 
-    expect(slidingSlip).toBeGreaterThan(grippedSlip * 1.5);
-    expect(slidingSlip).toBeGreaterThan(0.05);
+    expect(slidingSlip).toBeGreaterThan(grippedSlip * 2);
+    expect(slidingSlip).toBeGreaterThan(0.15);
 
     // Let go of everything and the tyres hook back up.
     Vehicle.handbrake[sliding.car] = 0;
-    Vehicle.steerInput[sliding.car] = 0;
     sliding.step(2);
     expect(Vehicle.slip[sliding.car]).toBeLessThan(slidingSlip);
   });
@@ -502,5 +517,64 @@ describe('vehicle: wet track', () => {
     Vehicle.throttle[wet.car] = 1;
     wet.step(3);
     expect(Vehicle.speed[wet.car]).toBeLessThan(drySpeed * 0.98);
+  });
+});
+
+describe('vehicle: keyboard bindings', () => {
+  // readPlayerInput reads the global keyboard, so these tests drive the input
+  // plugin's own handlers. A focused canvas is all handleKeyDown requires —
+  // no DOM listeners are involved.
+  const press = (code: string): void => {
+    handleKeyDown({ code, preventDefault: () => {} } as KeyboardEvent);
+  };
+  const release = (code: string): void => {
+    handleKeyUp({ code, preventDefault: () => {} } as KeyboardEvent);
+  };
+
+  afterEach(() => {
+    clearAllInput();
+    setFocusedCanvas(null);
+  });
+
+  it('reserves the home row (HJKL) for commands — it never steers', () => {
+    setFocusedCanvas({} as HTMLCanvasElement);
+    const h = makeHarness({ player: true, nodes: ovalNodes(26) });
+
+    // The home row is the command cluster (J item, H horn, K/L future
+    // actions): pressing any of it mid-drive must not touch the driver
+    // inputs, or a fired power-up would wrench the wheel.
+    for (const code of ['KeyH', 'KeyJ', 'KeyK', 'KeyL']) press(code);
+    h.step(0.3);
+    expect(Vehicle.throttle[h.car]).toBe(0);
+    expect(Vehicle.brakeInput[h.car]).toBe(0);
+    expect(Vehicle.steerInput[h.car]).toBe(0);
+    expect(Vehicle.speed[h.car]).toBe(0);
+
+    for (const code of ['KeyH', 'KeyJ', 'KeyK', 'KeyL']) release(code);
+  });
+
+  it('still drives with WASD and the arrow keys', () => {
+    setFocusedCanvas({} as HTMLCanvasElement);
+    const h = makeHarness({ player: true, nodes: ovalNodes(26) });
+
+    press('ArrowUp');
+    h.step(1);
+    expect(Vehicle.throttle[h.car]).toBe(1);
+    release('ArrowUp');
+
+    press('KeyW');
+    h.step(0.5);
+    expect(Vehicle.throttle[h.car]).toBe(1);
+    release('KeyW');
+
+    press('KeyA');
+    h.step(0.2);
+    expect(Vehicle.steerInput[h.car]).toBe(1);
+    release('KeyA');
+
+    press('KeyD');
+    h.step(0.2);
+    expect(Vehicle.steerInput[h.car]).toBe(-1);
+    release('KeyD');
   });
 });

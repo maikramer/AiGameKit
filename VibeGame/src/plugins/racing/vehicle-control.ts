@@ -19,6 +19,7 @@ import { createFrame, type TrackSpline } from './spline';
 import { conditionGripMul, getRaceState, isRacingActive } from './race-state';
 import { startSpinOut } from './tricks';
 import { pushRacingBanner, pushRacingFx } from './fx-events';
+import { getSoundDef, playSound } from '../audio';
 
 const vehicleQuery = defineQuery([Vehicle, Transform]);
 const playerQuery = defineQuery([Vehicle, PlayerVehicle]);
@@ -45,6 +46,95 @@ const STEER_FALLOFF = 26;
 /** Wheel radius used to convert speed into visual wheel spin (m). */
 const WHEEL_RADIUS = 0.33;
 
+// ---- Drift charge (Mario-Kart mini-turbo) ----------------------------------
+/** Handbrake above this speed with steering on commits a chargeable drift. */
+export const DRIFT_MIN_SPEED = 12;
+/**
+ * Stable sideways speed a committed drift settles at (m/s). Past this the
+ * tyres dig in — the slide holds at a readable angle instead of running away,
+ * which is what lets a drift be *steered* down a corner.
+ */
+export const DRIFT_SLIP_MAX = 8;
+/** Charge seconds for the first payout tier (blue sparks). */
+export const DRIFT_TIER1_S = 1.0;
+/** Charge seconds for the second payout tier (orange sparks). */
+export const DRIFT_TIER2_S = 2.1;
+/** Mini-turbo burst duration per tier (s). */
+export const MINI_TURBO_T1_S = 0.85;
+export const MINI_TURBO_T2_S = 1.6;
+/** Mini-turbo acceleration while the burst lasts (m/s²). */
+const MINI_TURBO_ACCEL = 12;
+/** Mini-turbo overspeed ceiling multiplier over max speed. */
+const MINI_TURBO_OVERSPEED = 1.18;
+
+// ---- Rocket start (Ridge Racer / Daytona launch game) -----------------------
+/** Revs build at this rate while the throttle is held on the grid (1/s). */
+export const LAUNCH_REV_RATE = 1 / 1.1;
+/** Revs bleed back down at this rate when the throttle is released (1/s). */
+const LAUNCH_REV_DECAY = 1 / 0.6;
+/** Revs at/below which holding longer no longer counts as pinned. */
+const LAUNCH_REDLINE = 0.985;
+/** Seconds pinned at the redline before the launch becomes a wheelspin. */
+export const LAUNCH_OVERREV_S = 1.6;
+/** Instant kick of a rocket start (m/s) — the launch itself, not the burst. */
+const LAUNCH_ROCKET_KICK = 6.5;
+/** Rocket-start mini-turbo duration (s); a middling launch gets half. */
+const LAUNCH_ROCKET_TURBO_S = 1.15;
+/** How long a botched launch bogs the engine down (s). */
+export const LAUNCH_WHEELSPIN_S = 1.4;
+/** Countdown length the AI launch plan is drawn against (s). */
+export const COUNTDOWN_LENGTH = 3;
+
+/** Charge tier for a drift held this long: 0 none, 1 mini-turbo, 2 super. */
+export function driftTier(chargeS: number): 0 | 1 | 2 {
+  if (chargeS >= DRIFT_TIER2_S) return 2;
+  if (chargeS >= DRIFT_TIER1_S) return 1;
+  return 0;
+}
+
+/** Outcome of the launch game, from the revs the driver arrives with. */
+export type LaunchQuality = 'none' | 'decent' | 'rocket' | 'wheelspin';
+
+/**
+ * Judge a launch from the grid. Pure — the HUD shows the same zones.
+ *
+ * The sweet spot is revs ≥ 0.72 without having been pinned at the limiter for
+ * more than 1.6 s: hold too long and the tyres are already spinning (wheelspin,
+ * bogged down), too little and it is just a normal getaway.
+ */
+export function evaluateLaunch(
+  rev: number,
+  holdAtRedline: number
+): LaunchQuality {
+  if (holdAtRedline > LAUNCH_OVERREV_S) return 'wheelspin';
+  if (rev >= 0.72) return 'rocket';
+  if (rev >= 0.35) return 'decent';
+  return 'none';
+}
+
+/**
+ * When a rival pins its launch throttle: seconds into the countdown. Skilled
+ * drivers land inside the hold window (~0.3–2.2 s), weaker ones sometimes botch
+ * it in both directions. Pure — inject the random source for tests.
+ */
+export function drawLaunchDelay(
+  skill: number,
+  rand: () => number = Math.random
+): number {
+  const s = clamp(skill, 0, 1);
+  if (rand() < (1 - s) * 0.45) {
+    // Botch, both directions: pin it from the first light (wheelspin) or
+    // only blip the throttle late (no revs built).
+    return rand() < 0.5 ? rand() * 0.25 : 2.3 + rand() * 0.6;
+  }
+  return 0.35 + rand() * (1.75 + s * 0.1);
+}
+
+/** Fire a race SFX only when the game registered that bank key. */
+function playBanked(key: string): void {
+  if (getSoundDef(key)) playSound(key);
+}
+
 // Separate scratch frames: the simulation needs the frame under the car *and*
 // the frame it is moving to in the same step (that is how crests are detected).
 const _frameA = createFrame();
@@ -58,6 +148,9 @@ interface CarSlot {
   lateral: number;
 }
 const _cars: CarSlot[] = [];
+
+/** Was the race live last step — the countdown → racing edge is the launch. */
+let racingPrev = false;
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -163,6 +256,10 @@ function readPlayerInput(eid: number): void {
   // physics calls a positive (right) yaw appears as the car moving left on
   // screen. We map A/Left to positive steer (screen-left) and D/Right to
   // negative steer (screen-right) so the controls match what the player sees.
+  //
+  // HJKL is deliberately NOT steering: the home row is the command cluster
+  // (item fire, horn, future actions) so a driver never leaves WASD to act —
+  // reaching for the number row mid-corner is exactly what it avoids.
   if (isKeyDown('KeyA') || isKeyDown('ArrowLeft')) steer += 1;
   if (isKeyDown('KeyD') || isKeyDown('ArrowRight')) steer -= 1;
   Vehicle.throttle[eid] = throttle;
@@ -231,6 +328,17 @@ export const VehicleControlSystem: System = defineSystem({
     }
 
     for (const eid of vehicles) {
+      if (phase === 'countdown') {
+        // Grid hold with a launch game: throttle builds revs, nothing moves.
+        if (eid === player && !state.hasComponent(eid, AiDriver)) {
+          readPlayerInput(eid);
+        }
+        // AI launch inputs were written by AiDriverSystem earlier in the
+        // frame; plain vehicles (headless tests) keep the inputs written on
+        // them, so a harness can drive the launch directly.
+        holdOnGrid(eid, dt);
+        continue;
+      }
       if (!racing) {
         // Lights still red (or the flag is out): no drive, but gravity and the
         // suspension keep running so cars settle onto the grid.
@@ -244,6 +352,8 @@ export const VehicleControlSystem: System = defineSystem({
       // a headless test.
       // AI inputs were written by AiDriverSystem earlier in the frame.
 
+      if (racing && !racingPrev) applyLaunch(eid);
+
       const draft = racing ? draftAmount(eid, spline) : 0;
       Vehicle.draft[eid] = draft;
       simulateVehicle(eid, spline, dt, shoulder, wallsOn, draft);
@@ -252,8 +362,98 @@ export const VehicleControlSystem: System = defineSystem({
     resolveCarContacts(spline);
 
     for (const car of _cars) applyTrackPose(car.eid, spline);
+
+    racingPrev = racing;
+  },
+
+  dispose() {
+    racingPrev = false;
   },
 });
+
+/**
+ * The countdown, as a launch game: throttle in builds revs (and nothing else —
+ * the car is planted on its grid slot), throttle out bleeds them back down.
+ * Pinning the limiter for too long is remembered so the green light can punish
+ * it with a wheelspin.
+ */
+function holdOnGrid(eid: number, dt: number): void {
+  const throttle = Vehicle.throttle[eid];
+  let rev = Vehicle.launchRev[eid];
+  let hold = Vehicle.launchHold[eid];
+  if (throttle > 0) {
+    rev = Math.min(1, rev + LAUNCH_REV_RATE * dt);
+    if (rev >= LAUNCH_REDLINE) hold += dt;
+  } else {
+    rev = Math.max(0, rev - LAUNCH_REV_DECAY * dt);
+    hold = Math.max(0, hold - dt * 2);
+  }
+  Vehicle.launchRev[eid] = rev;
+  Vehicle.launchHold[eid] = hold;
+
+  Vehicle.speed[eid] = 0;
+  Vehicle.lateralSpeed[eid] = 0;
+  Vehicle.steer[eid] = 0;
+  Vehicle.yawRate[eid] = 0;
+  Vehicle.draft[eid] = 0;
+  const rideHeight = Vehicle.rideHeight[eid] || 0.35;
+  Vehicle.airHeight[eid] +=
+    (rideHeight - Vehicle.airHeight[eid]) * Math.min(1, 18 * dt);
+  // The engine sings on the grid: revs drive the synthesised voice so a held
+  // throttle reads as a held throttle.
+  Vehicle.rpm[eid] = 0.16 + rev * 0.78;
+}
+
+/**
+ * Green light: convert the revs each car arrives with into a launch. A rocket
+ * start kicks the car forward and chains a short mini-turbo; an over-rev'd
+ * launch spins the tyres instead (bogged-down acceleration + smoke).
+ */
+function applyLaunch(eid: number): void {
+  const quality = evaluateLaunch(
+    Vehicle.launchRev[eid],
+    Vehicle.launchHold[eid]
+  );
+  Vehicle.launchRev[eid] = 0;
+  Vehicle.launchHold[eid] = 0;
+  if (quality === 'rocket') {
+    Vehicle.speed[eid] = LAUNCH_ROCKET_KICK;
+    Vehicle.miniTurbo[eid] = Math.max(
+      Vehicle.miniTurbo[eid],
+      LAUNCH_ROCKET_TURBO_S
+    );
+    pushRacingBanner({ eid, text: 'ROCKET START!', cls: 'trick' });
+    playBanked('race-drift');
+  } else if (quality === 'decent') {
+    Vehicle.miniTurbo[eid] = Math.max(
+      Vehicle.miniTurbo[eid],
+      LAUNCH_ROCKET_TURBO_S * 0.5
+    );
+  } else if (quality === 'wheelspin') {
+    Vehicle.wheelspin[eid] = LAUNCH_WHEELSPIN_S;
+    pushRacingBanner({ eid, text: 'WHEELSPIN!', cls: 'spin' });
+    playBanked('race-skid');
+  }
+}
+
+/**
+ * Handbrake released (or the drift broke): pay the charge out as a burst.
+ * Anything below the first tier is just a slide that didn't commit.
+ */
+function resolveDriftRelease(eid: number, charge: number): void {
+  const tier = driftTier(charge);
+  if (tier === 0) return;
+  Vehicle.miniTurbo[eid] = Math.max(
+    Vehicle.miniTurbo[eid],
+    tier === 2 ? MINI_TURBO_T2_S : MINI_TURBO_T1_S
+  );
+  pushRacingBanner({
+    eid,
+    text: tier === 2 ? 'SUPER TURBO!' : 'MINI-TURBO!',
+    cls: 'trick',
+  });
+  playBanked('race-drift');
+}
 
 function draftAmount(eid: number, spline: TrackSpline): number {
   const myS = Vehicle.trackS[eid];
@@ -316,6 +516,9 @@ function simulateVehicle(
       (Vehicle.speed[eid] ?? 0) * (1 - Math.min(1, 1.9 * dt));
     Vehicle.lateralSpeed[eid] =
       (Vehicle.lateralSpeed[eid] ?? 0) * (1 - Math.min(1, 3 * dt));
+    // A spin is a lost drift: crashing out of a charge forfeits the payout.
+    Vehicle.driftDir[eid] = 0;
+    Vehicle.driftCharge[eid] = 0;
   }
 
   const airborne = Vehicle.airborne[eid] === 1;
@@ -344,10 +547,53 @@ function simulateVehicle(
     }
   }
   Vehicle.boosting[eid] = boosting ? 1 : 0;
+
+  // ---- Mini-turbo burst ----------------------------------------------------
+  // Pays out from a charged drift (or a rocket start): a short, strong push
+  // that raises the ceiling as well, so it always feels like free speed.
+  let miniTurbo = Vehicle.miniTurbo[eid];
+  if (miniTurbo > 0) {
+    miniTurbo = Math.max(0, miniTurbo - dt);
+    Vehicle.miniTurbo[eid] = miniTurbo;
+  }
+  let wheelspin = Vehicle.wheelspin[eid];
+  if (wheelspin > 0) {
+    wheelspin = Math.max(0, wheelspin - dt);
+    Vehicle.wheelspin[eid] = wheelspin;
+  }
+
+  // ---- Drift charge (the Mario-Kart commitment) -----------------------------
+  // Handbrake + steering at speed locks a drift direction; holding it charges
+  // the mini-turbo, releasing pays it out. Airtime pauses the charge (land and
+  // keep sliding to keep it); a spin or dropping below drift speed loses it.
+  let driftDir = Vehicle.driftDir[eid] || 0;
+  let driftCharge = Vehicle.driftCharge[eid] || 0;
+  const speedNow = Vehicle.speed[eid] ?? 0;
+  if (spinOut > 0) {
+    // handled above (charge already zeroed)
+  } else if (airborne) {
+    // charge pauses in the air
+  } else if (handbrake && Math.abs(speedNow) > DRIFT_MIN_SPEED) {
+    if (driftDir === 0 && Math.abs(Vehicle.steerInput[eid] ?? 0) > 0.25) {
+      driftDir = Math.sign(Vehicle.steerInput[eid] ?? 0);
+    }
+    if (driftDir !== 0) {
+      driftCharge = Math.min(DRIFT_TIER2_S + 0.4, driftCharge + dt);
+    }
+  } else if (driftDir !== 0) {
+    resolveDriftRelease(eid, driftCharge);
+    driftDir = 0;
+    driftCharge = 0;
+  }
+  Vehicle.driftDir[eid] = driftDir;
+  Vehicle.driftCharge[eid] = driftCharge;
+  const drifting = driftDir !== 0;
+
   const maxSpeed =
     (boosting
       ? maxSpeedBase * (Vehicle.boostSpeed[eid] || 1.25)
       : maxSpeedBase) *
+    (miniTurbo > 0 ? MINI_TURBO_OVERSPEED : 1) *
     (1 + 0.07 * draft) *
     (0.9 + 0.1 * wetMul);
 
@@ -360,7 +606,10 @@ function simulateVehicle(
         (Vehicle.accel[eid] || 24) *
         headroom *
         throttle *
-        clamp(surfaceGrip, 0.35, 1);
+        clamp(surfaceGrip, 0.35, 1) *
+        // A botched launch is still spinning its tyres: half power until they
+        // hook up, exactly like dumping the clutch at the redline.
+        (wheelspin > 0 ? 0.5 : 1);
       // Cancel drag and rolling resistance while the car is still under its
       // rated top speed, so `max-speed` is the speed the car actually reaches.
       // Left uncompensated the resistances eat the last 15%, and a kart
@@ -389,8 +638,16 @@ function simulateVehicle(
       else speed = 0;
     }
     if (handbrake && speed > 0) {
-      speed -= (Vehicle.brake[eid] || 44) * 0.28 * dt;
+      // A committed drift is a technique, not a braking event: the kart
+      // scrubs a little speed while sliding, but nowhere near a full
+      // handbrake stop — otherwise no corner is long enough to charge.
+      speed -= (Vehicle.brake[eid] || 44) * (drifting ? 0.07 : 0.28) * dt;
       if (speed < 0) speed = 0;
+    }
+    // The mini-turbo pushes even off-throttle for its duration — that is what
+    // makes releasing a charged drift feel like a launch rather than a lift.
+    if (miniTurbo > 0) {
+      speed += MINI_TURBO_ACCEL * clamp(surfaceGrip, 0.5, 1) * dt;
     }
   }
 
@@ -409,18 +666,26 @@ function simulateVehicle(
 
   // ---- Steering -----------------------------------------------------------
   const steerTarget = clamp(Vehicle.steerInput[eid], -1, 1);
+  // Asymmetric ramp: unwinding the wheel is quicker than winding it on — a
+  // keyboard has no analogue return, so the car has to provide one.
+  const returning = Math.abs(steerTarget) < Math.abs(Vehicle.steer[eid]);
   Vehicle.steer[eid] +=
     (steerTarget - Vehicle.steer[eid]) *
-    Math.min(1, (Vehicle.steerSpeed[eid] || 9) * dt);
+    Math.min(1, (Vehicle.steerSpeed[eid] || 9) * (returning ? 1.6 : 1) * dt);
   const steer = Vehicle.steer[eid];
+
+  // In a committed drift the steering chooses the arc, Mario-Kart style:
+  // counter-steer opens the slide wide, steering into it tightens the loop.
+  const steerAlign = clamp(steer * driftDir, -1, 1);
+  const driftYawMul = drifting ? 1.05 + 0.6 * (0.5 + 0.5 * steerAlign) : 1;
 
   const speedFactor = 1 / (1 + Math.abs(speed) / STEER_FALLOFF);
   const dirSign = speed < -0.05 ? -1 : 1;
-  const yawRate =
+  let yawRate =
     steer *
     (Vehicle.maxSteer[eid] || 2.4) *
     speedFactor *
-    (handbrake ? 1.4 : 1) *
+    (drifting ? driftYawMul : handbrake ? 1.4 : 1) *
     (airborne ? 0.25 : 1) *
     dirSign *
     clamp(Math.abs(speed) / 3, 0, 1) * // no pirouettes while parked
@@ -442,10 +707,20 @@ function simulateVehicle(
       (handbrake ? Vehicle.driftGrip[eid] || 0.35 : 1) *
       (0.75 + 0.25 * wetMul);
     const desired = -lateralSpeed * gripRate;
+    // A committed drift recovers lateral velocity at the full friction circle
+    // (only the *rate* is reduced) — that is what holds the slide at a steady,
+    // readable slip angle instead of letting it run away.
     const maxLat =
-      MAX_LATERAL_ACCEL * surfaceGrip * (handbrake ? 0.5 : 1) +
+      MAX_LATERAL_ACCEL * surfaceGrip * (handbrake && !drifting ? 0.5 : 1) +
       Math.abs(Math.sin(f.bank)) * GRAVITY; // banking buys grip back
     lateralSpeed += clamp(desired, -maxLat, maxLat) * dt;
+    if (drifting) {
+      // The stable-slide clamp: rotating the chassis can generate sideways
+      // velocity far faster than grip recovers it, and without a ceiling a
+      // full-lock drift becomes an ever-tightening spiral. The tyres bite at
+      // this slip and hold it — the drift becomes a line you can steer.
+      lateralSpeed = clamp(lateralSpeed, -DRIFT_SLIP_MAX, DRIFT_SLIP_MAX);
+    }
     // Sliding scrubs speed: a drift is fast, a spin is not.
     speed -= Math.abs(lateralSpeed) * 0.12 * dt * (handbrake ? 0.5 : 1);
   }
@@ -568,6 +843,10 @@ function simulateVehicle(
   Vehicle.speed[eid] = speed;
   Vehicle.lateralSpeed[eid] = lateralSpeed;
   Vehicle.slip[eid] = clamp(Math.abs(lateralSpeed) / 9, 0, 1);
+  // A wheelspinning launch reads as one: tyres lit up, smoke and screech.
+  if (wheelspin > 0) {
+    Vehicle.slip[eid] = Math.max(Vehicle.slip[eid], 0.85);
+  }
   Vehicle.airHeight[eid] = height;
   Vehicle.verticalSpeed[eid] = vertical;
   Vehicle.trackS[eid] = newS;
@@ -824,6 +1103,12 @@ export function placeVehicleOnTrack(
   Vehicle.steer[eid] = 0;
   Vehicle.yawRate[eid] = 0;
   Vehicle.slip[eid] = 0;
+  Vehicle.driftDir[eid] = 0;
+  Vehicle.driftCharge[eid] = 0;
+  Vehicle.miniTurbo[eid] = 0;
+  Vehicle.launchRev[eid] = 0;
+  Vehicle.launchHold[eid] = 0;
+  Vehicle.wheelspin[eid] = 0;
   Vehicle.roll[eid] = 0;
   Vehicle.pitch[eid] = 0;
   Vehicle.rpm[eid] = 0.18;

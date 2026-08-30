@@ -217,9 +217,11 @@ export const ChaseCameraSystem: System = defineSystem({
 
       // Impact and speed shake, applied to the final position only.
       const impact = Vehicle.impactTimer[target];
+      const bursting =
+        Vehicle.boosting[target] === 1 || (Vehicle.miniTurbo[target] ?? 0) > 0;
       let shake = speedFrac > 0.55 ? (speedFrac - 0.55) * 0.06 : 0;
       if (impact < 0.35) shake += (1 - impact / 0.35) * 0.32;
-      if (Vehicle.boosting[target]) shake += 0.05;
+      if (bursting) shake += 0.05;
       shake += getImpactShake() * 0.55;
       if (shake > 0) {
         _desired.x += (Math.random() - 0.5) * shake;
@@ -246,7 +248,7 @@ export const ChaseCameraSystem: System = defineSystem({
           const targetFov =
             base +
             (ChaseCamera.fovBoost[cam] || 10) * speedFrac +
-            (Vehicle.boosting[target] ? 12 : 0);
+            (bursting ? 12 : 0);
           ChaseCamera.fov[cam] = damp(
             ChaseCamera.fov[cam],
             targetFov,

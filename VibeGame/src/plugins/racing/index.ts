@@ -103,6 +103,20 @@ export type {
   TrackCondition,
 } from './race-state';
 export { VehicleControlSystem, placeVehicleOnTrack } from './vehicle-control';
+export {
+  driftTier,
+  evaluateLaunch,
+  drawLaunchDelay,
+  DRIFT_MIN_SPEED,
+  DRIFT_TIER1_S,
+  DRIFT_TIER2_S,
+  MINI_TURBO_T1_S,
+  MINI_TURBO_T2_S,
+  LAUNCH_REV_RATE,
+  LAUNCH_OVERREV_S,
+  LAUNCH_WHEELSPIN_S,
+} from './vehicle-control';
+export type { LaunchQuality } from './vehicle-control';
 export { AiDriverSystem, triggerAiMistake, resetAiMistakes } from './ai-driver';
 export type { AiMistakeKind } from './ai-driver';
 export {
