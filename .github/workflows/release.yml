@@ -16,6 +16,12 @@ on:
         type: boolean
         default: false
 
+# O job version-bump faz commit + tag + push do bump — precisa de write em
+# contents; sem este bloco o GITHUB_TOKEN fica com o default read-only e o
+# push do bump morre com 403.
+permissions:
+  contents: write
+
 jobs:
   version-bump:
     name: Bump version
