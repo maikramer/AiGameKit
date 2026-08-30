@@ -369,6 +369,32 @@ const TERRAIN_FOOTPRINT_RADIUS = 0.3;
  * (matching {@link getTerrainHeightAt}). Defaults reproduce the cross footprint
  * (4 offsets at 0.3 m).
  */
+const FOOTPRINT_OFFSET_X = [1, -1, 0, 0] as const;
+const FOOTPRINT_OFFSET_Z = [0, 0, 1, -1] as const;
+
+/** One lattice probe of `data` at a world (px, pz). Hot path — no allocation. */
+function probeFieldHeight(
+  data: TerrainEntityData,
+  entity: number,
+  px: number,
+  pz: number
+): number {
+  const localX = px - data.worldOffset.x;
+  const localZ = pz - data.worldOffset.z;
+  return surfaceHeightAt(
+    data.sampler,
+    localX,
+    localZ,
+    meshSurfaceResolutionForPoint(
+      Terrain.resolution[entity],
+      Terrain.levels[entity],
+      data.density,
+      localX,
+      localZ
+    )
+  );
+}
+
 export function sampleTerrainHeight(
   state: State,
   x: number,
@@ -377,44 +403,27 @@ export function sampleTerrainHeight(
   radius = TERRAIN_FOOTPRINT_RADIUS
 ): number {
   const context = getTerrainContext(state);
-  let field: { data: TerrainEntityData; entity: number } | null = null;
+  let fieldData: TerrainEntityData | null = null;
+  let fieldEntity = 0;
   for (const [entity, data] of context) {
     if (!data.initialized) continue;
-    field = { data, entity };
+    fieldData = data;
+    fieldEntity = entity;
     break;
   }
+  if (!fieldData) return 0;
 
-  const pointHeight = (px: number, pz: number): number => {
-    if (!field) return 0;
-    const { data, entity } = field;
-    const localX = px - data.worldOffset.x;
-    const localZ = pz - data.worldOffset.z;
-    return surfaceHeightAt(
-      data.sampler,
-      localX,
-      localZ,
-      meshSurfaceResolutionForPoint(
-        Terrain.resolution[entity],
-        Terrain.levels[entity],
-        data.density,
-        localX,
-        localZ
-      )
-    );
-  };
-
-  let best = pointHeight(x, z);
+  let best = probeFieldHeight(fieldData, fieldEntity, x, z);
   if (!Number.isFinite(best)) best = 0;
 
   const count = Math.max(0, Math.min(samples, 4));
-  const offsets: ReadonlyArray<readonly [number, number]> = [
-    [radius, 0],
-    [-radius, 0],
-    [0, radius],
-    [0, -radius],
-  ];
   for (let i = 0; i < count; i++) {
-    const h = pointHeight(x + offsets[i]![0], z + offsets[i]![1]);
+    const h = probeFieldHeight(
+      fieldData,
+      fieldEntity,
+      x + FOOTPRINT_OFFSET_X[i]! * radius,
+      z + FOOTPRINT_OFFSET_Z[i]! * radius
+    );
     if (Number.isFinite(h) && h > best) best = h;
   }
   return best;

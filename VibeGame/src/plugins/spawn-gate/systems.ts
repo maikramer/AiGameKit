@@ -3,6 +3,7 @@ import { logger } from '../../core/utils/logger';
 import { getBvhSurfaceHeight } from '../bvh';
 import {
   getGroundHeight,
+  getGroundRevision,
   getTerrainContext,
   isTerrainColliderAt,
 } from '../terrain';
@@ -203,6 +204,74 @@ const RESEAT_WARN_MAX_TRACKED = 512;
 
 const reseatWarnedAt = new Map<number, number>();
 
+/** Horizontal drift tolerated before a cached surface sample is re-probed. */
+const SURFACE_CACHE_EPSILON = 0.03;
+/** Cap on cached samples so recycled eids cannot grow the map forever. */
+const SURFACE_CACHE_MAX_TRACKED = 4096;
+
+interface CachedSurface {
+  rev: number;
+  x: number;
+  z: number;
+  surfaceY: number;
+}
+
+const surfaceCaches = new WeakMap<State, Map<number, CachedSurface>>();
+
+function surfaceCacheFor(state: State): Map<number, CachedSurface> {
+  let cache = surfaceCaches.get(state);
+  if (!cache) {
+    cache = new Map();
+    surfaceCaches.set(state, cache);
+  }
+  return cache;
+}
+
+/** Drop every cached surface sample for a world (tests, teardown). */
+export function resetUnburySurfaceCache(state: State): void {
+  surfaceCaches.get(state)?.clear();
+}
+
+/**
+ * `getGroundHeight` is a five-probe Catmull-Rom cross over the LOD lattice —
+ * two orders of magnitude more expensive than everything else in this system.
+ * Off-collider characters are *carried* by it on every fixed step, so a roster
+ * of ~100 idle NPCs re-derived the same constant 50x/s each. Memoise per
+ * entity and re-probe only when the character moved horizontally or the
+ * surface itself changed (heightmap load, pad/road/river carve — see
+ * `getGroundRevision`).
+ */
+function cachedSurfaceY(
+  state: State,
+  eid: number,
+  x: number,
+  z: number,
+  rev: number
+): number {
+  const cache = surfaceCacheFor(state);
+  const hit = cache.get(eid);
+  if (
+    hit !== undefined &&
+    hit.rev === rev &&
+    Math.abs(hit.x - x) < SURFACE_CACHE_EPSILON &&
+    Math.abs(hit.z - z) < SURFACE_CACHE_EPSILON
+  ) {
+    return hit.surfaceY;
+  }
+
+  const surfaceY = getGroundHeight(state, x, z);
+  if (hit !== undefined) {
+    hit.rev = rev;
+    hit.x = x;
+    hit.z = z;
+    hit.surfaceY = surfaceY;
+  } else {
+    if (cache.size >= SURFACE_CACHE_MAX_TRACKED) cache.clear();
+    cache.set(eid, { rev, x, z, surfaceY });
+  }
+  return surfaceY;
+}
+
 function warnReseat(eid: number, depth: number, elapsed: number): void {
   const last = reseatWarnedAt.get(eid);
   if (last !== undefined && elapsed - last < RESEAT_WARN_COOLDOWN) return;
@@ -224,6 +293,8 @@ export const CharacterUnburySystem: System = defineSystem({
     // Pre-decode the flat sampler does not describe the real surface.
     if (!isTerrainDataReady(state)) return;
 
+    const rev = getGroundRevision(state);
+
     for (const eid of characterQuery(state.world)) {
       if (
         state.hasComponent(eid, SpawnGateComponent) &&
@@ -234,7 +305,7 @@ export const CharacterUnburySystem: System = defineSystem({
 
       const x = Rigidbody.posX[eid];
       const z = Rigidbody.posZ[eid];
-      const surfaceY = getGroundHeight(state, x, z);
+      const surfaceY = cachedSurfaceY(state, eid, x, z, rev);
       const hasCollider = state.hasComponent(eid, Collider);
       const feetY = hasCollider
         ? getCharacterFeetY(state, eid, Rigidbody.posY[eid])
