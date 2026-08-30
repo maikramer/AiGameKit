@@ -1,21 +1,23 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=68.0, wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "aigamekit-vramd"
-version = "0.3.0"
+version = "0.3.1"
 description = "Supervisor de VRAM do AiGameKit — pin do vramd no venv canónico"
 readme = "README.md"
 authors = [{ name = "AiGameKit Project" }]
 requires-python = ">=3.13,<3.14"
 license = "MIT"
-# O supervisor vive no clone irmão ~/GitClones/vramd (instalação editável:
-# `Vramd/.venv/bin/pip install -e ~/GitClones/vramd`). O pin mínimo mantém o
-# contrato quando o vramd sai via PyPI; em experimento usa-se sempre o clone.
+# O supervisor vem do PyPI (`pip install vramd==0.3.1` no Vramd/.venv — o
+# `./install.sh vramd` refresca). O clone irmão ~/GitClones/vramd é o upstream
+# de desenvolvimento: só se instala editável quando se está a desenvolver o
+# próprio vramd, nunca como dependência do monorepo.
 dependencies = [
-    "vramd>=0.3.0",
+    "vramd>=0.3.1",
 ]
 
 [project.scripts]
 vramd = "vramd.cli:main"
+
