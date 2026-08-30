@@ -243,6 +243,8 @@ Levels a rounded rectangle into the shared height sampler so buildings sit flush
 
 `registerGroundMutationCallback` fires from `rebuildTerrainDerivatives` so already-spawned props can resync Y.
 
+**Ground revision:** `fireGroundMutationCallbacks` and `fireHeightmapReloadCallbacks` also bump a monotonic counter read with `getGroundRevision(state)`. Systems that re-query the same (x, z) on every fixed step cache the sampled height against it and skip the probe while the number holds — `getGroundHeight` is a five-point Catmull-Rom cross over the LOD lattice, far too expensive to repeat 50x/s per entity (see `spawn-gate` `CharacterUnburySystem`). Any new code path that edits `sampler.data` directly must route through one of those two fires, or stationary consumers will keep the stale height.
+
 ### Spawner e declive (normal vs visual)
 
 O **plugin spawner** posiciona com lattice density-aware (`sampleTerrainSurface`) e calcula **normais** no heightmap analítico. Ver [`../spawner/context.md`](../spawner/context.md) § Amostragem.

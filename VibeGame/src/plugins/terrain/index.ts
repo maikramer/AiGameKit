@@ -13,6 +13,8 @@ export {
   registerHeightmapReloadCallback,
   registerGroundMutationCallback,
   fireGroundMutationCallbacks,
+  getGroundRevision,
+  bumpGroundRevision,
   setTerrainHeightmapUrl,
   getTerrainTextureUrl,
   setTerrainTextureUrl,

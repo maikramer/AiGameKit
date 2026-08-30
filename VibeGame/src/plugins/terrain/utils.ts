@@ -61,6 +61,7 @@ export function registerHeightmapReloadCallback(
 }
 
 export function fireHeightmapReloadCallbacks(state: State): void {
+  bumpGroundRevision(state);
   const arr = heightmapReloadCallbacks.get(state);
   if (arr) {
     for (const cb of arr) cb();
@@ -88,10 +89,37 @@ export function registerGroundMutationCallback(
 }
 
 export function fireGroundMutationCallbacks(state: State): void {
+  bumpGroundRevision(state);
   const arr = groundMutationCallbacks.get(state);
   if (arr) {
     for (const cb of arr) cb();
   }
+}
+
+/**
+ * Monotonic counter of surface changes: heightmap (re)load and every sampler
+ * carve/flatten (pads, lakes, rivers, roads). Systems that re-query the same
+ * (x, z) every fixed step can cache the sampled height against this and skip
+ * the lattice probe while the number is unchanged — `getGroundHeight` is a
+ * 5-probe Catmull-Rom cross, far too expensive to repeat 50x/s per entity.
+ */
+const groundRevisions = new WeakMap<State, { value: number }>();
+
+function groundRevisionCell(state: State): { value: number } {
+  let cell = groundRevisions.get(state);
+  if (!cell) {
+    cell = { value: 1 };
+    groundRevisions.set(state, cell);
+  }
+  return cell;
+}
+
+export function getGroundRevision(state: State): number {
+  return groundRevisionCell(state).value;
+}
+
+export function bumpGroundRevision(state: State): void {
+  groundRevisionCell(state).value++;
 }
 
 export function getTerrainContext(
