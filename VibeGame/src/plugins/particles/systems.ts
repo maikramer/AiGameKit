@@ -336,20 +336,25 @@ export const ParticleUpdateSystem: System = defineSystem({
     const systems = getParticleSystems(state);
     const delta = state.time.deltaTime;
     const emitters = emitterQuery(state.world);
-    const emitterCount = emitters.length;
 
     // No emitters and no live systems → skip BatchedRenderer.update.
-    if (emitterCount === 0 && systems.size === 0) return;
+    if (emitters.length === 0 && systems.size === 0) return;
 
+    // The cap bounds SIMULATION/DRAW cost, so it counts attached systems only —
+    // systems detached by the distance cull are not stepped or drawn. Counting
+    // raw emitter entities starves new (or transient combat-burst) emitters in
+    // worlds with many far-away ambient emitters.
+    const detached = getDetached(state);
+    const attachedCount = systems.size - detached.size;
     let anyActive = systems.size > 0;
     for (const entity of emitters) {
       if (ParticleEmitter.active[entity] !== 1) continue;
 
       let ps = systems.get(entity);
       if (!ps) {
-        if (emitterCount >= MAX_PARTICLE_EMITTERS) {
+        if (attachedCount >= MAX_PARTICLE_EMITTERS) {
           logger.warn(
-            `Particle emitter cap reached (MAX_PARTICLE_EMITTERS=${MAX_PARTICLE_EMITTERS}); skipping new emitter`
+            `Attached particle emitter cap reached (MAX_PARTICLE_EMITTERS=${MAX_PARTICLE_EMITTERS}); skipping new emitter`
           );
           continue;
         }
@@ -414,3 +419,46 @@ export const ParticleUpdateSystem: System = defineSystem({
     cullLastFrame.delete(state);
   },
 });
+
+export interface ParticleEmitterStat {
+  eid: number;
+  active: boolean;
+  attached: boolean;
+  pos: { x: number; y: number; z: number } | null;
+}
+
+export interface ParticleEmitterStats {
+  cap: number;
+  total: number;
+  attached: number;
+  detached: number;
+  emitters: ParticleEmitterStat[];
+}
+
+/** Debug census of every emitter against the batch cap and distance cull. */
+export function describeParticleEmitters(state: State): ParticleEmitterStats {
+  const detached = getDetached(state);
+  const emitters = emitterQuery(state.world);
+  const rows: ParticleEmitterStat[] = emitters.map((eid) => {
+    const hasWorldPos = state.hasComponent(eid, WorldTransform);
+    return {
+      eid,
+      active: ParticleEmitter.active[eid] === 1,
+      attached: !detached.has(eid),
+      pos: hasWorldPos
+        ? {
+            x: WorldTransform.posX[eid],
+            y: WorldTransform.posY[eid],
+            z: WorldTransform.posZ[eid],
+          }
+        : null,
+    };
+  });
+  return {
+    cap: MAX_PARTICLE_EMITTERS,
+    total: rows.length,
+    attached: rows.filter((r) => r.attached).length,
+    detached: detached.size,
+    emitters: rows,
+  };
+}

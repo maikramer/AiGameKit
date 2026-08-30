@@ -22,7 +22,8 @@ export type PresetName =
   | 'woodchips'
   | 'rockshards'
   | 'leaves'
-  | 'ground-dust';
+  | 'ground-dust'
+  | 'slash';
 
 // New presets append at the end: ParticleEmitter.preset stores the index.
 const PRESET_NAMES: readonly PresetName[] = [
@@ -40,6 +41,7 @@ const PRESET_NAMES: readonly PresetName[] = [
   'rockshards',
   'leaves',
   'ground-dust',
+  'slash',
 ];
 
 /** Aliases used by games that don't match PRESET_NAMES exactly. */
@@ -510,6 +512,59 @@ function rockshardsPreset(): Partial<SystemParams> {
   };
 }
 
+/**
+ * One-shot sword-arc flash for melee impacts: a single large additive sprite
+ * that swells and fades over ~0.2s. Billboarded on purpose — it reads as an
+ * action-RPG hit spark regardless of camera angle.
+ */
+function slashPreset(): Partial<SystemParams> {
+  return {
+    material: particleMaterial({ preset: 'slash', additive: true }),
+    looping: false,
+    duration: 0.25,
+    autoDestroy: true,
+    startLife: new ConstantValue(0.18),
+    startSpeed: new ConstantValue(0),
+    startSize: new ConstantValue(1.7),
+    startColor: new ColorRange(
+      new Vector4(1, 1, 0.92, 1),
+      new Vector4(1, 0.95, 0.75, 1)
+    ),
+    emissionOverTime: new ConstantValue(0),
+    emissionBursts: [
+      {
+        time: 0,
+        count: new ConstantValue(1),
+        cycle: 1,
+        interval: 0.01,
+        probability: 1,
+      },
+    ],
+    shape: new SphereEmitter({ radius: 0.05 }),
+    worldSpace: true,
+    renderMode: RenderMode.BillBoard,
+    behaviors: [
+      new SizeOverLife(
+        new PiecewiseBezier([[new Bezier(0.55, 1.0, 1.15, 1.25), 0]])
+      ),
+      new ColorOverLife(
+        new Gradient(
+          [
+            [new Vector3(1, 1, 0.95), 0],
+            [new Vector3(1, 0.9, 0.6), 0.55],
+            [new Vector3(0.85, 0.65, 0.25), 1],
+          ],
+          [
+            [0.95, 0],
+            [0.55, 0.5],
+            [0, 1],
+          ]
+        )
+      ),
+    ],
+  };
+}
+
 /** Slow fluttering foliage puff for a felled tree's canopy. */
 function leavesPreset(): Partial<SystemParams> {
   return {
@@ -563,6 +618,7 @@ const PRESET_FACTORIES: Record<PresetName, () => Partial<SystemParams>> = {
   rockshards: rockshardsPreset,
   leaves: leavesPreset,
   'ground-dust': groundDustPreset,
+  slash: slashPreset,
 };
 
 export function createPresetParams(name: PresetName): Partial<SystemParams> {

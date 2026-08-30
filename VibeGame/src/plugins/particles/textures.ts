@@ -25,6 +25,8 @@ export const PRESET_TEXTURE_FILE = {
   // lençol de poeira do deserto ficava sem sprite (o teste "maps every preset
   // to a sprite filename" apanhava-o). Partilha o sprite do 'dust'.
   'ground-dust': 'dust.png',
+  // Melee arc flash — Kenney CC0 slash sprite shipped in examples/shared-assets.
+  slash: 'slash_01.png',
 } as const;
 
 export type ParticleTexturePreset = keyof typeof PRESET_TEXTURE_FILE;
