@@ -1,4 +1,4 @@
-import { defineQuery } from 'vibegame';
+import { defineQuery, playSound } from 'vibegame';
 import type { MonoBehaviourContext, State } from 'vibegame';
 import {
   Transform,
@@ -217,6 +217,9 @@ function tryEnter(
   const y = resolveFeetY(ctx.state, player, spawn.x, spawn.z, spawn.y);
   teleportWithAssist(ctx, player, spawn.x, y, spawn.z);
   lastTeleportAt = now;
+  // SFX de porta do pool partilhado: abre ao entrar, fecha ao sair (defs
+  // 'portal.exit_*'). Player-local (2D) — a porta "virtual" acompanha o teleporte.
+  playSound(dest.startsWith('exit_') ? 'door-close' : 'door-open');
   const toast = def.label.startsWith('Entrar')
     ? def.label.replace('Entrar', 'Entrou')
     : def.label.startsWith('Sair')

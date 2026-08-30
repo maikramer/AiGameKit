@@ -76,6 +76,21 @@ export function registerGameSounds(): void {
       ...worldSfx,
       loop: true,
     },
+    // Ambiência de água (gerada no pipeline Text2Sound — regen_sounds.py,
+    // specs sfx/world/water_*): loops espaciais de rio/lago, ver
+    // scripts/ambient-water.ts.
+    'water-flow': {
+      url: '/assets/audio/sfx/world/water_flow.ogg',
+      volume: 0.3,
+      ...worldSfx,
+      loop: true,
+    },
+    'water-lake': {
+      url: '/assets/audio/sfx/world/water_lake.ogg',
+      volume: 0.24,
+      ...worldSfx,
+      loop: true,
+    },
     'footsteps-grass': {
       url: '/assets/audio/sfx/world/footsteps_grass.ogg',
       volume: 0.3,

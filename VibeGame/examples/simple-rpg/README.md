@@ -10,13 +10,13 @@ On the engine side it exercises the full RPG plugin stack: combat, inventory, pr
 
 ## Getting started
 
-The 3D assets (GLB meshes, images, textures, sky) are large binary blobs, so
-they are **not committed to git**. They live once in the **shared pool**
-([`examples/shared-assets/public/assets/`](../shared-assets/README.md)) — every
-example reads them through the `vibegame({ sharedAssets })` plugin — and a
-fresh clone restores them from a pinned GitHub Release on demand. Only
-game-specific media (`audio/`, `icons/`, `particles/`, `terrain/`) stays in
-this example's `public/assets/`:
+The 3D assets (GLB meshes, images, textures, sky, audio) are large binary
+blobs, so they are **not committed to git**. They live once in the **shared
+pool** ([`examples/shared-assets/public/assets/`](../shared-assets/README.md))
+— every example reads them through the `vibegame({ sharedAssets })` plugin —
+and a fresh clone restores them from a pinned GitHub Release on demand. Only
+game-specific media (`icons/`, `particles/`, `terrain/`) stays in this
+example's `public/assets/`:
 
 ```bash
 npm install        # or: bun install
@@ -24,12 +24,13 @@ npm run dev        # predev runs scripts/fetch-assets.mjs automatically
 ```
 
 `scripts/fetch-assets.mjs` downloads the bundle pinned in `assets.lock.json`,
-verifies its sha256, fills the shared pool file-by-file (never overwriting
-pool content — the pool is canonical) and merges the game-specific media into
-`public/assets/` (idempotent: it no-ops once the pinned version is present).
-Run it directly with `npm run setup` if needed. To bump the assets, regenerate
-them with the GameAssets pipeline, upload a new release, and update
-`assets.lock.json` (`version` + `url` + `sha256`).
+verifies its sha256 and installs it **fill-if-missing** — the shared pool and
+the game-specific media alike. Nothing is ever overwritten (pool and local
+work are canonical; the release only fills gaps), and the download itself only
+runs when nothing is present yet — `--force` re-downloads but still never
+overwrites. Run it directly with `npm run setup` if needed. To bump the
+assets, regenerate them with the GameAssets pipeline, upload a new release,
+and update `assets.lock.json` (`version` + `url` + `sha256`).
 
 ## What is in the scene
 

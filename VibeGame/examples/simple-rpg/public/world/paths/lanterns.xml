@@ -1,0 +1,450 @@
+<!--
+  Aleia de lanternas — postes de tocha a ladear as quatro artérias cardeais,
+  do portão até ao início da cunha do bioma. Loaded via Include (depois de
+  paths/network.xml, para o poste assentar no leito já planado da estrada).
+
+  Padrão igual ao das tochas da praça (cities/discordia/utilities.xml):
+  GLB torch_post (sem chama modelada) + <ParticleSystem preset="fire"> à cota
+  da haste (2.14 m) + <PointLight> quente. `align-to-terrain: 0` mantém o
+  poste na vertical mesmo em encosta; os pares ficam a 4.2 m da centreline
+  (largura da artéria = 4 m), fora do ribbon e do carve.
+
+  O motor só acende as 12 PointLights mais próximas da câmera
+  (MAX_POINT_LIGHTS em plugins/rendering/systems.ts), por isso a aleia inteira
+  não pesa: acende-se por troços à medida que o herói avança.
+-->
+<Group name="paths.lanterns" pos="0 0 0">
+  <GameObject
+    place="at: -4.2 60; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -4.2 60; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -4.2 60; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: 4.2 60; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 4.2 60; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: 4.2 60; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: -6.2 96; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -6.2 96; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -6.2 96; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: 2.2 96; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 2.2 96; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: 2.2 96; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: -4.2 -58; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -4.2 -58; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -4.2 -58; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: 4.2 -58; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 4.2 -58; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: 4.2 -58; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: -2.2 -84; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -2.2 -84; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -2.2 -84; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: 6.2 -84; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 6.2 -84; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: 6.2 -84; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: 60 -4.2; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 60 -4.2; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: 60 -4.2; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: 60 4.2; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 60 4.2; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: 60 4.2; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: 96 -2.2; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 96 -2.2; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: 96 -2.2; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: 96 6.2; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 96 6.2; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: 96 6.2; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: -58 -4.2; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -58 -4.2; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -58 -4.2; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: -58 4.2; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -58 4.2; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -58 4.2; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: -80 -6.2; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -80 -6.2; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -80 -6.2; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+  <GameObject
+    place="at: -80 2.2; align-to-terrain: 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+      lod-threshold-near="40"
+      lod-threshold-mid="110"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -80 2.2; align-to-terrain: 0">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 18; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.7; start-size-min: 0.14; start-size-max: 0.3; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -80 2.2; align-to-terrain: 0" body="fixed" collider="none">
+    <PointLight
+      pos="0 2.2 0"
+      point-light="color: 0xffa040; intensity: 2.4; distance: 13; decay: 2"
+    ></PointLight>
+  </Composition>
+</Group>
+<!-- FIM paths.lanterns -->

@@ -1,12 +1,14 @@
 <!--
-  Landmarks do PÂNTANO (Sul). Loaded via Include.
+  Landmarks do PÂNTANO (Oeste — cunha x<0). Loaded via Include.
   O relevo vem cru do Terrain3D — a bacia deixou de ser garantida por
   sculpt, por isso as cotas dos <Lake> têm de ser confirmadas contra o
   heightmap atual.
 -->
 <Group name="biome.swamp.landmarks" pos="0 0 0">
   <!-- ============================================================
-       §1 LAGOAS (8,-95) e (-34,-78) — landmarks existentes
+       §1 LAGOAS — grande (-190,-16 r=24, ponte da artéria oeste),
+       noroeste (-156,68 r=14) e leste (-236,-84 r=18). Vitórias-régias
+       em vegetation/swamp.xml (§3); ponte em paths/network.xml.
        ============================================================ -->
   <Lake
     at="-190 -16"
@@ -38,9 +40,9 @@
   ></Lake>
 
   <!-- ============================================================
-       §2 BARCA ENCALHADA (26, -92)
-       Casco partido na margem norte da lagoa grande. Serve de
-       abrigo e de referência para chegar ao passadiço.
+       §2 BARCA ENCALHADA (-184,-52)
+       Casco partido na margem sul da Lagoa Grande. Serve de
+       abrigo e de referência para quem apanha a trilha da margem.
        ============================================================ -->
   <GameObject
     name="swamp-wrecked-boat"
@@ -75,12 +77,12 @@
   <SpawnExclusion at="-184 -52" radius="16"></SpawnExclusion>
 
   <!-- ============================================================
-       §3 CEMITÉRIO AFUNDADO (-28, -108)
+       §3 CEMITÉRIO AFUNDADO (-224,62)
        Lápides tortas a meio caminho da choça — o sítio onde os
        boglings se juntam.
        ============================================================ -->
   <!-- Cemitério: menires GLB (sem lápides Box). -->
-  <GameObject place="at: -224 62; align-to-terrain: 0" transform="rotation: 0 108 0; scale: 0.85 0.85 0.85"
+  <GameObject place="at: -226 64.5; align-to-terrain: 0" transform="rotation: 0 108 0; scale: 0.85 0.85 0.85"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
     collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
     <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
@@ -116,7 +118,7 @@
   </GameObject>
 
   <!-- ============================================================
-       §4 ALTAR DE OSSOS (-48, -132)
+       §4 ALTAR DE OSSOS (-264,96)
        Fogueira verde e ossadas no fundo oeste do brejo. Recompensa
        mística ([F]).
        ============================================================ -->
@@ -151,8 +153,8 @@
   <SpawnExclusion at="-264 96" radius="18"></SpawnExclusion>
 
   <!-- ============================================================
-       §5 RUÍNA SUBMERSA (34, -120)
-       Pilares meio afundados na lagoa leste.
+       §5 RUÍNA SUBMERSA (-248,-72)
+       Pilares meio afundados na margem da lagoa leste (-236,-84).
        ============================================================ -->
   <GameObject place="at: -248 -72; align-to-terrain: 0" transform="rotation: 0 112 0"
     rigidbody="type: fixed; mass: 0; gravity-scale: 0"
@@ -212,5 +214,147 @@
   >
     <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
   </GameObject>
+
+  <!-- ============================================================
+       §6 PONTE DA LAGOA GRANDE — cabeças acesas + acampamento de
+       pescador na margem norte. Tips da ponte: w_lake_e (-171,2.2) /
+       w_lake_w (-209,2.8) (paths/network.xml).
+       ============================================================ -->
+  <!-- Tocha da cabeça este. -->
+  <GameObject
+    name="lake_bridge_torch_e"
+    place="at: -167 7; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -167 7; align-to-terrain: 1">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -167 7; align-to-terrain: 1" body="fixed" collider="none">
+    <PointLight pos="0 2.2 0" point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"></PointLight>
+  </Composition>
+  <!-- Tocha da cabeça oeste. -->
+  <GameObject
+    name="lake_bridge_torch_w"
+    place="at: -213 7.6; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/torch_post_lod0.glb"
+      lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+      lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -213 7.6; align-to-terrain: 1">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 2.14 0"
+      particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -213 7.6; align-to-terrain: 1" body="fixed" collider="none">
+    <PointLight pos="0 2.2 0" point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"></PointLight>
+  </Composition>
+
+  <!-- Acampamento de pescador na margem norte, de frente para a ponte e
+       para a barca encalhada do outro lado da lagoa. -->
+  <GameObject
+    name="lagoon-campfire"
+    place="at: -187.5 13.5; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/campfire_pit_lod0.glb"
+      lod1-url="/assets/meshes/village/campfire_pit_lod1.glb"
+      lod2-url="/assets/meshes/village/campfire_pit_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -187.5 13.5; align-to-terrain: 1">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 0.42 0"
+      particle-emitter="preset: fire; emission-rate: 42; shape-radius: 0.28; start-life-min: 0.5; start-life-max: 1.3; start-speed-min: 1.3; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -187.5 13.5; align-to-terrain: 1" body="fixed" collider="none">
+    <PointLight pos="0 0.7 0" point-light="color: 0xff8a33; intensity: 2.4; distance: 9; decay: 2; cast-shadow: 0"></PointLight>
+  </Composition>
+  <GameObject
+    place="at: -185 12.5; align-to-terrain: 1"
+    transform="rotation: 0 -20 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 1.6 0.9 0.55"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_bench_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_bench_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: -190.1 15.9; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 0.55 0.7 0.55"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_barrel_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: -183.9 11.1; align-to-terrain: 1"
+    transform="rotation: 0 24 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/wooden_crate_lod0.glb"
+      lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+      lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <GameObject
+    place="at: -190.9 10.7; align-to-terrain: 1"
+    transform="rotation: 0 78 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 1.8 0.8 0.9"
+  >
+    <GLTFLoader
+      role="visual"
+      url="/assets/meshes/village/log_pile_lod0.glb"
+      lod1-url="/assets/meshes/village/log_pile_lod1.glb"
+      lod2-url="/assets/meshes/village/log_pile_lod2.glb"
+    ></GLTFLoader>
+  </GameObject>
+  <!-- Ambiência de água nas duas lagoas. -->
+  <GameObject
+    name="ambient_water_lagoon"
+    place="at: -190 -6; align-to-terrain: 1"
+    script="ambient-water.ts"
+  ></GameObject>
+  <GameObject
+    name="ambient_water_east_lagoon"
+    place="at: -236 -84; align-to-terrain: 1"
+    script="ambient-water.ts"
+  ></GameObject>
 </Group>
 <!-- FIM biome.swamp.landmarks -->

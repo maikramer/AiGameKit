@@ -98,6 +98,7 @@ export function update(ctx: MonoBehaviourContext): void {
     // never existed here, so passing it threw a ReferenceError on open.
     addGold(GOLD_REWARD);
     healHealth(player, HEAL_REWARD);
+    playSound('chest-open');
     playSound('coin');
     playSound('heal');
     spawnParticleBurst(ctx.state, {

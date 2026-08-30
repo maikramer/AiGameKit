@@ -14,7 +14,7 @@ Gerado: 2026-07-29. Inventário factual de `public/assets/` + ligações em `pub
 - **82 IDs** de mesh entregáveis em `/assets/meshes/` (lod0/lod1/lod2 + collision).
 - **143 referências GLB** únicas nos XML (incl. index.html).
 - **Onda composition** (`game.yaml` ids 1549–1944): **23 GLBs completos no disco**, **0 ligados** — distritos usam `<Composition>` de primitivas.
-- **Kit vegetação** (`/assets/meshes/vegetation/*.glb`): gerado via `npm run generate-vegetation` (bpy); tapetes `<Vegetation>` ativos (erva ×8 density).
+- **Kit vegetação** (`/assets/meshes/vegetation/*.glb`): gerado via `npm run generate-vegetation` (bpy); tapetes `<Vegetation>` ativos (~10000 instâncias/bioma, alinhados ao cap do spawner).
 - **`shade`**: GLB no disco; cena usa `bogling` escalado (ver `context.md`).
 - **`npc_merchant`**: GLB no disco; entidade `merchant` em `market.xml` **sem** `<GLTFLoader>`.
 

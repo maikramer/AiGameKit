@@ -6,7 +6,7 @@
   "scripts": {
     "setup": "node scripts/fetch-assets.mjs",
     "predev": "node scripts/fetch-assets.mjs",
-    "prebuild": "node scripts/fetch-assets.mjs --force",
+    "prebuild": "node scripts/fetch-assets.mjs",
     "fetch-assets": "node scripts/fetch-assets.mjs --force",
     "generate-vegetation": "node scripts/run-generate-vegetation.mjs",
     "dev": "vite",

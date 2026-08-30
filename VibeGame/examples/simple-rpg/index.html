@@ -178,7 +178,7 @@
            acompanha (32→64) para a heightfield física seguir a malha.
            ============================================================ -->
         <Terrain
-          pos="0 0 0"
+          pos="-51 0 51"
           world-size="4000"
           max-height="200"
           levels="5"
@@ -190,20 +190,21 @@
           height-smoothing-spread="1.25"
           heightmap="/assets/terrain/terrain.ahgt"
           skirt-width="0.015625"
-          roughness="0.82"
+          roughness="0.95"
           metalness="0"
-          normal-strength="2.6"
+          normal-strength="1.15"
           base-color="#8cb866"
           texture="/assets/textures/vale_grass.png"
-          ao-strength="1.1"
-          height-blend-strength="0.40"
+          texture-tile-size="5"
+          ao-strength="0.85"
+          height-blend-strength="0.22"
           snow-height="0.92"
-          slope-threshold="0.78"
-          slope-softness="0.10"
-          color-low="#3a5a2a"
-          color-mid="#8cb866"
+          slope-threshold="0.93"
+          slope-softness="0.05"
+          color-low="#35502a"
+          color-mid="#75a04f"
           color-high="#e8f0ff"
-          color-rock="#6a6660"
+          color-rock="#726b60"
           noise-sand-strength="0.45"
           noise-sand-scale="0.012"
           noise-sand-threshold="0.56"
@@ -220,6 +221,10 @@
       <Include src="/world/spawn/dressing.xml"></Include>
       <Include src="/world/paths/network.xml"></Include>
       <Include src="/world/paths/trails.xml"></Include>
+      <!-- Aleia de lanternas nas quatro artérias (postes + chama + luz
+           quente). Depois de network.xml: o poste assenta no leito já
+           planado da estrada. -->
+      <Include src="/world/paths/lanterns.xml"></Include>
 
       <!-- Biomas: vegetação (tapete + dossel) e landmarks (destinos) em
            ficheiros separados por cunha cardeal. -->
@@ -231,6 +236,7 @@
       <Include src="/world/landmarks/desert.xml"></Include>
       <Include src="/world/landmarks/swamp.xml"></Include>
       <Include src="/world/landmarks/peaks.xml"></Include>
+      <Include src="/world/landmarks/wilds.xml"></Include>
 
       <!-- Cena separada: ambientes internos (portais das portas → salas em
            (-410, 120); saídas teleportam de volta para as portas exteriores). -->
@@ -269,7 +275,9 @@
         <PostFxDebugToggle></PostFxDebugToggle>
 
         <!-- HUD: camada declarativa screen-space + widgets (engine HudPlugin). -->
-        <HudScreenLayer></HudScreenLayer>
+        <HudScreenLayer>
+          <Clock></Clock>
+        </HudScreenLayer>
         <HealthBar
           target-entity="player"
           icon="/assets/icons/hud_health.png"
@@ -348,8 +356,9 @@
 
     <canvas id="game-canvas"></canvas>
     <div id="controls-hint">
-      WASD mover · Espaço pular · J atacar · F interagir · G fogueira · K
-      comércio · B bomba · Q menu · P profiler (?profiler=1)
+      WASD mover · Espaço pular · J atacar (combo) · L guardar/parry · C
+      esquiva · F interagir · G fogueira · K comércio · B bomba · Q menu · P
+      profiler (?profiler=1)
     </div>
 
     <script type="module" src="/src/main.ts"></script>

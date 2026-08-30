@@ -1,10 +1,10 @@
 <!--
-  Landmarks dos PICOS GELADOS (Oeste). Loaded via Include.
+  Landmarks dos PICOS GELADOS (Sul — cunha z<0). Loaded via Include.
 
-  O corredor |z| ≲ 16 é o caminho até à arena do ogro. Os landmarks marcam
-  esse percurso (mojões), premeiam o desvio (mina de cristal, lago gelado) e
-  fecham com a arena. O relevo vem cru do Terrain3D — não há patamares
-  esculpidos por baixo destas coordenadas.
+  A artéria sul é o caminho até à arena do ogro (-12,-290). Os landmarks
+  marcam esse percurso (mojões peaks-cairn-*), premeiam o desvio (mina de
+  cristal, lago gelado) e fecham com a arena. O relevo vem cru do Terrain3D —
+  não há patamares esculpidos por baixo destas coordenadas.
 -->
 <Group name="biome.peaks.landmarks" pos="0 0 0">
   <!-- ============================================================
@@ -23,9 +23,9 @@
   <TerrainPad at="-32 -280" size="36 36" falloff="22" corner-radius="12"></TerrainPad>
 
   <!-- ============================================================
-       §1 MOJÕES DO CORREDOR (-78,-4) (-100,3) (-122,-6)
-       Montes de pedra que marcam o caminho na neblina — a leitura
-       "é por aqui" sem HUD.
+       §1 MOJÕES DO CORREDOR — peaks-cairn-1/2/3 ao longo da artéria
+       sul (8,-156) (-6,-200) (12,-244): montes de pedra que marcam o
+       caminho na neblina — a leitura "é por aqui" sem HUD.
        ============================================================ -->
   <GameObject
     name="peaks-cairn-1"
@@ -321,5 +321,11 @@
     ></ParticleSystem>
   </GameObject>
   <SpawnExclusion at="-12 -290" radius="40"></SpawnExclusion>
+  <!-- Ambiência de água no lago gelado. -->
+  <GameObject
+    name="ambient_water_ice_lake"
+    place="at: 68 -184; align-to-terrain: 1"
+    script="ambient-water.ts"
+  ></GameObject>
 </Group>
 <!-- FIM biome.peaks.landmarks -->

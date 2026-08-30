@@ -12,6 +12,7 @@ Hub canónico: [`../MODEL_FINDINGS.md`](../MODEL_FINDINGS.md).
 | [IMAGE_SKY_SOUND_FINDINGS.md](IMAGE_SKY_SOUND_FINDINGS.md) | Text2D, Skymap, audio trim, kernels |
 | [TEXT2SOUND_SA3_LOOP_FINDINGS.md](TEXT2SOUND_SA3_LOOP_FINDINGS.md) | BGM seamless SA3: equal-power, comprimento exacto, mastering dobrado |
 | [VIBEGAME_AUDIO_COMBAT_FINDINGS.md](VIBEGAME_AUDIO_COMBAT_FINDINGS.md) | Cull espacial, profiler Audio, SFX longos, melee impact 0.35 |
+| [VIBEGAME_COMBAT_FEEL_FINDINGS.md](VIBEGAME_COMBAT_FEEL_FINDINGS.md) | Hit-stop, camera shake, knockback CCT, stagger, telegraph, i-frames; PauseSystem vs timeScale |
 | [VIBEGAME_SPAWN_GROUND_FINDINGS.md](VIBEGAME_SPAWN_GROUND_FINDINGS.md) | Chão: estáticos AABB; creatures CCT; anti-settle / anti-fudge Y |
 | [KERNEL_OPTS_FINDINGS.md](KERNEL_OPTS_FINDINGS.md) | compile / channels-last / flashvdm defaults |
 | [ANIMATOR_RETARGET_FINDINGS.md](ANIMATOR_RETARGET_FINDINGS.md) | Quaternius retarget: loc_conv, `_bone_rest_dir`, QA; bipeds → `humanoid` (não `creature`); tabela HML22 |

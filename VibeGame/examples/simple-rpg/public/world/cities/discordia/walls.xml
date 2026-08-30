@@ -3,7 +3,7 @@
   Edit this file for this district only. Cell coords: space-separated (at="2 1").
 
   GERADO — layout compacto. Muralha ±38: passo visual 6.38 m
-  (mesh LOD0 6.5 m − junta 0.12 m). Collider é ~0.12 m mais
+  (mesh LOD0 6.5 m - junta 0.12 m). Collider é ~0.12 m mais
   longo → penetração coberta por `overlap-max=0.3`.
 -->
 <Group name="city.walls" pos="0 0 0">
@@ -814,7 +814,9 @@
               lod-threshold-mid="160"
             ></GLTFLoader>
           </GameObject>
-          <!-- Tochas nos portões (torch_post). -->
+          <!-- Tochas nos portões (torch_post, grupo village) com
+               chama e luz — portões apagados liam-se como tripés
+               pretos à noite. -->
           <GameObject
             name="gate_n_torch_w"
             place="at: -5.8 38; align-to-terrain: 0"
@@ -831,6 +833,23 @@
               lod-threshold-mid="120"
             ></GLTFLoader>
           </GameObject>
+          <GameObject place="at: -5.8 38; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: -5.8 38; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>
           <GameObject
             name="gate_n_torch_e"
             place="at: 5.8 38; align-to-terrain: 0"
@@ -847,6 +866,23 @@
               lod-threshold-mid="120"
             ></GLTFLoader>
           </GameObject>
+          <GameObject place="at: 5.8 38; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: 5.8 38; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>
           <GameObject
             name="gate_s_torch_w"
             place="at: -5.8 -38; align-to-terrain: 0"
@@ -864,6 +900,23 @@
               lod-threshold-mid="120"
             ></GLTFLoader>
           </GameObject>
+          <GameObject place="at: -5.8 -38; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: -5.8 -38; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>
           <GameObject
             name="gate_s_torch_e"
             place="at: 5.8 -38; align-to-terrain: 0"
@@ -881,6 +934,23 @@
               lod-threshold-mid="120"
             ></GLTFLoader>
           </GameObject>
+          <GameObject place="at: 5.8 -38; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: 5.8 -38; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>
           <GameObject
             name="gate_e_torch_s"
             place="at: 38 -5.8; align-to-terrain: 0"
@@ -898,6 +968,23 @@
               lod-threshold-mid="120"
             ></GLTFLoader>
           </GameObject>
+          <GameObject place="at: 38 -5.8; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: 38 -5.8; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>
           <GameObject
             name="gate_e_torch_n"
             place="at: 38 5.8; align-to-terrain: 0"
@@ -915,6 +1002,23 @@
               lod-threshold-mid="120"
             ></GLTFLoader>
           </GameObject>
+          <GameObject place="at: 38 5.8; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: 38 5.8; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>
           <GameObject
             name="gate_w_torch_s"
             place="at: -38 -5.8; align-to-terrain: 0"
@@ -932,6 +1036,23 @@
               lod-threshold-mid="120"
             ></GLTFLoader>
           </GameObject>
+          <GameObject place="at: -38 -5.8; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: -38 -5.8; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>
           <GameObject
             name="gate_w_torch_n"
             place="at: -38 5.8; align-to-terrain: 0"
@@ -949,4 +1070,21 @@
               lod-threshold-mid="120"
             ></GLTFLoader>
           </GameObject>
+          <GameObject place="at: -38 5.8; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: -38 5.8; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>
 </Group>

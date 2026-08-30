@@ -8,17 +8,19 @@
 -->
 <Group name="biome.swamp.vegetation" pos="0 0 0">
   <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).
-       density-per-km2=256000 (= 8× baseline pós-expansão do mapa). -->
+       density-per-km2 alinhada ao tecto do spawner (MAX_DENSITY_SPAWN_INSTANCES
+       = 12000) e ao orçamento de entidades: 91000 × 0.1096 km² ≈ 9974 — sem
+       capping silencioso e com folga no budget (boot ~86% de 100k). -->
 
   <Vegetation
     meshes="/assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb"
-    density-per-km2="200000"
+    density-per-km2="91000"
     seed="801"
     region-min="-390 0 -200"
     region-max="-116 0 200"
     scale-min="1.4"
     scale-max="2.8"
-    max-slope-deg="30"
+    max-slope-deg="26"
     avoid-water="1"
     avoid-overlaps="0"
     max-distance="110"
@@ -171,12 +173,13 @@
     </GameObject>
   </StaticSpawner>
 
-  <!-- §3 Vitórias-régias nas lagoas (in-water ancora o Y à lâmina de água). -->
+  <!-- §3 Vitórias-régias nas lagoas (in-water ancora o Y à lâmina de água).
+       Região desce até z=-110 para cobrir também a lagoa leste (-236,-84). -->
   <StaticSpawner
     profile="tree"
-    count="68"
+    count="120"
     seed="325"
-    region-min="-310 0 -80"
+    region-min="-310 0 -110"
     region-max="-124 0 110"
     in-water="1"
     align-to-terrain="0"

@@ -2,6 +2,10 @@
   World fragment loaded via Include src= (see index.html shell).
   Edit this file — do not paste into index.html.
   Cell coords for CityGrid: space-separated (at="4 2").
+
+  lod-threshold-near="53": só o lod0 é animado (auto-idle do engine), então a
+  banda near precisa cobrir a distância em que o jogador percebe A-pose. A
+  histerese de upgrade (0.85) religa o lod0 a 53 × 0.85 ≈ 45 m na aproximação.
 -->
 <!-- NPCs Scene (name=/dialogue-id). JSON quests ficam em src/data/quests/. -->
       <!-- GRUPO "quest-npcs": NPCs de quest (3 por bioma) + NPCs especiais
@@ -27,8 +31,8 @@
             url="/assets/meshes/characters/npc_guard_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_guard_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_guard_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="forest_wolves"
@@ -43,8 +47,8 @@
             url="/assets/meshes/characters/npc_healer_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_healer_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_healer_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="forest_shades"
@@ -59,8 +63,8 @@
             url="/assets/meshes/characters/npc_blacksmith_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="forest_darkwood"
@@ -77,8 +81,8 @@
             url="/assets/meshes/characters/npc_guard_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_guard_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_guard_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="desert_scorpions"
@@ -93,8 +97,8 @@
             url="/assets/meshes/characters/npc_blacksmith_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="desert_bandits"
@@ -110,8 +114,8 @@
             url="/assets/meshes/characters/npc_elder_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_elder_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_elder_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="desert_ruins"
@@ -121,15 +125,15 @@
           ></DialogueNPC>
         </GameObject>
 
-        <!-- Pântano (sul) -->
-        <GameObject name="npc_swamp_boglings" place="at: -16 -60; align-to-terrain: 1">
+        <!-- Pântano (oeste — cunha x<0, bacias baixas do Terrain3D) -->
+        <GameObject name="npc_swamp_boglings" place="at: -60 -16; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
             url="/assets/meshes/characters/npc_healer_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_healer_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_healer_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="swamp_boglings"
@@ -138,14 +142,14 @@
             marker-height="2.5"
           ></DialogueNPC>
         </GameObject>
-        <GameObject name="npc_swamp_bogwarden" place="at: 16 -68; align-to-terrain: 1">
+        <GameObject name="npc_swamp_bogwarden" place="at: -68 16; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
             url="/assets/meshes/characters/npc_guard_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_guard_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_guard_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="swamp_bogwarden"
@@ -160,8 +164,8 @@
             url="/assets/meshes/characters/npc_elder_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_elder_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_elder_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="swamp_bogmoss"
@@ -171,15 +175,15 @@
           ></DialogueNPC>
         </GameObject>
 
-        <!-- Picos Gelados (oeste) -->
-        <GameObject name="npc_peaks_goblins" place="at: -60 -16; align-to-terrain: 1">
+        <!-- Picos Gelados (sul — encostas íngremes z<0) -->
+        <GameObject name="npc_peaks_goblins" place="at: -16 -60; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
             url="/assets/meshes/characters/npc_guard_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_guard_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_guard_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="peaks_goblins"
@@ -188,14 +192,14 @@
             marker-height="2.5"
           ></DialogueNPC>
         </GameObject>
-        <GameObject name="npc_peaks_frost" place="at: -68 16; align-to-terrain: 1">
+        <GameObject name="npc_peaks_frost" place="at: 16 -68; align-to-terrain: 1">
           <GLTFLoader
             role="visual"
             url="/assets/meshes/characters/npc_healer_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_healer_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_healer_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="peaks_frost"
@@ -210,8 +214,8 @@
             url="/assets/meshes/characters/npc_blacksmith_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="peaks_ogre"
@@ -236,8 +240,8 @@
             url="/assets/meshes/characters/npc_scout_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_scout_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_scout_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="forest_survey"
@@ -255,8 +259,8 @@
             url="/assets/meshes/characters/npc_scout_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_scout_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_scout_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="desert_survey"
@@ -274,8 +278,8 @@
             url="/assets/meshes/characters/npc_scout_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_scout_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_scout_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="swamp_survey"
@@ -293,8 +297,8 @@
             url="/assets/meshes/characters/npc_scout_lod0.glb"
             lod1-url="/assets/meshes/characters/npc_scout_lod1.glb"
             lod2-url="/assets/meshes/characters/npc_scout_lod2.glb"
-            lod-threshold-near="22"
-            lod-threshold-mid="60"
+            lod-threshold-near="53"
+            lod-threshold-mid="130"
           ></GLTFLoader>
           <DialogueNPC
             dialogue-id="peaks_survey"

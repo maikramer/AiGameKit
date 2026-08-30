@@ -30,7 +30,7 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     // melee range.
     modelUrl: '/assets/meshes/characters/wolf_lod2.glb',
     clips: STANDARD_CLIPS,
-    hp: 35,
+    hp: 55,
     chaseSpeed: 3.6,
     wanderSpeed: 1.3,
     wanderRadius: 14,
@@ -60,7 +60,7 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     // it keeps contact rather than darting away.
     modelUrl: '/assets/meshes/characters/slime_lod2.glb',
     clips: STANDARD_CLIPS,
-    hp: 60,
+    hp: 95,
     chaseSpeed: 1.6,
     wanderSpeed: 0.4,
     wanderRadius: 8,
@@ -82,8 +82,15 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     // Identity (mesh, HP, loot, enemyType) stays bandit so desert quests keep
     // counting kills.
     modelUrl: '/assets/meshes/characters/bandit_lod2.glb',
-    clips: STANDARD_CLIPS,
-    hp: 50,
+    // Cortes B/C (diferentes dos do goblin) para variedade no mesmo bioma.
+    clips: {
+      ...STANDARD_CLIPS,
+      attack: ['attack', 'swordb', 'swordc'],
+      // O pack traz `knockback` — golpe pesado/crítico atira o bandido para
+      // trás em vez de repetir sempre o mesmo `hit`.
+      knockback: 'knockback',
+    },
+    hp: 80,
     chaseSpeed: 2.7,
     wanderSpeed: 1.1,
     wanderRadius: 12,
@@ -111,8 +118,12 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     // Swarming pest: fragile, frantic, very short windup — throws itself at
     // the player in numbers. Dies fast but interrupts casts/movement.
     modelUrl: '/assets/meshes/characters/bogling_lod2.glb',
-    clips: STANDARD_CLIPS,
-    hp: 30,
+    // Praga do pântano: arranhos zumbis em vez de golpes de espada.
+    clips: {
+      ...STANDARD_CLIPS,
+      attack: ['attack', 'zombiescratch'],
+    },
+    hp: 45,
     chaseSpeed: 3.0,
     wanderSpeed: 1.0,
     wanderRadius: 6,
@@ -134,8 +145,10 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     // watches can sidestep. When it does connect, it hurts. Enrage shortens
     // the windup window dramatically (becomes dangerous at low HP).
     modelUrl: '/assets/meshes/characters/scorpion_lod2.glb',
-    clips: STANDARD_CLIPS,
-    hp: 55,
+    // 0.5s de windup é o telegrafo mais longo do bestiário: dá para armar a
+    // cauda (`roar` do pack Animator3D) antes da picada.
+    clips: { ...STANDARD_CLIPS, windup: 'roar' },
+    hp: 90,
     chaseSpeed: 1.6,
     wanderSpeed: 0.5,
     wanderRadius: 4,
@@ -162,8 +175,9 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     // HP. Long-ish windup telegraphs the strike; the threat is it relentless
     // re-engages from orbit rather than committing.
     modelUrl: '/assets/meshes/characters/bogling_lod0.glb',
-    clips: STANDARD_CLIPS,
-    hp: 25,
+    // Espírito: shamble zumbi no wander/idle (eerie) + lunge normal na carga.
+    clips: { ...STANDARD_CLIPS, idle: 'zombieidle', walk: 'zombiewalk' },
+    hp: 40,
     chaseSpeed: 2.2,
     wanderSpeed: 0.9,
     wanderRadius: 10,
@@ -188,8 +202,16 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     // Agile skirmisher: short telegraph, quick jab, fast recovery — hits often
     // but soft. Packs weave around the player rather than body-blocking.
     modelUrl: '/assets/meshes/characters/goblin_lod2.glb',
-    clips: STANDARD_CLIPS,
-    hp: 40,
+    // Ataques em ciclo: slash base + variações A/B da UAL2.
+    clips: {
+      ...STANDARD_CLIPS,
+      attack: ['attack', 'sworda', 'swordb'],
+      knockback: 'knockback',
+      // Guincho antes do salto: o tell fica legível na silhueta, não só no
+      // brilho do windup (0.18s ainda dá para ler o arranque do clip).
+      windup: 'roar',
+    },
+    hp: 65,
     chaseSpeed: 2.7,
     wanderSpeed: 1.1,
     wanderRadius: 12,
@@ -218,7 +240,7 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     // dedicated archer asset exists, fight like the melee bandit / goblin.
     modelUrl: '/assets/meshes/characters/bandit_lod2.glb',
     clips: STANDARD_CLIPS,
-    hp: 38,
+    hp: 60,
     chaseSpeed: 2.7,
     wanderSpeed: 1.1,
     wanderRadius: 12,
@@ -250,13 +272,19 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
       idle: 'idle',
       walk: 'walk',
       run: 'walk',
-      lunge: 'attack',
+      // Golpes pesados UAL2: combo overhand (machado) alternado com hook/punch.
+      lunge: 'swordheavy',
       death: 'death',
       roar: 'roar',
       hit: 'hit',
-      attack: 'punch',
+      // Reação pesada separada da leve: pancada normal encolhe (`hit`),
+      // crítico/finisher atira para trás (`knockback`).
+      knockback: 'knockback',
+      // Rugido como telegrafo do golpe pesado (windup default 0.25s).
+      windup: 'roar',
+      attack: ['punch', 'hook'],
     },
-    hp: 300,
+    hp: 350,
     chaseSpeed: 3.0,
     wanderSpeed: 0, // stays put until it spots the player, then hunts
     wanderRadius: 1,
@@ -282,16 +310,19 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
   bog_warden: {
     // Swamp elite boss — always-active at the far south of the swamp biome.
     modelUrl: '/assets/meshes/characters/bog_warden_boss_lod2.glb',
+    // Guardião: gancho (puxão) e golpe pesado alternados.
     clips: {
       idle: 'idle',
       walk: 'walk',
       run: 'walk',
-      lunge: 'jump',
+      lunge: 'hook',
       death: 'death',
       hit: 'hit',
-      attack: 'attack',
+      knockback: 'knockback',
+      windup: 'roar',
+      attack: ['attack', 'swordheavy'],
     },
-    hp: 175,
+    hp: 200,
     chaseSpeed: 2.8,
     wanderSpeed: 0.6,
     wanderRadius: 6,
@@ -321,9 +352,10 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
       lunge: 'jump',
       death: 'death',
       hit: 'hit',
+      windup: 'roar',
       attack: 'attack',
     },
-    hp: 190,
+    hp: 220,
     chaseSpeed: 3.4,
     wanderSpeed: 0.8,
     wanderRadius: 8,
@@ -348,6 +380,9 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
     // an always-active elite at the far north of the dark forest biome (no
     // global gate — it guards its lair until approached).
     modelUrl: '/assets/meshes/characters/witch_boss_lod2.glb',
+    // NB: o rig da bruxa não é humanoid-detectável (chapéu/robe = cadeias
+    // extra) — game-pack cai no procedural (Animator3D_*); 'spellcast' etc.
+    // nunca existem neste GLB.
     clips: {
       idle: 'idle',
       walk: 'walk',
@@ -357,7 +392,7 @@ export const CREATURE_DEFS: Record<string, CreatureConfig> = {
       hit: 'hit',
       attack: 'attack',
     },
-    hp: 160,
+    hp: 185,
     chaseSpeed: 3.0,
     wanderSpeed: 0.6,
     wanderRadius: 6,

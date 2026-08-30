@@ -8,6 +8,7 @@ import {
   createHudSlot,
   damageHealth,
   defineQuery,
+  getAnimator,
   getBvhSurfaceHeight,
   getRapierWorld,
   getTerrainHeightAt,
@@ -15,6 +16,7 @@ import {
   Health,
   isDead,
   isKeyDown,
+  PlayerGltfConfig,
   playSound,
   playSoundAt,
   spawnFloatingText,
@@ -25,7 +27,13 @@ import {
 import type { State } from 'vibegame';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { isGamePaused } from './pause';
-import { playerStats } from './skills';
+import { playerAttackPower, playerStats } from './skills';
+import {
+  comboDamageMult,
+  executeMultiplier,
+  notifyDodge,
+  notifyPlayerHitLanded,
+} from './combat-mechanics';
 
 interface Ability {
   id: string;
@@ -211,6 +219,18 @@ function doDash(state: State, player: number): void {
     duration: 0.5,
   });
   playSound('swing');
+  // O rig do herói traz `roll`: sem ele o dash era uma teleportação a deslizar
+  // com pose de corrida. O override trava a locomoção durante o clip — a 1.9×
+  // dura ~0.5 s, bem dentro do cooldown de 3 s, por isso não come inputs de
+  // ataque na prática.
+  if (state.hasComponent(player, PlayerGltfConfig)) {
+    const regIdx = PlayerGltfConfig.animatorRegistryIndex[player];
+    const animator = regIdx ? getAnimator(state, regIdx) : undefined;
+    animator?.playOverride('roll', { loop: false, timeScale: 1.9 });
+  }
+  // A dash is a dodge: brief i-frames, and dashing through an enemy's
+  // windup triggers the perfect-dodge reward (slow-mo + fury).
+  notifyDodge(state, player);
   flash('dash');
 }
 
@@ -251,7 +271,8 @@ function doPowerStrike(state: State, player: number): void {
   });
   playSoundAt('mine-break', hx, hy, hz, { originEid: player });
   const r2 = POWER_RADIUS * POWER_RADIUS;
-  const damage = POWER_DAMAGE + playerStats.attackBonus;
+  const baseDamage = POWER_DAMAGE + playerAttackPower();
+  const comboMult = comboDamageMult();
   let hits = 0;
   for (const e of healthQuery(state.world)) {
     if (e === player || e === merchant || isDead(e)) continue;
@@ -259,10 +280,23 @@ function doPowerStrike(state: State, player: number): void {
     const dz = Transform.posZ[e] - hz;
     const dy = Transform.posY[e] - hy;
     if (dx * dx + dz * dz > r2 || Math.abs(dy) > POWER_VERTICAL) continue;
-    damageHealth(e, damage);
+    let dmg = baseDamage * comboMult;
+    const exec = executeMultiplier(e);
+    if (exec > 1) {
+      dmg *= exec;
+      spawnFloatingText(state, 'EXECUTADO!', {
+        x: Transform.posX[e],
+        y: Transform.posY[e] + 2.8,
+        z: Transform.posZ[e],
+        color: '#ff4a4a',
+        duration: 0.9,
+      });
+    }
+    damageHealth(e, Math.round(dmg), player);
     hits++;
   }
   if (hits > 0) {
+    notifyPlayerHitLanded(hits);
     spawnFloatingText(state, '💥', {
       x: hx,
       y: Transform.posY[player] + 1.6,

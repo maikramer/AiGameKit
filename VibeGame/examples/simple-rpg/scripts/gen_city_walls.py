@@ -42,29 +42,49 @@ def fmt(v: float) -> str:
     return s if s not in ("-0", "") else "0"
 
 
-def gltf(mesh: str, near: int = 70, mid: int = 160) -> str:
-    # Grupo `infra` (manifests/infra.yaml) — GLBs em meshes/infra/.
+def gltf(mesh: str, near: int = 70, mid: int = 160, mesh_dir: str = "infra") -> str:
     return f"""            <GLTFLoader
               role="visual"
-              url="/assets/meshes/infra/{mesh}_lod0.glb"
-              lod1-url="/assets/meshes/infra/{mesh}_lod1.glb"
-              lod2-url="/assets/meshes/infra/{mesh}_lod2.glb"
+              url="/assets/meshes/{mesh_dir}/{mesh}_lod0.glb"
+              lod1-url="/assets/meshes/{mesh_dir}/{mesh}_lod1.glb"
+              lod2-url="/assets/meshes/{mesh_dir}/{mesh}_lod2.glb"
               lod-threshold-near="{near}"
               lod-threshold-mid="{mid}"
             ></GLTFLoader>"""
 
 
-def obj(name: str, x: float, z: float, rot: int | None, mesh: str, near: int = 70, mid: int = 160) -> str:
+def obj(name: str, x: float, z: float, rot: int | None, mesh: str, near: int = 70, mid: int = 160, mesh_dir: str = "infra") -> str:
     rot_attr = f'\n            transform="rotation: 0 {rot} 0"' if rot is not None else ""
     return f"""          <GameObject
             name="{name}"
             place="at: {fmt(x)} {fmt(z)}; align-to-terrain: 0"{rot_attr}
             overlap-max="{OVERLAP_MAX}"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-            collider="shape: trimesh; mesh-url: /assets/meshes/infra/{mesh}_collision.glb; mesh-anchor: base"
+            collider="shape: trimesh; mesh-url: /assets/meshes/{mesh_dir}/{mesh}_collision.glb; mesh-anchor: base"
           >
-{gltf(mesh, near, mid)}
+{gltf(mesh, near, mid, mesh_dir)}
           </GameObject>"""
+
+
+def torch_flame(x: float, z: float) -> str:
+    """Chama + luz sobre um torch_post (haste sólida até y=2.15, como na praça)."""
+    return f"""          <GameObject place="at: {fmt(x)} {fmt(z)}; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: {fmt(x)} {fmt(z)}; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.4; distance: 6; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>"""
 
 
 out: list[str] = []
@@ -116,7 +136,9 @@ for name, x, z, rot in (
 ):
     out.append(obj(name, x, z, rot, "city_gate_arch"))
 
-out.append("          <!-- Tochas nos portões (torch_post). -->")
+out.append("          <!-- Tochas nos portões (torch_post, grupo village) com")
+out.append("               chama e luz — portões apagados liam-se como tripés")
+out.append("               pretos à noite. -->")
 T = 5.8
 for name, x, z, rot in (
     ("gate_n_torch_w", -T, S, None),
@@ -128,7 +150,8 @@ for name, x, z, rot in (
     ("gate_w_torch_s", -S, -T, -90),
     ("gate_w_torch_n", -S, T, -90),
 ):
-    out.append(obj(name, x, z, rot, "torch_post", near=50, mid=120))
+    out.append(obj(name, x, z, rot, "torch_post", near=50, mid=120, mesh_dir="village"))
+    out.append(torch_flame(x, z))
 
 out.append("</Group>")
 

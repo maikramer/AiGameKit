@@ -11,8 +11,9 @@ import {
   unregisterInteractionTarget,
   setInputMovementSuppressed,
   playSound,
+  playSoundAt,
 } from 'vibegame';
-import type { MonoBehaviourContext, State } from 'vibegame';
+import type { MonoBehaviourContext, SoundHandle, State } from 'vibegame';
 import { isGamePaused, setGameModal } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';
 import { showToast } from '../../../shared/src/ui';
@@ -293,6 +294,12 @@ function handleKeys(): void {
   closePressed = close;
 }
 
+// Crepitar ambiente: loop fire-crackle (pool) enquanto o jogador está
+// perto da fogueira, com histerese 6m/9m para não ligar-desligar na borda.
+let crackle: SoundHandle | null = null;
+const CRACKLE_START_SQ = 6 * 6;
+const CRACKLE_STOP_SQ = 9 * 9;
+
 export function start(ctx: MonoBehaviourContext): void {
   findPlayer(ctx.state);
   fireEid = ctx.entity;
@@ -301,6 +308,8 @@ export function start(ctx: MonoBehaviourContext): void {
 }
 
 export function onDestroy(ctx: MonoBehaviourContext): void {
+  crackle?.stop();
+  crackle = null;
   closePanel();
   hidePrompt(ctx.state);
   fireEid = 0;
@@ -316,6 +325,23 @@ export function update(ctx: MonoBehaviourContext): void {
   const dx = player ? Transform.posX[player] - Transform.posX[eid] : 0;
   const dz = player ? Transform.posZ[player] - Transform.posZ[eid] : 0;
   const distSq = dx * dx + dz * dz;
+
+  if (crackle) {
+    if (!player || distSq > CRACKLE_STOP_SQ) {
+      crackle.fadeOut(1.2);
+      crackle = null;
+    }
+  } else if (player && distSq < CRACKLE_START_SQ) {
+    crackle = playSoundAt(
+      'fire-crackle',
+      Transform.posX[eid],
+      Transform.posY[eid],
+      Transform.posZ[eid],
+      {
+        originEid: eid,
+      }
+    );
+  }
 
   if (panelOpen) {
     handleKeys();

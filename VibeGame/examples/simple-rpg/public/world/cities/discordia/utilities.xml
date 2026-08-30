@@ -84,7 +84,7 @@
           </GameObject>
           <GameObject
             transform="rotation: 0 -35 0"
-            place="at: 9.5 -3.6; align-to-terrain: 0"
+            place="at: 8.7 -3.4; align-to-terrain: 0"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: box; size: 1.6 0.9 0.55"
           >
@@ -183,16 +183,37 @@
                (±39.8), encostados às vias E-W sem lhes ficar em cima. -->
           <GameObject
             name="rune-pillar"
-            place="at: -35 17; align-to-terrain: 0"
+            place="at: -35 17; align-to-terrain: 1"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base"
             script="stone-pillar.ts"
           ></GameObject>
           <GameObject
             name="crystal-shrine"
-            place="at: 35 17; align-to-terrain: 0"
+            place="at: 35 17; align-to-terrain: 1"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base"
             script="crystal-shrine.ts"
+          ></GameObject>
+        </Group>
+
+<Group name="city.townsfolk" pos="0 0 0">
+          <!-- Transeuntes ambientes (src/game/townsfolk.ts): cada um adota a
+               rota cujo primeiro ponto fica mais perto do seu spawn. Sem
+               collider — passam pelas ruas, o jogador atravessa-os. -->
+          <GameObject
+            name="townsfolk_plaza"
+            place="at: 5 10.5; align-to-terrain: 1"
+            script="townsfolk.ts"
+          ></GameObject>
+          <GameObject
+            name="townsfolk_north"
+            place="at: 0 -10; align-to-terrain: 1"
+            script="townsfolk.ts"
+          ></GameObject>
+          <GameObject
+            name="townsfolk_market"
+            place="at: 6 0; align-to-terrain: 1"
+            script="townsfolk.ts"
           ></GameObject>
         </Group>

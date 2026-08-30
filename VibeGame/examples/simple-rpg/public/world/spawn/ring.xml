@@ -27,7 +27,7 @@
           at="-80 104"
           radius="16"
           depth="5.0"
-          water-offset="0.55"
+          water-offset="0.25"
           color="#2a6685"
           opacity="0.72"
         ></Lake>
@@ -509,5 +509,17 @@
             ></GLTFLoader>
           </Creature>
         </DynamicSpawner>
+  <!-- Ambiência de água (scripts/ambient-water.ts): loops espaciais com
+       histerese — rio na ponte norte, lago do vale. -->
+  <GameObject
+    name="ambient_water_river"
+    place="at: 4 214; align-to-terrain: 1"
+    script="ambient-water.ts"
+  ></GameObject>
+  <GameObject
+    name="ambient_water_valley_lake"
+    place="at: -80 104; align-to-terrain: 1"
+    script="ambient-water.ts"
+  ></GameObject>
       </Group>
       <!-- FIM valley-outskirts -->

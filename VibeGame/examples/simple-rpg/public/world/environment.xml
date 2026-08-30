@@ -20,18 +20,38 @@
              céu de imagem (`<EquirectSky>`). Nuvens do shader ficam leves
              porque os billboards do Weather (crossfade por bioma) são a
              camada de nuvens "de jogo". -->
+        <!-- Calendário dia/noite: o <DayCycle> escreve a elevação/azimute do
+             <Sky> (quantizados a 2°) e faz o ramp da luz ambiente
+             (0.22 de dia — o look atual — para 0.07 à noite). Nadir do sol a
+             −22°: noite escura de verdade, as tochas/portões/acampamentos
+             assumem. Dia de 20 min reais; começa 08:00. -->
+        <DayCycle
+          minute-of-day="480"
+          minutes-per-real-second="1.2"
+          dawn-minute="330"
+          dusk-minute="1170"
+          sun-azimuth-base="205"
+          max-sun-elevation="62"
+          min-sun-elevation="20"
+          sky-step-deg="2"
+          drive-sky="1"
+          drive-ambient="1"
+          ambient-day-intensity="0.26"
+          ambient-night-intensity="0.07"
+        ></DayCycle>
+
         <Sky
           sun-elevation="17"
           sun-azimuth="205"
-          turbidity="3.4"
-          rayleigh="2.0"
-          mie-coefficient="0.006"
-          mie-directional-g="0.86"
+          turbidity="2.4"
+          rayleigh="2.8"
+          mie-coefficient="0.0035"
+          mie-directional-g="0.80"
           cloud-coverage="0.45"
-          cloud-density="0.35"
+          cloud-density="0.32"
           cloud-elevation="0.55"
-          environment-intensity="0.3"
-          sun-intensity="5.2"
+          environment-intensity="0.38"
+          sun-intensity="2.6"
           drive-light="1"
         ></Sky>
 
@@ -46,7 +66,7 @@
         <GameObject
           ambient-light="sky-color: 0xc8d8e8; ground-color: 0xa89878; intensity: 0.22"
           directional-light="cast-shadow: 1; shadow-map-size: 4096; distance: 140; pcss: 1"
-          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.18; bloom-radius: 0.55; bloom-threshold: 8.0; chromatic-aberration: 1; ca-strength: 0.0006; vignette: 1; vignette-offset: 0.32; vignette-darkness: 0.36; aa: smaa; tone-mapping: aces; tone-mapping-exposure: 0.88; ssao: 1; ssao-intensity: 1.5; ssao-radius: 2.5; depth-of-field: 0; god-rays: 1; god-rays-density: 0.95; god-rays-decay: 0.93; god-rays-weight: 0.38; god-rays-exposure: 0.42; film-grain: 1; film-grain-opacity: 0.03; color-grading: 1; saturation: 0.08; contrast: 0.08; brightness: 0.0; height-fog: 1; fog-color: 0xdac8ae; fog-density: 0.0018; fog-height: 132; fog-falloff: 35; fog-noise: 0.3; fog-sun-influence: 1.4; fog-sky-haze: 0.22"
+          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.16; bloom-radius: 0.6; bloom-threshold: 6.0; chromatic-aberration: 1; ca-strength: 0.0006; vignette: 1; vignette-offset: 0.30; vignette-darkness: 0.44; aa: smaa; tone-mapping: aces; tone-mapping-exposure: 0.76; ssao: 1; ssao-intensity: 1.25; ssao-radius: 2.5; depth-of-field: 0; god-rays: 1; god-rays-density: 0.45; god-rays-decay: 0.93; god-rays-weight: 0.30; god-rays-exposure: 0.28; film-grain: 1; film-grain-opacity: 0.03; color-grading: 1; saturation: 0.15; contrast: 0.18; brightness: 0.0; height-fog: 1; fog-color: 0xb9cede; fog-density: 0.0012; fog-height: 132; fog-falloff: 35; fog-noise: 0.3; fog-sun-influence: 0.45; fog-sky-haze: 0.10"
         >
         </GameObject>
 
@@ -64,7 +84,7 @@
              mais próximo DENTRO da fronteira, assente no chão e sem
              velocidade — em vez de cair do mundo no corte final. -->
         <WorldBorder
-          radius="1800"
+          radius="3800"
           warn-seconds="5"
           margin="80"
         ></WorldBorder>
@@ -109,44 +129,44 @@
         <BiomeRegion
           id="dark-forest"
           type="1"
-          polygon="[-56,56;56,56;1040,1040;-1040,1040]"
+          polygon="[-56,56;56,56;4040,4040;-4040,4040]"
           tint="#1a3320"
-          fog-color="#16241c"
-          fog-density="0.0038"
+          fog-color="#22362b"
+          fog-density="0.0030"
           ambient="#3a4a55"
           bgm-layer="1"
           clouds="0.85"
-          pp-exposure="0.8"
-          pp-vignette-darkness="0.55"
+          pp-exposure="0.78"
+          pp-vignette-darkness="0.50"
           terrain-texture="/assets/textures/forest_floor.png"
         ></BiomeRegion>
         <!-- LESTE: Deserto -->
         <BiomeRegion
           id="desert"
           type="2"
-          polygon="[56,-56;56,56;1040,1040;1040,-1040]"
+          polygon="[56,-56;56,56;4040,4040;4040,-4040]"
           tint="#c2a878"
-          fog-color="#d8c89a"
-          fog-density="0.0019"
+          fog-color="#e0d3b0"
+          fog-density="0.0014"
           ambient="#5a4a3a"
           bgm-layer="1"
           clouds="0.25"
-          pp-exposure="1.12"
-          pp-bloom-strength="0.20"
+          pp-exposure="0.74"
+          pp-bloom-strength="0.18"
           terrain-texture="/assets/textures/desert_sand.png"
         ></BiomeRegion>
         <!-- OESTE: Pântano (bacias baixas do relevo real) -->
         <BiomeRegion
           id="swamp"
           type="3"
-          polygon="[-56,-56;-56,56;-1040,1040;-1040,-1040]"
+          polygon="[-56,-56;-56,56;-4040,4040;-4040,-4040]"
           tint="#3a4a30"
-          fog-color="#16241a"
-          fog-density="0.0050"
+          fog-color="#29382c"
+          fog-density="0.0038"
           ambient="#2a3a30"
           bgm-layer="1"
           rain="0.35"
-          pp-exposure="0.9"
+          pp-exposure="0.76"
           terrain-texture="/assets/textures/swamp_mud.png"
         ></BiomeRegion>
         <!-- SUL: Picos Gelados. Vértice da cunha empurrado de ±56 para ±240:
@@ -157,13 +177,13 @@
         <BiomeRegion
           id="frozen-peaks"
           type="4"
-          polygon="[-240,-240;240,-240;1040,-1040;-1040,-1040]"
+          polygon="[-240,-240;240,-240;4040,-4040;-4040,-4040]"
           tint="#cdd9e6"
-          fog-color="#dfe8f2"
-          fog-density="0.0016"
+          fog-color="#d6e4f2"
+          fog-density="0.0014"
           ambient="#aeb9c8"
           bgm-layer="1"
-          pp-exposure="1.05"
+          pp-exposure="0.78"
           terrain-texture="/assets/textures/snow_peak.png"
         ></BiomeRegion>
       </Group>

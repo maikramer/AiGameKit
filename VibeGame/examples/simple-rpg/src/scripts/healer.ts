@@ -15,10 +15,16 @@ import {
 import { spendGold } from '../game/economy.ts';
 import { isGamePaused } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';
+import { NpcIdleAnimator } from '../game/npc-anims.ts';
 import { showToast } from '../../../shared/src/ui';
 
 const MODEL_URL = '/assets/meshes/characters/npc_healer_lod2.glb';
 const IDLE_CLIP = 'idle';
+// Variedade de idle: conversa/braços cruzados; acena 'yes' ao curar.
+const idleVariety = new NpcIdleAnimator({
+  idle: IDLE_CLIP,
+  gestures: ['talk', 'foldarms'],
+});
 const TURN_SPEED = 6;
 const TALK_RANGE_SQ = 4.5 * 4.5;
 const FACE_RANGE_SQ = 5 * 5;
@@ -71,6 +77,7 @@ function tryHeal(player: number): void {
   }
   healHealth(player, max - cur);
   playSound('heal');
+  idleVariety.react(animator, 'yes');
   showToast('As feridas fecham.', {
     color: '#9fe8c0',
     borderColor: '#4caf7a',
@@ -90,6 +97,7 @@ export function start(ctx: MonoBehaviourContext): void {
     group = result.group;
     animator = result.animator;
     animator?.play(IDLE_CLIP);
+    idleVariety.start(animator);
   });
 }
 
@@ -97,6 +105,7 @@ export function update(ctx: MonoBehaviourContext): void {
   if (isGamePaused()) return;
   if (!group) return;
   animator?.update(ctx.deltaTime);
+  idleVariety.update(ctx.deltaTime, animator);
 
   const eid = ctx.entity;
   const x = Transform.posX[eid];

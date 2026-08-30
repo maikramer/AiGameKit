@@ -59,6 +59,12 @@ export function aliveEnemyCount(): number {
   return alive.size;
 }
 
+/** Living enemy eids (bosses excluded) — proximity gates like harvest
+ * suppression read positions off these. */
+export function livingEnemies(): Iterable<number> {
+  return alive;
+}
+
 export function aliveInBiome(biome: string): number {
   return counts.get(biome) ?? 0;
 }

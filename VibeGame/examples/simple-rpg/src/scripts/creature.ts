@@ -2,13 +2,17 @@ import * as THREE from 'three';
 import {
   GltfAnimator,
   GltfPending,
+  forEachLodChild,
   getGltfRootGroup,
   loadGltfMasterTracked,
+  loadSettledGltfMaster,
   loadGltfToSceneWithAnimator,
+  lodChildCount,
   notifyEnemyKilled,
   playSound,
   playSoundAt,
   spawnFloatingText,
+  threeCameras,
 } from 'vibegame';
 import type { MonoBehaviourContext, State } from 'vibegame';
 import {
@@ -30,14 +34,17 @@ import {
   AI_MODE_ATTACK,
   AI_MODE_LUNGE,
   AI_MODE_DEAD,
+  AI_LUNGE_PHASE_WINDUP,
+  staggerAi,
   NavMeshAgent,
   removeAgent,
   planarYawRadians,
   setTransformYawRadians,
+  shortestAngleDelta,
+  markRigidbodyPoseDirty,
   spawnProjectileFromTemplate,
   hasLineOfSight,
   Rigidbody,
-  DistanceCull,
 } from 'vibegame';
 import type { MeleeAiConfig } from 'vibegame';
 import {
@@ -55,6 +62,13 @@ import {
  */
 const SLEEP_RANGE_MARGIN = 8;
 const SLEEP_CHECK_INTERVAL = 20;
+
+/**
+ * Fraction of max HP a single blow must take to count as heavy — crits,
+ * finishers and boss-tier weapons cross it, ordinary swings do not. Heavy hits
+ * get the bigger reaction clip, the longer stagger and the fatter spark burst.
+ */
+const HEAVY_HIT_FRAC = 0.16;
 
 // AI tuning not expressed in CreatureConfig — defaults from the original
 // creature prototype, fed into the engine MeleeAiConfig.
@@ -83,6 +97,14 @@ export function anyBossAggro(): boolean {
 }
 export function anyCreatureAggro(): boolean {
   return aggroEntities.size > 0;
+}
+
+/**
+ * Poise check for attacker-side effects (melee.ts): bosses don't get shoved
+ * or staggered by ordinary blows — the sword stops on them.
+ */
+export function isBossCreature(eid: number): boolean {
+  return bossEntities.has(eid);
 }
 
 /**
@@ -122,8 +144,21 @@ export interface CreatureClips {
   roar?: string;
   /** Optional hit reaction clip (played when taking damage). */
   hit?: string;
-  /** Optional attack clip (played during the attack swing between lunges). */
-  attack?: string;
+  /**
+   * Heavy-hit reaction. A crit or a big chunk of the health bar plays this
+   * instead of `hit` — one reaction for every blow reads flat, and packs ship
+   * a `knockback`/`hithead` clip that is exactly the "that one hurt" pose.
+   */
+  knockback?: string;
+  /**
+   * Telegraph clip played during the lunge windup (`roar`, `swordheavy`…).
+   * The windup already ramps an emissive glow; a wind-up pose makes the same
+   * beat readable from the silhouette instead of only from the tint.
+   */
+  windup?: string;
+  /** Optional attack clip(s) played during the attack swing between lunges.
+   * A string[] is a variety pool — successive swings cycle through it. */
+  attack?: string | string[];
 }
 
 export interface CreatureConfig {
@@ -176,6 +211,12 @@ export interface CreatureConfig {
   enemyType?: string;
   /** Boss flag: aggro dele alimenta a camada de BGM 'boss' (anyBossAggro). */
   isBoss?: boolean;
+  /**
+   * Seconds the creature's FSM freezes when it takes a hit (hit-stagger).
+   * Default: 0.32 for regular mobs, 0 for bosses (poise). The shove itself
+   * (knockback) is applied by the attacker — see melee.ts.
+   */
+  hitStaggerSec?: number;
   /** Time-scale applied to the run clip while chasing (e.g. 1.5 to reuse walk as a jog). */
   runTimeScale?: number;
   /**
@@ -267,21 +308,90 @@ interface PresentationState {
     { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[] | null;
   deathHandled: boolean;
   deathTimer: number;
-  /** Hit-reaction countdown: plays the hit clip, then returns to AI clip. */
+  /** Hit-reaction countdown: plays the reaction clip, then returns to AI clip. */
   hitTimer: number;
+  /** Which reaction clip the countdown is holding (`hit` or `knockback`). */
+  hitClip: string;
   /** Gate: false while dormant (boss waiting), true once activated. */
   activated: boolean;
   /** Intro-roar countdown (holds still, plays roar clip). */
   roarTimer: number;
   /** Frames spent waiting for index.html GLTFLoader child. */
   xmlWaitFrames: number;
+  /** Countdown to the next LOD-animator retry after a transient load fail. */
+  lodRetryTimer: number;
+  /** Seconds the creature has been outside the camera frustum (sleep grace). */
+  outOfViewFor: number;
+  /** Watchdog: last animator time seen (frozen-animation detection). */
+  wdLastTime: number;
+  /** Watchdog: consecutive checks where the animator did not advance. */
+  wdStuck: number;
+  /** Clips whose play already failed once (log de-dup). */
+  failedClipWarns?: Set<string>;
+  /** Per-LOD animator time for the watchdog (index aligned with lodAnimators). */
+  wdLodTimes: number[];
+  /** Transient retries left before giving up on LOD animators for good. */
+  lodRetriesLeft: number;
+  /** LOD levels already seen (parked included) — arms the late-attach scan. */
+  lodSeenCount: number;
   /** True while beyond sleep range — AI/nav/anim paused. */
   sleeping: boolean;
   /** Seconds remaining before the next ranged shot (ranged creatures only). */
   rangedCdTimer: number;
+  /** Seconds elapsed in the current lunge windup (telegraph glow ramp). */
+  windupElapsed: number;
+  /** Next index into the attack variety pool (advance per completed swing). */
+  attackIdx: number;
+  /** Last AI mode seen by pickClip — detects lunge→attack transitions. */
+  lastPickMode: number;
 }
 
 const playerQuery = defineQuery([PlayerController]);
+const cameraQuery = defineQuery([Transform]);
+// ── Predictive camera-frustum wake ───────────────────────────────────────────
+// Creatures used to wake by DISTANCE only (detect+8 m), so a mob you could
+// clearly see stayed frozen until you walked close — very perceptible. Now the
+// wake rule is the camera FRUSTUM with a margin: animate unless the creature
+// is outside the (slightly expanded) view angle, and start BEFORE it enters
+// the frame. The frustum is computed once per frame and shared by all mobs.
+const FRUSTUM_WAKE_MARGIN = 10; // meters of predictive slack around each mob
+const FRUSTUM_SLEEP_GRACE = 2.5; // seconds outside the frustum before sleeping
+let _frustumFrame = -1;
+let _frustumValid = false;
+const _frustum = new THREE.Frustum();
+const _projScreen = new THREE.Matrix4();
+const _wakeSphere = new THREE.Sphere();
+
+function cameraFrustum(state: State): THREE.Frustum | null {
+  if (_frustumFrame === state.time.frameCount) {
+    return _frustumValid ? _frustum : null;
+  }
+  _frustumFrame = state.time.frameCount;
+  _frustumValid = false;
+  // The engine keeps one THREE.Camera per MainCamera entity; use the first
+  // live instance (the third-person follow camera).
+  for (const cam of threeCameras.values()) {
+    if (!cam.projectionMatrix) continue;
+    _projScreen.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    _frustum.setFromProjectionMatrix(_projScreen);
+    _frustumValid = true;
+    break;
+  }
+  return _frustumValid ? _frustum : null;
+}
+
+/** True when the creature is inside (or near) the camera view angle. */
+function withinCameraView(state: State, eid: number): boolean {
+  const frustum = cameraFrustum(state);
+  if (!frustum) return true; // no camera yet — never gate on it
+  _wakeSphere.center.set(
+    Transform.posX[eid],
+    Transform.posY[eid] + 1,
+    Transform.posZ[eid]
+  );
+  _wakeSphere.radius = FRUSTUM_WAKE_MARGIN;
+  return frustum.intersectsSphere(_wakeSphere);
+}
 const xmlVisualQuery = defineQuery([Parent, GltfPending]);
 /** Planar speed (m/s) above which chase/idle facing follows displacement. */
 const MOVE_FACE_SPEED = 0.3;
@@ -300,6 +410,13 @@ function deriveLodUrls(modelUrl: string): [string, string, string] | null {
     return [`${base}_lod1.glb`, `${base}_lod2.glb`, `${base}_lod2.glb`];
   }
   return [`${base}_lod0.glb`, `${base}_lod1.glb`, `${base}_lod2.glb`];
+}
+
+/** Sibling master URL for `level` (`goblin_lod2.glb` → `goblin_lod0.glb`). */
+function lodUrlAtLevel(modelUrl: string, level: number): string | null {
+  const m = modelUrl.match(/^(.*)_lod[012]\.glb$/i);
+  if (!m || level < 0 || level > 2) return null;
+  return `${m[1]}_lod${level}.glb`;
 }
 
 function findXmlVisualChild(state: State, parentEid: number): number | null {
@@ -373,6 +490,22 @@ function applyFlash(s: PresentationState, on: boolean): void {
       f.mat.emissive.setHex(f.emHex);
       f.mat.emissiveIntensity = f.emInt;
     }
+  }
+}
+
+/**
+ * Telegraph glow while the creature braces for a lunge: amber → red, intensity
+ * ramping with windup progress (`k` in 0..1). Gives the player a readable
+ * dodge window without a bespoke windup animation clip. The white hit-flash
+ * takes precedence (see the update loop).
+ */
+function applyWindupGlow(s: PresentationState, k: number): void {
+  if (!s.flashMats) return;
+  const g = 0.55 * (1 - k * 0.8);
+  const b = 0.15 * (1 - k);
+  for (const f of s.flashMats) {
+    f.mat.emissive.setRGB(1, g, b);
+    f.mat.emissiveIntensity = 0.5 + 1.1 * k;
   }
 }
 
@@ -492,12 +625,13 @@ export function createCreatureBehaviours(
       return true;
     }
 
-    // Still drawn (camera within max-distance) → keep simulating. Old sleep
-    // at detect+8 froze packs that were clearly on screen past ~26 m.
-    const visuallyCulled =
-      ctx.state.hasComponent(eid, DistanceCull) &&
-      DistanceCull.culled[eid] === 1;
-    if (!visuallyCulled) {
+    // In (or near) the camera view angle → keep simulating, with a short
+    // grace after leaving the frame so a quick camera swing doesn't park a
+    // visible mob mid-stride. This replaces the old DistanceCull gate, which
+    // kept clearly visible distant mobs frozen until the player got close.
+    const inView = withinCameraView(ctx.state, eid);
+    s.outOfViewFor = inView ? 0 : s.outOfViewFor + (ctx.deltaTime || 0);
+    if (inView || s.outOfViewFor < FRUSTUM_SLEEP_GRACE) {
       if (s.sleeping) {
         s.sleeping = false;
         setNavEnabled(ctx.state, eid, true);
@@ -547,7 +681,10 @@ export function createCreatureBehaviours(
     const x = Transform.posX[eid];
     const y = Transform.posY[eid];
     const z = Transform.posZ[eid];
-    playSoundAt('enemy-death', x, y, z, { originEid: eid });
+    playSoundAt('enemy-death', x, y, z, {
+      originEid: eid,
+      pitch: 1 + (Math.random() * 2 - 1) * 0.08,
+    });
     if (cfg.defeatedText) {
       spawnFloatingText(ctx.state, cfg.defeatedText, {
         x,
@@ -575,33 +712,58 @@ export function createCreatureBehaviours(
       duration: 0.8,
     });
     if (s.playing !== cfg.clips.death) {
-      playClip(s, cfg.clips.death, { loop: false });
+      if (playClip(s, cfg.clips.death, { loop: false })) {
+        // Packs ship one death clip; a ±12% rate spread keeps a wiped pack
+        // from collapsing in perfect unison.
+        jitterTimeScale(s, 0.12);
+      }
+      // A corpse must not keep recoiling from the blow that killed it.
+      for (const anim of animatorsOf(s)) anim.clearFlinch();
     }
   }
 
-  function pickClip(mode: number, moving: boolean): string {
+  function pickClip(
+    s: PresentationState,
+    mode: number,
+    moving: boolean,
+    winding: boolean
+  ): string {
     // Only the actual lunge burst plays the lunge clip; while waiting between
     // swings (ATTACK) we play the attack clip if available (windup/recover),
     // otherwise idle so the rig doesn't freeze on the lunge's clamped last frame.
-    if (mode === AI_MODE_LUNGE) return cfg.clips.lunge;
+    if (mode === AI_MODE_LUNGE) {
+      // Telegraph: the brace before the burst gets its own pose (roar, raised
+      // axe…) so the tell is readable from the silhouette, not only from the
+      // windup glow. Falls through to the lunge clip once the burst starts.
+      if (winding && cfg.clips.windup) return cfg.clips.windup;
+      return cfg.clips.lunge;
+    }
     if (mode === AI_MODE_CHASE) return cfg.clips.run;
     if (mode === AI_MODE_ATTACK) {
       // Ranged units sit in ATTACK at long stand-off; looping the melee
       // `attack` clip looks like close swings that never deal damage (lunge
       // suppressed). Attack anim plays only when a projectile actually fires.
       if (isRanged) return moving ? cfg.clips.run : cfg.clips.idle;
-      return cfg.clips.attack ?? cfg.clips.idle;
+      const pool = cfg.clips.attack;
+      if (pool == null) return cfg.clips.idle;
+      // Variety pool: advance once per completed swing (lunge→attack edge).
+      if (
+        s.lastPickMode === AI_MODE_LUNGE &&
+        Array.isArray(pool) &&
+        pool.length > 1
+      ) {
+        s.attackIdx = (s.attackIdx + 1) % pool.length;
+      }
+      return Array.isArray(pool)
+        ? (pool[s.attackIdx % pool.length] as string)
+        : pool;
     }
     return moving ? cfg.clips.walk : cfg.clips.idle;
   }
 
-  /** Play clip; only stamp ``playing`` on success. Fall back to idle on miss
-   * so flying packs (Hover/Soar, no Walk) never sticky-T-pose. */
-  function playClip(
-    s: PresentationState,
-    clip: string,
-    opts?: { loop?: boolean }
-  ): boolean {
+  /** Every live animator for this creature (all LOD levels stay in sync so a
+   *  LOD switch mid-swing does not restart the pose). */
+  function animatorsOf(s: PresentationState): GltfAnimator[] {
     const targets = s.lodAnimators.filter(
       (a): a is GltfAnimator => !!a && a.clipNames.length > 0
     );
@@ -612,6 +774,24 @@ export function createCreatureBehaviours(
     ) {
       targets.push(s.animator);
     }
+    return targets;
+  }
+
+  /** Nudge playback rate by ±`amount` — repeated reactions/swings played at
+   *  exactly the same rate are what makes a mob read as a machine. */
+  function jitterTimeScale(s: PresentationState, amount: number): void {
+    const scale = 1 + (Math.random() * 2 - 1) * amount;
+    for (const anim of animatorsOf(s)) anim.setTimeScale(scale);
+  }
+
+  /** Play clip; only stamp ``playing`` on success. Fall back to idle on miss
+   * so flying packs (Hover/Soar, no Walk) never sticky-T-pose. */
+  function playClip(
+    s: PresentationState,
+    clip: string,
+    opts?: { loop?: boolean }
+  ): boolean {
+    const targets = animatorsOf(s);
     if (targets.length === 0) return false;
     let acted = false;
     for (const anim of targets) {
@@ -627,6 +807,13 @@ export function createCreatureBehaviours(
         if (anim.play(cfg.clips.idle)) idle = true;
       }
       if (idle) s.playing = cfg.clips.idle;
+    }
+    if (!s.failedClipWarns) s.failedClipWarns = new Set();
+    if (!s.failedClipWarns.has(clip)) {
+      s.failedClipWarns.add(clip);
+      console.warn(
+        `[creature] clip play failed everywhere → idle fallback: clip=${clip}, type=${cfg.enemyType ?? '?'}, available=${targets[0]?.clipNames.slice(0, 12).join(',') ?? '(none)'}`
+      );
     }
     return false;
   }
@@ -675,34 +862,85 @@ export function createCreatureBehaviours(
   async function attachLodAnimators(
     state: State,
     s: PresentationState,
-    urls: [string, string, string]
+    urls: [string, string, string],
+    eid: number
   ): Promise<void> {
     if (!s.group) return;
-    for (const child of s.group.children) {
-      const level = (child.userData.lodLevel as number | undefined) ?? 0;
-      if (s.lodAnimators[level] || s.lodAttempted[level]) continue;
-      const url = urls[level];
-      if (!url) continue;
-      s.lodAttempted[level] = true;
-      try {
-        // Always background: the XML visual already holds the boot gate for
-        // this mesh; the animator is presentation polish on top of it.
-        const master = await loadGltfMasterTracked(state, url, 'background');
-        if (!s.group) return;
-        if (!master.animations?.length) {
-          // Master without clips (rigged-only / bad handoff) — skip so we
-          // never spam "Clip idle not found. Available:".
-          continue;
-        }
-        const anim = new GltfAnimator(master, {
-          root: child,
-          crossfadeDuration: 0.25,
-        });
-        s.lodAnimators[level] = anim;
-        if (level === 0 || !s.animator) s.animator = anim;
-        if (s.playing) anim.play(s.playing);
-      } catch {
-        /* lod stream can 404; keep lod0 animator */
+    const attach = (child: THREE.Object3D): void => {
+      void attachLodAnimatorFor(state, s, urls, eid, child);
+    };
+    // Inactive LOD levels are parked off-graph (gltf-lod-parking): scanning
+    // only attached children misses every level but the active one, and the
+    // distance band then switches to an animator-less level — the creature
+    // chases frozen in bind pose while its AI stays healthy. Parked levels
+    // must get animators too; a mixer drives a detached subtree just fine.
+    if (lodChildCount(s.group) === 0) {
+      for (const child of s.group.children) attach(child);
+    } else {
+      forEachLodChild(s.group, attach);
+    }
+  }
+
+  async function attachLodAnimatorFor(
+    state: State,
+    s: PresentationState,
+    urls: [string, string, string],
+    eid: number,
+    child: THREE.Object3D
+  ): Promise<void> {
+    const level = (child.userData.lodLevel as number | undefined) ?? 0;
+    if (s.lodAnimators[level] || s.lodAttempted[level]) return;
+    const url = urls[level];
+    if (!url) return;
+    s.lodAttempted[level] = true;
+    try {
+      // Prefer a master that already settled this session (the LOD0 visual is
+      // cloned from one, so it is always there): clips are identical across
+      // levels, and waiting on a colder master leaves the first encounter
+      // chasing in bind pose until the far LOD streams in. Always background:
+      // the XML visual already holds the boot gate for this mesh; the
+      // animator is presentation polish on top of it.
+      const ownLevelUrl = lodUrlAtLevel(cfg.modelUrl, level);
+      const settled =
+        loadSettledGltfMaster(url) ??
+        (ownLevelUrl ? loadSettledGltfMaster(ownLevelUrl) : null);
+      const master = await (settled ??
+        loadGltfMasterTracked(state, url, 'background'));
+      if (!s.group) return;
+      // A retry may have re-armed this level while the master was in flight —
+      // the first continuation to land owns the animator, the other exits.
+      if (s.lodAnimators[level]) return;
+      if (!master.animations?.length) {
+        // Master without clips (rigged-only / bad handoff) — skip so we
+        // never spam "Clip idle not found. Available:". Log once: a mesh-only
+        // LOD means that distance band renders in bind pose (frozen look).
+        console.warn(
+          `[creature] LOD master without animations: ${url} (eid ${eid ?? '?'}, type ${cfg.enemyType ?? '?'})`
+        );
+        return;
+      }
+      const anim = new GltfAnimator(master, {
+        root: child,
+        crossfadeDuration: 0.25,
+      });
+      s.lodAnimators[level] = anim;
+      if (level === 0 || !s.animator) s.animator = anim;
+      if (s.playing) anim.play(s.playing);
+    } catch {
+      // Transient fetch failure (cold-boot dev-server races leave GLB
+      // requests failing while Vite is still compiling). A permanent skip
+      // here left the creature without ANY animator — it chased the player
+      // frozen solid ("não descongela"). Mark retryable; the update loop
+      // re-attaches after a cooldown (capped by lodRetriesLeft). A real 404
+      // burns through the retries quickly and then stays skipped.
+      if (s.lodRetriesLeft > 0) {
+        s.lodRetriesLeft -= 1;
+        s.lodRetryTimer = 3;
+        s.lodAttempted[level] = false;
+      } else if (level === 0) {
+        console.warn(
+          `[creature] LOD animator retries exhausted (lod0) — creature will stay un-animated: eid ${eid ?? '?'}, type ${cfg.enemyType ?? '?'}, url ${url}`
+        );
       }
     }
   }
@@ -736,7 +974,7 @@ export function createCreatureBehaviours(
     if (!group) return false;
     bindGroup(s, group, true);
     const urls = deriveLodUrls(cfg.modelUrl);
-    if (urls) void attachLodAnimators(ctx.state, s, urls);
+    if (urls) void attachLodAnimators(ctx.state, s, urls, eid);
     return true;
   }
 
@@ -773,6 +1011,17 @@ export function createCreatureBehaviours(
       xmlWaitFrames: preferXml ? 0 : 999,
       sleeping: false,
       rangedCdTimer: 0,
+      windupElapsed: 0,
+      attackIdx: 0,
+      hitClip: '',
+      lastPickMode: -1,
+      lodRetryTimer: 0,
+      lodRetriesLeft: 6,
+      lodSeenCount: 0,
+      outOfViewFor: 0,
+      wdLastTime: -1,
+      wdStuck: 0,
+      wdLodTimes: [],
     };
     presentationMap(ctx.state).set(eid, s);
 
@@ -840,15 +1089,31 @@ export function createCreatureBehaviours(
       }
     }
 
+    // Retry transient LOD-animator failures: without this a creature whose
+    // animator fetch failed during boot NEVER animates (frozen chaser).
+    if (s.group && !s.animator && s.lodRetryTimer > 0 && !s.deathHandled) {
+      s.lodRetryTimer -= ctx.deltaTime;
+      if (s.lodRetryTimer <= 0) {
+        for (let i = 0; i < s.lodAttempted.length; i++) {
+          if (!s.lodAnimators[i]) s.lodAttempted[i] = false;
+        }
+        const urls = deriveLodUrls(cfg.modelUrl);
+        if (urls) void attachLodAnimators(ctx.state, s, urls, eid);
+      }
+    }
+
     // Late-arriving lod1/lod2 children (streamed after near LOD). Attach
     // even while sleeping so a denser LOD doesn't appear in bind/jump pose.
+    // lodChildCount includes parked levels — root.children.length is capped
+    // at 1 by the LOD parking, so it can never reveal a late arrival.
     if (s.group && s.xmlVisual) {
       const urls = deriveLodUrls(cfg.modelUrl);
-      if (
-        urls &&
-        s.group.children.length > s.lodAttempted.filter(Boolean).length
-      ) {
-        void attachLodAnimators(ctx.state, s, urls);
+      if (urls) {
+        const count = lodChildCount(s.group);
+        if (count > s.lodSeenCount) {
+          s.lodSeenCount = count;
+          void attachLodAnimators(ctx.state, s, urls, eid);
+        }
       }
     }
 
@@ -875,11 +1140,11 @@ export function createCreatureBehaviours(
         }
       }
     } else if (!shouldSimulate(ctx, s, eid)) {
-      // Sleeping: park on idle once so frozen jump/lunge poses don't linger.
-      if (s.group && s.playing !== cfg.clips.idle) {
-        playClip(s, cfg.clips.idle);
-        for (const anim of s.lodAnimators) anim?.update(0);
-      }
+      // Sleeping: park every animator on idle frame 0 so frozen chase/lunge
+      // poses — and far-LOD animators that attach while asleep — never sit
+      // in bind pose.
+      if (s.group && s.playing !== cfg.clips.idle) playClip(s, cfg.clips.idle);
+      for (const anim of s.lodAnimators) anim?.poseFrozenFrame();
       return;
     }
 
@@ -927,6 +1192,40 @@ export function createCreatureBehaviours(
     // Presentation: visuals, clips, hit-flash, death FX + loot.
     if (!s.group) return;
     for (const anim of s.lodAnimators) anim?.update(ctx.deltaTime);
+
+    // ── Frozen-animation watchdog ─────────────────────────────────────────
+    // While awake, a looping locomotion clip must ALWAYS advance — on EVERY
+    // LOD animator (the visible mesh may belong to a different level than
+    // the primary). If a level stalls for ~2 s we log the full context once.
+    let anyStuck = false;
+    for (let li = 0; li < s.lodAnimators.length; li++) {
+      const anim = s.lodAnimators[li];
+      if (!anim || anim.clipNames.length === 0) continue;
+      const t = anim.currentTime;
+      const prev = s.wdLodTimes[li];
+      if (prev !== undefined && Math.abs(t - prev) < 1e-6) {
+        anyStuck = true;
+      }
+      s.wdLodTimes[li] = t;
+    }
+    if (anyStuck) {
+      s.wdStuck++;
+      if (s.wdStuck === 120) {
+        // ~2 s at 60fps — only log the FIRST stall window per creature.
+        const times = s.lodAnimators
+          .map((a, i) =>
+            a && a.clipNames.length > 0
+              ? `lod${i}:${a.currentTime.toFixed(2)}`
+              : `lod${i}:-`
+          )
+          .join(' ');
+        console.warn(
+          `[creature] FROZEN-ANIM watchdog: eid ${eid}, type ${cfg.enemyType ?? '?'}, mode ${AiStateComponent.mode[eid]}, playing=${s.playing}, [${times}], animators=${s.lodAnimators.filter(Boolean).length}, xmlVisual=${s.xmlVisual}, outOfView=${s.outOfViewFor.toFixed(1)}s`
+        );
+      }
+    } else {
+      s.wdStuck = 0;
+    }
     if (s.animator && !s.lodAnimators.includes(s.animator)) {
       s.animator.update(ctx.deltaTime);
     }
@@ -958,8 +1257,13 @@ export function createCreatureBehaviours(
               eid: cachedPlayer,
             });
             s.rangedCdTimer = cfg.rangedCooldown ?? 2.0;
-            if (cfg.clips.attack && s.playing !== cfg.clips.attack) {
-              playClip(s, cfg.clips.attack, { loop: false });
+            const rangedClip = Array.isArray(cfg.clips.attack)
+              ? (cfg.clips.attack[
+                  s.attackIdx % cfg.clips.attack.length
+                ] as string)
+              : cfg.clips.attack;
+            if (rangedClip && s.playing !== rangedClip) {
+              playClip(s, rangedClip, { loop: false });
             }
           } catch {
             // Template not registered yet (e.g. scene still loading) — retry
@@ -976,6 +1280,23 @@ export function createCreatureBehaviours(
     if (mode === AI_MODE_DEAD || isDead(eid)) {
       handleDeath(ctx, s, eid);
       s.deathTimer -= dt;
+      // Last half-second: sink into the ground instead of popping out. XML
+      // visuals are driven from WorldTransform, so the sink goes through
+      // Transform (+Rigidbody, the physics-owned path); script-owned groups
+      // move directly.
+      if (s.deathTimer < 0.5 && s.deathTimer > 0) {
+        const sink = dt * 1.1;
+        if (s.xmlVisual) {
+          Transform.posY[eid] -= sink;
+          Transform.dirty[eid] = 1;
+          if (ctx.state.hasComponent(eid, Rigidbody)) {
+            Rigidbody.posY[eid] = Transform.posY[eid];
+            markRigidbodyPoseDirty(eid);
+          }
+        } else if (s.group) {
+          s.group.position.y -= sink;
+        }
+      }
       if (s.deathTimer <= 0) {
         if (s.group) {
           if (!s.xmlVisual) s.group.removeFromParent();
@@ -993,7 +1314,7 @@ export function createCreatureBehaviours(
     // Hit flash + hit-reaction clip on HP drop (damage numbers/SFX come from main.ts watcher).
     if (s.flashTimer > 0) {
       s.flashTimer -= dt;
-      if (s.flashTimer <= 0) applyFlash(s, false);
+      if (s.flashTimer <= 0 && s.windupElapsed <= 0) applyFlash(s, false);
     }
     if (s.hitTimer > 0) s.hitTimer -= dt;
     const hp = Health.current[eid];
@@ -1001,10 +1322,52 @@ export function createCreatureBehaviours(
       collectFlashMats(s);
       s.flashTimer = 0.11;
       applyFlash(s, true);
-      // Play hit-reaction clip if available (brief stagger, then AI resumes).
-      if (cfg.clips.hit && s.animator && mode !== AI_MODE_DEAD) {
-        if (playClip(s, cfg.clips.hit, { loop: false })) {
-          s.hitTimer = 0.35;
+      // Hit-stagger: freeze the FSM (interrupts an in-flight lunge) unless the
+      // creature has poise (bosses default to none — see hitStaggerSec).
+      const stagger = cfg.hitStaggerSec ?? (cfg.isBoss ? 0 : 0.32);
+      if (stagger > 0 && !isDead(eid)) {
+        staggerAi(ctx.state, eid, stagger);
+      }
+      // Reaction, in three grades. A single `hit` clip for every blow reads
+      // flat, and swapping the whole body onto it is wrong twice over: it
+      // cancels the creature's own swing (so trading blows looks like the mob
+      // never attacks) and a boss with poise would get no reaction at all.
+      //   heavy blow  → `knockback` (or `hit`), full-body, staggered anyway
+      //   poise / mid-swing → additive flinch over whatever is playing
+      //   otherwise   → `hit`, full-body, as before
+      const dmgFrac = Math.max(
+        0,
+        (s.lastHp - hp) / Math.max(1, Health.max[eid] || cfg.hp)
+      );
+      const heavy = dmgFrac >= HEAVY_HIT_FRAC;
+      const keepsComposure =
+        stagger <= 0 || mode === AI_MODE_LUNGE || s.roarTimer > 0;
+      if (s.animator && mode !== AI_MODE_DEAD) {
+        const heavyClip = heavy ? (cfg.clips.knockback ?? cfg.clips.hit) : null;
+        if (keepsComposure) {
+          // Additive: the run/swing underneath keeps playing, the torso recoils.
+          const reaction = heavyClip ?? cfg.clips.hit;
+          if (reaction) {
+            for (const anim of animatorsOf(s)) {
+              anim.playFlinch(reaction, {
+                weight: heavy ? 0.85 : 0.55,
+                release: heavy ? 0.34 : 0.24,
+              });
+            }
+          }
+        } else if (heavyClip || cfg.clips.hit) {
+          const clipName = heavyClip ?? (cfg.clips.hit as string);
+          if (playClip(s, clipName, { loop: false })) {
+            // A heavy reaction is longer, and it must not be cut short by the
+            // AI clip coming back on the next frame.
+            s.hitTimer = heavy ? 0.5 : 0.35;
+            // Hold *this* clip for the countdown: keying the hold on
+            // `clips.hit` would cut a knockback back to the light reaction on
+            // the very next frame.
+            s.hitClip = clipName;
+            // ±8% so consecutive hits never play back identically.
+            jitterTimeScale(s, 0.08);
+          }
         }
       }
       spawnParticleBurst(ctx.state, {
@@ -1012,11 +1375,29 @@ export function createCreatureBehaviours(
         y: Transform.posY[eid] + 1.0,
         z: Transform.posZ[eid],
         preset: 'sparks',
-        count: 6,
-        duration: 0.4,
+        count: heavy ? 12 : 6,
+        duration: heavy ? 0.55 : 0.4,
       });
     }
     s.lastHp = hp;
+
+    // Windup telegraph: while the FSM braces for a lunge, ramp an amber→red
+    // emissive glow so the attack is dodge-readable. The white hit-flash
+    // overrides it; both restore the saved emissive when they end.
+    if (AiStateComponent.lungePhase[eid] === AI_LUNGE_PHASE_WINDUP) {
+      s.windupElapsed += dt;
+      if (s.flashTimer <= 0) {
+        collectFlashMats(s);
+        const windup = Math.max(
+          0.12,
+          cfg.lungeWindup ?? AI_DEFAULTS.lungeWindup
+        );
+        applyWindupGlow(s, Math.min(1, s.windupElapsed / windup));
+      }
+    } else if (s.windupElapsed > 0) {
+      s.windupElapsed = 0;
+      if (s.flashTimer <= 0) applyFlash(s, false);
+    }
 
     // FSM / NavMesh own XZ; CCT owns Y. Script never plants / lifts.
     const x = Transform.posX[eid];
@@ -1025,19 +1406,29 @@ export function createCreatureBehaviours(
 
     // Facing policy (single writer — navmesh faceVelocity is off):
     //   chase / move → face displacement; attack / lunge → face target.
+    // Heading eases toward the target yaw (exponential damping, shortest
+    // angular path) — instant snaps are what read as "robotic". Mirrors the
+    // hero's dampQ turn (VISUAL_TURN_RATE 10 ≈ tau 0.1s).
     const vx = x - s.prevX;
     const vz = z - s.prevZ;
     const moveSpeed = dt > 0 ? Math.hypot(vx, vz) / dt : 0;
     const yawOff = cfg.facingYawOffset ?? 0;
     const faceTarget = mode === AI_MODE_ATTACK || mode === AI_MODE_LUNGE;
+    let targetHeading = s.heading;
     if (faceTarget && cachedPlayer > 0) {
-      s.heading =
+      targetHeading =
         planarYawRadians(
           Transform.posX[cachedPlayer] - x,
           Transform.posZ[cachedPlayer] - z
         ) + yawOff;
     } else if (moveSpeed > MOVE_FACE_SPEED) {
-      s.heading = planarYawRadians(vx, vz) + yawOff;
+      targetHeading = planarYawRadians(vx, vz) + yawOff;
+    }
+    if (targetHeading !== s.heading) {
+      const turnTau = faceTarget ? 0.09 : 0.14;
+      s.heading +=
+        shortestAngleDelta(s.heading, targetHeading) *
+        (1 - Math.exp(-dt / turnTau));
     }
     s.prevX = x;
     s.prevZ = z;
@@ -1057,21 +1448,32 @@ export function createCreatureBehaviours(
     // Clip selection: hit-reaction takes priority (brief stagger).
     // Then AI mode picks the locomotion/combat clip.
     let clip: string;
-    if (s.hitTimer > 0 && cfg.clips.hit) {
-      clip = cfg.clips.hit;
+    if (s.hitTimer > 0 && s.hitClip) {
+      clip = s.hitClip;
     } else {
-      clip = pickClip(mode, moveSpeed > MOVE_FACE_SPEED);
-    }
-    if (s.animator && s.playing !== clip) {
-      playClip(
+      clip = pickClip(
         s,
-        clip,
-        clip === cfg.clips.lunge || clip === cfg.clips.hit
-          ? { loop: false }
-          : undefined
+        mode,
+        moveSpeed > MOVE_FACE_SPEED,
+        AiStateComponent.lungePhase[eid] === AI_LUNGE_PHASE_WINDUP
       );
     }
-    if (s.animator && cfg.runTimeScale !== undefined) {
+    s.lastPickMode = mode;
+    const oneShot =
+      clip === cfg.clips.lunge ||
+      clip === cfg.clips.hit ||
+      clip === cfg.clips.knockback ||
+      clip === cfg.clips.windup;
+    if (s.animator && s.playing !== clip) {
+      if (playClip(s, clip, oneShot ? { loop: false } : undefined) && oneShot) {
+        // Swings and telegraphs vary a little in speed; locomotion keeps the
+        // rate the gait was authored at (runTimeScale below owns that).
+        jitterTimeScale(s, 0.07);
+      }
+    }
+    // Gait rate only applies to gait clips — re-asserting it every frame used
+    // to flatten the per-swing jitter back to a constant the frame after.
+    if (s.animator && cfg.runTimeScale !== undefined && !oneShot) {
       s.animator.setTimeScale(mode === AI_MODE_CHASE ? cfg.runTimeScale : 1);
     }
   }

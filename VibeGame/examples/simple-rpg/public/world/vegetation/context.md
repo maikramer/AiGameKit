@@ -8,17 +8,20 @@ correspondente. Ver custo scenery vs colhível vs inimigo em `../context.md`
 ## Densidade (pós-expansão do mapa)
 
 - Spawners `count=` (árvores, rochas, foliage props, inimigos em `creatures/`) → **×2**
-- Tapete `<Vegetation>` erva/planta/flor → **×8** vs baseline (`density-per-km2`)
+- Tapete `<Vegetation>` erva/planta/flor → **~10000 instâncias por bioma**
+  (`density-per-km2` calibrada pela área da região do tapete)
 - Kit bpy: `npm run generate-vegetation` → `public/assets/meshes/vegetation/*.glb`
 - Engine soft-cap: ≤12000 instâncias por camada `foliage` (density mode) — evita
-  `pendingKick` de dezenas de milhares a travar o loading gate
+  `pendingKick` de dezenas de milhares a travar o loading gate. As densidades
+  ficam abaixo do cap (sem capping silencioso) e o boot fica em ~86% do
+  orçamento de 100k entidades (o aviso dispara a 90%).
 
-| Bioma  | `density-per-km2` (erva) |
-| ------ | ------------------------ |
-| forest | 304000                   |
-| desert | 176000                   |
-| swamp  | 256000                   |
-| peaks  | 144000                   |
+| Bioma  | `density-per-km2` (erva) | ≈ instâncias |
+| ------ | ------------------------ | ------------ |
+| forest | 99000                    | 9932         |
+| desert | 103000                   | 9942         |
+| swamp  | 91000                    | 9974         |
+| peaks  | 103000                   | 9942         |
 
 ## forest.xml — Floresta Sombria (Norte)
 
@@ -26,7 +29,7 @@ Dono: `vegetation/forest.xml`.
 
 | Camada                        | Mesh(es)                                                                           | `count`/densidade | Notas                                |
 | ----------------------------- | ---------------------------------------------------------------------------------- | ----------------- | ------------------------------------ |
-| Tapete erva/planta/flor       | kit bpy `vegetation/*.glb`                                                         | 304000/km²        | ativo; `npm run generate-vegetation` |
+| Tapete erva/planta/flor       | kit bpy `vegetation/*.glb`                                                         | 99000/km²         | ativo; `npm run generate-vegetation` |
 | Dossel principal              | `pine_dark`                                                                        | 380               | ×2                                   |
 | Mata rala de fundo            | `pine_dark` (lod1 como visual base)                                                | 240               | ×2                                   |
 | Árvores mortas                | `dead_tree`                                                                        | 92                | ×2                                   |

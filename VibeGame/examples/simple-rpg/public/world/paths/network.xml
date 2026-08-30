@@ -42,6 +42,12 @@
     <Way id="ring_sw" xz="-25 -25"></Way>
     <Way id="ring_nw" xz="-25 25"></Way>
 
+    <!-- Ponte da Lagoa Grande (pântano, lagoa -190,-16 r=24): tips a ~26 m
+         do centro — fora da lâmina e do carve da margem. O deck GLB cobre
+         o canto NE da lagoa (a artéria clipava a água a pé). -->
+    <Way id="w_lake_e" xz="-171 2.2"></Way>
+    <Way id="w_lake_w" xz="-209 2.8"></Way>
+
     <!-- Norte (floresta) — a ponte vive aqui: margens simétricas ao centro
          do rio (z≈214), tips fora do ribbon de água (198/230), span 32 m.
          O deck GLB centra na centreline do rio (river-crossing.ts). -->
@@ -54,7 +60,8 @@
     <!-- Este (deserto) -->
     <Way id="gate_e" xz="124 2"></Way>
     <Way id="desert_end" xz="290 -4"></Way>
-    <!-- Oeste (pântano) — sem rio, artéria contínua -->
+    <!-- Oeste (pântano) — sem rio, artéria contínua até à Lagoa Grande;
+         a travessia é ponte (w_lake_e↔w_lake_w). -->
     <Way id="w_end" xz="-292 12"></Way>
 
     <!-- Cruzamento praça → mid (grau 4 em cada mid com anel) -->
@@ -80,7 +87,20 @@
     <Segment a="mid_s" b="s_end" via="0 -58 2 -84 0 -184 18 -220"></Segment>
     <Segment a="mid_e" b="gate_e" via="60 0 96 2"></Segment>
     <Segment a="gate_e" b="desert_end" via="160 6 200 10 240 8"></Segment>
-    <Segment a="mid_w" b="w_end" via="-58 0 -80 -2 -208 2"></Segment>
+    <Segment a="mid_w" b="w_lake_e" via="-58 0 -80 -2"></Segment>
+    <!-- Ponte de madeira sobre a Lagoa Grande — a segunda travessia do
+         vale (a primeira é o rio norte). native-span 18, vão ≈38 m. -->
+    <Segment
+      a="w_lake_e"
+      b="w_lake_w"
+      profile="bridge"
+      bridge-url="/assets/meshes/infra/river_bridge_wood_lod0.glb"
+      bridge-collision-url="/assets/meshes/infra/river_bridge_wood_collision.glb"
+      bridge-lod1-url="/assets/meshes/infra/river_bridge_wood_lod1.glb"
+      bridge-lod2-url="/assets/meshes/infra/river_bridge_wood_lod2.glb"
+      bridge-native-span="18"
+    ></Segment>
+    <Segment a="w_lake_w" b="w_end"></Segment>
 
     <!-- Anel periurbano (liga os quatro mid_*) -->
     <Segment a="mid_n" b="ring_ne" via="11 32 20 29"></Segment>

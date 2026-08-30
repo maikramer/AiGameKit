@@ -119,5 +119,34 @@
     ></ParticleSystem>
   </GameObject>
   <GameObject place="at: -26 -190"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
+
+  <!-- ============================================================
+       VALE (anel 52–116) — o quadrante neutro à volta da cidade não
+       tinha FX nenhum: os vaga-lumes só começavam a z≥156, já dentro da
+       floresta. Estes ficam nas diagonais, junto aos prados de flores de
+       spawn/dressing.xml, e dão vida ao percurso portão → bioma.
+       ============================================================ -->
+  <GameObject place="at: 74 72"><ParticleSystem preset="fireflies" transform="pos: 0 1.1 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -76 66"><ParticleSystem preset="fireflies" transform="pos: 0 1.1 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 70 -74"><ParticleSystem preset="fireflies" transform="pos: 0 1.1 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -70 -70"><ParticleSystem preset="fireflies" transform="pos: 0 1.1 0"></ParticleSystem></GameObject>
+  <!-- Folha a cair sobre os carvalhos do anel (spawn/ring.xml). -->
+  <GameObject place="at: 88 22">
+    <ParticleSystem
+      preset="leaves"
+      transform="pos: 0 6.0 0"
+      particle-emitter="preset: leaves; emission-rate: 4; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.2; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -90 -20">
+    <ParticleSystem
+      preset="leaves"
+      transform="pos: 0 6.0 0"
+      particle-emitter="preset: leaves; emission-rate: 4; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.2; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <!-- Brilho na lâmina do laguinho NO da muralha (Lake em spawn/ring.xml,
+       -80,104 r=16): o emissor fica na margem, não no meio do disco. -->
+  <GameObject place="at: -66 96"><ParticleSystem preset="sparkle" transform="pos: 0 1.0 0"></ParticleSystem></GameObject>
 </Group>
 <!-- FIM atmosphere.ambient -->

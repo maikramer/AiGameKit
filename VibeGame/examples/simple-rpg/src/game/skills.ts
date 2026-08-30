@@ -20,7 +20,20 @@ export const playerStats = {
   attackBonus: 0,
   ringOwned: false,
   swordLevel: 0,
+  /** Temp attack bonus from the War Cry skill [U]; timer ticked by skill-bar. */
+  buffAttackBonus: 0,
+  buffAttackTimer: 0,
+  /** Temp attack bonus from a Perfect Dodge (fury); ticked by combat-mechanics. */
+  furyBonus: 0,
+  furyTimer: 0,
+  /** True while the player holds guard [L] — PlayerStatsSystem slows movement. */
+  blocking: false,
 };
+
+/** Total flat attack power the player adds to every hit right now. */
+export function playerAttackPower(): number {
+  return playerStats.attackBonus + playerStats.furyBonus;
+}
 
 export const RING_SPEED_MULT = 1.15;
 

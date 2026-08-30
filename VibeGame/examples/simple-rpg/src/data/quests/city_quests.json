@@ -59,7 +59,7 @@
     "portrait": "",
     "voice": "",
     "lines_intro": [
-      "Goblins descem a trilha oeste e roubam as hortas da saia da muralha.",
+      "Goblins descem a trilha sul e roubam as hortas da saia da muralha.",
       "Abata 4. A cidade não pergunta de onde veio o aço."
     ],
     "lines_progress": ["Ainda faltam {remaining} goblins neste aviso."],

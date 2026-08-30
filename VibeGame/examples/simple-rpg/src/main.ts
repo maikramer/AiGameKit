@@ -12,6 +12,7 @@ import {
   notifyResourceHarvested,
   setKTX2TranscoderPath,
   // Plugins (engine RPG stack)
+  DayCyclePlugin,
   LoadingPlugin,
   NavMeshPlugin,
   SaveLoadPlugin,
@@ -22,6 +23,7 @@ import {
   RpgPlugins,
   registerDebugAction,
   registerDebugVar,
+  registerProfilerExtra,
   SpawnGatePlugin,
   ParticlesPlugin,
   // HUD / loading
@@ -39,13 +41,23 @@ import {
   addInputMapping,
   isKeyDown,
   setPlayerAttackClip,
+  setPlayerWeaponTrail,
   setPlayerIdleClip,
   setPlayerHeldItem,
   setPlayerFaceTarget,
+  setPlayerMeleeDamage,
   attachHeldItem,
   loadHeldItemGrips,
   PlayerGltfConfig,
   getAnimator,
+  // combat feel
+  addCameraShake,
+  grantInvulnerability,
+  tickHitStop,
+  tickCctKnockbacks,
+  damageHealth,
+  healHealth,
+  onEvent,
   // ecs / gameplay
   defineQuery,
   Transform,
@@ -62,11 +74,13 @@ import {
   addXp,
   getStatModifiers,
   isPaused,
+  PauseSystem,
   spawnFloatingText,
   spawnDamageNumber,
   setCombatTarget,
   tickCombatTarget,
   Destructible,
+  HarvestSuppressed,
   onDestructibleDestroyed,
   registerSaveSerializer,
   getDataRegistry,
@@ -101,7 +115,27 @@ import {
 } from './game/skills';
 import { updateConsumables, clearHotbar } from './game/consumables';
 import { updateAbilities, clearAbilityBar } from './game/abilities';
-import { updateMelee, clearMelee } from './game/melee';
+import {
+  updateMelee,
+  clearMelee,
+  secondsSincePlayerAttack,
+} from './game/melee';
+import { updateSkillBar, clearSkillBar } from './game/skill-bar';
+import {
+  updateCombatMechanics,
+  clearCombatMechanics,
+  installGuardModifier,
+  notifyPlayerDamaged,
+  BLOCK_SPEED_MULT,
+} from './game/combat-mechanics';
+import {
+  isGripEditorActive,
+  seedGripEditor,
+  setGripEditorActive,
+  updateGripEditor,
+  clearGripEditor,
+} from './game/grip-editor';
+import { mountHurtVignette, type HurtVignette } from './game/hurt-vignette';
 import { addGold } from './game/economy';
 import { teleportEntity } from '../../shared/src/physics';
 import { setupHmrGuard } from '../../shared/src/hmr';
@@ -139,7 +173,11 @@ import { isWoodEntity } from './scripts/tree';
 import { addStone } from './scripts/inventory';
 import { addWood } from './scripts/wood';
 import { anyBossAggro, anyCreatureAggro } from './scripts/creature';
-import { biomeAtPosition, getEnemyLabel } from './scripts/enemy-registry';
+import {
+  biomeAtPosition,
+  getEnemyLabel,
+  livingEnemies,
+} from './scripts/enemy-registry';
 import { setupAggroChain } from './scripts/aggro-chain';
 
 import darkForestQuestsData from './data/quests/dark_forest_quests.json';
@@ -177,9 +215,30 @@ const PlayerSetupSystem: System = {
     if (!state.hasComponent(player, InventoryComponent))
       state.addComponent(player, InventoryComponent);
 
+    installGuardModifier(state);
+    installStatusEffectsBridge(state);
+
     playerInit = true;
   },
 };
+
+// ── Status-effect bridge: the engine's rpg-status plugin only emits typed
+//    `status:damage` / `status:heal` tick events; something must turn them
+//    into real HP changes. Wiring them here makes poison (venom blade, slime
+//    spit) and heal-over-time work for ANY entity with Health. ──────────────
+let statusBridgeInstalled = false;
+function installStatusEffectsBridge(state: State): void {
+  if (statusBridgeInstalled) return;
+  statusBridgeInstalled = true;
+  onEvent(state, 'status:damage', (p: unknown) => {
+    const { eid, amount } = (p ?? {}) as { eid?: number; amount?: number };
+    if (eid && amount) damageHealth(eid, amount);
+  });
+  onEvent(state, 'status:heal', (p: unknown) => {
+    const { eid, amount } = (p ?? {}) as { eid?: number; amount?: number };
+    if (eid && amount) healHealth(eid, amount);
+  });
+}
 
 // ── Player stats: resolve all three progression stat-modifiers (Vitality → max
 //    HP, Strength → attack damage, Agility → move speed) plus the merchant
@@ -204,7 +263,9 @@ const PlayerStatsSystem: System = {
       else if (mod.stat === 'moveSpeed') moveBonus += mod.magnitude;
     }
     playerStats.attackBonus =
-      attackBonus + playerStats.swordLevel * SWORD_DMG_PER_LEVEL;
+      attackBonus +
+      playerStats.swordLevel * SWORD_DMG_PER_LEVEL +
+      playerStats.buffAttackBonus;
 
     const newMax = BASE_MAX_HP + hpBonus;
     if (Health.max[player] !== newMax) {
@@ -217,7 +278,8 @@ const PlayerStatsSystem: System = {
       baseHeroSpeedCaptured = true;
     }
     const ringMult = playerStats.ringOwned ? RING_SPEED_MULT : 1;
-    const targetSpeed = (baseHeroSpeed + moveBonus) * ringMult;
+    const guardMult = playerStats.blocking ? BLOCK_SPEED_MULT : 1;
+    const targetSpeed = (baseHeroSpeed + moveBonus) * ringMult * guardMult;
     if (PlayerController.speed[player] !== targetSpeed) {
       PlayerController.speed[player] = targetSpeed;
     }
@@ -293,6 +355,31 @@ function biomeHarvestKind(
   return null;
 }
 
+// ── Combat feel ─────────────────────────────────────────────────────────────
+// Lazy singleton: mounted on first hit so the DOM (and the game container)
+// exists even if this module loads before the page finishes parsing.
+let _hurtVignette: HurtVignette | null = null;
+function hurtVignette(): HurtVignette | null {
+  if (!_hurtVignette && typeof document !== 'undefined') {
+    _hurtVignette = mountHurtVignette();
+  }
+  return _hurtVignette;
+}
+
+// Hit-stop uses UNSCALED dt (scaled dt is ~0 during the freeze — it would
+// never end); knockbacks use scaled dt so shoves freeze with the world.
+// Group `late` + after PauseSystem: the pause coordinator re-asserts its own
+// timeScale contract every frame and would wipe the freeze otherwise.
+const GameFeelSystem: System = {
+  name: 'GameFeelSystem',
+  group: 'late',
+  after: [PauseSystem],
+  update(state: State) {
+    tickHitStop(state, state.time.unscaledDeltaTime);
+    tickCctKnockbacks(state, state.time.deltaTime);
+  },
+};
+
 const CombatFeedbackSystem: System = {
   name: 'CombatFeedbackSystem',
   group: 'simulation',
@@ -320,14 +407,26 @@ const CombatFeedbackSystem: System = {
           stackKey: `dmg@${e}`,
         });
         if (isHero) {
-          playSound('player-hurt', { originEid: e });
+          playSound('player-hurt', {
+            originEid: e,
+            pitch: 1 + (Math.random() * 2 - 1) * 0.08,
+          });
+          // A real blow (post-guard) breaks the hit combo…
+          notifyPlayerDamaged();
+          // Being-hit feedback beyond the number + bar: red vignette punch,
+          // camera kick, and a short i-frame window so a wolf pack doesn't
+          // stack three lunges into a single unreadable death.
+          hurtVignette()?.flash(Math.min(1.5, dmg / 18));
+          addCameraShake(Math.min(0.45, 0.22 + dmg / 90));
+          grantInvulnerability(e, 0.35);
+          playHeroFlinch(state, e, dmg);
         } else {
           playSoundAt(
             'enemy-hurt',
             Transform.posX[e],
             Transform.posY[e],
             Transform.posZ[e],
-            { originEid: e }
+            { originEid: e, pitch: 1 + (Math.random() * 2 - 1) * 0.08 }
           );
         }
         if (!isHero) {
@@ -482,7 +581,23 @@ function initAudioBuses(state: State): void {
 //    (sword/axe/spear, cycled with [V]). The gather/pickup gesture is the F
 //    interact (handled in the player system). ──────────────────────────────
 const WEAPON_CLIPS = ['sword', 'axe', 'spear'] as const;
-const MESH_BASE = '/assets/meshes/';
+// Combo pools por arma (UAL1+UAL2): a espada alterna slashes A/B/C; o machado
+// usa o combo pesado e a lança o dash/estocada (clips dedicados da UAL2).
+const ATTACK_POOLS: Record<string, string[]> = {
+  // Base clips only, advanced in 'random' mode (no immediate repeat). The UAL
+  // combo bases already swing from both sides naturally, so the chain reads
+  // left↔right without mirrored clips — the hero rig is a retarget with
+  // asymmetric rest poses and the "_m" anim-mirror twists it (wet-cloth bug).
+  sword: ['sword', 'sworda', 'swordb', 'swordc'],
+  // The axe's own clips (axe/axe_m) are the slow, heavy sequence — that is
+  // the [Y] skill now. The normal axe swing shares the sword combo pool.
+  axe: ['sword', 'sworda', 'swordb', 'swordc'],
+  spear: ['spear'],
+};
+// Held weapon models live under the shared-assets pool's `meshes/props/`
+// (the flat `/assets/meshes/` root stopped existing when assets migrated to
+// the single pool — a wrong base fails silently and leaves the hand empty).
+const MESH_BASE = '/assets/meshes/props/';
 // Held model per action clip. (Generated by text3d+paint3d; sword reuses the
 // existing player sword.) Missing GLBs just leave the hand empty (load fails
 // silently) until generated.
@@ -503,6 +618,20 @@ let weaponIdx = 0;
 let weaponCyclePressed = false;
 let bombAiming = false; // BombSystem owns the hand + facing while aiming
 const HARVEST_HINT_RANGE_SQ = 3.6 * 3.6;
+// Coleta pausa em combate: inimigo vivo nesse raio do herói marca o player
+// com HarvestSuppressed — o golpe vai para a batalha, nunca para árvore/pedra.
+const HARVEST_ENEMY_RADIUS_SQ = 6 * 6;
+/** Seconds after an attack before the hero drops the guard stance. */
+const GUARD_IDLE_TIMEOUT = 3;
+
+function enemyNearHero(hx: number, hz: number): boolean {
+  for (const e of livingEnemies()) {
+    const dx = Transform.posX[e] - hx;
+    const dz = Transform.posZ[e] - hz;
+    if (dx * dx + dz * dz <= HARVEST_ENEMY_RADIUS_SQ) return true;
+  }
+  return false;
+}
 const AttackContextSystem: System = {
   group: 'simulation',
   update(state: State) {
@@ -517,15 +646,24 @@ const AttackContextSystem: System = {
 
     const hx = Transform.posX[player];
     const hz = Transform.posZ[player];
+    const harvestBlocked = enemyNearHero(hx, hz);
+    const suppressed = state.hasComponent(player, HarvestSuppressed);
+    if (harvestBlocked && !suppressed) {
+      state.addComponent(player, HarvestSuppressed);
+    } else if (!harvestBlocked && suppressed) {
+      state.removeComponent(player, HarvestSuppressed);
+    }
     let near = 0;
-    let bestD2 = HARVEST_HINT_RANGE_SQ;
-    for (const e of destructibleFxQuery(state.world)) {
-      const dx = Transform.posX[e] - hx;
-      const dz = Transform.posZ[e] - hz;
-      const d2 = dx * dx + dz * dz;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        near = e;
+    if (!harvestBlocked) {
+      let bestD2 = HARVEST_HINT_RANGE_SQ;
+      for (const e of destructibleFxQuery(state.world)) {
+        const dx = Transform.posX[e] - hx;
+        const dz = Transform.posZ[e] - hz;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          near = e;
+        }
       }
     }
     const clip = forcedHold
@@ -535,13 +673,30 @@ const AttackContextSystem: System = {
           ? 'chop'
           : 'mine'
         : WEAPON_CLIPS[weaponIdx];
-    setPlayerAttackClip(clip);
+    // Pool de combo em combate; contexto de colheita (chop/mine) fica no clip
+    // único. 'random': cada golpe sorteia a variante (sem repetir a última) —
+    // os clips UAL já alternam lados naturalmente, sem mirrors que torçam o rig.
+    setPlayerAttackClip(
+      near || forcedHold ? clip : (ATTACK_POOLS[clip] ?? clip),
+      near || forcedHold ? undefined : { mode: 'random' }
+    );
+    // Rasto da lâmina: só em armas (o swing de machado/picareta a colher
+    // madeira ou pedra não deixa rasto — não é um golpe, é trabalho). A cor
+    // segue a arma para o combo ler diferente entre espada/machado/lança.
+    applyWeaponTrail(near || forcedHold ? null : clip);
     // Relaxed idle while exploring — weapon *idle clips (swordidle/axeidle/…)
     // plant a combat crouch with knee sway that reads as floating/dancing feet
-    // on cobble. Guard stance only when a creature is aggro'd.
-    setPlayerIdleClip(anyCreatureAggro() && clip ? `${clip}idle` : null);
-    // Show the matching model in hand (unless the bomb-aim owns the hand).
-    if (!bombAiming) {
+    // on cobble. Guard stance while a creature is aggro'd OR for a few seconds
+    // after the player strikes (attacking drops straight back to a relaxed
+    // idle otherwise — reads as lowering the sword mid-fight).
+    const inGuard =
+      anyCreatureAggro() || secondsSincePlayerAttack() < GUARD_IDLE_TIMEOUT;
+    setPlayerIdleClip(inGuard && clip ? `${clip}idle` : null);
+    // Show the matching model in hand (unless the bomb-aim or the grip
+    // editor owns the hand). The editor also polls its toggle/keys here —
+    // this system runs every simulation frame.
+    updateGripEditor(state);
+    if (!bombAiming && !isGripEditorActive()) {
       const url = HELD_MODEL[clip] ?? null;
       if (!attachHeldItem(state, player, clip, GRIPS, url))
         setPlayerHeldItem(url);
@@ -560,6 +715,48 @@ const _bombLand = { x: 0, y: 0, z: 0 };
 const _bombFrom = { x: 0, y: 0, z: 0 };
 // (Bomb count now lives in the consumable hotbar — see game/consumables.ts.)
 
+// ── Weapon trail per weapon ──────────────────────────────────────────────────
+// Engine draws the ribbon while an attack override runs; the game only says
+// which weapon is in hand (and mutes it for harvesting swings).
+// Opacidades altas de propósito: o rasto é aditivo e o mapa é ensolarado —
+// a 0.5 desaparecia contra a calçada clara da praça.
+const TRAIL_BY_WEAPON: Record<string, { color: number; opacity: number }> = {
+  sword: { color: 0xbcd8ff, opacity: 0.9 },
+  axe: { color: 0xffb06a, opacity: 0.85 },
+  spear: { color: 0x8ff0ff, opacity: 0.85 },
+};
+let trailKey: string | null = '';
+
+function applyWeaponTrail(weapon: string | null): void {
+  const key = weapon && TRAIL_BY_WEAPON[weapon] ? weapon : null;
+  if (key === trailKey) return;
+  trailKey = key;
+  setPlayerWeaponTrail(
+    key ? { ...TRAIL_BY_WEAPON[key]!, lifetime: 0.18, segments: 16 } : false
+  );
+}
+
+/**
+ * The hero's own reaction to being hit.
+ *
+ * Full-body `hit` is the wrong tool here: a blow that lands mid-swing would
+ * cancel the swing (and with it the damage the player already committed to),
+ * so being attacked while attacking would silently eat inputs. The additive
+ * layer recoils the torso over whatever is playing — swing, sprint or idle —
+ * and decays on its own. `hithead` on the big ones reads as a stagger.
+ */
+function playHeroFlinch(state: State, hero: number, dmg: number): void {
+  if (!state.hasComponent(hero, PlayerGltfConfig)) return;
+  const regIdx = PlayerGltfConfig.animatorRegistryIndex[hero];
+  const animator = regIdx ? getAnimator(state, regIdx) : undefined;
+  if (!animator) return;
+  const heavy = dmg >= 18;
+  animator.playFlinch(heavy ? 'hithead' : 'hit', {
+    weight: heavy ? 0.85 : 0.5,
+    release: heavy ? 0.36 : 0.24,
+  });
+}
+
 const BombSystem: System = {
   group: 'simulation',
   update(state: State) {
@@ -567,7 +764,9 @@ const BombSystem: System = {
     const playerForHud = state.getEntityByName('player');
     updateConsumables(state, playerForHud ?? 0);
     updateAbilities(state, playerForHud ?? 0, state.time.deltaTime);
+    updateSkillBar(state, playerForHud ?? 0, state.time.deltaTime);
     updateMelee(state, playerForHud ?? 0, state.time.deltaTime);
+    updateCombatMechanics(state, playerForHud ?? 0, state.time.deltaTime);
     const dt = state.time.deltaTime;
     const held = isKeyDown('KeyB');
     const player = state.getEntityByName('player');
@@ -786,7 +985,8 @@ function bgmZone(): string {
     // Interior rooms (interiors.ts REGISTRY: x 797-917, z 226-336, com margem)
     if (x > 770 && x < 950 && z > 205 && z < 355) return 'dungeon';
     // Frozen peaks wedge: z <= -240, |x| abre 240→1040 (BiomeRegion polygon)
-    if (z <= -240 && Math.abs(x) <= 240 + Math.max(0, -z - 240)) return 'mountain';
+    if (z <= -240 && Math.abs(x) <= 240 + Math.max(0, -z - 240))
+      return 'mountain';
     // Walled village at the origin (SpawnExclusion radius 52 + margem)
     if (x * x + z * z < 55 * 55) return 'village';
   }
@@ -852,7 +1052,12 @@ async function runBootstrap(): Promise<void> {
   registerGameSounds();
   preloadGameSounds();
   addInputMapping('primaryAction', 'KeyJ');
+  // The game's own swing (melee.ts: crit/backstab/soft-lock) is the single
+  // damage source for [J] — without this the engine's flat 25-dmg meleeHit
+  // double-dips on the same blow. Harvest (Destructible) is a separate path.
+  setPlayerMeleeDamage(0);
 
+  withPlugin(DayCyclePlugin);
   withPlugin(LoadingPlugin);
   withPlugins(...RpgPlugins);
   withPlugin(SpawnGatePlugin);
@@ -867,6 +1072,7 @@ async function runBootstrap(): Promise<void> {
   withSystem(PlayerStatsSystem);
   withSystem(RespawnSystem);
   withSystem(CombatFeedbackSystem);
+  withSystem(GameFeelSystem);
   withSystem(AttackContextSystem);
   withSystem(BombSystem);
   withSystem(BombAimSpineSystem);
@@ -887,6 +1093,8 @@ async function runBootstrap(): Promise<void> {
 
   try {
     GRIPS = await loadHeldItemGrips('/data/held-items.json');
+    // Dev: grip editor starts from the loaded values so tweaks are relative.
+    seedGripEditor(GRIPS as unknown as Record<string, never>);
   } catch (err) {
     // Missing/corrupt grip table must not kill the boot — weapons just attach
     // without per-clip grip offsets instead of the game hanging on the
@@ -1100,6 +1308,18 @@ async function runBootstrap(): Promise<void> {
   // Dev cheats (vite DEV only): grant items/gold via the debug surface for testing.
   //   __VIBEGAME__.debug.callAction('give', 'potion', 3)
   //   __VIBEGAME__.debug.callAction('gold', 500)
+  registerDebugAction(state, 'grip', () => {
+    setGripEditorActive(!isGripEditorActive());
+    return isGripEditorActive();
+  });
+  // Same toggle as a button in the profiler panel's Extras tab ([P]).
+  registerProfilerExtra(state, {
+    id: 'grip-editor',
+    label: '🛠 Grip Editor',
+    description:
+      'Ajustar pos/rotação das armas na mão e exportar held-items.json (Tab pos/rot · setas · N arma · X exporta)',
+    onClick: () => setGripEditorActive(!isGripEditorActive()),
+  });
   registerDebugAction(state, 'give', (id: string, n: number = 1) => {
     const h = state.getEntityByName('player') ?? 0;
     if (h) addItem(state, h, id, n);
@@ -1264,6 +1484,13 @@ async function runBootstrap(): Promise<void> {
   // callAction('grip', 'sword', { scale: 1.2 }) live-edits its grip.
   registerDebugAction(state, 'hold', (key: string | null) => {
     forcedHold = key;
+    // O force persiste na sessão — sem este aviso, herói de picareta longe
+    // de pedra parece bug em vez de ferramenta de tuning ativa.
+    console.info(
+      key
+        ? `[hold] arma fixada em "${key}" (limpar: callAction('hold', null))`
+        : '[hold] força removida — arma volta a seguir o contexto'
+    );
     return key;
   });
   registerDebugAction(
@@ -1340,8 +1567,11 @@ void bootstrap().catch((err) => {
 setupHmrGuard(() => {
   clearBombs();
   clearAbilityBar();
+  clearSkillBar();
+  clearGripEditor();
   clearHotbar();
   clearMelee();
+  clearCombatMechanics();
   clearNota();
   // GPU only — must not await Rapier/navmesh teardown before reload.
   releaseRuntimeGpuResources();

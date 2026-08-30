@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenera os 22 sons do simple-rpg com Stable Audio 3 Small (2026-08).
+"""Regenera os 24 sons do simple-rpg com Stable Audio 3 Small (2026-08).
 
 Era SA3: sem flags de steps/cfg/crop da era Open (o quality tier `high` +
 ModelSpec resolvem steps 16, cfg 1.0, pingpong + mastering). BGM usa o
@@ -228,6 +228,30 @@ SPECS: list[tuple[str, str, str | None, str, float, int]] = [
         0.8,
         513,
     ),
+    # ── Ambiência de água (loops seamless; toca perto de rio/lagos) ──────
+    # Saem em sfx/world/ — sounds.ts referencia /assets/audio/sfx/world/.
+    (
+        "sfx/world/water_flow",
+        (
+            "Calm forest river flowing over smooth rocks, clear stream babbling "
+            "gently, soft continuous water ripples, peaceful nature ambience"
+        ),
+        "humanoid",  # music_loop: loop seamless exacto (sem clique na emenda)
+        "music",
+        12.0,
+        611,
+    ),
+    (
+        "sfx/world/water_lake",
+        (
+            "Quiet lake water gently lapping on a sandy shore, small soft waves, "
+            "calm slow ripples, serene nature ambience"
+        ),
+        "humanoid",
+        "music",
+        12.0,
+        612,
+    ),
 ]
 
 
@@ -253,7 +277,13 @@ def main() -> int:
     # argv[1] opcional: "sfx" (só efeitos) ou "bgm" (só música) — p.ex. para
     # re-passar só os SFX depois de afinar thresholds de trim por kind.
     only = sys.argv[1] if len(sys.argv) > 1 else None
-    specs = [s for s in SPECS if only is None or (only == "sfx") == (s[3] != "music")]
+    if only in (None, "sfx", "bgm"):
+        specs = [
+            s for s in SPECS if only is None or (only == "sfx") == (s[3] != "music")
+        ]
+    else:
+        # Filtro por prefixo de nome — p.ex. "water_" regenera só a ambiência.
+        specs = [s for s in SPECS if s[0].startswith(only)]
 
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     ok, fail = 0, 0

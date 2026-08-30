@@ -14,6 +14,7 @@ import {
 } from 'vibegame';
 import { isGamePaused } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';
+import { NpcIdleAnimator } from '../game/npc-anims.ts';
 import { showToast } from '../../../shared/src/ui';
 import {
   LOOKOUT_GATES,
@@ -22,6 +23,13 @@ import {
 
 const MODEL_URL = '/assets/meshes/characters/npc_guard_lod2.glb';
 const IDLE_CLIP = 'idle';
+// Guarda: conversa, abana a cabeça e acena entre rondas. O pack do guard
+// (npc_guard) só embarca idle/lantern/no/talk/walk/yes — lean/foldarms
+// pertencem a outros packs e o NpcIdleAnimator filtra o que não existe.
+const idleVariety = new NpcIdleAnimator({
+  idle: IDLE_CLIP,
+  gestures: ['talk', 'no', 'yes'],
+});
 const TURN_SPEED = 6;
 const TALK_RANGE_SQ = 4.5 * 4.5;
 const FACE_RANGE_SQ = 5 * 5;
@@ -85,6 +93,7 @@ export function start(ctx: MonoBehaviourContext): void {
     group = result.group;
     animator = result.animator;
     animator?.play(IDLE_CLIP);
+    idleVariety.start(animator);
   });
 }
 
@@ -92,6 +101,7 @@ export function update(ctx: MonoBehaviourContext): void {
   if (isGamePaused()) return;
   if (!group) return;
   animator?.update(ctx.deltaTime);
+  idleVariety.update(ctx.deltaTime, animator);
 
   const eid = ctx.entity;
   const x = Transform.posX[eid];

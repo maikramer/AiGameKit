@@ -37,8 +37,8 @@
               url="/assets/meshes/characters/npc_elder_lod0.glb"
               lod1-url="/assets/meshes/characters/npc_elder_lod1.glb"
               lod2-url="/assets/meshes/characters/npc_elder_lod2.glb"
-              lod-threshold-near="22"
-              lod-threshold-mid="60"
+              lod-threshold-near="53"
+              lod-threshold-mid="130"
             ></GLTFLoader>
           </GameObject>
 </Group>

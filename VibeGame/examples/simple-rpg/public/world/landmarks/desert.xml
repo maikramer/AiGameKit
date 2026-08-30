@@ -327,5 +327,11 @@
     <ParticleSystem preset="ground-dust" transform="pos: 0 0.3 0"></ParticleSystem>
   </GameObject>
   <SpawnExclusion at="260 16" radius="14"></SpawnExclusion>
+  <!-- Ambiência de água no oásis. -->
+  <GameObject
+    name="ambient_water_oasis"
+    place="at: 140 92; align-to-terrain: 1"
+    script="ambient-water.ts"
+  ></GameObject>
 </Group>
 <!-- FIM biome.desert.landmarks -->

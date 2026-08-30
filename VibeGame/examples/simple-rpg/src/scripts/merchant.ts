@@ -14,6 +14,7 @@ import {
 import { getGold, spendGold, addGold } from '../game/economy.ts';
 import { isGamePaused, setShopOpen } from '../game/pause.ts';
 import { findPlayer } from '../game/player-query.ts';
+import { NpcIdleAnimator } from '../game/npc-anims.ts';
 import { getStoneCount, removeStone } from './inventory.ts';
 import { getWoodCount, removeWood } from './wood.ts';
 import { playerStats, RING_SPEED_MULT } from '../game/skills';
@@ -21,6 +22,11 @@ import { playerStats, RING_SPEED_MULT } from '../game/skills';
 const TURN_SPEED = 6;
 const MODEL_URL = '/assets/meshes/characters/npc_merchant_lod2.glb';
 const IDLE_CLIP = 'idle';
+// Mercador vivo: pregões (call), conversa, braços cruzados entre idles.
+const idleVariety = new NpcIdleAnimator({
+  idle: IDLE_CLIP,
+  gestures: ['call', 'talk', 'foldarms'],
+});
 
 // Compared squared against dx*dx + dz*dz to avoid sqrt per frame.
 const TALK_RANGE_SQ = 4.5 * 4.5;
@@ -122,6 +128,7 @@ export function start(ctx: MonoBehaviourContext): void {
       group = result.group;
       animator = result.animator;
       animator?.play(IDLE_CLIP);
+      idleVariety.start(animator);
     });
   }
 }
@@ -532,6 +539,7 @@ export function update(ctx: MonoBehaviourContext): void {
   // Frozen while the pause menu is open (don't open the shop on K, etc.).
   if (isGamePaused() && !shopOpen) return;
   animator?.update(ctx.deltaTime);
+  idleVariety.update(ctx.deltaTime, animator);
 
   const x = Transform.posX[eid];
   const y = Transform.posY[eid];

@@ -4,9 +4,9 @@ Shell: `../discordia.xml` (Includes). **Editar o XML do distrito**, não o shell
 
 | Ficheiro        | Group(s)                       | Conteúdo                                                                                                                                                      |
 | --------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `walls.xml`     | `city.walls`                   | **GERADO** (`scripts/gen_city_walls.py`). Muralha ±38 **GLB** (passo visual 6.38, junta 0.12): 4 corners + 40 segs + 4 portões + 8 tochas                     |
+| `walls.xml`     | `city.walls`                   | **GERADO** (`scripts/gen_city_walls.py`). Muralha ±38 **GLB** (passo visual 6.38, junta 0.12): 4 corners + 40 segs + 4 portões + 8 tochas **acesas** (chama + PointLight, emissos pelo gerador) |
 | `roads.xml`     | `city.roads`                   | Pad praça (artérias em `paths/network.xml`)                                                                                                                   |
-| `utilities.xml` | `city.plaza`, `city.landmarks` | Poço (`well.ts`, [F] beber), fogueira (`campfire.ts`, [G] descansar + viajar aos marcos da Nota), bancos, quadro (`notice-board.ts`, [F]), tochas, santuários |
+| `utilities.xml` | `city.plaza`, `city.landmarks`, `city.townsfolk` | Poço (`well.ts`, [F] beber), fogueira (`campfire.ts`, [G] descansar + viajar aos marcos da Nota), bancos, quadro (`notice-board.ts`, [F]), tochas, santuários; 3 transeuntes (`townsfolk.ts`, rotas de patrulha) |
 | `houses.xml`    | `city.houses`                  | 4 casas **GLB**: 3× `village_house` (A/B/C) + 1× `shepherd_cottage` (Casa do Pastor); barril GLB junto à casa B                                               |
 | `forge.xml`     | `city.forge`                   | Ferraria **GLB** + pátio; ferreiro (`DialogueNPC` `city_stone`, [F]); bigorna (`anvil.ts`, [K] forjar bomba)                                                  |
 | `barn.xml`      | `city.barn`                    | Celeiro **GLB** `village_barn`                                                                                                                                |
@@ -15,8 +15,8 @@ Shell: `../discordia.xml` (Includes). **Editar o XML do distrito**, não o shell
 | `market.xml`    | `city.market`                  | Mercado (bancas GLB); `merchant` já renderiza `npc_merchant` via script próprio (`src/scripts/merchant.ts`), sem `<GLTFLoader>` declarativo                   |
 | `longhouse.xml` | `city.longhouse`               | Longhouse                                                                                                                                                     |
 | `skirts.xml`    | `city.skirts`                  | 4 carvalhos no miolo + caixotaria na muralha                                                                                                                  |
-| `clutter.xml`   | `city.clutter`                 | Vestir exterior: barris, caixas, bancos, lenha, pátio de treino, cairns. Sem móvel de interior (armário/cadeira/banqueta)                                     |
-| `grid.xml`      | `city.grid-district`           | Stub vazio (CityGrid→Box removido; foco GLB)                                                                                                                  |
+| `clutter.xml`   | `city.clutter`                 | Vestir exterior: barris, caixas, bancos, lenha, pátio de treino, cairns. Tochas/braseiros **todos com chama** (`ParticleSystem`; luz só onde o orçamento dá). Sem móvel de interior (armário/cadeira/banqueta) |
+| `grid.xml`      | `city.grid-district`           | **Ampliação de 58 AA** (GDD): casa GLB + quintal (lenha, barril, caixote), banco e tocha acesa no bolsão NW interno (x∈[-15,-5], z∈[16..28])                  |
 
 ### Onda composition — migrado (2026-07-29)
 

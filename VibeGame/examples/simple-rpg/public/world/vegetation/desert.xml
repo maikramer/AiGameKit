@@ -9,17 +9,19 @@
 -->
 <Group name="biome.desert.vegetation" pos="0 0 0">
   <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).
-       density-per-km2=176000 (= 8× baseline pós-expansão do mapa). -->
+       density-per-km2 alinhada ao tecto do spawner (MAX_DENSITY_SPAWN_INSTANCES
+       = 12000) e ao orçamento de entidades: 103000 × 0.0965 km² ≈ 9942 — sem
+       capping silencioso e com folga no budget (boot ~86% de 100k). -->
 
   <Vegetation
     meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_yellowA.glb"
-    density-per-km2="140000"
+    density-per-km2="103000"
     seed="702"
     region-min="116 0 -190"
     region-max="370 0 190"
     scale-min="1.4"
     scale-max="2.8"
-    max-slope-deg="32"
+    max-slope-deg="26"
     avoid-water="1"
     avoid-overlaps="0"
     max-distance="110"

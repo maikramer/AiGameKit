@@ -5,7 +5,7 @@ Scene fragments loaded via `<Include src="/world/…">` from `index.html`.
 
 | Path                        | Contents                                                        |
 | --------------------------- | --------------------------------------------------------------- |
-| `environment.xml`           | Sky, lights, post, audio, weather, `BiomeRegion`                |
+| `environment.xml`           | Sky, lights, post, audio, weather, `BiomeRegion`, `<DayCycle>` (dia/noite) |
 | `cities/discordia.xml`      | City shell (`SpawnExclusion` + `TerrainPad` + Includes)         |
 | `cities/discordia/*.xml`    | Districts: `houses`, `utilities`, `walls`, `roads`, `skirts`, … |
 | `cities/town-demo.xml`      | Demo town @ (420,420) — `CityGrid` + prefabs                    |
@@ -15,15 +15,30 @@ Scene fragments loaded via `<Include src="/world/…">` from `index.html`.
 | `paths/trails.xml`          | Dirt/sand spur `<Road flatten="0">` to landmarks                |
 | `vegetation/<biome>.xml`    | Carpet + canopy + rocks, one file per cardinal wedge            |
 | `landmarks/<biome>.xml`     | Destinations: outposts, ruins, mine, arena, boss glades         |
+| `landmarks/wilds.xml`       | Anel selvagem (8 km): Ruína de Orm (leste, guardas bandit), Clareira Paradisíaca (oeste, lagoa turquesa + cura), Mirante da Caldeira (sul, cota 133 m) — POIs em `scripts/poi/`, trilhas em `paths/trails.xml` |
 | `frontier/ridges.xml`       | Diagonal ridges between the wedges                              |
 | `creatures/enemies.xml`     | Per-biome enemy `DynamicSpawner`s                               |
 | `creatures/bosses.xml`      | The four bosses (`name="boss"` = final, feeds `BossBar`)        |
 | `ai/npcs.xml`               | Quest NPC entities (`name=`, `dialogue-id`)                     |
 | `atmosphere/ambient-fx.xml` | Ambient particles per biome                                     |
 
-`<biome>` ∈ `forest` (N) · `desert` (E) · `swamp` (S) · `peaks` (O).
+`<biome>` ∈ `forest` (N) · `desert` (E) · `swamp` (O) · `peaks` (S).
+Pós-Terrain3D as bacias baixas reais ficaram a Oeste (pântano) e as encostas
+íngremes a Sul (picos) — sync com `LOOKOUT_GATES` (`src/game/city-amenities.ts`).
 
-## Relevo — 100% Terrain3D
+## Relevo — 100% Terrain3D (mundo dobrado 8 km, 2026-08-29)
+
+**Mapa dobrado:** world-size 4000 → 8000 m (heightmap 2048 → 4096, mesma
+densidade de 15,4×). A difusão **não reproduz** a geografia antiga a outra
+resolução (correlação 0,26 entre o mapa 2048 e a janela correspondente do
+4096) — o mundo novo é uma geografia nova: uma **caldeira** com piso a ~24 m
+e muros a +50 m, centrada na origem via `<Terrain pos="-51 0 51">`. Toda a
+infraestrutura auto-esculpe-se no novo vale (pads, estradas, rio, lagos,
+pontes re-assentam sozinhas — verificado). A escolha do vale foi por scan
+(planície r=250 m, muro no anel 600–1400 m). Seeds descartadas: 20260818
+(planalto std 0,12), 20260819 (0,23), 20260821 (0,24). Anel selvagem
+~400–3800 m sem conteúdo — é a tela para os novos ambientes. Cunhas de bioma
+estendidas para ±4040; WorldBorder 3800; levels 6.
 
 O relevo é o output cru do Terrain3D, sem pós-processamento. O antigo
 `scripts/sculpt_terrain.py` (cunhas cardeais + anel de borda + patamares nos
@@ -35,8 +50,8 @@ o resto ficava com cones radiais e costuras a 45°.
 cd public/assets/terrain
 terrain3d generate \
   --prompt "vale fluvial de fantasia RPG — fundo de vale habitável, rio, encostas e montanhas em redor" \
-  --seed 20260818 --size 2048 --offset-i 512 --offset-j 1408 \
-  --world-size 4000 --max-height 200 \
+  --seed 20260820 --size 4096 --offset-i 774 --offset-j 2866 \
+  --world-size 8000 --max-height 200 \
   --mode continental --format ahgt \
   --output terrain.ahgt --metadata terrain.json
 ```
@@ -159,7 +174,7 @@ onde a cidade acaba.
 
 **Densidade (pós câmera/bioma alargados):** spawners `count=` ×2 (vegetação,
 anel, cristas, landmarks, inimigos). Tapete `<Vegetation>` erva/planta/flor
-reativado com `density-per-km2` ×8 vs baseline — ver `vegetation/context.md`.
+reativado com tapetes `<Vegetation>` a ~10000 instâncias/bioma (alinhados ao cap do spawner) — ver `vegetation/context.md`.
 
 **Learnings**
 
@@ -175,8 +190,14 @@ reativado com `density-per-km2` ×8 vs baseline — ver `vegetation/context.md`.
 Artéria cobble = um `<RoadNetwork>` (~2 m) em `network.xml`:
 cruz praça → `mid_*` (±32, 8 m dentro da muralha) → portões/biomas, **mais anel periurbano** (±25)
 (`mid_n`↔`ring_ne`↔`mid_e`↔…↔`mid_n`) para não ficar só um `+`.
+**Duas travessias em ponte** (as únicas — o `analyze` barra estrada em água sem
+`profile="bridge"`): o rio norte na artéria da floresta (z≈214) e a **Lagoa
+Grande do pântano** na artéria oeste (`w_lake_e`↔`w_lake_w`, lagoa -190,-16
+r=24; tochas nas cabeças + acampamento de pescador na margem norte em
+`landmarks/swamp.xml`). Trilhas de terra/areia = `<Road flatten="0">` em
+`trails.xml` (sem carve; docks nos `via=`; o ramo dos menires sai do pad
+`n_resume`, a trilha da margem do pântano contorna a lagoa por NE).
 Gaps rio: `s_bank`↛`s_resume`, `w_bank`↛`w_resume`.
-Ramos de terra/areia = `<Road flatten="0">` em `trails.xml` (sem carve; docks nos `via=`).
 Ver [`VibeGame/src/plugins/road/context.md`](../../../src/plugins/road/context.md).
 
 ## POIs com recompensa (`src/scripts/poi/`)
@@ -215,6 +236,24 @@ Catches Include/asset misses and solid footprint overlaps (buildings/walls throu
 - `SpawnExclusion at="0 0" radius="52"` in `cities/discordia.xml`
 - Cardinal gates at wall ±39.8 (`RESPAWN_POINTS` = ±50)
 - Quest `dialogue-id` matches JSON under `src/data/quests/`
+
+## Dia/noite (`<DayCycle>`)
+
+O `DayCyclePlugin` (main.ts) + `<DayCycle>` no `environment.xml` comandam o
+`<Sky>` procedural e a luz ambiente: dia de 20 min reais, amanhecer 05:30,
+anoitecer 19:30, nadir do sol a −22° (noite escura — as tochas de
+praça/portões/ponte e o acampamento da lagoa assumem; `ambient-night-intensity`
+0.07). O relógio aparece no HUD (`<Clock>`), salva globalmente e o write direto
+de `GameClock.minuteOfDay` serve para QA (tour noturno). `sleepUntilMorning`
+está disponível para futuros pontos de descanso. God-rays/fog-sun foram
+afinados para não lavar a tela com o disco solar abaixo do horizonte.
+
+## Ambiência de água
+
+Loops espaciais `water-flow` / `water-lake` (Text2Sound, `regen_sounds.py` →
+`public/assets/audio/sfx/world/`) ligam por proximidade com histerese via
+`scripts/ambient-water.ts` — âncoras: ponte do rio norte, Lagoa Grande, lago
+do vale, lagoa leste, oásis, lago gelado.
 
 Quest/dialogue **data** stays in `src/data/quests/` and `public/data/ai/*.yaml` — not in these Scene XMLs. City-watch bounties live in `city_quests.json` (`npc: notice_board`, taken via `notice-board.ts`); the blacksmith job is `city_stone` on `npc_blacksmith` in `forge.xml`. Chapel healer is `healer.ts` (gold for a full heal), not a quest. Plaza campfire (`campfire.ts`, [G]) and well (`well.ts`, [F]) are free heals with cooldown; forge anvil (`anvil.ts`, [K]) crafts a bomb; watchtower guard (`watch-guard.ts`, [F]) pins the four gates on the compass.
 

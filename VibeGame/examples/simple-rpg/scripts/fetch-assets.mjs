@@ -10,13 +10,15 @@
  * game-specific media (audio, icons, particles, terrain data).
  *
  * This script downloads that bundle, verifies its sha256, extracts it to a
- * staging dir (never over public/ directly), fills the pool file-by-file in
- * fill-if-missing mode — the Release never overwrites pool content; the pool
- * is canonical and may be newer — and merges the game-specific media into
- * ./public. No symlinks, no copies of pooled assets inside the example.
+ * staging dir (never over public/ directly) and installs everything in
+ * fill-if-missing mode — pool trees and game media alike. The Release NEVER
+ * overwrites pool or local content: both are canonical and may be newer than
+ * the pinned bundle. No symlinks, no copies of pooled assets inside the
+ * example.
  *
  * Download policy (safe for dev — never overwrites local work):
- *   1. --force (or FETCH_ASSETS_FORCE=1): always download.
+ *   1. --force (or FETCH_ASSETS_FORCE=1): always download (install is still
+ *      fill-if-missing — existing files are kept everywhere).
  *   2. Sentinel matches lock.version: skip (already have the right version).
  *   3. Pool or asset folders have local files (dev in progress): skip with a hint.
  *   4. Everything empty (fresh checkout): auto-download.
@@ -55,11 +57,12 @@ const poolDir = resolve(root, '../shared-assets/public/assets');
 /**
  * Tarball trees that belong to the shared pool — every example reads them via
  * `vibegame({ sharedAssets })`; the example's public/ never holds copies.
+ * `audio` lives in the pool too (combat/sfx packs are shared across games).
  */
-const POOL_TREES = new Set(['meshes', 'images', 'textures', 'sky']);
+const POOL_TREES = new Set(['audio', 'meshes', 'images', 'textures', 'sky']);
 
 /** Pastas de media específica do jogo — instaladas em public/assets. */
-const LOCAL_DIRS = ['audio', 'icons', 'particles', 'terrain'];
+const LOCAL_DIRS = ['icons', 'particles', 'terrain'];
 
 function log(msg) {
   process.stdout.write(`[fetch-assets] ${msg}\n`);
@@ -107,8 +110,10 @@ function fillTree(staged, pool, rel) {
 }
 
 /**
- * Instala staging/assets: trees do pool (meshes/images/textures/sky) → pool
- * (fill-if-missing); media específica do jogo → merge direto em public/assets.
+ * Instala staging/assets em modo fill-if-missing: trees do pool
+ * (audio/meshes/images/textures/sky) e media específica do jogo → só copia o
+ * que ainda não existe. Ficheiros locais/pool existentes são canónicos e nunca
+ * são sobrescritos — nem com --force.
  */
 function installStaged(staged) {
   for (const entry of readdirSync(staged, { withFileTypes: true })) {
@@ -122,8 +127,20 @@ function installStaged(staged) {
       log(`${rel}/ → pool: ${copied} novos, ${kept} mantidos (canónicos)`);
       continue;
     }
-    mergeSync(join(staged, rel), join(assetsDir, rel));
-    log(`${rel} ← release`);
+    const src = join(staged, rel);
+    const dst = join(assetsDir, rel);
+    if (entry.isFile()) {
+      if (existsSync(dst)) {
+        log(`${rel} mantido (local é canónico)`);
+      } else {
+        mkdirSync(dirname(dst), { recursive: true });
+        cpSync(src, dst);
+        log(`${rel} ← release`);
+      }
+      continue;
+    }
+    const { copied, kept } = fillTree(src, dst, rel);
+    log(`${rel}/ → local: ${copied} novos, ${kept} mantidos (canónicos)`);
   }
 }
 
@@ -141,8 +158,9 @@ if (!force) {
   if (assetsPresent()) {
     log('local assets detected — skipping download (dev mode).');
     log(
-      '  use --force or FETCH_ASSETS_FORCE=1 to re-download from the release.'
+      '  use --force or FETCH_ASSETS_FORCE=1 to re-download from the release'
     );
+    log('  (install is fill-if-missing — local work is never overwritten).');
     process.exit(0);
   }
 }

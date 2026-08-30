@@ -142,7 +142,7 @@
   </DynamicSpawner>
 
   <!-- ============================================================
-       SUL — Pântano
+       OESTE — Pântano (bacias baixas)
        ============================================================ -->
   <DynamicSpawner
     avoid-water="1"
@@ -191,7 +191,7 @@
   </DynamicSpawner>
 
   <!-- ============================================================
-       OESTE — Picos Gelados (Z estreito: flancos íngremes).
+       SUL — Picos Gelados (encostas íngremes z<0).
        max-slope 50° alinha com navmesh walkableSlopeAngle 55°.
        ============================================================ -->
   <DynamicSpawner
