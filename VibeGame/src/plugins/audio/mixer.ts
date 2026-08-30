@@ -55,6 +55,9 @@ export function registerMusicLayerName(name: string, id: number): void {
   layerNames.set(name.toLowerCase(), id);
 }
 
+/** Next free layer id for declarative <MusicLayer> self-registration. */
+let nextDynamicLayerId = 2;
+
 export function resolveMusicLayer(name: string | number): number {
   if (typeof name === 'number') return name;
   const asNum = Number(name);
@@ -176,7 +179,21 @@ export const musicLayerRecipe: Recipe = {
 
 export const musicLayerAdapters: Record<string, Adapter> = {
   layer: (entity: number, value: string) => {
-    MusicLayerComponent.layer[entity] = resolveMusicLayer(value);
+    // Declarative layers self-register: <MusicLayer layer="village"> gets the
+    // next free id instead of warn-and-fallback — games can declare as many
+    // context layers as they want (ids are stable per scene parse order, and
+    // the MusicLayerDriver resolves names through the same map at runtime).
+    const name = value.trim().toLowerCase();
+    if (!Number.isNaN(Number(name)) && name !== '') {
+      MusicLayerComponent.layer[entity] = Number(name);
+      return;
+    }
+    let id = layerNames.get(name);
+    if (id === undefined) {
+      id = nextDynamicLayerId++;
+      registerMusicLayerName(name, id);
+    }
+    MusicLayerComponent.layer[entity] = id;
   },
   'base-volume': (entity: number, value: string) => {
     MusicLayerComponent.volume[entity] = clamp01(num(value));
