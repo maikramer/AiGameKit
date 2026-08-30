@@ -1,6 +1,6 @@
 /* eslint-disable import/no-namespace */
 
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import * as GAME from 'aigamekit-vibegame';
 import { RenderingPlugin } from 'aigamekit-vibegame/rendering';
@@ -10,7 +10,25 @@ import { TransformsPlugin } from 'aigamekit-vibegame/transforms';
 import { MAX_ENTITIES } from 'aigamekit-vibegame';
 
 describe('Builder-Runtime Integration', () => {
+  // Bun runs all test files in one process: a jsdom window left on globalThis
+  // makes later files (e.g. debug report/diagnostics) see a "browser" that
+  // does not exist. Save and restore every global this suite stomps.
+  const STOMPED_GLOBALS = [
+    'DOMParser',
+    'document',
+    'window',
+    'MutationObserver',
+    'Node',
+    'HTMLElement',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'performance',
+  ] as const;
+  let savedGlobals: Map<string, unknown> = new Map();
+
   beforeEach(() => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    savedGlobals = new Map(STOMPED_GLOBALS.map((k) => [k, g[k]]));
     GAME.resetBuilder();
     const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
     global.DOMParser = dom.window.DOMParser;
@@ -22,6 +40,17 @@ describe('Builder-Runtime Integration', () => {
     global.requestAnimationFrame = ((cb: any) => setTimeout(cb, 16)) as any;
     global.cancelAnimationFrame = clearTimeout as any;
     global.performance = { now: () => Date.now() } as any;
+  });
+
+  afterEach(() => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    for (const [key, value] of savedGlobals) {
+      if (value === undefined) {
+        delete g[key];
+      } else {
+        g[key] = value;
+      }
+    }
   });
 
   describe('Basic Usage Example', () => {

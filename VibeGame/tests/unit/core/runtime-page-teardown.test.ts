@@ -10,8 +10,14 @@ import {
 
 describe('ensureRuntimePageTeardown', () => {
   let dom: JSDOM;
+  let savedWindow: unknown;
+  let savedEvent: unknown;
 
   beforeEach(() => {
+    // jsdom window/Event left on globalThis leak into later files in the same
+    // bun process (they run alphabetically after this one).
+    savedWindow = globalThis.window;
+    savedEvent = globalThis.Event;
     dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
     globalThis.window = dom.window as unknown as typeof window;
     globalThis.Event = dom.window.Event as unknown as typeof Event;
@@ -23,6 +29,11 @@ describe('ensureRuntimePageTeardown', () => {
     resetRuntimePageTeardownForTests();
     disposeAllRuntimes();
     dom.window.close();
+    const g = globalThis as unknown as Record<string, unknown>;
+    if (savedWindow === undefined) delete g.window;
+    else g.window = savedWindow;
+    if (savedEvent === undefined) delete g.Event;
+    else g.Event = savedEvent;
   });
 
   it('installs pagehide only once', () => {

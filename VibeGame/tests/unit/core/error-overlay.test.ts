@@ -1,13 +1,24 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { hideErrorOverlay, showErrorOverlay } from 'aigamekit-vibegame';
 
 const OVERLAY_ID = 'vibegame-error-overlay';
 
 describe('error overlay', () => {
+  let savedDocument: unknown;
+
   beforeEach(() => {
+    // jsdom document left on globalThis leaks into later files in the same
+    // bun process.
+    savedDocument = globalThis.document;
     const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
     global.document = dom.window.document as unknown as Document;
+  });
+
+  afterEach(() => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    if (savedDocument === undefined) delete g.document;
+    else g.document = savedDocument;
   });
 
   it('shows a card with title and detail', () => {

@@ -14,8 +14,30 @@ import { installWebGLStub, uninstallWebGLStub } from '../../helpers/webgl-stub';
 
 describe('WebGL stub smoke (rendering under Bun/JSDOM)', () => {
   let dom: JSDOM;
+  // Bun runs all test files in one process, so anything left on globalThis
+  // leaks into every file that runs later (alphabetical: e2e → integration →
+  // unit). The jsdom navigator in particular is poisonous: its
+  // hardwareConcurrency getter calls os.cpus(), which re-enters the getter and
+  // stack-overflows in later files (debug report/diagnostics). Save and
+  // restore every global this suite stomps.
+  const STOMPED_GLOBALS = [
+    'DOMParser',
+    'document',
+    'window',
+    'navigator',
+    'MutationObserver',
+    'Node',
+    'HTMLElement',
+    'HTMLCanvasElement',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'performance',
+  ] as const;
+  let savedGlobals: Map<string, unknown> = new Map();
 
   beforeEach(() => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    savedGlobals = new Map(STOMPED_GLOBALS.map((k) => [k, g[k]]));
     dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
     global.DOMParser = dom.window.DOMParser as typeof DOMParser;
     global.document = dom.window.document as unknown as any;
@@ -38,6 +60,14 @@ describe('WebGL stub smoke (rendering under Bun/JSDOM)', () => {
 
   afterEach(() => {
     uninstallWebGLStub();
+    const g = globalThis as unknown as Record<string, unknown>;
+    for (const [key, value] of savedGlobals) {
+      if (value === undefined) {
+        delete g[key];
+      } else {
+        g[key] = value;
+      }
+    }
   });
 
   it('constructs WebGLRenderer via SceneRenderSystem without throwing', async () => {
