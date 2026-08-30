@@ -1,6 +1,9 @@
 ﻿import { describe, expect, it } from 'bun:test';
 import * as THREE from 'three';
-import { isNormalWithinSlopeLimit, partialAlignEuler } from 'aigamekit-vibegame';
+import {
+  isNormalWithinSlopeLimit,
+  partialAlignEuler,
+} from 'aigamekit-vibegame';
 
 /** Apply the returned Euler the same way the vegetation instancer does
  * (Object3D.rotation defaults to XYZ order, radians) and return the trunk's

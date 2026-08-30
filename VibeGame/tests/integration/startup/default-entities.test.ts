@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, defineQuery, parseXMLToEntities } from 'aigamekit-vibegame';
+import {
+  State,
+  XMLParser,
+  defineQuery,
+  parseXMLToEntities,
+} from 'aigamekit-vibegame';
 import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
 import {
   AmbientLight,
@@ -17,7 +22,11 @@ import {
 } from 'aigamekit-vibegame/physics';
 import { InputState } from 'aigamekit-vibegame/input';
 import { OrbitCamera } from 'aigamekit-vibegame/orbit-camera';
-import { Parent, Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
+import {
+  Parent,
+  Transform,
+  TransformsPlugin,
+} from 'aigamekit-vibegame/transforms';
 import { PlayerController } from 'aigamekit-vibegame/player';
 import { StartupPlugin } from 'aigamekit-vibegame/startup';
 

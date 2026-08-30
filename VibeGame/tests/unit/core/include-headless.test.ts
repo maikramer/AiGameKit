@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import * as path from 'path';
-import { Parent, RpgPlugins, State, parseXMLToEntities } from 'aigamekit-vibegame';
+import {
+  Parent,
+  RpgPlugins,
+  State,
+  parseXMLToEntities,
+} from 'aigamekit-vibegame';
 import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
 import { loadWorldFromFile } from '../../../src/cli/headless';
 

@@ -6,7 +6,11 @@ import {
   queryEntities,
 } from 'aigamekit-vibegame/cli';
 import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
-import { Parent, Transform, WorldTransform } from 'aigamekit-vibegame/transforms';
+import {
+  Parent,
+  Transform,
+  WorldTransform,
+} from 'aigamekit-vibegame/transforms';
 
 describe('E2E: Nested Entity Transform Hierarchy', () => {
   let state: State;

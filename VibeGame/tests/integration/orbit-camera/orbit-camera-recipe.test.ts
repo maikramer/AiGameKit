@@ -1,5 +1,8 @@
 import { State, XMLParser, parseXMLToEntities } from 'aigamekit-vibegame';
-import { OrbitCamera, OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
+import {
+  OrbitCamera,
+  OrbitCameraPlugin,
+} from 'aigamekit-vibegame/orbit-camera';
 import { Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
 import { PlayerPlugin } from 'aigamekit-vibegame/player';
 import { MainCamera, RenderingPlugin } from 'aigamekit-vibegame/rendering';

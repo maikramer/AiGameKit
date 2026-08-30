@@ -7,7 +7,10 @@ import {
   ThirdPersonCameraPlugin,
 } from 'aigamekit-vibegame';
 import { InputState } from 'aigamekit-vibegame/input';
-import { OrbitCamera, OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
+import {
+  OrbitCamera,
+  OrbitCameraPlugin,
+} from 'aigamekit-vibegame/orbit-camera';
 import { PlayerController, PlayerPlugin } from 'aigamekit-vibegame/player';
 import { MainCamera } from 'aigamekit-vibegame/rendering';
 import { Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';

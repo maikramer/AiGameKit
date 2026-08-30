@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, defineQuery, parseXMLToEntities } from 'aigamekit-vibegame';
+import {
+  State,
+  XMLParser,
+  defineQuery,
+  parseXMLToEntities,
+} from 'aigamekit-vibegame';
 import {
   MainCamera,
   RenderContext,

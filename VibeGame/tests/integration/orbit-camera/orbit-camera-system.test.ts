@@ -1,5 +1,8 @@
 import { State, TIME_CONSTANTS } from 'aigamekit-vibegame';
-import { OrbitCamera, OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
+import {
+  OrbitCamera,
+  OrbitCameraPlugin,
+} from 'aigamekit-vibegame/orbit-camera';
 import {
   Transform,
   TransformsPlugin,

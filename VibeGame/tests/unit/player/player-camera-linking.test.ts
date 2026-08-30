@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'aigamekit-vibegame';
 import { InputState } from 'aigamekit-vibegame/input';
-import { OrbitCamera, OrbitCameraPlugin } from 'aigamekit-vibegame/orbit-camera';
+import {
+  OrbitCamera,
+  OrbitCameraPlugin,
+} from 'aigamekit-vibegame/orbit-camera';
 import { ThirdPersonCamera, ThirdPersonCameraPlugin } from 'aigamekit-vibegame';
 import { PlayerController, PlayerPlugin } from 'aigamekit-vibegame/player';
 import { PlayerCameraLinkingSystem } from '../../../src/plugins/player/systems';

@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, Terrain, getTerrainContext, terrainReady } from 'aigamekit-vibegame';
+import {
+  State,
+  Terrain,
+  getTerrainContext,
+  terrainReady,
+} from 'aigamekit-vibegame';
 import type { TerrainEntityData } from '../../../src/plugins/terrain/utils';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';
 

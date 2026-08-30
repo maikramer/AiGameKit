@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { NULL_ENTITY, State, TIME_CONSTANTS, defineQuery } from 'aigamekit-vibegame';
+import {
+  NULL_ENTITY,
+  State,
+  TIME_CONSTANTS,
+  defineQuery,
+} from 'aigamekit-vibegame';
 import {
   Rigidbody,
   BodyType,

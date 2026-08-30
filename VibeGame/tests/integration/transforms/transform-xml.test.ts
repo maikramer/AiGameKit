@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, TIME_CONSTANTS, XMLParser, parseXMLToEntities } from 'aigamekit-vibegame';
+import {
+  State,
+  TIME_CONSTANTS,
+  XMLParser,
+  parseXMLToEntities,
+} from 'aigamekit-vibegame';
 import {
   TransformsPlugin,
   Transform,

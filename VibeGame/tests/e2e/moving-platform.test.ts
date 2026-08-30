@@ -6,7 +6,11 @@ import {
   queryEntities,
 } from 'aigamekit-vibegame/cli';
 import { DefaultPlugins } from 'aigamekit-vibegame/defaults';
-import { Rigidbody, BodyType, CharacterController } from 'aigamekit-vibegame/physics';
+import {
+  Rigidbody,
+  BodyType,
+  CharacterController,
+} from 'aigamekit-vibegame/physics';
 
 describe('E2E: Moving Platform Character Controller', () => {
   let state: State;

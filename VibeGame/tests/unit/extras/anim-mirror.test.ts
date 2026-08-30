@@ -7,7 +7,11 @@ import {
   QuaternionKeyframeTrack,
   VectorKeyframeTrack,
 } from 'three';
-import { GltfAnimator, mirrorAnimationClip, mirrorBoneName } from 'aigamekit-vibegame';
+import {
+  GltfAnimator,
+  mirrorAnimationClip,
+  mirrorBoneName,
+} from 'aigamekit-vibegame';
 
 /** Skeletal clip with one lateral bone pair + trunk, quat+pos+scale tracks. */
 function makeSlashClip(name: string): AnimationClip {

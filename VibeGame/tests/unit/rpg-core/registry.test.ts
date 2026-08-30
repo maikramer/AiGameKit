@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DataRegistry, RpgCorePlugin, State, getDataRegistry } from 'aigamekit-vibegame';
+import {
+  DataRegistry,
+  RpgCorePlugin,
+  State,
+  getDataRegistry,
+} from 'aigamekit-vibegame';
 
 describe('DataRegistry', () => {
   let reg: DataRegistry;

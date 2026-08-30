@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { State, XMLParser, defineQuery, parseXMLToEntities } from 'aigamekit-vibegame';
-import { AnimatedCharacter, AnimationPlugin } from 'aigamekit-vibegame/animation';
+import {
+  State,
+  XMLParser,
+  defineQuery,
+  parseXMLToEntities,
+} from 'aigamekit-vibegame';
+import {
+  AnimatedCharacter,
+  AnimationPlugin,
+} from 'aigamekit-vibegame/animation';
 import { CharacterController, PhysicsPlugin } from 'aigamekit-vibegame/physics';
 import { Transform, TransformsPlugin } from 'aigamekit-vibegame/transforms';
 
