@@ -6,6 +6,7 @@ import {
   vibegameSharedAssets,
 } from './shared-assets.ts';
 import { silenceTyprOpentypeNoise } from './silence-typr.ts';
+import { silenceRapierWasmSourcemapNoise } from './silence-rapier-sourcemap.ts';
 import { mergeWatchIgnored } from './watch-ignored.ts';
 
 /** WASM glue breaks Vite prebundle sourcemaps in Firefox DevTools. */
@@ -36,6 +37,7 @@ export function vibegame(options: VibegameOptions = {}): Plugin[] {
     vibegamePublicLiveServe(),
     ...(shared ? [vibegameSharedAssets(shared)] : []),
     silenceTyprOpentypeNoise(),
+    silenceRapierWasmSourcemapNoise(),
     {
       name: 'aigamekit-vibegame',
       config: (config) => {
@@ -84,6 +86,7 @@ export {
   vibegameSharedAssets,
 } from './shared-assets.ts';
 export { silenceTyprOpentypeNoise } from './silence-typr.ts';
+export { silenceRapierWasmSourcemapNoise } from './silence-rapier-sourcemap.ts';
 export {
   mergeWatchIgnored,
   VIBEGAME_SERVER_WATCH_IGNORED,

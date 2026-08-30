@@ -202,6 +202,17 @@ if (import.meta.hot) {
       if (args[0] instanceof Error && args[0].name === 'SendBeforeConnectError') {
         return;
       }
+      // Vite's own client logs the same failure as a plain string when the
+      // rejection escapes its transport. Forwarding that string would trigger
+      // another failed send and another logged error — a self-sustaining
+      // cascade while the socket is down (server restart, slow connect).
+      if (
+        typeof args[0] === 'string' &&
+        (args[0].startsWith('[vite] Error: send was called before connect') ||
+          args[0].startsWith('[vite] Error: invoke was called before connect'))
+      ) {
+        return;
+      }
       originalConsole[method](...args);
       sendConsoleMessage(method === 'log' ? 'info' : method, args);
     };
