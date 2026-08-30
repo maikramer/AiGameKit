@@ -161,12 +161,12 @@
           type="3"
           polygon="[-56,-56;-56,56;-4040,4040;-4040,-4040]"
           tint="#3a4a30"
-          fog-color="#29382c"
-          fog-density="0.0038"
+          fog-color="#243024"
+          fog-density="0.0046"
           ambient="#2a3a30"
           bgm-layer="1"
           rain="0.35"
-          pp-exposure="0.76"
+          pp-exposure="0.70"
           terrain-texture="/assets/textures/swamp_mud.png"
         ></BiomeRegion>
         <!-- SUL: Picos Gelados. Vértice da cunha empurrado de ±56 para ±240:

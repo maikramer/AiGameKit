@@ -26,7 +26,7 @@
     flatten-max-grade="0.34"
     texture-url="/assets/textures/cobblestone_road.png"
     normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
-    texture-scale="5"
+    texture-scale="9"
   >
     <!-- Praça + docks do anel (muralha ±39.8 — layout compacto).
          mid_* ficam 8 m dentro da muralha, alinhados com os portões. -->

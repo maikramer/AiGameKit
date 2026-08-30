@@ -13,6 +13,7 @@ Scene fragments loaded via `<Include src="/world/…">` from `index.html`.
 | `spawn/dressing.xml`        | Cairns `form_stack` no anel do vale (fora da cidade)            |
 | `paths/network.xml`         | Cobble `<RoadNetwork>` cruz + anel periurbano + 4 biomes (~2 m) |
 | `paths/trails.xml`          | Dirt/sand spur `<Road flatten="0">` to landmarks                |
+| `paths/lanterns.xml`        | Aleia de tochas (poste + chama + PointLight) nas 4 artérias      |
 | `vegetation/<biome>.xml`    | Carpet + canopy + rocks, one file per cardinal wedge            |
 | `landmarks/<biome>.xml`     | Destinations: outposts, ruins, mine, arena, boss glades         |
 | `landmarks/wilds.xml`       | Anel selvagem (8 km): Ruína de Orm (leste, guardas bandit), Clareira Paradisíaca (oeste, lagoa turquesa + cura), Mirante da Caldeira (sul, cota 133 m) — POIs em `scripts/poi/`, trilhas em `paths/trails.xml` |
@@ -68,6 +69,62 @@ o próprio Terrain3D avisa acima de 32× (declives artificiais). 2048 sobre
 `world-size` / `max-height` do `terrain.json` têm de bater com os atributos do
 `<Terrain>` no `index.html`. O formato `.ahgt` (uint16 + deflate) é lido
 nativamente pelo plugin `terrain` — sem o terracing de 0,78 m do PNG 8-bit.
+
+## Chão e materiais — passagem de embelezamento (2026-08-29)
+
+O relevo estava bom mas a **superfície** não: o mapa lia-se lavado, com o chão
+a sobrepor-se ao resto. Quatro causas, todas corrigidas:
+
+1. **Texturas de bioma erradas para o sítio.** `forest_floor` era relva com
+   folhas de outono vermelhas — numa "Floresta Sombria" lia-se como confetti;
+   `desert_sand` saíra laranja-néon; `snow_peak` era cascalho cinzento-azulado.
+   Regeneradas com `regen_textures.py` (prompts novos lá documentados) e
+   pós-processadas de forma determinística (`POST` no mesmo ficheiro): realce de
+   contraste **local** na areia (o difuso vinha com `std ≈ 7`, um lençol liso),
+   escurecimento do `swamp_mud` (lia-se como praia) e reancoragem quente do
+   `cobblestone_road` (cinzento-neutro + IBL do céu = praça "de gelo").
+
+2. **`base-color` do `<Terrain>` era verde (`#8cb866`).** A cor do material
+   multiplica **todas** as camadas de bioma — a areia e a neve saíam
+   esverdeadas. Hoje é neutro (`#c9c5ba`) e a cor vem das texturas; o gradiente
+   de altitude (`color-low/mid/high/rock`) desceu para
+   `height-blend-strength="0.22"` (era 0.40) para tingir sem invadir.
+
+3. **`normal-strength="2.6"` no terreno.** Com o IBL do céu e `roughness 0.82`
+   o normal map criava um brilho especular por píxel — o chão ficava com um
+   véu de "geada" em todos os biomas. Hoje: `normal-strength 1.15`,
+   `roughness 0.95`, `ao-strength 0.85`.
+
+4. **`pp-exposure` das `BiomeRegion` SUBSTITUI a global, não multiplica**
+   (`biomes/systems.ts`: `Postprocessing.toneMappingExposure = lerp(pick(...))`).
+   As cunhas estavam em 0.8–1.12 com a global em 0.88 — ou seja, o deserto
+   corria mais claro que a baseline. Hoje a global é 0.76 e as cunhas
+   0.70–0.78, sempre **abaixo** dela. Sol de 5.2 → 2.6, `environment-intensity`
+   0.3 → 0.38, `contrast` 0.08 → 0.18, `fog-sun-influence` 1.0 → 0.45 e
+   `fog-sky-haze` 0.22 → 0.10 (o horizonte era uma banda branca).
+
+**Albedo das rochas.** `form_stack_6/11` e `stone_cairn` vieram do paint com
+albedo lavanda/azul/laranja — no mapa liam-se como gelatinas pastel. Os GLBs do
+pool **não são versionados** (`shared-assets/.gitignore` ignora
+`public/assets/meshes/`), por isso o repaint é um passo re-executável:
+
+```bash
+cd examples/simple-rpg
+npm run fetch-assets          # se o pool ainda não estiver local
+python3 scripts/repaint_rock_albedo.py    # precisa do `ktx` no PATH
+```
+
+Rampa de luminância → pedra neutra, re-encode ETC1S e repack do GLB (offsets do
+`EXT_meshopt_compression` recalculados). Um sidecar `<glb>.repainted.json` evita
+escurecer duas vezes; `--force` ignora-o.
+
+**Vestir o vale.** `spawn/dressing.xml` deixou de ser 88 cairns iguais: cada
+spawner sorteia entre quatro templates (dois cairns + `rock_boulder` +
+`rock_mossy`) e as diagonais ganharam quatro prados de `<Vegetation>` com
+`flower-density-ratio="0.55"`. `paths/lanterns.xml` põe 16 tochas a ladear as
+quatro artérias (pares a 4.2 m da centreline, `align-to-terrain: 0`) — de dia
+marcam o caminho, de noite são o que se vê. O motor só acende as 12 PointLights
+mais próximas (`MAX_POINT_LIGHTS`), por isso a aleia inteira não pesa.
 
 ## Densidade — spawner instanciado vs entidade
 

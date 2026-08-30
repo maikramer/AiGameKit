@@ -19,7 +19,9 @@ from pathlib import Path
 
 from aigamekit_shared.vramd_client import delegate_to_vramd
 
-TEXTURES_DIR = Path(__file__).parent / "public" / "assets" / "textures"
+# O pool passou a ser partilhado pelos exemplos (shared-assets), servido pelo
+# plugin `sharedAssets` do Vite — as texturas do simple-rpg vivem lá.
+TEXTURES_DIR = Path(__file__).resolve().parents[1] / "shared-assets" / "public" / "assets" / "textures"
 
 # (filename, prompt, negative_prompt, materialize_preset)
 SPECS: list[tuple[str, str, str, str]] = [
@@ -33,20 +35,27 @@ SPECS: list[tuple[str, str, str, str]] = [
     ),
     (
         "forest_floor",
-        "seamless tileable texture, dark mossy forest floor with fallen leaves, twigs and roots, "
-        "rich organic soil, damp earth, top-down flat view, game asset",
-        "grass, clean, polished, sand, desert, seams, borders",
+        # A versão anterior saía com folhas de outono vermelhas/amarelas: numa
+        # "Floresta Sombria" o chão lia-se como confetti. Musgo + húmus, sem cor forte.
+        "seamless tileable texture, dark damp forest floor, deep green moss over brown humus soil, "
+        "scattered pine needles and small twigs, muted desaturated earthy palette, soft even lighting, "
+        "top-down orthographic flat view, stylized game ground texture",
+        "autumn leaves, red leaves, orange, yellow, colorful, saturated, confetti, flowers, grass lawn, "
+        "high contrast, harsh shadows, seams, borders, frame, watermark",
         "default",
     ),
     (
         "desert_sand",
-        "seamless tileable texture, golden desert sand with small rocks and cracks, wind-rippled dune sand, "
-        "dry arid ground, top-down flat view, game asset",
-        "rocks, grass, water, snow, seams, borders",
-        "stone",
+        # Antes saía laranja-néon. Areia clara com ondulação; o realce de
+        # contraste LOCAL (POST abaixo) é o que dá as marcas de vento.
+        "seamless tileable texture, light golden yellow sand dunes seen from above, rippled sand waves, "
+        "bright sunny desert floor, clean sand, top-down orthographic view, stylized game ground",
+        "brown, mud, dark, soil, dirt, rocks, grass, water, seams, borders, vignette",
+        "default",
     ),
     (
         "swamp_mud",
+        # O brejo lia-se como praia clara; o escurecimento vive no POST.
         "seamless tileable texture, murky dark swamp mud with algae patches, wet slippery ground, "
         "decaying vegetation, top-down flat view, game asset",
         "grass, clean, polished, sand, seams, borders",
@@ -54,10 +63,11 @@ SPECS: list[tuple[str, str, str, str]] = [
     ),
     (
         "snow_peak",
-        "seamless tileable texture, white snow with ice crystals and small rocks, mountain peak surface, "
-        "frozen ground, frost, top-down flat view, game asset",
-        "smooth, polished, grass, green, seams, borders",
-        "stone",
+        # Antes: cascalho cinzento-azulado (lia-se como betão sujo).
+        "seamless tileable texture, pure white fresh snow surface, soft powder drifts, gentle undulations, "
+        "bright snowfield seen from above, top-down orthographic view, stylized game ground",
+        "blue, cyan, speckles, dots, granite, rock, gravel, dirt, grey, noise, stars, seams, borders",
+        "default",
     ),
     (
         "mountain_stone",
@@ -133,6 +143,49 @@ def generate_texture(name: str, prompt: str, negative: str) -> bool:
         return False
 
 
+# --- Pós-processamento por textura -------------------------------------------
+# O difuso do texture2d chega correto na cor mas nem sempre no contraste/valor;
+# estes passes são determinísticos e correm sobre o PNG já gerado, antes do
+# Materialize. Sem eles: a areia é um lençol liso (std ≈ 7) e o brejo lê-se
+# como praia clara. Ver public/world/context.md ("Chão e materiais").
+POST: dict[str, str] = {
+    # Realce de contraste LOCAL (ondulações), mantendo a média/cor da areia.
+    "desert_sand": "local_contrast:3.2",
+    # Escurecer e puxar para verde-lodo.
+    "swamp_mud": "scale_rgb:0.56,0.62,0.50",
+    # Cobble cinzento-neutro lia-se AZUL sob o IBL do céu (praça "de gelo").
+    "cobblestone_road": "warm_stone",
+}
+
+
+def postprocess(name: str) -> None:
+    """Aplica o passe de POST (se houver) ao difuso já gerado."""
+    recipe = POST.get(name)
+    if not recipe:
+        return
+    import numpy as np
+    from PIL import Image, ImageFilter
+
+    path = TEXTURES_DIR / f"{name}.png"
+    im = Image.open(path).convert("RGB")
+    a = np.asarray(im).astype(np.float32)
+    if recipe.startswith("local_contrast:"):
+        amount = float(recipe.split(":", 1)[1])
+        blur = np.asarray(im.filter(ImageFilter.GaussianBlur(12))).astype(np.float32)
+        out = blur + (a - blur) * amount
+    elif recipe.startswith("scale_rgb:"):
+        factors = [float(v) for v in recipe.split(":", 1)[1].split(",")]
+        out = a * np.array(factors, dtype=np.float32)
+    elif recipe == "warm_stone":
+        lum = a @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
+        warm = np.stack([lum * 1.06 + 6, lum * 0.99, lum * 0.88 - 4], axis=-1)
+        out = warm * 0.82 + a * 0.18
+    else:
+        raise ValueError(f"POST desconhecido: {recipe}")
+    Image.fromarray(np.clip(out, 0, 255).astype("uint8")).save(path)
+    print(f"  [POST] {name}: {recipe}", flush=True)
+
+
 def generate_pbr(name: str, preset: str) -> bool:
     """Gera PBR maps via Materialize. Retorna True se OK."""
     diffuse = TEXTURES_DIR / f"{name}.png"
@@ -184,7 +237,10 @@ def main() -> None:
             fail_count += 1
             continue
 
-        # 2. Gerar PBR maps via Materialize.
+        # 2. Pós-processamento determinístico (contraste/valor), se houver.
+        postprocess(name)
+
+        # 3. Gerar PBR maps via Materialize (a partir do difuso já tratado).
         if generate_pbr(name, preset):
             ok_count += 1
         else:
