@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Fetch the prebuilt asset bundle for the simple-rpg example.
+ * Fetch the prebuilt asset bundle (unified `shared-assets-vN` release — one
+ * bundle consumed by every example; this script pins it for simple-rpg).
  *
  * Generated binaries are kept out of git and published as a pinned GitHub
  * Release instead (see assets.lock.json). The shared pool
