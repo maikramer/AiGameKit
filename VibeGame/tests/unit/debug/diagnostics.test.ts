@@ -16,6 +16,22 @@ import {
 beforeEach(() => clearDiagnostics());
 
 describe('diagnostics capture (node environment)', () => {
+  // A jsdom window leaked by an earlier test file would make
+  // installDiagnostics() actually install (jsdom passes the checks),
+  // poisoning the page-global singleton for the fake-browser tests below.
+  let savedWindow: unknown;
+
+  beforeEach(() => {
+    savedWindow = globalThis.window;
+    delete (globalThis as { window?: unknown }).window;
+  });
+
+  afterEach(() => {
+    const g = globalThis as { window?: unknown };
+    if (savedWindow === undefined) delete g.window;
+    else g.window = savedWindow;
+  });
+
   it('is a safe no-op without a browser window', () => {
     const before = diagnosticsCursor();
     expect(installDiagnostics()).toBe(false);

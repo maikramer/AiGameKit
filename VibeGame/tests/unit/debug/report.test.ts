@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'aigamekit-vibegame';
 import { registerDebugVar } from '../../../src/plugins/debug/registry';
 import {
@@ -22,7 +22,27 @@ function freshState(): State {
   return state;
 }
 
-beforeEach(() => clearDiagnostics());
+// Bun runs all test files in one process: a jsdom window/navigator left on
+// globalThis by an earlier file flips report.meta.headless to false and the
+// navigator read can stack-overflow (jsdom getter x os.cpus). This suite owns
+// the browser globals: run headless no matter what leaked.
+const BROWSER_GLOBALS = ['window', 'document', 'navigator'];
+let savedBrowserGlobals: Map<string, unknown> = new Map();
+
+beforeEach(() => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  savedBrowserGlobals = new Map(BROWSER_GLOBALS.map((k) => [k, g[k]]));
+  for (const k of BROWSER_GLOBALS) delete g[k];
+  clearDiagnostics();
+});
+
+afterEach(() => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  for (const [k, v] of savedBrowserGlobals) {
+    if (v === undefined) delete g[k];
+    else g[k] = v;
+  }
+});
 
 describe('agent report', () => {
   it('dumps world counters, named entities, registry and loading gates', () => {
