@@ -36,6 +36,20 @@ pub const DEFAULT_TURN_LAG: f32 = 0.38;
 /// Default terrain clearance (VibeGame plugin default `minTerrainDistance`).
 pub const DEFAULT_MIN_TERRAIN_DISTANCE: f32 = 1.0;
 
+// --- true automatic camera (auto-follow behind the movement heading) ---
+/// Movement speed (m/s) below which the camera stays where it is.
+pub const AUTO_FOLLOW_MIN_SPEED: f32 = 0.8;
+/// Seconds after manual A/D steering before the auto-follow takes over.
+pub const AUTO_FOLLOW_GRACE: f32 = 0.8;
+/// Time constant of the auto-follow swing (larger = lazier repositioning).
+pub const AUTO_FOLLOW_TAU: f32 = 0.45;
+/// Cap on the auto-follow swing (deg/s) — a 180° turnaround is a graceful
+/// sweep, not a whip.
+pub const AUTO_FOLLOW_MAX_RATE: f32 = 140.0;
+/// Auto-follow dead zone (deg) — small enough that the settle error stays
+/// imperceptible; the low-pass already decelerates near the target.
+pub const AUTO_FOLLOW_DEAD_ZONE: f32 = 2.0;
+
 /// Camera-to-target offset for a third-person rig, VibeGame formula: the
 /// pitch ring sits `height` ABOVE the follow point (`desiredY = followY +
 /// height + sin(pitch)·dist`) — the authored `height` is additive framing,
@@ -116,28 +130,90 @@ pub fn terrain_safe_distance(
     has_hit.then_some(min_safe)
 }
 
+/// Yaw that puts the camera BEHIND a character moving along heading
+/// `(x, z)`: the camera forward is `-(sin yaw, cos yaw)`, so behind a run
+/// along `h` is `atan2(-h.x, -h.z)`.
+pub fn behind_yaw_deg(vel_x: f32, vel_z: f32) -> f32 {
+    (-vel_x).atan2(-vel_z).to_degrees()
+}
+
+/// Auto-camera step: swing `yaw_deg` toward the behind-heading yaw when the
+/// character is genuinely moving and the player hasn't steered for
+/// [`AUTO_FOLLOW_GRACE`] seconds. A dead zone stops idle oscillation and the
+/// per-frame step is rate-limited so a 180° turnaround is a graceful sweep,
+/// not a whip.
+pub fn auto_follow_yaw(
+    yaw_deg: f32,
+    vel_x: f32,
+    vel_z: f32,
+    seconds_since_steer: f32,
+    dt: f32,
+) -> f32 {
+    let speed = (vel_x * vel_x + vel_z * vel_z).sqrt();
+    if speed < AUTO_FOLLOW_MIN_SPEED || seconds_since_steer < AUTO_FOLLOW_GRACE {
+        return yaw_deg;
+    }
+    let target = behind_yaw_deg(vel_x, vel_z);
+    let delta = shortest_angle_delta_deg(yaw_deg, target);
+    if delta.abs() < AUTO_FOLLOW_DEAD_ZONE {
+        return yaw_deg;
+    }
+    let step = (delta * low_pass_factor(dt, AUTO_FOLLOW_TAU))
+        .clamp(-AUTO_FOLLOW_MAX_RATE * dt, AUTO_FOLLOW_MAX_RATE * dt);
+    yaw_deg + step
+}
+
+/// Cheap seeded 1-D value noise in [-1, 1] — smooth (smoothstep lattice),
+/// deterministic, no external crate. Feeds the organic camera sway.
+pub fn noise_pm1(t: f32, seed: u32) -> f32 {
+    fn hash01(i: u32) -> f32 {
+        let mut x = i.wrapping_mul(0x9E37_79B9);
+        x ^= x >> 16;
+        x = x.wrapping_mul(0x85EB_CA6B);
+        x ^= x >> 13;
+        (x & 0x00FF_FFFF) as f32 / 0x00FF_FFFF as f32
+    }
+    let x = t + seed as f32 * 17.31;
+    let i = x.floor();
+    let f = x - i;
+    let u = f * f * (3.0 - 2.0 * f);
+    let (i, i1) = (i as i64 as u32, (i as i64 + 1) as u32);
+    hash01(i) * (1.0 - u) + hash01(i1) * u
+}
+
 /// Decoupled third-person follow for target-less `<OrbitCamera>`s (worlds
 /// with a player). Cameras with an explicit `target` stay on the rigid
 /// follow in [`crate::recipes::spawn::orbit_camera_follow`].
 ///
 /// Order matters: run AFTER [`crate::player::player_movement`], which steers
-/// `OrbitCamera::yaw_deg` with A/D — this system trails it smoothly.
+/// `OrbitCamera::yaw_deg` with A/D — this system auto-follows the movement
+/// heading and trails everything smoothly.
 #[allow(clippy::type_complexity)]
 pub fn third_person_camera(
     time: Res<Time>,
     mut cameras: Query<(&mut Transform, &mut OrbitCamera)>,
-    players: Query<&GlobalTransform, With<Player>>,
+    players: Query<(&GlobalTransform, &Player), With<Player>>,
     runtime: Option<Res<TerrainRuntime>>,
 ) {
-    let Some(target) = players.iter().next() else {
+    let Some((target, player)) = players.iter().next() else {
         return;
     };
     let target_pos = target.translation();
     let dt = time.delta_secs();
+    let now = time.elapsed_secs();
     for (mut transform, mut cam) in &mut cameras {
         if cam.target.is_some() {
             continue; // named-target camera: rigid follow owns it
         }
+        // TRUE automatic camera: when the character runs and the player isn't
+        // steering, the rig swings around behind the movement heading.
+        cam.yaw_deg = auto_follow_yaw(
+            cam.yaw_deg,
+            player.vel_x,
+            player.vel_z,
+            now - player.last_steer_time,
+            dt,
+        );
         // First frame: snap the smoothed state onto the target (no startup
         // swoop from the world origin).
         if !cam.initialized {
@@ -219,7 +295,15 @@ pub fn third_person_camera(
         let cur = cam.current_pos;
         cam.current_pos = cur + (safe - cur) * sf;
 
-        transform.translation = cam.current_pos;
+        // Organic sway (handheld breathing): two octave layers of slow value
+        // noise on the RENDERED position only — `current_pos` stays clean, so
+        // the noise never feeds back or accumulates.
+        let sway = Vec3::new(
+            noise_pm1(now * 0.35, 1) * 0.05 + noise_pm1(now * 1.1, 7) * 0.02,
+            noise_pm1(now * 0.3, 2) * 0.04,
+            noise_pm1(now * 0.35, 3) * 0.05 + noise_pm1(now * 1.1, 8) * 0.02,
+        );
+        transform.translation = cam.current_pos + sway;
         transform.look_at(cam.follow_point + Vec3::Y * LOOK_PIVOT_HEIGHT, Vec3::Y);
     }
 }
@@ -331,6 +415,77 @@ mod tests {
             max_val = max_val.max(smooth);
         }
         assert!(max_val <= steered + 1e-3, "no overshoot: {max_val}");
+    }
+
+    #[test]
+    fn test_behind_yaw_matches_heading() {
+        // Running into -Z: the camera must sit on +Z behind the character.
+        let yaw = behind_yaw_deg(0.0, -4.0);
+        assert!(approx(yaw, 0.0), "run -Z → yaw 0: {yaw}");
+        // Running along +X: camera swings to -X side.
+        let yaw = behind_yaw_deg(4.0, 0.0);
+        assert!(approx(shortest_angle_delta_deg(yaw, -90.0), 0.0), "{yaw}");
+    }
+
+    #[test]
+    fn test_auto_follow_swallows_behind_heading() {
+        // Camera starts at yaw 0, character runs along +X at 4 m/s, no
+        // steering for > grace: the yaw must sweep to -90° (behind the run).
+        let dt = 1.0 / 60.0;
+        let mut yaw = 0.0f32;
+        for _ in 0..600 {
+            yaw = auto_follow_yaw(yaw, 4.0, 0.0, 10.0, dt);
+        }
+        assert!(
+            (shortest_angle_delta_deg(yaw, -90.0)).abs() < 2.5,
+            "auto yaw settled at {yaw}"
+        );
+        // Rate limit: the first frame moves well under the 140°/s ceiling.
+        let first = auto_follow_yaw(0.0, 4.0, 0.0, 10.0, dt);
+        assert!(first < 0.0 && first.abs() < 140.0 * dt + 1e-3, "{first}");
+        // Dead zone: a sub-degree misalignment is left alone (no idle
+        // oscillation).
+        assert!(approx(auto_follow_yaw(-89.5, 4.0, 0.0, 10.0, dt), -89.5));
+    }
+
+    #[test]
+    fn test_auto_follow_respects_speed_and_grace() {
+        // Below the speed threshold: no auto rotation.
+        assert!(approx(
+            auto_follow_yaw(30.0, 0.5, 0.0, 10.0, 1.0 / 60.0),
+            30.0
+        ));
+        // Standing still: none either.
+        assert!(approx(
+            auto_follow_yaw(30.0, 0.0, 0.0, 10.0, 1.0 / 60.0),
+            30.0
+        ));
+        // Moving fast but the player steered 0.2 s ago (< grace): none.
+        assert!(approx(
+            auto_follow_yaw(30.0, 4.0, 0.0, 0.2, 1.0 / 60.0),
+            30.0
+        ));
+    }
+
+    #[test]
+    fn test_noise_bounded_deterministic_and_smooth() {
+        // Bounded in [-1, 1] and deterministic.
+        for i in 0..200 {
+            let t = i as f32 * 0.037;
+            let n = noise_pm1(t, 3);
+            assert!((-1.0..=1.0).contains(&n), "t={t} n={n}");
+            assert_eq!(noise_pm1(t, 3), n, "deterministic");
+        }
+        // Smooth: consecutive samples differ by far less than the range.
+        let mut prev = noise_pm1(0.0, 5);
+        for i in 1..400 {
+            let t = i as f32 * 1.0 / 60.0;
+            let n = noise_pm1(t, 5);
+            assert!((n - prev).abs() < 0.2, "jump at t={t}: {prev}→{n}");
+            prev = n;
+        }
+        // Different seeds are uncorrelated enough to use as separate axes.
+        assert!((noise_pm1(1.234, 1) - noise_pm1(1.234, 2)).abs() > 1e-3);
     }
 
     #[test]

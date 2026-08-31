@@ -10,6 +10,7 @@ use bevy::math::Quat;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 
+use crate::camera::low_pass_factor;
 use crate::recipes::spawn::{DialogueNpc, OrbitCamera};
 use crate::terrain::runtime::TerrainRuntime;
 
@@ -30,6 +31,26 @@ pub const JUMP_BUFFER: f32 = 0.1;
 pub const COYOTE_TIME: f32 = 0.1;
 /// Cooldown between jumps (VibeGame `JUMP_CONSTANTS.cooldown` = 0.2 s).
 pub const JUMP_COOLDOWN: f32 = 0.2;
+/// Time constant to REACH the input velocity (acceleration feel). Larger =
+/// heavier, more inertia ramping up.
+pub const ACCEL_TAU: f32 = 0.08;
+/// Time constant to bleed the velocity back to zero when input stops
+/// (drag / skid feel). Larger = more drift on release.
+pub const DECEL_TAU: f32 = 0.14;
+/// Time constant while airborne: jumps keep their momentum (drifty arcs)
+/// instead of tracking input instantly.
+pub const AIR_TAU: f32 = 0.3;
+
+/// Smoothed-velocity time constant for the current motion state.
+pub fn movement_tau(grounded: bool, input_active: bool) -> f32 {
+    if !grounded {
+        AIR_TAU
+    } else if input_active {
+        ACCEL_TAU
+    } else {
+        DECEL_TAU
+    }
+}
 
 /// The controllable hero (VibeGame `PlayerController` subset).
 #[derive(Debug, Component)]
@@ -44,6 +65,10 @@ pub struct Player {
     pub rotation_speed: f32,
     /// Vertical velocity (jump / gravity integration).
     pub vel_y: f32,
+    /// Smoothed horizontal velocity (m/s) — carries the inertia/drag feel;
+    /// the auto-camera reads it for the movement heading.
+    pub vel_x: f32,
+    pub vel_z: f32,
     /// True while standing on the terrain surface.
     pub grounded: bool,
     /// Jump allowed again once the cooldown elapses (VibeGame `canJump`).
@@ -57,6 +82,9 @@ pub struct Player {
     pub last_grounded_time: f32,
     /// Time of the last jump press — drives the input buffer.
     pub jump_buffer_time: f32,
+    /// Time of the last A/D steering frame — the auto-camera hands control
+    /// back to the player for a grace period after manual steering.
+    pub last_steer_time: f32,
 }
 
 impl Default for Player {
@@ -67,12 +95,15 @@ impl Default for Player {
             jump_height: 2.3,
             rotation_speed: 10.0,
             vel_y: 0.0,
+            vel_x: 0.0,
+            vel_z: 0.0,
             grounded: true,
             can_jump: true,
             is_jumping: false,
             jump_cooldown: 0.0,
             last_grounded_time: f32::NEG_INFINITY,
             jump_buffer_time: f32::NEG_INFINITY,
+            last_steer_time: f32::NEG_INFINITY,
         }
     }
 }
@@ -190,11 +221,15 @@ pub fn player_movement(
         }
 
         // Steering: A/D turn the camera; the character heading follows it.
-        // The yaw itself is smoothed by the camera system (turnLag).
+        // The yaw itself is smoothed by the camera system (turnLag), and the
+        // auto-follow hands control back after a grace period.
         let mut camera_yaw_deg = 0.0f32;
         if let Some(mut cam) = cameras.iter_mut().next() {
             cam.yaw_deg -= move_x * CAMERA_TURN_SPEED * dt;
             camera_yaw_deg = cam.yaw_deg;
+        }
+        if move_x != 0.0 {
+            player.last_steer_time = now;
         }
         let strafe = move_x * SIDE_MOVE_FACTOR;
 
@@ -206,7 +241,15 @@ pub fn player_movement(
             1.0
         };
         let desired = dir * player.speed * sprint_mult * input_mag;
-        let mut motion = desired * dt;
+
+        // Inertia & drag: the actual velocity chases the input velocity
+        // through a state-dependent low-pass (accel ramp, release skid,
+        // drifty airborne arcs) — instant velocity reads as "stiff".
+        let tau = movement_tau(player.grounded, dir.length_squared() > 0.0);
+        let a = low_pass_factor(dt, tau);
+        player.vel_x += (desired.x - player.vel_x) * a;
+        player.vel_z += (desired.z - player.vel_z) * a;
+        let mut motion = Vec3::new(player.vel_x, 0.0, player.vel_z) * dt;
 
         // Facing: slerp toward the move heading at `rotation_speed` rad/s,
         // only while moving (VibeGame rotation mode 1 — idle keeps facing).
@@ -433,6 +476,49 @@ mod tests {
         assert!(f < 0.15, "small dt → small factor: {f}");
         // big dt reaches the target exactly
         assert_eq!(facing_slerp_factor(id, quarter, 10.0, 5.0), 1.0);
+    }
+
+    #[test]
+    fn test_movement_tau_states() {
+        assert_eq!(movement_tau(true, true), ACCEL_TAU);
+        assert_eq!(movement_tau(true, false), DECEL_TAU);
+        assert_eq!(movement_tau(false, true), AIR_TAU);
+        assert_eq!(movement_tau(false, false), AIR_TAU);
+    }
+
+    #[test]
+    fn test_inertia_ramp_and_drag() {
+        let dt = 1.0 / 60.0;
+        // Acceleration: ~90 % of walk speed after tau·ln(10) ≈ 0.18 s
+        // (≈ 11 frames at 60 fps) — a perceptible ramp, not instant.
+        let mut v = 0.0f32;
+        let mut frames_to_90 = 0u32;
+        for i in 1..=120 {
+            v += (4.0 - v) * low_pass_factor(dt, movement_tau(true, true));
+            if frames_to_90 == 0 && v >= 3.6 {
+                frames_to_90 = i;
+            }
+        }
+        assert!(
+            (10..=14).contains(&frames_to_90),
+            "90 % speed after {frames_to_90} frames"
+        );
+        // Drag on release: ~10 % left after tau·ln(10) ≈ 0.32 s (≈ 19 frames)
+        // — a skid, not a stop.
+        let mut v = 4.0f32;
+        let mut frames_to_10 = 0u32;
+        for i in 1..=120 {
+            v += (0.0 - v) * low_pass_factor(dt, movement_tau(true, false));
+            if frames_to_10 == 0 && v <= 0.4 {
+                frames_to_10 = i;
+            }
+        }
+        assert!(
+            (17..=22).contains(&frames_to_10),
+            "10 % speed after {frames_to_10} frames"
+        );
+        // Airborne: much floatier (momentum through jump arcs).
+        assert!(movement_tau(false, true) > movement_tau(true, true) * 2.0);
     }
 
     #[test]
