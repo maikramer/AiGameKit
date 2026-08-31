@@ -89,7 +89,10 @@ fn is_ground_feature(kind: &EntityKind) -> bool {
     )
 }
 
-fn collect_terrain(specs: &[EntitySpec], out: &mut PendingTerrain) {
+/// Collects the terrain spec and every ground feature out of a parsed entity
+/// tree into `out` — the same pass `startup` runs, exposed so headless tools
+/// and tests can carve a world without booting the app.
+pub fn collect_terrain(specs: &[EntitySpec], out: &mut PendingTerrain) {
     collect_walk(specs, Vec2::ZERO, out);
 }
 
@@ -215,7 +218,7 @@ pub fn startup(world: &mut World) {
     });
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
-    let (chips, hud_elements, mixer_settings) = {
+    let (chips, hud_elements, mixer_settings, pending_worldsys) = {
         let mut ctx = SpawnCtx {
             meshes: &mut meshes,
             materials: &mut materials,
@@ -224,6 +227,7 @@ pub fn startup(world: &mut World) {
             mixer: std::cell::RefCell::new(None),
             chips: std::cell::RefCell::new(Vec::new()),
             hud: std::cell::RefCell::new(Vec::new()),
+            worldsys: Default::default(),
         };
         for spec in &parsed.entities {
             if is_ground_feature(&spec.kind) {
@@ -233,7 +237,13 @@ pub fn startup(world: &mut World) {
         }
         let hud_elements = ctx.hud.into_inner();
         let mixer = ctx.mixer.into_inner();
-        (ctx.chips.into_inner(), hud_elements, mixer)
+        let pending_worldsys = ctx.worldsys.consume();
+        (
+            ctx.chips.into_inner(),
+            hud_elements,
+            mixer,
+            pending_worldsys,
+        )
     };
     if let Some(light) = ambient {
         world.insert_resource(light);
@@ -254,6 +264,21 @@ pub fn startup(world: &mut World) {
     }
     for (tag, attrs) in &hud_elements {
         crate::hud::spawn_hud(world, tag, attrs);
+    }
+    if let Some(day) = pending_worldsys.day_cycle {
+        world.insert_resource(day);
+    }
+    if let Some(weather) = pending_worldsys.weather {
+        world.insert_resource(weather);
+    }
+    if let Some(border) = pending_worldsys.border {
+        world.insert_resource(border);
+    }
+    for biome in pending_worldsys.biomes {
+        world.insert_resource(biome);
+    }
+    for config in pending_worldsys.configs {
+        world.insert_resource(config);
     }
     if let Some(mixer) = mixer_settings {
         world.insert_resource(mixer);
@@ -290,6 +315,8 @@ struct SpawnCtx<'a> {
     chips: std::cell::RefCell<Vec<(usize, String)>>,
     /// Deferred HUD screen elements (tag + raw attrs).
     hud: std::cell::RefCell<HudList>,
+    /// Deferred world-system resources (DayCycle/Weather/border/biomes/config).
+    worldsys: crate::worldsys::PendingWorldSystems,
 }
 
 /// Recursively collect `<StaticSpawner>` specs and start their template loads.
@@ -364,7 +391,12 @@ fn spawn_entity(
         entity.insert(Name::new(name.clone()));
     }
     match &spec.kind {
-        EntityKind::Group => {}
+        EntityKind::Group => {
+            // Grupos autorais a y≈0 assentam no terreno real (a vila fica a
+            // ~24.6 m no heightmap); conteúdo autoral elevado mantém offset
+            // relativo ao novo y.
+            entity.insert(crate::worldsys::SeatOnTerrain);
+        }
         EntityKind::ParticleSystem { spec } => {
             let resolved = crate::particles::resolve(spec);
             let capacity = crate::particles::emitter_capacity(&resolved);
@@ -557,7 +589,7 @@ fn spawn_entity(
             let handle: Handle<Gltf> = ctx.asset_server.load(path.to_owned());
             entity.insert((
                 GltfScenePending { handle },
-                crate::player::Player { speed: 6.0 },
+                crate::player::Player::default(),
             ));
         }
         // Ground features + `<Terrain>` + spawner groups return before the
@@ -572,6 +604,73 @@ fn spawn_entity(
         | EntityKind::DynamicSpawner { .. }
         | EntityKind::SpawnExclusion { .. }
         | EntityKind::Vegetation { .. } => {}
+        // World-system elements defer resources via ctx (entity borrows world):
+        EntityKind::DayCycle {
+            minute_of_day,
+            minutes_per_real_second,
+            dawn_minute,
+            dusk_minute,
+            ambient_day,
+            ambient_night,
+            drive_ambient,
+        } => {
+            ctx.worldsys.day_cycle = Some(crate::worldsys::DayCycleState::from_parts(
+                *minute_of_day,
+                *minutes_per_real_second,
+                *dawn_minute,
+                *dusk_minute,
+                *ambient_day,
+                *ambient_night,
+                *drive_ambient,
+            ));
+        }
+        EntityKind::Weather {
+            wind,
+            wind_strength,
+            clouds,
+            rain,
+            cycle,
+        } => {
+            ctx.worldsys.weather = Some(crate::worldsys::WeatherState {
+                wind: *wind,
+                wind_strength: *wind_strength,
+                clouds: *clouds,
+                rain: *rain,
+                cycle: *cycle,
+            });
+        }
+        EntityKind::BiomeRegion {
+            id,
+            polygon,
+            fog_density,
+            tint,
+        } => {
+            ctx.worldsys.biomes.push(crate::worldsys::BiomeRegionData {
+                id: id.clone(),
+                polygon: polygon.clone(),
+                fog_density: *fog_density,
+                tint: *tint,
+            });
+        }
+        EntityKind::WorldBorder {
+            radius,
+            warn_seconds,
+            margin,
+        } => {
+            ctx.worldsys.border = Some(crate::worldsys::WorldBorderConfig {
+                radius: *radius,
+                warn_seconds: *warn_seconds,
+                margin: *margin,
+            });
+        }
+        EntityKind::EngineConfig { tag, attrs } => {
+            ctx.worldsys
+                .configs
+                .push(crate::worldsys::EngineConfigData {
+                    tag: tag.clone(),
+                    attrs: attrs.clone(),
+                });
+        }
     }
     stats.entities += 1;
     let id = entity.id();
@@ -641,6 +740,7 @@ pub fn orbit_camera_follow(
     mut cameras: Query<(&mut Transform, &OrbitCamera)>,
     names: Query<(Entity, &Name)>,
     globals: Query<&GlobalTransform>,
+    runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
 ) {
     for (mut cam, settings) in &mut cameras {
         let target_pos = match &settings.target {
@@ -658,6 +758,13 @@ pub fn orbit_camera_follow(
             settings.distance,
         );
         cam.translation = target_pos + offset;
+        // Never sink below the terrain surface (VibeGame minTerrainDistance).
+        if let Some(runtime) = runtime.as_deref() {
+            let min_y = runtime.sample(cam.translation.x, cam.translation.z) + 1.0;
+            if cam.translation.y < min_y {
+                cam.translation.y = min_y;
+            }
+        }
         cam.look_at(target_pos + Vec3::Y * 1.2, Vec3::Y);
     }
 }
