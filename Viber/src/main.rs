@@ -267,8 +267,18 @@ fn analyze(path: &Path, strict: bool) -> Result<()> {
             summary.road_networks
         );
     }
-    if summary.static_spawners > 0 {
-        println!("  spawn groups: {}", summary.static_spawners);
+    if summary.static_spawners > 0
+        || summary.dynamic_spawners > 0
+        || summary.vegetation > 0
+        || summary.spawn_exclusions > 0
+    {
+        println!(
+            "  spawn groups: {} static, {} dynamic, {} vegetation ({} exclusion zones)",
+            summary.static_spawners,
+            summary.dynamic_spawners,
+            summary.vegetation,
+            summary.spawn_exclusions
+        );
     }
     if !world.skipped_tags.is_empty() {
         let total: usize = world.skipped_tags.values().sum();

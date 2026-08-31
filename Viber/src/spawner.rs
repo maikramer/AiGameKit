@@ -47,6 +47,13 @@ impl Rng {
     }
 }
 
+/// Global no-spawn circle (`<SpawnExclusion at="x z" radius="n">`).
+#[derive(Debug, Clone, Copy)]
+pub struct SpawnExclusion {
+    pub center: bevy::math::Vec2,
+    pub radius: f32,
+}
+
 /// One placed template instance.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlacedInstance {
@@ -100,6 +107,7 @@ fn next_candidate(
 /// the original engine's bounded-retry behaviour.
 pub fn compute_placements(
     spec: &StaticSpawnerSpec,
+    exclusions: &[SpawnExclusion],
     sample: &mut dyn FnMut(f32, f32) -> TerrainSample,
 ) -> Vec<PlacedInstance> {
     let mut rng = Rng::new(spec.seed ^ 0x5EED_5EED_5EED_5EED);
@@ -127,6 +135,12 @@ pub fn compute_placements(
         }
         let pos = next_candidate(spec, &mut rng, &clusters);
         if spec.max_distance > 0.0 && pos.length() > spec.max_distance {
+            continue;
+        }
+        if exclusions
+            .iter()
+            .any(|e| (pos - e.center).length() < e.radius)
+        {
             continue;
         }
         let terrain = sample(pos.x, pos.y);
@@ -189,6 +203,8 @@ pub struct SpawnGroupState {
 #[derive(Resource)]
 pub struct PendingSpawnGroups {
     pub groups: Vec<SpawnGroupState>,
+    /// `<SpawnExclusion>` circles collected across the whole world.
+    pub exclusions: Vec<SpawnExclusion>,
 }
 
 /// Spawn every instance of every loaded spawner group. Runs each frame until
@@ -206,6 +222,7 @@ pub fn instantiate_spawn_groups(
     let Some(runtime) = runtime else {
         return; // terrain bootstrap has not published the carved world yet
     };
+    let exclusions = pending.exclusions.clone();
     let mut all_done = true;
     for group in &mut pending.groups {
         if group.done {
@@ -259,7 +276,7 @@ pub fn instantiate_spawn_groups(
             normal: grid.sample_normal(x, z, 0.5),
             water: runtime.in_water(x, z),
         };
-        for instance in compute_placements(&group.spec, &mut sample) {
+        for instance in compute_placements(&group.spec, &exclusions, &mut sample) {
             let mut transform = Transform::from_translation(instance.position);
             transform.rotation = bevy::math::Quat::from_rotation_y(instance.yaw_deg.to_radians());
             transform.scale = instance.scale;
@@ -332,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_placements_respect_count_region_and_height() {
-        let out = compute_placements(&spec(), &mut flat);
+        let out = compute_placements(&spec(), &[], &mut flat);
         assert_eq!(out.len(), 10);
         for instance in &out {
             assert!(instance.position.x >= -100.0 && instance.position.x <= 100.0);
@@ -346,8 +363,8 @@ mod tests {
 
     #[test]
     fn test_placements_are_deterministic() {
-        let a = compute_placements(&spec(), &mut flat);
-        let b = compute_placements(&spec(), &mut flat);
+        let a = compute_placements(&spec(), &[], &mut flat);
+        let b = compute_placements(&spec(), &[], &mut flat);
         assert_eq!(a, b);
     }
 
@@ -355,7 +372,7 @@ mod tests {
     fn test_slope_filter_rejects_steep_terrain() {
         let mut s = spec();
         s.max_slope_deg = 40.0;
-        let out = compute_placements(&s, &mut |_: f32, _: f32| TerrainSample {
+        let out = compute_placements(&s, &[], &mut |_: f32, _: f32| TerrainSample {
             height: 0.0,
             normal: Vec3::new(1.0, 0.2, 0.0),
             water: false,
@@ -367,7 +384,7 @@ mod tests {
     fn test_water_filter_rejects_water() {
         let mut s = spec();
         s.avoid_water = true;
-        let out = compute_placements(&s, &mut |_: f32, _: f32| TerrainSample {
+        let out = compute_placements(&s, &[], &mut |_: f32, _: f32| TerrainSample {
             height: -1.0,
             normal: Vec3::Y,
             water: true,
@@ -383,8 +400,65 @@ mod tests {
         s.footprint_radius = 5.0;
         s.region_min = [0.0, 0.0, 0.0];
         s.region_max = [1.0, 0.0, 1.0]; // everything within 5 m of everything
-        let out = compute_placements(&s, &mut flat);
+        let out = compute_placements(&s, &[], &mut flat);
         assert_eq!(out.len(), 1, "only the first candidate fits the footprint");
+    }
+
+    #[test]
+    fn test_spawn_exclusion_rejects_circle() {
+        let mut s = spec();
+        s.count = 20;
+        // flat terrain everywhere; the whole region is otherwise valid
+        let mut no_excl = compute_placements(&s, &[], &mut flat);
+        let with_excl = compute_placements(
+            &s,
+            &[SpawnExclusion {
+                center: bevy::math::Vec2::ZERO,
+                radius: 150.0,
+            }],
+            &mut flat,
+        );
+        assert!(!no_excl.is_empty());
+        // every instance outside the exclusion circle
+        for instance in &with_excl {
+            let d = bevy::math::Vec2::new(instance.position.x, instance.position.z).length();
+            assert!(
+                d >= 150.0,
+                "instance at {d:.1} m inside the 150 m exclusion"
+            );
+        }
+        no_excl.clear();
+    }
+
+    #[test]
+    fn test_vegetation_spec_to_spawner_spec_caps_count() {
+        let mut v = crate::recipes::VegetationSpec {
+            meshes: vec!["/assets/meshes/vegetation/grass.glb".into()],
+            density_per_km2: 100_000.0,
+            seed: 601,
+            region_min: [-190.0, 0.0, 116.0],
+            region_max: [190.0, 0.0, 380.0],
+            scale_min: 0.9,
+            scale_max: 1.5,
+            scale_axis_min: 0.9,
+            scale_axis_max: 1.1,
+            max_slope_deg: 26.0,
+            avoid_water: true,
+            max_distance: 110.0,
+            cluster_count: 128,
+            cluster_radius: 8.8,
+            max_instances: 800,
+        };
+        // 380×264 m = 0.1 km² × 100k = ~10 028 → capped at 800
+        assert_eq!(v.instance_count(), 800);
+        let group = v.to_spawner_spec();
+        assert_eq!(group.count, 800);
+        assert_eq!(group.template_urls.len(), 1);
+        assert!(group.avoid_water && group.random_yaw);
+        // small density: uncapped, rounded up
+        v.density_per_km2 = 100.0;
+        v.max_instances = 800;
+        assert_eq!(v.instance_count(), 11);
     }
 
     #[test]
@@ -393,7 +467,7 @@ mod tests {
         s.random_yaw = true;
         s.scale_min = 0.8;
         s.scale_max = 1.4;
-        let out = compute_placements(&s, &mut flat);
+        let out = compute_placements(&s, &[], &mut flat);
         let yaws: Vec<f32> = out.iter().map(|i| i.yaw_deg).collect();
         assert!(yaws.iter().any(|y| *y > 0.0), "yaws should vary: {yaws:?}");
         for instance in &out {

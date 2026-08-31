@@ -43,6 +43,9 @@ pub const KNOWN_TAGS: &[&str] = &[
     "gltfscene",
     "staticspawner",
     "particlesystem",
+    "spawnexclusion",
+    "dynamicspawner",
+    "vegetation",
 ];
 
 /// A parsed world: clear color, entity tree and non-fatal warnings.
@@ -163,6 +166,15 @@ pub enum EntityKind {
     /// (posições determinísticas por `seed`; regras de água/declive/sobreposição).
     /// Consumido pelo runtime de spawner, não spawna entidade própria.
     StaticSpawner { spec: StaticSpawnerSpec },
+    /// `<DynamicSpawner>` — mesmas regras de colocação do StaticSpawner; as
+    /// entidades nascem marcadas como criaturas (IA/combat chegam com scripts).
+    DynamicSpawner { spec: StaticSpawnerSpec },
+    /// `<SpawnExclusion>` — círculo global onde spawners não colocam instâncias.
+    /// Recolhido num recurso global, não spawna entidade.
+    SpawnExclusion { center: [f32; 2], radius: f32 },
+    /// `<Vegetation>` — erva/flores densas por densidade/km² (convertida num
+    /// grupo de spawner com cap; instancing GPU é follow-up).
+    Vegetation { spec: VegetationSpec },
     /// `<ParticleSystem>` — emissor de partículas (fogueiras, poeira, clima).
     /// Entity própria; emissor CPU billboard desenhado em `particles`.
     ParticleSystem { spec: ParticleSpec },
@@ -208,6 +220,68 @@ pub struct StaticSpawnerSpec {
     /// glTF urls found in the template subtree (GLTFLoader/GltfScene), in
     /// document order; one is picked per instance via the seeded RNG.
     pub template_urls: Vec<String>,
+}
+
+/// `<Vegetation>`: dense foliage spread by density per km². The original
+/// engine GPU-instances ~100k quads; Viber spawns template scenes with a
+/// per-tag safety cap instead.
+#[derive(Debug, Clone)]
+pub struct VegetationSpec {
+    pub meshes: Vec<String>,
+    pub density_per_km2: f32,
+    pub seed: u64,
+    pub region_min: [f32; 3],
+    pub region_max: [f32; 3],
+    pub scale_min: f32,
+    pub scale_max: f32,
+    pub scale_axis_min: f32,
+    pub scale_axis_max: f32,
+    pub max_slope_deg: f32,
+    pub avoid_water: bool,
+    pub max_distance: f32,
+    pub cluster_count: u32,
+    pub cluster_radius: f32,
+    /// Viber-specific instance cap (default 800 per tag).
+    pub max_instances: u32,
+}
+
+impl VegetationSpec {
+    /// Region area in km² (XZ extents).
+    pub fn area_km2(&self) -> f32 {
+        let dx = (self.region_max[0] - self.region_min[0]).abs();
+        let dz = (self.region_max[2] - self.region_min[2]).abs();
+        (dx * dz) / 1.0e6
+    }
+
+    /// Instance count: density × area, clamped to the safety cap.
+    pub fn instance_count(&self) -> u32 {
+        let target = (self.area_km2() * self.density_per_km2).ceil();
+        target.min(self.max_instances as f32) as u32
+    }
+
+    /// Convert to a placement spec consumable by the spawner runtime.
+    pub fn to_spawner_spec(&self) -> StaticSpawnerSpec {
+        StaticSpawnerSpec {
+            seed: self.seed,
+            count: self.instance_count(),
+            region_min: self.region_min,
+            region_max: self.region_max,
+            cluster_count: self.cluster_count,
+            cluster_radius: self.cluster_radius,
+            footprint_radius: 0.4,
+            avoid_overlaps: false,
+            max_slope_deg: self.max_slope_deg,
+            avoid_water: self.avoid_water,
+            align_to_terrain: true,
+            scale_min: self.scale_min,
+            scale_max: self.scale_max,
+            scale_axis_min: self.scale_axis_min,
+            scale_axis_max: self.scale_axis_max,
+            random_yaw: true,
+            max_distance: self.max_distance,
+            template_urls: self.meshes.clone(),
+        }
+    }
 }
 
 /// A resolved recipe: everything needed to spawn one Bevy entity.
@@ -306,7 +380,10 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
                 Ok(None)
             }
         },
-        "staticspawner" => finish_static_spawner(node, ctx).map(Some),
+        "staticspawner" => finish_static_spawner(node, false, ctx).map(Some),
+        "dynamicspawner" => finish_static_spawner(node, true, ctx).map(Some),
+        "spawnexclusion" => finish_spawn_exclusion(node, ctx).map(Some),
+        "vegetation" => finish_vegetation(node, ctx).map(Some),
         "particlesystem" => finish_particle_system(node, ctx).map(Some),
         "terrain" => finish_terrain(node, ctx).map(Some),
         "terrainpad" => finish_terrain_pad(node, ctx).map(Some),
@@ -646,7 +723,7 @@ fn collect_template_urls(node: &XmlNode, out: &mut Vec<String>) {
     }
 }
 
-fn finish_static_spawner(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut spec = StaticSpawnerSpec {
@@ -678,7 +755,11 @@ fn finish_static_spawner(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpe
             tag: common.tag,
             script: common.script,
             transform: common.transform,
-            kind: EntityKind::StaticSpawner { spec },
+            kind: if dynamic {
+                EntityKind::DynamicSpawner { spec }
+            } else {
+                EntityKind::StaticSpawner { spec }
+            },
             children: Vec::new(),
         });
     }
@@ -715,7 +796,11 @@ fn finish_static_spawner(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpe
         tag: common.tag,
         script: common.script,
         transform: common.transform,
-        kind: EntityKind::StaticSpawner { spec },
+        kind: if dynamic {
+            EntityKind::DynamicSpawner { spec }
+        } else {
+            EntityKind::StaticSpawner { spec }
+        },
         children: Vec::new(),
     })
 }
@@ -803,6 +888,104 @@ fn finish_particle_system(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
         script: common.script,
         transform: common.transform,
         kind: EntityKind::ParticleSystem { spec },
+        children: Vec::new(),
+    })
+}
+
+/// `<SpawnExclusion at="x z" radius="N">` — global no-spawn circle.
+fn finish_spawn_exclusion(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut center = [0.0_f32, 0.0];
+    let mut radius = 0.0_f32;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "at" => {
+                let v = values::parse_vec2(&value, &kctx)?;
+                center = [v[0], v[1]];
+            }
+            "radius" => radius = values::parse_f32(&value, &kctx)?,
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::SpawnExclusion { center, radius },
+        children: Vec::new(),
+    })
+}
+
+/// `<Vegetation meshes="… …" density-per-km2="…">` — dense foliage.
+fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut spec = VegetationSpec {
+        meshes: Vec::new(),
+        density_per_km2: 0.0,
+        seed: 0,
+        region_min: [0.0; 3],
+        region_max: [0.0; 3],
+        scale_min: 1.0,
+        scale_max: 1.0,
+        scale_axis_min: 0.9,
+        scale_axis_max: 1.1,
+        max_slope_deg: 26.0,
+        avoid_water: true,
+        max_distance: 0.0,
+        cluster_count: 0,
+        cluster_radius: 0.0,
+        max_instances: 800,
+    };
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "meshes" => {
+                spec.meshes = value.split_whitespace().map(str::to_string).collect();
+            }
+            "density-per-km2" => spec.density_per_km2 = values::parse_f32(&value, &kctx)?,
+            "seed" => spec.seed = values::parse_f32(&value, &kctx)? as u64,
+            "region-min" => spec.region_min = values::parse_vec3(&value, &kctx)?,
+            "region-max" => spec.region_max = values::parse_vec3(&value, &kctx)?,
+            "scale-min" => spec.scale_min = values::parse_f32(&value, &kctx)?,
+            "scale-max" => spec.scale_max = values::parse_f32(&value, &kctx)?,
+            "scale-axis-min" => spec.scale_axis_min = values::parse_f32(&value, &kctx)?,
+            "scale-axis-max" => spec.scale_axis_max = values::parse_f32(&value, &kctx)?,
+            "max-slope-deg" => spec.max_slope_deg = values::parse_f32(&value, &kctx)?,
+            "avoid-water" => spec.avoid_water = values::parse_bool(&value, &kctx)?,
+            "max-distance" => spec.max_distance = values::parse_f32(&value, &kctx)?,
+            "cluster-count" => spec.cluster_count = values::parse_f32(&value, &kctx)? as u32,
+            "cluster-radius" => spec.cluster_radius = values::parse_f32(&value, &kctx)?,
+            "max-instances" => spec.max_instances = values::parse_f32(&value, &kctx)? as u32,
+            // accepted no-ops: VibeGame instancing/appearance details
+            "smart"
+            | "wind"
+            | "flower-near-radius"
+            | "flower-density-ratio"
+            | "plant-density-ratio"
+            | "variation"
+            | "profile"
+            | "ground-align" => {}
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    if spec.meshes.is_empty() {
+        ctx.warnings
+            .push(format!("{ctx_tag}: no meshes listed — skipped"));
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::Vegetation { spec },
         children: Vec::new(),
     })
 }
@@ -1312,6 +1495,12 @@ pub struct WorldSummary {
     pub static_spawners: usize,
     /// `<ParticleSystem>` emitters.
     pub particle_systems: usize,
+    /// `<DynamicSpawner>` groups (creature spawns).
+    pub dynamic_spawners: usize,
+    /// `<Vegetation>` groups (converted into spawner groups).
+    pub vegetation: usize,
+    /// `<SpawnExclusion>` no-spawn circles (global constraint).
+    pub spawn_exclusions: usize,
 }
 
 impl WorldSummary {
@@ -1353,6 +1542,9 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::GltfScene { .. } => out.gltf_scenes += 1,
                 EntityKind::StaticSpawner { .. } => out.static_spawners += 1,
                 EntityKind::ParticleSystem { .. } => out.particle_systems += 1,
+                EntityKind::DynamicSpawner { .. } => out.dynamic_spawners += 1,
+                EntityKind::SpawnExclusion { .. } => out.spawn_exclusions += 1,
+                EntityKind::Vegetation { .. } => out.vegetation += 1,
             }
             walk(&spec.children, out);
         }
@@ -1466,13 +1658,13 @@ mod tests {
             &[
                 node("GameObject", &[]),
                 node("GameObject", &[]),
-                node("SpawnExclusion", &[]),
+                node("SpawnGate", &[]),
             ],
         )
         .unwrap();
         assert_eq!(world.entities.len(), 0);
         assert_eq!(world.skipped_tags.get("GameObject"), Some(&2));
-        assert_eq!(world.skipped_tags.get("SpawnExclusion"), Some(&1));
+        assert_eq!(world.skipped_tags.get("SpawnGate"), Some(&1));
         assert!(
             world.warnings.iter().any(|w| w.contains("<GameObject>×2")),
             "{:?}",
@@ -1900,6 +2092,15 @@ mod tests {
                     "ParticleSystem",
                     &[("preset", "fire"), ("transform", "pos: 0 1 2")],
                 ),
+                node("DynamicSpawner", &[("count", "3"), ("seed", "9")]),
+                node("SpawnExclusion", &[("at", "0 0"), ("radius", "52")]),
+                node(
+                    "Vegetation",
+                    &[
+                        ("meshes", "/assets/meshes/vegetation/grass.glb"),
+                        ("density-per-km2", "5000"),
+                    ],
+                ),
             ],
         )
         .unwrap();
@@ -1922,6 +2123,9 @@ mod tests {
                 gltf_scenes: 1,
                 static_spawners: 1,
                 particle_systems: 1,
+                dynamic_spawners: 1,
+                vegetation: 1,
+                spawn_exclusions: 1,
             }
         );
         assert_eq!(summary.entities(), 7);

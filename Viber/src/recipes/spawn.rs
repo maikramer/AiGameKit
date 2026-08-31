@@ -184,9 +184,16 @@ pub fn startup(world: &mut World) {
     // `spawner::instantiate_spawn_groups` places instances once the terrain
     // runtime and the assets are ready.
     let mut spawn_groups = Vec::new();
-    collect_spawn_groups(&parsed.entities, &asset_server, &mut spawn_groups);
+    let mut exclusions = Vec::new();
+    collect_spawn_groups(
+        &parsed.entities,
+        &asset_server,
+        &mut spawn_groups,
+        &mut exclusions,
+    );
     world.insert_resource(crate::spawner::PendingSpawnGroups {
         groups: spawn_groups,
+        exclusions,
     });
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
@@ -234,22 +241,46 @@ fn collect_spawn_groups(
     specs: &[EntitySpec],
     asset_server: &AssetServer,
     out: &mut Vec<crate::spawner::SpawnGroupState>,
+    exclusions: &mut Vec<crate::spawner::SpawnExclusion>,
 ) {
     for spec in specs {
-        if let EntityKind::StaticSpawner { spec } = &spec.kind {
-            let handles = spec
-                .template_urls
-                .iter()
-                .map(|url| asset_server.load::<Gltf>(url.trim_start_matches('/').to_owned()))
-                .collect();
-            out.push(crate::spawner::SpawnGroupState {
-                spec: spec.clone(),
-                handles,
-                done: false,
-            });
-            continue;
+        match &spec.kind {
+            EntityKind::StaticSpawner { spec } | EntityKind::DynamicSpawner { spec } => {
+                let handles = spec
+                    .template_urls
+                    .iter()
+                    .map(|url| asset_server.load::<Gltf>(url.trim_start_matches('/').to_owned()))
+                    .collect();
+                out.push(crate::spawner::SpawnGroupState {
+                    spec: spec.clone(),
+                    handles,
+                    done: false,
+                });
+            }
+            EntityKind::SpawnExclusion { center, radius } => {
+                exclusions.push(crate::spawner::SpawnExclusion {
+                    center: bevy::math::Vec2::new(center[0], center[1]),
+                    radius: *radius,
+                });
+            }
+            EntityKind::Vegetation { spec } => {
+                let spawner_spec = spec.to_spawner_spec();
+                if spawner_spec.count == 0 || spawner_spec.template_urls.is_empty() {
+                    continue;
+                }
+                let handles = spawner_spec
+                    .template_urls
+                    .iter()
+                    .map(|url| asset_server.load::<Gltf>(url.trim_start_matches('/').to_owned()))
+                    .collect();
+                out.push(crate::spawner::SpawnGroupState {
+                    spec: spawner_spec,
+                    handles,
+                    done: false,
+                });
+            }
+            _ => collect_spawn_groups(&spec.children, asset_server, out, exclusions),
         }
-        collect_spawn_groups(&spec.children, asset_server, out);
     }
 }
 
@@ -403,7 +434,10 @@ fn spawn_entity(
         | EntityKind::River { .. }
         | EntityKind::Road { .. }
         | EntityKind::RoadNetwork { .. }
-        | EntityKind::StaticSpawner { .. } => {}
+        | EntityKind::StaticSpawner { .. }
+        | EntityKind::DynamicSpawner { .. }
+        | EntityKind::SpawnExclusion { .. }
+        | EntityKind::Vegetation { .. } => {}
     }
     stats.entities += 1;
     let id = entity.id();

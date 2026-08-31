@@ -50,6 +50,8 @@ GLB_CHUNK_JSON = 0x4E4F534A  # "JSON"
 
 # Any attribute whose name ends in ``url`` (url, model-url, texture-url, ...).
 _URL_RE = re.compile(r"[\w-]*url\s*=\s*\"([^\"]+)\"", re.IGNORECASE)
+# <Vegetation meshes="url1 url2 …"> — space-separated multi-url attribute
+_MESHES_RE = re.compile(r"\bmeshes\s*=\s*\"([^\"]+)\"", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -90,8 +92,11 @@ def glb_extensions_used(data: bytes) -> set[str]:
 # url extraction
 # ---------------------------------------------------------------------------
 def extract_urls(text: str) -> list[str]:
-    """All ``...url="..."`` attribute values, in order of appearance."""
-    return _URL_RE.findall(text)
+    """All ``...url="..."`` values plus space-separated ``meshes="…"`` lists."""
+    urls = _URL_RE.findall(text)
+    for listing in _MESHES_RE.findall(text):
+        urls.extend(listing.split())
+    return urls
 
 
 def collect_urls(world_dir: Path) -> list[str]:
