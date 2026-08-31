@@ -3,7 +3,7 @@ import { defineSoundBank, preloadSounds } from 'aigamekit-vibegame';
 /**
  * Single source of truth for every sound in the game.
  *
- * Todos os clips vêm do pool partilhado (`examples/shared-assets/public/assets/audio`)
+ * Todos os clips vêm do pool partilhado (`Viber/examples/shared-assets/public/assets/audio`)
  * via plugin vibegame({ sharedAssets }) — nenhum binário local. Um jogo pode
  * sobrepor um clip largando um ficheiro com o mesmo caminho no seu `public/`.
  *

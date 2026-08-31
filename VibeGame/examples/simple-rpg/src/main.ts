@@ -599,7 +599,7 @@ const ATTACK_POOLS: Record<string, string[]> = {
   axe: ['sword', 'sworda', 'swordb', 'swordc'],
   spear: ['spear'],
 };
-// Held weapon models live under the shared-assets pool's `meshes/props/`
+// Held weapon models live under the shared-assets pool's `meshes/props/` (Viber/examples/shared-assets)
 // (the flat `/assets/meshes/` root stopped existing when assets migrated to
 // the single pool — a wrong base fails silently and leaves the hand empty).
 const MESH_BASE = '/assets/meshes/props/';

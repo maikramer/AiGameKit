@@ -32,9 +32,10 @@ const nodeStubsPlugin = (): Plugin => ({
   },
 });
 
+// O pool partilhado mudou-se para dentro de Viber/examples (2026-08-31).
 const sharedAssets = path.join(
   vibegameRoot,
-  'examples/shared-assets/public/assets'
+  '../Viber/examples/shared-assets/public/assets'
 );
 
 export default defineConfig({
