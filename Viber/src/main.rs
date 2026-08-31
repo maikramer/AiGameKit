@@ -10,7 +10,9 @@ use clap::{CommandFactory, Parser, Subcommand};
 use viber::bridge::{self, client::BridgeClient};
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
-use viber::{hud, music, particles, player, recipes, scaffold, spawner, terrain, worldsys, xml};
+use viber::{
+    hud, music, particles, physics, player, recipes, scaffold, sky, spawner, terrain, worldsys, xml,
+};
 
 /// Native Bevy engine for AiGameKit declarative worlds.
 #[derive(Parser)]
@@ -326,9 +328,14 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         "Viber — {}",
         path.file_name().and_then(|n| n.to_str()).unwrap_or("world")
     );
-    // Asset root for world-referenced assets (`/assets/...`): the folder that
-    // CONTAINS `assets/` — the world dir itself when it has one (mirrored
-    // assets), else its `public/` (site-style root), else bevy default.
+    // O shader do céu viaja embutido e é escrito no asset root do mundo
+    // (materiais custom resolvem "shaders/sky.wgsl" pela asset root).
+    let world_dir = world_base_dir(path).unwrap_or_else(|| PathBuf::from("."));
+    let shaders_dir = world_dir.join("shaders");
+    let _ = std::fs::create_dir_all(&shaders_dir);
+    let _ = std::fs::write(shaders_dir.join("sky.wgsl"), sky::SKY_WGSL);
+    // Asset root: the folder that CONTAINS `assets/` — the world dir itself
+    // when it has one (mirrored assets), else its `public/`, else default.
     let asset_root = match world_base_dir(path) {
         Some(dir) if dir.join("assets").is_dir() => dir,
         Some(dir) if dir.join("public").is_dir() => dir.join("public"),
@@ -360,6 +367,15 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         world,
         base_dir: world_base_dir(path),
     });
+    // `worldsys::sun_drive` writes it and `sky::sky_update` reads it; nothing
+    // was creating it, so both systems failed parameter validation.
+    app.init_resource::<worldsys::SunState>();
+    // `sky::spawn_sky` needs `Assets<SkyMaterial>`; without this plugin the
+    // startup system panics and leaves `Assets<Mesh>` taken out of the world.
+    app.add_plugins(bevy::pbr::MaterialPlugin::<sky::SkyMaterial>::default());
+    app.add_plugins(physics::PhysicsPlugin {
+        debug: std::env::var_os("VIBER_PHYSICS_DEBUG").is_some(),
+    });
     app.add_plugins(terrain::TerrainPlugin);
     app.add_plugins(terrain::runtime::TerrainFeaturesPlugin);
     app.add_systems(bevy::app::Startup, spawn::startup);
@@ -375,7 +391,10 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             hud::hud_prompt_update,
             music::music_driver,
             worldsys::daycycle_drive,
+            worldsys::sun_drive,
             worldsys::world_border_clamp,
+            sky::sky_follow_camera,
+            sky::sky_update,
             worldsys::seat_statics_once,
             hud::hud_toggle,
             particles::particle_emitter_update,

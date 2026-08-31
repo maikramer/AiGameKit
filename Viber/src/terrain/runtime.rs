@@ -130,6 +130,14 @@ pub fn bootstrap(world: &mut World) {
         .expect("Assets<StandardMaterial> exists before startup systems run");
     let asset_server = world.get_resource::<AssetServer>().cloned();
 
+    // Chunk LODs are picked against the camera the world spawned, so a large
+    // world does not materialise at full detail (see `spawn_chunks`).
+    let camera_xz = world
+        .query_filtered::<&Transform, With<Camera3d>>()
+        .iter(world)
+        .next()
+        .map(|t| Vec2::new(t.translation.x, t.translation.z));
+
     let root = world
         .spawn((
             Name::new("terrain"),
@@ -145,6 +153,7 @@ pub fn bootstrap(world: &mut World) {
         root,
         &spec,
         &grid,
+        camera_xz,
     );
     spawn_water(
         world,
@@ -187,6 +196,17 @@ fn lod0_step(spec: &TerrainSpec) -> usize {
     }
 }
 
+/// Spawns the terrain's chunk meshes.
+///
+/// Each chunk is built at the LOD its distance from `camera_xz` implies — the
+/// same selection [`super::plugin`] applies every frame — and chunks past
+/// `render_distance` are left for the plugin to spawn on approach. Building
+/// the whole field at LOD 0 is not viable: `simple-rpg` is a 4000 m world with
+/// the default 64 m chunk, i.e. 3969 chunks, and at LOD 0 that is ~18 M
+/// vertices of resident mesh — the host ran out of memory before the window
+/// ever opened. Picking LODs up front keeps distant chunks at a few hundred
+/// vertices each.
+#[allow(clippy::too_many_arguments)]
 fn spawn_chunks(
     world: &mut World,
     meshes: &mut Assets<Mesh>,
@@ -195,6 +215,7 @@ fn spawn_chunks(
     parent: Entity,
     spec: &TerrainSpec,
     grid: &BrushGrid,
+    camera_xz: Option<Vec2>,
 ) {
     let step = lod0_step(spec);
     let segments = (spec.chunk_size / step as f32).round() as usize;
@@ -224,13 +245,28 @@ fn spawn_chunks(
     let terrain_material = materials.add(material);
 
     let half = spec.world_size * 0.5;
+    let max_lod = super::plugin::max_lod_for(spec, edge);
+    let margin = super::plugin::hysteresis_margin(spec);
     for cz in 0..rows {
         for cx in 0..rows {
             let origin = Vec3::new(-half + cx as f32 * edge, 0.0, -half + cz as f32 * edge);
+            let center = Vec2::new(origin.x + edge * 0.5, origin.z + edge * 0.5);
+            let distance = camera_xz.map(|cam| cam.distance(center));
+            if let (Some(render_distance), Some(distance)) = (spec.render_distance, distance) {
+                // The plugin spawns these at LOD 0 once the camera approaches.
+                if distance > render_distance {
+                    continue;
+                }
+            }
+            // Without a camera every chunk is "near"; that only happens in
+            // headless setups with no view, where LOD 0 is the safe answer.
+            let lod = distance
+                .map(|d| super::plugin::select_lod(d, spec.lod_distance(), 0, max_lod, margin))
+                .unwrap_or(0);
             let params = ChunkMeshParams {
                 origin,
                 size: edge,
-                lod_step: step,
+                lod_step: step << lod,
                 skirt_depth: spec.skirt_depth_meters(),
                 normal_epsilon: epsilon,
                 texture_tile_size: spec.texture_tile_size,
@@ -238,8 +274,20 @@ fn spawn_chunks(
                 tint: tint.clone(),
                 world_size: spec.world_size,
             };
+            // A LOD step that does not divide the chunk edge yields no mesh;
+            // fall back to LOD 0, which always does.
             let data = match build_chunk_mesh(grid, &params) {
                 Ok(Some(data)) => data,
+                Ok(None) | Err(_) if lod > 0 => {
+                    let params = ChunkMeshParams {
+                        lod_step: step,
+                        ..params
+                    };
+                    match build_chunk_mesh(grid, &params) {
+                        Ok(Some(data)) => data,
+                        _ => continue,
+                    }
+                }
                 Ok(None) => continue,
                 Err(error) => {
                     warn!("chunk ({cx},{cz}) failed to build: {error:#}");

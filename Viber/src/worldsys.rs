@@ -1,6 +1,8 @@
 //! World-system elements: DayCycle, Weather, WorldBorder, BiomeRegion and
 //! engine config — parsed into resources and driven by systems here.
 
+use bevy::math::Quat;
+use bevy::math::Vec3;
 use bevy::prelude::*;
 
 /// `<DayCycle>` clock: advances minute-of-day and ramps the ambient light.
@@ -13,6 +15,10 @@ pub struct DayCycleState {
     pub ambient_day: f32,
     pub ambient_night: f32,
     pub drive_ambient: bool,
+    /// Elevação máxima do sol ao meio-dia (graus).
+    pub max_sun_elevation: f32,
+    /// Azimute do nascer do sol (graus).
+    pub sun_azimuth_base: f32,
 }
 
 impl DayCycleState {
@@ -25,6 +31,8 @@ impl DayCycleState {
         ambient_day: f32,
         ambient_night: f32,
         drive_ambient: bool,
+        max_sun_elevation: f32,
+        sun_azimuth_base: f32,
     ) -> Self {
         Self {
             minute_of_day,
@@ -34,6 +42,8 @@ impl DayCycleState {
             ambient_day,
             ambient_night,
             drive_ambient,
+            max_sun_elevation,
+            sun_azimuth_base,
         }
     }
 }
@@ -133,6 +143,49 @@ pub fn seat_statics_once(
     *done = true;
 }
 
+/// Posição do sol (e estado dia/noite) calculada a partir do relógio.
+#[derive(Debug, Clone, Copy, Resource, Default)]
+pub struct SunState {
+    /// Direção PARA o sol, normalizada (mundo, Y-up).
+    pub dir: Vec3,
+    pub elevation_deg: f32,
+    /// 0 = dia pleno, 1 = noite plena.
+    pub night: f32,
+}
+
+/// Elevação (graus) do sol para o minuto do dia: sobe `max_elevation` ao
+/// meio-dia e desce abaixo do horizonte à noite.
+pub fn sun_elevation(minute: f32, dawn: f32, dusk: f32, max_elevation: f32) -> f32 {
+    const NIGHT_HALF_ARC: f32 = 25.0;
+    if minute >= dawn && minute < dusk {
+        let t = (minute - dawn) / (dusk - dawn);
+        (std::f32::consts::PI * t).sin() * max_elevation
+    } else {
+        let dusk_len = 24.0 * 60.0 - dusk + dawn;
+        let t = if minute >= dusk {
+            (minute - dusk) / dusk_len
+        } else {
+            (minute + (24.0 * 60.0 - dusk)) / dusk_len
+        };
+        -(std::f32::consts::PI * t).sin().abs() * NIGHT_HALF_ARC
+    }
+}
+
+/// Azimute (graus) do sol: avança 180° durante o dia, 180° durante a noite.
+pub fn sun_azimuth(minute: f32, dawn: f32, dusk: f32, base: f32) -> f32 {
+    if minute >= dawn && minute < dusk {
+        base + 180.0 * (minute - dawn) / (dusk - dawn)
+    } else {
+        let dusk_len = 24.0 * 60.0 - dusk + dawn;
+        let t = if minute >= dusk {
+            (minute - dusk) / dusk_len
+        } else {
+            (minute + (24.0 * 60.0 - dusk)) / dusk_len
+        };
+        base + 180.0 + 180.0 * t
+    }
+}
+
 /// Advance the day clock and ramp `GlobalAmbientLight.brightness`.
 #[allow(clippy::needless_pass_by_value)]
 pub fn daycycle_drive(
@@ -151,6 +204,48 @@ pub fn daycycle_drive(
     }
     let day = daylight_factor(clock.minute_of_day, clock.dawn_minute, clock.dusk_minute);
     ambient.brightness = day * clock.ambient_day + (1.0 - day) * clock.ambient_night;
+}
+
+/// Publish [`SunState`] from the day clock and aim the directional light.
+///
+/// NOTE (Claude): `main.rs` already scheduled this system but the body had not
+/// been written yet, so the binary did not build. This is the straightforward
+/// composition of the `sun_elevation` / `sun_azimuth` helpers that were already
+/// here — replace it if the intended behaviour differs.
+#[allow(clippy::needless_pass_by_value)]
+pub fn sun_drive(
+    clock: Option<Res<DayCycleState>>,
+    mut sun: ResMut<SunState>,
+    mut lights: Query<&mut Transform, With<DirectionalLight>>,
+) {
+    let Some(clock) = clock else {
+        return;
+    };
+    let elevation_deg = sun_elevation(
+        clock.minute_of_day,
+        clock.dawn_minute,
+        clock.dusk_minute,
+        clock.max_sun_elevation,
+    );
+    let azimuth_deg = sun_azimuth(
+        clock.minute_of_day,
+        clock.dawn_minute,
+        clock.dusk_minute,
+        clock.sun_azimuth_base,
+    );
+    let (el, az) = (elevation_deg.to_radians(), azimuth_deg.to_radians());
+    // Direction *towards* the sun (Y-up).
+    let dir = Vec3::new(el.cos() * az.sin(), el.sin(), el.cos() * az.cos()).normalize_or_zero();
+    sun.dir = dir;
+    sun.elevation_deg = elevation_deg;
+    // Night ramps in as the sun drops below the horizon.
+    sun.night = (1.0 - (elevation_deg / 6.0).clamp(0.0, 1.0)).clamp(0.0, 1.0);
+
+    // Sunlight travels from the sun into the scene; bevy shines a directional
+    // light along the entity's -Z (same convention as `recipes::spawn`).
+    for mut transform in &mut lights {
+        transform.rotation = Quat::from_rotation_arc(-Vec3::Z, -dir);
+    }
 }
 
 /// Keep the player inside the world disc (radius − margin).

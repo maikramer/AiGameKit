@@ -113,12 +113,21 @@ pub fn facing_slerp_factor(current: Quat, target: Quat, rotation_speed: f32, dt:
 
 /// WASD/arrows movement over the terrain: camera-relative walk/sprint,
 /// Space jump (`√2gh` under gravity −60), ground snap via `TerrainRuntime`.
+#[allow(clippy::type_complexity)]
 pub fn player_movement(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     runtime: Option<Res<TerrainRuntime>>,
     cameras: Query<&crate::recipes::spawn::OrbitCamera>,
-    mut players: Query<(&mut Transform, &mut Player), Without<Camera>>,
+    mut players: Query<
+        (
+            &mut Transform,
+            &mut Player,
+            Option<&mut bevy_rapier3d::prelude::KinematicCharacterController>,
+            Option<&bevy_rapier3d::prelude::KinematicCharacterControllerOutput>,
+        ),
+        Without<Camera>,
+    >,
 ) {
     let Some(runtime) = runtime else {
         return; // terrain bootstrap has not run yet — hero waits airborne
@@ -136,7 +145,7 @@ pub fn player_movement(
     let sprint = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let jump = keys.pressed(KeyCode::Space);
 
-    for (mut transform, mut player) in &mut players {
+    for (mut transform, mut player, mut controller, output) in &mut players {
         let dir = move_direction(w, s, a, d, camera.yaw_deg);
         // A/D alone moves at the side factor (carves arcs instead of
         // strafing at full speed) — VibeGame `SIDE_MOVE_FACTOR`.
@@ -148,14 +157,14 @@ pub fn player_movement(
         };
 
         // Horizontal walk.
+        let mut motion = Vec3::ZERO;
         if dir != Vec3::ZERO {
             let sprint_mult = if sprint {
                 player.sprint_multiplier
             } else {
                 1.0
             };
-            let step = dir * player.speed * sprint_mult * dt;
-            transform.translation += step;
+            motion += dir * player.speed * sprint_mult * dt;
             // Facing: slerp toward the move heading at `rotation_speed` rad/s.
             let target = facing_rotation(dir);
             let factor = facing_slerp_factor(transform.rotation, target, player.rotation_speed, dt);
@@ -171,16 +180,46 @@ pub fn player_movement(
             player.grounded = false;
         }
 
-        // Vertical integration + terrain clamp. Falls faster than it rises
-        // feels right (gravity is already twice the jump-fair value).
+        // Vertical integration. Falls faster than it rises feels right
+        // (gravity is already twice the jump-fair value).
         player.vel_y -= GRAVITY * dt;
-        transform.translation.y += player.vel_y * dt;
-        if transform.translation.y <= ground {
-            transform.translation.y = ground;
-            player.vel_y = 0.0;
-            player.grounded = true;
-        } else {
-            player.grounded = false;
+        motion.y += player.vel_y * dt;
+
+        match controller.as_deref_mut() {
+            // With a character controller Rapier resolves the motion against
+            // the world's colliders, so walls and props actually stop the hero
+            // instead of the transform being written straight through them.
+            Some(controller) => {
+                controller.translation = Some(motion);
+                // `grounded` comes from the previous frame's resolution; the
+                // heightfield is the floor of last resort while the terrain
+                // colliders around the hero are still streaming in.
+                let on_collider = output.is_some_and(|out| out.grounded);
+                if on_collider {
+                    player.grounded = true;
+                    if player.vel_y < 0.0 {
+                        player.vel_y = 0.0;
+                    }
+                } else if transform.translation.y <= ground {
+                    transform.translation.y = ground;
+                    player.vel_y = 0.0;
+                    player.grounded = true;
+                } else {
+                    player.grounded = false;
+                }
+            }
+            // No controller (headless tests, or a hero spawned before the
+            // physics plugin): keep the original direct-move behaviour.
+            None => {
+                transform.translation += motion;
+                if transform.translation.y <= ground {
+                    transform.translation.y = ground;
+                    player.vel_y = 0.0;
+                    player.grounded = true;
+                } else {
+                    player.grounded = false;
+                }
+            }
         }
     }
 }
@@ -210,6 +249,56 @@ pub fn dialogue_interaction(
         }
     }
     let _ = near; // prompt UI lands with the HUD phase
+}
+
+// ------------------------------------------------------ character controller
+
+/// Capsule radius of the hero's collider (meters).
+pub const HERO_RADIUS: f32 = 0.35;
+/// Capsule half-height between the cap centres (meters) — a ~1.8 m character.
+pub const HERO_HALF_HEIGHT: f32 = 0.55;
+/// Steps up to this height are climbed instead of blocking (stairs, kerbs).
+pub const HERO_STEP_HEIGHT: f32 = 0.4;
+/// Slopes up to this angle are walkable.
+pub const HERO_MAX_SLOPE_DEG: f32 = 55.0;
+
+/// Height of the capsule's centre above the entity origin.
+///
+/// The pipeline exports characters with y = 0 at the feet, and the character
+/// controller drives the entity transform — so the entity origin *is* the
+/// hero's footprint. A bare `capsule_y` is centred on its own origin, which
+/// would bury half the capsule underground and leave the hero floating a
+/// radius-plus-half-height above the floor.
+pub const HERO_CAPSULE_CENTER: f32 = HERO_HALF_HEIGHT + HERO_RADIUS;
+
+/// The hero's collision shape, with its base at the entity origin.
+pub fn hero_collider() -> bevy_rapier3d::prelude::Collider {
+    use bevy_rapier3d::prelude::Collider;
+    Collider::compound(vec![(
+        Vec3::new(0.0, HERO_CAPSULE_CENTER, 0.0),
+        Quat::IDENTITY,
+        Collider::capsule_y(HERO_HALF_HEIGHT, HERO_RADIUS),
+    )])
+}
+
+/// Rapier character controller tuned to the VibeGame hero.
+pub fn hero_controller() -> bevy_rapier3d::prelude::KinematicCharacterController {
+    use bevy_rapier3d::prelude::*;
+    KinematicCharacterController {
+        up: Vec3::Y,
+        // A small skin keeps the capsule from resting exactly on a face, which
+        // otherwise flickers between grounded and airborne.
+        offset: CharacterLength::Absolute(0.02),
+        max_slope_climb_angle: HERO_MAX_SLOPE_DEG.to_radians(),
+        min_slope_slide_angle: (HERO_MAX_SLOPE_DEG + 10.0).to_radians(),
+        autostep: Some(CharacterAutostep {
+            max_height: CharacterLength::Absolute(HERO_STEP_HEIGHT),
+            min_width: CharacterLength::Absolute(HERO_RADIUS * 0.5),
+            include_dynamic_bodies: false,
+        }),
+        snap_to_ground: Some(CharacterLength::Absolute(0.3)),
+        ..KinematicCharacterController::default()
+    }
 }
 
 #[cfg(test)]

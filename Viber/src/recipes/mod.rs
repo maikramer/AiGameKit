@@ -9,6 +9,7 @@
 pub mod spawn;
 pub mod transform;
 
+use crate::physics::{PhysicsSpec, parse_body, parse_collider};
 use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};
@@ -57,6 +58,7 @@ pub const KNOWN_TAGS: &[&str] = &[
     "weather",
     "biomeregion",
     "worldborder",
+    "sky",
     "navmesh",
     "spawngate",
     "projectiletemplate",
@@ -235,7 +237,8 @@ pub enum EntityKind {
     /// `<MusicLayer layer sound base-volume>` — looped BGM bus layer; the
     /// driver crossfades layers by player zone (`src/music.rs`).
     MusicLayer { layer: String, base_volume: f32 },
-    /// `<DayCycle>` — advances minute-of-day and drives the ambient light.
+    /// `<DayCycle>` — advances minute-of-day and drives the ambient light
+    /// and the procedural sun.
     DayCycle {
         minute_of_day: f32,
         minutes_per_real_second: f32,
@@ -244,6 +247,8 @@ pub enum EntityKind {
         ambient_day: f32,
         ambient_night: f32,
         drive_ambient: bool,
+        max_sun_elevation: f32,
+        sun_azimuth_base: f32,
     },
     /// `<Weather>` — wind/clouds/rain config (rain spawns a rain emitter).
     Weather {
@@ -286,6 +291,8 @@ pub struct DayCycleConfig {
     pub ambient_day: f32,
     pub ambient_night: f32,
     pub drive_ambient: bool,
+    pub max_sun_elevation: f32,
+    pub sun_azimuth_base: f32,
 }
 
 /// `<Weather>` config (wind/clouds/rain).
@@ -413,6 +420,8 @@ pub struct EntitySpec {
     #[allow(dead_code)]
     pub script: Option<String>,
     pub transform: TransformSpec,
+    /// Colliders / rigid bodies for the physics runtime.
+    pub physics: PhysicsSpec,
     pub kind: EntityKind,
     pub children: Vec<EntitySpec>,
 }
@@ -517,7 +526,8 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
         },
         "thirdpersoncamera" => finish_orbit_camera(node, ctx, true).map(Some),
         "audiomixer" => finish_audio_mixer(node, ctx).map(Some),
-        "sky" | "navmesh" | "spawngate" | "projectiletemplate" | "postfxdebugtoggle"
+        "sky" => finish_sky(node, ctx).map(Some),
+        "navmesh" | "spawngate" | "projectiletemplate" | "postfxdebugtoggle"
         | "adaptivequality" => finish_engine_config(node, ctx).map(Some),
         "daycycle" => finish_daycycle(node, ctx).map(Some),
         "weather" => finish_weather(node, ctx).map(Some),
@@ -567,16 +577,19 @@ struct Common {
     tag: Option<String>,
     script: Option<String>,
     transform: TransformSpec,
+    /// Colliders / rigid bodies (`collider`, `rigidbody`, `body`).
+    physics: PhysicsSpec,
 }
 
 /// Parse the universal attributes, returning the ones left for the kind parser.
-fn parse_common(node: &XmlNode) -> Result<(Common, Vec<(String, String)>)> {
-    let ctx = format!("<{}>", node.tag);
+fn parse_common(node: &XmlNode, ctx: &mut ParseCtx) -> Result<(Common, Vec<(String, String)>)> {
+    let ctx_tag = format!("<{}>", node.tag);
     let mut common = Common {
         name: None,
         tag: None,
         script: None,
         transform: TransformSpec::default(),
+        physics: PhysicsSpec::default(),
     };
     let mut rest = Vec::new();
     for (key, value) in &node.attrs {
@@ -584,25 +597,40 @@ fn parse_common(node: &XmlNode) -> Result<(Common, Vec<(String, String)>)> {
             "name" => common.name = Some(value.clone()),
             "tag" => common.tag = Some(value.clone()),
             "script" => common.script = Some(value.clone()),
+            "collider" => {
+                let (shape, warning) = parse_collider(value);
+                common.physics.collider = shape;
+                if let Some(warning) = warning {
+                    ctx.warnings.push(format!("{ctx_tag}: {warning}"));
+                }
+            }
+            // `rigidbody` is the full component string; `body` is the bare
+            // shorthand `<Group>` uses.
+            "rigidbody" | "body" => {
+                let (kind, mass, gravity_scale) = parse_body(value);
+                common.physics.body = kind;
+                common.physics.mass = mass;
+                common.physics.gravity_scale = gravity_scale;
+            }
             // `pos` is the original-format spelling (verbatim tags keep it)
             "translation" | "pos" => {
                 common.transform.translation =
-                    values::parse_vec3(value, &format!("{ctx} translation"))?;
+                    values::parse_vec3(value, &format!("{ctx_tag} translation"))?;
             }
             "euler" => {
                 common.transform.euler_deg =
-                    Some(values::parse_vec3(value, &format!("{ctx} euler"))?);
+                    Some(values::parse_vec3(value, &format!("{ctx_tag} euler"))?);
             }
             "rotation" => {
                 common.transform.rotation_quat =
-                    Some(values::parse_vec4(value, &format!("{ctx} rotation"))?);
+                    Some(values::parse_vec4(value, &format!("{ctx_tag} rotation"))?);
             }
             "scale" => {
-                common.transform.scale = values::parse_vec3(value, &format!("{ctx} scale"))?;
+                common.transform.scale = values::parse_vec3(value, &format!("{ctx_tag} scale"))?;
             }
             "transform" => {
                 // Component-string syntax: `transform="pos: x y z; euler: …"`.
-                let tctx = format!("{ctx} transform");
+                let tctx = format!("{ctx_tag} transform");
                 for (key, value) in parse_component_string(value) {
                     match key.as_str() {
                         "pos" | "position" => {
@@ -652,13 +680,14 @@ fn warn_ignored(node: &XmlNode, rest: Vec<(String, String)>, ctx: &mut ParseCtx)
 }
 
 fn finish_group(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     warn_ignored(node, rest, ctx);
     Ok(EntitySpec {
         name: common.name,
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::Group,
         children: parse_entities(&node.children, ctx)?,
     })
@@ -666,7 +695,7 @@ fn finish_group(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
 
 fn finish_primitive(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let lower = node.tag.to_ascii_lowercase();
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut shape = match lower.as_str() {
         "cuboid" => Shape::Cuboid {
@@ -730,13 +759,14 @@ fn finish_primitive(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::Primitive { shape, material },
         children: parse_entities(&node.children, ctx)?,
     })
 }
 
 fn finish_point_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut color = None;
     let mut intensity = None;
@@ -759,6 +789,7 @@ fn finish_point_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::PointLight {
             color,
             intensity,
@@ -770,7 +801,7 @@ fn finish_point_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
 }
 
 fn finish_directional_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut color = None;
     let mut illuminance = None;
@@ -793,6 +824,7 @@ fn finish_directional_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Entity
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::DirectionalLight {
             color,
             illuminance,
@@ -804,7 +836,7 @@ fn finish_directional_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Entity
 }
 
 fn finish_ambient_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut color = None;
     let mut brightness = None;
@@ -823,6 +855,7 @@ fn finish_ambient_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::AmbientLight { color, brightness },
         children: parse_entities(&node.children, ctx)?,
     })
@@ -833,7 +866,7 @@ fn finish_orbit_camera(
     ctx: &mut ParseCtx,
     third_person: bool,
 ) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let (default_target, default_distance, default_height) = if third_person {
         (Some("player".to_string()), 4.0, 1.6)
@@ -875,6 +908,7 @@ fn finish_orbit_camera(
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind,
         children: parse_entities(&node.children, ctx)?,
     })
@@ -895,7 +929,7 @@ fn collect_template_urls(node: &XmlNode, out: &mut Vec<String>) {
 }
 
 fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut spec = StaticSpawnerSpec {
         seed: 0,
@@ -926,6 +960,7 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
             tag: common.tag,
             script: common.script,
             transform: common.transform,
+            physics: common.physics,
             kind: if dynamic {
                 EntityKind::DynamicSpawner { spec }
             } else {
@@ -967,6 +1002,7 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: if dynamic {
             EntityKind::DynamicSpawner { spec }
         } else {
@@ -977,7 +1013,7 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
 }
 
 fn finish_particle_system(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut spec = ParticleSpec {
         preset: "fire".to_string(),
@@ -1058,6 +1094,7 @@ fn finish_particle_system(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::ParticleSystem { spec },
         children: Vec::new(),
     })
@@ -1065,7 +1102,7 @@ fn finish_particle_system(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
 
 /// `<SpawnExclusion at="x z" radius="N">` — global no-spawn circle.
 fn finish_spawn_exclusion(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut center = [0.0_f32, 0.0];
     let mut radius = 0.0_f32;
@@ -1087,6 +1124,7 @@ fn finish_spawn_exclusion(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::SpawnExclusion { center, radius },
         children: Vec::new(),
     })
@@ -1094,7 +1132,7 @@ fn finish_spawn_exclusion(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
 
 /// `<Vegetation meshes="… …" density-per-km2="…">` — dense foliage.
 fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut spec = VegetationSpec {
         meshes: Vec::new(),
@@ -1156,13 +1194,14 @@ fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::Vegetation { spec },
         children: Vec::new(),
     })
 }
 
 fn finish_player_gltf(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     warn_ignored(
         node,
         rest.into_iter()
@@ -1175,13 +1214,14 @@ fn finish_player_gltf(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::PlayerGltf { url },
         children: Vec::new(),
     })
 }
 
 fn finish_dialogue_npc(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let dialogue_id = node
         .attr("dialogue-id")
@@ -1207,6 +1247,7 @@ fn finish_dialogue_npc(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::DialogueNpc {
             dialogue_id,
             marker_height,
@@ -1216,7 +1257,7 @@ fn finish_dialogue_npc(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
 }
 
 fn finish_resource_chip(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut resource = String::new();
     let mut icon = String::new();
@@ -1240,6 +1281,7 @@ fn finish_resource_chip(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::ResourceChip {
             resource,
             icon,
@@ -1251,7 +1293,7 @@ fn finish_resource_chip(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
 
 /// HUD elements keep their raw attributes — `src/hud.rs` interprets them.
 fn finish_audio_mixer(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut master = 1.0;
     let mut music = 1.0;
@@ -1272,13 +1314,14 @@ fn finish_audio_mixer(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::AudioMixer { master, music, sfx },
         children: Vec::new(),
     })
 }
 
 fn finish_music_layer(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let layer = node
         .attr("layer")
@@ -1306,6 +1349,7 @@ fn finish_music_layer(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
             tag: common.tag,
             script: common.script,
             transform: common.transform,
+            physics: common.physics,
             kind: EntityKind::MusicLayer {
                 layer: String::new(),
                 base_volume,
@@ -1319,13 +1363,14 @@ fn finish_music_layer(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::MusicLayer { layer, base_volume },
         children: Vec::new(),
     })
 }
 
-fn finish_daycycle(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+fn finish_daycycle(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut c = DayCycleConfig {
         minute_of_day: 480.0,
@@ -1335,6 +1380,8 @@ fn finish_daycycle(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
         ambient_day: 0.26,
         ambient_night: 0.07,
         drive_ambient: true,
+        max_sun_elevation: 62.0,
+        sun_azimuth_base: 205.0,
     };
     for (key, value) in rest {
         let kctx = format!("{ctx_tag} {key}");
@@ -1348,6 +1395,8 @@ fn finish_daycycle(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "ambient-day-intensity" => c.ambient_day = values::parse_f32(&value, &kctx)?,
             "ambient-night-intensity" => c.ambient_night = values::parse_f32(&value, &kctx)?,
             "drive-ambient" => c.drive_ambient = values::parse_bool(&value, &kctx)?,
+            "max-sun-elevation" => c.max_sun_elevation = values::parse_f32(&value, &kctx)?,
+            "sun-azimuth-base" => c.sun_azimuth_base = values::parse_f32(&value, &kctx)?,
             _ => {}
         }
     }
@@ -1356,6 +1405,7 @@ fn finish_daycycle(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::DayCycle {
             minute_of_day: c.minute_of_day,
             minutes_per_real_second: c.minutes_per_real_second,
@@ -1364,13 +1414,15 @@ fn finish_daycycle(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
             ambient_day: c.ambient_day,
             ambient_night: c.ambient_night,
             drive_ambient: c.drive_ambient,
+            max_sun_elevation: c.max_sun_elevation,
+            sun_azimuth_base: c.sun_azimuth_base,
         },
         children: Vec::new(),
     })
 }
 
-fn finish_weather(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+fn finish_weather(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut w = WeatherConfig {
         wind: [0.7, 0.25],
@@ -1398,6 +1450,7 @@ fn finish_weather(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::Weather {
             wind: w.wind,
             wind_strength: w.wind_strength,
@@ -1422,8 +1475,8 @@ pub fn parse_polygon(value: &str) -> Vec<[f32; 2]> {
         .collect()
 }
 
-fn finish_biome_region(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+fn finish_biome_region(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut id = String::new();
     let mut polygon = Vec::new();
@@ -1444,6 +1497,7 @@ fn finish_biome_region(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::BiomeRegion {
             id,
             polygon,
@@ -1454,8 +1508,8 @@ fn finish_biome_region(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec
     })
 }
 
-fn finish_world_border(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+fn finish_world_border(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let mut radius = 3800.0;
     let mut warn_seconds = 5.0;
@@ -1474,6 +1528,7 @@ fn finish_world_border(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::WorldBorder {
             radius,
             warn_seconds,
@@ -1486,13 +1541,14 @@ fn finish_world_border(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec
 /// Generic engine-config element: tag + raw attrs preserved as data
 /// (Sky, NavMesh, SpawnGate, ProjectileTemplate, PostFxDebugToggle,
 /// AdaptiveQuality).
-fn finish_engine_config(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, _rest) = parse_common(node)?;
+fn finish_engine_config(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, _rest) = parse_common(node, ctx)?;
     Ok(EntitySpec {
         name: common.name,
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::EngineConfig {
             tag: node.tag.to_ascii_lowercase(),
             attrs: node
@@ -1505,14 +1561,38 @@ fn finish_engine_config(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpe
     })
 }
 
-fn finish_hud_element(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, _rest) = parse_common(node)?;
+/// `<Sky>` — procedural sky parameters kept as raw attrs; `src/hud.rs`
+/// (`spawn_hud`) builds the shader dome from them.
+fn finish_sky(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node, ctx)?;
+    let _ = rest;
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        physics: common.physics,
+        kind: EntityKind::HudElement {
+            tag: "sky".to_string(),
+            attrs: node
+                .attrs
+                .iter()
+                .map(|(k, v)| (k.to_ascii_lowercase(), v.clone()))
+                .collect(),
+        },
+        children: Vec::new(),
+    })
+}
+
+fn finish_hud_element(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, _rest) = parse_common(node, ctx)?;
     // Raw attrs are the data — hud.rs interprets them, nothing to warn about.
     Ok(EntitySpec {
         name: common.name,
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::HudElement {
             tag: node.tag.to_ascii_lowercase(),
             attrs: node
@@ -1526,7 +1606,7 @@ fn finish_hud_element(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec>
 }
 
 fn finish_gltf_scene(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     // `url` is this tag's own attribute — already consumed by the caller.
     warn_ignored(
         node,
@@ -1538,6 +1618,7 @@ fn finish_gltf_scene(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result<
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::GltfScene { url },
         children: parse_entities(&node.children, ctx)?,
     })
@@ -1581,7 +1662,7 @@ fn warn_children(node: &XmlNode, ctx: &mut ParseCtx) {
 }
 
 fn finish_terrain(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     warn_children(node, ctx);
     let ctx_tag = format!("<{}>", node.tag);
     let mut spec = TerrainSpec::default();
@@ -1644,6 +1725,7 @@ fn finish_terrain(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::Terrain { spec },
         children: Vec::new(),
     })
@@ -1655,7 +1737,7 @@ fn tint_color(value: &str, ctx: &str) -> Result<bevy::color::Color> {
 }
 
 fn finish_terrain_pad(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     warn_children(node, ctx);
     let ctx_tag = format!("<{}>", node.tag);
     let off = terrain_offset(&common, node, ctx);
@@ -1678,13 +1760,14 @@ fn finish_terrain_pad(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::TerrainPad { spec },
         children: Vec::new(),
     })
 }
 
 fn finish_lake(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     warn_children(node, ctx);
     let ctx_tag = format!("<{}>", node.tag);
     let off = terrain_offset(&common, node, ctx);
@@ -1709,13 +1792,14 @@ fn finish_lake(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::Lake { spec },
         children: Vec::new(),
     })
 }
 
 fn finish_river(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     warn_children(node, ctx);
     let ctx_tag = format!("<{}>", node.tag);
     let off = terrain_offset(&common, node, ctx);
@@ -1746,6 +1830,7 @@ fn finish_river(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::River { spec },
         children: Vec::new(),
     })
@@ -1785,7 +1870,7 @@ fn parse_road_attrs(
 }
 
 fn finish_road(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     warn_children(node, ctx);
     let ctx_tag = format!("<{}>", node.tag);
     let off = terrain_offset(&common, node, ctx);
@@ -1861,13 +1946,14 @@ fn finish_road(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::Road { spec },
         children: Vec::new(),
     })
 }
 
 fn finish_road_network(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
-    let (common, rest) = parse_common(node)?;
+    let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
     let off = terrain_offset(&common, node, ctx);
     let mut spec = RoadNetworkSpec {
@@ -2003,6 +2089,7 @@ fn finish_road_network(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         tag: common.tag,
         script: common.script,
         transform: common.transform,
+        physics: common.physics,
         kind: EntityKind::RoadNetwork { spec },
         children: Vec::new(),
     })
@@ -2461,10 +2548,45 @@ mod tests {
     fn test_gltf_scene_unknown_attr_warns() {
         let (_, w) = parse_one(&node(
             "GltfScene",
-            &[("url", "x.glb"), ("collider", "auto")],
+            &[("url", "x.glb"), ("nonsense-attr", "1")],
         ))
         .unwrap();
-        assert!(w.iter().any(|m| m.contains("`collider`")), "{w:?}");
+        assert!(w.iter().any(|m| m.contains("`nonsense-attr`")), "{w:?}");
+    }
+
+    #[test]
+    fn test_physics_attributes_are_parsed_not_warned() {
+        use crate::physics::{BodyKind, ColliderShape};
+        let (entity, w) = parse_one(&node(
+            "GltfScene",
+            &[
+                ("url", "x.glb"),
+                ("collider", "shape: box; size: 1 2 3"),
+                ("rigidbody", "type: fixed; mass: 0; gravity-scale: 0"),
+            ],
+        ))
+        .unwrap();
+        assert!(
+            !w.iter()
+                .any(|m| m.contains("collider") || m.contains("rigidbody")),
+            "physics attributes are consumed, not warned: {w:?}"
+        );
+        assert_eq!(
+            entity.physics.collider,
+            ColliderShape::Box {
+                size: bevy::math::Vec3::new(1.0, 2.0, 3.0),
+                offset: bevy::math::Vec3::ZERO,
+            }
+        );
+        assert_eq!(entity.physics.body, BodyKind::Fixed);
+        assert_eq!(entity.physics.gravity_scale, Some(0.0));
+    }
+
+    #[test]
+    fn test_group_body_shorthand_is_parsed() {
+        use crate::physics::BodyKind;
+        let (entity, _) = parse_one(&node("Group", &[("body", "fixed")])).unwrap();
+        assert_eq!(entity.physics.body, BodyKind::Fixed);
     }
 
     #[test]

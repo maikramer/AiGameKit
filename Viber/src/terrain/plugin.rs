@@ -134,14 +134,17 @@ fn adopt_chunks(
             let Ok((entity, child_name, material)) = chunk_candidates.get(child) else {
                 continue;
             };
-            if tagged.get(entity).is_ok() {
-                continue;
-            }
             let Some(coords) = parse_chunk_name(child_name.as_str()) else {
                 continue;
             };
+            // Capture the shared material before the tagged check: the
+            // bootstrap tags its own chunks (it builds them at the LOD their
+            // distance implies), and respawns still need this handle.
             if let Some(mat) = material {
                 state.material.get_or_insert(mat.0.clone());
+            }
+            if tagged.get(entity).is_ok() {
+                continue;
             }
             commands.entity(entity).insert(TerrainChunk {
                 coords,
@@ -331,7 +334,13 @@ fn rebuild(
 /// LOD selection with hysteresis: boundaries sit at `lod_distance * 2^(l-1)`;
 /// coarsening requires crossing `boundary * margin`, refining
 /// `boundary / margin`.
-fn select_lod(dist: f32, lod_distance: f32, current: u8, max_lod: u8, margin: f32) -> u8 {
+pub(crate) fn select_lod(
+    dist: f32,
+    lod_distance: f32,
+    current: u8,
+    max_lod: u8,
+    margin: f32,
+) -> u8 {
     if lod_distance <= 0.0 || !dist.is_finite() {
         return 0;
     }
@@ -365,7 +374,7 @@ fn select_lod(dist: f32, lod_distance: f32, current: u8, max_lod: u8, margin: f3
 
 /// `sqrt(hysteresis)` — a factor 1.2 shifts each boundary by ~±9.5%, giving
 /// symmetric dead-zones around it.
-fn hysteresis_margin(spec: &TerrainSpec) -> f32 {
+pub(crate) fn hysteresis_margin(spec: &TerrainSpec) -> f32 {
     let h = if spec.lod_hysteresis >= 1.0 {
         spec.lod_hysteresis
     } else {
@@ -375,7 +384,7 @@ fn hysteresis_margin(spec: &TerrainSpec) -> f32 {
 }
 
 /// Coarsest LOD whose integer grid step still divides the chunk edge evenly.
-fn max_lod_for(spec: &TerrainSpec, edge: f32) -> u8 {
+pub(crate) fn max_lod_for(spec: &TerrainSpec, edge: f32) -> u8 {
     let base_segments = (edge / lod0_step(spec) as f32).round() as u32;
     let mut lod = 0u8;
     while lod + 1 < spec.levels && base_segments.is_multiple_of(1 << (lod + 1)) {
@@ -386,7 +395,7 @@ fn max_lod_for(spec: &TerrainSpec, edge: f32) -> u8 {
 
 /// Full chunk edge in meters (the bootstrap's `edge`, which falls back to
 /// whole meters when `resolution` does not divide `chunk_size` exactly).
-fn chunk_edge(spec: &TerrainSpec) -> f32 {
+pub(crate) fn chunk_edge(spec: &TerrainSpec) -> f32 {
     let step = lod0_step(spec);
     (spec.chunk_size / step as f32).round() * step as f32
 }

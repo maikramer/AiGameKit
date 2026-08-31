@@ -20,6 +20,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 flate2 = "1"
+# `async-collider` gives `Collider::from_bevy_mesh` (trimesh/convex colliders
+# baked from glTF meshes); `debug-render-3d` draws collider wireframes so
+# collision can be verified in a screenshot.
+bevy_rapier3d = { version = "0.36", features = ["async-collider", "debug-render-3d"] }
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }

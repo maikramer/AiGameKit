@@ -198,6 +198,9 @@ pub fn startup(world: &mut World) {
     let mut materials = world
         .remove_resource::<Assets<StandardMaterial>>()
         .expect("Assets<StandardMaterial> exists before startup systems run");
+    let mut sky_mats = world
+        .remove_resource::<Assets<crate::sky::SkyMaterial>>()
+        .expect("Assets<SkyMaterial> exists before startup systems run");
     let asset_server = world
         .remove_resource::<AssetServer>()
         .expect("AssetServer exists before startup systems run");
@@ -218,16 +221,18 @@ pub fn startup(world: &mut World) {
     });
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
-    let (chips, hud_elements, mixer_settings, pending_worldsys) = {
+    let (chips, hud_elements, mixer_settings, pending_worldsys, _sky_request) = {
         let mut ctx = SpawnCtx {
             meshes: &mut meshes,
             materials: &mut materials,
+            sky_mats: &mut sky_mats,
             asset_server: &asset_server,
             chip_counter: std::cell::Cell::new(0),
             mixer: std::cell::RefCell::new(None),
             chips: std::cell::RefCell::new(Vec::new()),
             hud: std::cell::RefCell::new(Vec::new()),
             worldsys: Default::default(),
+            sky_request: std::cell::RefCell::new(None),
         };
         for spec in &parsed.entities {
             if is_ground_feature(&spec.kind) {
@@ -235,14 +240,20 @@ pub fn startup(world: &mut World) {
             }
             spawn_entity(world, &mut ctx, spec, None, &mut stats, &mut ambient);
         }
+        // `<Sky>`: domo procedural (shader embutido escrito no world dir pelo run()).
+        if let Some(attrs) = ctx.sky_request.take() {
+            crate::sky::build_sky(world, ctx.meshes, ctx.sky_mats, &attrs);
+        }
         let hud_elements = ctx.hud.into_inner();
         let mixer = ctx.mixer.into_inner();
         let pending_worldsys = ctx.worldsys.consume();
+        let sky_request = ctx.sky_request.into_inner();
         (
             ctx.chips.into_inner(),
             hud_elements,
             mixer,
             pending_worldsys,
+            sky_request,
         )
     };
     if let Some(light) = ambient {
@@ -285,6 +296,7 @@ pub fn startup(world: &mut World) {
     }
     world.insert_resource(meshes);
     world.insert_resource(materials);
+    world.insert_resource(sky_mats);
     world.insert_resource(asset_server);
     if !stats.has_camera {
         world.spawn((
@@ -308,6 +320,11 @@ pub type HudList = Vec<(String, HudAttrs)>;
 struct SpawnCtx<'a> {
     meshes: &'a mut Assets<Mesh>,
     materials: &'a mut Assets<StandardMaterial>,
+    /// `<Sky>` dome material — taken out of the world alongside the other
+    /// asset collections so `build_sky` never has to remove a resource that
+    /// `startup` already holds (a nested removal panicked and left
+    /// `Assets<Mesh>` missing for the terrain bootstrap).
+    sky_mats: &'a mut Assets<crate::sky::SkyMaterial>,
     asset_server: &'a AssetServer,
     chip_counter: std::cell::Cell<usize>,
     mixer: std::cell::RefCell<Option<crate::music::AudioMixerSettings>>,
@@ -317,6 +334,8 @@ struct SpawnCtx<'a> {
     hud: std::cell::RefCell<HudList>,
     /// Deferred world-system resources (DayCycle/Weather/border/biomes/config).
     worldsys: crate::worldsys::PendingWorldSystems,
+    /// `<Sky>` attrs — constrói o domo no fim do startup.
+    sky_request: std::cell::RefCell<Option<Vec<(String, String)>>>,
 }
 
 /// Recursively collect `<StaticSpawner>` specs and start their template loads.
@@ -368,6 +387,58 @@ fn collect_spawn_groups(
 }
 
 /// Recursively spawn one spec (and its children) as Bevy entities.
+/// Attaches the Rapier body + collider a spec asks for.
+///
+/// Boxes are built here; `trimesh` / `precompute` / `auto` need mesh data that
+/// is still loading, so they leave a [`crate::physics::PendingCollider`] for
+/// [`crate::physics::resolve_pending_colliders`] to finish. The collision glTF
+/// is requested now so the load is already in flight.
+fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &EntitySpec) {
+    use crate::physics::{ColliderShape, PendingCollider, body_bundle, immediate_collider};
+
+    let physics = &spec.physics;
+    if physics.is_empty() {
+        return;
+    }
+    if let Some((body, gravity)) = body_bundle(physics.body, physics.gravity_scale) {
+        entity.insert((body, gravity));
+    }
+    match &physics.collider {
+        ColliderShape::None => {}
+        ColliderShape::Box { .. } => {
+            if let Some((collider, transform)) = immediate_collider(&physics.collider) {
+                if transform.translation == Vec3::ZERO {
+                    entity.insert(collider);
+                } else {
+                    // Rapier positions a collider by its own entity transform,
+                    // so `pos-offset-y` becomes a child holding the shape; the
+                    // render mesh keeps the entity's placement untouched.
+                    let parent = entity.id();
+                    entity.world_scope(|world| {
+                        world.spawn((Name::new("collider"), collider, transform, ChildOf(parent)));
+                    });
+                }
+            }
+        }
+        ColliderShape::Auto => {
+            entity.insert(PendingCollider {
+                shape: ColliderShape::Auto,
+                gltf: None,
+            });
+        }
+        ColliderShape::Mesh { url, .. } | ColliderShape::Precompute { url } => {
+            // Root-absolute asset paths are unapproved in bevy; strip the '/'.
+            let handle = ctx
+                .asset_server
+                .load(url.trim_start_matches('/').to_string());
+            entity.insert(PendingCollider {
+                shape: physics.collider.clone(),
+                gltf: Some(handle),
+            });
+        }
+    }
+}
+
 fn spawn_entity(
     world: &mut World,
     ctx: &mut SpawnCtx,
@@ -390,6 +461,7 @@ fn spawn_entity(
     if let Some(name) = &spec.name {
         entity.insert(Name::new(name.clone()));
     }
+    attach_physics(&mut entity, ctx, spec);
     match &spec.kind {
         EntityKind::Group => {
             // Grupos autorais a y≈0 assentam no terreno real (a vila fica a
@@ -582,7 +654,13 @@ fn spawn_entity(
             ));
         }
         EntityKind::HudElement { tag, attrs } => {
-            ctx.hud.borrow_mut().push((tag.clone(), attrs.clone()));
+            if tag.eq_ignore_ascii_case("sky") {
+                // O domo tem o seu próprio pipeline de construção no fim do
+                // startup (precisa de Assets<Mesh> sem aliasing).
+                ctx.sky_request.replace(Some(attrs.clone()));
+            } else {
+                ctx.hud.borrow_mut().push((tag.clone(), attrs.clone()));
+            }
         }
         EntityKind::PlayerGltf { url } => {
             let path = url.trim_start_matches('/');
@@ -590,6 +668,13 @@ fn spawn_entity(
             entity.insert((
                 GltfScenePending { handle },
                 crate::player::Player::default(),
+                // Character controller: the hero is moved by code but has to be
+                // stopped by the world's static colliders (walls, buildings,
+                // props), so Rapier resolves the motion instead of the
+                // transform being written blind.
+                bevy_rapier3d::prelude::RigidBody::KinematicPositionBased,
+                crate::player::hero_collider(),
+                crate::player::hero_controller(),
             ));
         }
         // Ground features + `<Terrain>` + spawner groups return before the
@@ -613,6 +698,8 @@ fn spawn_entity(
             ambient_day,
             ambient_night,
             drive_ambient,
+            max_sun_elevation,
+            sun_azimuth_base,
         } => {
             ctx.worldsys.day_cycle = Some(crate::worldsys::DayCycleState::from_parts(
                 *minute_of_day,
@@ -622,6 +709,8 @@ fn spawn_entity(
                 *ambient_day,
                 *ambient_night,
                 *drive_ambient,
+                *max_sun_elevation,
+                *sun_azimuth_base,
             ));
         }
         EntityKind::Weather {
