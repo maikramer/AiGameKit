@@ -1,8 +1,7 @@
 <!--
   Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
   implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: place:align-to-terrain
-  Verbatim (no-op) tags: GLTFLoader x4
+  Dropped attrs: lod-threshold-mid, lod-threshold-near, lod1-url, lod2-url, place:align-to-terrain, role
 -->
 <world>
   <!--
@@ -13,20 +12,20 @@
   <Group name="creatures.bosses" translation="0 0 0">
     <!-- Norte — Bruxa da Floresta (clareira, -10/135). -->
     <Entity name="boss-witch" translation="16 0 290" script="bosses/witch.lua">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/witch_boss_lod0.glb" lod1-url="/assets/meshes/characters/witch_boss_lod1.glb" lod2-url="/assets/meshes/characters/witch_boss_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
+      <GltfScene url="/assets/meshes/characters/witch_boss_lod0.glb" />
     </Entity>
     <!-- Leste — Verme das Areias (fundo do deserto). -->
     <Entity name="boss-sandworm" translation="290 0 -12" script="bosses/sand-worm.lua">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/sand_worm_lod0.glb" lod1-url="/assets/meshes/characters/sand_worm_lod1.glb" lod2-url="/assets/meshes/characters/sand_worm_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
+      <GltfScene url="/assets/meshes/characters/sand_worm_lod0.glb" />
     </Entity>
     <!-- Sul — Bog Warden (fundo do pântano). -->
     <Entity name="boss-bogwarden" translation="-290 0 12" script="bosses/bog-warden.lua">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/bog_warden_boss_lod0.glb" lod1-url="/assets/meshes/characters/bog_warden_boss_lod1.glb" lod2-url="/assets/meshes/characters/bog_warden_boss_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
+      <GltfScene url="/assets/meshes/characters/bog_warden_boss_lod0.glb" />
     </Entity>
     <!-- Oeste — Ogro da Montanha: chefe FINAL, gated (aparece quando os
        inimigos normais morrem). name="boss" alimenta a <BossBar>. -->
     <Entity name="boss" translation="-12 0 -290" script="boss.lua">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/boss_ogre_lod0.glb" lod1-url="/assets/meshes/characters/boss_ogre_lod1.glb" lod2-url="/assets/meshes/characters/boss_ogre_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
+      <GltfScene url="/assets/meshes/characters/boss_ogre_lod0.glb" />
     </Entity>
   </Group>
   <!-- FIM creatures.bosses -->

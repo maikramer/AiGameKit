@@ -25,6 +25,8 @@ pip-wheel-metadata/
 # Rust — artefactos de build do crate Viber (o Materialize usa o seu .gitignore local)
 Viber/target/
 Viber/Cargo.lock
+# Espelho de assets do simple-rpg (regenerável: Viber/scripts/sync_assets.py)
+Viber/examples/simple-rpg/assets/
 
 # Test & quality
 .pytest_cache/

@@ -3,6 +3,7 @@
 //! Library crate exposing the XML loader (`xml`), the recipe IR (`recipes`)
 //! and gameplay modules (`terrain`); the `viber` binary is a thin CLI on top.
 
+pub mod bridge;
 pub mod recipes;
 pub mod scaffold;
 pub mod terrain;

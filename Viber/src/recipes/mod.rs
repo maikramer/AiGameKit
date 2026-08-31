@@ -40,6 +40,7 @@ pub const KNOWN_TAGS: &[&str] = &[
     "river",
     "road",
     "roadnetwork",
+    "gltfscene",
 ];
 
 /// A parsed world: clear color, entity tree and non-fatal warnings.
@@ -152,6 +153,10 @@ pub enum EntityKind {
     Road { spec: RoadSpec },
     /// `<RoadNetwork>` — one road per `<Segment>` (expanded at carve time).
     RoadNetwork { spec: RoadNetworkSpec },
+    /// glTF asset loaded async; its default scene spawns under the entity
+    /// (the entity's transform applies). Paths starting with `/` are relative
+    /// to the engine asset root.
+    GltfScene { url: String },
 }
 
 /// A resolved recipe: everything needed to spawn one Bevy entity.
@@ -242,6 +247,14 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
         "directionallight" => finish_directional_light(node, ctx).map(Some),
         "ambientlight" => finish_ambient_light(node, ctx).map(Some),
         "orbitcamera" => finish_orbit_camera(node, ctx).map(Some),
+        "gltfscene" => match node.attr("url").map(str::trim).filter(|s| !s.is_empty()) {
+            Some(url) => finish_gltf_scene(node, url.to_string(), ctx).map(Some),
+            None => {
+                ctx.warnings
+                    .push(format!("<{}>: missing url — skipped", node.tag));
+                Ok(None)
+            }
+        },
         "terrain" => finish_terrain(node, ctx).map(Some),
         "terrainpad" => finish_terrain_pad(node, ctx).map(Some),
         "lake" => finish_lake(node, ctx).map(Some),
@@ -524,6 +537,24 @@ fn finish_orbit_camera(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         script: common.script,
         transform: common.transform,
         kind,
+        children: parse_entities(&node.children, ctx)?,
+    })
+}
+
+fn finish_gltf_scene(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    // `url` is this tag's own attribute — already consumed by the caller.
+    warn_ignored(
+        node,
+        rest.into_iter().filter(|(key, _)| key != "url").collect(),
+        ctx,
+    );
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::GltfScene { url },
         children: parse_entities(&node.children, ctx)?,
     })
 }
@@ -1009,12 +1040,19 @@ pub struct WorldSummary {
     pub rivers: usize,
     pub roads: usize,
     pub road_networks: usize,
+    /// glTF scenes referenced (spawned async at runtime).
+    pub gltf_scenes: usize,
 }
 
 impl WorldSummary {
     /// Total spawned entities (ambient lights are resources, not entities).
     pub fn entities(&self) -> usize {
-        self.groups + self.primitives + self.point_lights + self.directional_lights + self.cameras
+        self.groups
+            + self.primitives
+            + self.point_lights
+            + self.directional_lights
+            + self.cameras
+            + self.gltf_scenes
     }
 
     /// Total ground-feature elements (terrain element excluded — it is the
@@ -1041,6 +1079,7 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::River { .. } => out.rivers += 1,
                 EntityKind::Road { .. } => out.roads += 1,
                 EntityKind::RoadNetwork { .. } => out.road_networks += 1,
+                EntityKind::GltfScene { .. } => out.gltf_scenes += 1,
             }
             walk(&spec.children, out);
         }
@@ -1320,6 +1359,44 @@ mod tests {
     }
 
     #[test]
+    fn test_gltf_scene_parses_url_and_transform() {
+        let (spec, w) = parse_one(&node(
+            "GltfScene",
+            &[
+                ("url", "/assets/meshes/tree.glb"),
+                ("translation", "2 0 4"),
+                ("scale", "1.5"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::GltfScene { url } = spec.kind else {
+            panic!("expected gltf scene");
+        };
+        assert_eq!(url, "/assets/meshes/tree.glb");
+        assert_eq!(spec.transform.translation, [2.0, 0.0, 4.0]);
+        assert_eq!(spec.transform.scale, [1.5; 3]);
+    }
+
+    #[test]
+    fn test_gltf_scene_unknown_attr_warns() {
+        let (_, w) = parse_one(&node(
+            "GltfScene",
+            &[("url", "x.glb"), ("collider", "auto")],
+        ))
+        .unwrap();
+        assert!(w.iter().any(|m| m.contains("`collider`")), "{w:?}");
+    }
+
+    #[test]
+    fn test_gltf_scene_missing_url_is_skipped() {
+        let mut ctx = ParseCtx::default();
+        let spec = parse_entity(&node("GltfScene", &[]), &mut ctx).unwrap();
+        assert!(spec.is_none());
+        assert!(ctx.warnings.iter().any(|m| m.contains("missing url")));
+    }
+
+    #[test]
     fn test_ambient_light_is_resource_kind() {
         let (spec, _) = parse_one(&node("AmbientLight", &[("brightness", "300")])).unwrap();
         assert!(matches!(spec.kind, EntityKind::AmbientLight { .. }));
@@ -1425,6 +1502,7 @@ mod tests {
                 node("River", &[]),
                 node("Road", &[]),
                 node("RoadNetwork", &[]),
+                node("GltfScene", &[("url", "/assets/meshes/x.glb")]),
             ],
         )
         .unwrap();
@@ -1444,9 +1522,10 @@ mod tests {
                 rivers: 1,
                 roads: 1,
                 road_networks: 1,
+                gltf_scenes: 1,
             }
         );
-        assert_eq!(summary.entities(), 5);
+        assert_eq!(summary.entities(), 6);
         assert_eq!(summary.ground_features(), 5);
     }
 

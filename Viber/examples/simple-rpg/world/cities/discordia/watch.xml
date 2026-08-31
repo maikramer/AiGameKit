@@ -1,8 +1,7 @@
 <!--
   Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
   implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: place:align-to-terrain
-  Verbatim (no-op) tags: GLTFLoader x1
+  Dropped attrs: lod-threshold-mid, lod-threshold-near, lod1-url, lod2-url, place:align-to-terrain, role
 -->
 <world>
   <!--
@@ -12,7 +11,7 @@
   <Group name="city.watch" translation="0 0 0">
     <!-- Torre de vigia GLB + guarda. Sem bandeira Composition. -->
     <Entity name="watchtower" translation="32 0 32" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/watchtower_lod0.glb" lod1-url="/assets/meshes/village/watchtower_lod1.glb" lod2-url="/assets/meshes/village/watchtower_lod2.glb" lod-threshold-near="60" lod-threshold-mid="140" />
+      <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
     </Entity>
     <!-- Guarda: [F] pinta os quatro portões na bússola. Script carrega
                o GLB com idle (igual merchant/healer). -->

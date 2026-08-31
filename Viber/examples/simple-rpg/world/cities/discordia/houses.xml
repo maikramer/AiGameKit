@@ -1,8 +1,7 @@
 <!--
   Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
   implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: place:align-to-terrain
-  Verbatim (no-op) tags: GLTFLoader x5
+  Dropped attrs: lod-threshold-mid, lod-threshold-near, lod1-url, lod2-url, place:align-to-terrain, role
 -->
 <world>
   <!--
@@ -19,23 +18,23 @@
            ============================================================ -->
     <!-- Casa A (E da praça). Mesh door on local −X; yaw -90 → porta a sul. -->
     <Entity name="house_a" transform="rotation: 0 -90 0" translation="25 0 12" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/village_house_lod0.glb" lod1-url="/assets/meshes/village/village_house_lod1.glb" lod2-url="/assets/meshes/village/village_house_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+      <GltfScene url="/assets/meshes/village/village_house_lod0.glb" />
     </Entity>
     <!-- Casa B (NW da praça). Mesh door local −X; yaw 135 → porta a NE. -->
     <Entity name="house_b" transform="rotation: 0 135 0" translation="-19 0 19" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/village_house_lod0.glb" lod1-url="/assets/meshes/village/village_house_lod1.glb" lod2-url="/assets/meshes/village/village_house_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+      <GltfScene url="/assets/meshes/village/village_house_lod0.glb" />
     </Entity>
     <!-- Barril de água da chuva no canto da casa B (afastado do celeiro) -->
     <Entity translation="-14.6 0 14.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <!-- Casa C (SW da praça). Mesh door local −X; yaw 45 → porta a SW. -->
     <Entity name="house_c" transform="rotation: 0 45 0" translation="-17 0 -20" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/village_house_lod0.glb" lod1-url="/assets/meshes/village/village_house_lod1.glb" lod2-url="/assets/meshes/village/village_house_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+      <GltfScene url="/assets/meshes/village/village_house_lod0.glb" />
     </Entity>
     <!-- Casa do Pastor (distrito NW/Oeste, junto ao curral) -->
     <Entity name="shepherd_cottage" translation="-21 0 8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/shepherd_cottage_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/shepherd_cottage_lod0.glb" lod1-url="/assets/meshes/village/shepherd_cottage_lod1.glb" lod2-url="/assets/meshes/village/shepherd_cottage_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+      <GltfScene url="/assets/meshes/village/shepherd_cottage_lod0.glb" />
     </Entity>
   </Group>
 </world>

@@ -1,8 +1,8 @@
 <!--
   Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
   implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: place:align-to-terrain, point-light:decay, point-light:distance
-  Verbatim (no-op) tags: GLTFLoader x7, ParticleSystem x3
+  Dropped attrs: lod1-url, lod2-url, place:align-to-terrain, point-light:decay, point-light:distance, role
+  Verbatim (no-op) tags: ParticleSystem x3
 -->
 <world>
   <!--
@@ -19,14 +19,14 @@
     <!-- Poço medieval (~1.6 m nativo). Centro-oeste da praça.
                Fora do corredor da artéria praça→mid_w (|z| ≤ 2.4). -->
     <Entity name="well" translation="-6 0 4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_lod2.glb; mesh-anchor: base" script="well.lua">
-      <GLTFLoader role="visual" url="/assets/meshes/village/medieval_well_lod0.glb" lod1-url="/assets/meshes/village/medieval_well_lod1.glb" lod2-url="/assets/meshes/village/medieval_well_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/medieval_well_lod0.glb" />
     </Entity>
     <!-- Fogueira comunitária: GLB campfire_pit (anel de pedra, sem
            chama modelada) + brasa/luz por cima. Canto SE da praça, fora dos
            corredores das duas artérias (|x| ≤ 2.4 e |z| ≤ 2.4).
            [G] abre descanso + viagem aos marcos da Nota (campfire.ts). -->
     <Entity name="campfire" translation="6.5 0 -6.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base" script="campfire.lua">
-      <GLTFLoader role="visual" url="/assets/meshes/village/campfire_pit_lod0.glb" lod1-url="/assets/meshes/village/campfire_pit_lod1.glb" lod2-url="/assets/meshes/village/campfire_pit_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
     </Entity>
     <!-- Chama: partículas reais, não um <Sphere> laranja. A esfera opaca
                estática que aqui estava lia-se como uma bola pousada na pedra.
@@ -44,21 +44,21 @@
                Offset ±3 m em X, +3 m em Z — encostar mais metia o banco
                dentro do aro de pedra. -->
     <Entity transform="rotation: 0 35 0" translation="3.5 0 -3.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.6 0.9 0.55">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
     </Entity>
     <Entity transform="rotation: 0 -35 0" translation="8.7 0 -3.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.6 0.9 0.55">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
     </Entity>
     <!-- Quadro de avisos (borda sul da praça) — GLB notice_board.
                [F] abre as recompensas da guarda (src/scripts/notice-board.ts). -->
     <Entity name="notice_board" translation="5 0 -12.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/notice_board_collision.glb; mesh-anchor: base" script="notice-board.lua">
-      <GLTFLoader role="visual" url="/assets/meshes/village/notice_board_lod0.glb" lod1-url="/assets/meshes/village/notice_board_lod1.glb" lod2-url="/assets/meshes/village/notice_board_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/notice_board_lod0.glb" />
     </Entity>
     <!-- Tochas da praça: GLB torch_post (sem chama modelada) + brasa/luz
            por cima — orçamento de PointLights mantido em 2. Nos cantos NE/SW
            da praça, onde a rua não passa. -->
     <Entity translation="8.5 0 8.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <!-- Chama da tocha: torch_post mede 2.20 m e a haste é sólida até
                y≈2.15, por isso a esfera a y=1.9 estava enterrada dentro do
@@ -71,7 +71,7 @@
       <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1280" />
     </Group>
     <Entity translation="-8.5 0 -8.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-8.5 0 -8.5">
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />

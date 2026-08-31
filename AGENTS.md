@@ -421,7 +421,9 @@ make test-viber                              # cargo test in Viber/
 # or: python3 -m aigamekit_shared.installer.unified viber
 ```
 
-This runs `cargo build --release` in `Viber/` and installs the binary as `viber` into `~/.local/bin`. Subcommands: `viber create <name>` (world scaffold), `viber analyze [world.xml]` (headless, CI-ready; sem caminho procura `world.xml`/`worlds/*.xml`), `viber run [world.xml]` (Bevy window; `--release`/`--no-cargo`), `viber --version`/`help`. `viber run` inside a Viber checkout delegates to `cargo run -- run` (engine rebuilt from source, like `vibegame run`); `analyze` never delegates.
+This runs `cargo build --release` in `Viber/` and installs the binary as `viber` into `~/.local/bin`. Subcommands: `viber create <name>` (world scaffold), `viber analyze [world.xml]` (headless, CI-ready; sem caminho procura `world.xml`/`worlds/*.xml`), `viber run [world.xml]` (Bevy window; `--release`/`--no-cargo`), `viber debug …` (client do debug bridge), `viber --version`/`help`. `viber run` inside a Viber checkout delegates to `cargo run -- run` (engine rebuilt from source, like `vibegame run`); `analyze` never delegates.
+
+**Debug bridge:** `viber run world.xml --bridge` expõe BRP sobre HTTP na porta 15702 (`--bridge PORT`, env `VIBER_BRIDGE_PORT`) — screenshot (request+poll), input sintético (key/text/click/move), árvore de entidades, ring-buffer de logs, mais os métodos BRP builtin (`world.query`, `world.insert_components`, …) para inspecção/mutação live do ECS. Cliente: `viber debug probe|screenshot|tree|logs|click|move|key|text`. É o equivalente nativo do tooling Chrome DevTools MCP do VibeGame — detalhes em `Viber/AGENTS.md`.
 
 The world XML follows **Bevy naming** (`translation`, `euler`, `half-size`, `base-color`) — no Unity/three.js vocabulary. Short tag contract: `Entity`, `Group`, shapes `Cuboid`/`Sphere`/`Cylinder`/`Plane`/`Capsule`, lights `PointLight`/`DirectionalLight`/`AmbientLight`, `OrbitCamera`, and `<Include src="…">` for composition (depth ≤ 8).
 

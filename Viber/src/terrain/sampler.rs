@@ -505,7 +505,10 @@ mod tests {
             let b = HeightField::sample(&exact, x, z);
             assert!((a - b).abs() < 1e-4, "smoothing 5.0 must clamp to 1.0");
             // Monotone fit never leaves the [low, high] span of the step.
-            assert!((10.0 - Q_EPS..=40.0 + Q_EPS).contains(&a), "no overshoot: {a}");
+            assert!(
+                (10.0 - Q_EPS..=40.0 + Q_EPS).contains(&a),
+                "no overshoot: {a}"
+            );
         }
     }
 

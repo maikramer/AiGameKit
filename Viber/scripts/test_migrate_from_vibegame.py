@@ -133,7 +133,7 @@ class TestComposition:
         root, _ = migrate(
             '<Composition pos="5 0 6" scale="2">'
             '  <Box pos="1 2 3" size="2 2 2" rotation="0.7853981633974483 0 0" color="#ffffff" />'
-            '  <GLTFLoader url="/a.glb" />'
+            '  <ParticleSystem preset="fire" />'
             "</Composition>"
         )
         group = first(root, "Group")
@@ -143,8 +143,8 @@ class TestComposition:
         assert cuboid.get("translation") == "1 2 3"  # local, parent composes
         assert cuboid.get("euler") == "45 0 0"  # radians -> degrees
         # non-primitive children stay inside the bridge Group, verbatim
-        loader = first(group, "GLTFLoader")
-        assert loader.get("url") == "/a.glb"
+        particles = first(group, "ParticleSystem")
+        assert particles.get("preset") == "fire"
 
     def test_composition_child_plane_tilt(self) -> None:
         root, _ = migrate('<Composition><Plane size="4 6" /></Composition>')
@@ -236,6 +236,61 @@ class TestComponentAttrStrings:
         assert ambient.get("color") == "0xc8d8e8"
         assert ambient.get("brightness") == "110"  # 0.22 x 500
         assert "ambient-light:ground-color" in ctx.dropped_attrs
+
+
+class TestGltfScene:
+    def test_gltfloader_becomes_gltfscene_with_url_kept(self) -> None:
+        root, _ = migrate('<GLTFLoader url="/assets/meshes/hero.glb" pos="1 2 3" scale="1.5" name="hero-mesh" />')
+        scene = first(root, "GltfScene")
+        assert scene.tag == "GltfScene"
+        assert scene.get("url") == "/assets/meshes/hero.glb"
+        assert scene.get("translation") == "1 2 3"
+        assert scene.get("scale") == "1.5"
+        assert scene.get("name") == "hero-mesh"
+
+    def test_gltfloader_rotation_rules(self) -> None:
+        root, _ = migrate('<GLTFLoader url="/a.glb" rot="0 45 0" />')
+        assert first(root, "GltfScene").get("euler") == "0 45 0"
+        root2, _ = migrate('<GLTFLoader url="/a.glb" rotation="0 0.7071 0 0.7071" />')
+        assert first(root2, "GltfScene").get("rotation") == "0 0.7071 0 0.7071"
+
+    def test_gltfloader_lod_and_shadow_attrs_drop(self) -> None:
+        root, ctx = migrate(
+            '<GLTFLoader url="/a.glb" role="visual" lod1-url="/a_lod1.glb" lod2-url="/a_lod2.glb" '
+            'lod-threshold-near="53" lod-threshold-mid="130" cast-shadow="1" merge="1" />'
+        )
+        scene = first(root, "GltfScene")
+        assert scene.get("role") is None
+        assert scene.get("lod1-url") is None
+        assert scene.get("lod-threshold-near") is None
+        assert scene.get("cast-shadow") is None
+        assert scene.get("merge") is None
+        for attr in ("role", "lod1-url", "lod2-url", "lod-threshold-near", "lod-threshold-mid", "cast-shadow", "merge"):
+            assert attr in ctx.dropped_attrs
+
+    def test_gltfloader_collider_animation_prefixes_drop(self) -> None:
+        root, ctx = migrate(
+            '<GLTFLoader url="/a.glb" collider-shape="trimesh" collider-mesh-url="/a_col.glb" '
+            'play-animations="idle" animation-speed="1.2" speed="1" visibility="visible" />'
+        )
+        scene = first(root, "GltfScene")
+        assert scene.get("collider-shape") is None
+        assert scene.get("play-animations") is None
+        for attr in (
+            "collider-shape",
+            "collider-mesh-url",
+            "play-animations",
+            "animation-speed",
+            "speed",
+            "visibility",
+        ):
+            assert attr in ctx.dropped_attrs
+
+    def test_gltfloader_script_rewritten_and_case_insensitive(self) -> None:
+        root, _ = migrate('<gltfloader URL="/a.glb" script="spin.ts" />')
+        scene = first(root, "GltfScene")
+        assert scene.get("url") == "/a.glb"
+        assert scene.get("script") == "spin.lua"
 
 
 class TestVerbatimTags:

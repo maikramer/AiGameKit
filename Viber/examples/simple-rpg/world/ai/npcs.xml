@@ -1,8 +1,8 @@
 <!--
   Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
   implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: place:align-to-terrain
-  Verbatim (no-op) tags: DialogueNPC x16, GLTFLoader x16
+  Dropped attrs: lod-threshold-mid, lod-threshold-near, lod1-url, lod2-url, place:align-to-terrain, role
+  Verbatim (no-op) tags: DialogueNPC x16
 -->
 <world>
   <!--
@@ -33,55 +33,55 @@
            ============================================================ -->
     <!-- Floresta (norte) -->
     <Entity name="npc_forest_wolves" translation="-16 0 60">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_guard_lod0.glb" lod1-url="/assets/meshes/characters/npc_guard_lod1.glb" lod2-url="/assets/meshes/characters/npc_guard_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
       <DialogueNPC dialogue-id="forest_wolves" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <Entity name="npc_forest_shades" translation="16 0 68">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_healer_lod0.glb" lod1-url="/assets/meshes/characters/npc_healer_lod1.glb" lod2-url="/assets/meshes/characters/npc_healer_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_healer_lod0.glb" />
       <DialogueNPC dialogue-id="forest_shades" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <Entity name="npc_forest_darkwood" translation="0 0 100">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_blacksmith_lod0.glb" lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb" lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="forest_darkwood" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <!-- Deserto (leste) -->
     <Entity name="npc_desert_scorpions" translation="60 0 -16">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_guard_lod0.glb" lod1-url="/assets/meshes/characters/npc_guard_lod1.glb" lod2-url="/assets/meshes/characters/npc_guard_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
       <DialogueNPC dialogue-id="desert_scorpions" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <Entity name="npc_desert_bandits" translation="68 0 16">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_blacksmith_lod0.glb" lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb" lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="desert_bandits" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <!-- Junto às Ruínas do Templo (landmarks/desert §5) — nunca na artéria. -->
     <Entity name="npc_desert_ruins" translation="284 0 104">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_elder_lod0.glb" lod1-url="/assets/meshes/characters/npc_elder_lod1.glb" lod2-url="/assets/meshes/characters/npc_elder_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_elder_lod0.glb" />
       <DialogueNPC dialogue-id="desert_ruins" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <!-- Pântano (oeste — cunha x<0, bacias baixas do Terrain3D) -->
     <Entity name="npc_swamp_boglings" translation="-60 0 -16">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_healer_lod0.glb" lod1-url="/assets/meshes/characters/npc_healer_lod1.glb" lod2-url="/assets/meshes/characters/npc_healer_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_healer_lod0.glb" />
       <DialogueNPC dialogue-id="swamp_boglings" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <Entity name="npc_swamp_bogwarden" translation="-68 0 16">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_guard_lod0.glb" lod1-url="/assets/meshes/characters/npc_guard_lod1.glb" lod2-url="/assets/meshes/characters/npc_guard_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
       <DialogueNPC dialogue-id="swamp_bogwarden" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <Entity name="npc_swamp_bogmoss" translation="-100 0 0">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_elder_lod0.glb" lod1-url="/assets/meshes/characters/npc_elder_lod1.glb" lod2-url="/assets/meshes/characters/npc_elder_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_elder_lod0.glb" />
       <DialogueNPC dialogue-id="swamp_bogmoss" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <!-- Picos Gelados (sul — encostas íngremes z<0) -->
     <Entity name="npc_peaks_goblins" translation="-16 0 -60">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_guard_lod0.glb" lod1-url="/assets/meshes/characters/npc_guard_lod1.glb" lod2-url="/assets/meshes/characters/npc_guard_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_guard_lod0.glb" />
       <DialogueNPC dialogue-id="peaks_goblins" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <Entity name="npc_peaks_frost" translation="16 0 -68">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_healer_lod0.glb" lod1-url="/assets/meshes/characters/npc_healer_lod1.glb" lod2-url="/assets/meshes/characters/npc_healer_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_healer_lod0.glb" />
       <DialogueNPC dialogue-id="peaks_frost" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <Entity name="npc_peaks_ogre" translation="0 0 -100">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_blacksmith_lod0.glb" lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb" lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="peaks_ogre" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <!-- ============================================================
@@ -92,19 +92,19 @@
            marco, atualizar também src/data/quests/*.json.
            ============================================================ -->
     <Entity name="npc_forest_survey" translation="32 0 80">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_scout_lod0.glb" lod1-url="/assets/meshes/characters/npc_scout_lod1.glb" lod2-url="/assets/meshes/characters/npc_scout_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="forest_survey" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <Entity name="npc_desert_survey" translation="80 0 -32">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_scout_lod0.glb" lod1-url="/assets/meshes/characters/npc_scout_lod1.glb" lod2-url="/assets/meshes/characters/npc_scout_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="desert_survey" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <Entity name="npc_swamp_survey" translation="-80 0 32">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_scout_lod0.glb" lod1-url="/assets/meshes/characters/npc_scout_lod1.glb" lod2-url="/assets/meshes/characters/npc_scout_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="swamp_survey" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
     <Entity name="npc_peaks_survey" translation="-32 0 -80">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_scout_lod0.glb" lod1-url="/assets/meshes/characters/npc_scout_lod1.glb" lod2-url="/assets/meshes/characters/npc_scout_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_scout_lod0.glb" />
       <DialogueNPC dialogue-id="peaks_survey" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
   </Group>

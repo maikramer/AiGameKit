@@ -1,8 +1,8 @@
 <!--
   Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
   implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: place:align-to-terrain, point-light:decay, point-light:distance
-  Verbatim (no-op) tags: DialogueNPC x1, GLTFLoader x9, ParticleSystem x2
+  Dropped attrs: lod-threshold-mid, lod-threshold-near, lod1-url, lod2-url, place:align-to-terrain, point-light:decay, point-light:distance, role
+  Verbatim (no-op) tags: DialogueNPC x1, ParticleSystem x2
 -->
 <world>
   <!--
@@ -15,7 +15,7 @@
            chaminé e bigorna já vêm modelados; luz/partículas de brasa e
            fumo ficam como camada dinâmica por cima do mesh estático. -->
     <Entity name="village_forge" translation="-31 0 -33" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_forge_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/village_forge_lod0.glb" lod1-url="/assets/meshes/village/village_forge_lod1.glb" lod2-url="/assets/meshes/village/village_forge_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+      <GltfScene url="/assets/meshes/village/village_forge_lod0.glb" />
     </Entity>
     <!-- Brasa da forja, na boca do hearth modelado no GLB.
                Medido no mesh: a chaminé ocupa x ∈ [1.3, 2.6], z ∈ [-0.64, 0.21]
@@ -50,37 +50,37 @@
                ========================================================== -->
     <!-- Bigorna: centro da área de trabalho. -->
     <Entity name="anvil" translation="-31.8 0 -28.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/anvil_collision.glb; mesh-anchor: base" script="anvil.lua">
-      <GLTFLoader role="visual" url="/assets/meshes/village/anvil_lod0.glb" lod1-url="/assets/meshes/village/anvil_lod1.glb" lod2-url="/assets/meshes/village/anvil_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/anvil_lod0.glb" />
     </Entity>
     <!-- Monte de ferraduras junto à bigorna. -->
     <Entity translation="-29.8 0 -27.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/horseshoe_pile_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/horseshoe_pile_lod0.glb" lod1-url="/assets/meshes/village/horseshoe_pile_lod1.glb" lod2-url="/assets/meshes/village/horseshoe_pile_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/horseshoe_pile_lod0.glb" />
     </Entity>
     <!-- Tina de arrefecimento, à direita da bigorna. -->
     <Entity transform="rotation: 0 20 0" translation="-27.6 0 -28.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/quench_trough_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/quench_trough_lod0.glb" lod1-url="/assets/meshes/village/quench_trough_lod1.glb" lod2-url="/assets/meshes/village/quench_trough_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/quench_trough_lod0.glb" />
     </Entity>
     <!-- Fole na ombreira esquerda do pátio, virado à forja. -->
     <Entity transform="rotation: 0 -15 0" translation="-34.6 0 -28.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/forge_bellows_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/forge_bellows_lod0.glb" lod1-url="/assets/meshes/village/forge_bellows_lod1.glb" lod2-url="/assets/meshes/village/forge_bellows_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/forge_bellows_lod0.glb" />
     </Entity>
     <!-- Suporte de armas na ombreira direita, de perfil para a praça. -->
     <Entity transform="rotation: 0 90 0" translation="-26.8 0 -29.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/weapon_rack_lod0.glb" lod1-url="/assets/meshes/village/weapon_rack_lod1.glb" lod2-url="/assets/meshes/village/weapon_rack_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/weapon_rack_lod0.glb" />
     </Entity>
     <!-- Cepo e barril de carvão a fechar o pátio (assets já no pack,
                antes sem uso nesta zona). -->
     <Entity translation="-34.8 0 -26.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/chopping_block_lod0.glb" lod1-url="/assets/meshes/village/chopping_block_lod1.glb" lod2-url="/assets/meshes/village/chopping_block_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/chopping_block_lod0.glb" />
     </Entity>
     <Entity translation="-25.4 0 -30.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <!-- Ferreiro: estava em "-21 -30" = local (3.0, -4.0), ou seja atrás
                da forja e fora do edifício, apesar do comentário "à porta". Vai
                para o pátio, ao lado da bigorna, virado para a praça. -->
     <Entity name="npc_blacksmith" translation="-31.8 0 -26.2" transform="rotation: 0 8 0">
-      <GLTFLoader role="visual" url="/assets/meshes/characters/npc_blacksmith_lod0.glb" lod1-url="/assets/meshes/characters/npc_blacksmith_lod1.glb" lod2-url="/assets/meshes/characters/npc_blacksmith_lod2.glb" lod-threshold-near="53" lod-threshold-mid="130" />
+      <GltfScene url="/assets/meshes/characters/npc_blacksmith_lod0.glb" />
       <DialogueNPC dialogue-id="city_stone" portrait-url="" voice-sfx="" marker-height="2.5" />
     </Entity>
   </Group>

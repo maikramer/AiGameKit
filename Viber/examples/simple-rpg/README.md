@@ -18,12 +18,17 @@ cargo run -- analyze examples/simple-rpg/world.xml       # headless + cobertura
 ## Estado atual
 
 O `analyze` imprime o relatório de cobertura — é o roteiro de trabalho da
-engine. Referência (após terreno Fase 1): **843 entidades** vivas (702 grupos,
-71 primitivas, 68 point lights, 1 directional, 1 câmara) + terreno com
-heightfield e 32 ground features (8 pads, 7 lagos, 1 rio, 15 estradas);
-**710 elementos em 33 tags** ainda em no-op (`GLTFLoader`×450, `ParticleSystem`×105,
-`StaticSpawner`×58, …). Cada tag implementada na engine acende mais parte do
-mundo sem editar os XMLs daqui.
+engine. Referência (após glTF — Feature 1): **1293 entidades** vivas (702
+grupos, 71 primitivas, 68 point lights, 1 directional, 1 câmara, **450 cenas
+glTF**) + terreno com heightfield e 32 ground features; **260 elementos em 32
+tags** ainda em no-op (`ParticleSystem`×105, `StaticSpawner`×58,
+`SpawnExclusion`×24, `DialogueNPC`×17, `DynamicSpawner`×12, …). Cada tag
+implementada na engine acende mais parte do mundo sem editar os XMLs daqui.
+
+Assets: os GLBs do pool partilhado vêm com meshopt + KTX2/BasisU +
+quantização (bevy 0.19 não lê nenhuma das três sintaxes). O espelho
+`assets/` (regenerável com `scripts/sync_assets.py`, não versionado) guarda
+cópias decomprimidas; a asset root do mundo é a pasta que contém `assets/`.
 
 ## Estrutura
 

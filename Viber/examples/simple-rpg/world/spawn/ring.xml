@@ -1,8 +1,8 @@
 <!--
   Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
   implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: place:align-to-terrain
-  Verbatim (no-op) tags: DynamicSpawner x1, GLTFLoader x8, Lake x1, River x1, StaticSpawner x5, TerrainPad x2
+  Dropped attrs: lod1-url, lod2-url, place:align-to-terrain, role
+  Verbatim (no-op) tags: DynamicSpawner x1, Lake x1, River x1, StaticSpawner x5, TerrainPad x2
 -->
 <world>
   <!--
@@ -48,29 +48,29 @@
              travessia — o rio segue a drenagem real e passa a norte da cidade. -->
     <!-- Posto de descanso na margem sul da ponte norte: crate/barrel/bench. -->
     <Entity translation="-11.8 0 196.6" transform="rotation: 0 20 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <Entity translation="-14.2 0 194.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <Entity translation="-10.2 0 193" transform="rotation: 0 -70 0">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
     </Entity>
     <!-- Posto de descanso na ponte SUL (pads 4,-102 / 4,-146). -->
     <Entity translation="6.4 0 199.8" transform="rotation: 0 -15 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <Entity translation="2.2 0 195.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <Entity translation="-1.6 0 198.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="5.2 0 225.6" transform="rotation: 0 70 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9">
-      <GLTFLoader role="visual" url="/assets/meshes/village/log_pile_lod0.glb" lod1-url="/assets/meshes/village/log_pile_lod1.glb" lod2-url="/assets/meshes/village/log_pile_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
     </Entity>
     <Entity translation="1.8 0 229.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <!-- Vitórias-régias no laguinho (-40,52 r=8). -->
     <StaticSpawner profile="tree" count="20" seed="326" region-min="-94 0 90" region-max="-66 0 118" in-water="1" align-to-terrain="0" max-slope-attempts="128" scale-min="0.7" scale-max="1.4" avoid-overlaps="1" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">

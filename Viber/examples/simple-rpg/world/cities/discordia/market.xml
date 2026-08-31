@@ -1,8 +1,7 @@
 <!--
   Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
   implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: corner-radius, edge-feather, edge-noise, normal-map-url, place:align-to-terrain, place:y-offset, texture-scale, texture-url
-  Verbatim (no-op) tags: GLTFLoader x7
+  Dropped attrs: corner-radius, edge-feather, edge-noise, lod1-url, lod2-url, normal-map-url, place:align-to-terrain, place:y-offset, role, texture-scale, texture-url
 -->
 <world>
   <!--
@@ -15,27 +14,27 @@
       <Plane translation="0 0.03 0" half-size="6.5 6" />
     </Group>
     <Entity translation="10.1 0 -17.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.2 2.0 1.4">
-      <GLTFLoader role="visual" url="/assets/meshes/village/market_stall_lod0.glb" lod1-url="/assets/meshes/village/market_stall_lod1.glb" lod2-url="/assets/meshes/village/market_stall_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
     <Entity transform="rotation: 0 -90 0" translation="13.7 0 -14.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.2 2.0 1.4">
-      <GLTFLoader role="visual" url="/assets/meshes/village/market_stall_lod0.glb" lod1-url="/assets/meshes/village/market_stall_lod1.glb" lod2-url="/assets/meshes/village/market_stall_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
     <Entity transform="rotation: 0 180 0" translation="18.9 0 -18.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 2.2 2.0 1.4">
-      <GLTFLoader role="visual" url="/assets/meshes/village/market_stall_lod0.glb" lod1-url="/assets/meshes/village/market_stall_lod1.glb" lod2-url="/assets/meshes/village/market_stall_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
     <!-- Barris junto às bancas -->
     <Entity translation="11.75 0 -18.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <Entity translation="12.66 0 -20.1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <!-- Caixas GLB junto à muralha Este -->
     <Entity translation="34.5 0 -18.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <Entity transform="rotation: 0 25 0" translation="35.3 0 -21" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <!-- Comerciante atrás da banca principal, voltado para a praça. [K] -->
     <Entity name="merchant" translation="16.3 0 -14.4" script="merchant.lua" />

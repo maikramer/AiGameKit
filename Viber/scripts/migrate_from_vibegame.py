@@ -27,6 +27,7 @@ Conversion rules (the test suite next to this file is the executable spec):
     GameObject -> Entity          Group -> Group
     Composition -> Group (bridge) PointLight -> PointLight
     ThirdPersonCamera -> OrbitCamera
+    GLTFLoader -> GltfScene
     Box -> Cuboid   Sphere -> Sphere   Cylinder -> Cylinder   Plane/Pad -> Plane
 
 * Universal attrs: ``pos`` -> ``translation``; ``scale`` / ``name`` / ``tag``
@@ -44,6 +45,11 @@ Conversion rules (the test suite next to this file is the executable spec):
   - primitives: ``opacity`` (values < 1 lose transparency),
     ``texture-*``, ``normal-map-url``, ``roughness-map-url``;
   - Pad: ``edge-feather``/``feather``, ``corner-radius``, ``edge-noise``;
+  - GLTFLoader (-> GltfScene): everything beyond ``url`` + the universal
+    transform attrs — ``role``, ``lod1-url``/``lod2-url``/``lod3-url``,
+    ``lod-threshold-*``, ``collider*``, ``merge``, ``cast-shadow``,
+    ``receive-shadow``, ``shadow-bias``, ``play-animations``, ``animation*``,
+    ``speed``, ``visibility`` and any other unknown attr (recorded);
   - ``place``: the ``at: X Z`` vector becomes ``translation`` (Y=0); the
     remaining keys (``align-to-terrain`` and friends) are dropped.
 * three.js -> Bevy unit scales:
@@ -63,10 +69,13 @@ Conversion rules (the test suite next to this file is the executable spec):
   is deliberately NOT done here: the engine hierarchy composes it.  When the
   composition rotates AND primitive children have a non-zero ``pos``, a
   warning comment is emitted in place.
-* Unmapped tags (GLTFLoader, Terrain, spawners, HUD, ...) pass through
-  VERBATIM (attrs and children kept) and no-op in the engine; they are listed
-  in the per-file header.  Exception: ``<Include src>`` files are migrated and
-  the tree is mirrored so include paths stay valid.
+* Unmapped tags (Terrain, spawners, HUD, ...) pass through VERBATIM (attrs and
+  children kept) and no-op in the engine; they are listed in the per-file
+  header.  Exception: ``<Include src>`` files are migrated and the tree is
+  mirrored so include paths stay valid.
+* ``GltfScene`` urls keep their leading ``/``: the engine resolves them
+  against the world's asset root (``assets/`` next to world.xml), which
+  ``sync_assets.py`` populates from the shared-assets pool.
 """
 
 from __future__ import annotations
@@ -121,6 +130,31 @@ PAD_DROP_ATTRS = {"edge-feather", "feather", "corner-radius", "edge-noise"}
 # Primitive material/texture attrs dropped (no transparency / no maps in Viber yet).
 PRIMITIVE_TEXTURE_DROP_PREFIXES = ("texture-",)
 PRIMITIVE_TEXTURE_DROP_ATTRS = {"normal-map-url", "roughness-map-url"}
+
+# GLTFLoader -> GltfScene: only ``url`` plus the universal transform attrs
+# survive; the LOD chain, shadows, collider and animation knobs drop.
+GLTF_KEEP_ATTRS = {"url"}
+GLTF_DROP_ATTR_PREFIXES = ("collider", "animation")
+GLTF_DROP_ATTRS = {
+    "role",
+    "merge",
+    "cast-shadow",
+    "castshadow",
+    "receive-shadow",
+    "receiveshadow",
+    "shadow-bias",
+    "shadowbias",
+    "play-animations",
+    "playanimations",
+    "speed",
+    "visibility",
+    "lod1-url",
+    "lod2-url",
+    "lod3-url",
+    "lod-threshold-near",
+    "lod-threshold-mid",
+    "lod-threshold-far",
+}
 
 _HEADER_NOTE = (
     "Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não",
@@ -510,6 +544,27 @@ def convert_orbit_camera(el: ET.Element, ctx: MigrationContext, rot_rad: bool) -
     return out
 
 
+def convert_gltf_scene(el: ET.Element, ctx: MigrationContext, rot_rad: bool) -> ET.Element:
+    """``GLTFLoader`` -> ``GltfScene`` (Viber loads glTF asynchronously).
+
+    ``url`` is kept unchanged: ``/``-paths are relative to the world's asset
+    root (the ``assets/`` folder next to world.xml), which mirrors the VibeGame
+    web root.  Everything beyond ``url`` + universal transform attrs drops
+    (LOD chain, shadows, collider, animation knobs) with a header record.
+    """
+    out = ET.Element("GltfScene")
+    for name, value in el.attrib.items():
+        low = name.lower()
+        if low in GLTF_KEEP_ATTRS:
+            out.set("url", value)
+        elif low in GLTF_DROP_ATTRS or low.startswith(GLTF_DROP_ATTR_PREFIXES):
+            ctx.drop_attr(name)
+        elif not map_universal_attr(low, value, out, ctx, rot_rad):
+            ctx.drop_attr(name)  # unknown GLTFLoader attrs have no GltfScene equivalent
+    convert_children_into(el, out, ctx, rot_rad=False)
+    return out
+
+
 def convert_primitive(el: ET.Element, ctx: MigrationContext, rot_rad: bool) -> ET.Element:
     """Convert a VibeGame primitive (Box/Sphere/Cylinder/Plane/Pad).
 
@@ -775,6 +830,8 @@ def convert_element(el: ET.Element, ctx: MigrationContext, rot_rad: bool = False
         return convert_pointlight(el, ctx, rot_rad)
     if tag == "thirdpersoncamera":
         return convert_orbit_camera(el, ctx, rot_rad)
+    if tag == "gltfloader":
+        return convert_gltf_scene(el, ctx, rot_rad)
     if tag in ("gameobject", "group"):
         return convert_entity_or_group(el, TAG_MAP[tag], ctx, rot_rad)
     if tag in PRIMITIVES:

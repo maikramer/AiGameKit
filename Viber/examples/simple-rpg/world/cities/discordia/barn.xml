@@ -1,8 +1,7 @@
 <!--
   Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
   implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: place:align-to-terrain
-  Verbatim (no-op) tags: GLTFLoader x1
+  Dropped attrs: lod-threshold-mid, lod-threshold-near, lod1-url, lod2-url, place:align-to-terrain, role
 -->
 <world>
   <!--
@@ -14,7 +13,7 @@
            village_barn (onda composition) — plataforma sobre pilares,
            telhado de palha, escada e sacos de grão já vêm modelados. -->
     <Entity name="village_barn" transform="rotation: 0 90 0" translation="-31.1 0 30" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_barn_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/village_barn_lod0.glb" lod1-url="/assets/meshes/village/village_barn_lod1.glb" lod2-url="/assets/meshes/village/village_barn_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+      <GltfScene url="/assets/meshes/village/village_barn_lod0.glb" />
     </Entity>
   </Group>
 </world>

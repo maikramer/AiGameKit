@@ -38,6 +38,41 @@ viber --version | help
 corre directo fora do checkout. `analyze` nunca delega (CI-ready, mesmo parser
 do binário instalado).
 
+### Debug bridge (`viber run --bridge`)
+
+BRP sobre HTTP (`bevy_remote`) na porta **15702** (`--bridge PORT` muda; env
+`VIBER_BRIDGE_PORT`) — o equivalente nativo do tooling Chrome DevTools MCP do
+VibeGame. Métodos JSON-RPC: `viber.ping`; `viber.screenshot` +
+`viber.screenshot_status` (request/poll — a captura completa em ~1-3 frames);
+`viber.tree` (árvore de entidades: id/nome/pai/transform/componentes);
+`viber.logs` (ring-buffer de tracing, 1000 entradas); `viber.input.key/text/
+click/move` (input sintético: `KeyboardInput`/`MouseButtonInput`/`CursorMoved`
++ `ButtonInput`). Os métodos BRP builtin (`world.query`, `world.spawn_entity`,
+`world.insert_components`, `world.mutate_components`, …) também ficam expostos
+— inspecção e mutação live do ECS.
+
+Cliente CLI (`--port` ou `VIBER_BRIDGE_PORT`):
+
+```bash
+viber run world.xml --bridge &   # engine com bridge
+viber debug probe                          # bridge vivo? (como list_pages)
+viber debug screenshot -o shot.png         # captura da janela
+viber debug tree [--json]                  # entidades (como take_snapshot)
+viber debug logs [--limit N] [--json]      # console
+viber debug click 400 300 [--button right]
+viber debug move 400 300
+viber debug key w | space | esc | up | ctrl [--shift]
+viber debug text "hello"                   # typing sintético por char
+```
+
+Detalhes: handlers correm como sistemas exclusivos em `RemoteLast` (depois de
+`Last`); screenshots são request+poll porque a captura precisa de frames de
+render (bloquear o handler congelaria a engine); o cliente HTTP é std-only
+(`src/bridge/client.rs`, retry no connect pois o bind é assíncrono). Código:
+`src/bridge/` (`mod.rs` server, `client.rs` cliente, `logs.rs` layer de
+tracing). Testes headless em `src/bridge/tests.rs` (App mínima + bridge real
+em loopback).
+
 ## CONTRATO XML (Fase 0)
 
 Raiz: `<world>` (ou `<scene>`), attr `clear-color` (`#rgb`/`#rrggbb`/`0x…`/nome).
@@ -54,6 +89,7 @@ Raiz: `<world>` (ou `<scene>`), attr `clear-color` (`#rgb`/`#rrggbb`/`0x…`/nom
 | `DirectionalLight` | `color`, `illuminance` (lux, default bevy 10 000), `direction` ("x y z", para onde a luz viaja; −Z da entidade alinha à direção), `shadows` |
 | `AmbientLight` | `color`, `brightness` — aplicado como recurso `GlobalAmbientLight`, não entidade |
 | `OrbitCamera` | `target` (nome de entidade), `distance`, `height`, `pitch` (graus; quando presente sobrepõe `height` via `height = distance·tan(pitch)`) |
+| `GltfScene` | `url` (obrigatório; `/assets/...` resolve contra a asset root do mundo — a pasta que contém `assets/`) + attrs universais; cena default do GLB spawna como filhos da entidade (transform aplica); load assíncrono, falha = warn + nó vazio. GLBs do pipeline vêm meshopt-comprimidos (bevy 0.19 não lê EXT_meshopt) → espelho decomprimido via `Viber/scripts/sync_assets.py` |
 
 Primitivas aceitam material: `base-color`, `metallic`, `roughness`.
 Atributos universais: `name`, `tag`, `script`, `translation`, `euler` (graus XYZ),

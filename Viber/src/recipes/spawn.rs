@@ -2,8 +2,11 @@
 
 use std::path::PathBuf;
 
+use bevy::asset::LoadState;
+use bevy::gltf::Gltf;
 use bevy::math::primitives::{Capsule3d, Cuboid, Cylinder, Plane3d, Sphere};
 use bevy::prelude::*;
+use bevy::world_serialization::WorldAssetRoot;
 
 use super::{EntityKind, EntitySpec, MaterialSpec, ParsedWorld, Shape, TransformSpec};
 use crate::terrain::TerrainSpec;
@@ -37,6 +40,13 @@ pub struct AutoOrbit {
 pub struct PendingWorld {
     pub world: ParsedWorld,
     pub base_dir: Option<PathBuf>,
+}
+
+/// Pending `<GltfScene>`: the handle loads async; [`gltf_scene_spawner`]
+/// swaps it for a `SceneRoot` once loaded (and drops it on failure).
+#[derive(Component)]
+pub struct GltfScenePending {
+    pub handle: Handle<Gltf>,
 }
 
 /// Declarative terrain collected from the entity tree, consumed by the
@@ -165,27 +175,30 @@ pub fn startup(world: &mut World) {
     let mut materials = world
         .remove_resource::<Assets<StandardMaterial>>()
         .expect("Assets<StandardMaterial> exists before startup systems run");
+    let asset_server = world
+        .remove_resource::<AssetServer>()
+        .expect("AssetServer exists before startup systems run");
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
-    for spec in &parsed.entities {
-        if is_ground_feature(&spec.kind) {
-            continue;
+    {
+        let mut ctx = SpawnCtx {
+            meshes: &mut meshes,
+            materials: &mut materials,
+            asset_server: &asset_server,
+        };
+        for spec in &parsed.entities {
+            if is_ground_feature(&spec.kind) {
+                continue;
+            }
+            spawn_entity(world, &mut ctx, spec, None, &mut stats, &mut ambient);
         }
-        spawn_entity(
-            world,
-            &mut meshes,
-            &mut materials,
-            spec,
-            None,
-            &mut stats,
-            &mut ambient,
-        );
     }
     if let Some(light) = ambient {
         world.insert_resource(light);
     }
     world.insert_resource(meshes);
     world.insert_resource(materials);
+    world.insert_resource(asset_server);
     if !stats.has_camera {
         world.spawn((
             Camera3d::default(),
@@ -199,11 +212,17 @@ pub fn startup(world: &mut World) {
     }
 }
 
+/// Borrowed asset handles used while spawning one world.
+struct SpawnCtx<'a> {
+    meshes: &'a mut Assets<Mesh>,
+    materials: &'a mut Assets<StandardMaterial>,
+    asset_server: &'a AssetServer,
+}
+
 /// Recursively spawn one spec (and its children) as Bevy entities.
 fn spawn_entity(
     world: &mut World,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    ctx: &mut SpawnCtx,
     spec: &EntitySpec,
     parent: Option<Entity>,
     stats: &mut SpawnStats,
@@ -223,9 +242,14 @@ fn spawn_entity(
     }
     match &spec.kind {
         EntityKind::Group => {}
+        EntityKind::GltfScene { url } => {
+            let path = url.trim_start_matches('/');
+            let handle: Handle<Gltf> = ctx.asset_server.load(path.to_owned());
+            entity.insert(GltfScenePending { handle });
+        }
         EntityKind::Primitive { shape, material } => {
-            let mesh = build_mesh(shape, meshes);
-            let mat = build_material(material, materials);
+            let mesh = build_mesh(shape, ctx.meshes);
+            let mat = build_material(material, ctx.materials);
             entity.insert((Mesh3d(mesh), MeshMaterial3d(mat), Visibility::Inherited));
         }
         EntityKind::PointLight {
@@ -324,7 +348,7 @@ fn spawn_entity(
     stats.entities += 1;
     let id = entity.id();
     for child in &spec.children {
-        spawn_entity(world, meshes, materials, child, Some(id), stats, ambient);
+        spawn_entity(world, ctx, child, Some(id), stats, ambient);
     }
 }
 
@@ -419,6 +443,39 @@ pub fn auto_orbit(time: Res<Time>, mut cameras: Query<(&mut Transform, &mut Auto
             orbit.yaw.sin() * orbit.radius,
         );
         transform.look_at(Vec3::ZERO, Vec3::Y);
+    }
+}
+
+/// Swap loaded `<GltfScene>` pendings for their default scene (parented under
+/// the entity, so its transform applies). Load failures log once and leave an
+/// empty node — a broken asset must not take the world down.
+pub fn gltf_scene_spawner(
+    mut commands: Commands,
+    gltfs: Res<Assets<Gltf>>,
+    server: Res<AssetServer>,
+    pending: Query<(Entity, &GltfScenePending)>,
+) {
+    for (entity, scene) in &pending {
+        match server.get_load_state(&scene.handle) {
+            Some(LoadState::Loaded) => {
+                if let Some(gltf) = gltfs.get(&scene.handle) {
+                    match gltf.default_scene.clone() {
+                        Some(root) => {
+                            commands.entity(entity).insert(WorldAssetRoot(root));
+                        }
+                        None => {
+                            bevy::log::warn!("gltf scene has no default scene; leaving empty");
+                        }
+                    }
+                }
+                commands.entity(entity).remove::<GltfScenePending>();
+            }
+            Some(LoadState::Failed(err)) => {
+                bevy::log::warn!("gltf asset failed to load: {err}");
+                commands.entity(entity).remove::<GltfScenePending>();
+            }
+            _ => {}
+        }
     }
 }
 

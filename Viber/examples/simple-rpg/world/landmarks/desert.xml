@@ -1,8 +1,8 @@
 <!--
   Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
   implementadas passam verbatim e fazem no-op na engine.
-  Dropped attrs: place:align-to-terrain, point-light:decay, point-light:distance
-  Verbatim (no-op) tags: GLTFLoader x17, Lake x1, ParticleSystem x3, SpawnExclusion x7, StaticSpawner x2
+  Dropped attrs: lod-threshold-mid, lod-threshold-near, lod1-url, lod2-url, place:align-to-terrain, point-light:decay, point-light:distance, role
+  Verbatim (no-op) tags: Lake x1, ParticleSystem x3, SpawnExclusion x7, StaticSpawner x2
 -->
 <world>
   <!--
@@ -26,7 +26,7 @@
        x ≈ ±2.85 (largura 1.34) e o vão livre em x ∈ [-2.18, 2.18] (4.36 m).
        Colisão = duas caixas-pilar, rodadas com o arco. -->
     <Entity name="desert-arch" translation="190 0 64" transform="rotation: 0 35 0">
-      <GLTFLoader role="visual" url="/assets/meshes/desert/sandstone_arch_lod0.glb" lod1-url="/assets/meshes/desert/sandstone_arch_lod1.glb" lod2-url="/assets/meshes/desert/sandstone_arch_lod2.glb" lod-threshold-near="55" lod-threshold-mid="150" />
+      <GltfScene url="/assets/meshes/desert/sandstone_arch_lod0.glb" />
     </Entity>
     <!-- Pilares: local (±2.85, 0) rodado 35° → offset mundo (±2.34, ∓1.64). -->
     <Entity name="desert-arch-pillar-a" translation="194.68 0 60.74" transform="rotation: 0 35 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.5 7.0 2.8; pos-offset-y: 3.5" />
@@ -34,10 +34,10 @@
     <SpawnExclusion at="190 64" radius="24" />
     <!-- Arco natural menor (form_arch_3) — marco na estrada, não substitui o sandstone_arch. -->
     <Entity name="desert-form-arch" translation="148 0 28" transform="rotation: 0 55 0">
-      <GLTFLoader role="visual" url="/assets/meshes/terrain/form_arch_3_lod0.glb" lod1-url="/assets/meshes/terrain/form_arch_3_lod1.glb" lod2-url="/assets/meshes/terrain/form_arch_3_lod2.glb" lod-threshold-near="45" lod-threshold-mid="120" />
+      <GltfScene url="/assets/meshes/terrain/form_arch_3_lod0.glb" />
     </Entity>
     <Entity translation="152 0 24" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <!-- ============================================================
        §2 CARAVANA DESTRUÍDA (108, -18)
@@ -45,16 +45,16 @@
        história dos bandidos que rondam a região.
        ============================================================ -->
     <Entity name="desert-caravan-wreck" translation="216 0 -36" transform="rotation: 0 -24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/market_stall_lod0.glb" lod1-url="/assets/meshes/village/market_stall_lod1.glb" lod2-url="/assets/meshes/village/market_stall_lod2.glb" lod-threshold-near="45" lod-threshold-mid="120" />
+      <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
     <Entity translation="211 0 -32" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <Entity translation="220 0 -29" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <Entity translation="218 0 -40" transform="rotation: 0 -50 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.35 0.9 0.15">
-      <GLTFLoader role="visual" url="/assets/meshes/props/axe_lod0.glb" lod1-url="/assets/meshes/props/axe_lod1.glb" lod2-url="/assets/meshes/props/axe_lod2.glb" />
+      <GltfScene url="/assets/meshes/props/axe_lod0.glb" />
     </Entity>
     <SpawnExclusion at="216 -36" radius="18" />
     <!-- ============================================================
@@ -63,7 +63,7 @@
        mística ([F]) para quem faz o desvio.
        ============================================================ -->
     <Entity name="desert-sun-obelisk" translation="240 0 80" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/desert_obelisk_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/desert/desert_obelisk_lod0.glb" lod1-url="/assets/meshes/desert/desert_obelisk_lod1.glb" lod2-url="/assets/meshes/desert/desert_obelisk_lod2.glb" />
+      <GltfScene url="/assets/meshes/desert/desert_obelisk_lod0.glb" />
     </Entity>
     <Group translation="240 0 80" body="none" collider="none">
       <PointLight translation="0 8.1 0" color="0xffc766" intensity="1280" />
@@ -78,10 +78,10 @@
        Poço sem água a meio do trilho sul do deserto.
        ============================================================ -->
     <Entity name="desert-dry-cistern" translation="156 0 -116" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/medieval_well_lod0.glb" lod1-url="/assets/meshes/village/medieval_well_lod1.glb" lod2-url="/assets/meshes/village/medieval_well_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/medieval_well_lod0.glb" />
     </Entity>
     <Entity translation="161 0 -121">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
     </Entity>
     <SpawnExclusion at="156 -116" radius="14" />
     <!-- ============================================================
@@ -90,16 +90,16 @@
        deserto — silhueta contra a serra da borda.
        ============================================================ -->
     <Entity translation="288 0 112" transform="rotation: 0 12 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb" />
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
     <Entity translation="300 0 116" transform="rotation: 0 -20 0; scale: 1.25 1.25 1.25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb" />
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
     <Entity translation="312 0 124" transform="rotation: 0 40 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb" />
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
     <Entity translation="304 0 134" transform="rotation: 0 -8 0; scale: 0.9 0.9 0.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/desert/ruin_pillar_lod0.glb" lod1-url="/assets/meshes/desert/ruin_pillar_lod1.glb" lod2-url="/assets/meshes/desert/ruin_pillar_lod2.glb" />
+      <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
     <SpawnExclusion at="300 122" radius="22" />
     <!-- ============================================================
@@ -122,7 +122,7 @@
     </StaticSpawner>
     <!-- Acampamento de bandidos: campfire_pit GLB + chama/luz + caixa. -->
     <Entity translation="170.8 0 -73.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/campfire_pit_lod0.glb" lod1-url="/assets/meshes/village/campfire_pit_lod1.glb" lod2-url="/assets/meshes/village/campfire_pit_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
     </Entity>
     <Entity translation="170.8 0 -73.2">
       <ParticleSystem preset="fire" transform="pos: 0 0.30 0" particle-emitter="preset: fire; emission-rate: 42; shape-radius: 0.32; start-life-min: 0.45; start-life-max: 1.25; start-speed-min: 1.2; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1" />
@@ -131,14 +131,14 @@
       <PointLight translation="0 0.7 0" color="0xff8a33" intensity="1760" />
     </Group>
     <Entity translation="176 0 -64" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+      <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <SpawnExclusion at="170 -70" radius="18" />
     <!-- ============================================================
        §8 NINHO DE ESCORPIÕES (130, 8) — landmark existente
        ============================================================ -->
     <Entity name="scorpion-nest" translation="260 0 16" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/scorpion_nest_collision.glb; mesh-anchor: base">
-      <GLTFLoader role="visual" url="/assets/meshes/desert/scorpion_nest_lod0.glb" lod1-url="/assets/meshes/desert/scorpion_nest_lod1.glb" lod2-url="/assets/meshes/desert/scorpion_nest_lod2.glb" />
+      <GltfScene url="/assets/meshes/desert/scorpion_nest_lod0.glb" />
     </Entity>
     <Entity translation="260 0 16">
       <ParticleSystem preset="ground-dust" transform="pos: 0 0.3 0" />
