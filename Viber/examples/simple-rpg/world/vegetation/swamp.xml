@@ -1,0 +1,78 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Verbatim (no-op) tags: StaticSpawner x7, Vegetation x1
+-->
+<world>
+  <!--
+  Vegetação do PÂNTANO (Sul, z ≲ -58). Loaded via Include.
+  Mesh próprio do bioma: dead_willow (salgueiro morto) — antes o pântano
+  usava tree_oak com collider dead_willow_stump_collision, o que dava
+  carvalhos verdes num brejo. dead_tree completa a mata morta.
+  O terreno vem cru do Terrain3D — sem bacia esculpida; confirmar as cotas
+  reais antes de assumir brejo rebaixado.
+-->
+  <Group name="biome.swamp.vegetation" translation="0 0 0">
+    <!-- Tapete erva/planta/flor (kit bpy em /assets/meshes/vegetation/).
+       density-per-km2 alinhada ao tecto do spawner (MAX_DENSITY_SPAWN_INSTANCES
+       = 12000) e ao orçamento de entidades: 91000 × 0.1096 km² ≈ 9974 — sem
+       capping silencioso e com folga no budget (boot ~86% de 100k). -->
+    <Vegetation meshes="/assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb" density-per-km2="91000" seed="801" region-min="-390 0 -200" region-max="-116 0 200" scale-min="1.4" scale-max="2.8" max-slope-deg="26" avoid-water="1" avoid-overlaps="0" max-distance="110" cluster-count="120" cluster-radius="7.6" flower-near-radius="5.2" flower-density-ratio="0.34" plant-density-ratio="0.44" smart="1" wind="1" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="foliage" />
+    <!-- §1 Salgueiros mortos — o dossel do brejo. -->
+    <StaticSpawner profile="tree" count="320" seed="8101" region-min="-380 0 -190" region-max="-116 0 190" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="32" scale-min="0.85" scale-max="1.6" avoid-overlaps="1" footprint-radius="3.2" cluster-count="18" cluster-radius="44" max-distance="220" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+      <GameObject role="static" destructible="popup-text: Bog Wood; popup-color: #3a4a30; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" script="tree.ts" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/dead_willow_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/dead_willow_lod0.glb" lod1-url="/assets/meshes/swamp/dead_willow_lod1.glb" lod2-url="/assets/meshes/swamp/dead_willow_lod2.glb" lod-threshold-near="32" lod-threshold-mid="90" />
+        <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- Troncos secos esparsos no fundo da bacia. -->
+    <StaticSpawner profile="tree" count="140" seed="8102" region-min="-430 0 -210" region-max="-190 0 210" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="38" scale-min="0.8" scale-max="1.35" avoid-overlaps="1" footprint-radius="2.6" cluster-count="12" cluster-radius="40" max-distance="230" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+      <GameObject role="static" destructible="popup-text: Dead Wood; popup-color: #3a3226; preset: leaves; burst-count: 18; hits: 2; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 8; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" script="tree.ts" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/dead_tree_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/forest/dead_tree_lod0.glb" lod1-url="/assets/meshes/forest/dead_tree_lod1.glb" lod2-url="/assets/meshes/forest/dead_tree_lod2.glb" lod-threshold-near="45" lod-threshold-mid="115" />
+        <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- §2 Salgueiros colhíveis. -->
+    <StaticSpawner profile="tree" count="40" seed="305" region-min="-290 0 -116" region-max="-120 0 116" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="28" scale-min="0.95" scale-max="1.4" avoid-overlaps="1" footprint-radius="4" max-distance="150" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="tree">
+      <GameObject role="static" destructible="popup-text: Bog Wood; popup-color: #3a4a30; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7" script="tree.ts" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/dead_willow_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/dead_willow_lod0.glb" lod1-url="/assets/meshes/swamp/dead_willow_lod1.glb" lod2-url="/assets/meshes/swamp/dead_willow_lod2.glb" lod-threshold-near="36" lod-threshold-mid="110" />
+        <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- §3 Vitórias-régias nas lagoas (in-water ancora o Y à lâmina de água).
+       Região desce até z=-110 para cobrir também a lagoa leste (-236,-84). -->
+    <StaticSpawner profile="tree" count="120" seed="325" region-min="-310 0 -110" region-max="-124 0 110" in-water="1" align-to-terrain="0" max-slope-attempts="192" scale-min="0.8" scale-max="1.5" avoid-overlaps="1" max-distance="120" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="foliage">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/lily_pad_lod0.glb" lod1-url="/assets/meshes/swamp/lily_pad_lod1.glb" lod2-url="/assets/meshes/swamp/lily_pad_lod2.glb" lod-threshold-near="30" lod-threshold-mid="70" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- §4 Pedras musgosas semi-afundadas na lama. -->
+    <StaticSpawner profile="tree" count="180" seed="8103" region-min="-400 0 -200" region-max="-116 0 200" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="50" scale-min="0.8" scale-max="2.2" avoid-overlaps="1" pick-strategy="random" footprint-radius="2.6" cluster-count="16" cluster-radius="32" max-distance="180" scale-axis-min="0.85" scale-axis-max="1.15" random-yaw="true" variation="rock">
+      <GameObject role="static" script="rock.ts" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="32" lod-threshold-mid="85" />
+        <ResourceNode kind="stone" yield="4" transform="pos: 0 0 0" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- §5 Afloramentos nas margens das lagoas (near-water = anel de barranco). -->
+    <StaticSpawner profile="tree" count="52" seed="431" region-min="-380 0 -190" region-max="-116 0 190" near-water="1" avoid-water="0" align-to-terrain="1" ground-align="auto" max-slope-deg="55" max-slope-attempts="96" scale-min="1.0" scale-max="2.0" avoid-overlaps="1" pick-strategy="random" footprint-radius="3.6" max-distance="150" scale-axis-min="0.9" scale-axis-max="1.1" random-yaw="true" variation="rock">
+      <GameObject role="static" script="rock.ts" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb" lod-threshold-near="34" lod-threshold-mid="90" />
+        <ResourceNode kind="stone" yield="4" transform="pos: 0 0 0" />
+      </GameObject>
+      <GameObject role="static" script="rock.ts" destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="34" lod-threshold-mid="90" />
+        <ResourceNode kind="stone" yield="4" transform="pos: 0 0 0" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- Cairns no brejo (form_stack — lápides naturais). -->
+    <StaticSpawner profile="tree" count="32" seed="8210" region-min="-380 0 -180" region-max="-120 0 180" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="28" scale-min="0.7" scale-max="1.4" avoid-overlaps="1" footprint-radius="3.4" cluster-count="8" cluster-radius="28" max-distance="200" random-yaw="true" variation="rock" pick-strategy="random">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_6_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_6_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_6_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="40" lod-threshold-mid="110" />
+      </GameObject>
+    </StaticSpawner>
+  </Group>
+  <!-- FIM biome.swamp.vegetation -->
+</world>

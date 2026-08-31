@@ -61,6 +61,40 @@ pub fn parse_vec4(value: &str, ctx: &str) -> Result<[f32; 4]> {
     ])
 }
 
+/// Parse `"x z x z …"` into a list of 2D points (paths, `via` waypoints).
+/// An empty value yields an empty list; an odd component count is an error.
+pub fn parse_vec2_list(value: &str, ctx: &str) -> Result<Vec<[f32; 2]>> {
+    let parts: Vec<&str> = value.split_whitespace().collect();
+    if !parts.len().is_multiple_of(2) {
+        bail!(
+            "{ctx}: expected an even number of components (x z pairs), got {}: `{value}`",
+            parts.len()
+        );
+    }
+    parts
+        .chunks(2)
+        .map(|pair| Ok([parse_f32(pair[0], ctx)?, parse_f32(pair[1], ctx)?]))
+        .collect()
+}
+
+/// Parse an attribute value as a `u32` (non-negative, finite integers only).
+pub fn parse_u32(value: &str, ctx: &str) -> Result<u32> {
+    let v = parse_f32(value, ctx)?;
+    if v < 0.0 || v.fract() != 0.0 || v > u32::MAX as f32 {
+        bail!("{ctx}: `{value}` is not a non-negative integer");
+    }
+    Ok(v as u32)
+}
+
+/// Parse an attribute value as a `u64` (non-negative, finite integers only).
+pub fn parse_u64(value: &str, ctx: &str) -> Result<u64> {
+    let v = parse_f32(value, ctx)?;
+    if v < 0.0 || v.fract() != 0.0 || v > 18_446_744_073_709_551_615.0 {
+        bail!("{ctx}: `{value}` is not a non-negative integer");
+    }
+    Ok(v as u64)
+}
+
 /// Parse a boolean: `true/1/yes/on` vs `false/0/no/off` (case-insensitive).
 pub fn parse_bool(value: &str, ctx: &str) -> Result<bool> {
     match value.trim().to_ascii_lowercase().as_str() {
@@ -177,6 +211,26 @@ mod tests {
     fn test_parse_vec4_requires_four() {
         assert_eq!(parse_vec4("0 0 0 1", "t").unwrap(), [0.0, 0.0, 0.0, 1.0]);
         assert!(parse_vec4("0 0 1", "t").is_err());
+    }
+
+    #[test]
+    fn test_parse_vec2_list_pairs_and_errors() {
+        assert_eq!(parse_vec2_list("", "t").unwrap(), Vec::<[f32; 2]>::new());
+        assert_eq!(
+            parse_vec2_list("0 0 10 20", "t").unwrap(),
+            vec![[0.0, 0.0], [10.0, 20.0]]
+        );
+        assert!(parse_vec2_list("1 2 3", "t").is_err());
+        assert!(parse_vec2_list("1", "t").is_err());
+    }
+
+    #[test]
+    fn test_parse_u32_and_u64() {
+        assert_eq!(parse_u32("64", "t").unwrap(), 64);
+        assert!(parse_u32("-1", "t").is_err());
+        assert!(parse_u32("1.5", "t").is_err());
+        assert_eq!(parse_u64("42", "t").unwrap(), 42);
+        assert!(parse_u64("x", "t").is_err());
     }
 
     #[test]

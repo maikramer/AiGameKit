@@ -1,0 +1,81 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Verbatim (no-op) tags: StaticSpawner x4
+-->
+<world>
+  <!--
+  Faixa de horizonte (450-840 m). Loaded via Include.
+
+  PORQUÊ: a cobertura de conteúdo do mapa media 100% até 400 m e depois caía
+  a pique — 41% a 500 m, 5% a 600 m, ZERO de 700 m até ao far plane da câmara
+  (840 m). O jogador via ~440 m de terreno completamente nu até ao horizonte,
+  em todas as direções. Todos os spawners existentes param nos ±470 porque
+  foram autorados para a zona jogável.
+
+  ORÇAMENTO: silhueta, não conteúdo. ~300 instâncias sobre 1,58 km² (≈190 por
+  km², contra os 112k-240k por km² dos tapetes de bioma) — escala grande e
+  poucos objetos, que é o que se lê a 500-800 m. Os LOD threshold empurrados
+  para 240/480 põem quase tudo em lod2. `max-distance="900"` porque com os
+  250-280 dos spawners da zona jogável nada disto chegaria a renderizar.
+
+  RELEVO DA FAIXA (medido, cota média / declive médio):
+    E  159 m /  6.2°   planalto seco  → mesas e arcos de arenito
+    N  113 m /  7.9°   colinas        → bosques de pinheiro escuro
+    O   84 m /  7.3°   bacia baixa    → salgueiros mortos e pedra musgosa
+    S  153 m / 10.0°   montanha       → falésias e pilhas de pedra
+
+  As caixas repartem o anel sem se sobreporem: E/O param em |z|=430, N/S
+  cobrem toda a largura acima/abaixo disso.
+-->
+  <Group name="frontier.horizon" translation="0 0 0">
+    <!-- ============================================================
+       LESTE — planalto do deserto: mesas e arcos recortados no céu
+       ============================================================ -->
+    <StaticSpawner profile="tree" count="55" seed="4501" region-min="430 0 -430" region-max="840 0 430" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="34" max-slope-attempts="24" scale-min="1.8" scale-max="3.6" avoid-overlaps="1" footprint-radius="14" cluster-count="7" cluster-radius="90" max-distance="900" random-yaw="true" variation="rock">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_5_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_5_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_5_lod2.glb" lod-threshold-near="240" lod-threshold-mid="480" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_outcrop_8_lod0.glb" lod1-url="/assets/meshes/terrain/form_outcrop_8_lod1.glb" lod2-url="/assets/meshes/terrain/form_outcrop_8_lod2.glb" lod-threshold-near="240" lod-threshold-mid="480" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/desert/sandstone_arch_lod0.glb" lod1-url="/assets/meshes/desert/sandstone_arch_lod1.glb" lod2-url="/assets/meshes/desert/sandstone_arch_lod2.glb" lod-threshold-near="240" lod-threshold-mid="480" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- ============================================================
+       OESTE — bacia do pântano: mata morta rala sobre o ponto baixo
+       ============================================================ -->
+    <StaticSpawner profile="tree" count="55" seed="4502" region-min="-840 0 -430" region-max="-430 0 430" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="30" max-slope-attempts="24" scale-min="1.5" scale-max="2.8" avoid-overlaps="1" footprint-radius="12" cluster-count="8" cluster-radius="80" max-distance="900" random-yaw="true" variation="tree">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/dead_willow_lod0.glb" lod1-url="/assets/meshes/swamp/dead_willow_lod1.glb" lod2-url="/assets/meshes/swamp/dead_willow_lod2.glb" lod-threshold-near="240" lod-threshold-mid="480" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" lod-threshold-near="240" lod-threshold-mid="480" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- ============================================================
+       NORTE — colinas da floresta: bosques que fecham o horizonte
+       ============================================================ -->
+    <StaticSpawner profile="tree" count="95" seed="4503" region-min="-840 0 430" region-max="840 0 840" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="34" max-slope-attempts="24" scale-min="1.4" scale-max="2.4" avoid-overlaps="1" footprint-radius="10" cluster-count="12" cluster-radius="70" max-distance="900" random-yaw="true" variation="tree">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/forest/pine_dark_lod0.glb" lod1-url="/assets/meshes/forest/pine_dark_lod1.glb" lod2-url="/assets/meshes/forest/pine_dark_lod2.glb" lod-threshold-near="240" lod-threshold-mid="480" />
+      </GameObject>
+    </StaticSpawner>
+    <!-- ============================================================
+       SUL — encostas dos Picos: falésias a fechar o vale
+       ============================================================ -->
+    <StaticSpawner profile="tree" count="95" seed="4504" region-min="-840 0 -840" region-max="840 0 -430" align-to-terrain="1" ground-align="auto" avoid-water="1" max-slope-deg="40" max-slope-attempts="24" scale-min="1.6" scale-max="3.2" avoid-overlaps="1" footprint-radius="14" cluster-count="10" cluster-radius="88" max-distance="900" random-yaw="true" variation="rock">
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_cliff_1_lod0.glb" lod1-url="/assets/meshes/terrain/form_cliff_1_lod1.glb" lod2-url="/assets/meshes/terrain/form_cliff_1_lod2.glb" lod-threshold-near="240" lod-threshold-mid="480" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_cliff_20_lod0.glb" lod1-url="/assets/meshes/terrain/form_cliff_20_lod1.glb" lod2-url="/assets/meshes/terrain/form_cliff_20_lod2.glb" lod-threshold-near="240" lod-threshold-mid="480" />
+      </GameObject>
+      <GameObject role="static">
+        <GLTFLoader role="visual" url="/assets/meshes/terrain/form_stack_11_lod0.glb" lod1-url="/assets/meshes/terrain/form_stack_11_lod1.glb" lod2-url="/assets/meshes/terrain/form_stack_11_lod2.glb" lod-threshold-near="240" lod-threshold-mid="480" />
+      </GameObject>
+    </StaticSpawner>
+  </Group>
+  <!-- FIM frontier.horizon -->
+</world>

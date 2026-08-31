@@ -1,0 +1,43 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Dropped attrs: place:align-to-terrain
+  Verbatim (no-op) tags: GLTFLoader x6, ParticleSystem x1
+-->
+<world>
+  <!--
+  §4.4d AMPLIAÇÃO (58 AA — distrito de grelha "feito à pressa", GDD).
+  Preenche o bolsão NW do anel interno (x∈[-15,-5], z∈[16..28]): o vazio
+  mais visível do percurso praça→portão norte. Casa GLB da onda composition
+  (porta local −X; yaw 180 → porta a este, para a artéria norte), quintal com
+  lenha/barris/caixote e tocha acesa.
+  Bolsão medido contra: carvalho (-13,11), house_b (-19,19), shepherd (-21,8),
+  capela (10,25), corredor da artéria (|x| ≤ 2.4) e anel (z ≳ 30 no trecho NW).
+-->
+  <Group name="city.grid-district" translation="0 0 0">
+    <Entity name="house_grid_a" transform="rotation: 0 180 0" translation="-10 0 22" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/village_house_lod0.glb" lod1-url="/assets/meshes/village/village_house_lod1.glb" lod2-url="/assets/meshes/village/village_house_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <!-- Quintal: lenha encostada à fachada sul, barril + caixote a poente. -->
+    <Entity transform="rotation: 0 15 0" translation="-10 0 17.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9">
+      <GLTFLoader role="visual" url="/assets/meshes/village/log_pile_lod0.glb" lod1-url="/assets/meshes/village/log_pile_lod1.glb" lod2-url="/assets/meshes/village/log_pile_lod2.glb" />
+    </Entity>
+    <Entity translation="-13.6 0 25.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity transform="rotation: 0 12 0" translation="-13.4 0 23.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <!-- Banco virado para o caminho da ampliação. -->
+    <Entity transform="rotation: 0 65 0" translation="-7.9 0 17.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.6 0.9 0.55">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+    </Entity>
+    <!-- Tocha do quintal: chama no poste (sem PointLight — a praça gasta as 2). -->
+    <Entity translation="-6.4 0 25.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" />
+      <Entity>
+        <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+      </Entity>
+    </Entity>
+  </Group>
+</world>

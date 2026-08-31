@@ -1,0 +1,97 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Dropped attrs: place:align-to-terrain, point-light:decay, point-light:distance
+  Verbatim (no-op) tags: GLTFLoader x7, ParticleSystem x3
+-->
+<world>
+  <!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+  Edit this file for this district only. Cell coords: space-separated (at="4 2").
+
+  Layout compacto (muralha ±39.8): as âncoras da praça encolheram ~0.62×, mas
+  os offsets *dentro* de cada cluster (chama sobre a fogueira, bancos à volta
+  do lume, chama no topo do poste) são geometria medida do GLB e ficam como
+  estavam — escalá-los enterrava partículas dentro das malhas.
+-->
+  <!-- utilities: praça essencial — poço, fogueira+luz, bancos GLB, quadro, tochas, santuários. -->
+  <Group name="city.plaza" translation="0 0 0">
+    <!-- Poço medieval (~1.6 m nativo). Centro-oeste da praça.
+               Fora do corredor da artéria praça→mid_w (|z| ≤ 2.4). -->
+    <Entity name="well" translation="-6 0 4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_lod2.glb; mesh-anchor: base" script="well.lua">
+      <GLTFLoader role="visual" url="/assets/meshes/village/medieval_well_lod0.glb" lod1-url="/assets/meshes/village/medieval_well_lod1.glb" lod2-url="/assets/meshes/village/medieval_well_lod2.glb" />
+    </Entity>
+    <!-- Fogueira comunitária: GLB campfire_pit (anel de pedra, sem
+           chama modelada) + brasa/luz por cima. Canto SE da praça, fora dos
+           corredores das duas artérias (|x| ≤ 2.4 e |z| ≤ 2.4).
+           [G] abre descanso + viagem aos marcos da Nota (campfire.ts). -->
+    <Entity name="campfire" translation="6.5 0 -6.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base" script="campfire.lua">
+      <GLTFLoader role="visual" url="/assets/meshes/village/campfire_pit_lod0.glb" lod1-url="/assets/meshes/village/campfire_pit_lod1.glb" lod2-url="/assets/meshes/village/campfire_pit_lod2.glb" />
+    </Entity>
+    <!-- Chama: partículas reais, não um <Sphere> laranja. A esfera opaca
+               estática que aqui estava lia-se como uma bola pousada na pedra.
+               Geometria alvo do campfire_pit (~1.5×0.5×1.5): aro de pedra
+               com topo a y≈0.42 e cavidade interior de raio ≈0.45 → chama
+               enraizada a y=0.42 com raio de emissão 0.28 (fica dentro do
+               aro, acima do carvão/lenha). -->
+    <Entity translation="6.5 0 -6.6">
+      <ParticleSystem preset="fire" transform="pos: 0 0.42 0" particle-emitter="preset: fire; emission-rate: 48; shape-radius: 0.28; start-life-min: 0.5; start-life-max: 1.35; start-speed-min: 1.3; start-speed-max: 2.9; start-size-min: 0.34; start-size-max: 0.7; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="6.5 0 -6.6" body="fixed" collider="none">
+      <PointLight translation="0 0.7 0" color="0xff8a33" intensity="2400" shadows="false" />
+    </Group>
+    <!-- Bancos de madeira virados para a fogueira (rotação em graus).
+               Offset ±3 m em X, +3 m em Z — encostar mais metia o banco
+               dentro do aro de pedra. -->
+    <Entity transform="rotation: 0 35 0" translation="3.5 0 -3.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.6 0.9 0.55">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+    </Entity>
+    <Entity transform="rotation: 0 -35 0" translation="8.7 0 -3.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.6 0.9 0.55">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+    </Entity>
+    <!-- Quadro de avisos (borda sul da praça) — GLB notice_board.
+               [F] abre as recompensas da guarda (src/scripts/notice-board.ts). -->
+    <Entity name="notice_board" translation="5 0 -12.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/notice_board_collision.glb; mesh-anchor: base" script="notice-board.lua">
+      <GLTFLoader role="visual" url="/assets/meshes/village/notice_board_lod0.glb" lod1-url="/assets/meshes/village/notice_board_lod1.glb" lod2-url="/assets/meshes/village/notice_board_lod2.glb" />
+    </Entity>
+    <!-- Tochas da praça: GLB torch_post (sem chama modelada) + brasa/luz
+           por cima — orçamento de PointLights mantido em 2. Nos cantos NE/SW
+           da praça, onde a rua não passa. -->
+    <Entity translation="8.5 0 8.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" />
+    </Entity>
+    <!-- Chama da tocha: torch_post mede 2.20 m e a haste é sólida até
+               y≈2.15, por isso a esfera a y=1.9 estava enterrada dentro do
+               poste. Chama a y=2.14, estreita (raio 0.06) para caber na haste
+               de 0.23 m. -->
+    <Entity translation="8.5 0 8.5">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="8.5 0 8.5" body="fixed" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1280" />
+    </Group>
+    <Entity translation="-8.5 0 -8.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" />
+    </Entity>
+    <Entity translation="-8.5 0 -8.5">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-8.5 0 -8.5" body="fixed" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1280" />
+    </Group>
+  </Group>
+  <Group name="city.landmarks" translation="0 0 0">
+    <!-- Santuários místicos entre o anel periurbano (±25) e a muralha
+               (±39.8), encostados às vias E-W sem lhes ficar em cima. -->
+    <Entity name="rune-pillar" translation="-35 0 17" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" script="stone-pillar.lua" />
+    <Entity name="crystal-shrine" translation="35 0 17" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" script="crystal-shrine.lua" />
+  </Group>
+  <Group name="city.townsfolk" translation="0 0 0">
+    <!-- Transeuntes ambientes (src/game/townsfolk.ts): cada um adota a
+               rota cujo primeiro ponto fica mais perto do seu spawn. Sem
+               collider — passam pelas ruas, o jogador atravessa-os. -->
+    <Entity name="townsfolk_plaza" translation="5 0 10.5" script="townsfolk.lua" />
+    <Entity name="townsfolk_north" translation="0 0 -10" script="townsfolk.lua" />
+    <Entity name="townsfolk_market" translation="6 0 0" script="townsfolk.lua" />
+  </Group>
+</world>

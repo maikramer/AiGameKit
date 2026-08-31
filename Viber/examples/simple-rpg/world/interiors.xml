@@ -1,0 +1,551 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Dropped attrs: corner-radius, distance, edge-feather, opacity, place:align-to-terrain, place:y-offset, texture-repeat, texture-scale, texture-url
+  Verbatim (no-op) tags: GLTFLoader x110, TerrainPad x1
+  Note: opacity < 1 descartado (transparência sem equivalente na Fase 0)
+-->
+<world>
+  <!--
+  Ambientes internos (portais das portas → salas). Cena à parte, ao estilo RPG
+  clássico: a grelha vive num canto remoto do mapa (centro 859,281 — a 903 m
+  do vale, muito fora da zona jogável de ±400 m) e está fechada numa caixa
+  preta, por isso não há céu, horizonte nem relevo a aparecer por trás das
+  paredes.
+
+  PORQUÊ AQUI E NÃO FORA DO CAMPO DO TERRENO:
+  - Tentou-se pôr a grelha fora dos ±2000 m do heightmap (x≈3092). O `place`
+    resolve bem lá (`sampleHeightAt` devolve 0 fora dos limites), mas o
+    terreno continua a gerar chunks nessa zona e, ~4 s depois do teleporte,
+    o colisor do chunk despenetra o CCT: o jogador salta num único frame de
+    (3090, 0, 120) para a superfície do relevo a 1,4 km dali. Fora do campo
+    não é território suportado pela stack terreno/física.
+  - Aqui dentro do campo, um <TerrainPad> grande achata os 4 m de amplitude
+    da zona e a caixa preta assenta num plano.
+
+  CONTRATO DE COLISÃO:
+  - Rigidbodies só em entidades TOP-LEVEL com `place` (TerrainPlaceSystem).
+  - Cada sala = shell Composition (chão=Pad hard + paredes BAIXAS,
+    collider="auto") + luzes Composition (collider="none", SEM teto) +
+    mobília GameObject place.
+  - Paredes ~0.70 m (acima do autoStep 0.3 m, abaixo da câmara 3ª pessoa) —
+    dollhouse: vê-se a sala por cima, CCT não sai. Vão visual ~2.8 m em −Z (sill invisível 0.70 m — jogador não sai a pé; F no portal).
+  - SEM teto: câmara não fica tapada; lanternas montadas na parede baixa.
+  - Chão visual: <Pad edge-feather="0"> a y=0.12 acima do pad.
+  - Spawn no CENTRO; exit no vão −Z (>3 m do spawn, anti-bounce F 2.8 m).
+  - overlap-max="2": overlaps esperados dentro do shell.
+
+  Dimensões shell (L×P): capela 24×18 · forja 22×16 · casa 20×16 ·
+  celeiro/longhouse 28×20 · banca 18×14. Paredes 0.70 m. Sem teto.
+  Grelha: z=226 (casa_a / capela / forja) · z=281 (casas b/c, cabana) ·
+  z=336 (celeiro, longhouse, banca).
+
+  Mover a grelha obriga a actualizar REGISTRY em src/game/interiors.ts.
+-->
+  <Group name="interiors" translation="0 0 0">
+    <!-- Patamar da zona: achata o terreno sob a grelha inteira para a caixa
+       preta assentar num plano. Sem ele o relevo (4 m de amplitude aqui)
+       atravessaria o chão da caixa. -->
+    <TerrainPad at="859 281" size="280 260" falloff="24" corner-radius="20" />
+    <!-- ══════════════════════ VAZIO PRETO ══════════════════════ -->
+    <!-- Caixa que fecha a grelha inteira: sem isto via-se o céu (o background
+       é o envMap equirect, que o height-fog dos biomas não tapa). Albedo 0
+       com roughness 1 / metalness 0 não devolve nada do IBL, por isso lê-se
+       como vazio. collider="none": quem prende o jogador são as paredes da
+       sala, não esta casca. Altura 40 m para a câmara de 3ª pessoa não sair. -->
+    <Group translation="859 0 281" body="none" collider="none" overlap-max="99">
+      <!-- Chão do vazio a +0.04: à cota do terreno perdia o z-fight com o
+         relevo do pad e via-se uma faixa de chão iluminado entre as salas
+         e a parede da caixa. Fica abaixo do <Pad> das salas (0.12). -->
+      <Cuboid translation="0 0.04 0" base-color="#000000" roughness="1" metallic="0" half-size="120 0.04 110" />
+      <Cuboid translation="0 40 0" base-color="#000000" roughness="1" metallic="0" half-size="120 0.1 110" />
+      <Cuboid translation="-120 20 0" base-color="#000000" roughness="1" metallic="0" half-size="0.1 20 110" />
+      <Cuboid translation="120 20 0" base-color="#000000" roughness="1" metallic="0" half-size="0.1 20 110" />
+      <Cuboid translation="0 20 -110" base-color="#000000" roughness="1" metallic="0" half-size="120 20 0.1" />
+      <Cuboid translation="0 20 110" base-color="#000000" roughness="1" metallic="0" half-size="120 20 0.1" />
+    </Group>
+    <!-- ══════════════════════ CAPELA ══════════════════════ -->
+    <!-- Shell 24×18. Paredes 0.70 m, vão −Z, sem teto. Altar +Z. Pad 32×26. -->
+    <Group translation="857 0 226" body="fixed" collider="auto" overlap-max="2">
+      <Plane translation="0 0.12 0" half-size="12 9" />
+      <Cuboid translation="-6.7 0.35 -9" half-size="5.3 0.35 0.14" />
+      <Cuboid translation="6.7 0.35 -9" half-size="5.3 0.35 0.14" />
+      <Cuboid translation="0 0.35 -9" half-size="1.4 0.35 0.08" />
+      <Cuboid translation="0 0.35 9" half-size="12 0.35 0.14" />
+      <Cuboid translation="-12 0.35 0" half-size="0.14 0.35 9" />
+      <Cuboid translation="12 0.35 0" half-size="0.14 0.35 9" />
+    </Group>
+    <Group translation="857 0 226" body="fixed" collider="none" overlap-max="2">
+      <PointLight translation="0 2.4 0" color="#ffd9a0" intensity="8000" />
+      <PointLight translation="0 2.2 5" color="#ffe2b0" intensity="6400" />
+    </Group>
+    <Entity name="interior.chapel.altar" translation="857 0 232.9" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_altar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/chapel_altar_lod0.glb" lod1-url="/assets/meshes/interiors/chapel_altar_lod1.glb" lod2-url="/assets/meshes/interiors/chapel_altar_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.pulpit" translation="864.2 0 232.3" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pulpit_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/chapel_pulpit_lod0.glb" lod1-url="/assets/meshes/interiors/chapel_pulpit_lod1.glb" lod2-url="/assets/meshes/interiors/chapel_pulpit_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.organ" translation="849.8 0 232.3" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/church_organ_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/church_organ_lod0.glb" lod1-url="/assets/meshes/interiors/church_organ_lod1.glb" lod2-url="/assets/meshes/interiors/church_organ_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.candelabra" translation="850.25 0 230.2" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/candelabra_tall_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/candelabra_tall_lod0.glb" lod1-url="/assets/meshes/interiors/candelabra_tall_lod1.glb" lod2-url="/assets/meshes/interiors/candelabra_tall_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.confessional" translation="846.8 0 225.25" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/confessional_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/confessional_lod0.glb" lod1-url="/assets/meshes/interiors/confessional_lod1.glb" lod2-url="/assets/meshes/interiors/confessional_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.pew_f1" translation="863.75 0 228.7" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/chapel_pew_lod0.glb" lod1-url="/assets/meshes/interiors/chapel_pew_lod1.glb" lod2-url="/assets/meshes/interiors/chapel_pew_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.pew_f2" translation="850.25 0 228.7" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/chapel_pew_lod0.glb" lod1-url="/assets/meshes/interiors/chapel_pew_lod1.glb" lod2-url="/assets/meshes/interiors/chapel_pew_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.pew_b1" translation="863.75 0 223.9" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/chapel_pew_lod0.glb" lod1-url="/assets/meshes/interiors/chapel_pew_lod1.glb" lod2-url="/assets/meshes/interiors/chapel_pew_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.pew_b2" translation="850.25 0 223.9" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_pew_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/chapel_pew_lod0.glb" lod1-url="/assets/meshes/interiors/chapel_pew_lod1.glb" lod2-url="/assets/meshes/interiors/chapel_pew_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.statue" translation="864.8 0 219.4" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/chapel_statue_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/chapel_statue_lod0.glb" lod1-url="/assets/meshes/interiors/chapel_statue_lod1.glb" lod2-url="/assets/meshes/interiors/chapel_statue_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.pillar_e" translation="867.2 0 219.1" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.pillar_w" translation="846.8 0 219.1" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.brazier_e" translation="864.2 0 221.2" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/iron_brazier_lod0.glb" lod1-url="/assets/meshes/village/iron_brazier_lod1.glb" lod2-url="/assets/meshes/village/iron_brazier_lod2.glb" />
+    </Entity>
+    <Entity name="interior.chapel.brazier_w" translation="849.8 0 221.2" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/iron_brazier_lod0.glb" lod1-url="/assets/meshes/village/iron_brazier_lod1.glb" lod2-url="/assets/meshes/village/iron_brazier_lod2.glb" />
+    </Entity>
+    <!-- Saída no vão −Z. Distância spawn ≈8.1 m. -->
+    <Entity name="portal.exit_chapel" translation="857 0 217.9" script="building-portal.lua" />
+    <!-- ══════════════════════ FERRARIA ══════════════════════ -->
+    <!-- Shell 22×16. Paredes 0.70 m, vão −Z, sem teto. Fornalha +Z. Pad 30×24. -->
+    <Group translation="917 0 226" body="fixed" collider="auto" overlap-max="2">
+      <Plane translation="0 0.12 0" half-size="11 8" />
+      <Cuboid translation="-6.2 0.35 -8" half-size="4.8 0.35 0.14" />
+      <Cuboid translation="6.2 0.35 -8" half-size="4.8 0.35 0.14" />
+      <Cuboid translation="0 0.35 -8" half-size="1.4 0.35 0.08" />
+      <Cuboid translation="0 0.35 8" half-size="11 0.35 0.14" />
+      <Cuboid translation="-11 0.35 0" half-size="0.14 0.35 8" />
+      <Cuboid translation="11 0.35 0" half-size="0.14 0.35 8" />
+    </Group>
+    <Group translation="917 0 226" body="fixed" collider="none" overlap-max="2">
+      <PointLight translation="0 2.3 4" color="#ff8a40" intensity="9600" />
+      <PointLight translation="0 2.2 -2" color="#ffc090" intensity="4800" />
+    </Group>
+    <Entity name="interior.forge.furnace" translation="917 0 232.4" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/forge_furnace_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/forge_furnace_lod0.glb" lod1-url="/assets/meshes/interiors/forge_furnace_lod1.glb" lod2-url="/assets/meshes/interiors/forge_furnace_lod2.glb" />
+    </Entity>
+    <Entity name="interior.forge.anvil" translation="917 0 228.33" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/anvil_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/anvil_lod0.glb" lod1-url="/assets/meshes/village/anvil_lod1.glb" lod2-url="/assets/meshes/village/anvil_lod2.glb" />
+    </Entity>
+    <Entity name="interior.forge.sledge" translation="912.91 0 227.75" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/sledge_hammer_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/sledge_hammer_lod0.glb" />
+    </Entity>
+    <Entity name="interior.forge.weapon_rack" translation="926.11 0 224.84" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/weapon_rack_lod0.glb" lod1-url="/assets/meshes/village/weapon_rack_lod1.glb" lod2-url="/assets/meshes/village/weapon_rack_lod2.glb" />
+    </Entity>
+    <Entity name="interior.forge.bellows" translation="908.51 0 231.24" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/forge_bellows_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/forge_bellows_lod0.glb" lod1-url="/assets/meshes/village/forge_bellows_lod1.glb" lod2-url="/assets/meshes/village/forge_bellows_lod2.glb" />
+    </Entity>
+    <Entity name="interior.forge.quench" translation="925.49 0 230.95" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/quench_trough_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/quench_trough_lod0.glb" lod1-url="/assets/meshes/village/quench_trough_lod1.glb" lod2-url="/assets/meshes/village/quench_trough_lod2.glb" />
+    </Entity>
+    <Entity name="interior.forge.horseshoes" translation="908.83 0 232.11" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/horseshoe_pile_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/horseshoe_pile_lod0.glb" lod1-url="/assets/meshes/village/horseshoe_pile_lod1.glb" lod2-url="/assets/meshes/village/horseshoe_pile_lod2.glb" />
+    </Entity>
+    <Entity name="interior.forge.log_pile" translation="925.8 0 220.47" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/log_pile_lod0.glb" lod1-url="/assets/meshes/village/log_pile_lod1.glb" lod2-url="/assets/meshes/village/log_pile_lod2.glb" />
+    </Entity>
+    <Entity name="interior.forge.chopping" translation="908.2 0 220.47" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/chopping_block_lod0.glb" lod1-url="/assets/meshes/village/chopping_block_lod1.glb" lod2-url="/assets/meshes/village/chopping_block_lod2.glb" />
+    </Entity>
+    <!-- Saída no vão −Z. Distância spawn ≈7.1 m. -->
+    <Entity name="portal.exit_village_forge" translation="917 0 218.9" script="building-portal.lua" />
+    <!-- ══════════════════════ CASA COMUM ══════════════════════ -->
+    <!-- Shell 20×16. Paredes 0.70 m, vão −Z, sem teto. Pad 28×24. -->
+    <Group translation="797 0 226" body="fixed" collider="auto" overlap-max="2">
+      <Plane translation="0 0.12 0" half-size="10 8" />
+      <Cuboid translation="-5.7 0.35 -8" half-size="4.3 0.35 0.14" />
+      <Cuboid translation="5.7 0.35 -8" half-size="4.3 0.35 0.14" />
+      <Cuboid translation="0 0.35 -8" half-size="1.4 0.35 0.08" />
+      <Cuboid translation="0 0.35 8" half-size="10 0.35 0.14" />
+      <Cuboid translation="-10 0.35 0" half-size="0.14 0.35 8" />
+      <Cuboid translation="10 0.35 0" half-size="0.14 0.35 8" />
+    </Group>
+    <Group translation="797 0 226" body="fixed" collider="none" overlap-max="2">
+      <PointLight translation="0 2.3 1" color="#ffcf9a" intensity="8000" />
+      <PointLight translation="5 2.1 0" color="#ffb070" intensity="4000" />
+    </Group>
+    <Entity name="interior.house_a.hearth" translation="805 0 226" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/fireplace_hearth_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/fireplace_hearth_lod0.glb" lod1-url="/assets/meshes/interiors/fireplace_hearth_lod1.glb" lod2-url="/assets/meshes/interiors/fireplace_hearth_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.table" translation="797 0 227.6" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/dining_table_lod0.glb" lod1-url="/assets/meshes/interiors/dining_table_lod1.glb" lod2-url="/assets/meshes/interiors/dining_table_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.chair_n" translation="797 0 230.16" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb" lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.chair_s" translation="797 0 225.04" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb" lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.chair_w" translation="794 0 227.6" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb" lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.chair_e" translation="800 0 227.6" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb" lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.rug" translation="797 0 227.6" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/rug_woven_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/rug_woven_lod0.glb" lod1-url="/assets/meshes/interiors/rug_woven_lod1.glb" lod2-url="/assets/meshes/interiors/rug_woven_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.bed" translation="789.5 0 231.76" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bed_simple_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/bed_simple_lod0.glb" lod1-url="/assets/meshes/interiors/bed_simple_lod1.glb" lod2-url="/assets/meshes/interiors/bed_simple_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.cupboard" translation="789.33 0 220.24" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cupboard_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/cupboard_lod0.glb" lod1-url="/assets/meshes/interiors/cupboard_lod1.glb" lod2-url="/assets/meshes/interiors/cupboard_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.bookshelf" translation="789 0 225.36" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/bookshelf_lod0.glb" lod1-url="/assets/meshes/interiors/bookshelf_lod1.glb" lod2-url="/assets/meshes/interiors/bookshelf_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.cauldron" translation="804.33 0 229.84" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cauldron_iron_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/cauldron_iron_lod0.glb" lod1-url="/assets/meshes/interiors/cauldron_iron_lod1.glb" lod2-url="/assets/meshes/interiors/cauldron_iron_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.spinning_wheel" translation="804.67 0 220.56" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/spinning_wheel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/spinning_wheel_lod0.glb" lod1-url="/assets/meshes/interiors/spinning_wheel_lod1.glb" lod2-url="/assets/meshes/interiors/spinning_wheel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.barrel" translation="791.67 0 229.52" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_a.crate" translation="801.67 0 220.88" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <!-- Saída no vão −Z. Distância spawn ≈7.1 m. -->
+    <Entity name="portal.exit_house_a" translation="797 0 218.9" script="building-portal.lua" />
+    <!-- ══════════════════════ CASA B ══════════════════════ -->
+    <!-- Shell 20×16. Paredes 0.70 m, vão −Z, sem teto. Pad 28×24. -->
+    <Group translation="797 0 281" body="fixed" collider="auto" overlap-max="2">
+      <Plane translation="0 0.12 0" half-size="10 8" />
+      <Cuboid translation="-5.7 0.35 -8" half-size="4.3 0.35 0.14" />
+      <Cuboid translation="5.7 0.35 -8" half-size="4.3 0.35 0.14" />
+      <Cuboid translation="0 0.35 -8" half-size="1.4 0.35 0.08" />
+      <Cuboid translation="0 0.35 8" half-size="10 0.35 0.14" />
+      <Cuboid translation="-10 0.35 0" half-size="0.14 0.35 8" />
+      <Cuboid translation="10 0.35 0" half-size="0.14 0.35 8" />
+    </Group>
+    <Group translation="797 0 281" body="fixed" collider="none" overlap-max="2">
+      <PointLight translation="0 2.3 1" color="#ffcf9a" intensity="8000" />
+      <PointLight translation="5 2.1 0" color="#ffb070" intensity="4000" />
+    </Group>
+    <Entity name="interior.house_b.hearth" translation="805 0 281" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/fireplace_hearth_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/fireplace_hearth_lod0.glb" lod1-url="/assets/meshes/interiors/fireplace_hearth_lod1.glb" lod2-url="/assets/meshes/interiors/fireplace_hearth_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.table" translation="797 0 283.24" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/dining_table_lod0.glb" lod1-url="/assets/meshes/interiors/dining_table_lod1.glb" lod2-url="/assets/meshes/interiors/dining_table_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.chair_n" translation="797 0 285.48" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb" lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.chair_w" translation="794 0 283.24" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb" lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.chair_e" translation="800 0 283.24" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb" lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.rug" translation="797 0 283.24" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/rug_woven_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/rug_woven_lod0.glb" lod1-url="/assets/meshes/interiors/rug_woven_lod1.glb" lod2-url="/assets/meshes/interiors/rug_woven_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.bed" translation="789.5 0 286.44" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bed_simple_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/bed_simple_lod0.glb" lod1-url="/assets/meshes/interiors/bed_simple_lod1.glb" lod2-url="/assets/meshes/interiors/bed_simple_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.cupboard" translation="789.33 0 275.56" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cupboard_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/cupboard_lod0.glb" lod1-url="/assets/meshes/interiors/cupboard_lod1.glb" lod2-url="/assets/meshes/interiors/cupboard_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.bookshelf" translation="789 0 281.32" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/bookshelf_lod0.glb" lod1-url="/assets/meshes/interiors/bookshelf_lod1.glb" lod2-url="/assets/meshes/interiors/bookshelf_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.stool" translation="804.33 0 275.56" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.barrel" translation="791.33 0 286.12" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.crate" translation="804.33 0 286.44" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.lantern_w" translation="788.15 0 282.6" overlap-max="2">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb" lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_b.lantern_e" translation="805.85 0 282.6" overlap-max="2">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb" lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb" />
+    </Entity>
+    <!-- Saída no vão −Z. Distância spawn ≈7.1 m. -->
+    <Entity name="portal.exit_house_b" translation="797 0 273.9" script="building-portal.lua" />
+    <!-- ══════════════════════ CASA C ══════════════════════ -->
+    <!-- Shell 20×16. Cozinha. Paredes 0.70 m, vão −Z, sem teto. Pad 28×24. -->
+    <Group translation="857 0 281" body="fixed" collider="auto" overlap-max="2">
+      <Plane translation="0 0.12 0" half-size="10 8" />
+      <Cuboid translation="-5.7 0.35 -8" half-size="4.3 0.35 0.14" />
+      <Cuboid translation="5.7 0.35 -8" half-size="4.3 0.35 0.14" />
+      <Cuboid translation="0 0.35 -8" half-size="1.4 0.35 0.08" />
+      <Cuboid translation="0 0.35 8" half-size="10 0.35 0.14" />
+      <Cuboid translation="-10 0.35 0" half-size="0.14 0.35 8" />
+      <Cuboid translation="10 0.35 0" half-size="0.14 0.35 8" />
+    </Group>
+    <Group translation="857 0 281" body="fixed" collider="none" overlap-max="2">
+      <PointLight translation="0 2.3 1" color="#ffd0a0" intensity="8000" />
+      <PointLight translation="5 2.1 0" color="#ff8a40" intensity="4000" />
+    </Group>
+    <Entity name="interior.house_c.hearth" translation="865 0 281" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/fireplace_hearth_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/fireplace_hearth_lod0.glb" lod1-url="/assets/meshes/interiors/fireplace_hearth_lod1.glb" lod2-url="/assets/meshes/interiors/fireplace_hearth_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.cauldron" translation="864.33 0 284.52" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cauldron_iron_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/cauldron_iron_lod0.glb" lod1-url="/assets/meshes/interiors/cauldron_iron_lod1.glb" lod2-url="/assets/meshes/interiors/cauldron_iron_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.table" translation="857 0 283.08" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/dining_table_lod0.glb" lod1-url="/assets/meshes/interiors/dining_table_lod1.glb" lod2-url="/assets/meshes/interiors/dining_table_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.stool_n" translation="857 0 285.16" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.stool_w" translation="854.17 0 283.08" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.stool_e" translation="859.83 0 283.08" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.bed" translation="849.5 0 286.44" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bed_simple_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/bed_simple_lod0.glb" lod1-url="/assets/meshes/interiors/bed_simple_lod1.glb" lod2-url="/assets/meshes/interiors/bed_simple_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.cupboard" translation="849.33 0 275.56" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cupboard_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/cupboard_lod0.glb" lod1-url="/assets/meshes/interiors/cupboard_lod1.glb" lod2-url="/assets/meshes/interiors/cupboard_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.spinning" translation="864.67 0 275.56" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/spinning_wheel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/spinning_wheel_lod0.glb" lod1-url="/assets/meshes/interiors/spinning_wheel_lod1.glb" lod2-url="/assets/meshes/interiors/spinning_wheel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.crate" translation="861.33 0 275.56" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.barrel" translation="849.67 0 286.12" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.house_c.lantern" translation="857 0 287.85" overlap-max="2">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb" lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb" />
+    </Entity>
+    <!-- Saída no vão −Z. Distância spawn ≈7.1 m. -->
+    <Entity name="portal.exit_house_c" translation="857 0 273.9" script="building-portal.lua" />
+    <!-- ══════════════════════ CABANA DO PASTOR ══════════════════════ -->
+    <!-- Shell 20×16. Madeira. Paredes 0.70 m, vão −Z, sem teto. Pad 28×24. -->
+    <Group translation="917 0 281" body="fixed" collider="auto" overlap-max="2">
+      <Plane translation="0 0.12 0" half-size="10 8" />
+      <Cuboid translation="-5.7 0.35 -8" half-size="4.3 0.35 0.14" />
+      <Cuboid translation="5.7 0.35 -8" half-size="4.3 0.35 0.14" />
+      <Cuboid translation="0 0.35 -8" half-size="1.4 0.35 0.08" />
+      <Cuboid translation="0 0.35 8" half-size="10 0.35 0.14" />
+      <Cuboid translation="-10 0.35 0" half-size="0.14 0.35 8" />
+      <Cuboid translation="10 0.35 0" half-size="0.14 0.35 8" />
+    </Group>
+    <Group translation="917 0 281" body="fixed" collider="none" overlap-max="2">
+      <PointLight translation="0 2.2 1" color="#e8c090" intensity="6400" />
+      <PointLight translation="4 2.0 0" color="#d09050" intensity="4000" />
+    </Group>
+    <Entity name="interior.shepherd_cottage.spinning" translation="923.33 0 285.48" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/spinning_wheel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/spinning_wheel_lod0.glb" lod1-url="/assets/meshes/interiors/spinning_wheel_lod1.glb" lod2-url="/assets/meshes/interiors/spinning_wheel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.shepherd_cottage.stool" translation="921 0 284.52" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.shepherd_cottage.table" translation="917 0 282.92" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/dining_table_lod0.glb" lod1-url="/assets/meshes/interiors/dining_table_lod1.glb" lod2-url="/assets/meshes/interiors/dining_table_lod2.glb" />
+    </Entity>
+    <Entity name="interior.shepherd_cottage.stool_w" translation="914.17 0 282.92" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.shepherd_cottage.stool_e" translation="919.83 0 282.92" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.shepherd_cottage.bed" translation="909.67 0 286.12" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bed_simple_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/bed_simple_lod0.glb" lod1-url="/assets/meshes/interiors/bed_simple_lod1.glb" lod2-url="/assets/meshes/interiors/bed_simple_lod2.glb" />
+    </Entity>
+    <Entity name="interior.shepherd_cottage.crate" translation="909.67 0 275.88" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity name="interior.shepherd_cottage.barrel" translation="924 0 275.88" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.shepherd_cottage.chopping" translation="924 0 286.12" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/chopping_block_lod0.glb" lod1-url="/assets/meshes/village/chopping_block_lod1.glb" lod2-url="/assets/meshes/village/chopping_block_lod2.glb" />
+    </Entity>
+    <Entity name="interior.shepherd_cottage.lantern" translation="917 0 287.85" overlap-max="2">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb" lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb" />
+    </Entity>
+    <!-- Saída no vão −Z. Distância spawn ≈7.1 m. -->
+    <Entity name="portal.exit_shepherd_cottage" translation="917 0 273.9" script="building-portal.lua" />
+    <!-- ══════════════════════ CELEIRO ══════════════════════ -->
+    <!-- Shell 28×20. Paredes 0.70 m, vão −Z, sem teto. Corredor central. Pad 36×28. -->
+    <Group translation="797 0 336" body="fixed" collider="auto" overlap-max="2">
+      <Plane translation="0 0.12 0" half-size="14 10" />
+      <Cuboid translation="-7.7 0.35 -10" half-size="6.3 0.35 0.14" />
+      <Cuboid translation="7.7 0.35 -10" half-size="6.3 0.35 0.14" />
+      <Cuboid translation="0 0.35 -10" half-size="1.4 0.35 0.08" />
+      <Cuboid translation="0 0.35 10" half-size="14 0.35 0.14" />
+      <Cuboid translation="-14 0.35 0" half-size="0.14 0.35 10" />
+      <Cuboid translation="14 0.35 0" half-size="0.14 0.35 10" />
+    </Group>
+    <Group translation="797 0 336" body="fixed" collider="none" overlap-max="2">
+      <PointLight translation="0 2.4 0" color="#d8b080" intensity="7200" />
+      <PointLight translation="-6 2.2 4" color="#c09050" intensity="4000" />
+    </Group>
+    <Entity name="interior.village_barn.log_n" translation="786.15 0 343" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/log_pile_lod0.glb" lod1-url="/assets/meshes/village/log_pile_lod1.glb" lod2-url="/assets/meshes/village/log_pile_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.log_s" translation="786.15 0 329.67" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/log_pile_lod0.glb" lod1-url="/assets/meshes/village/log_pile_lod1.glb" lod2-url="/assets/meshes/village/log_pile_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.crate_w" translation="786.5 0 338" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.crate_e" translation="807.5 0 338" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.barrel_ne" translation="807.85 0 343" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.barrel_se" translation="807.85 0 329.67" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.barrel_n" translation="805.75 0 343" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.chopping" translation="786.15 0 334" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/chopping_block_lod0.glb" lod1-url="/assets/meshes/village/chopping_block_lod1.glb" lod2-url="/assets/meshes/village/chopping_block_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.horseshoes" translation="807.5 0 334" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/horseshoe_pile_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/horseshoe_pile_lod0.glb" lod1-url="/assets/meshes/village/horseshoe_pile_lod1.glb" lod2-url="/assets/meshes/village/horseshoe_pile_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.stool" translation="806.1 0 334.33" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.lantern_w" translation="784.15 0 336" overlap-max="2">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb" lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.lantern_e" translation="809.85 0 336" overlap-max="2">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb" lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb" />
+    </Entity>
+    <Entity name="interior.village_barn.lantern_n" translation="797 0 344.85" overlap-max="2">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb" lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb" />
+    </Entity>
+    <!-- Saída no vão −Z. Distância spawn ≈9.1 m. -->
+    <Entity name="portal.exit_village_barn" translation="797 0 326.9" script="building-portal.lua" />
+    <!-- ══════════════════════ LONGHOUSE ══════════════════════ -->
+    <!-- Shell 28×20. Barra +Z. Paredes 0.70 m, vão −Z, sem teto. Pad 36×28. -->
+    <Group translation="862 0 336" body="fixed" collider="auto" overlap-max="2">
+      <Plane translation="0 0.12 0" half-size="14 10" />
+      <Cuboid translation="-7.7 0.35 -10" half-size="6.3 0.35 0.14" />
+      <Cuboid translation="7.7 0.35 -10" half-size="6.3 0.35 0.14" />
+      <Cuboid translation="0 0.35 -10" half-size="1.4 0.35 0.08" />
+      <Cuboid translation="0 0.35 10" half-size="14 0.35 0.14" />
+      <Cuboid translation="-14 0.35 0" half-size="0.14 0.35 10" />
+      <Cuboid translation="14 0.35 0" half-size="0.14 0.35 10" />
+    </Group>
+    <Group translation="862 0 336" body="fixed" collider="none" overlap-max="2">
+      <PointLight translation="0 2.4 5" color="#ff8a40" intensity="9600" />
+      <PointLight translation="0 2.2 -2" color="#ffc090" intensity="5600" />
+    </Group>
+    <Entity name="interior.longhouse.bar" translation="862 0 343.67" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/tavern_bar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/tavern_bar_lod0.glb" lod1-url="/assets/meshes/interiors/tavern_bar_lod1.glb" lod2-url="/assets/meshes/interiors/tavern_bar_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.stool_bar_w" translation="859.2 0 341.67" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.stool_bar_e" translation="864.8 0 341.67" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.table" translation="862 0 338.5" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/dining_table_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/dining_table_lod0.glb" lod1-url="/assets/meshes/interiors/dining_table_lod1.glb" lod2-url="/assets/meshes/interiors/dining_table_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.chair_n" translation="862 0 340.83" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb" lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.chair_w" translation="858.5 0 338.5" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb" lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.chair_e" translation="865.5 0 338.5" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/wooden_chair_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/wooden_chair_lod0.glb" lod1-url="/assets/meshes/interiors/wooden_chair_lod1.glb" lod2-url="/assets/meshes/interiors/wooden_chair_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.bench_w" translation="851.85 0 339.33" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_bench_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.bench_e" translation="872.15 0 339.33" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_bench_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.bookshelf" translation="850.8 0 330" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/bookshelf_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/bookshelf_lod0.glb" lod1-url="/assets/meshes/interiors/bookshelf_lod1.glb" lod2-url="/assets/meshes/interiors/bookshelf_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.candelabra_e" translation="872.15 0 343" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/candelabra_tall_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/candelabra_tall_lod0.glb" lod1-url="/assets/meshes/interiors/candelabra_tall_lod1.glb" lod2-url="/assets/meshes/interiors/candelabra_tall_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.candelabra_w" translation="851.85 0 343" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/candelabra_tall_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/candelabra_tall_lod0.glb" lod1-url="/assets/meshes/interiors/candelabra_tall_lod1.glb" lod2-url="/assets/meshes/interiors/candelabra_tall_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.crate" translation="872.85 0 329.67" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.barrel" translation="851.15 0 329.67" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.lantern_w" translation="849.15 0 336.67" overlap-max="2">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb" lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb" />
+    </Entity>
+    <Entity name="interior.longhouse.lantern_e" translation="874.85 0 336.67" overlap-max="2">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb" lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb" />
+    </Entity>
+    <!-- Saída no vão −Z. Distância spawn ≈9.1 m. -->
+    <Entity name="portal.exit_longhouse" translation="862 0 326.9" script="building-portal.lua" />
+    <!-- ══════════════════════ BANCA DO MERCADO ══════════════════════ -->
+    <!-- Shell 18×14. Sala partilhada stalls a/b/c. Paredes 0.70 m, sem teto. Pad 26×22. -->
+    <Group translation="927 0 336" body="fixed" collider="auto" overlap-max="2">
+      <Plane translation="0 0.12 0" half-size="9 7" />
+      <Cuboid translation="-5.2 0.35 -7" half-size="3.8 0.35 0.14" />
+      <Cuboid translation="5.2 0.35 -7" half-size="3.8 0.35 0.14" />
+      <Cuboid translation="0 0.35 -7" half-size="1.4 0.35 0.08" />
+      <Cuboid translation="0 0.35 7" half-size="9 0.35 0.14" />
+      <Cuboid translation="-9 0.35 0" half-size="0.14 0.35 7" />
+      <Cuboid translation="9 0.35 0" half-size="0.14 0.35 7" />
+    </Group>
+    <Group translation="927 0 336" body="fixed" collider="none" overlap-max="2">
+      <PointLight translation="0 2.2 2" color="#ffcf9a" intensity="7200" />
+      <PointLight translation="0 2.1 -2" color="#ffb070" intensity="4000" />
+    </Group>
+    <Entity name="interior.market.bar" translation="927 0 340.55" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/tavern_bar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/tavern_bar_lod0.glb" lod1-url="/assets/meshes/interiors/tavern_bar_lod1.glb" lod2-url="/assets/meshes/interiors/tavern_bar_lod2.glb" />
+    </Entity>
+    <Entity name="interior.market.stool_w" translation="924.3 0 338.62" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.market.stool_e" translation="929.7 0 338.62" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/stool_wood_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/stool_wood_lod0.glb" lod1-url="/assets/meshes/interiors/stool_wood_lod1.glb" lod2-url="/assets/meshes/interiors/stool_wood_lod2.glb" />
+    </Entity>
+    <Entity name="interior.market.crate_w" translation="920.52 0 331.8" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity name="interior.market.crate_e" translation="933.48 0 331.8" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity name="interior.market.barrel_w" translation="920.52 0 340.2" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.market.barrel_e" translation="933.48 0 340.2" overlap-max="2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity name="interior.market.lantern" translation="934.85 0 336" overlap-max="2">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/lantern_hanging_lod0.glb" lod1-url="/assets/meshes/interiors/lantern_hanging_lod1.glb" lod2-url="/assets/meshes/interiors/lantern_hanging_lod2.glb" />
+    </Entity>
+    <!-- Saída no vão −Z. Distância spawn ≈6.1 m. -->
+    <Entity name="portal.exit_market" translation="927 0 329.9" script="building-portal.lua" />
+  </Group>
+</world>

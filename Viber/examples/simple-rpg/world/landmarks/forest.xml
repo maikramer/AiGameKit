@@ -1,0 +1,162 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Dropped attrs: place:align-to-terrain, point-light:decay, point-light:distance
+  Verbatim (no-op) tags: GLTFLoader x30, ParticleSystem x2, SpawnExclusion x4
+-->
+<world>
+  <!--
+  Landmarks da FLORESTA SOMBRIA (Norte). Loaded via Include.
+
+  Cada landmark é um destino: vê-se de longe, tem um trilho a ligá-lo
+  (paths/trails.xml) e dá alguma coisa ao jogador (recompensa, diálogo ou
+  atalho). O relevo vem cru do Terrain3D — não há patamares esculpidos, por
+  isso confirmar o declive real de cada coordenada.
+-->
+  <Group name="biome.forest.landmarks" translation="0 0 0">
+    <!-- ============================================================
+       §1 POSTO AVANÇADO ARRUINADO (-46, 88)
+       Torre de vigia meio caída na orla oeste da floresta. Primeiro
+       destino a partir do portão norte: dá o miradouro e o tomo.
+       ============================================================ -->
+    <Entity name="forest-outpost-tower" translation="-92 0 176" transform="rotation: 0 24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/watchtower_lod0.glb" lod1-url="/assets/meshes/village/watchtower_lod1.glb" lod2-url="/assets/meshes/village/watchtower_lod2.glb" lod-threshold-near="55" lod-threshold-mid="140" />
+    </Entity>
+    <Entity translation="-86 0 172" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity translation="-98 0 173" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity translation="-90 0 170" transform="rotation: 0 40 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9">
+      <GLTFLoader role="visual" url="/assets/meshes/village/log_pile_lod0.glb" lod1-url="/assets/meshes/village/log_pile_lod1.glb" lod2-url="/assets/meshes/village/log_pile_lod2.glb" />
+    </Entity>
+    <Entity translation="-88 0 176" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" />
+    </Entity>
+    <Entity translation="-80 0 174" transform="rotation: 0 -30 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/weapon_rack_lod0.glb" lod1-url="/assets/meshes/village/weapon_rack_lod1.glb" lod2-url="/assets/meshes/village/weapon_rack_lod2.glb" />
+    </Entity>
+    <Entity translation="-81 0 176" transform="rotation: 0 15 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.15 1.0 0.12">
+      <GLTFLoader role="visual" url="/assets/meshes/props/sword_hero_lod0.glb" lod1-url="/assets/meshes/props/sword_hero_lod1.glb" lod2-url="/assets/meshes/props/sword_hero_lod2.glb" />
+    </Entity>
+    <!-- Recompensa do posto: tomo do vigia (XP), [F]. -->
+    <Entity name="forest-watch-tome" translation="-84 0 183" script="poi/watch-tome.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base" />
+    <!-- ============================================================
+       §2 CÍRCULO DE MENIRES (52, 118)
+       Oito pedras eretas num anel de 7 m, altar ao centro. Marco
+       visível acima do dossel; luz fria e partículas mágicas.
+       ============================================================ -->
+    <Entity translation="104 0 250" transform="scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb" />
+    </Entity>
+    <Entity translation="114 0 246" transform="rotation: 0 45 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb" />
+    </Entity>
+    <Entity translation="118 0 236" transform="rotation: 0 90 0; scale: 1.55 1.55 1.55" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb" />
+    </Entity>
+    <Entity translation="114 0 226" transform="rotation: 0 135 0; scale: 1.35 1.35 1.35" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb" />
+    </Entity>
+    <Entity translation="104 0 222" transform="rotation: 0 180 0; scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb" />
+    </Entity>
+    <Entity translation="94 0 226" transform="rotation: 0 225 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb" />
+    </Entity>
+    <Entity translation="90 0 236" transform="rotation: 0 270 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb" />
+    </Entity>
+    <Entity translation="94 0 246" transform="rotation: 0 315 0; scale: 1.45 1.45 1.45" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb" />
+    </Entity>
+    <!-- Altar central (GLB) + luz mágica -->
+    <Entity name="forest-stone-circle" translation="104 0 236" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/druid_stone_altar_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/terrain/druid_stone_altar_lod0.glb" lod1-url="/assets/meshes/terrain/druid_stone_altar_lod1.glb" lod2-url="/assets/meshes/terrain/druid_stone_altar_lod2.glb" />
+      <PointLight translation="0 1.1 0" color="0x6ec8ff" intensity="1600" />
+    </Entity>
+    <Entity translation="104 0 236">
+      <ParticleSystem preset="magic" transform="pos: 0 1.4 0" />
+    </Entity>
+    <SpawnExclusion at="104 236" radius="34" />
+    <!-- ============================================================
+       §3 ACAMPAMENTO DE LENHADOR ABANDONADO (-30, 64)
+       Primeira coisa que se vê ao sair do portão norte: o alpendre,
+       toros cortados e a serração parada. Explica de onde vem a
+       madeira da cidade.
+       ============================================================ -->
+    <Entity name="forest-logging-camp" translation="-60 0 128" transform="rotation: 0 -18 0; scale: 0.62 0.62 0.62" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/village_longhouse_lod0.glb" lod1-url="/assets/meshes/village/village_longhouse_lod1.glb" lod2-url="/assets/meshes/village/village_longhouse_lod2.glb" lod-threshold-near="50" lod-threshold-mid="130" />
+    </Entity>
+    <!-- Toros cortados empilhados (log_pile GLB) + cepo de rachar (chopping_block GLB) -->
+    <Entity translation="-42 0 120" transform="rotation: 0 -14 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/log_pile_lod0.glb" lod1-url="/assets/meshes/village/log_pile_lod1.glb" lod2-url="/assets/meshes/village/log_pile_lod2.glb" />
+    </Entity>
+    <Entity translation="-36.8 0 117.2" transform="rotation: 0 20 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/chopping_block_lod0.glb" lod1-url="/assets/meshes/village/chopping_block_lod1.glb" lod2-url="/assets/meshes/village/chopping_block_lod2.glb" />
+    </Entity>
+    <Entity translation="-76 0 117" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity translation="-79 0 122" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity translation="-47 0 138">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+    </Entity>
+    <Entity translation="-60 0 128">
+      <ParticleSystem preset="smoke" transform="pos: 0 4.2 0" particle-emitter="preset: smoke; emission-rate: 4; start-life-min: 2.4; start-life-max: 4.2; start-speed-min: 0.3; start-speed-max: 0.8; start-size-min: 0.35; start-size-max: 0.8; start-color: #9a9a9a; looping: 1; world-space: 1" />
+    </Entity>
+    <SpawnExclusion at="-60 128" radius="22" />
+    <!-- ============================================================
+       §4 POÇO DA ENCRUZILHADA (14, 96)
+       Ponto de água a meio do trilho norte — descanso e referência.
+       ============================================================ -->
+    <Entity name="forest-crossroads-well" translation="28 0 192" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/medieval_well_lod0.glb" lod1-url="/assets/meshes/village/medieval_well_lod1.glb" lod2-url="/assets/meshes/village/medieval_well_lod2.glb" />
+    </Entity>
+    <Entity translation="33.2 0 188.8" transform="rotation: 0 30 0">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb" />
+    </Entity>
+    <Group translation="23.2 0 194.8" body="none" collider="none">
+      <PointLight translation="0 2.15 0" color="0xffb060" intensity="1120" />
+    </Group>
+    <SpawnExclusion at="28 192" radius="12" />
+    <!-- ============================================================
+       §5 CLAREIRA DA BRUXA (-10, 135) — landmark existente
+       ============================================================ -->
+    <Entity name="witch-hut" translation="-20 0 270" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/forest/witch_hut_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/forest/witch_hut_lod0.glb" lod1-url="/assets/meshes/forest/witch_hut_lod1.glb" lod2-url="/assets/meshes/forest/witch_hut_lod2.glb" lod-threshold-near="45" lod-threshold-mid="120" />
+    </Entity>
+    <!-- Luz verde na clareira da bruxa (sem caldeirão Cylinder). -->
+    <Group translation="-8 0 260" body="none" collider="none">
+      <PointLight translation="0 1.1 0" color="0x55e055" intensity="1760" />
+    </Group>
+    <SpawnExclusion at="-20 266" radius="24" />
+    <Entity translation="-14 0 264" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cauldron_iron_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/interiors/cauldron_iron_lod0.glb" lod1-url="/assets/meshes/interiors/cauldron_iron_lod1.glb" lod2-url="/assets/meshes/interiors/cauldron_iron_lod2.glb" />
+    </Entity>
+    <Entity translation="-24 0 272" transform="rotation: 0 50 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <!-- Bosque encantado: luz + cogumelos brilhantes (mushroom_glow, antes sem
+       referência XML) + cogumelos forrageáveis. -->
+    <Group translation="36 0 144" body="none" collider="none">
+      <PointLight translation="0 0.8 0" color="0x6ee8d8" intensity="1120" />
+    </Group>
+    <Entity translation="34.4 0 142.8" transform="rotation: 0 40 0">
+      <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" />
+    </Entity>
+    <Entity translation="38.2 0 145.2" transform="rotation: 0 160 0; scale: 0.85 0.85 0.85">
+      <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" />
+    </Entity>
+    <Entity translation="36.8 0 141" transform="rotation: 0 260 0; scale: 1.15 1.15 1.15">
+      <GLTFLoader role="visual" url="/assets/meshes/forest/mushroom_glow_lod0.glb" lod1-url="/assets/meshes/forest/mushroom_glow_lod1.glb" lod2-url="/assets/meshes/forest/mushroom_glow_lod2.glb" />
+    </Entity>
+    <!-- mushroom.ts: [F] come e cura 40 HP, uma vez cada. -->
+    <Entity name="forage-mushroom-1" translation="-44 0 124" script="mushroom.lua" />
+    <Entity name="forage-mushroom-2" translation="52 0 192" script="mushroom.lua" />
+  </Group>
+  <!-- FIM biome.forest.landmarks -->
+</world>

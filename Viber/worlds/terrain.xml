@@ -1,0 +1,55 @@
+<!--
+  Terrain feature demo. Exercises every declarative ground feature of the
+  Viber native terrain: heightfield, pads, lake, river, roads and a road
+  network with a bridge segment. "cargo run: analyze worlds/terrain.xml"
+  must report 1 heightfield + 5 ground features and no skipped tags.
+-->
+<world clear-color="#87ceeb">
+  <AmbientLight color="#bfd4e0" brightness="400" />
+  <DirectionalLight direction="-0.5 -1 -0.3" illuminance="28000" shadows="true" />
+
+  <!-- Heightfield: procedural (no heightmap attribute), 512 m world. -->
+  <Terrain name="vale" world-size="512" max-height="60" chunk-size="64"
+           levels="4" resolution="64" collision-resolution="32"
+           height-smoothing="1" seed="7"
+           base-color="#c9c5ba" color-low="#4a6b3a" color-mid="#5c7a42"
+           color-high="#8a8a7a" color-rock="#6b6560"
+           snow-height="0.82" slope-threshold="0.55" slope-softness="0.1" />
+
+  <!-- Plaza pad at the world center. -->
+  <TerrainPad name="plaza" at="0 0" size="48 48" falloff="14" corner-radius="10" />
+
+  <!-- Lake in the southwest quadrant. -->
+  <Lake name="lagoa" at="-140 -120" radius="26" depth="3.2" water-offset="0.6"
+        color="#2f5a4a" opacity="0.8" ripple="0.5" />
+
+  <!-- River crossing the map from north to south, through the east side. -->
+  <River name="rio" path="150 220 170 120 150 20 175 -80 150 -200"
+         width="14" depth="3.4" water-offset="1.0"
+         bank-width="5.5" bank-height="0.9" color="#2a6685" opacity="0.88" />
+
+  <!-- A dirt trail (decal only — no terrain carve). -->
+  <Road name="trilha" path="-60 32 -10 24 40 30"
+        width="3" flatten="0" texture-scale="6" edge-feather="1.0" />
+
+  <!-- Road network: plaza crossings + a bridge over the river. -->
+  <RoadNetwork name="estradas" default-profile="artery" default-width="6"
+               crossing-flare="true" flatten="true"
+               flatten-falloff="18" flatten-window="56" flatten-max-grade="0.3"
+               texture-scale="9">
+    <Way id="plaza" xz="0 0" width="8" />
+    <Way id="oeste" xz="-60 0" />
+    <Way id="nascente" xz="120 0" />
+    <Way id="ponte_o" xz="128 0" />
+    <Way id="ponte_e" xz="160 0" />
+    <Way id="leste" xz="190 0" />
+
+    <Segment a="plaza" b="oeste" />
+    <Segment a="plaza" b="nascente" />
+    <!-- Bridge: spans the river channel; no corridor carve. -->
+    <Segment a="ponte_o" b="ponte_e" profile="bridge" />
+    <Segment a="ponte_e" b="leste" />
+  </RoadNetwork>
+
+  <OrbitCamera target="plaza" distance="120" height="55" pitch="24" />
+</world>

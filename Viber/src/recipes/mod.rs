@@ -2,17 +2,26 @@
 //!
 //! Tags and attributes follow Bevy component/field names (`translation`,
 //! `euler`, `half-size`, `base-color`, `metallic`, …). Tag matching is
-//! case-insensitive; unknown attributes become warnings, unknown elements are
-//! hard errors with the known-tag list.
+//! case-insensitive; unknown attributes become warnings and unknown elements
+//! are skipped as no-ops (so worlds written against a bigger tag vocabulary
+//! still run — `analyze` reports what was skipped).
 
 pub mod spawn;
 pub mod transform;
 
-use anyhow::{Result, bail};
+use std::collections::BTreeMap;
 
+use anyhow::{Result, bail};
+use bevy::math::Vec2;
+
+use crate::terrain::TerrainSpec;
+use crate::terrain::roads::{RoadNetworkSpec, RoadProfile, RoadSpec, SegmentSpec, WaySpec};
+use crate::terrain::spec::TerrainPadSpec;
+use crate::terrain::water::{LakeSpec, RiverSpec};
 use crate::xml::{XmlNode, values};
 
 /// Tags accepted inside a `<world>` root (lowercase canonical spellings).
+/// Anything else parses as a no-op skip; `analyze` reports the coverage.
 pub const KNOWN_TAGS: &[&str] = &[
     "entity",
     "group",
@@ -22,8 +31,15 @@ pub const KNOWN_TAGS: &[&str] = &[
     "plane",
     "capsule",
     "pointlight",
+    "directionallight",
     "ambientlight",
     "orbitcamera",
+    "terrain",
+    "terrainpad",
+    "lake",
+    "river",
+    "road",
+    "roadnetwork",
 ];
 
 /// A parsed world: clear color, entity tree and non-fatal warnings.
@@ -32,6 +48,15 @@ pub struct ParsedWorld {
     pub clear_color: Option<[f32; 3]>,
     pub entities: Vec<EntitySpec>,
     pub warnings: Vec<String>,
+    /// Elements skipped because their tag is not implemented, by tag name.
+    pub skipped_tags: BTreeMap<String, usize>,
+}
+
+/// Accumulates non-fatal parse findings.
+#[derive(Debug, Default)]
+struct ParseCtx {
+    warnings: Vec<String>,
+    skipped: BTreeMap<String, usize>,
 }
 
 /// Local transform of an entity (world transform comes from the hierarchy).
@@ -93,6 +118,14 @@ pub enum EntityKind {
         radius: Option<f32>,
         shadows: Option<bool>,
     },
+    DirectionalLight {
+        color: Option<[f32; 3]>,
+        /// Lux; unset uses the Bevy default (10,000 — ambient daylight).
+        illuminance: Option<f32>,
+        /// Direction the light travels, world space (normalized on spawn).
+        direction: [f32; 3],
+        shadows: Option<bool>,
+    },
     /// Applied as a world resource, not an entity.
     AmbientLight {
         color: Option<[f32; 3]>,
@@ -106,6 +139,19 @@ pub enum EntityKind {
         /// `Some` only when `pitch` was set explicitly (overrides `height`).
         pitch_deg: Option<f32>,
     },
+    /// `<Terrain>` — declarative heightfield terrain (consumed by the terrain
+    /// runtime; the element itself spawns the chunk hierarchy).
+    Terrain { spec: TerrainSpec },
+    /// `<TerrainPad>` — ground-flattening pad (world XZ, hierarchy-translated).
+    TerrainPad { spec: TerrainPadSpec },
+    /// `<Lake>` — carved bowl + water mirror.
+    Lake { spec: LakeSpec },
+    /// `<River>` — carved channel + water ribbon.
+    River { spec: RiverSpec },
+    /// `<Road>` — carved corridor + ribbon.
+    Road { spec: RoadSpec },
+    /// `<RoadNetwork>` — one road per `<Segment>` (expanded at carve time).
+    RoadNetwork { spec: RoadNetworkSpec },
 }
 
 /// A resolved recipe: everything needed to spawn one Bevy entity.
@@ -125,27 +171,42 @@ pub struct EntitySpec {
 
 /// Parse the root of an expanded world.
 pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result<ParsedWorld> {
-    let mut warnings = Vec::new();
+    let mut ctx = ParseCtx::default();
     let mut clear_color = None;
     for (key, value) in root_attrs {
         match key.as_str() {
             "clear-color" => {
                 clear_color = Some(values::parse_color(value, "<world clear-color>")?);
             }
-            other => warnings.push(format!("<world>: ignored attribute `{other}`")),
+            other => ctx
+                .warnings
+                .push(format!("<world>: ignored attribute `{other}`")),
         }
     }
-    let entities = parse_entities(nodes, &mut warnings)?;
+    let entities = parse_entities(nodes, &mut ctx)?;
     let ambient_count = count_ambient_lights(&entities);
     if ambient_count > 1 {
-        warnings.push(format!(
+        ctx.warnings.push(format!(
             "multiple <AmbientLight> elements ({ambient_count}) — the last one wins"
+        ));
+    }
+    let mut warnings = ctx.warnings;
+    if !ctx.skipped.is_empty() {
+        let summary: Vec<String> = ctx
+            .skipped
+            .iter()
+            .map(|(tag, count)| format!("<{tag}>×{count}"))
+            .collect();
+        warnings.push(format!(
+            "not implemented, skipped as no-op: {}",
+            summary.join(", ")
         ));
     }
     Ok(ParsedWorld {
         clear_color,
         entities,
         warnings,
+        skipped_tags: ctx.skipped,
     })
 }
 
@@ -161,28 +222,41 @@ fn count_ambient_lights(entities: &[EntitySpec]) -> usize {
         .sum()
 }
 
-fn parse_entities(nodes: &[XmlNode], warnings: &mut Vec<String>) -> Result<Vec<EntitySpec>> {
-    nodes.iter().map(|n| parse_entity(n, warnings)).collect()
+fn parse_entities(nodes: &[XmlNode], ctx: &mut ParseCtx) -> Result<Vec<EntitySpec>> {
+    nodes
+        .iter()
+        .map(|n| parse_entity(n, ctx))
+        .collect::<Result<Vec<Option<_>>>>()
+        .map(|specs| specs.into_iter().flatten().collect())
 }
 
-fn parse_entity(node: &XmlNode, warnings: &mut Vec<String>) -> Result<EntitySpec> {
+/// `Ok(None)` = element skipped as a no-op (unknown tag), subtree included.
+fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>> {
     let lower = node.tag.to_ascii_lowercase();
     match lower.as_str() {
-        "entity" | "group" => finish_group(node, warnings),
-        "cuboid" | "sphere" | "cylinder" | "plane" | "capsule" => finish_primitive(node, warnings),
-        "pointlight" => finish_point_light(node, warnings),
-        "ambientlight" => finish_ambient_light(node, warnings),
-        "orbitcamera" => finish_orbit_camera(node, warnings),
+        "entity" | "group" => finish_group(node, ctx).map(Some),
+        "cuboid" | "sphere" | "cylinder" | "plane" | "capsule" => {
+            finish_primitive(node, ctx).map(Some)
+        }
+        "pointlight" => finish_point_light(node, ctx).map(Some),
+        "directionallight" => finish_directional_light(node, ctx).map(Some),
+        "ambientlight" => finish_ambient_light(node, ctx).map(Some),
+        "orbitcamera" => finish_orbit_camera(node, ctx).map(Some),
+        "terrain" => finish_terrain(node, ctx).map(Some),
+        "terrainpad" => finish_terrain_pad(node, ctx).map(Some),
+        "lake" => finish_lake(node, ctx).map(Some),
+        "river" => finish_river(node, ctx).map(Some),
+        "road" => finish_road(node, ctx).map(Some),
+        "roadnetwork" => finish_road_network(node, ctx).map(Some),
         "include" => bail!(
             "<{}>: <include> must be expanded before parsing (use xml::include::load_world)",
             node.tag
         ),
         "world" | "scene" => bail!("<{}>: world roots cannot be nested", node.tag),
-        _ => bail!(
-            "<{}>: unknown element — known tags: {}",
-            node.tag,
-            KNOWN_TAGS.join(", ")
-        ),
+        _ => {
+            *ctx.skipped.entry(node.tag.clone()).or_insert(0) += 1;
+            Ok(None)
+        }
     }
 }
 
@@ -230,29 +304,30 @@ fn parse_common(node: &XmlNode) -> Result<(Common, Vec<(String, String)>)> {
     Ok((common, rest))
 }
 
-fn warn_ignored(node: &XmlNode, rest: Vec<(String, String)>, warnings: &mut Vec<String>) {
+fn warn_ignored(node: &XmlNode, rest: Vec<(String, String)>, ctx: &mut ParseCtx) {
     for (key, _) in rest {
-        warnings.push(format!("<{}>: ignored attribute `{key}`", node.tag));
+        ctx.warnings
+            .push(format!("<{}>: ignored attribute `{key}`", node.tag));
     }
 }
 
-fn finish_group(node: &XmlNode, warnings: &mut Vec<String>) -> Result<EntitySpec> {
+fn finish_group(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node)?;
-    warn_ignored(node, rest, warnings);
+    warn_ignored(node, rest, ctx);
     Ok(EntitySpec {
         name: common.name,
         tag: common.tag,
         script: common.script,
         transform: common.transform,
         kind: EntityKind::Group,
-        children: parse_entities(&node.children, warnings)?,
+        children: parse_entities(&node.children, ctx)?,
     })
 }
 
-fn finish_primitive(node: &XmlNode, warnings: &mut Vec<String>) -> Result<EntitySpec> {
+fn finish_primitive(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let lower = node.tag.to_ascii_lowercase();
     let (common, rest) = parse_common(node)?;
-    let ctx = format!("<{}>", node.tag);
+    let ctx_tag = format!("<{}>", node.tag);
     let mut shape = match lower.as_str() {
         "cuboid" => Shape::Cuboid {
             half_size: [0.5; 3],
@@ -273,7 +348,7 @@ fn finish_primitive(node: &XmlNode, warnings: &mut Vec<String>) -> Result<Entity
     };
     let mut material = MaterialSpec::default();
     for (key, value) in rest {
-        let kctx = format!("{ctx} {key}");
+        let kctx = format!("{ctx_tag} {key}");
         match key.as_str() {
             "half-size" => match &mut shape {
                 Shape::Cuboid { half_size } => {
@@ -282,24 +357,32 @@ fn finish_primitive(node: &XmlNode, warnings: &mut Vec<String>) -> Result<Entity
                 Shape::Plane { half_size } => {
                     *half_size = values::parse_vec2(&value, &kctx)?;
                 }
-                _ => warnings.push(format!("{ctx}: `{key}` does not apply to this shape")),
+                _ => ctx
+                    .warnings
+                    .push(format!("{ctx_tag}: `{key}` does not apply to this shape")),
             },
             "radius" => match &mut shape {
                 Shape::Sphere { radius }
                 | Shape::Cylinder { radius, .. }
                 | Shape::Capsule { radius, .. } => *radius = values::parse_f32(&value, &kctx)?,
-                _ => warnings.push(format!("{ctx}: `{key}` does not apply to this shape")),
+                _ => ctx
+                    .warnings
+                    .push(format!("{ctx_tag}: `{key}` does not apply to this shape")),
             },
             "half-height" => match &mut shape {
                 Shape::Cylinder { half_height, .. } | Shape::Capsule { half_height, .. } => {
                     *half_height = values::parse_f32(&value, &kctx)?;
                 }
-                _ => warnings.push(format!("{ctx}: `{key}` does not apply to this shape")),
+                _ => ctx
+                    .warnings
+                    .push(format!("{ctx_tag}: `{key}` does not apply to this shape")),
             },
             "base-color" => material.base_color = Some(values::parse_color(&value, &kctx)?),
             "metallic" => material.metallic = Some(values::parse_f32(&value, &kctx)?),
             "roughness" => material.roughness = Some(values::parse_f32(&value, &kctx)?),
-            other => warnings.push(format!("{ctx}: ignored attribute `{other}`")),
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
         }
     }
     Ok(EntitySpec {
@@ -308,25 +391,27 @@ fn finish_primitive(node: &XmlNode, warnings: &mut Vec<String>) -> Result<Entity
         script: common.script,
         transform: common.transform,
         kind: EntityKind::Primitive { shape, material },
-        children: parse_entities(&node.children, warnings)?,
+        children: parse_entities(&node.children, ctx)?,
     })
 }
 
-fn finish_point_light(node: &XmlNode, warnings: &mut Vec<String>) -> Result<EntitySpec> {
+fn finish_point_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node)?;
-    let ctx = format!("<{}>", node.tag);
+    let ctx_tag = format!("<{}>", node.tag);
     let mut color = None;
     let mut intensity = None;
     let mut radius = None;
     let mut shadows = None;
     for (key, value) in rest {
-        let kctx = format!("{ctx} {key}");
+        let kctx = format!("{ctx_tag} {key}");
         match key.as_str() {
             "color" => color = Some(values::parse_color(&value, &kctx)?),
             "intensity" => intensity = Some(values::parse_f32(&value, &kctx)?),
             "radius" => radius = Some(values::parse_f32(&value, &kctx)?),
             "shadows" => shadows = Some(values::parse_bool(&value, &kctx)?),
-            other => warnings.push(format!("{ctx}: ignored attribute `{other}`")),
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
         }
     }
     Ok(EntitySpec {
@@ -340,21 +425,57 @@ fn finish_point_light(node: &XmlNode, warnings: &mut Vec<String>) -> Result<Enti
             radius,
             shadows,
         },
-        children: parse_entities(&node.children, warnings)?,
+        children: parse_entities(&node.children, ctx)?,
     })
 }
 
-fn finish_ambient_light(node: &XmlNode, warnings: &mut Vec<String>) -> Result<EntitySpec> {
+fn finish_directional_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node)?;
-    let ctx = format!("<{}>", node.tag);
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut color = None;
+    let mut illuminance = None;
+    let mut shadows = None;
+    let mut direction = [-1.0, -1.0, -1.0];
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "color" => color = Some(values::parse_color(&value, &kctx)?),
+            "illuminance" => illuminance = Some(values::parse_f32(&value, &kctx)?),
+            "direction" => direction = values::parse_vec3(&value, &kctx)?,
+            "shadows" => shadows = Some(values::parse_bool(&value, &kctx)?),
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::DirectionalLight {
+            color,
+            illuminance,
+            direction,
+            shadows,
+        },
+        children: parse_entities(&node.children, ctx)?,
+    })
+}
+
+fn finish_ambient_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
     let mut color = None;
     let mut brightness = None;
     for (key, value) in rest {
-        let kctx = format!("{ctx} {key}");
+        let kctx = format!("{ctx_tag} {key}");
         match key.as_str() {
             "color" => color = Some(values::parse_color(&value, &kctx)?),
             "brightness" => brightness = Some(values::parse_f32(&value, &kctx)?),
-            other => warnings.push(format!("{ctx}: ignored attribute `{other}`")),
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
         }
     }
     Ok(EntitySpec {
@@ -363,13 +484,13 @@ fn finish_ambient_light(node: &XmlNode, warnings: &mut Vec<String>) -> Result<En
         script: common.script,
         transform: common.transform,
         kind: EntityKind::AmbientLight { color, brightness },
-        children: parse_entities(&node.children, warnings)?,
+        children: parse_entities(&node.children, ctx)?,
     })
 }
 
-fn finish_orbit_camera(node: &XmlNode, warnings: &mut Vec<String>) -> Result<EntitySpec> {
+fn finish_orbit_camera(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node)?;
-    let ctx = format!("<{}>", node.tag);
+    let ctx_tag = format!("<{}>", node.tag);
     let mut kind = EntityKind::OrbitCamera {
         target: None,
         distance: 12.0,
@@ -377,7 +498,7 @@ fn finish_orbit_camera(node: &XmlNode, warnings: &mut Vec<String>) -> Result<Ent
         pitch_deg: None,
     };
     for (key, value) in rest {
-        let kctx = format!("{ctx} {key}");
+        let kctx = format!("{ctx_tag} {key}");
         let EntityKind::OrbitCamera {
             target,
             distance,
@@ -392,7 +513,9 @@ fn finish_orbit_camera(node: &XmlNode, warnings: &mut Vec<String>) -> Result<Ent
             "distance" => *distance = values::parse_f32(&value, &kctx)?,
             "height" => *height = values::parse_f32(&value, &kctx)?,
             "pitch" => *pitch_deg = Some(values::parse_f32(&value, &kctx)?),
-            other => warnings.push(format!("{ctx}: ignored attribute `{other}`")),
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
         }
     }
     Ok(EntitySpec {
@@ -401,7 +524,472 @@ fn finish_orbit_camera(node: &XmlNode, warnings: &mut Vec<String>) -> Result<Ent
         script: common.script,
         transform: common.transform,
         kind,
-        children: parse_entities(&node.children, warnings)?,
+        children: parse_entities(&node.children, ctx)?,
+    })
+}
+
+/// Hierarchy offset for world-anchored terrain features: groups are
+/// transform-only containers, so a nested `<TerrainPad translation="…">`
+/// inherits the accumulated XZ translation (rotation/scale are ignored for
+/// ground features and warn when non-default).
+fn terrain_offset(common: &Common, node: &XmlNode, ctx: &mut ParseCtx) -> Vec2 {
+    let t = &common.transform;
+    if t.scale != [1.0, 1.0, 1.0] || t.euler_deg.is_some() || t.rotation_quat.is_some() {
+        ctx.warnings.push(format!(
+            "<{}>: rotation/scale do not apply to ground features — only the XZ translation is inherited",
+            node.tag
+        ));
+    }
+    Vec2::new(t.translation[0], t.translation[2])
+}
+
+fn offset_point(p: [f32; 2], off: Vec2) -> Vec2 {
+    Vec2::new(p[0], p[1]) + off
+}
+
+fn offset_path(points: Vec<[f32; 2]>, off: Vec2) -> Vec<Vec2> {
+    points
+        .into_iter()
+        .map(|p| Vec2::new(p[0], p[1]) + off)
+        .collect()
+}
+
+/// Ground features must stay leaf elements: their children would never be
+/// spawned (the feature consumes the element), so any child is a mistake.
+fn warn_children(node: &XmlNode, ctx: &mut ParseCtx) {
+    if !node.children.is_empty() {
+        ctx.warnings.push(format!(
+            "<{}>: children are ignored (ground features are leaf elements)",
+            node.tag
+        ));
+    }
+}
+
+fn finish_terrain(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    warn_children(node, ctx);
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut spec = TerrainSpec::default();
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "heightmap" => spec.heightmap = Some(value.trim().to_string()),
+            "world-size" => {
+                spec.world_size = values::parse_f32(&value, &kctx)?;
+                if spec.world_size <= 0.0 {
+                    bail!("{kctx}: must be positive");
+                }
+            }
+            "max-height" => {
+                spec.max_height = values::parse_f32(&value, &kctx)?;
+                if spec.max_height <= 0.0 {
+                    bail!("{kctx}: must be positive");
+                }
+            }
+            "chunk-size" => {
+                spec.chunk_size = values::parse_f32(&value, &kctx)?;
+                if spec.chunk_size <= 0.0 {
+                    bail!("{kctx}: must be positive");
+                }
+            }
+            "levels" => spec.levels = values::parse_u32(&value, &kctx)?.clamp(1, 8) as u8,
+            "lod-distance-ratio" => {
+                spec.lod_distance_ratio = values::parse_f32(&value, &kctx)?;
+            }
+            "lod-hysteresis" => spec.lod_hysteresis = values::parse_f32(&value, &kctx)?,
+            "render-distance" => spec.render_distance = Some(values::parse_f32(&value, &kctx)?),
+            "skirt-width" => spec.skirt_width = values::parse_f32(&value, &kctx)?,
+            "skirt-depth" => spec.skirt_depth = values::parse_f32(&value, &kctx)?,
+            "height-smoothing" => spec.height_smoothing = values::parse_f32(&value, &kctx)?,
+            "collision-resolution" => {
+                spec.collision_resolution = values::parse_u32(&value, &kctx)?;
+            }
+            "resolution" => spec.resolution = values::parse_u32(&value, &kctx)?.max(1),
+            "texture" | "texture-url" => spec.texture = Some(value.trim().to_string()),
+            "texture-tile-size" => spec.texture_tile_size = values::parse_f32(&value, &kctx)?,
+            "seed" => spec.seed = values::parse_u64(&value, &kctx)?,
+            "base-color" => spec.tint.base_color = tint_color(&value, &kctx)?,
+            "color-low" => spec.tint.color_low = tint_color(&value, &kctx)?,
+            "color-mid" => spec.tint.color_mid = tint_color(&value, &kctx)?,
+            "color-high" => spec.tint.color_high = tint_color(&value, &kctx)?,
+            "color-rock" => spec.tint.color_rock = tint_color(&value, &kctx)?,
+            "snow-height" => spec.tint.snow_height = values::parse_f32(&value, &kctx)?,
+            "slope-threshold" => spec.tint.slope_threshold = values::parse_f32(&value, &kctx)?,
+            "slope-softness" => spec.tint.slope_softness = values::parse_f32(&value, &kctx)?,
+            "height-blend-strength" => {
+                spec.tint.height_blend_strength = values::parse_f32(&value, &kctx)?;
+            }
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::Terrain { spec },
+        children: Vec::new(),
+    })
+}
+
+fn tint_color(value: &str, ctx: &str) -> Result<bevy::color::Color> {
+    let [r, g, b] = values::parse_color(value, ctx)?;
+    Ok(bevy::color::Color::srgb(r, g, b))
+}
+
+fn finish_terrain_pad(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    warn_children(node, ctx);
+    let ctx_tag = format!("<{}>", node.tag);
+    let off = terrain_offset(&common, node, ctx);
+    let mut spec = TerrainPadSpec::default();
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "at" => spec.at = offset_point(values::parse_vec2(&value, &kctx)?, off),
+            "size" => spec.size = Vec2::from(values::parse_vec2(&value, &kctx)?),
+            "falloff" => spec.falloff = values::parse_f32(&value, &kctx)?,
+            "corner-radius" => spec.corner_radius = values::parse_f32(&value, &kctx)?,
+            "height" => spec.height = Some(values::parse_f32(&value, &kctx)?),
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::TerrainPad { spec },
+        children: Vec::new(),
+    })
+}
+
+fn finish_lake(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    warn_children(node, ctx);
+    let ctx_tag = format!("<{}>", node.tag);
+    let off = terrain_offset(&common, node, ctx);
+    let mut spec = LakeSpec::default();
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "at" => spec.at = offset_point(values::parse_vec2(&value, &kctx)?, off),
+            "radius" => spec.radius = values::parse_f32(&value, &kctx)?,
+            "depth" => spec.depth = values::parse_f32(&value, &kctx)?,
+            "water-offset" => spec.water_offset = values::parse_f32(&value, &kctx)?,
+            "color" => spec.color = values::parse_color(&value, &kctx)?,
+            "opacity" => spec.opacity = values::parse_f32(&value, &kctx)?,
+            "ripple" => spec.ripple = values::parse_f32(&value, &kctx)?,
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::Lake { spec },
+        children: Vec::new(),
+    })
+}
+
+fn finish_river(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    warn_children(node, ctx);
+    let ctx_tag = format!("<{}>", node.tag);
+    let off = terrain_offset(&common, node, ctx);
+    let mut spec = RiverSpec::default();
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "path" => {
+                spec.path = offset_path(values::parse_vec2_list(&value, &kctx)?, off);
+                if spec.path.len() < 2 {
+                    bail!("{kctx}: a river needs at least 2 points (x z pairs)");
+                }
+            }
+            "width" => spec.width = values::parse_f32(&value, &kctx)?,
+            "depth" => spec.depth = values::parse_f32(&value, &kctx)?,
+            "water-offset" => spec.water_offset = values::parse_f32(&value, &kctx)?,
+            "bank-width" => spec.bank_width = values::parse_f32(&value, &kctx)?,
+            "bank-height" => spec.bank_height = values::parse_f32(&value, &kctx)?,
+            "color" => spec.color = values::parse_color(&value, &kctx)?,
+            "opacity" => spec.opacity = values::parse_f32(&value, &kctx)?,
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::River { spec },
+        children: Vec::new(),
+    })
+}
+
+/// Attributes shared by `<Road>` and `<RoadNetwork>` (the network carries the
+/// defaults; standalone roads their own values). Returns `true` when the key
+/// was consumed.
+#[allow(clippy::too_many_arguments)]
+fn parse_road_attrs(
+    key: &str,
+    value: &str,
+    kctx: &str,
+    profile: &mut Option<RoadProfile>,
+    flatten: &mut Option<bool>,
+    falloff: &mut Option<f32>,
+    window: &mut Option<f32>,
+    max_grade: &mut Option<f32>,
+    texture: &mut Option<String>,
+    texture_scale: &mut Option<f32>,
+) -> Result<bool> {
+    match key {
+        "profile" | "default-profile" => {
+            *profile = Some(RoadProfile::parse(value).ok_or_else(|| {
+                anyhow::anyhow!("{kctx}: unknown profile `{value}` (artery|spur|plaza|bridge)")
+            })?);
+        }
+        "flatten" => *flatten = Some(values::parse_bool(value, kctx)?),
+        "flatten-falloff" => *falloff = Some(values::parse_f32(value, kctx)?),
+        "flatten-window" => *window = Some(values::parse_f32(value, kctx)?),
+        "flatten-max-grade" => *max_grade = Some(values::parse_f32(value, kctx)?),
+        "texture-url" | "texture" => *texture = Some(value.trim().to_string()),
+        "texture-scale" => *texture_scale = Some(values::parse_f32(value, kctx)?),
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
+fn finish_road(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    warn_children(node, ctx);
+    let ctx_tag = format!("<{}>", node.tag);
+    let off = terrain_offset(&common, node, ctx);
+    let mut spec = RoadSpec {
+        name: common.name.clone(),
+        ..RoadSpec::default()
+    };
+    let mut profile: Option<RoadProfile> = None;
+    let mut flatten: Option<bool> = None;
+    let mut falloff: Option<f32> = None;
+    let mut window: Option<f32> = None;
+    let mut max_grade: Option<f32> = None;
+    let mut texture_scale: Option<f32> = None;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        let handled = parse_road_attrs(
+            &key,
+            &value,
+            &kctx,
+            &mut profile,
+            &mut flatten,
+            &mut falloff,
+            &mut window,
+            &mut max_grade,
+            &mut spec.texture,
+            &mut texture_scale,
+        )?;
+        if handled {
+            continue;
+        }
+        match key.as_str() {
+            "path" => {
+                spec.path = offset_path(values::parse_vec2_list(&value, &kctx)?, off);
+                if spec.path.len() < 2 {
+                    bail!("{kctx}: a road needs at least 2 points (x z pairs)");
+                }
+            }
+            "width" => spec.width = values::parse_f32(&value, &kctx)?,
+            "flatten-shoulder" => spec.flatten_shoulder = values::parse_f32(&value, &kctx)?,
+            "platform-sink" => spec.platform_sink = values::parse_f32(&value, &kctx)?,
+            "smoothing" => spec.smoothing = values::parse_u32(&value, &kctx)?.min(6),
+            "closed" => spec.closed = values::parse_bool(&value, &kctx)?,
+            "edge-feather" => spec.edge_feather = values::parse_f32(&value, &kctx)?.clamp(0.0, 1.0),
+            // Parsed-for-compat visuals (decal trails) — no native effect yet.
+            "edge-noise" | "end-feather-start" | "end-feather-end" | "normal-map-url" => ctx
+                .warnings
+                .push(format!("{kctx}: accepted, no native effect yet")),
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    if let Some(p) = profile {
+        spec.profile = p;
+    }
+    if let Some(f) = flatten {
+        spec.flatten = f;
+    }
+    if let Some(f) = falloff {
+        spec.flatten_falloff = f;
+    }
+    if let Some(w) = window {
+        spec.flatten_window = w;
+    }
+    if let Some(g) = max_grade {
+        spec.flatten_max_grade = g;
+    }
+    if let Some(s) = texture_scale {
+        spec.texture_scale = s;
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::Road { spec },
+        children: Vec::new(),
+    })
+}
+
+fn finish_road_network(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let off = terrain_offset(&common, node, ctx);
+    let mut spec = RoadNetworkSpec {
+        name: common.name.clone(),
+        ..RoadNetworkSpec::default()
+    };
+    let mut profile: Option<RoadProfile> = None;
+    let mut flatten: Option<bool> = None;
+    let mut falloff: Option<f32> = None;
+    let mut window: Option<f32> = None;
+    let mut max_grade: Option<f32> = None;
+    let mut texture_scale: Option<f32> = None;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        let handled = parse_road_attrs(
+            &key,
+            &value,
+            &kctx,
+            &mut profile,
+            &mut flatten,
+            &mut falloff,
+            &mut window,
+            &mut max_grade,
+            &mut spec.texture,
+            &mut texture_scale,
+        )?;
+        if handled {
+            continue;
+        }
+        match key.as_str() {
+            "default-width" => spec.default_width = values::parse_f32(&value, &kctx)?,
+            "crossing-flare" => spec.crossing_flare = values::parse_bool(&value, &kctx)?,
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    if let Some(p) = profile {
+        spec.default_profile = p;
+    }
+    if let Some(f) = flatten {
+        spec.flatten = f;
+    }
+    if let Some(f) = falloff {
+        spec.flatten_falloff = f;
+    }
+    if let Some(w) = window {
+        spec.flatten_window = w;
+    }
+    if let Some(g) = max_grade {
+        spec.flatten_max_grade = g;
+    }
+    if let Some(s) = texture_scale {
+        spec.texture_scale = s;
+    }
+    // Children: `<Way>` + `<Segment>` (case-insensitive); anything else is a
+    // parse error — networks have exactly two child kinds.
+    for child in &node.children {
+        let lower = child.tag.to_ascii_lowercase();
+        match lower.as_str() {
+            "way" => {
+                let mut way = WaySpec {
+                    id: String::new(),
+                    at: Vec2::ZERO,
+                    width: None,
+                };
+                for (key, value) in &child.attrs {
+                    let kctx = format!("<{} {key}>", child.tag);
+                    match key.as_str() {
+                        "id" => way.id = value.trim().to_string(),
+                        "xz" => way.at = offset_point(values::parse_vec2(value, &kctx)?, off),
+                        "width" => way.width = Some(values::parse_f32(value, &kctx)?),
+                        other => ctx
+                            .warnings
+                            .push(format!("<{}>: ignored attribute `{other}`", child.tag)),
+                    }
+                }
+                if way.id.is_empty() {
+                    bail!("<{}>: way needs an `id`", child.tag);
+                }
+                spec.ways.push(way);
+            }
+            "segment" => {
+                let mut seg = SegmentSpec {
+                    a: String::new(),
+                    b: String::new(),
+                    via: Vec::new(),
+                    width: None,
+                    profile: None,
+                };
+                for (key, value) in &child.attrs {
+                    let kctx = format!("<{} {key}>", child.tag);
+                    match key.as_str() {
+                        "a" => seg.a = value.trim().to_string(),
+                        "b" => seg.b = value.trim().to_string(),
+                        "via" => seg.via = offset_path(values::parse_vec2_list(value, &kctx)?, off),
+                        "width" => seg.width = Some(values::parse_f32(value, &kctx)?),
+                        "profile" => {
+                            seg.profile = Some(RoadProfile::parse(value).ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "{kctx}: unknown profile `{value}` (artery|spur|plaza|bridge)"
+                                )
+                            })?)
+                        }
+                        // Bridge GLB decks need glTF (Phase 1 handoff).
+                        "bridge-url"
+                        | "bridge-collision-url"
+                        | "bridge-lod1-url"
+                        | "bridge-lod2-url"
+                        | "bridge-native-span" => ctx.warnings.push(format!(
+                            "<{}>: `{key}` accepted, bridge decks need glTF (not yet native)",
+                            child.tag
+                        )),
+                        other => ctx
+                            .warnings
+                            .push(format!("<{}>: ignored attribute `{other}`", child.tag)),
+                    }
+                }
+                if seg.a.is_empty() || seg.b.is_empty() {
+                    bail!("<{}>: segment needs `a` and `b` way ids", child.tag);
+                }
+                spec.segments.push(seg);
+            }
+            _other => bail!(
+                "<{}>: unknown element inside <{}> — only <Way> and <Segment> are allowed",
+                child.tag,
+                node.tag
+            ),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::RoadNetwork { spec },
+        children: Vec::new(),
     })
 }
 
@@ -411,14 +999,28 @@ pub struct WorldSummary {
     pub groups: usize,
     pub primitives: usize,
     pub point_lights: usize,
+    pub directional_lights: usize,
     pub cameras: usize,
     pub has_ambient: bool,
+    /// Declarative terrain features (consumed by the terrain runtime).
+    pub terrain: usize,
+    pub terrain_pads: usize,
+    pub lakes: usize,
+    pub rivers: usize,
+    pub roads: usize,
+    pub road_networks: usize,
 }
 
 impl WorldSummary {
     /// Total spawned entities (ambient lights are resources, not entities).
     pub fn entities(&self) -> usize {
-        self.groups + self.primitives + self.point_lights + self.cameras
+        self.groups + self.primitives + self.point_lights + self.directional_lights + self.cameras
+    }
+
+    /// Total ground-feature elements (terrain element excluded — it is the
+    /// heightfield itself, counted in `terrain`).
+    pub fn ground_features(&self) -> usize {
+        self.terrain_pads + self.lakes + self.rivers + self.roads + self.road_networks
     }
 }
 
@@ -430,8 +1032,15 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::Group => out.groups += 1,
                 EntityKind::Primitive { .. } => out.primitives += 1,
                 EntityKind::PointLight { .. } => out.point_lights += 1,
+                EntityKind::DirectionalLight { .. } => out.directional_lights += 1,
                 EntityKind::AmbientLight { .. } => out.has_ambient = true,
                 EntityKind::OrbitCamera { .. } => out.cameras += 1,
+                EntityKind::Terrain { .. } => out.terrain += 1,
+                EntityKind::TerrainPad { .. } => out.terrain_pads += 1,
+                EntityKind::Lake { .. } => out.lakes += 1,
+                EntityKind::River { .. } => out.rivers += 1,
+                EntityKind::Road { .. } => out.roads += 1,
+                EntityKind::RoadNetwork { .. } => out.road_networks += 1,
             }
             walk(&spec.children, out);
         }
@@ -457,9 +1066,10 @@ mod tests {
     }
 
     fn parse_one(n: &XmlNode) -> Result<(EntitySpec, Vec<String>)> {
-        let mut warnings = Vec::new();
-        let spec = parse_entity(n, &mut warnings)?;
-        Ok((spec, warnings))
+        let mut ctx = ParseCtx::default();
+        let spec =
+            parse_entity(n, &mut ctx)?.ok_or_else(|| anyhow::anyhow!("element was skipped"))?;
+        Ok((spec, ctx.warnings))
     }
 
     #[test]
@@ -518,12 +1128,43 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_element_lists_known_tags() {
-        let err = parse_one(&node("GameObject", &[])).unwrap_err();
-        let msg = err.to_string();
-        assert!(msg.contains("unknown element"), "{msg}");
-        assert!(msg.contains("entity"), "{msg}");
-        assert!(msg.contains("orbitcamera"), "{msg}");
+    fn test_unknown_element_is_skipped_as_noop() {
+        let mut ctx = ParseCtx::default();
+        let spec = parse_entity(&node("GameObject", &[]), &mut ctx).unwrap();
+        assert!(spec.is_none());
+        assert_eq!(ctx.skipped.get("GameObject"), Some(&1));
+    }
+
+    #[test]
+    fn test_unknown_subtree_is_dropped_wholesale() {
+        let mut parent = node("GLTFLoader", &[("url", "x.glb")]);
+        parent.children = vec![node("Entity", &[("name", "inside")])];
+        let mut ctx = ParseCtx::default();
+        let spec = parse_entity(&parent, &mut ctx).unwrap();
+        assert!(spec.is_none());
+        // The child is skipped as part of the subtree, not parsed.
+        assert_eq!(ctx.skipped.get("GLTFLoader"), Some(&1));
+        assert_eq!(ctx.skipped.get("Entity"), None);
+    }
+
+    #[test]
+    fn test_parse_world_aggregates_skipped_tags() {
+        let world = parse_world(
+            &[],
+            &[
+                node("GameObject", &[]),
+                node("GameObject", &[]),
+                node("ParticleSystem", &[]),
+            ],
+        )
+        .unwrap();
+        assert_eq!(world.entities.len(), 0);
+        assert_eq!(world.skipped_tags.get("GameObject"), Some(&2));
+        assert!(
+            world.warnings.iter().any(|w| w.contains("<GameObject>×2")),
+            "{:?}",
+            world.warnings
+        );
     }
 
     #[test]
@@ -638,6 +1279,47 @@ mod tests {
     }
 
     #[test]
+    fn test_directional_light_overrides() {
+        let (spec, _) = parse_one(&node(
+            "DirectionalLight",
+            &[
+                ("color", "#ffeecc"),
+                ("illuminance", "20000"),
+                ("direction", "-1 -2 -1"),
+                ("shadows", "true"),
+            ],
+        ))
+        .unwrap();
+        let EntityKind::DirectionalLight {
+            color,
+            illuminance,
+            direction,
+            shadows,
+        } = spec.kind
+        else {
+            panic!("expected directional light");
+        };
+        assert!(color.is_some() && illuminance == Some(20000.0));
+        assert_eq!(direction, [-1.0, -2.0, -1.0]);
+        assert_eq!(shadows, Some(true));
+    }
+
+    #[test]
+    fn test_directional_light_defaults() {
+        let (spec, _) = parse_one(&node("DirectionalLight", &[])).unwrap();
+        let EntityKind::DirectionalLight {
+            illuminance,
+            direction,
+            ..
+        } = spec.kind
+        else {
+            panic!("expected directional light");
+        };
+        assert_eq!(illuminance, None);
+        assert_eq!(direction, [-1.0, -1.0, -1.0]);
+    }
+
+    #[test]
     fn test_ambient_light_is_resource_kind() {
         let (spec, _) = parse_one(&node("AmbientLight", &[("brightness", "300")])).unwrap();
         assert!(matches!(spec.kind, EntityKind::AmbientLight { .. }));
@@ -729,9 +1411,23 @@ mod tests {
         group.children = vec![
             node("Cuboid", &[]),
             node("PointLight", &[]),
+            node("DirectionalLight", &[]),
             node("AmbientLight", &[]),
         ];
-        let world = parse_world(&[], &[group, node("OrbitCamera", &[])]).unwrap();
+        let world = parse_world(
+            &[],
+            &[
+                group,
+                node("OrbitCamera", &[]),
+                node("Terrain", &[]),
+                node("TerrainPad", &[]),
+                node("Lake", &[]),
+                node("River", &[]),
+                node("Road", &[]),
+                node("RoadNetwork", &[]),
+            ],
+        )
+        .unwrap();
         let summary = summarize(&world);
         assert_eq!(
             summary,
@@ -739,10 +1435,279 @@ mod tests {
                 groups: 1,
                 primitives: 1,
                 point_lights: 1,
+                directional_lights: 1,
                 cameras: 1,
                 has_ambient: true,
+                terrain: 1,
+                terrain_pads: 1,
+                lakes: 1,
+                rivers: 1,
+                roads: 1,
+                road_networks: 1,
             }
         );
-        assert_eq!(summary.entities(), 4);
+        assert_eq!(summary.entities(), 5);
+        assert_eq!(summary.ground_features(), 5);
+    }
+
+    // ----- terrain feature parsing -----
+
+    #[test]
+    fn test_terrain_defaults_and_attrs() {
+        let (spec, w) = parse_one(&node(
+            "Terrain",
+            &[
+                ("world-size", "4000"),
+                ("max-height", "200"),
+                ("levels", "5"),
+                ("resolution", "128"),
+                ("collision-resolution", "64"),
+                ("heightmap", "terrain/terrain.ahgt.png"),
+                ("base-color", "#c9c5ba"),
+                ("color-rock", "#6b6560"),
+                ("snow-height", "0.92"),
+                ("seed", "7"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Terrain { spec } = spec.kind else {
+            panic!("expected terrain");
+        };
+        assert_eq!(spec.world_size, 4000.0);
+        assert_eq!(spec.max_height, 200.0);
+        assert_eq!(spec.levels, 5);
+        assert_eq!(spec.resolution, 128);
+        assert_eq!(spec.collision_resolution, 64);
+        assert_eq!(spec.heightmap.as_deref(), Some("terrain/terrain.ahgt.png"));
+        assert_eq!(spec.seed, 7);
+        assert_eq!(
+            spec.tint.base_color,
+            bevy::color::Color::srgb(201.0 / 255.0, 197.0 / 255.0, 186.0 / 255.0)
+        );
+    }
+
+    #[test]
+    fn test_terrain_bad_levels_is_error() {
+        assert!(parse_one(&node("Terrain", &[("levels", "x")])).is_err());
+        assert!(parse_one(&node("Terrain", &[("world-size", "0")])).is_err());
+    }
+
+    #[test]
+    fn test_terrain_pad_at_size_and_height() {
+        let (spec, w) = parse_one(&node(
+            "TerrainPad",
+            &[
+                ("at", "0 0"),
+                ("size", "120 120"),
+                ("falloff", "20"),
+                ("corner-radius", "18"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::TerrainPad { spec } = spec.kind else {
+            panic!("expected pad");
+        };
+        assert_eq!(spec.at, Vec2::ZERO);
+        assert_eq!(spec.size, Vec2::splat(120.0));
+        assert_eq!(spec.falloff, 20.0);
+        assert_eq!(spec.height, None, "absent height = auto mode");
+        // height="0" activates absolute mode.
+        let (spec, _) = parse_one(&node("TerrainPad", &[("at", "1 2"), ("height", "0")])).unwrap();
+        let EntityKind::TerrainPad { spec } = spec.kind else {
+            panic!("expected pad");
+        };
+        assert_eq!(spec.height, Some(0.0));
+    }
+
+    #[test]
+    fn test_terrain_pad_at_is_parent_local() {
+        // `at` is local to the parent (VibeGame semantics); the group
+        // translation is accumulated by the spawn collector.
+        let mut group = node("Group", &[("translation", "859 0 281")]);
+        group.children = vec![node(
+            "TerrainPad",
+            &[("at", "5 7"), ("size", "280 260"), ("falloff", "24")],
+        )];
+        let world = parse_world(&[], &[group]).unwrap();
+        let EntityKind::TerrainPad { spec } = &world.entities[0].children[0].kind else {
+            panic!("expected pad");
+        };
+        assert_eq!(spec.at, Vec2::new(5.0, 7.0), "at stays parent-local");
+    }
+
+    #[test]
+    fn test_lake_and_river_parse() {
+        let (spec, w) = parse_one(&node(
+            "Lake",
+            &[
+                ("at", "-190 -16"),
+                ("radius", "24"),
+                ("depth", "2.6"),
+                ("water-offset", "0.5"),
+                ("color", "#2f5a4a"),
+                ("opacity", "0.8"),
+                ("ripple", "0.5"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::Lake { spec } = spec.kind else {
+            panic!("expected lake");
+        };
+        assert_eq!(spec.at, Vec2::new(-190.0, -16.0));
+        assert_eq!(spec.radius, 24.0);
+        assert_eq!(spec.depth, 2.6);
+        assert_eq!(spec.color, [47.0 / 255.0, 90.0 / 255.0, 74.0 / 255.0]);
+
+        let (spec, w) = parse_one(&node(
+            "River",
+            &[
+                ("path", "4 215 30 210 60 216"),
+                ("width", "16"),
+                ("depth", "3.7"),
+                ("water-offset", "1.2"),
+                ("bank-width", "6.4"),
+                ("bank-height", "0.85"),
+                ("color", "#2a6685"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::River { spec } = spec.kind else {
+            panic!("expected river");
+        };
+        assert_eq!(spec.path.len(), 3);
+        assert_eq!(spec.path[0], Vec2::new(4.0, 215.0));
+        assert_eq!(spec.width, 16.0);
+        assert_eq!(spec.bank_width, 6.4);
+    }
+
+    #[test]
+    fn test_river_needs_two_points() {
+        assert!(parse_one(&node("River", &[("path", "4 215")])).is_err());
+    }
+
+    #[test]
+    fn test_road_parse_with_flatten_attrs() {
+        let (spec, w) = parse_one(&node(
+            "Road",
+            &[
+                ("path", "0 0 100 10 200 0"),
+                ("width", "4"),
+                ("flatten", "0"),
+                ("texture-url", "assets/road.png"),
+                ("texture-scale", "6"),
+                ("edge-feather", "1.0"),
+                ("edge-noise", "0.6"),
+            ],
+        ))
+        .unwrap();
+        // edge-noise is accepted-for-compat but warned.
+        assert!(w.iter().any(|m| m.contains("edge-noise")), "{w:?}");
+        let EntityKind::Road { spec } = spec.kind else {
+            panic!("expected road");
+        };
+        assert_eq!(spec.path.len(), 3);
+        assert_eq!(spec.width, 4.0);
+        assert!(!spec.flatten, "flatten=0 is a decal trail");
+        assert_eq!(spec.texture.as_deref(), Some("assets/road.png"));
+    }
+
+    #[test]
+    fn test_road_network_ways_segments_and_profiles() {
+        let mut net = node(
+            "RoadNetwork",
+            &[
+                ("name", "paths"),
+                ("default-profile", "artery"),
+                ("default-width", "4"),
+                ("crossing-flare", "true"),
+                ("flatten", "true"),
+                ("flatten-falloff", "26"),
+                ("flatten-window", "72"),
+                ("flatten-max-grade", "0.34"),
+                ("texture-url", "assets/cobble.png"),
+                ("texture-scale", "9"),
+            ],
+        );
+        net.children = vec![
+            node("Way", &[("id", "plaza"), ("xz", "0 0"), ("width", "4.8")]),
+            node("Way", &[("id", "n_gate"), ("xz", "-3 128")]),
+            node(
+                "Segment",
+                &[
+                    ("a", "plaza"),
+                    ("b", "n_gate"),
+                    ("profile", "bridge"),
+                    ("bridge-url", "assets/bridge.glb"),
+                ],
+            ),
+            node("Segment", &[("a", "plaza"), ("b", "ghost")]),
+        ];
+        let (spec, w) = parse_one(&net).unwrap();
+        assert!(
+            w.iter()
+                .any(|m| m.contains("bridge-url") && m.contains("glTF")),
+            "{w:?}"
+        );
+        let EntityKind::RoadNetwork { spec } = spec.kind else {
+            panic!("expected network");
+        };
+        assert_eq!(spec.ways.len(), 2);
+        assert_eq!(spec.segments.len(), 2);
+        assert_eq!(spec.flatten_falloff, 26.0);
+        assert_eq!(spec.flatten_window, 72.0);
+        assert!((spec.flatten_max_grade - 0.34).abs() < 1e-6);
+        assert_eq!(spec.ways[0].width, Some(4.8));
+        assert_eq!(spec.segments[0].profile, Some(RoadProfile::Bridge));
+        let expanded = spec.expand();
+        assert_eq!(expanded.len(), 1, "unknown way ids skip at expansion");
+        assert!(!expanded[0].flatten, "bridge expansion disables flatten");
+    }
+
+    #[test]
+    fn test_road_network_rejects_unknown_children() {
+        let mut net = node("RoadNetwork", &[]);
+        net.children = vec![node("Cuboid", &[])];
+        assert!(parse_one(&net).is_err());
+    }
+
+    #[test]
+    fn test_road_network_way_needs_id() {
+        let mut net = node("RoadNetwork", &[]);
+        net.children = vec![node("Way", &[("xz", "0 0")])];
+        assert!(parse_one(&net).is_err());
+    }
+
+    #[test]
+    fn test_ground_feature_children_warn() {
+        let mut lake = node("Lake", &[("at", "0 0")]);
+        lake.children = vec![node("Cuboid", &[])];
+        let (_, w) = parse_one(&lake).unwrap();
+        assert!(
+            w.iter().any(|m| m.contains("children are ignored")),
+            "{w:?}"
+        );
+    }
+
+    #[test]
+    fn test_via_waypoints_parse_into_segments() {
+        let mut net = node("RoadNetwork", &[]);
+        net.children = vec![
+            node("Way", &[("id", "a"), ("xz", "0 0")]),
+            node("Way", &[("id", "b"), ("xz", "10 10")]),
+            node("Segment", &[("a", "a"), ("b", "b"), ("via", "4 2 6 8")]),
+        ];
+        let (spec, w) = parse_one(&net).unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::RoadNetwork { spec } = spec.kind else {
+            panic!("expected network");
+        };
+        assert_eq!(
+            spec.segments[0].via,
+            vec![Vec2::new(4.0, 2.0), Vec2::new(6.0, 8.0)]
+        );
     }
 }

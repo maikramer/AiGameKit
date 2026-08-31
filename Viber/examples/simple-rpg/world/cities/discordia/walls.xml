@@ -1,0 +1,240 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Dropped attrs: place:align-to-terrain, point-light:decay, point-light:distance
+  Verbatim (no-op) tags: GLTFLoader x56, ParticleSystem x8
+-->
+<world>
+  <!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+  Edit this file for this district only. Cell coords: space-separated (at="2 1").
+
+  GERADO — layout compacto. Muralha ±38: passo visual 6.38 m
+  (mesh LOD0 6.5 m - junta 0.12 m). Collider é ~0.12 m mais
+  longo → penetração coberta por `overlap-max=0.3`.
+-->
+  <Group name="city.walls" translation="0 0 0">
+    <!-- §4.1 Muralha GLB: semi-lado 38, vão visual 10 m,
+           segs @6.38 m. Mesh-anchor base; collider envelope. -->
+    <Entity name="wall_corner_nw" translation="-38 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_corner_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_corner_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_corner_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_corner_ne" translation="38 0 38" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_corner_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_corner_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_corner_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_corner_se" translation="38 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_corner_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_corner_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_corner_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_corner_sw" translation="-38 0 -38" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_corner_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_corner_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_corner_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_corner_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_n_w0" translation="-8.13 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_n_w1" translation="-14.51 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_n_w2" translation="-20.89 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_n_w3" translation="-27.27 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_n_w4" translation="-33.65 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_n_e0" translation="8.13 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_n_e1" translation="14.51 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_n_e2" translation="20.89 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_n_e3" translation="27.27 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_n_e4" translation="33.65 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_s_e0" translation="8.13 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_s_e1" translation="14.51 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_s_e2" translation="20.89 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_s_e3" translation="27.27 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_s_e4" translation="33.65 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_s_w0" translation="-8.13 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_s_w1" translation="-14.51 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_s_w2" translation="-20.89 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_s_w3" translation="-27.27 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_s_w4" translation="-33.65 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_e_n0" translation="38 0 8.13" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_e_n1" translation="38 0 14.51" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_e_n2" translation="38 0 20.89" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_e_n3" translation="38 0 27.27" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_e_n4" translation="38 0 33.65" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_e_s0" translation="38 0 -8.13" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_e_s1" translation="38 0 -14.51" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_e_s2" translation="38 0 -20.89" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_e_s3" translation="38 0 -27.27" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_e_s4" translation="38 0 -33.65" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_w_s0" translation="-38 0 -8.13" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_w_s1" translation="-38 0 -14.51" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_w_s2" translation="-38 0 -20.89" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_w_s3" translation="-38 0 -27.27" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_w_s4" translation="-38 0 -33.65" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_w_n0" translation="-38 0 8.13" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_w_n1" translation="-38 0 14.51" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_w_n2" translation="-38 0 20.89" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_b_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_b_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_b_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_b_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_w_n3" translation="-38 0 27.27" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="wall_w_n4" translation="-38 0 33.65" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_a_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_wall_seg_a_lod0.glb" lod1-url="/assets/meshes/infra/city_wall_seg_a_lod1.glb" lod2-url="/assets/meshes/infra/city_wall_seg_a_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <!-- Portões cardeais (sync RESPAWN_POINTS em src/main.ts). -->
+    <Entity name="gate_north" translation="0 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_gate_arch_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_gate_arch_lod0.glb" lod1-url="/assets/meshes/infra/city_gate_arch_lod1.glb" lod2-url="/assets/meshes/infra/city_gate_arch_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="gate_south" translation="0 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_gate_arch_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_gate_arch_lod0.glb" lod1-url="/assets/meshes/infra/city_gate_arch_lod1.glb" lod2-url="/assets/meshes/infra/city_gate_arch_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="gate_east" translation="38 0 0" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_gate_arch_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_gate_arch_lod0.glb" lod1-url="/assets/meshes/infra/city_gate_arch_lod1.glb" lod2-url="/assets/meshes/infra/city_gate_arch_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <Entity name="gate_west" translation="-38 0 0" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_gate_arch_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/infra/city_gate_arch_lod0.glb" lod1-url="/assets/meshes/infra/city_gate_arch_lod1.glb" lod2-url="/assets/meshes/infra/city_gate_arch_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <!-- Tochas nos portões (torch_post, grupo village) com
+               chama e luz — portões apagados liam-se como tripés
+               pretos à noite. -->
+    <Entity name="gate_n_torch_w" translation="-5.8 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    </Entity>
+    <Entity translation="-5.8 0 38">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-5.8 0 38" body="fixed" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
+    </Group>
+    <Entity name="gate_n_torch_e" translation="5.8 0 38" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    </Entity>
+    <Entity translation="5.8 0 38">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="5.8 0 38" body="fixed" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
+    </Group>
+    <Entity name="gate_s_torch_w" translation="-5.8 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    </Entity>
+    <Entity translation="-5.8 0 -38">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-5.8 0 -38" body="fixed" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
+    </Group>
+    <Entity name="gate_s_torch_e" translation="5.8 0 -38" transform="rotation: 0 180 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    </Entity>
+    <Entity translation="5.8 0 -38">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="5.8 0 -38" body="fixed" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
+    </Group>
+    <Entity name="gate_e_torch_s" translation="38 0 -5.8" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    </Entity>
+    <Entity translation="38 0 -5.8">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="38 0 -5.8" body="fixed" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
+    </Group>
+    <Entity name="gate_e_torch_n" translation="38 0 5.8" transform="rotation: 0 90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    </Entity>
+    <Entity translation="38 0 5.8">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="38 0 5.8" body="fixed" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
+    </Group>
+    <Entity name="gate_w_torch_s" translation="-38 0 -5.8" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    </Entity>
+    <Entity translation="-38 0 -5.8">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-38 0 -5.8" body="fixed" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
+    </Group>
+    <Entity name="gate_w_torch_n" translation="-38 0 5.8" transform="rotation: 0 -90 0" overlap-max="0.3" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/torch_post_lod0.glb" lod1-url="/assets/meshes/village/torch_post_lod1.glb" lod2-url="/assets/meshes/village/torch_post_lod2.glb" lod-threshold-near="50" lod-threshold-mid="120" />
+    </Entity>
+    <Entity translation="-38 0 5.8">
+      <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
+    </Entity>
+    <Group translation="-38 0 5.8" body="fixed" collider="none">
+      <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
+    </Group>
+  </Group>
+</world>

@@ -1,0 +1,50 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Dropped attrs: place:align-to-terrain
+  Verbatim (no-op) tags: GLTFLoader x7
+-->
+<world>
+  <!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+
+  Antes: stub vazio (a vegetação periurbana vive nos spawners de
+  `vegetation/*.xml`, fora da muralha). Com o layout compacto a muralha veio
+  para ±38 e a `SpawnExclusion` para r=52 — ou seja, nenhum spawner entra
+  aqui dentro e o miolo entre a praça (±10) e o anel periurbano (±25) ficava
+  relvado e vazio. Estes props são a mobília desse miolo: quatro carvalhos de
+  sombra nas diagonais (onde nenhuma via passa) e caixotaria encostada à
+  muralha. Tudo GLB já no bundle — nada de assets novos.
+
+  Regras de colocação (verificadas com `vibegame analyze` + teste de distância
+  às polilinhas das vias):
+    - fora dos corredores de 4.8 m das artérias praça→portão (|x| ou |z| ≤ 2.4)
+    - fora do anel ±25 (largura 4 → folga ≥ 2 m ao eixo)
+    - face interior da muralha ~±37.5 — props encostados ficam antes disso
+-->
+  <Group name="city.skirts" translation="0 0 0">
+    <!-- Carvalhos do largo: um por quadrante, nas diagonais livres. -->
+    <Entity name="city_oak_ne" translation="15 0 13" transform="rotation: 0 24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb">
+      <GLTFLoader role="visual" url="/assets/meshes/forest/tree_oak_lod0.glb" lod1-url="/assets/meshes/forest/tree_oak_lod1.glb" lod2-url="/assets/meshes/forest/tree_oak_lod2.glb" lod-threshold-near="36" lod-threshold-mid="110" />
+    </Entity>
+    <Entity name="city_oak_nw" translation="-13 0 11" transform="rotation: 0 -70 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb">
+      <GLTFLoader role="visual" url="/assets/meshes/forest/tree_oak_lod0.glb" lod1-url="/assets/meshes/forest/tree_oak_lod1.glb" lod2-url="/assets/meshes/forest/tree_oak_lod2.glb" lod-threshold-near="36" lod-threshold-mid="110" />
+    </Entity>
+    <Entity name="city_oak_sw" translation="-15 0 -11" transform="rotation: 0 140 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb">
+      <GLTFLoader role="visual" url="/assets/meshes/forest/tree_oak_lod0.glb" lod1-url="/assets/meshes/forest/tree_oak_lod1.glb" lod2-url="/assets/meshes/forest/tree_oak_lod2.glb" lod-threshold-near="36" lod-threshold-mid="110" />
+    </Entity>
+    <Entity name="city_oak_se" translation="17 0 -7" transform="rotation: 0 -140 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb">
+      <GLTFLoader role="visual" url="/assets/meshes/forest/tree_oak_lod0.glb" lod1-url="/assets/meshes/forest/tree_oak_lod1.glb" lod2-url="/assets/meshes/forest/tree_oak_lod2.glb" lod-threshold-near="36" lod-threshold-mid="110" />
+    </Entity>
+    <!-- Caixotaria encostada à muralha (quebra o perímetro nu). -->
+    <Entity translation="-34.5 0 -6" transform="rotation: 0 12 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb" />
+    </Entity>
+    <Entity translation="-34.5 0 -8.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb" />
+    </Entity>
+    <Entity translation="21 0 32" transform="rotation: 0 -25 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/chopping_block_lod0.glb" lod1-url="/assets/meshes/village/chopping_block_lod1.glb" lod2-url="/assets/meshes/village/chopping_block_lod2.glb" />
+    </Entity>
+  </Group>
+</world>

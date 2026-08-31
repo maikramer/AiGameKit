@@ -1,0 +1,22 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Dropped attrs: place:align-to-terrain
+  Verbatim (no-op) tags: GLTFLoader x1
+-->
+<world>
+  <!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+  Edit this file for this district only. Cell coords: space-separated (at="4 2").
+-->
+  <Group name="city.chapel" translation="0 0 0">
+    <!-- Capela GLB + curandeira. Sem jardim/banco Composition. -->
+    <Entity name="chapel" transform="rotation: 0 -135 0" translation="10 0 25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chapel_collision.glb; mesh-anchor: base">
+      <GLTFLoader role="visual" url="/assets/meshes/village/chapel_lod0.glb" lod1-url="/assets/meshes/village/chapel_lod1.glb" lod2-url="/assets/meshes/village/chapel_lod2.glb" lod-threshold-near="70" lod-threshold-mid="160" />
+    </Entity>
+    <!-- Curandeira: [F] cura completa por ouro. O script carrega o GLB
+               com idle (igual ao merchant) — GLTFLoader declarativo + script
+               congelava a pose. -->
+    <Entity name="npc_healer" translation="5 0 21" transform="rotation: 0 -20 0" script="healer.lua" />
+  </Group>
+</world>

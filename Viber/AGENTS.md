@@ -12,6 +12,7 @@ não Unity/three.js.
 | CLI (`run` / `analyze`) | `src/main.rs` | `analyze` é headless, exit 1 em erro |
 | XML: parse, includes, valores | `src/xml/` | `include.rs` (expansão), `values.rs` (parsers tolerantes) |
 | IR de entidades + spawn Bevy | `src/recipes/` | `mod.rs` (IR), `spawn.rs`, `transform.rs` (euler→quat) |
+| Terreno (specs, sampler, mesh, LOD) | `src/terrain/` | `spec.rs` (contrato), `sampler.rs`/`heightmap.rs` (altura), `mesh.rs` (chunks), `plugin.rs` (LOD runtime), `runtime.rs` (bootstrap + carve) |
 
 ## COMANDOS
 
@@ -21,6 +22,21 @@ cd Viber && cargo run -- run <world.xml>       # janela Bevy
 cd Viber && cargo test                          # testes headless
 make test-viber                                 # atalho monorepo
 ```
+
+### CLI instalado (`viber`, via instalador unificado)
+
+```bash
+./install.sh viber            # raiz do monorepo: cargo build --release + ~/.local/bin/viber
+viber create <nome>           # scaffold <nome>/world.xml (falha se a pasta existe)
+viber analyze [world.xml]     # valida headless; sem caminho procura world.xml / worlds/*.xml
+viber run [world.xml]         # janela Bevy; `--release` e `--no-cargo` disponíveis
+viber --version | help
+```
+
+`viber run` dentro de um checkout do Viber delega em `cargo run -- run <mundo>`
+(parcidade com o `vibegame run`, que reconstrói a engine) — o binário instalado
+corre directo fora do checkout. `analyze` nunca delega (CI-ready, mesmo parser
+do binário instalado).
 
 ## CONTRATO XML (Fase 0)
 
@@ -43,13 +59,49 @@ Atributos universais: `name`, `tag`, `script`, `translation`, `euler` (graus XYZ
 `rotation` (quat `x y z w`, ganha sobre `euler`), `scale`.
 Sem câmara no mundo → auto-orbit lenta na origem.
 
+### Terreno (Fase 1)
+
+Port do `bevy_mesh_terrain` (MIT) corrigido + contratos do plugin terrain do
+VibeGame (sampler CPU único, skirts + frontier normals em vez de stitching,
+LOD com histerese, pads com falloff, tint por altura/inclinação em vertex
+colors — sem WGSL custom).
+
+| Tag | Atributos próprios |
+|-----|--------------------|
+| `Terrain` | `heightmap` (PNG 8/16-bit; ausente = procedural determinístico via `seed`; `.ahgt` ainda não decodifica → fallback procedural com warning), `world-size` (256), `max-height` (50), `chunk-size` (64), `resolution` (64 — verts/chunk edge), `levels` (3), `lod-distance-ratio` (2.0), `lod-hysteresis` (1.2), `render-distance` (sem default = tudo), `skirt-width` (0.015625), `skirt-depth` (1.0), `height-smoothing` (1 = Catmull-Rom monotone; 0 = bilinear), `collision-resolution` (64; 0 desliga — dados prontos para a Fase 3), `texture`/`texture-url`, `texture-tile-size` (0 = auto), `seed` (0), tint: `base-color`, `color-low`, `color-mid`, `color-high`, `color-rock`, `snow-height`, `slope-threshold`, `slope-softness`, `height-blend-strength` |
+| `TerrainPad` | `at` (`"x z"`), `size` (`"w d"`), `falloff` (8), `corner-radius` (4), `height` (ausente = auto: amostra o centro e escreve de volta) |
+| `Lake` | `at`, `radius` (6), `depth` (1.5), `water-offset` (0.5), `color` (#2f7a9a), `opacity` (0.78), `ripple` (0.6, reservado). Carve lower-only: contorno orgânico (±28 %, harmónicos sin 2θ/3θ/5θ com fase por posição), rim = mínimo de 32 raios, taça `rim − depth·(1−t²)^1.5` até `radius·1.25`; espelho de água em `rim − water-offset` |
+| `River` | `path` (`"x z x z …"`, ≥2 pontos), `width` (6), `depth` (1.5), `water-offset` (0.3), `bank-width` (2), `bank-height` (0.9), `color` (#2a6685), `opacity` (0.85). Chaikin ×2 + estações de 3 m; eixos amostrados pós-pads e suavizados; superfície = prefixo-mínimo descendente (água nunca sobe); carve por estação em 2 passes — banks (raise, teto `MAX_BANK_RAISE`=2) e depois canal+bank cut (lower-only) |
+| `Road` | `path` (≥2 pontos), `width` (2), `profile` (artery), `flatten` (true; `false` = trilho decal sem carve), `flatten-falloff` (8), `flatten-window` (56), `flatten-max-grade` (0.22), `flatten-shoulder` (0), `platform-sink` (0.12), `smoothing` (2), `closed` (false), `texture-url`, `texture-scale` (6), `edge-feather` (1.0); aceites sem efeito: `edge-noise`, `end-feather-start/end`, `normal-map-url` |
+| `RoadNetwork` | `default-profile` (artery), `default-width` (4), `crossing-flare` (false — alarga ×1.45 perto de ways com grau ≥3), `flatten`, `flatten-falloff`, `flatten-window`, `flatten-max-grade`, `texture-url`, `texture-scale` (9) + filhos `Way id xz [width]` e `Segment a b [via] [width] [profile]` (1 estrada por segmento, width interpolada; `profile="bridge"` salta o carve e desenha deck plano; `bridge-url`/`bridge-lod*`/`bridge-native-span` aceites sem efeito até glTF) |
+
+**Ordem de carve (contrato do VibeGame, `features.rs`):** Pads → Lakes → Rivers →
+Roads (arteriais primeiro, **pontes por último**). Estradas saltam núcleos de pads
+e zonas de carve de água (mutuamente exclusivas; o guard do road devolve `+inf`
+em zona bloqueada). Todo o mutate passa pelo brush engine (`brush.rs`): modos
+blend/lower/raise, journal por owner (`pad:0`, `road:3`…) com revert para
+re-carve idempotente, guard anti-lip (clamp lower-only ao anel de stencil) e
+`min_effective` (larguras < 1.5 texéis são promovidas — senão o carve no-op).
+
+Runtime: `TerrainFeaturesPlugin` (bootstrap one-shot: heightmap → carve
+pads→água→estradas → entidades de chunks/água/ribbons) + `TerrainPlugin` (LOD
+dinâmico por distância da câmara com histerese, rebuild com budget/frame, cull
+por `render-distance`). Queries de gameplay: `TerrainRuntime::sample /
+in_water / on_road` (recurso) + `WaterBody::contains / is_near / surface_y_at`
+(`avoid-water` / `near-water`) e `RoadPath::is_on_road / distance_to_road`.
+
+**Desvios conhecidos vs VibeGame** (documentados, nenhum afeta o simple-rpg):
+estações de road a 1 m (vs 0.35); sem berms/cross-slope; decks de ponte são
+ribbons planas (GLB chega com glTF); `.ahgt` não decodifica. Mundo demo:
+`worlds/terrain.xml` (`viber analyze worlds/terrain.xml`).
+
 **Regras:**
 - Tags case-insensitive; vetores `"x y z"` com broadcast de 1 valor; **2 valores = erro**.
 - Bools tolerantes: bare (`<PointLight shadows>`) e `true/1/yes/on` / `false/0/no/off`.
 - `<Include src>`: profundidade máx. 8, ciclos fail-fast; caminhos com `/` resolvem
   contra o dir do ficheiro raiz, relativos contra o dir do ficheiro que inclui;
   fragmentos com raiz `<world>`/`<scene>` contribuem os filhos.
-- Atributos desconhecidos = **warning** (impresso no `analyze`); tags desconhecidas = **erro**.
+- Atributos desconhecidos = **warning** (impresso no `analyze`); tags desconhecidas = **skip no-op** com relatório no `analyze` (`--strict` trata como erro).
 - `world`/`scene` aninhados e `<Include>` não-expandido = erro.
 - Números não finitos (`NaN`/`inf`) são rejeitados; includes podem sair da árvore
   de pastas (`..`, symlinks) — CLI local, sem sandbox (decisão consciente).
@@ -57,9 +109,10 @@ Sem câmara no mundo → auto-orbit lenta na origem.
 ## ROADMAP
 
 - **Fase 0 (✅):** parse/validate, includes, primitivas, luzes, `OrbitCamera`, `run`/`analyze`.
-- **Fase 1:** glTF (`GltfScene`) + terreno + player/movimento.
+- **Fase 1 (terreno ✅):** heightfield chunks + LOD + pads/água/estradas (`src/terrain/`).
+  Falta: glTF (`GltfScene`) + player/movimento; `.ahgt` ainda não decodifica (fallback procedural).
 - **Fase 2:** Luau/mlua (hooks `on_add`/`on_update`/`on_remove` + hot-reload).
-- **Fase 3:** física avian (`RigidBody`/`Collider`) + simple-rpg atualizado em `Viber/examples/simple-rpg/`.
+- **Fase 3:** física avian (`RigidBody`/`Collider` — consumir `collision-resolution`) + simple-rpg atualizado em `Viber/examples/simple-rpg/`.
 
 **Nota:** `script="ficheiro.lua"` já é aceite no XML e registado na IR, mas ainda
 **não executa** (chega na Fase 2).

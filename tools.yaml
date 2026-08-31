@@ -209,3 +209,11 @@ tools:
     cli_name: vibegame
     description: "Motor 3D (TypeScript/Bun); CLI vibegame create + build da biblioteca"
     bun_cli_script: scripts/vibegame-cli.mjs
+
+  viber:
+    name: "Viber"
+    kind: rust
+    folder: Viber
+    cli_name: viber
+    cargo_bin_name: viber
+    description: "Motor Bevy nativo (Rust); CLI viber create/run/analyze para mundos XML declarativos"

@@ -26,14 +26,25 @@
 //! <TerrainPad at="20 -10" size="24 16" falloff="8" corner-radius="4" />
 //! ```
 
+pub mod brush;
+pub mod features;
 pub mod heightmap;
 pub mod mesh;
+pub mod paths;
 pub mod plugin;
+pub mod roads;
+pub mod runtime;
 pub mod sampler;
 pub mod spec;
+pub mod water;
 
+pub use brush::{BrushGrid, BrushMode};
 pub use heightmap::HeightMapU16;
 pub use mesh::{ChunkMeshData, HeightField, TerrainColliderData};
+pub use paths::{chaikin_smooth, resample};
 pub use plugin::TerrainPlugin;
+pub use roads::{RoadNetworkSpec, RoadPath, RoadProfile, RoadSpec, SegmentSpec, WaySpec};
+pub use runtime::TerrainFeaturesPlugin;
 pub use sampler::{HeightSampler, ResolvedPad};
 pub use spec::{TerrainPadSpec, TerrainSpec, TerrainTint};
+pub use water::{LakeSpec, RiverSpec, WaterBody, WaterKind};

@@ -1,0 +1,129 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Dropped attrs: canvas, far, follow-lag, fov, mouse-sensitivity, near, resume-audio-on-user-gesture, turn-lag
+  Verbatim (no-op) tags: BossBar x1, Compass x1, DialogueBalloon x1, HealthBar x1, HudScreenLayer x1, InteractionPrompt x1, Minimap x1, NavMesh x1, PlayerGLTF x1, PostFxDebugToggle x1, ProjectileTemplate x1, QuestTracker x1, ResourceChip x3, SpawnGate x1, TabbedModal x1, TargetBar x1, Terrain x1, WaypointArrow x1, XpBar x1
+-->
+<world clear-color="#8fc2ef">
+  <!-- Projectile template used by ranged enemies (e.g. the archer). The
+           archer script fires this via spawnProjectileFromTemplate. Visual is
+           attached by main.ts's projectile watcher; the template only defines
+           kinematics + damage + the 'enemy' faction so player collision applies. -->
+  <ProjectileTemplate id="enemy-arrow" speed="16" damage="8" max-life="2.5" sensor-radius="0.3" faction="enemy" />
+  <!-- ============================================================
+           GRUPO "environment": céu, iluminação global, pós-processamento,
+           áudio, clima e as 4 cunhas de bioma cardeais. Tudo aqui é global
+           (luz ambiente/direcional, skybox, mixer, regiões de bioma) — não
+           tem posicionar no mundo, pelo que o Group fica na origem (0 0 0)
+           e funciona como contentor semântico. Movê-lo não é expectável,
+           mas se algum dia for útil (e.g. skybox offset) todos os filhos
+           acompanham via hierarquia de transforms.
+           ============================================================ -->
+  <Include src="/world/environment.xml" />
+  <!-- §3 HERÓI — nasce no centro da praça da cidade. Fora de qualquer
+           <Group> porque <PlayerGLTF> é um recipe merge:true: se fosse child
+           de um Group, o seu pos="0 150 0" fundir-se-ia no parent e elevaria
+           o terreno inteiro (o terrain field lê o WorldTransform.posY da
+           entidade onde faz merge). -->
+  <PlayerGLTF name="player" pos="0 150 0" model-url="/assets/meshes/characters/hero_lod0.glb">
+      </PlayerGLTF>
+  <!-- Hold player until heightmap + heightfield ready, then seat once (CCT). -->
+  <SpawnGate target-entity="player" y-fallback="150" />
+  <!-- GRUPO "world-base": terreno (heightfield + NavMesh). O <Terrain>
+           é merge:true — o Group TEM de ficar em pos="0 0 0". -->
+  <Group name="world-base" translation="0 0 0">
+    <!-- ============================================================
+           §2 TERRENO + NAVMESH
+           Quadtree LOD chunks; world-size/max-height batem com
+           public/assets/terrain/terrain.json. Física: uma heightfield
+           Rapier por chunk visual, criada/libertada dinamicamente.
+           levels 4→5 e resolution 64→128: o mundo mantém os 4 km, mas o
+           ground sampling quadruplica por eixo — chunks-folha 4× (metade do
+           lado) com o dobro de vértices por lado. collision-resolution
+           acompanha (32→64) para a heightfield física seguir a malha.
+           ============================================================ -->
+    <Terrain pos="-51 0 51" world-size="4000" max-height="200" levels="5" resolution="128" collision-resolution="64" lod-hysteresis="1.3" lod-distance-ratio="1.7" height-smoothing="1" height-smoothing-spread="1.25" heightmap="/assets/terrain/terrain.ahgt" skirt-width="0.015625" roughness="0.95" metalness="0" normal-strength="1.15" base-color="#c9c5ba" texture="/assets/textures/vale_grass.png" texture-tile-size="5" ao-strength="0.85" height-blend-strength="0.22" snow-height="0.92" slope-threshold="0.93" slope-softness="0.05" color-low="#35502a" color-mid="#75a04f" color-high="#e8f0ff" color-rock="#726b60" noise-sand-strength="0.45" noise-sand-scale="0.012" noise-sand-threshold="0.56" noise-sand-height-min="0.42" noise-sand-height-max="0.74" />
+    <NavMesh />
+  </Group>
+  <!-- FIM world-base -->
+  <Include src="/world/cities/discordia.xml" />
+  <Include src="/world/spawn/ring.xml" />
+  <Include src="/world/spawn/dressing.xml" />
+  <Include src="/world/paths/network.xml" />
+  <Include src="/world/paths/trails.xml" />
+  <!-- Aleia de lanternas nas quatro artérias (postes + chama + luz
+           quente). Depois de network.xml: o poste assenta no leito já
+           planado da estrada. -->
+  <Include src="/world/paths/lanterns.xml" />
+  <!-- Biomas: vegetação (tapete + dossel) e landmarks (destinos) em
+           ficheiros separados por cunha cardeal. -->
+  <Include src="/world/vegetation/forest.xml" />
+  <Include src="/world/vegetation/desert.xml" />
+  <Include src="/world/vegetation/swamp.xml" />
+  <Include src="/world/vegetation/peaks.xml" />
+  <Include src="/world/landmarks/forest.xml" />
+  <Include src="/world/landmarks/desert.xml" />
+  <Include src="/world/landmarks/swamp.xml" />
+  <Include src="/world/landmarks/peaks.xml" />
+  <Include src="/world/landmarks/wilds.xml" />
+  <!-- Cena separada: ambientes internos (portais das portas → salas em
+           (-410, 120); saídas teleportam de volta para as portas exteriores). -->
+  <Include src="/world/interiors.xml" />
+  <Include src="/world/frontier/ridges.xml" />
+  <Include src="/world/frontier/horizon.xml" />
+  <Include src="/world/atmosphere/ambient-fx.xml" />
+  <Include src="/world/creatures/enemies.xml" />
+  <Include src="/world/creatures/bosses.xml" />
+  <Include src="/world/ai/npcs.xml" />
+  <!-- Câmera 3ª pessoa. Fora de qualquer <Group> porque
+           <ThirdPersonCamera> é merge:true — dentro de um Group, a stack de
+           câmera fundir-se-ia no parent em vez de criar a sua própria entidade.
+           Teclas 1-6 alternam pós-processamento. -->
+  <OrbitCamera distance="3.3" height="1.55" pitch="18.3" />
+  <!-- GRUPO "ui": HUD (health/xp/bars/minimap/compass), prompts de
+           diálogo, e o menu tabbed (pause/inventário/skills/opções/quests).
+           Elementos DOM; o Group serve como contentor lógico. -->
+  <Group name="ui" translation="0 0 0">
+    <!-- ============================================================
+           §11 CÂMERA, HUD E UI
+           ============================================================ -->
+    <PostFxDebugToggle />
+    <!-- HUD: camada declarativa screen-space + widgets (engine HudPlugin). -->
+    <HudScreenLayer>
+      <Clock />
+    </HudScreenLayer>
+    <HealthBar target-entity="player" icon="/assets/icons/hud_health.png" />
+    <XpBar target-entity="player" />
+    <ResourceChip resource="gold" icon="/assets/icons/hud_gold.png" target-entity="player" />
+    <ResourceChip resource="wood" icon="/assets/icons/hud_wood.png" target-entity="player" />
+    <ResourceChip resource="stone" icon="/assets/icons/hud_stone.png" target-entity="player" />
+    <Minimap range="60" />
+    <Compass />
+    <TargetBar />
+    <BossBar target-entity="boss" />
+    <InteractionPrompt key="F" range="4.5" position="bottom-center" />
+    <!-- Navegação de missão: seta screen-space para o marcador rastreado
+           (fora do ecrã encosta à borda e aponta) + canto com as missões
+           ativas. Os pontos no minimapa/bússola vêm do mesmo registo de
+           waypoints (QuestBeaconSystem). -->
+    <WaypointArrow margin="64" />
+    <QuestTracker anchor="top-right" max-rows="4" />
+    <!-- Diálogo (instância única). QuestTriggerSystem abre ao [F] perto
+           de um <DialogueNPC>; QuestsTab lista as quests ativas. -->
+    <DialogueBalloon />
+    <!-- Menu de pausa: modal tabbed com [Q]. -->
+    <TabbedModal id="pause" key="q" target-entity="player" title-key="modal.pause">
+      <InventoryTab columns="5" />
+      <SkillsTab />
+      <OptionsTab label-key="modal.tab.system" preset="core">
+        <OptionRow id="save" type="button" label-key="options.save" />
+        <OptionRow id="load" type="button" label-key="options.load" />
+        <OptionRow id="controls" type="note" label-key="options.controls" />
+      </OptionsTab>
+      <WikiTab />
+      <QuestsTab />
+    </TabbedModal>
+  </Group>
+  <!-- FIM ui -->
+  <Include src="/world/cities/town-demo.xml" />
+</world>

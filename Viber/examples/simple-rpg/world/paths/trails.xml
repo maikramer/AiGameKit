@@ -1,0 +1,56 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Verbatim (no-op) tags: Road x15
+-->
+<world>
+  <!--
+  Ramos de terra/areia (flatten="0") até landmarks. Artéria cobble = network.xml.
+-->
+  <Group name="paths.trails" translation="0 0 0">
+    <!-- ============================================================
+       NORTE — Floresta Sombria (dock em n_forest* / n_gate)
+       ============================================================ -->
+    <!-- ramo → posto avançado (-46, 88) -->
+    <Road path="4 156 -32 160 -68 172 -88 176" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.6" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/forest_floor.png" normal-map-url="/assets/textures/pbr_forest_floor/forest_floor_normal.png" />
+    <!-- ramo → círculo de menires (52, 118). Começa na margem NORTE do rio
+       (dock no pad n_resume da ponte) — a linha antiga (24,208) nascia
+       dentro da lâmina do rio. -->
+    <Road path="8 230 24 224 56 220 88 232 100 236" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.6" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/forest_floor.png" normal-map-url="/assets/textures/pbr_forest_floor/forest_floor_normal.png" />
+    <!-- ramo → acampamento de lenhador (-30, 64) -->
+    <Road path="-3 132 -28 128 -52 128" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.6" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/forest_floor.png" normal-map-url="/assets/textures/pbr_forest_floor/forest_floor_normal.png" />
+    <!-- ============================================================
+       LESTE — Deserto (dock em d1/d2)
+       ============================================================ -->
+    <!-- Termina na praia do oásis (140,92 r=14) — não dentro da bacia. -->
+    <Road path="160 6 148 52 142 76" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand.png" normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png" />
+    <Road path="200 10 184 -28 176 -60 164 -92 156 -110" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand.png" normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png" />
+    <Road path="240 8 236 52 240 72" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand.png" normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png" />
+    <Road path="200 10 210 -24 214 -32" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand.png" normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png" />
+    <!-- ============================================================
+       OESTE — Pântano
+       ============================================================ -->
+    <!-- Dock na artéria oeste antes da ponte da Lagoa Grande; contorna a
+       margem NE da lagoa (-190,-16 r=24) — o início antigo (-184,0)
+       caía dentro da água. -->
+    <Road path="-160 1.7 -172 8 -190 20 -214 48 -244 76 -260 92" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/swamp_mud.png" normal-map-url="/assets/textures/pbr_swamp_mud/swamp_mud_normal.png" />
+    <Road path="-220 -18 -200 -44 -188 -52" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/swamp_mud.png" normal-map-url="/assets/textures/pbr_swamp_mud/swamp_mud_normal.png" />
+    <!-- ============================================================
+       SUL — Picos Gelados
+       ============================================================ -->
+    <Road path="-2 -208 -32 -208 -54 -214" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.5" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/mountain_stone.png" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png" />
+    <!-- Termina na margem N do Lago Gelado (-184,-68 r=22) — não dentro da água. -->
+    <Road path="-2 -208 40 -186 42 -184" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.5" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/mountain_stone.png" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png" />
+    <Road path="-2 -208 -26 -180 -38 -174" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.5" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/mountain_stone.png" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png" />
+    <!-- ============================================================
+       ANEL SELVAGEM (mapa 8 km) — ramos para os novos marcos.
+       ============================================================ -->
+    <!-- Deserto → Ruína Ancestral de Orm (1700,-810). -->
+    <Road path="290 -4 480 -180 760 -420 1100 -640 1400 -760 1640 -800" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/desert_sand.png" normal-map-url="/assets/textures/pbr_desert_sand/desert_sand_normal.png" />
+    <!-- Oeste → Clareira Paradisíaca (-540,30). -->
+    <Road path="-292 12 -400 30 -470 28 -528 30" width="4" flatten="0" texture-scale="6" edge-feather="1.1" edge-noise="0.7" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/swamp_mud.png" normal-map-url="/assets/textures/pbr_swamp_mud/swamp_mud_normal.png" />
+    <!-- Sul → Mirante da Caldeira (-605,-725). -->
+    <Road path="-12 -286 -160 -420 -380 -600 -520 -690 -590 -720" width="4" flatten="0" texture-scale="6" edge-feather="1.0" edge-noise="0.5" end-feather-start="1.5" end-feather-end="3" texture-url="/assets/textures/mountain_stone.png" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png" />
+  </Group>
+  <!-- FIM paths.trails -->
+</world>

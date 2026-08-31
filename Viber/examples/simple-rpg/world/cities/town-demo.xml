@@ -1,0 +1,11 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+-->
+<world>
+  <!--
+  town-demo CityGrid removido — expandia para Box/Composition.
+  Stub mantido pelo Include em index.html. Foco: assets GLB.
+-->
+  <Group name="town" translation="840 0 840" />
+</world>

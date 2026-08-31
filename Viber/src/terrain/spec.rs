@@ -31,6 +31,10 @@ pub const DEFAULT_SKIRT_DEPTH: f32 = 1.0;
 pub const DEFAULT_HEIGHT_SMOOTHING: f32 = 1.0;
 /// Collider heightfield resolution per chunk edge (0 disables collider generation).
 pub const DEFAULT_COLLISION_RESOLUTION: u32 = 64;
+/// Mesh vertices per chunk edge at LOD 0. The effective grid step is
+/// `chunk_size / resolution` rounded to whole meters (the mesh builder works
+/// on integer steps); values finer than 1 m/vertex clamp to 1.
+pub const DEFAULT_RESOLUTION: u32 = 64;
 /// Mesh chunks rebuilt per frame after the initial load (frame budget).
 pub const DEFAULT_MAX_MESH_BUILDS_PER_FRAME: u32 = 4;
 
@@ -63,6 +67,8 @@ pub struct TerrainSpec {
     pub height_smoothing: f32,
     /// Collider heightfield resolution per chunk edge; `0` disables collider generation.
     pub collision_resolution: u32,
+    /// Mesh vertices per chunk edge at LOD 0 (see [`DEFAULT_RESOLUTION`]).
+    pub resolution: u32,
     /// Optional tiled diffuse texture applied over the whole terrain.
     pub texture: Option<String>,
     /// Texture tile size in meters; `0.0` = auto (keeps texel density constant across LODs).
@@ -88,6 +94,7 @@ impl Default for TerrainSpec {
             skirt_depth: DEFAULT_SKIRT_DEPTH,
             height_smoothing: DEFAULT_HEIGHT_SMOOTHING,
             collision_resolution: DEFAULT_COLLISION_RESOLUTION,
+            resolution: DEFAULT_RESOLUTION,
             texture: None,
             texture_tile_size: 0.0,
             tint: TerrainTint::default(),

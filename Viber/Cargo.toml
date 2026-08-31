@@ -13,6 +13,7 @@ categories = ["game-development"]
 anyhow = "1.0"
 bevy = "0.19"
 clap = { version = "4.6", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 roxmltree = "0.20"
 
 [dev-dependencies]

@@ -1,0 +1,18 @@
+<!--
+  Migrated from VibeGame by scripts/migrate_from_vibegame.py; tags não
+  implementadas passam verbatim e fazem no-op na engine.
+  Dropped attrs: corner-radius, edge-feather, edge-noise, normal-map-url, place:align-to-terrain, texture-scale, texture-url
+-->
+<world>
+  <!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+  Artérias cobble → paths/network.xml (<RoadNetwork>). Aqui: só pad da praça.
+  Layout compacto: praça 32×32 → 20×20 (muralha ±39.8). Continua a ser a maior
+  área aberta da cidade — o que encolheu foi o vazio entre distritos.
+-->
+  <Group name="city.roads" translation="0 0 0">
+    <Group translation="0 0 0" body="fixed" collider="none">
+      <Plane translation="0 0.03 0" half-size="10 10" />
+    </Group>
+  </Group>
+</world>

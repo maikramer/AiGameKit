@@ -85,7 +85,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Motion3D/` | Python | `motion3d` | Text-to-motion (HY-Motion-1.0 Lite/Full) → NPZ @30fps; `apply-rigged` → SkinTokens via Animator3D `hml22`; vramd |
 | `AiGameKitLab/` | Python | `aigamekit-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
-| `Viber/` | Rust | `viber` | Native Bevy engine (declarative world XML, Bevy naming; Phases: 0 ✅ XML+spawn, 1 glTF/terrain, 2 Luau scripts, 3 physics) |
+| `Viber/` | Rust | `viber` | Native Bevy engine (declarative world XML, Bevy naming; Phases: 0 ✅ XML+spawn, 1 terreno ✅ (Terrain/Pad/Lake/River/Road/RoadNetwork) + glTF pendente, 2 Luau scripts, 3 physics) |
 | `Terrain3D/` | Python | `terrain3d` | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
 | `Rocks3D/` | Python | `rocks3d` | Procedural 3D rock generation (no PyTorch) |
 | `Vramd/` | Python | `modelserver` (CLI `vramd`/`vramd`) | Unified Model Server (vramd) — single-process GPU/VRAM supervisor |
@@ -414,9 +414,20 @@ cd Viber && cargo run -- run world.xml       # open a window and spawn the world
 make test-viber                              # cargo test in Viber/
 ```
 
-The world XML follows **Bevy naming** (`translation`, `euler`, `half-size`, `base-color`) — no Unity/three.js vocabulary. Short tag contract: `Entity`, `Group`, shapes `Cuboid`/`Sphere`/`Cylinder`/`Plane`/`Capsule`, lights `PointLight`/`AmbientLight`, `OrbitCamera`, and `<Include src="…">` for composition (depth ≤ 8).
+**Unified installer (CLI on PATH):** from monorepo root, with `cargo` available:
 
-Roadmap: Phase 0 ✅ (XML + spawn); Phase 1 glTF + terrain + player; Phase 2 Luau scripting (mlua); Phase 3 physics (`avian`) + `simple-rpg` updated. **VibeGame (TS/browser) remains the browser engine** — Viber is the native track; both share the GLB/KTX2/meshopt assets produced by the `gameassets` pipeline.
+```bash
+./install.sh viber
+# or: python3 -m aigamekit_shared.installer.unified viber
+```
+
+This runs `cargo build --release` in `Viber/` and installs the binary as `viber` into `~/.local/bin`. Subcommands: `viber create <name>` (world scaffold), `viber analyze [world.xml]` (headless, CI-ready; sem caminho procura `world.xml`/`worlds/*.xml`), `viber run [world.xml]` (Bevy window; `--release`/`--no-cargo`), `viber --version`/`help`. `viber run` inside a Viber checkout delegates to `cargo run -- run` (engine rebuilt from source, like `vibegame run`); `analyze` never delegates.
+
+The world XML follows **Bevy naming** (`translation`, `euler`, `half-size`, `base-color`) — no Unity/three.js vocabulary. Short tag contract: `Entity`, `Group`, shapes `Cuboid`/`Sphere`/`Cylinder`/`Plane`/`Capsule`, lights `PointLight`/`DirectionalLight`/`AmbientLight`, `OrbitCamera`, and `<Include src="…">` for composition (depth ≤ 8).
+
+**Terrain (Phase 1 ✅):** declarative heightfield + ground features ported from the VibeGame terrain/water/road plugins — `<Terrain>` (PNG/procedural heightmap, chunked LOD0+ meshes with skirts + frontier normals), `<TerrainPad>`, `<Lake>`, `<River>`, `<Road>`, `<RoadNetwork>` (Way/Segment expansion, bridge profile). Carve order is Pads → Lakes → Rivers → Roads (bridges last); roads skip pad cores and water carve zones; every mutation goes through the brush engine (`Viber/src/terrain/brush.rs`) with owner-journal reverts. Gameplay queries land as resources: `TerrainRuntime::sample/in_water/on_road`, `WaterBody`, `RoadPath` (spawner `avoid-water`/`near-water`/`isPointOnRoad` parity). Demo world: `Viber/worlds/terrain.xml`. Unknown tags are skipped as no-ops with an `analyze` report (`--strict` fails) — so worlds written for VibeGame parse natively and unimplemented tags degrade gracefully.
+
+Roadmap: Phase 0 ✅ (XML + spawn); Phase 1 terrain ✅ (heightfield + features), glTF + player pending; Phase 2 Luau scripting (mlua); Phase 3 physics (`avian`) + `simple-rpg` updated. **VibeGame (TS/browser) remains the browser engine** — Viber is the native track; both share the GLB/KTX2/meshopt assets produced by the `gameassets` pipeline.
 
 ## vramd (VRAM Coordination)
 
