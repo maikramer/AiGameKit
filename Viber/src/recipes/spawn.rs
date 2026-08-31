@@ -303,18 +303,7 @@ pub fn startup(world: &mut World) {
         world.insert_resource(light);
     }
     for (index, resource) in chips {
-        world.spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(10.0 + 26.0 * (index - 1) as f32),
-                left: Val::Px(10.0),
-                ..Default::default()
-            },
-            Text::new(format!("{} 0", resource)),
-            TextColor(Color::srgb(1.0, 0.9, 0.6)),
-            TextFont::from_font_size(20.0),
-            Name::new(format!("chip:{resource}")),
-        ));
+        crate::hud::spawn_resource_chip(world, index, &resource);
     }
     for (tag, attrs) in &hud_elements {
         crate::hud::spawn_hud(world, tag, attrs);

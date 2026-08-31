@@ -12,8 +12,8 @@ use viber::bridge::{self, client::BridgeClient};
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
 use viber::{
-    animation, camera, hud, music, particles, physics, player, recipes, scaffold, sky, spawner,
-    terrain, worldsys, xml,
+    animation, camera, hud, meshopt, music, particles, physics, player, recipes, scaffold, sky,
+    spawner, terrain, worldsys, xml,
 };
 
 /// Native Bevy engine for AiGameKit declarative worlds.
@@ -347,6 +347,10 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         _ => PathBuf::from("assets"),
     };
     let mut app = bevy::app::App::new();
+    // Registered before `AssetPlugin`, which snapshots the sources when it
+    // builds. The reader expands `EXT_meshopt_compression` so the engine can
+    // read the shared asset pool's compressed GLBs as authored.
+    meshopt::register_asset_source(&mut app, asset_root.clone());
     let mut plugins = bevy::DefaultPlugins
         .set(bevy::window::WindowPlugin {
             primary_window: Some(bevy::window::Window {
@@ -385,6 +389,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     app.add_plugins(terrain::TerrainPlugin);
     app.add_plugins(terrain::runtime::TerrainFeaturesPlugin);
     app.add_systems(bevy::app::Startup, spawn::startup);
+    app.add_systems(bevy::app::Update, hud::hud_minimap_update);
     app.add_systems(
         bevy::app::Update,
         (
@@ -401,6 +406,9 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             spawn::gltf_scene_spawner,
             player::dialogue_interaction,
             hud::hud_prompt_update,
+            hud::hud_compass_update,
+            hud::hud_minimap_update,
+            // BISECT hud::hud_nametags_update,
             music::music_driver,
             worldsys::daycycle_drive,
             worldsys::sun_drive,
