@@ -214,13 +214,14 @@ pub fn startup(world: &mut World) {
     });
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
-    let chips = {
+    let (chips, hud_elements) = {
         let mut ctx = SpawnCtx {
             meshes: &mut meshes,
             materials: &mut materials,
             asset_server: &asset_server,
             chip_counter: std::cell::Cell::new(0),
             chips: std::cell::RefCell::new(Vec::new()),
+            hud: std::cell::RefCell::new(Vec::new()),
         };
         for spec in &parsed.entities {
             if is_ground_feature(&spec.kind) {
@@ -228,7 +229,8 @@ pub fn startup(world: &mut World) {
             }
             spawn_entity(world, &mut ctx, spec, None, &mut stats, &mut ambient);
         }
-        ctx.chips.into_inner()
+        let hud_elements = ctx.hud.into_inner();
+        (ctx.chips.into_inner(), hud_elements)
     };
     if let Some(light) = ambient {
         world.insert_resource(light);
@@ -247,6 +249,9 @@ pub fn startup(world: &mut World) {
             Name::new(format!("chip:{resource}")),
         ));
     }
+    for (tag, attrs) in &hud_elements {
+        crate::hud::spawn_hud(world, tag, attrs);
+    }
     world.insert_resource(meshes);
     world.insert_resource(materials);
     world.insert_resource(asset_server);
@@ -263,6 +268,11 @@ pub fn startup(world: &mut World) {
     }
 }
 
+/// Raw attributes of one HUD element.
+pub type HudAttrs = Vec<(String, String)>;
+/// Deferred HUD requests: (tag, attrs).
+pub type HudList = Vec<(String, HudAttrs)>;
+
 /// Borrowed asset handles used while spawning one world.
 struct SpawnCtx<'a> {
     meshes: &'a mut Assets<Mesh>,
@@ -271,6 +281,8 @@ struct SpawnCtx<'a> {
     chip_counter: std::cell::Cell<usize>,
     /// Deferred HUD chip UI nodes (resource name + stack index).
     chips: std::cell::RefCell<Vec<(usize, String)>>,
+    /// Deferred HUD screen elements (tag + raw attrs).
+    hud: std::cell::RefCell<HudList>,
 }
 
 /// Recursively collect `<StaticSpawner>` specs and start their template loads.
@@ -505,6 +517,9 @@ fn spawn_entity(
             // HUD chip: UI node deferred to the end of startup (the entity
             // borrow holds `world`).
             ctx.chips.borrow_mut().push((index, resource.clone()));
+        }
+        EntityKind::HudElement { tag, attrs } => {
+            ctx.hud.borrow_mut().push((tag.clone(), attrs.clone()));
         }
         EntityKind::PlayerGltf { url } => {
             let path = url.trim_start_matches('/');

@@ -50,6 +50,16 @@ pub const KNOWN_TAGS: &[&str] = &[
     "thirdpersoncamera",
     "dialoguenpc",
     "resourcechip",
+    "hudscreenlayer",
+    "healthbar",
+    "xpbar",
+    "bossbar",
+    "targetbar",
+    "minimap",
+    "compass",
+    "interactionprompt",
+    "dialogueballoon",
+    "tabbedmodal",
 ];
 
 /// A parsed world: clear color, entity tree and non-fatal warnings.
@@ -199,6 +209,12 @@ pub enum EntityKind {
         resource: String,
         icon: String,
         target: String,
+    },
+    /// HUD screen elements (bars, minimap, compass, modal, prompt…): the
+    /// original tag plus its raw attributes — `src/hud.rs` builds the UI.
+    HudElement {
+        tag: String,
+        attrs: Vec<(String, String)>,
     },
 }
 
@@ -433,6 +449,10 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
             }
         },
         "resourcechip" => finish_resource_chip(node, ctx).map(Some),
+        "hudscreenlayer" | "healthbar" | "xpbar" | "bossbar" | "targetbar" | "minimap"
+        | "compass" | "interactionprompt" | "dialogueballoon" | "tabbedmodal" => {
+            finish_hud_element(node, ctx).map(Some)
+        }
         "particlesystem" => finish_particle_system(node, ctx).map(Some),
         "terrain" => finish_terrain(node, ctx).map(Some),
         "terrainpad" => finish_terrain_pad(node, ctx).map(Some),
@@ -1140,6 +1160,27 @@ fn finish_resource_chip(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
     })
 }
 
+/// HUD elements keep their raw attributes — `src/hud.rs` interprets them.
+fn finish_hud_element(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, _rest) = parse_common(node)?;
+    // Raw attrs are the data — hud.rs interprets them, nothing to warn about.
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::HudElement {
+            tag: node.tag.to_ascii_lowercase(),
+            attrs: node
+                .attrs
+                .iter()
+                .map(|(k, v)| (k.to_ascii_lowercase(), v.clone()))
+                .collect(),
+        },
+        children: Vec::new(),
+    })
+}
+
 fn finish_gltf_scene(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node)?;
     // `url` is this tag's own attribute — already consumed by the caller.
@@ -1657,6 +1698,8 @@ pub struct WorldSummary {
     pub dialogue_npcs: usize,
     /// `<ResourceChip>` HUD chips.
     pub resource_chips: usize,
+    /// HUD screen elements (bars, minimap, compass, modal…).
+    pub hud_elements: usize,
 }
 
 impl WorldSummary {
@@ -1733,6 +1776,7 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::PlayerGltf { .. } => out.players += 1,
                 EntityKind::DialogueNpc { .. } => out.dialogue_npcs += 1,
                 EntityKind::ResourceChip { .. } => out.resource_chips += 1,
+                EntityKind::HudElement { .. } => out.hud_elements += 1,
             }
             walk(&spec.children, out);
         }
@@ -2183,6 +2227,32 @@ mod tests {
     }
 
     #[test]
+    fn test_hud_element_keeps_raw_attrs() {
+        let (spec, w) = parse_one(&node(
+            "InteractionPrompt",
+            &[
+                ("key", "E"),
+                ("range", "4.5"),
+                ("position", "bottom-center"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::HudElement { tag, attrs } = spec.kind else {
+            panic!("expected hud element");
+        };
+        assert_eq!(tag, "interactionprompt");
+        assert_eq!(
+            attrs,
+            vec![
+                ("key".to_string(), "E".to_string()),
+                ("range".to_string(), "4.5".to_string()),
+                ("position".to_string(), "bottom-center".to_string()),
+            ]
+        );
+    }
+
+    #[test]
     fn test_static_spawner_spec_and_template_urls() {
         let mut template = node("GameObject", &[("role", "static")]);
         template.children = vec![node(
@@ -2367,6 +2437,7 @@ mod tests {
                     "ResourceChip",
                     &[("resource", "gold"), ("target-entity", "player")],
                 ),
+                node("HealthBar", &[("target-entity", "player")]),
             ],
         )
         .unwrap();
@@ -2395,6 +2466,7 @@ mod tests {
                 players: 1,
                 dialogue_npcs: 1,
                 resource_chips: 1,
+                hud_elements: 1,
             }
         );
         assert_eq!(summary.entities(), 8);
