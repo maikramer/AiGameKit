@@ -39,7 +39,8 @@ pub const DEFAULT_MIN_TERRAIN_DISTANCE: f32 = 1.0;
 // --- true automatic camera (auto-follow behind the movement heading) ---
 /// Movement speed (m/s) below which the camera stays where it is.
 pub const AUTO_FOLLOW_MIN_SPEED: f32 = 1.0;
-/// Seconds after manual A/D steering before the auto-follow takes over.
+/// Seconds after manual A/D steering before the FAST follow takes over
+/// (the continuous settle runs during steering too).
 pub const AUTO_FOLLOW_GRACE: f32 = 0.2;
 /// Time constant of the auto-follow swing (larger = lazier repositioning).
 pub const AUTO_FOLLOW_TAU: f32 = 0.45;
@@ -173,22 +174,26 @@ pub struct AutoCameraInput {
     pub seconds_since_steer: f32,
 }
 
-/// Auto-camera step (two regimes), after the steering grace:
+/// Auto-camera step (two regimes):
 ///
-/// - **Fast follow**: running (speed ≥ [`AUTO_FOLLOW_MIN_SPEED`]) with the
-///   heading not pointing backwards (alignment ≥ [`AUTO_FOLLOW_ALIGN_MIN`])
-///   swings the yaw behind the movement heading at up to
-///   [`AUTO_FOLLOW_MAX_RATE`].
-/// - **Continuous settle**: otherwise the yaw drifts behind the CHARACTER'S
-///   BACK at [`AUTO_SETTLE_MAX_RATE`] — walking backwards contours the rig
-///   around while you move, instead of staring at the hero's face forever.
+/// - **Fast follow** (only outside the steering grace): running (speed ≥
+///   [`AUTO_FOLLOW_MIN_SPEED`]) with the heading not pointing backwards
+///   (alignment ≥ [`AUTO_FOLLOW_ALIGN_MIN`]) swings the yaw behind the
+///   movement heading at up to [`AUTO_FOLLOW_MAX_RATE`]. Gated during A/D
+///   because the heading is camera-relative — summed with steering it
+///   would spiral.
+/// - **Continuous settle** (ALWAYS on, steering included): the yaw drifts
+///   behind the CHARACTER'S BACK at [`AUTO_SETTLE_MAX_RATE`] — turning
+///   with A/D already repositions the rig mid-motion instead of only
+///   after releasing.
 pub fn auto_camera_yaw(yaw_deg: f32, input: AutoCameraInput, dt: f32) -> f32 {
-    if input.seconds_since_steer < AUTO_FOLLOW_GRACE {
-        return yaw_deg; // steering owns the yaw
-    }
+    let steering = input.seconds_since_steer < AUTO_FOLLOW_GRACE;
     match input.heading {
+        // Fast follow only FORA do steering: ele persegue o heading, que é
+        // relativo à câmera — somado ao steering giraria em espiral.
         Some((hx, hz))
-            if input.speed >= AUTO_FOLLOW_MIN_SPEED
+            if !steering
+                && input.speed >= AUTO_FOLLOW_MIN_SPEED
                 && input.heading_alignment >= AUTO_FOLLOW_ALIGN_MIN =>
         {
             swing_yaw(
@@ -199,6 +204,9 @@ pub fn auto_camera_yaw(yaw_deg: f32, input: AutoCameraInput, dt: f32) -> f32 {
                 dt,
             )
         }
+        // Settle CONTÍNUO, inclusive DURANTE o steering: é o que mantém a
+        // câmera contornando para trás das costas enquanto o player gira
+        // com A/D, em vez de só começar depois de soltar.
         _ if input.settle_allowed => swing_yaw(
             yaw_deg,
             input.behind_facing_yaw,
@@ -602,6 +610,31 @@ mod tests {
             ),
             0.0
         ));
+    }
+
+    #[test]
+    fn test_settle_runs_during_steering() {
+        // O reposicionamento é contínuo: com A/D pressionado (dentro do
+        // grace) o settle continua contornando para trás das costas — a
+        // câmera não espera o player soltar as teclas.
+        let dt = 1.0 / 60.0;
+        let yaw = auto_camera_yaw(
+            0.0,
+            AutoCameraInput {
+                heading: Some((1.0, 0.0)),
+                speed: 4.0,
+                heading_alignment: 0.0,
+                behind_facing_yaw: 180.0,
+                settle_allowed: true,
+                seconds_since_steer: 0.0,
+            },
+            dt,
+        );
+        assert!(yaw > 0.5, "settle moves during steering: {yaw}");
+        // E o fast follow continua bloqueado pelo grace (não duplica a
+        // rotação do steering): rumo -90 não é perseguido aqui — o passo
+        // veio do settle (rumo +180).
+        assert!(yaw < 2.5, "settle rate cap respected: {yaw}");
     }
 
     #[test]
