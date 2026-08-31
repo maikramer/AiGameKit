@@ -18,14 +18,14 @@
   <Group name="city.plaza" translation="0 0 0">
     <!-- Poço medieval (~1.6 m nativo). Centro-oeste da praça.
                Fora do corredor da artéria praça→mid_w (|z| ≤ 2.4). -->
-    <Entity name="well" translation="-6 0 4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_lod2.glb; mesh-anchor: base" script="well.lua">
+    <Entity name="well" translation="-6 0 4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_lod0.glb; mesh-anchor: base" script="well.lua">
       <GltfScene url="/assets/meshes/village/medieval_well_lod0.glb" />
     </Entity>
     <!-- Fogueira comunitária: GLB campfire_pit (anel de pedra, sem
            chama modelada) + brasa/luz por cima. Canto SE da praça, fora dos
            corredores das duas artérias (|x| ≤ 2.4 e |z| ≤ 2.4).
            [G] abre descanso + viagem aos marcos da Nota (campfire.ts). -->
-    <Entity name="campfire" translation="6.5 0 -6.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base" script="campfire.lua">
+    <Entity name="campfire" translation="6.5 0 -6.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_lod0.glb; mesh-anchor: base" script="campfire.lua">
       <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
     </Entity>
     <!-- Chama: partículas reais, não um <Sphere> laranja. A esfera opaca
@@ -51,13 +51,13 @@
     </Entity>
     <!-- Quadro de avisos (borda sul da praça) — GLB notice_board.
                [F] abre as recompensas da guarda (src/scripts/notice-board.ts). -->
-    <Entity name="notice_board" translation="5 0 -12.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/notice_board_collision.glb; mesh-anchor: base" script="notice-board.lua">
+    <Entity name="notice_board" translation="5 0 -12.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/notice_board_lod0.glb; mesh-anchor: base" script="notice-board.lua">
       <GltfScene url="/assets/meshes/village/notice_board_lod0.glb" />
     </Entity>
     <!-- Tochas da praça: GLB torch_post (sem chama modelada) + brasa/luz
            por cima — orçamento de PointLights mantido em 2. Nos cantos NE/SW
            da praça, onde a rua não passa. -->
-    <Entity translation="8.5 0 8.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="8.5 0 8.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <!-- Chama da tocha: torch_post mede 2.20 m e a haste é sólida até
@@ -70,7 +70,7 @@
     <Group translation="8.5 0 8.5" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1280" />
     </Group>
-    <Entity translation="-8.5 0 -8.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-8.5 0 -8.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-8.5 0 -8.5">
@@ -83,8 +83,8 @@
   <Group name="city.landmarks" translation="0 0 0">
     <!-- Santuários místicos entre o anel periurbano (±25) e a muralha
                (±39.8), encostados às vias E-W sem lhes ficar em cima. -->
-    <Entity name="rune-pillar" translation="-35 0 17" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base" script="stone-pillar.lua" />
-    <Entity name="crystal-shrine" translation="35 0 17" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" script="crystal-shrine.lua" />
+    <Entity name="rune-pillar" translation="-35 0 17" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base" script="stone-pillar.lua" />
+    <Entity name="crystal-shrine" translation="35 0 17" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb; mesh-anchor: base" script="crystal-shrine.lua" />
   </Group>
   <Group name="city.townsfolk" translation="0 0 0">
     <!-- Transeuntes ambientes (src/game/townsfolk.ts): cada um adota a

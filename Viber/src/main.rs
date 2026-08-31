@@ -11,7 +11,8 @@ use viber::bridge::{self, client::BridgeClient};
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
 use viber::{
-    hud, music, particles, physics, player, recipes, scaffold, sky, spawner, terrain, worldsys, xml,
+    animation, hud, music, particles, physics, player, recipes, scaffold, sky, spawner, terrain,
+    worldsys, xml,
 };
 
 /// Native Bevy engine for AiGameKit declarative worlds.
@@ -373,6 +374,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // `sky::spawn_sky` needs `Assets<SkyMaterial>`; without this plugin the
     // startup system panics and leaves `Assets<Mesh>` taken out of the world.
     app.add_plugins(bevy::pbr::MaterialPlugin::<sky::SkyMaterial>::default());
+    app.add_plugins(animation::AnimationPlugin);
     app.add_plugins(physics::PhysicsPlugin {
         debug: std::env::var_os("VIBER_PHYSICS_DEBUG").is_some(),
     });

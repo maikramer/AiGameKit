@@ -15,7 +15,7 @@
   capela (10,25), corredor da artéria (|x| ≤ 2.4) e anel (z ≳ 30 no trecho NW).
 -->
   <Group name="city.grid-district" translation="0 0 0">
-    <Entity name="house_grid_a" transform="rotation: 0 180 0" translation="-10 0 22" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_collision.glb; mesh-anchor: base">
+    <Entity name="house_grid_a" transform="rotation: 0 180 0" translation="-10 0 22" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_house_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/village_house_lod0.glb" />
     </Entity>
     <!-- Quintal: lenha encostada à fachada sul, barril + caixote a poente. -->
@@ -33,7 +33,7 @@
       <GltfScene url="/assets/meshes/village/wooden_bench_lod0.glb" />
     </Entity>
     <!-- Tocha do quintal: chama no poste (sem PointLight — a praça gasta as 2). -->
-    <Entity translation="-6.4 0 25.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-6.4 0 25.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
       <Entity>
         <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />

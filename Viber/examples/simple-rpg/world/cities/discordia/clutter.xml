@@ -93,13 +93,13 @@
     <Entity translation="35.8 0 -35.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
-    <Entity translation="22.6 0 -28.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="22.6 0 -28.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="22.6 0 -28.6">
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="36.2 0 -33.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="36.2 0 -33.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="36.2 0 -33.8">
@@ -109,13 +109,13 @@
       <GltfScene url="/assets/meshes/village/treasure_chest_lod0.glb" />
     </Entity>
     <!-- Pátio de treino NE (city_wall_seg_c), longe do cepo em 21,32. -->
-    <Entity name="city_drill_wall_e" translation="15.4 0 34.8" overlap-max="1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+    <Entity name="city_drill_wall_e" translation="15.4 0 34.8" overlap-max="1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
     </Entity>
-    <Entity name="city_drill_wall_s" translation="18.6 0 33" transform="rotation: 0 90 0" overlap-max="1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_collision.glb; mesh-anchor: base">
+    <Entity name="city_drill_wall_s" translation="18.6 0 33" transform="rotation: 0 90 0" overlap-max="1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/infra/city_wall_seg_c_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/infra/city_wall_seg_c_lod0.glb" />
     </Entity>
-    <Entity translation="16.6 0 33.2" transform="rotation: 0 20 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">
+    <Entity translation="16.6 0 33.2" transform="rotation: 0 20 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/weapon_rack_lod0.glb" />
     </Entity>
     <Entity translation="15.2 0 32.6" transform="rotation: 0 12 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.15 1.0 0.12">
@@ -127,13 +127,13 @@
     <Entity translation="17.4 0 34.2" transform="rotation: 0 40 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.35 0.9 0.15">
       <GltfScene url="/assets/meshes/props/axe_lod0.glb" />
     </Entity>
-    <Entity translation="28.2 0 34.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="28.2 0 34.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="28.2 0 34.6">
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="34.6 0 28.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="34.6 0 28.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="34.6 0 28.4">
@@ -162,13 +162,13 @@
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <!-- Praça — tochas nos cantos que faltavam, bancos/caixotes. -->
-    <Entity translation="-8.4 0 8.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-8.4 0 8.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-8.4 0 8.4">
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="8.4 0 -8.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="8.4 0 -8.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="8.4 0 -8.4">
@@ -184,19 +184,19 @@
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <!-- Santuários — cairns form_stack + braseiros. -->
-    <Entity translation="-35 0 14.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base">
+    <Entity translation="-35 0 14.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
     </Entity>
-    <Entity translation="35 0 14.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base">
+    <Entity translation="35 0 14.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/form_stack_11_lod0.glb" />
     </Entity>
-    <Entity translation="-32.4 0 18.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-32.4 0 18.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="-32.4 0 18.6">
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="32.4 0 18.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="32.4 0 18.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="32.4 0 18.6">
@@ -224,37 +224,37 @@
     <Entity translation="-36 0 36" transform="rotation: 0 0 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9">
       <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
     </Entity>
-    <Entity translation="8.2 0 34.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="8.2 0 34.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="8.2 0 34.6">
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="-8.2 0 34.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-8.2 0 34.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="-8.2 0 34.6">
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="8.2 0 -34.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="8.2 0 -34.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="8.2 0 -34.6">
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="-8.2 0 -34.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-8.2 0 -34.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="-8.2 0 -34.6">
       <ParticleSystem preset="fire" transform="pos: 0 1.05 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="34.6 0 14.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="34.6 0 14.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="34.6 0 14.2">
       <ParticleSystem preset="fire" transform="pos: 0 2.14 0" particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="-34.6 0 -14.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-34.6 0 -14.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-34.6 0 -14.2">

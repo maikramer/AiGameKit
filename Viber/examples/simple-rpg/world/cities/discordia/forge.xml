@@ -14,7 +14,7 @@
            aberta a norte). GLB village_forge (onda composition) — hearth,
            chaminé e bigorna já vêm modelados; luz/partículas de brasa e
            fumo ficam como camada dinâmica por cima do mesh estático. -->
-    <Entity name="village_forge" translation="-31 0 -33" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_forge_collision.glb; mesh-anchor: base">
+    <Entity name="village_forge" translation="-31 0 -33" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_forge_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/village_forge_lod0.glb" />
     </Entity>
     <!-- Brasa da forja, na boca do hearth modelado no GLB.
@@ -49,31 +49,31 @@
                esse trabalho por elas.
                ========================================================== -->
     <!-- Bigorna: centro da área de trabalho. -->
-    <Entity name="anvil" translation="-31.8 0 -28.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/anvil_collision.glb; mesh-anchor: base" script="anvil.lua">
+    <Entity name="anvil" translation="-31.8 0 -28.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/anvil_lod0.glb; mesh-anchor: base" script="anvil.lua">
       <GltfScene url="/assets/meshes/village/anvil_lod0.glb" />
     </Entity>
     <!-- Monte de ferraduras junto à bigorna. -->
-    <Entity translation="-29.8 0 -27.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/horseshoe_pile_collision.glb; mesh-anchor: base">
+    <Entity translation="-29.8 0 -27.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/horseshoe_pile_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/horseshoe_pile_lod0.glb" />
     </Entity>
     <!-- Tina de arrefecimento, à direita da bigorna. -->
-    <Entity transform="rotation: 0 20 0" translation="-27.6 0 -28.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/quench_trough_collision.glb; mesh-anchor: base">
+    <Entity transform="rotation: 0 20 0" translation="-27.6 0 -28.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/quench_trough_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/quench_trough_lod0.glb" />
     </Entity>
     <!-- Fole na ombreira esquerda do pátio, virado à forja. -->
-    <Entity transform="rotation: 0 -15 0" translation="-34.6 0 -28.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/forge_bellows_collision.glb; mesh-anchor: base">
+    <Entity transform="rotation: 0 -15 0" translation="-34.6 0 -28.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/forge_bellows_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/forge_bellows_lod0.glb" />
     </Entity>
     <!-- Suporte de armas na ombreira direita, de perfil para a praça. -->
-    <Entity transform="rotation: 0 90 0" translation="-26.8 0 -29.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">
+    <Entity transform="rotation: 0 90 0" translation="-26.8 0 -29.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/weapon_rack_lod0.glb" />
     </Entity>
     <!-- Cepo e barril de carvão a fechar o pátio (assets já no pack,
                antes sem uso nesta zona). -->
-    <Entity translation="-34.8 0 -26.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base">
+    <Entity translation="-34.8 0 -26.8" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/chopping_block_lod0.glb" />
     </Entity>
-    <Entity translation="-25.4 0 -30.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+    <Entity translation="-25.4 0 -30.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <!-- Ferreiro: estava em "-21 -30" = local (3.0, -4.0), ou seja atrás

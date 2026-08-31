@@ -33,19 +33,19 @@
        sul (8,-156) (-6,-200) (12,-244): montes de pedra que marcam o
        caminho na neblina — a leitura "é por aqui" sem HUD.
        ============================================================ -->
-    <Entity name="peaks-cairn-1" translation="8 0 -156" transform="scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base">
+    <Entity name="peaks-cairn-1" translation="8 0 -156" transform="scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/stone_cairn_lod0.glb" />
     </Entity>
-    <Entity name="peaks-cairn-2" translation="-6 0 -200" transform="rotation: 0 310 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base">
+    <Entity name="peaks-cairn-2" translation="-6 0 -200" transform="rotation: 0 310 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/stone_cairn_lod0.glb" />
     </Entity>
-    <Entity name="peaks-cairn-3" translation="12 0 -244" transform="rotation: 0 245 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base">
+    <Entity name="peaks-cairn-3" translation="12 0 -244" transform="rotation: 0 245 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/stone_cairn_lod0.glb" />
     </Entity>
-    <Entity name="peaks-stack-a" translation="4 0 -178" transform="rotation: 0 288 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base">
+    <Entity name="peaks-stack-a" translation="4 0 -178" transform="rotation: 0 288 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
     </Entity>
-    <Entity name="peaks-stack-b" translation="-2 0 -222" transform="rotation: 0 240 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base">
+    <Entity name="peaks-stack-b" translation="-2 0 -222" transform="rotation: 0 240 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/form_stack_11_lod0.glb" />
     </Entity>
     <!-- ============================================================
@@ -53,10 +53,10 @@
        Torre tomada por goblins na encosta norte do corredor. Dá um
        combate opcional e explica os goblins que rondam a zona.
        ============================================================ -->
-    <Entity name="peaks-goblin-outpost" translation="-44 0 -172" transform="rotation: 0 230 0; scale: 0.85 0.85 0.85" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base">
+    <Entity name="peaks-goblin-outpost" translation="-44 0 -172" transform="rotation: 0 230 0; scale: 0.85 0.85 0.85" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
     </Entity>
-    <Entity translation="-38 0 -172" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-38 0 -172" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Group translation="-38 0 -172" body="none" collider="none">
@@ -70,11 +70,11 @@
     <Entity translation="-38 0 -172">
       <ParticleSystem preset="fire" transform="pos: 0 1.00 0" particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.16; start-life-min: 0.4; start-life-max: 1.0; start-speed-min: 1.1; start-speed-max: 2.4; start-size-min: 0.24; start-size-max: 0.5; looping: 1; world-space: 1" />
     </Entity>
-    <Entity translation="-40 0 -178" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity translation="-40 0 -178" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <!-- Afloramento na encosta norte, atrás do posto — ancora a torre à montanha. -->
-    <Entity translation="-54 0 -166" transform="rotation: 0 255 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_cliff_1_collision.glb; mesh-anchor: base">
+    <Entity translation="-54 0 -166" transform="rotation: 0 255 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_cliff_1_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/form_cliff_1_lod0.glb" />
     </Entity>
     <SpawnExclusion at="-42 -172" radius="20" />
@@ -83,11 +83,11 @@
        Boca de mina na encosta: moldura de pilares, veio a brilhar e
        carga abandonada. Fonte do "Vale do Cristal".
        ============================================================ -->
-    <Entity name="peaks-crystal-mine" translation="-60 0 -216" transform="rotation: 0 215 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/crystal_mine_entrance_collision.glb; mesh-anchor: base">
+    <Entity name="peaks-crystal-mine" translation="-60 0 -216" transform="rotation: 0 215 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/crystal_mine_entrance_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/crystal_mine_entrance_lod0.glb" />
     </Entity>
     <!-- Afloramentos que ancoram a boca de mina à encosta. -->
-    <Entity translation="-68 0 -230" transform="rotation: 0 290 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_cliff_20_collision.glb; mesh-anchor: base">
+    <Entity translation="-68 0 -230" transform="rotation: 0 290 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_cliff_20_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/form_cliff_20_lod0.glb" />
     </Entity>
     <!-- veio exposto ao lado da boca -->
@@ -103,10 +103,10 @@
     <Entity translation="-56 0 -216">
       <ParticleSystem preset="sparkle" transform="pos: 0 1.6 0" />
     </Entity>
-    <Entity translation="-64 0 -208" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity translation="-64 0 -208" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
-    <Entity translation="-68 0 -211" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+    <Entity translation="-68 0 -211" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <SpawnExclusion at="-60 -216" radius="22" />
@@ -121,7 +121,7 @@
         <GLTFLoader role="visual" url="/assets/meshes/swamp/moss_rock_lod0.glb" lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb" lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb" />
       </GameObject>
     </StaticSpawner>
-    <Entity name="peaks-frost-cairn" translation="60 0 -176" script="poi/frost-cairn.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" />
+    <Entity name="peaks-frost-cairn" translation="60 0 -176" script="poi/frost-cairn.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb; mesh-anchor: base" />
     <SpawnExclusion at="68 -184" radius="26" />
     <!-- ============================================================
        §5 JAZIDA DE CRISTAIS (-95, 13) — landmark existente
@@ -143,29 +143,29 @@
        plataforma e mais pilares (o chefe final merece um palco).
        ============================================================ -->
     <!-- Arena do ogro: pilares + braseiros GLB (plataforma Cylinder removida). -->
-    <Entity translation="-28 0 -300" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="-28 0 -300" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="4 0 -304" transform="rotation: 0 300 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="4 0 -304" transform="rotation: 0 300 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="-32 0 -280" transform="rotation: 0 245 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="-32 0 -280" transform="rotation: 0 245 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="8 0 -276" transform="rotation: 0 325 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="8 0 -276" transform="rotation: 0 325 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="-12 0 -312" transform="rotation: 0 0 0; scale: 1.2 1.2 1.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="-12 0 -312" transform="rotation: 0 0 0; scale: 1.2 1.2 1.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
     <!-- Braseiros -->
-    <Entity translation="-12 0 -276" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-12 0 -276" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Group translation="-12 0 -276" body="none" collider="none">
       <PointLight translation="0 1.0 0" color="0xff8a33" intensity="1920" />
     </Group>
-    <Entity translation="-12 0 -304" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-12 0 -304" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Group translation="-12 0 -304" body="none" collider="none">

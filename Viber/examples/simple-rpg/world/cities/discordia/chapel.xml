@@ -10,7 +10,7 @@
 -->
   <Group name="city.chapel" translation="0 0 0">
     <!-- Capela GLB + curandeira. Sem jardim/banco Composition. -->
-    <Entity name="chapel" transform="rotation: 0 -135 0" translation="10 0 25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chapel_collision.glb; mesh-anchor: base">
+    <Entity name="chapel" transform="rotation: 0 -135 0" translation="10 0 25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chapel_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/chapel_lod0.glb" />
     </Entity>
     <!-- Curandeira: [F] cura completa por ouro. O script carrega o GLB

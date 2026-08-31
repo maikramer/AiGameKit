@@ -195,6 +195,9 @@ pub struct SpawnGroupState {
     pub spec: StaticSpawnerSpec,
     pub handles: Vec<Handle<Gltf>>,
     pub done: bool,
+    /// True para `<DynamicSpawner>` — as instâncias nascem com
+    /// [`crate::ai::EnemyCreature`] e o driver de IA conduz-as.
+    pub dynamic: bool,
 }
 
 /// All spawner groups collected at startup; consumed by
@@ -281,12 +284,16 @@ pub fn instantiate_spawn_groups(
             transform.rotation = bevy::math::Quat::from_rotation_y(instance.yaw_deg.to_radians());
             transform.scale = instance.scale;
             if let Some(scene) = scenes[instance.template_index.min(scenes.len() - 1)].clone() {
-                commands.spawn((
-                    transform,
-                    Visibility::Inherited,
-                    WorldAssetRoot(scene),
-                    crate::worldsys::SeatOnTerrain,
-                ));
+                if group.dynamic {
+                    commands.spawn((
+                        transform,
+                        Visibility::Inherited,
+                        WorldAssetRoot(scene),
+                        crate::ai::EnemyCreature::default(),
+                    ));
+                } else {
+                    commands.spawn((transform, Visibility::Inherited, WorldAssetRoot(scene)));
+                }
             }
         }
         group.done = true;

@@ -44,13 +44,13 @@
        Tenda tombada, carga espalhada e uma fogueira fria. Conta a
        história dos bandidos que rondam a região.
        ============================================================ -->
-    <Entity name="desert-caravan-wreck" translation="216 0 -36" transform="rotation: 0 -24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_collision.glb; mesh-anchor: base">
+    <Entity name="desert-caravan-wreck" translation="216 0 -36" transform="rotation: 0 -24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/market_stall_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/market_stall_lod0.glb" />
     </Entity>
-    <Entity translation="211 0 -32" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity translation="211 0 -32" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
-    <Entity translation="220 0 -29" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+    <Entity translation="220 0 -29" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <Entity translation="218 0 -40" transform="rotation: 0 -50 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.35 0.9 0.15">
@@ -62,13 +62,13 @@
        Agulha de arenito ~8 m (desert_obelisk, GLB real). Recompensa
        mística ([F]) para quem faz o desvio.
        ============================================================ -->
-    <Entity name="desert-sun-obelisk" translation="240 0 80" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/desert_obelisk_collision.glb; mesh-anchor: base">
+    <Entity name="desert-sun-obelisk" translation="240 0 80" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/desert_obelisk_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/desert_obelisk_lod0.glb" />
     </Entity>
     <Group translation="240 0 80" body="none" collider="none">
       <PointLight translation="0 8.1 0" color="0xffc766" intensity="1280" />
     </Group>
-    <Entity name="desert-sun-relic" translation="248 0 74" script="poi/sun-relic.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" />
+    <Entity name="desert-sun-relic" translation="248 0 74" script="poi/sun-relic.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb; mesh-anchor: base" />
     <Entity translation="240 0 80">
       <ParticleSystem preset="sparkle" transform="pos: 0 8.4 0" />
     </Entity>
@@ -77,7 +77,7 @@
        §4 CISTERNA SECA (78, -58)
        Poço sem água a meio do trilho sul do deserto.
        ============================================================ -->
-    <Entity name="desert-dry-cistern" translation="156 0 -116" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_collision.glb; mesh-anchor: base">
+    <Entity name="desert-dry-cistern" translation="156 0 -116" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/medieval_well_lod0.glb" />
     </Entity>
     <Entity translation="161 0 -121">
@@ -89,16 +89,16 @@
        Fileira de pilares meio soterrados no fundo nordeste do
        deserto — silhueta contra a serra da borda.
        ============================================================ -->
-    <Entity translation="288 0 112" transform="rotation: 0 12 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="288 0 112" transform="rotation: 0 12 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="300 0 116" transform="rotation: 0 -20 0; scale: 1.25 1.25 1.25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="300 0 116" transform="rotation: 0 -20 0; scale: 1.25 1.25 1.25" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="312 0 124" transform="rotation: 0 40 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="312 0 124" transform="rotation: 0 40 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="304 0 134" transform="rotation: 0 -8 0; scale: 0.9 0.9 0.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="304 0 134" transform="rotation: 0 -8 0; scale: 0.9 0.9 0.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
     <SpawnExclusion at="300 122" radius="22" />
@@ -121,7 +121,7 @@
       </GameObject>
     </StaticSpawner>
     <!-- Acampamento de bandidos: campfire_pit GLB + chama/luz + caixa. -->
-    <Entity translation="170.8 0 -73.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
+    <Entity translation="170.8 0 -73.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
     </Entity>
     <Entity translation="170.8 0 -73.2">
@@ -130,14 +130,14 @@
     <Group translation="170.8 0 -73.2" body="none" collider="none">
       <PointLight translation="0 0.7 0" color="0xff8a33" intensity="1760" />
     </Group>
-    <Entity translation="176 0 -64" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity translation="176 0 -64" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <SpawnExclusion at="170 -70" radius="18" />
     <!-- ============================================================
        §8 NINHO DE ESCORPIÕES (130, 8) — landmark existente
        ============================================================ -->
-    <Entity name="scorpion-nest" translation="260 0 16" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/scorpion_nest_collision.glb; mesh-anchor: base">
+    <Entity name="scorpion-nest" translation="260 0 16" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/scorpion_nest_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/scorpion_nest_lod0.glb" />
     </Entity>
     <Entity translation="260 0 16">

@@ -8,7 +8,11 @@
 #import bevy_pbr::forward_io::VertexOutput
 
 @group(0) @binding(0) var<uniform> view: View;
-@group(2) @binding(0) var<uniform> sky: SkyUniform;
+// NOTE: binding (2,0) MUST be `var<storage, read>` — the AsBindGroup derive
+// in Bevy 0.19 gives the pipeline a Storage-LOAD layout entry for this
+// buffer; a `var<uniform>` declaration fails validation at runtime with
+// "doesn't match the shader Uniform".
+@group(2) @binding(0) var<storage, read> sky: SkyUniform;
 
 struct SkyUniform {
     sun_dir: vec3<f32>,

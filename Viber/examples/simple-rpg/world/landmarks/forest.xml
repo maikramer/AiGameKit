@@ -19,60 +19,60 @@
        Torre de vigia meio caída na orla oeste da floresta. Primeiro
        destino a partir do portão norte: dá o miradouro e o tomo.
        ============================================================ -->
-    <Entity name="forest-outpost-tower" translation="-92 0 176" transform="rotation: 0 24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base">
+    <Entity name="forest-outpost-tower" translation="-92 0 176" transform="rotation: 0 24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
     </Entity>
-    <Entity translation="-86 0 172" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity translation="-86 0 172" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
-    <Entity translation="-98 0 173" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+    <Entity translation="-98 0 173" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <Entity translation="-90 0 170" transform="rotation: 0 40 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9">
       <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
     </Entity>
-    <Entity translation="-88 0 176" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-88 0 176" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
-    <Entity translation="-80 0 174" transform="rotation: 0 -30 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_collision.glb; mesh-anchor: base">
+    <Entity translation="-80 0 174" transform="rotation: 0 -30 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/weapon_rack_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/weapon_rack_lod0.glb" />
     </Entity>
     <Entity translation="-81 0 176" transform="rotation: 0 15 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.15 1.0 0.12">
       <GltfScene url="/assets/meshes/props/sword_hero_lod0.glb" />
     </Entity>
     <!-- Recompensa do posto: tomo do vigia (XP), [F]. -->
-    <Entity name="forest-watch-tome" translation="-84 0 183" script="poi/watch-tome.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base" />
+    <Entity name="forest-watch-tome" translation="-84 0 183" script="poi/watch-tome.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_lod0.glb; mesh-anchor: base" />
     <!-- ============================================================
        §2 CÍRCULO DE MENIRES (52, 118)
        Oito pedras eretas num anel de 7 m, altar ao centro. Marco
        visível acima do dossel; luz fria e partículas mágicas.
        ============================================================ -->
-    <Entity translation="104 0 250" transform="scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="104 0 250" transform="scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="114 0 246" transform="rotation: 0 45 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="114 0 246" transform="rotation: 0 45 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="118 0 236" transform="rotation: 0 90 0; scale: 1.55 1.55 1.55" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="118 0 236" transform="rotation: 0 90 0; scale: 1.55 1.55 1.55" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="114 0 226" transform="rotation: 0 135 0; scale: 1.35 1.35 1.35" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="114 0 226" transform="rotation: 0 135 0; scale: 1.35 1.35 1.35" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="104 0 222" transform="rotation: 0 180 0; scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="104 0 222" transform="rotation: 0 180 0; scale: 1.5 1.5 1.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="94 0 226" transform="rotation: 0 225 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="94 0 226" transform="rotation: 0 225 0; scale: 1.4 1.4 1.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="90 0 236" transform="rotation: 0 270 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="90 0 236" transform="rotation: 0 270 0; scale: 1.6 1.6 1.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="94 0 246" transform="rotation: 0 315 0; scale: 1.45 1.45 1.45" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="94 0 246" transform="rotation: 0 315 0; scale: 1.45 1.45 1.45" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
     <!-- Altar central (GLB) + luz mágica -->
-    <Entity name="forest-stone-circle" translation="104 0 236" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/druid_stone_altar_collision.glb; mesh-anchor: base">
+    <Entity name="forest-stone-circle" translation="104 0 236" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/druid_stone_altar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/druid_stone_altar_lod0.glb" />
       <PointLight translation="0 1.1 0" color="0x6ec8ff" intensity="1600" />
     </Entity>
@@ -86,20 +86,20 @@
        toros cortados e a serração parada. Explica de onde vem a
        madeira da cidade.
        ============================================================ -->
-    <Entity name="forest-logging-camp" translation="-60 0 128" transform="rotation: 0 -18 0; scale: 0.62 0.62 0.62" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base">
+    <Entity name="forest-logging-camp" translation="-60 0 128" transform="rotation: 0 -18 0; scale: 0.62 0.62 0.62" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/village_longhouse_lod0.glb" />
     </Entity>
     <!-- Toros cortados empilhados (log_pile GLB) + cepo de rachar (chopping_block GLB) -->
-    <Entity translation="-42 0 120" transform="rotation: 0 -14 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_collision.glb; mesh-anchor: base">
+    <Entity translation="-42 0 120" transform="rotation: 0 -14 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/log_pile_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/log_pile_lod0.glb" />
     </Entity>
-    <Entity translation="-36.8 0 117.2" transform="rotation: 0 20 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base">
+    <Entity translation="-36.8 0 117.2" transform="rotation: 0 20 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/chopping_block_lod0.glb" />
     </Entity>
-    <Entity translation="-76 0 117" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity translation="-76 0 117" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
-    <Entity translation="-79 0 122" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+    <Entity translation="-79 0 122" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <Entity translation="-47 0 138">
@@ -113,7 +113,7 @@
        §4 POÇO DA ENCRUZILHADA (14, 96)
        Ponto de água a meio do trilho norte — descanso e referência.
        ============================================================ -->
-    <Entity name="forest-crossroads-well" translation="28 0 192" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_collision.glb; mesh-anchor: base">
+    <Entity name="forest-crossroads-well" translation="28 0 192" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/medieval_well_lod0.glb" />
     </Entity>
     <Entity translation="33.2 0 188.8" transform="rotation: 0 30 0">
@@ -126,7 +126,7 @@
     <!-- ============================================================
        §5 CLAREIRA DA BRUXA (-10, 135) — landmark existente
        ============================================================ -->
-    <Entity name="witch-hut" translation="-20 0 270" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/forest/witch_hut_collision.glb; mesh-anchor: base">
+    <Entity name="witch-hut" translation="-20 0 270" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/forest/witch_hut_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/forest/witch_hut_lod0.glb" />
     </Entity>
     <!-- Luz verde na clareira da bruxa (sem caldeirão Cylinder). -->
@@ -134,7 +134,7 @@
       <PointLight translation="0 1.1 0" color="0x55e055" intensity="1760" />
     </Group>
     <SpawnExclusion at="-20 266" radius="24" />
-    <Entity translation="-14 0 264" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cauldron_iron_collision.glb; mesh-anchor: base">
+    <Entity translation="-14 0 264" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/interiors/cauldron_iron_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/interiors/cauldron_iron_lod0.glb" />
     </Entity>
     <Entity translation="-24 0 272" transform="rotation: 0 50 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.8 0.8 0.8">

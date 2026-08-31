@@ -25,6 +25,15 @@ flate2 = "1"
 # collision can be verified in a screenshot.
 bevy_rapier3d = { version = "0.36", features = ["async-collider", "debug-render-3d"] }
 
+# Luau scripting runtime (`src/luau.rs`). `luau` = sandboxed Luau VM;
+# `vendored` builds the VM from source (needs a C++ toolchain);
+# `send` makes `Lua: Send + Sync` so `LuaScriptHost` can live in a Bevy
+# `Resource` (costs ~10-20% VM perf, fine for gameplay scripts).
+# NOTE(orchestrator): if the vendored C++ build of Luau fails (cmake/C++),
+# swap to `features = ["lua54", "vendored"]` and adjust luau-specific
+# sandbox code in `src/luau.rs` accordingly.
+mlua = { version = "0.10", features = ["luau", "vendored", "send"] }
+
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"

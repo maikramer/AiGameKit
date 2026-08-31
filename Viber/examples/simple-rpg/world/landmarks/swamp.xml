@@ -26,13 +26,13 @@
        Casco partido na margem sul da Lagoa Grande. Serve de
        abrigo e de referência para quem apanha a trilha da margem.
        ============================================================ -->
-    <Entity name="swamp-wrecked-boat" translation="-184 0 -52" transform="rotation: 0 114 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/wrecked_boat_collision.glb; mesh-anchor: base">
+    <Entity name="swamp-wrecked-boat" translation="-184 0 -52" transform="rotation: 0 114 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/wrecked_boat_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/swamp/wrecked_boat_lod0.glb" />
     </Entity>
-    <Entity translation="-178 0 -58" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+    <Entity translation="-178 0 -58" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
-    <Entity translation="-174 0 -42" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity translation="-174 0 -42" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <SpawnExclusion at="-184 -52" radius="16" />
@@ -42,20 +42,20 @@
        boglings se juntam.
        ============================================================ -->
     <!-- Cemitério: menires GLB (sem lápides Box). -->
-    <Entity translation="-226 0 64.5" transform="rotation: 0 108 0; scale: 0.85 0.85 0.85" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="-226 0 64.5" transform="rotation: 0 108 0; scale: 0.85 0.85 0.85" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="-210 0 48" transform="rotation: 0 50 0; scale: 0.7 0.7 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="-210 0 48" transform="rotation: 0 50 0; scale: 0.7 0.7 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
     <Entity translation="-216 0 56">
       <ParticleSystem preset="smoke" transform="pos: 0 0.6 0" particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 3.0; start-life-max: 5.0; start-speed-min: 0.15; start-speed-max: 0.4; start-size-min: 0.9; start-size-max: 2.0; start-color: #7d8f80; looping: 1; world-space: 1" />
     </Entity>
     <SpawnExclusion at="-216 56" radius="18" />
-    <Entity translation="-220 0 58" transform="rotation: 0 112 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_collision.glb; mesh-anchor: base">
+    <Entity translation="-220 0 58" transform="rotation: 0 112 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_6_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/form_stack_6_lod0.glb" />
     </Entity>
-    <Entity translation="-228 0 52" transform="rotation: 0 55 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_collision.glb; mesh-anchor: base">
+    <Entity translation="-228 0 52" transform="rotation: 0 55 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/form_stack_11_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/terrain/form_stack_11_lod0.glb" />
     </Entity>
     <!-- ============================================================
@@ -63,22 +63,22 @@
        Fogueira verde e ossadas no fundo oeste do brejo. Recompensa
        mística ([F]).
        ============================================================ -->
-    <Entity name="swamp-bone-altar" translation="-264 0 96" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/bone_altar_collision.glb; mesh-anchor: base">
+    <Entity name="swamp-bone-altar" translation="-264 0 96" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/bone_altar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/swamp/bone_altar_lod0.glb" />
     </Entity>
     <Group translation="-264 0 96" body="none" collider="none">
       <PointLight translation="0 1.8 0" color="0x66e878" intensity="1920" />
     </Group>
-    <Entity name="swamp-bog-idol" translation="-268 0 88" script="poi/bog-idol.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" />
+    <Entity name="swamp-bog-idol" translation="-268 0 88" script="poi/bog-idol.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb; mesh-anchor: base" />
     <SpawnExclusion at="-264 96" radius="18" />
     <!-- ============================================================
        §5 RUÍNA SUBMERSA (-248,-72)
        Pilares meio afundados na margem da lagoa leste (-236,-84).
        ============================================================ -->
-    <Entity translation="-248 0 -72" transform="rotation: 0 112 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="-248 0 -72" transform="rotation: 0 112 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="-253 0 -62" transform="rotation: 0 55 0; scale: 0.85 0.85 0.85" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="-253 0 -62" transform="rotation: 0 55 0; scale: 0.85 0.85 0.85" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/desert/ruin_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/desert/ruin_pillar_lod0.glb" />
     </Entity>
     <SpawnExclusion at="-248 -68" radius="16" />
@@ -96,7 +96,7 @@
       <PointLight translation="0 1.65 0" color="0x7dff8a" intensity="880" />
     </Group>
     <!-- Choça do pântano (GLB). Passadiço Composition removido. -->
-    <Entity name="swamp-shack" translation="-260 0 -20" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/swamp_shack_collision.glb; mesh-anchor: base">
+    <Entity name="swamp-shack" translation="-260 0 -20" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/swamp/swamp_shack_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/swamp/swamp_shack_lod0.glb" />
     </Entity>
     <SpawnExclusion at="-260 -20" radius="18" />
@@ -112,7 +112,7 @@
        w_lake_w (-209,2.8) (paths/network.xml).
        ============================================================ -->
     <!-- Tocha da cabeça este. -->
-    <Entity name="lake_bridge_torch_e" translation="-167 0 7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity name="lake_bridge_torch_e" translation="-167 0 7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-167 0 7">
@@ -122,7 +122,7 @@
       <PointLight translation="0 2.2 0" color="0xffa83a" intensity="1120" shadows="false" />
     </Group>
     <!-- Tocha da cabeça oeste. -->
-    <Entity name="lake_bridge_torch_w" translation="-213 0 7.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity name="lake_bridge_torch_w" translation="-213 0 7.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-213 0 7.6">
@@ -133,7 +133,7 @@
     </Group>
     <!-- Acampamento de pescador na margem norte, de frente para a ponte e
        para a barca encalhada do outro lado da lagoa. -->
-    <Entity name="lagoon-campfire" translation="-187.5 0 13.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
+    <Entity name="lagoon-campfire" translation="-187.5 0 13.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
     </Entity>
     <Entity translation="-187.5 0 13.5">
@@ -148,7 +148,7 @@
     <Entity translation="-190.1 0 15.9" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 0.55 0.7 0.55">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
-    <Entity translation="-183.9 0 11.1" transform="rotation: 0 24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity translation="-183.9 0 11.1" transform="rotation: 0 24 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <Entity translation="-190.9 0 10.7" transform="rotation: 0 78 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: box; size: 1.8 0.8 0.9">

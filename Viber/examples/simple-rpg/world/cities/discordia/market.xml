@@ -30,10 +30,10 @@
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <!-- Caixas GLB junto à muralha Este -->
-    <Entity translation="34.5 0 -18.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity translation="34.5 0 -18.5" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
-    <Entity transform="rotation: 0 25 0" translation="35.3 0 -21" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity transform="rotation: 0 25 0" translation="35.3 0 -21" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
     <!-- Comerciante atrás da banca principal, voltado para a praça. [K] -->

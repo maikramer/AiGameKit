@@ -10,10 +10,10 @@
 -->
   <Group name="city.longhouse" translation="0 0 0">
     <!-- Longhouse GLB + baú + ancião. Sem estandarte/boneco Composition. -->
-    <Entity name="longhouse" transform="rotation: 0 135 0" translation="29 0 -31" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_collision.glb; mesh-anchor: base">
+    <Entity name="longhouse" transform="rotation: 0 135 0" translation="29 0 -31" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/village_longhouse_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/village_longhouse_lod0.glb" />
     </Entity>
-    <Entity name="chest" translation="35.5 0 -33" script="chest.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_collision.glb; mesh-anchor: base" />
+    <Entity name="chest" translation="35.5 0 -33" script="chest.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/treasure_chest_lod0.glb; mesh-anchor: base" />
     <Entity name="npc_elder" translation="22 0 -24" transform="rotation: 0 45 0">
       <GltfScene url="/assets/meshes/characters/npc_elder_lod0.glb" />
     </Entity>

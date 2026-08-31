@@ -1,0 +1,874 @@
+//! Luau scripting runtime: each `world_dir/scripts/<path>` chunk defines
+//! `function on_update(dt)` and drives its owner entity through the `viber`
+//! API (`log`, `time`, `position`, `set_position`, `distance_to_player`).
+//!
+//! Design notes:
+//! - One shared sandboxed Luau VM ([`LuaScriptHost`]); every script chunk is
+//!   compiled with its own environment table (`__index` → real globals) so
+//!   scripts cannot clobber each other's globals.
+//! - The owning entity is *injected* into each call: before invoking
+//!   `on_update` the system stores a [`ScriptCtx`] snapshot (entity, position
+//!   snapshot, player position, clock) as Lua app data; the `viber` closures
+//!   read it back. `set_position` only queues a command — applied to
+//!   [`bevy::math::Vec3`]-bearing entities after all scripts ran. No `unsafe`,
+//!   no raw `World` pointers.
+//! - Script errors are pcall-style: reported once per script path
+//!   ([`warn_once`]) and never abort the engine.
+//!
+//! WIRED-BY-ORCHESTRATOR: [`LuaScriptRef`] is inserted by the spawn step
+//! (recipes/spawn) on entities that declare `<script src="...">`; the
+//! orchestrator also adds [`LuauScriptPlugin`] to the `App` with the world's
+//! `scripts/` directory.
+
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+
+use bevy::prelude::*;
+use mlua::{Function, Lua, Table};
+
+/// A component marking an entity as owned by a Luau script (`scripts/<path>`
+/// relative to the world directory).
+///
+/// WIRED-BY-ORCHESTRATOR: inserted by the spawn step; this module only
+/// observes it (`on_add` / update / `on_remove`).
+#[derive(Debug, Clone, Component)]
+pub struct LuaScriptRef {
+    /// Script path relative to `world_dir/scripts/` (e.g. `"doors/gate.lua"`).
+    pub path: String,
+}
+
+/// Per-call context injected into the shared VM (Lua app data) by
+/// [`luau_update`]. The `viber` closures read the snapshot and queue commands.
+#[derive(Default, Debug)]
+pub struct ScriptCtx {
+    /// Entity currently running `on_update` (None outside script calls).
+    pub entity: Option<Entity>,
+    /// Position snapshot of the current entity (start of frame).
+    pub origin: Vec3,
+    /// Player position snapshot, when a [`crate::player::Player`] exists.
+    pub player: Option<Vec3>,
+    /// Seconds since engine startup.
+    pub elapsed: f64,
+    /// Delta time passed to `on_update`.
+    pub dt: f32,
+    /// Queued `set_position` commands, drained by [`luau_update`].
+    pub pending: Vec<(Entity, Vec3)>,
+    /// Ring of `viber.log` lines (capped) — also read by tests.
+    pub logs: Vec<String>,
+}
+
+impl ScriptCtx {
+    const LOG_CAP: usize = 256;
+
+    fn push_log(&mut self, line: String) {
+        if self.logs.len() >= Self::LOG_CAP {
+            self.logs.remove(0);
+        }
+        self.logs.push(line);
+    }
+}
+
+/// A compiled script chunk with its sandboxed environment.
+#[derive(Clone)]
+pub struct LoadedScript {
+    /// Per-script global environment (`__index` falls back to real globals,
+    /// so the shared `viber` API table stays visible).
+    pub env: Table,
+    /// Top-level chunk (executed once, defines `on_update` in `env`).
+    pub chunk: Function,
+    /// `on_update(dt)` extracted from the environment after execution.
+    pub on_update: Option<Function>,
+    /// True once the chunk's top-level has run.
+    pub ran: bool,
+}
+
+/// Registry of loaded chunks: `HashMap<path → loaded chunk handle>`.
+#[derive(Default)]
+pub struct LuaScriptRegistry {
+    chunks: HashMap<String, LoadedScript>,
+}
+
+impl LuaScriptRegistry {
+    pub fn get(&self, path: &str) -> Option<&LoadedScript> {
+        self.chunks.get(path)
+    }
+
+    pub fn get_mut(&mut self, path: &str) -> Option<&mut LoadedScript> {
+        self.chunks.get_mut(path)
+    }
+
+    pub fn contains(&self, path: &str) -> bool {
+        self.chunks.contains_key(path)
+    }
+
+    pub fn insert(&mut self, path: String, script: LoadedScript) {
+        self.chunks.insert(path, script);
+    }
+
+    /// Paths of all loaded scripts (sorted, for stable logging).
+    pub fn paths(&self) -> Vec<&str> {
+        let mut paths: Vec<&str> = self.chunks.keys().map(String::as_str).collect();
+        paths.sort_unstable();
+        paths
+    }
+}
+
+/// Bevy resource holding the shared Luau VM, the chunk registry and the
+/// warn-once bookkeeping. Build with [`LuaScriptHost::new`], load scripts via
+/// [`LuaScriptHost::load_script`] (code string) or
+/// [`LuaScriptHost::load_script_from_dir`] (disk), then add
+/// [`LuauScriptPlugin`]-equivalent systems.
+#[derive(Resource)]
+pub struct LuaScriptHost {
+    /// The shared sandboxed Luau VM (`Lua::new()` with the `luau` feature).
+    pub lua: Lua,
+    /// Loaded chunks keyed by script path.
+    pub registry: LuaScriptRegistry,
+    /// Directory scripts are loaded from: `<world_dir>/scripts`.
+    pub scripts_dir: PathBuf,
+    /// Script paths whose last error was already warned (warn 1x).
+    warned: HashSet<String>,
+}
+
+impl LuaScriptHost {
+    /// Creates the VM, installs the `viber` API table and seeds the app-data
+    /// [`ScriptCtx`].
+    pub fn new(scripts_dir: PathBuf) -> mlua::Result<Self> {
+        let lua = Lua::new();
+        let host = Self {
+            lua,
+            registry: LuaScriptRegistry::default(),
+            scripts_dir,
+            warned: HashSet::new(),
+        };
+        host.install_viber_api()?;
+        host.lua.set_app_data(ScriptCtx::default());
+        Ok(host)
+    }
+
+    /// Compiles `code` under `path` with a fresh sandboxed environment.
+    /// The chunk is *not* executed yet — [`LuaScriptHost::activate`] runs the
+    /// top level when the first entity references the script.
+    pub fn load_script(&mut self, path: &str, code: &str) -> mlua::Result<()> {
+        let env = self.create_script_env()?;
+        let chunk = self
+            .lua
+            .load(code)
+            .set_name(path)
+            .set_environment(env.clone())
+            .into_function()?;
+        self.registry.insert(
+            path.to_string(),
+            LoadedScript {
+                env,
+                chunk,
+                on_update: None,
+                ran: false,
+            },
+        );
+        Ok(())
+    }
+
+    /// Loads a script from disk: `<scripts_dir>/<path>`.
+    pub fn load_script_from_dir(&mut self, path: &str) -> mlua::Result<()> {
+        let full = self.scripts_dir.join(path);
+        let code = std::fs::read_to_string(&full).map_err(|e| {
+            mlua::Error::runtime(format!("failed to read script {}: {e}", full.display()))
+        })?;
+        self.load_script(path, &code)
+    }
+
+    /// Ensures `path` is in the registry, loading it from
+    /// `<scripts_dir>/<path>` when missing.
+    pub fn ensure_loaded(&mut self, path: &str) -> mlua::Result<()> {
+        if self.registry.contains(path) {
+            return Ok(());
+        }
+        self.load_script_from_dir(path)
+    }
+
+    /// Runs the chunk top level once (defines `on_update` and any script
+    /// state) and extracts the `on_update` handle. Idempotent per path —
+    /// entities sharing a script share its globals.
+    pub fn activate(&mut self, entity: Entity, path: &str) -> mlua::Result<()> {
+        // Refresh the per-call ctx so top-level viber calls don't panic.
+        if let Some(mut ctx) = self.lua.app_data_mut::<ScriptCtx>() {
+            ctx.entity = Some(entity);
+        }
+        let script = self
+            .registry
+            .get_mut(path)
+            .ok_or_else(|| mlua::Error::runtime(format!("script '{path}' not loaded")))?;
+        if !script.ran {
+            script.chunk.call::<()>(())?;
+            script.on_update = script.env.raw_get::<Option<Function>>("on_update")?;
+            script.ran = true;
+        }
+        Ok(())
+    }
+
+    /// Calls `on_update(dt)` for `entity`'s script. The [`ScriptCtx`] snapshot
+    /// (entity, origin, player, clock) must be passed in; commands queued by
+    /// `viber.set_position` accumulate until [`LuaScriptHost::take_pending`].
+    /// Scripts without `on_update` are a no-op.
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_update(
+        &mut self,
+        entity: Entity,
+        path: &str,
+        dt: f32,
+        origin: Vec3,
+        player: Option<Vec3>,
+        elapsed: f64,
+    ) -> mlua::Result<()> {
+        {
+            let mut ctx = self
+                .lua
+                .app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+            ctx.entity = Some(entity);
+            ctx.origin = origin;
+            ctx.player = player;
+            ctx.dt = dt;
+            ctx.elapsed = elapsed;
+        } // release the borrow before re-entering Lua
+        let on_update = self.registry.get(path).and_then(|s| s.on_update.clone());
+        let Some(on_update) = on_update else {
+            return Ok(());
+        };
+        on_update.call::<()>(dt)
+    }
+
+    /// Drains all queued `set_position` commands (called once per frame after
+    /// every script ran).
+    pub fn take_pending(&self) -> Vec<(Entity, Vec3)> {
+        self.lua
+            .app_data_mut::<ScriptCtx>()
+            .map(|mut ctx| std::mem::take(&mut ctx.pending))
+            .unwrap_or_default()
+    }
+
+    /// `viber.log` lines so far (ring buffer, oldest first).
+    pub fn logs(&self) -> Vec<String> {
+        self.lua
+            .app_data_ref::<ScriptCtx>()
+            .map(|ctx| ctx.logs.clone())
+            .unwrap_or_default()
+    }
+
+    /// Reads a global value from a script's sandboxed environment (test/HUD
+    /// introspection helper).
+    pub fn script_global(&self, path: &str, key: &str) -> mlua::Result<mlua::Value> {
+        let script = self
+            .registry
+            .get(path)
+            .ok_or_else(|| mlua::Error::runtime(format!("script '{path}' not loaded")))?;
+        script.env.raw_get(key)
+    }
+
+    /// Reports `err` for `path`; returns true the first time (so callers only
+    /// emit a `warn!` once per script). Never panics — script errors are
+    /// data, engine keeps running.
+    pub fn warn_once(&mut self, path: &str, err: &dyn std::fmt::Display) -> bool {
+        if self.warned.insert(path.to_string()) {
+            warn!("luau script '{path}' error (further errors silenced): {err}");
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Clears warn-once state for `path` (e.g. after a successful reload).
+    pub fn clear_warnings(&mut self, path: &str) {
+        self.warned.remove(path);
+    }
+
+    /// Removes per-entity leftovers when a [`LuaScriptRef`] despawns (drops
+    /// queued commands for that entity; the chunk stays cached for reuse).
+    pub fn deactivate(&mut self, entity: Entity) {
+        if let Some(mut ctx) = self.lua.app_data_mut::<ScriptCtx>() {
+            ctx.pending.retain(|(e, _)| *e != entity);
+            if ctx.entity == Some(entity) {
+                ctx.entity = None;
+            }
+        }
+    }
+
+    /// Fresh per-script environment whose metatable falls back to the real
+    /// globals (so the shared `viber` API and stdlib stay reachable without
+    /// letting scripts overwrite each other's globals).
+    fn create_script_env(&self) -> mlua::Result<Table> {
+        let env = self.lua.create_table()?;
+        let mt = self.lua.create_table()?;
+        mt.set("__index", self.lua.globals())?;
+        env.set_metatable(Some(mt));
+        Ok(env)
+    }
+
+    /// Installs the `viber` API table on the VM globals:
+    /// `log(msg)`, `time()`, `position()`, `set_position(x, y, z)`,
+    /// `distance_to_player()`.
+    fn install_viber_api(&self) -> mlua::Result<()> {
+        let lua = &self.lua;
+        let api = lua.create_table()?;
+
+        // viber.log(msg) — engine log + ring buffer.
+        api.set(
+            "log",
+            lua.create_function(|lua, msg: String| {
+                let entity = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|ctx| ctx.entity)
+                    .map(|e| format!("{e:?}"))
+                    .unwrap_or_else(|| "pre-activate".into());
+                info!(target: "viber::luau", "[{entity}] {msg}");
+                if let Some(mut ctx) = lua.app_data_mut::<ScriptCtx>() {
+                    ctx.push_log(msg);
+                }
+                Ok(())
+            })?,
+        )?;
+
+        // viber.time() — seconds since engine startup.
+        api.set(
+            "time",
+            lua.create_function(|lua, ()| {
+                let elapsed = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .map(|ctx| ctx.elapsed)
+                    .unwrap_or_default();
+                Ok(elapsed)
+            })?,
+        )?;
+
+        // viber.position() -> x, y, z — start-of-frame snapshot.
+        api.set(
+            "position",
+            lua.create_function(|lua, ()| {
+                let origin = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .map(|ctx| ctx.origin)
+                    .unwrap_or_default();
+                Ok((origin.x, origin.y, origin.z))
+            })?,
+        )?;
+
+        // viber.set_position(x, y, z) — queues a command applied post-frame.
+        api.set(
+            "set_position",
+            lua.create_function(|lua, (x, y, z): (f32, f32, f32)| {
+                let mut ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                let Some(entity) = ctx.entity else {
+                    return Err(mlua::Error::runtime(
+                        "viber.set_position outside on_update (no owning entity)",
+                    ));
+                };
+                ctx.pending.push((entity, Vec3::new(x, y, z)));
+                Ok(())
+            })?,
+        )?;
+
+        // viber.distance_to_player() -> number | nil (nil = no player).
+        api.set(
+            "distance_to_player",
+            lua.create_function(|lua, ()| {
+                let (origin, player) = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .map(|ctx| (ctx.origin, ctx.player))
+                    .unwrap_or((Vec3::ZERO, None));
+                Ok(player.map(|p| p.distance(origin)))
+            })?,
+        )?;
+
+        lua.globals().set("viber", api)?;
+        Ok(())
+    }
+}
+
+/// Bevy plugin wiring the Luau runtime: inserts [`LuaScriptHost`], then runs
+/// `on_add` → `update` → `on_remove` hooks every frame. The orchestrator adds
+/// it with the world's scripts dir (`world_dir.join("scripts")`).
+pub struct LuauScriptPlugin {
+    /// Directory scripts load from: `<world_dir>/scripts`.
+    pub scripts_dir: PathBuf,
+}
+
+impl Default for LuauScriptPlugin {
+    fn default() -> Self {
+        Self {
+            scripts_dir: PathBuf::from("scripts"),
+        }
+    }
+}
+
+impl bevy::app::Plugin for LuauScriptPlugin {
+    fn build(&self, app: &mut bevy::app::App) {
+        let host = LuaScriptHost::new(self.scripts_dir.clone())
+            .expect("failed to initialize Luau VM (LuaScriptHost)");
+        // Garante o clock mesmo sem TimePlugin (plugin autossuficiente em apps mínimos).
+        app.init_resource::<Time>();
+        // .chain() obriga on_add → update → on_remove dentro do mesmo frame
+        // (um tuple simples não garante ordem no Bevy 0.19).
+        app.insert_resource(host)
+            .add_systems(Update, (luau_on_add, luau_update, luau_on_remove).chain());
+    }
+}
+
+/// Hook `on_add`: when a [`LuaScriptRef`] appears, ensure its chunk is loaded
+/// (from `<scripts_dir>/<path>`) and run its top level. Errors warn once and
+/// never abort.
+pub fn luau_on_add(
+    mut host: ResMut<LuaScriptHost>,
+    added: Query<(Entity, &LuaScriptRef), Added<LuaScriptRef>>,
+) {
+    for (entity, lref) in &added {
+        let result = host
+            .ensure_loaded(&lref.path)
+            .and_then(|()| host.activate(entity, &lref.path));
+        if let Err(e) = result {
+            host.warn_once(&lref.path, &e);
+        }
+    }
+}
+
+/// Runs `on_update(dt)` of every live script, then applies queued
+/// `set_position` commands. A script error is pcall'd: warned once, engine
+/// keeps running.
+pub fn luau_update(
+    time: Res<Time>,
+    mut host: ResMut<LuaScriptHost>,
+    mut scripts: Query<(Entity, &LuaScriptRef, Option<&mut Transform>)>,
+    players: Query<&GlobalTransform, With<crate::player::Player>>,
+) {
+    let dt = time.delta_secs();
+    let elapsed = time.elapsed_secs_f64();
+    let player = players.single().ok().map(|t| t.translation());
+
+    for (entity, lref, transform) in &mut scripts {
+        let Some(origin) = transform.as_ref().map(|t| t.translation) else {
+            continue;
+        };
+        if let Err(e) = host.run_update(entity, &lref.path, dt, origin, player, elapsed) {
+            host.warn_once(&lref.path, &e);
+        }
+    }
+
+    for (entity, pos) in host.take_pending() {
+        if let Ok((_, _, Some(mut transform))) = scripts.get_mut(entity) {
+            transform.translation = pos;
+        }
+    }
+}
+
+/// Hook `on_remove`: drop per-entity leftovers; the chunk stays cached in the
+/// registry so a respawned entity reuses the script's existing globals.
+pub fn luau_on_remove(
+    mut host: ResMut<LuaScriptHost>,
+    mut removed: RemovedComponents<LuaScriptRef>,
+) {
+    for entity in removed.read() {
+        host.deactivate(entity);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::player::Player;
+    use std::time::Duration;
+
+    /// Advances the app's `Time` resource by `secs` (no TimePlugin in tests).
+    fn advance_time(app: &mut bevy::app::App, secs: f32) {
+        let mut time = app.world_mut().remove_resource::<Time>().unwrap();
+        time.advance_by(Duration::from_secs_f32(secs));
+        app.world_mut().insert_resource(time);
+    }
+
+    /// Minimal headless app: Time + host resource + the three runtime systems.
+    fn test_app(host: LuaScriptHost) -> bevy::app::App {
+        let mut app = bevy::app::App::new();
+        app.init_resource::<Time>();
+        app.insert_resource(host);
+        app.add_systems(Update, (luau_on_add, luau_update, luau_on_remove).chain());
+        app
+    }
+
+    fn host_with(code: &str, path: &str) -> LuaScriptHost {
+        let mut host = LuaScriptHost::new(PathBuf::from("scripts")).expect("host");
+        host.load_script(path, code).expect("load script");
+        host
+    }
+
+    #[test]
+    fn test_script_top_level_runs_and_logs() {
+        let mut host = host_with("viber.log('hello from luau')", "log.lua");
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+        host.activate(entity, "log.lua").expect("activate");
+        assert!(
+            host.logs().iter().any(|l| l == "hello from luau"),
+            "expected logged line, got {:?}",
+            host.logs()
+        );
+    }
+
+    #[test]
+    fn test_syntax_error_is_reported_not_fatal() {
+        let mut host = host_with("function on_update(dt) end", "ok.lua");
+        let err = host
+            .load_script("broken.lua", "this is not luau )))")
+            .expect_err("syntax error should fail loading");
+        assert!(!err.to_string().is_empty());
+        // O host continua utilizável depois do erro de compilação.
+        host.load_script("after.lua", "viber.log('still alive')")
+            .expect("reload ok");
+        let mut world = World::new();
+        host.activate(world.spawn_empty().id(), "after.lua")
+            .expect("activate after");
+        assert!(host.logs().iter().any(|l| l == "still alive"));
+    }
+
+    #[test]
+    fn test_runtime_error_warns_once_and_engine_survives() {
+        let mut host = LuaScriptHost::new(PathBuf::from("scripts")).expect("host");
+        host.load_script("bad.lua", "function on_update(dt) error('boom') end")
+            .expect("load bad");
+        host.load_script(
+            "good.lua",
+            "calls = 0\nfunction on_update(dt) calls = calls + 1 end",
+        )
+        .expect("load good");
+        let mut world = World::new();
+        let bad = world.spawn_empty().id();
+        let good = world.spawn_empty().id();
+        host.activate(bad, "bad.lua").expect("activate bad");
+        host.activate(good, "good.lua").expect("activate good");
+
+        for _ in 0..3 {
+            let bad_err = host
+                .run_update(bad, "bad.lua", 0.016, Vec3::ZERO, None, 0.0)
+                .expect_err("bad script errors every frame");
+            assert!(bad_err.to_string().contains("boom"));
+            host.warn_once("bad.lua", &bad_err);
+            host.run_update(good, "good.lua", 0.016, Vec3::ZERO, None, 0.0)
+                .expect("good script unaffected");
+        }
+
+        // Warn 1x: só a primeira chamada devolve true.
+        let mut host2 = LuaScriptHost::new(PathBuf::from("scripts")).expect("host");
+        host2
+            .load_script("x.lua", "function on_update(dt) error('e') end")
+            .unwrap();
+        host2.activate(bad, "x.lua").unwrap();
+        assert!(host2.warn_once("x.lua", &"first"));
+        assert!(!host2.warn_once("x.lua", &"second"));
+
+        // Script bom correu as 3 vezes apesar do mau.
+        match host.script_global("good.lua", "calls").expect("global") {
+            mlua::Value::Integer(n) => assert_eq!(n, 3),
+            other => panic!("expected integer calls, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_on_update_call_counter() {
+        let mut host = host_with(
+            "count = 0\nfunction on_update(dt) count = count + 1 end",
+            "counter.lua",
+        );
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+        host.activate(entity, "counter.lua").expect("activate");
+        for i in 1..=4 {
+            host.run_update(entity, "counter.lua", 0.016, Vec3::ZERO, None, 0.0)
+                .expect("run_update");
+            match host.script_global("counter.lua", "count").expect("count") {
+                mlua::Value::Integer(n) => assert_eq!(n, i),
+                other => panic!("expected integer count, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_position_read_write_via_app() {
+        let host = host_with(
+            "function on_update(dt)\n  local px, py, pz = viber.position()\n  viber.set_position(px + 5, py, pz)\nend",
+            "move.lua",
+        );
+        let mut app = test_app(host);
+        app.world_mut().spawn((
+            Transform::from_xyz(1.0, 2.0, 3.0),
+            LuaScriptRef {
+                path: "move.lua".to_string(),
+            },
+        ));
+        app.update();
+
+        let mut q = app.world_mut().query::<&Transform>();
+        let tf = q.single(app.world()).expect("transform");
+        assert!(
+            (tf.translation.x - 6.0).abs() < 1e-4,
+            "x should be 6, got {}",
+            tf.translation.x
+        );
+        assert!((tf.translation.y - 2.0).abs() < 1e-4);
+        assert!((tf.translation.z - 3.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_distance_to_player() {
+        let host = host_with(
+            "dist = nil\nfunction on_update(dt) dist = viber.distance_to_player() end",
+            "dist.lua",
+        );
+        let mut app = test_app(host);
+        // Player a 10 m na origem do script.
+        app.world_mut()
+            .spawn((Player::default(), GlobalTransform::from_xyz(10.0, 0.0, 0.0)));
+        app.world_mut().spawn((
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            LuaScriptRef {
+                path: "dist.lua".to_string(),
+            },
+        ));
+        app.update();
+
+        let host = app.world().resource::<LuaScriptHost>();
+        // mlua converte 10.0 (integral) em Value::Integer; aceitar ambos.
+        let dist = match host.script_global("dist.lua", "dist").expect("dist") {
+            mlua::Value::Number(d) => d,
+            mlua::Value::Integer(n) => n as f64,
+            other => panic!("expected number dist, got {other:?}"),
+        };
+        assert!((dist - 10.0).abs() < 1e-4, "dist {dist}");
+    }
+
+    #[test]
+    fn test_time_api_reports_elapsed() {
+        let host = host_with(
+            "t0 = nil\nfunction on_update(dt) t0 = viber.time() end",
+            "clock.lua",
+        );
+        let mut app = test_app(host);
+        advance_time(&mut app, 2.5);
+        app.world_mut().spawn((
+            Transform::default(),
+            LuaScriptRef {
+                path: "clock.lua".to_string(),
+            },
+        ));
+        app.update();
+
+        let host = app.world().resource::<LuaScriptHost>();
+        match host.script_global("clock.lua", "t0").expect("t0") {
+            mlua::Value::Number(t) => {
+                assert!((t - 2.5).abs() < 0.1, "elapsed should be ~2.5, got {t}")
+            }
+            other => panic!("expected number t0, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_on_update_receives_dt() {
+        let host = host_with("got = nil\nfunction on_update(dt) got = dt end", "dt.lua");
+        let mut app = test_app(host);
+        advance_time(&mut app, 0.25);
+        app.world_mut().spawn((
+            Transform::default(),
+            LuaScriptRef {
+                path: "dt.lua".to_string(),
+            },
+        ));
+        app.update();
+
+        let host = app.world().resource::<LuaScriptHost>();
+        match host.script_global("dt.lua", "got").expect("got") {
+            mlua::Value::Number(d) => assert!((d - 0.25).abs() < 1e-3, "dt {d}"),
+            other => panic!("expected number dt, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_script_environments_are_isolated() {
+        let mut host = LuaScriptHost::new(PathBuf::from("scripts")).expect("host");
+        host.load_script("a.lua", "secret = 42\nfunction on_update(dt) end")
+            .expect("load a");
+        host.load_script(
+            "b.lua",
+            "assert(secret == nil, 'b must not see a.globals')\nfunction on_update(dt) end",
+        )
+        .expect("load b");
+        let mut world = World::new();
+        host.activate(world.spawn_empty().id(), "a.lua")
+            .expect("activate a");
+        host.activate(world.spawn_empty().id(), "b.lua")
+            .expect("activate b");
+        match host.script_global("a.lua", "secret").expect("secret") {
+            mlua::Value::Integer(n) => assert_eq!(n, 42),
+            other => panic!("expected integer secret, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_on_remove_stops_script_calls() {
+        let host = host_with(
+            "count = 0\nfunction on_update(dt) count = count + 1 end",
+            "count_remove.lua",
+        );
+        let mut app = test_app(host);
+        let entity = app
+            .world_mut()
+            .spawn((
+                Transform::default(),
+                LuaScriptRef {
+                    path: "count_remove.lua".to_string(),
+                },
+            ))
+            .id();
+        app.update();
+        app.update();
+
+        app.world_mut().despawn(entity);
+        app.update(); // frame pós-despawn: on_remove corre, on_update não deve chamar
+        app.update();
+
+        let host = app.world().resource::<LuaScriptHost>();
+        match host
+            .script_global("count_remove.lua", "count")
+            .expect("count")
+        {
+            mlua::Value::Integer(n) => assert_eq!(n, 2, "script must stop after despawn"),
+            other => panic!("expected integer count, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_load_script_from_dir_reads_disk() {
+        let tmp = tempfile::tempdir().expect("tmpdir");
+        let scripts = tmp.path().join("scripts");
+        std::fs::create_dir_all(&scripts).expect("mkdir");
+        std::fs::write(
+            scripts.join("disk.lua"),
+            "loaded_from = 'disk'\nfunction on_update(dt) end",
+        )
+        .expect("write script");
+
+        let mut host = LuaScriptHost::new(scripts).expect("host");
+        host.ensure_loaded("disk.lua").expect("ensure_loaded");
+        let mut world = World::new();
+        host.activate(world.spawn_empty().id(), "disk.lua")
+            .expect("activate");
+        match host
+            .script_global("disk.lua", "loaded_from")
+            .expect("global")
+        {
+            mlua::Value::String(s) => assert_eq!(s.to_str().expect("utf8"), "disk"),
+            other => panic!("expected string, got {other:?}"),
+        }
+        // Idempotente: segunda chamada não recarrega nem falha.
+        host.ensure_loaded("disk.lua").expect("ensure_loaded again");
+    }
+
+    #[test]
+    fn test_plugin_registers_host_and_systems() {
+        let mut app = bevy::app::App::new();
+        app.add_plugins(LuauScriptPlugin::default());
+        assert!(app.world().get_resource::<LuaScriptHost>().is_some());
+
+        // Script pré-carregado via o resource do plugin (host de teste).
+        let mut host = app.world_mut().resource_mut::<LuaScriptHost>();
+        host.load_script("plugin.lua", "viber.log('via plugin')")
+            .expect("load");
+
+        app.world_mut().spawn((
+            Transform::default(),
+            LuaScriptRef {
+                path: "plugin.lua".to_string(),
+            },
+        ));
+        app.update();
+        assert!(
+            app.world()
+                .resource::<LuaScriptHost>()
+                .logs()
+                .iter()
+                .any(|l| l == "via plugin"),
+            "plugin path should run scripts"
+        );
+    }
+
+    #[test]
+    fn test_missing_script_on_disk_warns_but_does_not_panic() {
+        let mut app = bevy::app::App::new();
+        app.init_resource::<Time>();
+        app.insert_resource(
+            LuaScriptHost::new(PathBuf::from("/nonexistent/scripts")).expect("host"),
+        );
+        app.add_systems(Update, (luau_on_add, luau_update, luau_on_remove).chain());
+        app.world_mut().spawn((
+            Transform::default(),
+            LuaScriptRef {
+                path: "ghost.lua".to_string(),
+            },
+        ));
+        app.update(); // on_add falha → warn_once; luau_update ignora path ausente
+        app.update();
+        assert!(app.world().get_resource::<LuaScriptHost>().is_some());
+    }
+
+    #[test]
+    fn test_registry_lists_paths_sorted() {
+        let mut host = LuaScriptHost::new(PathBuf::from("scripts")).expect("host");
+        host.load_script("z.lua", "function on_update(dt) end")
+            .unwrap();
+        host.load_script("a.lua", "function on_update(dt) end")
+            .unwrap();
+        assert_eq!(host.registry.paths(), vec!["a.lua", "z.lua"]);
+        assert!(host.registry.contains("z.lua"));
+        assert!(!host.registry.contains("nope.lua"));
+    }
+
+    #[test]
+    fn test_bundled_example_script_compiles_runs_and_moves() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("assets")
+            .join("scripts")
+            .join("example.lua");
+        let code = std::fs::read_to_string(&path)
+            .expect("assets/scripts/example.lua must ship with the crate");
+
+        let mut host = LuaScriptHost::new(PathBuf::from("scripts")).expect("host");
+        host.load_script("example.lua", &code)
+            .expect("compile example");
+
+        let mut app = test_app(host);
+        let entity = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(0.0, 0.0, 0.0),
+                LuaScriptRef {
+                    path: "example.lua".to_string(),
+                },
+            ))
+            .id();
+        advance_time(&mut app, 0.5);
+        app.update();
+
+        // O script empurra py = sin(elapsed * 2): com elapsed 0.5 s, py != 0.
+        let mut q = app.world_mut().query::<&Transform>();
+        let tf = q.get(app.world(), entity).expect("transform");
+        assert!(
+            tf.translation.y.abs() > 1e-3,
+            "example should oscillate y, got {}",
+            tf.translation.y
+        );
+        // Top-level log + tick @1 Hz ainda não (elapsed < 1).
+        let logs = app.world().resource::<LuaScriptHost>().logs();
+        assert!(
+            logs.iter().any(|l| l.contains("carregado")),
+            "example top-level log missing: {logs:?}"
+        );
+    }
+}

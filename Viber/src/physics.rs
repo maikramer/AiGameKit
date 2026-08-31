@@ -220,6 +220,29 @@ pub struct PendingCollider {
     pub gltf: Option<Handle<bevy::gltf::Gltf>>,
 }
 
+/// Colliders already baked from a glTF, keyed by asset and shape kind.
+///
+/// The world reuses a handful of props hundreds of times — `simple-rpg` places
+/// the same crate 44 times and the same wall segment 32 — and every instance
+/// would otherwise re-triangulate the identical mesh. Rapier colliders are
+/// reference-counted internally, so the clones share one shape.
+#[derive(Resource, Default)]
+pub struct ColliderCache {
+    baked: std::collections::HashMap<(AssetId<bevy::gltf::Gltf>, bool), Option<Collider>>,
+}
+
+impl ColliderCache {
+    /// Number of distinct baked shapes (cache entries).
+    pub fn len(&self) -> usize {
+        self.baked.len()
+    }
+
+    /// True when nothing has been baked yet.
+    pub fn is_empty(&self) -> bool {
+        self.baked.is_empty()
+    }
+}
+
 /// Marker for entities whose collider has been resolved (or given up on), so
 /// the resolver never revisits them.
 #[derive(Debug, Component)]
@@ -238,7 +261,8 @@ pub struct PhysicsPlugin {
 
 impl bevy::app::Plugin for PhysicsPlugin {
     fn build(&self, app: &mut bevy::app::App) {
-        app.add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+        app.init_resource::<ColliderCache>()
+            .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
             .add_systems(
                 bevy::app::Update,
                 (resolve_pending_colliders, stream_terrain_colliders),
@@ -285,6 +309,8 @@ pub fn immediate_collider(shape: &ColliderShape) -> Option<(Collider, Transform)
 #[allow(clippy::type_complexity)]
 pub fn resolve_pending_colliders(
     mut commands: Commands,
+    server: Res<AssetServer>,
+    mut cache: ResMut<ColliderCache>,
     gltfs: Res<Assets<bevy::gltf::Gltf>>,
     gltf_meshes: Res<Assets<bevy::gltf::GltfMesh>>,
     meshes: Res<Assets<Mesh>>,
@@ -312,11 +338,45 @@ pub fn resolve_pending_colliders(
                     commands.entity(entity).insert(ColliderResolved);
                     continue;
                 };
+                // A collision glTF that cannot be loaded must not leave the
+                // prop pending forever. The asset pool is missing dozens of
+                // `*_collision.glb` files that the world still references, so
+                // this is the common case, not an edge case: fall back to the
+                // rendered bounds, which gives the prop *some* collision
+                // instead of letting the player walk through it.
+                if matches!(
+                    server.get_load_state(handle),
+                    Some(bevy::asset::LoadState::Failed(_))
+                ) {
+                    match aabb {
+                        Some(aabb) => {
+                            let half = Vec3::from(aabb.half_extents).max(Vec3::splat(1e-3));
+                            commands.entity(entity).insert((
+                                Collider::cuboid(half.x, half.y, half.z),
+                                ColliderResolved,
+                            ));
+                        }
+                        // No bounds yet either — give up rather than spin.
+                        None => {
+                            commands.entity(entity).insert(ColliderResolved);
+                        }
+                    }
+                    continue;
+                }
                 let Some(gltf) = gltfs.get(handle) else {
                     continue; // still loading
                 };
                 let convex = matches!(request.shape, ColliderShape::Precompute { .. });
-                let Some(collider) = collider_from_gltf(gltf, &gltf_meshes, &meshes, convex) else {
+                let key = (handle.id(), convex);
+                let cached = match cache.baked.get(&key) {
+                    Some(cached) => cached.clone(),
+                    None => {
+                        let built = collider_from_gltf(gltf, &gltf_meshes, &meshes, convex);
+                        cache.baked.insert(key, built.clone());
+                        built
+                    }
+                };
+                let Some(collider) = cached else {
                     commands.entity(entity).insert(ColliderResolved);
                     continue;
                 };

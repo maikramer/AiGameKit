@@ -22,25 +22,25 @@
        ============================================================ -->
     <SpawnExclusion at="1700 -810" radius="46" />
     <!-- Anel de pilares em pé (r=22). -->
-    <Entity translation="1722 0 -810" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="1722 0 -810" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="1715.6 0 -794.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="1715.6 0 -794.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="1700 0 -788" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="1700 0 -788" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="1684.4 0 -794.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="1684.4 0 -794.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="1678 0 -810" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="1678 0 -810" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="1684.4 0 -825.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="1684.4 0 -825.6" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
-    <Entity translation="1700 0 -832" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <Entity translation="1700 0 -832" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/stone_pillar_lod0.glb" />
     </Entity>
     <!-- Pilares caídos (marca de ruína). -->
@@ -60,7 +60,7 @@
     <!-- Coração de Orm: o POI central (cristal pulsante). -->
     <Entity name="orm-heart" translation="1700 0 -810" script="poi/ruin-relic.lua" />
     <!-- Acampamento de saqueadores (guardiões do saque). -->
-    <Entity translation="1732 0 -836" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
+    <Entity translation="1732 0 -836" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/campfire_pit_lod0.glb" />
     </Entity>
     <Entity translation="1732 0 -836">
@@ -108,8 +108,8 @@
       </GameObject>
     </StaticSpawner>
     <!-- Cristais da fonte + cogumelos. -->
-    <Entity translation="-521 0 44" script="poi/paradise-spring.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base" />
-    <Entity translation="-556 0 48" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base">
+    <Entity translation="-521 0 44" script="poi/paradise-spring.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb; mesh-anchor: base" />
+    <Entity translation="-556 0 48" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/props/crystal_blue_lod0.glb" />
     </Entity>
     <Entity translation="-560 0 16" transform="scale: 0.7 0.7 0.7" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: precompute; mesh-url: /assets/meshes/props/mushroom_red_lod0.glb">
@@ -122,9 +122,9 @@
        §3 MIRANTE DA CALDEIRA (-605,-725) — cota ~133 m, o mundo aos pés.
        ============================================================ -->
     <SpawnExclusion at="-605 -725" radius="26" />
-    <Entity translation="-605 0 -725" script="poi/mirante-vista.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base" />
+    <Entity translation="-605 0 -725" script="poi/mirante-vista.lua" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_lod0.glb; mesh-anchor: base" />
     <!-- Braseiros acesos: visíveis do vale à noite. -->
-    <Entity translation="-621 0 -715" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-621 0 -715" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="-621 0 -715">
@@ -133,7 +133,7 @@
     <Group translation="-621 0 -715" body="fixed" collider="none">
       <PointLight translation="0 1.2 0" color="0xffa83a" intensity="1280" shadows="false" />
     </Group>
-    <Entity translation="-589 0 -713" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <Entity translation="-589 0 -713" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/iron_brazier_lod0.glb" />
     </Entity>
     <Entity translation="-589 0 -713">

@@ -36,13 +36,13 @@
       <GltfScene url="/assets/meshes/forest/tree_oak_lod0.glb" />
     </Entity>
     <!-- Caixotaria encostada à muralha (quebra o perímetro nu). -->
-    <Entity translation="-34.5 0 -6" transform="rotation: 0 12 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base">
+    <Entity translation="-34.5 0 -6" transform="rotation: 0 12 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_crate_lod0.glb" />
     </Entity>
-    <Entity translation="-34.5 0 -8.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base">
+    <Entity translation="-34.5 0 -8.4" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
-    <Entity translation="21 0 32" transform="rotation: 0 -25 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_collision.glb; mesh-anchor: base">
+    <Entity translation="21 0 32" transform="rotation: 0 -25 0" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/chopping_block_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/chopping_block_lod0.glb" />
     </Entity>
   </Group>

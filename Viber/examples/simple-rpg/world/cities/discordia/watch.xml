@@ -10,7 +10,7 @@
 -->
   <Group name="city.watch" translation="0 0 0">
     <!-- Torre de vigia GLB + guarda. Sem bandeira Composition. -->
-    <Entity name="watchtower" translation="32 0 32" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_collision.glb; mesh-anchor: base">
+    <Entity name="watchtower" translation="32 0 32" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/watchtower_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/watchtower_lod0.glb" />
     </Entity>
     <!-- Guarda: [F] pinta os quatro portões na bússola. Script carrega

@@ -38,6 +38,25 @@ pub struct OrbitCamera {
     pub max_distance: f32,
 }
 
+impl OrbitCamera {
+    /// Height above the target the camera aims at (meters).
+    ///
+    /// `height` doubles as the pitch seed when the world gives no explicit
+    /// `pitch`; either way it describes how far above the target's origin the
+    /// framing sits, so it is the pivot too. Falls back to chest height for
+    /// worlds that set neither.
+    pub fn pivot_height(&self) -> f32 {
+        if self.height > 0.0 {
+            self.height
+        } else {
+            DEFAULT_ORBIT_PIVOT_HEIGHT
+        }
+    }
+}
+
+/// Look-at height used when a world sets no `height` (meters).
+pub const DEFAULT_ORBIT_PIVOT_HEIGHT: f32 = 1.2;
+
 /// Camera spawned automatically when the world has none: slow orbit at origin.
 #[derive(Debug, Component)]
 pub struct AutoOrbit {
@@ -347,16 +366,19 @@ fn collect_spawn_groups(
 ) {
     for spec in specs {
         match &spec.kind {
-            EntityKind::StaticSpawner { spec } | EntityKind::DynamicSpawner { spec } => {
-                let handles = spec
+            EntityKind::StaticSpawner { spec: group }
+            | EntityKind::DynamicSpawner { spec: group } => {
+                let handles = group
                     .template_urls
                     .iter()
                     .map(|url| asset_server.load::<Gltf>(url.trim_start_matches('/').to_owned()))
                     .collect();
                 out.push(crate::spawner::SpawnGroupState {
-                    spec: spec.clone(),
+                    spec: group.clone(),
                     handles,
                     done: false,
+                    // `<DynamicSpawner>` instances are driven by the AI system.
+                    dynamic: matches!(spec.kind, EntityKind::DynamicSpawner { .. }),
                 });
             }
             EntityKind::SpawnExclusion { center, radius } => {
@@ -379,6 +401,8 @@ fn collect_spawn_groups(
                     spec: spawner_spec,
                     handles,
                     done: false,
+                    // Vegetation is scenery — never AI-driven.
+                    dynamic: false,
                 });
             }
             _ => collect_spawn_groups(&spec.children, asset_server, out, exclusions),
@@ -825,10 +849,12 @@ fn build_material(
 /// target. An explicit `pitch` (degrees) overrides `height` via
 /// `height = distance · tan(pitch)`; input-driven yaw lands with the player
 /// in a later phase.
+#[allow(clippy::type_complexity)]
 pub fn orbit_camera_follow(
     mut cameras: Query<(&mut Transform, &OrbitCamera)>,
     names: Query<(Entity, &Name)>,
     globals: Query<&GlobalTransform>,
+    players: Query<&GlobalTransform, With<crate::player::Player>>,
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
 ) {
     for (mut cam, settings) in &mut cameras {
@@ -839,7 +865,16 @@ pub fn orbit_camera_follow(
                 .and_then(|(entity, _)| globals.get(entity).ok())
                 .map(|g| g.translation())
                 .unwrap_or(Vec3::ZERO),
-            None => Vec3::ZERO,
+            // No `target`: follow the hero. `<OrbitCamera>` in a world with a
+            // player is the third-person camera, and its authored values say
+            // so — `simple-rpg` asks for distance 3.3 / height 1.55, which is
+            // over-the-shoulder framing and means nothing orbiting the world
+            // origin (where the camera used to sit, staring at the ground).
+            None => players
+                .iter()
+                .next()
+                .map(|g| g.translation())
+                .unwrap_or(Vec3::ZERO),
         };
         let offset = crate::player::camera_offset(
             settings.yaw_deg,
@@ -854,7 +889,9 @@ pub fn orbit_camera_follow(
                 cam.translation.y = min_y;
             }
         }
-        cam.look_at(target_pos + Vec3::Y * 1.2, Vec3::Y);
+        // Pivot at the target's upper body, not its feet, so the hero sits in
+        // the lower half of the frame instead of dead centre.
+        cam.look_at(target_pos + Vec3::Y * settings.pivot_height(), Vec3::Y);
     }
 }
 
@@ -909,6 +946,16 @@ pub fn gltf_scene_spawner(
                     match gltf.default_scene.clone() {
                         Some(root) => {
                             commands.entity(entity).insert(WorldAssetRoot(root));
+                            // Characters ship a catalogue of clips; ask the
+                            // animation module to bind them once the scene has
+                            // spawned its `AnimationPlayer`.
+                            if !gltf.animations.is_empty() {
+                                commands
+                                    .entity(entity)
+                                    .insert(crate::animation::AnimatedScene {
+                                        gltf: scene.handle.clone(),
+                                    });
+                            }
                         }
                         None => {
                             bevy::log::warn!("gltf scene has no default scene; leaving empty");

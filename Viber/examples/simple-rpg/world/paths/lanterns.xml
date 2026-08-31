@@ -21,7 +21,7 @@
   não pesa: acende-se por troços à medida que o herói avança.
 -->
   <Group name="paths.lanterns" translation="0 0 0">
-    <Entity translation="-4.2 0 60" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-4.2 0 60" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-4.2 0 60">
@@ -30,7 +30,7 @@
     <Group translation="-4.2 0 60" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="4.2 0 60" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="4.2 0 60" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="4.2 0 60">
@@ -39,7 +39,7 @@
     <Group translation="4.2 0 60" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="-6.2 0 96" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-6.2 0 96" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-6.2 0 96">
@@ -48,7 +48,7 @@
     <Group translation="-6.2 0 96" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="2.2 0 96" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="2.2 0 96" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="2.2 0 96">
@@ -57,7 +57,7 @@
     <Group translation="2.2 0 96" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="-4.2 0 -58" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-4.2 0 -58" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-4.2 0 -58">
@@ -66,7 +66,7 @@
     <Group translation="-4.2 0 -58" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="4.2 0 -58" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="4.2 0 -58" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="4.2 0 -58">
@@ -75,7 +75,7 @@
     <Group translation="4.2 0 -58" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="-2.2 0 -84" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-2.2 0 -84" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-2.2 0 -84">
@@ -84,7 +84,7 @@
     <Group translation="-2.2 0 -84" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="6.2 0 -84" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="6.2 0 -84" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="6.2 0 -84">
@@ -93,7 +93,7 @@
     <Group translation="6.2 0 -84" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="60 0 -4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="60 0 -4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="60 0 -4.2">
@@ -102,7 +102,7 @@
     <Group translation="60 0 -4.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="60 0 4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="60 0 4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="60 0 4.2">
@@ -111,7 +111,7 @@
     <Group translation="60 0 4.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="96 0 -2.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="96 0 -2.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="96 0 -2.2">
@@ -120,7 +120,7 @@
     <Group translation="96 0 -2.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="96 0 6.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="96 0 6.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="96 0 6.2">
@@ -129,7 +129,7 @@
     <Group translation="96 0 6.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="-58 0 -4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-58 0 -4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-58 0 -4.2">
@@ -138,7 +138,7 @@
     <Group translation="-58 0 -4.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="-58 0 4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-58 0 4.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-58 0 4.2">
@@ -147,7 +147,7 @@
     <Group translation="-58 0 4.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="-80 0 -6.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-80 0 -6.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-80 0 -6.2">
@@ -156,7 +156,7 @@
     <Group translation="-80 0 -6.2" body="fixed" collider="none">
       <PointLight translation="0 2.2 0" color="0xffa040" intensity="1920" />
     </Group>
-    <Entity translation="-80 0 2.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base">
+    <Entity translation="-80 0 2.2" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_lod0.glb; mesh-anchor: base">
       <GltfScene url="/assets/meshes/village/torch_post_lod0.glb" />
     </Entity>
     <Entity translation="-80 0 2.2">
