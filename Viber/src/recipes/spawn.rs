@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use bevy::asset::LoadState;
 use bevy::gltf::Gltf;
+use bevy::light::NotShadowCaster;
 use bevy::math::primitives::{Capsule3d, Cuboid, Cylinder, Plane3d, Sphere};
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
@@ -275,6 +276,31 @@ fn spawn_entity(
     }
     match &spec.kind {
         EntityKind::Group => {}
+        EntityKind::ParticleSystem { spec } => {
+            let resolved = crate::particles::resolve(spec);
+            let capacity = crate::particles::emitter_capacity(&resolved);
+            let mesh = ctx.meshes.add(crate::particles::particle_mesh(capacity));
+            let material = ctx.materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                unlit: true,
+                alpha_mode: if resolved.additive {
+                    AlphaMode::Add
+                } else {
+                    AlphaMode::Blend
+                },
+                ..Default::default()
+            });
+            entity.insert((
+                Mesh3d(mesh),
+                MeshMaterial3d(material),
+                Visibility::Inherited,
+                NotShadowCaster,
+                crate::particles::ParticleEmitter {
+                    sim: crate::particles::EmitterSim::new(spec),
+                    capacity,
+                },
+            ));
+        }
         EntityKind::GltfScene { url } => {
             let path = url.trim_start_matches('/');
             let handle: Handle<Gltf> = ctx.asset_server.load(path.to_owned());

@@ -10,7 +10,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use viber::bridge::{self, client::BridgeClient};
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
-use viber::{recipes, scaffold, spawner, terrain, xml};
+use viber::{particles, recipes, scaffold, spawner, terrain, xml};
 
 /// Native Bevy engine for AiGameKit declarative worlds.
 #[derive(Parser)]
@@ -356,6 +356,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             spawn::orbit_camera_follow,
             spawn::auto_orbit,
             spawn::gltf_scene_spawner,
+            particles::particle_emitter_update,
             spawner::instantiate_spawn_groups,
         ),
     );

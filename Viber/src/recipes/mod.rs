@@ -42,6 +42,7 @@ pub const KNOWN_TAGS: &[&str] = &[
     "roadnetwork",
     "gltfscene",
     "staticspawner",
+    "particlesystem",
 ];
 
 /// A parsed world: clear color, entity tree and non-fatal warnings.
@@ -162,6 +163,25 @@ pub enum EntityKind {
     /// (posições determinísticas por `seed`; regras de água/declive/sobreposição).
     /// Consumido pelo runtime de spawner, não spawna entidade própria.
     StaticSpawner { spec: StaticSpawnerSpec },
+    /// `<ParticleSystem>` — emissor de partículas (fogueiras, poeira, clima).
+    /// Entity própria; emissor CPU billboard desenhado em `particles`.
+    ParticleSystem { spec: ParticleSpec },
+}
+
+/// Emitter config of a `<ParticleSystem>`: a preset plus the
+/// `particle-emitter="…"` component-string overrides found in the world.
+#[derive(Debug, Clone)]
+pub struct ParticleSpec {
+    pub preset: String,
+    pub emission_rate: Option<f32>,
+    pub life: Option<(f32, f32)>,
+    pub speed: Option<(f32, f32)>,
+    pub size: Option<(f32, f32)>,
+    pub color: Option<[f32; 3]>,
+    pub looping: bool,
+    /// Authored `world-space` flag (Viber emitters are always local — the
+    /// emitters in this world are static, so behaviour is equivalent).
+    pub world_space: bool,
 }
 
 /// Placement rules + template urls of a `<StaticSpawner>` (attribute names as
@@ -287,6 +307,7 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
             }
         },
         "staticspawner" => finish_static_spawner(node, ctx).map(Some),
+        "particlesystem" => finish_particle_system(node, ctx).map(Some),
         "terrain" => finish_terrain(node, ctx).map(Some),
         "terrainpad" => finish_terrain_pad(node, ctx).map(Some),
         "lake" => finish_lake(node, ctx).map(Some),
@@ -343,10 +364,48 @@ fn parse_common(node: &XmlNode) -> Result<(Common, Vec<(String, String)>)> {
             "scale" => {
                 common.transform.scale = values::parse_vec3(value, &format!("{ctx} scale"))?;
             }
+            "transform" => {
+                // Component-string syntax: `transform="pos: x y z; euler: …"`.
+                let tctx = format!("{ctx} transform");
+                for (key, value) in parse_component_string(value) {
+                    match key.as_str() {
+                        "pos" | "position" => {
+                            common.transform.translation =
+                                values::parse_vec3(&value, &format!("{tctx} pos"))?;
+                        }
+                        "euler" | "rotation" => {
+                            common.transform.euler_deg =
+                                Some(values::parse_vec3(&value, &format!("{tctx} euler"))?);
+                        }
+                        "scale" => {
+                            common.transform.scale =
+                                values::parse_vec3(&value, &format!("{tctx} scale"))?;
+                        }
+                        // unknown transform components (component-string extras)
+                        _ => {}
+                    }
+                }
+            }
             other => rest.push((other.to_string(), value.clone())),
         }
     }
     Ok((common, rest))
+}
+
+/// Parse a VibeGame component string (`"pos: 0 1 0; preset: fire"`) into
+/// key/value pairs; keys are lowercased and trimmed.
+pub fn parse_component_string(value: &str) -> Vec<(String, String)> {
+    value
+        .split(';')
+        .filter_map(|part| {
+            let part = part.trim();
+            if part.is_empty() {
+                return None;
+            }
+            let (key, val) = part.split_once(':')?;
+            Some((key.trim().to_ascii_lowercase(), val.trim().to_string()))
+        })
+        .collect()
 }
 
 fn warn_ignored(node: &XmlNode, rest: Vec<(String, String)>, ctx: &mut ParseCtx) {
@@ -657,6 +716,93 @@ fn finish_static_spawner(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpe
         script: common.script,
         transform: common.transform,
         kind: EntityKind::StaticSpawner { spec },
+        children: Vec::new(),
+    })
+}
+
+fn finish_particle_system(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut spec = ParticleSpec {
+        preset: "fire".to_string(),
+        emission_rate: None,
+        life: None,
+        speed: None,
+        size: None,
+        color: None,
+        looping: true,
+        world_space: false,
+    };
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "preset" => spec.preset = value.trim().to_ascii_lowercase(),
+            "looping" => spec.looping = values::parse_bool(&value, &kctx)?,
+            "world-space" => spec.world_space = values::parse_bool(&value, &kctx)?,
+            "particle-emitter" => {
+                for (ckey, cvalue) in parse_component_string(&value) {
+                    let cctx = format!("{kctx} {ckey}");
+                    match ckey.as_str() {
+                        "preset" => spec.preset = cvalue.to_ascii_lowercase(),
+                        "emission-rate" | "emissionovertime" => {
+                            spec.emission_rate = Some(values::parse_f32(&cvalue, &cctx)?)
+                        }
+                        "start-life-min" => {
+                            spec.life = Some((
+                                values::parse_f32(&cvalue, &cctx)?,
+                                spec.life.map(|l| l.1).unwrap_or(1.0),
+                            ));
+                        }
+                        "start-life-max" => {
+                            spec.life = Some((
+                                spec.life.map(|l| l.0).unwrap_or(1.0),
+                                values::parse_f32(&cvalue, &cctx)?,
+                            ));
+                        }
+                        "start-speed-min" => {
+                            spec.speed = Some((
+                                values::parse_f32(&cvalue, &cctx)?,
+                                spec.speed.map(|s| s.1).unwrap_or(1.0),
+                            ));
+                        }
+                        "start-speed-max" => {
+                            spec.speed = Some((
+                                spec.speed.map(|s| s.0).unwrap_or(1.0),
+                                values::parse_f32(&cvalue, &cctx)?,
+                            ));
+                        }
+                        "start-size-min" => {
+                            spec.size = Some((
+                                values::parse_f32(&cvalue, &cctx)?,
+                                spec.size.map(|s| s.1).unwrap_or(1.0),
+                            ));
+                        }
+                        "start-size-max" => {
+                            spec.size = Some((
+                                spec.size.map(|s| s.0).unwrap_or(1.0),
+                                values::parse_f32(&cvalue, &cctx)?,
+                            ));
+                        }
+                        "start-color" => spec.color = Some(values::parse_color(&cvalue, &cctx)?),
+                        "looping" => spec.looping = values::parse_bool(&cvalue, &cctx)?,
+                        "world-space" => spec.world_space = values::parse_bool(&cvalue, &cctx)?,
+                        other => ctx
+                            .warnings
+                            .push(format!("{kctx}: ignored emitter prop `{other}`")),
+                    }
+                }
+            }
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::ParticleSystem { spec },
         children: Vec::new(),
     })
 }
@@ -1164,6 +1310,8 @@ pub struct WorldSummary {
     pub gltf_scenes: usize,
     /// `<StaticSpawner>` groups (expanded into instances at runtime).
     pub static_spawners: usize,
+    /// `<ParticleSystem>` emitters.
+    pub particle_systems: usize,
 }
 
 impl WorldSummary {
@@ -1175,6 +1323,7 @@ impl WorldSummary {
             + self.directional_lights
             + self.cameras
             + self.gltf_scenes
+            + self.particle_systems
     }
 
     /// Total ground-feature elements (terrain element excluded — it is the
@@ -1203,6 +1352,7 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::RoadNetwork { .. } => out.road_networks += 1,
                 EntityKind::GltfScene { .. } => out.gltf_scenes += 1,
                 EntityKind::StaticSpawner { .. } => out.static_spawners += 1,
+                EntityKind::ParticleSystem { .. } => out.particle_systems += 1,
             }
             walk(&spec.children, out);
         }
@@ -1316,12 +1466,13 @@ mod tests {
             &[
                 node("GameObject", &[]),
                 node("GameObject", &[]),
-                node("ParticleSystem", &[]),
+                node("SpawnExclusion", &[]),
             ],
         )
         .unwrap();
         assert_eq!(world.entities.len(), 0);
         assert_eq!(world.skipped_tags.get("GameObject"), Some(&2));
+        assert_eq!(world.skipped_tags.get("SpawnExclusion"), Some(&1));
         assert!(
             world.warnings.iter().any(|w| w.contains("<GameObject>×2")),
             "{:?}",
@@ -1520,6 +1671,70 @@ mod tests {
     }
 
     #[test]
+    fn test_particle_system_transform_component_string() {
+        let (entity, w) = parse_one(&node(
+            "ParticleSystem",
+            &[("preset", "fire"), ("transform", "pos: 0 1.2 3")],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(entity.transform.translation, [0.0, 1.2, 3.0]);
+        let EntityKind::ParticleSystem { spec } = entity.kind else {
+            panic!("expected particle system");
+        };
+        assert_eq!(spec.preset, "fire");
+        assert!(spec.looping);
+    }
+
+    #[test]
+    fn test_particle_system_full_emitter_string() {
+        let (entity, w) = parse_one(&node(
+            "ParticleSystem",
+            &[
+                ("preset", "leaves"),
+                ("transform", "pos: 0 6.5 0"),
+                (
+                    "particle-emitter",
+                    "preset: leaves; emission-rate: 5; start-life-min: 4; start-life-max: 7; \
+                     start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; \
+                     start-size-max: 0.22; looping: 1; world-space: 1",
+                ),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(entity.transform.translation, [0.0, 6.5, 0.0]);
+        let EntityKind::ParticleSystem { spec } = entity.kind else {
+            panic!("expected particle system");
+        };
+        assert_eq!(spec.preset, "leaves");
+        assert_eq!(spec.emission_rate, Some(5.0));
+        assert_eq!(spec.life, Some((4.0, 7.0)));
+        assert_eq!(spec.speed, Some((0.2, 0.6)));
+        assert_eq!(spec.size, Some((0.1, 0.22)));
+        assert!(spec.looping && spec.world_space);
+    }
+
+    #[test]
+    fn test_particle_system_color_override() {
+        let (spec, w) = parse_one(&node(
+            "ParticleSystem",
+            &[(
+                "particle-emitter",
+                "preset: smoke; start-color: #888888; emission-rate: 8",
+            )],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::ParticleSystem { spec } = spec.kind else {
+            panic!("expected particle system");
+        };
+        assert_eq!(spec.preset, "smoke");
+        assert_eq!(spec.color, Some([136.0 / 255.0; 3]));
+        assert_eq!(spec.emission_rate, Some(8.0));
+    }
+
+    #[test]
     fn test_static_spawner_spec_and_template_urls() {
         let mut template = node("GameObject", &[("role", "static")]);
         template.children = vec![node(
@@ -1681,6 +1896,10 @@ mod tests {
                 node("RoadNetwork", &[]),
                 node("GltfScene", &[("url", "/assets/meshes/x.glb")]),
                 node("StaticSpawner", &[("count", "10"), ("seed", "7")]),
+                node(
+                    "ParticleSystem",
+                    &[("preset", "fire"), ("transform", "pos: 0 1 2")],
+                ),
             ],
         )
         .unwrap();
@@ -1702,9 +1921,10 @@ mod tests {
                 road_networks: 1,
                 gltf_scenes: 1,
                 static_spawners: 1,
+                particle_systems: 1,
             }
         );
-        assert_eq!(summary.entities(), 6);
+        assert_eq!(summary.entities(), 7);
         assert_eq!(summary.ground_features(), 5);
     }
 
