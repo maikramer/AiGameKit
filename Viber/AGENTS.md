@@ -51,7 +51,8 @@ Raiz: `<world>` (ou `<scene>`), attr `clear-color` (`#rgb`/`#rrggbb`/`0x…`/nom
 | `Plane` | `half-size` (vec2, plano XZ) |
 | `Capsule` | `radius`, `half-height` |
 | `PointLight` | `color`, `intensity` (default 1200 lm), `radius`, `shadows` |
-| `AmbientLight` | `color`, `brightness` — aplicado como recurso, não entidade |
+| `DirectionalLight` | `color`, `illuminance` (lux, default bevy 10 000), `direction` ("x y z", para onde a luz viaja; −Z da entidade alinha à direção), `shadows` |
+| `AmbientLight` | `color`, `brightness` — aplicado como recurso `GlobalAmbientLight`, não entidade |
 | `OrbitCamera` | `target` (nome de entidade), `distance`, `height`, `pitch` (graus; quando presente sobrepõe `height` via `height = distance·tan(pitch)`) |
 
 Primitivas aceitam material: `base-color`, `metallic`, `roughness`.
