@@ -1,0 +1,116 @@
+# Grupo swamp — vegetação e estruturas do Pântano.
+# Defs base (estilo, ferramentas, presets) em ../game.yaml.
+# Regenerar: gameassets resume --profile game.yaml --manifest manifests/swamp
+output_dir: ../public/assets
+meshes_subdir: meshes/swamp
+images_subdir: images/swamp
+assets:
+  - id: dead_willow
+    idea:
+      cartoon dead willow tree with wide drooping leafless branches spanning left-right,
+      twisted dark grey trunk, moss-covered roots in murky water, spooky fantasy swamp
+      tree, broad canopy silhouette
+    kind: environment
+    category: vegetation
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    lod_levels: 2
+    omni:
+      control_type: bbox
+      size_m:
+        - 3.9
+        - 6.0
+        - 3.0
+  - id: lily_pad
+    idea:
+      cartoon large green lily pad with small pink lily flower, floating on dark
+      water surface, fantasy swamp vegetation prop
+    kind: prop
+    category: vegetation
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: flat
+      size_m:
+        - 1.2
+        - 0.15
+        - 1.2
+  - id: moss_rock
+    idea:
+      cartoon dark grey angular swamp boulder with faceted rocky silhouette, patches
+      of bright green moss on the top and sides, small mushrooms at the base, wet stone
+      surface clearly visible, fantasy swamp terrain rock
+    kind: prop
+    category: terrain
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: cube
+      size_m:
+        - 1.5
+        - 1.0
+        - 1.2
+  - id: swamp_shack
+    idea:
+      cartoon dilapidated wooden swamp shack on stilts above murky water, mossy
+      plank walls, sagging thatched roof, small lantern, fantasy swamp dwelling
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: building
+      size_m:
+        - 5.0
+        - 4.0
+        - 5.0
+  - id: wrecked_boat
+    idea:
+      broken cartoon wooden boat hull half-buried, cracked planks and missing stern,
+      fantasy swamp wreck prop sitting flush to ground, exterior only, no characters
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      size_m:
+        - 3.5
+        - 1.2
+        - 1.4
+  - id: bone_altar
+    idea:
+      eerie cartoon swamp bone altar made of stacked skulls and femurs on a flat
+      stone slab, fantasy bog ritual prop, low wide silhouette, stylized not gory
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: crate
+      size_m:
+        - 1.6
+        - 1.0
+        - 1.2

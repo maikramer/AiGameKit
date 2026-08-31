@@ -1,0 +1,19 @@
+{
+  "timestamp": 1783569907.6359015,
+  "prompt": "app icon, simple, centered, bold, clean background, high contrast, flat design, crisp edges, single subject, readable at small size, no duplicate objects, golden magic ring jewelry, fantasy RPG game UI",
+  "params": {
+    "seed": 403,
+    "prompt_final": "app icon, simple, centered, bold, clean background, high contrast, flat design, crisp edges, single subject, readable at small size, no duplicate objects, golden magic ring jewelry, fantasy RPG game UI",
+    "model": "Efficient-Large-Model/Sana_600M_512px_diffusers",
+    "transformer_quant_preset": "sdnq-int4",
+    "encoder_quant_preset": "sdnq-int4",
+    "remove_background": true,
+    "negative_prompt": "blurry, watermark, text, duplicate, multiple objects, extra limbs, distorted, low quality, realistic photo, cropped",
+    "guidance_scale": 4.5,
+    "num_inference_steps": 20,
+    "width": 512,
+    "height": 512
+  },
+  "image_path": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/AiGameKit/VibeGame/examples/simple-rpg/public/assets/icons/ring_magic.png",
+  "filename": "ring_magic.png"
+}

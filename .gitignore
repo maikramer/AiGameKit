@@ -140,9 +140,9 @@ VibeGame/examples/simple-rpg/public/assets/.assets-version
 # VibeGame shared-assets — pool binário canónico Crystal Vale (regen com
 # gameassets resume a partir de examples/shared-assets; sync.sh distribui).
 # Não versionar: mesmo modelo do simple-rpg, histórico leve.
-VibeGame/examples/shared-assets/public/assets/meshes/
-VibeGame/examples/shared-assets/public/assets/images/
-VibeGame/examples/shared-assets/public/assets/sky/
+Viber/examples/shared-assets/public/assets/meshes/
+Viber/examples/shared-assets/public/assets/images/
+Viber/examples/shared-assets/public/assets/sky/
 
 # Screenshots de teste no exemplo
 VibeGame/examples/simple-rpg/screenshot*.png

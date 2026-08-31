@@ -27,7 +27,7 @@ size relation to their source, so existence is the marker).
 
     python3 Viber/scripts/sync_assets.py \
         --world Viber/examples/simple-rpg \
-        --pool VibeGame/examples/shared-assets/public [--dry-run]
+        --pool Viber/examples/shared-assets/public [--dry-run]
 """
 
 from __future__ import annotations
@@ -51,6 +51,13 @@ GLB_CHUNK_JSON = 0x4E4F534A  # "JSON"
 
 # Any attribute whose name ends in ``url`` (url, model-url, texture-url, ...).
 _URL_RE = re.compile(r"[\w-]*url\s*=\s*\"([^\"]+)\"", re.IGNORECASE)
+# Atributos de asset sem sufixo ``url`` usados nos mundos migrados:
+# ``texture="/assets/textures/vale_grass.png"`` no <Terrain>, ``terrain-texture``
+# em variants, ``icon="/assets/icons/…"`` no HUD.
+_PLAIN_ASSET_RE = re.compile(
+    r"\b(?:texture|terrain-texture|icon|portrait-url|image)\s*=\s*\"([^\"]+)\"",
+    re.IGNORECASE,
+)
 # <Vegetation meshes="url1 url2 …"> — space-separated multi-url attribute
 _MESHES_RE = re.compile(r"\bmeshes\s*=\s*\"([^\"]+)\"", re.IGNORECASE)
 # <MusicLayer sound="bgm-explore"> → /assets/audio/bgm/explore.ogg (convenção)
@@ -99,6 +106,8 @@ def glb_extensions_used(data: bytes) -> set[str]:
 def extract_urls(text: str) -> list[str]:
     """All ``...url="..."`` values plus space-separated ``meshes="…"`` lists."""
     urls = _URL_RE.findall(text)
+    for match in _PLAIN_ASSET_RE.findall(text):
+        urls.append(match)
     for listing in _MESHES_RE.findall(text):
         urls.extend(listing.split())
     for layer in _SOUND_RE.findall(text):
@@ -210,6 +219,17 @@ def mirror_total_bytes(world_dir: Path) -> int:
     return sum(path.stat().st_size for path in world_dir.rglob("*") if path.is_file())
 
 
+def collision_sibling(rel: str) -> str | None:
+    """Sibling ``<base>_collision.glb`` de um GLB visual (``X_lod0.glb`` →
+    ``X_collision.glb``). A engine de física deriva esse path em runtime
+    (trimesh collider), mas ele nunca aparece no XML — sem este passo o
+    sync nunca o espelharia."""
+    match = re.match(r"^(.*/)(.+?)(?:_lod\d+)?\.glb$", rel)
+    if not match:
+        return None
+    return f"{match.group(1)}{match.group(2)}_collision.glb"
+
+
 def sync_assets(
     world_dir: Path,
     pool: Path,
@@ -220,7 +240,11 @@ def sync_assets(
     decompress = decompress or decompress_with_npx
     stats = SyncStats()
 
-    for url in collect_urls(world_dir):
+    queue = collect_urls(world_dir)
+    scanned = 0
+    while scanned < len(queue):
+        url = queue[scanned]
+        scanned += 1
         if not url.startswith("/"):
             stats.ignored += 1  # only asset-root absolute paths are mirrored
             continue
@@ -234,6 +258,11 @@ def sync_assets(
         if mode is None:
             stats.ignored += 1
             continue
+        # O irmão _collision.glb (usado pela física) entra na mesma fila.
+        if rel.endswith(".glb"):
+            sibling = collision_sibling(rel)
+            if sibling and sibling not in set(queue) and (pool / sibling).is_file():
+                queue.append("/" + sibling)
         # idempotency: equal-size destination (links) or existing destination
         # (decompressed GLBs have no size relation to the source) -> skip
         if dst.is_file() and (mode == "decompress" or dst.stat().st_size == src.stat().st_size):
@@ -281,7 +310,11 @@ def main(argv: list[str] | None = None) -> int:
         description="Espelha assets referenciados pelos mundos Viber migrados a partir do pool partilhado.",
     )
     parser.add_argument("--world", default="Viber/examples/simple-rpg", help="diretório do mundo migrado")
-    parser.add_argument("--pool", default="VibeGame/examples/shared-assets/public", help="raiz do pool de assets")
+    parser.add_argument(
+        "--pool",
+        default="Viber/examples/shared-assets/public",
+        help="raiz do pool de assets (fallback: VibeGame/examples/shared-assets/public)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="não escreve nada; só reporta")
     args = parser.parse_args(argv)
 
@@ -289,8 +322,13 @@ def main(argv: list[str] | None = None) -> int:
     if not world_dir.is_dir():
         parser.error(f"--world não é um diretório: {args.world}")
     pool = Path(args.pool)
-    if not pool.is_dir():
-        parser.error(f"--pool não é um diretório: {args.pool}")
+    if not pool.is_dir:
+        # Pool movido: tenta o local antigo (VibeGame) antes de falhar.
+        legacy = Path("VibeGame/examples/shared-assets/public")
+        if legacy.is_dir():
+            pool = legacy
+        else:
+            parser.error(f"--pool não é um diretório: {args.pool}")
 
     stats = sync_assets(world_dir, pool, dry_run=args.dry_run)
     print_summary(stats, world_dir, args.dry_run)

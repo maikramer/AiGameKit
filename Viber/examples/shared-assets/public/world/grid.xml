@@ -1,0 +1,100 @@
+<!--
+  A grelha. O `pos` de um veículo é irrelevante: o race director põe cada carro
+  no seu lugar, com a orientação e a altura certas para o traçado. Em
+  time-trial os `<AiVehicle>` são removidos pelo hook de mundo (src/main.ts) —
+  editar os rivais aqui.
+
+  Sem <Group>: um corpo rígido só espelha a pose no Rapier quando é top-level.
+-->
+<PlayerVehicle
+  name="player"
+  driver="You"
+  color="#e03a3a"
+  model-url="/assets/meshes/vehicles/kart_hero_lod0.glb"
+  model-length="2.4"
+  model-yaw="90"
+  half-length="1.2"
+  half-width="0.58"
+  max-speed="52"
+  accel="27"
+  brake="52"
+  engine-brake="7"
+  max-steer="2.7"
+  steer-speed="11"
+  grip="7.5"
+  drift-grip="0.3"
+  boost="2.6"
+  boost-recharge="0.28"
+></PlayerVehicle>
+
+<!-- Rivals (Race mode only — main.ts removes these for Time Trial).
+     Same model as the player; everyone starts empty-handed and cracks item
+     chests on track — the AI rolls and fires items like the player does. -->
+<AiVehicle
+  name="rival-1"
+  driver="Vega"
+  color="#2f6fe0"
+  model-url="/assets/meshes/vehicles/kart_rival_lod0.glb"
+  model-length="2.4"
+  model-yaw="90"
+  half-length="1.2"
+  half-width="0.58"
+  max-speed="52"
+  accel="27"
+  brake="52"
+  skill="0.94"
+  rubber-band="0.45"
+  line-offset="0"
+  boost="2.2"
+></AiVehicle>
+<AiVehicle
+  name="rival-2"
+  driver="Koda"
+  color="#f2a33c"
+  model-url="/assets/meshes/vehicles/kart_rival_lod0.glb"
+  model-length="2.4"
+  model-yaw="90"
+  half-length="1.2"
+  half-width="0.58"
+  max-speed="51"
+  accel="26"
+  brake="50"
+  skill="0.87"
+  rubber-band="0.55"
+  line-offset="1.4"
+  boost="2.2"
+></AiVehicle>
+<AiVehicle
+  name="rival-3"
+  driver="Mira"
+  color="#59c98a"
+  model-url="/assets/meshes/vehicles/kart_rival_lod0.glb"
+  model-length="2.4"
+  model-yaw="90"
+  half-length="1.2"
+  half-width="0.58"
+  max-speed="50"
+  accel="26"
+  brake="49"
+  skill="0.8"
+  rubber-band="0.6"
+  line-offset="-1.4"
+  boost="2.2"
+></AiVehicle>
+<AiVehicle
+  name="rival-4"
+  driver="Rook"
+  color="#b061e0"
+  model-url="/assets/meshes/vehicles/kart_rival_lod0.glb"
+  model-length="2.4"
+  model-yaw="90"
+  half-length="1.2"
+  half-width="0.58"
+  max-speed="50"
+  accel="25"
+  brake="48"
+  skill="0.74"
+  rubber-band="0.65"
+  line-offset="2.6"
+  boost="2.2"
+></AiVehicle>

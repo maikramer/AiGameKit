@@ -1,0 +1,18 @@
+{
+  "timestamp": 1788051306.691447,
+  "prompt": "seamless tileable texture, light golden yellow sand dunes seen from above, rippled sand waves, bright sunny desert floor, clean sand, top-down orthographic view, stylized game ground, top-down close-up photograph of flat ground surface, seamless tileable game texture, albedo material, even diffuse lighting, uniform fine detail",
+  "params": {
+    "backend": "sd-circular",
+    "model_id": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+    "seed": 2202,
+    "prompt_final": "seamless tileable texture, light golden yellow sand dunes seen from above, rippled sand waves, bright sunny desert floor, clean sand, top-down orthographic view, stylized game ground, top-down close-up photograph of flat ground surface, seamless tileable game texture, albedo material, even diffuse lighting, uniform fine detail",
+    "prompt": "seamless tileable texture, light golden yellow sand dunes seen from above, rippled sand waves, bright sunny desert floor, clean sand, top-down orthographic view, stylized game ground, top-down close-up photograph of flat ground surface, seamless tileable game texture, albedo material, even diffuse lighting, uniform fine detail",
+    "negative_prompt": "brown, mud, dark, soil, dirt, rocks, grass, water, seams, borders, vignette, aerial view, satellite image, drone shot, landscape, horizon, sky, trees, bushes, buildings, roads, isometric view, oblique angle, perspective, tilted camera, side view, macro photography, extreme close-up, individual grass blades leaning sideways, 3d render, depth of field, bokeh, strong directional shadows, deep relief, ambient occlusion, high contrast, dramatic lighting, blurry, low quality, watermark, text, signature, frame, border",
+    "guidance_scale": 3.5,
+    "num_inference_steps": 30,
+    "width": 1024,
+    "height": 1024
+  },
+  "image_path": "/tmp/claude-1000/-media-maikeu-b1e73891-ddde-49a0-9382-903accb68b49-GitClones-AiGameKit-VibeGame/3f45fa98-d0ce-4000-adca-ff3f8bbea2bf/scratchpad/cand/sand_b.png",
+  "filename": "sand_b.png"
+}

@@ -1,0 +1,3441 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-01T19:23:25.292738+00:00",
+  "public_dir": "public",
+  "assets_base_url": "/assets",
+  "rows": [
+    {
+      "id": "anvil",
+      "public_id": "anvil",
+      "model": {
+        "url": "/assets/meshes/village/anvil_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/anvil_lod0.glb",
+          "/assets/meshes/village/anvil_lod1.glb",
+          "/assets/meshes/village/anvil_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "anvil",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.3474,
+            0.0,
+            -0.2375
+          ],
+          "max": [
+            0.3476,
+            0.9,
+            0.2375
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.3475,
+          "height": 0.8999,
+          "base_y": 0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "axe",
+      "public_id": "axe",
+      "model": {
+        "url": "/assets/meshes/props/axe_lod0.glb",
+        "lod": [
+          "/assets/meshes/props/axe_lod0.glb",
+          "/assets/meshes/props/axe_lod1.glb",
+          "/assets/meshes/props/axe_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "axe",
+        "category": "weapon",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.1711,
+            -0.0,
+            -0.0244
+          ],
+          "max": [
+            0.1712,
+            0.893,
+            0.0243
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.1711,
+          "height": 0.893,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "bandit",
+      "public_id": "bandit",
+      "model": {
+        "url": "/assets/meshes/characters/bandit_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/bandit_lod0.glb",
+          "/assets/meshes/characters/bandit_lod1.glb",
+          "/assets/meshes/characters/bandit_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "bandit",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.5731,
+            0.001,
+            -0.2469
+          ],
+          "max": [
+            0.5722,
+            1.6518,
+            0.2465
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.5726,
+          "height": 1.6508,
+          "base_y": 0.001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "bog_warden_boss",
+      "public_id": "bog_warden_boss",
+      "model": {
+        "url": "/assets/meshes/characters/bog_warden_boss_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/bog_warden_boss_lod0.glb",
+          "/assets/meshes/characters/bog_warden_boss_lod1.glb",
+          "/assets/meshes/characters/bog_warden_boss_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "bog_warden_boss",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.2541,
+            0.0004,
+            -0.5331
+          ],
+          "max": [
+            1.2542,
+            2.5992,
+            0.5339
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 1.2541,
+          "height": 2.5988,
+          "base_y": 0.0004
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "bogling",
+      "public_id": "bogling",
+      "model": {
+        "url": "/assets/meshes/characters/bogling_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/bogling_lod0.glb",
+          "/assets/meshes/characters/bogling_lod1.glb",
+          "/assets/meshes/characters/bogling_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "bogling",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.4946,
+            -0.0,
+            -0.2902
+          ],
+          "max": [
+            0.4944,
+            1.1,
+            0.2905
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.4945,
+          "height": 1.1,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "bomb",
+      "public_id": "bomb",
+      "model": {
+        "url": "/assets/meshes/props/bomb_lod0.glb",
+        "lod": [
+          "/assets/meshes/props/bomb_lod0.glb",
+          "/assets/meshes/props/bomb_lod1.glb",
+          "/assets/meshes/props/bomb_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "bomb",
+        "category": "item",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.1224,
+            -0.0007,
+            -0.1231
+          ],
+          "max": [
+            0.1229,
+            0.2946,
+            0.1234
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.1232,
+          "height": 0.2953,
+          "base_y": -0.0007
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "bone_altar",
+      "public_id": "bone_altar",
+      "model": {
+        "url": "/assets/meshes/swamp/bone_altar_lod0.glb",
+        "lod": [
+          "/assets/meshes/swamp/bone_altar_lod0.glb",
+          "/assets/meshes/swamp/bone_altar_lod1.glb",
+          "/assets/meshes/swamp/bone_altar_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "bone_altar",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.7994,
+            0.0012,
+            -0.6127
+          ],
+          "max": [
+            0.7999,
+            0.9655,
+            0.612
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.7997,
+          "height": 0.9642,
+          "base_y": 0.0012
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "boss_ogre",
+      "public_id": "boss_ogre",
+      "model": {
+        "url": "/assets/meshes/characters/boss_ogre_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/boss_ogre_lod0.glb",
+          "/assets/meshes/characters/boss_ogre_lod1.glb",
+          "/assets/meshes/characters/boss_ogre_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "boss_ogre",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.4002,
+            0.0002,
+            -0.608
+          ],
+          "max": [
+            1.3992,
+            2.8003,
+            0.6077
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 1.3997,
+          "height": 2.8,
+          "base_y": 0.0002
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "cactus",
+      "public_id": "cactus",
+      "model": {
+        "url": "/assets/meshes/desert/cactus_lod0.glb",
+        "lod": [
+          "/assets/meshes/desert/cactus_lod0.glb",
+          "/assets/meshes/desert/cactus_lod1.glb",
+          "/assets/meshes/desert/cactus_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "cactus",
+        "category": "vegetation",
+        "source": "stump",
+        "aabb": {
+          "min": [
+            -0.2815,
+            0.0005,
+            -0.3026
+          ],
+          "max": [
+            0.2698,
+            0.6,
+            0.2381
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.2757,
+          "height": 0.5995,
+          "base_y": 0.0005
+        },
+        "collectible_hint": {
+          "kind": "wood"
+        }
+      }
+    },
+    {
+      "id": "campfire_pit",
+      "public_id": "campfire_pit",
+      "model": {
+        "url": "/assets/meshes/village/campfire_pit_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/campfire_pit_lod0.glb",
+          "/assets/meshes/village/campfire_pit_lod1.glb",
+          "/assets/meshes/village/campfire_pit_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "campfire_pit",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.6976,
+            0.0014,
+            -0.6618
+          ],
+          "max": [
+            0.6978,
+            0.3355,
+            0.6615
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.6977,
+          "height": 0.3341,
+          "base_y": 0.0014
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "chapel",
+      "public_id": "chapel",
+      "model": {
+        "url": "/assets/meshes/village/chapel_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/chapel_lod0.glb",
+          "/assets/meshes/village/chapel_lod1.glb",
+          "/assets/meshes/village/chapel_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "chapel",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -2.833,
+            0.0002,
+            -2.2865
+          ],
+          "max": [
+            2.8316,
+            7.0053,
+            2.287
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 2.8323,
+          "height": 7.0051,
+          "base_y": 0.0002
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "chopping_block",
+      "public_id": "chopping_block",
+      "model": {
+        "url": "/assets/meshes/village/chopping_block_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/chopping_block_lod0.glb",
+          "/assets/meshes/village/chopping_block_lod1.glb",
+          "/assets/meshes/village/chopping_block_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "chopping_block",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.3479,
+            0.0001,
+            -0.3499
+          ],
+          "max": [
+            0.3475,
+            0.5597,
+            0.3499
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.3499,
+          "height": 0.5596,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "city_gate_arch",
+      "public_id": "city_gate_arch",
+      "model": {
+        "url": "/assets/meshes/infra/city_gate_arch_lod0.glb",
+        "lod": [
+          "/assets/meshes/infra/city_gate_arch_lod0.glb",
+          "/assets/meshes/infra/city_gate_arch_lod1.glb",
+          "/assets/meshes/infra/city_gate_arch_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "city_gate_arch",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -5.078,
+            -0.0849,
+            -0.8368
+          ],
+          "max": [
+            5.0685,
+            5.1707,
+            0.8386
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 5.0732,
+          "height": 5.2555,
+          "base_y": -0.0849
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "city_wall_corner",
+      "public_id": "city_wall_corner",
+      "model": {
+        "url": "/assets/meshes/infra/city_wall_corner_lod0.glb",
+        "lod": [
+          "/assets/meshes/infra/city_wall_corner_lod0.glb",
+          "/assets/meshes/infra/city_wall_corner_lod1.glb",
+          "/assets/meshes/infra/city_wall_corner_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "city_wall_corner",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.2824,
+            -0.0771,
+            -1.2926
+          ],
+          "max": [
+            1.2824,
+            6.0761,
+            1.2882
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 1.2904,
+          "height": 6.1532,
+          "base_y": -0.0771
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "city_wall_seg_a",
+      "public_id": "city_wall_seg_a",
+      "model": {
+        "url": "/assets/meshes/infra/city_wall_seg_a_lod0.glb",
+        "lod": [
+          "/assets/meshes/infra/city_wall_seg_a_lod0.glb",
+          "/assets/meshes/infra/city_wall_seg_a_lod1.glb",
+          "/assets/meshes/infra/city_wall_seg_a_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "city_wall_seg_a",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -3.3076,
+            -0.0677,
+            -0.5331
+          ],
+          "max": [
+            3.3076,
+            4.7839,
+            0.5306
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 3.3076,
+          "height": 4.8516,
+          "base_y": -0.0677
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "city_wall_seg_b",
+      "public_id": "city_wall_seg_b",
+      "model": {
+        "url": "/assets/meshes/infra/city_wall_seg_b_lod0.glb",
+        "lod": [
+          "/assets/meshes/infra/city_wall_seg_b_lod0.glb",
+          "/assets/meshes/infra/city_wall_seg_b_lod1.glb",
+          "/assets/meshes/infra/city_wall_seg_b_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "city_wall_seg_b",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -3.314,
+            -0.0683,
+            -0.5967
+          ],
+          "max": [
+            3.3015,
+            4.7993,
+            0.596
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 3.3077,
+          "height": 4.8676,
+          "base_y": -0.0683
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "city_wall_seg_c",
+      "public_id": "city_wall_seg_c",
+      "model": {
+        "url": "/assets/meshes/infra/city_wall_seg_c_lod0.glb",
+        "lod": [
+          "/assets/meshes/infra/city_wall_seg_c_lod0.glb",
+          "/assets/meshes/infra/city_wall_seg_c_lod1.glb",
+          "/assets/meshes/infra/city_wall_seg_c_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "city_wall_seg_c",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -3.2811,
+            0.0379,
+            -0.6942
+          ],
+          "max": [
+            3.1512,
+            4.8035,
+            0.7202
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 3.2162,
+          "height": 4.7656,
+          "base_y": 0.0379
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "crystal_blue",
+      "public_id": "crystal_blue",
+      "model": {
+        "url": "/assets/meshes/props/crystal_blue_lod0.glb",
+        "lod": [
+          "/assets/meshes/props/crystal_blue_lod0.glb",
+          "/assets/meshes/props/crystal_blue_lod1.glb",
+          "/assets/meshes/props/crystal_blue_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "crystal_blue",
+        "category": "item",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.1761,
+            -0.0,
+            -0.1782
+          ],
+          "max": [
+            0.1761,
+            0.6001,
+            0.1782
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.1782,
+          "height": 0.6001,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "crystal_mine_entrance",
+      "public_id": "crystal_mine_entrance",
+      "model": {
+        "url": "/assets/meshes/terrain/crystal_mine_entrance_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/crystal_mine_entrance_lod0.glb",
+          "/assets/meshes/terrain/crystal_mine_entrance_lod1.glb",
+          "/assets/meshes/terrain/crystal_mine_entrance_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "crystal_mine_entrance",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -2.0028,
+            -0.0,
+            -1.7833
+          ],
+          "max": [
+            2.0027,
+            3.5221,
+            1.7832
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 2.0027,
+          "height": 3.5221,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "dead_bush",
+      "public_id": "dead_bush",
+      "model": {
+        "url": "/assets/meshes/desert/dead_bush_lod0.glb",
+        "lod": [
+          "/assets/meshes/desert/dead_bush_lod0.glb",
+          "/assets/meshes/desert/dead_bush_lod1.glb",
+          "/assets/meshes/desert/dead_bush_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "dead_bush",
+        "category": "vegetation",
+        "source": "trunk-slice",
+        "aabb": {
+          "min": [
+            -0.7485,
+            -0.0,
+            -0.506
+          ],
+          "max": [
+            0.7485,
+            1.0156,
+            0.506
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.4919,
+          "height": 1.0156,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": "wood"
+        }
+      }
+    },
+    {
+      "id": "dead_tree",
+      "public_id": "dead_tree",
+      "model": {
+        "url": "/assets/meshes/forest/dead_tree_lod0.glb",
+        "lod": [
+          "/assets/meshes/forest/dead_tree_lod0.glb",
+          "/assets/meshes/forest/dead_tree_lod1.glb",
+          "/assets/meshes/forest/dead_tree_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "dead_tree",
+        "category": "vegetation",
+        "source": "stump",
+        "aabb": {
+          "min": [
+            -0.6597,
+            -0.0,
+            -0.847
+          ],
+          "max": [
+            0.4649,
+            0.6,
+            0.847
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.847,
+          "height": 0.6,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": "wood"
+        }
+      }
+    },
+    {
+      "id": "dead_willow",
+      "public_id": "dead_willow",
+      "model": {
+        "url": "/assets/meshes/swamp/dead_willow_lod0.glb",
+        "lod": [
+          "/assets/meshes/swamp/dead_willow_lod0.glb",
+          "/assets/meshes/swamp/dead_willow_lod1.glb",
+          "/assets/meshes/swamp/dead_willow_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "dead_willow",
+        "category": "vegetation",
+        "source": "stump",
+        "aabb": {
+          "min": [
+            -1.8666,
+            -0.0002,
+            -1.1291
+          ],
+          "max": [
+            1.8898,
+            0.6,
+            1.128
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 1.8782,
+          "height": 0.6002,
+          "base_y": -0.0002
+        },
+        "collectible_hint": {
+          "kind": "wood"
+        }
+      }
+    },
+    {
+      "id": "desert_obelisk",
+      "public_id": "desert_obelisk",
+      "model": {
+        "url": "/assets/meshes/desert/desert_obelisk_lod0.glb",
+        "lod": [
+          "/assets/meshes/desert/desert_obelisk_lod0.glb",
+          "/assets/meshes/desert/desert_obelisk_lod1.glb",
+          "/assets/meshes/desert/desert_obelisk_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "desert_obelisk",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.7303,
+            0.0004,
+            -0.6889
+          ],
+          "max": [
+            0.7292,
+            7.9974,
+            0.689
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.7298,
+          "height": 7.9969,
+          "base_y": 0.0004
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "druid_stone_altar",
+      "public_id": "druid_stone_altar",
+      "model": {
+        "url": "/assets/meshes/terrain/druid_stone_altar_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/druid_stone_altar_lod0.glb",
+          "/assets/meshes/terrain/druid_stone_altar_lod1.glb",
+          "/assets/meshes/terrain/druid_stone_altar_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "druid_stone_altar",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.9008,
+            0.0,
+            -0.639
+          ],
+          "max": [
+            0.9004,
+            0.8864,
+            0.639
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 0.9006,
+          "height": 0.8864,
+          "base_y": 0.0
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "felling_axe",
+      "public_id": "felling_axe",
+      "model": {
+        "url": "/assets/meshes/props/felling_axe_lod0.glb",
+        "lod": [
+          "/assets/meshes/props/felling_axe_lod0.glb",
+          "/assets/meshes/props/felling_axe_lod1.glb",
+          "/assets/meshes/props/felling_axe_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "felling_axe",
+        "category": "tool",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.1694,
+            0.0001,
+            -0.0237
+          ],
+          "max": [
+            0.1695,
+            0.8435,
+            0.0237
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.1695,
+          "height": 0.8434,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "forge_bellows",
+      "public_id": "forge_bellows",
+      "model": {
+        "url": "/assets/meshes/village/forge_bellows_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/forge_bellows_lod0.glb",
+          "/assets/meshes/village/forge_bellows_lod1.glb",
+          "/assets/meshes/village/forge_bellows_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "forge_bellows",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.5,
+            0.0004,
+            -0.2899
+          ],
+          "max": [
+            0.4998,
+            0.7016,
+            0.2893
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.4999,
+          "height": 0.7012,
+          "base_y": 0.0004
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "form_arch_3",
+      "public_id": "form_arch_3",
+      "model": {
+        "url": "/assets/meshes/terrain/form_arch_3_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/form_arch_3_lod0.glb",
+          "/assets/meshes/terrain/form_arch_3_lod1.glb",
+          "/assets/meshes/terrain/form_arch_3_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "form_arch_3",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.5975,
+            0.0003,
+            -0.8101
+          ],
+          "max": [
+            1.5976,
+            2.2459,
+            0.8102
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 1.5975,
+          "height": 2.2456,
+          "base_y": 0.0003
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "form_cliff_1",
+      "public_id": "form_cliff_1",
+      "model": {
+        "url": "/assets/meshes/terrain/form_cliff_1_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/form_cliff_1_lod0.glb",
+          "/assets/meshes/terrain/form_cliff_1_lod1.glb",
+          "/assets/meshes/terrain/form_cliff_1_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "form_cliff_1",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.1109,
+            0.0006,
+            -1.07
+          ],
+          "max": [
+            1.1112,
+            2.9988,
+            1.0696
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 1.1111,
+          "height": 2.9982,
+          "base_y": 0.0006
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "form_cliff_20",
+      "public_id": "form_cliff_20",
+      "model": {
+        "url": "/assets/meshes/terrain/form_cliff_20_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/form_cliff_20_lod0.glb",
+          "/assets/meshes/terrain/form_cliff_20_lod1.glb",
+          "/assets/meshes/terrain/form_cliff_20_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "form_cliff_20",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.1263,
+            0.0005,
+            -1.2513
+          ],
+          "max": [
+            1.125,
+            2.9997,
+            1.2515
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 1.2514,
+          "height": 2.9991,
+          "base_y": 0.0005
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "form_outcrop_2",
+      "public_id": "form_outcrop_2",
+      "model": {
+        "url": "/assets/meshes/terrain/form_outcrop_2_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/form_outcrop_2_lod0.glb",
+          "/assets/meshes/terrain/form_outcrop_2_lod1.glb",
+          "/assets/meshes/terrain/form_outcrop_2_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "form_outcrop_2",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.2064,
+            0.0,
+            -0.83
+          ],
+          "max": [
+            1.2056,
+            1.6262,
+            0.8244
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 1.206,
+          "height": 1.6262,
+          "base_y": 0.0
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "form_outcrop_5",
+      "public_id": "form_outcrop_5",
+      "model": {
+        "url": "/assets/meshes/terrain/form_outcrop_5_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/form_outcrop_5_lod0.glb",
+          "/assets/meshes/terrain/form_outcrop_5_lod1.glb",
+          "/assets/meshes/terrain/form_outcrop_5_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "form_outcrop_5",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.0241,
+            0.0021,
+            -0.8511
+          ],
+          "max": [
+            1.0237,
+            2.1994,
+            0.8505
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 1.0239,
+          "height": 2.1973,
+          "base_y": 0.0021
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "form_outcrop_8",
+      "public_id": "form_outcrop_8",
+      "model": {
+        "url": "/assets/meshes/terrain/form_outcrop_8_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/form_outcrop_8_lod0.glb",
+          "/assets/meshes/terrain/form_outcrop_8_lod1.glb",
+          "/assets/meshes/terrain/form_outcrop_8_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "form_outcrop_8",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.4004,
+            0.0016,
+            -1.1416
+          ],
+          "max": [
+            1.4009,
+            1.883,
+            1.1446
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 1.4006,
+          "height": 1.8813,
+          "base_y": 0.0016
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "form_stack_11",
+      "public_id": "form_stack_11",
+      "model": {
+        "url": "/assets/meshes/terrain/form_stack_11_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/form_stack_11_lod0.glb",
+          "/assets/meshes/terrain/form_stack_11_lod1.glb",
+          "/assets/meshes/terrain/form_stack_11_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "form_stack_11",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.5656,
+            0.0,
+            -0.5746
+          ],
+          "max": [
+            0.5654,
+            3.2,
+            0.5744
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 0.5745,
+          "height": 3.1999,
+          "base_y": 0.0
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "form_stack_6",
+      "public_id": "form_stack_6",
+      "model": {
+        "url": "/assets/meshes/terrain/form_stack_6_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/form_stack_6_lod0.glb",
+          "/assets/meshes/terrain/form_stack_6_lod1.glb",
+          "/assets/meshes/terrain/form_stack_6_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "form_stack_6",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.7101,
+            0.0005,
+            -0.7145
+          ],
+          "max": [
+            0.7114,
+            2.4002,
+            0.7144
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 0.7145,
+          "height": 2.3997,
+          "base_y": 0.0005
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "goblin",
+      "public_id": "goblin",
+      "model": {
+        "url": "/assets/meshes/characters/goblin_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/goblin_lod0.glb",
+          "/assets/meshes/characters/goblin_lod1.glb",
+          "/assets/meshes/characters/goblin_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "goblin",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.4568,
+            -0.0001,
+            -0.1563
+          ],
+          "max": [
+            0.4569,
+            1.1486,
+            0.1562
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.4569,
+          "height": 1.1487,
+          "base_y": -0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "hero",
+      "public_id": "hero",
+      "model": {
+        "url": "/assets/meshes/characters/hero_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/hero_lod0.glb",
+          "/assets/meshes/characters/hero_lod1.glb",
+          "/assets/meshes/characters/hero_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "hero",
+        "category": "humanoid",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.6358,
+            0.0003,
+            -0.1954
+          ],
+          "max": [
+            0.6359,
+            1.5505,
+            0.1948
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.6358,
+          "height": 1.5502,
+          "base_y": 0.0003
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "horseshoe_pile",
+      "public_id": "horseshoe_pile",
+      "model": {
+        "url": "/assets/meshes/village/horseshoe_pile_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/horseshoe_pile_lod0.glb",
+          "/assets/meshes/village/horseshoe_pile_lod1.glb",
+          "/assets/meshes/village/horseshoe_pile_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "horseshoe_pile",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.2236,
+            0.0,
+            -0.225
+          ],
+          "max": [
+            0.2236,
+            0.2384,
+            0.2249
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.2249,
+          "height": 0.2384,
+          "base_y": 0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "iron_brazier",
+      "public_id": "iron_brazier",
+      "model": {
+        "url": "/assets/meshes/village/iron_brazier_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/iron_brazier_lod0.glb",
+          "/assets/meshes/village/iron_brazier_lod1.glb",
+          "/assets/meshes/village/iron_brazier_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "iron_brazier",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.3378,
+            0.0001,
+            -0.3298
+          ],
+          "max": [
+            0.3371,
+            1.1003,
+            0.3295
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.3375,
+          "height": 1.1002,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "lily_pad",
+      "public_id": "lily_pad",
+      "model": {
+        "url": "/assets/meshes/swamp/lily_pad_lod0.glb",
+        "lod": [
+          "/assets/meshes/swamp/lily_pad_lod0.glb",
+          "/assets/meshes/swamp/lily_pad_lod1.glb",
+          "/assets/meshes/swamp/lily_pad_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "lily_pad",
+        "category": "vegetation",
+        "source": "trunk-slice",
+        "aabb": {
+          "min": [
+            -0.59,
+            -0.0,
+            -0.593
+          ],
+          "max": [
+            0.59,
+            0.1665,
+            0.5929
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.6195,
+          "height": 0.1665,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": "wood"
+        }
+      }
+    },
+    {
+      "id": "log_pile",
+      "public_id": "log_pile",
+      "model": {
+        "url": "/assets/meshes/village/log_pile_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/log_pile_lod0.glb",
+          "/assets/meshes/village/log_pile_lod1.glb",
+          "/assets/meshes/village/log_pile_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "log_pile",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.9,
+            0.0001,
+            -0.6796
+          ],
+          "max": [
+            0.9002,
+            1.2865,
+            0.6799
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.9001,
+          "height": 1.2864,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "market_stall",
+      "public_id": "market_stall",
+      "model": {
+        "url": "/assets/meshes/village/market_stall_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/market_stall_lod0.glb",
+          "/assets/meshes/village/market_stall_lod1.glb",
+          "/assets/meshes/village/market_stall_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "market_stall",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.5002,
+            0.0002,
+            -0.9822
+          ],
+          "max": [
+            1.4997,
+            2.4637,
+            0.9824
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 1.5,
+          "height": 2.4636,
+          "base_y": 0.0002
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "medieval_well",
+      "public_id": "medieval_well",
+      "model": {
+        "url": "/assets/meshes/village/medieval_well_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/medieval_well_lod0.glb",
+          "/assets/meshes/village/medieval_well_lod1.glb",
+          "/assets/meshes/village/medieval_well_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "medieval_well",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.7328,
+            0.0007,
+            -0.7962
+          ],
+          "max": [
+            0.735,
+            1.5991,
+            0.7959
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.7961,
+          "height": 1.5984,
+          "base_y": 0.0007
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "moss_rock",
+      "public_id": "moss_rock",
+      "model": {
+        "url": "/assets/meshes/swamp/moss_rock_lod0.glb",
+        "lod": [
+          "/assets/meshes/swamp/moss_rock_lod0.glb",
+          "/assets/meshes/swamp/moss_rock_lod1.glb",
+          "/assets/meshes/swamp/moss_rock_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "moss_rock",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.7465,
+            -0.0005,
+            -0.5527
+          ],
+          "max": [
+            0.7463,
+            1.06,
+            0.5532
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 0.7464,
+          "height": 1.0605,
+          "base_y": -0.0005
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "mushroom_glow",
+      "public_id": "mushroom_glow",
+      "model": {
+        "url": "/assets/meshes/forest/mushroom_glow_lod0.glb",
+        "lod": [
+          "/assets/meshes/forest/mushroom_glow_lod0.glb",
+          "/assets/meshes/forest/mushroom_glow_lod1.glb",
+          "/assets/meshes/forest/mushroom_glow_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "mushroom_glow",
+        "category": "vegetation",
+        "source": "trunk-slice",
+        "aabb": {
+          "min": [
+            -0.1861,
+            -0.0001,
+            -0.1735
+          ],
+          "max": [
+            0.1858,
+            0.5498,
+            0.1733
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.1418,
+          "height": 0.5499,
+          "base_y": -0.0001
+        },
+        "collectible_hint": {
+          "kind": "wood"
+        }
+      }
+    },
+    {
+      "id": "mushroom_red",
+      "public_id": "mushroom_red",
+      "model": {
+        "url": "/assets/meshes/props/mushroom_red_lod0.glb",
+        "lod": [
+          "/assets/meshes/props/mushroom_red_lod0.glb",
+          "/assets/meshes/props/mushroom_red_lod1.glb",
+          "/assets/meshes/props/mushroom_red_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "mushroom_red",
+        "category": "vegetation",
+        "source": "stump",
+        "aabb": {
+          "min": [
+            -0.2434,
+            -0.0005,
+            -0.2494
+          ],
+          "max": [
+            0.2433,
+            0.6003,
+            0.2491
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.2493,
+          "height": 0.6008,
+          "base_y": -0.0005
+        },
+        "collectible_hint": {
+          "kind": "wood"
+        }
+      }
+    },
+    {
+      "id": "notice_board",
+      "public_id": "notice_board",
+      "model": {
+        "url": "/assets/meshes/village/notice_board_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/notice_board_lod0.glb",
+          "/assets/meshes/village/notice_board_lod1.glb",
+          "/assets/meshes/village/notice_board_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "notice_board",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.7896,
+            -0.0,
+            -0.0905
+          ],
+          "max": [
+            0.7896,
+            1.9838,
+            0.0905
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.7896,
+          "height": 1.9838,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "npc_blacksmith",
+      "public_id": "npc_blacksmith",
+      "model": {
+        "url": "/assets/meshes/characters/npc_blacksmith_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/npc_blacksmith_lod0.glb",
+          "/assets/meshes/characters/npc_blacksmith_lod1.glb",
+          "/assets/meshes/characters/npc_blacksmith_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "npc_blacksmith",
+        "category": "humanoid",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.6178,
+            0.0008,
+            -0.2677
+          ],
+          "max": [
+            0.6178,
+            1.599,
+            0.2671
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.6178,
+          "height": 1.5982,
+          "base_y": 0.0008
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "npc_elder",
+      "public_id": "npc_elder",
+      "model": {
+        "url": "/assets/meshes/characters/npc_elder_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/npc_elder_lod0.glb",
+          "/assets/meshes/characters/npc_elder_lod1.glb",
+          "/assets/meshes/characters/npc_elder_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "npc_elder",
+        "category": "humanoid",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.5741,
+            -0.0009,
+            -0.2547
+          ],
+          "max": [
+            0.574,
+            1.5,
+            0.2549
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.574,
+          "height": 1.5009,
+          "base_y": -0.0009
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "npc_guard",
+      "public_id": "npc_guard",
+      "model": {
+        "url": "/assets/meshes/characters/npc_guard_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/npc_guard_lod0.glb",
+          "/assets/meshes/characters/npc_guard_lod1.glb",
+          "/assets/meshes/characters/npc_guard_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "npc_guard",
+        "category": "humanoid",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.8012,
+            -0.0001,
+            -0.1835
+          ],
+          "max": [
+            0.8012,
+            1.5616,
+            0.1825
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.8012,
+          "height": 1.5617,
+          "base_y": -0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "npc_healer",
+      "public_id": "npc_healer",
+      "model": {
+        "url": "/assets/meshes/characters/npc_healer_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/npc_healer_lod0.glb",
+          "/assets/meshes/characters/npc_healer_lod1.glb",
+          "/assets/meshes/characters/npc_healer_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "npc_healer",
+        "category": "humanoid",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.605,
+            0.0001,
+            -0.2314
+          ],
+          "max": [
+            0.6048,
+            1.5513,
+            0.2312
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.6049,
+          "height": 1.5512,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "npc_merchant",
+      "public_id": "npc_merchant",
+      "model": {
+        "url": "/assets/meshes/characters/npc_merchant_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/npc_merchant_lod0.glb",
+          "/assets/meshes/characters/npc_merchant_lod1.glb",
+          "/assets/meshes/characters/npc_merchant_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "npc_merchant",
+        "category": "humanoid",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.588,
+            0.0002,
+            -0.2689
+          ],
+          "max": [
+            0.5882,
+            1.4994,
+            0.269
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.5881,
+          "height": 1.4993,
+          "base_y": 0.0002
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "npc_scout",
+      "public_id": "npc_scout",
+      "model": {
+        "url": "/assets/meshes/characters/npc_scout_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/npc_scout_lod0.glb",
+          "/assets/meshes/characters/npc_scout_lod1.glb",
+          "/assets/meshes/characters/npc_scout_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "npc_scout",
+        "category": "humanoid",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.5763,
+            0.0004,
+            -0.2134
+          ],
+          "max": [
+            0.5767,
+            1.5497,
+            0.2134
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.5765,
+          "height": 1.5493,
+          "base_y": 0.0004
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "pickaxe",
+      "public_id": "pickaxe",
+      "model": {
+        "url": "/assets/meshes/props/pickaxe_lod0.glb",
+        "lod": [
+          "/assets/meshes/props/pickaxe_lod0.glb",
+          "/assets/meshes/props/pickaxe_lod1.glb",
+          "/assets/meshes/props/pickaxe_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "pickaxe",
+        "category": "tool",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.1721,
+            -0.0,
+            -0.0125
+          ],
+          "max": [
+            0.1721,
+            0.8876,
+            0.0125
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.1721,
+          "height": 0.8876,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "pine_dark",
+      "public_id": "pine_dark",
+      "model": {
+        "url": "/assets/meshes/forest/pine_dark_lod0.glb",
+        "lod": [
+          "/assets/meshes/forest/pine_dark_lod0.glb",
+          "/assets/meshes/forest/pine_dark_lod1.glb",
+          "/assets/meshes/forest/pine_dark_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "pine_dark",
+        "category": "vegetation",
+        "source": "stump",
+        "aabb": {
+          "min": [
+            -0.2289,
+            0.0002,
+            -0.2716
+          ],
+          "max": [
+            0.2274,
+            0.6,
+            0.2474
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.2595,
+          "height": 0.5998,
+          "base_y": 0.0002
+        },
+        "collectible_hint": {
+          "kind": "wood"
+        }
+      }
+    },
+    {
+      "id": "quench_trough",
+      "public_id": "quench_trough",
+      "model": {
+        "url": "/assets/meshes/village/quench_trough_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/quench_trough_lod0.glb",
+          "/assets/meshes/village/quench_trough_lod1.glb",
+          "/assets/meshes/village/quench_trough_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "quench_trough",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.7008,
+            0.0004,
+            -0.3324
+          ],
+          "max": [
+            0.7007,
+            0.5465,
+            0.3315
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.7007,
+          "height": 0.5461,
+          "base_y": 0.0004
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "river_bridge_stone",
+      "public_id": "river_bridge_stone",
+      "model": {
+        "url": "/assets/meshes/infra/river_bridge_stone_lod0.glb",
+        "lod": [
+          "/assets/meshes/infra/river_bridge_stone_lod0.glb",
+          "/assets/meshes/infra/river_bridge_stone_lod1.glb",
+          "/assets/meshes/infra/river_bridge_stone_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "river_bridge_stone",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -9.0625,
+            -0.0809,
+            -2.4187
+          ],
+          "max": [
+            9.0727,
+            2.2272,
+            2.4117
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 9.0676,
+          "height": 2.3081,
+          "base_y": -0.0809
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "river_bridge_wood",
+      "public_id": "river_bridge_wood",
+      "model": {
+        "url": "/assets/meshes/infra/river_bridge_wood_lod0.glb",
+        "lod": [
+          "/assets/meshes/infra/river_bridge_wood_lod0.glb",
+          "/assets/meshes/infra/river_bridge_wood_lod1.glb",
+          "/assets/meshes/infra/river_bridge_wood_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "river_bridge_wood",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -9.0331,
+            -0.0568,
+            -1.9898
+          ],
+          "max": [
+            9.0255,
+            2.6942,
+            1.9994
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 9.0293,
+          "height": 2.7511,
+          "base_y": -0.0568
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "rock_mossy",
+      "public_id": "rock_mossy",
+      "model": {
+        "url": "/assets/meshes/props/rock_mossy_lod0.glb",
+        "lod": [
+          "/assets/meshes/props/rock_mossy_lod0.glb",
+          "/assets/meshes/props/rock_mossy_lod1.glb",
+          "/assets/meshes/props/rock_mossy_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "rock_mossy",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.6971,
+            0.0003,
+            -0.7
+          ],
+          "max": [
+            0.6968,
+            0.9992,
+            0.7003
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 0.7002,
+          "height": 0.999,
+          "base_y": 0.0003
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "ruin_pillar",
+      "public_id": "ruin_pillar",
+      "model": {
+        "url": "/assets/meshes/desert/ruin_pillar_lod0.glb",
+        "lod": [
+          "/assets/meshes/desert/ruin_pillar_lod0.glb",
+          "/assets/meshes/desert/ruin_pillar_lod1.glb",
+          "/assets/meshes/desert/ruin_pillar_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "ruin_pillar",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.5957,
+            0.0003,
+            -0.6104
+          ],
+          "max": [
+            0.596,
+            3.9998,
+            0.6106
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.6105,
+          "height": 3.9995,
+          "base_y": 0.0003
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "sand_worm",
+      "public_id": "sand_worm",
+      "model": {
+        "url": "/assets/meshes/characters/sand_worm_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/sand_worm_lod0.glb",
+          "/assets/meshes/characters/sand_worm_lod1.glb",
+          "/assets/meshes/characters/sand_worm_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "sand_worm",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.349,
+            0.0027,
+            -0.872
+          ],
+          "max": [
+            1.3491,
+            5.3991,
+            0.8723
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 1.349,
+          "height": 5.3963,
+          "base_y": 0.0027
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "sandstone_arch",
+      "public_id": "sandstone_arch",
+      "model": {
+        "url": "/assets/meshes/desert/sandstone_arch_lod0.glb",
+        "lod": [
+          "/assets/meshes/desert/sandstone_arch_lod0.glb",
+          "/assets/meshes/desert/sandstone_arch_lod1.glb",
+          "/assets/meshes/desert/sandstone_arch_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "sandstone_arch",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -4.0177,
+            0.0042,
+            -1.3792
+          ],
+          "max": [
+            4.0162,
+            10.0046,
+            1.381
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 4.017,
+          "height": 10.0004,
+          "base_y": 0.0042
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "scorpion",
+      "public_id": "scorpion",
+      "model": {
+        "url": "/assets/meshes/characters/scorpion_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/scorpion_lod0.glb",
+          "/assets/meshes/characters/scorpion_lod1.glb",
+          "/assets/meshes/characters/scorpion_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "scorpion",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.5996,
+            -0.0,
+            -0.4037
+          ],
+          "max": [
+            0.5996,
+            0.6681,
+            0.4036
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.5996,
+          "height": 0.6681,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "scorpion_nest",
+      "public_id": "scorpion_nest",
+      "model": {
+        "url": "/assets/meshes/desert/scorpion_nest_lod0.glb",
+        "lod": [
+          "/assets/meshes/desert/scorpion_nest_lod0.glb",
+          "/assets/meshes/desert/scorpion_nest_lod1.glb",
+          "/assets/meshes/desert/scorpion_nest_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "scorpion_nest",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.2504,
+            -0.0004,
+            -1.2494
+          ],
+          "max": [
+            1.2484,
+            1.21,
+            1.2487
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 1.2494,
+          "height": 1.2104,
+          "base_y": -0.0004
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "shade",
+      "public_id": "shade",
+      "model": {
+        "url": "/assets/meshes/characters/shade_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/shade_lod0.glb",
+          "/assets/meshes/characters/shade_lod1.glb",
+          "/assets/meshes/characters/shade_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "shade",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.7063,
+            0.0001,
+            -0.2339
+          ],
+          "max": [
+            0.7066,
+            1.6005,
+            0.2338
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.7065,
+          "height": 1.6004,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "shepherd_cottage",
+      "public_id": "shepherd_cottage",
+      "model": {
+        "url": "/assets/meshes/village/shepherd_cottage_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/shepherd_cottage_lod0.glb",
+          "/assets/meshes/village/shepherd_cottage_lod1.glb",
+          "/assets/meshes/village/shepherd_cottage_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "shepherd_cottage",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -3.332,
+            -0.0005,
+            -3.7491
+          ],
+          "max": [
+            3.3342,
+            3.9382,
+            3.7476
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 3.7483,
+          "height": 3.9386,
+          "base_y": -0.0005
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "slime",
+      "public_id": "slime",
+      "model": {
+        "url": "/assets/meshes/characters/slime_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/slime_lod0.glb",
+          "/assets/meshes/characters/slime_lod1.glb",
+          "/assets/meshes/characters/slime_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "slime",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.4094,
+            0.0008,
+            -0.211
+          ],
+          "max": [
+            0.4094,
+            1.0003,
+            0.211
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.4094,
+          "height": 0.9996,
+          "base_y": 0.0008
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "spear",
+      "public_id": "spear",
+      "model": {
+        "url": "/assets/meshes/props/spear_lod0.glb",
+        "lod": [
+          "/assets/meshes/props/spear_lod0.glb",
+          "/assets/meshes/props/spear_lod1.glb",
+          "/assets/meshes/props/spear_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "spear",
+        "category": "weapon",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.0358,
+            -0.0,
+            -0.0224
+          ],
+          "max": [
+            0.0358,
+            1.7698,
+            0.0224
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.0358,
+          "height": 1.7698,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "stone_cairn",
+      "public_id": "stone_cairn",
+      "model": {
+        "url": "/assets/meshes/terrain/stone_cairn_lod0.glb",
+        "lod": [
+          "/assets/meshes/terrain/stone_cairn_lod0.glb",
+          "/assets/meshes/terrain/stone_cairn_lod1.glb",
+          "/assets/meshes/terrain/stone_cairn_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "stone_cairn",
+        "category": "terrain",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.5815,
+            0.0002,
+            -0.4419
+          ],
+          "max": [
+            0.5809,
+            1.3994,
+            0.4406
+          ]
+        },
+        "collider": {
+          "shape": "cylinder",
+          "radius": 0.5812,
+          "height": 1.3991,
+          "base_y": 0.0002
+        },
+        "collectible_hint": {
+          "kind": "stone"
+        }
+      }
+    },
+    {
+      "id": "stone_pillar",
+      "public_id": "stone_pillar",
+      "model": {
+        "url": "/assets/meshes/props/stone_pillar_lod0.glb",
+        "lod": [
+          "/assets/meshes/props/stone_pillar_lod0.glb",
+          "/assets/meshes/props/stone_pillar_lod1.glb",
+          "/assets/meshes/props/stone_pillar_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "stone_pillar",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.4977,
+            0.0001,
+            -0.6953
+          ],
+          "max": [
+            0.497,
+            3.4974,
+            0.6956
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.6955,
+          "height": 3.4974,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "swamp_shack",
+      "public_id": "swamp_shack",
+      "model": {
+        "url": "/assets/meshes/swamp/swamp_shack_lod0.glb",
+        "lod": [
+          "/assets/meshes/swamp/swamp_shack_lod0.glb",
+          "/assets/meshes/swamp/swamp_shack_lod1.glb",
+          "/assets/meshes/swamp/swamp_shack_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "swamp_shack",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -2.4957,
+            0.0,
+            -2.4638
+          ],
+          "max": [
+            2.493,
+            4.0991,
+            2.4615
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 2.4944,
+          "height": 4.0991,
+          "base_y": 0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "sword_hero",
+      "public_id": "sword_hero",
+      "model": {
+        "url": "/assets/meshes/props/sword_hero_lod0.glb",
+        "lod": [
+          "/assets/meshes/props/sword_hero_lod0.glb",
+          "/assets/meshes/props/sword_hero_lod1.glb",
+          "/assets/meshes/props/sword_hero_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "sword_hero",
+        "category": "weapon",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.0567,
+            -0.0,
+            -0.024
+          ],
+          "max": [
+            0.0567,
+            0.9976,
+            0.024
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.0567,
+          "height": 0.9976,
+          "base_y": -0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "torch_post",
+      "public_id": "torch_post",
+      "model": {
+        "url": "/assets/meshes/village/torch_post_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/torch_post_lod0.glb",
+          "/assets/meshes/village/torch_post_lod1.glb",
+          "/assets/meshes/village/torch_post_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "torch_post",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.1173,
+            0.0001,
+            -0.0987
+          ],
+          "max": [
+            0.1172,
+            2.199,
+            0.0987
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.1172,
+          "height": 2.1989,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "treasure_chest",
+      "public_id": "treasure_chest",
+      "model": {
+        "url": "/assets/meshes/village/treasure_chest_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/treasure_chest_lod0.glb",
+          "/assets/meshes/village/treasure_chest_lod1.glb",
+          "/assets/meshes/village/treasure_chest_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "treasure_chest",
+        "category": "chest",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.5002,
+            0.0004,
+            -0.3171
+          ],
+          "max": [
+            0.5002,
+            0.662,
+            0.3175
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.5002,
+          "height": 0.6616,
+          "base_y": 0.0004
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "tree_oak",
+      "public_id": "tree_oak",
+      "model": {
+        "url": "/assets/meshes/forest/tree_oak_lod0.glb",
+        "lod": [
+          "/assets/meshes/forest/tree_oak_lod0.glb",
+          "/assets/meshes/forest/tree_oak_lod1.glb",
+          "/assets/meshes/forest/tree_oak_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "tree_oak",
+        "category": "vegetation",
+        "source": "stump",
+        "aabb": {
+          "min": [
+            -0.9963,
+            -0.001,
+            -0.7384
+          ],
+          "max": [
+            0.6587,
+            0.6002,
+            1.1175
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.9279,
+          "height": 0.6012,
+          "base_y": -0.001
+        },
+        "collectible_hint": {
+          "kind": "wood"
+        }
+      }
+    },
+    {
+      "id": "tree_pine",
+      "public_id": "tree_pine",
+      "model": {
+        "url": "/assets/meshes/forest/tree_pine_lod0.glb",
+        "lod": [
+          "/assets/meshes/forest/tree_pine_lod0.glb",
+          "/assets/meshes/forest/tree_pine_lod1.glb",
+          "/assets/meshes/forest/tree_pine_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "tree_pine",
+        "category": "vegetation",
+        "source": "stump",
+        "aabb": {
+          "min": [
+            -0.2719,
+            -0.0001,
+            -0.3066
+          ],
+          "max": [
+            0.2369,
+            0.6,
+            0.3031
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.3049,
+          "height": 0.6001,
+          "base_y": -0.0001
+        },
+        "collectible_hint": {
+          "kind": "wood"
+        }
+      }
+    },
+    {
+      "id": "village_barn",
+      "public_id": "village_barn",
+      "model": {
+        "url": "/assets/meshes/village/village_barn_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/village_barn_lod0.glb",
+          "/assets/meshes/village/village_barn_lod1.glb",
+          "/assets/meshes/village/village_barn_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "village_barn",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -4.2298,
+            -0.0003,
+            -5.4902
+          ],
+          "max": [
+            4.2298,
+            6.0579,
+            5.4899
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 5.4901,
+          "height": 6.0583,
+          "base_y": -0.0003
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "village_forge",
+      "public_id": "village_forge",
+      "model": {
+        "url": "/assets/meshes/village/village_forge_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/village_forge_lod0.glb",
+          "/assets/meshes/village/village_forge_lod1.glb",
+          "/assets/meshes/village/village_forge_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "village_forge",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -2.9994,
+            0.0012,
+            -2.4399
+          ],
+          "max": [
+            3.0007,
+            5.7512,
+            2.4401
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 3.0,
+          "height": 5.7501,
+          "base_y": 0.0012
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "village_house",
+      "public_id": "village_house",
+      "model": {
+        "url": "/assets/meshes/village/village_house_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/village_house_lod0.glb",
+          "/assets/meshes/village/village_house_lod1.glb",
+          "/assets/meshes/village/village_house_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "village_house",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -2.3635,
+            0.0,
+            -3.0007
+          ],
+          "max": [
+            2.3638,
+            3.1872,
+            3.0007
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 3.0007,
+          "height": 3.1872,
+          "base_y": 0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "village_longhouse",
+      "public_id": "village_longhouse",
+      "model": {
+        "url": "/assets/meshes/village/village_longhouse_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/village_longhouse_lod0.glb",
+          "/assets/meshes/village/village_longhouse_lod1.glb",
+          "/assets/meshes/village/village_longhouse_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "village_longhouse",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -2.8655,
+            0.0001,
+            -4.9999
+          ],
+          "max": [
+            2.8646,
+            5.609,
+            4.9998
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 4.9999,
+          "height": 5.6089,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "watchtower",
+      "public_id": "watchtower",
+      "model": {
+        "url": "/assets/meshes/village/watchtower_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/watchtower_lod0.glb",
+          "/assets/meshes/village/watchtower_lod1.glb",
+          "/assets/meshes/village/watchtower_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "watchtower",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.5372,
+            0.0006,
+            -1.5781
+          ],
+          "max": [
+            1.5371,
+            8.9993,
+            1.5778
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 1.5779,
+          "height": 8.9987,
+          "base_y": 0.0006
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "weapon_rack",
+      "public_id": "weapon_rack",
+      "model": {
+        "url": "/assets/meshes/village/weapon_rack_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/weapon_rack_lod0.glb",
+          "/assets/meshes/village/weapon_rack_lod1.glb",
+          "/assets/meshes/village/weapon_rack_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "weapon_rack",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.6091,
+            0.0001,
+            -0.0828
+          ],
+          "max": [
+            0.6092,
+            1.5419,
+            0.0828
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.6091,
+          "height": 1.5418,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "witch_boss",
+      "public_id": "witch_boss",
+      "model": {
+        "url": "/assets/meshes/characters/witch_boss_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/witch_boss_lod0.glb",
+          "/assets/meshes/characters/witch_boss_lod1.glb",
+          "/assets/meshes/characters/witch_boss_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "witch_boss",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.6521,
+            0.0,
+            -0.2974
+          ],
+          "max": [
+            0.6521,
+            1.7994,
+            0.297
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.6521,
+          "height": 1.7994,
+          "base_y": 0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "witch_hut",
+      "public_id": "witch_hut",
+      "model": {
+        "url": "/assets/meshes/forest/witch_hut_lod0.glb",
+        "lod": [
+          "/assets/meshes/forest/witch_hut_lod0.glb",
+          "/assets/meshes/forest/witch_hut_lod1.glb",
+          "/assets/meshes/forest/witch_hut_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "witch_hut",
+        "category": "building",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -2.5,
+            0.0002,
+            -2.4703
+          ],
+          "max": [
+            2.5027,
+            3.9895,
+            2.4728
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 2.5014,
+          "height": 3.9892,
+          "base_y": 0.0002
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "wolf",
+      "public_id": "wolf",
+      "model": {
+        "url": "/assets/meshes/characters/wolf_lod0.glb",
+        "lod": [
+          "/assets/meshes/characters/wolf_lod0.glb",
+          "/assets/meshes/characters/wolf_lod1.glb",
+          "/assets/meshes/characters/wolf_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "wolf",
+        "category": "creature",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.6979,
+            0.0,
+            -0.2245
+          ],
+          "max": [
+            0.698,
+            0.7784,
+            0.2245
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.698,
+          "height": 0.7784,
+          "base_y": 0.0
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "wooden_barrel",
+      "public_id": "wooden_barrel",
+      "model": {
+        "url": "/assets/meshes/village/wooden_barrel_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/wooden_barrel_lod0.glb",
+          "/assets/meshes/village/wooden_barrel_lod1.glb",
+          "/assets/meshes/village/wooden_barrel_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "wooden_barrel",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.3134,
+            0.0007,
+            -0.3118
+          ],
+          "max": [
+            0.3135,
+            0.9003,
+            0.3119
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.3134,
+          "height": 0.8995,
+          "base_y": 0.0007
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "wooden_bench",
+      "public_id": "wooden_bench",
+      "model": {
+        "url": "/assets/meshes/village/wooden_bench_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/wooden_bench_lod0.glb",
+          "/assets/meshes/village/wooden_bench_lod1.glb",
+          "/assets/meshes/village/wooden_bench_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "wooden_bench",
+        "category": "furniture",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.7999,
+            0.0001,
+            -0.3119
+          ],
+          "max": [
+            0.8,
+            0.4875,
+            0.3118
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.7999,
+          "height": 0.4875,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "wooden_crate",
+      "public_id": "wooden_crate",
+      "model": {
+        "url": "/assets/meshes/village/wooden_crate_lod0.glb",
+        "lod": [
+          "/assets/meshes/village/wooden_crate_lod0.glb",
+          "/assets/meshes/village/wooden_crate_lod1.glb",
+          "/assets/meshes/village/wooden_crate_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "wooden_crate",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -0.3999,
+            0.0001,
+            -0.3987
+          ],
+          "max": [
+            0.4,
+            0.7989,
+            0.3988
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 0.3999,
+          "height": 0.7988,
+          "base_y": 0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    },
+    {
+      "id": "wrecked_boat",
+      "public_id": "wrecked_boat",
+      "model": {
+        "url": "/assets/meshes/swamp/wrecked_boat_lod0.glb",
+        "lod": [
+          "/assets/meshes/swamp/wrecked_boat_lod0.glb",
+          "/assets/meshes/swamp/wrecked_boat_lod1.glb",
+          "/assets/meshes/swamp/wrecked_boat_lod2.glb"
+        ]
+      },
+      "precompute": {
+        "version": 1,
+        "asset_id": "wrecked_boat",
+        "category": "prop",
+        "source": "aabb",
+        "aabb": {
+          "min": [
+            -1.7487,
+            -0.0001,
+            -0.662
+          ],
+          "max": [
+            1.7511,
+            0.9126,
+            0.6612
+          ]
+        },
+        "collider": {
+          "shape": "capsule",
+          "radius": 1.7499,
+          "height": 0.9126,
+          "base_y": -0.0001
+        },
+        "collectible_hint": {
+          "kind": null
+        }
+      }
+    }
+  ],
+  "note": "backfill gerado a partir dos GLBs da release (aigamekit-lab precompute)"
+}

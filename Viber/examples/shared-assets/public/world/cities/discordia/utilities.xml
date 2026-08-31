@@ -1,0 +1,219 @@
+<!--
+  Discordia district fragment. Loaded via Include from cities/discordia.xml.
+  Edit this file for this district only. Cell coords: space-separated (at="4 2").
+
+  Layout compacto (muralha ±39.8): as âncoras da praça encolheram ~0.62×, mas
+  os offsets *dentro* de cada cluster (chama sobre a fogueira, bancos à volta
+  do lume, chama no topo do poste) são geometria medida do GLB e ficam como
+  estavam — escalá-los enterrava partículas dentro das malhas.
+-->
+<!-- utilities: praça essencial — poço, fogueira+luz, bancos GLB, quadro, tochas, santuários. -->
+<Group name="city.plaza" pos="0 0 0">
+          <!-- Poço medieval (~1.6 m nativo). Centro-oeste da praça.
+               Fora do corredor da artéria praça→mid_w (|z| ≤ 2.4). -->
+          <GameObject
+            name="well"
+            place="at: -6 4; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/medieval_well_lod2.glb; mesh-anchor: base"
+            script="well.ts"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/village/medieval_well_lod0.glb"
+            lod1-url="/assets/meshes/village/medieval_well_lod1.glb"
+            lod2-url="/assets/meshes/village/medieval_well_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <!-- Fogueira comunitária: GLB campfire_pit (anel de pedra, sem
+           chama modelada) + brasa/luz por cima. Canto SE da praça, fora dos
+           corredores das duas artérias (|x| ≤ 2.4 e |z| ≤ 2.4).
+           [G] abre descanso + viagem aos marcos da Nota (campfire.ts). -->
+          <GameObject
+            name="campfire"
+            place="at: 6.5 -6.6; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base"
+            script="campfire.ts"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/village/campfire_pit_lod0.glb"
+              lod1-url="/assets/meshes/village/campfire_pit_lod1.glb"
+              lod2-url="/assets/meshes/village/campfire_pit_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <!-- Chama: partículas reais, não um <Sphere> laranja. A esfera opaca
+               estática que aqui estava lia-se como uma bola pousada na pedra.
+               Geometria alvo do campfire_pit (~1.5×0.5×1.5): aro de pedra
+               com topo a y≈0.42 e cavidade interior de raio ≈0.45 → chama
+               enraizada a y=0.42 com raio de emissão 0.28 (fica dentro do
+               aro, acima do carvão/lenha). -->
+          <GameObject place="at: 6.5 -6.6; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 0.42 0"
+              particle-emitter="preset: fire; emission-rate: 48; shape-radius: 0.28; start-life-min: 0.5; start-life-max: 1.35; start-speed-min: 1.3; start-speed-max: 2.9; start-size-min: 0.34; start-size-max: 0.7; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: 6.5 -6.6; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 0.7 0"
+              point-light="color: 0xff8a33; intensity: 3; distance: 10; decay: 2; cast-shadow: 0"
+            ></PointLight>
+          </Composition>
+          <!-- Bancos de madeira virados para a fogueira (rotação em graus).
+               Offset ±3 m em X, +3 m em Z — encostar mais metia o banco
+               dentro do aro de pedra. -->
+          <GameObject
+            transform="rotation: 0 35 0"
+            place="at: 3.5 -3.6; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: box; size: 1.6 0.9 0.55"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/village/wooden_bench_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_bench_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            transform="rotation: 0 -35 0"
+            place="at: 8.7 -3.4; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: box; size: 1.6 0.9 0.55"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/village/wooden_bench_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_bench_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <!-- Quadro de avisos (borda sul da praça) — GLB notice_board.
+               [F] abre as recompensas da guarda (src/scripts/notice-board.ts). -->
+          <GameObject
+            name="notice_board"
+            place="at: 5 -12.5; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/notice_board_collision.glb; mesh-anchor: base"
+            script="notice-board.ts"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/village/notice_board_lod0.glb"
+              lod1-url="/assets/meshes/village/notice_board_lod1.glb"
+              lod2-url="/assets/meshes/village/notice_board_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <!-- Tochas da praça: GLB torch_post (sem chama modelada) + brasa/luz
+           por cima — orçamento de PointLights mantido em 2. Nos cantos NE/SW
+           da praça, onde a rua não passa. -->
+          <GameObject
+            place="at: 8.5 8.5; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <!-- Chama da tocha: torch_post mede 2.20 m e a haste é sólida até
+               y≈2.15, por isso a esfera a y=1.9 estava enterrada dentro do
+               poste. Chama a y=2.14, estreita (raio 0.06) para caber na haste
+               de 0.23 m. -->
+          <GameObject place="at: 8.5 8.5; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: 8.5 8.5; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"
+            ></PointLight>
+          </Composition>
+          <GameObject
+            place="at: -8.5 -8.5; align-to-terrain: 0"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/village/torch_post_lod0.glb"
+              lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+              lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject place="at: -8.5 -8.5; align-to-terrain: 0">
+            <ParticleSystem
+              preset="fire"
+              transform="pos: 0 2.14 0"
+              particle-emitter="preset: fire; emission-rate: 22; shape-radius: 0.06; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+            ></ParticleSystem>
+          </GameObject>
+          <Composition
+            place="at: -8.5 -8.5; align-to-terrain: 0"
+            body="fixed"
+            collider="none"
+          >
+            <PointLight
+              pos="0 2.2 0"
+              point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"
+            ></PointLight>
+          </Composition>
+        </Group>
+
+<Group name="city.landmarks" pos="0 0 0">
+          <!-- Santuários místicos entre o anel periurbano (±25) e a muralha
+               (±39.8), encostados às vias E-W sem lhes ficar em cima. -->
+          <GameObject
+            name="rune-pillar"
+            place="at: -35 17; align-to-terrain: 1"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base"
+            script="stone-pillar.ts"
+          ></GameObject>
+          <GameObject
+            name="crystal-shrine"
+            place="at: 35 17; align-to-terrain: 1"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base"
+            script="crystal-shrine.ts"
+          ></GameObject>
+        </Group>
+
+<Group name="city.townsfolk" pos="0 0 0">
+          <!-- Transeuntes ambientes (src/game/townsfolk.ts): cada um adota a
+               rota cujo primeiro ponto fica mais perto do seu spawn. Sem
+               collider — passam pelas ruas, o jogador atravessa-os. -->
+          <GameObject
+            name="townsfolk_plaza"
+            place="at: 5 10.5; align-to-terrain: 1"
+            script="townsfolk.ts"
+          ></GameObject>
+          <GameObject
+            name="townsfolk_north"
+            place="at: 0 -10; align-to-terrain: 1"
+            script="townsfolk.ts"
+          ></GameObject>
+          <GameObject
+            name="townsfolk_market"
+            place="at: 6 0; align-to-terrain: 1"
+            script="townsfolk.ts"
+          ></GameObject>
+        </Group>

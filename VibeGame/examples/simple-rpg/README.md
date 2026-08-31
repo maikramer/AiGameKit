@@ -136,7 +136,7 @@ examples/shared-assets/          # pool canónico
 From the shared pool (`resume` é idempotente — só gera o que falta):
 
 ```bash
-cd VibeGame/examples/shared-assets
+cd Viber/examples/shared-assets
 
 # 2D images + 3D meshes + PBR textures + rigging + animation
 # (um comando por pack; `ls manifests/` lista todos)
@@ -149,7 +149,7 @@ cd ../simple-rpg/sample-gameassets
 gameassets resume --profile game.yaml --manifest manifests/audio
 
 # Sky (separate CLI): write directly into the pool's sky/
-cd ../../shared-assets
+cd ../../../Viber/examples/shared-assets
 skymap2d generate "bright blue sky with soft clouds over green plains, equirectangular 360" -o public/assets/sky/sky.png
 ```
 
@@ -159,7 +159,7 @@ O handoff corre a partir do pool e escreve nele (os exemplos leem via plugin;
 não há passo de cópia para o jogo):
 
 ```bash
-cd VibeGame/examples/shared-assets
+cd Viber/examples/shared-assets
 gameassets handoff \
   --profile game.yaml \
   --manifest manifests/characters \

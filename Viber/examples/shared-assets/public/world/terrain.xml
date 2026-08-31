@@ -1,0 +1,30 @@
+<!--
+  O mundo por baixo de tudo. O heightmap é o mapa do circuito:
+
+    · planalto liso a y≈14 a oeste e a norte  → cidade, reta principal, retorno
+    · bacia a y≈0–8 no centro-leste           → o vale do viaduto (floresta)
+    · montanha a y≈22–30 a sudeste            → a subida e o grampo do cume
+
+  Quem mexer no traçado (`src/track.ts`) tem de olhar para estes três blocos:
+  a pista é desenhada CONTRA o relevo, não por cima dele.
+-->
+<Group name="terrain" pos="0 0 0">
+  <Terrain
+    pos="0 0 0"
+    world-size="1400"
+    max-height="30"
+    heightmap="/assets/terrain/heightmap.png"
+    levels="4"
+    resolution="64"
+    collision-resolution="32"
+    base-color="#4a6a2a"
+    color-low="#3a5a22"
+    color-mid="#557a35"
+    color-high="#6a8a45"
+  ></Terrain>
+
+  <!-- Lago no fundo da bacia, mesmo por baixo do viaduto: com o carve a
+       ignorar o vão (flatten-viaduct-clearance), a água fica intacta e passa
+       ~20 m debaixo do deck. -->
+  <Lake at="150 90" radius="70" depth="2.4" color="#2f7a9a"></Lake>
+</Group>

@@ -1,0 +1,459 @@
+# Grupo village — edifícios e props da Cidade Discordia / aldeia (Crystal Vale, partilhado).
+# Canónico em examples/shared-assets/ (manifests + binários em public/assets).
+# Exemplos consomem via plugin vibegame({ sharedAssets }) — sem cópias nem symlinks.
+# Regenerar: cd examples/shared-assets && gameassets resume --profile game.yaml --manifest manifests/village
+output_dir: ../public/assets
+meshes_subdir: meshes/village
+images_subdir: images/village
+assets:
+  - id: village_longhouse
+    seed: 90210
+    idea:
+      large medieval wooden longhouse mead-hall with carved timber beams, shingled
+      steep roof, grand double doors, glowing warm windows, stone foundation, elder
+      meeting hall
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: building
+      size_m:
+        - 5.5
+        - 5.5
+        - 10.0
+  - id: watchtower
+    idea:
+      'very tall narrow medieval stone watchtower nine meters high, square 3 by
+      3 meter base, slender vertical shaft much taller than wide, squared heavy stone
+      base flush to ground with sharp block edges and no flared footings, crisp crenellated
+      battlements on top, thin straight wooden ladder with clear separate rungs, continuous
+      thin flagpole with attached waving flag (no gaps), observation platform, clean
+      hard architectural silhouettes, game-ready prop, not a short cube keep
+
+      '
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    generation: high
+    omni:
+      control_type: bbox
+      height_m: 9.0
+      footprint_m: 3.0
+  - id: chapel
+    idea:
+      small medieval stone chapel with tall bell tower, arched stained-glass window,
+      peaked slate roof, wooden door, cozy village temple, house of worship, eye-level
+      three-quarter view from front-right, camera slightly above eye height, solid stone
+      foundation closed at the base sitting flush as if on the ground, exterior only
+      opaque walls, no worm's-eye or underside view
+    kind: environment
+    category: building
+    omni:
+      control_type: bbox
+      bbox_preset: chapel
+      size_m:
+        - 6.0
+        - 7.0
+        - 4.5
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+  - id: market_stall
+    idea:
+      bustling medieval market stall with striped canvas awning, wooden counter,
+      hanging fruits and vegetables, sacks of grain, cheerful merchant booth
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: building
+      size_m:
+        - 3.0
+        - 2.5
+        - 2.0
+  - id: village_forge
+    idea:
+      cartoon medieval village blacksmith forge workshop open front facing camera,
+      brick and plaster walls, peaked terracotta tile roof, tall brick chimney with
+      chimney rain hood, dark forge hearth inside back wall, solid stone foundation
+      flush to ground, eye-level three-quarter view from front-right, exterior only,
+      cozy fantasy smithy building, static architecture no smoke no flames no particles,
+      no characters
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      size_m:
+        - 6.0
+        - 5.5
+        - 5.0
+  - id: village_house
+    idea:
+      small cartoon medieval village cottage with plaster walls, timber beams, peaked
+      shingle roof, wooden front door, two small shuttered windows, stone foundation
+      flush to ground, cozy fantasy house, eye-level three-quarter view from front-right,
+      exterior only opaque walls, no characters
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      size_m:
+        - 5.0
+        - 4.2
+        - 6.0
+  - id: shepherd_cottage
+    idea:
+      cartoon medieval shepherd cottage with mossy green thatch roof, rough plaster
+      walls, wooden door, hay loft hatch, small vegetable garden pots by door, stone
+      foundation flush to ground, rustic fantasy farmhouse, eye-level three-quarter
+      view, exterior only, no characters
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      size_m:
+        - 5.5
+        - 4.0
+        - 7.5
+  - id: village_barn
+    idea:
+      cartoon medieval raised wooden barn on short stone pillars, thatched roof,
+      large sliding barn doors, ladder to loft, grain sacks silhouette, rustic fantasy
+      farm building, solid base flush to ground, eye-level three-quarter view, exterior
+      only, no animals no characters
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      size_m:
+        - 8.0
+        - 6.0
+        - 11.0
+  - id: medieval_well
+    idea:
+      round medieval stone well with wooden bucket on rope, iron crank handle, mossy
+      stonework, fantasy village water source
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: crate
+      size_m:
+        - 1.4
+        - 1.6
+        - 1.4
+  - id: wooden_barrel
+    idea:
+      wooden barrel with iron bands, oak staves, tap handle, fantasy tavern storage
+      barrel, game prop
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: barrel
+      size_m:
+        - 0.6
+        - 0.9
+        - 0.6
+  - id: wooden_bench
+    idea:
+      medieval village wooden bench, front three-quarter view, four long sturdy oak
+      legs, thick seat plank at adult sitting height (knees, not ankles), slatted backrest
+      to lower-back height, furniture proportions like a park bench not a footstool,
+      not flattened, not a crate, not sunk into the ground, clean readable silhouette,
+      game prop
+    kind: prop
+    category: furniture
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: furniture
+      size_m:
+        - 1.6
+        - 0.9
+        - 0.55
+  - id: wooden_crate
+    idea:
+      cartoon wooden crate with iron bands, weathered oak planks, sturdy box prop,
+      simple lowpoly game asset
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: crate
+      size_m:
+        - 0.8
+        - 0.8
+        - 0.8
+  - id: treasure_chest
+    idea:
+      cartoon fantasy treasure chest with golden metal bands and big brass lock,
+      arched lid, warm brown wood, RPG loot container
+    kind: prop
+    category: chest
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: chest
+      size_m:
+        - 1.0
+        - 0.65
+        - 0.65
+  - id: anvil
+    idea:
+      classic cartoon blacksmith anvil on short wooden stump base, heavy dark iron
+      horn and face, fantasy forge prop standing upright, clean silhouette, game-ready
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: crate
+      size_m:
+        - 0.7
+        - 0.9
+        - 0.45
+  - id: weapon_rack
+    idea:
+      wooden cartoon weapon rack with vertical posts and crossbars holding two hanging
+      hammers and one blank sword silhouette, fantasy blacksmith tool rack prop, freestanding,
+      clean simple design
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      size_m:
+        - 1.2
+        - 1.6
+        - 0.4
+  - id: forge_bellows
+    idea:
+      cartoon medieval blacksmith leather bellows with wooden handles and iron nozzle,
+      large accordion air pump prop for forge, fantasy workshop tool sitting on ground,
+      clean silhouette
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: crate
+      size_m:
+        - 1.0
+        - 0.7
+        - 0.55
+  - id: quench_trough
+    idea:
+      long wooden cartoon quench trough filled with dark water, iron bands, blacksmith
+      cooling bath prop, fantasy forge yard water tub sitting flush on ground
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      size_m:
+        - 1.4
+        - 0.55
+        - 0.6
+  - id: horseshoe_pile
+    idea:
+      small pile of cartoon iron horseshoes stacked on ground, rusty metal fantasy
+      blacksmith scrap prop, compact low heap, clean simple silhouette
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: cube
+      size_m:
+        - 0.45
+        - 0.25
+        - 0.45
+  - id: campfire_pit
+    idea:
+      cartoon village campfire pit, three-quarter view slightly above eye height,
+      thick chunky grey stones packed into a closed continuous ring with no gaps no
+      holes no swiss-cheese, stones touching neighbours, dark charcoal bed and three
+      short firewood logs filling the inner bowl (not a black void, not see-through),
+      solid stone volume sitting flush on ground, no flame mesh, no particle blobs,
+      watertight game prop
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: cube
+      size_m:
+        - 1.5
+        - 0.5
+        - 1.5
+  - id: notice_board
+    idea:
+      wooden cartoon notice board on two posts with pinned parchment papers and
+      nails, fantasy village bulletin board prop, upright freestanding, clean readable
+      silhouette
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      size_m:
+        - 1.6
+        - 2.0
+        - 0.22
+  - id: torch_post
+    idea:
+      tall cartoon wooden torch post with iron bracket and wrapped cloth torch head,
+      fantasy village street torch prop standing upright, clean vertical silhouette,
+      no flame mesh
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      height_m: 2.2
+      footprint_m: 0.25
+  - id: iron_brazier
+    idea:
+      standing cartoon iron brazier bowl on tripod legs with dark charcoal inside,
+      fantasy mountain camp fire bowl prop, upright, no flame mesh
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: crate
+      size_m:
+        - 0.7
+        - 1.1
+        - 0.7
+  - id: chopping_block
+    idea:
+      thick cartoon wooden chopping block stump with axe cut marks on top, fantasy
+      lumberjack yard prop, short wide cylinder flush to ground
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: cube
+      size_m:
+        - 0.7
+        - 0.55
+        - 0.7
+  - id: log_pile
+    idea:
+      neat pile of cartoon cut wooden logs stacked in a row, bark and sawn ends
+      visible, fantasy lumber camp prop, low wide silhouette
+    kind: prop
+    category: prop
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      size_m:
+        - 1.8
+        - 0.8
+        - 0.9

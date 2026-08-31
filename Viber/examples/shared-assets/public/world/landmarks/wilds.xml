@@ -1,0 +1,269 @@
+<!--
+  Novos ambientes do anel selvagem (mapa 8 km). Cada marco tem trilha própria
+  em paths/trails.xml e POI com recompensa única (src/scripts/poi/).
+
+  §1 RUÍNA ANCESTRAL DE ORM (1700,-810) — circo de pilares no deserto,
+     saqueadores acampados, o Coração de Orm no centro.
+  §2 CLAREIRA PARADISÍACA (-540,30) — lagoa turquesa e palmeiras no meio do
+     brejo; refúgio seguro (cura, sem inimigos).
+  §3 MIRANTE DA CALDEIRA (-605,-725) — no alto da borda sul, braseiros
+     acesos e a vista do mundo inteiro.
+-->
+<Group name="biome.wilds.landmarks" pos="0 0 0">
+  <!-- ============================================================
+       §1 RUÍNA ANCESTRAL DE ORM (1700,-810)
+       ============================================================ -->
+  <SpawnExclusion at="1700 -810" radius="46"></SpawnExclusion>
+  <!-- Anel de pilares em pé (r=22). -->
+  <GameObject place="at: 1722 -810; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 1715.6 -794.4; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 1700 -788; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 1684.4 -794.4; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 1678 -810; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 1684.4 -825.6; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 1700 -832; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/stone_pillar_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <!-- Pilares caídos (marca de ruína). -->
+  <GameObject place="at: 1715.6 -825.6; align-to-terrain: 1"
+    transform="rotation: 0 65 78"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 3.2 0.9 0.9">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 1692 -800.5; align-to-terrain: 1"
+    transform="rotation: 0 -20 -84"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 3.2 0.9 0.9">
+    <GLTFLoader role="visual" url="/assets/meshes/props/stone_pillar_lod0.glb" lod1-url="/assets/meshes/props/stone_pillar_lod1.glb" lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <!-- Mojões de acesso + pedras do circo. -->
+  <GameObject place="at: 1666 -796; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb">
+    <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 1736 -822; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb">
+    <GLTFLoader role="visual" url="/assets/meshes/props/rock_mossy_lod0.glb" lod1-url="/assets/meshes/props/rock_mossy_lod1.glb" lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <!-- Coração de Orm: o POI central (cristal pulsante). -->
+  <GameObject
+    name="orm-heart"
+    place="at: 1700 -810; align-to-terrain: 1"
+    script="poi/ruin-relic.ts"
+  ></GameObject>
+  <!-- Acampamento de saqueadores (guardiões do saque). -->
+  <GameObject place="at: 1732 -836; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/campfire_pit_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/village/campfire_pit_lod0.glb" lod1-url="/assets/meshes/village/campfire_pit_lod1.glb" lod2-url="/assets/meshes/village/campfire_pit_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 1732 -836; align-to-terrain: 1">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 0.42 0"
+      particle-emitter="preset: fire; emission-rate: 40; shape-radius: 0.28; start-life-min: 0.5; start-life-max: 1.3; start-speed-min: 1.3; start-speed-max: 2.7; start-size-min: 0.3; start-size-max: 0.62; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: 1732 -836; align-to-terrain: 1" body="fixed" collider="none">
+    <PointLight pos="0 0.7 0" point-light="color: 0xff8a33; intensity: 2.2; distance: 9; decay: 2; cast-shadow: 0"></PointLight>
+  </Composition>
+  <GameObject place="at: 1729 -840; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 0.8 0.8 0.8">
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_crate_lod0.glb" lod1-url="/assets/meshes/village/wooden_crate_lod1.glb" lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: 1736 -833; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 0.55 0.7 0.55">
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_barrel_lod0.glb" lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb" lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <DynamicSpawner
+    avoid-water="1"
+    count="5"
+    seed="7331"
+    region-min="1650 0 -860"
+    region-max="1750 0 -760"
+    random-yaw="true"
+    avoid-overlaps="false"
+    max-slope-deg="40"
+    max-distance="180"
+  >
+    <Creature role="enemy" script="enemies/bandit.ts">
+      <GLTFLoader
+        role="visual"
+        url="/assets/meshes/characters/bandit_lod0.glb"
+        lod1-url="/assets/meshes/characters/bandit_lod1.glb"
+        lod2-url="/assets/meshes/characters/bandit_lod2.glb"
+        lod-threshold-near="18"
+        lod-threshold-mid="55"
+      ></GLTFLoader>
+    </Creature>
+  </DynamicSpawner>
+
+  <!-- ============================================================
+       §2 CLAREIRA PARADISÍACA (-540,30) — refúgio seguro no brejo.
+       ============================================================ -->
+  <Lake
+    at="-540 30"
+    radius="26"
+    depth="2.4"
+    water-offset="0.4"
+    color="#3ec8b8"
+    opacity="0.72"
+    ripple="0.5"
+  ></Lake>
+  <SpawnExclusion at="-540 30" radius="44"></SpawnExclusion>
+  <!-- Palmeiras em volta da lagoa. -->
+  <GameObject place="at: -574 8; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/props/palm_tree_lod0.glb">
+    <GLTFLoader role="visual" url="/assets/meshes/props/palm_tree_lod0.glb" lod1-url="/assets/meshes/props/palm_tree_lod1.glb" lod2-url="/assets/meshes/props/palm_tree_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -508 6; align-to-terrain: 1"
+    transform="rotation: 0 40 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/props/palm_tree_lod0.glb">
+    <GLTFLoader role="visual" url="/assets/meshes/props/palm_tree_lod0.glb" lod1-url="/assets/meshes/props/palm_tree_lod1.glb" lod2-url="/assets/meshes/props/palm_tree_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -566 62; align-to-terrain: 1"
+    transform="rotation: 0 95 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/props/palm_tree_lod0.glb">
+    <GLTFLoader role="visual" url="/assets/meshes/props/palm_tree_lod0.glb" lod1-url="/assets/meshes/props/palm_tree_lod1.glb" lod2-url="/assets/meshes/props/palm_tree_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -510 58; align-to-terrain: 1"
+    transform="rotation: 0 160 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/props/palm_tree_lod0.glb">
+    <GLTFLoader role="visual" url="/assets/meshes/props/palm_tree_lod0.glb" lod1-url="/assets/meshes/props/palm_tree_lod1.glb" lod2-url="/assets/meshes/props/palm_tree_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -536 -6; align-to-terrain: 1"
+    transform="rotation: 0 210 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/props/palm_tree_lod0.glb">
+    <GLTFLoader role="visual" url="/assets/meshes/props/palm_tree_lod0.glb" lod1-url="/assets/meshes/props/palm_tree_lod1.glb" lod2-url="/assets/meshes/props/palm_tree_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <!-- Vitórias-régias na lagoa. -->
+  <StaticSpawner
+    profile="tree"
+    count="14"
+    seed="841"
+    region-min="-566 0 4"
+    region-max="-514 0 56"
+    in-water="1"
+    align-to-terrain="0"
+    max-slope-attempts="96"
+    scale-min="0.8"
+    scale-max="1.4"
+    avoid-overlaps="1"
+    scale-axis-min="0.9"
+    scale-axis-max="1.1"
+    random-yaw="true"
+    variation="foliage"
+  >
+    <GameObject role="static">
+      <GLTFLoader role="visual" url="/assets/meshes/swamp/lily_pad_lod0.glb"></GLTFLoader>
+    </GameObject>
+  </StaticSpawner>
+  <!-- Cristais da fonte + cogumelos. -->
+  <GameObject place="at: -521 44; align-to-terrain: 1"
+    script="poi/paradise-spring.ts"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base"
+  ></GameObject>
+  <GameObject place="at: -556 48; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/props/crystal_blue_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/props/crystal_blue_lod0.glb" lod1-url="/assets/meshes/props/crystal_blue_lod1.glb" lod2-url="/assets/meshes/props/crystal_blue_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -560 16; align-to-terrain: 1"
+    transform="scale: 0.7 0.7 0.7"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/props/mushroom_red_lod0.glb">
+    <GLTFLoader role="visual" url="/assets/meshes/props/mushroom_red_lod0.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -514 20; align-to-terrain: 1"
+    transform="scale: 0.55 0.55 0.55"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: precompute; mesh-url: /assets/meshes/props/mushroom_red_lod0.glb">
+    <GLTFLoader role="visual" url="/assets/meshes/props/mushroom_red_lod0.glb"></GLTFLoader>
+  </GameObject>
+
+  <!-- ============================================================
+       §3 MIRANTE DA CALDEIRA (-605,-725) — cota ~133 m, o mundo aos pés.
+       ============================================================ -->
+  <SpawnExclusion at="-605 -725" radius="26"></SpawnExclusion>
+  <GameObject place="at: -605 -725; align-to-terrain: 1"
+    script="poi/mirante-vista.ts"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/terrain/stone_cairn_collision.glb; mesh-anchor: base"
+  ></GameObject>
+  <!-- Braseiros acesos: visíveis do vale à noite. -->
+  <GameObject place="at: -621 -715; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/village/iron_brazier_lod0.glb" lod1-url="/assets/meshes/village/iron_brazier_lod1.glb" lod2-url="/assets/meshes/village/iron_brazier_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -621 -715; align-to-terrain: 1">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 1.05 0"
+      particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -621 -715; align-to-terrain: 1" body="fixed" collider="none">
+    <PointLight pos="0 1.2 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 8; decay: 2; cast-shadow: 0"></PointLight>
+  </Composition>
+  <GameObject place="at: -589 -713; align-to-terrain: 1"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: trimesh; mesh-url: /assets/meshes/village/iron_brazier_collision.glb; mesh-anchor: base">
+    <GLTFLoader role="visual" url="/assets/meshes/village/iron_brazier_lod0.glb" lod1-url="/assets/meshes/village/iron_brazier_lod1.glb" lod2-url="/assets/meshes/village/iron_brazier_lod2.glb"></GLTFLoader>
+  </GameObject>
+  <GameObject place="at: -589 -713; align-to-terrain: 1">
+    <ParticleSystem
+      preset="fire"
+      transform="pos: 0 1.05 0"
+      particle-emitter="preset: fire; emission-rate: 30; shape-radius: 0.13; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.9; start-speed-max: 1.9; start-size-min: 0.16; start-size-max: 0.34; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <Composition place="at: -589 -713; align-to-terrain: 1" body="fixed" collider="none">
+    <PointLight pos="0 1.2 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 8; decay: 2; cast-shadow: 0"></PointLight>
+  </Composition>
+  <!-- Banco de mirante, virado para o vale (sul da borda). -->
+  <GameObject place="at: -605 -738; align-to-terrain: 1"
+    transform="rotation: 0 180 0"
+    rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+    collider="shape: box; size: 1.6 0.9 0.55">
+    <GLTFLoader role="visual" url="/assets/meshes/village/wooden_bench_lod0.glb" lod1-url="/assets/meshes/village/wooden_bench_lod1.glb" lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"></GLTFLoader>
+  </GameObject>
+</Group>
+<!-- FIM biome.wilds.landmarks -->

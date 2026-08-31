@@ -1,0 +1,29 @@
+{
+  "version": "2.0",
+  "generator": "terrain3d",
+  "model_id": "xandergos/terrain-diffusion-30m",
+  "terrain": {
+    "size": 4096,
+    "world_size": 8000.0,
+    "max_height": 200.0,
+    "height_min": 0.0,
+    "height_max": 1.0,
+    "height_mean": 0.5462433448262314,
+    "height_std": 0.25070895461787746
+  },
+  "rivers": [],
+  "lakes": [],
+  "lake_planes": [],
+  "stats": {
+    "generation_time_seconds": 79.714,
+    "native_resolution": 30.0,
+    "native_extent_m": 122880.0,
+    "horizontal_scale_ratio": 15.36,
+    "mode": "continental",
+    "num_inference_steps": 20,
+    "offset_i": 774,
+    "offset_j": 2866
+  },
+  "seed": 20260820,
+  "note": "Mapa dobrado (8000 m): seed 20260820, offsets 774,2866 — vale-caldeira centrado via <Terrain pos=\"-51 0 51\">. Substitui o mundo 4000 m (seed 20260818)."
+}

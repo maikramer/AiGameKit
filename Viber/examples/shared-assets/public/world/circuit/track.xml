@@ -1,0 +1,31 @@
+<!--
+  A pista. `centerline`, `widths` e `sections` vêm de `src/track.ts` (hook
+  `GAME.onWorldXml` em main.ts) — a lista de nós é grande demais para se
+  escrever à mão e o cenário lê a mesma fonte.
+
+  `viaduct-clearance` tem de bater certo com o `flatten-viaduct-clearance` do
+  bed.xml: é o mesmo limiar visto dos dois lados (um deixa o chão em paz, o
+  outro constrói o tabuleiro e os pilares). `pylon-spacing` é o vão entre
+  colunas; colunas que cairiam em cima de outra passagem da pista (a descida
+  que passa por baixo do viaduto) são omitidas pelo motor.
+
+  `checkpoint-count` (respawn por checkpoint) é armado só em time-trial, pelo
+  hook de modo em main.ts — não autorar aqui.
+-->
+<RaceTrack
+  name="circuit"
+  width="18"
+  laps="3"
+  closed="true"
+  shoulder="3.5"
+  walls="true"
+  max-bank="9"
+  theme="asphalt"
+  viaduct-clearance="6"
+  pylon-spacing="30"
+  road-color="#6a5840"
+  apron-color="#5c7f3c"
+  shoulder-color="#8b7355"
+  wall-color="#6e5c48"
+  centerline="0 0 0 1 0 0 2 0 0"
+></RaceTrack>

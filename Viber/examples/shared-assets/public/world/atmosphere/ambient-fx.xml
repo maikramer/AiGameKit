@@ -1,0 +1,152 @@
+<!--
+  Partículas de ambiente por bioma. Loaded via Include.
+
+  ⚠️ `transform="pos: x y z"` num <ParticleSystem> é posição de MUNDO, e o chão
+  deste mapa está aos ~23–63 m — a versão anterior punha tudo a y=0.25–1.5, ou
+  seja ~35 m enterrado, e nenhuma destas partículas se via. Usar sempre
+  <GameObject place="at: x z"> (amostra o terreno) com o emissor como filho a
+  uma altura LOCAL. Ver VibeGame/src/plugins/spawner/context.md.
+
+  Sem luzes novas aqui (o budget de PointLight vive nos landmarks).
+  Presets: sparkle(s), sand-dust, fire, rain, snow, smoke, dust, explosion,
+  sparks, magic, fireflies, splash, woodchips, rockshards, leaves, ground-dust
+  — ver VibeGame/src/plugins/particles/presets.ts.
+-->
+<Group name="atmosphere.ambient" pos="0 0 0">
+  <!-- ============================================================
+       DESERTO — poeira rasteira sobre as dunas
+       ('ground-dust' é o lençol de ambiente; 'dust' é FX de quebra)
+       ============================================================ -->
+  <GameObject place="at: 170 0"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 220 70"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 210 -80"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 260 20"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 190 -40"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 290 -30"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 320 90"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 250 -130"><ParticleSystem preset="ground-dust" transform="pos: 0 0.25 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 236 40"><ParticleSystem preset="sand-dust" transform="pos: 0 2.4 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 300 -60"><ParticleSystem preset="sand-dust" transform="pos: 0 2.4 0"></ParticleSystem></GameObject>
+
+  <!-- ============================================================
+       FLORESTA SOMBRIA — vaga-lumes nas clareiras + folha a cair
+       ============================================================ -->
+  <GameObject place="at: 0 180"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -50 230"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 44 210"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -100 156"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 80 300"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -28 330"><ParticleSystem preset="fireflies" transform="pos: 0 1.2 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 12 192">
+    <ParticleSystem
+      preset="leaves"
+      transform="pos: 0 6.5 0"
+      particle-emitter="preset: leaves; emission-rate: 5; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -76 240">
+    <ParticleSystem
+      preset="leaves"
+      transform="pos: 0 6.5 0"
+      particle-emitter="preset: leaves; emission-rate: 4; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <!-- Fumo baixo na clareira da bruxa -->
+  <GameObject place="at: -16 270">
+    <ParticleSystem
+      preset="smoke"
+      transform="pos: 0 1.5 0"
+      particle-emitter="preset: smoke; emission-rate: 8; start-life-min: 2; start-life-max: 4; start-speed-min: 0.4; start-speed-max: 1.0; start-size-min: 0.4; start-size-max: 0.9; start-color: #888888; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- ============================================================
+       PÂNTANO — névoa rasteira na bacia
+       ============================================================ -->
+  <GameObject place="at: -170 0">
+    <ParticleSystem
+      preset="smoke"
+      transform="pos: 0 0.8 0"
+      particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.4; start-color: #93a596; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -240 60">
+    <ParticleSystem
+      preset="smoke"
+      transform="pos: 0 0.8 0"
+      particle-emitter="preset: smoke; emission-rate: 7; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.4; start-color: #93a596; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -210 -68">
+    <ParticleSystem
+      preset="smoke"
+      transform="pos: 0 0.8 0"
+      particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.0; start-color: #93a596; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -310 -8">
+    <ParticleSystem
+      preset="smoke"
+      transform="pos: 0 0.8 0"
+      particle-emitter="preset: smoke; emission-rate: 6; start-life-min: 5; start-life-max: 9; start-speed-min: 0.05; start-speed-max: 0.2; start-size-min: 1.6; start-size-max: 3.0; start-color: #93a596; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- ============================================================
+       PICOS GELADOS — neve fina no corredor
+       (emission-rate baixo: 'snow' no default 50/s vira nevão que tapa a
+       encosta toda a 40 m de distância)
+       ============================================================ -->
+  <GameObject place="at: 0 -170">
+    <ParticleSystem
+      preset="snow"
+      transform="pos: 0 9 0"
+      particle-emitter="preset: snow; emission-rate: 10; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -8 -230">
+    <ParticleSystem
+      preset="snow"
+      transform="pos: 0 9 0"
+      particle-emitter="preset: snow; emission-rate: 10; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -12 -290">
+    <ParticleSystem
+      preset="snow"
+      transform="pos: 0 9 0"
+      particle-emitter="preset: snow; emission-rate: 12; start-life-min: 5; start-life-max: 8; start-speed-min: 0.3; start-speed-max: 0.9; start-size-min: 0.06; start-size-max: 0.14; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -26 -190"><ParticleSystem preset="sparkle" transform="pos: 0 1.6 0"></ParticleSystem></GameObject>
+
+  <!-- ============================================================
+       VALE (anel 52–116) — o quadrante neutro à volta da cidade não
+       tinha FX nenhum: os vaga-lumes só começavam a z≥156, já dentro da
+       floresta. Estes ficam nas diagonais, junto aos prados de flores de
+       spawn/dressing.xml, e dão vida ao percurso portão → bioma.
+       ============================================================ -->
+  <GameObject place="at: 74 72"><ParticleSystem preset="fireflies" transform="pos: 0 1.1 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -76 66"><ParticleSystem preset="fireflies" transform="pos: 0 1.1 0"></ParticleSystem></GameObject>
+  <GameObject place="at: 70 -74"><ParticleSystem preset="fireflies" transform="pos: 0 1.1 0"></ParticleSystem></GameObject>
+  <GameObject place="at: -70 -70"><ParticleSystem preset="fireflies" transform="pos: 0 1.1 0"></ParticleSystem></GameObject>
+  <!-- Folha a cair sobre os carvalhos do anel (spawn/ring.xml). -->
+  <GameObject place="at: 88 22">
+    <ParticleSystem
+      preset="leaves"
+      transform="pos: 0 6.0 0"
+      particle-emitter="preset: leaves; emission-rate: 4; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.2; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject place="at: -90 -20">
+    <ParticleSystem
+      preset="leaves"
+      transform="pos: 0 6.0 0"
+      particle-emitter="preset: leaves; emission-rate: 4; start-life-min: 4; start-life-max: 7; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.1; start-size-max: 0.2; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <!-- Brilho na lâmina do laguinho NO da muralha (Lake em spawn/ring.xml,
+       -80,104 r=16): o emissor fica na margem, não no meio do disco. -->
+  <GameObject place="at: -66 96"><ParticleSystem preset="sparkle" transform="pos: 0 1.0 0"></ParticleSystem></GameObject>
+</Group>
+<!-- FIM atmosphere.ambient -->

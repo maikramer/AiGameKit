@@ -1,0 +1,190 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+  Cell coords for CityGrid: space-separated (at="4 2").
+-->
+      <Group name="environment" pos="0 0 0">
+        <!-- ============================================================
+           §0 CÉU, LUZ, PÓS-PROCESSAMENTO E ÁUDIO
+           Pipeline moderado (stylized): sombras PCSS 1024, SSAO + bloom +
+           fog/grading. DoF / god-rays / film-grain OFF (custo alto, pouco
+           ganho em jogabilidade). SSR OFF (águas usam mirror planar).
+           AdaptiveQuality pode baixar DPR até 0.55 sob pressão; teto 1.5
+           (nativo) quando a dGPU está no jogo.
+           ============================================================ -->
+        <!-- Céu atmosférico procedural (espalhamento de Preetham + nuvens no
+             shader + disco solar): o sol definido aqui dirige a direcional
+             abaixo e o PMREM vira `scene.environment` — céu, sombras e o
+             ambient PBR compartilham um único sol. O equirect painterly
+             (sky.png) fica disponível em /assets/sky/ para quem preferir
+             céu de imagem (`<EquirectSky>`). Nuvens do shader ficam leves
+             porque os billboards do Weather (crossfade por bioma) são a
+             camada de nuvens "de jogo". -->
+        <!-- Calendário dia/noite: o <DayCycle> escreve a elevação/azimute do
+             <Sky> (quantizados a 2°) e faz o ramp da luz ambiente
+             (0.22 de dia — o look atual — para 0.07 à noite). Nadir do sol a
+             −22°: noite escura de verdade, as tochas/portões/acampamentos
+             assumem. Dia de 20 min reais; começa 08:00. -->
+        <DayCycle
+          minute-of-day="480"
+          minutes-per-real-second="1.2"
+          dawn-minute="330"
+          dusk-minute="1170"
+          sun-azimuth-base="205"
+          max-sun-elevation="62"
+          min-sun-elevation="20"
+          sky-step-deg="2"
+          drive-sky="1"
+          drive-ambient="1"
+          ambient-day-intensity="0.26"
+          ambient-night-intensity="0.07"
+        ></DayCycle>
+
+        <Sky
+          sun-elevation="17"
+          sun-azimuth="205"
+          turbidity="2.4"
+          rayleigh="2.8"
+          mie-coefficient="0.0035"
+          mie-directional-g="0.80"
+          cloud-coverage="0.45"
+          cloud-density="0.32"
+          cloud-elevation="0.55"
+          environment-intensity="0.38"
+          sun-intensity="2.6"
+          drive-light="1"
+        ></Sky>
+
+        <!-- Ambiente hemisférico baixo: o IBL do céu é quem colore a sombra
+           (azul de céu em cima, quente do chão embaixo); biomas continuam a
+           crossfadar o ambient por região. Sombras 2048 + PCSS (penumbra que
+           abre com a distância ao bloqueador). Height fog com perspectiva
+           aérea + inscattering do sol; as densidades por bioma abaixo
+           continuam a aplicar-se (o efeito lê o componente a cada frame).
+           ACES dá o contraste que o AgX lavava; bloom só no sol/glare
+           (threshold 8 — o céu procedural é HDR). -->
+        <GameObject
+          ambient-light="sky-color: 0xc8d8e8; ground-color: 0xa89878; intensity: 0.22"
+          directional-light="cast-shadow: 1; shadow-map-size: 4096; distance: 140; pcss: 1"
+          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.16; bloom-radius: 0.6; bloom-threshold: 6.0; chromatic-aberration: 1; ca-strength: 0.0006; vignette: 1; vignette-offset: 0.30; vignette-darkness: 0.44; aa: smaa; tone-mapping: aces; tone-mapping-exposure: 0.76; ssao: 1; ssao-intensity: 1.25; ssao-radius: 2.5; depth-of-field: 0; god-rays: 1; god-rays-density: 0.45; god-rays-decay: 0.93; god-rays-weight: 0.30; god-rays-exposure: 0.28; film-grain: 1; film-grain-opacity: 0.03; color-grading: 1; saturation: 0.15; contrast: 0.18; brightness: 0.0; height-fog: 1; fog-color: 0xb9cede; fog-density: 0.0012; fog-height: 132; fog-falloff: 35; fog-noise: 0.3; fog-sun-influence: 0.45; fog-sky-haze: 0.10"
+        >
+        </GameObject>
+
+        <!-- Adaptive Quality: target 60; max 1.0 = resolução nativa na dGPU.
+             Em iGPU/PRIME mal configurado o piso 0.55 ainda protege FPS. -->
+        <AdaptiveQuality
+          target-fps="60"
+          min-pixel-ratio="0.55"
+          max-pixel-ratio="1.5"
+        ></AdaptiveQuality>
+
+        <!-- Fronteira suave, perto do fim do mapa (terreno ±2000): a serra
+             fecha o horizonte na crista (~560) e o lado de lá desce até à
+             orla. Cruzar r=1800 conta 5 s no ecrã e devolve o herói ao ponto
+             mais próximo DENTRO da fronteira, assente no chão e sem
+             velocidade — em vez de cair do mundo no corte final. -->
+        <WorldBorder
+          radius="3800"
+          warn-seconds="5"
+          margin="80"
+        ></WorldBorder>
+
+        <!-- Mixer buses + BGM layers. O MusicLayerDriverSystem (engine)
+             crossfada por contexto (main.ts bgmZone): boss > battle (aggro) >
+             dungeon (interiores) > mountain (Picos Gelados) > village (muralha)
+             > explore. Todas saem na bus 'music' controlada pelo slider. Clips
+             do pool partilhado (shared-assets/public/assets/audio). -->
+        <AudioMixer master="1" music="0.7" sfx="0.8"></AudioMixer>
+        <MusicLayer layer="explore" sound="bgm-explore" base-volume="0.18"></MusicLayer>
+        <MusicLayer layer="battle" sound="bgm-battle" base-volume="0.22"></MusicLayer>
+        <MusicLayer layer="boss" sound="bgm-boss" base-volume="0.24"></MusicLayer>
+        <MusicLayer layer="dungeon" sound="bgm-dungeon" base-volume="0.2"></MusicLayer>
+        <MusicLayer layer="mountain" sound="bgm-mountain" base-volume="0.2"></MusicLayer>
+        <MusicLayer layer="village" sound="bgm-village" base-volume="0.18"></MusicLayer>
+
+        <!-- Clima global: vento constante de SW, nuvens com ciclo lento
+           (cobertura "respira" ao longo de minutos), chuva controlada por
+           bioma (pântano) ou via setWeather() em runtime. -->
+        <Weather
+          wind="0.7 0.25"
+          wind-strength="1.5"
+          clouds="0.25"
+          cloud-height="150"
+          rain="0"
+          cycle="1"
+        ></Weather>
+
+        <!-- ============================================================
+           §1 BIOMAS — 4 cunhas cardeais. O BiomeDetectionSystem aplica
+           tint/fog/ambient/textura-de-terreno e crossfade de BGM quando
+           o herói entra. type: 1=FLORESTA, 2=DESERTO, 3=PÂNTANO,
+           4=MONTANHA. As cunhas começam fora do quadrado central (±28)
+           e são partidas pelas diagonais (±520 nos cantos) — sem
+           sobreposição; a cidade fica como vale neutro. Os cantos foram
+           de ±240 para ±520 porque a câmera passou a ver até 420 m: com
+           ±240 a serra da borda ficava fora de qualquer bioma e perdia
+           tint/fog.
+           ============================================================ -->
+        <!-- NORTE: Floresta Sombria -->
+        <BiomeRegion
+          id="dark-forest"
+          type="1"
+          polygon="[-56,56;56,56;4040,4040;-4040,4040]"
+          tint="#1a3320"
+          fog-color="#22362b"
+          fog-density="0.0030"
+          ambient="#3a4a55"
+          bgm-layer="1"
+          clouds="0.85"
+          pp-exposure="0.78"
+          pp-vignette-darkness="0.50"
+          terrain-texture="/assets/textures/forest_floor.png"
+        ></BiomeRegion>
+        <!-- LESTE: Deserto -->
+        <BiomeRegion
+          id="desert"
+          type="2"
+          polygon="[56,-56;56,56;4040,4040;4040,-4040]"
+          tint="#c2a878"
+          fog-color="#e0d3b0"
+          fog-density="0.0014"
+          ambient="#5a4a3a"
+          bgm-layer="1"
+          clouds="0.25"
+          pp-exposure="0.74"
+          pp-bloom-strength="0.18"
+          terrain-texture="/assets/textures/desert_sand.png"
+        ></BiomeRegion>
+        <!-- OESTE: Pântano (bacias baixas do relevo real) -->
+        <BiomeRegion
+          id="swamp"
+          type="3"
+          polygon="[-56,-56;-56,56;-4040,4040;-4040,-4040]"
+          tint="#3a4a30"
+          fog-color="#243024"
+          fog-density="0.0046"
+          ambient="#2a3a30"
+          bgm-layer="1"
+          rain="0.35"
+          pp-exposure="0.70"
+          terrain-texture="/assets/textures/swamp_mud.png"
+        ></BiomeRegion>
+        <!-- SUL: Picos Gelados. Vértice da cunha empurrado de ±56 para ±240:
+             o setor sul só ganha cota a partir de r≈260 (126 m a 80-160 m,
+             161 m a 400-600 m). Com o vértice na muralha, a textura de neve
+             começava a 60 m do portão, em pleno fundo de vale. Entre a
+             cidade e r=240 fica o anel neutro do vale. -->
+        <BiomeRegion
+          id="frozen-peaks"
+          type="4"
+          polygon="[-240,-240;240,-240;4040,-4040;-4040,-4040]"
+          tint="#cdd9e6"
+          fog-color="#d6e4f2"
+          fog-density="0.0014"
+          ambient="#aeb9c8"
+          bgm-layer="1"
+          pp-exposure="0.78"
+          terrain-texture="/assets/textures/snow_peak.png"
+        ></BiomeRegion>
+      </Group>
+      <!-- FIM environment -->

@@ -45,9 +45,11 @@ cópias decomprimidas; a asset root do mundo é a pasta que contém `assets/`.
 
 - `world.xml` — raiz ( porta do `index.html` original; `<Scene>` → `<world>` )
 - `world/**.xml` — módulos migrados, espelham `public/world/` do original
-- `public` — symlink para `VibeGame/examples/simple-rpg/public` (assets GLB/
-  texturas partilhados; quando glTF chegar, os caminhos `/assets/...` resolvem
-  aqui sem duplicar GBs)
+- `assets/` — espelho local (não versionado) dos assets referenciados,
+  gerado por `scripts/sync_assets.py` a partir do pool partilhado
+  `Viber/examples/shared-assets/public` (GLBs decomprimidos de
+  meshopt/KTX2/quantização que o bevy 0.19 não lê; caminhos `/assets/...`
+  resolvem aqui via asset root = pasta do mundo)
 
 ## Re-migrar
 
@@ -56,8 +58,14 @@ Depois de mudanças no mundo original (ou no conversor):
 ```bash
 python3 Viber/scripts/migrate_from_vibegame.py \
   VibeGame/examples/simple-rpg/index.html \
-  --public VibeGame/examples/simple-rpg/public \
+  --public Viber/examples/shared-assets/public \
   -o Viber/examples/simple-rpg/
+```
+
+Depois de mudanças nos assets (novos refs, GLBs novos):
+
+```bash
+python3 Viber/scripts/sync_assets.py   # pool: Viber/examples/shared-assets/public
 ```
 
 Cada ficheiro de saída leva um cabeçalho com os attrs descartados e as tags

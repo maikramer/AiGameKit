@@ -1,0 +1,121 @@
+# Grupo desert — vegetação e ruínas do Deserto.
+# Defs base (estilo, ferramentas, presets) em ../game.yaml.
+# Regenerar: gameassets resume --profile game.yaml --manifest manifests/desert
+output_dir: ../public/assets
+meshes_subdir: meshes/desert
+images_subdir: images/desert
+assets:
+  - id: cactus
+    idea:
+      cartoon desert saguaro cactus tall column with wider left-right silhouette,
+      three green arms spreading sideways, ribbed texture, small spines, stylized fantasy
+      desert plant, vertical trunk
+    kind: environment
+    category: vegetation
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    lod_levels: 2
+    omni:
+      control_type: bbox
+      size_m:
+        - 1.8
+        - 3.5
+        - 0.71
+  - id: dead_bush
+    idea:
+      cartoon dry desert tumbleweed bush with twisted brown branches, sparse leaves,
+      arid climate plant, fantasy desert prop
+    kind: prop
+    category: vegetation
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: blob
+      size_m:
+        - 1.5
+        - 1.0
+        - 1.5
+  - id: ruin_pillar
+    idea:
+      ancient cartoon sandstone ruin pillar with cracked carved hieroglyphs, weathered
+      top, broken base, fantasy desert monument
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox_preset: building
+      size_m:
+        - 1.2
+        - 4.0
+        - 1.2
+  - id: scorpion_nest
+    text3d:
+      octree_resolution: 256
+    idea:
+      low wide cartoon desert sand mound burrow with a small dark tunnel entrance
+      hole, packed sand termite-hill lump hugging the ground, scattered bones around
+      the entrance, flat wide base, fantasy creature lair
+    kind: environment
+    category: terrain
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      bbox:
+        - 1.0
+        - 0.48
+        - 1.0
+      size_m:
+        - 2.5
+        - 1.2
+        - 2.5
+  - id: desert_obelisk
+    idea:
+      tall slender cartoon sandstone desert obelisk with carved sun symbol near
+      top, warm orange stone, square tapered shaft on small stepped base flush to ground,
+      fantasy landmark needle, upright
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      height_m: 8.0
+      footprint_m: 1.4
+  - id: sandstone_arch
+    idea:
+      monumental cartoon sandstone desert arch ten meters tall, thick weathered
+      pillars and curved top, warm orange stone with erosion cracks, fantasy canyon
+      gate freestanding flush to ground, front view, clean architectural silhouette,
+      no characters
+    kind: environment
+    category: building
+    pipeline:
+      - 3d
+      - paint
+      - lod
+      - collision
+    omni:
+      control_type: bbox
+      size_m:
+        - 8.0
+        - 10.0
+        - 2.5

@@ -1,0 +1,20 @@
+{
+  "timestamp": 1787874516.892715,
+  "prompt": "heavy battle axe skill icon, fantasy RPG ability icon, massive double-bladed axe with glowing orange edge, dark slate background, bold game UI style, centered emblem",
+  "params": {
+    "seed": 3206400727,
+    "prompt_final": "heavy battle axe skill icon, fantasy RPG ability icon, massive double-bladed axe with glowing orange edge, dark slate background, bold game UI style, centered emblem",
+    "model": "Efficient-Large-Model/Sana_600M_512px_diffusers",
+    "transformer_quant_preset": "sdnq-int4",
+    "encoder_quant_preset": "sdnq-int4",
+    "remove_background": false,
+    "prompt": "heavy battle axe skill icon, fantasy RPG ability icon, massive double-bladed axe with glowing orange edge, dark slate background, bold game UI style, centered emblem",
+    "negative_prompt": "",
+    "guidance_scale": 4.5,
+    "num_inference_steps": 20,
+    "width": 512,
+    "height": 512
+  },
+  "image_path": "VibeGame/examples/simple-rpg/public/assets/icons/skill_heavy.png",
+  "filename": "skill_heavy.png"
+}

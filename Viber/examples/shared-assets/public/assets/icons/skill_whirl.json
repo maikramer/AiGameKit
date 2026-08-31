@@ -1,0 +1,20 @@
+{
+  "timestamp": 1787874570.293219,
+  "prompt": "whirlwind slash skill icon, fantasy RPG ability emblem, spinning silver sword with circular cyan wind trail, dark slate background, bold game UI style, centered",
+  "params": {
+    "seed": 2590433111,
+    "prompt_final": "whirlwind slash skill icon, fantasy RPG ability emblem, spinning silver sword with circular cyan wind trail, dark slate background, bold game UI style, centered",
+    "model": "Efficient-Large-Model/Sana_600M_512px_diffusers",
+    "transformer_quant_preset": "sdnq-int4",
+    "encoder_quant_preset": "sdnq-int4",
+    "remove_background": false,
+    "prompt": "whirlwind slash skill icon, fantasy RPG ability emblem, spinning silver sword with circular cyan wind trail, dark slate background, bold game UI style, centered",
+    "negative_prompt": "",
+    "guidance_scale": 4.5,
+    "num_inference_steps": 20,
+    "width": 512,
+    "height": 512
+  },
+  "image_path": "VibeGame/examples/simple-rpg/public/assets/icons/skill_whirl.png",
+  "filename": "skill_whirl.png"
+}

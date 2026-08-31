@@ -1,0 +1,145 @@
+<!--
+  Discordia — building door portals (stand-in-front markers).
+  Positions = building place + doorWorldOffset(door-catalog, buildingYaw).
+  Interact F → interiors.ts spawn (salas em interiors.xml). Soft magic ring on ground.
+-->
+<Group name="city.portals" pos="0 0 0">
+  <!-- house_a @ (25,12) yaw -90 — village_house door on local −X → world south -->
+  <GameObject
+    name="portal.house_a"
+    place="at: 26.35 8.44; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.35 0"
+      particle-emitter="preset: magic; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- house_b @ (-19,19) yaw 135 — door local −X → world NE -->
+  <GameObject
+    name="portal.house_b"
+    place="at: -17.44 22.47; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.35 0"
+      particle-emitter="preset: magic; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- house_c @ (-17,-20) yaw 45 — door local −X → world SW -->
+  <GameObject
+    name="portal.house_c"
+    place="at: -20.47 -18.44; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.35 0"
+      particle-emitter="preset: magic; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- shepherd_cottage @ (-21,8) yaw 0 — +Z door left of center -->
+  <GameObject
+    name="portal.shepherd_cottage"
+    place="at: -22.33 12.95; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.35 0"
+      particle-emitter="preset: magic; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- chapel @ (10,25) yaw -135 — +Z arched door -->
+  <GameObject
+    name="portal.chapel"
+    place="at: 7.46 22.46; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.35 0"
+      particle-emitter="preset: magic; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- village_forge @ (-31,-33) yaw 0 — +Z mouth slightly +X, north -->
+  <GameObject
+    name="portal.village_forge"
+    place="at: -30.47 -29.06; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.35 0"
+      particle-emitter="preset: magic; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- village_barn @ (-33.1,30) yaw 90 — +Z doors → world east -->
+  <GameObject
+    name="portal.village_barn"
+    place="at: -26.11 30; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.35 0"
+      particle-emitter="preset: magic; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- longhouse @ (31,-33) yaw 135 — +Z gable doors -->
+  <GameObject
+    name="portal.longhouse"
+    place="at: 35.53 -37.53; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.35 0"
+      particle-emitter="preset: magic; emission-rate: 16; shape-radius: 0.65; start-life-min: 0.7; start-life-max: 1.4; start-speed-min: 0.15; start-speed-max: 0.55; start-size-min: 0.1; start-size-max: 0.22; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+
+  <!-- market stalls — +Z counter -->
+  <GameObject
+    name="portal.market_stall_a"
+    place="at: 10.1 -15.7; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.3 0"
+      particle-emitter="preset: magic; emission-rate: 12; shape-radius: 0.5; start-life-min: 0.6; start-life-max: 1.2; start-speed-min: 0.1; start-speed-max: 0.4; start-size-min: 0.08; start-size-max: 0.18; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject
+    name="portal.market_stall_b"
+    place="at: 11.7 -14.4; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.3 0"
+      particle-emitter="preset: magic; emission-rate: 12; shape-radius: 0.5; start-life-min: 0.6; start-life-max: 1.2; start-speed-min: 0.1; start-speed-max: 0.4; start-size-min: 0.08; start-size-max: 0.18; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+  <GameObject
+    name="portal.market_stall_c"
+    place="at: 18.9 -20.3; align-to-terrain: 0"
+    script="building-portal.ts"
+  >
+    <ParticleSystem
+      preset="magic"
+      transform="pos: 0 0.3 0"
+      particle-emitter="preset: magic; emission-rate: 12; shape-radius: 0.5; start-life-min: 0.6; start-life-max: 1.2; start-speed-min: 0.1; start-speed-max: 0.4; start-size-min: 0.08; start-size-max: 0.18; looping: 1; world-space: 1"
+    ></ParticleSystem>
+  </GameObject>
+</Group>

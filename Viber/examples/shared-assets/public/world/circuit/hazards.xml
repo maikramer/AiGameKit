@@ -1,0 +1,64 @@
+<!--
+  Perigos e prêmios da corrida, em coordenadas de PISTA: `s` = metros de arco
+  desde a linha de meta, `lateral` = deslocamento do eixo (+ = direita do
+  condutor). Volta ≈ 5450 m — ver os setores em `src/track.ts`.
+
+  Nada aqui tem coordenadas de mundo: mexer no traçado leva os hazards junto.
+
+  Baús de item e obstáculos são PROCEDURAIS: <HazardsLayout> sorteia fileiras
+  de baús e obstáculos (parados, móveis e caixotes) com uma seed. seed="auto"
+  re-sorteada a cada corrida; o modo time-trial congela a seed via main.ts
+  para o PB/ghost continuar justo. Rampas são fixas — são parte do traçado.
+-->
+<Group name="hazards" pos="0 0 0">
+  <!-- Reta da cidade, saindo dos boxes. -->
+  <RaceTrackRamp
+    name="ramp-downtown"
+    s="300"
+    lateral="0"
+    length="14"
+    width="7"
+    height="2.6"
+  ></RaceTrackRamp>
+
+  <!-- Retão do oeste, entre o pouso do viaduto e a subida. -->
+  <RaceTrackRamp
+    name="ramp-west"
+    s="2400"
+    lateral="0"
+    length="16"
+    width="7"
+    height="3"
+  ></RaceTrackRamp>
+
+  <!-- Planalto leste, reta longa antes da crista. -->
+  <RaceTrackRamp
+    name="ramp-rim"
+    s="3100"
+    lateral="0"
+    length="14"
+    width="6"
+    height="2.4"
+  ></RaceTrackRamp>
+
+  <!-- Descida rápida para o sub-viaduto: salto cego, passe com fé. -->
+  <RaceTrackRamp
+    name="ramp-descent"
+    s="4300"
+    lateral="0"
+    length="18"
+    width="7"
+    height="3.2"
+  ></RaceTrackRamp>
+
+  <!-- Layout procedural: 6 fileiras de 3 baús, 4 obstáculos parados,
+       3 móveis (drones que varrem + barris rolando) e 2 caixotes. -->
+  <HazardsLayout
+    seed="auto"
+    rows="6"
+    per-row="3"
+    obstacles="4"
+    moving="3"
+    crates="2"
+  ></HazardsLayout>
+</Group>

@@ -1,0 +1,525 @@
+<!--
+  World fragment loaded via Include src= (see index.html shell).
+  Edit this file — do not paste into index.html.
+  Cell coords for CityGrid: space-separated (at="4 2").
+-->
+<!-- Anel de recursos + exclusões periurbanas. -->
+      <!-- GRUPO "valley-outskirts": anel de recursos à volta da cidade
+           (carvalhos, pedras, laguinho, rio, goblins de aviso). Área de
+           transição entre a cidade e os biomas profundos. -->
+      <Group name="valley-outskirts" pos="0 0 0">
+        <!-- ============================================================
+           §5 ANEL DO VALE — recursos junto à cidade (fora da muralha ±39.8,
+           dentro de ~±116). Exclusion r=52 limpa o interior. A cidade
+           compacta libertou a coroa 52–84 que antes era planalto pelado:
+           as contagens abaixo subiram ~40 % para a preencher.
+           ============================================================ -->
+        <!-- Erva / plantas / flores no anel periurbano.
+           O kit Quaternius (/assets/meshes/vegetation/*.glb) está ausente do
+           disco (ver ASSETS_REGISTRY.md — "GLBs em falta"); a tag <Vegetation>
+           foi removida daqui para não referenciar URLs partidos
+           (`vibegame analyze` reportava 9 ERROR "missing asset" nesta zona).
+           O tapete verde do anel vem da textura `vale_grass` do terreno; a
+           árvore/rocha colhível (ResourceNode) abaixo já usa GLBs válidos. -->
+        <!-- Laguinho NW da muralha mas ESTE do rio (antes -50,42 sobrepunha
+           o carve em x≈-58 → disco a flutuar sobre a ravina). -->
+        <Lake
+          at="-80 104"
+          radius="16"
+          depth="5.0"
+          water-offset="0.25"
+          color="#2a6685"
+          opacity="0.72"
+        ></Lake>
+        <!-- Aproches: pads LANDWARD dos Ways (tips fora do mesh de água). -->
+        <!-- Aproches da ponte norte. O rio segue agora a drenagem real do
+             heightmap (nasce a 314,125 e corre para NO), cruzando só a
+             artéria norte por volta de z=214 — as antigas travessias oeste
+             e sul deixaram de ter rio por baixo. Sem `height=`: o pad
+             assenta na cota do terreno no seu centro, em vez de fixar a
+             cota 34.9/33.7 do contrato antigo (o vale está agora a ~134 m). -->
+        <TerrainPad
+          at="2 198"
+          size="20 12"
+          falloff="8"
+          corner-radius="4"
+        ></TerrainPad>
+        <TerrainPad
+          at="6 230"
+          size="20 12"
+          falloff="8"
+          corner-radius="4"
+        ></TerrainPad>
+        <!-- Rio: sul → oeste (x≲-58) → NW sem passar no laguinho.
+           path = [x0 z0 ...] nascente primeiro. -->
+        <!-- width = lâmina; carve total = width + 2·bank-width (+ feather). -->
+        <River
+          path="314 125 287 121 258 121 236 141 209 162 180 188 150 193 121 199 92 189 62 203 33 209 4 215 -25 213 -55 215 -84 232 -113 260 -133 289 -158 318 -186 340"
+          width="16"
+          depth="3.7"
+          water-offset="1.2"
+          bank-width="6.4"
+          bank-height="0.85"
+          color="#2a6685"
+          opacity="0.88"
+        ></River>
+        <!-- Ponte: RoadNetwork Segment bridge na artéria norte (z≈214), a única
+             travessia — o rio segue a drenagem real e passa a norte da cidade. -->
+        <!-- Posto de descanso na margem sul da ponte norte: crate/barrel/bench. -->
+        <GameObject
+          place="at: -11.8 196.6; align-to-terrain: 1"
+          transform="rotation: 0 20 0"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_crate_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: -14.2 194.2; align-to-terrain: 1"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/village/wooden_barrel_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: -10.2 193; align-to-terrain: 1"
+          transform="rotation: 0 -70 0"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/wooden_bench_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_bench_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_bench_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <!-- Posto de descanso na ponte SUL (pads 4,-102 / 4,-146). -->
+        <GameObject
+          place="at: 6.4 199.8; align-to-terrain: 1"
+          transform="rotation: 0 -15 0"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: box; size: 0.8 0.8 0.8"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: 2.2 195.6; align-to-terrain: 1"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: box; size: 0.55 0.7 0.55"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/wooden_barrel_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_barrel_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_barrel_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: -1.6 198.6; align-to-terrain: 1"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/village/torch_post_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/torch_post_lod0.glb"
+            lod1-url="/assets/meshes/village/torch_post_lod1.glb"
+            lod2-url="/assets/meshes/village/torch_post_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: 5.2 225.6; align-to-terrain: 1"
+          transform="rotation: 0 70 0"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: box; size: 1.8 0.8 0.9"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/log_pile_lod0.glb"
+            lod1-url="/assets/meshes/village/log_pile_lod1.glb"
+            lod2-url="/assets/meshes/village/log_pile_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          place="at: 1.8 229.8; align-to-terrain: 1"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: box; size: 0.8 0.8 0.8"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village/wooden_crate_lod0.glb"
+            lod1-url="/assets/meshes/village/wooden_crate_lod1.glb"
+            lod2-url="/assets/meshes/village/wooden_crate_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <!-- Vitórias-régias no laguinho (-40,52 r=8). -->
+        <StaticSpawner
+          profile="tree"
+          count="20"
+          seed="326"
+          region-min="-94 0 90"
+          region-max="-66 0 118"
+          in-water="1"
+          align-to-terrain="0"
+          max-slope-attempts="128"
+          scale-min="0.7"
+          scale-max="1.4"
+          avoid-overlaps="1"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="tree"
+        >
+          <GameObject role="static">
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/swamp/lily_pad_lod0.glb"
+            ></GLTFLoader>
+          </GameObject>
+        </StaticSpawner>
+        <StaticSpawner
+          profile="tree"
+          count="84"
+          seed="7"
+          region-min="-116 0 -116"
+          region-max="116 0 116"
+          align-to-terrain="1"
+          ground-align="auto"
+          scale-min="0.7"
+          scale-max="1.4"
+          avoid-overlaps="1"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="tree"
+        >
+          <GameObject
+            role="static"
+            destructible="popup-text: Wood; popup-color: #8b4513; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: fall; cut-height: 0.7"
+            script="tree.ts"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: precompute; mesh-url: /assets/meshes/forest/tree_oak_lod0.glb"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/forest/tree_oak_lod0.glb"
+              lod1-url="/assets/meshes/forest/tree_oak_lod1.glb"
+              lod2-url="/assets/meshes/forest/tree_oak_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="wood"
+              yield="3"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+        </StaticSpawner>
+        <StaticSpawner
+          profile="tree"
+          count="62"
+          seed="99"
+          region-min="-116 0 -116"
+          region-max="116 0 116"
+          align-to-terrain="1"
+          ground-align="auto"
+          scale-min="0.7"
+          scale-max="1.4"
+          avoid-overlaps="1"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="rock"
+        >
+          <GameObject
+            role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="3"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+        </StaticSpawner>
+
+        <!-- §4.x Pedras de margem do rio no anel de barranco (near-water).
+           Região larga; o filtro só aceita carve sem água. -->
+        <StaticSpawner
+          profile="tree"
+          count="96"
+          seed="401"
+          region-min="-400 0 -200"
+          region-max="440 0 400"
+          near-water="1"
+          avoid-water="0"
+          align-to-terrain="1"
+          ground-align="auto"
+          max-slope-deg="58"
+          max-slope-attempts="128"
+          scale-min="0.7"
+          scale-max="1.4"
+          avoid-overlaps="1"
+          pick-strategy="random"
+          footprint-radius="2.8"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="tree"
+        >
+          <GameObject
+            role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+          <GameObject
+            role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: precompute; mesh-url: /assets/meshes/swamp/moss_rock_lod0.glb"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/swamp/moss_rock_lod0.glb"
+              lod1-url="/assets/meshes/swamp/moss_rock_lod1.glb"
+              lod2-url="/assets/meshes/swamp/moss_rock_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+          <GameObject
+            role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+          <GameObject
+            role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+          <GameObject
+            role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+        </StaticSpawner>
+        <!-- Outcrops cénicos no vale (fora da cidade) — colheitáveis (stone). -->
+        <StaticSpawner
+          profile="tree"
+          count="56"
+          seed="402"
+          region-min="-110 0 -110"
+          region-max="110 0 110"
+          avoid-water="1"
+          align-to-terrain="1"
+          ground-align="auto"
+          scale-min="0.7"
+          scale-max="1.4"
+          avoid-overlaps="1"
+          pick-strategy="random"
+          footprint-radius="3.2"
+          cluster-count="2"
+          cluster-radius="20"
+          scale-axis-min="0.9"
+          scale-axis-max="1.1"
+          random-yaw="true"
+          variation="tree"
+        >
+          <GameObject
+            role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+          <GameObject
+            role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/stone_pillar_lod0.glb"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/props/stone_pillar_lod0.glb"
+              lod1-url="/assets/meshes/props/stone_pillar_lod1.glb"
+              lod2-url="/assets/meshes/props/stone_pillar_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+          <GameObject
+            role="static"
+            script="rock.ts"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: precompute; mesh-url: /assets/meshes/props/rock_mossy_lod0.glb"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/props/rock_mossy_lod0.glb"
+              lod1-url="/assets/meshes/props/rock_mossy_lod1.glb"
+              lod2-url="/assets/meshes/props/rock_mossy_lod2.glb"
+              lod-threshold-near="36"
+              lod-threshold-mid="110"
+            ></GLTFLoader>
+            <ResourceNode
+              kind="stone"
+              yield="4"
+              transform="pos: 0 0 0"
+            ></ResourceNode>
+          </GameObject>
+        </StaticSpawner>
+
+        <!-- Goblins de aviso a caminho da floresta norte (briga inicial). A
+           cidade murada fica livre de inimigos — a DynamicSpawner não
+           respeita o SpawnExclusion. A banda começa em z>=40 (e não em 28)
+           para não ficar em cima do ponto de respawn do portão norte
+           (0,28): com detectRange=18 os goblins nasciam a ~3.6 m do herói
+           e matavam-no logo ao renascer. -->
+        <!-- Enemies: Creature CCT on terrain heightfield; NavMesh steers desiredVel. -->
+        <DynamicSpawner
+          avoid-water="1"
+          count="6"
+          seed="11"
+          region-min="-52 0 80"
+          region-max="52 0 104"
+          random-yaw="true"
+          avoid-overlaps="false"
+          max-slope-deg="40"
+          max-distance="180"
+        >
+          <Creature role="enemy" script="goblin-wander.ts">
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/characters/goblin_lod0.glb"
+              lod1-url="/assets/meshes/characters/goblin_lod1.glb"
+              lod2-url="/assets/meshes/characters/goblin_lod2.glb"
+              lod-threshold-near="18"
+              lod-threshold-mid="55"
+            ></GLTFLoader>
+          </Creature>
+        </DynamicSpawner>
+  <!-- Ambiência de água (scripts/ambient-water.ts): loops espaciais com
+       histerese — rio na ponte norte, lago do vale. -->
+  <GameObject
+    name="ambient_water_river"
+    place="at: 4 214; align-to-terrain: 1"
+    script="ambient-water.ts"
+  ></GameObject>
+  <GameObject
+    name="ambient_water_valley_lake"
+    place="at: -80 104; align-to-terrain: 1"
+    script="ambient-water.ts"
+  ></GameObject>
+      </Group>
+      <!-- FIM valley-outskirts -->

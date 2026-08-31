@@ -1,0 +1,50 @@
+title: Crystal Vale shared packs
+genre: cartoon fantasy
+tone: bright cheerful adventure, vibrant colors, playful cartoon world, Crystal Vale
+style_preset: painterly
+output_dir: public/assets
+path_layout: split
+images_subdir: images
+meshes_subdir: meshes
+image_ext: png
+seed_base: 7777
+generation: medium
+
+# Packs canónicos (audio-bgm/audio-sfx-*/characters/desert/farm/forest/infra/
+# interiors/props-rpg/props/swamp/terrain/vehicles/village). O happy path de
+# regen é `cd examples/shared-assets` — o batch escreve em public/assets
+# **daqui** (fonte canónica dos binários); os exemplos leem o pool via plugin
+# vibegame({ sharedAssets }). Não há passo de sync nem symlinks.
+master_validate: true
+master_bake_normals: false
+negative_keywords:
+  - gore
+  - realistic
+  - photorealistic
+  - dark gritty
+  - scary
+text2d:
+  width: 768
+  height: 768
+text2sound:
+  quality: high
+  audio_format: ogg
+text3d:
+  export_origin: feet
+  bounds_mode: auto
+  mc_level: auto
+  split_at_height: true
+  sdnq_preset: sdnq-int4
+  memory_efficient: true
+# Personagens: retarget encadeado villager + UAL1+UAL2 — trabalhos kevdev
+# (mining/hammer/pesca por-ficheiro) com a UAL por cima em idle/gather/combos.
+animator3d:
+  preset: humanoid
+  anim_pack: all
+# Criaturas animam a partir de *_lod2.glb — o rig tem de sobreviver a todos os
+# níveis (default 1 deixaria o lod2 estático = inimigos congelados).
+lod:
+  rig_max_level: 2
+paint3d:
+  preserve_origin: true
+  texture_size: 2048
