@@ -18,8 +18,9 @@ cargo run -- analyze examples/simple-rpg/world.xml       # headless + cobertura
 ## Estado atual
 
 O `analyze` imprime o relatório de cobertura — é o roteiro de trabalho da
-engine. Referência (após glTF + spawners + partículas + exclusões): **1398
-entidades** declaradas (702 grupos, 71 primitivas, 68 point lights, 1
+engine. Referência (após player + câmara interativa): **1399 entidades**
+declaradas — com **1 player jogável** (WASD/setas + Shift sprint sobre o
+terreno, câmara third-person com drag/scroll) — (702 grupos, 71 primitivas, 68 point lights, 1
 directional, 1 câmara, **450 cenas glTF**, **58 static + 12 dynamic spawn
 groups**, **8 vegetation groups** (cap 800 instâncias/tag), **105 emissores
 de partículas**, **24 zonas de exclusão** respeitadas por todos os

@@ -46,6 +46,8 @@ pub const KNOWN_TAGS: &[&str] = &[
     "spawnexclusion",
     "dynamicspawner",
     "vegetation",
+    "playergltf",
+    "thirdpersoncamera",
 ];
 
 /// A parsed world: clear color, entity tree and non-fatal warnings.
@@ -144,6 +146,8 @@ pub enum EntityKind {
         height: f32,
         /// `Some` only when `pitch` was set explicitly (overrides `height`).
         pitch_deg: Option<f32>,
+        /// Degrees per pixel of mouse drag; `None` = engine default.
+        mouse_sensitivity: Option<f32>,
     },
     /// `<Terrain>` — declarative heightfield terrain (consumed by the terrain
     /// runtime; the element itself spawns the chunk hierarchy).
@@ -178,6 +182,9 @@ pub enum EntityKind {
     /// `<ParticleSystem>` — emissor de partículas (fogueiras, poeira, clima).
     /// Entity própria; emissor CPU billboard desenhado em `particles`.
     ParticleSystem { spec: ParticleSpec },
+    /// `<PlayerGLTF model-url>` — the controllable hero: glTF scene plus the
+    /// [`crate::player::Player`] movement component.
+    PlayerGltf { url: String },
 }
 
 /// Emitter config of a `<ParticleSystem>`: a preset plus the
@@ -320,6 +327,7 @@ pub fn parse_world(root_attrs: &[(String, String)], nodes: &[XmlNode]) -> Result
             "multiple <AmbientLight> elements ({ambient_count}) — the last one wins"
         ));
     }
+    let entities = demote_extra_cameras(entities, &mut ctx.warnings);
     let mut warnings = ctx.warnings;
     if !ctx.skipped.is_empty() {
         let summary: Vec<String> = ctx
@@ -371,7 +379,7 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
         "pointlight" => finish_point_light(node, ctx).map(Some),
         "directionallight" => finish_directional_light(node, ctx).map(Some),
         "ambientlight" => finish_ambient_light(node, ctx).map(Some),
-        "orbitcamera" => finish_orbit_camera(node, ctx).map(Some),
+        "orbitcamera" => finish_orbit_camera(node, ctx, false).map(Some),
         "gltfscene" => match node.attr("url").map(str::trim).filter(|s| !s.is_empty()) {
             Some(url) => finish_gltf_scene(node, url.to_string(), ctx).map(Some),
             None => {
@@ -384,6 +392,19 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
         "dynamicspawner" => finish_static_spawner(node, true, ctx).map(Some),
         "spawnexclusion" => finish_spawn_exclusion(node, ctx).map(Some),
         "vegetation" => finish_vegetation(node, ctx).map(Some),
+        "playergltf" => match node
+            .attr("model-url")
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            Some(url) => finish_player_gltf(node, url.to_string(), ctx).map(Some),
+            None => {
+                ctx.warnings
+                    .push(format!("<{}>: missing model-url — skipped", node.tag));
+                Ok(None)
+            }
+        },
+        "thirdpersoncamera" => finish_orbit_camera(node, ctx, true).map(Some),
         "particlesystem" => finish_particle_system(node, ctx).map(Some),
         "terrain" => finish_terrain(node, ctx).map(Some),
         "terrainpad" => finish_terrain_pad(node, ctx).map(Some),
@@ -426,7 +447,8 @@ fn parse_common(node: &XmlNode) -> Result<(Common, Vec<(String, String)>)> {
             "name" => common.name = Some(value.clone()),
             "tag" => common.tag = Some(value.clone()),
             "script" => common.script = Some(value.clone()),
-            "translation" => {
+            // `pos` is the original-format spelling (verbatim tags keep it)
+            "translation" | "pos" => {
                 common.transform.translation =
                     values::parse_vec3(value, &format!("{ctx} translation"))?;
             }
@@ -669,14 +691,24 @@ fn finish_ambient_light(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
     })
 }
 
-fn finish_orbit_camera(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+fn finish_orbit_camera(
+    node: &XmlNode,
+    ctx: &mut ParseCtx,
+    third_person: bool,
+) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node)?;
     let ctx_tag = format!("<{}>", node.tag);
+    let (default_target, default_distance, default_height) = if third_person {
+        (Some("player".to_string()), 4.0, 1.6)
+    } else {
+        (None, 12.0, 4.0)
+    };
     let mut kind = EntityKind::OrbitCamera {
-        target: None,
-        distance: 12.0,
-        height: 4.0,
+        target: default_target,
+        distance: default_distance,
+        height: default_height,
         pitch_deg: None,
+        mouse_sensitivity: None,
     };
     for (key, value) in rest {
         let kctx = format!("{ctx_tag} {key}");
@@ -685,6 +717,7 @@ fn finish_orbit_camera(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
             distance,
             height,
             pitch_deg,
+            mouse_sensitivity,
         } = &mut kind
         else {
             unreachable!("kind is OrbitCamera here");
@@ -694,6 +727,7 @@ fn finish_orbit_camera(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
             "distance" => *distance = values::parse_f32(&value, &kctx)?,
             "height" => *height = values::parse_f32(&value, &kctx)?,
             "pitch" => *pitch_deg = Some(values::parse_f32(&value, &kctx)?),
+            "mouse-sensitivity" => *mouse_sensitivity = Some(values::parse_f32(&value, &kctx)?),
             other => ctx
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
@@ -986,6 +1020,25 @@ fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         script: common.script,
         transform: common.transform,
         kind: EntityKind::Vegetation { spec },
+        children: Vec::new(),
+    })
+}
+
+fn finish_player_gltf(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    warn_ignored(
+        node,
+        rest.into_iter()
+            .filter(|(key, _)| key != "model-url")
+            .collect(),
+        ctx,
+    );
+    Ok(EntitySpec {
+        name: common.name.or_else(|| Some("player".to_string())),
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::PlayerGltf { url },
         children: Vec::new(),
     })
 }
@@ -1501,6 +1554,8 @@ pub struct WorldSummary {
     pub vegetation: usize,
     /// `<SpawnExclusion>` no-spawn circles (global constraint).
     pub spawn_exclusions: usize,
+    /// `<PlayerGLTF>` heroes (controllable).
+    pub players: usize,
 }
 
 impl WorldSummary {
@@ -1513,6 +1568,7 @@ impl WorldSummary {
             + self.cameras
             + self.gltf_scenes
             + self.particle_systems
+            + self.players
     }
 
     /// Total ground-feature elements (terrain element excluded — it is the
@@ -1520,6 +1576,34 @@ impl WorldSummary {
     pub fn ground_features(&self) -> usize {
         self.terrain_pads + self.lakes + self.rivers + self.roads + self.road_networks
     }
+}
+
+/// Keep the first camera in the tree; deeper cameras become plain groups
+/// (two `Camera3d` entities would double-render and fight over the window).
+fn demote_extra_cameras(specs: Vec<EntitySpec>, warnings: &mut Vec<String>) -> Vec<EntitySpec> {
+    let mut seen_camera = false;
+    let mut demoted = 0usize;
+    fn walk(specs: &mut [EntitySpec], seen: &mut bool, demoted: &mut usize) {
+        for spec in specs.iter_mut() {
+            if matches!(spec.kind, EntityKind::OrbitCamera { .. }) {
+                if *seen {
+                    spec.kind = EntityKind::Group;
+                    *demoted += 1;
+                } else {
+                    *seen = true;
+                }
+            }
+            walk(&mut spec.children, seen, demoted);
+        }
+    }
+    let mut specs = specs;
+    walk(&mut specs, &mut seen_camera, &mut demoted);
+    if demoted > 0 {
+        warnings.push(format!(
+            "{demoted} extra camera(s) demoted to groups — only the first one renders"
+        ));
+    }
+    specs
 }
 
 /// Walk the entity tree and count each kind.
@@ -1545,6 +1629,7 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::DynamicSpawner { .. } => out.dynamic_spawners += 1,
                 EntityKind::SpawnExclusion { .. } => out.spawn_exclusions += 1,
                 EntityKind::Vegetation { .. } => out.vegetation += 1,
+                EntityKind::PlayerGltf { .. } => out.players += 1,
             }
             walk(&spec.children, out);
         }
@@ -1625,10 +1710,17 @@ mod tests {
     }
 
     #[test]
+    fn test_pos_is_alias_of_translation() {
+        let (spec, w) = parse_one(&node("Entity", &[("pos", "1 2 3")])).unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(spec.transform.translation, [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
     fn test_unknown_attribute_is_warning() {
-        let (spec, w) = parse_one(&node("Entity", &[("pos", "0 0 0")])).unwrap();
+        let (spec, w) = parse_one(&node("Entity", &[("pos-x", "0 0 0")])).unwrap();
         assert!(matches!(spec.kind, EntityKind::Group));
-        assert_eq!(w, vec!["<Entity>: ignored attribute `pos`".to_string()]);
+        assert_eq!(w, vec!["<Entity>: ignored attribute `pos-x`".to_string()]);
     }
 
     #[test]
@@ -2018,6 +2110,7 @@ mod tests {
             distance,
             height,
             pitch_deg,
+            ..
         } = spec.kind
         else {
             panic!("expected camera");
@@ -2101,6 +2194,10 @@ mod tests {
                         ("density-per-km2", "5000"),
                     ],
                 ),
+                node(
+                    "PlayerGLTF",
+                    &[("model-url", "/assets/meshes/characters/hero_lod0.glb")],
+                ),
             ],
         )
         .unwrap();
@@ -2126,9 +2223,10 @@ mod tests {
                 dynamic_spawners: 1,
                 vegetation: 1,
                 spawn_exclusions: 1,
+                players: 1,
             }
         );
-        assert_eq!(summary.entities(), 7);
+        assert_eq!(summary.entities(), 8);
         assert_eq!(summary.ground_features(), 5);
     }
 

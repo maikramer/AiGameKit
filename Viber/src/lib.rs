@@ -5,6 +5,7 @@
 
 pub mod bridge;
 pub mod particles;
+pub mod player;
 pub mod recipes;
 pub mod scaffold;
 pub mod spawner;

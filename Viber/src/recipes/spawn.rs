@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use bevy::asset::LoadState;
 use bevy::gltf::Gltf;
+use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::light::NotShadowCaster;
 use bevy::math::primitives::{Capsule3d, Cuboid, Cylinder, Plane3d, Sphere};
 use bevy::prelude::*;
@@ -25,6 +26,15 @@ pub struct OrbitCamera {
     /// `Some` only when the world set `pitch` explicitly; it overrides
     /// `height` (see [`orbit_camera_follow`]).
     pub pitch_deg: Option<f32>,
+    /// Live orbit pitch (degrees) — seeded from `pitch_deg` or from
+    /// `atan(height/distance)`, driven by mouse drag.
+    pub pitch_state_deg: f32,
+    /// Live orbit yaw (degrees) — driven by mouse drag.
+    pub yaw_deg: f32,
+    /// Degrees per pixel of drag.
+    pub mouse_sensitivity: f32,
+    pub min_distance: f32,
+    pub max_distance: f32,
 }
 
 /// Camera spawned automatically when the world has none: slow orbit at origin.
@@ -414,7 +424,9 @@ fn spawn_entity(
             distance,
             height,
             pitch_deg,
+            mouse_sensitivity,
         } => {
+            let pitch = pitch_deg.unwrap_or_else(|| height.atan2(*distance).to_degrees());
             entity.insert((
                 Camera3d::default(),
                 OrbitCamera {
@@ -422,9 +434,22 @@ fn spawn_entity(
                     distance: *distance,
                     height: *height,
                     pitch_deg: *pitch_deg,
+                    pitch_state_deg: pitch,
+                    yaw_deg: 0.0,
+                    mouse_sensitivity: mouse_sensitivity.unwrap_or(0.12),
+                    min_distance: 2.0,
+                    max_distance: 80.0,
                 },
             ));
             stats.has_camera = true;
+        }
+        EntityKind::PlayerGltf { url } => {
+            let path = url.trim_start_matches('/');
+            let handle: Handle<Gltf> = ctx.asset_server.load(path.to_owned());
+            entity.insert((
+                GltfScenePending { handle },
+                crate::player::Player { speed: 6.0 },
+            ));
         }
         // Ground features + `<Terrain>` + spawner groups return before the
         // spawn above; this arm only satisfies exhaustiveness.
@@ -518,12 +543,35 @@ pub fn orbit_camera_follow(
                 .unwrap_or(Vec3::ZERO),
             None => Vec3::ZERO,
         };
-        let height = match settings.pitch_deg {
-            Some(pitch) => settings.distance * pitch.to_radians().tan(),
-            None => settings.height,
-        };
-        cam.translation = target_pos + Vec3::new(0.0, height, settings.distance);
-        cam.look_at(target_pos, Vec3::Y);
+        let offset = crate::player::camera_offset(
+            settings.yaw_deg,
+            settings.pitch_state_deg,
+            settings.distance,
+        );
+        cam.translation = target_pos + offset;
+        cam.look_at(target_pos + Vec3::Y * 1.2, Vec3::Y);
+    }
+}
+
+/// Mouse drag orbits (yaw/pitch); scroll zooms. Drag with either button —
+/// no pointer lock needed for a desktop window.
+pub fn orbit_camera_input(
+    buttons: Res<ButtonInput<MouseButton>>,
+    motion: Res<AccumulatedMouseMotion>,
+    scroll: Res<AccumulatedMouseScroll>,
+    mut cameras: Query<&mut OrbitCamera>,
+) {
+    let dragging = buttons.pressed(MouseButton::Right) || buttons.pressed(MouseButton::Left);
+    for mut cam in &mut cameras {
+        if dragging {
+            cam.yaw_deg -= motion.delta.x * cam.mouse_sensitivity;
+            cam.pitch_state_deg =
+                (cam.pitch_state_deg - motion.delta.y * cam.mouse_sensitivity).clamp(-10.0, 85.0);
+        }
+        let zoom = scroll.delta.y * 1.5;
+        if zoom != 0.0 {
+            cam.distance = (cam.distance - zoom).clamp(cam.min_distance, cam.max_distance);
+        }
     }
 }
 

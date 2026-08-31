@@ -40,8 +40,7 @@ do binário instalado).
 
 ### Debug bridge (`viber run --bridge`)
 
-BRP sobre HTTP (`bevy_remote`) na porta **15702** (`--bridge PORT` muda; env
-`VIBER_BRIDGE_PORT`) — o equivalente nativo do tooling Chrome DevTools MCP do
+BRP sobre HTTP (`bevy_remote`) na porta **15702** (`--bridge PORT` muda) — o equivalente nativo do tooling Chrome DevTools MCP do
 VibeGame. Métodos JSON-RPC: `viber.ping`; `viber.screenshot` +
 `viber.screenshot_status` (request/poll — a captura completa em ~1-3 frames);
 `viber.tree` (árvore de entidades: id/nome/pai/transform/componentes);
@@ -92,6 +91,8 @@ Raiz: `<world>` (ou `<scene>`), attr `clear-color` (`#rgb`/`#rrggbb`/`0x…`/nom
 | `GltfScene` | `url` (obrigatório; `/assets/...` resolve contra a asset root do mundo — a pasta que contém `assets/`) + attrs universais; cena default do GLB spawna como filhos da entidade (transform aplica); load assíncrono, falha = warn + nó vazio. GLBs do pipeline vêm meshopt-comprimidos (bevy 0.19 não lê EXT_meshopt) → espelho decomprimido via `Viber/scripts/sync_assets.py` |
 | `StaticSpawner` | `count`, `seed`, `region-min`/`region-max` ("x y z"), `cluster-count`/`cluster-radius`, `footprint-radius`+`avoid-overlaps`, `max-slope-deg`, `avoid-water`, `align-to-terrain`, `scale-min`/`max`+`scale-axis-min`/`max`, `random-yaw`, `max-distance`; template = primeiro glTF (`GLTFLoader`/`GltfScene`) na subárvore filho. Colocação determinística (SplitMix64 por seed, rejeita água/declive/sobreposição, tenta count×8+64); `profile`/`variation`/`ground-align` aceites sem efeito. Espelha `src/spawner.rs` (função pura `compute_placements`) |
 | `ParticleSystem` | `preset` (fire, smoke, fireflies, ground-dust, sparkle, leaves, snow, sand-dust, magic, core; desconhecido = core) + `transform="pos: x y z"` (component-string) + overrides em `particle-emitter="preset: …; emission-rate: …; start-life-min/max: …; start-speed-min/max: …; start-size-min/max: …; start-color: #hex; looping: …; world-space: …"`. Emissor CPU billboard (`src/particles.rs`): mesh de capacidade FIXA por emissor (quads degenerados nos slots livres — realocar por frame tripava use-after-free no slab allocator), vertex color com fade por vida, material unlit Add (fogo/magic/sparkle/fireflies) ou Blend (resto) |
+| `PlayerGLTF` | `model-url` (obrigatório), `name` (default `player`), `pos` (alias de `translation` — tags verbatim mantêm `pos`), `speed` futuro. Componente `Player` + WASD/setas relativo ao yaw da câmara (Shift = sprint ×1.8), assenta no terreno via `TerrainRuntime::sample` todos os frames (`src/player.rs`) |
+| `ThirdPersonCamera` | alias interactivo do `OrbitCamera` com defaults `target="player"`, `distance` 4, `height` 1.6; aceita `mouse-sensitivity`. Drag (qualquer botão) = yaw/pitch, scroll = zoom (clamp 2–80 m); câmaras extra são rebaixadas a Group com warning |
 | `DynamicSpawner` | mesmos attrs de colocação do `StaticSpawner` (count/seed/region/avoid-*/random-yaw/max-slope/max-distance); template = `Creature`→glTF. Spawn único (respawn/comportamento chega com scripts) |
 | `SpawnExclusion` | `at` ("x z"), `radius` — círculo global; recolhido num recurso e respeitado por TODOS os spawners (rejeita candidatos dentro do raio) |
 | `Vegetation` | `meshes` (lista separada por espaços), `density-per-km2`, `seed`, `region-*`, `scale-*`, `max-slope-deg`, `avoid-water`, `max-distance`, `cluster-*`; count = densidade × área km² com cap `max-instances` (default 800/tag — o original GPU-instancia ~100k; instancing é follow-up). `smart`/`wind`/`flower-*`/`plant-*` aceites sem efeito |

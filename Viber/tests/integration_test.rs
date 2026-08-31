@@ -76,11 +76,11 @@ fn test_analyze_include_chain_is_expanded() {
 fn test_analyze_warns_but_succeeds_on_unknown_attribute() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("warn.xml");
-    std::fs::write(&path, "<world><Entity pos=\"0 0 0\" /></world>").unwrap();
+    std::fs::write(&path, "<world><Entity pos-x=\"0 0 0\" /></world>").unwrap();
     let (code, _, stderr) = viber(&["analyze", path.to_str().unwrap()]);
     assert_eq!(code, 0);
     assert!(
-        stderr.contains("ignored attribute `pos`"),
+        stderr.contains("ignored attribute `pos-x`"),
         "stderr: {stderr}"
     );
 }
