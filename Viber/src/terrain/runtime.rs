@@ -25,12 +25,78 @@ use bevy::render::mesh::{Indices, PrimitiveTopology};
 use super::brush::BrushGrid;
 use super::features::{FeatureResult, apply_features};
 use super::heightmap::HeightMapU16;
-use super::mesh::{ChunkMeshParams, TintParams, build_chunk_mesh};
+use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
+
+use super::mesh::{ChunkMeshParams, build_chunk_mesh};
 use super::roads::RoadPath;
 use super::sampler::ResolvedPad;
 use super::spec::TerrainSpec;
 use super::water::{WaterBody, lake_water_mesh, river_water_mesh};
 use crate::recipes::spawn::PendingTerrain;
+
+/// Materials whose `base_color_texture` is still loading, so a texture that
+/// never arrives can be dropped instead of blanking what it was painting.
+///
+/// Bevy will not prepare a `StandardMaterial` until every texture it
+/// references is resident, and a mesh with an unprepared material is simply
+/// not drawn. A single missing PNG therefore makes the whole terrain
+/// disappear — which is exactly what `simple-rpg` hit: it asks for
+/// `vale_grass.png`, the file is not in the pool, and the entire 4000 m world
+/// rendered as empty sky.
+#[derive(Resource, Default)]
+pub struct PendingTerrainTextures {
+    /// `(material, texture)` pairs still waiting on their image.
+    pub watched: Vec<(Handle<StandardMaterial>, Handle<Image>)>,
+}
+
+/// Sampler para texturas com UV em unidades de mundo (terrain `world/tile`,
+/// road/river `arc/scale`): sem REPEAT os UVs >> 1.0 clampeiam na borda e a
+/// textura estica numa mancha única — a ribbon da estrada ficava "quebrada".
+pub fn world_tiled_sampler() -> ImageSampler {
+    ImageSampler::Descriptor(ImageSamplerDescriptor {
+        address_mode_u: ImageAddressMode::Repeat,
+        address_mode_v: ImageAddressMode::Repeat,
+        ..ImageSamplerDescriptor::default()
+    })
+}
+
+/// Drops textures that failed to load from the materials referencing them.
+///
+/// The material then falls back to its vertex-color tint (terrain) or flat
+/// base color (roads) — a texture-less surface instead of no surface.
+pub fn drop_failed_terrain_textures(
+    server: Res<AssetServer>,
+    mut pending: ResMut<PendingTerrainTextures>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    if pending.watched.is_empty() {
+        return;
+    }
+    pending.watched.retain(|(material, texture)| {
+        match server.get_load_state(texture) {
+            Some(bevy::asset::LoadState::Failed(error)) => {
+                warn!(
+                    "terrain texture failed to load ({error}); rendering untextured \
+                     instead of hiding the surface"
+                );
+                if let Some(mut material) = materials.get_mut(material) {
+                    material.base_color_texture = None;
+                }
+                false
+            }
+            Some(bevy::asset::LoadState::Loaded) => {
+                // Toda textura watched usa UV em metros — repete em vez de
+                // clampear (mutar o asset re-dispara o upload da GPU).
+                if let Some(mut image) = images.get_mut(texture) {
+                    image.sampler = world_tiled_sampler();
+                }
+                false
+            }
+            _ => true,
+        }
+    });
+}
 
 /// Carved world state, published after the bootstrap for gameplay queries.
 #[derive(Resource)]
@@ -67,10 +133,12 @@ pub struct TerrainFeaturesPlugin;
 
 impl bevy::app::Plugin for TerrainFeaturesPlugin {
     fn build(&self, app: &mut bevy::app::App) {
-        app.add_systems(
-            bevy::app::Startup,
-            bootstrap.after(crate::recipes::spawn::startup),
-        );
+        app.init_resource::<PendingTerrainTextures>()
+            .add_systems(
+                bevy::app::Startup,
+                bootstrap.after(crate::recipes::spawn::startup),
+            )
+            .add_systems(bevy::app::Update, drop_failed_terrain_textures);
     }
 }
 
@@ -130,6 +198,8 @@ pub fn bootstrap(world: &mut World) {
         .expect("Assets<StandardMaterial> exists before startup systems run");
     let asset_server = world.get_resource::<AssetServer>().cloned();
 
+    let mut watched: Vec<(Handle<StandardMaterial>, Handle<Image>)> = Vec::new();
+
     // Chunk LODs are picked against the camera the world spawned, so a large
     // world does not materialise at full detail (see `spawn_chunks`).
     let camera_xz = world
@@ -154,6 +224,7 @@ pub fn bootstrap(world: &mut World) {
         &spec,
         &grid,
         camera_xz,
+        &mut watched,
     );
     spawn_water(
         world,
@@ -171,8 +242,10 @@ pub fn bootstrap(world: &mut World) {
         root,
         &grid,
         &result,
+        &mut watched,
     );
 
+    world.insert_resource(PendingTerrainTextures { watched });
     world.insert_resource(meshes);
     world.insert_resource(materials);
     world.insert_resource(TerrainRuntime {
@@ -216,6 +289,7 @@ fn spawn_chunks(
     spec: &TerrainSpec,
     grid: &BrushGrid,
     camera_xz: Option<Vec2>,
+    watched: &mut Vec<(Handle<StandardMaterial>, Handle<Image>)>,
 ) {
     let step = lod0_step(spec);
     let segments = (spec.chunk_size / step as f32).round() as usize;
@@ -225,24 +299,27 @@ fn spawn_chunks(
     }
     let edge = segments as f32 * step as f32;
     let rows = (spec.world_size / edge).ceil().max(1.0) as u32;
-    let tint = TintParams::from(&spec.tint);
     let epsilon = grid.texel();
 
     let mut material = StandardMaterial {
-        // White: `tint_vertex_color` already multiplies `base_color` into every
-        // vertex color, and the PBR shader multiplies material x vertex — so
-        // setting it here too applied the base tint twice.
-        base_color: Color::WHITE,
+        // The authored `base-color`, straight on the material — the terrain
+        // has no vertex colours to multiply against any more.
+        base_color: spec.tint.base_color,
         metallic: 0.0,
         perceptual_roughness: 0.95,
         ..StandardMaterial::default()
     };
+    let mut texture_handle = None;
     if let (Some(server), Some(texture)) = (asset_server, spec.texture.as_deref()) {
         // strip leading '/' — bevy treats root-absolute asset paths as unapproved
-        material.base_color_texture =
-            Some(server.load(texture.trim_start_matches('/').to_string()));
+        let handle: Handle<Image> = server.load(texture.trim_start_matches('/').to_string());
+        texture_handle = Some(handle.clone());
+        material.base_color_texture = Some(handle);
     }
     let terrain_material = materials.add(material);
+    if let Some(texture) = texture_handle {
+        watched.push((terrain_material.clone(), texture));
+    }
 
     let half = spec.world_size * 0.5;
     let max_lod = super::plugin::max_lod_for(spec, edge);
@@ -271,7 +348,6 @@ fn spawn_chunks(
                 normal_epsilon: epsilon,
                 texture_tile_size: spec.texture_tile_size,
                 levels: spec.levels,
-                tint: tint.clone(),
                 world_size: spec.world_size,
             };
             // A LOD step that does not divide the chunk edge yields no mesh;
@@ -372,6 +448,7 @@ fn spawn_water(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_roads(
     world: &mut World,
     meshes: &mut Assets<Mesh>,
@@ -380,6 +457,7 @@ fn spawn_roads(
     parent: Entity,
     grid: &BrushGrid,
     result: &FeatureResult,
+    watched: &mut Vec<(Handle<StandardMaterial>, Handle<Image>)>,
 ) {
     for (i, (path, spec)) in result.roads.iter().zip(&result.road_specs).enumerate() {
         let mesh = super::roads::road_ribbon_mesh(grid, path, spec);
@@ -393,12 +471,17 @@ fn spawn_roads(
             alpha_mode: bevy::material::AlphaMode::Blend,
             ..StandardMaterial::default()
         };
+        let mut texture_handle = None;
         if let (Some(server), Some(texture)) = (asset_server, spec.texture.as_deref()) {
             // strip leading '/' — bevy treats root-absolute asset paths as unapproved
-            material.base_color_texture =
-                Some(server.load(texture.trim_start_matches('/').to_string()));
+            let image: Handle<Image> = server.load(texture.trim_start_matches('/').to_string());
+            texture_handle = Some(image.clone());
+            material.base_color_texture = Some(image);
         }
         let handle = materials.add(material);
+        if let Some(texture) = texture_handle {
+            watched.push((handle.clone(), texture));
+        }
         let mesh_handle = meshes.add(to_bevy_mesh(&mesh));
         world
             .spawn((
@@ -421,7 +504,11 @@ fn to_bevy_mesh(data: &super::mesh::ChunkMeshData) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, data.positions.clone());
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, data.normals.clone());
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, data.uvs.clone());
-    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, data.colors.clone());
+    // Only surfaces that actually use vertex colours get the attribute:
+    // roads carry their edge alpha there, terrain chunks carry nothing.
+    if !data.colors.is_empty() {
+        mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, data.colors.clone());
+    }
     mesh.insert_indices(Indices::U32(data.indices.clone()));
     mesh
 }
@@ -476,6 +563,16 @@ fn load_heightmap(base_dir: Option<&Path>, path: &str) -> anyhow::Result<LoadedH
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_world_tiled_sampler_repeats() {
+        let sampler = world_tiled_sampler();
+        let bevy::image::ImageSampler::Descriptor(desc) = sampler else {
+            panic!("expected a concrete sampler descriptor");
+        };
+        assert_eq!(desc.address_mode_u, bevy::image::ImageAddressMode::Repeat);
+        assert_eq!(desc.address_mode_v, bevy::image::ImageAddressMode::Repeat);
+    }
+
     use super::*;
     use crate::terrain::spec::TerrainSpec;
 

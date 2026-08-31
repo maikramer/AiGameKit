@@ -48,7 +48,15 @@ pub const ADAPTIVE_FALLOFF_FACTOR: f32 = 1.875;
 /// Junction flare multiplier (VibeGame crossing flare ×1.45).
 pub const CROSSING_FLARE: f32 = 1.45;
 /// Lift of the road ribbon above the carved bed (meters) — avoids z-fighting.
-pub const RIBBON_LIFT: f32 = 0.06;
+/// Altura da ribbon sobre o terreno esculpido. 6 cm era sub-pixel a médias
+/// distâncias (far plane do domo = 4000 m) e a ribbon brigava no depth buffer
+/// com o terreno — listras verde/branco (terreno/estrada) nas artérias.
+pub const RIBBON_LIFT: f32 = 0.2;
+
+/// Cap on the miter scale at a corner (VibeGame `ROAD_MITER_LIMIT`). Sem o
+/// limite um hairpin atirava a borda externa ao infinito; 3 mantém junções
+/// de 90° quase quadradas.
+pub const ROAD_MITER_LIMIT: f32 = 3.0;
 
 /// Road profiles (VibeGame `road/profiles.ts`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -589,13 +597,43 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
         if i > 0 {
             arc += st.distance(path.stations[i - 1]);
         }
-        let next = path.stations[(i + 1).min(n - 1)];
-        let prev = path.stations[i.saturating_sub(1)];
-        let dir = (next - prev).normalize_or_zero();
-        let perp = Vec2::new(-dir.y, dir.x);
+        // Bisector normal + miter scale (VibeGame road geometry): offsetar
+        // por `hw` ao longo da média das normais dos segmentos vizinhos
+        // estreita a ribbon para `hw·cos(θ/2)` medido perpendicular a cada
+        // segmento — os cantos apertam e a estrada "quebra" onde curva.
+        // Dividir por cos(θ/2) (com cap) restaura largura constante.
+        let seg_normal = |d: Vec2| Vec2::new(-d.y, d.x);
+        let in_n = if i > 0 {
+            seg_normal((*st - path.stations[i - 1]).normalize_or_zero())
+        } else {
+            Vec2::ZERO
+        };
+        let out_n = if i + 1 < n {
+            seg_normal((path.stations[i + 1] - *st).normalize_or_zero())
+        } else {
+            Vec2::ZERO
+        };
+        let (perp, seg_n) = if in_n == Vec2::ZERO {
+            (out_n, out_n)
+        } else if out_n == Vec2::ZERO {
+            (in_n, in_n)
+        } else {
+            let bisector = in_n + out_n;
+            if bisector.length_squared() > 1e-8 {
+                (bisector.normalize(), in_n)
+            } else {
+                (in_n, in_n) // reversão a 180°: usa a normal de entrada
+            }
+        };
+        let cos_half = perp.dot(seg_n).abs();
+        let miter = if cos_half > 1e-3 {
+            (1.0 / cos_half).min(ROAD_MITER_LIMIT)
+        } else {
+            1.0
+        };
         let hw = path.half_width[i];
         for u in [0.0_f32, 0.5, 1.0] {
-            let p = *st + perp * (hw * (u * 2.0 - 1.0));
+            let p = *st + perp * (hw * (u * 2.0 - 1.0) * miter);
             let y = if path.bridge {
                 path.deck_y.unwrap_or(0.0) + RIBBON_LIFT
             } else {
@@ -608,7 +646,12 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
             } else {
                 grid.sample_normal(p.x, p.y, grid.texel()).to_array()
             });
-            mesh.uvs.push([u, arc / scale]);
+            // Tile across the ribbon in world space, like the length already
+            // does. A normalized `u` stretches exactly one texture tile over
+            // the full width, so a narrow trail looked anisotropic and a wide
+            // plaza came out as flat colour with no stones at all.
+            let across = (u - 0.5) * 2.0 * hw;
+            mesh.uvs.push([across / scale, arc / scale]);
             mesh.colors.push([1.0, 1.0, 1.0, alpha_at(u)]);
         }
     }
@@ -1000,6 +1043,61 @@ mod tests {
         let path = carve_road(&mut grid, &spec, 0, &guards).expect("decal road");
         assert!(!path.bridge, "decals are not bridges");
         assert_eq!(grid.raw(), before, "decal roads never touch the grid");
+    }
+
+    #[test]
+    fn test_road_ribbon_corner_keeps_constant_width() {
+        // L de 90°: sem miter, a largura perpendicular no canto aperta para
+        // hw·cos(45°) ≈ 1.41 m; com miter (= 1/cos45 ≈ 1.414) cada borda
+        // fica a hw da linha de centro de AMBOS os segmentos.
+        let grid = test_grid();
+        let path = RoadPath {
+            name: None,
+            profile: RoadProfile::Artery,
+            bridge: false,
+            deck_y: None,
+            stations: vec![
+                Vec2::new(20.0, 64.0),
+                Vec2::new(50.0, 64.0),
+                Vec2::new(64.0, 64.0),
+                Vec2::new(64.0, 78.0),
+                Vec2::new(64.0, 108.0),
+            ],
+            half_width: vec![2.0; 5],
+        };
+        let spec = road_spec();
+        let mesh = road_ribbon_mesh(&grid, &path, &spec);
+        // Estação do canto (índice 2): 3 vértices (l, c, r) por estação.
+        let corner = 2 * 3;
+        let left = bevy::math::Vec3::from_array(mesh.positions[corner]);
+        let right = bevy::math::Vec3::from_array(mesh.positions[corner + 2]);
+        // Borda esquerda do canto: afastada `hw` da linha z=64 (segmento de
+        // entrada) e `hw` da linha x=64 (segmento de saída). Vec3 = (x, y
+        // altura, z) — o plano XZ é x/z.
+        assert!(
+            ((left.x - 64.0).abs() - 2.0).abs() < 0.1,
+            "left edge respects out-segment width: {left:?}"
+        );
+        assert!(
+            ((left.z - 64.0).abs() - 2.0).abs() < 0.1,
+            "left edge respects in-segment width: {left:?}"
+        );
+        // Sem miter esta distância seria ~1.41 (pinch de 45°).
+        assert!(
+            ((right.x - 64.0).abs() - 2.0).abs() < 0.1,
+            "right edge respects out-segment width: {right:?}"
+        );
+        assert!(
+            ((right.z - 64.0).abs() - 2.0).abs() < 0.1,
+            "right edge respects in-segment width: {right:?}"
+        );
+        // A largura total no canto excede a nominal (offsets esticados pelo
+        // miter cobrem a dobra externa, sem gap).
+        assert!(
+            left.distance(right) > 4.0,
+            "miter widens the outer fold: {}",
+            left.distance(right)
+        );
     }
 
     #[test]
