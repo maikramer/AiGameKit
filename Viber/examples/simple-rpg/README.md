@@ -18,15 +18,17 @@ cargo run -- analyze examples/simple-rpg/world.xml       # headless + cobertura
 ## Estado atual
 
 O `analyze` imprime o relatório de cobertura — é o roteiro de trabalho da
-engine. Referência (após player + câmara interativa): **1399 entidades**
+engine. Referência (após NPCs de diálogo + chips de recursos): **1399 entidades**
 declaradas — com **1 player jogável** (WASD/setas + Shift sprint sobre o
-terreno, câmara third-person com drag/scroll) — (702 grupos, 71 primitivas, 68 point lights, 1
+terreno, câmara third-person com drag/scroll), **17 NPCs de diálogo**
+(marcador dourado + interação E a <3.5 m, log no bridge) e **3 chips de
+recursos** no HUD ("gold/wood/stone 0") — (702 grupos, 71 primitivas, 68 point lights, 1
 directional, 1 câmara, **450 cenas glTF**, **58 static + 12 dynamic spawn
 groups**, **8 vegetation groups** (cap 800 instâncias/tag), **105 emissores
 de partículas**, **24 zonas de exclusão** respeitadas por todos os
-spawners) + heightfield com 32 ground features; **53 elementos em 27 tags**
-ainda em no-op (`DialogueNPC`×17, `MusicLayer`×6, `BiomeRegion`×4,
-`ResourceChip`×3, HUD/áudio/clima…). ~28 mil entidades vivas na janela.
+spawners) + heightfield com 32 ground features; **32 elementos em 24 tags**
+ainda em no-op (`MusicLayer`×6, `BiomeRegion`×4, HUD de
+barras/minimap/diálogo, áudio/clima/navmesh…). ~28 mil entidades vivas na janela.
 Cada tag implementada na engine acende mais parte do mundo sem editar os
 XMLs daqui.
 

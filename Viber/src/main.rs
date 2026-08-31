@@ -371,6 +371,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             spawn::gltf_scene_spawner,
             spawn::orbit_camera_input,
             player::player_movement,
+            player::dialogue_interaction,
             particles::particle_emitter_update,
             spawner::instantiate_spawn_groups,
         ),

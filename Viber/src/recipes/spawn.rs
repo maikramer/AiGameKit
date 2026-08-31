@@ -53,6 +53,13 @@ pub struct PendingWorld {
     pub base_dir: Option<PathBuf>,
 }
 
+/// `<DialogueNPC>` marker: this entity is a dialogue target with the given
+/// quest/dialogue id (dialogue UI lands with the HUD phase).
+#[derive(Debug, Component)]
+pub struct DialogueNpc {
+    pub dialogue_id: String,
+}
+
 /// Pending `<GltfScene>`: the handle loads async; [`gltf_scene_spawner`]
 /// swaps it for a `SceneRoot` once loaded (and drops it on failure).
 #[derive(Component)]
@@ -207,11 +214,13 @@ pub fn startup(world: &mut World) {
     });
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
-    {
+    let chips = {
         let mut ctx = SpawnCtx {
             meshes: &mut meshes,
             materials: &mut materials,
             asset_server: &asset_server,
+            chip_counter: std::cell::Cell::new(0),
+            chips: std::cell::RefCell::new(Vec::new()),
         };
         for spec in &parsed.entities {
             if is_ground_feature(&spec.kind) {
@@ -219,9 +228,24 @@ pub fn startup(world: &mut World) {
             }
             spawn_entity(world, &mut ctx, spec, None, &mut stats, &mut ambient);
         }
-    }
+        ctx.chips.into_inner()
+    };
     if let Some(light) = ambient {
         world.insert_resource(light);
+    }
+    for (index, resource) in chips {
+        world.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(10.0 + 26.0 * (index - 1) as f32),
+                left: Val::Px(10.0),
+                ..Default::default()
+            },
+            Text::new(format!("{} 0", resource)),
+            TextColor(Color::srgb(1.0, 0.9, 0.6)),
+            TextFont::from_font_size(20.0),
+            Name::new(format!("chip:{resource}")),
+        ));
     }
     world.insert_resource(meshes);
     world.insert_resource(materials);
@@ -244,6 +268,9 @@ struct SpawnCtx<'a> {
     meshes: &'a mut Assets<Mesh>,
     materials: &'a mut Assets<StandardMaterial>,
     asset_server: &'a AssetServer,
+    chip_counter: std::cell::Cell<usize>,
+    /// Deferred HUD chip UI nodes (resource name + stack index).
+    chips: std::cell::RefCell<Vec<(usize, String)>>,
 }
 
 /// Recursively collect `<StaticSpawner>` specs and start their template loads.
@@ -442,6 +469,42 @@ fn spawn_entity(
                 },
             ));
             stats.has_camera = true;
+        }
+        EntityKind::DialogueNpc {
+            dialogue_id,
+            marker_height,
+        } => {
+            entity.insert(DialogueNpc {
+                dialogue_id: dialogue_id.clone(),
+            });
+            let marker_mesh = ctx.meshes.add(Mesh::from(Sphere::new(0.16)));
+            let marker_mat = ctx.materials.add(StandardMaterial {
+                base_color: Color::srgb(1.0, 0.82, 0.15),
+                emissive: LinearRgba::new(3.0, 2.4, 0.5, 1.0),
+                unlit: true,
+                ..Default::default()
+            });
+            // with_children auto-parents the marker (no extra world borrow).
+            entity.with_children(|children| {
+                children.spawn((
+                    Mesh3d(marker_mesh),
+                    MeshMaterial3d(marker_mat),
+                    Transform::from_translation(Vec3::Y * *marker_height),
+                    Visibility::Inherited,
+                    NotShadowCaster,
+                ));
+            });
+        }
+        EntityKind::ResourceChip {
+            resource,
+            icon: _,
+            target: _,
+        } => {
+            let index = ctx.chip_counter.get() + 1;
+            ctx.chip_counter.set(index);
+            // HUD chip: UI node deferred to the end of startup (the entity
+            // borrow holds `world`).
+            ctx.chips.borrow_mut().push((index, resource.clone()));
         }
         EntityKind::PlayerGltf { url } => {
             let path = url.trim_start_matches('/');

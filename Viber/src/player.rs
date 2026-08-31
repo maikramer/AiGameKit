@@ -5,6 +5,7 @@ use bevy::math::Quat;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 
+use crate::recipes::spawn::DialogueNpc;
 use crate::terrain::runtime::TerrainRuntime;
 
 /// The controllable hero.
@@ -94,6 +95,33 @@ pub fn player_movement(
         // Seat on the ground every frame (also drops the authored y=150 spawn).
         transform.translation.y = runtime.sample(transform.translation.x, transform.translation.z);
     }
+}
+
+/// Proximity interaction: when the player stands near a `<DialogueNPC>`,
+/// pressing E logs the dialogue target (dialogue UI lands with the HUD phase;
+/// the bridge's `viber debug logs` shows the same lines).
+pub fn dialogue_interaction(
+    keys: Res<ButtonInput<KeyCode>>,
+    players: Query<&GlobalTransform, With<Player>>,
+    npcs: Query<(&GlobalTransform, &DialogueNpc)>,
+) {
+    let Ok(player) = players.single() else {
+        return;
+    };
+    let player_pos = player.translation();
+    let nearest = npcs
+        .iter()
+        .filter(|(t, _)| t.translation().distance(player_pos) < 3.5)
+        .map(|(_, npc)| npc.dialogue_id.as_str())
+        .next();
+    let near = nearest.is_some();
+    if keys.just_pressed(KeyCode::KeyE) {
+        match nearest {
+            Some(id) => bevy::log::info!("interaction: dialogue {} available", id),
+            None => bevy::log::info!("interaction: nothing nearby"),
+        }
+    }
+    let _ = near; // prompt UI lands with the HUD phase
 }
 
 #[cfg(test)]

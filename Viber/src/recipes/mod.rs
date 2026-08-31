@@ -48,6 +48,8 @@ pub const KNOWN_TAGS: &[&str] = &[
     "vegetation",
     "playergltf",
     "thirdpersoncamera",
+    "dialoguenpc",
+    "resourcechip",
 ];
 
 /// A parsed world: clear color, entity tree and non-fatal warnings.
@@ -185,6 +187,19 @@ pub enum EntityKind {
     /// `<PlayerGLTF model-url>` — the controllable hero: glTF scene plus the
     /// [`crate::player::Player`] movement component.
     PlayerGltf { url: String },
+    /// `<DialogueNPC>` — marks the parent NPC as a dialogue target
+    /// (`dialogue-id`), with a floating marker at `marker-height`.
+    DialogueNpc {
+        dialogue_id: String,
+        marker_height: f32,
+    },
+    /// `<ResourceChip>` — HUD readout of one resource (visual HUD lands with
+    /// the UI phase; the entity carries the parsed data).
+    ResourceChip {
+        resource: String,
+        icon: String,
+        target: String,
+    },
 }
 
 /// Emitter config of a `<ParticleSystem>`: a preset plus the
@@ -405,6 +420,19 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
             }
         },
         "thirdpersoncamera" => finish_orbit_camera(node, ctx, true).map(Some),
+        "dialoguenpc" => match node
+            .attr("dialogue-id")
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            Some(_) => finish_dialogue_npc(node, ctx).map(Some),
+            None => {
+                ctx.warnings
+                    .push(format!("<{}>: missing dialogue-id — skipped", node.tag));
+                Ok(None)
+            }
+        },
+        "resourcechip" => finish_resource_chip(node, ctx).map(Some),
         "particlesystem" => finish_particle_system(node, ctx).map(Some),
         "terrain" => finish_terrain(node, ctx).map(Some),
         "terrainpad" => finish_terrain_pad(node, ctx).map(Some),
@@ -1043,6 +1071,75 @@ fn finish_player_gltf(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result
     })
 }
 
+fn finish_dialogue_npc(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let dialogue_id = node
+        .attr("dialogue-id")
+        .map(str::trim)
+        .expect("caller checked dialogue-id")
+        .to_string();
+    let mut marker_height = 2.5;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            // already consumed from `node.attr` above
+            "dialogue-id" => {}
+            "marker-height" => marker_height = values::parse_f32(&value, &kctx)?,
+            // accepted no-ops (visual/audio dialogue UI lands with the HUD phase)
+            "portrait-url" | "voice-sfx" => {}
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::DialogueNpc {
+            dialogue_id,
+            marker_height,
+        },
+        children: Vec::new(),
+    })
+}
+
+fn finish_resource_chip(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut resource = String::new();
+    let mut icon = String::new();
+    let mut target = "player".to_string();
+    for (key, value) in rest {
+        match key.as_str() {
+            "resource" => resource = value.trim().to_string(),
+            "icon" => icon = value.trim().to_string(),
+            "target-entity" => target = value.trim().to_string(),
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    if resource.is_empty() {
+        ctx.warnings
+            .push(format!("{ctx_tag}: missing resource — skipped"));
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::ResourceChip {
+            resource,
+            icon,
+            target,
+        },
+        children: Vec::new(),
+    })
+}
+
 fn finish_gltf_scene(node: &XmlNode, url: String, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node)?;
     // `url` is this tag's own attribute — already consumed by the caller.
@@ -1556,6 +1653,10 @@ pub struct WorldSummary {
     pub spawn_exclusions: usize,
     /// `<PlayerGLTF>` heroes (controllable).
     pub players: usize,
+    /// `<DialogueNPC>` dialogue targets.
+    pub dialogue_npcs: usize,
+    /// `<ResourceChip>` HUD chips.
+    pub resource_chips: usize,
 }
 
 impl WorldSummary {
@@ -1630,6 +1731,8 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::SpawnExclusion { .. } => out.spawn_exclusions += 1,
                 EntityKind::Vegetation { .. } => out.vegetation += 1,
                 EntityKind::PlayerGltf { .. } => out.players += 1,
+                EntityKind::DialogueNpc { .. } => out.dialogue_npcs += 1,
+                EntityKind::ResourceChip { .. } => out.resource_chips += 1,
             }
             walk(&spec.children, out);
         }
@@ -2019,6 +2122,67 @@ mod tests {
     }
 
     #[test]
+    fn test_dialogue_npc_parses() {
+        let (spec, w) = parse_one(&node(
+            "DialogueNPC",
+            &[
+                ("dialogue-id", "city_stone"),
+                ("marker-height", "3"),
+                ("portrait-url", ""),
+                ("voice-sfx", ""),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::DialogueNpc {
+            dialogue_id,
+            marker_height,
+        } = spec.kind
+        else {
+            panic!("expected dialogue npc");
+        };
+        assert_eq!(dialogue_id, "city_stone");
+        assert_eq!(marker_height, 3.0);
+    }
+
+    #[test]
+    fn test_dialogue_npc_without_id_is_skipped() {
+        let mut ctx = ParseCtx::default();
+        let spec = parse_entity(&node("DialogueNPC", &[]), &mut ctx).unwrap();
+        assert!(spec.is_none());
+        assert!(
+            ctx.warnings
+                .iter()
+                .any(|m| m.contains("missing dialogue-id"))
+        );
+    }
+
+    #[test]
+    fn test_resource_chip_parses() {
+        let (spec, w) = parse_one(&node(
+            "ResourceChip",
+            &[
+                ("resource", "gold"),
+                ("icon", "/assets/icons/hud_gold.png"),
+                ("target-entity", "player"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::ResourceChip {
+            resource,
+            icon,
+            target,
+        } = spec.kind
+        else {
+            panic!("expected resource chip");
+        };
+        assert_eq!(resource, "gold");
+        assert_eq!(icon, "/assets/icons/hud_gold.png");
+        assert_eq!(target, "player");
+    }
+
+    #[test]
     fn test_static_spawner_spec_and_template_urls() {
         let mut template = node("GameObject", &[("role", "static")]);
         template.children = vec![node(
@@ -2198,6 +2362,11 @@ mod tests {
                     "PlayerGLTF",
                     &[("model-url", "/assets/meshes/characters/hero_lod0.glb")],
                 ),
+                node("DialogueNPC", &[("dialogue-id", "city_stone")]),
+                node(
+                    "ResourceChip",
+                    &[("resource", "gold"), ("target-entity", "player")],
+                ),
             ],
         )
         .unwrap();
@@ -2224,6 +2393,8 @@ mod tests {
                 vegetation: 1,
                 spawn_exclusions: 1,
                 players: 1,
+                dialogue_npcs: 1,
+                resource_chips: 1,
             }
         );
         assert_eq!(summary.entities(), 8);
