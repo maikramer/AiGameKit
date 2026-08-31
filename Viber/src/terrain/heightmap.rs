@@ -60,6 +60,76 @@ impl HeightMapU16 {
     ///
     /// # Errors
     /// Fails on unsupported texture formats or non-2D images.
+    /// Decode an `.ahgt` blob (AHGT magic + JSON meta + deflate u16 grid).
+    /// Returns the map and the authoritative `worldSize`/`maxHeight` stored
+    /// in the file (they override the XML spec — the heightmap defines the
+    /// terrain).
+    pub fn from_ahgt(bytes: &[u8]) -> anyhow::Result<(Self, f32, f32)> {
+        use anyhow::{Context, bail};
+
+        if bytes.len() < 20 {
+            bail!("AHGT: truncated header");
+        }
+        let magic = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        const AHGT_MAGIC: u32 = 0x5447_4841; // "AHGT" little-endian
+        if magic != AHGT_MAGIC {
+            bail!("AHGT: bad magic 0x{magic:08x}");
+        }
+        let version = u16::from_le_bytes([bytes[4], bytes[5]]);
+        if version != 1 {
+            bail!("AHGT: unsupported version {version}");
+        }
+        let width = u16::from_le_bytes([bytes[6], bytes[7]]) as usize;
+        let depth = u16::from_le_bytes([bytes[8], bytes[9]]) as usize;
+        let meta_len = u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]) as usize;
+        let meta_start = 20;
+        if meta_start + meta_len > bytes.len() {
+            bail!("AHGT: truncated metadata block");
+        }
+        let meta: serde_json::Value =
+            serde_json::from_slice(&bytes[meta_start..meta_start + meta_len])
+                .context("AHGT: invalid metadata JSON")?;
+        let world_size = meta["worldSize"].as_f64().unwrap_or(0.0) as f32;
+        let max_height = meta["maxHeight"].as_f64().unwrap_or(0.0) as f32;
+        if world_size <= 0.0 || max_height <= 0.0 {
+            bail!("AHGT: metadata missing worldSize/maxHeight");
+        }
+
+        // The payload accepts both raw deflate and the RFC1950 zlib wrapper.
+        let payload = &bytes[meta_start + meta_len..];
+        let zlib_wrapped = payload.len() >= 2
+            && (payload[0] & 0x0f) == 0x08
+            && ((payload[0] as u16) << 8 | payload[1] as u16).is_multiple_of(31);
+        let raw: Vec<u8> = {
+            let mut out = Vec::with_capacity(width * depth * 2);
+            if zlib_wrapped {
+                let mut decoder = flate2::read::ZlibDecoder::new(payload);
+                use std::io::Read;
+                decoder
+                    .read_to_end(&mut out)
+                    .context("AHGT: zlib decompress failed")?;
+            } else {
+                let mut decoder = flate2::read::DeflateDecoder::new(payload);
+                use std::io::Read;
+                decoder
+                    .read_to_end(&mut out)
+                    .context("AHGT: deflate decompress failed")?;
+            }
+            out
+        };
+        if raw.len() < width * depth * 2 {
+            bail!(
+                "AHGT: height payload too small ({} bytes for {width}x{depth})",
+                raw.len()
+            );
+        }
+        let mut data = Vec::with_capacity(width * depth);
+        for i in 0..width * depth {
+            data.push(u16::from_le_bytes([raw[i * 2], raw[i * 2 + 1]]));
+        }
+        Ok((Self { width, depth, data }, world_size, max_height))
+    }
+
     pub fn from_image(image: &Image) -> anyhow::Result<Self> {
         if image.texture_descriptor.dimension != TextureDimension::D2 {
             anyhow::bail!(

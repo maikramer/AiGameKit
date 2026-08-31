@@ -52,6 +52,18 @@ pub const KNOWN_TAGS: &[&str] = &[
     "resourcechip",
     "audiomixer",
     "musiclayer",
+    "sky",
+    "daycycle",
+    "weather",
+    "biomeregion",
+    "worldborder",
+    "navmesh",
+    "spawngate",
+    "projectiletemplate",
+    "questtracker",
+    "waypointarrow",
+    "postfxdebugtoggle",
+    "adaptivequality",
     "hudscreenlayer",
     "healthbar",
     "xpbar",
@@ -223,6 +235,67 @@ pub enum EntityKind {
     /// `<MusicLayer layer sound base-volume>` — looped BGM bus layer; the
     /// driver crossfades layers by player zone (`src/music.rs`).
     MusicLayer { layer: String, base_volume: f32 },
+    /// `<DayCycle>` — advances minute-of-day and drives the ambient light.
+    DayCycle {
+        minute_of_day: f32,
+        minutes_per_real_second: f32,
+        dawn_minute: f32,
+        dusk_minute: f32,
+        ambient_day: f32,
+        ambient_night: f32,
+        drive_ambient: bool,
+    },
+    /// `<Weather>` — wind/clouds/rain config (rain spawns a rain emitter).
+    Weather {
+        wind: [f32; 2],
+        wind_strength: f32,
+        clouds: f32,
+        rain: f32,
+        cycle: bool,
+    },
+    /// `<BiomeRegion>` — biome polygon with fog/tint data (fog rendering is
+    /// a follow-up; the data drives BGM/hint systems).
+    BiomeRegion {
+        id: String,
+        polygon: Vec<[f32; 2]>,
+        fog_density: f32,
+        tint: Option<[f32; 3]>,
+    },
+    /// `<WorldBorder radius>` — keeps the player inside the world disc.
+    WorldBorder {
+        radius: f32,
+        warn_seconds: f32,
+        margin: f32,
+    },
+    /// Engine config element kept as raw data (`Sky`, `NavMesh`,
+    /// `SpawnGate`, `ProjectileTemplate`, `PostFxDebugToggle`,
+    /// `AdaptiveQuality`) — data now, runtime hooks as phases land.
+    EngineConfig {
+        tag: String,
+        attrs: Vec<(String, String)>,
+    },
+}
+
+/// `<DayCycle>` clock config (ambient light driver).
+#[derive(Debug, Clone)]
+pub struct DayCycleConfig {
+    pub minute_of_day: f32,
+    pub minutes_per_real_second: f32,
+    pub dawn_minute: f32,
+    pub dusk_minute: f32,
+    pub ambient_day: f32,
+    pub ambient_night: f32,
+    pub drive_ambient: bool,
+}
+
+/// `<Weather>` config (wind/clouds/rain).
+#[derive(Debug, Clone)]
+pub struct WeatherConfig {
+    pub wind: [f32; 2],
+    pub wind_strength: f32,
+    pub clouds: f32,
+    pub rain: f32,
+    pub cycle: bool,
 }
 
 /// Emitter config of a `<ParticleSystem>`: a preset plus the
@@ -444,6 +517,13 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
         },
         "thirdpersoncamera" => finish_orbit_camera(node, ctx, true).map(Some),
         "audiomixer" => finish_audio_mixer(node, ctx).map(Some),
+        "sky" | "navmesh" | "spawngate" | "projectiletemplate" | "postfxdebugtoggle"
+        | "adaptivequality" => finish_engine_config(node, ctx).map(Some),
+        "daycycle" => finish_daycycle(node, ctx).map(Some),
+        "weather" => finish_weather(node, ctx).map(Some),
+        "biomeregion" => finish_biome_region(node, ctx).map(Some),
+        "worldborder" => finish_world_border(node, ctx).map(Some),
+        "questtracker" | "waypointarrow" => finish_hud_element(node, ctx).map(Some),
         "musiclayer" => finish_music_layer(node, ctx).map(Some),
         "dialoguenpc" => match node
             .attr("dialogue-id")
@@ -1244,6 +1324,187 @@ fn finish_music_layer(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> 
     })
 }
 
+fn finish_daycycle(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut c = DayCycleConfig {
+        minute_of_day: 480.0,
+        minutes_per_real_second: 1.2,
+        dawn_minute: 330.0,
+        dusk_minute: 1170.0,
+        ambient_day: 0.26,
+        ambient_night: 0.07,
+        drive_ambient: true,
+    };
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "minute-of-day" => c.minute_of_day = values::parse_f32(&value, &kctx)?,
+            "minutes-per-real-second" => {
+                c.minutes_per_real_second = values::parse_f32(&value, &kctx)?
+            }
+            "dawn-minute" => c.dawn_minute = values::parse_f32(&value, &kctx)?,
+            "dusk-minute" => c.dusk_minute = values::parse_f32(&value, &kctx)?,
+            "ambient-day-intensity" => c.ambient_day = values::parse_f32(&value, &kctx)?,
+            "ambient-night-intensity" => c.ambient_night = values::parse_f32(&value, &kctx)?,
+            "drive-ambient" => c.drive_ambient = values::parse_bool(&value, &kctx)?,
+            _ => {}
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::DayCycle {
+            minute_of_day: c.minute_of_day,
+            minutes_per_real_second: c.minutes_per_real_second,
+            dawn_minute: c.dawn_minute,
+            dusk_minute: c.dusk_minute,
+            ambient_day: c.ambient_day,
+            ambient_night: c.ambient_night,
+            drive_ambient: c.drive_ambient,
+        },
+        children: Vec::new(),
+    })
+}
+
+fn finish_weather(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut w = WeatherConfig {
+        wind: [0.7, 0.25],
+        wind_strength: 1.5,
+        clouds: 0.25,
+        rain: 0.0,
+        cycle: true,
+    };
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "wind" => {
+                let v = values::parse_vec2(&value, &kctx)?;
+                w.wind = v;
+            }
+            "wind-strength" => w.wind_strength = values::parse_f32(&value, &kctx)?,
+            "clouds" => w.clouds = values::parse_f32(&value, &kctx)?,
+            "rain" => w.rain = values::parse_f32(&value, &kctx)?,
+            "cycle" => w.cycle = values::parse_bool(&value, &kctx)?,
+            _ => {}
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::Weather {
+            wind: w.wind,
+            wind_strength: w.wind_strength,
+            clouds: w.clouds,
+            rain: w.rain,
+            cycle: w.cycle,
+        },
+        children: Vec::new(),
+    })
+}
+
+/// Parse a polygon attribute: `"[-56,56;56,56;…]"` → Vec<[f32;2]>.
+pub fn parse_polygon(value: &str) -> Vec<[f32; 2]> {
+    value
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .split(';')
+        .filter_map(|pair| {
+            let (x, y) = pair.trim().split_once(',')?;
+            Some([x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?])
+        })
+        .collect()
+}
+
+fn finish_biome_region(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut id = String::new();
+    let mut polygon = Vec::new();
+    let mut fog_density = 0.0;
+    let mut tint = None;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "id" => id = value.trim().to_string(),
+            "polygon" => polygon = parse_polygon(&value),
+            "fog-density" => fog_density = values::parse_f32(&value, &kctx)?,
+            "tint" => tint = Some(values::parse_color(&value, &kctx)?),
+            _ => {}
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::BiomeRegion {
+            id,
+            polygon,
+            fog_density,
+            tint,
+        },
+        children: Vec::new(),
+    })
+}
+
+fn finish_world_border(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut radius = 3800.0;
+    let mut warn_seconds = 5.0;
+    let mut margin = 80.0;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "radius" => radius = values::parse_f32(&value, &kctx)?,
+            "warn-seconds" => warn_seconds = values::parse_f32(&value, &kctx)?,
+            "margin" => margin = values::parse_f32(&value, &kctx)?,
+            _ => {}
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::WorldBorder {
+            radius,
+            warn_seconds,
+            margin,
+        },
+        children: Vec::new(),
+    })
+}
+
+/// Generic engine-config element: tag + raw attrs preserved as data
+/// (Sky, NavMesh, SpawnGate, ProjectileTemplate, PostFxDebugToggle,
+/// AdaptiveQuality).
+fn finish_engine_config(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, _rest) = parse_common(node)?;
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::EngineConfig {
+            tag: node.tag.to_ascii_lowercase(),
+            attrs: node
+                .attrs
+                .iter()
+                .map(|(k, v)| (k.to_ascii_lowercase(), v.clone()))
+                .collect(),
+        },
+        children: Vec::new(),
+    })
+}
+
 fn finish_hud_element(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, _rest) = parse_common(node)?;
     // Raw attrs are the data — hud.rs interprets them, nothing to warn about.
@@ -1787,6 +2048,8 @@ pub struct WorldSummary {
     pub audio_mixer: usize,
     /// `<MusicLayer>` BGM layers.
     pub music_layers: usize,
+    /// Engine config / world-rule elements (DayCycle, Weather, border…).
+    pub world_systems: usize,
 }
 
 impl WorldSummary {
@@ -1812,23 +2075,40 @@ impl WorldSummary {
 /// Keep the first camera in the tree; deeper cameras become plain groups
 /// (two `Camera3d` entities would double-render and fight over the window).
 fn demote_extra_cameras(specs: Vec<EntitySpec>, warnings: &mut Vec<String>) -> Vec<EntitySpec> {
+    fn has_target(spec: &EntitySpec) -> bool {
+        matches!(
+            &spec.kind,
+            EntityKind::OrbitCamera {
+                target: Some(_),
+                ..
+            }
+        )
+    }
+    fn find_targeted(specs: &[EntitySpec]) -> bool {
+        specs
+            .iter()
+            .any(|s| has_target(s) || find_targeted(&s.children))
+    }
+    // Prefer a camera with an explicit target (e.g. ThirdPersonCamera →
+    // player): when one exists, every other camera is demoted.
+    let prefer_target = find_targeted(&specs);
     let mut seen_camera = false;
     let mut demoted = 0usize;
-    fn walk(specs: &mut [EntitySpec], seen: &mut bool, demoted: &mut usize) {
+    fn walk(specs: &mut [EntitySpec], seen: &mut bool, demoted: &mut usize, prefer_target: bool) {
         for spec in specs.iter_mut() {
             if matches!(spec.kind, EntityKind::OrbitCamera { .. }) {
-                if *seen {
+                if *seen || (prefer_target && !has_target(spec)) {
                     spec.kind = EntityKind::Group;
                     *demoted += 1;
                 } else {
                     *seen = true;
                 }
             }
-            walk(&mut spec.children, seen, demoted);
+            walk(&mut spec.children, seen, demoted, prefer_target);
         }
     }
     let mut specs = specs;
-    walk(&mut specs, &mut seen_camera, &mut demoted);
+    walk(&mut specs, &mut seen_camera, &mut demoted, prefer_target);
     if demoted > 0 {
         warnings.push(format!(
             "{demoted} extra camera(s) demoted to groups — only the first one renders"
@@ -1866,6 +2146,11 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::HudElement { .. } => out.hud_elements += 1,
                 EntityKind::AudioMixer { .. } => out.audio_mixer += 1,
                 EntityKind::MusicLayer { .. } => out.music_layers += 1,
+                EntityKind::DayCycle { .. }
+                | EntityKind::Weather { .. }
+                | EntityKind::BiomeRegion { .. }
+                | EntityKind::WorldBorder { .. }
+                | EntityKind::EngineConfig { .. } => out.world_systems += 1,
             }
             walk(&spec.children, out);
         }
@@ -1986,13 +2271,13 @@ mod tests {
             &[
                 node("GameObject", &[]),
                 node("GameObject", &[]),
-                node("SpawnGate", &[]),
+                node("NoSuchThing", &[]),
             ],
         )
         .unwrap();
         assert_eq!(world.entities.len(), 0);
         assert_eq!(world.skipped_tags.get("GameObject"), Some(&2));
-        assert_eq!(world.skipped_tags.get("SpawnGate"), Some(&1));
+        assert_eq!(world.skipped_tags.get("NoSuchThing"), Some(&1));
         assert!(
             world.warnings.iter().any(|w| w.contains("<GameObject>×2")),
             "{:?}",
@@ -2562,6 +2847,7 @@ mod tests {
                     &[("resource", "gold"), ("target-entity", "player")],
                 ),
                 node("HealthBar", &[("target-entity", "player")]),
+                node("WorldBorder", &[("radius", "3800")]),
                 node("AudioMixer", &[("master", "1"), ("music", "0.7")]),
                 node(
                     "MusicLayer",
@@ -2602,6 +2888,7 @@ mod tests {
                 hud_elements: 1,
                 audio_mixer: 1,
                 music_layers: 1,
+                world_systems: 1,
             }
         );
         assert_eq!(summary.entities(), 8);

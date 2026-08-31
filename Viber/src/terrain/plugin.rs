@@ -408,7 +408,7 @@ pub(crate) fn lod0_step(spec: &TerrainSpec) -> usize {
 fn to_bevy_mesh(data: &ChunkMeshData) -> Mesh {
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
-        RenderAssetUsages::MAIN_WORLD,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, data.positions.clone());
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, data.normals.clone());

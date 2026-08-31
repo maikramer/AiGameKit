@@ -10,7 +10,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use viber::bridge::{self, client::BridgeClient};
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
-use viber::{hud, music, particles, player, recipes, scaffold, spawner, terrain, xml};
+use viber::{hud, music, particles, player, recipes, scaffold, spawner, terrain, worldsys, xml};
 
 /// Native Bevy engine for AiGameKit declarative worlds.
 #[derive(Parser)]
@@ -374,6 +374,9 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             player::dialogue_interaction,
             hud::hud_prompt_update,
             music::music_driver,
+            worldsys::daycycle_drive,
+            worldsys::world_border_clamp,
+            worldsys::seat_statics_once,
             hud::hud_toggle,
             particles::particle_emitter_update,
             spawner::instantiate_spawn_groups,

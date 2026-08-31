@@ -84,9 +84,13 @@ pub struct TintParams {
 
 impl From<&crate::terrain::spec::TerrainTint> for TintParams {
     fn from(t: &crate::terrain::spec::TerrainTint) -> Self {
+        // Linear, not sRGB. `Mesh::ATTRIBUTE_COLOR` is consumed by the PBR
+        // shader as linear RGBA, so handing it sRGB components renders every
+        // band far too bright (sRGB 0.29 read as linear is ~4x the intended
+        // 0.068) — which is why the tint used to wash out to near-white.
         let conv = |c: bevy::color::Color| {
-            let s = c.to_srgba();
-            [s.red, s.green, s.blue, s.alpha]
+            let l = c.to_linear();
+            [l.red, l.green, l.blue, l.alpha]
         };
         Self {
             base_color: conv(t.base_color),

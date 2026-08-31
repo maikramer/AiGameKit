@@ -24,9 +24,10 @@
 
 use bevy::math::Vec2;
 
-use super::brush::{BrushGrid, BrushMode, BrushRequest, GuardFn, min_effective, smoothstep01};
+use super::brush::{BrushGrid, BrushMode, BrushRequest, min_effective, smoothstep01};
 use super::mesh::ChunkMeshData;
-use super::paths::{chaikin_smooth, distance_to_path, nearest_on_path, resample};
+use super::paths::{chaikin_smooth, distance_to_path, nearest_on_path, resample, station_lerp};
+use super::roads::ADAPTIVE_FALLOFF_FACTOR;
 
 /// Lake contour: number of rim rays sampled (VibeGame `rimY` ring).
 const RIM_RAYS: usize = 32;
@@ -36,7 +37,9 @@ const SHAPE_AMPLITUDES: [f32; 3] = [0.12, 0.10, 0.06];
 pub const CARVE_MARGIN: f32 = 1.25;
 /// River station spacing (meters, VibeGame `STATION_SPACING`).
 pub const RIVER_STATION_SPACING: f32 = 3.0;
-/// River: extra falloff band outside the banks (meters).
+/// River: **minimum** falloff band outside the banks (meters). The band grows
+/// with the local cut depth (see [`ADAPTIVE_FALLOFF_FACTOR`]) — a fixed band
+/// turns every deep cut into a vertical wall.
 pub const FEATHER_WIDTH: f32 = 2.5;
 /// River: maximum bank raise over the **pre-carve axis height** (meters) —
 /// deeper cuts read as a cascade instead of a levee wall.
@@ -177,13 +180,14 @@ impl WaterBody {
                 (d <= self.radius.max(self.carve_radius)).then_some(self.water_y)
             }
             WaterKind::River => {
-                let (q, seg) = nearest_on_path(&self.stations, p)?;
-                let d = q.distance(p);
+                let hit = nearest_on_path(&self.stations, p)?;
+                let d = hit.point.distance(p);
                 (d <= self.water_width * 0.5).then(|| {
-                    self.surface_y
-                        .get(seg.min(self.surface_y.len().saturating_sub(1)))
-                        .copied()
-                        .unwrap_or(self.water_y)
+                    if self.surface_y.is_empty() {
+                        self.water_y
+                    } else {
+                        station_lerp(&self.surface_y, &hit)
+                    }
                 })
             }
         }
@@ -244,16 +248,54 @@ pub fn carve_lake(grid: &mut BrushGrid, spec: &LakeSpec, index: usize) -> Option
         (water_y + spec.water_offset) - spec.depth * (1.0 - t * t).max(0.0).powf(1.5)
     };
 
+    // Shore band, per rim ray. The contour used to be a hard 0/1 mask, so a
+    // lake dropped into a slope cut a cylinder: everything inside the contour
+    // went down to the water surface and the uphill side became a sheer wall
+    // as tall as the hillside. Grading the rim over a band that widens with
+    // the local cut (the rule `roads` and the river bank already use) turns
+    // that wall into a shore.
+    let surface = water_y + spec.water_offset;
+    let feather_base = min_effective(FEATHER_WIDTH, texel);
+    let shore: Vec<f32> = (0..RIM_RAYS)
+        .map(|i| {
+            let theta = i as f32 / RIM_RAYS as f32 * std::f32::consts::TAU;
+            let r = lake_shape_radius(spec.radius, theta, phases) * CARVE_MARGIN;
+            let p = spec.at + Vec2::new(theta.cos(), theta.sin()) * r;
+            let cut = (grid.sample(p.x, p.y) - surface).max(0.0);
+            feather_base.max(ADAPTIVE_FALLOFF_FACTOR * cut)
+        })
+        .collect();
+    let shore_max = shore.iter().copied().fold(feather_base, f32::max);
+    // Shore width at an arbitrary angle: linear blend of the two rim rays.
+    let shore_at = move |theta: f32| -> f32 {
+        let tau = std::f32::consts::TAU;
+        let f = (theta.rem_euclid(tau) / tau) * RIM_RAYS as f32;
+        let i = (f.floor() as usize) % RIM_RAYS;
+        let j = (i + 1) % RIM_RAYS;
+        let frac = f - f.floor();
+        shore[i] + (shore[j] - shore[i]) * frac
+    };
+
     let owner = format!("lake:{index}");
     grid.begin_stroke(&owner);
     let mut weight = |p: Vec2| {
         let d = p.distance(spec.at);
         let theta = (p.y - spec.at.y).atan2(p.x - spec.at.x);
-        usize::from(d < lake_shape_radius(spec.radius, theta, phases) * CARVE_MARGIN) as f32
+        let r = lake_shape_radius(spec.radius, theta, phases) * CARVE_MARGIN;
+        if d < r {
+            return 1.0;
+        }
+        let band = shore_at(theta);
+        if d >= r + band {
+            return 0.0;
+        }
+        1.0 - smoothstep01((d - r) / band.max(1e-4))
     };
     let mut target = bowl;
-    let guard = move |p: Vec2| bowl(p);
-    let extent = carve_r + texel * 2.0;
+    // No guard: outside the contour `bowl` is just the water surface, not a
+    // design — clamping the unweighted ring onto it is what cut a slot around
+    // the shore (see the river carve for the same trap).
+    let extent = carve_r + shore_max + texel * 2.0;
     grid.apply(BrushRequest {
         mode: BrushMode::Lower,
         min_x: spec.at.x - extent,
@@ -262,7 +304,6 @@ pub fn carve_lake(grid: &mut BrushGrid, spec: &LakeSpec, index: usize) -> Option
         max_z: spec.at.y + extent,
         target: &mut target,
         weight: &mut weight,
-        guard: Some(&guard),
     });
     grid.commit_stroke();
 
@@ -289,7 +330,7 @@ pub fn carve_river(grid: &mut BrushGrid, spec: &RiverSpec, index: usize) -> Opti
     let half = width * 0.5;
     let bank = min_effective(spec.bank_width, texel);
     let bank_height = spec.bank_height;
-    let feather = min_effective(FEATHER_WIDTH, texel);
+    let feather_base = min_effective(FEATHER_WIDTH, texel);
 
     // Design profile: smooth the path, sample the pre-water axis heights and
     // build the descending surface (water never flows uphill).
@@ -306,10 +347,25 @@ pub fn carve_river(grid: &mut BrushGrid, spec: &RiverSpec, index: usize) -> Opti
         running = running.min(h - spec.water_offset);
         surface.push(running);
     }
-    let at_station = |i: usize| -> usize { i.min(stations.len() - 1) };
 
-    let reach = half + bank + feather;
-    let extent = reach + texel * 2.0;
+    // Adaptive outer feather, per station. At the outer bank rim the design
+    // profile is the water surface, so the hillside there is cut by
+    // `axis - surface` meters. A fixed feather would spread that whole cut
+    // over 2.5 m — a ~33 m cliff where the path crosses a ridge, which is
+    // exactly the vertical fin that used to line the banks. Grading the band
+    // with the cut (the same rule `roads` already uses for its falloff) turns
+    // the gorge walls into slopes.
+    let feathers: Vec<f32> = axis
+        .iter()
+        .zip(surface.iter())
+        .map(|(&a, &s)| feather_base.max(ADAPTIVE_FALLOFF_FACTOR * (a - s).max(0.0)))
+        .collect();
+    let feather_max = feathers.iter().copied().fold(feather_base, f32::max);
+
+    // The registry radius stays the *water* reach (the `avoid-water` zone):
+    // the graded slopes beyond the bank are ordinary terrain, not river.
+    let reach = half + bank + feather_base;
+    let extent = half + bank + feather_max + texel * 2.0;
     let owner = format!("river:{index}");
 
     // Bank + channel profile at a point: the pass-2 design surface. The bank
@@ -318,18 +374,22 @@ pub fn carve_river(grid: &mut BrushGrid, spec: &RiverSpec, index: usize) -> Opti
     let channel_profile = {
         let stations = &stations;
         let surface = &surface;
+        let axis = &axis;
         move |p: Vec2| -> f32 {
-            let (q, seg) = nearest_on_path(stations, p).expect("stations >= 2");
-            let d = q.distance(p);
-            let i = at_station(seg);
-            let surf = surface[i];
+            let hit = nearest_on_path(stations, p).expect("stations >= 2");
+            let d = hit.point.distance(p);
+            // Interpolated along the path: reading `surface[seg]` directly
+            // steps by a whole station at every segment boundary, and the
+            // lower-only pass then cuts that step into a vertical fin.
+            let surf = station_lerp(surface, &hit);
+            let axis_h = station_lerp(axis, &hit);
             if d <= half {
                 let t = d / half;
                 surf - spec.depth.max(MIN_CHANNEL_DEPTH) * (1.0 - t * t).max(0.0).powf(1.5)
             } else {
                 let band = ((d - half) / bank.max(1e-4)).clamp(0.0, 1.0);
                 let raised = surf + bank_height * smoothstep01(1.0 - band);
-                raised.min(axis[i] + MAX_BANK_RAISE)
+                raised.min(axis_h + MAX_BANK_RAISE)
             }
         }
     };
@@ -337,8 +397,9 @@ pub fn carve_river(grid: &mut BrushGrid, spec: &RiverSpec, index: usize) -> Opti
     // Pass 1 — banks (raise): fills the near bank band up to the profile.
     grid.begin_stroke(&format!("{owner}:banks"));
     let mut bank_weight = |p: Vec2| {
-        let (q, _) = nearest_on_path(&stations, p).expect("stations >= 2");
-        let d = q.distance(p);
+        let hit = nearest_on_path(&stations, p).expect("stations >= 2");
+        let d = hit.point.distance(p);
+        let feather = station_lerp(&feathers, &hit);
         if d <= half || d > half + bank + feather {
             return 0.0;
         }
@@ -356,7 +417,6 @@ pub fn carve_river(grid: &mut BrushGrid, spec: &RiverSpec, index: usize) -> Opti
         extent,
         &mut bank_target,
         &mut bank_weight,
-        None,
         BrushMode::Raise,
     );
     grid.commit_stroke();
@@ -365,8 +425,9 @@ pub fn carve_river(grid: &mut BrushGrid, spec: &RiverSpec, index: usize) -> Opti
     // water surface and cuts the hillside down to the bank profile.
     grid.begin_stroke(&owner);
     let mut channel_weight = |p: Vec2| {
-        let (q, _) = nearest_on_path(&stations, p).expect("stations >= 2");
-        let d = q.distance(p);
+        let hit = nearest_on_path(&stations, p).expect("stations >= 2");
+        let d = hit.point.distance(p);
+        let feather = station_lerp(&feathers, &hit);
         if d > half + bank + feather {
             return 0.0;
         }
@@ -376,14 +437,21 @@ pub fn carve_river(grid: &mut BrushGrid, spec: &RiverSpec, index: usize) -> Opti
         1.0
     };
     let mut channel_target = |p: Vec2| channel_profile(p);
-    let channel_guard = |p: Vec2| channel_profile(p);
+    // Deliberately **no guard**. The guard clamp is a flat-design device: it
+    // exists so a pad/road bed has no bilinear-stencil lip just outside its
+    // falloff, where the design surface is still meaningful. A river has no
+    // design surface out there — past the bank band `channel_profile` decays
+    // to the bare water surface, tens of meters under the hillside it is
+    // crossing. Since the guard only ever visits texels the main pass left
+    // unweighted (everything beyond `half + bank + feather`), wiring it up
+    // here did nothing *except* stamp that water height into a two-texel
+    // column at the footprint edge — the vertical fins along every bank.
     river_apply(
         grid,
         &stations,
         extent,
         &mut channel_target,
         &mut channel_weight,
-        Some(&channel_guard),
         BrushMode::Lower,
     );
     grid.commit_stroke();
@@ -409,7 +477,6 @@ fn river_apply(
     extent: f32,
     target: &mut dyn FnMut(Vec2) -> f32,
     weight: &mut dyn FnMut(Vec2) -> f32,
-    guard: Option<GuardFn>,
     mode: BrushMode,
 ) {
     let (min_x, min_z, max_x, max_z) = stations.iter().fold(
@@ -429,7 +496,6 @@ fn river_apply(
         max_z: max_z + extent,
         target,
         weight,
-        guard,
     });
 }
 

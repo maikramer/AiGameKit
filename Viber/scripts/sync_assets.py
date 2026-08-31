@@ -55,6 +55,8 @@ _URL_RE = re.compile(r"[\w-]*url\s*=\s*\"([^\"]+)\"", re.IGNORECASE)
 _MESHES_RE = re.compile(r"\bmeshes\s*=\s*\"([^\"]+)\"", re.IGNORECASE)
 # <MusicLayer sound="bgm-explore"> → /assets/audio/bgm/explore.ogg (convenção)
 _SOUND_RE = re.compile(r"\bsound\s*=\s*\"bgm-([a-z0-9-]+)\"", re.IGNORECASE)
+# <Terrain heightmap="/assets/terrain/terrain.ahgt"> e afins
+_HEIGHTMAP_RE = re.compile(r"\bheightmap\s*=\s*\"([^\"]+)\"", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +103,8 @@ def extract_urls(text: str) -> list[str]:
         urls.extend(listing.split())
     for layer in _SOUND_RE.findall(text):
         urls.append(f"/assets/audio/bgm/{layer}.ogg")
+    for hm in _HEIGHTMAP_RE.findall(text):
+        urls.append(hm)
     return urls
 
 
@@ -167,6 +171,8 @@ def decompress_with_npx(src: Path, dst: Path) -> None:
 def plan_for(src: Path) -> str | None:
     """``decompress`` | ``link`` | None (ignored extension), from the source file."""
     ext = src.suffix.lower()
+    if ext == ".ahgt":
+        return "link"
     if ext == ".glb":
         try:
             used = glb_extensions_used(src.read_bytes())

@@ -16,11 +16,14 @@
 //!   [`BrushMode::Lower`]/[`BrushMode::Raise`] only ever cut/fill. Water is
 //!   always lower-only, so overlapping bodies and pre-existing valleys stay
 //!   safe.
-//! * **Guard clamp** — after a stroke, texels whose bilinear stencil touches
-//!   the brush region are lowered to the design surface when they rise above
-//!   it (the `guardAt` lower-only clamp). This removes the "lip" the 1-texel
-//!   bilinear influence reach (`√2·texel`) would otherwise leave at the edge
-//!   of flat pads and road beds.
+//! * **No guard clamp.** The VibeGame port carried a `guardAt` pass that, after
+//!   a stroke, pulled every texel adjacent to the brush down onto the design
+//!   surface. It only ever ran on texels the falloff had left at weight 0, so
+//!   it could not remove a discontinuity — it moved it one texel outward, and
+//!   on real relief it manufactured cliffs: a 21 m ring around the demo
+//!   world's plaza, an 18 m wall beside its roads, a slot along every river
+//!   bank. Transitions are graded by the carvers' falloffs instead, which
+//!   widen with the depth of their own cut.
 //! * **Minimum effective width** — [`min_effective`] clamps brush widths and
 //!   falloffs to ≥1.5 texels of the grid: smaller beds cannot touch a texel
 //!   center and would silently no-op (heightmap 4000 m / 64 texels ≈ 32 m per
@@ -32,9 +35,6 @@ use super::heightmap::HeightMapU16;
 
 /// Weight/target evaluation at a world XZ position (meters).
 pub type BrushFn<'a> = &'a mut dyn FnMut(Vec2) -> f32;
-
-/// Read-only design-surface evaluation for the guard clamp.
-pub type GuardFn<'a> = &'a dyn Fn(Vec2) -> f32;
 
 /// How candidates move toward the design surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,10 +60,6 @@ pub struct BrushRequest<'a> {
     pub target: BrushFn<'a>,
     /// Brush weight `0..=1` at a world position (0 = untouched).
     pub weight: BrushFn<'a>,
-    /// Optional design surface used by the guard clamp: texels near the brush
-    /// that still rise above it are lowered onto it. Typically the same
-    /// surface as `target` evaluated without falloff.
-    pub guard: Option<GuardFn<'a>>,
 }
 
 /// A recorded stroke: every `(cell, old_raw)` the owner wrote, in order.
@@ -323,46 +319,23 @@ impl BrushGrid {
             }
         }
 
-        // Guard clamp: texels whose 3x3 stencil touches a weighted texel but
-        // that sit above the design surface are lowered onto it (lower-only).
-        // This is what keeps flat pads/road beds free of bilinear-stencil
-        // lips at their falloff edges.
-        if let Some(guard) = req.guard {
-            let reach = texel * std::f32::consts::SQRT_2;
-            for z in z0..z1 {
-                for x in x0..x1 {
-                    let p = self.cell_center(x, z);
-                    if (req.weight)(p) > 0.0 {
-                        continue; // the main pass owns weighted texels
-                    }
-                    let touches = [
-                        Vec2::new(p.x - reach, p.y),
-                        Vec2::new(p.x + reach, p.y),
-                        Vec2::new(p.x, p.y - reach),
-                        Vec2::new(p.x, p.y + reach),
-                    ]
-                    .into_iter()
-                    .any(|q| (req.weight)(q) > 0.0);
-                    if !touches {
-                        continue;
-                    }
-                    let g = guard(p);
-                    let cur = self.cell_height(x, z);
-                    if cur - g > eps {
-                        self.set_cell_height(x, z, g);
-                    }
-                }
-            }
-        }
-
         self.commit_stroke()
     }
 
     /// Flattens a rounded rectangle to `height` — the `<TerrainPad>` carve
-    /// (`flattenRect`): SDF core at weight 1 (cut **and** fill), smoothstep
-    /// falloff ring, guard clamped to the plane. When `height` is `None` the
-    /// pad center is sampled first (auto mode) so callers can resolve it.
-    /// Returns the resolved height.
+    /// (`flattenRect`): SDF core at weight 1 (cut **and** fill) and a
+    /// smoothstep falloff ring that lands the pad plane back on the natural
+    /// terrain. When `height` is `None` the pad center is sampled first (auto
+    /// mode) so callers can resolve it. Returns the resolved height.
+    ///
+    /// Deliberately **unguarded**. The guard clamp used to run here with a
+    /// design of `target_height` everywhere, which pulled the one-texel ring
+    /// just outside the falloff down onto the pad plane no matter how far the
+    /// natural terrain stood above it. That cannot remove a discontinuity — it
+    /// only moves it one texel outward — so on real relief it manufactured a
+    /// cliff ring around every pad (21 m around the demo world's plaza). When
+    /// a pad meets a steep hillside the fix is a wider `falloff`, which grades
+    /// the transition, not a hard clamp at its edge.
     pub fn flatten_rect(
         &mut self,
         at: Vec2,
@@ -392,7 +365,6 @@ impl BrushGrid {
             }
         };
         let mut target = |_| target_height;
-        let guard: GuardFn = &|_| target_height;
         self.apply(BrushRequest {
             mode: BrushMode::Blend,
             min_x: at.x - core_half.x - falloff,
@@ -401,7 +373,6 @@ impl BrushGrid {
             max_z: at.y + core_half.y + falloff,
             target: &mut target,
             weight: &mut weight,
-            guard: Some(guard),
         });
         self.commit_stroke();
         target_height
@@ -631,39 +602,75 @@ mod tests {
     }
 
     #[test]
-    fn test_flatten_guard_removes_stencil_lip() {
-        // A wall exactly at the falloff boundary: without the guard, the
-        // weight-0 texels just outside keep their full height and the bilinear
-        // stencil leaves a step lip at the pad edge.
+    fn test_flatten_leaves_no_cliff_ring_outside_the_falloff() {
+        // A pad cut into a slope must not step harder just outside its
+        // falloff than the slope itself does. The old guard clamp pulled that
+        // ring onto the pad plane, turning the pad edge into a cliff.
         let mut grid = flat_grid(0.0);
-        grid.begin_stroke("wall");
-        let wall_x = 21.0;
+        grid.begin_stroke("slope");
         for z in 0..64 {
             for x in 0..64 {
                 let p = grid.cell_center(x, z);
-                let h = if p.x >= wall_x { 12.0 } else { 0.0 };
-                grid.set_cell_height(x, z, h);
+                grid.set_cell_height(x, z, (p.x + 32.0) * 0.4);
             }
         }
         grid.commit_stroke();
-        // Pad centered at (10, 0): core to ±5, falloff to ~21 m.
-        let resolved = grid.flatten_rect(
-            Vec2::new(10.0, 0.0),
-            Vec2::splat(10.0),
+        let texel = grid.texel();
+        let natural_step = 0.4 * texel;
+
+        grid.flatten_rect(
+            Vec2::new(0.0, 0.0),
+            Vec2::splat(12.0),
             6.0,
             2.0,
             Some(0.0),
-            "pad:lip",
+            "pad:slope",
         );
-        assert_eq!(resolved, 0.0);
-        // Texels just past the falloff (inside the guard reach) are clamped to
-        // the plane instead of leaving a 12 m step next to the falloff ring.
-        let lip = grid.sample(wall_x + 0.6, 0.0);
-        assert!(lip < 0.6, "guard clamps the wall lip: {lip}");
-        // The wall far from the pad is untouched.
+
+        // Scan a line through the pad and out the far side.
+        let mut worst = 0.0_f32;
+        let mut at = 0.0_f32;
+        let mut x = -30.0_f32;
+        while x < 30.0 {
+            let step = (grid.sample(x + texel, 0.0) - grid.sample(x, 0.0)).abs();
+            if step > worst {
+                worst = step;
+                at = x;
+            }
+            x += texel;
+        }
+        // The falloff ramp is steeper than the natural slope by construction,
+        // but it must stay a ramp — no single texel may swallow the whole cut.
         assert!(
-            (grid.sample(wall_x + 1.2, 30.0) - 12.0).abs() < 0.05,
-            "guard only acts near the brush"
+            worst < natural_step * 12.0,
+            "cliff of {worst:.2} m per texel at x = {at:.1} (natural {natural_step:.2})"
+        );
+    }
+
+    #[test]
+    fn test_flatten_falloff_lands_back_on_the_natural_terrain() {
+        // Outside core + falloff the pad must not have touched anything.
+        let mut grid = flat_grid(0.0);
+        grid.begin_stroke("slope");
+        for z in 0..64 {
+            for x in 0..64 {
+                let p = grid.cell_center(x, z);
+                grid.set_cell_height(x, z, (p.x + 32.0) * 0.4);
+            }
+        }
+        grid.commit_stroke();
+        let outside_before = grid.sample(26.0, 0.0);
+        grid.flatten_rect(
+            Vec2::new(0.0, 0.0),
+            Vec2::splat(12.0),
+            6.0,
+            2.0,
+            Some(0.0),
+            "pad:slope",
+        );
+        assert!(
+            (grid.sample(26.0, 0.0) - outside_before).abs() < 0.05,
+            "terrain well outside the falloff is untouched"
         );
     }
 
@@ -681,7 +688,6 @@ mod tests {
             max_z: 10.0,
             target: &mut target,
             weight: &mut weight,
-            guard: None,
         });
         grid.commit_stroke();
         assert!(grid.sample(0.0, 0.0) < 10.0, "center carved down");
@@ -704,7 +710,6 @@ mod tests {
             max_z: 6.0,
             target: &mut target,
             weight: &mut weight,
-            guard: None,
         });
         grid.commit_stroke();
         assert!(
@@ -727,7 +732,6 @@ mod tests {
             max_z: 8.0,
             target: &mut target,
             weight: &mut weight,
-            guard: None,
         });
         grid.commit_stroke();
         assert!(written > 0);
@@ -764,7 +768,6 @@ mod tests {
             max_z: 8.0,
             target: &mut target,
             weight: &mut weight,
-            guard: None,
         });
         grid.commit_stroke();
         grid.revert_last_stroke("road:0");
@@ -787,7 +790,6 @@ mod tests {
             max_z: 1.0,
             target: &mut target,
             weight: &mut weight,
-            guard: None,
         });
         grid.commit_stroke();
         assert_eq!(written, 0);
@@ -804,7 +806,6 @@ mod tests {
             max_z: 1.0,
             target: &mut target,
             weight: &mut weight,
-            guard: None,
         });
         grid.commit_stroke();
         assert_eq!(grid.revision(), 1);

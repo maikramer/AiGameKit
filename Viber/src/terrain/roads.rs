@@ -30,13 +30,16 @@ use bevy::math::Vec2;
 
 use super::brush::{BrushGrid, BrushMode, BrushRequest, min_effective, smootherstep01};
 use super::mesh::ChunkMeshData;
-use super::paths::{chaikin_smooth, nearest_on_path, path_length, resample};
+use super::paths::{chaikin_smooth, nearest_on_path, path_length, resample, station_lerp};
 use super::water::WaterBody;
 
 /// Road station spacing for the design profile (meters). VibeGame uses
 /// 0.35 m; 1 m keeps native carving cheap with identical visual results at
 /// terrain texel sizes ≥ 1 m.
 pub const STATION_SPACING: f32 = 1.0;
+/// Alternations of "pin pad plazas / re-limit the grade" while resolving a
+/// road's design profile (see `carve_road`); converges well inside this.
+const PAD_PIN_ITERATIONS: usize = 4;
 /// Extra bed overhang beyond the ribbon (meters, VibeGame `ROADBED_OVERHANG`).
 pub const ROADBED_OVERHANG: f32 = 2.0;
 /// Adaptive falloff slope: `falloff = max(falloff, 1.875 · cutDepth)` gives a
@@ -297,17 +300,27 @@ impl RoadSpec {
 /// Guards for the road carve: mutual exclusions against pads and water.
 #[derive(Debug, Clone, Default)]
 pub struct RoadGuards<'a> {
-    /// Pad cores as `(center, half_extents)` — never carved by roads.
-    pub pad_cores: &'a [(Vec2, Vec2)],
+    /// Pad cores as `(center, half_extents, plane height)` — never carved by
+    /// roads, and used to **anchor** the road grade so an approach ramps down
+    /// onto the plaza instead of ending at a wall on its boundary.
+    pub pad_cores: &'a [(Vec2, Vec2, f32)],
     /// Water bodies — carve zones are never filled back in.
     pub water: &'a [WaterBody],
 }
 
 impl<'a> RoadGuards<'a> {
     fn blocked(&self, p: Vec2) -> bool {
-        self.pad_cores.iter().any(|(c, h)| {
-            p.x >= c.x - h.x && p.x <= c.x + h.x && p.y >= c.y - h.y && p.y <= c.y + h.y
-        }) || self.water.iter().any(|w| w.contains(p))
+        self.pad_plane_at(p).is_some() || self.water.iter().any(|w| w.contains(p))
+    }
+
+    /// Resolved plane height of the pad core containing `p`, if any.
+    fn pad_plane_at(&self, p: Vec2) -> Option<f32> {
+        self.pad_cores
+            .iter()
+            .find(|(c, h, _)| {
+                p.x >= c.x - h.x && p.x <= c.x + h.x && p.y >= c.y - h.y && p.y <= c.y + h.y
+            })
+            .map(|(_, _, plane)| *plane)
     }
 }
 
@@ -329,11 +342,13 @@ impl RoadPath {
     /// Signed "distance onto the road": ≤ 0 when on the ribbon, else meters
     /// to the nearest edge (VibeGame `distanceToRoadAt`).
     pub fn distance_to_road(&self, p: Vec2) -> f32 {
-        let Some((q, seg)) = nearest_on_path(&self.stations, p) else {
+        let Some(hit) = nearest_on_path(&self.stations, p) else {
             return f32::INFINITY;
         };
-        let hw = self.half_width.get(seg).copied().unwrap_or(0.0);
-        q.distance(p) - hw
+        // Interpolated: a per-segment half-width makes the ribbon edge (and
+        // every `is_on_road` query against it) step at each station.
+        let hw = station_lerp(&self.half_width, &hit);
+        hit.point.distance(p) - hw
     }
 
     /// Point is on the road ribbon (VibeGame `isPointOnRoad`).
@@ -378,7 +393,6 @@ pub fn carve_road(
             None => 1.0,
         }
     };
-    let half_at = |i: usize| -> f32 { bed_half * flare_at(stations[i]) };
 
     // Bridge: no carve; flat deck at the higher end (GLB decks come later).
     if spec.profile == RoadProfile::Bridge || !spec.flatten {
@@ -399,6 +413,8 @@ pub fn carve_road(
         });
     }
 
+    let sink = spec.platform_sink;
+
     // 1. Survey the natural profile, then smooth it (window, 3 box passes).
     let mut design: Vec<f32> = stations.iter().map(|p| grid.sample(p.x, p.y)).collect();
     let window = (spec.flatten_window / STATION_SPACING.max(1e-3)).round();
@@ -406,8 +422,33 @@ pub fn carve_road(
     for _ in 0..3 {
         box_smooth(&mut design, half_window);
     }
-    // 2. Limit the grade (forward + backward clamps).
-    limit_grade(&mut design, spec.flatten_max_grade, STATION_SPACING);
+    // 2. Pin the pad plazas, then limit the grade.
+    //
+    // The survey window is wide (`flatten_window`, smoothed three times), so a
+    // plaza's flat plane is averaged away and the design drifts back onto the
+    // surrounding hillside. Roads do not carve pad cores, so that drift used
+    // to surface as a sheer wall on the pad boundary — 18 m around the demo
+    // world's plaza. Pinning the stations that sit on a pad to its plane and
+    // re-running the grade limit makes the approach ramp down to meet it; the
+    // limit can pull a pinned station, so pin and limit alternate to a fixed
+    // point.
+    let pins: Vec<Option<f32>> = stations
+        .iter()
+        .map(|p| guards.pad_plane_at(*p).map(|plane| plane + sink))
+        .collect();
+    for _ in 0..PAD_PIN_ITERATIONS {
+        for (d, pin) in design.iter_mut().zip(&pins) {
+            if let Some(plane) = pin {
+                *d = *plane;
+            }
+        }
+        limit_grade(&mut design, spec.flatten_max_grade, STATION_SPACING);
+    }
+    for (d, pin) in design.iter_mut().zip(&pins) {
+        if let Some(plane) = pin {
+            *d = *plane;
+        }
+    }
 
     // 3. Adaptive falloff per station: deep cuts get wide slopes.
     let falloff_base = min_effective(spec.flatten_falloff, texel);
@@ -422,7 +463,6 @@ pub fn carve_road(
         .collect();
 
     let shoulder = spec.flatten_shoulder;
-    let sink = spec.platform_sink;
     let extent = bed_half * CROSSING_FLARE + falloff_base + texel * 2.0;
 
     let owner = format!("road:{index}");
@@ -432,14 +472,16 @@ pub fn carve_road(
         if guards.blocked(p) {
             return 0.0;
         }
-        let Some((q, seg)) = nearest_on_path(stations_ref, p) else {
+        let Some(hit) = nearest_on_path(stations_ref, p) else {
             return 0.0;
         };
-        let i = seg.min(stations_ref.len() - 1);
-        let d = q.distance(p);
-        let hw = half_at(i);
+        let d = hit.point.distance(p);
+        // Both the bed half-width and the falloff are evaluated at the
+        // projected point / interpolated station: sampling them per segment
+        // steps the corridor width and terraces its slope.
+        let hw = bed_half * flare_at(hit.point);
         let inner = hw + shoulder;
-        let fall = falloff[i];
+        let fall = station_lerp(&falloff, &hit);
         let outer = inner + fall;
         if d > outer {
             return 0.0;
@@ -449,20 +491,16 @@ pub fn carve_road(
         }
         1.0 - smootherstep01((d - inner) / (outer - inner).max(1e-3))
     };
-    let mut target = |p: Vec2| {
-        let (_, seg) = nearest_on_path(stations_ref, p).unwrap_or((Vec2::ZERO, 0));
-        design[seg.min(design.len() - 1)] - sink
+    let mut target = |p: Vec2| match nearest_on_path(stations_ref, p) {
+        Some(hit) => station_lerp(&design, &hit) - sink,
+        None => -sink,
     };
-    let design_ref = &design;
-    let guard = move |p: Vec2| {
-        // Blocked zones (pad cores, water) must never be touched — not even
-        // by the guard clamp; +INF makes the lower-only clamp a no-op there.
-        if guards.blocked(p) {
-            return f32::INFINITY;
-        }
-        let (_, seg) = nearest_on_path(stations_ref, p).unwrap_or((Vec2::ZERO, 0));
-        design_ref[seg.min(design_ref.len() - 1)] - sink
-    };
+    // No guard clamp. It only ever visits texels the falloff left unweighted,
+    // i.e. the ring just outside `inner + fall`, and there it pulled the
+    // hillside all the way down to the road bed — a ~18 m drop beside a deep
+    // cut in the demo world. A guard cannot remove a discontinuity, it moves
+    // it one texel outward; the adaptive falloff above is what actually grades
+    // the transition. Same trap as the pad and river carves.
     let (min_x, min_z, max_x, max_z) = stations.iter().fold(
         (
             f32::INFINITY,
@@ -480,7 +518,6 @@ pub fn carve_road(
         max_z: max_z + extent,
         target: &mut target,
         weight: &mut weight,
-        guard: Some(&guard),
     });
     grid.commit_stroke();
 
@@ -872,7 +909,7 @@ mod tests {
         let pad_height = grid.sample(64.0, 32.0);
         let spec = road_spec();
         let guards = RoadGuards {
-            pad_cores: &[(Vec2::new(64.0, 32.0), Vec2::splat(10.0))],
+            pad_cores: &[(Vec2::new(64.0, 32.0), Vec2::splat(10.0), 0.0)],
             water: &[],
         };
         let _ = carve_road(&mut grid, &spec, 0, &guards).expect("road");

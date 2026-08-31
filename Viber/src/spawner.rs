@@ -281,7 +281,12 @@ pub fn instantiate_spawn_groups(
             transform.rotation = bevy::math::Quat::from_rotation_y(instance.yaw_deg.to_radians());
             transform.scale = instance.scale;
             if let Some(scene) = scenes[instance.template_index.min(scenes.len() - 1)].clone() {
-                commands.spawn((transform, Visibility::Inherited, WorldAssetRoot(scene)));
+                commands.spawn((
+                    transform,
+                    Visibility::Inherited,
+                    WorldAssetRoot(scene),
+                    crate::worldsys::SeatOnTerrain,
+                ));
             }
         }
         group.done = true;

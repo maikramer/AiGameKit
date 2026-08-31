@@ -55,7 +55,8 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                 100,
                 100,
                 Color::srgb(0.75, 0.15, 0.15),
-                (18.0, 900.0),
+                (18.0, 300.0),
+                (10.0, 10.0),
             );
         }
         "xpbar" => {
@@ -65,7 +66,8 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                 0,
                 100,
                 Color::srgb(0.2, 0.45, 0.8),
-                (10.0, 900.0),
+                (10.0, 300.0),
+                (10.0, 46.0),
             );
         }
         "bossbar" => {
@@ -76,6 +78,7 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                 100,
                 Color::srgb(0.45, 0.1, 0.55),
                 (22.0, 420.0),
+                (0.0, 12.0),
             );
             world.entity_mut(id).insert(Visibility::Hidden);
         }
@@ -87,6 +90,7 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                 100,
                 Color::srgb(0.6, 0.2, 0.2),
                 (14.0, 240.0),
+                (170.0, 10.0),
             );
             world.entity_mut(id).insert(Visibility::Hidden);
         }
@@ -224,6 +228,7 @@ fn bar(
     max: u32,
     fill: Color,
     (text_size, width): (f32, f32),
+    (left_px, bottom_px): (f32, f32),
 ) -> Entity {
     let fraction = if max > 0 {
         value as f32 / max as f32
@@ -234,7 +239,8 @@ fn bar(
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: Val::Px(10.0),
+                left: Val::Px(left_px),
+                bottom: Val::Px(bottom_px),
                 width: Val::Px(width),
                 height: Val::Px(text_size + 8.0),
                 ..Default::default()

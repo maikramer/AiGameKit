@@ -99,17 +99,77 @@ pub fn resample(points: &[Vec2], spacing: f32) -> Vec<Vec2> {
 /// Distance from `p` to the closest point on the polyline `points`.
 pub fn distance_to_path(points: &[Vec2], p: Vec2) -> f32 {
     nearest_on_path(points, p)
-        .map(|(q, _)| q.distance(p))
+        .map(|hit| hit.point.distance(p))
         .unwrap_or(f32::INFINITY)
 }
 
-/// Closest point on the polyline plus the index of its segment start vertex.
-/// `None` for paths with fewer than 2 points.
-pub fn nearest_on_path(points: &[Vec2], p: Vec2) -> Option<(Vec2, usize)> {
-    if points.len() < 2 {
-        return points.first().map(|q| (*q, 0));
+/// Where a query point projects onto a polyline.
+///
+/// `segment` is the index of the segment's **start** station and `t` the
+/// normalized position along it (`0` at `segment`, `1` at `segment + 1`).
+///
+/// Carvers keep their design as per-station arrays (river water surface, road
+/// grade, half-widths). Reading those with `array[segment]` alone makes the
+/// design *piecewise constant*: two neighbouring texels that project onto
+/// different segments read values that differ by a whole station step, so the
+/// carve writes a cliff at every segment boundary — the vertical fins that
+/// used to line every river bank. [`station_lerp`] exists so callers blend
+/// with `t` instead and the design stays continuous across the whole path.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PathHit {
+    /// Closest point on the polyline.
+    pub point: Vec2,
+    /// Index of the segment's start station.
+    pub segment: usize,
+    /// Normalized position along that segment, `0..=1`.
+    pub t: f32,
+}
+
+impl PathHit {
+    /// Fractional station coordinate (`segment + t`), clamped to the last
+    /// station so it indexes any per-station array of the same path.
+    pub fn station(&self, stations: usize) -> f32 {
+        let last = stations.saturating_sub(1) as f32;
+        (self.segment as f32 + self.t).clamp(0.0, last.max(0.0))
     }
-    let mut best = (f32::INFINITY, Vec2::ZERO, 0usize);
+}
+
+/// Samples a per-station array at the fractional position of `hit`, linearly
+/// interpolating between the two neighbouring stations.
+///
+/// This is the continuous counterpart of `values[hit.segment]`; use it for
+/// every quantity that varies along a path (design height, half-width,
+/// falloff) so the carve never steps at a segment boundary.
+pub fn station_lerp(values: &[f32], hit: &PathHit) -> f32 {
+    match values.len() {
+        0 => 0.0,
+        1 => values[0],
+        n => {
+            let s = hit.station(n);
+            let i = (s.floor() as usize).min(n - 1);
+            let j = (i + 1).min(n - 1);
+            let frac = s - i as f32;
+            values[i] + (values[j] - values[i]) * frac
+        }
+    }
+}
+
+/// Closest point on the polyline, with the segment index and the normalized
+/// position along it. `None` for paths with fewer than 2 points.
+pub fn nearest_on_path(points: &[Vec2], p: Vec2) -> Option<PathHit> {
+    if points.len() < 2 {
+        return points.first().map(|q| PathHit {
+            point: *q,
+            segment: 0,
+            t: 0.0,
+        });
+    }
+    let mut best_d = f32::INFINITY;
+    let mut best = PathHit {
+        point: Vec2::ZERO,
+        segment: 0,
+        t: 0.0,
+    };
     for (i, window) in points.windows(2).enumerate() {
         let (a, b) = (window[0], window[1]);
         let ab = b - a;
@@ -120,11 +180,16 @@ pub fn nearest_on_path(points: &[Vec2], p: Vec2) -> Option<(Vec2, usize)> {
         };
         let q = a + ab * t;
         let d = q.distance_squared(p);
-        if d < best.0 {
-            best = (d, q, i);
+        if d < best_d {
+            best_d = d;
+            best = PathHit {
+                point: q,
+                segment: i,
+                t,
+            };
         }
     }
-    Some((best.1, best.2))
+    Some(best)
 }
 
 #[cfg(test)]
@@ -237,28 +302,72 @@ mod tests {
     #[test]
     fn test_nearest_on_path_distance_and_segment() {
         let pts = vec![Vec2::ZERO, Vec2::new(10.0, 0.0), Vec2::new(10.0, 10.0)];
-        let (q, seg) = nearest_on_path(&pts, Vec2::new(5.0, 3.0)).expect("open path");
-        assert!(close(q, Vec2::new(5.0, 0.0)));
-        assert_eq!(seg, 0);
-        let (q, seg) = nearest_on_path(&pts, Vec2::new(14.0, 4.0)).expect("open path");
-        assert!(close(q, Vec2::new(10.0, 4.0)));
-        assert_eq!(seg, 1);
+        let hit = nearest_on_path(&pts, Vec2::new(5.0, 3.0)).expect("open path");
+        assert!(close(hit.point, Vec2::new(5.0, 0.0)));
+        assert_eq!(hit.segment, 0);
+        assert!((hit.t - 0.5).abs() < 1e-4, "halfway along segment 0");
+        let hit = nearest_on_path(&pts, Vec2::new(14.0, 4.0)).expect("open path");
+        assert!(close(hit.point, Vec2::new(10.0, 4.0)));
+        assert_eq!(hit.segment, 1);
+        assert!((hit.t - 0.4).abs() < 1e-4);
         assert_eq!(distance_to_path(&pts, Vec2::new(5.0, 3.0)), 3.0);
     }
 
     #[test]
     fn test_nearest_on_path_endpoint_clamps() {
         let pts = vec![Vec2::ZERO, Vec2::new(10.0, 0.0)];
-        let (q, _) = nearest_on_path(&pts, Vec2::new(-4.0, 0.0)).expect("open path");
-        assert!(close(q, Vec2::ZERO), "projected before the start clamps");
+        let hit = nearest_on_path(&pts, Vec2::new(-4.0, 0.0)).expect("open path");
+        assert!(
+            close(hit.point, Vec2::ZERO),
+            "projected before the start clamps"
+        );
+        assert_eq!(hit.t, 0.0);
     }
 
     #[test]
     fn test_nearest_on_path_single_point() {
         let pts = vec![Vec2::new(3.0, 4.0)];
-        let (q, seg) = nearest_on_path(&pts, Vec2::ZERO).expect("degenerate path");
-        assert!(close(q, pts[0]));
-        assert_eq!(seg, 0);
+        let hit = nearest_on_path(&pts, Vec2::ZERO).expect("degenerate path");
+        assert!(close(hit.point, pts[0]));
+        assert_eq!(hit.segment, 0);
         assert!(nearest_on_path(&[], Vec2::ZERO).is_none());
+    }
+
+    #[test]
+    fn test_station_lerp_interpolates_between_stations() {
+        let pts = vec![Vec2::ZERO, Vec2::new(10.0, 0.0), Vec2::new(20.0, 0.0)];
+        let values = vec![0.0_f32, 10.0, 30.0];
+        // Halfway along segment 0 → halfway between station 0 and 1.
+        let hit = nearest_on_path(&pts, Vec2::new(5.0, 2.0)).expect("open path");
+        assert!((station_lerp(&values, &hit) - 5.0).abs() < 1e-4);
+        // A quarter along segment 1 → 10 + 0.25 * (30 - 10).
+        let hit = nearest_on_path(&pts, Vec2::new(12.5, -2.0)).expect("open path");
+        assert!((station_lerp(&values, &hit) - 15.0).abs() < 1e-4);
+        // Exactly on a station is the station value.
+        let hit = nearest_on_path(&pts, Vec2::new(10.0, 3.0)).expect("open path");
+        assert!((station_lerp(&values, &hit) - 10.0).abs() < 1e-4);
+        // Degenerate arrays never panic.
+        assert_eq!(station_lerp(&[], &hit), 0.0);
+        assert_eq!(station_lerp(&[7.0], &hit), 7.0);
+    }
+
+    /// The whole point of `station_lerp`: no step at a segment boundary.
+    /// Sampling either side of station 1 must differ by ~the local gradient,
+    /// not by a whole station step (the old `values[segment]` behaviour).
+    #[test]
+    fn test_station_lerp_is_continuous_across_segment_boundaries() {
+        let pts = vec![Vec2::ZERO, Vec2::new(10.0, 0.0), Vec2::new(20.0, 0.0)];
+        let values = vec![0.0_f32, 10.0, 30.0];
+        let before = nearest_on_path(&pts, Vec2::new(9.99, 1.0)).expect("open path");
+        let after = nearest_on_path(&pts, Vec2::new(10.01, 1.0)).expect("open path");
+        assert_ne!(
+            before.segment, after.segment,
+            "the samples straddle station 1"
+        );
+        let jump = (station_lerp(&values, &after) - station_lerp(&values, &before)).abs();
+        assert!(
+            jump < 0.05,
+            "discontinuity of {jump} at the segment boundary"
+        );
     }
 }

@@ -12,4 +12,5 @@ pub mod recipes;
 pub mod scaffold;
 pub mod spawner;
 pub mod terrain;
+pub mod worldsys;
 pub mod xml;

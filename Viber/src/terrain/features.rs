@@ -108,7 +108,11 @@ pub fn apply_features(grid: &mut BrushGrid, features: &TerrainFeatures) -> Featu
         specs.extend(network.expand());
     }
     specs.sort_by_key(|r| matches!(r.profile, RoadProfile::Bridge));
-    let pad_cores: Vec<(Vec2, Vec2)> = result.pads.iter().map(|p| (p.at, p.size * 0.5)).collect();
+    let pad_cores: Vec<(Vec2, Vec2, f32)> = result
+        .pads
+        .iter()
+        .map(|p| (p.at, p.size * 0.5, p.height))
+        .collect();
     let guards = RoadGuards {
         pad_cores: &pad_cores,
         water: &result.water,

@@ -84,9 +84,19 @@ pub fn bootstrap(world: &mut World) {
     };
 
     // 1. Height grid.
+    let mut spec = spec.clone();
     let map = match &spec.heightmap {
         Some(path) => match load_heightmap(pending.base_dir.as_deref(), path) {
-            Ok(map) => map,
+            Ok(loaded) => {
+                // The heightmap file is authoritative for its own coverage.
+                if let Some(world_size) = loaded.world_size {
+                    spec.world_size = world_size;
+                }
+                if let Some(max_height) = loaded.max_height {
+                    spec.max_height = max_height;
+                }
+                loaded.map
+            }
             Err(error) => {
                 warn!("heightmap `{path}` unavailable ({error:#}); using the procedural field");
                 HeightMapU16::procedural(&spec, spec.resolution.max(1) as usize)
@@ -198,7 +208,10 @@ fn spawn_chunks(
     let epsilon = grid.texel();
 
     let mut material = StandardMaterial {
-        base_color: spec.tint.base_color,
+        // White: `tint_vertex_color` already multiplies `base_color` into every
+        // vertex color, and the PBR shader multiplies material x vertex — so
+        // setting it here too applied the base tint twice.
+        base_color: Color::WHITE,
         metallic: 0.0,
         perceptual_roughness: 0.95,
         ..StandardMaterial::default()
@@ -355,7 +368,7 @@ fn spawn_roads(
 fn to_bevy_mesh(data: &super::mesh::ChunkMeshData) -> Mesh {
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
-        RenderAssetUsages::MAIN_WORLD,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, data.positions.clone());
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, data.normals.clone());
@@ -368,30 +381,49 @@ fn to_bevy_mesh(data: &super::mesh::ChunkMeshData) -> Mesh {
 /// Loads a PNG heightmap (8-bit grayscale is upscaled to the full 16-bit
 /// range like the VibeGame loader). Relative paths resolve against the world
 /// XML directory first, then the process CWD.
-fn load_heightmap(base_dir: Option<&Path>, path: &str) -> anyhow::Result<HeightMapU16> {
-    if path.to_ascii_lowercase().ends_with(".ahgt") {
-        anyhow::bail!(
-            "the packed `.ahgt` format is not decoded natively yet — export a 16-bit PNG heightmap"
-        );
-    }
+/// Loaded heightmap plus the authoritative world size / max height (the
+/// `.ahgt` metadata overrides the XML spec when present).
+pub struct LoadedHeightmap {
+    pub map: HeightMapU16,
+    pub world_size: Option<f32>,
+    pub max_height: Option<f32>,
+}
+
+fn load_heightmap(base_dir: Option<&Path>, path: &str) -> anyhow::Result<LoadedHeightmap> {
+    // `/assets/…`-style paths are site-root relative: resolve against the
+    // world dir (the folder that contains `assets/`).
+    let rel = path.trim_start_matches('/');
     let resolved = match base_dir {
-        Some(dir) if !path.starts_with('/') => {
-            let candidate = dir.join(path);
+        Some(dir) => {
+            let candidate = dir.join(rel);
             if candidate.exists() {
                 candidate
             } else {
                 PathBuf::from(path)
             }
         }
-        _ => PathBuf::from(path),
+        None => PathBuf::from(path),
     };
     let bytes =
         std::fs::read(&resolved).map_err(|e| anyhow::anyhow!("{}: {e}", resolved.display()))?;
+    if path.to_ascii_lowercase().ends_with(".ahgt") {
+        let (map, world_size, max_height) = HeightMapU16::from_ahgt(&bytes)
+            .map_err(|e| anyhow::anyhow!("{}: {e}", resolved.display()))?;
+        return Ok(LoadedHeightmap {
+            map,
+            world_size: Some(world_size),
+            max_height: Some(max_height),
+        });
+    }
     let img = image::load_from_memory(&bytes)
         .map_err(|e| anyhow::anyhow!("{}: {e}", resolved.display()))?;
     let (width, depth) = (img.width() as usize, img.height() as usize);
     let data = img.to_luma16().into_raw();
-    Ok(HeightMapU16 { width, depth, data })
+    Ok(LoadedHeightmap {
+        map: HeightMapU16 { width, depth, data },
+        world_size: None,
+        max_height: None,
+    })
 }
 
 #[cfg(test)]
