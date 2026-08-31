@@ -64,7 +64,7 @@ duras (git=`main`, vramd, LOD0). Tribal knowledge longa vive nos docs abaixo —
 
 ## Repository Overview
 
-Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textures, skymaps, PBR map generation, rigging, animation, asset batching, and a browser 3D engine. Primarily Python with one Rust crate (Materialize) and one TypeScript package (VibeGame).
+Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textures, skymaps, PBR map generation, rigging, animation, asset batching, a browser 3D engine, and a native Bevy engine. Primarily Python with two Rust crates (Materialize, Viber) and one TypeScript package (VibeGame).
 
 **Key directories:**
 
@@ -85,6 +85,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Motion3D/` | Python | `motion3d` | Text-to-motion (HY-Motion-1.0 Lite/Full) → NPZ @30fps; `apply-rigged` → SkinTokens via Animator3D `hml22`; vramd |
 | `AiGameKitLab/` | Python | `aigamekit-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
+| `Viber/` | Rust | `viber` | Native Bevy engine (declarative world XML, Bevy naming; Phases: 0 ✅ XML+spawn, 1 glTF/terrain, 2 Luau scripts, 3 physics) |
 | `Terrain3D/` | Python | `terrain3d` | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
 | `Rocks3D/` | Python | `rocks3d` | Procedural 3D rock generation (no PyTorch) |
 | `Vramd/` | Python | `modelserver` (CLI `vramd`/`vramd`) | Unified Model Server (vramd) — single-process GPU/VRAM supervisor |
@@ -102,7 +103,7 @@ All Python packages depend on `aigamekit-shared` (install Shared first). VibeGam
 make check
 ```
 
-This runs: lint + format check + typecheck + all **Python** tests and **Materialize** (`cargo test`). It does **not** run VibeGame (Bun/TypeScript); use `make test-vibegame` and related targets in `VibeGame/`.
+This runs: lint + format check + typecheck + all **Python** tests and the Rust crates **Materialize + Viber** (`cargo test`). It does **not** run VibeGame (Bun/TypeScript); use `make test-vibegame` and related targets in `VibeGame/`.
 
 ### Lint
 
@@ -152,6 +153,7 @@ make test-rigging3d    # pytest Rigging3D only
 make test-animator3d   # pytest Animator3D only
 make test-motion3d     # pytest Motion3D only
 make test-materialize  # cargo test in Materialize/
+make test-viber        # cargo test in Viber/
 make test-terrain3d    # pytest Terrain3D only
 make test-rocks3d      # pytest Rocks3D only
 make test-vibegame     # bun install (frozen) + bun test in VibeGame/
@@ -401,6 +403,20 @@ aigamekit-lab debug compare before.glb after.glb \
 Requires `bpy` installed in the active venv (`pip install bpy`, Python 3.13+ / Blender 5.2 LTS). All rendering is **native bpy** — no `animator3d` subprocess. Weight heatmaps (`debug inspect-rig --show-weights`), turntable GIFs (`debug turntable`), material inspection (`debug inspect-material`), and overlay diffs (`debug compare --overlay`) are handled in-process.
 
 See `AiGameKitLab/README.md` for full documentation.
+
+## Viber (Bevy engine)
+
+The monorepo also includes **Viber** (`viber`), a native game engine crate in Bevy 0.19 that runs declarative world XML — the native counterpart to VibeGame. Commands (from repo root, requires `cargo`):
+
+```bash
+cd Viber && cargo run -- analyze world.xml   # headless XML validation (CI-ready)
+cd Viber && cargo run -- run world.xml       # open a window and spawn the world
+make test-viber                              # cargo test in Viber/
+```
+
+The world XML follows **Bevy naming** (`translation`, `euler`, `half-size`, `base-color`) — no Unity/three.js vocabulary. Short tag contract: `Entity`, `Group`, shapes `Cuboid`/`Sphere`/`Cylinder`/`Plane`/`Capsule`, lights `PointLight`/`AmbientLight`, `OrbitCamera`, and `<Include src="…">` for composition (depth ≤ 8).
+
+Roadmap: Phase 0 ✅ (XML + spawn); Phase 1 glTF + terrain + player; Phase 2 Luau scripting (mlua); Phase 3 physics (`avian`) + `simple-rpg` updated. **VibeGame (TS/browser) remains the browser engine** — Viber is the native track; both share the GLB/KTX2/meshopt assets produced by the `gameassets` pipeline.
 
 ## vramd (VRAM Coordination)
 

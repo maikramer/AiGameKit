@@ -108,6 +108,22 @@ jobs:
       - name: Tests
         run: cargo test --manifest-path Materialize/Cargo.toml
 
+  viber:
+    name: cargo (Viber)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: rustfmt
+        run: cargo fmt --all --manifest-path Viber/Cargo.toml -- --check
+      - name: Clippy
+        run: cargo clippy --manifest-path Viber/Cargo.toml -- -D warnings
+      - name: Tests
+        run: cargo test --manifest-path Viber/Cargo.toml
+
   vibegame:
     name: VibeGame (Bun)
     runs-on: ubuntu-latest

@@ -22,6 +22,9 @@ tools/bfg-*.jar
 dist/
 build/
 pip-wheel-metadata/
+# Rust — artefactos de build do crate Viber (o Materialize usa o seu .gitignore local)
+Viber/target/
+Viber/Cargo.lock
 
 # Test & quality
 .pytest_cache/

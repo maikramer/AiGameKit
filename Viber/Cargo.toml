@@ -1,0 +1,20 @@
+[package]
+name = "viber"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+description = "Viber — native Bevy engine for AiGameKit declarative world XML"
+license = "MIT"
+repository = "https://github.com/maikeu/AiGameKit"
+keywords = ["gamedev", "bevy", "engine", "xml"]
+categories = ["game-development"]
+
+[dependencies]
+anyhow = "1.0"
+bevy = "0.19"
+clap = { version = "4.6", features = ["derive"] }
+roxmltree = "0.20"
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+tempfile = "3"

@@ -5,7 +5,7 @@ PYTHON_PROJECTS := Shared Text2D Text2Icon Text3D Paint3D Part3D GameAssets Text
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text2icon test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text2icon test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-skymap2d test-text2sound test-rigging3d test-animator3d test-motion3d test-aigamekitlab test-terrain3d test-rocks3d test-materialize test-rust test-viber test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
 
 # Each package is tested from its own venv (installed by ./install.sh <tool>, which
 # adds the [dev] extra). CI has no per-package venv, so the system interpreter stays
@@ -21,24 +21,27 @@ endef
 help: ## List all targets (default)
 	@echo "AiGameKit monorepo targets:"
 	@echo ""
-	@echo "Full Python/Rust CI (no VibeGame): make check"
+	@echo "Full Python/Rust CI (Materialize + Viber, no VibeGame): make check"
 	@echo "VibeGame (Bun): make test-vibegame | make check-vibegame | make lint-vibegame | make build-vibegame"
 	@echo ""
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-22s %s\n", $$1, $$2}'
 
-lint: ## ruff check at repo root; cargo clippy in Materialize/
+lint: ## ruff check at repo root; cargo clippy in Materialize/ and Viber/
 	ruff check .
 	cd Materialize && cargo clippy
+	cd Viber && cargo clippy -- -D warnings
 
-fmt: ## ruff format at repo root; cargo fmt in Materialize/
+fmt: ## ruff format at repo root; cargo fmt in Materialize/ and Viber/
 	ruff format .
 	cd Materialize && cargo fmt
+	cd Viber && cargo fmt
 
-fmt-check: ## ruff format --check; cargo fmt --check in Materialize/
+fmt-check: ## ruff format --check; cargo fmt --check in Materialize/ and Viber/
 	ruff format --check .
 	cd Materialize && cargo fmt --check
+	cd Viber && cargo fmt --check
 
-test: ## pytest in each Python project; cargo test in Materialize/
+test: ## pytest in each Python project; cargo test in Materialize/ and Viber/
 	@for d in $(PYTHON_PROJECTS); do \
 		echo "==> pytest $$d"; \
 		cd "$(CURDIR)/$$d" || exit 1; \
@@ -46,6 +49,7 @@ test: ## pytest in each Python project; cargo test in Materialize/
 		cd "$(CURDIR)"; \
 	done
 	cd Materialize && cargo test
+	cd Viber && cargo test
 
 test-shared: ## pytest only in Shared/
 	$(call run-pytest,Shared)
@@ -99,6 +103,9 @@ test-materialize: ## cargo test in Materialize/
 	cd Materialize && cargo test
 
 test-rust: test-materialize ## alias for test-materialize
+
+test-viber: ## cargo test in Viber/
+	cd Viber && cargo test
 
 # VibeGame: requires Bun (https://bun.sh/) on PATH. Not part of `make test` / `make check`.
 test-vibegame: ## bun install (frozen) + bun test in VibeGame/

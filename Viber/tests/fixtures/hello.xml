@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<world clear-color="#87ceeb">
+  <!-- Minimal Viber world: one group with primitives, a light, a camera. -->
+  <AmbientLight brightness="300" />
+  <Group name="props" translation="0 0 0">
+    <Cuboid half-size="1 0.5 1" translation="0 0.5 0" base-color="#c0764a" roughness="0.6" />
+    <Sphere radius="0.75" translation="3 0.75 0" base-color="red" metallic="0.8" roughness="0.2" />
+    <Cylinder radius="0.4" half-height="0.9" translation="-3 0.9 0" base-color="gray" />
+  </Group>
+  <Entity name="ground" euler="0 45 0">
+    <Plane half-size="20 20" base-color="#3a7d3a" />
+  </Entity>
+  <PointLight translation="2 4 2" intensity="1200" color="#ffddaa" shadows="true" />
+  <OrbitCamera target="props" distance="14" height="5" pitch="20" />
+</world>
