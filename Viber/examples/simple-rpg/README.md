@@ -18,10 +18,11 @@ cargo run -- analyze examples/simple-rpg/world.xml       # headless + cobertura
 ## Estado atual
 
 O `analyze` imprime o relatório de cobertura — é o roteiro de trabalho da
-engine. Referência (após glTF — Feature 1): **1293 entidades** vivas (702
-grupos, 71 primitivas, 68 point lights, 1 directional, 1 câmara, **450 cenas
-glTF**) + terreno com heightfield e 32 ground features; **260 elementos em 32
-tags** ainda em no-op (`ParticleSystem`×105, `StaticSpawner`×58,
+engine. Referência (após glTF + StaticSpawner): **1293 entidades** declaradas
+(702 grupos, 71 primitivas, 68 point lights, 1 directional, 1 câmara, **450
+cenas glTF**, **58 spawn groups** que instanciam ~1200 modelos de
+vegetação/props sobre o terreno) + heightfield com 32 ground features;
+**202 elementos em 31 tags** ainda em no-op (`ParticleSystem`×105,
 `SpawnExclusion`×24, `DialogueNPC`×17, `DynamicSpawner`×12, …). Cada tag
 implementada na engine acende mais parte do mundo sem editar os XMLs daqui.
 

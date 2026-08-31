@@ -10,7 +10,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use viber::bridge::{self, client::BridgeClient};
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
-use viber::{recipes, scaffold, terrain, xml};
+use viber::{recipes, scaffold, spawner, terrain, xml};
 
 /// Native Bevy engine for AiGameKit declarative worlds.
 #[derive(Parser)]
@@ -267,6 +267,9 @@ fn analyze(path: &Path, strict: bool) -> Result<()> {
             summary.road_networks
         );
     }
+    if summary.static_spawners > 0 {
+        println!("  spawn groups: {}", summary.static_spawners);
+    }
     if !world.skipped_tags.is_empty() {
         let total: usize = world.skipped_tags.values().sum();
         let mut entries: Vec<_> = world.skipped_tags.iter().collect();
@@ -353,6 +356,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             spawn::orbit_camera_follow,
             spawn::auto_orbit,
             spawn::gltf_scene_spawner,
+            spawner::instantiate_spawn_groups,
         ),
     );
     app.run();

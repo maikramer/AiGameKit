@@ -41,6 +41,7 @@ pub const KNOWN_TAGS: &[&str] = &[
     "road",
     "roadnetwork",
     "gltfscene",
+    "staticspawner",
 ];
 
 /// A parsed world: clear color, entity tree and non-fatal warnings.
@@ -157,6 +158,36 @@ pub enum EntityKind {
     /// (the entity's transform applies). Paths starting with `/` are relative
     /// to the engine asset root.
     GltfScene { url: String },
+    /// `<StaticSpawner>` — instancias `count` do template GLB sobre o terreno
+    /// (posições determinísticas por `seed`; regras de água/declive/sobreposição).
+    /// Consumido pelo runtime de spawner, não spawna entidade própria.
+    StaticSpawner { spec: StaticSpawnerSpec },
+}
+
+/// Placement rules + template urls of a `<StaticSpawner>` (attribute names as
+/// authored in the source worlds — the element migrates verbatim).
+#[derive(Debug, Clone)]
+pub struct StaticSpawnerSpec {
+    pub seed: u64,
+    pub count: u32,
+    pub region_min: [f32; 3],
+    pub region_max: [f32; 3],
+    pub cluster_count: u32,
+    pub cluster_radius: f32,
+    pub footprint_radius: f32,
+    pub avoid_overlaps: bool,
+    pub max_slope_deg: f32,
+    pub avoid_water: bool,
+    pub align_to_terrain: bool,
+    pub scale_min: f32,
+    pub scale_max: f32,
+    pub scale_axis_min: f32,
+    pub scale_axis_max: f32,
+    pub random_yaw: bool,
+    pub max_distance: f32,
+    /// glTF urls found in the template subtree (GLTFLoader/GltfScene), in
+    /// document order; one is picked per instance via the seeded RNG.
+    pub template_urls: Vec<String>,
 }
 
 /// A resolved recipe: everything needed to spawn one Bevy entity.
@@ -255,6 +286,7 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
                 Ok(None)
             }
         },
+        "staticspawner" => finish_static_spawner(node, ctx).map(Some),
         "terrain" => finish_terrain(node, ctx).map(Some),
         "terrainpad" => finish_terrain_pad(node, ctx).map(Some),
         "lake" => finish_lake(node, ctx).map(Some),
@@ -538,6 +570,94 @@ fn finish_orbit_camera(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec>
         transform: common.transform,
         kind,
         children: parse_entities(&node.children, ctx)?,
+    })
+}
+
+/// glTF urls in a spawner's template subtree (original `GLTFLoader` names and
+/// native `GltfScene` both accepted), in document order.
+fn collect_template_urls(node: &XmlNode, out: &mut Vec<String>) {
+    let lower = node.tag.to_ascii_lowercase();
+    if matches!(lower.as_str(), "gltfloader" | "gltfscene") {
+        if let Some(url) = node.attr("url").map(str::trim).filter(|s| !s.is_empty()) {
+            out.push(url.to_string());
+        }
+    }
+    for child in &node.children {
+        collect_template_urls(child, out);
+    }
+}
+
+fn finish_static_spawner(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut spec = StaticSpawnerSpec {
+        seed: 0,
+        count: 1,
+        region_min: [0.0; 3],
+        region_max: [0.0; 3],
+        cluster_count: 0,
+        cluster_radius: 0.0,
+        footprint_radius: 0.0,
+        avoid_overlaps: false,
+        max_slope_deg: 45.0,
+        avoid_water: false,
+        align_to_terrain: true,
+        scale_min: 1.0,
+        scale_max: 1.0,
+        scale_axis_min: 1.0,
+        scale_axis_max: 1.0,
+        random_yaw: false,
+        max_distance: 0.0,
+        template_urls: Vec::new(),
+    };
+    collect_template_urls(node, &mut spec.template_urls);
+    if spec.template_urls.is_empty() {
+        ctx.warnings
+            .push(format!("{ctx_tag}: no template glTF url found — skipped"));
+        return Ok(EntitySpec {
+            name: common.name,
+            tag: common.tag,
+            script: common.script,
+            transform: common.transform,
+            kind: EntityKind::StaticSpawner { spec },
+            children: Vec::new(),
+        });
+    }
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "seed" => spec.seed = values::parse_f32(&value, &kctx)? as u64,
+            "count" => spec.count = values::parse_f32(&value, &kctx)? as u32,
+            "region-min" => spec.region_min = values::parse_vec3(&value, &kctx)?,
+            "region-max" => spec.region_max = values::parse_vec3(&value, &kctx)?,
+            "cluster-count" => spec.cluster_count = values::parse_f32(&value, &kctx)? as u32,
+            "cluster-radius" => spec.cluster_radius = values::parse_f32(&value, &kctx)?,
+            "footprint-radius" => spec.footprint_radius = values::parse_f32(&value, &kctx)?,
+            "avoid-overlaps" => spec.avoid_overlaps = values::parse_bool(&value, &kctx)?,
+            "max-slope-deg" => spec.max_slope_deg = values::parse_f32(&value, &kctx)?,
+            "avoid-water" => spec.avoid_water = values::parse_bool(&value, &kctx)?,
+            "align-to-terrain" => spec.align_to_terrain = values::parse_bool(&value, &kctx)?,
+            "scale-min" => spec.scale_min = values::parse_f32(&value, &kctx)?,
+            "scale-max" => spec.scale_max = values::parse_f32(&value, &kctx)?,
+            "scale-axis-min" => spec.scale_axis_min = values::parse_f32(&value, &kctx)?,
+            "scale-axis-max" => spec.scale_axis_max = values::parse_f32(&value, &kctx)?,
+            "random-yaw" => spec.random_yaw = values::parse_bool(&value, &kctx)?,
+            "max-distance" => spec.max_distance = values::parse_f32(&value, &kctx)?,
+            // accepted no-ops: profile metadata / placement details ported later
+            "profile" | "variation" | "ground-align" | "max-slope-attempts" | "pick-strategy"
+            | "base-y-offset" => {}
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::StaticSpawner { spec },
+        children: Vec::new(),
     })
 }
 
@@ -1042,6 +1162,8 @@ pub struct WorldSummary {
     pub road_networks: usize,
     /// glTF scenes referenced (spawned async at runtime).
     pub gltf_scenes: usize,
+    /// `<StaticSpawner>` groups (expanded into instances at runtime).
+    pub static_spawners: usize,
 }
 
 impl WorldSummary {
@@ -1080,6 +1202,7 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::Road { .. } => out.roads += 1,
                 EntityKind::RoadNetwork { .. } => out.road_networks += 1,
                 EntityKind::GltfScene { .. } => out.gltf_scenes += 1,
+                EntityKind::StaticSpawner { .. } => out.static_spawners += 1,
             }
             walk(&spec.children, out);
         }
@@ -1397,6 +1520,60 @@ mod tests {
     }
 
     #[test]
+    fn test_static_spawner_spec_and_template_urls() {
+        let mut template = node("GameObject", &[("role", "static")]);
+        template.children = vec![node(
+            "GLTFLoader",
+            &[("url", "/assets/meshes/forest/pine_dark_lod0.glb")],
+        )];
+        let mut spawner = node(
+            "StaticSpawner",
+            &[
+                ("count", "380"),
+                ("seed", "6101"),
+                ("region-min", "-184 0 116"),
+                ("region-max", "184 0 356"),
+                ("avoid-water", "1"),
+                ("max-slope-deg", "40"),
+                ("footprint-radius", "3.8"),
+                ("avoid-overlaps", "1"),
+                ("cluster-count", "14"),
+                ("cluster-radius", "52"),
+                ("random-yaw", "true"),
+                ("profile", "tree"),
+                ("variation", "tree"),
+            ],
+        );
+        spawner.children = vec![template];
+        let (spec, w) = parse_one(&spawner).unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::StaticSpawner { spec } = spec.kind else {
+            panic!("expected static spawner");
+        };
+        assert_eq!(spec.count, 380);
+        assert_eq!(spec.seed, 6101);
+        assert_eq!(spec.region_min, [-184.0, 0.0, 116.0]);
+        assert_eq!(spec.region_max, [184.0, 0.0, 356.0]);
+        assert_eq!(
+            spec.template_urls,
+            vec!["/assets/meshes/forest/pine_dark_lod0.glb"]
+        );
+        assert!(spec.avoid_water && spec.avoid_overlaps && spec.random_yaw);
+        assert_eq!(spec.max_slope_deg, 40.0);
+        assert_eq!(spec.cluster_count, 14);
+    }
+
+    #[test]
+    fn test_static_spawner_without_template_warns_but_keeps_spec() {
+        let (spec, w) = parse_one(&node("StaticSpawner", &[("count", "5")])).unwrap();
+        let EntityKind::StaticSpawner { spec } = spec.kind else {
+            panic!("expected static spawner");
+        };
+        assert!(spec.template_urls.is_empty());
+        assert!(w.iter().any(|m| m.contains("no template glTF url")));
+    }
+
+    #[test]
     fn test_ambient_light_is_resource_kind() {
         let (spec, _) = parse_one(&node("AmbientLight", &[("brightness", "300")])).unwrap();
         assert!(matches!(spec.kind, EntityKind::AmbientLight { .. }));
@@ -1503,6 +1680,7 @@ mod tests {
                 node("Road", &[]),
                 node("RoadNetwork", &[]),
                 node("GltfScene", &[("url", "/assets/meshes/x.glb")]),
+                node("StaticSpawner", &[("count", "10"), ("seed", "7")]),
             ],
         )
         .unwrap();
@@ -1523,6 +1701,7 @@ mod tests {
                 roads: 1,
                 road_networks: 1,
                 gltf_scenes: 1,
+                static_spawners: 1,
             }
         );
         assert_eq!(summary.entities(), 6);

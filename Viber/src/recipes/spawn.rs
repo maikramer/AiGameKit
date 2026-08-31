@@ -66,6 +66,7 @@ fn is_ground_feature(kind: &EntityKind) -> bool {
             | EntityKind::River { .. }
             | EntityKind::Road { .. }
             | EntityKind::RoadNetwork { .. }
+            | EntityKind::StaticSpawner { .. }
     )
 }
 
@@ -178,6 +179,14 @@ pub fn startup(world: &mut World) {
     let asset_server = world
         .remove_resource::<AssetServer>()
         .expect("AssetServer exists before startup systems run");
+    // `<StaticSpawner>` groups: collect specs and start their template loads;
+    // `spawner::instantiate_spawn_groups` places instances once the terrain
+    // runtime and the assets are ready.
+    let mut spawn_groups = Vec::new();
+    collect_spawn_groups(&parsed.entities, &asset_server, &mut spawn_groups);
+    world.insert_resource(crate::spawner::PendingSpawnGroups {
+        groups: spawn_groups,
+    });
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
     {
@@ -217,6 +226,30 @@ struct SpawnCtx<'a> {
     meshes: &'a mut Assets<Mesh>,
     materials: &'a mut Assets<StandardMaterial>,
     asset_server: &'a AssetServer,
+}
+
+/// Recursively collect `<StaticSpawner>` specs and start their template loads.
+fn collect_spawn_groups(
+    specs: &[EntitySpec],
+    asset_server: &AssetServer,
+    out: &mut Vec<crate::spawner::SpawnGroupState>,
+) {
+    for spec in specs {
+        if let EntityKind::StaticSpawner { spec } = &spec.kind {
+            let handles = spec
+                .template_urls
+                .iter()
+                .map(|url| asset_server.load::<Gltf>(url.trim_start_matches('/').to_owned()))
+                .collect();
+            out.push(crate::spawner::SpawnGroupState {
+                spec: spec.clone(),
+                handles,
+                done: false,
+            });
+            continue;
+        }
+        collect_spawn_groups(&spec.children, asset_server, out);
+    }
 }
 
 /// Recursively spawn one spec (and its children) as Bevy entities.
@@ -336,14 +369,15 @@ fn spawn_entity(
             ));
             stats.has_camera = true;
         }
-        // Ground features + `<Terrain>` return before the spawn above; this
-        // arm only satisfies exhaustiveness.
+        // Ground features + `<Terrain>` + spawner groups return before the
+        // spawn above; this arm only satisfies exhaustiveness.
         EntityKind::Terrain { .. }
         | EntityKind::TerrainPad { .. }
         | EntityKind::Lake { .. }
         | EntityKind::River { .. }
         | EntityKind::Road { .. }
-        | EntityKind::RoadNetwork { .. } => {}
+        | EntityKind::RoadNetwork { .. }
+        | EntityKind::StaticSpawner { .. } => {}
     }
     stats.entities += 1;
     let id = entity.id();

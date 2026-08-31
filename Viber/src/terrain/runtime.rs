@@ -204,7 +204,9 @@ fn spawn_chunks(
         ..StandardMaterial::default()
     };
     if let (Some(server), Some(texture)) = (asset_server, spec.texture.as_deref()) {
-        material.base_color_texture = Some(server.load(texture.to_string()));
+        // strip leading '/' — bevy treats root-absolute asset paths as unapproved
+        material.base_color_texture =
+            Some(server.load(texture.trim_start_matches('/').to_string()));
     }
     let terrain_material = materials.add(material);
 
@@ -331,7 +333,9 @@ fn spawn_roads(
             ..StandardMaterial::default()
         };
         if let (Some(server), Some(texture)) = (asset_server, spec.texture.as_deref()) {
-            material.base_color_texture = Some(server.load(texture.to_string()));
+            // strip leading '/' — bevy treats root-absolute asset paths as unapproved
+            material.base_color_texture =
+                Some(server.load(texture.trim_start_matches('/').to_string()));
         }
         let handle = materials.add(material);
         let mesh_handle = meshes.add(to_bevy_mesh(&mesh));

@@ -90,6 +90,7 @@ Raiz: `<world>` (ou `<scene>`), attr `clear-color` (`#rgb`/`#rrggbb`/`0x…`/nom
 | `AmbientLight` | `color`, `brightness` — aplicado como recurso `GlobalAmbientLight`, não entidade |
 | `OrbitCamera` | `target` (nome de entidade), `distance`, `height`, `pitch` (graus; quando presente sobrepõe `height` via `height = distance·tan(pitch)`) |
 | `GltfScene` | `url` (obrigatório; `/assets/...` resolve contra a asset root do mundo — a pasta que contém `assets/`) + attrs universais; cena default do GLB spawna como filhos da entidade (transform aplica); load assíncrono, falha = warn + nó vazio. GLBs do pipeline vêm meshopt-comprimidos (bevy 0.19 não lê EXT_meshopt) → espelho decomprimido via `Viber/scripts/sync_assets.py` |
+| `StaticSpawner` | `count`, `seed`, `region-min`/`region-max` ("x y z"), `cluster-count`/`cluster-radius`, `footprint-radius`+`avoid-overlaps`, `max-slope-deg`, `avoid-water`, `align-to-terrain`, `scale-min`/`max`+`scale-axis-min`/`max`, `random-yaw`, `max-distance`; template = primeiro glTF (`GLTFLoader`/`GltfScene`) na subárvore filho. Colocação determinística (SplitMix64 por seed, rejeita água/declive/sobreposição, tenta count×8+64); `profile`/`variation`/`ground-align` aceites sem efeito. Espelha `src/spawner.rs` (função pura `compute_placements`) |
 
 Primitivas aceitam material: `base-color`, `metallic`, `roughness`.
 Atributos universais: `name`, `tag`, `script`, `translation`, `euler` (graus XYZ),

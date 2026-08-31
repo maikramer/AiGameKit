@@ -6,5 +6,6 @@
 pub mod bridge;
 pub mod recipes;
 pub mod scaffold;
+pub mod spawner;
 pub mod terrain;
 pub mod xml;
