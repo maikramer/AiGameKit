@@ -75,11 +75,13 @@
   <Include src="/world/creatures/enemies.xml" />
   <Include src="/world/creatures/bosses.xml" />
   <Include src="/world/ai/npcs.xml" />
-  <!-- Câmera 3ª pessoa. Fora de qualquer <Group> porque
-           <ThirdPersonCamera> é merge:true — dentro de um Group, a stack de
-           câmera fundir-se-ia no parent em vez de criar a sua própria entidade.
-           Teclas 1-6 alternam pós-processamento. -->
-  <OrbitCamera distance="3.3" height="1.55" pitch="18.3" />
+  <!-- Câmera 3ª pessoa, gamepad-style: A/D giram a câmera (yaw com lag
+           turn-lag), W/S andam, sem mouse. follow-lag desacopla a câmera do
+           character (sprint adianta, câmera alcança), min-terrain-distance
+           puxa a câmera quando o terreno bloqueia. Valores = simple-rpg
+           VibeGame (pitch 0.32 rad ≈ 18.3°). -->
+  <OrbitCamera distance="3.3" height="1.55" pitch="18.3" fov="64"
+               follow-lag="0.18" turn-lag="0.38" min-terrain-distance="1.0" />
   <!-- GRUPO "ui": HUD (health/xp/bars/minimap/compass), prompts de
            diálogo, e o menu tabbed (pause/inventário/skills/opções/quests).
            Elementos DOM; o Group serve como contentor lógico. -->

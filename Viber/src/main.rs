@@ -5,14 +5,15 @@ use std::process::Command as StdCommand;
 
 use anyhow::{Context, Result};
 use bevy::app::PluginGroup;
+use bevy::ecs::schedule::IntoScheduleConfigs;
 use clap::{CommandFactory, Parser, Subcommand};
 
 use viber::bridge::{self, client::BridgeClient};
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
 use viber::{
-    animation, hud, music, particles, physics, player, recipes, scaffold, sky, spawner, terrain,
-    worldsys, xml,
+    animation, camera, hud, music, particles, physics, player, recipes, scaffold, sky, spawner,
+    terrain, worldsys, xml,
 };
 
 /// Native Bevy engine for AiGameKit declarative worlds.
@@ -193,7 +194,7 @@ fn viber_checkout_root(from: &Path) -> Option<PathBuf> {
 /// para correr o motor a partir do código-fonte (como `vibegame run` reconstrói
 /// a engine). Devolve `Ok(None)` quando não há delegação (sem checkout, cargo
 /// ausente ou guard activo) — o chamador corre in-process.
-fn delegate_run_to_cargo(world: &Path, release: bool) -> Result<Option<i32>> {
+fn delegate_run_to_cargo(world: &Path, release: bool, bridge: Option<u16>) -> Result<Option<i32>> {
     if std::env::var_os(CARGO_DELEGATE_GUARD).is_some() {
         return Ok(None);
     }
@@ -208,6 +209,9 @@ fn delegate_run_to_cargo(world: &Path, release: bool) -> Result<Option<i32>> {
         command.arg("--release");
     }
     command.arg("run").arg("--").arg("run").arg(&world);
+    if let Some(port) = bridge {
+        command.arg("--bridge").arg(port.to_string());
+    }
     command.env(CARGO_DELEGATE_GUARD, "1");
     eprintln!(
         "viber: Viber checkout detected at {} — delegating to `cargo run{}`",
@@ -384,11 +388,17 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     app.add_systems(
         bevy::app::Update,
         (
-            spawn::orbit_camera_follow,
+            // Deterministic order: the rigid follow skips third-person
+            // cameras, the player steers their yaw with A/D, then the
+            // third-person camera trails it. All three touch OrbitCamera.
+            (
+                spawn::orbit_camera_follow,
+                player::player_movement,
+                camera::third_person_camera,
+            )
+                .chain(),
             spawn::auto_orbit,
             spawn::gltf_scene_spawner,
-            spawn::orbit_camera_input,
-            player::player_movement,
             player::dialogue_interaction,
             hud::hud_prompt_update,
             music::music_driver,
@@ -418,7 +428,7 @@ fn dispatch(command: Command) -> Result<std::process::ExitCode> {
         } => {
             let world = resolve_world_path(path)?;
             if !no_cargo {
-                if let Some(code) = delegate_run_to_cargo(&world, release)? {
+                if let Some(code) = delegate_run_to_cargo(&world, release, bridge)? {
                     return Ok(std::process::ExitCode::from(code as u8));
                 }
             }

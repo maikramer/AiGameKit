@@ -1,22 +1,35 @@
 //! `<PlayerGLTF>` runtime: third-person character controller ported from the
-//! VibeGame `player` plugin (walk 4 m/s, sprint ×1.5, jump 2.3 m under
-//! gravity −60, side-move ×0.6, slerped facing at `rotationSpeed` 10 rad/s)
-//! plus the third-person orbit camera driven by mouse drag and scroll.
+//! VibeGame `player` plugin — gamepad-style, no mouse. A/D steer the camera
+//! yaw (`CAMERA_TURN_SPEED`) while nudging the character sideways
+//! (`SIDE_MOVE_FACTOR`), W/S walk/sprint along the camera axis, Space jumps
+//! with a 100 ms input buffer, 100 ms coyote time and a 0.2 s cooldown. The
+//! camera itself (decoupled follow, terrain collision) lives in
+//! [`crate::camera`].
 
 use bevy::math::Quat;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 
-use crate::recipes::spawn::DialogueNpc;
+use crate::recipes::spawn::{DialogueNpc, OrbitCamera};
 use crate::terrain::runtime::TerrainRuntime;
 
 /// Gravity magnitude (m/s²) — `DEFAULT_GRAVITY = -60` in the VibeGame
 /// physics utils; the jump velocity derives from it.
 pub const GRAVITY: f32 = 60.0;
-/// A/D move at this fraction of the walk speed (VibeGame `SIDE_MOVE_FACTOR`).
+/// A/D move at this fraction of the walk speed while steering the camera
+/// (VibeGame `SIDE_MOVE_FACTOR`), so turning carves an arc instead of
+/// pivoting in place.
 pub const SIDE_MOVE_FACTOR: f32 = 0.6;
-/// Camera yaw turn speed for gamepad-style input (rad/s) — unused for mouse.
+/// Camera yaw turn rate while steering with A/D (rad/s, VibeGame
+/// `CAMERA_TURN_SPEED`).
 pub const CAMERA_TURN_SPEED: f32 = 2.5;
+/// Jump input buffer window (VibeGame `INPUT_CONFIG.bufferWindow` = 100 ms).
+pub const JUMP_BUFFER: f32 = 0.1;
+/// Coyote time: jumps still land within this window after leaving the ground
+/// (VibeGame `INPUT_CONFIG.gracePeriods.coyoteTime` = 100 ms).
+pub const COYOTE_TIME: f32 = 0.1;
+/// Cooldown between jumps (VibeGame `JUMP_CONSTANTS.cooldown` = 0.2 s).
+pub const JUMP_COOLDOWN: f32 = 0.2;
 
 /// The controllable hero (VibeGame `PlayerController` subset).
 #[derive(Debug, Component)]
@@ -33,6 +46,17 @@ pub struct Player {
     pub vel_y: f32,
     /// True while standing on the terrain surface.
     pub grounded: bool,
+    /// Jump allowed again once the cooldown elapses (VibeGame `canJump`).
+    pub can_jump: bool,
+    /// True between the jump impulse and the next landing (VibeGame
+    /// `isJumping`; gates landing momentum reset).
+    pub is_jumping: bool,
+    /// Seconds left before [`Self::can_jump`] is restored.
+    pub jump_cooldown: f32,
+    /// Time of the last grounded frame — drives coyote time.
+    pub last_grounded_time: f32,
+    /// Time of the last jump press — drives the input buffer.
+    pub jump_buffer_time: f32,
 }
 
 impl Default for Player {
@@ -44,54 +68,57 @@ impl Default for Player {
             rotation_speed: 10.0,
             vel_y: 0.0,
             grounded: true,
+            can_jump: true,
+            is_jumping: false,
+            jump_cooldown: 0.0,
+            last_grounded_time: f32::NEG_INFINITY,
+            jump_buffer_time: f32::NEG_INFINITY,
         }
     }
 }
 
 /// Jump velocity that reaches `jump_height` under [`GRAVITY`]:
-/// `sqrt(2 · g · h)` (VibeGame `handleJump`).
+/// `sqrt(2 · g · h)` (VibeGame `calculateJumpVelocity`).
 pub fn jump_velocity(jump_height: f32) -> f32 {
     (2.0 * GRAVITY * jump_height.max(0.0)).sqrt()
 }
 
-/// Camera-to-target offset for an orbit camera: `pitch` 0 keeps the camera
-/// on the horizontal ring, +90° puts it straight above the target.
-pub fn camera_offset(yaw_deg: f32, pitch_deg: f32, distance: f32) -> Vec3 {
-    let yaw = yaw_deg.to_radians();
-    let pitch = pitch_deg.to_radians();
-    Vec3::new(
-        yaw.sin() * pitch.cos(),
-        pitch.sin(),
-        yaw.cos() * pitch.cos(),
-    ) * distance
+/// VibeGame `canPerformJump`: the press is inside the buffer window, the
+/// cooldown is done, and we are grounded — or left the ground within coyote
+/// time.
+pub fn can_perform_jump(
+    now: f32,
+    buffer_time: f32,
+    last_grounded_time: f32,
+    can_jump: bool,
+    grounded: bool,
+) -> bool {
+    now - buffer_time <= JUMP_BUFFER
+        && can_jump
+        && (grounded || now - last_grounded_time <= COYOTE_TIME)
 }
 
-/// Horizontal input direction (world space) from WASD/arrows given the
-/// camera yaw; normalized, `Vec3::ZERO` when no key is pressed.
-pub fn move_direction(w: bool, s: bool, a: bool, d: bool, yaw_deg: f32) -> Vec3 {
-    let yaw = yaw_deg.to_radians();
-    // The camera sits at target + offset(yaw,…) and looks at the target, so
-    // "forward" is the horizontal opposite of the offset ring direction.
-    let forward = Vec3::new(-yaw.sin(), 0.0, -yaw.cos());
-    let right = forward.cross(Vec3::Y);
-    let mut dir = Vec3::ZERO;
-    if w {
-        dir += forward;
-    }
-    if s {
-        dir -= forward;
-    }
-    if d {
-        dir += right;
-    }
-    if a {
-        dir -= right;
-    }
-    if dir != Vec3::ZERO {
+/// Horizontal input direction (world space) — VibeGame `processInput`:
+/// `(strafe, 0, -forward)` rotated by the camera yaw. Normalized; the input
+/// magnitude is applied separately by the caller.
+pub fn process_input(forward: f32, strafe: f32, yaw_deg: f32) -> Vec3 {
+    let (sin, cos) = yaw_deg.to_radians().sin_cos();
+    let dir = Vec3::new(
+        strafe * cos - forward * sin,
+        0.0,
+        -strafe * sin - forward * cos,
+    );
+    if dir.length_squared() > 0.0 {
         dir.normalize()
     } else {
         dir
     }
+}
+
+/// Input magnitude — VibeGame re-applies `min(1, hypot(forward, strafe))`
+/// after normalizing, so A/D alone (strafe 0.6) nudges at 60 % speed.
+pub fn input_magnitude(forward: f32, strafe: f32) -> f32 {
+    (forward * forward + strafe * strafe).sqrt().min(1.0)
 }
 
 /// Face a movement direction (models from the pipeline face +Z).
@@ -111,14 +138,16 @@ pub fn facing_slerp_factor(current: Quat, target: Quat, rotation_speed: f32, dt:
     }
 }
 
-/// WASD/arrows movement over the terrain: camera-relative walk/sprint,
-/// Space jump (`√2gh` under gravity −60), ground snap via `TerrainRuntime`.
+/// Gamepad-style movement over the terrain: A/D steer the third-person
+/// camera (which the character follows), W/S walk/sprint, Space jumps with
+/// buffer + coyote + cooldown. Ground snap via `TerrainRuntime`; walls stop
+/// the hero through the Rapier character controller.
 #[allow(clippy::type_complexity)]
 pub fn player_movement(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     runtime: Option<Res<TerrainRuntime>>,
-    cameras: Query<&crate::recipes::spawn::OrbitCamera>,
+    mut cameras: Query<&mut OrbitCamera>,
     mut players: Query<
         (
             &mut Transform,
@@ -132,53 +161,81 @@ pub fn player_movement(
     let Some(runtime) = runtime else {
         return; // terrain bootstrap has not run yet — hero waits airborne
     };
-    let Ok(camera) = cameras.single() else {
-        return;
-    };
     let dt = time.delta_secs();
+    let now = time.elapsed_secs();
     let (w, s, a, d) = (
         keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp),
         keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown),
         keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft),
         keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight),
     );
+    let move_x = (d as i32 - a as i32) as f32;
+    let move_forward = (w as i32 - s as i32) as f32;
     let sprint = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-    let jump = keys.pressed(KeyCode::Space);
+    let jump_held = keys.pressed(KeyCode::Space);
 
     for (mut transform, mut player, mut controller, output) in &mut players {
-        let dir = move_direction(w, s, a, d, camera.yaw_deg);
-        // A/D alone moves at the side factor (carves arcs instead of
-        // strafing at full speed) — VibeGame `SIDE_MOVE_FACTOR`.
-        let side_damped = d || a;
-        let dir = if side_damped && !w && !s {
-            dir * SIDE_MOVE_FACTOR
-        } else {
-            dir
-        };
+        // Grounded state update first (VibeGame PlayerGroundedSystem runs
+        // before movement): refresh the coyote clock and clear the jumping
+        // flag on landing.
+        if player.grounded {
+            player.last_grounded_time = now;
+            player.is_jumping = false;
+        }
+        if player.jump_cooldown > 0.0 {
+            player.jump_cooldown = (player.jump_cooldown - dt).max(0.0);
+            if player.jump_cooldown == 0.0 {
+                player.can_jump = true;
+            }
+        }
 
-        // Horizontal walk.
-        let mut motion = Vec3::ZERO;
-        if dir != Vec3::ZERO {
-            let sprint_mult = if sprint {
-                player.sprint_multiplier
-            } else {
-                1.0
-            };
-            motion += dir * player.speed * sprint_mult * dt;
-            // Facing: slerp toward the move heading at `rotation_speed` rad/s.
+        // Steering: A/D turn the camera; the character heading follows it.
+        // The yaw itself is smoothed by the camera system (turnLag).
+        let mut camera_yaw_deg = 0.0f32;
+        if let Some(mut cam) = cameras.iter_mut().next() {
+            cam.yaw_deg -= move_x * CAMERA_TURN_SPEED * dt;
+            camera_yaw_deg = cam.yaw_deg;
+        }
+        let strafe = move_x * SIDE_MOVE_FACTOR;
+
+        let dir = process_input(move_forward, strafe, camera_yaw_deg);
+        let input_mag = input_magnitude(move_forward, strafe);
+        let sprint_mult = if sprint {
+            player.sprint_multiplier
+        } else {
+            1.0
+        };
+        let desired = dir * player.speed * sprint_mult * input_mag;
+        let mut motion = desired * dt;
+
+        // Facing: slerp toward the move heading at `rotation_speed` rad/s,
+        // only while moving (VibeGame rotation mode 1 — idle keeps facing).
+        if dir.length_squared() > 0.0 {
             let target = facing_rotation(dir);
             let factor = facing_slerp_factor(transform.rotation, target, player.rotation_speed, dt);
             transform.rotation = transform.rotation.slerp(target, factor);
         }
 
+        // Jump: buffered press, coyote grace, cooldown gate.
+        if jump_held {
+            player.jump_buffer_time = now;
+        }
+        if can_perform_jump(
+            now,
+            player.jump_buffer_time,
+            player.last_grounded_time,
+            player.can_jump,
+            player.grounded,
+        ) {
+            player.vel_y = jump_velocity(player.jump_height);
+            player.is_jumping = true;
+            player.can_jump = false;
+            player.jump_cooldown = JUMP_COOLDOWN;
+            player.jump_buffer_time = f32::NEG_INFINITY;
+        }
+
         // Ground height under the player.
         let ground = runtime.sample(transform.translation.x, transform.translation.z);
-
-        // Jump: only while grounded (VibeGame `canJump`).
-        if jump && player.grounded {
-            player.vel_y = jump_velocity(player.jump_height);
-            player.grounded = false;
-        }
 
         // Vertical integration. Falls faster than it rises feels right
         // (gravity is already twice the jump-fair value).
@@ -310,32 +367,30 @@ mod tests {
     }
 
     #[test]
-    fn test_camera_offset_ring_and_top() {
-        // pitch 0: horizontal ring, distance preserved
-        let o = camera_offset(0.0, 0.0, 10.0);
-        assert!(approx(o.z, 10.0) && approx(o.y, 0.0) && approx(o.x, 0.0));
-        // pitch 90: straight above
-        let o = camera_offset(0.0, 90.0, 10.0);
-        assert!(approx(o.y, 10.0));
-        assert!(approx(o.length(), 10.0), "distance preserved: {o:?}");
-        // yaw rotates the ring point: yaw 90 → +X
-        let o = camera_offset(90.0, 0.0, 10.0);
-        assert!(approx(o.x, 10.0) && approx(o.z, 0.0));
+    fn test_process_input_cardinal() {
+        // yaw 0 → camera behind the target on +Z → W walks into -Z
+        let f = process_input(1.0, 0.0, 0.0);
+        assert!(approx(f.z, -1.0) && approx(f.x, 0.0));
+        // strafe-only input is rotated by the camera yaw too
+        let r = process_input(0.0, 1.0, 0.0);
+        assert!(approx(r.x, 1.0) && approx(r.z, 0.0));
+        // no input → zero
+        assert_eq!(process_input(0.0, 0.0, 0.0), Vec3::ZERO);
+        // forward at yaw 90° (camera swung to +X side) walks into -X
+        let f = process_input(1.0, 0.0, 90.0);
+        assert!(approx(f.x, -1.0) && approx(f.z, 0.0));
+        // output is always normalized
+        let diag = process_input(1.0, 0.6, 37.0);
+        assert!(approx(diag.length(), 1.0));
     }
 
     #[test]
-    fn test_move_direction_cardinal() {
-        // yaw 0 → camera behind the target on +Z → W walks into -Z
-        let f = move_direction(true, false, false, false, 0.0);
-        assert!(approx(f.z, -1.0) && approx(f.x, 0.0));
-        // D walks screen-right = +X at yaw 0
-        let r = move_direction(false, false, false, true, 0.0);
-        assert!(approx(r.x, 1.0) && approx(r.z, 0.0));
-        // no keys → zero
-        assert_eq!(move_direction(false, false, false, false, 0.0), Vec3::ZERO);
-        // W+D diagonal is normalized
-        let diag = move_direction(true, false, false, true, 0.0);
-        assert!(approx(diag.length(), 1.0));
+    fn test_input_magnitude_matches_vibegame() {
+        // W full, W+D saturates at 1, A/D alone nudges at the side factor.
+        assert!(approx(input_magnitude(1.0, 0.0), 1.0));
+        assert!(approx(input_magnitude(1.0, 0.6), 1.0));
+        assert!(approx(input_magnitude(0.0, 0.6), 0.6));
+        assert!(approx(input_magnitude(0.0, 0.0), 0.0));
     }
 
     #[test]
@@ -378,5 +433,32 @@ mod tests {
         assert!(f < 0.15, "small dt → small factor: {f}");
         // big dt reaches the target exactly
         assert_eq!(facing_slerp_factor(id, quarter, 10.0, 5.0), 1.0);
+    }
+
+    #[test]
+    fn test_can_perform_jump_buffer_and_coyote() {
+        let now = 10.0;
+        // Press inside the buffer window + grounded → jump.
+        assert!(can_perform_jump(now, now - 0.05, now - 5.0, true, true));
+        // Press older than the buffer window → no jump.
+        assert!(!can_perform_jump(now, now - 0.2, now, true, true));
+        // Airborne but within coyote time → still jumps.
+        assert!(can_perform_jump(now, now - 0.02, now - 0.08, true, false));
+        // Airborne past coyote time → blocked.
+        assert!(!can_perform_jump(now, now - 0.02, now - 0.5, true, false));
+        // Cooldown gate (can_jump false) blocks even a fresh press.
+        assert!(!can_perform_jump(now, now - 0.02, now, false, true));
+    }
+
+    #[test]
+    fn test_player_defaults_mirror_vibegame() {
+        let p = Player::default();
+        assert_eq!(p.speed, 4.0);
+        assert_eq!(p.sprint_multiplier, 1.5);
+        assert_eq!(p.jump_height, 2.3);
+        assert_eq!(p.rotation_speed, 10.0);
+        assert!(p.grounded && p.can_jump);
+        assert!(!p.is_jumping);
+        assert!(p.last_grounded_time.is_infinite());
     }
 }

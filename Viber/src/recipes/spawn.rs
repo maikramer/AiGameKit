@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use bevy::asset::LoadState;
 use bevy::audio::{AudioPlayer, PlaybackSettings, Volume};
 use bevy::gltf::Gltf;
-use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::light::NotShadowCaster;
 use bevy::math::primitives::{Capsule3d, Cuboid, Cylinder, Plane3d, Sphere};
 use bevy::prelude::*;
@@ -19,23 +18,48 @@ use crate::terrain::spec::TerrainPadSpec;
 use crate::terrain::water::{LakeSpec, RiverSpec};
 
 /// Marker for `<OrbitCamera>`: keeps its offset from a named target.
+///
+/// Target-less cameras in worlds with a `<PlayerGLTF>` are third-person
+/// cameras: [`crate::camera::third_person_camera`] drives them (decoupled
+/// follow, terrain collision), and [`crate::player::player_movement`] steers
+/// their yaw with A/D. Cameras with a `target` stay on the rigid follow.
 #[derive(Debug, Component)]
 pub struct OrbitCamera {
     pub target: Option<String>,
     pub distance: f32,
     pub height: f32,
     /// `Some` only when the world set `pitch` explicitly; it overrides
-    /// `height` (see [`orbit_camera_follow`]).
+    /// `height` as the ring seed (see [`orbit_camera_follow`]).
     pub pitch_deg: Option<f32>,
     /// Live orbit pitch (degrees) — seeded from `pitch_deg` or from
-    /// `atan(height/distance)`, driven by mouse drag.
+    /// `atan(height/distance)`.
     pub pitch_state_deg: f32,
-    /// Live orbit yaw (degrees) — driven by mouse drag.
+    /// Steered orbit yaw (degrees) — A/D in [`crate::player::player_movement`].
     pub yaw_deg: f32,
-    /// Degrees per pixel of drag.
+    /// Degrees per pixel of mouse drag (parsed for XML parity; the runtime
+    /// is gamepad-style and never reads the mouse).
     pub mouse_sensitivity: f32,
     pub min_distance: f32,
     pub max_distance: f32,
+    // --- third-person smoothing config (VibeGame ThirdPersonCamera) ---
+    /// Position follow time constant in seconds (larger = more lag on
+    /// sprints).
+    pub follow_lag: f32,
+    /// Yaw follow time constant in seconds (larger = the camera turns
+    /// slower/later than the steering).
+    pub turn_lag: f32,
+    /// Minimum clearance above the terrain (0 disables camera collision).
+    pub min_terrain_distance: f32,
+    // --- third-person smoothing state ---
+    /// Smoothed follow point the camera orbits and looks at; decoupled from
+    /// the raw character transform so view jitter can't accumulate.
+    pub follow_point: Vec3,
+    /// Lagged yaw the camera actually orbits at; trails [`Self::yaw_deg`].
+    pub smooth_yaw_deg: f32,
+    /// Current (post-collision, micro-smoothed) camera position.
+    pub current_pos: Vec3,
+    /// Whether the smoothed state has been seeded onto the target.
+    pub initialized: bool,
 }
 
 impl OrbitCamera {
@@ -559,7 +583,14 @@ fn spawn_entity(
             direction,
             shadows,
         } => {
-            let mut light = DirectionalLight::default();
+            // The directional light is the world's sun: it casts by default.
+            // Bevy ships shadows off, which reads as a flat, unlit scene —
+            // `<PointLight>` keeps the off default instead, since a world can
+            // hold dozens of them and each one costs a shadow cubemap.
+            let mut light = DirectionalLight {
+                shadow_maps_enabled: true,
+                ..DirectionalLight::default()
+            };
             if let Some([r, g, b]) = color {
                 light.color = Color::srgb(*r, *g, *b);
             }
@@ -581,7 +612,18 @@ fn spawn_entity(
                     Vec3::NEG_Y
                 },
             );
-            entity.insert((light, transform, Visibility::Inherited));
+            // Cascades tuned for a character-scale third-person view: crisp
+            // near the hero, still covering the buildings around him. Bevy's
+            // default bound is sized for a small demo scene and leaves the
+            // near ground unshadowed in a world this size.
+            let cascades = bevy::light::CascadeShadowConfigBuilder {
+                num_cascades: 4,
+                first_cascade_far_bound: 12.0,
+                maximum_distance: 220.0,
+                ..Default::default()
+            }
+            .build();
+            entity.insert((light, cascades, transform, Visibility::Inherited));
         }
         // Ambient light uses the `GlobalAmbientLight` resource; it is not
         // spawned as an entity.
@@ -601,6 +643,10 @@ fn spawn_entity(
             height,
             pitch_deg,
             mouse_sensitivity,
+            follow_lag,
+            turn_lag,
+            min_terrain_distance,
+            fov_deg,
         } => {
             let pitch = pitch_deg.unwrap_or_else(|| height.atan2(*distance).to_degrees());
             entity.insert((
@@ -615,8 +661,23 @@ fn spawn_entity(
                     mouse_sensitivity: mouse_sensitivity.unwrap_or(0.12),
                     min_distance: 2.0,
                     max_distance: 80.0,
+                    follow_lag: follow_lag.unwrap_or(crate::camera::DEFAULT_FOLLOW_LAG),
+                    turn_lag: turn_lag.unwrap_or(crate::camera::DEFAULT_TURN_LAG),
+                    min_terrain_distance: min_terrain_distance
+                        .unwrap_or(crate::camera::DEFAULT_MIN_TERRAIN_DISTANCE),
+                    follow_point: Vec3::ZERO,
+                    smooth_yaw_deg: 0.0,
+                    current_pos: Vec3::ZERO,
+                    initialized: false,
                 },
             ));
+            // Authored FOV (simple-rpg asks for 64°; the Bevy default is 45°).
+            if let Some(fov) = fov_deg {
+                entity.insert(Projection::Perspective(PerspectiveProjection {
+                    fov: fov.to_radians(),
+                    ..PerspectiveProjection::default()
+                }));
+            }
             stats.has_camera = true;
         }
         EntityKind::DialogueNpc {
@@ -845,10 +906,13 @@ fn build_material(
     materials.add(material)
 }
 
-/// `<OrbitCamera>` follow: keeps a fixed spherical offset from the named
-/// target. An explicit `pitch` (degrees) overrides `height` via
-/// `height = distance · tan(pitch)`; input-driven yaw lands with the player
-/// in a later phase.
+/// `<OrbitCamera>` follow for cameras with an explicit `target` (static
+/// scene framing): keeps a fixed spherical offset from the named target.
+/// An explicit `pitch` (degrees) overrides `height` as the ring seed via
+/// `height = distance · tan(pitch)`.
+///
+/// Target-less cameras in worlds with a player are third-person cameras —
+/// [`crate::camera::third_person_camera`] owns those.
 #[allow(clippy::type_complexity)]
 pub fn orbit_camera_follow(
     mut cameras: Query<(&mut Transform, &OrbitCamera)>,
@@ -857,7 +921,11 @@ pub fn orbit_camera_follow(
     players: Query<&GlobalTransform, With<crate::player::Player>>,
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
 ) {
+    let has_player = players.iter().next().is_some();
     for (mut cam, settings) in &mut cameras {
+        if settings.target.is_none() && has_player {
+            continue; // third-person camera: crate::camera owns it
+        }
         let target_pos = match &settings.target {
             Some(target_name) => names
                 .iter()
@@ -865,21 +933,15 @@ pub fn orbit_camera_follow(
                 .and_then(|(entity, _)| globals.get(entity).ok())
                 .map(|g| g.translation())
                 .unwrap_or(Vec3::ZERO),
-            // No `target`: follow the hero. `<OrbitCamera>` in a world with a
-            // player is the third-person camera, and its authored values say
-            // so — `simple-rpg` asks for distance 3.3 / height 1.55, which is
-            // over-the-shoulder framing and means nothing orbiting the world
-            // origin (where the camera used to sit, staring at the ground).
-            None => players
-                .iter()
-                .next()
-                .map(|g| g.translation())
-                .unwrap_or(Vec3::ZERO),
+            // No `target` and no player: frame the world origin (where the
+            // camera used to sit, staring at the ground, was worse).
+            None => Vec3::ZERO,
         };
-        let offset = crate::player::camera_offset(
+        let offset = crate::camera::camera_offset(
             settings.yaw_deg,
             settings.pitch_state_deg,
             settings.distance,
+            0.0,
         );
         cam.translation = target_pos + offset;
         // Never sink below the terrain surface (VibeGame minTerrainDistance).
@@ -889,31 +951,9 @@ pub fn orbit_camera_follow(
                 cam.translation.y = min_y;
             }
         }
-        // Pivot at the target's upper body, not its feet, so the hero sits in
-        // the lower half of the frame instead of dead centre.
+        // Pivot at the target's upper body, not its feet, so the subject sits
+        // in the lower half of the frame instead of dead centre.
         cam.look_at(target_pos + Vec3::Y * settings.pivot_height(), Vec3::Y);
-    }
-}
-
-/// Mouse drag orbits (yaw/pitch); scroll zooms. Drag with either button —
-/// no pointer lock needed for a desktop window.
-pub fn orbit_camera_input(
-    buttons: Res<ButtonInput<MouseButton>>,
-    motion: Res<AccumulatedMouseMotion>,
-    scroll: Res<AccumulatedMouseScroll>,
-    mut cameras: Query<&mut OrbitCamera>,
-) {
-    let dragging = buttons.pressed(MouseButton::Right) || buttons.pressed(MouseButton::Left);
-    for mut cam in &mut cameras {
-        if dragging {
-            cam.yaw_deg -= motion.delta.x * cam.mouse_sensitivity;
-            cam.pitch_state_deg =
-                (cam.pitch_state_deg - motion.delta.y * cam.mouse_sensitivity).clamp(-10.0, 85.0);
-        }
-        let zoom = scroll.delta.y * 1.5;
-        if zoom != 0.0 {
-            cam.distance = (cam.distance - zoom).clamp(cam.min_distance, cam.max_distance);
-        }
     }
 }
 

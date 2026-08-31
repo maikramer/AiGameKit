@@ -176,6 +176,14 @@ pub enum EntityKind {
         pitch_deg: Option<f32>,
         /// Degrees per pixel of mouse drag; `None` = engine default.
         mouse_sensitivity: Option<f32>,
+        /// Follow-point low-pass time constant (s); `None` = engine default.
+        follow_lag: Option<f32>,
+        /// Yaw trail low-pass time constant (s); `None` = engine default.
+        turn_lag: Option<f32>,
+        /// Camera clearance above terrain (m); `None` = engine default.
+        min_terrain_distance: Option<f32>,
+        /// Vertical field of view in degrees (Bevy default 45°).
+        fov_deg: Option<f32>,
     },
     /// `<Terrain>` — declarative heightfield terrain (consumed by the terrain
     /// runtime; the element itself spawns the chunk hierarchy).
@@ -315,6 +323,8 @@ pub struct ParticleSpec {
     pub speed: Option<(f32, f32)>,
     pub size: Option<(f32, f32)>,
     pub color: Option<[f32; 3]>,
+    /// `shape-radius`: spawn spread around the emitter origin (meters).
+    pub shape_radius: Option<f32>,
     pub looping: bool,
     /// Authored `world-space` flag (Viber emitters are always local — the
     /// emitters in this world are static, so behaviour is equivalent).
@@ -335,6 +345,14 @@ pub struct StaticSpawnerSpec {
     pub avoid_overlaps: bool,
     pub max_slope_deg: f32,
     pub avoid_water: bool,
+    /// Only place where the terrain is inside a water carve zone.
+    pub in_water: bool,
+    /// Only place on dry land within `near_water_radius` of water.
+    pub near_water: bool,
+    /// Shoreline width for `near_water` (meters).
+    pub near_water_radius: f32,
+    /// Never place on a carved road ribbon.
+    pub avoid_road: bool,
     pub align_to_terrain: bool,
     pub scale_min: f32,
     pub scale_max: f32,
@@ -363,6 +381,13 @@ pub struct VegetationSpec {
     pub scale_axis_max: f32,
     pub max_slope_deg: f32,
     pub avoid_water: bool,
+    /// Never place on a carved road ribbon.
+    pub avoid_road: bool,
+    /// Reject a candidate that lands within another instance's footprint.
+    pub avoid_overlaps: bool,
+    /// Give every instance a random heading, so a stand of identical trees
+    /// does not read as a row of clones.
+    pub random_yaw: bool,
     pub max_distance: f32,
     pub cluster_count: u32,
     pub cluster_radius: f32,
@@ -394,20 +419,28 @@ impl VegetationSpec {
             cluster_count: self.cluster_count,
             cluster_radius: self.cluster_radius,
             footprint_radius: 0.4,
-            avoid_overlaps: false,
+            avoid_overlaps: self.avoid_overlaps,
             max_slope_deg: self.max_slope_deg,
             avoid_water: self.avoid_water,
+            in_water: false,
+            near_water: false,
+            near_water_radius: DEFAULT_NEAR_WATER_RADIUS,
+            avoid_road: self.avoid_road,
             align_to_terrain: true,
             scale_min: self.scale_min,
             scale_max: self.scale_max,
             scale_axis_min: self.scale_axis_min,
             scale_axis_max: self.scale_axis_max,
-            random_yaw: true,
+            random_yaw: self.random_yaw,
             max_distance: self.max_distance,
             template_urls: self.meshes.clone(),
         }
     }
 }
+
+/// Shoreline width for `near-water` placement (meters) — how far from a water
+/// body a point still counts as bank.
+pub const DEFAULT_NEAR_WATER_RADIUS: f32 = 4.0;
 
 /// A resolved recipe: everything needed to spawn one Bevy entity.
 #[derive(Debug, Clone)]
@@ -879,6 +912,10 @@ fn finish_orbit_camera(
         height: default_height,
         pitch_deg: None,
         mouse_sensitivity: None,
+        follow_lag: None,
+        turn_lag: None,
+        min_terrain_distance: None,
+        fov_deg: None,
     };
     for (key, value) in rest {
         let kctx = format!("{ctx_tag} {key}");
@@ -888,6 +925,10 @@ fn finish_orbit_camera(
             height,
             pitch_deg,
             mouse_sensitivity,
+            follow_lag,
+            turn_lag,
+            min_terrain_distance,
+            fov_deg,
         } = &mut kind
         else {
             unreachable!("kind is OrbitCamera here");
@@ -898,6 +939,12 @@ fn finish_orbit_camera(
             "height" => *height = values::parse_f32(&value, &kctx)?,
             "pitch" => *pitch_deg = Some(values::parse_f32(&value, &kctx)?),
             "mouse-sensitivity" => *mouse_sensitivity = Some(values::parse_f32(&value, &kctx)?),
+            "follow-lag" => *follow_lag = Some(values::parse_f32(&value, &kctx)?),
+            "turn-lag" => *turn_lag = Some(values::parse_f32(&value, &kctx)?),
+            "min-terrain-distance" => {
+                *min_terrain_distance = Some(values::parse_f32(&value, &kctx)?)
+            }
+            "fov" => *fov_deg = Some(values::parse_f32(&value, &kctx)?),
             other => ctx
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
@@ -942,6 +989,10 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         avoid_overlaps: false,
         max_slope_deg: 45.0,
         avoid_water: false,
+        in_water: false,
+        near_water: false,
+        near_water_radius: DEFAULT_NEAR_WATER_RADIUS,
+        avoid_road: false,
         align_to_terrain: true,
         scale_min: 1.0,
         scale_max: 1.0,
@@ -982,6 +1033,10 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
             "avoid-overlaps" => spec.avoid_overlaps = values::parse_bool(&value, &kctx)?,
             "max-slope-deg" => spec.max_slope_deg = values::parse_f32(&value, &kctx)?,
             "avoid-water" => spec.avoid_water = values::parse_bool(&value, &kctx)?,
+            "in-water" => spec.in_water = values::parse_bool(&value, &kctx)?,
+            "near-water" => spec.near_water = values::parse_bool(&value, &kctx)?,
+            "near-water-radius" => spec.near_water_radius = values::parse_f32(&value, &kctx)?,
+            "avoid-road" => spec.avoid_road = values::parse_bool(&value, &kctx)?,
             "align-to-terrain" => spec.align_to_terrain = values::parse_bool(&value, &kctx)?,
             "scale-min" => spec.scale_min = values::parse_f32(&value, &kctx)?,
             "scale-max" => spec.scale_max = values::parse_f32(&value, &kctx)?,
@@ -1022,6 +1077,7 @@ fn finish_particle_system(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
         speed: None,
         size: None,
         color: None,
+        shape_radius: None,
         looping: true,
         world_space: false,
     };
@@ -1076,6 +1132,12 @@ fn finish_particle_system(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySp
                             ));
                         }
                         "start-color" => spec.color = Some(values::parse_color(&cvalue, &cctx)?),
+                        // The emitter shape is a disc/sphere of this radius;
+                        // the campfire and torches use it to spread the flame
+                        // across the pit instead of a single point jet.
+                        "shape-radius" => {
+                            spec.shape_radius = Some(values::parse_f32(&cvalue, &cctx)?);
+                        }
                         "looping" => spec.looping = values::parse_bool(&cvalue, &cctx)?,
                         "world-space" => spec.world_space = values::parse_bool(&cvalue, &cctx)?,
                         other => ctx
@@ -1146,6 +1208,11 @@ fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
         scale_axis_max: 1.1,
         max_slope_deg: 26.0,
         avoid_water: true,
+        // VibeGame vegetation is randomly oriented and non-overlapping by
+        // default; a stand of clones all facing the same way is the tell.
+        avoid_road: false,
+        avoid_overlaps: true,
+        random_yaw: true,
         max_distance: 0.0,
         cluster_count: 0,
         cluster_radius: 0.0,
@@ -1167,6 +1234,9 @@ fn finish_vegetation(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "scale-axis-max" => spec.scale_axis_max = values::parse_f32(&value, &kctx)?,
             "max-slope-deg" => spec.max_slope_deg = values::parse_f32(&value, &kctx)?,
             "avoid-water" => spec.avoid_water = values::parse_bool(&value, &kctx)?,
+            "avoid-road" => spec.avoid_road = values::parse_bool(&value, &kctx)?,
+            "avoid-overlaps" => spec.avoid_overlaps = values::parse_bool(&value, &kctx)?,
+            "random-yaw" => spec.random_yaw = values::parse_bool(&value, &kctx)?,
             "max-distance" => spec.max_distance = values::parse_f32(&value, &kctx)?,
             "cluster-count" => spec.cluster_count = values::parse_f32(&value, &kctx)? as u32,
             "cluster-radius" => spec.cluster_radius = values::parse_f32(&value, &kctx)?,

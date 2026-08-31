@@ -6,6 +6,7 @@
 pub mod ai;
 pub mod animation;
 pub mod bridge;
+pub mod camera;
 pub mod hud;
 pub mod luau;
 pub mod music;
