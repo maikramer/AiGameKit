@@ -85,6 +85,10 @@ pub struct Player {
     /// Time of the last A/D steering frame — the auto-camera hands control
     /// back to the player for a grace period after manual steering.
     pub last_steer_time: f32,
+    /// Time of the last frame the hero was actually moving (speed above the
+    /// walk gate) — starts at +∞ so the camera's idle settle only engages
+    /// after the character has moved and then stopped.
+    pub last_moving_time: f32,
 }
 
 impl Default for Player {
@@ -104,6 +108,7 @@ impl Default for Player {
             last_grounded_time: f32::NEG_INFINITY,
             jump_buffer_time: f32::NEG_INFINITY,
             last_steer_time: f32::NEG_INFINITY,
+            last_moving_time: f32::INFINITY,
         }
     }
 }
@@ -249,6 +254,9 @@ pub fn player_movement(
         let a = low_pass_factor(dt, tau);
         player.vel_x += (desired.x - player.vel_x) * a;
         player.vel_z += (desired.z - player.vel_z) * a;
+        if player.vel_x * player.vel_x + player.vel_z * player.vel_z > 0.5 * 0.5 {
+            player.last_moving_time = now;
+        }
         let mut motion = Vec3::new(player.vel_x, 0.0, player.vel_z) * dt;
 
         // Facing: slerp toward the move heading at `rotation_speed` rad/s,

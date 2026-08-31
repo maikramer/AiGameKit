@@ -38,9 +38,9 @@ pub const DEFAULT_MIN_TERRAIN_DISTANCE: f32 = 1.0;
 
 // --- true automatic camera (auto-follow behind the movement heading) ---
 /// Movement speed (m/s) below which the camera stays where it is.
-pub const AUTO_FOLLOW_MIN_SPEED: f32 = 0.8;
+pub const AUTO_FOLLOW_MIN_SPEED: f32 = 1.0;
 /// Seconds after manual A/D steering before the auto-follow takes over.
-pub const AUTO_FOLLOW_GRACE: f32 = 0.8;
+pub const AUTO_FOLLOW_GRACE: f32 = 0.2;
 /// Time constant of the auto-follow swing (larger = lazier repositioning).
 pub const AUTO_FOLLOW_TAU: f32 = 0.45;
 /// Cap on the auto-follow swing (deg/s) — a 180° turnaround is a graceful
@@ -49,6 +49,14 @@ pub const AUTO_FOLLOW_MAX_RATE: f32 = 140.0;
 /// Auto-follow dead zone (deg) — small enough that the settle error stays
 /// imperceptible; the low-pass already decelerates near the target.
 pub const AUTO_FOLLOW_DEAD_ZONE: f32 = 2.0;
+/// Fast-follow heading/camera-forward alignment gate (dot product): running
+/// forward or diagonally swings the camera; back-pedaling does not.
+pub const AUTO_FOLLOW_ALIGN_MIN: f32 = 0.0;
+/// Continuous settle: whenever the player isn't steering, the camera drifts
+/// behind the character's back at this rate — back-pedaling included, no
+/// stop required.
+pub const AUTO_SETTLE_TAU: f32 = 0.9;
+pub const AUTO_SETTLE_MAX_RATE: f32 = 60.0;
 
 /// Camera-to-target offset for a third-person rig, VibeGame formula: the
 /// pitch ring sits `height` ABOVE the follow point (`desiredY = followY +
@@ -137,30 +145,69 @@ pub fn behind_yaw_deg(vel_x: f32, vel_z: f32) -> f32 {
     (-vel_x).atan2(-vel_z).to_degrees()
 }
 
-/// Auto-camera step: swing `yaw_deg` toward the behind-heading yaw when the
-/// character is genuinely moving and the player hasn't steered for
-/// [`AUTO_FOLLOW_GRACE`] seconds. A dead zone stops idle oscillation and the
-/// per-frame step is rate-limited so a 180° turnaround is a graceful sweep,
-/// not a whip.
-pub fn auto_follow_yaw(
-    yaw_deg: f32,
-    vel_x: f32,
-    vel_z: f32,
-    seconds_since_steer: f32,
-    dt: f32,
-) -> f32 {
-    let speed = (vel_x * vel_x + vel_z * vel_z).sqrt();
-    if speed < AUTO_FOLLOW_MIN_SPEED || seconds_since_steer < AUTO_FOLLOW_GRACE {
-        return yaw_deg;
-    }
-    let target = behind_yaw_deg(vel_x, vel_z);
+/// One low-passed, rate-limited yaw step toward `target`.
+fn swing_yaw(yaw_deg: f32, target: f32, tau: f32, max_rate: f32, dt: f32) -> f32 {
     let delta = shortest_angle_delta_deg(yaw_deg, target);
     if delta.abs() < AUTO_FOLLOW_DEAD_ZONE {
         return yaw_deg;
     }
-    let step = (delta * low_pass_factor(dt, AUTO_FOLLOW_TAU))
-        .clamp(-AUTO_FOLLOW_MAX_RATE * dt, AUTO_FOLLOW_MAX_RATE * dt);
+    let step = (delta * low_pass_factor(dt, tau)).clamp(-max_rate * dt, max_rate * dt);
     yaw_deg + step
+}
+
+/// Player-derived inputs for [`auto_camera_yaw`] (a bundle keeps the arg
+/// count under clippy's limit).
+pub struct AutoCameraInput {
+    /// Unit movement heading, present while the hero has velocity.
+    pub heading: Option<(f32, f32)>,
+    /// Horizontal speed (m/s).
+    pub speed: f32,
+    /// `dot(heading, camera forward)` — back-pedal is negative.
+    pub heading_alignment: f32,
+    /// Yaw that sits behind the character's back (settle target).
+    pub behind_facing_yaw: f32,
+    /// The hero has moved at least once (the settle never relocates a
+    /// camera that is still on its authored boot framing).
+    pub settle_allowed: bool,
+    /// Seconds since the last A/D steering frame.
+    pub seconds_since_steer: f32,
+}
+
+/// Auto-camera step (two regimes), after the steering grace:
+///
+/// - **Fast follow**: running (speed ≥ [`AUTO_FOLLOW_MIN_SPEED`]) with the
+///   heading not pointing backwards (alignment ≥ [`AUTO_FOLLOW_ALIGN_MIN`])
+///   swings the yaw behind the movement heading at up to
+///   [`AUTO_FOLLOW_MAX_RATE`].
+/// - **Continuous settle**: otherwise the yaw drifts behind the CHARACTER'S
+///   BACK at [`AUTO_SETTLE_MAX_RATE`] — walking backwards contours the rig
+///   around while you move, instead of staring at the hero's face forever.
+pub fn auto_camera_yaw(yaw_deg: f32, input: AutoCameraInput, dt: f32) -> f32 {
+    if input.seconds_since_steer < AUTO_FOLLOW_GRACE {
+        return yaw_deg; // steering owns the yaw
+    }
+    match input.heading {
+        Some((hx, hz))
+            if input.speed >= AUTO_FOLLOW_MIN_SPEED
+                && input.heading_alignment >= AUTO_FOLLOW_ALIGN_MIN =>
+        {
+            swing_yaw(
+                yaw_deg,
+                behind_yaw_deg(hx, hz),
+                AUTO_FOLLOW_TAU,
+                AUTO_FOLLOW_MAX_RATE,
+                dt,
+            )
+        }
+        _ if input.settle_allowed => swing_yaw(
+            yaw_deg,
+            input.behind_facing_yaw,
+            AUTO_SETTLE_TAU,
+            AUTO_SETTLE_MAX_RATE,
+            dt,
+        ),
+        _ => yaw_deg,
+    }
 }
 
 /// Cheap seeded 1-D value noise in [-1, 1] — smooth (smoothstep lattice),
@@ -205,13 +252,31 @@ pub fn third_person_camera(
         if cam.target.is_some() {
             continue; // named-target camera: rigid follow owns it
         }
-        // TRUE automatic camera: when the character runs and the player isn't
-        // steering, the rig swings around behind the movement heading.
-        cam.yaw_deg = auto_follow_yaw(
+        // TRUE automatic camera (two regimes — see auto_camera_yaw): fast
+        // swing behind the movement heading while running; slow drift behind
+        // the character's back once they stop.
+        let speed = (player.vel_x * player.vel_x + player.vel_z * player.vel_z).sqrt();
+        let heading = if speed > 1e-3 {
+            Some((player.vel_x / speed, player.vel_z / speed))
+        } else {
+            None
+        };
+        let (fx, fz) = cam.yaw_deg.to_radians().sin_cos();
+        let alignment = heading.map_or(0.0, |(hx, hz)| hx * -fx + hz * -fz);
+        // Model forward is +Z (pipeline convention, matches facing_rotation).
+        let facing = target.rotation() * Vec3::Z;
+        let behind_facing = behind_yaw_deg(facing.x, facing.z);
+        let settle_allowed = player.last_moving_time.is_finite();
+        cam.yaw_deg = auto_camera_yaw(
             cam.yaw_deg,
-            player.vel_x,
-            player.vel_z,
-            now - player.last_steer_time,
+            AutoCameraInput {
+                heading,
+                speed,
+                heading_alignment: alignment,
+                behind_facing_yaw: behind_facing,
+                settle_allowed,
+                seconds_since_steer: now - player.last_steer_time,
+            },
             dt,
         );
         // First frame: snap the smoothed state onto the target (no startup
@@ -429,42 +494,155 @@ mod tests {
 
     #[test]
     fn test_auto_follow_swallows_behind_heading() {
-        // Camera starts at yaw 0, character runs along +X at 4 m/s, no
-        // steering for > grace: the yaw must sweep to -90° (behind the run).
+        // Camera at yaw 0 looks -Z; the character runs along +X (heading is
+        // perpendicular): the yaw must sweep to -90° (behind the run).
         let dt = 1.0 / 60.0;
         let mut yaw = 0.0f32;
         for _ in 0..600 {
-            yaw = auto_follow_yaw(yaw, 4.0, 0.0, 10.0, dt);
+            yaw = auto_camera_yaw(
+                yaw,
+                AutoCameraInput {
+                    heading: Some((1.0, 0.0)),
+                    speed: 4.0,
+                    heading_alignment: 0.0,
+                    behind_facing_yaw: 180.0,
+                    settle_allowed: false,
+                    seconds_since_steer: 10.0,
+                },
+                dt,
+            );
         }
         assert!(
             (shortest_angle_delta_deg(yaw, -90.0)).abs() < 2.5,
             "auto yaw settled at {yaw}"
         );
         // Rate limit: the first frame moves well under the 140°/s ceiling.
-        let first = auto_follow_yaw(0.0, 4.0, 0.0, 10.0, dt);
+        let first = auto_camera_yaw(
+            0.0,
+            AutoCameraInput {
+                heading: Some((1.0, 0.0)),
+                speed: 4.0,
+                heading_alignment: 0.0,
+                behind_facing_yaw: 180.0,
+                settle_allowed: false,
+                seconds_since_steer: 10.0,
+            },
+            dt,
+        );
         assert!(first < 0.0 && first.abs() < 140.0 * dt + 1e-3, "{first}");
-        // Dead zone: a sub-degree misalignment is left alone (no idle
-        // oscillation).
-        assert!(approx(auto_follow_yaw(-89.5, 4.0, 0.0, 10.0, dt), -89.5));
     }
 
     #[test]
-    fn test_auto_follow_respects_speed_and_grace() {
-        // Below the speed threshold: no auto rotation.
+    fn test_auto_camera_gates() {
+        let dt = 1.0 / 60.0;
+        // Steering 0.2 s ago (< grace): nothing moves the yaw.
         assert!(approx(
-            auto_follow_yaw(30.0, 0.5, 0.0, 10.0, 1.0 / 60.0),
+            auto_camera_yaw(
+                30.0,
+                AutoCameraInput {
+                    heading: Some((1.0, 0.0)),
+                    speed: 4.0,
+                    heading_alignment: 0.0,
+                    behind_facing_yaw: 180.0,
+                    settle_allowed: false,
+                    seconds_since_steer: 0.1
+                },
+                dt
+            ),
             30.0
         ));
-        // Standing still: none either.
+        // Back-pedal (heading opposite the camera forward, alignment < 0):
+        // the fast swing must NOT engage.
         assert!(approx(
-            auto_follow_yaw(30.0, 0.0, 0.0, 10.0, 1.0 / 60.0),
+            auto_camera_yaw(
+                30.0,
+                AutoCameraInput {
+                    heading: Some((0.0, 1.0)),
+                    speed: 4.0,
+                    heading_alignment: -1.0,
+                    behind_facing_yaw: 180.0,
+                    settle_allowed: false,
+                    seconds_since_steer: 10.0
+                },
+                dt
+            ),
             30.0
         ));
-        // Moving fast but the player steered 0.2 s ago (< grace): none.
+        // Never moved: the settle never engages, so a slow misaligned
+        // drift does nothing either.
         assert!(approx(
-            auto_follow_yaw(30.0, 4.0, 0.0, 0.2, 1.0 / 60.0),
+            auto_camera_yaw(
+                30.0,
+                AutoCameraInput {
+                    heading: Some((1.0, 0.0)),
+                    speed: 0.5,
+                    heading_alignment: 0.5,
+                    behind_facing_yaw: 180.0,
+                    settle_allowed: false,
+                    seconds_since_steer: 10.0
+                },
+                dt
+            ),
             30.0
         ));
+        // Character never moved (settle not allowed even at rest): no
+        // settle at boot.
+        assert!(approx(
+            auto_camera_yaw(
+                0.0,
+                AutoCameraInput {
+                    heading: None,
+                    speed: 0.0,
+                    heading_alignment: 0.0,
+                    behind_facing_yaw: 180.0,
+                    settle_allowed: false,
+                    seconds_since_steer: 10.0
+                },
+                dt
+            ),
+            0.0
+        ));
+    }
+
+    #[test]
+    fn test_idle_settle_goes_behind_the_back() {
+        // After a back-pedal the character faces the camera (behind-facing
+        // target = 180°); idle for > 1 s, the yaw must creep there at ≤
+        // 45°/s — a slow contour, not a whip.
+        let dt = 1.0 / 60.0;
+        let mut yaw = 0.0f32;
+        for _ in 0..60 {
+            yaw = auto_camera_yaw(
+                yaw,
+                AutoCameraInput {
+                    heading: None,
+                    speed: 0.0,
+                    heading_alignment: 0.0,
+                    behind_facing_yaw: 180.0,
+                    settle_allowed: true,
+                    seconds_since_steer: 10.0,
+                },
+                dt,
+            );
+        }
+        // ~1 s of settle at 60°/s ≈ 57°.
+        assert!((50.0..=70.0).contains(&yaw), "settled to {yaw} after 1 s");
+        // ...and it keeps going until it reaches the back.
+        for _ in 0..600 {
+            yaw = auto_camera_yaw(
+                yaw,
+                AutoCameraInput {
+                    heading: None,
+                    speed: 0.0,
+                    heading_alignment: 0.0,
+                    behind_facing_yaw: 180.0,
+                    settle_allowed: true,
+                    seconds_since_steer: 10.0,
+                },
+                dt,
+            );
+        }
+        assert!((yaw - 180.0).abs() < 2.5, "final yaw {yaw}");
     }
 
     #[test]
