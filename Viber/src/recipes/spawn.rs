@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use bevy::asset::LoadState;
+use bevy::audio::{AudioPlayer, PlaybackSettings, Volume};
 use bevy::gltf::Gltf;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::light::NotShadowCaster;
@@ -214,12 +215,13 @@ pub fn startup(world: &mut World) {
     });
     let mut stats = SpawnStats::default();
     let mut ambient: Option<GlobalAmbientLight> = None;
-    let (chips, hud_elements) = {
+    let (chips, hud_elements, mixer_settings) = {
         let mut ctx = SpawnCtx {
             meshes: &mut meshes,
             materials: &mut materials,
             asset_server: &asset_server,
             chip_counter: std::cell::Cell::new(0),
+            mixer: std::cell::RefCell::new(None),
             chips: std::cell::RefCell::new(Vec::new()),
             hud: std::cell::RefCell::new(Vec::new()),
         };
@@ -230,7 +232,8 @@ pub fn startup(world: &mut World) {
             spawn_entity(world, &mut ctx, spec, None, &mut stats, &mut ambient);
         }
         let hud_elements = ctx.hud.into_inner();
-        (ctx.chips.into_inner(), hud_elements)
+        let mixer = ctx.mixer.into_inner();
+        (ctx.chips.into_inner(), hud_elements, mixer)
     };
     if let Some(light) = ambient {
         world.insert_resource(light);
@@ -251,6 +254,9 @@ pub fn startup(world: &mut World) {
     }
     for (tag, attrs) in &hud_elements {
         crate::hud::spawn_hud(world, tag, attrs);
+    }
+    if let Some(mixer) = mixer_settings {
+        world.insert_resource(mixer);
     }
     world.insert_resource(meshes);
     world.insert_resource(materials);
@@ -279,6 +285,7 @@ struct SpawnCtx<'a> {
     materials: &'a mut Assets<StandardMaterial>,
     asset_server: &'a AssetServer,
     chip_counter: std::cell::Cell<usize>,
+    mixer: std::cell::RefCell<Option<crate::music::AudioMixerSettings>>,
     /// Deferred HUD chip UI nodes (resource name + stack index).
     chips: std::cell::RefCell<Vec<(usize, String)>>,
     /// Deferred HUD screen elements (tag + raw attrs).
@@ -347,7 +354,9 @@ fn spawn_entity(
     if is_ground_feature(&spec.kind) || matches!(spec.kind, EntityKind::Terrain { .. }) {
         return;
     }
-    let mut entity = world.spawn(build_transform(&spec.transform));
+    // Every entity gets Visibility: glTF scene children carry
+    // InheritedVisibility and warn B0004 if any parent lacks it.
+    let mut entity = world.spawn((build_transform(&spec.transform), Visibility::Inherited));
     if let Some(parent) = parent {
         entity.insert(ChildOf(parent));
     }
@@ -486,9 +495,12 @@ fn spawn_entity(
             dialogue_id,
             marker_height,
         } => {
-            entity.insert(DialogueNpc {
-                dialogue_id: dialogue_id.clone(),
-            });
+            entity.insert((
+                DialogueNpc {
+                    dialogue_id: dialogue_id.clone(),
+                },
+                Visibility::Inherited,
+            ));
             let marker_mesh = ctx.meshes.add(Mesh::from(Sphere::new(0.16)));
             let marker_mat = ctx.materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.82, 0.15),
@@ -517,6 +529,25 @@ fn spawn_entity(
             // HUD chip: UI node deferred to the end of startup (the entity
             // borrow holds `world`).
             ctx.chips.borrow_mut().push((index, resource.clone()));
+        }
+        EntityKind::AudioMixer { master, music, sfx } => {
+            ctx.mixer.replace(Some(crate::music::AudioMixerSettings {
+                master: *master,
+                music: *music,
+                sfx: *sfx,
+            }));
+        }
+        EntityKind::MusicLayer { layer, base_volume } => {
+            let url = format!("assets/audio/bgm/{layer}.ogg");
+            let handle = ctx.asset_server.load::<bevy::audio::AudioSource>(url);
+            entity.insert((
+                AudioPlayer(handle),
+                PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
+                crate::music::MusicLayerTag {
+                    layer: layer.clone(),
+                    base_volume: *base_volume,
+                },
+            ));
         }
         EntityKind::HudElement { tag, attrs } => {
             ctx.hud.borrow_mut().push((tag.clone(), attrs.clone()));

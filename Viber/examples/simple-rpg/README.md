@@ -26,11 +26,13 @@ recursos** no HUD ("gold/wood/stone 0") — (702 grupos, 71 primitivas, 68 point
 directional, 1 câmara, **450 cenas glTF**, **58 static + 12 dynamic spawn
 groups**, **8 vegetation groups** (cap 800 instâncias/tag), **105 emissores
 de partículas**, **24 zonas de exclusão** respeitadas por todos os
-spawners) + heightfield com 32 ground features; **22 elementos em 14 tags**
-ainda em no-op (`MusicLayer`×6, `BiomeRegion`×4, `DayCycle`, `Weather`,
-`NavMesh`, `SpawnGate`, `ProjectileTemplate`, `AdaptiveQuality`,
-`PostFxDebugToggle`, `QuestTracker`, `WaypointArrow`, `Sky`, `WorldBorder`) — o HUD completo (HP/XP/boss/target bars, minimap, bússola, prompt,
-modal) já está renderizado. ~28 mil entidades vivas na janela.
+spawners) + heightfield com 32 ground features; **15 elementos em 12 tags**
+ainda em no-op (`BiomeRegion`×4, `DayCycle`, `Weather`, `NavMesh`,
+`SpawnGate`, `ProjectileTemplate`, `AdaptiveQuality`, `PostFxDebugToggle`,
+`QuestTracker`, `WaypointArrow`, `Sky`, `WorldBorder`) — o HUD completo
+(HP/XP/boss/target bars, minimap, bússola, prompt, modal) e o áudio estão
+renderizados/a tocar: **6 camadas de BGM em crossfade por zona do player**
+(vila/montanha/interiores/explore; boss/battle entram com o combate). ~28 mil entidades vivas na janela.
 Cada tag implementada na engine acende mais parte do mundo sem editar os
 XMLs daqui.
 

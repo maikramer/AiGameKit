@@ -50,6 +50,8 @@ pub const KNOWN_TAGS: &[&str] = &[
     "thirdpersoncamera",
     "dialoguenpc",
     "resourcechip",
+    "audiomixer",
+    "musiclayer",
     "hudscreenlayer",
     "healthbar",
     "xpbar",
@@ -216,6 +218,11 @@ pub enum EntityKind {
         tag: String,
         attrs: Vec<(String, String)>,
     },
+    /// `<AudioMixer>` bus volumes (world resource).
+    AudioMixer { master: f32, music: f32, sfx: f32 },
+    /// `<MusicLayer layer sound base-volume>` — looped BGM bus layer; the
+    /// driver crossfades layers by player zone (`src/music.rs`).
+    MusicLayer { layer: String, base_volume: f32 },
 }
 
 /// Emitter config of a `<ParticleSystem>`: a preset plus the
@@ -436,6 +443,8 @@ fn parse_entity(node: &XmlNode, ctx: &mut ParseCtx) -> Result<Option<EntitySpec>
             }
         },
         "thirdpersoncamera" => finish_orbit_camera(node, ctx, true).map(Some),
+        "audiomixer" => finish_audio_mixer(node, ctx).map(Some),
+        "musiclayer" => finish_music_layer(node, ctx).map(Some),
         "dialoguenpc" => match node
             .attr("dialogue-id")
             .map(str::trim)
@@ -1161,6 +1170,80 @@ fn finish_resource_chip(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec
 }
 
 /// HUD elements keep their raw attributes — `src/hud.rs` interprets them.
+fn finish_audio_mixer(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let mut master = 1.0;
+    let mut music = 1.0;
+    let mut sfx = 1.0;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "master" => master = values::parse_f32(&value, &kctx)?,
+            "music" => music = values::parse_f32(&value, &kctx)?,
+            "sfx" => sfx = values::parse_f32(&value, &kctx)?,
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::AudioMixer { master, music, sfx },
+        children: Vec::new(),
+    })
+}
+
+fn finish_music_layer(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
+    let (common, rest) = parse_common(node)?;
+    let ctx_tag = format!("<{}>", node.tag);
+    let layer = node
+        .attr("layer")
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let sound = node.attr("sound").map(str::trim).unwrap_or("");
+    let mut base_volume = 0.2;
+    for (key, value) in rest {
+        let kctx = format!("{ctx_tag} {key}");
+        match key.as_str() {
+            "base-volume" | "volume" => base_volume = values::parse_f32(&value, &kctx)?,
+            // consumed via node.attr above
+            "layer" | "sound" => {}
+            other => ctx
+                .warnings
+                .push(format!("{ctx_tag}: ignored attribute `{other}`")),
+        }
+    }
+    let Some(layer) = layer else {
+        ctx.warnings
+            .push(format!("{ctx_tag}: missing layer — skipped"));
+        return Ok(EntitySpec {
+            name: common.name,
+            tag: common.tag,
+            script: common.script,
+            transform: common.transform,
+            kind: EntityKind::MusicLayer {
+                layer: String::new(),
+                base_volume,
+            },
+            children: Vec::new(),
+        });
+    };
+    let _ = sound;
+    Ok(EntitySpec {
+        name: common.name,
+        tag: common.tag,
+        script: common.script,
+        transform: common.transform,
+        kind: EntityKind::MusicLayer { layer, base_volume },
+        children: Vec::new(),
+    })
+}
+
 fn finish_hud_element(node: &XmlNode, _ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, _rest) = parse_common(node)?;
     // Raw attrs are the data — hud.rs interprets them, nothing to warn about.
@@ -1700,6 +1783,10 @@ pub struct WorldSummary {
     pub resource_chips: usize,
     /// HUD screen elements (bars, minimap, compass, modal…).
     pub hud_elements: usize,
+    /// `<AudioMixer>` buses (world resource).
+    pub audio_mixer: usize,
+    /// `<MusicLayer>` BGM layers.
+    pub music_layers: usize,
 }
 
 impl WorldSummary {
@@ -1777,6 +1864,8 @@ pub fn summarize(world: &ParsedWorld) -> WorldSummary {
                 EntityKind::DialogueNpc { .. } => out.dialogue_npcs += 1,
                 EntityKind::ResourceChip { .. } => out.resource_chips += 1,
                 EntityKind::HudElement { .. } => out.hud_elements += 1,
+                EntityKind::AudioMixer { .. } => out.audio_mixer += 1,
+                EntityKind::MusicLayer { .. } => out.music_layers += 1,
             }
             walk(&spec.children, out);
         }
@@ -2227,6 +2316,41 @@ mod tests {
     }
 
     #[test]
+    fn test_audio_mixer_parses_buses() {
+        let (spec, w) = parse_one(&node(
+            "AudioMixer",
+            &[("master", "1"), ("music", "0.7"), ("sfx", "0.8")],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::AudioMixer { master, music, sfx } = spec.kind else {
+            panic!("expected audio mixer");
+        };
+        assert_eq!(master, 1.0);
+        assert_eq!(music, 0.7);
+        assert_eq!(sfx, 0.8);
+    }
+
+    #[test]
+    fn test_music_layer_parses_layer_and_volume() {
+        let (spec, w) = parse_one(&node(
+            "MusicLayer",
+            &[
+                ("layer", "explore"),
+                ("sound", "bgm-explore"),
+                ("base-volume", "0.18"),
+            ],
+        ))
+        .unwrap();
+        assert!(w.is_empty(), "{w:?}");
+        let EntityKind::MusicLayer { layer, base_volume } = spec.kind else {
+            panic!("expected music layer");
+        };
+        assert_eq!(layer, "explore");
+        assert_eq!(base_volume, 0.18);
+    }
+
+    #[test]
     fn test_hud_element_keeps_raw_attrs() {
         let (spec, w) = parse_one(&node(
             "InteractionPrompt",
@@ -2438,6 +2562,15 @@ mod tests {
                     &[("resource", "gold"), ("target-entity", "player")],
                 ),
                 node("HealthBar", &[("target-entity", "player")]),
+                node("AudioMixer", &[("master", "1"), ("music", "0.7")]),
+                node(
+                    "MusicLayer",
+                    &[
+                        ("layer", "explore"),
+                        ("sound", "bgm-explore"),
+                        ("base-volume", "0.18"),
+                    ],
+                ),
             ],
         )
         .unwrap();
@@ -2467,6 +2600,8 @@ mod tests {
                 dialogue_npcs: 1,
                 resource_chips: 1,
                 hud_elements: 1,
+                audio_mixer: 1,
+                music_layers: 1,
             }
         );
         assert_eq!(summary.entities(), 8);

@@ -45,6 +45,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+LINK_EXTS = IMAGE_EXTS | {".ogg"}  # áudio: hardlink (fallback copy)
 GLB_MAGIC = b"glTF"
 GLB_CHUNK_JSON = 0x4E4F534A  # "JSON"
 
@@ -52,6 +53,8 @@ GLB_CHUNK_JSON = 0x4E4F534A  # "JSON"
 _URL_RE = re.compile(r"[\w-]*url\s*=\s*\"([^\"]+)\"", re.IGNORECASE)
 # <Vegetation meshes="url1 url2 …"> — space-separated multi-url attribute
 _MESHES_RE = re.compile(r"\bmeshes\s*=\s*\"([^\"]+)\"", re.IGNORECASE)
+# <MusicLayer sound="bgm-explore"> → /assets/audio/bgm/explore.ogg (convenção)
+_SOUND_RE = re.compile(r"\bsound\s*=\s*\"bgm-([a-z0-9-]+)\"", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +99,8 @@ def extract_urls(text: str) -> list[str]:
     urls = _URL_RE.findall(text)
     for listing in _MESHES_RE.findall(text):
         urls.extend(listing.split())
+    for layer in _SOUND_RE.findall(text):
+        urls.append(f"/assets/audio/bgm/{layer}.ogg")
     return urls
 
 
@@ -171,7 +176,7 @@ def plan_for(src: Path) -> str | None:
             used & {"EXT_meshopt_compression", "KHR_texture_basisu", "KHR_mesh_quantization"}
         )
         return "decompress" if needs_decode else "link"
-    if ext in IMAGE_EXTS:
+    if ext in LINK_EXTS:
         return "link"
     return None
 

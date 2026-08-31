@@ -5,6 +5,7 @@
 
 pub mod bridge;
 pub mod hud;
+pub mod music;
 pub mod particles;
 pub mod player;
 pub mod recipes;
