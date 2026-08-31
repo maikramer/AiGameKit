@@ -12,7 +12,7 @@ Executar com o Python do Blender (não com python.exe normal):
 
 Exemplo:
 
-  blender --background --python VibeGame/tools/blender_reorigin_glb_feet.py -- VibeGame/examples/simple-rpg/public
+  blender --background --python VibeGame/tools/blender_reorigin_glb_feet.py -- Viber/examples/shared-assets/public
 
 O importador glTF do Blender converte Y-up (glTF) para Z-up (Blender); por defeito
 o eixo vertical tratado como "altura" é Z. Usa --axis Y se os teus ficheiros já
