@@ -531,6 +531,19 @@ fn bomb_step_system(
             position: Some(center),
         });
         toasts.write(ScriptToast("BOOM!".into()));
+        // knockback radial (loop 10): empurra as criaturas sobreviventes
+        for (target, t, mut health) in creatures.iter_mut() {
+            let delta = t.translation() - center;
+            let distance = delta.length();
+            if let Some(strength) =
+                crate::physics_fx::radial_strength(distance, BOMB_RADIUS * 1.5, 9.0)
+            {
+                commands.entity(target).insert(crate::physics_fx::Knockback {
+                    velocity: delta.normalize_or_zero() * strength,
+                });
+            }
+            let _ = &mut health;
+        }
         commands.entity(entity).despawn();
     }
 }

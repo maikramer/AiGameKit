@@ -13,7 +13,7 @@ function on_update(dt)
       viber.add_xp(30)
       viber.report_collect("wood", 1)
       viber.toast("Árvore derrubada! (+30 XP, +1 madeira)")
-      viber.despawn_self()
+      viber.topple()
     else
       viber.toast("Cortar: " .. st.hits .. "/3")
     end

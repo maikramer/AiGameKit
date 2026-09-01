@@ -138,6 +138,7 @@ pub fn debug_damage(
         hurts.write(crate::feedback::PlayerHurt {
             amount: DEBUG_DAMAGE,
             status: false,
+            from: None,
         });
     }
     if keys.just_pressed(KeyCode::KeyN) {

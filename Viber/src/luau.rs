@@ -50,7 +50,7 @@ pub enum ScriptCommand {
     FaceTowards(Entity, Vec3),
     TeleportPlayer(Vec3),
     AddXp(u32),
-    DamagePlayer(f32),
+    DamagePlayer { amount: f32, from: Option<Vec3> },
     HealPlayer(f32),
     /// Aplica um status effect ao herói (hoje: `"venom"`) — tratado pelo
     /// feedback (tick 1/s, path único de dano).
@@ -63,6 +63,9 @@ pub enum ScriptCommand {
     QuestReport { target: String, amount: u32 },
     /// Visita a um marco nomeado.
     QuestVisit(String),
+    /// Destrutível com queda (`break-style: fall`) — tomba na direção
+    /// herói→entidade e despawna no fim.
+    Topple { entity: Entity },
     /// Deposita recurso no vault (`gold`/`wood`/`stone`) — economia loop 4.
     VaultAdd { kind: String, amount: u32 },
     /// Adiciona item ao inventário (`potion`, `antidote`, `bomb`…).
@@ -710,10 +713,25 @@ impl LuaScriptHost {
         api.set(
             "damage_player",
             lua.create_function(|lua, amount: f32| {
-                lua.app_data_mut::<ScriptCtx>()
-                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
-                    .commands
-                    .push(ScriptCommand::DamagePlayer(amount));
+                let mut ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                let from = ctx.origin;
+                ctx.commands
+                    .push(ScriptCommand::DamagePlayer { amount, from: Some(from) });
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "topple",
+            lua.create_function(|lua, ()| {
+                let mut ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                let Some(entity) = ctx.entity else {
+                    return Err(mlua::Error::runtime("viber.topple fora de on_update"));
+                };
+                ctx.commands.push(ScriptCommand::Topple { entity });
                 Ok(())
             })?,
         )?;
@@ -1173,12 +1191,13 @@ pub fn luau_update(
                     crate::vitals::gain_xp(xp, gain);
                 }
             }
-            ScriptCommand::DamagePlayer(amount) => {
+            ScriptCommand::DamagePlayer { amount, from } => {
                 // Path único de dano: o feedback aplica (i-frames, vinheta,
-                // número flutuante, morte) no próximo processamento.
+                // número flutuante, morte, knockback) no próximo processamento.
                 hurts.write(crate::feedback::PlayerHurt {
                     amount,
                     status: false,
+                    from,
                 });
                 if std::env::var_os("VIBER_COMBAT_DEBUG").is_some() {
                     info!(target: "viber::combat", "damage {amount} pedido por script");
@@ -1306,6 +1325,21 @@ pub fn luau_update(
             ScriptCommand::ItemAdd { id, amount } => {
                 if let Some(vault) = vault.as_deref_mut() {
                     vault.item_add(&id, amount);
+                }
+            }
+            ScriptCommand::Topple { entity } => {
+                // tomba na direção herói→entidade (break-style: fall)
+                let target_pos = scripts
+                    .get(entity)
+                    .ok()
+                    .and_then(|(_, _, transform, _)| transform.as_ref().map(|t| t.translation));
+                if let (Some(target_pos), Some(player_pos)) = (target_pos, player_pos) {
+                    let dir = (target_pos - player_pos).normalize_or_zero();
+                    commands.entity(entity).insert(crate::physics_fx::Falling {
+                        axis: Vec3::new(dir.z, 0.0, -dir.x),
+                        timer: 0.0,
+                    });
+                    commands.entity(entity).remove::<LuaScriptRef>();
                 }
             }
         }

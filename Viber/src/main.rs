@@ -15,8 +15,8 @@ use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
 use viber::{
     ambient, animation, camera, economy, feedback, hud, menus, meshopt, music, particles,
-    physics, player, profiler, quests, recipes, scaffold, save, sky, skills, spawner, terrain,
-    travel, vitals, worldsys, xml,
+    physics, physics_fx, player, profiler, quests, recipes, scaffold, save, sky, skills,
+    spawner, terrain, travel, vitals, worldsys, xml,
 };
 
 /// Native Bevy engine for AiGameKit declarative worlds.
@@ -422,6 +422,8 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // Mundo vivo (loop 9): fog/tint por BiomeRegion, orçamento de luzes,
     // gestos idle de NPC, SFX.
     app.add_plugins(ambient::AmbientPlugin);
+    // Física Fase 3 (loop 10): knockback cinemático + destrutíveis com queda.
+    app.add_plugins(physics_fx::PhysicsFxPlugin);
     // Quests & diálogo (loop 3): 21 quests JSON, flow [E] nos DialogueNPC,
     // QuestTracker, hooks viber.quest_* p/ Luau.
     app.add_plugins(quests::QuestsPlugin);

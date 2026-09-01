@@ -50,6 +50,8 @@ pub struct PlayerHurt {
     pub amount: f32,
     /// `true` para dano de status (veneno): ignora i-frames, sem número.
     pub status: bool,
+    /// Posição do atacante (knockback no herói); `None` = sem origem.
+    pub from: Option<Vec3>,
 }
 
 /// Número flutuante a mostrar no mundo (consumido pelo pool de UI).
@@ -294,6 +296,7 @@ fn player_hurt_system(
     mut numbers: MessageWriter<DamageNumberEvent>,
     mut flash: ResMut<HurtFlash>,
     mut toasts: MessageWriter<ScriptToast>,
+    mut knockbacks: Query<&mut crate::physics_fx::Knockback>,
 ) {
     let Ok((entity, transform, mut health, mut invuln, dying, guard)) = players.single_mut()
     else {
@@ -336,6 +339,18 @@ fn player_hurt_system(
         }
         if amount > 0.0 {
             flash.0 = (flash.0 + if hurt.status { 0.35 } else { 0.9 }).min(1.0);
+            // knockback do herói na direção do atacante
+            if let Some(from) = hurt.from {
+                let dir = (transform.translation() - from).normalize_or_zero();
+                let kb = crate::physics_fx::knockback_after(dir, 5.0);
+                if kb.velocity.length_squared() > 0.0 {
+                    if let Ok(mut existing) = knockbacks.get_mut(entity) {
+                        existing.velocity = kb.velocity;
+                    } else {
+                        commands.entity(entity).insert(kb);
+                    }
+                }
+            }
         }
     }
 }
@@ -356,6 +371,7 @@ fn tick_status_system(
             hurts.write(PlayerHurt {
                 amount: tick,
                 status: true,
+                from: None,
             });
         }
     }

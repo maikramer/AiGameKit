@@ -404,7 +404,7 @@ fn quest_debug_hostile(
     keys: Res<ButtonInput<KeyCode>>,
     mut players: Query<(Entity, &GlobalTransform, &mut Transform), With<Player>>,
     creatures: Query<
-        (&GlobalTransform, Option<&ScriptInteraction>),
+        (&GlobalTransform, &LuaScriptRef, Option<&ScriptInteraction>),
         (With<LuaScriptRef>, With<Health>, Without<Player>),
     >,
     terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
@@ -417,15 +417,21 @@ fn quest_debug_hostile(
         return;
     };
     let player_pos = player_global.translation();
+    // hostil = script de inimigo/boss (townsfolk/POIs ficam de fora)
+    let is_hostile = |path: &str| {
+        path.contains("enemies/") || path.contains("bosses/") || path.contains("boss")
+    };
     let Some(target) = creatures
         .iter()
-        .filter(|(_, interaction)| interaction.is_none())
-        .min_by(|(a, _), (b, _)| {
+        .filter(|(_, script, interaction)| {
+            interaction.is_none() && is_hostile(&script.path)
+        })
+        .min_by(|(a, _, _), (b, _, _)| {
             a.translation()
                 .distance_squared(player_pos)
                 .total_cmp(&b.translation().distance_squared(player_pos))
         })
-        .map(|(t, _)| t.translation())
+        .map(|(t, _, _)| t.translation())
     else {
         toasts.write(ScriptToast("QA: nenhuma criatura hostil ativa".into()));
         return;
@@ -446,9 +452,10 @@ fn quest_debug_hostile(
 fn quest_debug_harvest(
     keys: Res<ButtonInput<KeyCode>>,
     mut players: Query<(Entity, &GlobalTransform, &mut Transform), With<Player>>,
-    interactions: Query<(&GlobalTransform, &ScriptInteraction)>,
+    interactions: Query<(Entity, &GlobalTransform, &ScriptInteraction)>,
     terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     mut toasts: MessageWriter<ScriptToast>,
+    mut last: Local<Option<Entity>>,
 ) {
     if !keys.just_pressed(KeyCode::F9) {
         return;
@@ -457,24 +464,32 @@ fn quest_debug_harvest(
         return;
     };
     let player_pos = player_global.translation();
-    let Some(target) = interactions
+    // exclui o último alvo para o ciclo avançar pela cadeia de vizinhos
+    let previous = *last;
+    let Some((target_entity, target_transform)) = interactions
         .iter()
-        .min_by(|(a, _), (b, _)| {
+        .filter(|(_, _, interaction)| {
+            let label = interaction.label.to_lowercase();
+            label.contains("cortar") || label.contains("minerar")
+        })
+        .filter(|(entity, _, _)| previous.is_none_or(|l| l != *entity))
+        .min_by(|(_, a, _), (_, b, _)| {
             a.translation()
                 .distance_squared(player_pos)
                 .total_cmp(&b.translation().distance_squared(player_pos))
         })
-        .map(|(t, _)| t.translation())
+        .map(|(entity, t, _)| (entity, t.translation()))
     else {
         toasts.write(ScriptToast("QA: nenhum colhível por perto".into()));
         return;
     };
-    let x = target.x + 1.5;
-    let z = target.z + 1.5;
+    *last = Some(target_entity);
+    let x = target_transform.x + 1.5;
+    let z = target_transform.z + 1.5;
     let y = terrain
         .as_ref()
         .map(|t| t.sample(x, z))
-        .unwrap_or(target.y);
+        .unwrap_or(target_transform.y);
     transform.translation = Vec3::new(x, y + 0.1, z);
     toasts.write(ScriptToast("QA: teleport ao colhível mais próximo".into()));
 }

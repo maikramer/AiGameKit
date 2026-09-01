@@ -268,6 +268,14 @@ pub fn player_melee_attack(
             });
             // aggro-chain: aliados a 15 m do alvo batido recebem o alerta
             fx.alerts.write(crate::feedback::AttackAlert { position });
+            // knockback (loop 10): empurra o alvo na direção do golpe
+            if let Some(dir) = hit_pos.map(|p| p - origin) {
+                fx.commands
+                    .entity(entity)
+                    .insert(crate::physics_fx::Knockback {
+                        velocity: dir.normalize_or_zero() * 5.0,
+                    });
+            }
             fx.sfx.write(crate::ambient::SfxEvent {
                 clip: crate::ambient::SfxClip::Hit,
                 position: Some(position),

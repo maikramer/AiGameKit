@@ -13,7 +13,7 @@ function on_update(dt)
       viber.add_xp(30)
       viber.report_collect("stone", 1)
       viber.toast("Pedra quebrada! (+30 XP, +1 pedra)")
-      viber.despawn_self()
+      viber.topple()
     else
       viber.toast("Minerar: " .. st.hits .. "/3")
     end
