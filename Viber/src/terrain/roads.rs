@@ -797,12 +797,14 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
     }
     for i in 0..(n - 1) {
         // Vertices: 4 per station (ol, cl, cr, or). Three quads per pair
-        // (VibeGame), CCW.
+        // (VibeGame). Winding CCW visto de CIMA — (l0, c0, l1) dá normal +Y;
+        // a ordem (l0, l1, c0) invertia o normal (−Y) e o FrontSide cull
+        // escondia a ribbon inteira vista de cima.
         let a = (i * 4) as u32;
         let b = ((i + 1) * 4) as u32;
         for k in 0..3u32 {
             mesh.indices
-                .extend_from_slice(&[a + k, b + k, a + k + 1, a + k + 1, b + k, b + k + 1]);
+                .extend_from_slice(&[a + k, a + k + 1, b + k, a + k + 1, b + k + 1, b + k]);
         }
     }
     mesh
@@ -1307,6 +1309,30 @@ mod tests {
         assert_eq!(grid.raw(), before, "decal roads never touch the grid");
     }
 
+    #[test]
+    fn test_road_ribbon_winding_faces_up() {
+        // Estrada +X: o 1º triângulo (l0, c0, l1) tem de dar normal +Y —
+        // winding invertido escondia a ribbon inteira atrás do FrontSide
+        // cull (visível só de baixo).
+        let grid = test_grid();
+        let path = RoadPath {
+            name: None,
+            profile: RoadProfile::Artery,
+            bridge: false,
+            deck_y: None,
+            stations: vec![Vec2::new(30.0, 64.0), Vec2::new(40.0, 64.0)],
+            half_width: vec![2.0, 2.0],
+        };
+        let spec = road_spec();
+        let mesh = road_ribbon_mesh(&grid, &path, &spec);
+        // Usa os ÍNDICES reais do primeiro triângulo (o que a GPU vê).
+        let v = |i: u32| bevy::math::Vec3::from_array(mesh.positions[i as usize]);
+        let (a, b, c) = (v(mesh.indices[0]), v(mesh.indices[1]), v(mesh.indices[2]));
+        let normal = (b - a).cross(c - a);
+        assert!(normal.y > 0.0, "ribbon winding must face up: {normal}");
+    }
+
+    #[test]
     #[test]
     fn test_road_ribbon_corner_keeps_constant_width() {
         // L de 90°: sem miter, a largura perpendicular no canto aperta para
