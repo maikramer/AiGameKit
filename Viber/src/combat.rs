@@ -111,6 +111,8 @@ pub struct MeleeFx<'w, 's> {
     combat_target: ResMut<'w, crate::feedback::CombatTarget>,
     quests_log: Option<ResMut<'w, crate::quests::QuestLog>>,
     hero_attack_started: ResMut<'w, SwingClock>,
+    combo: ResMut<'w, crate::skills::ComboState>,
+    stats: Res<'w, crate::skills::PlayerStatsResource>,
 }
 
 /// Golpe do herói: alvo com script mais próximo dentro de alcance + cone.
@@ -131,9 +133,14 @@ pub fn player_melee_attack(
         (Without<Player>, With<LuaScriptRef>),
     >,
 ) {
+    fx.combo.window -= time.delta_secs();
+    if fx.combo.window <= 0.0 && fx.combo.hits > 0 {
+        fx.combo.hits = 0;
+    }
     let j_pressed = keys.just_pressed(KeyCode::KeyJ);
-    let triggered =
-        mouse.just_pressed(MouseButton::Left) || keys.just_pressed(KeyCode::KeyR) || j_pressed;
+    // [R] passou a ser o golpe forte radial (skills.rs) — o básico fica em
+    // [J] + clique esquerdo.
+    let triggered = mouse.just_pressed(MouseButton::Left) || j_pressed;
     if !triggered {
         return;
     }
@@ -213,8 +220,32 @@ pub fn player_melee_attack(
             .ok()
             .and_then(|(_, _, _, script)| script)
             .map(|script| script_kind(&script.path));
+        // ── profundidade do melee (loop 8) ──
+        // combo: 3.º golpe na janela é finisher
+        fx.combo.hits = fx.combo.hits.wrapping_add(1).min(crate::skills::COMBO_WINDOW_COUNT);
+        fx.combo.window = crate::skills::COMBO_WINDOW;
+        let combo_hit = fx.combo.hits;
+        let mut hit_entity_pos = origin;
+        let mut target_forward: Option<Vec3> = None;
+        if let Ok((_, t, _, _)) = enemies.get(entity) {
+            hit_entity_pos = t.translation();
+            target_forward = Some(Vec3::from(t.forward()));
+        }
+        // backstab: o alvo está virado para LONGE do herói
+        let to_player = (origin - hit_entity_pos).normalize_or_zero();
+        let backstab = target_forward.is_some_and(|f| f.dot(to_player) < -0.1);
+        let crit = crate::skills::is_crit(fx.stats.0.crit_bonus, pseudo_roll(&time));
+        let (mut damage, finisher) =
+            crate::skills::melee_damage(MELEE_DAMAGE + fx.stats.0.bonus_damage, combo_hit, backstab);
+        if crit {
+            damage *= 2.0;
+        }
         let killed = if let Ok((_, _, mut health, _)) = enemies.get_mut(entity) {
-            apply_damage(&mut health, MELEE_DAMAGE);
+            apply_damage(&mut health, damage);
+            // execute: alvo abaixo de 15 % cai na hora
+            if health.current > 0.0 && health.current < health.max * 0.15 {
+                health.current = 0.0;
+            }
             health.current <= 0.0
         } else {
             false
@@ -222,8 +253,17 @@ pub fn player_melee_attack(
         if let Some(position) = hit_pos {
             fx.numbers.write(crate::feedback::DamageNumberEvent {
                 position,
-                text: format!("-{MELEE_DAMAGE}"),
-                color: Color::srgb(1.0, 0.96, 0.85),
+                text: format!(
+                    "-{}{}{}",
+                    damage as i32,
+                    if crit { " CRIT!" } else { "" },
+                    if backstab { " x2" } else { "" }
+                ),
+                color: if crit {
+                    Color::srgb(1.0, 0.3, 0.1)
+                } else {
+                    Color::srgb(1.0, 0.96, 0.85)
+                },
             });
             // aggro-chain: aliados a 15 m do alvo batido recebem o alerta
             fx.alerts.write(crate::feedback::AttackAlert { position });
@@ -244,6 +284,9 @@ pub fn player_melee_attack(
                 });
             }
             fx.toasts.write(ScriptToast(format!("Inimigo derrotado (+{KILL_XP} XP)")));
+            if finisher {
+                fx.combo.hits = 0;
+            }
             // Quests: abate reportado ao diário (kill targets por tipo).
             if let (Some(kind), Some(quests)) = (kind, fx.quests_log.as_deref_mut()) {
                 for ready in quests.report_kill(&kind) {
@@ -259,6 +302,12 @@ pub fn player_melee_attack(
             info!(target: "viber::combat", "hit {entity:?}");
         }
     }
+}
+
+/// Roll pseudo-aleatório determinístico (0..1) para críticos, derivado do
+/// tempo da engine — sem depender de crate de RNG.
+pub fn pseudo_roll(time: &Time) -> f32 {
+    (time.elapsed_secs_f64() * 7919.0).fract() as f32
 }
 
 /// Tipo de criatura a partir do path do script (`"enemies/wolf.lua"` →

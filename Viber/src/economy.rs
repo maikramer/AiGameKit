@@ -288,7 +288,10 @@ fn debug_give_system(
     vault.add_resource("stone", 6);
     vault.item_add("potion", 1);
     vault.item_add("antidote", 1);
-    toasts.write(ScriptToast("QA: +10 ouro, +6 madeira, +6 pedra, poção, antídoto".into()));
+    vault.item_add("bomb", 1);
+    toasts.write(ScriptToast(
+        "QA: +10 ouro, +6 madeira, +6 pedra, poção, antídoto, bomba".into(),
+    ));
 }
 
 /// Contagens da hotbar em tempo real.

@@ -57,7 +57,7 @@ impl MenusOpen {
 #[derive(Debug, Clone, Copy, Resource, Default, PartialEq)]
 pub struct ModalTab(pub usize);
 
-pub const TAB_COUNT: usize = 3;
+pub const TAB_COUNT: usize = 4;
 
 /// Próxima tab (cíclica); pura para os testes.
 pub fn next_tab(current: usize, delta: i32) -> usize {
@@ -269,7 +269,7 @@ fn spawn_modal(mut commands: Commands) {
 
 /// Cabeçalho das tabs (marcador > na ativa).
 pub fn tab_header(active: usize) -> String {
-    let names = ["Quests", "Inventário", "Opções"];
+    let names = ["Quests", "Inventário", "Skills", "Opções"];
     names
         .iter()
         .enumerate()
@@ -376,6 +376,8 @@ fn modal_content_system(
     vault: Option<Res<Vault>>,
     mixer: Option<Res<crate::music::AudioMixerSettings>>,
     rows: Option<Res<crate::save::OptionsRows>>,
+    tree: Option<Res<crate::skills::SkillTree>>,
+    selection: Res<crate::skills::SkillUiSelection>,
     mut q_content: Query<&mut Text, With<ModalContent>>,
 ) {
     if !open.modal {
@@ -388,25 +390,36 @@ fn modal_content_system(
     *throttle = 0.25;
     for mut text in q_content.iter_mut() {
         let header = tab_header(tab.0);
-        let body = match (log.as_deref(), vault.as_deref()) {
-            (Some(log), Some(vault)) => {
+        let body = match tab.0 {
+            0 => {
                 let quest_lines: Vec<String> = log
-                    .active_ids(Some(vault))
-                    .iter()
-                    .map(|id| {
-                        log.def(id)
-                            .map(|def| {
-                                format!(
-                                    "• {}  [{}]",
-                                    def.title,
-                                    log.progress_text(id, Some(vault))
-                                )
+                    .as_deref()
+                    .zip(vault.as_deref())
+                    .map(|(log, vault)| {
+                        log.active_ids(Some(vault))
+                            .iter()
+                            .filter_map(|id| {
+                                log.def(id).map(|def| {
+                                    format!(
+                                        "• {}  [{}]",
+                                        def.title,
+                                        log.progress_text(id, Some(vault))
+                                    )
+                                })
                             })
-                            .unwrap_or_default()
+                            .collect()
                     })
-                    .collect();
-                tab_body(tab.0, &quest_lines, &vault_lines(vault))
+                    .unwrap_or_default();
+                tab_body(0, &quest_lines, &[])
             }
+            1 => {
+                let lines = vault
+                    .as_deref()
+                    .map(vault_lines)
+                    .unwrap_or_else(|| vec!["(inventário indisponível)".into()]);
+                tab_body(1, &[], &lines)
+            }
+            2 => skills_body(tree.as_deref(), selection.0),
             _ => options_body(
                 rows.as_ref().map(|r| r.selected).unwrap_or(0),
                 mixer.as_ref().map(|m| (m.master, m.music, m.sfx)).unwrap_or((1.0, 1.0, 1.0)),
@@ -418,6 +431,35 @@ fn modal_content_system(
             text.0 = wanted;
         }
     }
+}
+
+/// Corpo da tab Skills: 8 passivas com estado (aprendida/seleção/requisito).
+pub fn skills_body(tree: Option<&crate::skills::SkillTree>, selected: usize) -> String {
+    use crate::skills::SKILLS;
+    let Some(tree) = tree else {
+        return "(skills indisponíveis)".into();
+    };
+    let mut lines = vec![format!("Pontos: {}", tree.points), String::new()];
+    for (i, def) in SKILLS.iter().enumerate() {
+        let learned = tree.learned.iter().any(|l| l == def.id);
+        let marker = if i == selected { ">" } else { " " };
+        let state = if learned {
+            "✓".to_string()
+        } else if tree.can_learn(def.id) {
+            "[P]".into()
+        } else {
+            let missing = tree.missing_requires(def.id);
+            if missing.is_empty() {
+                "(sem pontos)".into()
+            } else {
+                format!("(requer {})", missing.join(", "))
+            }
+        };
+        lines.push(format!("{marker} {} {state}", def.label));
+    }
+    lines.push(String::new());
+    lines.push("↑↓ escolher · [P] aprender".into());
+    lines.join("\n")
 }
 
 /// Linhas do inventário a partir do vault.
@@ -722,9 +764,9 @@ mod tests {
     #[test]
     fn test_next_tab_cycles() {
         assert_eq!(next_tab(0, 1), 1);
-        assert_eq!(next_tab(2, 1), 0);
-        assert_eq!(next_tab(0, -1), 2);
-        assert_eq!(next_tab(1, 3), 1);
+        assert_eq!(next_tab(3, 1), 0);
+        assert_eq!(next_tab(0, -1), 3);
+        assert_eq!(next_tab(1, 4), 1);
     }
 
     #[test]

@@ -20,6 +20,7 @@ use bevy::camera::Camera3d;
 use bevy::prelude::*;
 
 use crate::luau::ScriptToast;
+use crate::skills::{GUARD_REDUCTION, Guarding};
 use crate::player::Player;
 use crate::vitals::{Health, apply_damage};
 
@@ -285,18 +286,36 @@ fn player_hurt_system(
             &mut Health,
             Option<&mut Invulnerable>,
             Option<&Dying>,
+            Option<&Guarding>,
         ),
         With<Player>,
     >,
     mut commands: Commands,
     mut numbers: MessageWriter<DamageNumberEvent>,
     mut flash: ResMut<HurtFlash>,
+    mut toasts: MessageWriter<ScriptToast>,
 ) {
-    let Ok((entity, transform, mut health, mut invuln, dying)) = players.single_mut() else {
+    let Ok((entity, transform, mut health, mut invuln, dying, guard)) = players.single_mut()
+    else {
         return;
     };
     for hurt in hurts.read() {
-        match hurt_player(&mut health, invuln.as_deref(), dying, hurt.amount, hurt.status) {
+        // guard [L]: parry total na janela inicial, senão −75 %
+        let mut amount = hurt.amount;
+        if !hurt.status {
+            if let Some(g) = guard {
+                if g.timer <= crate::skills::PARRY_WINDOW {
+                    amount = 0.0;
+                    toasts.write(ScriptToast("PARRY!".into()));
+                } else {
+                    amount *= GUARD_REDUCTION;
+                }
+            }
+        }
+        if amount <= 0.0 {
+            continue;
+        }
+        match hurt_player(&mut health, invuln.as_deref(), dying, amount, hurt.status) {
             HurtOutcome::Ignored | HurtOutcome::Blocked => continue,
             HurtOutcome::Applied { .. } => {}
         }
@@ -311,11 +330,13 @@ fn player_hurt_system(
             }
             numbers.write(DamageNumberEvent {
                 position: transform.translation() + Vec3::Y * 1.9,
-                text: format!("-{}", hurt.amount.round() as i32),
+                text: format!("-{}", amount.round() as i32),
                 color: Color::srgb(1.0, 0.32, 0.25),
             });
         }
-        flash.0 = (flash.0 + if hurt.status { 0.35 } else { 0.9 }).min(1.0);
+        if amount > 0.0 {
+            flash.0 = (flash.0 + if hurt.status { 0.35 } else { 0.9 }).min(1.0);
+        }
     }
 }
 

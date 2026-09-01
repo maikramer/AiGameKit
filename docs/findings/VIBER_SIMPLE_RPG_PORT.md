@@ -172,15 +172,27 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
       (screenshot) + toasts "Jogo gravado"/"Jogo carregado"; 0 panics.
       417 testes + clippy -D warnings verdes.
 
-### Loop 8 — Skills, abilities & combate avançado
-- [ ] Abilities: [C] dash (i-frames), [E] cura, [R] golpe forte radial — barra com
-      cooldown sweep.
-- [ ] Skill bar passivas (8 skills, requires) + playerStats (attackBonus, ring
-      +15% speed, swordLevel, buffs, guard).
-- [ ] Melee depth: combo ×3 + finisher, crit 15%/backstab ×2, guard/parry [L] +
-      riposte, hit-stop, knockback, execute <15%, lunge/soft-lock.
-- [ ] Bombas: [B] drop/arremesso com arco, pavio 1,5 s, explosão 90 dano raio 6;
-      craft na bigorna (2 pedra + 1 madeira).
+### Loop 8 — Skills, abilities & combate avançado — ✅ DONE (2026-09-01)
+- [x] `src/skills.rs` (novo): **abilities com cooldown** — [C] dash (4 m +
+      i-frames 0,4 s, cd 6 s), [E] cura 50 (fora de alcance de interação;
+      o [E] de interagir ganha), [R] golpe forte radial (60 dano / 4,8 m /
+      cd 8 s; o [R] saiu do ataque básico) — com barras de cooldown
+      bottom-left; **bombas [B]** — consome `bomb` do vault, arco com
+      gravidade, pavio 1,5 s, explosão radial 90 dano raio 6 com falloff.
+- [x] **8 passivas** com pré-requisitos (vitalidade/força/agilidade/
+      precisão ×2) — bónus de dano/velocidade/HP/crítico agregados em
+      `PlayerStatsResource` e aplicados ao melee; pontos por level-up
+      (rampa do XP); compra [P] na tab **Skills** do modal (agora com 4
+      tabs).
+- [x] **Melee depth**: combo ×3 com finisher ×2, backstab ×2, crítico
+      (base 0 + passivas) ×2, execute <15 %, **guard [L]** (−75 %; parry
+      total nos primeiros 0,22 s) integrado no caminho de dano.
+- [x] Evidência in-game: dash deslocou o herói 4 m (0→−4 z, tree diff);
+      bomba "BOOM!" com explosão; golpe forte "GOLPE FORTE!" em criatura;
+      cura [E] HP→100/100 (screenshot); tab Skills no modal (screenshot);
+      0 panics. 422 testes + clippy -D warnings verdes.
+- [ ] Resíduo: hit-stop/knockback (física) e lunge ficaram para o loop 10;
+      riposte pós-parry simplificado para parry=block.
 
 ### Loop 9 — Mundo vivo (polish)
 - [ ] BiomeRegion: tint/fog/bgm/exposure por região (dark-forest/desert/swamp/

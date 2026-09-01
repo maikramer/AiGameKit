@@ -23,6 +23,7 @@ pub mod quests;
 pub mod recipes;
 pub mod save;
 pub mod scaffold;
+pub mod skills;
 pub mod sky;
 pub mod spawner;
 pub mod terrain;
