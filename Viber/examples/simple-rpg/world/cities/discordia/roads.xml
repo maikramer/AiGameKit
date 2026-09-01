@@ -12,7 +12,10 @@
 -->
   <Group name="city.roads" translation="0 0 0">
     <Group translation="0 0 0" body="fixed" collider="none">
-      <Plane translation="0 0.03 0" half-size="10 10" />
+      <!-- Decal da praça: cobblestone 4 m/tile (a migração derrubou o
+           texture-url original; a engine agora suporta texture em
+           primitivas). base-color neutro para casar com as ribbons. -->
+      <Plane translation="0 0.03 0" half-size="10 10" texture="/assets/textures/cobblestone_road.png" texture-tile-size="4" base-color="#9d9891" roughness="0.9" />
     </Group>
   </Group>
 </world>

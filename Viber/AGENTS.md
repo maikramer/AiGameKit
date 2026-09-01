@@ -58,11 +58,25 @@ viber debug probe                          # bridge vivo? (como list_pages)
 viber debug screenshot -o shot.png         # captura da janela
 viber debug tree [--json]                  # entidades (como take_snapshot)
 viber debug logs [--limit N] [--json]      # console
+viber debug prof [--json]                  # snapshot do profiler (fps/frame/
+                                           #   entidades/scripts ativos/chunks)
 viber debug click 400 300 [--button right]
 viber debug move 400 300
-viber debug key w | space | esc | up | ctrl [--shift]
+viber debug key w | space | esc | up | ctrl | f3 [--shift]
 viber debug text "hello"                   # typing sintético por char
 ```
+
+### Profiler (F3)
+
+`src/profiler.rs` (ligado por omissão no `run`): overlay `bevy_ui` no canto
+superior direito com FPS + pior fps da janela (~3 s), frame-time médio/pico,
+entidades, scripts Luau totais/ativos (dentro do raio de `ScriptActivation` —
+o "LOD de IA"), emissores de partícula e chunks de terreno. **F3** alterna.
+O mesmo snapshot é o método bridge `viber.profiler` (cliente `viber debug
+prof`) para QA headless sem screenshot. `VIBER_PROF_LOG=1` adiciona o
+`LogDiagnosticsPlugin` (fps/frame_time/entity_count a cada 1 s no log).
+Teclas de debug de vitals: **H** −10 HP, **N** cura total, **K** +10 XP
+(`J` é o ataque do herói).
 
 Detalhes: handlers correm como sistemas exclusivos em `RemoteLast` (depois de
 `Last`); screenshots são request+poll porque a captura precisa de frames de

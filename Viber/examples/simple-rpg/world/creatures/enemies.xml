@@ -26,12 +26,12 @@
        NORTE — Floresta Sombria
        ============================================================ -->
     <DynamicSpawner avoid-water="1" count="10" seed="101" region-min="-170 0 124" region-max="170 0 350" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="180">
-      <Creature role="enemy" script="enemies/wolf.ts">
+      <Creature role="enemy" script="enemies/wolf.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/wolf_lod0.glb" lod1-url="/assets/meshes/characters/wolf_lod1.glb" lod2-url="/assets/meshes/characters/wolf_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
     <DynamicSpawner avoid-water="1" count="8" seed="202" region-min="-170 0 160" region-max="170 0 360" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="180">
-      <Creature role="enemy" script="enemies/shade.ts" transform="scale: 1.4 1.4 1.4">
+      <Creature role="enemy" script="enemies/shade.lua" transform="scale: 1.4 1.4 1.4">
         <GLTFLoader role="visual" url="/assets/meshes/characters/bogling_lod0.glb" lod1-url="/assets/meshes/characters/bogling_lod1.glb" lod2-url="/assets/meshes/characters/bogling_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
@@ -39,12 +39,12 @@
        LESTE — Deserto
        ============================================================ -->
     <DynamicSpawner avoid-water="1" count="10" seed="303" region-min="124 0 -160" region-max="350 0 160" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="180">
-      <Creature role="enemy" script="enemies/scorpion.ts">
+      <Creature role="enemy" script="enemies/scorpion.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/scorpion_lod0.glb" lod1-url="/assets/meshes/characters/scorpion_lod1.glb" lod2-url="/assets/meshes/characters/scorpion_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
     <DynamicSpawner avoid-water="1" count="10" seed="404" region-min="124 0 -160" region-max="330 0 160" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="180">
-      <Creature role="enemy" script="enemies/bandit.ts">
+      <Creature role="enemy" script="enemies/bandit.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/bandit_lod0.glb" lod1-url="/assets/meshes/characters/bandit_lod1.glb" lod2-url="/assets/meshes/characters/bandit_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
@@ -53,7 +53,7 @@
        — attack clip in ATTACK mode, lunge suppressed. Melee until a real
        archer asset exists. -->
     <DynamicSpawner avoid-water="1" count="6" seed="555" region-min="140 0 -140" region-max="320 0 140" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="180">
-      <Creature role="enemy" script="enemies/bandit.ts">
+      <Creature role="enemy" script="enemies/bandit.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/bandit_lod0.glb" lod1-url="/assets/meshes/characters/bandit_lod1.glb" lod2-url="/assets/meshes/characters/bandit_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
@@ -61,12 +61,12 @@
        OESTE — Pântano (bacias baixas)
        ============================================================ -->
     <DynamicSpawner avoid-water="1" count="12" seed="505" region-min="-350 0 -170" region-max="-124 0 170" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="180">
-      <Creature role="enemy" script="enemies/bogling.ts">
+      <Creature role="enemy" script="enemies/bogling.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/bogling_lod0.glb" lod1-url="/assets/meshes/characters/bogling_lod1.glb" lod2-url="/assets/meshes/characters/bogling_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
     <DynamicSpawner avoid-water="1" count="6" seed="515" region-min="-340 0 -170" region-max="-160 0 170" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="180">
-      <Creature role="enemy" script="enemies/wolf.ts">
+      <Creature role="enemy" script="enemies/wolf.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/wolf_lod0.glb" lod1-url="/assets/meshes/characters/wolf_lod1.glb" lod2-url="/assets/meshes/characters/wolf_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
@@ -75,17 +75,19 @@
        max-slope 50° alinha com navmesh walkableSlopeAngle 55°.
        ============================================================ -->
     <DynamicSpawner avoid-water="1" count="10" seed="707" region-min="-110 0 -330" region-max="110 0 -124" random-yaw="true" avoid-overlaps="false" max-slope-deg="50" max-distance="180">
-      <Creature role="enemy" script="goblin-wander.ts">
+      <Creature role="enemy" script="goblin-wander.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/goblin_lod0.glb" lod1-url="/assets/meshes/characters/goblin_lod1.glb" lod2-url="/assets/meshes/characters/goblin_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
-    <DynamicSpawner avoid-water="1" count="8" seed="808" region-min="-110 0 -320" region-max="110 0 -124" random-yaw="true" avoid-overlaps="false" max-slope-deg="50" max-distance="180">
-      <Creature role="enemy" script="slime.ts">
+    <!-- Tutorial: slimes colados ao portão norte (fora da muralha ±39.8),
+         dentro do raio de ativação do congelamento ao se aproximar. -->
+    <DynamicSpawner avoid-water="1" count="6" seed="808" region-min="-40 0 -115" region-max="40 0 -50" random-yaw="true" avoid-overlaps="false" max-slope-deg="50" max-distance="120">
+      <Creature role="enemy" script="slime.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/slime_lod0.glb" lod1-url="/assets/meshes/characters/slime_lod1.glb" lod2-url="/assets/meshes/characters/slime_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>
     <DynamicSpawner avoid-water="1" count="8" seed="909" region-min="-110 0 -320" region-max="110 0 -124" random-yaw="true" avoid-overlaps="false" max-slope-deg="50" max-distance="180">
-      <Creature role="enemy" script="enemies/wolf.ts">
+      <Creature role="enemy" script="enemies/wolf.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/wolf_lod0.glb" lod1-url="/assets/meshes/characters/wolf_lod1.glb" lod2-url="/assets/meshes/characters/wolf_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>

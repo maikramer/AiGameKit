@@ -191,6 +191,9 @@ pub fn resolve(spec: &ParticleSpec) -> ResolvedEmitter {
         resolved.color_a = color;
         resolved.color_b = color;
     }
+    if let Some(radius) = spec.shape_radius {
+        resolved.radius = radius.max(0.0);
+    }
     resolved
 }
 
@@ -422,6 +425,7 @@ mod tests {
             speed: Some((1.0, 2.0)),
             size: Some((0.2, 0.5)),
             color: None,
+            shape_radius: None,
             looping: true,
             world_space: false,
         }
@@ -489,5 +493,21 @@ mod tests {
         let written = write_billboards(&mut mesh, &[], Vec3::ZERO, Vec3::Z, 1.0, 8);
         assert_eq!(written, 0);
         assert_eq!(mesh.count_vertices(), 32);
+    }
+
+    /// `shape-radius` is what spreads a campfire's flame across its pit
+    /// instead of firing a single jet from the centre.
+    #[test]
+    fn test_shape_radius_overrides_the_preset_spread() {
+        let base = resolve(&fire_spec());
+        let mut wide_spec = fire_spec();
+        wide_spec.shape_radius = Some(base.radius + 1.5);
+        let wide = resolve(&wide_spec);
+        assert!((wide.radius - (base.radius + 1.5)).abs() < 1e-5);
+
+        // A negative radius is clamped rather than inverting the spread.
+        let mut bad_spec = fire_spec();
+        bad_spec.shape_radius = Some(-3.0);
+        assert_eq!(resolve(&bad_spec).radius, 0.0);
     }
 }

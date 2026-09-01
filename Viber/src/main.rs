@@ -9,11 +9,13 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use clap::{CommandFactory, Parser, Subcommand};
 
 use viber::bridge::{self, client::BridgeClient};
+use viber::combat;
+use viber::luau;
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
 use viber::{
-    animation, camera, hud, meshopt, music, particles, physics, player, recipes, scaffold, sky,
-    spawner, terrain, worldsys, xml,
+    animation, camera, hud, meshopt, music, particles, physics, player, profiler, recipes,
+    scaffold, sky, spawner, terrain, vitals, worldsys, xml,
 };
 
 /// Native Bevy engine for AiGameKit declarative worlds.
@@ -89,6 +91,14 @@ enum DebugCommand {
         port: Option<u16>,
         #[arg(long, default_value_t = 100)]
         limit: usize,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Profiler snapshot from the running engine (fps, frame time, entities,
+    /// active Luau scripts, particle emitters, terrain chunks)
+    Prof {
+        #[arg(long)]
+        port: Option<u16>,
         #[arg(long)]
         json: bool,
     },
@@ -376,8 +386,8 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         world,
         base_dir: world_base_dir(path),
     });
-    // `worldsys::sun_drive` writes it and `sky::sky_update` reads it; nothing
-    // was creating it, so both systems failed parameter validation.
+    // `worldsys::sun_drive` aims the directional light from it; nothing was
+    // creating it, so that system failed parameter validation.
     app.init_resource::<worldsys::SunState>();
     // `sky::spawn_sky` needs `Assets<SkyMaterial>`; without this plugin the
     // startup system panics and leaves `Assets<Mesh>` taken out of the world.
@@ -388,8 +398,18 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     });
     app.add_plugins(terrain::TerrainPlugin);
     app.add_plugins(terrain::runtime::TerrainFeaturesPlugin);
+    // Fase 2: Luau — scripts de `world_dir/scripts/` com `on_update(dt)`.
+    app.add_plugins(luau::LuauScriptPlugin {
+        scripts_dir: world_dir.join("scripts"),
+    });
+    app.add_plugins(combat::CombatPlugin);
+    // Profiler: overlay F3 (fps/frame/entidades/scripts ativos) + `viber.profiler`.
+    app.add_plugins(profiler::ProfilerPlugin);
     app.add_systems(bevy::app::Startup, spawn::startup);
-    app.add_systems(bevy::app::Update, hud::hud_minimap_update);
+    app.add_systems(
+        bevy::app::Update,
+        (hud::hud_minimap_update, hud::hud_health_sync, hud::hud_xp_sync),
+    );
     app.add_systems(
         bevy::app::Update,
         (
@@ -414,11 +434,11 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             worldsys::sun_drive,
             worldsys::world_border_clamp,
             sky::sky_follow_camera,
-            sky::sky_update,
             worldsys::seat_statics_once,
             hud::hud_toggle,
             particles::particle_emitter_update,
             spawner::instantiate_spawn_groups,
+            vitals::debug_damage,
         ),
     );
     app.run();
@@ -494,6 +514,44 @@ fn print_tree(tree: &serde_json::Value) {
     }
 }
 
+/// Resumo humano do snapshot `viber.profiler`.
+fn print_prof(prof: &serde_json::Value) {
+    let get = |key: &str| prof.get(key).and_then(serde_json::Value::as_f64);
+    let count = |key: &str| {
+        prof.get(key)
+            .and_then(serde_json::Value::as_u64)
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "—".into())
+    };
+    let fps = get("fps").map(|v| format!("{v:.0}")).unwrap_or_else(|| "—".into());
+    let frame = get("frame_ms_avg")
+        .map(|v| format!("{v:.1} ms"))
+        .unwrap_or_else(|| "—".into());
+    println!("FPS {fps}   frame {frame}");
+    println!(
+        "entidades {}   partículas {}   terreno {}",
+        count("entities"),
+        count("particle_emitters"),
+        count("terrain_chunks")
+    );
+    let scripts = prof.get("scripts");
+    let total = scripts
+        .and_then(|s| s.get("total"))
+        .and_then(serde_json::Value::as_u64)
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "—".into());
+    let active = scripts
+        .and_then(|s| s.get("active"))
+        .and_then(serde_json::Value::as_u64)
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "—".into());
+    let uptime = get("uptime_s").map(|v| format!("{v:.0}")).unwrap_or_else(|| "—".into());
+    println!("scripts {total} (ativos {active})   uptime {uptime} s");
+    if let Some(min) = get("min_fps_window") {
+        println!("pior fps (janela ~3 s): {min:.0}");
+    }
+}
+
 fn print_logs(logs: &serde_json::Value) {
     let Some(entries) = logs.as_array() else {
         println!("{logs}");
@@ -548,6 +606,15 @@ fn run_debug(command: DebugCommand) -> Result<()> {
                 println!("{logs:#}");
             } else {
                 print_logs(&logs);
+            }
+        }
+        DebugCommand::Prof { port, json } => {
+            let client = BridgeClient::localhost(bridge::client::resolve_port(port));
+            let prof = client.prof()?;
+            if json {
+                println!("{prof:#}");
+            } else {
+                print_prof(&prof);
             }
         }
         DebugCommand::Key {

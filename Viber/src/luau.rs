@@ -23,6 +23,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use crate::player::Player;
+use crate::vitals::{Health, Xp};
 use bevy::prelude::*;
 use mlua::{Function, Lua, Table};
 
@@ -35,6 +37,65 @@ use mlua::{Function, Lua, Table};
 pub struct LuaScriptRef {
     /// Script path relative to `world_dir/scripts/` (e.g. `"doors/gate.lua"`).
     pub path: String,
+}
+
+/// Comandos que scripts enfileiram e a engine aplica pós-frame. A engine
+/// provê os BLOCOS PRIMITIVOS (percepção, movimento com snap no terreno,
+/// combate, UI) — a composição de comportamento vive no Luau.
+#[derive(Debug, Clone)]
+pub enum ScriptCommand {
+    /// Delta XZ desejado; a engine aplica e senta o Y no terreno.
+    MoveBy(Entity, Vec2),
+    /// Vira a entidade para olhar um ponto (yaw only).
+    FaceTowards(Entity, Vec3),
+    TeleportPlayer(Vec3),
+    AddXp(u32),
+    DamagePlayer(f32),
+    HealPlayer(f32),
+    /// Mensagem de UI (balão/toast) — consumida via [`ScriptToast`].
+    Toast(String),
+    /// Registra alvo de interação ("[J] Minerar") na entidade.
+    SetInteraction {
+        entity: Entity,
+        label: String,
+        key: String,
+        range: f32,
+    },
+    Despawn(Entity),
+}
+
+/// Evento disparado quando um script pede `viber.toast(msg)` — o HUD pode
+/// consumir; enquanto isso cada toast também vai para o log (bridge).
+#[derive(Debug, Clone, bevy::ecs::message::Message)]
+pub struct ScriptToast(pub String);
+
+/// Raio de ativação do script ("LOD de IA"): além deste raio do player o
+/// `on_update` NEM RODA — inimigo congelado (lógica + animação paradas).
+/// Autoria via `activation-radius` no spawner; default 45 m.
+#[derive(Debug, Clone, Component)]
+pub struct ScriptActivation {
+    pub radius: f32,
+}
+
+impl Default for ScriptActivation {
+    fn default() -> Self {
+        Self {
+            radius: DEFAULT_ACTIVATION_RADIUS,
+        }
+    }
+}
+
+/// Distância padrão de congelamento total de scripts de criatura (m).
+pub const DEFAULT_ACTIVATION_RADIUS: f32 = 45.0;
+
+/// Alvo de interação registado por script (`viber.set_interaction`): o prompt
+/// "[tecla] label" aparece quando o player está perto.
+#[derive(Debug, Clone, Component)]
+pub struct ScriptInteraction {
+    pub label: String,
+    pub key: KeyCode,
+    /// Distância máxima player↔alvo (m).
+    pub range: f32,
 }
 
 /// Per-call context injected into the shared VM (Lua app data) by
@@ -53,6 +114,10 @@ pub struct ScriptCtx {
     pub dt: f32,
     /// Queued `set_position` commands, drained by [`luau_update`].
     pub pending: Vec<(Entity, Vec3)>,
+    /// Queued [`ScriptCommand`]s (drained e aplicado pós-frame).
+    pub commands: Vec<ScriptCommand>,
+    /// Teclas pressionadas neste frame (para `viber.interacted`).
+    pub just_pressed: Vec<KeyCode>,
     /// Ring of `viber.log` lines (capped) — also read by tests.
     pub logs: Vec<String>,
 }
@@ -192,8 +257,28 @@ impl LuaScriptHost {
     /// entities sharing a script share its globals.
     pub fn activate(&mut self, entity: Entity, path: &str) -> mlua::Result<()> {
         // Refresh the per-call ctx so top-level viber calls don't panic.
-        if let Some(mut ctx) = self.lua.app_data_mut::<ScriptCtx>() {
+        let origin = if let Some(mut ctx) = self.lua.app_data_mut::<ScriptCtx>() {
             ctx.entity = Some(entity);
+            ctx.origin
+        } else {
+            Vec3::ZERO
+        };
+        // Home = posição de spawn (centro do wander), gravada uma vez.
+        let key = entity.to_bits() as i64;
+        {
+            let states: Table = self.lua.named_registry_value("viber_states")?;
+            let table = states.raw_get::<Table>(key).or_else(|_| {
+                let fresh = self.lua.create_table()?;
+                let _ = states.raw_set(key, fresh.clone());
+                Ok::<Table, mlua::Error>(fresh)
+            })?;
+            if table.raw_get::<Table>("home").is_err() {
+                let home = self.lua.create_table()?;
+                home.raw_set("x", origin.x)?;
+                home.raw_set("z", origin.z)?;
+                table.raw_set("home", home)?;
+                table.raw_set("picks", 0u64)?;
+            }
         }
         let script = self
             .registry
@@ -286,8 +371,14 @@ impl LuaScriptHost {
     /// Removes per-entity leftovers when a [`LuaScriptRef`] despawns (drops
     /// queued commands for that entity; the chunk stays cached for reuse).
     pub fn deactivate(&mut self, entity: Entity) {
+        // Estado por entidade: limpa a tabela Lua (respawn = estado fresco).
+        if let Ok(states) = self.lua.named_registry_value::<Table>("viber_states") {
+            let _ = states.raw_remove(entity.to_bits() as i64);
+        }
         if let Some(mut ctx) = self.lua.app_data_mut::<ScriptCtx>() {
             ctx.pending.retain(|(e, _)| *e != entity);
+            ctx.commands
+                .retain(|c| !matches!(c, ScriptCommand::MoveBy(e, _) | ScriptCommand::FaceTowards(e, _) | ScriptCommand::SetInteraction { entity: e, .. } | ScriptCommand::Despawn(e) if *e == entity));
             if ctx.entity == Some(entity) {
                 ctx.entity = None;
             }
@@ -382,8 +473,317 @@ impl LuaScriptHost {
             })?,
         )?;
 
+        // ── Estado por entidade ─────────────────────────────────────────
+        // Chunks são partilhados entre entidades; o estado de CADA entidade
+        // vive numa tabela separada (`states[entity_bits]`), criada à pressa.
+        let state_fn = lua.create_function(|lua, ()| {
+            let entity = lua
+                .app_data_ref::<ScriptCtx>()
+                .and_then(|ctx| ctx.entity)
+                .ok_or_else(|| mlua::Error::runtime("viber.state fora de on_update"))?;
+            let key = entity.to_bits() as i64;
+            let states: Table = lua.named_registry_value("viber_states")?;
+            let table = states.raw_get::<Table>(key).or_else(|_| {
+                let fresh = lua.create_table()?;
+                let _ = states.raw_set(key, fresh.clone());
+                Ok::<Table, mlua::Error>(fresh)
+            })?;
+            Ok(table)
+        })?;
+        api.set("state", state_fn)?;
+
+        // viber.self_name() -> string
+        api.set(
+            "self_name",
+            lua.create_function(|lua, ()| {
+                let name = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .and_then(|ctx| ctx.entity)
+                    .map(|e| format!("{e:?}"))
+                    .unwrap_or_default();
+                Ok(name)
+            })?,
+        )?;
+
+        // viber.home() -> x, z — posição de spawn (centro do wander).
+        api.set(
+            "home",
+            lua.create_function(|lua, ()| {
+                let origin = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .map(|ctx| ctx.origin)
+                    .unwrap_or_default();
+                Ok((origin.x, origin.z))
+            })?,
+        )?;
+
+        // viber.player_position() -> x, y, z | nil
+        api.set(
+            "player_position",
+            lua.create_function(|lua, ()| {
+                let player = lua.app_data_ref::<ScriptCtx>().and_then(|ctx| ctx.player);
+                match player {
+                    Some(p) => Ok((true, p.x, p.y, p.z)),
+                    None => Ok((false, 0.0, 0.0, 0.0)),
+                }
+            })?,
+        )?;
+
+        // viber.move_towards(x, z, speed) — passo deste frame na direção do
+        // ponto; a engine senta o Y no terreno ao aplicar.
+        api.set(
+            "move_towards",
+            lua.create_function(|lua, (x, z, speed): (f32, f32, f32)| {
+                let mut ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                let Some(entity) = ctx.entity else {
+                    return Err(mlua::Error::runtime("viber.move_towards fora de on_update"));
+                };
+                let dir = Vec2::new(x - ctx.origin.x, z - ctx.origin.z);
+                if dir.length_squared() > 1e-6 {
+                    let step = dir.normalize() * speed * ctx.dt;
+                    ctx.commands.push(ScriptCommand::MoveBy(entity, step));
+                }
+                Ok(())
+            })?,
+        )?;
+
+        // viber.move_by(dx, dz) — passo relativo direto.
+        api.set(
+            "move_by",
+            lua.create_function(|lua, (dx, dz): (f32, f32)| {
+                let mut ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                let Some(entity) = ctx.entity else {
+                    return Err(mlua::Error::runtime("viber.move_by fora de on_update"));
+                };
+                let step = Vec2::new(dx * ctx.dt, dz * ctx.dt);
+                ctx.commands.push(ScriptCommand::MoveBy(entity, step));
+                Ok(())
+            })?,
+        )?;
+
+        // viber.face_towards(x, z) / viber.face_player()
+        let face_towards = |lua: &Lua| {
+            lua.create_function(|lua, (x, z): (f32, f32)| {
+                let mut ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                let Some(entity) = ctx.entity else {
+                    return Err(mlua::Error::runtime("viber.face fora de on_update"));
+                };
+                let target = Vec3::new(x, ctx.origin.y, z);
+                ctx.commands
+                    .push(ScriptCommand::FaceTowards(entity, target));
+                Ok(())
+            })
+        };
+        api.set("face_towards", face_towards(lua)?)?;
+        api.set(
+            "face_player",
+            lua.create_function(|lua, ()| {
+                let mut ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                let (Some(entity), Some(player)) = (ctx.entity, ctx.player) else {
+                    return Ok(());
+                };
+                ctx.commands
+                    .push(ScriptCommand::FaceTowards(entity, player));
+                Ok(())
+            })?,
+        )?;
+
+        // viber.wander_target(radius) -> x, z — ponto determinístico ao redor
+        // do home (mesma matemática da IA da engine, exposta ao script).
+        api.set(
+            "wander_target",
+            lua.create_function(|lua, radius: f32| {
+                let ctx = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .map(|c| ScriptCtx {
+                        entity: c.entity,
+                        origin: c.origin,
+                        player: c.player,
+                        elapsed: c.elapsed,
+                        dt: c.dt,
+                        pending: Vec::new(),
+                        commands: Vec::new(),
+                        just_pressed: c.just_pressed.clone(),
+                        logs: Vec::new(),
+                    })
+                    .unwrap_or_default();
+                let entity = ctx
+                    .entity
+                    .ok_or_else(|| mlua::Error::runtime("viber.wander_target fora de on_update"))?;
+                let states: Table = lua.named_registry_value("viber_states")?;
+                let key = entity.to_bits() as i64;
+                let state: Table = states.raw_get::<Table>(key).map_err(|_| {
+                    mlua::Error::runtime("viber.wander_target antes de viber.state()")
+                })?;
+                let home: Table = state.raw_get("home")?;
+                let home = Vec2::new(home.raw_get("x")?, home.raw_get("z")?);
+                let picks: u64 = state.raw_get("picks").unwrap_or(0u64);
+                state.raw_set("picks", picks + 1)?;
+                let seed = crate::ai::enemy_seed(entity.to_bits() as u32, picks);
+                let target = crate::ai::wander_target(home, radius, seed);
+                Ok((target.x, target.y))
+            })?,
+        )?;
+
+        // viber.next_state(cur, dist, aggro, deaggro) -> "wander"|"chase"
+        // A máquina wander↔chase da engine, exposta para os scripts comporem.
+        api.set(
+            "next_state",
+            lua.create_function(|_, (cur, dist, aggro, deaggro): (String, f32, f32, f32)| {
+                let state = match cur.as_str() {
+                    "chase" => crate::ai::EnemyState::Chase,
+                    _ => crate::ai::EnemyState::Wander,
+                };
+                match crate::ai::enemy_next_state(dist, state, aggro, deaggro) {
+                    crate::ai::EnemyState::Chase => Ok("chase"),
+                    crate::ai::EnemyState::Wander => Ok("wander"),
+                }
+            })?,
+        )?;
+
+        // ── Player / combate / progressão ───────────────────────────────
+        api.set(
+            "damage_player",
+            lua.create_function(|lua, amount: f32| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::DamagePlayer(amount));
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "heal_player",
+            lua.create_function(|lua, amount: f32| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::HealPlayer(amount));
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "add_xp",
+            lua.create_function(|lua, gain: u32| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::AddXp(gain));
+                Ok(())
+            })?,
+        )?;
+        // viber.despawn_self() — a entidade se remove (árvore derrubada etc).
+        api.set(
+            "despawn_self",
+            lua.create_function(|lua, ()| {
+                let mut ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                let Some(entity) = ctx.entity else {
+                    return Err(mlua::Error::runtime("viber.despawn_self fora de on_update"));
+                };
+                ctx.commands.push(ScriptCommand::Despawn(entity));
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "teleport_player",
+            lua.create_function(|lua, (x, y, z): (f32, f32, f32)| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::TeleportPlayer(Vec3::new(x, y, z)));
+                Ok(())
+            })?,
+        )?;
+
+        // ── UI / interação ──────────────────────────────────────────────
+        api.set(
+            "toast",
+            lua.create_function(|lua, msg: String| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::Toast(msg));
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "set_interaction",
+            lua.create_function(|lua, (label, key, range): (String, String, Option<f32>)| {
+                let mut ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                let Some(entity) = ctx.entity else {
+                    return Err(mlua::Error::runtime(
+                        "viber.set_interaction fora de on_update",
+                    ));
+                };
+                ctx.commands.push(ScriptCommand::SetInteraction {
+                    entity,
+                    label,
+                    key,
+                    range: range.unwrap_or(3.5),
+                });
+                Ok(())
+            })?,
+        )?;
+        // viber.interacted(key) -> bool — tecla pressionada NESTE frame E
+        // player dentro do alcance de interação (3.5 m).
+        api.set(
+            "interacted",
+            lua.create_function(|lua, key: String| {
+                let ctx = lua
+                    .app_data_ref::<ScriptCtx>()
+                    .map(|c| ScriptCtx {
+                        entity: c.entity,
+                        origin: c.origin,
+                        player: c.player,
+                        elapsed: c.elapsed,
+                        dt: c.dt,
+                        pending: Vec::new(),
+                        commands: Vec::new(),
+                        just_pressed: c.just_pressed.clone(),
+                        logs: Vec::new(),
+                    })
+                    .unwrap_or_default();
+                let code = key_code_from_str(&key)
+                    .ok_or_else(|| mlua::Error::runtime(format!("tecla desconhecida '{key}'")))?;
+                if !ctx.just_pressed.contains(&code) {
+                    return Ok(false);
+                }
+                Ok(ctx
+                    .player
+                    .map(|p| p.distance(ctx.origin) <= 3.5)
+                    .unwrap_or(false))
+            })?,
+        )?;
+
         lua.globals().set("viber", api)?;
+        let states = lua.create_table()?;
+        lua.set_named_registry_value("viber_states", states)?;
         Ok(())
+    }
+}
+
+/// Tecla Lua (`"e"`, `"j"`, `"f"`, `"space"`) → [`KeyCode`].
+pub fn key_code_from_str(key: &str) -> Option<KeyCode> {
+    match key.to_ascii_lowercase().as_str() {
+        "e" => Some(KeyCode::KeyE),
+        "j" => Some(KeyCode::KeyJ),
+        "f" => Some(KeyCode::KeyF),
+        "q" => Some(KeyCode::KeyQ),
+        "r" => Some(KeyCode::KeyR),
+        "space" => Some(KeyCode::Space),
+        _ => None,
     }
 }
 
@@ -409,6 +809,9 @@ impl bevy::app::Plugin for LuauScriptPlugin {
             .expect("failed to initialize Luau VM (LuaScriptHost)");
         // Garante o clock mesmo sem TimePlugin (plugin autossuficiente em apps mínimos).
         app.init_resource::<Time>();
+        // Input para `viber.interacted` + evento de toasts de script.
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.add_message::<ScriptToast>();
         // .chain() obriga on_add → update → on_remove dentro do mesmo frame
         // (um tuple simples não garante ordem no Bevy 0.19).
         app.insert_resource(host)
@@ -433,30 +836,149 @@ pub fn luau_on_add(
     }
 }
 
-/// Runs `on_update(dt)` of every live script, then applies queued
-/// `set_position` commands. A script error is pcall'd: warned once, engine
-/// keeps running.
+/// Runs `on_update(dt)` of every live script, then applies queued commands
+/// (posição com snap no terreno, teleporte, vitals do player, toasts,
+/// interações). A script error is pcall'd: warned once, engine keeps running.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn luau_update(
     time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
     mut host: ResMut<LuaScriptHost>,
-    mut scripts: Query<(Entity, &LuaScriptRef, Option<&mut Transform>)>,
-    players: Query<&GlobalTransform, With<crate::player::Player>>,
+    mut scripts: Query<
+        (
+            Entity,
+            &LuaScriptRef,
+            Option<&mut Transform>,
+            Option<&ScriptActivation>,
+        ),
+        Without<Player>,
+    >,
+    mut players: Query<
+        (
+            &GlobalTransform,
+            Option<&mut Transform>,
+            Option<&mut Health>,
+            Option<&mut Xp>,
+        ),
+        With<crate::player::Player>,
+    >,
+    terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
+    mut toasts: bevy::ecs::message::MessageWriter<ScriptToast>,
+    mut commands: Commands,
 ) {
     let dt = time.delta_secs();
     let elapsed = time.elapsed_secs_f64();
-    let player = players.single().ok().map(|t| t.translation());
+    let (player_pos, mut player_components) = match players.single_mut() {
+        Ok((global, transform, health, xp)) => {
+            (Some(global.translation()), Some((transform, health, xp)))
+        }
+        Err(_) => (None, None),
+    };
+    let just_pressed: Vec<KeyCode> = keys.get_just_pressed().copied().collect();
 
-    for (entity, lref, transform) in &mut scripts {
+    for (entity, lref, transform, activation) in &mut scripts {
         let Some(origin) = transform.as_ref().map(|t| t.translation) else {
             continue;
         };
-        if let Err(e) = host.run_update(entity, &lref.path, dt, origin, player, elapsed) {
+        // Congelamento (LOD de IA): além do raio de ativação o on_update nem
+        // roda — inimigo distante custa zero lógica (e a animação para junto).
+        let radius = activation
+            .map(|a| a.radius)
+            .unwrap_or(DEFAULT_ACTIVATION_RADIUS);
+        if let Some(p) = player_pos {
+            if origin.distance(p) > radius {
+                continue;
+            }
+        }
+        if let Err(e) = host.run_update(entity, &lref.path, dt, origin, player_pos, elapsed) {
             host.warn_once(&lref.path, &e);
         }
     }
 
+    // Semeia teclas + aplica os comandos enfileirados por TODOS os scripts.
+    let mut queued: Vec<ScriptCommand> = Vec::new();
+    if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
+        ctx.just_pressed = just_pressed;
+        queued = std::mem::take(&mut ctx.commands);
+    }
+    for command in queued {
+        match command {
+            ScriptCommand::MoveBy(entity, delta) => {
+                if let Ok((_, _, Some(mut transform), _)) = scripts.get_mut(entity) {
+                    let x = transform.translation.x + delta.x;
+                    let z = transform.translation.z + delta.y;
+                    let y = match terrain.as_ref() {
+                        Some(rt) => rt.sample(x, z),
+                        None => transform.translation.y,
+                    };
+                    transform.translation = Vec3::new(x, y, z);
+                }
+            }
+            ScriptCommand::FaceTowards(entity, target) => {
+                if let Ok((_, _, Some(mut transform), _)) = scripts.get_mut(entity) {
+                    let dir = Vec3::new(
+                        target.x - transform.translation.x,
+                        0.0,
+                        target.z - transform.translation.z,
+                    );
+                    if dir.length_squared() > 1e-6 {
+                        transform.rotation = crate::player::facing_rotation(dir.normalize());
+                    }
+                }
+            }
+            ScriptCommand::TeleportPlayer(pos) => {
+                if let Some((Some(transform), _, _)) = player_components.as_mut() {
+                    transform.translation = pos;
+                }
+            }
+            ScriptCommand::AddXp(gain) => {
+                if let Some((_, _, Some(xp))) = player_components.as_mut() {
+                    crate::vitals::gain_xp(xp, gain);
+                }
+            }
+            ScriptCommand::DamagePlayer(amount) => {
+                match player_components.as_mut() {
+                    Some((_, Some(health), _)) => {
+                        crate::vitals::apply_damage(health, amount);
+                        if std::env::var_os("VIBER_COMBAT_DEBUG").is_some() {
+                            info!(target: "viber::combat", "damage {amount} aplicado — hp {}", health.current);
+                        }
+                    }
+                    _ => warn!(target: "viber::combat", "damage SEM Health no player"),
+                }
+            }
+            ScriptCommand::HealPlayer(amount) => {
+                if let Some((_, Some(health), _)) = player_components.as_mut() {
+                    health.current = (health.current + amount).min(health.max);
+                }
+            }
+            ScriptCommand::Toast(msg) => {
+                info!(target: "viber::luau", "[toast] {msg}");
+                toasts.write(ScriptToast(msg));
+            }
+            ScriptCommand::SetInteraction {
+                entity,
+                label,
+                key,
+                range,
+            } => {
+                if let Some(code) = key_code_from_str(&key) {
+                    commands.entity(entity).insert(ScriptInteraction {
+                        label,
+                        key: code,
+                        range,
+                    });
+                }
+            }
+            ScriptCommand::Despawn(entity) => {
+                commands.entity(entity).try_despawn();
+            }
+        }
+    }
+
+    // Compat: `viber.set_position` legado (posição absoluta, sem snap).
     for (entity, pos) in host.take_pending() {
-        if let Ok((_, _, Some(mut transform))) = scripts.get_mut(entity) {
+        if let Ok((_, _, Some(mut transform), _)) = scripts.get_mut(entity) {
             transform.translation = pos;
         }
     }
@@ -490,6 +1012,8 @@ mod tests {
     fn test_app(host: LuaScriptHost) -> bevy::app::App {
         let mut app = bevy::app::App::new();
         app.init_resource::<Time>();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.add_message::<ScriptToast>();
         app.insert_resource(host);
         app.add_systems(Update, (luau_on_add, luau_update, luau_on_remove).chain());
         app
@@ -803,6 +1327,8 @@ mod tests {
     fn test_missing_script_on_disk_warns_but_does_not_panic() {
         let mut app = bevy::app::App::new();
         app.init_resource::<Time>();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.add_message::<ScriptToast>();
         app.insert_resource(
             LuaScriptHost::new(PathBuf::from("/nonexistent/scripts")).expect("host"),
         );

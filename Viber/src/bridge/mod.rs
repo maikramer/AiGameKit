@@ -35,6 +35,7 @@ pub const METHOD_SCREENSHOT: &str = "viber.screenshot";
 pub const METHOD_SCREENSHOT_STATUS: &str = "viber.screenshot_status";
 pub const METHOD_TREE: &str = "viber.tree";
 pub const METHOD_LOGS: &str = "viber.logs";
+pub const METHOD_PROFILER: &str = "viber.profiler";
 pub const METHOD_KEY: &str = "viber.input.key";
 pub const METHOD_TEXT: &str = "viber.input.text";
 pub const METHOD_CLICK: &str = "viber.input.click";
@@ -132,6 +133,7 @@ impl Plugin for BridgePlugin {
                     .with_method_main(METHOD_SCREENSHOT_STATUS, screenshot_status)
                     .with_method_main(METHOD_TREE, tree)
                     .with_method_main(METHOD_LOGS, logs_method)
+                    .with_method_main(METHOD_PROFILER, profiler_snapshot)
                     .with_method_main(METHOD_KEY, input_key)
                     .with_method_main(METHOD_TEXT, input_text)
                     .with_method_main(METHOD_CLICK, input_click)
@@ -284,6 +286,12 @@ fn logs_method(params: In<Option<Value>>, world: &mut World) -> BrpResult {
     let start = logs.len().saturating_sub(params.limit.unwrap_or(100));
     let entries: Vec<&logs::LogEntry> = logs.iter().skip(start).collect();
     Ok(serde_json::to_value(entries).expect("serialize"))
+}
+
+/// Snapshot do profiler (fps/frame-time/entidades/scripts ativos) — o mesmo
+/// corpo do overlay F3, para QA headless (`viber debug prof`).
+fn profiler_snapshot(_params: In<Option<Value>>, world: &mut World) -> BrpResult {
+    Ok(crate::profiler::snapshot(world))
 }
 
 // ---------------------------------------------------------------- input

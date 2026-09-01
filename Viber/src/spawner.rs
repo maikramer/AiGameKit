@@ -71,6 +71,10 @@ pub struct TerrainSample {
     /// Surface normal (normalized by the sampler).
     pub normal: Vec3,
     pub water: bool,
+    /// Point is on dry land but close enough to water to count as shoreline.
+    pub near_water: bool,
+    /// Point sits on a carved road ribbon (`<Road>` / `<RoadNetwork>`).
+    pub road: bool,
 }
 
 /// Pick a position for one instance: cluster center + disc offset, clamped to
@@ -144,7 +148,20 @@ pub fn compute_placements(
             continue;
         }
         let terrain = sample(pos.x, pos.y);
+        // Water and road placement rules. `avoid-water` keeps scenery out of
+        // lakes and river channels; `near-water` / `in-water` are the inverse
+        // (reeds on a shoreline, lilies on the surface); `avoid-road` keeps
+        // props off the carved ribbons so a road stays walkable.
         if spec.avoid_water && terrain.water {
+            continue;
+        }
+        if spec.in_water && !terrain.water {
+            continue;
+        }
+        if spec.near_water && !terrain.water && !terrain.near_water {
+            continue;
+        }
+        if spec.avoid_road && terrain.road {
             continue;
         }
         let normal = terrain.normal.normalize_or_zero();
@@ -198,6 +215,11 @@ pub struct SpawnGroupState {
     /// True para `<DynamicSpawner>` — as instâncias nascem com
     /// [`crate::ai::EnemyCreature`] e o driver de IA conduz-as.
     pub dynamic: bool,
+    /// Script do template (criaturas): cada instância spawna com
+    /// [`LuaScriptRef`] e o comportamento vive no Luau.
+    pub template_script: Option<String>,
+    /// Raio de ativação (congelamento) replicado às instâncias.
+    pub activation_radius: f32,
 }
 
 /// All spawner groups collected at startup; consumed by
@@ -274,22 +296,77 @@ pub fn instantiate_spawn_groups(
             continue;
         }
         let grid = &runtime.grid;
+        let near_radius = group.spec.near_water_radius;
         let mut sample = |x: f32, z: f32| TerrainSample {
             height: runtime.sample(x, z),
             normal: grid.sample_normal(x, z, 0.5),
             water: runtime.in_water(x, z),
+            // A shoreline test: within `near_water_radius` of a water body,
+            // sampled on the four axes so a bank on any side counts.
+            near_water: [
+                (near_radius, 0.0),
+                (-near_radius, 0.0),
+                (0.0, near_radius),
+                (0.0, -near_radius),
+            ]
+            .iter()
+            .any(|(dx, dz)| runtime.in_water(x + dx, z + dz)),
+            road: runtime.on_road(x, z),
         };
         for instance in compute_placements(&group.spec, &exclusions, &mut sample) {
             let mut transform = Transform::from_translation(instance.position);
             transform.rotation = bevy::math::Quat::from_rotation_y(instance.yaw_deg.to_radians());
             transform.scale = instance.scale;
             if let Some(scene) = scenes[instance.template_index.min(scenes.len() - 1)].clone() {
+                let script_bundle = group.template_script.as_ref().map(|script| {
+                    (
+                        crate::luau::LuaScriptRef {
+                            path: script.clone(),
+                        },
+                        crate::luau::ScriptActivation {
+                            radius: group.activation_radius,
+                        },
+                    )
+                });
                 if group.dynamic {
+                    // Com script no template o comportamento é do Luau (a
+                    // engine só provê os blocos); sem script, cai na FSM Rust.
+                    if let Some(script) = &group.template_script {
+                        commands.spawn((
+                            transform,
+                            Visibility::Inherited,
+                            WorldAssetRoot(scene),
+                            crate::luau::LuaScriptRef {
+                                path: script.clone(),
+                            },
+                            crate::luau::ScriptActivation {
+                                radius: group.activation_radius,
+                            },
+                            // Vitals para o combate (dano/morte) + animação.
+                            crate::vitals::Health::default(),
+                            crate::animation::AnimatedScene {
+                                gltf: group.handles
+                                    [instance.template_index.min(group.handles.len() - 1)]
+                                .clone(),
+                            },
+                        ));
+                    } else {
+                        commands.spawn((
+                            transform,
+                            Visibility::Inherited,
+                            WorldAssetRoot(scene),
+                            crate::ai::EnemyCreature::default(),
+                        ));
+                    }
+                } else if let Some((script_ref, activation)) = script_bundle {
+                    // Estático com script (ex.: árvores/rochas colhíveis): o
+                    // congelamento por raio mantém 380 árvores baratas.
                     commands.spawn((
                         transform,
                         Visibility::Inherited,
                         WorldAssetRoot(scene),
-                        crate::ai::EnemyCreature::default(),
+                        script_ref,
+                        activation,
                     ));
                 } else {
                     commands.spawn((transform, Visibility::Inherited, WorldAssetRoot(scene)));
@@ -320,6 +397,10 @@ mod tests {
             avoid_overlaps: false,
             max_slope_deg: 90.0,
             avoid_water: false,
+            in_water: false,
+            near_water: false,
+            near_water_radius: 4.0,
+            avoid_road: false,
             align_to_terrain: true,
             scale_min: 1.0,
             scale_max: 1.0,
@@ -328,6 +409,8 @@ mod tests {
             random_yaw: false,
             max_distance: 0.0,
             template_urls: vec!["/assets/meshes/a.glb".into()],
+            template_script: None,
+            activation_radius: 45.0,
         }
     }
 
@@ -336,6 +419,8 @@ mod tests {
             height: 3.0,
             normal: Vec3::Y,
             water: false,
+            near_water: false,
+            road: false,
         }
     }
 
@@ -388,6 +473,8 @@ mod tests {
             height: 0.0,
             normal: Vec3::new(1.0, 0.2, 0.0),
             water: false,
+            near_water: false,
+            road: false,
         });
         assert!(out.is_empty(), "all candidates exceed the 40° slope limit");
     }
@@ -400,6 +487,8 @@ mod tests {
             height: -1.0,
             normal: Vec3::Y,
             water: true,
+            near_water: false,
+            road: false,
         });
         assert!(out.is_empty());
     }
@@ -456,6 +545,9 @@ mod tests {
             scale_axis_max: 1.1,
             max_slope_deg: 26.0,
             avoid_water: true,
+            avoid_road: false,
+            avoid_overlaps: true,
+            random_yaw: true,
             max_distance: 110.0,
             cluster_count: 128,
             cluster_radius: 8.8,
@@ -485,5 +577,90 @@ mod tests {
         for instance in &out {
             assert!((0.8..=1.4).contains(&instance.scale.x));
         }
+    }
+
+    /// Water and road rules pick opposite sides of the same query, so each one
+    /// is checked against a field that is half water / half road.
+    #[test]
+    fn test_placement_water_and_road_rules() {
+        let base = || {
+            let mut s = spec();
+            s.count = 40;
+            s.region_min = [-50.0, 0.0, -50.0];
+            s.region_max = [50.0, 0.0, 50.0];
+            s.avoid_overlaps = false;
+            s
+        };
+        // West half is water, east half is road.
+        let mut field = |x: f32, _z: f32| TerrainSample {
+            height: 0.0,
+            normal: Vec3::Y,
+            water: x < 0.0,
+            near_water: (0.0..6.0).contains(&x),
+            road: x > 0.0,
+        };
+
+        let mut s = base();
+        s.avoid_water = true;
+        let out = compute_placements(&s, &[], &mut field);
+        assert!(!out.is_empty(), "some candidates land on dry ground");
+        assert!(
+            out.iter().all(|i| i.position.x >= 0.0),
+            "avoid-water keeps every instance out of the water half"
+        );
+
+        let mut s = base();
+        s.in_water = true;
+        let out = compute_placements(&s, &[], &mut field);
+        assert!(!out.is_empty());
+        assert!(
+            out.iter().all(|i| i.position.x < 0.0),
+            "in-water places only inside the water half"
+        );
+
+        let mut s = base();
+        s.avoid_road = true;
+        let out = compute_placements(&s, &[], &mut field);
+        assert!(!out.is_empty());
+        assert!(
+            out.iter().all(|i| i.position.x <= 0.0),
+            "avoid-road keeps every instance off the road half"
+        );
+
+        let mut s = base();
+        s.near_water = true;
+        let out = compute_placements(&s, &[], &mut field);
+        assert!(!out.is_empty());
+        assert!(
+            out.iter().all(|i| i.position.x < 6.0),
+            "near-water places on the bank (or in the water), not inland"
+        );
+    }
+
+    /// `random-yaw` is what stops a stand of identical trees reading as clones.
+    #[test]
+    fn test_random_yaw_spreads_headings() {
+        let mut s = spec();
+        s.count = 24;
+        s.region_min = [-50.0, 0.0, -50.0];
+        s.region_max = [50.0, 0.0, 50.0];
+        s.avoid_overlaps = false;
+        s.random_yaw = true;
+        let mut flat = |_: f32, _: f32| TerrainSample {
+            height: 0.0,
+            normal: Vec3::Y,
+            water: false,
+            near_water: false,
+            road: false,
+        };
+        let out = compute_placements(&s, &[], &mut flat);
+        let yaws: Vec<f32> = out.iter().map(|i| i.yaw_deg).collect();
+        assert!(yaws.len() > 4);
+        let distinct = yaws.iter().filter(|y| (**y - yaws[0]).abs() > 1.0).count();
+        assert!(distinct > 0, "headings vary: {yaws:?}");
+        assert!(
+            yaws.iter().all(|y| (0.0..=360.0).contains(y)),
+            "headings stay in range"
+        );
     }
 }

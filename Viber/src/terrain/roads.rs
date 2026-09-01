@@ -1333,7 +1333,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn test_road_ribbon_corner_keeps_constant_width() {
         // L de 90°: sem miter, a largura perpendicular no canto aperta para
         // hw·cos(45°) ≈ 1.41 m; com miter (= 1/cos45 ≈ 1.414) cada borda

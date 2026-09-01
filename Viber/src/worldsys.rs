@@ -14,6 +14,10 @@ pub struct DayCycleState {
     pub dusk_minute: f32,
     pub ambient_day: f32,
     pub ambient_night: f32,
+    /// Ambient brightness the world authored (`<AmbientLight brightness>`),
+    /// used as the full-day anchor for the day/night ramp. `0` until the
+    /// first drive tick captures it.
+    pub ambient_reference: f32,
     pub drive_ambient: bool,
     /// Elevação máxima do sol ao meio-dia (graus).
     pub max_sun_elevation: f32,
@@ -41,6 +45,8 @@ impl DayCycleState {
             dusk_minute,
             ambient_day,
             ambient_night,
+            // Captured from the live ambient light on the first drive tick.
+            ambient_reference: 0.0,
             drive_ambient,
             max_sun_elevation,
             sun_azimuth_base,
@@ -126,7 +132,9 @@ pub struct SeatOnTerrain;
 pub fn seat_statics_once(
     mut done: Local<bool>,
     runtime: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
-    mut targets: Query<&mut Transform, With<SeatOnTerrain>>,
+    mut targets: Query<(Entity, &mut Transform), With<SeatOnTerrain>>,
+    parents: Query<&ChildOf>,
+    seated: Query<(), With<SeatOnTerrain>>,
 ) {
     if *done {
         return;
@@ -134,13 +142,49 @@ pub fn seat_statics_once(
     let Some(runtime) = runtime else {
         return;
     };
-    for mut transform in &mut targets {
+    for (entity, mut transform) in &mut targets {
+        // Only the OUTERMOST seatable group is seated.
+        //
+        // `SeatOnTerrain` is placed on every `<Group>`, and the write is a
+        // *local* Y. Seating a nested group therefore added the ground height
+        // a second time on top of an ancestor that had already been raised to
+        // it — `simple-rpg` nests the city two deep, so its plaza ended up at
+        // 2x the terrain height and every prop in it at 3x, leaving the whole
+        // village floating ~49 m above the ground the hero stands on.
+        //
+        // Seating just the root also makes the local translation the world
+        // translation, so the ground is sampled at the right XZ without
+        // depending on transform propagation having run this frame.
+        if has_seated_ancestor(entity, &parents, &seated) {
+            continue;
+        }
         let ground = runtime.sample(transform.translation.x, transform.translation.z);
         if transform.translation.y < ground - 0.25 {
             transform.translation.y = ground;
         }
     }
     *done = true;
+}
+
+/// True when any ancestor of `entity` also carries [`SeatOnTerrain`].
+fn has_seated_ancestor(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    seated: &Query<(), With<SeatOnTerrain>>,
+) -> bool {
+    let mut current = entity;
+    // Depth guard: worlds compose with `<Include>` and could nest deeply, but
+    // a cycle would hang the startup frame.
+    for _ in 0..64 {
+        let Ok(parent) = parents.get(current) else {
+            return false;
+        };
+        if seated.get(parent.parent()).is_ok() {
+            return true;
+        }
+        current = parent.parent();
+    }
+    false
 }
 
 /// Posição do sol (e estado dia/noite) calculada a partir do relógio.
@@ -202,8 +246,26 @@ pub fn daycycle_drive(
     if !clock.drive_ambient {
         return;
     }
+    // Capture the world's own ambient before this system starts writing it.
+    if clock.ambient_reference <= 0.0 {
+        clock.ambient_reference = ambient.brightness.max(1.0);
+    }
     let day = daylight_factor(clock.minute_of_day, clock.dawn_minute, clock.dusk_minute);
-    ambient.brightness = day * clock.ambient_day + (1.0 - day) * clock.ambient_night;
+    // `ambient-day-intensity` / `ambient-night-intensity` are VibeGame's
+    // three.js ambient *intensities* — a 0..1 scale. Bevy's
+    // `AmbientLight::brightness` is in lux and the same worlds author it in the
+    // hundreds (`simple-rpg`: `brightness="110"`). Writing 0.26 straight into
+    // it dropped the ambient by ~400x and left the whole village in the dark.
+    //
+    // So the pair is used as a day/night *ratio* against the brightness the
+    // world authored: full day keeps that value, night falls to
+    // `night / day` of it.
+    let scale = if clock.ambient_day > f32::EPSILON {
+        (day * clock.ambient_day + (1.0 - day) * clock.ambient_night) / clock.ambient_day
+    } else {
+        day
+    };
+    ambient.brightness = clock.ambient_reference * scale.clamp(0.0, 1.0);
 }
 
 /// Publish [`SunState`] from the day clock and aim the directional light.
@@ -307,5 +369,118 @@ mod tests {
         let square = vec![[-10.0, -10.0], [10.0, -10.0], [10.0, 10.0], [-10.0, 10.0]];
         assert!(point_in_biome(&square, 0.0, 0.0));
         assert!(!point_in_biome(&square, 50.0, 50.0));
+    }
+
+    /// A `<Group>` nested inside another must not be seated twice.
+    ///
+    /// Regression: `SeatOnTerrain` is on every group and writes a *local* Y,
+    /// so seating a child on top of an already-seated parent added the ground
+    /// height again. `simple-rpg` nests its city two deep, which put the plaza
+    /// at 2x the terrain height and its props at 3x — the whole village
+    /// floated ~49 m over the ground the hero walks on.
+    #[test]
+    fn test_seat_statics_only_moves_the_outermost_group() {
+        use crate::terrain::brush::BrushGrid;
+        use crate::terrain::heightmap::HeightMapU16;
+        use crate::terrain::runtime::TerrainRuntime;
+        use crate::terrain::spec::TerrainSpec;
+
+        let spec = TerrainSpec {
+            world_size: 64.0,
+            max_height: 100.0,
+            ..TerrainSpec::default()
+        };
+        // Flat field at half of `max_height` → ground sits at 50 m.
+        let map = HeightMapU16 {
+            width: 33,
+            depth: 33,
+            data: vec![u16::MAX / 2; 33 * 33],
+        };
+        let grid = BrushGrid::from_height_map(&map, spec.world_size, spec.max_height, 0.0)
+            .expect("grid builds");
+        let ground = grid.sample(0.0, 0.0);
+        assert!(ground > 40.0, "fixture ground is well above zero: {ground}");
+
+        let mut app = bevy::app::App::new();
+        app.add_plugins(bevy::MinimalPlugins);
+        app.insert_resource(TerrainRuntime {
+            spec,
+            grid,
+            water: Vec::new(),
+            roads: Vec::new(),
+            pads: Vec::new(),
+        });
+        app.add_systems(bevy::app::Update, seat_statics_once);
+
+        let outer = app
+            .world_mut()
+            .spawn((Transform::default(), SeatOnTerrain))
+            .id();
+        let inner = app
+            .world_mut()
+            .spawn((Transform::default(), SeatOnTerrain, ChildOf(outer)))
+            .id();
+        // A prop that is not itself a group still rides the hierarchy.
+        let prop = app
+            .world_mut()
+            .spawn((Transform::from_xyz(1.0, 0.0, 1.0), ChildOf(inner)))
+            .id();
+
+        app.update();
+
+        let local_y =
+            |app: &bevy::app::App, e| app.world().get::<Transform>(e).unwrap().translation.y;
+        assert!(
+            (local_y(&app, outer) - ground).abs() < 0.5,
+            "the outermost group is seated on the ground"
+        );
+        assert_eq!(
+            local_y(&app, inner),
+            0.0,
+            "the nested group keeps its authored local Y"
+        );
+        assert_eq!(local_y(&app, prop), 0.0, "props keep their authored offset");
+    }
+
+    /// The day/night intensities are a ratio, not an absolute brightness.
+    ///
+    /// Regression: `ambient-day-intensity` is a three.js 0..1 intensity while
+    /// Bevy's `AmbientLight::brightness` is in lux, and the same worlds author
+    /// it in the hundreds. Writing 0.26 straight into it dropped the ambient
+    /// by ~400x and left the village in the dark.
+    #[test]
+    fn test_daycycle_ambient_is_a_ratio_of_the_authored_brightness() {
+        let mut app = bevy::app::App::new();
+        app.add_plugins(bevy::MinimalPlugins);
+        app.insert_resource(GlobalAmbientLight {
+            brightness: 110.0,
+            ..Default::default()
+        });
+        app.insert_resource(DayCycleState::from_parts(
+            600.0, // midday
+            0.0,   // clock frozen, so the test is about the ramp only
+            330.0, 1170.0, 0.26, 0.07, true, 62.0, 205.0,
+        ));
+        app.add_systems(bevy::app::Update, daycycle_drive);
+
+        app.update();
+        let midday = app.world().resource::<GlobalAmbientLight>().brightness;
+        assert!(
+            (midday - 110.0).abs() < 1.0,
+            "full day keeps the authored brightness, got {midday}"
+        );
+
+        // Midnight falls to the night/day ratio of it, not to 0.07 lux.
+        app.world_mut()
+            .resource_mut::<DayCycleState>()
+            .minute_of_day = 60.0;
+        app.update();
+        let night = app.world().resource::<GlobalAmbientLight>().brightness;
+        let expected = 110.0 * (0.07 / 0.26);
+        assert!(
+            (night - expected).abs() < 1.0,
+            "night is the authored brightness scaled by night/day, got {night} (expected {expected})"
+        );
+        assert!(night > 10.0, "night is dim, not black");
     }
 }

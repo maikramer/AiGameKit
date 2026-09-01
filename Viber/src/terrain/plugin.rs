@@ -29,7 +29,7 @@ use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 
 use super::brush::BrushGrid;
-use super::mesh::{ChunkMeshData, ChunkMeshParams, TintParams, build_chunk_mesh};
+use super::mesh::{ChunkMeshData, ChunkMeshParams, build_chunk_mesh};
 use super::runtime::TerrainRuntime;
 use super::spec::{
     DEFAULT_LOD_HYSTERESIS, DEFAULT_LOD_RESELECT_DISTANCE, DEFAULT_MAX_MESH_BUILDS_PER_FRAME,
@@ -214,7 +214,6 @@ fn update_chunk_lods(
     let max_lod = max_lod_for(spec, edge);
     let margin = hysteresis_margin(spec);
     let grid = &runtime.grid;
-    let tint = TintParams::from(&spec.tint);
 
     // 1. Cull + re-evaluate tracked chunks.
     for (entity, transform, mut chunk, mut mesh) in chunks.iter_mut() {
@@ -234,7 +233,7 @@ fn update_chunk_lods(
             }
             continue;
         }
-        match rebuild(grid, spec, chunk.coords, edge, chunk.lod, &tint) {
+        match rebuild(grid, spec, chunk.coords, edge, chunk.lod) {
             Some(data) => {
                 *mesh = Mesh3d(meshes.add(to_bevy_mesh(&data)));
                 chunk.built_lod = chunk.lod;
@@ -275,7 +274,7 @@ fn update_chunk_lods(
                     continue;
                 }
             }
-            let Some(data) = rebuild(grid, spec, coords, edge, 0, &tint) else {
+            let Some(data) = rebuild(grid, spec, coords, edge, 0) else {
                 continue;
             };
             let handle = meshes.add(to_bevy_mesh(&data));
@@ -308,7 +307,6 @@ fn rebuild(
     coords: UVec2,
     edge: f32,
     lod: u8,
-    tint: &TintParams,
 ) -> Option<ChunkMeshData> {
     let step = lod0_step(spec) << lod;
     let half = spec.world_size * 0.5;
@@ -325,7 +323,6 @@ fn rebuild(
         normal_epsilon: grid.texel(),
         texture_tile_size: spec.texture_tile_size,
         levels: spec.levels,
-        tint: tint.clone(),
         world_size: spec.world_size,
     };
     build_chunk_mesh(grid, &params).ok().flatten()
@@ -422,7 +419,11 @@ fn to_bevy_mesh(data: &ChunkMeshData) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, data.positions.clone());
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, data.normals.clone());
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, data.uvs.clone());
-    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, data.colors.clone());
+    // Only surfaces that actually use vertex colours get the attribute:
+    // roads carry their edge alpha there, terrain chunks carry nothing.
+    if !data.colors.is_empty() {
+        mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, data.colors.clone());
+    }
     mesh.insert_indices(Indices::U32(data.indices.clone()));
     mesh
 }

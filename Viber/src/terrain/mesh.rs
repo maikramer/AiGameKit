@@ -68,44 +68,6 @@ pub struct TerrainColliderData {
     pub indices: Vec<u32>,
 }
 
-/// Color banding parameters for [`build_chunk_mesh`] (subset of the tint spec).
-#[derive(Debug, Clone)]
-pub struct TintParams {
-    pub base_color: [f32; 4],
-    pub color_low: [f32; 4],
-    pub color_mid: [f32; 4],
-    pub color_high: [f32; 4],
-    pub color_rock: [f32; 4],
-    pub snow_height: f32,
-    pub slope_threshold: f32,
-    pub slope_softness: f32,
-    pub height_blend_strength: f32,
-}
-
-impl From<&crate::terrain::spec::TerrainTint> for TintParams {
-    fn from(t: &crate::terrain::spec::TerrainTint) -> Self {
-        // Linear, not sRGB. `Mesh::ATTRIBUTE_COLOR` is consumed by the PBR
-        // shader as linear RGBA, so handing it sRGB components renders every
-        // band far too bright (sRGB 0.29 read as linear is ~4x the intended
-        // 0.068) — which is why the tint used to wash out to near-white.
-        let conv = |c: bevy::color::Color| {
-            let l = c.to_linear();
-            [l.red, l.green, l.blue, l.alpha]
-        };
-        Self {
-            base_color: conv(t.base_color),
-            color_low: conv(t.color_low),
-            color_mid: conv(t.color_mid),
-            color_high: conv(t.color_high),
-            color_rock: conv(t.color_rock),
-            snow_height: t.snow_height,
-            slope_threshold: t.slope_threshold,
-            slope_softness: t.slope_softness,
-            height_blend_strength: t.height_blend_strength,
-        }
-    }
-}
-
 /// Options for [`build_chunk_mesh`].
 #[derive(Debug, Clone)]
 pub struct ChunkMeshParams {
@@ -139,8 +101,6 @@ pub struct ChunkMeshParams {
     /// constant across the terrain for deterministic UVs. `0` disables the
     /// auto resolution.
     pub levels: u8,
-    /// Height/slope tint parameters.
-    pub tint: TintParams,
     /// Terrain-wide world size, used by the auto tile-size rule.
     pub world_size: f32,
 }
@@ -166,13 +126,7 @@ const SKIRT_EDGES: [([f32; 3], bool); 4] = [
     ([1.0, 0.0, 0.0], false),  // max-X border (column `segments`)
 ];
 
-/// Altitude band centers (normalized 0..1) of the low→mid and mid→high blends.
-const MID_BAND_CENTER: f32 = 0.35;
-const HIGH_BAND_CENTER: f32 = 0.7;
-/// Half-width of an altitude band at full blend strength (fraction of 0..1).
-const BAND_WIDTH_AT_FULL_STRENGTH: f32 = 0.25;
 /// Snow target color blended in above `snow_height`.
-const SNOW_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 /// Relative tolerance when checking `size` is an exact multiple of `lod_step`.
 const SEGMENT_FIT_TOLERANCE: f32 = 1e-4;
 
@@ -241,7 +195,6 @@ pub fn build_chunk_mesh(
 
     let half = params.size * 0.5;
     let tile = resolved_tile_size(params);
-    let max_height = field.max_height();
     let skirt_depth = params.skirt_depth;
     let index_count = segments * segments * 6 + if has_skirt { 4 * segments * 6 } else { 0 };
 
@@ -249,12 +202,18 @@ pub fn build_chunk_mesh(
         positions: Vec::with_capacity(verts * verts),
         normals: Vec::with_capacity(verts * verts),
         uvs: Vec::with_capacity(verts * verts),
-        colors: Vec::with_capacity(verts * verts),
+        // Terrain chunks carry no vertex colours: the surface is the
+        // material's `base-color` and its texture. The automatic
+        // height/slope banding this used to compute (valley/mid/high plus a
+        // snow line and a rock slope) was never asked for and fought the
+        // authored look — a plaza at 97% of `max-height` came out white.
+        // Roads still use `colors` for their edge alpha.
+        colors: Vec::new(),
         indices: Vec::with_capacity(index_count),
     };
 
     // Top grid: row-major, z outer / x inner. Positions are chunk-center
-    // relative on XZ and absolute on Y; normals/uv/colors are world-driven so
+    // relative on XZ and absolute on Y; normals and UVs are world-driven so
     // they agree with every neighbor chunk and LOD.
     for z in 0..verts {
         for x in 0..verts {
@@ -270,8 +229,6 @@ pub fn build_chunk_mesh(
             } else {
                 [world_x, world_z]
             });
-            mesh.colors
-                .push(tint_vertex_color(y, normal.y, max_height, &params.tint));
         }
     }
 
@@ -287,7 +244,7 @@ pub fn build_chunk_mesh(
     }
 
     // Skirts: duplicate each border row/column and drop a vertical wall by
-    // `skirt_depth`. UV/color match the border vertex so the wall reads as a
+    // `skirt_depth`. UVs match the border vertex so the wall reads as a
     // continuation of the surface; normals are horizontal and point outward.
     if has_skirt {
         let grid_count = verts * verts;
@@ -301,8 +258,6 @@ pub fn build_chunk_mesh(
                 mesh.normals.push(outward);
                 let border_uv = mesh.uvs[g];
                 mesh.uvs.push(border_uv);
-                let border_color = mesh.colors[g];
-                mesh.colors.push(border_color);
             }
             for k in 0..segments {
                 let g0 = grid_index(edge, k, verts, segments) as u32;
@@ -410,70 +365,6 @@ fn resolved_tile_size(params: &ChunkMeshParams) -> f32 {
     }
 }
 
-/// Evaluates the height/slope tint for one vertex — CPU port of the VibeGame
-/// terrain fragment shader block (`colorLow/Mid/High/Rock`, `snowHeight`,
-/// `slopeThreshold`), folded into the vertex color so no custom WGSL is needed.
-///
-/// `y` is the absolute vertex height, `normal_y` the up component of its
-/// normal, `max_height` the field peak (normalized altitude bands run 0..1).
-/// The result is the banded color multiplied by `base_color` (RGBA).
-fn tint_vertex_color(y: f32, normal_y: f32, max_height: f32, tint: &TintParams) -> [f32; 4] {
-    let h = if max_height > 0.0 {
-        (y / max_height).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    // Slope: 0 flat, 1 vertical.
-    let slope = 1.0 - normal_y.clamp(0.0, 1.0);
-    let width = BAND_WIDTH_AT_FULL_STRENGTH * tint.height_blend_strength;
-
-    // Three-band altitude blend: low → mid → high, softstepped at the knots.
-    let mid_band = smoothstep(MID_BAND_CENTER - width, MID_BAND_CENTER + width, h);
-    let high_band = smoothstep(HIGH_BAND_CENTER - width, HIGH_BAND_CENTER + width, h);
-    let mut color = mix4(tint.color_low, tint.color_mid, mid_band);
-    color = mix4(color, tint.color_high, high_band);
-
-    // Snow: above `snow_height` the high color fades to white.
-    let snow_band = smoothstep(tint.snow_height - width, tint.snow_height + width, h);
-    color = mix4(color, SNOW_COLOR, snow_band);
-
-    // Rock on steep faces wins over altitude and snow (a cliff at the snow
-    // line should not read as pure white).
-    let rock_band = smoothstep(
-        tint.slope_threshold - tint.slope_softness,
-        tint.slope_threshold + tint.slope_softness,
-        slope,
-    );
-    color = mix4(color, tint.color_rock, rock_band);
-
-    [
-        color[0] * tint.base_color[0],
-        color[1] * tint.base_color[1],
-        color[2] * tint.base_color[2],
-        color[3] * tint.base_color[3],
-    ]
-}
-
-/// GLSL-style `smoothstep(edge0, edge1, x)` with a guard for degenerate edges
-/// (`edge1 <= edge0` collapses to a hard step instead of dividing by zero).
-fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
-    if (edge1 - edge0).abs() < f32::EPSILON {
-        return if x >= edge1 { 1.0 } else { 0.0 };
-    }
-    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
-
-/// Linear blend of two RGBA colors: `a` at `t = 0`, `b` at `t = 1`.
-fn mix4(a: [f32; 4], b: [f32; 4], t: f32) -> [f32; 4] {
-    [
-        a[0] + (b[0] - a[0]) * t,
-        a[1] + (b[1] - a[1]) * t,
-        a[2] + (b[2] - a[2]) * t,
-        a[3] + (b[3] - a[3]) * t,
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -496,21 +387,12 @@ mod tests {
             Self::new(Box::new(|_, _| 0.0), 50.0)
         }
 
-        fn plateau(height: f32, peak: f32) -> Self {
-            Self::new(Box::new(move |_, _| height), peak)
-        }
-
         /// Smooth gaussian hill, 10 m at the origin, flat far away.
         fn hill() -> Self {
             Self::new(
                 Box::new(|x: f32, z: f32| 10.0 * (-(x * x + z * z) / 200.0).exp()),
                 10.0,
             )
-        }
-
-        /// Vertical cliff wall at world x = 0 (20 m step).
-        fn wall() -> Self {
-            Self::new(Box::new(|x, _| if x > 0.0 { 20.0 } else { 0.0 }), 50.0)
         }
     }
 
@@ -537,20 +419,6 @@ mod tests {
         }
     }
 
-    fn test_tint() -> TintParams {
-        TintParams {
-            base_color: [1.0, 1.0, 1.0, 1.0],
-            color_low: [0.1, 0.2, 0.3, 1.0],
-            color_mid: [0.4, 0.5, 0.6, 1.0],
-            color_high: [0.7, 0.8, 0.9, 1.0],
-            color_rock: [0.25, 0.25, 0.25, 1.0],
-            snow_height: 0.75,
-            slope_threshold: 0.55,
-            slope_softness: 0.10,
-            height_blend_strength: 1.0,
-        }
-    }
-
     fn base_params(origin: Vec3, size: f32, step: usize) -> ChunkMeshParams {
         ChunkMeshParams {
             origin,
@@ -561,7 +429,6 @@ mod tests {
             texture_tile_size: 0.0,
             levels: 0,
             world_size: 256.0,
-            tint: test_tint(),
         }
     }
 
@@ -598,18 +465,6 @@ mod tests {
     // ----- helpers -----
 
     #[test]
-    fn test_smoothstep_helper_basic_and_degenerate() {
-        assert_eq!(smoothstep(0.0, 1.0, -0.5), 0.0);
-        assert_eq!(smoothstep(0.0, 1.0, 1.5), 1.0);
-        assert!((smoothstep(0.0, 1.0, 0.5) - 0.5).abs() < EPS);
-        assert!((smoothstep(0.1, 0.6, 0.35) - 0.5).abs() < EPS);
-        // Degenerate edges collapse to a hard step, no division by zero.
-        assert_eq!(smoothstep(0.5, 0.5, 0.4), 0.0);
-        assert_eq!(smoothstep(0.5, 0.5, 0.5), 1.0);
-        assert_eq!(smoothstep(0.5, 0.5, 0.6), 1.0);
-    }
-
-    #[test]
     fn test_auto_texture_tile_size_known_values() {
         assert!((auto_texture_tile_size(256.0, 3) - 2.0).abs() < EPS); // 256/4/32
         assert!((auto_texture_tile_size(256.0, 1) - 8.0).abs() < EPS); // 256/1/32
@@ -626,7 +481,6 @@ mod tests {
         assert_eq!(mesh.positions.len(), 17 * 17);
         assert_eq!(mesh.normals.len(), 17 * 17);
         assert_eq!(mesh.uvs.len(), 17 * 17);
-        assert_eq!(mesh.colors.len(), 17 * 17);
         assert_eq!(mesh.indices.len(), 16 * 16 * 6);
     }
 
@@ -703,7 +557,6 @@ mod tests {
                 assert_close(sp, [gp[0], gp[1] - 3.5, gp[2]], "skirt position");
                 assert_close(mesh.normals[s], outward, "skirt outward normal");
                 assert_eq!(mesh.uvs[s], mesh.uvs[g], "skirt copies border uv");
-                assert_eq!(mesh.colors[s], mesh.colors[g], "skirt copies border color");
             }
         }
     }
@@ -842,60 +695,6 @@ mod tests {
     }
 
     // ----- tint -----
-
-    #[test]
-    fn test_tint_low_at_valley() {
-        let field = TestField::plateau(0.0, 50.0);
-        let mesh = build(&field, &base_params(Vec3::ZERO, 16.0, 1));
-        let tint = test_tint();
-        assert_close(mesh.colors[0], tint.color_low, "valley color");
-    }
-
-    #[test]
-    fn test_tint_mid_band_halfway() {
-        let field = TestField::plateau(3.5, 10.0); // h = 0.35
-        let mesh = build(&field, &base_params(Vec3::ZERO, 16.0, 1));
-        // width = 0.25 -> mid band edges (0.10, 0.60): h = 0.35 -> 0.5 blend.
-        assert_close(mesh.colors[0], [0.25, 0.35, 0.45, 1.0], "mid halfway");
-    }
-
-    #[test]
-    fn test_tint_high_at_peak_snow_disabled() {
-        let field = TestField::plateau(10.0, 10.0); // h = 1
-        let mut params = base_params(Vec3::ZERO, 16.0, 1);
-        params.tint.snow_height = 2.0; // snow never reaches h = 1
-        let mesh = build(&field, &params);
-        assert_close(mesh.colors[0], [0.7, 0.8, 0.9, 1.0], "peak color");
-    }
-
-    #[test]
-    fn test_tint_snow_toward_white() {
-        let field = TestField::plateau(10.0, 10.0); // h = 1 > snow_height 0.75
-        let mesh = build(&field, &base_params(Vec3::ZERO, 16.0, 1));
-        assert_close(mesh.colors[0], [1.0, 1.0, 1.0, 1.0], "snow color");
-    }
-
-    #[test]
-    fn test_tint_rock_on_steep_wall() {
-        let field = TestField::wall();
-        // Chunk spanning world x in [-8, 8]; vertex index 8 sits on the cliff
-        // lip (world x = 0, y = 0 below the snow line).
-        let mesh = build(&field, &base_params(Vec3::new(-8.0, 0.0, -8.0), 16.0, 1));
-        assert_close(mesh.colors[8], [0.25, 0.25, 0.25, 1.0], "rock color");
-        // The flat vertex one step away keeps the altitude color.
-        assert_close(mesh.colors[7], [0.1, 0.2, 0.3, 1.0], "non-rock neighbor");
-    }
-
-    #[test]
-    fn test_tint_multiplies_base_color() {
-        let field = TestField::plateau(0.0, 50.0);
-        let mut params = base_params(Vec3::ZERO, 16.0, 1);
-        params.tint.base_color = [0.5, 0.6, 0.7, 0.8];
-        let mesh = build(&field, &params);
-        assert_close(mesh.colors[0], [0.05, 0.12, 0.21, 0.8], "base multiply");
-    }
-
-    // ----- error and degenerate cases -----
 
     #[test]
     fn test_ok_none_when_step_exceeds_size() {

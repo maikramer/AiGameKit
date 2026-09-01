@@ -3,12 +3,12 @@
 //! that show up in-engine as black holes — non-finite buffers, zero-length
 //! normals and downward-facing top-surface normals.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use viber::terrain::brush::BrushGrid;
 use viber::terrain::features::apply_features;
 use viber::terrain::heightmap::HeightMapU16;
-use viber::terrain::mesh::{ChunkMeshData, ChunkMeshParams, TintParams, build_chunk_mesh};
+use viber::terrain::mesh::{ChunkMeshData, ChunkMeshParams, build_chunk_mesh};
 use viber::terrain::spec::TerrainSpec;
 use viber::{recipes, xml};
 
@@ -54,7 +54,6 @@ fn build_all_chunks(spec: &TerrainSpec, grid: &BrushGrid) -> Vec<((u32, u32), Ch
     let edge = segments as f32 * step as f32;
     let rows = (spec.world_size / edge).ceil().max(1.0) as u32;
     let half = spec.world_size * 0.5;
-    let tint = TintParams::from(&spec.tint);
     let mut out = Vec::new();
     for cz in 0..rows {
         for cx in 0..rows {
@@ -70,7 +69,6 @@ fn build_all_chunks(spec: &TerrainSpec, grid: &BrushGrid) -> Vec<((u32, u32), Ch
                 normal_epsilon: grid.texel(),
                 texture_tile_size: spec.texture_tile_size,
                 levels: spec.levels,
-                tint: tint.clone(),
                 world_size: spec.world_size,
             };
             if let Ok(Some(data)) = build_chunk_mesh(grid, &params) {
@@ -255,4 +253,79 @@ fn test_full_demo_carve_does_not_tear_the_heightfield() {
         after <= before.max(1.0) * 6.0,
         "demo carve tore the field: max texel step {before:.2} m -> {after:.2} m"
     );
+}
+
+/// The shared asset pool ships meshopt-compressed GLBs; the decoder has to
+/// turn a real one into a plain GLB that a glTF reader accepts.
+///
+/// Skipped when the pool is not checked out beside this crate.
+#[test]
+fn test_meshopt_decodes_a_real_pool_asset() {
+    let Some(pool) = viber::meshopt::shared_asset_pool().map(|p| p.join("assets/meshes")) else {
+        eprintln!("shared-assets pool absent — skipping");
+        return;
+    };
+    // Find the first compressed GLB in the pool.
+    let mut compressed = None;
+    for entry in walk(&pool).into_iter().take(4000) {
+        let Ok(bytes) = std::fs::read(&entry) else {
+            continue;
+        };
+        if viber::meshopt::needs_decode(&bytes) {
+            compressed = Some((entry, bytes));
+            break;
+        }
+    }
+    let (path, bytes) = compressed.expect(
+        "the pool ships meshopt-compressed GLBs; finding none means the detector is broken",
+    );
+
+    let decoded = viber::meshopt::decode_glb(&bytes)
+        .unwrap_or_else(|e| panic!("decoding {}: {e:#}", path.display()));
+
+    assert!(
+        !viber::meshopt::needs_decode(&decoded),
+        "the decoded GLB no longer declares the extension"
+    );
+    assert!(
+        decoded.len() > bytes.len(),
+        "decompressed data is larger than the compressed source ({} -> {})",
+        bytes.len(),
+        decoded.len()
+    );
+    // The decoded container must parse as a glTF document with real meshes.
+    let doc = gltf_json(&decoded).expect("decoded GLB has a JSON chunk");
+    assert!(
+        doc["meshes"].as_array().is_some_and(|m| !m.is_empty()),
+        "decoded GLB still has meshes"
+    );
+    assert!(
+        doc["bufferViews"]
+            .as_array()
+            .is_some_and(|views| views.iter().all(|v| v.get("extensions").is_none())),
+        "no buffer view keeps a compression extension"
+    );
+}
+
+/// Every `.glb` under `dir`, recursively.
+fn walk(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            out.extend(walk(&path));
+        } else if path.extension().is_some_and(|e| e == "glb") {
+            out.push(path);
+        }
+    }
+    out
+}
+
+/// Parses the JSON chunk out of a GLB.
+fn gltf_json(bytes: &[u8]) -> Option<serde_json::Value> {
+    let len = u32::from_le_bytes(bytes.get(12..16)?.try_into().ok()?) as usize;
+    serde_json::from_slice(bytes.get(20..20 + len)?).ok()
 }

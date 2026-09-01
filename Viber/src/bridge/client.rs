@@ -152,6 +152,10 @@ impl BridgeClient {
         self.call("viber.logs", json!({ "limit": limit }))
     }
 
+    pub fn prof(&self) -> Result<Value> {
+        self.call("viber.profiler", json!({}))
+    }
+
     pub fn key(&self, key: &str, text: Option<String>, shift: bool) -> Result<Value> {
         let mut params = json!({ "key": normalize_key(key) });
         if let Some(text) = text {

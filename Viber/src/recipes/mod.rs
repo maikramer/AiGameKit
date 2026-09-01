@@ -138,6 +138,14 @@ pub struct MaterialSpec {
     pub base_color: Option<[f32; 3]>,
     pub metallic: Option<f32>,
     pub roughness: Option<f32>,
+    /// `texture="/assets/…"`` (ou `texture-url`) — base color map. Os
+    /// fragmentos migrados do VibeGame tinham `texture-url` nas decal
+    /// planes (praça de cobblestone) e o migrador deixou cair o atributo;
+    /// suportar aqui devolve o visual sem tocar no conteúdo.
+    pub texture: Option<String>,
+    /// `texture-tile-size` — metros por repetição da textura (UVs da
+    /// primitiva são 0..1; sem isso a textura estica pela malha toda).
+    pub texture_tile: Option<f32>,
 }
 
 #[derive(Debug, Clone)]
@@ -363,6 +371,11 @@ pub struct StaticSpawnerSpec {
     /// glTF urls found in the template subtree (GLTFLoader/GltfScene), in
     /// document order; one is picked per instance via the seeded RNG.
     pub template_urls: Vec<String>,
+    /// Script Luau declarado no template (`<Creature script="…">`) — cada
+    /// instância spawna com [`LuaScriptRef`] e roda o seu próprio FSM.
+    pub template_script: Option<String>,
+    /// Raio de ativação (congelamento) das instâncias — `activation-radius`.
+    pub activation_radius: f32,
 }
 
 /// `<Vegetation>`: dense foliage spread by density per km². The original
@@ -434,6 +447,8 @@ impl VegetationSpec {
             random_yaw: self.random_yaw,
             max_distance: self.max_distance,
             template_urls: self.meshes.clone(),
+            template_script: None,
+            activation_radius: crate::luau::DEFAULT_ACTIVATION_RADIUS,
         }
     }
 }
@@ -782,6 +797,8 @@ fn finish_primitive(node: &XmlNode, ctx: &mut ParseCtx) -> Result<EntitySpec> {
             "base-color" => material.base_color = Some(values::parse_color(&value, &kctx)?),
             "metallic" => material.metallic = Some(values::parse_f32(&value, &kctx)?),
             "roughness" => material.roughness = Some(values::parse_f32(&value, &kctx)?),
+            "texture" | "texture-url" => material.texture = Some(value),
+            "texture-tile-size" => material.texture_tile = Some(values::parse_f32(&value, &kctx)?),
             other => ctx
                 .warnings
                 .push(format!("{ctx_tag}: ignored attribute `{other}`")),
@@ -975,6 +992,19 @@ fn collect_template_urls(node: &XmlNode, out: &mut Vec<String>) {
     }
 }
 
+/// Primeiro attr `script=` na subárvore do template (`<Creature script>`).
+fn collect_template_script(node: &XmlNode) -> Option<String> {
+    if let Some(script) = node.attr("script").map(str::trim).filter(|s| !s.is_empty()) {
+        return Some(script.to_string());
+    }
+    for child in &node.children {
+        if let Some(found) = collect_template_script(child) {
+            return Some(found);
+        }
+    }
+    None
+}
+
 fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> Result<EntitySpec> {
     let (common, rest) = parse_common(node, ctx)?;
     let ctx_tag = format!("<{}>", node.tag);
@@ -1001,8 +1031,11 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
         random_yaw: false,
         max_distance: 0.0,
         template_urls: Vec::new(),
+        template_script: None,
+        activation_radius: crate::luau::DEFAULT_ACTIVATION_RADIUS,
     };
     collect_template_urls(node, &mut spec.template_urls);
+    spec.template_script = collect_template_script(node);
     if spec.template_urls.is_empty() {
         ctx.warnings
             .push(format!("{ctx_tag}: no template glTF url found — skipped"));
@@ -1045,6 +1078,9 @@ fn finish_static_spawner(node: &XmlNode, dynamic: bool, ctx: &mut ParseCtx) -> R
             "random-yaw" => spec.random_yaw = values::parse_bool(&value, &kctx)?,
             "max-distance" => spec.max_distance = values::parse_f32(&value, &kctx)?,
             // accepted no-ops: profile metadata / placement details ported later
+            "activation-radius" => {
+                spec.activation_radius = values::parse_f32(&value, &kctx)?.max(0.0)
+            }
             "profile" | "variation" | "ground-align" | "max-slope-attempts" | "pick-strategy"
             | "base-y-offset" => {}
             other => ctx

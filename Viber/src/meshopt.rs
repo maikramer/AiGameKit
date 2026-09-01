@@ -298,9 +298,13 @@ pub fn decode_glb(bytes: &[u8]) -> Result<Vec<u8>> {
     // rewritten.
     if relocated.is_empty() {
         let mut doc = doc;
+        let mut out_bin = bin.to_vec();
         lift_basisu_sources(&mut doc);
+        if dequantize_vertex_attributes(&mut doc, &mut out_bin)? {
+            strip_extension(&mut doc, "extensionsUsed", QUANTIZATION);
+        }
         strip_extension(&mut doc, "extensionsRequired", QUANTIZATION);
-        return write_glb(&doc, bin);
+        return write_glb(&doc, &out_bin);
     }
 
     // Uncompressed views are copied across unchanged so their data survives.
@@ -362,8 +366,14 @@ pub fn decode_glb(bytes: &[u8]) -> Result<Vec<u8>> {
     // *requires* an extension it does not name, so the requirement is dropped
     // while `extensionsUsed` keeps the honest record of how the file was
     // authored.
-    strip_extension(&mut doc, "extensionsRequired", QUANTIZATION);
     lift_basisu_sources(&mut doc);
+    // After the buffer views are rewritten: the de-quantizer reads decoded
+    // data and appends its packed output to the same binary chunk.
+    if dequantize_vertex_attributes(&mut doc, &mut out_bin)? {
+        strip_extension(&mut doc, "extensionsUsed", QUANTIZATION);
+    }
+    strip_extension(&mut doc, "extensionsRequired", QUANTIZATION);
+    doc["buffers"] = serde_json::json!([{ "byteLength": out_bin.len() }]);
 
     write_glb(&doc, &out_bin)
 }
@@ -446,6 +456,195 @@ fn write_glb(doc: &serde_json::Value, bin: &[u8]) -> Result<Vec<u8>> {
         out.extend_from_slice(&bin);
     }
     Ok(out)
+}
+
+// ------------------------------------------------------------- dequantizing
+
+/// glTF accessor component types.
+const COMP_BYTE: u64 = 5120;
+const COMP_UNSIGNED_BYTE: u64 = 5121;
+const COMP_SHORT: u64 = 5122;
+const COMP_UNSIGNED_SHORT: u64 = 5123;
+const COMP_FLOAT: u64 = 5126;
+
+/// Vertex semantics Bevy insists on receiving as `f32`.
+///
+/// Its glTF loader passes POSITION / NORMAL / TANGENT through unconverted
+/// (`ConversionMode::Any`) and then checks them against the target attribute,
+/// which is `Float32x3` / `Float32x4`. A quantized tangent therefore arrives as
+/// `Snorm8x4`, gets dropped, and the mesh panics on the missing attribute.
+/// Texture coordinates and joint weights have their own conversion paths in
+/// Bevy and are left alone.
+const FLOAT_SEMANTICS: [&str; 3] = ["POSITION", "NORMAL", "TANGENT"];
+
+/// Number of components in a glTF accessor `type`.
+fn components_of(kind: &str) -> Option<usize> {
+    match kind {
+        "SCALAR" => Some(1),
+        "VEC2" => Some(2),
+        "VEC3" => Some(3),
+        "VEC4" => Some(4),
+        _ => None,
+    }
+}
+
+/// Reads one integer component and maps it to `f32`.
+///
+/// A `normalized` accessor stores a fraction of the type's range (glTF spec
+/// 3.6.1.2); a plain one stores the value itself, and `KHR_mesh_quantization`
+/// leans on the node transform to scale it back. Either way the *meaning* is
+/// preserved by converting exactly as the spec prescribes, so the node's TRS
+/// still lands the mesh where it belongs.
+#[inline]
+fn component_to_f32(bytes: &[u8], component_type: u64, normalized: bool) -> f32 {
+    match component_type {
+        COMP_BYTE => {
+            let v = bytes[0] as i8 as f32;
+            if normalized { (v / 127.0).max(-1.0) } else { v }
+        }
+        COMP_UNSIGNED_BYTE => {
+            let v = bytes[0] as f32;
+            if normalized { v / 255.0 } else { v }
+        }
+        COMP_SHORT => {
+            let v = i16::from_le_bytes([bytes[0], bytes[1]]) as f32;
+            if normalized {
+                (v / 32767.0).max(-1.0)
+            } else {
+                v
+            }
+        }
+        COMP_UNSIGNED_SHORT => {
+            let v = u16::from_le_bytes([bytes[0], bytes[1]]) as f32;
+            if normalized { v / 65535.0 } else { v }
+        }
+        _ => f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+    }
+}
+
+/// Bytes per component of a glTF accessor component type.
+fn component_size(component_type: u64) -> usize {
+    match component_type {
+        COMP_BYTE | COMP_UNSIGNED_BYTE => 1,
+        COMP_SHORT | COMP_UNSIGNED_SHORT => 2,
+        _ => 4,
+    }
+}
+
+/// Rewrites quantized POSITION/NORMAL/TANGENT accessors as tightly packed
+/// `f32`, appending the new data to `bin`.
+///
+/// Each converted accessor gets its own buffer view rather than being written
+/// back in place: quantized meshes are interleaved, so widening one attribute
+/// would change the stride every attribute in that view shares. Emitting a
+/// packed view per accessor sidesteps the stride entirely, and is what the
+/// renderer wants anyway.
+///
+/// Returns `true` when anything changed.
+fn dequantize_vertex_attributes(doc: &mut serde_json::Value, bin: &mut Vec<u8>) -> Result<bool> {
+    // Which accessors feed a semantic Bevy needs as float.
+    let mut wanted: Vec<usize> = Vec::new();
+    for mesh in doc["meshes"].as_array().into_iter().flatten() {
+        for primitive in mesh["primitives"].as_array().into_iter().flatten() {
+            let Some(attributes) = primitive["attributes"].as_object() else {
+                continue;
+            };
+            for (semantic, index) in attributes {
+                if !FLOAT_SEMANTICS.contains(&semantic.as_str()) {
+                    continue;
+                }
+                if let Some(index) = index.as_u64() {
+                    wanted.push(index as usize);
+                }
+            }
+        }
+    }
+    wanted.sort_unstable();
+    wanted.dedup();
+    if wanted.is_empty() {
+        return Ok(false);
+    }
+
+    let views = doc["bufferViews"].as_array().cloned().unwrap_or_default();
+    let accessors = doc["accessors"].as_array().cloned().unwrap_or_default();
+    let mut converted = false;
+
+    for index in wanted {
+        let Some(accessor) = accessors.get(index) else {
+            continue;
+        };
+        let component_type = accessor["componentType"].as_u64().unwrap_or(COMP_FLOAT);
+        if component_type == COMP_FLOAT {
+            continue; // already float
+        }
+        let Some(kind) = accessor["type"].as_str().and_then(components_of) else {
+            continue;
+        };
+        let count = accessor["count"].as_u64().unwrap_or(0) as usize;
+        let Some(view_index) = accessor["bufferView"].as_u64() else {
+            continue;
+        };
+        let Some(view) = views.get(view_index as usize) else {
+            continue;
+        };
+        let normalized = accessor["normalized"].as_bool().unwrap_or(false);
+        let size = component_size(component_type);
+        let view_offset = view["byteOffset"].as_u64().unwrap_or(0) as usize;
+        let accessor_offset = accessor["byteOffset"].as_u64().unwrap_or(0) as usize;
+        // A view without an explicit stride is tightly packed.
+        let stride = view["byteStride"]
+            .as_u64()
+            .map(|s| s as usize)
+            .unwrap_or(size * kind);
+        let base = view_offset + accessor_offset;
+
+        let needed = base + stride * count.saturating_sub(1) + size * kind;
+        if needed > bin.len() {
+            bail!(
+                "accessor {index}: reads past the buffer ({needed} > {})",
+                bin.len()
+            );
+        }
+
+        // Tightly packed f32 output, appended to the binary chunk.
+        while !bin.len().is_multiple_of(4) {
+            bin.push(0);
+        }
+        let out_offset = bin.len();
+        bin.reserve(count * kind * 4);
+        for element in 0..count {
+            let start = base + element * stride;
+            for component in 0..kind {
+                let at = start + component * size;
+                let value = component_to_f32(&bin[at..at + size], component_type, normalized);
+                bin.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        let out_length = count * kind * 4;
+
+        // Point the accessor at the new packed view.
+        let new_view = serde_json::json!({
+            "buffer": 0,
+            "byteOffset": out_offset,
+            "byteLength": out_length,
+        });
+        let new_index = {
+            let array = doc["bufferViews"]
+                .as_array_mut()
+                .context("bufferViews is an array")?;
+            array.push(new_view);
+            array.len() - 1
+        };
+        let accessor = doc["accessors"][index]
+            .as_object_mut()
+            .context("accessor is an object")?;
+        accessor.insert("componentType".into(), serde_json::json!(COMP_FLOAT));
+        accessor.insert("bufferView".into(), serde_json::json!(new_index));
+        accessor.insert("byteOffset".into(), serde_json::json!(0));
+        accessor.remove("normalized");
+        converted = true;
+    }
+    Ok(converted)
 }
 
 // ------------------------------------------------------------ asset reading
@@ -549,10 +748,10 @@ pub fn register_asset_source(app: &mut App, asset_root: PathBuf) {
 /// `basis-universal` feature, and quantized attributes are ordinary normalized
 /// accessors. Bevy exposes `validate` for exactly this case.
 pub fn load_gltf(server: &AssetServer, path: String) -> Handle<bevy::gltf::Gltf> {
-    server.load_with_settings::<bevy::gltf::Gltf, bevy::gltf::GltfLoaderSettings>(
-        path,
-        |settings| settings.validate = false,
-    )
+    server
+        .load_builder()
+        .with_settings(|settings: &mut bevy::gltf::GltfLoaderSettings| settings.validate = false)
+        .load(path)
 }
 
 /// The shared asset pool, wherever it currently lives.
@@ -672,83 +871,123 @@ mod tests {
         glb[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
         assert!(parse_glb(&glb).is_err());
     }
-}
 
-/// A decoded GLB must not *require* extensions the reader cannot name.
-///
-/// Bevy refuses the whole file when `extensionsRequired` lists something
-/// it does not implement, so both meshopt (which is genuinely gone after
-/// decoding) and quantization (whose data core accessors already describe)
-/// have to leave that list.
-#[test]
-fn test_decoded_pool_asset_requires_no_unsupported_extensions() {
-    let pool = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../Viber/examples/shared-assets/public/assets/meshes");
-    if !pool.is_dir() {
-        eprintln!("shared-assets pool absent — skipping");
-        return;
-    }
-    let Some(path) = find_compressed(&pool) else {
-        eprintln!("no compressed GLB — skipping");
-        return;
-    };
-    let bytes = std::fs::read(&path).expect("reads");
-    let decoded = decode_glb(&bytes).expect("decodes");
-    let json = json_chunk(&decoded).expect("json chunk");
-
-    let required: Vec<String> = json["extensionsRequired"]
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
-                .collect()
+    /// Bevy needs POSITION/NORMAL/TANGENT as `f32`; a quantized pool asset
+    /// must come out of the rewrite that way, and the extension must stop
+    /// being advertised once the data no longer is quantized.
+    ///
+    /// This is the whole point of the de-quantizer: without it a quantized
+    /// tangent reaches Bevy as `Snorm8x4`, gets dropped for not matching
+    /// `Float32x4`, and the mesh panics on the missing attribute.
+    #[test]
+    fn test_quantized_pool_asset_comes_out_as_float() {
+        let Some(pool) = shared_asset_pool().map(|p| p.join("assets/meshes")) else {
+            eprintln!("shared-assets pool absent — skipping");
+            return;
+        };
+        let (path, bytes) = find_with(&pool, |doc| {
+            doc["extensionsUsed"]
+                .as_array()
+                .is_some_and(|used| used.iter().any(|e| e.as_str() == Some(QUANTIZATION)))
         })
-        .unwrap_or_default();
-    assert!(
-        !required.iter().any(|e| e == EXT),
-        "meshopt is no longer required: {required:?}"
-    );
-    assert!(
-        !required.iter().any(|e| e == QUANTIZATION),
-        "quantization is no longer required: {required:?}"
-    );
-    // `extensionsUsed` keeps the honest record of quantization.
-    let used: Vec<String> = json["extensionsUsed"]
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
-    assert!(
-        !used.iter().any(|e| e == EXT),
-        "meshopt leaves `extensionsUsed` too: {used:?}"
-    );
-}
+        .expect("the pool ships quantized GLBs; finding none means the scan is broken");
 
-/// First compressed GLB under `dir`.
-fn find_compressed(dir: &std::path::Path) -> Option<PathBuf> {
-    for entry in std::fs::read_dir(dir).ok()?.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            if let Some(found) = find_compressed(&path) {
-                return Some(found);
+        let decoded =
+            decode_glb(&bytes).unwrap_or_else(|e| panic!("rewriting {}: {e:#}", path.display()));
+        let doc = json_chunk(&decoded).expect("json chunk");
+
+        // Every accessor feeding a float semantic must now be COMPONENT_FLOAT.
+        let accessors = doc["accessors"].as_array().expect("accessors");
+        let mut checked = 0;
+        for mesh in doc["meshes"].as_array().into_iter().flatten() {
+            for primitive in mesh["primitives"].as_array().into_iter().flatten() {
+                for (semantic, index) in primitive["attributes"].as_object().expect("attributes") {
+                    if !FLOAT_SEMANTICS.contains(&semantic.as_str()) {
+                        continue;
+                    }
+                    let accessor = &accessors[index.as_u64().expect("index") as usize];
+                    assert_eq!(
+                        accessor["componentType"].as_u64(),
+                        Some(COMP_FLOAT),
+                        "{}: {semantic} is still quantized",
+                        path.display()
+                    );
+                    assert!(
+                        !accessor["normalized"].as_bool().unwrap_or(false),
+                        "{}: {semantic} is still flagged normalized",
+                        path.display()
+                    );
+                    checked += 1;
+                }
             }
-        } else if path.extension().is_some_and(|e| e == "glb")
-            && std::fs::read(&path).is_ok_and(|b| needs_decode(&b))
-        {
-            return Some(path);
         }
-    }
-    None
-}
+        assert!(
+            checked > 0,
+            "the asset actually has float semantics to check"
+        );
 
-/// Parses the JSON chunk of a GLB.
-fn json_chunk(bytes: &[u8]) -> Option<serde_json::Value> {
-    let len = u32::from_le_bytes(bytes.get(12..16)?.try_into().ok()?) as usize;
-    serde_json::from_slice(bytes.get(20..20 + len)?).ok()
-}
+        let used: Vec<&str> = doc["extensionsUsed"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+        assert!(
+            !used.contains(&QUANTIZATION),
+            "quantization is no longer advertised: {used:?}"
+        );
+    }
+
+    /// A decoded GLB must not *require* extensions the reader cannot name.
+    ///
+    /// Bevy refuses the whole file when `extensionsRequired` lists something
+    /// it does not implement, so both meshopt (which is genuinely gone after
+    /// decoding) and quantization (whose data core accessors already describe)
+    /// have to leave that list.
+    #[test]
+    fn test_decoded_pool_asset_requires_no_unsupported_extensions() {
+        let pool = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../Viber/examples/shared-assets/public/assets/meshes");
+        if !pool.is_dir() {
+            eprintln!("shared-assets pool absent — skipping");
+            return;
+        }
+        let Some(path) = find_compressed(&pool) else {
+            eprintln!("no compressed GLB — skipping");
+            return;
+        };
+        let bytes = std::fs::read(&path).expect("reads");
+        let decoded = decode_glb(&bytes).expect("decodes");
+        let json = json_chunk(&decoded).expect("json chunk");
+
+        let required: Vec<String> = json["extensionsRequired"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(
+            !required.iter().any(|e| e == EXT),
+            "meshopt is no longer required: {required:?}"
+        );
+        assert!(
+            !required.iter().any(|e| e == QUANTIZATION),
+            "quantization is no longer required: {required:?}"
+        );
+        // `extensionsUsed` keeps the honest record of quantization.
+        let used: Vec<String> = json["extensionsUsed"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(
+            !used.iter().any(|e| e == EXT),
+            "meshopt leaves `extensionsUsed` too: {used:?}"
+        );
+    }
 
     /// A KTX2 texture keeps its image index inside `KHR_texture_basisu`, and
     /// `gltf::Texture::source()` unwraps the core field — so an unlifted file
@@ -774,18 +1013,24 @@ fn json_chunk(bytes: &[u8]) -> Option<serde_json::Value> {
             "{} declares KHR_texture_basisu, so it needs a rewrite",
             path.display()
         );
-        let decoded = decode_glb(&bytes)
-            .unwrap_or_else(|e| panic!("rewriting {}: {e:#}", path.display()));
+        let decoded =
+            decode_glb(&bytes).unwrap_or_else(|e| panic!("rewriting {}: {e:#}", path.display()));
         let doc = json_chunk(&decoded).expect("json chunk");
 
         for texture in doc["textures"].as_array().expect("textures") {
             assert!(
-                texture.get("source").and_then(serde_json::Value::as_u64).is_some(),
+                texture
+                    .get("source")
+                    .and_then(serde_json::Value::as_u64)
+                    .is_some(),
                 "every texture has a core `source` in {}: {texture}",
                 path.display()
             );
             assert!(
-                texture.get("extensions").and_then(|e| e.get(BASISU)).is_none(),
+                texture
+                    .get("extensions")
+                    .and_then(|e| e.get(BASISU))
+                    .is_none(),
                 "the basisu block is consumed: {texture}"
             );
         }
@@ -822,9 +1067,29 @@ fn json_chunk(bytes: &[u8]) -> Option<serde_json::Value> {
         None
     }
 
-#[cfg(test)]
-mod reader_tests {
-    use super::*;
+    /// First compressed GLB under `dir`.
+    fn find_compressed(dir: &std::path::Path) -> Option<PathBuf> {
+        for entry in std::fs::read_dir(dir).ok()?.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if let Some(found) = find_compressed(&path) {
+                    return Some(found);
+                }
+            } else if path.extension().is_some_and(|e| e == "glb")
+                && std::fs::read(&path).is_ok_and(|b| needs_decode(&b))
+            {
+                return Some(path);
+            }
+        }
+        None
+    }
+
+    /// Parses the JSON chunk of a GLB.
+    fn json_chunk(bytes: &[u8]) -> Option<serde_json::Value> {
+        let len = u32::from_le_bytes(bytes.get(12..16)?.try_into().ok()?) as usize;
+        serde_json::from_slice(bytes.get(20..20 + len)?).ok()
+    }
+
     use bevy::asset::io::file::FileAssetReader;
 
     /// The reader must actually decode when it is handed a compressed asset —

@@ -76,7 +76,7 @@
       <GltfScene url="/assets/meshes/village/wooden_barrel_lod0.glb" />
     </Entity>
     <DynamicSpawner avoid-water="1" count="5" seed="7331" region-min="1650 0 -860" region-max="1750 0 -760" random-yaw="true" avoid-overlaps="false" max-slope-deg="40" max-distance="180">
-      <Creature role="enemy" script="enemies/bandit.ts">
+      <Creature role="enemy" script="enemies/bandit.lua">
         <GLTFLoader role="visual" url="/assets/meshes/characters/bandit_lod0.glb" lod1-url="/assets/meshes/characters/bandit_lod1.glb" lod2-url="/assets/meshes/characters/bandit_lod2.glb" lod-threshold-near="18" lod-threshold-mid="55" />
       </Creature>
     </DynamicSpawner>

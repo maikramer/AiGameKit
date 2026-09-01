@@ -309,6 +309,23 @@ pub fn startup(world: &mut World) {
         crate::hud::spawn_hud(world, tag, attrs);
     }
     if let Some(day) = pending_worldsys.day_cycle {
+        // The sky derives its sun/night inside the shader from Globals.time +
+        // these clock constants: the material's GPU buffer is written once at
+        // spawn (a plain `#[uniform]` is never re-uploaded on modify in Bevy
+        // 0.19), so the day cycle must be baked in HERE, not updated per frame.
+        let mut domes = world.query::<&crate::sky::SkyDome>();
+        for dome in domes.iter_mut(world) {
+            if let Some(mut material) = sky_mats.get_mut(&dome.material) {
+                let uniform = &mut material.uniform;
+                uniform.drive = 1.0;
+                uniform.clock_start = day.minute_of_day;
+                uniform.clock_speed = day.minutes_per_real_second;
+                uniform.dawn = day.dawn_minute;
+                uniform.dusk = day.dusk_minute;
+                uniform.max_elev = day.max_sun_elevation;
+                uniform.az_base = day.sun_azimuth_base;
+            }
+        }
         world.insert_resource(day);
     }
     if let Some(weather) = pending_worldsys.weather {
@@ -384,7 +401,12 @@ fn collect_spawn_groups(
                 let handles = group
                     .template_urls
                     .iter()
-                    .map(|url| asset_server.load::<Gltf>(url.trim_start_matches('/').to_owned()))
+                    .map(|url| {
+                        crate::meshopt::load_gltf(
+                            asset_server,
+                            url.trim_start_matches('/').to_owned(),
+                        )
+                    })
                     .collect();
                 out.push(crate::spawner::SpawnGroupState {
                     spec: group.clone(),
@@ -392,6 +414,8 @@ fn collect_spawn_groups(
                     done: false,
                     // `<DynamicSpawner>` instances are driven by the AI system.
                     dynamic: matches!(spec.kind, EntityKind::DynamicSpawner { .. }),
+                    template_script: group.template_script.clone(),
+                    activation_radius: group.activation_radius,
                 });
             }
             EntityKind::SpawnExclusion { center, radius } => {
@@ -408,9 +432,16 @@ fn collect_spawn_groups(
                 let handles = spawner_spec
                     .template_urls
                     .iter()
-                    .map(|url| asset_server.load::<Gltf>(url.trim_start_matches('/').to_owned()))
+                    .map(|url| {
+                        crate::meshopt::load_gltf(
+                            asset_server,
+                            url.trim_start_matches('/').to_owned(),
+                        )
+                    })
                     .collect();
                 out.push(crate::spawner::SpawnGroupState {
+                    template_script: spawner_spec.template_script.clone(),
+                    activation_radius: spawner_spec.activation_radius,
                     spec: spawner_spec,
                     handles,
                     done: false,
@@ -498,6 +529,10 @@ fn spawn_entity(
     if let Some(name) = &spec.name {
         entity.insert(Name::new(name.clone()));
     }
+    // Script Luau da entidade: o runtime executa `on_update(dt)` por frame.
+    if let Some(path) = &spec.script {
+        entity.insert(crate::luau::LuaScriptRef { path: path.clone() });
+    }
     attach_physics(&mut entity, ctx, spec);
     match &spec.kind {
         EntityKind::Group => {
@@ -533,12 +568,18 @@ fn spawn_entity(
         }
         EntityKind::GltfScene { url } => {
             let path = url.trim_start_matches('/');
-            let handle: Handle<Gltf> = ctx.asset_server.load(path.to_owned());
+            let handle: Handle<Gltf> = crate::meshopt::load_gltf(ctx.asset_server, path.to_owned());
             entity.insert(GltfScenePending { handle });
         }
         EntityKind::Primitive { shape, material } => {
-            let mesh = build_mesh(shape, ctx.meshes);
-            let mat = build_material(material, ctx.materials);
+            let mut primitive = primitive_mesh(shape);
+            if material.texture.is_some() {
+                if let Some(tile) = material.texture_tile {
+                    scale_primitive_uvs(&mut primitive, shape, tile);
+                }
+            }
+            let mesh = ctx.meshes.add(primitive);
+            let mat = build_material(material, ctx.materials, ctx.asset_server);
             entity.insert((Mesh3d(mesh), MeshMaterial3d(mat), Visibility::Inherited));
         }
         EntityKind::PointLight {
@@ -738,7 +779,7 @@ fn spawn_entity(
         }
         EntityKind::PlayerGltf { url } => {
             let path = url.trim_start_matches('/');
-            let handle: Handle<Gltf> = ctx.asset_server.load(path.to_owned());
+            let handle: Handle<Gltf> = crate::meshopt::load_gltf(ctx.asset_server, path.to_owned());
             entity.insert((
                 GltfScenePending { handle },
                 crate::player::Player::default(),
@@ -854,8 +895,8 @@ fn build_transform(spec: &TransformSpec) -> Transform {
     t
 }
 
-fn build_mesh(shape: &Shape, meshes: &mut Assets<Mesh>) -> Handle<Mesh> {
-    let mesh = match shape {
+fn primitive_mesh(shape: &Shape) -> Mesh {
+    match shape {
         Shape::Cuboid { half_size } => Mesh::from(Cuboid::new(
             half_size[0] * 2.0,
             half_size[1] * 2.0,
@@ -874,13 +915,13 @@ fn build_mesh(shape: &Shape, meshes: &mut Assets<Mesh>) -> Handle<Mesh> {
             radius,
             half_height,
         } => Mesh::from(Capsule3d::new(*radius, *half_height * 2.0)),
-    };
-    meshes.add(mesh)
+    }
 }
 
 fn build_material(
     spec: &MaterialSpec,
     materials: &mut Assets<StandardMaterial>,
+    asset_server: &AssetServer,
 ) -> Handle<StandardMaterial> {
     let mut material = StandardMaterial::default();
     if let Some([r, g, b]) = spec.base_color {
@@ -892,7 +933,32 @@ fn build_material(
     if let Some(v) = spec.roughness {
         material.perceptual_roughness = v.clamp(0.0, 1.0);
     }
+    if let Some(url) = spec.texture.as_deref() {
+        material.base_color_texture =
+            Some(asset_server.load(url.trim_start_matches('/').to_owned()));
+    }
     materials.add(material)
+}
+
+/// Re-escala as UVs (0..1) de uma primitiva para `extent / tile`, de modo que
+/// `texture-tile-size` seja metros por repetição da textura.
+fn scale_primitive_uvs(mesh: &mut bevy::mesh::Mesh, shape: &Shape, tile: f32) {
+    if tile <= 0.0 {
+        return;
+    }
+    let extents: [f32; 2] = match shape {
+        Shape::Plane { half_size } => [half_size[0] * 2.0, half_size[1] * 2.0],
+        Shape::Cuboid { half_size } => [half_size[0] * 2.0, half_size[2] * 2.0],
+        _ => return, // esferas/cilindros/cápsulas: UV polares, tiling por extensão não se aplica
+    };
+    let scale = [extents[0] / tile, extents[1] / tile];
+    if let Some(bevy::mesh::VertexAttributeValues::Float32x2(values)) =
+        mesh.attribute_mut(bevy::mesh::Mesh::ATTRIBUTE_UV_0)
+    {
+        for uv in values.iter_mut() {
+            *uv = [uv[0] * scale[0], uv[1] * scale[1]];
+        }
+    }
 }
 
 /// `<OrbitCamera>` follow for cameras with an explicit `target` (static

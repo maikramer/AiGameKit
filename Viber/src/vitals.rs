@@ -1,5 +1,8 @@
 //! Player vitals: `Health` and `Xp` components plus the debug key driver
-//! (`H` −10 HP, `J` full heal, `K` +10 XP) that feeds the dynamic HUD bars.
+//! (`H` −10 HP, `N` full heal, `K` +10 XP) that feeds the dynamic HUD bars.
+//!
+//! `J` was retired to the hero's melee attack (`combat`); `H`/`K` are free in
+//! the native build (the Luau `interacted()` keys are e/j/f/q/r/space only).
 //!
 //! There is no real combat yet — this is the dynamic-UI pipeline: the keys
 //! mutate the vitals, [`crate::hud::hud_health_sync`] /
@@ -84,7 +87,7 @@ pub fn apply_damage(health: &mut Health, amount: f32) {
     health.current = (health.current - amount).clamp(0.0, health.max);
 }
 
-/// Full restore (debug `J`).
+/// Full restore (debug `N`).
 pub fn heal_full(health: &mut Health) {
     health.current = health.max;
 }
@@ -105,11 +108,13 @@ pub fn gain_xp(xp: &mut Xp, gain: u32) {
     }
 }
 
-/// Debug vitals driver for the hero: `H` deals [`DEBUG_DAMAGE`], `J` fully
+/// Debug vitals driver for the hero: `H` deals [`DEBUG_DAMAGE`], `N` fully
 /// heals, `K` gains [`DEBUG_XP_GAIN`]. Inserts missing `Health`/`Xp` on the
 /// first relevant press (spawn recipes are intentionally left untouched).
+/// `J` belongs to the melee attack (`combat::player_melee_attack`).
 ///
-/// WIRED-BY-ORCHESTRATOR: see the module docs (registered in `src/main.rs`).
+/// WIRED-BY-ORCHESTRATOR: registered in `src/main.rs` (`vitals::debug_damage`
+/// in the `Update` schedule).
 #[allow(clippy::type_complexity)]
 pub fn debug_damage(
     keys: Res<ButtonInput<KeyCode>>,
@@ -131,7 +136,7 @@ pub fn debug_damage(
             }
         }
     }
-    if keys.just_pressed(KeyCode::KeyJ) {
+    if keys.just_pressed(KeyCode::KeyN) {
         match health.as_mut() {
             Some(hp) => heal_full(hp),
             None => {
