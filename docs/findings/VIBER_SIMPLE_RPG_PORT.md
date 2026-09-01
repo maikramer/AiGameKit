@@ -194,15 +194,25 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
 - [ ] Resíduo: hit-stop/knockback (física) e lunge ficaram para o loop 10;
       riposte pós-parry simplificado para parry=block.
 
-### Loop 9 — Mundo vivo (polish)
-- [ ] BiomeRegion: tint/fog/bgm/exposure por região (dark-forest/desert/swamp/
-      frozen-peaks) — port do VibeGame.
-- [ ] Orçamento de PointLights (acende as 12 tochas mais próximas — 69 luzes no
-      mundo).
-- [ ] SFX espaciais: whoosh/hit (pico ~35%), harvest, UI, loops ambient-water com
-      histerese (8 águas); bank de sons ~45 clips → subset.
-- [ ] NPC idle gestures (call/talk/foldarms) p/ townsfolk/merchant/healer/guard.
-- [ ] AdaptiveQuality (DPR por target FPS) — se aplicável ao render Bevy.
+### Loop 9 — Mundo vivo (polish) — ✅ DONE (2026-09-01)
+- [x] `src/ambient.rs` (novo): **BiomeRegion** — point-in-polygon nas 4
+      regiões do XML (`BiomeRegions` resource; o spawn antigo sobrescrevia
+      e só o último bioma sobrevivia) → `DistanceFog` exponencial na câmara
+      com a densidade do XML + tint do bioma + toast "Entraste em: X";
+      **orçamento de PointLights** — só as 12 mais próximas da câmara
+      ficam acesas (69 no mundo); **gestos idle de NPC** — NPCs de quest
+      (sem script) tocam clips talk/wave/call periodicamente quando o rig
+      tem (skip silencioso caso contrário); **SFX mínimos** — 4 WAVs
+      sintéticos (hit/whoosh/harvest/ui) em `assets/audio/sfx/`, evento
+      `SfxEvent` com volume por distância, acionados por golpe forte,
+      bomba e toasts; feature `wav` no bevy.
+- [x] Evidência in-game: "Entraste em: frozen-peaks" ao cruzar a cunha do
+      bioma (F11+medir); bomba → BOOM com SFX sem avisos de asset; 0
+      panics; light budget sem erros com 69 luzes. 426 testes + clippy -D
+      warnings verdes.
+- [ ] Resíduo: BGM por bioma (XML traz bgm-layer="1" em todos — nada a
+      trocar ainda), adaptive quality e loops ambient-water (água ainda
+      sem SFX assets próprios).
 
 ### Loop 10 — Física Fase 3 & extras
 - [ ] Knockback físico (impulsos Rapier) em hits/bombas.

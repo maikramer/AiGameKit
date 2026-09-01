@@ -158,6 +158,7 @@ pub struct ToastSpawned {
 fn toast_display_system(
     mut toasts: MessageReader<ScriptToast>,
     mut spawned: MessageWriter<ToastSpawned>,
+    mut sfx: MessageWriter<crate::ambient::SfxEvent>,
     active: Query<(), With<ToastPill>>,
     container: Query<Entity, With<ToastContainer>>,
     mut commands: Commands,
@@ -166,6 +167,10 @@ fn toast_display_system(
         info!(target: "viber::toast", "{}", toast.0);
         spawned.write(ToastSpawned {
             text: toast.0.clone(),
+        });
+        sfx.write(crate::ambient::SfxEvent {
+            clip: crate::ambient::SfxClip::Ui,
+            position: None,
         });
         if active.iter().count() >= TOAST_CAP {
             continue; // pilha cheia: o mais antigo ainda está a desvanecer

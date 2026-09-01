@@ -17,6 +17,7 @@ base64 = "0.22"
 # "Missing data" and the whole GLB fails to load.
 bevy = { version = "0.19", features = [
     "bevy_remote",
+    "wav",
     "jpeg",
     "webp",
     "basis-universal",

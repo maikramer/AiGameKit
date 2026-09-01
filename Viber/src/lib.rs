@@ -4,6 +4,7 @@
 //! and gameplay modules (`terrain`); the `viber` binary is a thin CLI on top.
 
 pub mod ai;
+pub mod ambient;
 pub mod animation;
 pub mod bridge;
 pub mod camera;

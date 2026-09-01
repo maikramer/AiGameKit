@@ -108,6 +108,7 @@ pub struct MeleeFx<'w, 's> {
     toasts: bevy::ecs::message::MessageWriter<'w, ScriptToast>,
     numbers: bevy::ecs::message::MessageWriter<'w, crate::feedback::DamageNumberEvent>,
     alerts: bevy::ecs::message::MessageWriter<'w, crate::feedback::AttackAlert>,
+    sfx: bevy::ecs::message::MessageWriter<'w, crate::ambient::SfxEvent>,
     combat_target: ResMut<'w, crate::feedback::CombatTarget>,
     quests_log: Option<ResMut<'w, crate::quests::QuestLog>>,
     hero_attack_started: ResMut<'w, SwingClock>,
@@ -267,6 +268,10 @@ pub fn player_melee_attack(
             });
             // aggro-chain: aliados a 15 m do alvo batido recebem o alerta
             fx.alerts.write(crate::feedback::AttackAlert { position });
+            fx.sfx.write(crate::ambient::SfxEvent {
+                clip: crate::ambient::SfxClip::Hit,
+                position: Some(position),
+            });
         }
         if killed {
             fx.commands.entity(entity).remove::<LuaScriptRef>();

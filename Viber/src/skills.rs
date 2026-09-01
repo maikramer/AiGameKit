@@ -383,6 +383,7 @@ fn abilities_system(
     stats: Res<PlayerStatsResource>,
     terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     mut commands: Commands,
+    mut sfx: MessageWriter<crate::ambient::SfxEvent>,
 ) {
     let dt = time.delta_secs();
     cds.dash = (cds.dash - dt).max(0.0);
@@ -444,6 +445,12 @@ fn abilities_system(
         } else {
             "Golpe forte ao ar!".into()
         }));
+        if hit_any {
+            sfx.write(crate::ambient::SfxEvent {
+                clip: crate::ambient::SfxClip::Whoosh,
+                position: Some(pos),
+            });
+        }
     }
 }
 
@@ -486,7 +493,7 @@ fn bomb_throw_system(
 }
 
 /// Bomba: voo parabólico + explosão radial no fim do pavio.
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn bomb_step_system(
     time: Res<Time>,
     mut bombs: Query<(Entity, &mut Transform, &mut Bomb)>,
@@ -495,6 +502,7 @@ fn bomb_step_system(
     mut numbers: MessageWriter<DamageNumberEvent>,
     mut alerts: MessageWriter<AttackAlert>,
     mut toasts: MessageWriter<ScriptToast>,
+    mut sfx: MessageWriter<crate::ambient::SfxEvent>,
 ) {
     let dt = time.delta_secs();
     for (entity, mut transform, mut bomb) in &mut bombs {
@@ -518,6 +526,10 @@ fn bomb_step_system(
             }
         }
         alerts.write(AttackAlert { position: center });
+        sfx.write(crate::ambient::SfxEvent {
+            clip: crate::ambient::SfxClip::Hit,
+            position: Some(center),
+        });
         toasts.write(ScriptToast("BOOM!".into()));
         commands.entity(entity).despawn();
     }

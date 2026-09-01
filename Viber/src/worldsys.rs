@@ -89,6 +89,12 @@ pub struct BiomeRegionData {
     pub tint: Option<[f32; 3]>,
 }
 
+/// Todas as `<BiomeRegion>` do mundo (loop 9: fog/tint por bioma).
+#[derive(Debug, Clone, Resource, Default)]
+pub struct BiomeRegions {
+    pub list: Vec<BiomeRegionData>,
+}
+
 /// `<WorldBorder>` config.
 #[derive(Debug, Clone, Resource)]
 pub struct WorldBorderConfig {

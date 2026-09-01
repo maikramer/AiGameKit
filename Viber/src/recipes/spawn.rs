@@ -317,8 +317,10 @@ pub fn startup(world: &mut World) {
     if let Some(border) = pending_worldsys.border {
         world.insert_resource(border);
     }
-    for biome in pending_worldsys.biomes {
-        world.insert_resource(biome);
+    if !pending_worldsys.biomes.is_empty() {
+        world.insert_resource(crate::worldsys::BiomeRegions {
+            list: pending_worldsys.biomes.clone(),
+        });
     }
     for config in pending_worldsys.configs {
         world.insert_resource(config);
