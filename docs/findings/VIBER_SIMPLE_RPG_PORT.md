@@ -132,14 +132,28 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
       em 0 como calculado (screenshots). 409 testes + clippy -D warnings
       verdes.
 
-### Loop 6 — Travel, Nota, wayfinding & IA de grupo
-- [ ] 12 marcos da Nota (nota-landmarks) + [F] "Medir e assinar" (crédito quests
-      visit) + snapshot p/ save.
-- [ ] Viagem rápida (fogueira → marcos) + respawn points (nearestRespawn).
-- [ ] Minimap blips por categoria + waypoints + WaypointArrow screen-space +
-      pips no compass; watch-guard fixa os 4 lookouts.
-- [ ] Enemy registry (aliveInBiome) + gating do boss final (só spawna com bioma
-      limpo); aggro-chain (dano alerta aliados próximos).
+### Loop 6 — Travel, Nota, wayfinding & IA de grupo — ✅ DONE (2026-09-01, commit afac7291)
+- [x] `src/travel.rs` (novo): catálogo dos **12 marcos da Nota** (3/bioma,
+      labels PT, raios de anotação por bioma — espelha nota-landmarks.ts);
+      **[F] "Medido e assinado"** (NotaLog + toast; 3 do bioma → "BIOMA
+      ASSINADO"); **viagem rápida [G]** perto da fogueira (lista marcos
+      assinados, ↑↓ + [J] teleporta); **Waypoint HUD** (topo do ecrã com
+      rumo N/NE/… e distância ao último marco); **EnemyRegistry** (hostis
+      vivos por banda centro/norte/sul/este/oeste, snapshot 1 Hz para
+      scripts via `viber.alive_in_region(idx)`); **gating do boss final**
+      no boss.lua (dorme até a banda sul estar limpa, toast ao despertar);
+      **aggro-chain**: `AttackAlert` → `on_player_attack(px, pz)` nos
+      scripts a 15 m do alvo atingido (wolf/bandit/goblin forçam chase);
+      QA **F11** teleporta ao próximo marco por assinar. Respawn points
+      por proximidade já feitos no loop 2.
+- [x] Fix no loop: `TravelMenuState` sem `init_resource` (panic no arranque);
+      tap sintético da bridge não sobrevive a `keys.pressed` (press+release
+      no mesmo lote) — [F] usa `just_pressed`.
+- [x] Evidência in-game: "Medido e assinado: Primeiro Mojão (faltam 2 em
+      Picos Gelados)" + "marco assinado" nos logs; F11 avançou para o
+      próximo marco não assinado; menu de viagem aberto na fogueira (estado
+      vazio pré-assinatura, screenshot); 0 panics pós-fix. 415 testes +
+      clippy -D warnings verdes.
 
 ### Loop 7 — Save/load & opções
 - [ ] Save/load em disco (JSON/RON) com serializers por módulo (progress: XP/
