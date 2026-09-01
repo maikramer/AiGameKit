@@ -309,23 +309,6 @@ pub fn startup(world: &mut World) {
         crate::hud::spawn_hud(world, tag, attrs);
     }
     if let Some(day) = pending_worldsys.day_cycle {
-        // The sky derives its sun/night inside the shader from Globals.time +
-        // these clock constants: the material's GPU buffer is written once at
-        // spawn (a plain `#[uniform]` is never re-uploaded on modify in Bevy
-        // 0.19), so the day cycle must be baked in HERE, not updated per frame.
-        let mut domes = world.query::<&crate::sky::SkyDome>();
-        for dome in domes.iter_mut(world) {
-            if let Some(mut material) = sky_mats.get_mut(&dome.material) {
-                let uniform = &mut material.uniform;
-                uniform.drive = 1.0;
-                uniform.clock_start = day.minute_of_day;
-                uniform.clock_speed = day.minutes_per_real_second;
-                uniform.dawn = day.dawn_minute;
-                uniform.dusk = day.dusk_minute;
-                uniform.max_elev = day.max_sun_elevation;
-                uniform.az_base = day.sun_azimuth_base;
-            }
-        }
         world.insert_resource(day);
     }
     if let Some(weather) = pending_worldsys.weather {

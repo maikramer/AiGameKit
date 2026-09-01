@@ -21,7 +21,7 @@ pub struct SkyDome {
 }
 
 /// GPU uniform block (mirrored in `sky.wgsl` as `SkyUniform`).
-#[derive(Debug, Clone, bevy::render::render_resource::ShaderType)]
+#[derive(Debug, Clone, Default, bevy::render::render_resource::ShaderType)]
 pub struct SkyUniform {
     pub sun_dir: Vec3,
     pub time: f32,
@@ -142,7 +142,10 @@ pub fn sky_dome_mesh() -> bevy::mesh::Mesh {
             let d = ((b + 1) * (slices + 1) + s) as u32;
             let e = ((b + 1) * (slices + 1) + s + 1) as u32;
             // Winding invertido: o interior da esfera é o lado visível.
-            indices.extend([a, e, d, a, e, c]);
+            // Os dois triângulos do quad têm de partilhar a MESMA orientação
+            // — [a,e,d] ficava com a normal para FORA e era culled visto de
+            // dentro (xadrez de um-triângulo-sim-um-triângulo-não no céu).
+            indices.extend([a, d, e, a, e, c]);
         }
     }
     let mut mesh = bevy::mesh::Mesh::new(
@@ -169,22 +172,35 @@ pub fn sky_follow_camera(
     }
 }
 
-/// Push clock/sun/weather into the dome material every frame.
+/// Publish the live sun/clock/weather into the dome's material.
+///
+/// The material asset is RE-CREATED every frame instead of mutated: Bevy
+/// 0.19 promotes a plain `#[uniform(0)]` to a slot-1 storage buffer that is
+/// never re-uploaded on `AssetEvent::Modified` (mutating it froze the sky on
+/// its first-frame values), and reading it back through the binding yielded
+/// unrelated buffer contents, which drove the day/night/cloud flicker. The
+/// `Added` path — a fresh asset — provably uploads correctly, and one 64-byte
+/// buffer per frame is nothing.
+#[allow(clippy::needless_pass_by_value)]
 pub fn sky_update(
     time: Res<Time>,
     sun: Res<crate::worldsys::SunState>,
     weather: Option<Res<crate::worldsys::WeatherState>>,
-    mut materials: ResMut<Assets<SkyMaterial>>,
-    domes: Query<&SkyDome>,
+    mut sky_mats: ResMut<Assets<SkyMaterial>>,
+    mut domes: Query<&mut MeshMaterial3d<SkyMaterial>>,
 ) {
-    for dome in &domes {
-        if let Some(mut material) = materials.get_mut(&dome.material) {
-            material.uniform.sun_dir = sun.dir;
-            material.uniform.night = sun.night;
-            material.uniform.time = time.elapsed_secs();
-            if let Some(w) = weather.as_deref() {
-                material.uniform.wind = Vec2::new(w.wind[0], w.wind[1]);
-            }
+    for mut binding in &mut domes {
+        let mut uniform = sky_mats
+            .get(&binding.0)
+            .map(|material| material.uniform.clone())
+            .unwrap_or_default();
+        uniform.sun_dir = sun.dir;
+        uniform.night = sun.night;
+        uniform.time = time.elapsed_secs();
+        if let Some(w) = weather.as_deref() {
+            uniform.wind = Vec2::new(w.wind[0], w.wind[1]);
         }
+        let handle = sky_mats.add(SkyMaterial { uniform });
+        **binding = handle;
     }
 }

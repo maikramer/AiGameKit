@@ -90,18 +90,30 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     color += vec3(0.9, 0.93, 1.0) * star;
 
     // ── Nuvens: FBM num plano projetado, deslocadas pelo vento ──────
+    // Frequência calibrada para nuvens de 3-8°: a versão anterior amostrava
+    // 0-6 unidades de ruído no céu VISÍVEL inteiro, o que gerava blobs do
+    // tamanho de continentes que cobriam o zénite ao passar (o céu "piscava"
+    // branco↔azul) e uma névoa branca permanente de ~20-30% de alpha.
     if (dir.y > 0.02) {
-        let lift = mix(0.35, 0.9, sky.cloud_elevation);
-        let uv = dir.xz / (dir.y + 0.08) * (2.2 - lift) * 1.6
-            + sky.wind * sky.time * 0.008;
+        // cloud_elevation controla a altura do plano: mais alto = nuvens
+        // mais pequenas/distantes. Perto do zénite a projeção ao plano
+        // colapsa (dir.xz → 0), por isso misturamos com um mapeamento
+        // tangencial — sem singularidade, sem nuvem congelada no topo.
+        let height = mix(0.7, 2.6, sky.cloud_elevation);
+        let plane = dir.xz / (dir.y + 0.12) * 3.0 * height;
+        let tangential = dir.xz * 4.0;
+        let uv = mix(plane, tangential, smoothstep(0.55, 0.95, dir.y))
+            + sky.wind * sky.time * 0.004;
         let n = fbm(uv);
-        let threshold = mix(0.78, 0.24, clamp(sky.cloud_coverage, 0.0, 1.0));
-        let cov = smoothstep(threshold, threshold + 0.22, n);
-        let alpha = cov * clamp(sky.cloud_density * 2.2, 0.0, 1.0)
+        let threshold = mix(0.74, 0.30, clamp(sky.cloud_coverage, 0.0, 1.0));
+        let cov = smoothstep(threshold, threshold + 0.20, n);
+        let alpha = cov * mix(0.5, 1.05, clamp(sky.cloud_density, 0.0, 1.0))
             * smoothstep(0.02, 0.12, dir.y);
 
-        // Sombreamento interno: lado virado ao sol mais claro.
-        let shade = mix(0.62, 1.0, clamp(n, 0.0, 1.0));
+        // Sombreamento interno: densidade escurece a base; uma segunda
+        // amostra deslocada na direção do sol acende o lado virado a ele.
+        let lit = fbm(uv + sun_az * 0.6);
+        let shade = mix(0.58, 1.02, n) + (lit - n) * 0.8;
         var cloud_col = vec3(1.04, 1.03, 1.0) * shade * (0.35 + 0.65 * day);
         // Nuvens pegam o tom do pôr-do-sol.
         cloud_col += vec3(0.9, 0.35, 0.1) * warm_band * 0.8;
@@ -141,9 +153,12 @@ fn fbm(p: vec2<f32>) -> f32 {
     var v = 0.0;
     var amp = 0.5;
     var pp = p;
-    for (var i = 0; i < 4; i++) {
+    // Rotação por oitava: sem ela as oitavas alinham-se à grelha do value
+    // noise e as nuvens ganham artefactos quadrados axis-aligned.
+    let rot = mat2x2<f32>(0.737, 0.676, -0.676, 0.737);
+    for (var i = 0; i < 5; i++) {
         v += amp * value_noise(pp);
-        pp = pp * 2.03 + vec2(11.7, 5.3);
+        pp = rot * pp * 2.03 + vec2(11.7, 5.3);
         amp *= 0.5;
     }
     return v;
