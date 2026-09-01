@@ -25,6 +25,7 @@ pub mod scaffold;
 pub mod sky;
 pub mod spawner;
 pub mod terrain;
+pub mod travel;
 pub mod vitals;
 pub mod worldsys;
 pub mod xml;

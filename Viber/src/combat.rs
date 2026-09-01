@@ -101,6 +101,18 @@ pub fn ensure_creature_vitals(
     }
 }
 
+/// Pacote de side-effects do melee (o sistema passa de 16 parâmetros).
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct MeleeFx<'w, 's> {
+    commands: Commands<'w, 's>,
+    toasts: bevy::ecs::message::MessageWriter<'w, ScriptToast>,
+    numbers: bevy::ecs::message::MessageWriter<'w, crate::feedback::DamageNumberEvent>,
+    alerts: bevy::ecs::message::MessageWriter<'w, crate::feedback::AttackAlert>,
+    combat_target: ResMut<'w, crate::feedback::CombatTarget>,
+    quests_log: Option<ResMut<'w, crate::quests::QuestLog>>,
+    hero_attack_started: ResMut<'w, SwingClock>,
+}
+
 /// Golpe do herói: alvo com script mais próximo dentro de alcance + cone.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn player_melee_attack(
@@ -109,12 +121,7 @@ pub fn player_melee_attack(
     harvest_targets: Query<(&GlobalTransform, &ScriptInteraction), Without<Player>>,
     time: Res<Time>,
     mut last: Local<Option<f64>>,
-    mut hero_attack_started: ResMut<SwingClock>,
-    mut commands: Commands,
-    mut toasts: bevy::ecs::message::MessageWriter<ScriptToast>,
-    mut numbers: bevy::ecs::message::MessageWriter<crate::feedback::DamageNumberEvent>,
-    mut combat_target: ResMut<crate::feedback::CombatTarget>,
-    mut quests_log: Option<ResMut<crate::quests::QuestLog>>,
+    mut fx: MeleeFx,
     players: Query<&GlobalTransform, With<Player>>,
     mut hero_xp: Query<&mut Xp, With<Player>>,
     mut hero_animator: Query<&mut CharacterAnimator, With<Player>>,
@@ -175,7 +182,7 @@ pub fn player_melee_attack(
     // que depende de acertar um alvo.
     let hit_entity: Option<Entity> = best.map(|(e, _)| e);
     *last = Some(time.elapsed_secs_f64());
-    hero_attack_started.0 = Some(time.elapsed_secs_f64());
+    fx.hero_attack_started.0 = Some(time.elapsed_secs_f64());
     // Clip de ataque do herói, por NOME ("attack" no hero_lod0). Não mexe em
     // `animator.state` — o driver de movimento só re-afirma walk/idle quando
     // o estado difere, então o golpe toca inteiro por cima.
@@ -195,8 +202,8 @@ pub fn player_melee_attack(
     }
     if let Some(entity) = hit_entity {
         // Soft-lock do VibeGame: acertar fixa o alvo da TargetBar (TTL 8 s).
-        combat_target.entity = Some(entity);
-        combat_target.timer = crate::feedback::TARGET_TTL;
+        fx.combat_target.entity = Some(entity);
+        fx.combat_target.timer = crate::feedback::TARGET_TTL;
         let hit_pos = enemies
             .get(entity)
             .ok()
@@ -213,33 +220,35 @@ pub fn player_melee_attack(
             false
         };
         if let Some(position) = hit_pos {
-            numbers.write(crate::feedback::DamageNumberEvent {
+            fx.numbers.write(crate::feedback::DamageNumberEvent {
                 position,
                 text: format!("-{MELEE_DAMAGE}"),
                 color: Color::srgb(1.0, 0.96, 0.85),
             });
+            // aggro-chain: aliados a 15 m do alvo batido recebem o alerta
+            fx.alerts.write(crate::feedback::AttackAlert { position });
         }
         if killed {
-            commands.entity(entity).remove::<LuaScriptRef>();
-            commands.entity(entity).insert(Corpse {
+            fx.commands.entity(entity).remove::<LuaScriptRef>();
+            fx.commands.entity(entity).insert(Corpse {
                 timer: CORPSE_LIFETIME,
             });
             if let Ok(mut xp) = hero_xp.single_mut() {
                 gain_xp(&mut xp, KILL_XP);
             }
             if let Some(position) = hit_pos {
-                numbers.write(crate::feedback::DamageNumberEvent {
+                fx.numbers.write(crate::feedback::DamageNumberEvent {
                     position: position + Vec3::Y * 0.4,
                     text: format!("+{KILL_XP} XP"),
                     color: Color::srgb(1.0, 0.8, 0.25),
                 });
             }
-            toasts.write(ScriptToast(format!("Inimigo derrotado (+{KILL_XP} XP)")));
+            fx.toasts.write(ScriptToast(format!("Inimigo derrotado (+{KILL_XP} XP)")));
             // Quests: abate reportado ao diário (kill targets por tipo).
-            if let (Some(kind), Some(quests)) = (kind, quests_log.as_deref_mut()) {
+            if let (Some(kind), Some(quests)) = (kind, fx.quests_log.as_deref_mut()) {
                 for ready in quests.report_kill(&kind) {
                     if let Some(def) = quests.def(&ready) {
-                        toasts.write(ScriptToast(format!(
+                        fx.toasts.write(ScriptToast(format!(
                             "Objetivo completo: {} — volta ao NPC",
                             def.title
                         )));

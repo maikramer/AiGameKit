@@ -15,6 +15,15 @@ local function pick_target()
 end
 
 function on_update(dt)
+  -- Gating (loop 6): o ogro dorme enquanto houver hostis vivos na banda sul
+  -- (frozen-peaks). `viber.alive_in_region(2)` = contagem da banda sul.
+  if not st.awake then
+    if viber.alive_in_region(2) > 0 then
+      return
+    end
+    st.awake = true
+    viber.toast("Um rugido ecoa dos Picos Gelados — o ogro despertou!")
+  end
   local has, px, py, pz = viber.player_position()
   if not has then return end
   local x, y, z = viber.position()

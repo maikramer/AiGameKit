@@ -9,6 +9,12 @@ local st = viber.state()
 st.t = 0
 local target = nil
 
+-- aggro-chain (loop 6): um golpe do herói num lobo da matilha acorda os
+-- outros a 15 m — forçam perseguição mesmo fora do raio de aggro.
+function on_player_attack(px, pz)
+  st.aggro = true
+end
+
 local function pick_target()
   local tx, tz = viber.wander_target(WANDER_RADIUS)
   target = { tx, tz }
@@ -19,6 +25,7 @@ function on_update(dt)
   if not has then return end
   local x, y, z = viber.position()
   local dist = math.sqrt((px - x)^2 + (pz - z)^2)
+  if st.aggro then dist = 0 end
   st.state = viber.next_state(st.state or "wander", dist, AGGRO, DEAGGRO)
 
   if st.state == "chase" then

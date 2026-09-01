@@ -59,6 +59,13 @@ pub struct DamageNumberEvent {
     pub color: Color,
 }
 
+/// Aggro-chain (loop 6): o herói acertou uma criatura nesta posição —
+/// aliados num raio de 15 m recebem `on_player_attack(px, pz)` nos scripts.
+#[derive(Debug, Clone, Copy, bevy::ecs::message::Message)]
+pub struct AttackAlert {
+    pub position: Vec3,
+}
+
 // ── componentes / recursos ──────────────────────────────────────────────
 
 /// Janela de i-frames do herói (decrementada por frame).
@@ -199,6 +206,7 @@ impl Plugin for FeedbackPlugin {
         app.add_message::<ScriptToast>()
             .add_message::<PlayerHurt>()
             .add_message::<DamageNumberEvent>()
+            .add_message::<AttackAlert>()
             .init_resource::<CombatTarget>()
             .init_resource::<HurtFlash>()
             .add_systems(Startup, (spawn_vignette, spawn_damage_number_pool))

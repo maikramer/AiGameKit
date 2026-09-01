@@ -140,6 +140,9 @@ pub struct ScriptCtx {
     pub quest_states: std::collections::HashMap<String, String>,
     /// Snapshot do vault (recursos + itens) para `vault_get`/`item_count`.
     pub vault: std::collections::HashMap<String, u32>,
+    /// Hostis vivos por banda do mundo (travel::REGIONS) —
+    /// `viber.alive_in_region(idx)`.
+    pub alive_regions: [u32; 5],
 }
 
 impl ScriptCtx {
@@ -163,6 +166,8 @@ pub struct LoadedScript {
     pub chunk: Function,
     /// `on_update(dt)` extracted from the environment after execution.
     pub on_update: Option<Function>,
+    /// Callback opcional de aggro-chain (`on_player_attack(px, pz)`).
+    pub on_player_attack: Option<Function>,
     /// True once the chunk's top-level has run.
     pub ran: bool,
 }
@@ -248,6 +253,7 @@ impl LuaScriptHost {
                 env,
                 chunk,
                 on_update: None,
+                on_player_attack: None,
                 ran: false,
             },
         );
@@ -307,6 +313,9 @@ impl LuaScriptHost {
         if !script.ran {
             script.chunk.call::<()>(())?;
             script.on_update = script.env.raw_get::<Option<Function>>("on_update")?;
+            script.on_player_attack = script
+                .env
+                .raw_get::<Option<Function>>("on_player_attack")?;
             script.ran = true;
         }
         Ok(())
@@ -342,6 +351,31 @@ impl LuaScriptHost {
             return Ok(());
         };
         on_update.call::<()>(dt)
+    }
+
+    /// Aggro-chain: chama `on_player_attack(px, pz)` no script da entidade
+    /// (opcional — scripts sem o callback são ignorados).
+    pub fn run_player_attack_alert(
+        &mut self,
+        entity: Entity,
+        path: &str,
+        attacker_pos: Vec3,
+    ) -> mlua::Result<()> {
+        {
+            let mut ctx = self
+                .lua
+                .app_data_mut::<ScriptCtx>()
+                .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+            ctx.entity = Some(entity);
+        }
+        let cb = self
+            .registry
+            .get(path)
+            .and_then(|s| s.on_player_attack.clone());
+        let Some(cb) = cb else {
+            return Ok(());
+        };
+        cb.call::<()>((attacker_pos.x, attacker_pos.z))
     }
 
     /// Drains all queued `set_position` commands (called once per frame after
@@ -635,6 +669,7 @@ impl LuaScriptHost {
                         logs: Vec::new(),
                         quest_states: c.quest_states.clone(),
                         vault: c.vault.clone(),
+                        alive_regions: c.alive_regions,
                     })
                     .unwrap_or_default();
                 let entity = ctx
@@ -801,6 +836,15 @@ impl LuaScriptHost {
             })?,
         )?;
         api.set(
+            "alive_in_region",
+            lua.create_function(|lua, idx: usize| {
+                let ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                Ok(ctx.alive_regions.get(idx).copied().unwrap_or(0))
+            })?,
+        )?;
+        api.set(
             "report_visit",
             lua.create_function(|lua, place: String| {
                 lua.app_data_mut::<ScriptCtx>()
@@ -895,6 +939,7 @@ impl LuaScriptHost {
                         logs: Vec::new(),
                         quest_states: c.quest_states.clone(),
                         vault: c.vault.clone(),
+                        alive_regions: c.alive_regions,
                     })
                     .unwrap_or_default();
                 let code = key_code_from_str(&key)
@@ -958,8 +1003,17 @@ impl bevy::app::Plugin for LuauScriptPlugin {
         app.add_message::<crate::feedback::PlayerHurt>();
         // .chain() obriga on_add → update → on_remove dentro do mesmo frame
         // (um tuple simples não garante ordem no Bevy 0.19).
-        app.insert_resource(host)
-            .add_systems(Update, (luau_on_add, luau_update, luau_on_remove).chain());
+        app.add_message::<crate::feedback::AttackAlert>();
+        app.insert_resource(host).add_systems(
+            Update,
+            (
+                luau_on_add,
+                luau_update,
+                aggro_alert_system,
+                luau_on_remove,
+            )
+                .chain(),
+        );
     }
 }
 
@@ -1261,6 +1315,35 @@ pub fn luau_update(
     for (entity, pos) in host.take_pending() {
         if let Ok((_, _, Some(mut transform), _)) = scripts.get_mut(entity) {
             transform.translation = pos;
+        }
+    }
+}
+
+/// Aggro-chain (loop 6): ao acertar uma criatura, aliados scriptados a até
+/// [`ALERT_RADIUS_M`] recebem `on_player_attack(px, pz)` — os scripts de
+/// matilhas usam-no para passar a perseguir.
+#[allow(clippy::type_complexity)]
+fn aggro_alert_system(
+    mut alerts: bevy::ecs::message::MessageReader<crate::feedback::AttackAlert>,
+    mut host: ResMut<LuaScriptHost>,
+    mut scripts: Query<(Entity, &LuaScriptRef, &GlobalTransform), Without<crate::player::Player>>,
+) {
+    for alert in alerts.read() {
+        let alert_pos = alert.position;
+        for (entity, lref, transform) in &mut scripts {
+            // só quem está perto DO ALVO ATINGIDO (não do player)
+            if transform
+                .translation()
+                .distance_squared(alert_pos)
+                .sqrt()
+                <= crate::travel::ALERT_RADIUS_M
+            {
+                if let Err(error) =
+                    host.run_player_attack_alert(entity, &lref.path, alert.position)
+                {
+                    host.warn_once(&lref.path, &error);
+                }
+            }
         }
     }
 }
