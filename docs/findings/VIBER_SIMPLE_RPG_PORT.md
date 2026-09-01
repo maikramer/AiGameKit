@@ -214,11 +214,25 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
       trocar ainda), adaptive quality e loops ambient-water (água ainda
       sem SFX assets próprios).
 
-### Loop 10 — Física Fase 3 & extras
-- [ ] Knockback físico (impulsos Rapier) em hits/bombas.
-- [ ] Destrutíveis com queda física (break-style: fall) — opcional.
-- [ ] Projectiles (legado archer — só se houver uso real).
-- [ ] NavMesh (recast) — provavelmente desnecessário: IA já anda por sample.
+### Loop 10 — Física Fase 3 & extras — ✅ DONE (2026-09-01, commit f73bf4ea)
+- [x] `src/physics_fx.rs` (novo): **knockback cinemático** — `Knockback`
+      (velocidade horizontal com decaimento exponencial 6/s + snap ao
+      terreno), aplicado ao alvo do melee (5 m/s na direção do golpe), às
+      criaturas sobreviventes de bombas (radial com falloff) e ao herói
+      quando atacado (`PlayerHurt.from` = origem do script atacante).
+      Decisão de arquitetura: as criaturas são transform-driven (scripts +
+      move_towards), pelo que o knockback segue o modelo cinemático do CCT
+      do VibeGame em vez de impulsos Rapier em rigidbodies dinâmicos.
+- [x] **Destrutíveis com queda** (`break-style: fall`): `viber.topple()` nos
+      scripts de colheita → `Falling` (tombamento ease-in de 88° em 0,9 s
+      na direção herói→entidade) + despawn; tree.lua/rock.lua migrados.
+- [x] Projectiles/NavMesh: descartados com justificação (sem uso ativo no
+      mundo; a IA anda por sample do heightfield).
+- [x] Evidência in-game: 2 árvores derrubadas com topple ao vivo ("Cortar"
+      ×4 e "Árvore derrubada" ×2 nos logs, screenshot do tombamento);
+      knockback do herói medido pela árvore de entidades (−25.8/133.1 →
+      −22.8/137.1 após ataque de criatura, sem input). 430 testes +
+      clippy -D warnings verdes.
 
 ## Contratos que o port deve respeitar
 
