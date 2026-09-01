@@ -260,7 +260,8 @@ fn spawn_overlay(mut commands: Commands) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(8.0),
+                // baixo-direita: o minimapa/barras ocupam o topo
+                bottom: Val::Px(8.0),
                 right: Val::Px(8.0),
                 padding: UiRect::all(Val::Px(8.0)),
                 flex_direction: FlexDirection::Column,
