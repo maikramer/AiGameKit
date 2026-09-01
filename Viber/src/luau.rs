@@ -52,6 +52,9 @@ pub enum ScriptCommand {
     AddXp(u32),
     DamagePlayer(f32),
     HealPlayer(f32),
+    /// Aplica um status effect ao herói (hoje: `"venom"`) — tratado pelo
+    /// feedback (tick 1/s, path único de dano).
+    ApplyStatus { kind: String, secs: f32 },
     /// Mensagem de UI (balão/toast) — consumida via [`ScriptToast`].
     Toast(String),
     /// Registra alvo de interação ("[J] Minerar") na entidade.
@@ -671,6 +674,16 @@ impl LuaScriptHost {
             })?,
         )?;
         api.set(
+            "apply_status",
+            lua.create_function(|lua, (kind, secs): (String, f32)| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::ApplyStatus { kind, secs });
+                Ok(())
+            })?,
+        )?;
+        api.set(
             "add_xp",
             lua.create_function(|lua, gain: u32| {
                 lua.app_data_mut::<ScriptCtx>()
@@ -812,6 +825,8 @@ impl bevy::app::Plugin for LuauScriptPlugin {
         // Input para `viber.interacted` + evento de toasts de script.
         app.init_resource::<ButtonInput<KeyCode>>();
         app.add_message::<ScriptToast>();
+        // O dano de scripts segue o path único do feedback (i-frames etc.).
+        app.add_message::<crate::feedback::PlayerHurt>();
         // .chain() obriga on_add → update → on_remove dentro do mesmo frame
         // (um tuple simples não garante ordem no Bevy 0.19).
         app.insert_resource(host)
@@ -855,6 +870,7 @@ pub fn luau_update(
     >,
     mut players: Query<
         (
+            Entity,
             &GlobalTransform,
             Option<&mut Transform>,
             Option<&mut Health>,
@@ -864,13 +880,14 @@ pub fn luau_update(
     >,
     terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     mut toasts: bevy::ecs::message::MessageWriter<ScriptToast>,
+    mut hurts: bevy::ecs::message::MessageWriter<crate::feedback::PlayerHurt>,
     mut commands: Commands,
 ) {
     let dt = time.delta_secs();
     let elapsed = time.elapsed_secs_f64();
     let (player_pos, mut player_components) = match players.single_mut() {
-        Ok((global, transform, health, xp)) => {
-            (Some(global.translation()), Some((transform, health, xp)))
+        Ok((p_entity, global, transform, health, xp)) => {
+            (Some(global.translation()), Some((p_entity, transform, health, xp)))
         }
         Err(_) => (None, None),
     };
@@ -927,29 +944,41 @@ pub fn luau_update(
                 }
             }
             ScriptCommand::TeleportPlayer(pos) => {
-                if let Some((Some(transform), _, _)) = player_components.as_mut() {
+                if let Some((_, Some(transform), _, _)) = player_components.as_mut() {
                     transform.translation = pos;
                 }
             }
             ScriptCommand::AddXp(gain) => {
-                if let Some((_, _, Some(xp))) = player_components.as_mut() {
+                if let Some((_, _, _, Some(xp))) = player_components.as_mut() {
                     crate::vitals::gain_xp(xp, gain);
                 }
             }
             ScriptCommand::DamagePlayer(amount) => {
-                match player_components.as_mut() {
-                    Some((_, Some(health), _)) => {
-                        crate::vitals::apply_damage(health, amount);
-                        if std::env::var_os("VIBER_COMBAT_DEBUG").is_some() {
-                            info!(target: "viber::combat", "damage {amount} aplicado — hp {}", health.current);
-                        }
-                    }
-                    _ => warn!(target: "viber::combat", "damage SEM Health no player"),
+                // Path único de dano: o feedback aplica (i-frames, vinheta,
+                // número flutuante, morte) no próximo processamento.
+                hurts.write(crate::feedback::PlayerHurt {
+                    amount,
+                    status: false,
+                });
+                if std::env::var_os("VIBER_COMBAT_DEBUG").is_some() {
+                    info!(target: "viber::combat", "damage {amount} pedido por script");
                 }
             }
             ScriptCommand::HealPlayer(amount) => {
-                if let Some((_, Some(health), _)) = player_components.as_mut() {
+                if let Some((_, _, Some(health), _)) = player_components.as_mut() {
                     health.current = (health.current + amount).min(health.max);
+                }
+            }
+            ScriptCommand::ApplyStatus { kind, secs } => {
+                if kind.eq_ignore_ascii_case("venom") {
+                    if let Some((p_entity, _, _, _)) = player_components.as_mut() {
+                        commands.entity(*p_entity).insert(crate::feedback::StatusEffects {
+                            venom: secs.max(0.0),
+                            venom_tick: 0.0,
+                        });
+                    }
+                } else {
+                    warn!(target: "viber::luau", "apply_status: kind desconhecido '{kind}'");
                 }
             }
             ScriptCommand::Toast(msg) => {
@@ -1014,6 +1043,7 @@ mod tests {
         app.init_resource::<Time>();
         app.init_resource::<ButtonInput<KeyCode>>();
         app.add_message::<ScriptToast>();
+        app.add_message::<crate::feedback::PlayerHurt>();
         app.insert_resource(host);
         app.add_systems(Update, (luau_on_add, luau_update, luau_on_remove).chain());
         app
@@ -1329,6 +1359,7 @@ mod tests {
         app.init_resource::<Time>();
         app.init_resource::<ButtonInput<KeyCode>>();
         app.add_message::<ScriptToast>();
+        app.add_message::<crate::feedback::PlayerHurt>();
         app.insert_resource(
             LuaScriptHost::new(PathBuf::from("/nonexistent/scripts")).expect("host"),
         );

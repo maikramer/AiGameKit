@@ -14,8 +14,8 @@ use viber::luau;
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
 use viber::{
-    animation, camera, hud, meshopt, music, particles, physics, player, profiler, recipes,
-    scaffold, sky, spawner, terrain, vitals, worldsys, xml,
+    animation, camera, feedback, hud, meshopt, music, particles, physics, player, profiler,
+    recipes, scaffold, sky, spawner, terrain, vitals, worldsys, xml,
 };
 
 /// Native Bevy engine for AiGameKit declarative worlds.
@@ -403,6 +403,9 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
         scripts_dir: world_dir.join("scripts"),
     });
     app.add_plugins(combat::CombatPlugin);
+    // Feedback de combate (loop 2): dano flutuante, vignette/i-frames,
+    // TargetBar/BossBar reais, respawn, status effects.
+    app.add_plugins(feedback::FeedbackPlugin);
     // Profiler: overlay F3 (fps/frame/entidades/scripts ativos) + `viber.profiler`.
     app.add_plugins(profiler::ProfilerPlugin);
     app.add_systems(bevy::app::Startup, spawn::startup);
@@ -434,6 +437,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             worldsys::sun_drive,
             worldsys::world_border_clamp,
             sky::sky_follow_camera,
+            sky::sky_update,
             worldsys::seat_statics_once,
             hud::hud_toggle,
             particles::particle_emitter_update,

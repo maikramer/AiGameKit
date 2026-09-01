@@ -48,10 +48,15 @@ impl bevy::app::Plugin for CombatPlugin {
         app.init_resource::<ButtonInput<MouseButton>>();
         app.init_resource::<SwingClock>();
         app.init_resource::<HeldWeapon>();
+        // Números de dano que o melee/fireball emitem (idempotente com o
+        // FeedbackPlugin) + soft-lock do alvo.
+        app.add_message::<crate::feedback::DamageNumberEvent>();
+        app.init_resource::<crate::feedback::CombatTarget>();
         app.add_systems(
             Update,
             (
                 ensure_player_vitals,
+                ensure_creature_vitals,
                 cycle_weapon,
                 player_melee_attack,
                 cast_fireball,
@@ -82,6 +87,20 @@ pub fn ensure_player_vitals(
     }
 }
 
+/// Bosses são GameObjects ESTÁTICOS com script (sem spawner dinâmico que
+/// insira `Health`) — sem vitals eles ficam fora do set de alvos do melee.
+/// Insere `Health` em qualquer scriptado sem interação (POIs/colheita ficam
+/// de fora de propósito: não são combatentes).
+#[allow(clippy::type_complexity)]
+pub fn ensure_creature_vitals(
+    creatures: Query<Entity, (With<LuaScriptRef>, Without<ScriptInteraction>, Without<Health>, Without<Player>)>,
+    mut commands: Commands,
+) {
+    for entity in &creatures {
+        commands.entity(entity).insert(Health::default());
+    }
+}
+
 /// Golpe do herói: alvo com script mais próximo dentro de alcance + cone.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn player_melee_attack(
@@ -93,6 +112,8 @@ pub fn player_melee_attack(
     mut hero_attack_started: ResMut<SwingClock>,
     mut commands: Commands,
     mut toasts: bevy::ecs::message::MessageWriter<ScriptToast>,
+    mut numbers: bevy::ecs::message::MessageWriter<crate::feedback::DamageNumberEvent>,
+    mut combat_target: ResMut<crate::feedback::CombatTarget>,
     players: Query<&GlobalTransform, With<Player>>,
     mut hero_xp: Query<&mut Xp, With<Player>>,
     mut hero_animator: Query<&mut CharacterAnimator, With<Player>>,
@@ -172,12 +193,26 @@ pub fn player_melee_attack(
         }
     }
     if let Some(entity) = hit_entity {
+        // Soft-lock do VibeGame: acertar fixa o alvo da TargetBar (TTL 8 s).
+        combat_target.entity = Some(entity);
+        combat_target.timer = crate::feedback::TARGET_TTL;
+        let hit_pos = enemies
+            .get(entity)
+            .ok()
+            .map(|(_, t, _)| t.translation() + Vec3::Y * 1.8);
         let killed = if let Ok((_, _, mut health)) = enemies.get_mut(entity) {
             apply_damage(&mut health, MELEE_DAMAGE);
             health.current <= 0.0
         } else {
             false
         };
+        if let Some(position) = hit_pos {
+            numbers.write(crate::feedback::DamageNumberEvent {
+                position,
+                text: format!("-{MELEE_DAMAGE}"),
+                color: Color::srgb(1.0, 0.96, 0.85),
+            });
+        }
         if killed {
             commands.entity(entity).remove::<LuaScriptRef>();
             commands.entity(entity).insert(Corpse {
@@ -185,6 +220,13 @@ pub fn player_melee_attack(
             });
             if let Ok(mut xp) = hero_xp.single_mut() {
                 gain_xp(&mut xp, KILL_XP);
+            }
+            if let Some(position) = hit_pos {
+                numbers.write(crate::feedback::DamageNumberEvent {
+                    position: position + Vec3::Y * 0.4,
+                    text: format!("+{KILL_XP} XP"),
+                    color: Color::srgb(1.0, 0.8, 0.25),
+                });
             }
             toasts.write(ScriptToast(format!("Inimigo derrotado (+{KILL_XP} XP)")));
         } else {

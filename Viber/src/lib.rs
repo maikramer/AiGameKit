@@ -8,6 +8,7 @@ pub mod animation;
 pub mod bridge;
 pub mod camera;
 pub mod combat;
+pub mod feedback;
 pub mod hud;
 pub mod luau;
 pub mod meshopt;

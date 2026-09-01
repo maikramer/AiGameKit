@@ -113,6 +113,11 @@ pub fn gain_xp(xp: &mut Xp, gain: u32) {
 /// first relevant press (spawn recipes are intentionally left untouched).
 /// `J` belongs to the melee attack (`combat::player_melee_attack`).
 ///
+/// O dano de `H` segue o path único do feedback (`PlayerHurt`: i-frames,
+/// vinheta, número flutuante, morte/respawn) — por isso escreve a mensagem
+/// em vez de aplicar directo. Necessita `Health` já presente (o melee e os
+/// scripts inserem via `ensure_player_vitals`).
+///
 /// WIRED-BY-ORCHESTRATOR: registered in `src/main.rs` (`vitals::debug_damage`
 /// in the `Update` schedule).
 #[allow(clippy::type_complexity)]
@@ -120,21 +125,20 @@ pub fn debug_damage(
     keys: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut players: Query<(Entity, Option<&mut Health>, Option<&mut Xp>), With<Player>>,
+    mut hurts: bevy::ecs::message::MessageWriter<crate::feedback::PlayerHurt>,
 ) {
     let Ok((entity, mut health, mut xp)) = players.single_mut() else {
         return;
     };
 
     if keys.just_pressed(KeyCode::KeyH) {
-        match health.as_mut() {
-            Some(hp) => apply_damage(hp, DEBUG_DAMAGE),
-            None => {
-                commands.entity(entity).insert(Health {
-                    current: (DEFAULT_HEALTH - DEBUG_DAMAGE).max(0.0),
-                    max: DEFAULT_HEALTH,
-                });
-            }
+        if health.is_none() {
+            commands.entity(entity).insert(Health::default());
         }
+        hurts.write(crate::feedback::PlayerHurt {
+            amount: DEBUG_DAMAGE,
+            status: false,
+        });
     }
     if keys.just_pressed(KeyCode::KeyN) {
         match health.as_mut() {

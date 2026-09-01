@@ -49,15 +49,23 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
       Resíduo conhecido: 1 erro de shader WGSL no log (refactor bindless do
       dono do sky.rs em curso — não é do profiler).
 
-### Loop 2 — Vitals & feedback de combate
-- [ ] Dano flutuante 3D (damage numbers empilháveis, estilo spawnDamageNumber) —
-      bilboard de texto; herdar do mecanismo de toasts/nametags.
-- [ ] Hurt vignette (flash vermelho ao levar dano) + i-frames 0,35 s + camera shake.
-- [ ] BossBar com HP REAL do boss (detectar `name="boss"`); TargetBar com alvo real
-      (soft-lock ao apanhar/dar dano).
-- [ ] RespawnSystem: morte do player → SFX/game-over 2 s → respawn no ponto mais
-      próximo (praça/portões/marcos) com HP cheio.
-- [ ] Status effects mínimos (venom/poison com tick) — base p/ antídoto.
+### Loop 2 — Vitals & feedback de combate — ✅ DONE (2026-09-01)
+- [x] `src/feedback.rs` (novo): dano flutuante 3D (pool de 14 slots world-
+      anchored, sobe+desvanece 0,9 s), hurt vignette (decai 2,2/s),
+      i-frames 0,35 s, TargetBar (soft-lock TTL 8 s), BossBar com HP real
+      (`name="boss"`), RespawnSystem (HP 0 → `Dying` 2 s → praça/portões
+      mais próximos, HP cheio + i-frames), StatusEffects (veneno 1 tick/s,
+      `viber.apply_status("venom", secs)` para scripts).
+- [x] Path ÚNICO de dano: scripts (`damage_player`) e debug key H vão todos
+      por `PlayerHurt` → i-frames/vinheta/número/morte. `ensure_creature_
+      vitals` dá `Health` a bosses estáticos (antes estavam inatingíveis).
+- [x] Camera shake: adiado (câmara é de outro agente) — follow-up.
+- [x] Evidência in-game: HP 100→60 sob H (i-frames a espaçar), morte +
+      logs `herói caiu`/`respawn na praça`, HP 100/100 pós-respawn; "-10"
+      flutuante capturado (projeção Vec2(640, 278)); vinheta vermelha
+      visível no frame; BossBar real renderizada. 392 testes + clippy -D
+      warnings verdes. Fix durante o loop: gate de i-frames por `timer > 0`
+      (componente persistente bloqueava para sempre após o 1.º golpe).
 
 ### Loop 3 — Quests & diálogo real
 - [ ] `src/quests.rs`: dados das 21 quests (5 JSONs → embutidos/RON), estado
