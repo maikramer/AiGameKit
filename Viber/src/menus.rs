@@ -269,7 +269,7 @@ fn spawn_modal(mut commands: Commands) {
 
 /// Cabeçalho das tabs (marcador > na ativa).
 pub fn tab_header(active: usize) -> String {
-    let names = ["Quests", "Inventário", "Ajuda"];
+    let names = ["Quests", "Inventário", "Opções"];
     names
         .iter()
         .enumerate()
@@ -282,6 +282,29 @@ pub fn tab_header(active: usize) -> String {
         })
         .collect::<Vec<_>>()
         .join("    ")
+}
+
+/// Corpo da tab Opções: volumes ao vivo, linhas com seleção e save/load.
+pub fn options_body(
+    selected: usize,
+    volumes: (f32, f32, f32),
+    controls: &str,
+) -> String {
+    let pct = |v: f32| format!("{}%", (v * 100.0).round() as i32);
+    let row = |i: usize, label: &str, value: &str| {
+        let marker = if i == selected { ">" } else { " " };
+        format!("{marker} {label}: {value}")
+    };
+    format!(
+        "{}\n{}\n{}\n{}\n{}\n\n{}\n\nControlos:\n{controls}",
+        row(0, "Volume master", &pct(volumes.0)),
+        row(1, "Volume música", &pct(volumes.1)),
+        row(2, "Volume efeitos", &pct(volumes.2)),
+        row(3, "Gravar jogo", "[J]"),
+        row(4, "Carregar jogo", "[L]"),
+        "↑↓ escolher · ←→ ajusta ±10% · [J]/[L] gravar/carregar",
+        controls = controls,
+    )
 }
 
 /// Corpo de uma tab (puro; texturas dos testes).
@@ -298,8 +321,7 @@ pub fn tab_body(tab: usize, quest_lines: &[String], vault_lines: &[String]) -> S
         _ => "Controlos:\n\
               WASD mover · Espaço saltar · Shift correr\n\
               [J] atacar/colher · [E] falar/interagir · [K] loja\n\
-              [Q] este menu · [F3] profiler · [F10] giver de QA\n\n\
-              Opções: volumes e save/load chegam com o loop 7.".into(),
+              [Q] este menu · [F3] profiler".into(),
     }
 }
 
@@ -318,11 +340,17 @@ fn modal_toggle_system(
         open.modal = false;
     }
     if open.modal {
-        if keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::Tab) {
+        let on_options = tab.0 + 1 == TAB_COUNT;
+        if keys.just_pressed(KeyCode::Tab) {
             tab.0 = next_tab(tab.0, 1);
         }
-        if keys.just_pressed(KeyCode::ArrowLeft) {
-            tab.0 = next_tab(tab.0, -1);
+        if !on_options {
+            if keys.just_pressed(KeyCode::ArrowRight) {
+                tab.0 = next_tab(tab.0, 1);
+            }
+            if keys.just_pressed(KeyCode::ArrowLeft) {
+                tab.0 = next_tab(tab.0, -1);
+            }
         }
     }
     for mut visibility in roots.iter_mut() {
@@ -338,7 +366,7 @@ fn modal_toggle_system(
 }
 
 /// Conteúdo do modal (throttle 0,25 s; barato e sempre fresco).
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn modal_content_system(
     mut throttle: Local<f32>,
     time: Res<Time>,
@@ -346,6 +374,8 @@ fn modal_content_system(
     tab: Res<ModalTab>,
     log: Option<Res<QuestLog>>,
     vault: Option<Res<Vault>>,
+    mixer: Option<Res<crate::music::AudioMixerSettings>>,
+    rows: Option<Res<crate::save::OptionsRows>>,
     mut q_content: Query<&mut Text, With<ModalContent>>,
 ) {
     if !open.modal {
@@ -377,7 +407,11 @@ fn modal_content_system(
                     .collect();
                 tab_body(tab.0, &quest_lines, &vault_lines(vault))
             }
-            _ => tab_body(tab.0, &[], &[]),
+            _ => options_body(
+                rows.as_ref().map(|r| r.selected).unwrap_or(0),
+                mixer.as_ref().map(|m| (m.master, m.music, m.sfx)).unwrap_or((1.0, 1.0, 1.0)),
+                "WASD mover · Espaço saltar · Shift correr\n[J] atacar/colher · [E] falar/interagir · [K] loja\n[Q] este menu · [F3] profiler",
+            ),
         };
         let wanted = format!("{header}\n\n{body}");
         if text.0 != wanted {

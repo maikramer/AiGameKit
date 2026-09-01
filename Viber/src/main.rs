@@ -15,7 +15,7 @@ use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
 use viber::{
     animation, camera, economy, feedback, hud, menus, meshopt, music, particles, physics,
-    player, profiler, quests, recipes, scaffold, sky, spawner, terrain, travel, vitals,
+    player, profiler, quests, recipes, scaffold, save, sky, spawner, terrain, travel, vitals,
     worldsys, xml,
 };
 
@@ -414,6 +414,8 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // Travel/Nota/wayfinding (loop 6): marcos, viagem rápida, waypoint,
     // registry de hostis por região.
     app.add_plugins(travel::TravelPlugin);
+    // Save/load & opções (loop 7): save JSON, volumes na tab Opções.
+    app.add_plugins(save::SavePlugin);
     // Quests & diálogo (loop 3): 21 quests JSON, flow [E] nos DialogueNPC,
     // QuestTracker, hooks viber.quest_* p/ Luau.
     app.add_plugins(quests::QuestsPlugin);

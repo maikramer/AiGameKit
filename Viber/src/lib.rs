@@ -21,6 +21,7 @@ pub mod player;
 pub mod profiler;
 pub mod quests;
 pub mod recipes;
+pub mod save;
 pub mod scaffold;
 pub mod sky;
 pub mod spawner;

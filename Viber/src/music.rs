@@ -6,7 +6,7 @@ use bevy::math::Vec2;
 use bevy::prelude::*;
 
 /// Bus volumes from `<AudioMixer master music sfx>`.
-#[derive(Debug, Clone, Resource)]
+#[derive(Debug, Clone, Resource, Default)]
 pub struct AudioMixerSettings {
     pub master: f32,
     pub music: f32,

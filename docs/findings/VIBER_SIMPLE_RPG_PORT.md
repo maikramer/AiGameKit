@@ -155,11 +155,22 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
       vazio pré-assinatura, screenshot); 0 panics pós-fix. 415 testes +
       clippy -D warnings verdes.
 
-### Loop 7 — Save/load & opções
-- [ ] Save/load em disco (JSON/RON) com serializers por módulo (progress: XP/
-      skills/anel/espada; nota: marcos; vault; quests) — botões na tab Options.
-- [ ] Volumes master/music/sfx no menu (AudioMixerSettings já existe).
-- [ ] i18n PT/EN mínimo (strings de UI) — se barato.
+### Loop 7 — Save/load & opções — ✅ DONE (2026-09-01)
+- [x] `src/save.rs` (novo): `SaveGame` em JSON (`~/.local/share/viber/
+      simple-rpg.save.json`) com XP, HP, posição, vault completo, estados
+      das quests (progresso + marcos visitados), quest_done, marcos da
+      Nota e volumes — captura/aplicação puras e testadas (roundtrip JSON).
+- [x] **Tab Opções** no modal [Q]: 5 linhas (master/música/sfx/gravar/
+      carregar) com seleção ↑↓, volumes ←→ ±10 % (AudioMixerSettings ao
+      vivo), **[J] grava** e **[L] carrega** com toasts de resultado.
+- [x] Setas ←/→ deixam de trocar de tab na página Opções (ajustam volumes);
+      Tab continua a ciclar.
+- [x] i18n PT/EN: adiado (todo o jogo está em PT; baixo valor até ter
+      jogadores EN).
+- [x] Evidência in-game: F10+dano → save com gold 10 / hp 80/100 (ficheiro
+      JSON verificado), mais dano → load → HP de volta a 80/100
+      (screenshot) + toasts "Jogo gravado"/"Jogo carregado"; 0 panics.
+      417 testes + clippy -D warnings verdes.
 
 ### Loop 8 — Skills, abilities & combate avançado
 - [ ] Abilities: [C] dash (i-frames), [E] cura, [R] golpe forte radial — barra com

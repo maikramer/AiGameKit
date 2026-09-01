@@ -129,8 +129,8 @@ pub fn status_name(status: QuestStatus) -> &'static str {
 #[derive(Debug, Clone, Resource)]
 pub struct QuestLog {
     pub defs: Vec<QuestDef>,
-    states: HashMap<String, ActiveQuest>,
-    done: Vec<String>,
+    pub(crate) states: HashMap<String, ActiveQuest>,
+    pub(crate) done: Vec<String>,
 }
 
 impl Default for QuestLog {
