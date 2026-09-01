@@ -216,6 +216,7 @@ struct HotbarCount;
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn hotbar_use_system(
     keys: Res<ButtonInput<KeyCode>>,
+    menus: Option<Res<crate::menus::MenusOpen>>,
     mut cooldown: Local<f32>,
     mut players: Query<(&mut Health, Option<&mut crate::feedback::StatusEffects>), With<Player>>,
     mut vault: ResMut<Vault>,
@@ -231,6 +232,10 @@ fn hotbar_use_system(
     let potion = keys.just_pressed(KeyCode::Digit1);
     let antidote = keys.just_pressed(KeyCode::Digit2);
     if !potion && !antidote {
+        return;
+    }
+    // menus abertos roubam as teclas numéricas
+    if menus.is_some_and(|m| m.any()) {
         return;
     }
     let (item, label) = if potion {

@@ -14,8 +14,8 @@ use viber::luau;
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
 use viber::{
-    animation, camera, economy, feedback, hud, meshopt, music, particles, physics, player,
-    profiler, quests, recipes, scaffold, sky, spawner, terrain, vitals, worldsys, xml,
+    animation, camera, economy, feedback, hud, menus, meshopt, music, particles, physics,
+    player, profiler, quests, recipes, scaffold, sky, spawner, terrain, vitals, worldsys, xml,
 };
 
 /// Native Bevy engine for AiGameKit declarative worlds.
@@ -408,6 +408,8 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     app.add_plugins(feedback::FeedbackPlugin);
     // Economia (loop 4): vault ouro/madeira/pedra, chips vivos, hotbar [1]/[2].
     app.add_plugins(economy::EconomyPlugin);
+    // UI & menus (loop 5): toasts visuais, modal [Q], loja [K], loading.
+    app.add_plugins(menus::MenusPlugin);
     // Quests & diálogo (loop 3): 21 quests JSON, flow [E] nos DialogueNPC,
     // QuestTracker, hooks viber.quest_* p/ Luau.
     app.add_plugins(quests::QuestsPlugin);

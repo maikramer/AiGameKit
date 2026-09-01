@@ -349,7 +349,6 @@ impl Plugin for QuestsPlugin {
                     quest_dialogue_system,
                     quest_visit_system,
                     quest_tracker_system,
-                    toast_log_system,
                     quest_debug_teleport,
                     quest_debug_nearest,
                     quest_debug_hostile,
@@ -478,13 +477,6 @@ fn quest_debug_harvest(
         .unwrap_or(target.y);
     transform.translation = Vec3::new(x, y + 0.1, z);
     toasts.write(ScriptToast("QA: teleport ao colhível mais próximo".into()));
-}
-
-/// Espelha toasts no log (bridge) — o DISPLAY visual chega com o loop 5.
-fn toast_log_system(mut toasts: MessageReader<ScriptToast>) {
-    for toast in toasts.read() {
-        info!(target: "viber::toast", "{}", toast.0);
-    }
 }
 
 /// Debug de QA (**F7**): teleporta o herói ao próximo `<DialogueNPC>` em

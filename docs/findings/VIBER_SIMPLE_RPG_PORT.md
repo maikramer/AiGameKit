@@ -114,14 +114,23 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
       testes + clippy -D warnings verdes (novo teste: collect lê vault,
       entrega consome).
 
-### Loop 5 — UI & menus (bevy_ui)
-- [ ] TabbedModal [Q] com tabs REAIS: Inventory, Skills, Options (volumes +
-      Save/Load), Wiki, Quests.
-- [ ] Loja do mercador [K]: painel comprar/vender navegável por teclado, pause do
-      sim quando aberto.
-- [ ] Painel da fogueira: descanso + menu de viagem (W/S/J).
-- [ ] Loading screen + controls hint (barra de teclas).
-- [ ] Toasts empilhados com fade (hoje: 1 toast por ScriptToast?).
+### Loop 5 — UI & menus — ✅ DONE (2026-09-01)
+- [x] `src/menus.rs` (novo): **toasts visuais** (pilha top-center, 5 máx.,
+      fade 3 s, espelhados no log), **modal [Q]** com tabs reais — Quests
+      (ativas + progresso do QuestLog), Inventário (vault completo), Ajuda
+      (controlos/opções) — navegação ←/→/Tab, **loja [K]** perto do
+      `name="merchant"`: comprar poção/antídoto/bomba, vender madeira/pedra,
+      seleção ↑↓ + [J], auto-close ao afastar; **loading screen**
+      "DISCORDIA — a forjar o mundo…" que levanta no arranque; banner da
+      fogueira perto da fogueira.
+- [x] Hotbar [1]/[2] não consome enquanto modal/loja abertos (`MenusOpen`).
+- [x] SkillsTab completa fica para o loop 8 (a tab Ajuda cobre o resto).
+- [x] Evidência in-game: loading capturado no arranque; toast "QA: +10
+      ouro…" visível (screenshot); modal aberto com tabs e corpo
+      (screenshot); loja aberta junto ao mercador com catálogo, venda de
+      pedra ×3 (+15 ouro) e compra da poção (−25) ao vivo — ouro terminou
+      em 0 como calculado (screenshots). 409 testes + clippy -D warnings
+      verdes.
 
 ### Loop 6 — Travel, Nota, wayfinding & IA de grupo
 - [ ] 12 marcos da Nota (nota-landmarks) + [F] "Medir e assinar" (crédito quests

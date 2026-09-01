@@ -12,6 +12,7 @@ pub mod economy;
 pub mod feedback;
 pub mod hud;
 pub mod luau;
+pub mod menus;
 pub mod meshopt;
 pub mod music;
 pub mod particles;
