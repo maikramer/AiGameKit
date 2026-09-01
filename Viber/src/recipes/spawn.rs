@@ -326,9 +326,8 @@ pub fn startup(world: &mut World) {
     for config in pending_worldsys.configs {
         world.insert_resource(config);
     }
-    if let Some(mixer) = mixer_settings {
-        world.insert_resource(mixer);
-    }
+    // Always present, `<AudioMixer>` or not — systems take it as `ResMut`.
+    world.insert_resource(mixer_settings.unwrap_or_default());
     world.insert_resource(meshes);
     world.insert_resource(materials);
     world.insert_resource(sky_mats);
@@ -402,6 +401,18 @@ fn collect_spawn_groups(
                     dynamic: matches!(spec.kind, EntityKind::DynamicSpawner { .. }),
                     template_script: group.template_script.clone(),
                     activation_radius: group.activation_radius,
+                    template_collider: group.template_collider.clone(),
+                    collider_handle: group.template_collider.as_ref().map(|shape| {
+                        let url = match shape {
+                            crate::physics::ColliderShape::Mesh { url, .. }
+                            | crate::physics::ColliderShape::Precompute { url } => url.clone(),
+                            _ => String::new(),
+                        };
+                        crate::meshopt::load_gltf(
+                            asset_server,
+                            url.trim_start_matches('/').to_owned(),
+                        )
+                    }),
                 });
             }
             EntityKind::SpawnExclusion { center, radius } => {
@@ -428,6 +439,18 @@ fn collect_spawn_groups(
                 out.push(crate::spawner::SpawnGroupState {
                     template_script: spawner_spec.template_script.clone(),
                     activation_radius: spawner_spec.activation_radius,
+                    template_collider: spawner_spec.template_collider.clone(),
+                    collider_handle: spawner_spec.template_collider.as_ref().map(|shape| {
+                        let url = match shape {
+                            crate::physics::ColliderShape::Mesh { url, .. }
+                            | crate::physics::ColliderShape::Precompute { url } => url.clone(),
+                            _ => String::new(),
+                        };
+                        crate::meshopt::load_gltf(
+                            asset_server,
+                            url.trim_start_matches('/').to_owned(),
+                        )
+                    }),
                     spec: spawner_spec,
                     handles,
                     done: false,
@@ -478,6 +501,7 @@ fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &Entity
             entity.insert(PendingCollider {
                 shape: ColliderShape::Auto,
                 gltf: None,
+                age: 0.0,
             });
         }
         ColliderShape::Mesh { url, .. } | ColliderShape::Precompute { url } => {
@@ -488,6 +512,7 @@ fn attach_physics(entity: &mut EntityWorldMut, ctx: &mut SpawnCtx, spec: &Entity
             entity.insert(PendingCollider {
                 shape: physics.collider.clone(),
                 gltf: Some(handle),
+                age: 0.0,
             });
         }
     }
@@ -549,6 +574,7 @@ fn spawn_entity(
                 crate::particles::ParticleEmitter {
                     sim: crate::particles::EmitterSim::new(spec),
                     capacity,
+                    culled: false,
                 },
             ));
         }
@@ -561,7 +587,9 @@ fn spawn_entity(
             let mut primitive = primitive_mesh(shape);
             if material.texture.is_some() {
                 if let Some(tile) = material.texture_tile {
-                    scale_primitive_uvs(&mut primitive, shape, tile);
+                    // UV world-space: decals com o mesmo tile-size batem com
+                    // as ribbons das estradas (mesmo divisor, mesma origem).
+                    scale_primitive_uvs(&mut primitive, shape, tile, spec.transform.translation);
                 }
             }
             let mesh = ctx.meshes.add(primitive);
@@ -834,12 +862,16 @@ fn spawn_entity(
             polygon,
             fog_density,
             tint,
+            pp_exposure,
+            pp_bloom_strength,
         } => {
             ctx.worldsys.biomes.push(crate::worldsys::BiomeRegionData {
                 id: id.clone(),
                 polygon: polygon.clone(),
                 fog_density: *fog_density,
                 tint: *tint,
+                pp_exposure: *pp_exposure,
+                pp_bloom_strength: *pp_bloom_strength,
             });
         }
         EntityKind::WorldBorder {
@@ -926,9 +958,16 @@ fn build_material(
     materials.add(material)
 }
 
-/// Re-escala as UVs (0..1) de uma primitiva para `extent / tile`, de modo que
-/// `texture-tile-size` seja metros por repetição da textura.
-fn scale_primitive_uvs(mesh: &mut bevy::mesh::Mesh, shape: &Shape, tile: f32) {
+/// Re-escala as UVs de uma primitiva para coordenadas de MUNDO divididas
+/// por `tile`: `uv = world / tile`. Decals com o mesmo tile-size partilham
+/// o padrão com as ribbons das estradas (mesma fórmula, mesma origem) — o
+/// cobblestone da praça bate com o da estrada na junção.
+fn scale_primitive_uvs(
+    mesh: &mut bevy::mesh::Mesh,
+    shape: &Shape,
+    tile: f32,
+    world_translation: [f32; 3],
+) {
     if tile <= 0.0 {
         return;
     }
@@ -937,12 +976,17 @@ fn scale_primitive_uvs(mesh: &mut bevy::mesh::Mesh, shape: &Shape, tile: f32) {
         Shape::Cuboid { half_size } => [half_size[0] * 2.0, half_size[2] * 2.0],
         _ => return, // esferas/cilindros/cápsulas: UV polares, tiling por extensão não se aplica
     };
-    let scale = [extents[0] / tile, extents[1] / tile];
+    // canto mínimo do decal no mundo (a primitiva é centrada na translation)
+    let min_x = world_translation[0] - extents[0] / 2.0;
+    let min_z = world_translation[2] - extents[1] / 2.0;
     if let Some(bevy::mesh::VertexAttributeValues::Float32x2(values)) =
         mesh.attribute_mut(bevy::mesh::Mesh::ATTRIBUTE_UV_0)
     {
         for uv in values.iter_mut() {
-            *uv = [uv[0] * scale[0], uv[1] * scale[1]];
+            *uv = [
+                (uv[0] * extents[0] + min_x) / tile,
+                (uv[1] * extents[1] + min_z) / tile,
+            ];
         }
     }
 }

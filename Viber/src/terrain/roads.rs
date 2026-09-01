@@ -225,6 +225,44 @@ impl RoadNetworkSpec {
         Some(way.width.unwrap_or(self.default_width))
     }
 
+    /// Fusion-disc points: ways touched by ≥3 segments (T/cruz/praça).
+    /// Raio = maior meia-largura tocando o way + 0.85 (VibeGame), no mínimo
+    /// o dobro da largura default (cobre o crossing flare).
+    pub fn junction_points(&self) -> Vec<RoadJunction> {
+        let mut degree: HashMap<&str, usize> = HashMap::new();
+        let mut max_width: HashMap<&str, f32> = HashMap::new();
+        for seg in &self.segments {
+            for id in [&seg.a, &seg.b] {
+                *degree.entry(id.as_str()).or_default() += 1;
+                let w = seg
+                    .width
+                    .unwrap_or_else(|| self.way_width(id).unwrap_or(self.default_width));
+                let slot = max_width.entry(id.as_str()).or_insert(0.0);
+                *slot = (*slot).max(w);
+            }
+        }
+        self.ways
+            .iter()
+            .filter_map(|w| {
+                let d = degree.get(w.id.as_str()).copied().unwrap_or(0);
+                if d < 3 {
+                    return None;
+                }
+                let max_w = max_width
+                    .get(w.id.as_str())
+                    .copied()
+                    .unwrap_or(self.default_width);
+                Some(RoadJunction {
+                    at: w.at,
+                    radius: (max_w * 0.5 + 0.85).max(self.default_width * 2.0),
+                    feather: 1.2,
+                    texture: self.texture.clone(),
+                    texture_scale: self.texture_scale,
+                })
+            })
+            .collect()
+    }
+
     /// Junction flare radius: ways referenced by 3+ segments get widened
     /// approaches.
     fn crossing_ways(&self) -> Vec<(Vec2, f32)> {
@@ -472,6 +510,22 @@ fn extend_path_end(points: &mut Vec<Vec2>, amount: f32, at_end: bool) {
     } else {
         points.insert(0, p);
     }
+}
+
+/// Fusion disc at a multi-arm junction (VibeGame `junctions.ts`): um círculo
+/// opaco de cobble centrado na junção cobre as emendas das ribbons que se
+/// cruzam — sem ele, pontas com alpha feather sobrepostas deixam costuras
+/// escuras e cunhas no cruzamento.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RoadJunction {
+    /// World XZ center (the shared way position).
+    pub at: Vec2,
+    /// Opaque core radius (m) — cobre a maior meia-largura + folga.
+    pub radius: f32,
+    /// Outer alpha fade beyond `radius` (m).
+    pub feather: f32,
+    pub texture: Option<String>,
+    pub texture_scale: f32,
 }
 
 /// Registry entry for one carved road (queries + ribbon generation).
@@ -747,8 +801,7 @@ fn refine_organic(path: &RoadPath) -> (Vec<Vec2>, Vec<f32>) {
                 let t = k as f32 / steps as f32;
                 pts.push(prev.lerp(*st, t));
                 widths.push(
-                    path.half_width[i - 1]
-                        + (path.half_width[i] - path.half_width[i - 1]) * t,
+                    path.half_width[i - 1] + (path.half_width[i] - path.half_width[i - 1]) * t,
                 );
             }
         } else {
@@ -853,7 +906,11 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
         let alphas = [1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
         for (k, lat) in laterals.iter().enumerate() {
             let p = *st + perp * (*lat * miter);
-            let lift = if k == 0 || k == 5 { RIBBON_SKIRT_DEPTH } else { 0.0 };
+            let lift = if k == 0 || k == 5 {
+                RIBBON_SKIRT_DEPTH
+            } else {
+                0.0
+            };
             let y = if path.bridge {
                 path.deck_y.unwrap_or(0.0) + RIBBON_LIFT
             } else {
@@ -865,7 +922,11 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
             } else {
                 grid.sample_normal(p.x, p.y, grid.texel()).to_array()
             });
-            mesh.uvs.push([lat / scale, arc / scale]);
+            // UV world-space (posição / scale): a textura fica FIXA no
+            // mundo — a praça (decal Plane) partilha a mesma fórmula e o
+            // mesmo divisor, por isso o cobblestone bate na junção e nas
+            // margens.
+            mesh.uvs.push([p.x / scale, p.y / scale]);
             mesh.colors.push([1.0, 1.0, 1.0, alphas[k]]);
         }
     }
@@ -876,14 +937,8 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
         let a = (i * stride) as u32;
         let b = ((i + 1) * stride) as u32;
         for k in 1..4_u32 {
-            mesh.indices.extend_from_slice(&[
-                a + k,
-                a + k + 1,
-                b + k,
-                a + k + 1,
-                b + k + 1,
-                b + k,
-            ]);
+            mesh.indices
+                .extend_from_slice(&[a + k, a + k + 1, b + k, a + k + 1, b + k + 1, b + k]);
         }
         // saia esquerda: verts 0 (skirt) ↔ 1 (edge)
         mesh.indices
@@ -891,6 +946,53 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
         // saia direita: verts 4 (edge) ↔ 5 (skirt)
         mesh.indices
             .extend_from_slice(&[a + 4, b + 4, b + 5, a + 4, b + 5, a + 5]);
+    }
+    mesh
+}
+
+/// Fusion-disc mesh for a junction: centro + 2 anéis (raio opaco, raio+feather
+/// alpha 0), drapado no grid, UV em metros/scale, winding CCW visto de cima.
+pub fn junction_disc_mesh(grid: &BrushGrid, j: &RoadJunction) -> ChunkMeshData {
+    const SEGMENTS: usize = 32;
+    let mut mesh = ChunkMeshData::default();
+    let scale = if j.texture_scale > 0.0 {
+        j.texture_scale
+    } else {
+        1.0
+    };
+    let mut push = |x: f32, z: f32, alpha: f32| {
+        let y = grid.sample(x, z) + RIBBON_LIFT;
+        mesh.positions.push([x, y, z]);
+        mesh.normals.push(grid.sample_normal(x, z, grid.texel()).to_array());
+        mesh.uvs.push([x / scale, z / scale]);
+        mesh.colors.push([1.0, 1.0, 1.0, alpha]);
+    };
+    // Centro (alpha 1).
+    push(j.at.x, j.at.y, 1.0);
+    // Anel opaco + anel de feather.
+    for k in 0..=SEGMENTS {
+        let t = (k as f32) / (SEGMENTS as f32) * std::f32::consts::TAU;
+        let (dx, dz) = (t.cos(), t.sin());
+        push(j.at.x + dx * j.radius, j.at.y + dz * j.radius, 1.0);
+        push(
+            j.at.x + dx * (j.radius + j.feather),
+            j.at.y + dz * (j.radius + j.feather),
+            0.0,
+        );
+    }
+    // Índices: leque do centro (CCW de cima) + quads anel0→anel1.
+    let center = 0u32;
+    let ring = |k: usize| -> [u32; 2] {
+        let base = 1 + (k as u32) * 2;
+        [base, base + 1] // (opaco, feather)
+    };
+    for k in 0..SEGMENTS {
+        let [a0, f0] = ring(k);
+        let [a1, f1] = ring(k + 1);
+        // Leque: (centro, a_k, a_{k+1}) com normal +Y.
+        mesh.indices.extend_from_slice(&[center, a1, a0]);
+        // Quad: (a_k, a_{k+1}, f_{k+1}) + (a_k, f_{k+1}, f_k).
+        mesh.indices.extend_from_slice(&[a0, a1, f1, a0, f1, f0]);
     }
     mesh
 }
@@ -1394,7 +1496,56 @@ mod tests {
         assert_eq!(grid.raw(), before, "decal roads never touch the grid");
     }
 
+        #[test]
+    fn test_junction_disc_mesh_layout() {
+        let grid = test_grid();
+        let j = RoadJunction {
+            at: Vec2::new(64.0, 64.0),
+            radius: 8.0,
+            feather: 1.2,
+            texture: None,
+            texture_scale: 4.0,
+        };
+        let mesh = junction_disc_mesh(&grid, &j);
+        // Centro + 2 anéis × (32+1) vértices.
+        assert_eq!(mesh.positions.len(), 1 + 2 * 33);
+        // Winding do leque: o primeiro triângulo (centro, a1, a0) → +Y.
+        let v = |i: u32| bevy::math::Vec3::from_array(mesh.positions[i as usize]);
+        let (c, a1, a0) = (v(0), v(mesh.indices[1]), v(mesh.indices[2]));
+        let n = (a1 - c).cross(a0 - c);
+        assert!(n.y > 0.0, "fan winding must face up: {n}");
+        // Alpha: centro/opaco 1, anel externo 0.
+        assert!((mesh.colors[0][3] - 1.0).abs() < 1e-5);
+        assert!((mesh.colors[1][3] - 1.0).abs() < 1e-5);
+        assert_eq!(mesh.colors[3][3], 0.0);
+    }
+
     #[test]
+    fn test_junction_points_from_ways() {
+        // T: b tem grau 3 → um disco; a/c/d grau 1 → nada.
+        let net = RoadNetworkSpec {
+            default_width: 4.0,
+            ways: vec![
+                WaySpec { id: "a".into(), at: Vec2::new(0.0, 0.0), width: None },
+                WaySpec { id: "b".into(), at: Vec2::new(10.0, 0.0), width: None },
+                WaySpec { id: "c".into(), at: Vec2::new(20.0, 0.0), width: None },
+                WaySpec { id: "d".into(), at: Vec2::new(10.0, 10.0), width: None },
+            ],
+            segments: vec![
+                SegmentSpec { a: "a".into(), b: "b".into(), via: Vec::new(), width: None, profile: None },
+                SegmentSpec { a: "c".into(), b: "b".into(), via: Vec::new(), width: None, profile: None },
+                SegmentSpec { a: "d".into(), b: "b".into(), via: Vec::new(), width: None, profile: None },
+            ],
+            ..RoadNetworkSpec::default()
+        };
+        let j = net.junction_points();
+        assert_eq!(j.len(), 1, "only the degree-3 way gets a disc");
+        assert_eq!(j[0].at, Vec2::new(10.0, 0.0));
+        assert!((j[0].radius - 8.0).abs() < 1e-5, "floor = default_width·2: {j:?}");
+    }
+
+    #[test]
+#[test]
     fn test_road_ribbon_winding_faces_up() {
         // Estrada +X: o primeiro triângulo do DECK (edgeL, coreL, edgeL do
         // próximo passo) tem de dar normal +Y — winding invertido escondia
@@ -1483,14 +1634,16 @@ mod tests {
             "ribbon drapes the carve: {} vs {bed}",
             first[1]
         );
-        // v coordinate follows arc length / texture scale.
+        // UV world-space: a última estação tem uv = (x, z) / texture_scale.
         let last_uv = &mesh.uvs[mesh.uvs.len() - 1];
-        let total = road_length(&path);
+        let last_pos = &mesh.positions[mesh.positions.len() - 1];
+        let expected = [
+            last_pos[0] / spec.texture_scale,
+            last_pos[2] / spec.texture_scale,
+        ];
         assert!(
-            (last_uv[1] - total / spec.texture_scale).abs() < 0.5,
-            "v is arc length: {} vs {}",
-            last_uv[1],
-            total / spec.texture_scale
+            (last_uv[0] - expected[0]).abs() < 1e-4 && (last_uv[1] - expected[1]).abs() < 1e-4,
+            "uv é world/scale: {last_uv:?} vs {expected:?}"
         );
         // Edge alpha feather; the center line stays opaque.
         assert!(mesh.colors[1][3] < 1.0, "edges feather");
