@@ -1,129 +1,47 @@
-// Viber procedural sky — atmospheric gradient, sun disc + mie glow, FBM
-// clouds drifting with the wind, moon and stars at night.
+// Viber procedural FANTASY sky — atmospheric gradient with teal mid-band,
+// sun disc + bloom + halo, dual cloud layers (cumulus with silver lining +
+// high cirrus), sunset band, and a night side with multi-scale colored
+// stars, nebula glow, aurora ribbons, a mottled moon with halo and
+// occasional meteors.
 //
 // The dome is an inverted sphere centered on the camera; the fragment
-// direction is `normalize(world_position - view_position)`.
+// direction is `normalize(world_position - v_view_pos)`.
+//
+// WORLD SPECIALIZATION: `viber run` rewrites the CONFIG block below from the
+// world's <Sky>/<DayCycle> attributes before the renderer loads this file.
+// Per-frame values derive from `Globals` (engine-updated view binding) —
+// NO material uniform: the Bevy 0.19 slot-1 storage promotion never
+// re-uploads modified uniforms and reads back unrelated buffer contents.
 
 #import bevy_render::view::View
+#import bevy_render::globals::Globals
 #import bevy_pbr::forward_io::VertexOutput
 
 @group(0) @binding(0) var<uniform> view: View;
-// NOTE: binding (2,0) MUST be `var<storage, read>` — the AsBindGroup derive
-// in Bevy 0.19 gives the pipeline a Storage-LOAD layout entry for this
-// buffer; a `var<uniform>` declaration fails validation at runtime with
-// "doesn't match the shader Uniform".
-@group(2) @binding(0) var<storage, read> sky: SkyUniform;
+@group(0) @binding(11) var<uniform> globals: Globals;
 
-struct SkyUniform {
-    sun_dir: vec3<f32>,
-    time: f32,
-    night: f32,
-    turbidity: f32,
-    rayleigh: f32,
-    mie: f32,
-    mie_g: f32,
-    sun_intensity: f32,
-    cloud_coverage: f32,
-    cloud_density: f32,
-    cloud_elevation: f32,
-    wind: vec2<f32>,
-};
-
-@fragment
-fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
-    let cam_pos = view.world_from_view[3].xyz;
-    let dir = normalize(mesh.world_position.xyz - cam_pos);
-    let sun = normalize(sky.sun_dir);
-    let up = clamp(dir.y, -1.0, 1.0);
-    let sun_h = clamp(sun.y, -1.0, 1.0);
-
-    // ── Day/night weights ────────────────────────────────────────────
-    let day = clamp(1.0 - sky.night, 0.0, 1.0);
-    let sunset = exp(-abs(sun_h) * 5.0) * day; // sol perto do horizonte
-
-    // ── Base gradient ────────────────────────────────────────────────
-    let zenith_day = vec3(0.12, 0.34, 0.75);
-    let horizon_day = vec3(0.62, 0.78, 0.96);
-    let zenith_night = vec3(0.012, 0.018, 0.05);
-    let horizon_night = vec3(0.04, 0.06, 0.11);
-
-    let zenith = mix(zenith_night, zenith_day, day);
-    let horizon = mix(horizon_night, horizon_day, day);
-
-    let t = pow(clamp(1.0 - up, 0.0, 1.0), 2.2);
-    var color = mix(zenith, horizon, t);
-
-    // ── Sunset warmth perto do sol, abaixo do horizonte-alto ────────
-    let sun_az = normalize(vec2(sun.x, sun.z) + vec2(1e-5));
-    let dir_az = normalize(vec2(dir.x, dir.z) + vec2(1e-5));
-    let toward_sun = max(dot(dir_az, sun_az), 0.0);
-    let warm_band = smoothstep(0.45, -0.1, up) * sunset * pow(toward_sun, 2.0);
-    color += vec3(0.95, 0.35, 0.08) * warm_band * 0.9;
-    color += vec3(0.9, 0.55, 0.15) * sunset * 0.25 * day;
-
-    // ── Sol: disco + mie glow ────────────────────────────────────────
-    let d = clamp(dot(dir, sun), 0.0, 1.0);
-    let disc = smoothstep(0.99955, 0.99985, d);
-    let glow = pow(d, mix(1200.0, 250.0, clamp(sky.mie_g, 0.0, 1.0)));
-    let sun_col = mix(
-        vec3(1.0, 0.55, 0.2),   // horizonte: âmbar
-        vec3(1.0, 0.97, 0.9),   // alto: quase branco
-        clamp(sun_h * 2.5, 0.0, 1.0),
-    );
-    color += sun_col * disc * sky.sun_intensity;
-    color += sun_col * glow * sky.mie * 400.0 * day;
-
-    // ── Lua: disco oposto ao sol ─────────────────────────────────────
-    let moon = normalize(-sun);
-    let md = clamp(dot(dir, moon), 0.0, 1.0);
-    let moon_disc = smoothstep(0.99975, 0.99993, md);
-    let moon_glow = pow(md, 600.0) * 0.4;
-    let moon_col = vec3(0.86, 0.9, 1.0);
-    color += (moon_disc * moon_col + moon_glow * moon_col * 0.35) * sky.night;
-
-    // ── Estrelas: hash grid na direção, só de noite ─────────────────
-    let sp = dir * 220.0;
-    let cell = floor(sp);
-    let h = hash31(cell);
-    let twinkle = 0.6 + 0.4 * sin(sky.time * 2.0 + h * 40.0);
-    let star = step(0.9985, hash31(cell + vec3<f32>(17.0))) * sky.night * twinkle;
-    color += vec3(0.9, 0.93, 1.0) * star;
-
-    // ── Nuvens: FBM num plano projetado, deslocadas pelo vento ──────
-    // Frequência calibrada para nuvens de 3-8°: a versão anterior amostrava
-    // 0-6 unidades de ruído no céu VISÍVEL inteiro, o que gerava blobs do
-    // tamanho de continentes que cobriam o zénite ao passar (o céu "piscava"
-    // branco↔azul) e uma névoa branca permanente de ~20-30% de alpha.
-    if (dir.y > 0.02) {
-        // cloud_elevation controla a altura do plano: mais alto = nuvens
-        // mais pequenas/distantes. Perto do zénite a projeção ao plano
-        // colapsa (dir.xz → 0), por isso misturamos com um mapeamento
-        // tangencial — sem singularidade, sem nuvem congelada no topo.
-        let height = mix(0.7, 2.6, sky.cloud_elevation);
-        let plane = dir.xz / (dir.y + 0.12) * 3.0 * height;
-        let tangential = dir.xz * 4.0;
-        let uv = mix(plane, tangential, smoothstep(0.55, 0.95, dir.y))
-            + sky.wind * sky.time * 0.004;
-        let n = fbm(uv);
-        let threshold = mix(0.74, 0.30, clamp(sky.cloud_coverage, 0.0, 1.0));
-        let cov = smoothstep(threshold, threshold + 0.20, n);
-        let alpha = cov * mix(0.5, 1.05, clamp(sky.cloud_density, 0.0, 1.0))
-            * smoothstep(0.02, 0.12, dir.y);
-
-        // Sombreamento interno: densidade escurece a base; uma segunda
-        // amostra deslocada na direção do sol acende o lado virado a ele.
-        let lit = fbm(uv + sun_az * 0.6);
-        let shade = mix(0.58, 1.02, n) + (lit - n) * 0.8;
-        var cloud_col = vec3(1.04, 1.03, 1.0) * shade * (0.35 + 0.65 * day);
-        // Nuvens pegam o tom do pôr-do-sol.
-        cloud_col += vec3(0.9, 0.35, 0.1) * warm_band * 0.8;
-        cloud_col = mix(cloud_col * vec3(0.25, 0.3, 0.45), cloud_col, day);
-
-        color = mix(color, cloud_col, clamp(alpha, 0.0, 1.0));
-    }
-
-    return vec4(color, 1.0);
-}
+// === WORLD CONFIG (generated by `viber run` — edit the XML, not this block) ===
+const CFG_DRIVE: f32 = 1;
+const CFG_CLOCK_START: f32 = 480;
+const CFG_CLOCK_SPEED: f32 = 1.2;
+const CFG_DAWN: f32 = 330;
+const CFG_DUSK: f32 = 1170;
+const CFG_MAX_ELEV: f32 = 62;
+const CFG_AZ_BASE: f32 = 205;
+const CFG_SUN_ELEV: f32 = 17;
+const CFG_SUN_AZ: f32 = 205;
+const CFG_MIE: f32 = 0.0035;
+const CFG_MIE_G: f32 = 0.8;
+const CFG_SUN_INTENSITY: f32 = 2.6;
+const CFG_CLOUD_COVERAGE: f32 = 0.45;
+const CFG_CLOUD_DENSITY: f32 = 0.32;
+const CFG_CLOUD_ELEVATION: f32 = 0.55;
+const CFG_STAR_DENSITY: f32 = 1;
+const CFG_AURORA: f32 = 0.6;
+const CFG_NEBULA: f32 = 0.5;
+const CFG_WIND_X: f32 = 0.7;
+const CFG_WIND_Z: f32 = 0.25;
+// === END WORLD CONFIG ===
 
 // ── Noise helpers ────────────────────────────────────────────────────
 fn hash21(p: vec2<f32>) -> f32 {
@@ -149,12 +67,13 @@ fn value_noise(p: vec2<f32>) -> f32 {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// 5-octave FBM com rotação de domínio por oitava: sem rotação as oitavas
+// alinham-se à grelha do value noise e as nuvens ganham artefactos
+// quadrados axis-aligned.
 fn fbm(p: vec2<f32>) -> f32 {
     var v = 0.0;
     var amp = 0.5;
     var pp = p;
-    // Rotação por oitava: sem ela as oitavas alinham-se à grelha do value
-    // noise e as nuvens ganham artefactos quadrados axis-aligned.
     let rot = mat2x2<f32>(0.737, 0.676, -0.676, 0.737);
     for (var i = 0; i < 5; i++) {
         v += amp * value_noise(pp);
@@ -162,4 +81,289 @@ fn fbm(p: vec2<f32>) -> f32 {
         amp *= 0.5;
     }
     return v;
+}
+
+// FBM barato (3 oitavas) para camadas finas (cirros, aurora, nebulosa).
+fn fbm3(p: vec2<f32>) -> f32 {
+    var v = 0.0;
+    var amp = 0.5;
+    var pp = p;
+    let rot = mat2x2<f32>(0.737, 0.676, -0.676, 0.737);
+    for (var i = 0; i < 3; i++) {
+        v += amp * value_noise(pp);
+        pp = rot * pp * 2.03 + vec2(11.7, 5.3);
+        amp *= 0.5;
+    }
+    return v;
+}
+
+// ── Day clock (mirror of `worldsys`) ─────────────────────────────────
+const PI: f32 = 3.141592653589793;
+const NIGHT_HALF_ARC: f32 = 25.0;
+
+fn sun_elevation_deg(minute: f32, dawn: f32, dusk: f32, max_elevation: f32) -> f32 {
+    if (minute >= dawn && minute < dusk) {
+        let t = (minute - dawn) / (dusk - dawn);
+        return sin(PI * t) * max_elevation;
+    }
+    let dusk_len = 24.0 * 60.0 - dusk + dawn;
+    var t = (minute - dusk) / dusk_len;
+    if (minute < dusk) {
+        t = (minute + (24.0 * 60.0 - dusk)) / dusk_len;
+    }
+    return -abs(sin(PI * t)) * NIGHT_HALF_ARC;
+}
+
+fn sun_azimuth_deg(minute: f32, dawn: f32, dusk: f32, base: f32) -> f32 {
+    if (minute >= dawn && minute < dusk) {
+        return base + 180.0 * (minute - dawn) / (dusk - dawn);
+    }
+    let dusk_len = 24.0 * 60.0 - dusk + dawn;
+    var t = (minute - dusk) / dusk_len;
+    if (minute < dusk) {
+        t = (minute + (24.0 * 60.0 - dusk)) / dusk_len;
+    }
+    return base + 180.0 + 180.0 * t;
+}
+
+// ── Sky features ─────────────────────────────────────────────────────
+
+// Gradiente base com banda turquesa a meia altura (olhar de fantasia) e
+// névoa junto ao horizonte.
+fn sky_gradient(up: f32, day: f32, sunset: f32) -> vec3<f32> {
+    let zenith_day = vec3(0.10, 0.30, 0.80);
+    let horizon_day = vec3(0.64, 0.79, 0.97);
+    let zenith_night = vec3(0.012, 0.018, 0.05);
+    let horizon_night = vec3(0.04, 0.06, 0.11);
+
+    let zenith = mix(zenith_night, zenith_day, day);
+    let horizon = mix(horizon_night, horizon_day, day);
+
+    let t = pow(clamp(1.0 - up, 0.0, 1.0), 2.2);
+    var color = mix(zenith, horizon, t);
+
+    // Banda turquesa subtil a meia altura (só de dia).
+    let mid = exp(-pow((up - 0.42) * 4.2, 2.0));
+    color += vec3(0.03, 0.11, 0.13) * mid * day * 0.5;
+
+    // Névoa de horizonte: quente ao pôr-do-sol, azulada de dia.
+    let haze = pow(clamp(1.0 - up, 0.0, 1.0), 9.0);
+    let haze_col = mix(vec3(0.45, 0.55, 0.75), vec3(0.95, 0.72, 0.55), sunset);
+    color = mix(color, haze_col, haze * 0.35 * max(day, 0.15));
+    return color;
+}
+
+// Disco solar + bloom de mie + halo largo.
+fn sun_light(dir: vec3<f32>, sun: vec3<f32>, day: f32, sun_h: f32) -> vec3<f32> {
+    let d = clamp(dot(dir, sun), 0.0, 1.0);
+    let disc = smoothstep(0.99930, 0.99965, d);
+    let glow = pow(d, mix(2000.0, 380.0, clamp(CFG_MIE_G, 0.0, 1.0)));
+    let halo = pow(d, 6.0) * 0.10;
+    let sun_col = mix(
+        vec3(1.0, 0.55, 0.2),   // horizonte: âmbar
+        vec3(1.0, 0.97, 0.9),   // alto: quase branco
+        clamp(sun_h * 2.5, 0.0, 1.0),
+    );
+    return sun_col * (disc * 1.35 + glow * CFG_MIE * 650.0 * day + halo * day) * CFG_SUN_INTENSITY;
+}
+
+// Lua com halo e manchas de superfície (ruído no plano tangente ao disco).
+fn moon_light(dir: vec3<f32>, sun: vec3<f32>, night: f32) -> vec3<f32> {
+    if (night < 0.02) {
+        return vec3(0.0);
+    }
+    let moon = normalize(-sun);
+    let md = clamp(dot(dir, moon), 0.0, 1.0);
+    let disc = smoothstep(0.99970, 0.99990, md);
+    let halo = pow(md, 150.0) * 0.22 + pow(md, 30.0) * 0.06;
+    let moon_col = vec3(0.86, 0.9, 1.0);
+
+    let t1 = normalize(cross(moon, vec3(0.0, 1.0, 0.0)) + vec3(0.0001));
+    let t2 = cross(moon, t1);
+    let local = vec2(dot(dir, t1), dot(dir, t2)) * 190.0;
+    let craters = value_noise(local * 1.7) * 0.6 + value_noise(local * 4.3) * 0.4;
+    let surface = disc * (0.78 + 0.44 * craters);
+
+    return (surface * moon_col + halo * moon_col) * night;
+}
+
+// Uma camada de estrelas: grelha de células na direção, fracção acesa por
+// hash, twinkle e tonalidade azulada↔dourada.
+fn star_layer(dir: vec3<f32>, scale: f32, threshold: f32, brightness: f32, time: f32) -> vec3<f32> {
+    let sp = dir * scale;
+    let cell = floor(sp);
+    let h = hash31(cell);
+    let lit = step(threshold, h);
+    let twinkle = 0.55 + 0.45 * sin(time * 2.0 + h * 40.0);
+    let tint = mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.86, 0.7), hash31(cell + vec3<f32>(7.0)));
+    return tint * lit * twinkle * brightness;
+}
+
+fn star_field(dir: vec3<f32>, time: f32, night: f32) -> vec3<f32> {
+    if (night < 0.02) {
+        return vec3(0.0);
+    }
+    let dim = star_layer(dir, 240.0, 0.9975, 0.55 * CFG_STAR_DENSITY, time);
+    let bright = star_layer(dir, 240.0, 0.99965, 1.9 * CFG_STAR_DENSITY, time);
+    return (dim + bright) * night;
+}
+
+// Nebulosa: faixas suaves púrpura↔turquesa nas altas elevações.
+fn nebula_glow(dir: vec3<f32>, night: f32) -> vec3<f32> {
+    if (night < 0.05 || CFG_NEBULA < 0.001) {
+        return vec3(0.0);
+    }
+    let nuv = dir.xz * 2.0 / (abs(dir.y) + 0.35) + vec2(dir.y * 1.5, 0.0);
+    let n = fbm3(nuv * 1.25 + vec2(3.7, 1.9));
+    let mask = smoothstep(0.52, 0.85, n) * night * smoothstep(0.02, 0.35, dir.y);
+    return mix(vec3(0.30, 0.14, 0.50), vec3(0.10, 0.38, 0.45), n) * mask * CFG_NEBULA * 0.4;
+}
+
+// Aurora boreal: fitas ondulantes verde↔azul a meia altura, cortinas
+// animadas pelo ruído.
+fn aurora_ribbons(dir: vec3<f32>, time: f32, night: f32) -> vec3<f32> {
+    if (night < 0.05 || CFG_AURORA < 0.001) {
+        return vec3(0.0);
+    }
+    let wind = vec2(CFG_WIND_X, CFG_WIND_Z);
+    let auv = dir.xz * 1.3 + wind * time * 0.02;
+    let a1 = fbm3(auv * 0.7 + vec2(time * 0.008, 0.0));
+    let band_y = 0.30 + (a1 - 0.5) * 0.28;
+    let band = exp(-pow((dir.y - band_y) * 6.5, 2.0));
+    let curtains = fbm3(vec2(auv.x * 2.6 + time * 0.02, dir.y * 5.0));
+    let a = band * smoothstep(0.42, 0.75, curtains) * CFG_AURORA * night * smoothstep(0.08, 0.25, dir.y);
+    return mix(vec3(0.15, 0.85, 0.45), vec3(0.30, 0.55, 0.95), curtains) * a * 0.55;
+}
+
+// Estrela cadente: janela de 11 s; ~metade tem um meteoro visível ~1.3 s.
+fn meteor(dir: vec3<f32>, time: f32, night: f32) -> vec3<f32> {
+    if (night < 0.25) {
+        return vec3(0.0);
+    }
+    let win = floor(time / 11.0);
+    if (hash21(vec2(win * 0.173, 4.7)) < 0.5) {
+        return vec3(0.0);
+    }
+    let ph = fract(time / 11.0);
+    let life = smoothstep(0.05, 0.12, ph) * (1.0 - smoothstep(0.12, 0.20, ph));
+    if (life <= 0.0) {
+        return vec3(0.0);
+    }
+    let sx = hash21(vec2(win, 1.3)) * 2.0 - 1.0;
+    let sz = hash21(vec2(win, 2.7)) * 2.0 - 1.0;
+    let start = normalize(vec3(sx, 0.55 + 0.35 * hash21(vec2(win, 5.1)), sz));
+    let vel = normalize(cross(start, vec3(0.0, 0.3, 1.0)) + vec3(0.001));
+    let head = normalize(start + vel * (ph * 3.0 - 0.3));
+    let tail = normalize(head - vel * 0.02);
+    let streak = exp(-(1.0 - dot(dir, head)) * 260.0) + exp(-(1.0 - dot(dir, tail)) * 150.0) * 0.35;
+    return vec3(0.9, 0.95, 1.0) * streak * life * night * 2.2;
+}
+
+// Mapa uv do plano de nuvens, com mistura tangencial perto do zénite
+// (a projeção ao plano colapsa quando dir.y → 1).
+fn cloud_uv(dir: vec3<f32>, height: f32, time: f32) -> vec2<f32> {
+    let wind = vec2(CFG_WIND_X, CFG_WIND_Z);
+    let plane = dir.xz / (dir.y + 0.12) * 3.0 * height;
+    let tangential = dir.xz * 4.0;
+    return mix(plane, tangential, smoothstep(0.55, 0.95, dir.y)) + wind * time * 0.004;
+}
+
+// Cúmulo principal: fbm com sombreado interno + silver lining nas bordas
+// viradas ao sol.
+fn cumulus_layer(dir: vec3<f32>, color: vec3<f32>, time: f32, sun_az: vec2<f32>, toward_sun: f32, warm_band: f32, day: f32) -> vec3<f32> {
+    if (dir.y <= 0.02) {
+        return color;
+    }
+    let height = mix(0.7, 2.6, CFG_CLOUD_ELEVATION);
+    let uv = cloud_uv(dir, height, time);
+    let n = fbm(uv);
+    let threshold = mix(0.74, 0.30, clamp(CFG_CLOUD_COVERAGE, 0.0, 1.0));
+    let cov = smoothstep(threshold, threshold + 0.20, n);
+    let alpha = cov * mix(0.5, 1.05, clamp(CFG_CLOUD_DENSITY, 0.0, 1.0))
+        * smoothstep(0.02, 0.12, dir.y);
+    if (alpha <= 0.001) {
+        return color;
+    }
+
+    // Sombreamento interno: densidade escurece a base; uma segunda amostra
+    // deslocada na direção do sol acende o lado virado a ele.
+    let lit = fbm(uv + sun_az * 0.6);
+    let shade = mix(0.58, 1.02, n) + (lit - n) * 0.8;
+    var cloud_col = vec3(1.04, 1.03, 1.0) * shade * (0.35 + 0.65 * day);
+
+    // Silver lining: bordas finas das nuvens viradas ao sol brilham.
+    let rim = smoothstep(threshold + 0.04, threshold, n);
+    cloud_col += vec3(1.0, 0.85, 0.6) * rim * pow(toward_sun, 3.0) * day * 0.55;
+
+    // Nuvens pegam o tom do pôr-do-sol.
+    cloud_col += vec3(0.9, 0.35, 0.1) * warm_band * 0.8;
+    cloud_col = mix(cloud_col * vec3(0.25, 0.3, 0.45), cloud_col, day);
+
+    return mix(color, cloud_col, clamp(alpha, 0.0, 1.0));
+}
+
+// Cirros: camada alta e fina, feixes alongados pelo vento.
+fn cirrus_layer(dir: vec3<f32>, color: vec3<f32>, time: f32, day: f32) -> vec3<f32> {
+    if (dir.y <= 0.15) {
+        return color;
+    }
+    let base = cloud_uv(dir, 1.9, time * 0.6);
+    let stretched = vec2(base.x * 0.5 - base.y * 0.22, base.y * 2.6);
+    let n = fbm3(stretched * 1.4);
+    let alpha = smoothstep(0.52, 0.80, n) * 0.20 * (0.3 + 0.7 * day)
+        * smoothstep(0.15, 0.40, dir.y);
+    let cirrus_col = mix(vec3(0.70, 0.76, 0.92), vec3(1.0, 0.99, 0.97), day);
+    return mix(color, cirrus_col, clamp(alpha, 0.0, 1.0));
+}
+
+@fragment
+fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
+    let cam_pos = view.world_from_view[3].xyz;
+    let dir = normalize(mesh.world_position.xyz - cam_pos);
+    let up = clamp(dir.y, -1.0, 1.0);
+
+    // ── Sol e noite: derivados do relógio (drive=1) ou estáticos ────
+    var sun = normalize(vec3(
+        cos(CFG_SUN_ELEV * PI / 180.0) * sin(CFG_SUN_AZ * PI / 180.0),
+        sin(CFG_SUN_ELEV * PI / 180.0),
+        cos(CFG_SUN_ELEV * PI / 180.0) * cos(CFG_SUN_AZ * PI / 180.0),
+    ));
+    var night = 0.0;
+    if (CFG_DRIVE > 0.5) {
+        // `daycycle_drive` avança `minute += speed * dt / 60` por tick; a
+        // forma fechada abaixo é equivalente (os dt somam → elapsed).
+        let minute = (CFG_CLOCK_START + CFG_CLOCK_SPEED * globals.time / 60.0) % 1440.0;
+        let el_deg = sun_elevation_deg(minute, CFG_DAWN, CFG_DUSK, CFG_MAX_ELEV);
+        let az_deg = sun_azimuth_deg(minute, CFG_DAWN, CFG_DUSK, CFG_AZ_BASE);
+        sun = normalize(vec3(
+            cos(el_deg * PI / 180.0) * sin(az_deg * PI / 180.0),
+            sin(el_deg * PI / 180.0),
+            cos(el_deg * PI / 180.0) * cos(az_deg * PI / 180.0),
+        ));
+        night = 1.0 - clamp(el_deg / 6.0, 0.0, 1.0);
+    }
+
+    let sun_h = clamp(sun.y, -1.0, 1.0);
+
+    // ── Pesos dia/noite ──────────────────────────────────────────────
+    let day = clamp(1.0 - night, 0.0, 1.0);
+    let sunset = exp(-abs(sun_h) * 5.0) * day; // sol perto do horizonte
+
+    let sun_az = normalize(vec2(sun.x, sun.z) + vec2(1e-5));
+    let dir_az = normalize(vec2(dir.x, dir.z) + vec2(1e-5));
+    let toward_sun = max(dot(dir_az, sun_az), 0.0);
+    let warm_band = smoothstep(0.45, -0.1, up) * sunset * pow(toward_sun, 2.0);
+
+    // ── Composição: céu → astros → fenómenos → nuvens → meteoro ─────
+    var color = sky_gradient(up, day, sunset);
+    color += sun_light(dir, sun, day, sun_h);
+    color += moon_light(dir, sun, night);
+    color += star_field(dir, globals.time, night);
+    color += nebula_glow(dir, night);
+    color += aurora_ribbons(dir, globals.time, night);
+    color = cumulus_layer(dir, color, globals.time, sun_az, toward_sun, warm_band, day);
+    color = cirrus_layer(dir, color, globals.time, day);
+    color += meteor(dir, globals.time, night);
+
+    return vec4(color, 1.0);
 }

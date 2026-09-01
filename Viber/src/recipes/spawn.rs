@@ -283,9 +283,10 @@ pub fn startup(world: &mut World) {
             }
             spawn_entity(world, &mut ctx, spec, None, &mut stats, &mut ambient);
         }
-        // `<Sky>`: domo procedural (shader embutido escrito no world dir pelo run()).
-        if let Some(attrs) = ctx.sky_request.take() {
-            crate::sky::build_sky(world, ctx.meshes, ctx.sky_mats, &attrs);
+        // `<Sky>`: domo procedural (o shader especializado com a config do
+        // mundo é escrito no world dir pelo run()).
+        if ctx.sky_request.take().is_some() {
+            crate::sky::build_sky(world, ctx.meshes, ctx.sky_mats);
         }
         let hud_elements = ctx.hud.into_inner();
         let mixer = ctx.mixer.into_inner();

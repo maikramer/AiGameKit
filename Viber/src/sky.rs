@@ -1,50 +1,41 @@
 //! `<Sky>` procedural dome: atmospheric gradient, sun disc + glow, FBM
-//! clouds drifting with the wind, moon and stars at night — composed in a
-//! custom WGSL fragment shader on a camera-following inverted sphere.
+//! clouds, moon, stars, nebula, aurora and meteors — a custom WGSL fragment
+//! shader on a camera-following inverted sphere.
+//!
+//! ARCHITECTURE NOTE — no material uniform: Bevy 0.19 promotes a custom
+//! material's `#[uniform(0)]` to a slot-1 storage buffer that is never
+//! re-uploaded after the first `Added` upload and reads back unrelated
+//! buffer contents (the sky "flickered" on per-frame garbage). Instead,
+//! `viber run` SPECIALIZES the WGSL per world: `SkyConfig` is extracted from
+//! the `<Sky>`/`<DayCycle>`/`<Weather>` elements and the CONFIG const block
+//! of `shaders/sky.wgsl` is rewritten before the renderer loads it. Per-frame
+//! values (clock, twinkle, drift) derive from `Globals` — the engine-updated
+//! view binding the `animate_shader` example uses.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::light::NotShadowCaster;
-use bevy::math::{Vec2, Vec3};
+use bevy::math::Vec3;
 use bevy::pbr::Material;
 use bevy::prelude::*;
 use bevy::render::mesh::PrimitiveTopology;
 use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
 
-/// Fonte WGSL do céu (embutida no binário e escrita no world dir).
+/// Template WGSL do céu (defaults; `viber run` reescreve o bloco CONFIG com
+/// os valores do mundo antes de o renderer o carregar).
 pub const SKY_WGSL: &str = include_str!("sky.wgsl");
 
-/// Marker + material handle for the sky dome entity.
+const CONFIG_BEGIN: &str = "// === WORLD CONFIG";
+const CONFIG_END: &str = "// === END WORLD CONFIG ===";
+
+/// Marker for the sky dome entity.
 #[derive(Debug, Component)]
-pub struct SkyDome {
-    pub material: Handle<SkyMaterial>,
-}
+pub struct SkyDome;
 
-/// GPU uniform block (mirrored in `sky.wgsl` as `SkyUniform`).
-#[derive(Debug, Clone, Default, bevy::render::render_resource::ShaderType)]
-pub struct SkyUniform {
-    pub sun_dir: Vec3,
-    pub time: f32,
-    /// 0 = full day, 1 = full night.
-    pub night: f32,
-    pub turbidity: f32,
-    pub rayleigh: f32,
-    pub mie: f32,
-    pub mie_g: f32,
-    pub sun_intensity: f32,
-    pub cloud_coverage: f32,
-    pub cloud_density: f32,
-    pub cloud_elevation: f32,
-    pub wind: Vec2,
-}
-
-/// Custom sky material (WGSL in `src/sky.wgsl`, written to the world asset
-/// root by `run()` before the renderer specializes the material).
+/// Custom sky material — no bindings at all (world config lives in the
+/// specialized WGSL consts, per-frame values in the engine's `Globals`).
 #[derive(Debug, Clone, Asset, TypePath, AsBindGroup)]
-pub struct SkyMaterial {
-    #[uniform(0)]
-    pub uniform: SkyUniform,
-}
+pub struct SkyMaterial {}
 
 impl Material for SkyMaterial {
     fn fragment_shader() -> ShaderRef {
@@ -56,63 +47,197 @@ impl Material for SkyMaterial {
     // the dome mesh itself is wound inward instead.
 }
 
-/// Spawn the dome + material for a `<Sky>` element from its raw attributes.
-pub fn build_sky(
-    world: &mut World,
-    meshes: &mut Assets<Mesh>,
-    sky_mats: &mut Assets<SkyMaterial>,
-    attrs: &[(String, String)],
-) {
-    let f = |name: &str, default: f32| -> f32 {
-        attrs
-            .iter()
-            .find(|(k, _)| k == name)
-            .and_then(|(_, v)| v.trim().parse::<f32>().ok())
-            .unwrap_or(default)
-    };
-    let sun_elevation = f("sun-elevation", 17.0);
-    let sun_azimuth = f("sun-azimuth", 205.0);
-    let turbidity = f("turbidity", 2.4).max(0.05);
-    let rayleigh = f("rayleigh", 2.8);
-    let mie = f("mie-coefficient", 0.0035);
-    let mie_g = f("mie-directional-g", 0.8).clamp(-0.99, 0.99);
-    let cloud_coverage = f("cloud-coverage", 0.45).clamp(0.0, 1.0);
-    let cloud_density = f("cloud-density", 0.32).clamp(0.0, 1.0);
-    let cloud_elevation = f("cloud-elevation", 0.55).clamp(0.0, 1.0);
-    let _ = f("environment-intensity", 0.38);
-    let sun_intensity = f("sun-intensity", 2.6).max(0.1);
-    let _ = f("drive-light", 1.0);
+/// Per-world sky configuration extracted from the world XML.
+#[derive(Debug, Clone)]
+pub struct SkyConfig {
+    /// `true` when a `<DayCycle>` drives the sun (shader derives the sun
+    /// position/night from `Globals.time`); otherwise a static `<Sky>` sun.
+    pub drive: bool,
+    pub clock_start: f32,
+    pub clock_speed: f32,
+    pub dawn: f32,
+    pub dusk: f32,
+    pub max_elev: f32,
+    pub az_base: f32,
+    /// Static sun used when there is no `<DayCycle>`.
+    pub sun_elevation: f32,
+    pub sun_azimuth: f32,
+    pub mie: f32,
+    pub mie_g: f32,
+    pub sun_intensity: f32,
+    pub cloud_coverage: f32,
+    pub cloud_density: f32,
+    pub cloud_elevation: f32,
+    pub star_density: f32,
+    pub aurora: f32,
+    pub nebula: f32,
+    pub wind: [f32; 2],
+}
 
-    let (el, az) = (sun_elevation.to_radians(), sun_azimuth.to_radians());
-    let sun_dir = Vec3::new(el.cos() * az.sin(), el.sin(), el.cos() * az.cos());
+impl Default for SkyConfig {
+    fn default() -> Self {
+        Self {
+            drive: false,
+            clock_start: 480.0,
+            clock_speed: 1.2,
+            dawn: 330.0,
+            dusk: 1170.0,
+            max_elev: 62.0,
+            az_base: 205.0,
+            sun_elevation: 17.0,
+            sun_azimuth: 205.0,
+            mie: 0.0035,
+            mie_g: 0.8,
+            sun_intensity: 2.6,
+            cloud_coverage: 0.45,
+            cloud_density: 0.32,
+            cloud_elevation: 0.55,
+            star_density: 1.0,
+            aurora: 0.6,
+            nebula: 0.5,
+            wind: [0.7, 0.25],
+        }
+    }
+}
 
+impl SkyConfig {
+    /// Scan the parsed world for `<Sky>`, `<DayCycle>` and `<Weather>` and
+    /// merge their values over the defaults.
+    pub fn from_world(entities: &[crate::recipes::EntitySpec]) -> SkyConfig {
+        let mut config = SkyConfig::default();
+        walk_entities(entities, &mut config);
+        config
+    }
+
+    /// Rewrite the CONFIG const block of the shader template with this
+    /// world's values (the rest of the template is untouched).
+    pub fn render_world_shader(&self) -> String {
+        let w = self.wind;
+        let block = format!(
+            "{CONFIG_BEGIN} (generated by `viber run` — edit the XML, not this block) ===\n\
+const CFG_DRIVE: f32 = {};\n\
+const CFG_CLOCK_START: f32 = {};\n\
+const CFG_CLOCK_SPEED: f32 = {};\n\
+const CFG_DAWN: f32 = {};\n\
+const CFG_DUSK: f32 = {};\n\
+const CFG_MAX_ELEV: f32 = {};\n\
+const CFG_AZ_BASE: f32 = {};\n\
+const CFG_SUN_ELEV: f32 = {};\n\
+const CFG_SUN_AZ: f32 = {};\n\
+const CFG_MIE: f32 = {};\n\
+const CFG_MIE_G: f32 = {};\n\
+const CFG_SUN_INTENSITY: f32 = {};\n\
+const CFG_CLOUD_COVERAGE: f32 = {};\n\
+const CFG_CLOUD_DENSITY: f32 = {};\n\
+const CFG_CLOUD_ELEVATION: f32 = {};\n\
+const CFG_STAR_DENSITY: f32 = {};\n\
+const CFG_AURORA: f32 = {};\n\
+const CFG_NEBULA: f32 = {};\n\
+const CFG_WIND_X: f32 = {};\n\
+const CFG_WIND_Z: f32 = {};\n\
+{CONFIG_END}",
+            self.drive as i32,
+            self.clock_start,
+            self.clock_speed,
+            self.dawn,
+            self.dusk,
+            self.max_elev,
+            self.az_base,
+            self.sun_elevation,
+            self.sun_azimuth,
+            self.mie,
+            self.mie_g,
+            self.sun_intensity,
+            self.cloud_coverage,
+            self.cloud_density,
+            self.cloud_elevation,
+            self.star_density,
+            self.aurora,
+            self.nebula,
+            w[0],
+            w[1],
+        );
+        let template = SKY_WGSL;
+        let Some(begin) = template.find(CONFIG_BEGIN) else {
+            return template.to_string();
+        };
+        let Some(end_rel) = template[begin..].find(CONFIG_END) else {
+            return template.to_string();
+        };
+        let end = begin + end_rel + CONFIG_END.len();
+        let mut out = String::with_capacity(template.len() + block.len());
+        out.push_str(&template[..begin]);
+        out.push_str(&block);
+        out.push_str(&template[end..]);
+        out
+    }
+}
+
+fn walk_entities(specs: &[crate::recipes::EntitySpec], config: &mut SkyConfig) {
+    for spec in specs {
+        match &spec.kind {
+            // <Sky> é parseado como HudElement (legado do plumbing que
+            // alimenta build_sky) — os attrs chegam aqui inteiros.
+            crate::recipes::EntityKind::HudElement { tag, attrs } if tag == "sky" => {
+                let f = |name: &str, default: f32| -> f32 {
+                    attrs
+                        .iter()
+                        .find(|(k, _)| k == name)
+                        .and_then(|(_, v)| v.trim().parse::<f32>().ok())
+                        .unwrap_or(default)
+                };
+                config.sun_elevation = f("sun-elevation", config.sun_elevation);
+                config.sun_azimuth = f("sun-azimuth", config.sun_azimuth);
+                config.mie = f("mie-coefficient", config.mie);
+                config.mie_g = f("mie-directional-g", config.mie_g).clamp(-0.99, 0.99);
+                config.sun_intensity = f("sun-intensity", config.sun_intensity).max(0.1);
+                config.cloud_coverage = f("cloud-coverage", config.cloud_coverage).clamp(0.0, 1.0);
+                config.cloud_density = f("cloud-density", config.cloud_density).clamp(0.0, 1.0);
+                config.cloud_elevation =
+                    f("cloud-elevation", config.cloud_elevation).clamp(0.0, 1.0);
+                config.star_density = f("star-density", config.star_density).max(0.0);
+                config.aurora = f("aurora", config.aurora).clamp(0.0, 2.0);
+                config.nebula = f("nebula", config.nebula).clamp(0.0, 1.5);
+            }
+            crate::recipes::EntityKind::DayCycle {
+                minute_of_day,
+                minutes_per_real_second,
+                dawn_minute,
+                dusk_minute,
+                max_sun_elevation,
+                sun_azimuth_base,
+                ..
+            } => {
+                config.drive = true;
+                config.clock_start = *minute_of_day;
+                config.clock_speed = *minutes_per_real_second;
+                config.dawn = *dawn_minute;
+                config.dusk = *dusk_minute;
+                config.max_elev = *max_sun_elevation;
+                config.az_base = *sun_azimuth_base;
+            }
+            crate::recipes::EntityKind::Weather { wind, .. } => {
+                config.wind = *wind;
+            }
+            _ => {}
+        }
+        walk_entities(&spec.children, config);
+    }
+}
+
+/// Spawn the dome + material for a `<Sky>` element (world config reaches the
+/// shader through the specialized WGSL, not through these attributes).
+pub fn build_sky(world: &mut World, meshes: &mut Assets<Mesh>, sky_mats: &mut Assets<SkyMaterial>) {
     let mesh = meshes.add(sky_dome_mesh());
-    let material = sky_mats.add(SkyMaterial {
-        uniform: SkyUniform {
-            sun_dir,
-            time: 0.0,
-            night: 0.0,
-            turbidity,
-            rayleigh,
-            mie,
-            mie_g,
-            sun_intensity,
-            cloud_coverage,
-            cloud_density,
-            cloud_elevation,
-            wind: Vec2::new(0.7, 0.25),
-        },
-    });
+    let material = sky_mats.add(SkyMaterial {});
     world.spawn((
         Name::new("sky"),
         Mesh3d(mesh),
-        MeshMaterial3d::<SkyMaterial>(material.clone()),
+        MeshMaterial3d::<SkyMaterial>(material),
         Transform::from_scale(Vec3::splat(4000.0)),
         Visibility::Visible,
         NotShadowCaster,
-        SkyDome {
-            material: material.clone(),
-        },
+        SkyDome,
     ));
 }
 
@@ -172,35 +297,63 @@ pub fn sky_follow_camera(
     }
 }
 
-/// Publish the live sun/clock/weather into the dome's material.
-///
-/// The material asset is RE-CREATED every frame instead of mutated: Bevy
-/// 0.19 promotes a plain `#[uniform(0)]` to a slot-1 storage buffer that is
-/// never re-uploaded on `AssetEvent::Modified` (mutating it froze the sky on
-/// its first-frame values), and reading it back through the binding yielded
-/// unrelated buffer contents, which drove the day/night/cloud flicker. The
-/// `Added` path — a fresh asset — provably uploads correctly, and one 64-byte
-/// buffer per frame is nothing.
-#[allow(clippy::needless_pass_by_value)]
-pub fn sky_update(
-    time: Res<Time>,
-    sun: Res<crate::worldsys::SunState>,
-    weather: Option<Res<crate::worldsys::WeatherState>>,
-    mut sky_mats: ResMut<Assets<SkyMaterial>>,
-    mut domes: Query<&mut MeshMaterial3d<SkyMaterial>>,
-) {
-    for mut binding in &mut domes {
-        let mut uniform = sky_mats
-            .get(&binding.0)
-            .map(|material| material.uniform.clone())
-            .unwrap_or_default();
-        uniform.sun_dir = sun.dir;
-        uniform.night = sun.night;
-        uniform.time = time.elapsed_secs();
-        if let Some(w) = weather.as_deref() {
-            uniform.wind = Vec2::new(w.wind[0], w.wind[1]);
-        }
-        let handle = sky_mats.add(SkyMaterial { uniform });
-        **binding = handle;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// O shader gerado substitui o bloco CONFIG e mantém o resto intacto.
+    #[test]
+    fn test_render_world_shader_specializes_config() {
+        let mut config = SkyConfig::default();
+        config.drive = true;
+        config.clock_start = 1140.0;
+        config.aurora = 1.25;
+        let shader = config.render_world_shader();
+        assert!(shader.contains("const CFG_DRIVE: f32 = 1;"));
+        assert!(shader.contains("const CFG_CLOCK_START: f32 = 1140;"));
+        assert!(shader.contains("const CFG_AURORA: f32 = 1.25;"));
+        // O corpo do shader sobrevive à substituição.
+        assert!(shader.contains("fn fragment"));
+        assert!(shader.contains("aurora_ribbons"));
+        assert_eq!(shader.matches(CONFIG_END.as_bytes()).count(), 1);
+        // Sem marcadores (template partido), devolve o template intacto.
+        assert_eq!(SkyConfig::default().render_world_shader().contains("const CFG_DRIVE"), true);
+    }
+
+    /// `from_world` lê `<Sky>`, `<DayCycle>` e `<Weather>` (incl. filhos).
+    #[test]
+    fn test_sky_config_from_world() {
+        use crate::recipes::{EntityKind, EntitySpec, PhysicsSpec, TransformSpec};
+
+        let spec = |kind: EntityKind| EntitySpec {
+            name: None,
+            tag: None,
+            script: None,
+            transform: TransformSpec {
+                translation: [0.0, 0.0, 0.0],
+                euler_deg: None,
+            },
+            physics: PhysicsSpec::default(),
+            kind,
+            children: Vec::new(),
+        };
+        let world = vec![spec(EntityKind::Group), spec(EntityKind::DayCycle {
+            minute_of_day: 1140.0,
+            minutes_per_real_second: 3.0,
+            dawn_minute: 330.0,
+            dusk_minute: 1170.0,
+            ambient_day: 0.26,
+            ambient_night: 0.07,
+            drive_ambient: true,
+            max_sun_elevation: 55.0,
+            sun_azimuth_base: 180.0,
+        })];
+        let config = SkyConfig::from_world(&world);
+        assert!(config.drive);
+        assert_eq!(config.clock_start, 1140.0);
+        assert_eq!(config.clock_speed, 3.0);
+        assert_eq!(config.max_elev, 55.0);
+        // Defaults preservados na ausência de <Sky>.
+        assert_eq!(config.cloud_coverage, 0.45);
     }
 }

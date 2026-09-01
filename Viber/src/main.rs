@@ -349,7 +349,11 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     let world_dir = world_base_dir(path).unwrap_or_else(|| PathBuf::from("."));
     let shaders_dir = world_dir.join("shaders");
     let _ = std::fs::create_dir_all(&shaders_dir);
-    let _ = std::fs::write(shaders_dir.join("sky.wgsl"), sky::SKY_WGSL);
+    // O shader do céu é ESPECIALIZADO por mundo: a config do <Sky>/<DayCycle>/
+    // <Weather> é injectada como consts WGSL (o uniform de material custom no
+    // Bevy 0.19 nunca re-uploads — ver sky.rs).
+    let sky_config = sky::SkyConfig::from_world(&world.entities);
+    let _ = std::fs::write(shaders_dir.join("sky.wgsl"), sky_config.render_world_shader());
     // Asset root: the folder that CONTAINS `assets/` — the world dir itself
     // when it has one (mirrored assets), else its `public/`, else default.
     let asset_root = match world_base_dir(path) {
@@ -458,7 +462,6 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             worldsys::sun_drive,
             worldsys::world_border_clamp,
             sky::sky_follow_camera,
-            sky::sky_update,
             worldsys::seat_statics_once,
             hud::hud_toggle,
             particles::particle_emitter_update,
