@@ -53,7 +53,18 @@ pub const CROSSING_FLARE: f32 = 1.45;
 /// Altura da ribbon sobre o terreno esculpido. 6 cm era sub-pixel a médias
 /// distâncias (far plane do domo = 4000 m) e a ribbon brigava no depth buffer
 /// com o terreno — listras verde/branco (terreno/estrada) nas artérias.
-pub const RIBBON_LIFT: f32 = 0.2;
+/// Ribbon: sub-elevação sobre o leito — o drape segue o terreno e as
+/// bordas descem em *skirt*, escondendo o gap nas encostas (loop de polish:
+/// antes era 0.2 fixo, que fazia a ribbon flutuar sobre declives).
+pub const RIBBON_LIFT: f32 = 0.06;
+/// Profundidade das saias laterais (esconde o corte do leito em declive).
+pub const RIBBON_SKIRT_DEPTH: f32 = 0.35;
+/// Passo máximo entre estações refinadas (m) — subdivisão para o noise.
+pub const RIBBON_SUBDIV: f32 = 2.5;
+/// Amplitude do noise lateral orgânico (m).
+pub const RIBBON_NOISE_AMP: f32 = 0.28;
+/// Wobble da largura (fração da meia-largura).
+pub const RIBBON_WOBBLE: f32 = 0.08;
 
 /// Cap on the miter scale at a corner (VibeGame `ROAD_MITER_LIMIT`). Sem o
 /// limite um hairpin atirava a borda externa ao infinito; 3 mantém junções
@@ -702,46 +713,115 @@ fn box_smooth(values: &mut [f32], half: usize) {
     values.copy_from_slice(&smoothed);
 }
 
+/// Value noise 1D determinístico (hash de inteiro + smoothstep): oscilação
+/// orgânica reproduzível sem crate de RNG.
+fn organic_noise(seed: u32, t: f32) -> f32 {
+    fn hash(i: u32) -> f32 {
+        let mut x = i.wrapping_mul(0x9E37_79B9);
+        x ^= x >> 15;
+        x = x.wrapping_mul(0x85EB_CA6B);
+        x ^= x >> 13;
+        (x & 0xFFFF) as f32 / 65535.0 * 2.0 - 1.0
+    }
+    let smooth = |f: f32| f * f * (3.0 - 2.0 * f);
+    let t = t.max(0.0);
+    let i = t.floor() as u32;
+    let f = smooth(t - t.floor());
+    hash(seed.wrapping_add(i)) * (1.0 - f) + hash(seed.wrapping_add(i + 1)) * f
+}
+
+/// Refina o caminho para o toque orgânico do polish: subdivisão em passos
+/// curtos, suavização dos cantos (média dos vizinhos) e noise lateral de
+/// baixa frequência + wobble da largura — determinístico por estrada
+/// (seed derivado da primeira estação).
+fn refine_organic(path: &RoadPath) -> (Vec<Vec2>, Vec<f32>) {
+    // 1) subdivisão em passos curtos
+    let mut pts: Vec<Vec2> = Vec::new();
+    let mut widths: Vec<f32> = Vec::new();
+    for (i, st) in path.stations.iter().enumerate() {
+        if i > 0 {
+            let prev = path.stations[i - 1];
+            let d = st.distance(prev);
+            let steps = (d / RIBBON_SUBDIV).ceil().max(1.0) as usize;
+            for k in 1..=steps {
+                let t = k as f32 / steps as f32;
+                pts.push(prev.lerp(*st, t));
+                widths.push(
+                    path.half_width[i - 1]
+                        + (path.half_width[i] - path.half_width[i - 1]) * t,
+                );
+            }
+        } else {
+            pts.push(*st);
+            widths.push(path.half_width[0]);
+        }
+    }
+    // 2) suavização dos cantos (2 passes de média dos vizinhos, endpoints fixos)
+    for _ in 0..2 {
+        let mut smoothed = pts.clone();
+        for i in 1..pts.len() - 1 {
+            smoothed[i] = (pts[i - 1] + pts[i] * 2.0 + pts[i + 1]) / 4.0;
+        }
+        pts = smoothed;
+    }
+    // 3) noise lateral + wobble da largura (seed = primeira estação)
+    let seed = (pts[0].x.to_bits() ^ pts[0].y.to_bits()) & 0xFFFF;
+    let dirs: Vec<Vec2> = pts
+        .windows(2)
+        .map(|w| (w[1] - w[0]).normalize_or_zero())
+        .chain(std::iter::once(Vec2::ONE))
+        .collect();
+    for (i, p) in pts.iter_mut().enumerate() {
+        let arc_t = i as f32 / 2.0; // ~2 m por passo
+        let offset = organic_noise(seed, arc_t * 0.35) * RIBBON_NOISE_AMP;
+        let dir = dirs.get(i).copied().unwrap_or(Vec2::ONE);
+        let perp = Vec2::new(-dir.y, dir.x);
+        *p += perp * offset;
+        widths[i] *= 1.0 + organic_noise(seed.wrapping_add(0x5111), arc_t * 0.25) * RIBBON_WOBBLE;
+    }
+    (pts, widths)
+}
+
 /// Builds the road ribbon draped on the carved terrain (world-space
 /// positions, edge alpha feather, `v` = arc length / texture scale).
 /// Bridge roads render as a flat deck at `deck_y`.
+/// Loop de polish (2026-09-01): caminho refinado orgânico (subdivisão +
+/// suavização de cantos + noise lateral/wobble determinísticos) e saias
+/// laterais que descem até o leito — a estrada funde com o terreno em vez
+/// de flutuar a 0.2 m fixo.
 pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> ChunkMeshData {
     let mut mesh = ChunkMeshData::default();
     let n = path.stations.len();
     if n < 2 {
         return mesh;
     }
+    let (stations, half_widths) = refine_organic(path);
+    let n = stations.len();
     let feather = spec.edge_feather.max(0.0); // metros (VibeGame edgeFeather)
     let scale = if spec.texture_scale > 0.0 {
         spec.texture_scale
     } else {
         1.0
     };
-    let mut arc = 0.0;
-    // Four vertices per station (bordaEsq, núcleoEsq, núcleoDir, bordaDir,
-    // alpha [0,1,1,0] — VibeGame makeRoadGeometry): o núcleo opaco tem
-    // `feather` metros de folga de cada lado e só a borda faz fade. Com a
-    // secção antiga de 3 vértices e feather interpretado como FRAÇÃO da
-    // meia-largura, o núcleo opaco encolhia até à linha central e a estrada
-    // ficava quase invisível.
     let feather_eff = feather.max(0.001);
-    for (i, st) in path.stations.iter().enumerate() {
+    let mut arc = 0.0;
+    // Seis vértices por estação: [skirtL, edgeL, coreL, coreR, edgeR,
+    // skirtR]. O deck (edge/core) mantém o feather do VibeGame; as saias
+    // descem RIBBON_SKIRT_DEPTH a partir das bordas com alpha 1 — vistas de
+    // lado cobrem o corte do leito nas encostas; vistas de cima são
+    // degeneradas (mesma lateral, menor altura).
+    for (i, st) in stations.iter().enumerate() {
         if i > 0 {
-            arc += st.distance(path.stations[i - 1]);
+            arc += st.distance(stations[i - 1]);
         }
-        // Bisector normal + miter scale (VibeGame road geometry): offsetar
-        // por `hw` ao longo da média das normais dos segmentos vizinhos
-        // estreita a ribbon para `hw·cos(θ/2)` medido perpendicular a cada
-        // segmento — os cantos apertam e a estrada "quebra" onde curva.
-        // Dividir por cos(θ/2) (com cap) restaura largura constante.
         let seg_normal = |d: Vec2| Vec2::new(-d.y, d.x);
         let in_n = if i > 0 {
-            seg_normal((*st - path.stations[i - 1]).normalize_or_zero())
+            seg_normal((*st - stations[i - 1]).normalize_or_zero())
         } else {
             Vec2::ZERO
         };
         let out_n = if i + 1 < n {
-            seg_normal((path.stations[i + 1] - *st).normalize_or_zero())
+            seg_normal((stations[i + 1] - *st).normalize_or_zero())
         } else {
             Vec2::ZERO
         };
@@ -754,7 +834,7 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
             if bisector.length_squared() > 1e-8 {
                 (bisector.normalize(), in_n)
             } else {
-                (in_n, in_n) // reversão a 180°: usa a normal de entrada
+                (in_n, in_n)
             }
         };
         let cos_half = perp.dot(seg_n).abs();
@@ -763,49 +843,54 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
         } else {
             1.0
         };
-        let hw = path.half_width[i];
+        let hw = half_widths[i].max(0.05);
         let outer_l = -hw;
         let outer_r = hw;
-        // Núcleo opaco a `feather` metros da borda (clamp para não cruzar em
-        // estradas estreitas — VibeGame coreL/coreR).
         let core_l = (outer_l + feather_eff).min(-0.02);
         let core_r = (outer_r - feather_eff).max(0.02);
 
-        let laterals = [outer_l, core_l, core_r, outer_r];
-        let alphas = [0.0, 1.0, 1.0, 0.0];
+        let laterals = [outer_l, outer_l, core_l, core_r, outer_r, outer_r];
+        let alphas = [1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
         for (k, lat) in laterals.iter().enumerate() {
             let p = *st + perp * (*lat * miter);
+            let lift = if k == 0 || k == 5 { RIBBON_SKIRT_DEPTH } else { 0.0 };
             let y = if path.bridge {
                 path.deck_y.unwrap_or(0.0) + RIBBON_LIFT
             } else {
-                grid.sample(p.x, p.y) + RIBBON_LIFT
+                grid.sample(p.x, p.y) + RIBBON_LIFT - lift
             };
             mesh.positions.push([p.x, y, p.y]);
-            // Bridge decks read as flat; ground ribbons follow the carve.
             mesh.normals.push(if path.bridge {
                 [0.0, 1.0, 0.0]
             } else {
                 grid.sample_normal(p.x, p.y, grid.texel()).to_array()
             });
-            // Tile across the ribbon in world space, like the length already
-            // does. A normalized `u` stretches exactly one texture tile over
-            // the full width, so a narrow trail looked anisotropic and a wide
-            // plaza came out as flat colour with no stones at all.
             mesh.uvs.push([lat / scale, arc / scale]);
             mesh.colors.push([1.0, 1.0, 1.0, alphas[k]]);
         }
     }
+    // Deck quads: 3 por segmento (edge/core) usando o stride de 6; depois os
+    // quads de saia (skirtL↔edgeL e edgeR↔skirtR), opacos de lado.
+    let stride = 6_usize;
     for i in 0..(n - 1) {
-        // Vertices: 4 per station (ol, cl, cr, or). Three quads per pair
-        // (VibeGame). Winding CCW visto de CIMA — (l0, c0, l1) dá normal +Y;
-        // a ordem (l0, l1, c0) invertia o normal (−Y) e o FrontSide cull
-        // escondia a ribbon inteira vista de cima.
-        let a = (i * 4) as u32;
-        let b = ((i + 1) * 4) as u32;
-        for k in 0..3u32 {
-            mesh.indices
-                .extend_from_slice(&[a + k, a + k + 1, b + k, a + k + 1, b + k + 1, b + k]);
+        let a = (i * stride) as u32;
+        let b = ((i + 1) * stride) as u32;
+        for k in 1..4_u32 {
+            mesh.indices.extend_from_slice(&[
+                a + k,
+                a + k + 1,
+                b + k,
+                a + k + 1,
+                b + k + 1,
+                b + k,
+            ]);
         }
+        // saia esquerda: verts 0 (skirt) ↔ 1 (edge)
+        mesh.indices
+            .extend_from_slice(&[a, b, b + 1, a, b + 1, a + 1]);
+        // saia direita: verts 4 (edge) ↔ 5 (skirt)
+        mesh.indices
+            .extend_from_slice(&[a + 4, b + 4, b + 5, a + 4, b + 5, a + 5]);
     }
     mesh
 }
@@ -1311,9 +1396,9 @@ mod tests {
 
     #[test]
     fn test_road_ribbon_winding_faces_up() {
-        // Estrada +X: o 1º triângulo (l0, c0, l1) tem de dar normal +Y —
-        // winding invertido escondia a ribbon inteira atrás do FrontSide
-        // cull (visível só de baixo).
+        // Estrada +X: o primeiro triângulo do DECK (edgeL, coreL, edgeL do
+        // próximo passo) tem de dar normal +Y — winding invertido escondia
+        // a ribbon atrás do FrontSide cull.
         let grid = test_grid();
         let path = RoadPath {
             name: None,
@@ -1325,18 +1410,25 @@ mod tests {
         };
         let spec = road_spec();
         let mesh = road_ribbon_mesh(&grid, &path, &spec);
-        // Usa os ÍNDICES reais do primeiro triângulo (o que a GPU vê).
+        // O 1º segmento escreve 18 índices de deck antes das saias.
         let v = |i: u32| bevy::math::Vec3::from_array(mesh.positions[i as usize]);
         let (a, b, c) = (v(mesh.indices[0]), v(mesh.indices[1]), v(mesh.indices[2]));
         let normal = (b - a).cross(c - a);
         assert!(normal.y > 0.0, "ribbon winding must face up: {normal}");
+        // Determinismo: mesma entrada → mesma malha.
+        let again = road_ribbon_mesh(&grid, &path, &spec);
+        assert_eq!(mesh.positions, again.positions, "noise determinístico");
+        // Refine orgânico: 10 m com passo ≤ 2.5 m → ≥ 4 estações refinadas
+        // (2 de entrada), 6 vértices cada (deck 4 + saias 2).
+        assert!(mesh.positions.len() >= 4 * 6, "refine subdividiu");
+        assert_eq!(mesh.positions.len() % 6, 0);
     }
 
     #[test]
     fn test_road_ribbon_corner_keeps_constant_width() {
-        // L de 90°: sem miter, a largura perpendicular no canto aperta para
-        // hw·cos(45°) ≈ 1.41 m; com miter (= 1/cos45 ≈ 1.414) cada borda
-        // fica a hw da linha de centro de AMBOS os segmentos.
+        // L de 90°: o refine orgânico (subdivisão + suavização) arredonda o
+        // canto; o miter mantém a largura local perto da nominal em TODAS
+        // as estações (nem pinch de 45° nem esticões).
         let grid = test_grid();
         let path = RoadPath {
             name: None,
@@ -1354,37 +1446,21 @@ mod tests {
         };
         let spec = road_spec();
         let mesh = road_ribbon_mesh(&grid, &path, &spec);
-        // Estação do canto (índice 2): 4 vértices (ol, cl, cr, or).
-        let corner = 2 * 4;
-        let left = bevy::math::Vec3::from_array(mesh.positions[corner]);
-        let right = bevy::math::Vec3::from_array(mesh.positions[corner + 3]);
-        // Borda esquerda do canto: afastada `hw` da linha z=64 (segmento de
-        // entrada) e `hw` da linha x=64 (segmento de saída). Vec3 = (x, y
-        // altura, z) — o plano XZ é x/z.
-        assert!(
-            ((left.x - 64.0).abs() - 2.0).abs() < 0.1,
-            "left edge respects out-segment width: {left:?}"
-        );
-        assert!(
-            ((left.z - 64.0).abs() - 2.0).abs() < 0.1,
-            "left edge respects in-segment width: {left:?}"
-        );
-        // Sem miter esta distância seria ~1.41 (pinch de 45°).
-        assert!(
-            ((right.x - 64.0).abs() - 2.0).abs() < 0.1,
-            "right edge respects out-segment width: {right:?}"
-        );
-        assert!(
-            ((right.z - 64.0).abs() - 2.0).abs() < 0.1,
-            "right edge respects in-segment width: {right:?}"
-        );
-        // A largura total no canto excede a nominal (offsets esticados pelo
-        // miter cobrem a dobra externa, sem gap).
-        assert!(
-            left.distance(right) > 4.0,
-            "miter widens the outer fold: {}",
-            left.distance(right)
-        );
+        assert_eq!(mesh.positions.len() % 6, 0, "6 verts por estação");
+        let stations = mesh.positions.len() / 6;
+        assert!(stations >= 20, "subdivisão refiniu a L: {stations}");
+        for s in 0..stations {
+            // deck: [skirtL, edgeL, coreL, coreR, edgeR, skirtR] — a largura
+            // nominal mede-se edge↔edge (1↔4; os skirts repetem a lateral
+            // descendo)
+            let left = bevy::math::Vec3::from_array(mesh.positions[s * 6 + 1]);
+            let right = bevy::math::Vec3::from_array(mesh.positions[s * 6 + 4]);
+            let width = left.distance(right);
+            assert!(
+                (3.4..=5.2).contains(&width),
+                "largura local {width} fora da faixa (estação {s})"
+            );
+        }
     }
 
     #[test]
@@ -1394,10 +1470,13 @@ mod tests {
         let guards = RoadGuards::default();
         let path = carve_road(&mut grid, &spec, 0, &guards).expect("road");
         let mesh = road_ribbon_mesh(&grid, &path, &spec);
-        assert_eq!(mesh.positions.len(), path.stations.len() * 4, "ol/cl/cr/or");
-        assert_eq!(mesh.indices.len(), (path.stations.len() - 1) * 18);
-        // Ribbon sits just above the bed at the centerline.
-        let first = &mesh.positions[0];
+        assert_eq!(mesh.positions.len() % 6, 0, "deck 4 + saias 2");
+        // 18 índices de deck + 12 de saias por segmento.
+        let refined = mesh.positions.len() / 6;
+        assert_eq!(mesh.indices.len(), (refined - 1) * 30);
+        // Ribbon sits just above the bed (vértice 1 = edgeL; o 0 é o skirt
+        // que desce RIBBON_SKIRT_DEPTH).
+        let first = &mesh.positions[1];
         let bed = grid.sample(first[0], first[2]);
         assert!(
             first[1] - bed >= 0.0 && first[1] - bed < 0.2,
@@ -1414,8 +1493,8 @@ mod tests {
             total / spec.texture_scale
         );
         // Edge alpha feather; the center line stays opaque.
-        assert!(mesh.colors[0][3] < 1.0, "edges feather");
-        assert!((mesh.colors[1][3] - 1.0).abs() < 1e-4, "center opaque");
+        assert!(mesh.colors[1][3] < 1.0, "edges feather");
+        assert!((mesh.colors[2][3] - 1.0).abs() < 1e-4, "center opaque");
     }
 
     #[test]
