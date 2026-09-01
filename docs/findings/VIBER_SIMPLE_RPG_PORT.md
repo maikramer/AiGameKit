@@ -32,12 +32,22 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
 
 ## 🎯 Fila (um sistema por loop, por ordem sugerida)
 
-### Loop 1 — Debugging & Profiler (FUNDACIONAL)
-- [ ] `src/profiler.rs`: DiagnosticsStore (FPS, frame time, entity count) + timings
-      por sistema; overlay bevy_ui togglável (**F3**); método bridge
-      `viber.profiler` (snapshot JSON para QA headless) + cliente `viber debug prof`.
-- [ ] Ligar `vitals::debug_damage` no main.rs (estava órfão).
-- [ ] Estado DONE.
+### Loop 1 — Debugging & Profiler — ✅ DONE (2026-09-01, commits c3da0cc5 + 817c60e1)
+- [x] `src/profiler.rs`: DiagnosticsStore (FPS, frame time, entity count) +
+      janela deslizante própria; overlay bevy_ui togglável (**F3**, visível por
+      omissão, canto inferior-direito); método bridge `viber.profiler` +
+      cliente `viber debug prof [--json]`; `VIBER_PROF_LOG=1` →
+      LogDiagnosticsPlugin.
+- [x] `vitals::debug_damage` ligado no main.rs — teclas **H** (−10 HP) /
+      **N** (cura) / **K** (+10 XP); `J` saiu (é o ataque do herói).
+- [x] Evidência: validação in-game no simple-rpg completo via bridge —
+      `viber debug prof` → `{entities: 46752, scripts: {total: 2823, active:
+      52}, particle_emitters: 105, terrain_chunks: 15625, fps, frame_ms}` —
+      2823 scripts instanciados com só 52 ativos = LOD de IA a funcionar;
+      overlay visível em /tmp/viber-prof-before.png, F3 alterna (screenshot
+      after 11 KB menor); 385 testes + clippy -D warnings verdes.
+      Resíduo conhecido: 1 erro de shader WGSL no log (refactor bindless do
+      dono do sky.rs em curso — não é do profiler).
 
 ### Loop 2 — Vitals & feedback de combate
 - [ ] Dano flutuante 3D (damage numbers empilháveis, estilo spawnDamageNumber) —
