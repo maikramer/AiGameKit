@@ -1128,38 +1128,24 @@ pub fn balloon_tick(timer: &mut f32, visible: bool, dt: f32) -> bool {
 /// carries visibility + the timer), hence the `Children` hop.
 ///
 /// WIRED-BY-ORCHESTRATOR: register in `src/main.rs` `Update` (module docs).
+/// Ticks the dialogue balloon's timer; hides it when it runs out. The TEXT
+/// itself is written by the quests system (`quests::quest_dialogue_system`),
+/// which owns the [E] dialogue flow since loop 3.
 pub fn hud_balloon_update(
-    keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    players: Query<&GlobalTransform, With<Player>>,
-    npcs: Query<(&GlobalTransform, &DialogueNpc)>,
     mut balloons: Query<(&mut Visibility, &mut HudBalloon, &Children)>,
     mut texts: Query<&mut Text>,
 ) {
-    let dialogue: Option<String> = if keys.just_pressed(KeyCode::KeyE) {
-        players.iter().next().and_then(|player| {
-            npcs.iter()
-                .find(|(t, _)| t.translation().distance(player.translation()) < BALLOON_RANGE_M)
-                .map(|(_, npc)| npc.dialogue_id.clone())
-        })
-    } else {
-        None
-    };
-
     let dt = time.delta_secs();
     for (mut visibility, mut balloon, children) in &mut balloons {
-        if let Some(id) = &dialogue {
-            balloon.timer = BALLOON_DURATION;
-            *visibility = Visibility::Visible;
-            if let Some(child) = children.first() {
-                if let Ok(mut text) = texts.get_mut(*child) {
-                    text.0 = id.clone();
-                }
-            }
-        }
         let visible = *visibility == Visibility::Visible;
         if !balloon_tick(&mut balloon.timer, visible, dt) {
             *visibility = Visibility::Hidden;
+            if let Some(child) = children.first() {
+                if let Ok(mut text) = texts.get_mut(*child) {
+                    text.0 = "…".into();
+                }
+            }
         }
     }
 }

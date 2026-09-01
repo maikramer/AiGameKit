@@ -67,15 +67,32 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
       warnings verdes. Fix durante o loop: gate de i-frames por `timer > 0`
       (componente persistente bloqueava para sempre após o 1.º golpe).
 
-### Loop 3 — Quests & diálogo real
-- [ ] `src/quests.rs`: dados das 21 quests (5 JSONs → embutidos/RON), estado
-      ativa/completa/entregue, objetivos kill/collect/visit, recompensas
-      gold/xp/items.
-- [ ] DialogueNPC: flow real [E] (intro → em progresso → completa), linhas por
-      quest-id; balão com as linhas certas.
-- [ ] QuestTracker UI (canto, max 4), QuestsTab no modal, jingle de conclusão.
-- [ ] Notice-board: bounties repetíveis (aceitar/entregar).
-- [ ] Hooks para scripts Luau: `viber.quest_state(id)`, `viber.complete_objective(...)`.
+### Loop 3 — Quests & diálogo real — ✅ DONE (2026-09-01)
+- [x] `src/quests.rs` (novo): as 21 quests dos JSONs embutidas
+      (`examples/simple-rpg/quests/*.json`, mesmo schema do VibeGame);
+      `QuestLog` NotTaken→Active→Ready→Done com bounties do quadro
+      repetíveis; objetivos **kill** (por tipo de criatura, com alias
+      `boss_*` normalizado), **collect** (via `viber.report_collect`) e
+      **visit** (proximidade a entidades nomeadas, múltiplos alvos).
+- [x] Diálogo [E] nos `<DialogueNPC>`: intro (aceita) → progresso com
+      `{remaining}` → entrega com recompensas (XP real; ouro/itens em toast
+      até o vault do loop 4). Balão do HUD agora é quest-aware
+      (`hud_balloon_update` ficou só com o timer).
+- [x] QuestTracker (top-right sob o minimapa, 4 linhas com `x/y`).
+- [x] Hooks Luau: `quest_state/quest_accept/quest_turn_in/report_kill/
+      report_collect/report_visit`; `notice-board.lua` reescrito sobre os
+      hooks (bounties em ciclo); `tree.lua`/`rock.lua` reportam coleta.
+- [x] QA: **F7** teleporta ao NPC de quest em ciclo, **F6** ao NPC mais
+      próximo, **F8** à criatura hostil mais próxima; toasts espelhados no
+      log da bridge (`viber::toast`).
+- [x] Evidência in-game: diálogo [E] aceita/progresso com logs
+      (`diálogo [E]`, `aceita via diálogo`), 7 abates reportados ao diário
+      com "+15 XP" e toasts no log, QuestTracker a vivo com
+      "Bram, o ferreiro [0/10]" (screenshot), F6/F7/F8 a funcionar, 0
+      panics. Entrega e repetibilidade cobertas por 8 testes unitários
+      sobre os JSONs reais (turn-in ao vivo ficou pêndente de navegação
+      sintética — teclas cegas não chegam ao NPC com fiabilidade a 1,5 fps).
+      400 testes + clippy -D warnings verdes.
 
 ### Loop 4 — Economia, inventário & colheita
 - [ ] Vault (gold/wood/stone) real; ResourceChips com valores vivos; ícones

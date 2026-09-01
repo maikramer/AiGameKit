@@ -1,0 +1,99 @@
+[
+  {
+    "id": "peaks_goblins",
+    "npc": "npc_peaks_goblins",
+    "biome": "frozen-peaks",
+    "title": "Sentinela Bruun",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Goblins desceram das cavernas geladas e saqueiam a trilha.",
+      "Abata 5 deles e eu te recompenso com ouro."
+    ],
+    "lines_progress": ["Ainda faltam {remaining} goblins nas encostas."],
+    "lines_complete": ["A trilha está mais segura. Toma sua recompensa."],
+    "objective": {
+      "type": "kill",
+      "target": "goblin",
+      "count": 5
+    },
+    "rewards": {
+      "gold": 220,
+      "xp": 170,
+      "items": ["potion:2"]
+    }
+  },
+  {
+    "id": "peaks_frost",
+    "npc": "npc_peaks_frost",
+    "biome": "frozen-peaks",
+    "title": "Kelm, alquimista do gelo",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Slimes de gelo se multiplicam perto das fontes congeladas.",
+      "Derreta 5 deles e eu te dou poções."
+    ],
+    "lines_progress": ["Faltam {remaining} slimes de gelo."],
+    "lines_complete": ["Excelente. As fontes vão voltar a fluir. Toma isto."],
+    "objective": {
+      "type": "kill",
+      "target": "slime",
+      "count": 5
+    },
+    "rewards": {
+      "gold": 260,
+      "xp": 200,
+      "items": ["potion:3"]
+    }
+  },
+  {
+    "id": "peaks_ogre",
+    "npc": "npc_peaks_ogre",
+    "biome": "frozen-peaks",
+    "title": "Batedora Sig",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Lobos das neves cercam o caminho pro covil do ogro.",
+      "Elimine 4 e eu abro a passagem pra você."
+    ],
+    "lines_progress": ["Ainda faltam {remaining} lobos das neves."],
+    "lines_complete": ["O caminho está livre. Cuidado com o ogro lá no alto."],
+    "objective": {
+      "type": "kill",
+      "target": "wolf",
+      "count": 4
+    },
+    "rewards": {
+      "gold": 320,
+      "xp": 260,
+      "items": ["potion:2"]
+    }
+  },
+  {
+    "id": "peaks_survey",
+    "npc": "npc_peaks_survey",
+    "biome": "frozen-peaks",
+    "title": "O Homem dos Mojões",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Na neblina do corredor, só os mojões dizem pra onde ir.",
+      "Toque nos três. Depois disso, você sabe o caminho da arena."
+    ],
+    "lines_progress": ["Faltam {remaining} mojões."],
+    "lines_complete": ["Agora você conhece o corredor. Vai precisar."],
+    "objective": {
+      "type": "visit",
+      "target": "peaks-cairn-1 peaks-cairn-2 peaks-cairn-3",
+      "count": 3,
+      "radius": 9
+    },
+    "rewards": {
+      "gold": 200,
+      "xp": 210,
+      "items": ["potion:3"]
+    }
+  }
+]

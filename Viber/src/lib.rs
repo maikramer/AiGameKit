@@ -17,6 +17,7 @@ pub mod particles;
 pub mod physics;
 pub mod player;
 pub mod profiler;
+pub mod quests;
 pub mod recipes;
 pub mod scaffold;
 pub mod sky;

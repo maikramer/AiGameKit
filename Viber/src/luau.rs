@@ -55,6 +55,14 @@ pub enum ScriptCommand {
     /// Aplica um status effect ao herói (hoje: `"venom"`) — tratado pelo
     /// feedback (tick 1/s, path único de dano).
     ApplyStatus { kind: String, secs: f32 },
+    /// Quests: aceitar / entregar / reportar progresso (hooks para scripts,
+    /// aplicados pelo [`crate::quests::QuestLog`]).
+    QuestAccept(String),
+    QuestTurnIn(String),
+    /// kill/collect: alvo + quantidade.
+    QuestReport { target: String, amount: u32 },
+    /// Visita a um marco nomeado.
+    QuestVisit(String),
     /// Mensagem de UI (balão/toast) — consumida via [`ScriptToast`].
     Toast(String),
     /// Registra alvo de interação ("[J] Minerar") na entidade.
@@ -123,6 +131,9 @@ pub struct ScriptCtx {
     pub just_pressed: Vec<KeyCode>,
     /// Ring of `viber.log` lines (capped) — also read by tests.
     pub logs: Vec<String>,
+    /// Snapshot dos estados de quest ("not_taken|active|ready|done") para
+    /// `viber.quest_state`, atualizado no início de cada frame.
+    pub quest_states: std::collections::HashMap<String, String>,
 }
 
 impl ScriptCtx {
@@ -616,6 +627,7 @@ impl LuaScriptHost {
                         commands: Vec::new(),
                         just_pressed: c.just_pressed.clone(),
                         logs: Vec::new(),
+                        quest_states: c.quest_states.clone(),
                     })
                     .unwrap_or_default();
                 let entity = ctx
@@ -680,6 +692,71 @@ impl LuaScriptHost {
                     .expect("ScriptCtx app data seeded in LuaScriptHost::new")
                     .commands
                     .push(ScriptCommand::ApplyStatus { kind, secs });
+                Ok(())
+            })?,
+        )?;
+
+        // ── Quests ──────────────────────────────────────────────────────
+        api.set(
+            "quest_state",
+            lua.create_function(|lua, id: String| {
+                let ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                Ok(ctx
+                    .quest_states
+                    .get(&id)
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".into()))
+            })?,
+        )?;
+        api.set(
+            "quest_accept",
+            lua.create_function(|lua, id: String| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::QuestAccept(id));
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "quest_turn_in",
+            lua.create_function(|lua, id: String| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::QuestTurnIn(id));
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "report_kill",
+            lua.create_function(|lua, kind: String| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::QuestReport { target: kind, amount: 1 });
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "report_collect",
+            lua.create_function(|lua, (item, amount): (String, u32)| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::QuestReport { target: item, amount });
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "report_visit",
+            lua.create_function(|lua, place: String| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::QuestVisit(place));
                 Ok(())
             })?,
         )?;
@@ -766,6 +843,7 @@ impl LuaScriptHost {
                         commands: Vec::new(),
                         just_pressed: c.just_pressed.clone(),
                         logs: Vec::new(),
+                        quest_states: c.quest_states.clone(),
                     })
                     .unwrap_or_default();
                 let code = key_code_from_str(&key)
@@ -881,6 +959,7 @@ pub fn luau_update(
     terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
     mut toasts: bevy::ecs::message::MessageWriter<ScriptToast>,
     mut hurts: bevy::ecs::message::MessageWriter<crate::feedback::PlayerHurt>,
+    mut quests: Option<ResMut<crate::quests::QuestLog>>,
     mut commands: Commands,
 ) {
     let dt = time.delta_secs();
@@ -892,6 +971,23 @@ pub fn luau_update(
         Err(_) => (None, None),
     };
     let just_pressed: Vec<KeyCode> = keys.get_just_pressed().copied().collect();
+
+    // Snapshot dos estados de quest para `viber.quest_state` (frame-start).
+    if let Some(quests) = quests.as_deref_mut() {
+        let snapshot: std::collections::HashMap<String, String> = quests
+            .defs
+            .iter()
+            .map(|d| {
+                (
+                    d.id.clone(),
+                    crate::quests::status_name(quests.status(&d.id)).to_string(),
+                )
+            })
+            .collect();
+        if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
+            ctx.quest_states = snapshot;
+        }
+    }
 
     for (entity, lref, transform, activation) in &mut scripts {
         let Some(origin) = transform.as_ref().map(|t| t.translation) else {
@@ -1001,6 +1097,67 @@ pub fn luau_update(
             }
             ScriptCommand::Despawn(entity) => {
                 commands.entity(entity).try_despawn();
+            }
+            ScriptCommand::QuestAccept(id) => {
+                let Some(quests) = quests.as_deref_mut() else {
+                    continue;
+                };
+                let title = quests.def(&id).map(|d| d.title.clone());
+                if quests.accept(&id) {
+                    toasts.write(ScriptToast(format!(
+                        "Quest aceita: {}",
+                        title.unwrap_or(id)
+                    )));
+                }
+            }
+            ScriptCommand::QuestTurnIn(id) => {
+                let Some(quests) = quests.as_deref_mut() else {
+                    continue;
+                };
+                let title = quests.def(&id).map(|d| d.title.clone());
+                if let Some(rewards) = quests.turn_in(&id) {
+                    if rewards.xp > 0 {
+                        if let Some((_, _, _, Some(xp))) = player_components.as_mut() {
+                            crate::vitals::gain_xp(xp, rewards.xp);
+                        }
+                    }
+                    toasts.write(ScriptToast(format!(
+                        "Quest entregue: {} (+{} XP{})",
+                        title.unwrap_or_else(|| id.clone()),
+                        rewards.xp,
+                        if rewards.gold > 0 {
+                            format!(", +{} ouro", rewards.gold)
+                        } else {
+                            String::new()
+                        }
+                    )));
+                }
+            }
+            ScriptCommand::QuestReport { target, amount } => {
+                let Some(quests) = quests.as_deref_mut() else {
+                    continue;
+                };
+                for ready in quests.report_progress(&target, amount) {
+                    if let Some(def) = quests.def(&ready) {
+                        toasts.write(ScriptToast(format!(
+                            "Objetivo completo: {} — volta ao NPC",
+                            def.title
+                        )));
+                    }
+                }
+            }
+            ScriptCommand::QuestVisit(place) => {
+                let Some(quests) = quests.as_deref_mut() else {
+                    continue;
+                };
+                for ready in quests.report_visit(&place) {
+                    if let Some(def) = quests.def(&ready) {
+                        toasts.write(ScriptToast(format!(
+                            "Objetivo completo: {} — volta ao NPC",
+                            def.title
+                        )));
+                    }
+                }
             }
         }
     }

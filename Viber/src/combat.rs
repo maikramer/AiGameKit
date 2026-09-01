@@ -114,12 +114,13 @@ pub fn player_melee_attack(
     mut toasts: bevy::ecs::message::MessageWriter<ScriptToast>,
     mut numbers: bevy::ecs::message::MessageWriter<crate::feedback::DamageNumberEvent>,
     mut combat_target: ResMut<crate::feedback::CombatTarget>,
+    mut quests_log: Option<ResMut<crate::quests::QuestLog>>,
     players: Query<&GlobalTransform, With<Player>>,
     mut hero_xp: Query<&mut Xp, With<Player>>,
     mut hero_animator: Query<&mut CharacterAnimator, With<Player>>,
     mut animation_players: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
     mut enemies: Query<
-        (Entity, &GlobalTransform, &mut Health),
+        (Entity, &GlobalTransform, &mut Health, Option<&LuaScriptRef>),
         (Without<Player>, With<LuaScriptRef>),
     >,
 ) {
@@ -156,7 +157,7 @@ pub fn player_melee_attack(
 
     // (entity, distância) do alvo mais próximo dentro do alcance e do cone.
     let mut best: Option<(Entity, f32)> = None;
-    for (entity, transform, _) in &mut enemies {
+    for (entity, transform, _, _) in &mut enemies {
         let to_target = transform.translation() - origin;
         let dist = to_target.length();
         if dist > MELEE_RANGE {
@@ -199,8 +200,13 @@ pub fn player_melee_attack(
         let hit_pos = enemies
             .get(entity)
             .ok()
-            .map(|(_, t, _)| t.translation() + Vec3::Y * 1.8);
-        let killed = if let Ok((_, _, mut health)) = enemies.get_mut(entity) {
+            .map(|(_, t, _, _)| t.translation() + Vec3::Y * 1.8);
+        let kind = enemies
+            .get(entity)
+            .ok()
+            .and_then(|(_, _, _, script)| script)
+            .map(|script| script_kind(&script.path));
+        let killed = if let Ok((_, _, mut health, _)) = enemies.get_mut(entity) {
             apply_damage(&mut health, MELEE_DAMAGE);
             health.current <= 0.0
         } else {
@@ -229,10 +235,31 @@ pub fn player_melee_attack(
                 });
             }
             toasts.write(ScriptToast(format!("Inimigo derrotado (+{KILL_XP} XP)")));
+            // Quests: abate reportado ao diário (kill targets por tipo).
+            if let (Some(kind), Some(quests)) = (kind, quests_log.as_deref_mut()) {
+                for ready in quests.report_kill(&kind) {
+                    if let Some(def) = quests.def(&ready) {
+                        toasts.write(ScriptToast(format!(
+                            "Objetivo completo: {} — volta ao NPC",
+                            def.title
+                        )));
+                    }
+                }
+            }
         } else {
             info!(target: "viber::combat", "hit {entity:?}");
         }
     }
+}
+
+/// Tipo de criatura a partir do path do script (`"enemies/wolf.lua"` →
+/// `"wolf"`) — é o alvo dos objetivos `kill` das quests.
+fn script_kind(path: &str) -> String {
+    path.rsplit('/')
+        .next()
+        .unwrap_or(path)
+        .trim_end_matches(".lua")
+        .to_string()
 }
 
 /// Toca o clip de morte assim que a entidade vira cadáver — por NOME (o

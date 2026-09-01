@@ -1,5 +1,5 @@
--- rock.lua: colhível em 3 golpes ([J]); no último, a entidade cai.
--- (A engine provê interacted/despawn_self; o inventário chega na Fase 3.)
+-- rock.lua: colhível em 3 golpes ([J]); no último, a entidade cai e a
+-- coleta reporta ao diário de quests (`viber.report_collect`).
 local st = viber.state()
 if not st.ready then
   st.ready = true
@@ -11,7 +11,8 @@ function on_update(dt)
     st.hits = (st.hits or 0) + 1
     if st.hits >= 3 then
       viber.add_xp(30)
-      viber.toast("Pedra quebrada! (+30 XP)")
+      viber.report_collect("stone", 1)
+      viber.toast("Pedra quebrada! (+30 XP, +1 pedra)")
       viber.despawn_self()
     else
       viber.toast("Minerar: " .. st.hits .. "/3")

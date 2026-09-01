@@ -1,0 +1,132 @@
+[
+  {
+    "id": "city_wolves",
+    "npc": "notice_board",
+    "biome": "city",
+    "title": "Recompensa: lobos",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "A guarda cola este aviso: lobos à volta do anel do vale.",
+      "Abata 3 e a cidade paga — o cartaz fica para o próximo aventureiro."
+    ],
+    "lines_progress": ["Ainda faltam {remaining} lobos neste aviso."],
+    "lines_complete": [
+      "A guarda carimba o aviso. O ouro é teu — o cartaz volta à tábua."
+    ],
+    "objective": {
+      "type": "kill",
+      "target": "wolf",
+      "count": 3
+    },
+    "rewards": {
+      "gold": 80,
+      "xp": 50,
+      "items": ["potion:1"]
+    }
+  },
+  {
+    "id": "city_bandits",
+    "npc": "notice_board",
+    "biome": "city",
+    "title": "Recompensa: bandidos",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Assaltantes na rota leste. A milícia não chega lá a tempo.",
+      "Traga 3 cabeças — ou o silêncio deles — e cobre a recompensa."
+    ],
+    "lines_progress": ["Ainda faltam {remaining} bandidos neste aviso."],
+    "lines_complete": [
+      "A rota respira. A milícia paga e cola o aviso outra vez."
+    ],
+    "objective": {
+      "type": "kill",
+      "target": "bandit",
+      "count": 3
+    },
+    "rewards": {
+      "gold": 95,
+      "xp": 60,
+      "items": ["bomb:1"]
+    }
+  },
+  {
+    "id": "city_goblins",
+    "npc": "notice_board",
+    "biome": "city",
+    "title": "Recompensa: goblins",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Goblins descem a trilha sul e roubam as hortas da saia da muralha.",
+      "Abata 4. A cidade não pergunta de onde veio o aço."
+    ],
+    "lines_progress": ["Ainda faltam {remaining} goblins neste aviso."],
+    "lines_complete": [
+      "As hortas ficam em paz. Toma o saco — o aviso volta ao prego."
+    ],
+    "objective": {
+      "type": "kill",
+      "target": "goblin",
+      "count": 4
+    },
+    "rewards": {
+      "gold": 90,
+      "xp": 55,
+      "items": ["potion:1"]
+    }
+  },
+  {
+    "id": "city_wood",
+    "npc": "notice_board",
+    "biome": "city",
+    "title": "Recompensa: lenha",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "O inverno ainda não chegou e a lenha da praça já acaba.",
+      "Corte 6 toros no anel do vale e deixe-os na tábua."
+    ],
+    "lines_progress": ["Faltam {remaining} toros neste aviso."],
+    "lines_complete": [
+      "A fogueira da praça agradece. O aviso fica para o próximo corte."
+    ],
+    "objective": {
+      "type": "collect",
+      "target": "wood",
+      "count": 6
+    },
+    "rewards": {
+      "gold": 55,
+      "xp": 35,
+      "items": ["bomb:1"]
+    }
+  },
+  {
+    "id": "city_stone",
+    "npc": "npc_blacksmith",
+    "biome": "city",
+    "title": "Bram, o ferreiro",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Os gonzos do portão oeste rangem a cada carroça.",
+      "Traga 10 pedras e eu forjo dobradiças novas — e te pago."
+    ],
+    "lines_progress": ["Faltam {remaining} pedras para a fornada."],
+    "lines_complete": [
+      "Portão firme outra vez. Toma o pagamento — e umas bombas da sucata."
+    ],
+    "objective": {
+      "type": "collect",
+      "target": "stone",
+      "count": 10
+    },
+    "rewards": {
+      "gold": 120,
+      "xp": 80,
+      "items": ["bomb:2"]
+    }
+  }
+]
