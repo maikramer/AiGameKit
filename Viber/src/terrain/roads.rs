@@ -26,6 +26,8 @@
 //! station spacing is 1 m (vs 0.35 m); berms and cross-slope banking are not
 //! implemented; bridge decks are flat ribbons (GLB decks arrive with glTF).
 
+use std::collections::HashMap;
+
 use bevy::math::Vec2;
 
 use super::brush::{BrushGrid, BrushMode, BrushRequest, min_effective, smootherstep01};
@@ -241,33 +243,130 @@ impl RoadNetworkSpec {
         } else {
             Vec::new()
         };
+        let way_at = |id: &str| {
+            self.ways
+                .iter()
+                .find(|w| w.id == id)
+                .map(|w| w.at)
+                .unwrap_or_default()
+        };
+        let resolved_profile = |seg: &SegmentSpec| seg.profile.unwrap_or(self.default_profile);
+        let resolved_width = |seg: &SegmentSpec| -> Option<f32> {
+            match (seg.width, self.way_width(&seg.a), self.way_width(&seg.b)) {
+                (Some(w), _, _) => Some(w),
+                (None, Some(wa), Some(wb)) => Some((wa + wb) * 0.5),
+                _ => None,
+            }
+        };
+
+        // Grau de cada way (nº de segmentos que a tocam) e adjacência.
+        let mut degree: HashMap<&str, usize> = HashMap::new();
+        let mut adjacency: HashMap<&str, Vec<usize>> = HashMap::new();
+        for (i, seg) in self.segments.iter().enumerate() {
+            *degree.entry(seg.a.as_str()).or_default() += 1;
+            *degree.entry(seg.b.as_str()).or_default() += 1;
+            adjacency.entry(seg.a.as_str()).or_default().push(i);
+            adjacency.entry(seg.b.as_str()).or_default().push(i);
+        }
+
+        let mut used = vec![false; self.segments.len()];
         let mut out = Vec::with_capacity(self.segments.len());
-        for seg in &self.segments {
-            let (Some(wa), Some(wb)) = (self.way_width(&seg.a), self.way_width(&seg.b)) else {
+        for (i, seg) in self.segments.iter().enumerate() {
+            if used[i] {
+                continue;
+            }
+            let (Some(_), Some(_)) = (self.way_width(&seg.a), self.way_width(&seg.b)) else {
                 continue;
             };
-            let profile = seg.profile.unwrap_or(self.default_profile);
-            let way_at = |id: &str| {
-                self.ways
-                    .iter()
-                    .find(|w| w.id == id)
-                    .map(|w| w.at)
-                    .unwrap_or_default()
-            };
+            used[i] = true;
+            let profile = resolved_profile(seg);
+            let width = resolved_width(seg);
             let mut points: Vec<Vec2> = Vec::with_capacity(seg.via.len() + 2);
             points.push(way_at(&seg.a));
             points.extend_from_slice(&seg.via);
             points.push(way_at(&seg.b));
+            let mut first_id = seg.a.clone();
+            let mut last_id = seg.b.clone();
+
+            // Funde cadeias através de ways de grau 2 (mesmo perfil/largura):
+            // uma dobra que atravessa vários segmentos vira UM path e o
+            // Chaikin do carve arredonda o canto — segmentos separados
+            // deixavam junções de 90° duras no anel.
+            if profile != RoadProfile::Bridge {
+                let mut head = i;
+                loop {
+                    let last = self.segments[head].b.clone();
+                    if degree.get(last.as_str()).copied().unwrap_or(0) != 2 {
+                        break;
+                    }
+                    let next = adjacency
+                        .get(last.as_str())
+                        .and_then(|v| v.iter().copied().find(|&j| j != head && !used[j]));
+                    let Some(j) = next else { break };
+                    let s2 = &self.segments[j];
+                    if resolved_profile(s2) != profile || resolved_width(s2) != width {
+                        break;
+                    }
+                    let Some(at) = way_at_checked(&self.ways, &s2.b) else {
+                        break;
+                    };
+                    used[j] = true;
+                    points.extend_from_slice(&s2.via);
+                    points.push(at);
+                    last_id = s2.b.clone();
+                    head = j;
+                }
+                let mut tail = i;
+                loop {
+                    let first = self.segments[tail].a.clone();
+                    if degree.get(first.as_str()).copied().unwrap_or(0) != 2 {
+                        break;
+                    }
+                    let next = adjacency
+                        .get(first.as_str())
+                        .and_then(|v| v.iter().copied().find(|&j| j != tail && !used[j]));
+                    let Some(j) = next else { break };
+                    let s2 = &self.segments[j];
+                    if resolved_profile(s2) != profile || resolved_width(s2) != width {
+                        break;
+                    }
+                    let Some(at) = way_at_checked(&self.ways, &s2.a) else {
+                        break;
+                    };
+                    used[j] = true;
+                    points.insert(0, at);
+                    for (k, v) in s2.via.iter().rev().enumerate() {
+                        points.insert(1 + k, *v);
+                    }
+                    first_id = s2.a.clone();
+                    tail = j;
+                }
+            }
+
+            // VibeGame extendPathEnds: uma ribbon que parava exactamente na
+            // centreline da vizinha deixava uma cunha de chão nu no canto
+            // externo da junção. Estende as pontas em ways partilhados
+            // (grau ≥ 2) — as ribbons sobrepõem-se e o alpha feather funde.
+            if profile != RoadProfile::Bridge {
+                let ext = (width.unwrap_or(self.default_width) * 0.75).min(6.0);
+                if degree.get(first_id.as_str()).copied().unwrap_or(0) >= 2 {
+                    extend_path_end(&mut points, ext, false);
+                }
+                if degree.get(last_id.as_str()).copied().unwrap_or(0) >= 2 {
+                    extend_path_end(&mut points, ext, true);
+                }
+            }
+
             out.push(
                 RoadSpec {
                     name: Some(format!(
                         "{}/{}-{}",
                         self.name.as_deref().unwrap_or("net"),
-                        seg.a,
-                        seg.b
+                        first_id,
+                        last_id
                     )),
                     path: points,
-                    width: seg.width.unwrap_or((wa + wb) * 0.5),
+                    width: width.unwrap_or(self.default_width),
                     profile,
                     flatten: self.flatten && profile != RoadProfile::Bridge,
                     flatten_falloff: self.flatten_falloff,
@@ -329,6 +428,38 @@ impl<'a> RoadGuards<'a> {
                 p.x >= c.x - h.x && p.x <= c.x + h.x && p.y >= c.y - h.y && p.y <= c.y + h.y
             })
             .map(|(_, _, plane)| *plane)
+    }
+}
+
+/// Position of a way id, `None` when unknown (segments referencing ghosts
+/// are skipped instead of collapsing onto the origin).
+fn way_at_checked(ways: &[WaySpec], id: &str) -> Option<Vec2> {
+    ways.iter().find(|w| w.id == id).map(|w| w.at)
+}
+
+/// Push one extrapolated point past the first (`at_end = false`) or last
+/// (`at_end = true`) path point along the end tangent (VibeGame
+/// `extendPathEnds`).
+fn extend_path_end(points: &mut Vec<Vec2>, amount: f32, at_end: bool) {
+    let n = points.len();
+    if points.len() < 2 || amount <= 0.0 {
+        return;
+    }
+    let (tip, prev) = if at_end {
+        (points[n - 1], points[n - 2])
+    } else {
+        (points[0], points[1])
+    };
+    let d = tip - prev;
+    let len = d.length();
+    if len < 1e-4 {
+        return;
+    }
+    let p = tip + d / len * amount;
+    if at_end {
+        points.push(p);
+    } else {
+        points.insert(0, p);
     }
 }
 
@@ -580,19 +711,20 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
     if n < 2 {
         return mesh;
     }
-    let feather = spec.edge_feather.clamp(0.0, 1.0);
+    let feather = spec.edge_feather.max(0.0); // metros (VibeGame edgeFeather)
     let scale = if spec.texture_scale > 0.0 {
         spec.texture_scale
     } else {
         1.0
     };
     let mut arc = 0.0;
-    // Three vertices per station (left, center, right): the alpha feather
-    // lives at the edges, the center line stays fully opaque.
-    let alpha_at = |u: f32| -> f32 {
-        let edge = (u - 0.5).abs() * 2.0; // 0 center .. 1 edge
-        1.0 - smootherstep01((edge - (1.0 - feather)) / feather.max(1e-3))
-    };
+    // Four vertices per station (bordaEsq, núcleoEsq, núcleoDir, bordaDir,
+    // alpha [0,1,1,0] — VibeGame makeRoadGeometry): o núcleo opaco tem
+    // `feather` metros de folga de cada lado e só a borda faz fade. Com a
+    // secção antiga de 3 vértices e feather interpretado como FRAÇÃO da
+    // meia-largura, o núcleo opaco encolhia até à linha central e a estrada
+    // ficava quase invisível.
+    let feather_eff = feather.max(0.001);
     for (i, st) in path.stations.iter().enumerate() {
         if i > 0 {
             arc += st.distance(path.stations[i - 1]);
@@ -632,8 +764,17 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
             1.0
         };
         let hw = path.half_width[i];
-        for u in [0.0_f32, 0.5, 1.0] {
-            let p = *st + perp * (hw * (u * 2.0 - 1.0) * miter);
+        let outer_l = -hw;
+        let outer_r = hw;
+        // Núcleo opaco a `feather` metros da borda (clamp para não cruzar em
+        // estradas estreitas — VibeGame coreL/coreR).
+        let core_l = (outer_l + feather_eff).min(-0.02);
+        let core_r = (outer_r - feather_eff).max(0.02);
+
+        let laterals = [outer_l, core_l, core_r, outer_r];
+        let alphas = [0.0, 1.0, 1.0, 0.0];
+        for (k, lat) in laterals.iter().enumerate() {
+            let p = *st + perp * (*lat * miter);
             let y = if path.bridge {
                 path.deck_y.unwrap_or(0.0) + RIBBON_LIFT
             } else {
@@ -650,23 +791,19 @@ pub fn road_ribbon_mesh(grid: &BrushGrid, path: &RoadPath, spec: &RoadSpec) -> C
             // does. A normalized `u` stretches exactly one texture tile over
             // the full width, so a narrow trail looked anisotropic and a wide
             // plaza came out as flat colour with no stones at all.
-            let across = (u - 0.5) * 2.0 * hw;
-            mesh.uvs.push([across / scale, arc / scale]);
-            mesh.colors.push([1.0, 1.0, 1.0, alpha_at(u)]);
+            mesh.uvs.push([lat / scale, arc / scale]);
+            mesh.colors.push([1.0, 1.0, 1.0, alphas[k]]);
         }
     }
     for i in 0..(n - 1) {
-        // Vertices: 3 per station (l, c, r). Four CCW triangles per segment.
-        let l0 = (i * 3) as u32;
-        let c0 = l0 + 1;
-        let r0 = l0 + 2;
-        let l1 = ((i + 1) * 3) as u32;
-        let c1 = l1 + 1;
-        let r1 = l1 + 2;
-        mesh.indices.extend_from_slice(&[
-            l0, l1, c0, c0, l1, c1, // left half
-            c0, c1, r0, r0, c1, r1, // right half
-        ]);
+        // Vertices: 4 per station (ol, cl, cr, or). Three quads per pair
+        // (VibeGame), CCW.
+        let a = (i * 4) as u32;
+        let b = ((i + 1) * 4) as u32;
+        for k in 0..3u32 {
+            mesh.indices
+                .extend_from_slice(&[a + k, b + k, a + k + 1, a + k + 1, b + k, b + k + 1]);
+        }
     }
     mesh
 }
@@ -812,6 +949,131 @@ mod tests {
             "segment names carry the way ids: {:?}",
             artery.name
         );
+    }
+
+    #[test]
+    fn test_network_merges_chain_through_degree2_way() {
+        // Anel: mid → ring → mid com o way do canto a grau 2 — funde num
+        // ÚNICO path A→B→C para o Chaikin arredondar a dobra (junções de 90°
+        // duras eram o bug visual).
+        let net = RoadNetworkSpec {
+            default_width: 4.0,
+            ways: vec![
+                WaySpec {
+                    id: "a".into(),
+                    at: Vec2::new(0.0, 20.0),
+                    width: None,
+                },
+                WaySpec {
+                    id: "b".into(),
+                    at: Vec2::new(20.0, 20.0),
+                    width: None,
+                },
+                WaySpec {
+                    id: "c".into(),
+                    at: Vec2::new(20.0, 0.0),
+                    width: None,
+                },
+            ],
+            segments: vec![
+                SegmentSpec {
+                    a: "a".into(),
+                    b: "b".into(),
+                    via: Vec::new(),
+                    width: None,
+                    profile: None,
+                },
+                SegmentSpec {
+                    a: "b".into(),
+                    b: "c".into(),
+                    via: Vec::new(),
+                    width: None,
+                    profile: None,
+                },
+            ],
+            ..RoadNetworkSpec::default()
+        };
+        let roads = net.expand();
+        assert_eq!(roads.len(), 1, "degree-2 chain collapses into one path");
+        assert_eq!(
+            roads[0].path,
+            vec![
+                Vec2::new(0.0, 20.0),
+                Vec2::new(20.0, 20.0),
+                Vec2::new(20.0, 0.0)
+            ]
+        );
+        // Pontas em ways de grau 1 não estendem.
+        assert_eq!(roads[0].path.len(), 3);
+    }
+
+    #[test]
+    fn test_network_extends_ends_at_shared_junction() {
+        // T: B tem grau 3 — cada ribbon estende para lá do B (VibeGame
+        // extendPathEnds) para não deixar cunha de chão nu no canto externo.
+        let net = RoadNetworkSpec {
+            default_width: 4.0,
+            ways: vec![
+                WaySpec {
+                    id: "a".into(),
+                    at: Vec2::new(0.0, 0.0),
+                    width: None,
+                },
+                WaySpec {
+                    id: "b".into(),
+                    at: Vec2::new(10.0, 0.0),
+                    width: None,
+                },
+                WaySpec {
+                    id: "c".into(),
+                    at: Vec2::new(20.0, 0.0),
+                    width: None,
+                },
+                WaySpec {
+                    id: "d".into(),
+                    at: Vec2::new(10.0, 10.0),
+                    width: None,
+                },
+            ],
+            segments: vec![
+                SegmentSpec {
+                    a: "a".into(),
+                    b: "b".into(),
+                    via: Vec::new(),
+                    width: None,
+                    profile: None,
+                },
+                SegmentSpec {
+                    a: "c".into(),
+                    b: "b".into(),
+                    via: Vec::new(),
+                    width: None,
+                    profile: None,
+                },
+                SegmentSpec {
+                    a: "d".into(),
+                    b: "b".into(),
+                    via: Vec::new(),
+                    width: None,
+                    profile: None,
+                },
+            ],
+            ..RoadNetworkSpec::default()
+        };
+        let roads = net.expand();
+        assert_eq!(roads.len(), 3, "T junction keeps 3 ribbons");
+        // Ribbon a→b: estende para ALÉM de b (grau 3), ~width·0.75 = 3 m.
+        let ab = roads
+            .iter()
+            .find(|r| r.name.as_deref().is_some_and(|n| n.contains("a-b")))
+            .unwrap();
+        let last = *ab.path.last().unwrap();
+        assert!(
+            last.x > 12.5 && last.x < 13.5 && last.y.abs() < 1e-4,
+            "extended past the junction: {last:?}"
+        );
+        // Ponta em a (grau 1) intacta.
+        assert_eq!(ab.path.first().unwrap().x, 0.0);
     }
 
     #[test]
@@ -1067,10 +1329,10 @@ mod tests {
         };
         let spec = road_spec();
         let mesh = road_ribbon_mesh(&grid, &path, &spec);
-        // Estação do canto (índice 2): 3 vértices (l, c, r) por estação.
-        let corner = 2 * 3;
+        // Estação do canto (índice 2): 4 vértices (ol, cl, cr, or).
+        let corner = 2 * 4;
         let left = bevy::math::Vec3::from_array(mesh.positions[corner]);
-        let right = bevy::math::Vec3::from_array(mesh.positions[corner + 2]);
+        let right = bevy::math::Vec3::from_array(mesh.positions[corner + 3]);
         // Borda esquerda do canto: afastada `hw` da linha z=64 (segmento de
         // entrada) e `hw` da linha x=64 (segmento de saída). Vec3 = (x, y
         // altura, z) — o plano XZ é x/z.
@@ -1107,8 +1369,8 @@ mod tests {
         let guards = RoadGuards::default();
         let path = carve_road(&mut grid, &spec, 0, &guards).expect("road");
         let mesh = road_ribbon_mesh(&grid, &path, &spec);
-        assert_eq!(mesh.positions.len(), path.stations.len() * 3, "l/c/r");
-        assert_eq!(mesh.indices.len(), (path.stations.len() - 1) * 12);
+        assert_eq!(mesh.positions.len(), path.stations.len() * 4, "ol/cl/cr/or");
+        assert_eq!(mesh.indices.len(), (path.stations.len() - 1) * 18);
         // Ribbon sits just above the bed at the centerline.
         let first = &mesh.positions[0];
         let bed = grid.sample(first[0], first[2]);
