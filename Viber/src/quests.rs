@@ -148,47 +148,80 @@ impl QuestLog {
         self.defs.iter().find(|d| d.id == id)
     }
 
-    /// Estado computado (Ready = ativa com objetivo completo).
-    pub fn status(&self, id: &str) -> QuestStatus {
+    /// Estado computado (Ready = ativa com objetivo completo). Collect lê o
+    /// VAULT (o inventário é a autoridade); kill/visit usam o estado interno.
+    pub fn status(&self, id: &str, vault: Option<&crate::economy::Vault>) -> QuestStatus {
         if self.done.iter().any(|d| d == id) {
             return QuestStatus::Done;
         }
         let Some((def, active)) = self.def(id).zip(self.states.get(id)) else {
             return QuestStatus::NotTaken;
         };
-        if self.is_complete(def, active) {
+        if self.is_complete_with_vault(def, active, vault) {
             QuestStatus::Ready
         } else {
             QuestStatus::Active
         }
     }
 
-    fn is_complete(&self, def: &QuestDef, active: &ActiveQuest) -> bool {
+    /// Progresso de um objetivo collect a partir do vault.
+    fn collect_progress(&self, def: &QuestDef, vault: Option<&crate::economy::Vault>) -> u32 {
+        match vault {
+            Some(vault) => vault.count(&def.objective.target).min(def.objective.count),
+            None => 0,
+        }
+    }
+
+    fn is_complete_with_vault(
+        &self,
+        def: &QuestDef,
+        active: &ActiveQuest,
+        vault: Option<&crate::economy::Vault>,
+    ) -> bool {
         match def.objective.kind.as_str() {
             "visit" => active.visited.len() >= def.objective.count as usize,
+            "collect" => self.collect_progress(def, vault) >= def.objective.count,
             _ => active.progress >= def.objective.count,
         }
     }
 
     /// Aceita (NotTaken → Active). `false` se não existe ou já está ativa/feita.
     pub fn accept(&mut self, id: &str) -> bool {
-        if self.status(id) != QuestStatus::NotTaken {
+        if self.status(id, None) != QuestStatus::NotTaken {
             return false;
         }
         self.states.insert(id.into(), ActiveQuest::default());
         true
     }
 
-    /// Entrega (Ready → Done; repetíveis voltam a NotTaken). Devolve as
-    /// recompensas quando a entrega aconteceu.
-    pub fn turn_in(&mut self, id: &str) -> Option<QuestRewards> {
-        if self.status(id) != QuestStatus::Ready {
+    /// Entrega (Ready → Done; repetíveis voltam a NotTaken). Collect consome
+    /// os itens do vault. Devolve as recompensas quando a entrega aconteceu.
+    pub fn turn_in(
+        &mut self,
+        id: &str,
+        mut vault: Option<&mut crate::economy::Vault>,
+    ) -> Option<QuestRewards> {
+        if self.status(id, vault.as_deref()) != QuestStatus::Ready {
             return None;
         }
-        let (rewards, repeatable) = {
+        let (rewards, repeatable, collect_target, collect_count) = {
             let def = self.def(id)?;
-            (def.rewards.clone(), def.npc == "notice_board")
+            (
+                def.rewards.clone(),
+                def.npc == "notice_board",
+                (def.objective.kind == "collect").then_some(def.objective.target.clone()),
+                def.objective.count,
+            )
         };
+        // collect consome os itens entregues
+        if let Some(target) = collect_target {
+            let Some(vault) = vault.as_mut() else {
+                return None; // collect exige vault para consumir
+            };
+            if !vault.take(&target, collect_count) {
+                return None; // stock sumiu entre ready e entrega
+            }
+        }
         self.states.remove(id);
         if !repeatable {
             self.done.push(id.into());
@@ -202,15 +235,15 @@ impl QuestLog {
         self.report_progress(kind, 1)
     }
 
-    /// Aplica progresso de kill/collect às quests ativas com esse alvo;
-    /// devolve os ids que ficaram Ready agora.
+    /// Aplica progresso de kill às quests ativas com esse alvo; devolve os
+    /// ids que ficaram Ready agora. (collect é vault-driven.)
     pub fn report_progress(&mut self, target: &str, amount: u32) -> Vec<String> {
         let wanted = normalize_target(target);
         let candidates: Vec<(String, u32)> = self
             .defs
             .iter()
             .filter(|d| {
-                (d.objective.kind == "kill" || d.objective.kind == "collect")
+                d.objective.kind == "kill"
                     && normalize_target(&d.objective.target) == wanted
             })
             .filter(|d| self.states.contains_key(&d.id))
@@ -263,21 +296,29 @@ impl QuestLog {
     }
 
     /// ids das quests ativas (para o tracker), na ordem dos defs.
-    pub fn active_ids(&self) -> Vec<String> {
+    pub fn active_ids(&self, vault: Option<&crate::economy::Vault>) -> Vec<String> {
         self.defs
             .iter()
-            .filter(|d| matches!(self.status(&d.id), QuestStatus::Active | QuestStatus::Ready))
+            .filter(|d| {
+                matches!(
+                    self.status(&d.id, vault),
+                    QuestStatus::Active | QuestStatus::Ready
+                )
+            })
             .map(|d| d.id.clone())
             .collect()
     }
 
-    /// Texto "x/y" do objetivo (ou "2/3 marcos" para visit).
-    pub fn progress_text(&self, id: &str) -> String {
+    /// Texto "x/y" do objetivo (collect lê o vault; visit conta marcos).
+    pub fn progress_text(&self, id: &str, vault: Option<&crate::economy::Vault>) -> String {
         let (Some(def), Some(active)) = (self.def(id), self.states.get(id)) else {
             return String::new();
         };
         match def.objective.kind.as_str() {
             "visit" => format!("{}/{}", active.visited.len(), def.objective.count),
+            "collect" => {
+                format!("{}/{}", self.collect_progress(def, vault), def.objective.count)
+            }
             _ => format!("{}/{}", active.progress.min(def.objective.count), def.objective.count),
         }
     }
@@ -312,6 +353,7 @@ impl Plugin for QuestsPlugin {
                     quest_debug_teleport,
                     quest_debug_nearest,
                     quest_debug_hostile,
+                    quest_debug_harvest,
                 ),
             );
     }
@@ -399,6 +441,45 @@ fn quest_debug_hostile(
     toasts.write(ScriptToast("QA: teleport à criatura mais próxima".into()));
 }
 
+/// Debug de QA (**F9**): teleporta o herói ao colhível/ponto de interação
+/// (ScriptInteraction: árvore, pedra, baú, quadro) mais próximo.
+#[allow(clippy::type_complexity)]
+fn quest_debug_harvest(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut players: Query<(Entity, &GlobalTransform, &mut Transform), With<Player>>,
+    interactions: Query<(&GlobalTransform, &ScriptInteraction)>,
+    terrain: Option<Res<crate::terrain::runtime::TerrainRuntime>>,
+    mut toasts: MessageWriter<ScriptToast>,
+) {
+    if !keys.just_pressed(KeyCode::F9) {
+        return;
+    }
+    let Ok((_pe, player_global, mut transform)) = players.single_mut() else {
+        return;
+    };
+    let player_pos = player_global.translation();
+    let Some(target) = interactions
+        .iter()
+        .min_by(|(a, _), (b, _)| {
+            a.translation()
+                .distance_squared(player_pos)
+                .total_cmp(&b.translation().distance_squared(player_pos))
+        })
+        .map(|(t, _)| t.translation())
+    else {
+        toasts.write(ScriptToast("QA: nenhum colhível por perto".into()));
+        return;
+    };
+    let x = target.x + 1.5;
+    let z = target.z + 1.5;
+    let y = terrain
+        .as_ref()
+        .map(|t| t.sample(x, z))
+        .unwrap_or(target.y);
+    transform.translation = Vec3::new(x, y + 0.1, z);
+    toasts.write(ScriptToast("QA: teleport ao colhível mais próximo".into()));
+}
+
 /// Espelha toasts no log (bridge) — o DISPLAY visual chega com o loop 5.
 fn toast_log_system(mut toasts: MessageReader<ScriptToast>) {
     for toast in toasts.read() {
@@ -456,6 +537,7 @@ fn quest_dialogue_system(
     players: Query<&GlobalTransform, With<Player>>,
     npcs: Query<(&GlobalTransform, &crate::recipes::spawn::DialogueNpc)>,
     mut log: ResMut<QuestLog>,
+    mut vault: Option<ResMut<crate::economy::Vault>>,
     mut heroes: Query<&mut Xp, With<Player>>,
     mut toasts: MessageWriter<ScriptToast>,
     mut balloons: Query<(&mut Visibility, &mut HudBalloon, &Children)>,
@@ -474,8 +556,9 @@ fn quest_dialogue_system(
         return;
     };
     let id = npc.dialogue_id.clone();
-    info!(target: "viber::quests", "diálogo [E] com '{id}' — estado {}", crate::quests::status_name(log.status(&id)));
-    let body: String = match log.status(&id) {
+    let vault_ref = vault.as_deref();
+    info!(target: "viber::quests", "diálogo [E] com '{id}' — estado {}", crate::quests::status_name(log.status(&id, vault_ref)));
+    let body: String = match log.status(&id, vault.as_deref()) {
         QuestStatus::NotTaken => {
             log.accept(&id);
             info!(target: "viber::quests", "quest '{id}' aceita via diálogo");
@@ -498,11 +581,23 @@ fn quest_dialogue_system(
             let Some((progress_lines, complete_lines, count, title)) = snapshot else {
                 return;
             };
-            if log.status(&id) == QuestStatus::Ready {
+            if log.status(&id, vault.as_deref()) == QuestStatus::Ready {
                 info!(target: "viber::quests", "entrega de '{id}'");
-                if let Some(rewards) = log.turn_in(&id) {
+                if let Some(rewards) = log.turn_in(&id, vault.as_deref_mut()) {
                         if let Ok(mut xp) = heroes.single_mut() {
                             crate::vitals::gain_xp(&mut xp, rewards.xp);
+                        }
+                        if rewards.gold > 0 {
+                            if let Some(vault) = vault.as_deref_mut() {
+                                vault.add_resource("gold", rewards.gold);
+                            }
+                        }
+                        for item in &rewards.items {
+                            if let Some((id, n)) = parse_item_reward(item) {
+                                if let Some(vault) = vault.as_deref_mut() {
+                                    vault.item_add(&id, n);
+                                }
+                            }
                         }
                         toasts.write(ScriptToast(format!(
                             "Quest concluída: {} (+{} XP{})",
@@ -534,6 +629,12 @@ fn quest_dialogue_system(
 
 fn join_lines(lines: &[String]) -> String {
     lines.join("\n")
+}
+
+/// Parseia reward de item do JSON (`"potion:2"` → ("potion", 2)).
+pub fn parse_item_reward(raw: &str) -> Option<(String, u32)> {
+    let (id, n) = raw.split_once(':')?;
+    Some((id.trim().to_lowercase(), n.trim().parse().ok()?))
 }
 
 /// Mostra o balão do HUD com `body` (mesmo mecanismo do hud: timer de 4 s).
@@ -574,7 +675,9 @@ fn quest_visit_system(
     let visit_targets: Vec<(String, Vec<String>)> = log
         .defs
         .iter()
-        .filter(|d| d.objective.kind == "visit" && log.status(&d.id) == QuestStatus::Active)
+        .filter(|d| {
+            d.objective.kind == "visit" && log.status(&d.id, None) == QuestStatus::Active
+        })
         .map(|d| {
             (
                 d.id.clone(),
@@ -638,6 +741,7 @@ fn quest_tracker_system(
     mut throttle: Local<f32>,
     time: Res<Time>,
     log: Res<QuestLog>,
+    vault: Option<Res<crate::economy::Vault>>,
     tracker: Query<&Children, With<QuestTracker>>,
     mut texts: Query<&mut Text>,
 ) {
@@ -649,7 +753,7 @@ fn quest_tracker_system(
     let Ok(children) = tracker.single() else {
         return;
     };
-    let active = log.active_ids();
+    let active = log.active_ids(vault.as_deref());
     for (i, child) in children.iter().enumerate() {
         let Ok(mut text) = texts.get_mut(child) else {
             continue;
@@ -657,7 +761,9 @@ fn quest_tracker_system(
         let wanted = active
             .get(i)
             .and_then(|id| log.def(id))
-            .map(|def| format!("{}  [{}]", def.title, log.progress_text(&def.id)))
+            .map(|def| {
+                format!("{}  [{}]", def.title, log.progress_text(&def.id, vault.as_deref()))
+            })
             .unwrap_or_default();
         if text.0 != wanted {
             text.0 = wanted;
@@ -704,25 +810,25 @@ mod tests {
     #[test]
     fn test_kill_quest_lifecycle() {
         let mut log = log();
-        assert_eq!(log.status("forest_wolves"), QuestStatus::NotTaken);
+        assert_eq!(log.status("forest_wolves", None), QuestStatus::NotTaken);
         assert!(log.accept("forest_wolves"));
-        assert_eq!(log.status("forest_wolves"), QuestStatus::Active);
+        assert_eq!(log.status("forest_wolves", None), QuestStatus::Active);
         // aceitar duas vezes falha
         assert!(!log.accept("forest_wolves"));
         // 4 de 5 lobos…
         for _ in 0..4 {
             assert!(log.report_kill("wolf").is_empty());
         }
-        assert_eq!(log.status("forest_wolves"), QuestStatus::Active);
-        assert_eq!(log.progress_text("forest_wolves"), "4/5");
+        assert_eq!(log.status("forest_wolves", None), QuestStatus::Active);
+        assert_eq!(log.progress_text("forest_wolves", None), "4/5");
         // …o 5.º fica pronto
         assert_eq!(log.report_kill("wolf"), vec!["forest_wolves".to_string()]);
-        assert_eq!(log.status("forest_wolves"), QuestStatus::Ready);
+        assert_eq!(log.status("forest_wolves", None), QuestStatus::Ready);
         // entregar: one-shot vira Done
-        let rewards = log.turn_in("forest_wolves").expect("recompensas");
+        let rewards = log.turn_in("forest_wolves", None).expect("recompensas");
         assert_eq!(rewards.xp, 150);
-        assert_eq!(log.status("forest_wolves"), QuestStatus::Done);
-        assert!(log.turn_in("forest_wolves").is_none());
+        assert_eq!(log.status("forest_wolves", None), QuestStatus::Done);
+        assert!(log.turn_in("forest_wolves", None).is_none());
     }
 
     #[test]
@@ -732,11 +838,11 @@ mod tests {
         for _ in 0..3 {
             log.report_kill("wolf");
         }
-        assert_eq!(log.status("city_wolves"), QuestStatus::Ready);
-        let rewards = log.turn_in("city_wolves").expect("entrega");
+        assert_eq!(log.status("city_wolves", None), QuestStatus::Ready);
+        let rewards = log.turn_in("city_wolves", None).expect("entrega");
         assert_eq!(rewards.gold, 80);
         // repetível: volta a NotTaken (o cartaz volta à tábua)
-        assert_eq!(log.status("city_wolves"), QuestStatus::NotTaken);
+        assert_eq!(log.status("city_wolves", None), QuestStatus::NotTaken);
         assert!(log.accept("city_wolves"));
     }
 
@@ -744,31 +850,43 @@ mod tests {
     fn test_visit_quest_multiple_targets() {
         let mut log = log();
         log.accept("forest_survey");
-        assert_eq!(log.status("forest_survey"), QuestStatus::Active);
-        assert_eq!(log.progress_text("forest_survey"), "0/3");
+        assert_eq!(log.status("forest_survey", None), QuestStatus::Active);
+        assert_eq!(log.progress_text("forest_survey", None), "0/3");
         // nomes com variações normalizam
         assert!(log.report_visit("Forest-Outpost-Tower").is_empty());
-        assert_eq!(log.progress_text("forest_survey"), "1/3");
+        assert_eq!(log.progress_text("forest_survey", None), "1/3");
         assert!(log.report_visit("forest-outpost-tower").is_empty(), "revisita não duplica");
         assert!(log.report_visit("forest-crossroads-well").is_empty());
         assert_eq!(
             log.report_visit("forest-stone-circle"),
             vec!["forest_survey".to_string()]
         );
-        assert_eq!(log.status("forest_survey"), QuestStatus::Ready);
+        assert_eq!(log.status("forest_survey", None), QuestStatus::Ready);
     }
 
     #[test]
-    fn test_collect_quest_via_progress() {
+    fn test_collect_quest_reads_vault() {
         let mut log = log();
+        let mut vault = crate::economy::Vault::default();
         log.accept("city_stone");
-        assert!(log.report_progress("stone", 7).is_empty());
-        assert_eq!(log.progress_text("city_stone"), "7/10");
+        assert_eq!(log.status("city_stone", Some(&vault)), QuestStatus::Active);
+        assert_eq!(log.progress_text("city_stone", Some(&vault)), "0/10");
+        // colheita deposita no vault — o objetivo lê o inventário
+        vault.add_resource("stone", 7);
         assert_eq!(
-            log.report_progress("Stone", 3),
-            vec!["city_stone".to_string()]
+            log.progress_text("city_stone", Some(&vault)),
+            "7/10"
         );
-        assert_eq!(log.status("city_stone"), QuestStatus::Ready);
+        assert_eq!(log.status("city_stone", Some(&vault)), QuestStatus::Active);
+        vault.add_resource("stone", 3);
+        assert_eq!(log.status("city_stone", Some(&vault)), QuestStatus::Ready);
+        // entregar consome as 10 pedras
+        let rewards = log
+            .turn_in("city_stone", Some(&mut vault))
+            .expect("entrega");
+        assert_eq!(rewards.gold, 120);
+        assert_eq!(vault.resource("stone"), 0, "pedras consumidas");
+        assert_eq!(log.status("city_stone", Some(&vault)), QuestStatus::Done);
     }
 
     #[test]
@@ -776,7 +894,7 @@ mod tests {
         let mut log = log();
         log.accept("forest_wolves");
         log.accept("city_wolves");
-        let active = log.active_ids();
+        let active = log.active_ids(None);
         assert_eq!(active.len(), 2);
         // ordem dos defs: city primeiro (city_quests carregado antes)
         assert_eq!(active[0], "city_wolves");

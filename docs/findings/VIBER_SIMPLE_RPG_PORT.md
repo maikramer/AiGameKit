@@ -94,14 +94,25 @@ valida (testes + bridge in-game) e marca. Inventário-fonte completo:
       sintética — teclas cegas não chegam ao NPC com fiabilidade a 1,5 fps).
       400 testes + clippy -D warnings verdes.
 
-### Loop 4 — Economia, inventário & colheita
-- [ ] Vault (gold/wood/stone) real; ResourceChips com valores vivos; ícones
-      `hud_*.png` no HUD.
-- [ ] Colheita: tree/rock/mushroom → loot + "+1 Wood/Stone" flutuante + SFX +
-      destrutível (hits/break-style) — port do DestructiblePlugin mínimo.
-- [ ] Item defs (poção/antídoto/bomba/anel/espada-upgrade, maxStack) + hotbar
-      consumível [1] poção / [2] antídoto com contagens.
-- [ ] Chest (loot real), merchant banter melhorado (loja fica no Loop 5).
+### Loop 4 — Economia, inventário & colheita — ✅ DONE (2026-09-01)
+- [x] `src/economy.rs` (novo): `Vault` (gold/wood/stone + itens com stack 99,
+      `count`/`take` unificados para recursos e itens), **ResourceChips
+      vivos** (`chip:gold|wood|stone` mostram o vault real), **hotbar**
+      `[1]` poção (cura 50) / `[2]` antídoto (limpa veneno) com contagens e
+      cooldown.
+- [x] **Collect quests vault-driven**: o progresso de city_wood/city_stone/
+      dark-wood/bog-moss lê o INVENTÁRIO (entregar consome os itens) —
+      colheita (`report_collect`→vault) alimenta as quests automaticamente.
+- [x] Hooks Luau: `vault_get/vault_add/item_add/item_count`;
+      `report_collect` agora deposita no vault; `chest.lua` dá loot real
+      (+25 ouro, +1 poção); turn-in de quest credita ouro/itens no vault.
+- [x] QA: **F9** teleporta ao colhível/interação mais próximo, **F10** dá
+      recursos+itens (análogo do `give`/`gold` do VibeGame).
+- [x] Evidência in-game: F10 → chips gold 10 / wood 6 / stone 6 (screenshot,
+      valores reais), hotbar "[1] Poção x1 / [2] Antídoto x1", poção usada
+      com toast "Poção usada (+50 HP)" e consumo do stock, 0 panics. 404
+      testes + clippy -D warnings verdes (novo teste: collect lê vault,
+      entrega consome).
 
 ### Loop 5 — UI & menus (bevy_ui)
 - [ ] TabbedModal [Q] com tabs REAIS: Inventory, Skills, Options (volumes +

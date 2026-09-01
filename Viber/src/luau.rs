@@ -63,6 +63,10 @@ pub enum ScriptCommand {
     QuestReport { target: String, amount: u32 },
     /// Visita a um marco nomeado.
     QuestVisit(String),
+    /// Deposita recurso no vault (`gold`/`wood`/`stone`) — economia loop 4.
+    VaultAdd { kind: String, amount: u32 },
+    /// Adiciona item ao inventário (`potion`, `antidote`, `bomb`…).
+    ItemAdd { id: String, amount: u32 },
     /// Mensagem de UI (balão/toast) — consumida via [`ScriptToast`].
     Toast(String),
     /// Registra alvo de interação ("[J] Minerar") na entidade.
@@ -134,6 +138,8 @@ pub struct ScriptCtx {
     /// Snapshot dos estados de quest ("not_taken|active|ready|done") para
     /// `viber.quest_state`, atualizado no início de cada frame.
     pub quest_states: std::collections::HashMap<String, String>,
+    /// Snapshot do vault (recursos + itens) para `vault_get`/`item_count`.
+    pub vault: std::collections::HashMap<String, u32>,
 }
 
 impl ScriptCtx {
@@ -628,6 +634,7 @@ impl LuaScriptHost {
                         just_pressed: c.just_pressed.clone(),
                         logs: Vec::new(),
                         quest_states: c.quest_states.clone(),
+                        vault: c.vault.clone(),
                     })
                     .unwrap_or_default();
                 let entity = ctx
@@ -740,14 +747,57 @@ impl LuaScriptHost {
                 Ok(())
             })?,
         )?;
+        // Colheita deposita no VAULT — os objetivos collect das quests leem o
+        // inventário (auto-progress).
         api.set(
             "report_collect",
             lua.create_function(|lua, (item, amount): (String, u32)| {
                 lua.app_data_mut::<ScriptCtx>()
                     .expect("ScriptCtx app data seeded in LuaScriptHost::new")
                     .commands
-                    .push(ScriptCommand::QuestReport { target: item, amount });
+                    .push(ScriptCommand::VaultAdd {
+                        kind: item,
+                        amount,
+                    });
                 Ok(())
+            })?,
+        )?;
+        api.set(
+            "vault_add",
+            lua.create_function(|lua, (kind, amount): (String, u32)| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::VaultAdd { kind, amount });
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "vault_get",
+            lua.create_function(|lua, kind: String| {
+                let ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                Ok(ctx.vault.get(&kind).copied().unwrap_or(0))
+            })?,
+        )?;
+        api.set(
+            "item_add",
+            lua.create_function(|lua, (id, amount): (String, u32)| {
+                lua.app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new")
+                    .commands
+                    .push(ScriptCommand::ItemAdd { id, amount });
+                Ok(())
+            })?,
+        )?;
+        api.set(
+            "item_count",
+            lua.create_function(|lua, id: String| {
+                let ctx = lua
+                    .app_data_mut::<ScriptCtx>()
+                    .expect("ScriptCtx app data seeded in LuaScriptHost::new");
+                Ok(ctx.vault.get(&id).copied().unwrap_or(0))
             })?,
         )?;
         api.set(
@@ -844,6 +894,7 @@ impl LuaScriptHost {
                         just_pressed: c.just_pressed.clone(),
                         logs: Vec::new(),
                         quest_states: c.quest_states.clone(),
+                        vault: c.vault.clone(),
                     })
                     .unwrap_or_default();
                 let code = key_code_from_str(&key)
@@ -960,6 +1011,7 @@ pub fn luau_update(
     mut toasts: bevy::ecs::message::MessageWriter<ScriptToast>,
     mut hurts: bevy::ecs::message::MessageWriter<crate::feedback::PlayerHurt>,
     mut quests: Option<ResMut<crate::quests::QuestLog>>,
+    mut vault: Option<ResMut<crate::economy::Vault>>,
     mut commands: Commands,
 ) {
     let dt = time.delta_secs();
@@ -980,12 +1032,30 @@ pub fn luau_update(
             .map(|d| {
                 (
                     d.id.clone(),
-                    crate::quests::status_name(quests.status(&d.id)).to_string(),
+                    crate::quests::status_name(
+                        quests.status(&d.id, vault.as_deref()),
+                    )
+                    .to_string(),
                 )
             })
             .collect();
         if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
             ctx.quest_states = snapshot;
+        }
+    }
+    // Snapshot do vault para `vault_get`/`item_count`.
+    if let Some(vault) = vault.as_deref() {
+        let snapshot: std::collections::HashMap<String, u32> = [
+            ("gold", vault.gold),
+            ("wood", vault.wood),
+            ("stone", vault.stone),
+        ]
+        .into_iter()
+        .chain(vault.items.iter().map(|(k, v)| (k.as_str(), *v)))
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+        if let Some(mut ctx) = host.lua.app_data_mut::<ScriptCtx>() {
+            ctx.vault = snapshot;
         }
     }
 
@@ -1111,14 +1181,27 @@ pub fn luau_update(
                 }
             }
             ScriptCommand::QuestTurnIn(id) => {
-                let Some(quests) = quests.as_deref_mut() else {
+                let (Some(quests), Some(vault_ref)) =
+                    (quests.as_deref_mut(), vault.as_deref_mut())
+                else {
                     continue;
                 };
                 let title = quests.def(&id).map(|d| d.title.clone());
-                if let Some(rewards) = quests.turn_in(&id) {
+                let Some(rewards) = quests.turn_in(&id, Some(vault_ref)) else {
+                    continue;
+                };
+                {
                     if rewards.xp > 0 {
                         if let Some((_, _, _, Some(xp))) = player_components.as_mut() {
                             crate::vitals::gain_xp(xp, rewards.xp);
+                        }
+                    }
+                    if rewards.gold > 0 {
+                        vault_ref.add_resource("gold", rewards.gold);
+                    }
+                    for item in &rewards.items {
+                        if let Some((item_id, n)) = crate::quests::parse_item_reward(item) {
+                            vault_ref.item_add(&item_id, n);
                         }
                     }
                     toasts.write(ScriptToast(format!(
@@ -1157,6 +1240,18 @@ pub fn luau_update(
                             def.title
                         )));
                     }
+                }
+            }
+            ScriptCommand::VaultAdd { kind, amount } => {
+                if let Some(vault) = vault.as_deref_mut() {
+                    if !vault.add_resource(&kind, amount) {
+                        warn!(target: "viber::economy", "vault_add: recurso desconhecido '{kind}'");
+                    }
+                }
+            }
+            ScriptCommand::ItemAdd { id, amount } => {
+                if let Some(vault) = vault.as_deref_mut() {
+                    vault.item_add(&id, amount);
                 }
             }
         }
