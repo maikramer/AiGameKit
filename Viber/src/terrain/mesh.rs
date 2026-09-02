@@ -269,7 +269,9 @@ pub fn build_chunk_mesh(
     let half = params.size * 0.5;
     let max_height = field.max_height();
     let tile = resolved_tile_size(params);
-    let skirt_depth = params.skirt_depth;
+    // O skirt_depth vira o CAP do drop adaptativo (mínimo útil 6 m para
+    // selar valas de estrada; o padrão 1.0 eleva o cap ao piso do sistema).
+    let skirt_cap = params.skirt_depth.max(6.0);
     let index_count = segments * segments * 6 + if has_skirt { 4 * segments * 6 } else { 0 };
 
     let mut mesh = ChunkMeshData {
@@ -341,7 +343,7 @@ pub fn build_chunk_mesh(
                         world_x + outward[0] * step * 2.0,
                         world_z + outward[2] * step * 2.0,
                     ));
-                let drop = (border_pos[1] - probe.min(border_pos[1]) + 0.06).clamp(0.0, 6.0);
+                let drop = (border_pos[1] - probe.min(border_pos[1]) + 0.06).clamp(0.0, skirt_cap);
                 mesh.positions
                     .push([border_pos[0], border_pos[1] - drop, border_pos[2]]);
                 mesh.normals.push(outward);
