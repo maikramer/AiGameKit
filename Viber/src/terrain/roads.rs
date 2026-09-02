@@ -57,8 +57,9 @@ pub const CROSSING_FLARE: f32 = 1.45;
 /// bordas descem em *skirt*, escondendo o gap nas encostas (loop de polish:
 /// antes era 0.2 fixo, que fazia a ribbon flutuar sobre declives).
 pub const RIBBON_LIFT: f32 = 0.06;
-/// Profundidade das saias laterais (esconde o corte do leito em declive).
-pub const RIBBON_SKIRT_DEPTH: f32 = 0.35;
+/// Profundidade das saias laterais — rasa de propósito: saia alta aparece
+/// como borda escura vista de ângulo raso e perfura ribbons cruzadas.
+pub const RIBBON_SKIRT_DEPTH: f32 = 0.12;
 /// Passo máximo entre estações refinadas (m) — subdivisão para o noise.
 pub const RIBBON_SUBDIV: f32 = 2.5;
 /// Amplitude do noise lateral orgânico (m).
@@ -963,7 +964,8 @@ pub fn junction_disc_mesh(grid: &BrushGrid, j: &RoadJunction) -> ChunkMeshData {
     let mut push = |x: f32, z: f32, alpha: f32| {
         let y = grid.sample(x, z) + RIBBON_LIFT;
         mesh.positions.push([x, y, z]);
-        mesh.normals.push(grid.sample_normal(x, z, grid.texel()).to_array());
+        mesh.normals
+            .push(grid.sample_normal(x, z, grid.texel()).to_array());
         mesh.uvs.push([x / scale, z / scale]);
         mesh.colors.push([1.0, 1.0, 1.0, alpha]);
     };
@@ -1496,7 +1498,7 @@ mod tests {
         assert_eq!(grid.raw(), before, "decal roads never touch the grid");
     }
 
-        #[test]
+    #[test]
     fn test_junction_disc_mesh_layout() {
         let grid = test_grid();
         let j = RoadJunction {
@@ -1526,26 +1528,62 @@ mod tests {
         let net = RoadNetworkSpec {
             default_width: 4.0,
             ways: vec![
-                WaySpec { id: "a".into(), at: Vec2::new(0.0, 0.0), width: None },
-                WaySpec { id: "b".into(), at: Vec2::new(10.0, 0.0), width: None },
-                WaySpec { id: "c".into(), at: Vec2::new(20.0, 0.0), width: None },
-                WaySpec { id: "d".into(), at: Vec2::new(10.0, 10.0), width: None },
+                WaySpec {
+                    id: "a".into(),
+                    at: Vec2::new(0.0, 0.0),
+                    width: None,
+                },
+                WaySpec {
+                    id: "b".into(),
+                    at: Vec2::new(10.0, 0.0),
+                    width: None,
+                },
+                WaySpec {
+                    id: "c".into(),
+                    at: Vec2::new(20.0, 0.0),
+                    width: None,
+                },
+                WaySpec {
+                    id: "d".into(),
+                    at: Vec2::new(10.0, 10.0),
+                    width: None,
+                },
             ],
             segments: vec![
-                SegmentSpec { a: "a".into(), b: "b".into(), via: Vec::new(), width: None, profile: None },
-                SegmentSpec { a: "c".into(), b: "b".into(), via: Vec::new(), width: None, profile: None },
-                SegmentSpec { a: "d".into(), b: "b".into(), via: Vec::new(), width: None, profile: None },
+                SegmentSpec {
+                    a: "a".into(),
+                    b: "b".into(),
+                    via: Vec::new(),
+                    width: None,
+                    profile: None,
+                },
+                SegmentSpec {
+                    a: "c".into(),
+                    b: "b".into(),
+                    via: Vec::new(),
+                    width: None,
+                    profile: None,
+                },
+                SegmentSpec {
+                    a: "d".into(),
+                    b: "b".into(),
+                    via: Vec::new(),
+                    width: None,
+                    profile: None,
+                },
             ],
             ..RoadNetworkSpec::default()
         };
         let j = net.junction_points();
         assert_eq!(j.len(), 1, "only the degree-3 way gets a disc");
         assert_eq!(j[0].at, Vec2::new(10.0, 0.0));
-        assert!((j[0].radius - 8.0).abs() < 1e-5, "floor = default_width·2: {j:?}");
+        assert!(
+            (j[0].radius - 8.0).abs() < 1e-5,
+            "floor = default_width·2: {j:?}"
+        );
     }
 
     #[test]
-#[test]
     fn test_road_ribbon_winding_faces_up() {
         // Estrada +X: o primeiro triângulo do DECK (edgeL, coreL, edgeL do
         // próximo passo) tem de dar normal +Y — winding invertido escondia

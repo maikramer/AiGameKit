@@ -65,6 +65,8 @@ pub struct FeatureResult {
     pub road_specs: Vec<RoadSpec>,
     /// Pads with the auto height resolved (placement anchors).
     pub pads: Vec<ResolvedPad>,
+    /// Fusion discs for multi-arm junctions (VibeGame junctions.ts).
+    pub road_junctions: Vec<super::roads::RoadJunction>,
 }
 
 /// Applies all features in the canonical order and returns the registries.
@@ -122,6 +124,9 @@ pub fn apply_features(grid: &mut BrushGrid, features: &TerrainFeatures) -> Featu
             result.roads.push(path);
             result.road_specs.push(spec.clone());
         }
+    }
+    for network in &features.networks {
+        result.road_junctions.extend(network.junction_points());
     }
 
     result

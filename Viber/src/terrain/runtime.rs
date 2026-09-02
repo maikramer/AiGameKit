@@ -19,6 +19,7 @@
 use std::path::{Path, PathBuf};
 
 use bevy::asset::RenderAssetUsages;
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 
@@ -156,12 +157,27 @@ pub fn bootstrap(world: &mut World) {
     let map = match &spec.heightmap {
         Some(path) => match load_heightmap(pending.base_dir.as_deref(), path) {
             Ok(loaded) => {
-                // The heightmap file is authoritative for its own coverage.
-                if let Some(world_size) = loaded.world_size {
-                    spec.world_size = world_size;
-                }
-                if let Some(max_height) = loaded.max_height {
-                    spec.max_height = max_height;
+                // The heightmap file describes its own coverage, but the world
+                // XML wins when it states one: pads, lakes, rivers, roads and
+                // biome polygons are all authored in the XML's coordinate
+                // space. `simple-rpg` asks for 4000 m while its `.ahgt` header
+                // claims 8000 — taking the file stretched the whole world to
+                // double scale and quadrupled the chunk grid (63² → 125²).
+                let authored = spec.extent_authored;
+                for (label, from_file, target) in [
+                    ("world-size", loaded.world_size, &mut spec.world_size),
+                    ("max-height", loaded.max_height, &mut spec.max_height),
+                ] {
+                    let Some(from_file) = from_file else { continue };
+                    if !authored {
+                        *target = from_file;
+                    } else if (from_file - *target).abs() > 1e-3 {
+                        warn!(
+                            "heightmap `{path}` declares {label} {from_file}, the world XML says \
+                             {} — keeping the authored value",
+                            *target
+                        );
+                    }
                 }
                 loaded.map
             }
@@ -302,9 +318,10 @@ fn spawn_chunks(
     let epsilon = grid.texel();
 
     let mut material = StandardMaterial {
-        // The authored `base-color`, straight on the material — the terrain
-        // has no vertex colours to multiply against any more.
-        base_color: spec.tint.base_color,
+        // White: the authored `base-color` is already folded into the chunk
+        // vertex colours by `tint_vertex_color`, and the PBR shader multiplies
+        // those in. Putting it here as well would square it.
+        base_color: Color::WHITE,
         metallic: 0.0,
         perceptual_roughness: 0.95,
         ..StandardMaterial::default()
@@ -329,9 +346,9 @@ fn spawn_chunks(
             let origin = Vec3::new(-half + cx as f32 * edge, 0.0, -half + cz as f32 * edge);
             let center = Vec2::new(origin.x + edge * 0.5, origin.z + edge * 0.5);
             let distance = camera_xz.map(|cam| cam.distance(center));
-            if let (Some(render_distance), Some(distance)) = (spec.render_distance, distance) {
+            if let Some(distance) = distance {
                 // The plugin spawns these at LOD 0 once the camera approaches.
-                if distance > render_distance {
+                if distance > spec.effective_render_distance() {
                     continue;
                 }
             }
@@ -349,6 +366,7 @@ fn spawn_chunks(
                 texture_tile_size: spec.texture_tile_size,
                 levels: spec.levels,
                 world_size: spec.world_size,
+                tint: (&spec.tint).into(),
             };
             // A LOD step that does not divide the chunk edge yields no mesh;
             // fall back to LOD 0, which always does.
@@ -488,6 +506,44 @@ fn spawn_roads(
                 Name::new(path.name.clone().unwrap_or_else(|| format!("road {i}"))),
                 Transform::default(),
                 Visibility::Inherited,
+                // estrada não projeta sombra dura — a sombra própria
+                // escurecia as bordas na relva (polish loop 6)
+                NotShadowCaster,
+                ChildOf(parent),
+            ))
+            .insert((Mesh3d(mesh_handle), MeshMaterial3d(handle)));
+    }
+
+    // Fusion discs (VibeGame junctions.ts): círculo opaco nas junções multi-braço
+    // cobrindo as costuras das ribbons.
+    for (i, junction) in result.road_junctions.iter().enumerate() {
+        let mesh = super::roads::junction_disc_mesh(grid, junction);
+        if mesh.indices.is_empty() {
+            continue;
+        }
+        let mut material = StandardMaterial {
+            base_color: Color::srgb(0.62, 0.60, 0.56),
+            metallic: 0.0,
+            perceptual_roughness: 0.9,
+            alpha_mode: bevy::material::AlphaMode::Blend,
+            ..StandardMaterial::default()
+        };
+        let mut texture_handle = None;
+        if let (Some(server), Some(texture)) = (asset_server, junction.texture.as_deref()) {
+            let image: Handle<Image> = server.load(texture.trim_start_matches('/').to_string());
+            texture_handle = Some(image.clone());
+            material.base_color_texture = Some(image);
+        }
+        let handle = materials.add(material);
+        if let Some(texture) = texture_handle {
+            watched.push((handle.clone(), texture));
+        }
+        let mesh_handle = meshes.add(to_bevy_mesh(&mesh));
+        world
+            .spawn((
+                Name::new(format!("junction {i}")),
+                Transform::default(),
+                Visibility::Inherited,
                 ChildOf(parent),
             ))
             .insert((Mesh3d(mesh_handle), MeshMaterial3d(handle)));
@@ -505,7 +561,7 @@ fn to_bevy_mesh(data: &super::mesh::ChunkMeshData) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, data.normals.clone());
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, data.uvs.clone());
     // Only surfaces that actually use vertex colours get the attribute:
-    // roads carry their edge alpha there, terrain chunks carry nothing.
+    // terrain chunks carry the height/slope tint, roads their edge alpha.
     if !data.colors.is_empty() {
         mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, data.colors.clone());
     }
@@ -516,8 +572,9 @@ fn to_bevy_mesh(data: &super::mesh::ChunkMeshData) -> Mesh {
 /// Loads a PNG heightmap (8-bit grayscale is upscaled to the full 16-bit
 /// range like the VibeGame loader). Relative paths resolve against the world
 /// XML directory first, then the process CWD.
-/// Loaded heightmap plus the authoritative world size / max height (the
-/// `.ahgt` metadata overrides the XML spec when present).
+/// Loaded heightmap plus the world size / max height its own metadata
+/// declares. These only fill the spec when the world XML did not state them
+/// (`TerrainSpec::extent_authored`); an authored extent always wins.
 pub struct LoadedHeightmap {
     pub map: HeightMapU16,
     pub world_size: Option<f32>,
