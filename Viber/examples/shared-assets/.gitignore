@@ -2,3 +2,6 @@
 public/assets/images/
 public/assets/meshes/
 public/assets/sky/
+
+# SFX vivem no exemplo (assets/ do simple-rpg); espelhos no pool ficam de fora.
+public/assets/audio/sfx/
