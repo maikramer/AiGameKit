@@ -14,9 +14,9 @@ use viber::luau;
 use viber::recipes::ParsedWorld;
 use viber::recipes::spawn::{self, PendingWorld};
 use viber::{
-    ambient, animation, camera, economy, feedback, hud, menus, meshopt, music, particles,
-    physics, physics_fx, player, profiler, quests, recipes, scaffold, save, sky, skills,
-    spawner, terrain, travel, vitals, worldsys, xml,
+    ambient, animation, camera, economy, feedback, hud, menus, meshopt, music, particles, physics,
+    physics_fx, player, postfx, profiler, quests, recipes, save, scaffold, skills, sky, spawner,
+    terrain, textures, travel, vitals, worldsys, xml,
 };
 
 /// Native Bevy engine for AiGameKit declarative worlds.
@@ -353,7 +353,10 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     // <Weather> é injectada como consts WGSL (o uniform de material custom no
     // Bevy 0.19 nunca re-uploads — ver sky.rs).
     let sky_config = sky::SkyConfig::from_world(&world.entities);
-    let _ = std::fs::write(shaders_dir.join("sky.wgsl"), sky_config.render_world_shader());
+    let _ = std::fs::write(
+        shaders_dir.join("sky.wgsl"),
+        sky_config.render_world_shader(),
+    );
     // Asset root: the folder that CONTAINS `assets/` — the world dir itself
     // when it has one (mirrored assets), else its `public/`, else default.
     let asset_root = match world_base_dir(path) {
@@ -401,6 +404,9 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     app.add_plugins(physics::PhysicsPlugin {
         debug: std::env::var_os("VIBER_PHYSICS_DEBUG").is_some(),
     });
+    // Pós-processamento (exposição/bloom/SSAO) na câmara do mundo; os
+    // `pp-*` das `<BiomeRegion>` conduzem-no. `VIBER_NO_POSTFX=1` desliga.
+    app.add_plugins(postfx::PostFxPlugin);
     app.add_plugins(terrain::TerrainPlugin);
     app.add_plugins(terrain::runtime::TerrainFeaturesPlugin);
     // Fase 2: Luau — scripts de `world_dir/scripts/` com `on_update(dt)`.
@@ -436,7 +442,11 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
     app.add_systems(bevy::app::Startup, spawn::startup);
     app.add_systems(
         bevy::app::Update,
-        (hud::hud_minimap_update, hud::hud_health_sync, hud::hud_xp_sync),
+        (
+            hud::hud_minimap_update,
+            hud::hud_health_sync,
+            hud::hud_xp_sync,
+        ),
     );
     app.add_systems(
         bevy::app::Update,
@@ -454,7 +464,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             spawn::gltf_scene_spawner,
             player::dialogue_interaction,
             hud::hud_prompt_update,
-            hud::hud_compass_update,
+            hud::compass::hud_compass_update,
             hud::hud_minimap_update,
             // BISECT hud::hud_nametags_update,
             music::music_driver,
@@ -462,6 +472,7 @@ fn run(path: &Path, bridge_port: Option<u16>) -> Result<()> {
             worldsys::sun_drive,
             worldsys::world_border_clamp,
             sky::sky_follow_camera,
+            textures::generate_mipmaps_on_load,
             worldsys::seat_statics_once,
             hud::hud_toggle,
             particles::particle_emitter_update,
@@ -551,7 +562,9 @@ fn print_prof(prof: &serde_json::Value) {
             .map(|v| v.to_string())
             .unwrap_or_else(|| "—".into())
     };
-    let fps = get("fps").map(|v| format!("{v:.0}")).unwrap_or_else(|| "—".into());
+    let fps = get("fps")
+        .map(|v| format!("{v:.0}"))
+        .unwrap_or_else(|| "—".into());
     let frame = get("frame_ms_avg")
         .map(|v| format!("{v:.1} ms"))
         .unwrap_or_else(|| "—".into());
@@ -573,7 +586,9 @@ fn print_prof(prof: &serde_json::Value) {
         .and_then(serde_json::Value::as_u64)
         .map(|v| v.to_string())
         .unwrap_or_else(|| "—".into());
-    let uptime = get("uptime_s").map(|v| format!("{v:.0}")).unwrap_or_else(|| "—".into());
+    let uptime = get("uptime_s")
+        .map(|v| format!("{v:.0}"))
+        .unwrap_or_else(|| "—".into());
     println!("scripts {total} (ativos {active})   uptime {uptime} s");
     if let Some(min) = get("min_fps_window") {
         println!("pior fps (janela ~3 s): {min:.0}");
