@@ -9,7 +9,7 @@ use super::assets::{
     HudAssets, centered_at, gradient_overlay, label, panel_base, panel_edge, panel_shadow,
 };
 use super::compass::{CompassDistance, CompassLetter, CompassTick};
-use super::interact::{BALLOON_DURATION, HudBalloon, HudPrompt, HudToggle};
+use super::interact::{BALLOON_DURATION, HudBalloon, HudPrompt};
 use super::minimap::{MinimapArrow, MinimapDot, MinimapRange};
 use super::nametags::NameTag;
 use super::vitals::xp_label_text;
@@ -40,9 +40,9 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                 },
                 Name::new("hud:layer"),
             ));
-            help_bar(world, &hud);
             action_slots(world, &hud);
             name_tag_pool(world, &hud);
+            super::profiler_window::build_profiler_window(world, &hud);
         }
         "healthbar" => {
             // Rounded gradient panel: glossy heart icon + green bar with
@@ -262,40 +262,6 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                     ));
                 });
         }
-        "bossbar" => {
-            let id = bar(
-                world,
-                &hud,
-                BarSpec {
-                    label_text: "BOSS",
-                    value: 100,
-                    max: 100,
-                    fill: Color::srgb(0.45, 0.1, 0.55),
-                    text_size: 22.0,
-                    width: 420.0,
-                    left_px: 0.0,
-                    bottom_px: 12.0,
-                },
-            );
-            world.entity_mut(id).insert(Visibility::Hidden);
-        }
-        "targetbar" => {
-            let id = bar(
-                world,
-                &hud,
-                BarSpec {
-                    label_text: "sem alvo",
-                    value: 0,
-                    max: 100,
-                    fill: Color::srgb(0.6, 0.2, 0.2),
-                    text_size: 14.0,
-                    width: 240.0,
-                    left_px: 170.0,
-                    bottom_px: 10.0,
-                },
-            );
-            world.entity_mut(id).insert(Visibility::Hidden);
-        }
         "minimap" => {
             let range = attr(attrs, "range")
                 .and_then(|v| v.parse::<f32>().ok())
@@ -423,8 +389,10 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                     .with_children(|strip| {
                         // Center caret (static): the heading marker.
                         strip.spawn((
-                            centered_at(Val::Percent(50.0), Val::Px(2.0)),
                             Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Percent(50.0),
+                                top: Val::Px(2.0),
                                 width: Val::Px(2.0),
                                 height: Val::Px(8.0),
                                 border_radius: BorderRadius::all(Val::Px(1.0)),
@@ -466,8 +434,10 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                             let bearing = i as f32 * 22.5;
                             let tall = i % 2 == 0;
                             strip.spawn((
-                                centered_at(Val::Px(230.0), Val::Px(0.0)),
                                 Node {
+                                    position_type: PositionType::Absolute,
+                                    left: Val::Px(230.0),
+                                    top: Val::Px(0.0),
                                     width: Val::Px(1.5),
                                     height: Val::Px(if tall { 5.0 } else { 3.0 }),
                                     ..Default::default()
@@ -562,40 +532,8 @@ pub fn spawn_hud(world: &mut World, tag: &str, attrs: &[(String, String)]) {
                 });
         }
         "tabbedmodal" => {
-            let key = attr(attrs, "key").unwrap_or("tab").to_string();
-            let title = attr(attrs, "title-key").unwrap_or("modal").to_string();
-            world
-                .spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        top: Val::Px(0.0),
-                        left: Val::Px(0.0),
-                        right: Val::Px(0.0),
-                        bottom: Val::Px(0.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..Default::default()
-                    },
-                    Visibility::Hidden,
-                    HudToggle(toggle_key(&key)),
-                    Name::new("hud:modal"),
-                ))
-                .with_children(|modal| {
-                    modal.spawn((
-                        Node {
-                            width: Val::Px(520.0),
-                            height: Val::Px(320.0),
-                            padding: UiRect::all(Val::Px(18.0)),
-                            border: UiRect::all(Val::Px(2.0)),
-                            border_radius: BorderRadius::all(Val::Px(16.0)),
-                            ..Default::default()
-                        },
-                        panel_base(),
-                        BorderColor::all(Color::srgb(0.85, 0.75, 0.45)),
-                        panel_shadow(),
-                        label(&hud, title, 22.0, Color::srgb(0.95, 0.85, 0.6)),
-                    ));
-                });
+            // Menu com abas (Q): Controles (a antiga help bar) + Sobre.
+            super::menu::build_menu(world, &hud);
         }
         other => {
             bevy::log::warn!("hud: unhandled element `{other}` — skipped");
@@ -731,75 +669,6 @@ pub fn spawn_resource_chip(world: &mut World, index: usize, resource: &str) {
                 }
             }
             slot.spawn(label(&hud, "0", 15.0, Color::srgb(0.96, 0.94, 0.86)));
-        });
-}
-
-/// Bottom-center help pill with key-hint styling: keys in gold, actions in
-/// warm light, dot separators.
-fn help_bar(world: &mut World, hud: &HudAssets) {
-    const SEGMENTS: [(&str, bool); 9] = [
-        ("WASD", true),
-        (" mover", false),
-        ("ESPAÇO", true),
-        (" pular", false),
-        ("SHIFT", true),
-        (" correr", false),
-        ("E", true),
-        (" interagir", false),
-        ("Q menu", true),
-    ];
-    world
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                bottom: Val::Px(10.0),
-                left: Val::Px(0.0),
-                right: Val::Px(0.0),
-                justify_content: JustifyContent::Center,
-                ..Default::default()
-            },
-            Name::new("hud:help"),
-        ))
-        .with_children(|wrap| {
-            wrap.spawn((
-                Node {
-                    padding: UiRect::axes(Val::Px(16.0), Val::Px(7.0)),
-                    border_radius: BorderRadius::all(Val::Px(14.0)),
-                    ..Default::default()
-                },
-                panel_base(),
-                panel_shadow(),
-                Text::new(""),
-            ))
-            .with_children(|pill| {
-                for (i, (text, is_key)) in SEGMENTS.iter().enumerate() {
-                    let color = if *is_key {
-                        Color::srgb(0.95, 0.78, 0.28)
-                    } else {
-                        Color::srgb(0.9, 0.88, 0.8)
-                    };
-                    pill.spawn((
-                        bevy::text::TextSpan::new((*text).to_string()),
-                        TextColor(color),
-                        TextFont {
-                            font: hud.font.clone().into(),
-                            font_size: 13.0.into(),
-                            ..Default::default()
-                        },
-                    ));
-                    if i + 1 < SEGMENTS.len() {
-                        pill.spawn((
-                            bevy::text::TextSpan::new("  ·  "),
-                            TextColor(Color::srgba(0.8, 0.78, 0.7, 0.5)),
-                            TextFont {
-                                font: hud.font.clone().into(),
-                                font_size: 13.0.into(),
-                                ..Default::default()
-                            },
-                        ));
-                    }
-                }
-            });
         });
 }
 
@@ -956,91 +825,5 @@ fn name_tag_pool(world: &mut World, hud: &HudAssets) {
                     label(hud, "", 13.0, Color::srgb(0.96, 0.96, 0.92)),
                 ));
             });
-    }
-}
-
-/// Static bar (boss/target): background + fill + label, rounded.
-struct BarSpec {
-    label_text: &'static str,
-    value: u32,
-    max: u32,
-    fill: Color,
-    text_size: f32,
-    width: f32,
-    left_px: f32,
-    bottom_px: f32,
-}
-
-fn bar(world: &mut World, hud: &HudAssets, spec: BarSpec) -> Entity {
-    let BarSpec {
-        label_text,
-        value,
-        max,
-        fill,
-        text_size,
-        width,
-        left_px,
-        bottom_px,
-    } = spec;
-    let fraction = if max > 0 {
-        value as f32 / max as f32
-    } else {
-        0.0
-    };
-    let id = world
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Px(left_px),
-                bottom: Val::Px(bottom_px),
-                width: Val::Px(width),
-                height: Val::Px(text_size + 10.0),
-                padding: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::all(Val::Px(8.0)),
-                ..Default::default()
-            },
-            panel_base(),
-            panel_shadow(),
-            Name::new(format!("hud:bar:{label_text}")),
-        ))
-        .id();
-    world.entity_mut(id).with_children(|bar_node| {
-        bar_node.spawn((
-            Node {
-                width: Val::Percent(fraction * 100.0),
-                height: Val::Percent(100.0),
-                border_radius: BorderRadius::all(Val::Px(6.0)),
-                ..Default::default()
-            },
-            BackgroundColor(fill),
-        ));
-        bar_node.spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Px(8.0),
-                top: Val::Px(2.0),
-                ..Default::default()
-            },
-            label(
-                hud,
-                format!("{label_text} {value}/{max}"),
-                text_size,
-                Color::srgb(0.95, 0.92, 0.85),
-            ),
-        ));
-    });
-    id
-}
-
-/// Map a toggle key name (as authored) to a [`KeyCode`].
-fn toggle_key(name: &str) -> KeyCode {
-    match name.to_ascii_lowercase().as_str() {
-        "q" => KeyCode::KeyQ,
-        "e" => KeyCode::KeyE,
-        "tab" => KeyCode::Tab,
-        "m" => KeyCode::KeyM,
-        "i" => KeyCode::KeyI,
-        "space" => KeyCode::Space,
-        _ => KeyCode::Tab,
     }
 }

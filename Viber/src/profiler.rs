@@ -37,7 +37,7 @@ struct ProfilerOverlay;
 #[derive(Component)]
 struct ProfilerText;
 
-/// Estado do overlay: refresh throttle + visibilidade (**F3** alterna).
+/// Estado do overlay: refresh throttle + visibilidade (**P** alterna).
 #[derive(Resource)]
 struct HudState {
     timer: f32,
@@ -48,7 +48,9 @@ impl Default for HudState {
     fn default() -> Self {
         Self {
             timer: 0.0,
-            visible: true,
+            // A telinha F3 só aparece sob pedido: a janela do profiler (P)
+            // no HUD é a interface completa.
+            visible: false,
         }
     }
 }
@@ -78,14 +80,15 @@ impl FrameStats {
     }
 
     fn max_ms(&self) -> Option<f32> {
-        self.samples
-            .iter()
-            .fold(None, |acc: Option<f32>, &v| Some(acc.map_or(v, |m| m.max(v))))
+        self.samples.iter().fold(None, |acc: Option<f32>, &v| {
+            Some(acc.map_or(v, |m| m.max(v)))
+        })
     }
 
     /// Pior fps da janela (`1000/max_ms`); `None` sem amostras.
     pub fn min_fps(&self) -> Option<f32> {
-        self.max_ms().map(|ms| if ms > 0.0 { 1000.0 / ms } else { 0.0 })
+        self.max_ms()
+            .map(|ms| if ms > 0.0 { 1000.0 / ms } else { 0.0 })
     }
 }
 
@@ -136,7 +139,10 @@ pub fn collect_counters(world: &mut World) -> GameCounters {
     >();
     for (transform, activation) in q_scripts.iter(world) {
         scripts_total += 1;
-        script_rows.push((transform.map(GlobalTransform::translation), activation.map(|a| a.radius)));
+        script_rows.push((
+            transform.map(GlobalTransform::translation),
+            activation.map(|a| a.radius),
+        ));
     }
 
     let mut q_emitters = world.query_filtered::<(), With<ParticleEmitter>>();
@@ -293,15 +299,12 @@ fn profiler_overlay_update(
     stats: Res<FrameStats>,
     diagnostics: Option<Res<DiagnosticsStore>>,
     players: Query<&GlobalTransform, With<Player>>,
-    scripts: Query<
-        (Option<&GlobalTransform>, Option<&ScriptActivation>),
-        With<LuaScriptRef>,
-    >,
+    scripts: Query<(Option<&GlobalTransform>, Option<&ScriptActivation>), With<LuaScriptRef>>,
     entities: Query<Entity>,
     emitters: Query<(), With<ParticleEmitter>>,
     chunks: Query<(), With<TerrainChunk>>,
 ) {
-    if keys.just_pressed(KeyCode::F3) {
+    if keys.just_pressed(KeyCode::KeyP) {
         state.visible = !state.visible;
     }
     let wanted = if state.visible {
@@ -446,7 +449,10 @@ mod tests {
         // entidades: recursos vivem como entidades internas no Bevy 0.16+, por
         // isso o teste compara o DELTA (agnóstico aos internals)
         let before = snap["entities"].as_u64().expect("entities numérico");
-        world.spawn((GlobalTransform::default(), LuaScriptRef { path: "x".into() }));
+        world.spawn((
+            GlobalTransform::default(),
+            LuaScriptRef { path: "x".into() },
+        ));
         let after = snapshot(&mut world)["entities"].as_u64().expect("numérico");
         assert_eq!(after - before, 1, "+1 entidade por spawn");
     }

@@ -69,9 +69,12 @@ pub fn hud_compass_update(
     cameras: Query<&OrbitCamera>,
     players: Query<&GlobalTransform, With<Player>>,
     npcs: Query<&GlobalTransform, With<DialogueNpc>>,
-    mut letters: Query<(&mut Node, &mut Visibility, &CompassLetter)>,
-    mut ticks: Query<(&mut Node, &CompassTick)>,
-    mut distances: Query<(&mut Node, &mut Visibility, &CompassDistance, &mut Text)>,
+    mut letters: Query<(&mut Node, &mut Visibility, &CompassLetter), Without<CompassTick>>,
+    mut ticks: Query<(&mut Node, &CompassTick), (Without<CompassLetter>, Without<CompassDistance>)>,
+    mut distances: Query<
+        (&mut Node, &mut Visibility, &CompassDistance, &mut Text),
+        (Without<CompassLetter>, Without<CompassTick>),
+    >,
 ) {
     let Some(cam) = cameras.iter().next() else {
         return;

@@ -17,9 +17,12 @@ pub mod assets;
 pub mod compass;
 pub mod elements;
 pub mod interact;
+pub mod menu;
 pub mod minimap;
 pub mod nametags;
+pub mod profiler_window;
 pub mod vitals;
+pub mod widgets;
 
 pub use assets::HudAssets;
 pub use compass::{

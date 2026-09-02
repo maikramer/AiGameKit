@@ -87,8 +87,8 @@ pub(crate) fn arrow_image() -> Image {
                 let ab = (b.0 - a.0, b.1 - a.1);
                 let len = (ab.0 * ab.0 + ab.1 * ab.1).sqrt().max(1e-5_f32);
                 let side = (p.0 - a.0) * ab.1 - (p.1 - a.1) * ab.0;
-                let dist = side / len; // signed, pixels
-                if side < 0.0 {
+                let dist = -side / len; // signed, pixels (y-down flip)
+                if side > 0.0 {
                     inside = false;
                 }
                 min_dist = min_dist.min(dist.abs());
