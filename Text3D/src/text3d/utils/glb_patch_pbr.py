@@ -216,7 +216,10 @@ def patch_glb_pbr(
         return PatchPbrResult(True, "sem baseColorTexture — GLB sem PBR para enriquecer")
 
     dst = output_path or glb_path
-    with tempfile.TemporaryDirectory(prefix="text3d_patch_pbr_") as td_raw:
+    # Tempdir no filesystem do DESTINO: os.replace é atómico no mesmo device
+    # (EXDEV se o /tmp for outro filesystem, como no pool /media).
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="text3d_patch_pbr_", dir=dst.parent) as td_raw:
         tmp = Path(td_raw)
         albedo_png = extract_albedo_png(glb_path, tmp)
         normal_png, ao_png = derive_maps(albedo_png, tmp, preset=preset, logger=logger)
