@@ -28,8 +28,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .gltf_finish import _run_gltf_transform
-
 JSON_CHUNK = 0x4E4F534A
 BIN_CHUNK = 0x004E4942
 _TIMEOUT_S = 600
@@ -95,10 +93,15 @@ def _image_blob(gltf: dict[str, Any], bin_data: bytes, image_index: int) -> byte
     return bin_data[bv.get("byteOffset", 0) : bv.get("byteOffset", 0) + bv["byteLength"]]
 
 
-def _blob_to_png(blob: bytes, mime: str, out: Path) -> Path:
-    """KTX2→PNG via ``ktx extract``; PNG sai direto."""
+def _blob_to_image(blob: bytes, mime: str, stem: str, tmp: Path) -> Path:
+    """KTX2→PNG via ``ktx extract``; PNG/JPEG saem direto (extensão pelo mime).
+
+    O albedo do paint export pode ser JPEG (AUTO no exporter) — materialize
+    lê jpg, mas tem de estar com a extensão certa.
+    """
     if "ktx2" in mime:
-        src = out.with_suffix(".ktx2")
+        out = tmp / f"{stem}.png"
+        src = tmp / f"{stem}.ktx2"
         src.write_bytes(blob)
         subprocess.run(
             ["ktx", "extract", str(src), str(out)],
@@ -107,12 +110,14 @@ def _blob_to_png(blob: bytes, mime: str, out: Path) -> Path:
             check=True,
         )
         return out
+    ext = "jpg" if "jpeg" in mime else "png"
+    out = tmp / f"{stem}.{ext}"
     out.write_bytes(blob)
     return out
 
 
 def extract_albedo_png(glb_path: Path, tmp: Path) -> Path:
-    """Albedo (baseColor do material 0) como PNG no dir temporário."""
+    """Albedo (baseColor do material 0) como PNG/JPEG no dir temporário."""
     gltf, bin_data = _load_glb(glb_path)
     base = material_slots(gltf)["base"]
     if base is None:
@@ -124,8 +129,7 @@ def extract_albedo_png(glb_path: Path, tmp: Path) -> Path:
         raise RuntimeError(f"{glb_path.name}: texture sem source")
     img = gltf["images"][src]
     blob = _image_blob(gltf, bytes(bin_data), src)
-    out = tmp / f"albedo_{glb_path.stem}.png"
-    return _blob_to_png(blob, img.get("mimeType", "image/png"), out)
+    return _blob_to_image(blob, img.get("mimeType", "image/png"), f"albedo_{glb_path.stem}", tmp)
 
 
 def resolve_materialize_bin() -> str | None:
@@ -181,18 +185,69 @@ def _png_size(path: Path) -> tuple[int, int]:
         return im.size
 
 
-def _inject_maps(gltf: dict[str, Any], bin_data: bytearray, normal_png: Path, ao_png: Path) -> None:
+def _png_to_ktx2(png: Path, tmp: Path) -> Path:
+    """PNG → KTX2 UASTC+Zstd via KTX-Software (linear, mapa de dados)."""
+    out = tmp / f"{png.stem}.ktx2"
+    proc = subprocess.run(
+        [
+            "ktx",
+            "create",
+            "--format",
+            "R8G8B8A8_UNORM",
+            "--encode",
+            "uastc",
+            "--assign-tf",
+            "linear",
+            "--zstd",
+            "18",
+            str(png),
+            str(out),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=_TIMEOUT_S,
+        check=False,
+    )
+    if proc.returncode != 0 or not out.is_file():
+        tail = (proc.stderr.strip().splitlines() or [f"rc={proc.returncode}"])[-1]
+        raise RuntimeError(f"ktx create falhou: {tail}")
+    return out
+
+
+def _inject_maps(
+    gltf: dict[str, Any],
+    bin_data: bytearray,
+    normal_png: Path,
+    ao_png: Path,
+    tmp: Path,
+) -> None:
+    """Injeta normal+AO como KTX2 (convenção gltf-transform: image/ktx2 +
+    ``extensions.KHR_texture_basisu.source`` no texture). Geometria e meshopt
+    existentes ficam intactos — nenhum re-encode."""
     mat = gltf["materials"][0]
     images = gltf.setdefault("images", [])
     textures = gltf.setdefault("textures", [])
     buffer_views = gltf.setdefault("bufferViews", [])
+    used = gltf.setdefault("extensionsUsed", [])
+    if "KHR_texture_basisu" not in used:
+        used.append("KHR_texture_basisu")
     for slot, png in (("normalTexture", normal_png), ("occlusionTexture", ao_png)):
-        blob = png.read_bytes()
+        ktx2 = _png_to_ktx2(png, tmp)
+        blob = ktx2.read_bytes()
         blob += b"\x00" * ((4 - len(blob) % 4) % 4)
         buffer_views.append({"buffer": 0, "byteOffset": len(bin_data), "byteLength": len(blob)})
-        images.append({"bufferView": len(buffer_views) - 1, "mimeType": "image/png", "name": png.stem.split("_")[-1]})
-        textures.append({"source": len(images) - 1, "sampler": 0})
-        mat[slot] = {"index": len(textures) - 1, **({"scale": 1.0} if slot == "normalTexture" else {"strength": 1.0})}
+        img_idx = len(images)
+        images.append({"bufferView": len(buffer_views) - 1, "mimeType": "image/ktx2", "name": png.stem.split("_")[-1]})
+        textures.append(
+            {
+                "sampler": 0,
+                "extensions": {"KHR_texture_basisu": {"source": img_idx}},
+            }
+        )
+        mat[slot] = {
+            "index": len(textures) - 1,
+            **({"scale": 1.0} if slot == "normalTexture" else {"strength": 1.0}),
+        }
         bin_data += blob
     gltf["buffers"][0]["byteLength"] = len(bin_data)
 
@@ -225,22 +280,9 @@ def patch_glb_pbr(
         normal_png, ao_png = derive_maps(albedo_png, tmp, preset=preset, logger=logger)
 
         gltf, bin_data = _load_glb(glb_path)
-        _inject_maps(gltf, bin_data, normal_png, ao_png)
-        patched = tmp / "patched.glb"
-        _save_glb(patched, gltf, bin_data)
-
-        # KTX2 UASTC (flags do gltf_finish) + meshopt re-aplicado (o uastc
-        # decodifica o meshopt existente).
-        uastc = tmp / "uastc.glb"
-        ok, err = _run_gltf_transform(
-            "uastc", patched, uastc, ["--level", "2", "--rdo", "1.0", "--zstd", "18", "--slots", "*"]
-        )
-        if not ok:
-            raise RuntimeError(f"gltf-transform uastc falhou: {err}")
+        _inject_maps(gltf, bin_data, normal_png, ao_png, tmp)
         final = tmp / "final.glb"
-        ok, err = _run_gltf_transform("meshopt", uastc, final, ["--level", "high"])
-        if not ok:
-            raise RuntimeError(f"gltf-transform meshopt falhou: {err}")
+        _save_glb(final, gltf, bin_data)
 
         # Escrita atómica (crash entre passes não deixa GLB intermédio).
         os.replace(final, dst)

@@ -101,7 +101,7 @@ class TestInject:
         a = tmp_path / "ao.png"
         n.write_bytes(_png_bytes((128, 128, 255)))
         a.write_bytes(_png_bytes((200, 200, 200)))
-        _inject_maps(gltf, bin_data, n, a)
+        _inject_maps(gltf, bin_data, n, a, tmp_path)
         out = tmp_path / "patched.glb"
         _save_glb(out, gltf, bin_data)
 
@@ -109,6 +109,10 @@ class TestInject:
         assert glb_is_pbr_complete(gltf2)
         assert len(gltf2["images"]) == 3
         assert len(gltf2["textures"]) == 3
+        # Os mapas novos entram como KTX2 (regra texture_format do pipeline).
+        assert gltf2["images"][1]["mimeType"] == "image/ktx2"
+        assert gltf2["images"][2]["mimeType"] == "image/ktx2"
+        assert "KHR_texture_basisu" in gltf2["extensionsUsed"]
         # bufferViews novos com offsets alinhados e byteLength igual ao PNG.
         for bv in gltf2["bufferViews"][1:]:
             assert bv["byteOffset"] % 4 == 0
@@ -123,7 +127,7 @@ class TestInject:
         outs = []
         for _ in range(2):
             gltf, bin_data = _load_glb(src)
-            _inject_maps(gltf, bin_data, n, a)
+            _inject_maps(gltf, bin_data, n, a, tmp_path)
             out = tmp_path / f"o{len(outs)}.glb"
             _save_glb(out, gltf, bin_data)
             outs.append(out.read_bytes())
