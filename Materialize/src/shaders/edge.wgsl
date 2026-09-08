@@ -1,21 +1,6 @@
-struct Params {
-    height_blur_radius_0: f32,           // 1
-    height_blur_radius_1: f32,           // 2
-    height_blur_radius_2: f32,           // 3
-    height_contrast: f32,                // 4
-    normal_strength: f32,                // 5
-    normal_flip_y: u32,                  // 6  (NEW 2.0)
-    metallic_scale: f32,                 // 7
-    metallic_local_variance_factor: f32, // 8  (NEW 2.0)
-    smoothness_base: f32,                // 9
-    smoothness_metallic_boost: f32,      // 10
-    smoothness_roughness_factor: f32,    // 11 (NEW 2.0)
-    edge_contrast: f32,                  // 12
-    ao_depth_scale: f32,                 // 13
-    seamless: u32,                       // 14 (NEW 2.0)
-    _pad0: f32,                          // 15
-    _pad1: f32,                          // 16
-}
+// Crease/edge map (F0 fix + F2): total variation of the normal map — the
+// full gradient magnitude over both normal components (2.0 used only 2 of the
+// 4 components and missed diagonal creases).
 
 @group(0) @binding(0)
 var normal_texture: texture_2d<f32>;
@@ -26,16 +11,9 @@ var output_texture: texture_storage_2d<rgba8unorm, write>;
 @group(1) @binding(0)
 var<uniform> params: Params;
 
-fn sample_coord(coords: vec2<i32>, dims: vec2<u32>) -> vec2<i32> {
-    let d = vec2<i32>(dims);
-    if (params.seamless == 1u) {
-        return ((coords % d) + d) % d;
-    }
-    return clamp(coords, vec2<i32>(0), d - vec2<i32>(1));
-}
-
-fn sample_normal_rg(coords: vec2<i32>, dims: vec2<u32>) -> vec2<f32> {
-    let c = sample_coord(coords, dims);
+fn sample_normal_rg(coords: vec2<i32>) -> vec2<f32> {
+    let dims = textureDimensions(normal_texture);
+    let c = wrap_or_clamp(coords, dims, params.seamless);
     let n = textureLoad(normal_texture, c, 0);
     return vec2<f32>(n.r, n.g);
 }
@@ -49,14 +27,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    // Gradient of the normal map (slope of slope = curvature of surface).
-    let gx = sample_normal_rg(coords + vec2<i32>(1, 0), dims) -
-             sample_normal_rg(coords + vec2<i32>(-1, 0), dims);
-    let gy = sample_normal_rg(coords + vec2<i32>(0, 1), dims) -
-             sample_normal_rg(coords + vec2<i32>(0, -1), dims);
+    // Central difference of the 2D normal field; keep the full vector norm.
+    let gx = sample_normal_rg(coords + vec2<i32>(1, 0)) -
+             sample_normal_rg(coords + vec2<i32>(-1, 0));
+    let gy = sample_normal_rg(coords + vec2<i32>(0, 1)) -
+             sample_normal_rg(coords + vec2<i32>(0, -1));
 
-    // Magnitude of the gradient → edges are where the normal changes fast.
-    let mag = sqrt(gx.x * gx.x + gy.y * gy.y);
+    let mag = sqrt(dot(gx, gx) + dot(gy, gy));
     let edge = smoothstep(0.05, 0.40, mag * params.edge_contrast);
 
     textureStore(output_texture, coords, vec4<f32>(edge, edge, edge, 1.0));

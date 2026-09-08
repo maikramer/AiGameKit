@@ -20,14 +20,42 @@ Materialize takes a single diffuse/albedo texture and produces up to seven PBR m
 | **AO** | Ambient occlusion (cavity-style, derived from height) |
 | **Curvature** _(opt-in)_ | Convex/concave curvature (Laplacian of height) — enable with `--include-curvature` |
 
+**3.0 algorithms (paper-backed)** — full details in
+[`docs/algorithms.md`](docs/algorithms.md) and the
+[upgrade plan](docs/2026-09-08-materialize-3-papers-upgrade.md):
+
+- **Height** — gaussian pyramid blend (iterative σ-doubling) + **guided
+  filter** base/detail split (He et al. 2010): shadows stop pretending to be
+  relief; edges survive the smoothing.
+- **Normal** — Sobel/**Scharr** operator, gaussian pre-filter, physically
+  scaled z (`normal_slope_z`).
+- **AO** — **horizon-based ray marching** (HBAO, Bavoil & Sander 2008) with a
+  multi-scale blend over the guided-filter base; `--ao-quality fast|medium|high`.
+- **Metallic** — gray-world white balance (Buchsbaum 1980) + specular
+  evidence; vegetation/variance guards from 2.0.
+- **Smoothness** — GGX slope-variance proxy from the normal map (Walter et
+  al. 2007) on top of the 2.0 local-contrast term.
+- **Curvature** — multi-scale Laplacian of Gaussian.
+- **`--make-seamless fast|high`** — minimum-error offset roll (Kwatra et al.
+  2003) + mirror cross-fade, or **Poisson blending** (Pérez et al. 2003) on
+  the seam band. All maps inherit the aligned seam.
+- **`--intrinsic`** *(optional)* — decomposes albedo/shading/specular via the
+  vramd `intrinsic` backend (compphoto/Intrinsic — **academic-use-only
+  licence**, see `Intrinsic/README.md`) and feeds shadow-free albedo to
+  metallic/smoothness, specular residual as evidence, and shading
+  high-frequency into the height. Degrades gracefully without vramd.
+
 **Key properties:**
 
-- **Fast** — GPU compute shaders via wgpu; no CPU-bound image loops
+- **Fast** — GPU compute shaders via wgpu; the whole chain is one submit
 - **Cross-platform** — Linux, macOS, Windows (Vulkan, Metal, DirectX 12)
-- **No CUDA required** — wgpu works with any modern GPU
+- **No CUDA required** — wgpu works with any modern GPU (the optional
+  `--intrinsic` backend does use CUDA via vramd)
 - **Auto-detect** — `-p auto` analyses the texture and picks the best preset
 - **Batch-friendly** — directories and globs, `--skip-existing` resume
 - **Scriptable** — CLI-only; stable exit codes
+- **Tested** — CPU golden tests for every pass + GPU↔CPU parity suite
+  (`MATERIALIZE_GPU_TESTS=1 cargo test --test gpu_parity`)
 
 ---
 

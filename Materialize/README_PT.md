@@ -24,14 +24,43 @@ A partir de uma única textura difusa/albedo, o Materialize produz até sete map
 | **AO** | Oclusão ambiente (estilo cavidade, derivada da height) |
 | **Curvature** _(opt-in)_ | Curvatura convexa/côncava (Laplaciano da height) — ative com `--include-curvature` |
 
+**Algoritmos 3.0 (baseados em papers)** — detalhe completo em
+[`docs/algorithms.md`](docs/algorithms.md) e no
+[plano de upgrade](docs/2026-09-08-materialize-3-papers-upgrade.md):
+
+- **Height** — pirâmide Gaussiana (duplo-σ iterativo) + separação base/detail
+  por **guided filter** (He et al. 2010): sombras deixam de fingir ser relevo;
+  bordas sobrevivem à suavização.
+- **Normal** — operador Sobel/**Scharr**, pré-filtro Gaussiano, z com escala
+  física (`normal_slope_z`).
+- **AO** — **ray marching de horizonte** (HBAO, Bavoil & Sander 2008) com
+  blend multi-escala sobre o base do guided filter; `--ao-quality
+  fast|medium|high`.
+- **Metallic** — white balance gray-world (Buchsbaum 1980) + evidência
+  especular; guardas de vegetação/variância do 2.0 mantidos.
+- **Smoothness** — proxy de variância de slope GGX a partir do normal map
+  (Walter et al. 2007) sobre o termo de contraste local do 2.0.
+- **Curvature** — Laplaciano de Gaussiana multi-escala.
+- **`--make-seamless fast|high`** — roll de offset de erro mínimo (Kwatra et
+  al. 2003) + cross-fade espelhado, ou **Poisson blending** (Pérez et al.
+  2003) na banda do seam. Todos os mapas herdam o seam alinhado.
+- **`--intrinsic`** *(opcional)* — decompõe albedo/shading/especular via
+  backend vramd `intrinsic` (compphoto/Intrinsic — **licença uso-académico**,
+  ver `Intrinsic/README.md`) e alimenta o metallic/smoothness com albedo sem
+  sombras, usa o residual especular como evidência e injeta a alta-frequência
+  do shading no height. Degrada graciosamente sem vramd.
+
 **Propriedades principais:**
 
-- **Rápida** — *Compute shaders* na GPU via wgpu; sem loops pesados na CPU
+- **Rápida** — *Compute shaders* na GPU via wgpu; a cadeia inteira é um submit
 - **Multiplataforma** — Linux, macOS, Windows (Vulkan, Metal, DirectX 12)
-- **Sem CUDA** — wgpu funciona com qualquer GPU moderna
+- **Sem CUDA** — wgpu funciona com qualquer GPU moderna (o backend opcional
+  `--intrinsic` usa CUDA via vramd)
 - **Auto-detect** — `-p auto` analisa a textura e escolhe o melhor preset
 - **Batch-friendly** — diretórios e globs, `--skip-existing` para retomar
 - **Scriptável** — Só CLI; códigos de saída estáveis
+- **Testada** — testes golden CPU por passe + suíte de paridade GPU↔CPU
+  (`MATERIALIZE_GPU_TESTS=1 cargo test --test gpu_parity`)
 
 ---
 

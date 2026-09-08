@@ -69,6 +69,54 @@ fn luma_at(view: &image::ImageBuffer<Rgba<u8>, Vec<u8>>, x: u32, y: u32) -> f32 
     luma(*view.get_pixel(x, y))
 }
 
+/// Gray-world white-balance gains (Buchsbaum 1980) for the metallic detector
+/// (F5): each channel is scaled so its mean matches the luminance mean.
+/// Returns (r, g, b) gains, all 1.0 on a neutral image.
+pub fn gray_world_gains(image: &image::DynamicImage) -> (f32, f32, f32) {
+    let rgba = image.to_rgba8();
+    let (w, h) = rgba.dimensions();
+    let step_x = ((w as f32).sqrt().max(2.0)).round() as u32;
+    let step_y = ((h as f32).sqrt().max(2.0)).round() as u32;
+
+    let mut sum_r = 0.0f64;
+    let mut sum_g = 0.0f64;
+    let mut sum_b = 0.0f64;
+    let mut sum_l = 0.0f64;
+    let mut n = 0.0f64;
+
+    let mut y = 0u32;
+    while y < h {
+        let mut x = 0u32;
+        while x < w {
+            let p = *rgba.get_pixel(x, y);
+            let r = p[0] as f32 / 255.0;
+            let g = p[1] as f32 / 255.0;
+            let b = p[2] as f32 / 255.0;
+            sum_r += r as f64;
+            sum_g += g as f64;
+            sum_b += b as f64;
+            sum_l += (0.2126 * r + 0.7152 * g + 0.0722 * b) as f64;
+            n += 1.0;
+            x += step_x;
+        }
+        y += step_y;
+    }
+
+    if n < 1.0 {
+        return (1.0, 1.0, 1.0);
+    }
+    let mean = |s: f64| (s / n) as f32;
+    let mean_l = mean(sum_l);
+    let gain = |c: f32| {
+        if c > 1e-4 {
+            (mean_l / c).clamp(0.25, 4.0)
+        } else {
+            1.0
+        }
+    };
+    (gain(mean(sum_r)), gain(mean(sum_g)), gain(mean(sum_b)))
+}
+
 pub fn analyze(image: &image::DynamicImage) -> ImageFeatures {
     let rgba = image.to_rgba8();
     let (w, h) = rgba.dimensions();

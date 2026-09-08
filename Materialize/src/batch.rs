@@ -1,7 +1,6 @@
 //! Batch processing: directory/glob input. GPU work is serialised on the caller
 //! thread (wgpu Device/Queue cannot be shared across threads for concurrent
-//! dispatch, see plan v2 §F3.1). `--jobs N` is accepted for API stability but
-//! GPU dispatch stays single-threaded; CPU load/analyse is the only parallelism.
+//! dispatch); the per-image chain is already one encoder/submit.
 
 use std::path::{Path, PathBuf};
 
@@ -96,6 +95,16 @@ pub fn run_batch(
     cli: &Cli,
     resolve_params: &dyn Fn(&DynamicImage) -> PresetParams,
 ) -> Result<BatchResult> {
+    let resolve_options = |img: &DynamicImage| -> crate::pipeline::ProcessOptions<'static> {
+        let mut options = crate::pipeline::ProcessOptions::default();
+        if let Some(tier) = cli.make_seamless {
+            let features = crate::analyze::analyze(img);
+            if features.tile_mse >= 0.005 {
+                options.seamless_mode = tier.to_mode();
+            }
+        }
+        options
+    };
     let selection = build_selection(cli)?;
     let format_str = format!("{}", cli.format);
     let image_format = io::output_format_to_image_format(&cli.format);
@@ -137,9 +146,10 @@ pub fn run_batch(
         };
 
         let params = resolve_params(&img);
+        let options = resolve_options(&img);
         let (width, height) = (img.width(), img.height());
 
-        let result = pipeline.process_blocking(&img, &params, &selection);
+        let result = pipeline.process_blocking_with(&img, &params, &selection, &options);
         match result {
             Ok((maps, timings)) => {
                 if let Err(e) = save_job(

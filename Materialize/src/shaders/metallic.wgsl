@@ -1,37 +1,27 @@
-struct Params {
-    height_blur_radius_0: f32,           // 1
-    height_blur_radius_1: f32,           // 2
-    height_blur_radius_2: f32,           // 3
-    height_contrast: f32,                // 4
-    normal_strength: f32,                // 5
-    normal_flip_y: u32,                  // 6  (NEW 2.0)
-    metallic_scale: f32,                 // 7
-    metallic_local_variance_factor: f32, // 8  (NEW 2.0)
-    smoothness_base: f32,                // 9
-    smoothness_metallic_boost: f32,      // 10
-    smoothness_roughness_factor: f32,    // 11 (NEW 2.0)
-    edge_contrast: f32,                  // 12
-    ao_depth_scale: f32,                 // 13
-    seamless: u32,                       // 14 (NEW 2.0)
-    _pad0: f32,                          // 15
-    _pad1: f32,                          // 16
-}
+// Metallic detection (F5): two-tier HSL detector over a gray-world-balanced
+// diffuse (or intrinsic albedo when the F6 pre-pass ran), luminance-variance
+// damping, vegetation veto, and specular evidence (direct residual from the
+// intrinsic pre-pass when available).
 
 @group(0) @binding(0)
 var input_texture: texture_2d<f32>;
 
 @group(0) @binding(1)
+var specular_texture: texture_2d<f32>;
+
+@group(0) @binding(2)
 var output_texture: texture_storage_2d<rgba8unorm, write>;
 
 @group(1) @binding(0)
 var<uniform> params: Params;
 
-fn sample_coord(coords: vec2<i32>, dims: vec2<u32>) -> vec2<i32> {
-    let d = vec2<i32>(dims);
-    if (params.seamless == 1u) {
-        return ((coords % d) + d) % d;
-    }
-    return clamp(coords, vec2<i32>(0), d - vec2<i32>(1));
+fn sample_coord(coords: vec2<i32>) -> vec2<i32> {
+    let dims = textureDimensions(input_texture);
+    return wrap_or_clamp(coords, dims, params.seamless);
+}
+
+fn sample_rgb(coords: vec2<i32>) -> vec3<f32> {
+    return textureLoad(input_texture, sample_coord(coords), 0).rgb;
 }
 
 fn rgb_to_hsl(rgb: vec3<f32>) -> vec3<f32> {
@@ -70,8 +60,9 @@ fn smooth_step(edge0: f32, edge1: f32, x: f32) -> f32 {
     return t * t * (3.0 - 2.0 * t);
 }
 
-// Two-tier detector. Achromatic group (sat < 0.15) covers steel/silver/aluminum/
-// titanium/pewter/chrome/blue-steel; chromatic group uses non-overlapping hue bands.
+// Two-tier detector. Achromatic group (sat < 0.15) covers steel/silver/
+// aluminum/titanium/pewter/chrome/blue-steel; chromatic group uses
+// non-overlapping hue bands (copper/bronze/gold/brass).
 fn detect_metallic(rgb: vec3<f32>) -> f32 {
     let hsl = rgb_to_hsl(rgb);
     let h = hsl.x;
@@ -80,11 +71,9 @@ fn detect_metallic(rgb: vec3<f32>) -> f32 {
 
     var metallic = 0.0;
 
-    // === Achromatic metals (gray) ===
     if (s < 0.15 && l > 0.30 && l < 0.92) {
         let lum_factor = smooth_step(0.30, 0.85, l);
         let sat_factor = 1.0 - smooth_step(0.0, 0.15, s);
-        // Blue tint bonus (titanium blue / blue steel).
         var blue_factor = 1.0;
         if (h > 0.55 && h < 0.68) {
             blue_factor = 1.15;
@@ -92,20 +81,15 @@ fn detect_metallic(rgb: vec3<f32>) -> f32 {
         metallic = max(metallic, clamp(lum_factor * sat_factor * blue_factor, 0.0, 1.0));
     }
 
-    // === Chromatic metals (sat >= 0.30), non-overlapping hue bands ===
     if (s >= 0.30 && l > 0.20) {
         var chromatic = 0.0;
         if (h >= 0.00 && h < 0.06) {
-            // Copper.
             chromatic = max(chromatic, 1.0 - abs(h - 0.03) * 16.0);
         } else if (h >= 0.06 && h < 0.09) {
-            // Bronze.
             chromatic = max(chromatic, 1.0 - abs(h - 0.075) * 33.0);
         } else if (h >= 0.09 && h < 0.14) {
-            // Gold.
             chromatic = max(chromatic, 1.0 - abs(h - 0.115) * 22.0);
         } else if (h >= 0.14 && h < 0.17) {
-            // Brass.
             chromatic = max(chromatic, 1.0 - abs(h - 0.155) * 33.0);
         }
 
@@ -119,17 +103,14 @@ fn detect_metallic(rgb: vec3<f32>) -> f32 {
     return clamp(metallic, 0.0, 1.0);
 }
 
-// 3×3 luminance variance. Textured non-metals (concrete, gray stone) have high local
-// variance; polished metals have low variance. Used to damp false positives (F2.5).
-fn local_luma_variance_3x3(center: vec2<i32>, dims: vec2<u32>) -> f32 {
+fn local_luma_variance_3x3(center: vec2<i32>) -> f32 {
     var sum = 0.0;
     var sum_sq = 0.0;
     let n = 9.0;
     for (var dy = -1; dy <= 1; dy++) {
         for (var dx = -1; dx <= 1; dx++) {
-            let c = sample_coord(center + vec2<i32>(dx, dy), dims);
-            let rgb = textureLoad(input_texture, c, 0).rgb;
-            let luma = dot(rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+            let rgb = sample_rgb(center + vec2<i32>(dx, dy));
+            let luma = luma709(rgb);
             sum += luma;
             sum_sq += luma * luma;
         }
@@ -138,19 +119,12 @@ fn local_luma_variance_3x3(center: vec2<i32>, dims: vec2<u32>) -> f32 {
     return clamp((sum_sq / n) - mean * mean, 0.0, 0.25);
 }
 
-// Fraction of the 9×9 neighbourhood (5×5 taps, stride 2) that is saturated
-// green — i.e. vegetation. Dry blades and shadow gaps inside grass are
-// desaturated gray per-pixel and slip past detect_metallic's achromatic
-// branch, but their surroundings are unmistakably green. There is no green
-// metal (weathered-copper patina is a roughness story, not a metallic one),
-// so a green context always vetoes metal.
-fn green_neighbourhood_fraction(center: vec2<i32>, dims: vec2<u32>) -> f32 {
+fn green_neighbourhood_fraction(center: vec2<i32>) -> f32 {
     var green = 0.0;
     let n = 25.0;
     for (var dy = -4; dy <= 4; dy += 2) {
         for (var dx = -4; dx <= 4; dx += 2) {
-            let c = sample_coord(center + vec2<i32>(dx, dy), dims);
-            let hsl = rgb_to_hsl(textureLoad(input_texture, c, 0).rgb);
+            let hsl = rgb_to_hsl(sample_rgb(center + vec2<i32>(dx, dy)));
             if (hsl.x > 0.17 && hsl.x < 0.46 && hsl.y > 0.15) {
                 green += 1.0;
             }
@@ -168,20 +142,40 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    let color = textureLoad(input_texture, coords, 0).rgb;
+    var color = textureLoad(input_texture, coords, 0).rgb;
+
+    // Gray-world white balance (Buchsbaum 1980): cancels illumination colour
+    // temperature so the hue bands stay meaningful under tinted light.
+    if (params.metallic_gray_world == 1u) {
+        color = clamp(color * vec3<f32>(params.gray_gain_r, params.gray_gain_g, params.gray_gain_b), vec3<f32>(0.0), vec3<f32>(4.0));
+    }
+
     let raw = detect_metallic(color);
 
-    let variance = local_luma_variance_3x3(coords, dims);
+    let variance = local_luma_variance_3x3(coords);
     let variance_factor = params.metallic_local_variance_factor;
     let damping = 1.0 - variance_factor * clamp(variance * 4.0, 0.0, 1.0);
 
-    // Vegetation veto: gray pixels embedded in a green neighbourhood are dry
-    // blades/shadow gaps inside foliage, never metal. Ramps in from 30% green
-    // context and fully vetoes at 60%.
-    let green_frac = green_neighbourhood_fraction(coords, dims);
+    let green_frac = green_neighbourhood_fraction(coords);
     let vegetation_veto = 1.0 - smooth_step(0.30, 0.60, green_frac);
 
-    let metallic = clamp(raw * params.metallic_scale * damping * vegetation_veto, 0.0, 1.0);
+    var metallic = raw * params.metallic_scale * damping * vegetation_veto;
+
+    // Specular evidence: bright desaturated highlights are metal-only in
+    // PBR (dielectrics cap specular at ~0.04). Prefer the intrinsic residual
+    // when present; fall back to the heuristic luma/saturation shape.
+    if (params.metallic_specular_gain > 0.0) {
+        let sp_dims = textureDimensions(specular_texture);
+        let has_specular = sp_dims.x > 1u;
+        let spec = select(
+            smooth_step(0.75, 0.95, luma709(color)) * (1.0 - rgb_to_hsl(color).y),
+            textureLoad(specular_texture, coords, 0).r,
+            has_specular,
+        );
+        metallic += params.metallic_specular_gain * spec * damping * vegetation_veto;
+    }
+
+    metallic = clamp(metallic, 0.0, 1.0);
 
     textureStore(output_texture, coords, vec4<f32>(metallic, 0.0, 0.0, 1.0));
 }

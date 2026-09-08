@@ -51,10 +51,47 @@ impl NormalFormat {
     }
 }
 
+/// AO ray-marching quality tier (F3): (directions, geometric steps).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum AoQuality {
+    Fast,
+    Medium,
+    High,
+}
+
+impl AoQuality {
+    pub fn dirs_and_steps(self) -> (u32, u32) {
+        match self {
+            AoQuality::Fast => (8, 8),
+            AoQuality::Medium => (16, 12),
+            AoQuality::High => (32, 24),
+        }
+    }
+}
+
+/// Make-seamless tier (F4): minimum-SSD offset roll + band blend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum SeamQuality {
+    Fast,
+    High,
+}
+
+impl SeamQuality {
+    pub fn to_mode(self) -> crate::pipeline::SeamlessMode {
+        match self {
+            SeamQuality::Fast => crate::pipeline::SeamlessMode::Fast,
+            SeamQuality::High => crate::pipeline::SeamlessMode::High,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct InlineOverrides {
     pub height_contrast: Option<f32>,
     pub height_blur: Option<f32>,
+    pub height_sigma: Option<f32>,
+    pub guided_radius: Option<f32>,
+    pub detail_mix: Option<f32>,
     pub normal_strength: Option<f32>,
     pub normal_format: Option<NormalFormat>,
     pub metallic_scale: Option<f32>,
@@ -64,6 +101,7 @@ pub struct InlineOverrides {
     pub smoothness_roughness: Option<f32>,
     pub edge_contrast: Option<f32>,
     pub ao_depth_scale: Option<f32>,
+    pub ao_quality: Option<AoQuality>,
 }
 
 #[derive(Parser, Debug)]
@@ -72,7 +110,7 @@ pub struct InlineOverrides {
     about = "Generate PBR maps (height, normal, metallic, smoothness/roughness, edge, AO, curvature) from diffuse textures"
 )]
 #[command(
-    after_help = "EXAMPLES:\n  materialize texture.png -o ./out/\n  materialize skin.png -p skin -v\n  materialize ./textures/ -o ./pbr/ --jobs 4\n  materialize texture.png -p auto -v\n  materialize info texture.png   (analyse without generating)\n  materialize --list-presets\n\nPRESETS:\n  default skin floor metal fabric wood stone\n  concrete leather marble sand foliage plaster asphalt brick ice snow lava water\n  auto   (auto-detect from texture analysis)"
+    after_help = "EXAMPLES:\n  materialize texture.png -o ./out/\n  materialize skin.png -p skin -v\n  materialize ./textures/ -o ./pbr/\n  materialize texture.png -p auto -v\n  materialize texture.png --ao-quality high\n  materialize info texture.png   (analyse without generating)\n  materialize --list-presets\n\nPRESETS:\n  default skin floor metal fabric wood stone\n  concrete leather marble sand foliage plaster asphalt brick ice snow lava water\n  auto   (auto-detect from texture analysis)"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -139,6 +177,12 @@ pub struct Cli {
 
     #[arg(
         long,
+        help = "Make the texture tileable: min-SSD offset roll + band blend (fast = cross-fade, high = + Poisson)"
+    )]
+    pub make_seamless: Option<SeamQuality>,
+
+    #[arg(
+        long,
         help = "Only generate these maps (comma list)",
         conflicts_with = "skip"
     )]
@@ -146,13 +190,6 @@ pub struct Cli {
 
     #[arg(long, help = "Skip these maps (comma list)", conflicts_with = "only")]
     pub skip: Option<String>,
-
-    #[arg(
-        long,
-        help = "Accepted for compatibility — GPU dispatch stays serial in v2.0",
-        default_value = "1"
-    )]
-    pub jobs: u32,
 
     #[arg(long, help = "Skip images whose height output already exists (resume)")]
     pub skip_existing: bool,
@@ -163,8 +200,17 @@ pub struct Cli {
     // === Inline overrides (applied on top of preset) ===
     #[arg(long, help = "Override height_contrast")]
     pub height_contrast: Option<f32>,
-    #[arg(long, help = "Override all 3 height blur radii (offset)")]
+    #[arg(long, help = "Offset the pyramid base sigma (σ0)")]
     pub height_blur: Option<f32>,
+    #[arg(long, help = "Override the pyramid base sigma (σ0)")]
+    pub height_sigma: Option<f32>,
+    #[arg(long, help = "Override the guided-filter window radius (px)")]
+    pub guided_radius: Option<f32>,
+    #[arg(
+        long,
+        help = "Override the detail-layer weight in the final height (0..1)"
+    )]
+    pub detail_mix: Option<f32>,
     #[arg(long, help = "Override normal_strength")]
     pub normal_strength: Option<f32>,
     #[arg(long, help = "Override metallic_scale")]
@@ -181,6 +227,18 @@ pub struct Cli {
     pub edge_contrast: Option<f32>,
     #[arg(long, help = "Override ao_depth_scale")]
     pub ao_depth_scale: Option<f32>,
+    #[arg(
+        long,
+        help = "AO ray-marching tier: fast (8 dirs) | medium (16) | high (32)",
+        value_enum
+    )]
+    pub ao_quality: Option<AoQuality>,
+
+    #[arg(
+        long,
+        help = "Decompose via the vramd `intrinsic` backend (albedo/shading/specular) and feed the PBR passes (degrades gracefully without vramd)"
+    )]
+    pub intrinsic: bool,
 }
 
 impl Cli {
@@ -188,6 +246,9 @@ impl Cli {
         InlineOverrides {
             height_contrast: self.height_contrast,
             height_blur: self.height_blur,
+            height_sigma: self.height_sigma,
+            guided_radius: self.guided_radius,
+            detail_mix: self.detail_mix,
             normal_strength: self.normal_strength,
             normal_format: self.normal_format,
             metallic_scale: self.metallic_scale,
@@ -197,6 +258,7 @@ impl Cli {
             smoothness_roughness: self.smoothness_roughness,
             edge_contrast: self.edge_contrast,
             ao_depth_scale: self.ao_depth_scale,
+            ao_quality: self.ao_quality,
         }
     }
 }
@@ -218,6 +280,15 @@ pub enum CliSubcommand {
     Info {
         /// Input image path.
         input: String,
+    },
+    /// Intrinsic decomposition (albedo/shading/specular) via the vramd
+    /// `intrinsic` backend — pure delegation, no local GPU pipeline.
+    Decompose {
+        /// Input image path.
+        input: String,
+        /// Output directory for the three PNGs.
+        #[arg(short, long, default_value = ".")]
+        output: String,
     },
 }
 
