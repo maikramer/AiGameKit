@@ -38,7 +38,7 @@ class TestResolveToPaintFaces:
             output_dir=".",
             paint3d=Paint3DProfile(texture_size=1024),
         )
-        assert _resolve_to_paint_faces(p) == 57_671
+        assert _resolve_to_paint_faces(p) == 115_343
 
 
 class TestEnsureToPaint:

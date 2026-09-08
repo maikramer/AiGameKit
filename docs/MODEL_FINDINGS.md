@@ -125,8 +125,8 @@ Paint escala com **faces**, não com texels UNet. Atlas também escala com
 | Constante | Valor |
 |-----------|------:|
 | UV packing | 0.55 |
-| Texels/face alvo | 10 |
-| Faces | **6k…160k** (clamp) |
+| Texels/face alvo | 5 |
+| Faces | **6k…320k** (clamp) |
 | Fórmula | `faces ≈ texture_size² × packing / texels_per_face` |
 | Atlas por tamanho | `char≤0.5→512`, `≤1.2→1024`, `≤3.5→2048`, else 4096 ∩ tier |
 
@@ -294,7 +294,7 @@ Ver `Text3D/AGENTS.md`, `aigamekit_shared.mesh_repair`,
 [ ] hw-auto ligado (default); sem --low-vram / --memory-efficient na CLI
 [ ] Payloads vramd com sdnq_preset / memory_efficient (via hw-auto / with_vramd_peak_opts)
 [ ] Text3D: flashvdm + int4; Omni bbox_axis_max=1.0
-[ ] Paint: face budget 6k–160k + atlas por size_m; sem compile+SDNQ
+[ ] Paint: face budget 6k–320k + atlas por size_m; sem compile+SDNQ
 [ ] Batch GameAssets: vramd up; prioridade batch; waves shape/paint + opcionais; não kill mid-queue
 [ ] Debug: vramd debug / stats + `~/.cache/aigamekit/logs/vramd-*.log` — não nvidia-smi pkill
 [ ] Kernel: ver findings/KERNEL_OPTS_FINDINGS.md (batch/vramd defaults)

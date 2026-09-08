@@ -43,7 +43,7 @@ class TestResolvePaintTextureBySize:
         assert _resolve_paint_texture_size(profile, house) == 2048
         bf = _resolve_to_paint_faces(profile, bucket)
         hf = _resolve_to_paint_faces(profile, house)
-        assert 6_000 <= bf <= 20_000
+        assert 20_000 <= bf <= 40_000
         assert hf == PAINT_FACES_MAX
 
     def test_explicit_texture_override_wins(self) -> None:

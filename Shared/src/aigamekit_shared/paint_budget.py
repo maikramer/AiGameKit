@@ -21,16 +21,18 @@ from __future__ import annotations
 
 # Densidade de packing UV realista (xatlas em assets de jogo).
 PAINT_UV_PACKING = 0.55
-# Texels por triângulo: 10 = orçamento dobrado face ao sweet-spot antigo (20);
-# paint em 80k mostrou-se soft — mais faces = melhor projeção multi-vista.
-PAINT_TEXELS_PER_FACE = 10.0
-# Piso: props pequenos / LOD-like ainda unwrapam bem (atlas 512 → ~14k raw).
+# Texels por triângulo: 5 = 2ª duplicação do orçamento (10, que já era 2x o
+# sweet-spot antigo de 20); paint soft persistia no cap — mais faces = melhor
+# projeção multi-vista.
+PAINT_TEXELS_PER_FACE = 5.0
+# Piso: props pequenos / LOD-like ainda unwrapam bem. Não vincula no ladder
+# atual (256 → ~7k raw, 512 → ~29k raw); mantido como salvaguarda.
 PAINT_FACES_MIN = 6_000
 # Tecto: xatlas + raster multi-vista (~36 candidatos + N views). Acima disto
 # o tempo explode com ganho mínimo no UNet (independente de faces).
-# Hunyuan upstream remesh default = 40k; 160k (2x80k) para qualidade de paint
-# em buildings — unwrap/raster ainda tolerável (~2x tempo do cap antigo).
-PAINT_FACES_MAX = 160_000
+# Hunyuan upstream remesh default = 40k; 320k (2x160k) para qualidade de paint
+# em buildings — unwrap/raster ainda tolerável (~2x tempo do cap anterior).
+PAINT_FACES_MAX = 320_000
 # V/F típico em malha triangular welded (antes do UV split).
 PAINT_VERTS_PER_FACE = 0.55
 
