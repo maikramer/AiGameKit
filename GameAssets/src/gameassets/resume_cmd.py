@@ -64,6 +64,7 @@ from .profile import Paint3DProfile
 from .prompt_builder import build_prompt
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
 from .vramd_batch import (
+    make_paint_degrader,
     run_paint_wave_or_fallback,
     run_shape_wave_or_fallback,
     run_text2d_wave_or_fallback,
@@ -1041,6 +1042,15 @@ def resume_cmd(
                             if p3.smooth_passes is not None:
                                 _paint_kw["smooth_passes"] = p3.smooth_passes
 
+                        if need_paint and text3d_bin:
+                            _paint_kw["reprep_item"] = make_paint_degrader(
+                                text3d_bin=text3d_bin,
+                                profile=profile,
+                                child_env=child_env,
+                                manifest_dir=manifest_dir,
+                                mesh_final_by_id={it["row"].id: it["mesh_final"] for it in need_paint},
+                                row_by_id={it["row"].id: it["row"] for it in need_paint},
+                            )
                         ums_paint_results = run_paint_wave_or_fallback(
                             paint_manifest_items,
                             on_progress=lambda r: dash.feed_event(r.asset_id, "paint3d", r.status, phase="texture"),
@@ -1792,6 +1802,15 @@ def resume_cmd(
                             if p3.smooth_passes is not None:
                                 _paint_kw["smooth_passes"] = p3.smooth_passes
 
+                        if need_paint and text3d_bin:
+                            _paint_kw["reprep_item"] = make_paint_degrader(
+                                text3d_bin=text3d_bin,
+                                profile=profile,
+                                child_env=child_env,
+                                manifest_dir=manifest_dir,
+                                mesh_final_by_id={it["row"].id: it["mesh_final"] for it in need_paint},
+                                row_by_id={it["row"].id: it["row"] for it in need_paint},
+                            )
                         ums_paint_results = run_paint_wave_or_fallback(paint_manifest_items, **_paint_kw)
 
                         r = None

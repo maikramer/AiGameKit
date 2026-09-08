@@ -40,6 +40,48 @@ class TestResolveToPaintFaces:
         )
         assert _resolve_to_paint_faces(p) == 115_343
 
+    def test_target_faces_override_used_in_simplify(self, tmp_path: Path) -> None:
+        """Recovery do paint: degradação 0.6x entra no --target-faces do simplify."""
+        mesh_final = tmp_path / "meshes" / "chapel.glb"
+        mesh_final.parent.mkdir(parents=True)
+        clean = tmp_path / "meshes" / "_intermediate" / "chapel_clean.glb"
+        clean.parent.mkdir(parents=True)
+        clean.write_bytes(b"glTF")
+        to_paint = _to_paint_path(mesh_final)
+        profile = GameProfile(
+            title="t",
+            genre="g",
+            tone="t",
+            style_preset="s",
+            output_dir=str(tmp_path / "meshes"),
+            paint3d=Paint3DProfile(texture_size=2048),
+        )
+
+        def _fake_run(argv, **_kw):
+            Path(argv[argv.index("-o") + 1]).write_bytes(b"glTF")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("gameassets.pipeline.ensure_clean_for_paint", return_value=clean),
+            patch(
+                "gameassets.pipeline._count_faces_glb",
+                side_effect=lambda p: 2_000_000 if "clean" in p.name else 100_000,
+            ),
+            patch("gameassets.pipeline.run_cmd", side_effect=_fake_run) as run_cmd,
+        ):
+            out = ensure_to_paint_for_paint(
+                mesh_final,
+                text3d_bin="text3d",
+                profile=profile,
+                child_env={},
+                manifest_dir=tmp_path,
+                force=True,
+                target_faces=192_000,
+            )
+        assert out == to_paint
+        simplify_argv = next(c.args[0] for c in run_cmd.call_args_list if c.args[0][:2] == ["text3d", "simplify"])
+        assert simplify_argv[simplify_argv.index("--target-faces") + 1] == "192000"
+
 
 class TestEnsureToPaint:
     def test_skip_when_clean_small(self, tmp_path: Path) -> None:

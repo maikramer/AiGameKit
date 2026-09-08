@@ -1382,6 +1382,7 @@ def ensure_to_paint_for_paint(
     manifest_dir: Path,
     force: bool = False,
     row: ManifestRow | None = None,
+    target_faces: int | None = None,
 ) -> Path:
     """Garante ``_clean`` + ``_to_paint`` (remesh orçado) e devolve input do paint.
 
@@ -1390,6 +1391,10 @@ def ensure_to_paint_for_paint(
     só vê a malha orçada ao atlas (evita unwrap/raster em 1-2M faces).
 
     Se ``_clean`` já está ≤ ~110% do alvo, devolve ``_clean`` (sem ficheiro extra).
+
+    Args:
+        target_faces: Override do alvo de faces (degradação de recovery do
+            paint — ex. 0.6x do budget quando o item estoura a VRAM do worker).
     """
     clean_p = ensure_clean_for_paint(
         mesh_final,
@@ -1400,7 +1405,11 @@ def ensure_to_paint_for_paint(
         force=force,
         row=row,
     )
-    target = _resolve_to_paint_faces(profile, row)
+    target = (
+        int(target_faces)
+        if target_faces is not None and int(target_faces) >= 4
+        else _resolve_to_paint_faces(profile, row)
+    )
     tex_size = _resolve_paint_texture_size(profile, row)
     current = _count_faces_glb(clean_p)
     if current < 0:

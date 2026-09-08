@@ -276,6 +276,152 @@ def run_shape_wave_or_fallback(
     return results_as_batch_jsonl(wave)
 
 
+def _respawn_paint_worker() -> None:
+    """Renova o worker paint3d — recovery documentado para OOM-spin do allocator."""
+    try:
+        from aigamekit_shared.vramd_client import respawn_vramd_backend
+
+        respawn_vramd_backend("paint3d", lazy=True)
+    except Exception:
+        pass
+
+
+def _merge_wave_results(
+    results: list[UmsJobResult], wave: list[UmsJobResult], on_progress: Callable[[UmsJobResult], None] | None
+) -> None:
+    """Substitui in-place os resultados de asset_ids re-corridos (a ronda nova ganha)."""
+    replaced = {r.asset_id for r in wave}
+    results[:] = [r for r in results if r.asset_id not in replaced] + list(wave)
+    if on_progress:
+        for r in wave:
+            on_progress(r)
+
+
+def _retry_failed_paint_items(
+    items: list[dict[str, Any]],
+    results: list[UmsJobResult],
+    *,
+    spec_kwargs: dict[str, Any],
+    vramd_stream: bool,
+    on_progress: Callable[[UmsJobResult], None] | None,
+    reprep_item: Callable[[dict[str, Any]], dict[str, Any] | None] | None,
+) -> list[UmsJobResult]:
+    """Auto-recuperação da wave de paint (2 rondas).
+
+    Uma wave 0/N por um item preso (worker paint3d em OOM-spin — allocator
+    degradado numa GPU pequena) marcava TODOS os items como falhados e o
+    fallback subprocess era recusado com o vramd ocupado. Recuperação:
+
+    * Ronda 1 — worker novo (``vramd respawn paint3d``): recorre só os items
+      falhados; a maioria dos "falhanços" eram colaterais do abort.
+    * Ronda 2 — degradação do ``_to_paint`` via ``reprep_item`` (caller
+      regenera a ~0.6x do budget) para o item que mesmo com worker novo
+      estoura a VRAM.
+
+    Items que falham as duas rondas seguem para o fallback do caller.
+    """
+    from .vramd_coord import run_gpu_wave as _run_wave
+
+    def _failed_ids(rs: list[UmsJobResult]) -> list[str]:
+        seen: list[str] = []
+        for r in rs:
+            if r.status not in ("ok", "skipped") and r.asset_id not in seen:
+                seen.append(r.asset_id)
+        return seen
+
+    failed = _failed_ids(results)
+    if not failed:
+        return results
+
+    _respawn_paint_worker()
+    retry_items = [it for it in items if str(it.get("id")) in set(failed)]
+    specs = paint_specs_from_items(retry_items, **spec_kwargs)
+    if specs:
+        wave = _run_wave(
+            "paint3d",
+            specs,
+            priority="batch",
+            stream=vramd_stream,
+            preload=False,
+            on_progress=on_progress,
+            no_vramd=False,
+        )
+        if isinstance(wave, list) and wave:
+            _merge_wave_results(results, wave, on_progress)
+
+    if reprep_item is None:
+        return results
+
+    still = _failed_ids(results)
+    degraded_items: list[dict[str, Any]] = []
+    for it in retry_items:
+        if str(it.get("id")) in set(still):
+            try:
+                new_it = reprep_item(it)
+            except Exception:
+                new_it = None
+            if new_it:
+                degraded_items.append(new_it)
+    if degraded_items:
+        _respawn_paint_worker()
+        specs = paint_specs_from_items(degraded_items, **spec_kwargs)
+        if specs:
+            wave = _run_wave(
+                "paint3d",
+                specs,
+                priority="batch",
+                stream=vramd_stream,
+                preload=False,
+                on_progress=on_progress,
+                no_vramd=False,
+            )
+            if isinstance(wave, list) and wave:
+                _merge_wave_results(results, wave, on_progress)
+    return results
+
+
+def make_paint_degrader(
+    *,
+    text3d_bin: str,
+    profile: Any,
+    child_env: dict[str, str],
+    manifest_dir: Path,
+    mesh_final_by_id: dict[str, Path],
+    row_by_id: dict[str, Any] | None = None,
+    factor: float = 0.6,
+) -> Callable[[dict[str, Any]], dict[str, Any] | None]:
+    """Callback ``reprep_item`` que regenera o ``_to_paint`` degradado (~0.6x).
+
+    Devolve o item com a mesh nova (ou ``None`` para manter a falha). Assets
+    cujo ``_clean`` cabe no alvo degradado continuam a pintar o próprio
+    ``_clean`` — só meshes genuinamente grandes são simplificadas.
+    """
+
+    def reprep(item: dict[str, Any]) -> dict[str, Any] | None:
+        from .pipeline import _resolve_to_paint_faces, ensure_to_paint_for_paint
+
+        aid = str(item.get("id"))
+        mesh_final = mesh_final_by_id.get(aid)
+        if mesh_final is None:
+            return None
+        row = (row_by_id or {}).get(aid)
+        base = _resolve_to_paint_faces(profile, row)
+        degraded = max(4_000, int(base * factor))
+        out = ensure_to_paint_for_paint(
+            mesh_final,
+            text3d_bin=text3d_bin,
+            profile=profile,
+            child_env=child_env,
+            manifest_dir=manifest_dir,
+            force=True,
+            row=row,
+            target_faces=degraded,
+        )
+        return {**item, "mesh": str(out)}
+
+    return reprep
+
+
 def run_paint_wave_or_fallback(
     items: list[dict[str, Any]],
     *,
@@ -294,6 +440,7 @@ def run_paint_wave_or_fallback(
     memory_efficient: bool | None = None,
     sdnq_preset: str | None = None,
     on_progress: Callable[[UmsJobResult], None] | None = None,
+    reprep_item: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
 ) -> list[dict[str, Any]] | None:
     """Corre wave paint3d via vramd. ``None`` → caller usa subprocess texture-batch."""
     if no_vramd:
@@ -331,7 +478,31 @@ def run_paint_wave_or_fallback(
     if wave is FALLBACK_SUBPROCESS:
         return None
     assert isinstance(wave, list)
-    return results_as_batch_jsonl(wave)
+    results: list[UmsJobResult] = list(wave)
+    if any(r.status not in ("ok", "skipped") for r in results):
+        spec_kwargs = dict(
+            manifest_dir=manifest_dir,
+            gpu_ids=gpu_ids,
+            max_views=max_views,
+            view_resolution=view_resolution,
+            render_size=render_size,
+            texture_size=texture_size,
+            bake_exp=bake_exp,
+            preserve_origin=preserve_origin,
+            smooth=smooth,
+            smooth_passes=smooth_passes,
+            memory_efficient=memory_efficient,
+            sdnq_preset=sdnq_preset,
+        )
+        results = _retry_failed_paint_items(
+            items,
+            results,
+            spec_kwargs=spec_kwargs,
+            vramd_stream=vramd_stream,
+            on_progress=on_progress,
+            reprep_item=reprep_item,
+        )
+    return results_as_batch_jsonl(results)
 
 
 # ---------------------------------------------------------------------------
