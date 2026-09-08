@@ -345,3 +345,95 @@ def test_collision_alignment_skips_skinned(tmp_path: Path) -> None:
     lod0 = write_glb_with_bounds(tmp_path / "s_lod0.glb", [-1, 0, -1], [1, 2, 1], skinned=True)
     coll = write_glb_with_bounds(tmp_path / "s_collision.glb", [-9, 0, -9], [9, 9, 9])
     assert collision_alignment_deviation(coll, lod0) is None
+
+
+class TestPatchPbrStage:
+    """Stage pós-lod patch-pbr: idempotente, não-bloqueante, gate do perfil."""
+
+    def _run(self, fake_stage):
+        from gameassets.pipeline import (
+            MasterPipelineResult,
+            _run_patch_pbr_stage,
+        )
+
+        res = MasterPipelineResult(asset_id="x", ok=True, stages=[])
+        calls: list[list[str]] = []
+
+        def run_stage(name, argv, output):
+            calls.append(argv)
+            return fake_stage(name, output)
+
+        _run_patch_pbr_stage(
+            run_stage=run_stage,
+            res=res,
+            text3d_bin="/bin/text3d",
+            lod_paths=self.paths,
+            patch_pbr=self.enabled,
+        )
+        return res, calls
+
+    def setup_method(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        self.tmp = Path(tempfile.mkdtemp())
+        self.enabled = True
+        self.paths = []
+
+    def teardown_method(self) -> None:
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _mk(self, name: str, size: int = 100) -> None:
+        p = self.tmp / name
+        p.write_bytes(b"x" * size)
+        self.paths.append(p)
+
+    def test_patches_each_existing_lod(self) -> None:
+        from gameassets.pipeline import StageResult
+
+        self._mk("a_lod0.glb")
+        self._mk("a_lod1.glb")
+        self._mk("a_lod2.glb")
+        res, calls = self._run(lambda name, out: StageResult(name, True, 0.1, "", out))
+        assert len(calls) == 3
+        assert all(c[0] == "/bin/text3d" and c[1] == "patch-pbr" for c in calls)
+        assert len(res.stages) == 3
+        assert all(s.ok for s in res.stages)
+
+    def test_skips_missing_files(self) -> None:
+        from gameassets.pipeline import StageResult
+
+        self._mk("a_lod0.glb")
+        self.paths.append(self.tmp / "a_lod1.glb")  # não existe
+        _res, calls = self._run(lambda name, out: StageResult(name, True, 0.1, "", out))
+        assert len(calls) == 1
+
+    def test_failure_is_non_blocking(self) -> None:
+        from gameassets.pipeline import StageResult
+
+        self._mk("a_lod0.glb")
+        res, calls = self._run(lambda name, out: StageResult(name, False, 0.1, "materialize ausente", out))
+        assert len(calls) == 1
+        assert len(res.stages) == 1
+        s = res.stages[0]
+        assert s.ok, "falha do patch-pbr não pode quebrar o batch"
+        assert "materialize ausente" in s.error
+        assert res.ok
+
+    def test_profile_flag_off_skips_without_calls(self) -> None:
+        from gameassets.pipeline import StageResult
+
+        self.enabled = False
+        self._mk("a_lod0.glb")
+        res, calls = self._run(lambda name, out: StageResult(name, True, 0.1, "", out))
+        assert len(calls) == 0
+        assert len(res.stages) == 1
+        assert "patch_pbr=false" in res.stages[0].error
+
+    def test_empty_paths_marks_skip(self) -> None:
+        res, calls = self._run(lambda name, out: None)  # type: ignore[arg-type]
+        assert len(calls) == 0
+        assert len(res.stages) == 1
+        assert "nenhum LOD" in res.stages[0].error

@@ -187,6 +187,10 @@ class LODProfile:
     # usam 1 (default); personagens que animam à distância (criaturas em
     # ``*_lod2.glb``) precisam de 2.
     rig_max_level: int = 1
+    # Pós-lod: garante normal + occlusion em todos os níveis (patch idempotente
+    # ``text3d patch-pbr`` — o paint3d embute os mapas no painted; este passo
+    # cobre o que o rebake de LOD deixa cair e GLBs legados). 0 desliga.
+    patch_pbr: bool = True
 
 
 @dataclass
@@ -780,6 +784,7 @@ class GameProfile:
                 min_faces_lod2=mf2_i,
                 meshfix=bool(raw_lod.get("meshfix", False)),
                 rig_max_level=rig_max,
+                patch_pbr=bool(raw_lod.get("patch_pbr", True)),
             )
         coll: CollisionProfile | None = None
         raw_coll = data.get("collision")

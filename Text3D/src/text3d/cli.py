@@ -8,6 +8,7 @@ Text-to-3D: Text2D (texto → imagem) + Hunyuan3D-Omni (imagem → mesh, control
 import atexit
 import contextlib
 import json
+import logging
 import math
 import os
 import signal
@@ -1409,6 +1410,36 @@ def doctor():
     except Exception as exc:
         extra.add_row("ktx (KTX-Software)", f"[yellow]erro: {exc}[/yellow]")
 
+    # ``materialize`` — normal+AO do enriquecimento PBR do paint (skip gracioso
+    # quando ausente; versão tem de ser ≥2.0 para ``--only``). Autónomo: o venv
+    # do text3d não tem o pacote paint3d.
+    try:
+        import os as _os
+        import shutil as _shutil
+        from pathlib import Path as _Path
+
+        mat_bin = _os.environ.get("MATERIALIZE_BIN", "").strip()
+        if not mat_bin or not _Path(mat_bin).is_file():
+            mat_bin = None
+            repo = _Path(__file__).resolve().parents[3]
+            for _name in ("materialize", "materialize-cli"):
+                _cand = repo / "Materialize" / "target" / "release" / _name
+                if _cand.is_file() and os.access(_cand, _os.X_OK):
+                    mat_bin = str(_cand)
+                    break
+            if mat_bin is None:
+                mat_bin = _shutil.which("materialize") or _shutil.which("materialize-cli")
+        if mat_bin:
+            extra.add_row("materialize", f"OK ({mat_bin}) — normal/AO do enrich PBR do paint")
+        else:
+            extra.add_row(
+                "materialize",
+                "[yellow]ausente — paint sai sem normal/AO; "
+                "cargo build --release em Materialize/ ou ./install.sh materialize[/yellow]",
+            )
+    except Exception as exc:
+        extra.add_row("materialize", f"[yellow]erro: {exc}[/yellow]")
+
     console.print(extra)
 
     console.print(
@@ -2321,6 +2352,54 @@ def remesh_textured_cmd(
         sz = "?"
     console.print(Rule("[bold green]remesh-textured", style="green"))
     console.print(f"[bold green]✓[/bold green] [cyan]{out_p}[/cyan] [dim]({sz})[/dim]")
+
+
+@cli.command("patch-pbr")
+@click.argument("input_mesh", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="GLB de saída (defeito: patch in-place do input)",
+)
+@click.option(
+    "--preset",
+    type=str,
+    default="default",
+    show_default=True,
+    help="Preset do Materialize para derivar normal/AO do albedo",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Refaz mesmo quando o GLB já tem normalTexture + occlusionTexture",
+)
+def patch_pbr_cmd(input_mesh: Path, output: Path | None, preset: str, force: bool) -> None:
+    """Garante normal + occlusion num GLB PBR sem re-decimar geometria.
+
+    Deriva os mapas do albedo do próprio GLB via Materialize (mesmo UV atlas,
+    resolução do nível) e injeta-os no material. Idempotente: GLBs já
+    completos são skip. É o passo pós-lod do GameAssets (``lod.patch_pbr``) —
+    o paint3d já embute os mapas no painted; este passo cobre o que o rebake
+    de LOD deixa cair (occlusion) e GLBs legados.
+    """
+    from text3d.utils.glb_patch_pbr import patch_glb_pbr
+
+    logger = logging.getLogger("text3d.patch_pbr")
+    try:
+        result = patch_glb_pbr(input_mesh, output_path=output, preset=preset, force=force, logger=logger)
+    except (RuntimeError, ValueError) as e:
+        raise click.ClickException(str(e)) from e
+    if result.skipped:
+        console.print(f"[dim]skip[/dim] [cyan]{input_mesh}[/cyan] — {result.reason}")
+        return
+    out = result.output or input_mesh
+    try:
+        sz = format_bytes(out.stat().st_size)
+    except OSError:
+        sz = "?"
+    console.print(f"[bold green]✓[/bold green] [cyan]{out}[/cyan] [dim]({sz})[/dim] — {result.reason}")
 
 
 @cli.command("split-at-height")

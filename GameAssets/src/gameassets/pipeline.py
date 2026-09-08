@@ -2036,6 +2036,40 @@ def _run_static_lod_stages(
         res.stages.append(s)
 
 
+def _run_patch_pbr_stage(
+    *,
+    run_stage: Callable[[str, list[str], Path | None], StageResult],
+    res: MasterPipelineResult,
+    text3d_bin: str,
+    lod_paths: list[Path],
+    patch_pbr: bool,
+) -> None:
+    """Pós-lod: ``text3d patch-pbr`` — normal+AO idempotente por ficheiro.
+
+    O paint3d já embute os mapas no painted (pbr_enrich); este passo cobre o
+    que o rebake de LOD deixa cair (occlusion) e GLBs legados. Não-bloqueante
+    por design: falha de materialize/GPU regista o motivo e o asset segue
+    albedo+MR (filosofia do pbr_enrich do paint3d).
+    """
+    first = next((p for p in lod_paths if p.is_file()), None)
+    if not patch_pbr:
+        res.stages.append(StageResult("patch-pbr", True, 0.0, "skipped (lod.patch_pbr=false)", first))
+        return
+    appended = 0
+    for p in lod_paths:
+        if not p.is_file() or p.stat().st_size < 64:
+            continue
+        s = run_stage("patch-pbr", [text3d_bin, "patch-pbr", str(p)], p)
+        if not s.ok:
+            detail = (s.error or "falha").strip()
+            res.stages.append(StageResult("patch-pbr", True, s.elapsed_s, f"skip gracioso: {detail[:200]}", p))
+        else:
+            res.stages.append(s)
+        appended += 1
+    if appended == 0:
+        res.stages.append(StageResult("patch-pbr", True, 0.0, "skip (nenhum LOD para patchar)", first))
+
+
 def _run_split_lod_stages(
     *,
     run_stage: Callable[[str, list[str], Path | None], StageResult],
@@ -2611,6 +2645,23 @@ def run_master_pipeline(
             with_rig=with_rig,
             texture_size_lod0=lod0_tex,
         )
+
+    # Stage 5.5 - patch-pbr pós-lod: garante normal+AO em todos os níveis
+    # (idempotente; cobre o rebake de LOD e GLBs legados).
+    _lod_profile = profile.lod
+    _patch_pbr = _lod_profile.patch_pbr if _lod_profile is not None else True
+    _patch_paths: list[Path] = []
+    for _lvl in (0, 1, 2):
+        _patch_paths.append(mesh_final.parent / f"{_bake_base}_lod{_lvl}.glb")
+        _patch_paths.append(mesh_final.parent / f"{_bake_base}_stump_lod{_lvl}.glb")
+        _patch_paths.append(mesh_final.parent / f"{_bake_base}_top_lod{_lvl}.glb")
+    _run_patch_pbr_stage(
+        run_stage=_run,
+        res=res,
+        text3d_bin=text3d_bin,
+        lod_paths=_patch_paths,
+        patch_pbr=_patch_pbr,
+    )
 
     # Stage 6 - collision: ``_clean`` nos estáticos (fechado, o envelope precisa)
     # e ``lod0`` nos riggados (o painted está em T-pose) — ver collision_source.

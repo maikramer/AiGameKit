@@ -45,6 +45,9 @@ animator3d:
 # níveis (default 1 deixaria o lod2 estático = inimigos congelados).
 lod:
   rig_max_level: 2
+  # Pós-lod automático: text3d patch-pbr garante normal+AO em todos os níveis
+  # (idempotente; derivados do albedo via Materialize). 0 desliga.
+  patch_pbr: true
 paint3d:
   preserve_origin: true
   texture_size: 2048
