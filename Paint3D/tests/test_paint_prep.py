@@ -262,21 +262,35 @@ class TestSaveGlbVerifyStage:
 
     O input ainda não tem UVs (o unwrap é do pipeline), por isso verificá-lo
     como ``painted`` produzia um ERROR ``NO_UV`` que não é erro nenhum.
+    A escrita é atómica (tmp + os.replace) — o mock cria o tmp.
     """
 
-    def test_default_stage_is_painted(self) -> None:
+    def _save(self, path: str, *, verify_stage: str) -> tuple:
+        from pathlib import Path as _P
+
         from paint3d.utils import mesh_io
 
-        with patch.object(mesh_io, "_bpy_save_glb") as save, patch.object(mesh_io, "smooth_shade_scene", create=True):
-            mesh_io.save_glb([], "/tmp/out.glb")
-        assert save.call_args.kwargs["verify_stage"] == "painted"
+        def fake_save(objects, output_path, **kw):
+            _P(str(output_path)).write_bytes(b"glTF")
+            return str(output_path)
+
+        out = None
+        with (
+            patch.object(mesh_io, "_bpy_save_glb", side_effect=fake_save) as save,
+            patch.object(mesh_io, "smooth_shade_scene", create=True),
+        ):
+            out = mesh_io.save_glb([], path, verify_stage=verify_stage)
+        return save.call_args.kwargs["verify_stage"], str(out)
+
+    def test_default_stage_is_painted(self) -> None:
+        stage, out = self._save("/tmp/out.glb", verify_stage="painted")
+        assert stage == "painted"
+        assert out == "/tmp/out.glb"  # tmp foi substituído no caminho final
 
     def test_input_mesh_stage_is_forwarded(self) -> None:
-        from paint3d.utils import mesh_io
-
-        with patch.object(mesh_io, "_bpy_save_glb") as save, patch.object(mesh_io, "smooth_shade_scene", create=True):
-            mesh_io.save_glb([], "/tmp/in.glb", verify_stage="to_paint")
-        assert save.call_args.kwargs["verify_stage"] == "to_paint"
+        stage, out = self._save("/tmp/in.glb", verify_stage="to_paint")
+        assert stage == "to_paint"
+        assert out == "/tmp/in.glb"
 
     def test_painter_writes_input_as_to_paint(self) -> None:
         """Regressão: os dois call-sites do input têm de passar to_paint."""
