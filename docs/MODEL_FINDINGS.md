@@ -126,7 +126,7 @@ Paint escala com **faces**, não com texels UNet. Atlas também escala com
 |-----------|------:|
 | UV packing | 0.55 |
 | Texels/face alvo | 5 |
-| Faces | **6k…320k** (clamp) |
+| Faces | **6k…320k** (clamp ∩ VRAM: 4 GiB→160k, 8 GiB→320k, linear) |
 | Fórmula | `faces ≈ texture_size² × packing / texels_per_face` |
 | Atlas por tamanho | `char≤0.5→512`, `≤1.2→1024`, `≤3.5→2048`, else 4096 ∩ tier |
 

@@ -345,6 +345,7 @@ def _retry_failed_paint_items(
             preload=False,
             on_progress=on_progress,
             no_vramd=False,
+            timeout_sec=3600.0,
         )
         if isinstance(wave, list) and wave:
             _merge_wave_results(results, wave, on_progress)
@@ -374,6 +375,7 @@ def _retry_failed_paint_items(
                 preload=False,
                 on_progress=on_progress,
                 no_vramd=False,
+                timeout_sec=3600.0,
             )
             if isinstance(wave, list) and wave:
                 _merge_wave_results(results, wave, on_progress)
@@ -466,6 +468,8 @@ def run_paint_wave_or_fallback(
         return None
 
     # Idem shape: evitar preload sync (timeout/Broken pipe). 1.º job carrega.
+    # Timeout 2x o default: waits atras de reload/evict do worker (OOM-spin
+    # recovery) + paints 320k (~5 min cada) nao devem matar jobs legitimos.
     wave = run_gpu_wave(
         "paint3d",
         specs,
@@ -474,6 +478,7 @@ def run_paint_wave_or_fallback(
         preload=False,
         on_progress=on_progress,
         no_vramd=False,
+        timeout_sec=3600.0,
     )
     if wave is FALLBACK_SUBPROCESS:
         return None

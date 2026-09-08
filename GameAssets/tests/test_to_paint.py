@@ -5,18 +5,28 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import aigamekit_shared.paint_budget as _pb
 from gameassets.paths import _to_paint_path
 from gameassets.pipeline import _resolve_paint_texture_size, _resolve_to_paint_faces, ensure_to_paint_for_paint
 from gameassets.profile import GameProfile, Paint3DProfile
 
 
 class TestResolveToPaintFaces:
-    def test_default_medium_2048(self) -> None:
+    def test_default_medium_2048(self, monkeypatch) -> None:
         from aigamekit_shared.paint_budget import PAINT_FACES_MAX
 
+        # GPU grande explícita: numa 6 GiB o tecto por VRAM reduz o alvo.
+        monkeypatch.setattr(_pb, "_VRAM_TOTAL_MIB", 16384)
         p = GameProfile(title="t", genre="g", tone="t", style_preset="s", output_dir=".")
         assert _resolve_paint_texture_size(p) == 2048
         assert _resolve_to_paint_faces(p) == PAINT_FACES_MAX
+
+    def test_vram_cap_reduces_target(self, monkeypatch) -> None:
+        # 4050 6 GB (6053 MiB): tecto ≈236k em vez do cap de produto 320k.
+        monkeypatch.setattr(_pb, "_VRAM_TOTAL_MIB", 6053)
+        p = GameProfile(title="t", genre="g", tone="t", style_preset="s", output_dir=".")
+        faces = _resolve_to_paint_faces(p)
+        assert 230_000 <= faces <= 240_000
 
     def test_override_to_paint_faces(self) -> None:
         p = GameProfile(

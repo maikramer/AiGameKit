@@ -14,9 +14,10 @@ from aigamekit_shared.paint_budget import (
 
 class TestPaintTargetFaces:
     def test_medium_2048_caps_at_max(self) -> None:
-        # raw ≈ 461k → clamp MAX (320k, 2ª duplicação do orçamento)
+        # raw ≈ 461k → clamp MAX (320k, 2ª duplicação do orçamento); VRAM
+        # explícita grande para não depender do auto-detetor da máquina.
         assert PAINT_FACES_MAX == 320_000
-        assert paint_target_faces(2048) == PAINT_FACES_MAX
+        assert paint_target_faces(2048, vram_total_mib=16384) == PAINT_FACES_MAX
 
     def test_1024_in_band(self) -> None:
         f = paint_target_faces(1024)
@@ -48,8 +49,8 @@ class TestPaintTextureForChar:
         assert bucket_tex == 512
         assert house_tex == 2048
         assert house_hi == 4096
-        bucket_faces = paint_target_faces(bucket_tex)
-        house_faces = paint_target_faces(house_tex)
+        bucket_faces = paint_target_faces(bucket_tex, vram_total_mib=16384)
+        house_faces = paint_target_faces(house_tex, vram_total_mib=16384)
         assert 20_000 <= bucket_faces <= 40_000
         assert bucket_faces == 28_835  # 512^2 * 0.55 / 5
         assert house_faces == PAINT_FACES_MAX
@@ -73,3 +74,46 @@ class TestPaintTextureForChar:
         assert paint_texture_for_char(0.69, quality_cap=2048, ref_m=0.0) == paint_texture_for_char(
             0.69, quality_cap=2048
         )
+
+
+class TestPaintFacesCapForVram:
+    """Tecto de faces por VRAM disponível (âncoras medidas na 4050 6 GB)."""
+
+    def test_anchors(self) -> None:
+        from aigamekit_shared.paint_budget import paint_faces_cap_for_vram
+
+        assert paint_faces_cap_for_vram(4096) == 160_000
+        assert paint_faces_cap_for_vram(8192) == 320_000
+        assert paint_faces_cap_for_vram(16384) == 320_000  # nunca excede o produto
+        assert paint_faces_cap_for_vram(2048) == 160_000  # abaixo da âncora baixa
+
+    def test_linear_interpolation(self) -> None:
+        from aigamekit_shared.paint_budget import paint_faces_cap_for_vram
+
+        # 6 GiB: 160k + 0.5 x 160k = 240k — abaixo do cap de produto e dos
+        # 298k+ que OOMavam intermitentemente na 4050.
+        assert paint_faces_cap_for_vram(6144) == 240_000
+        # 4050 real (6053 MiB): ≈236k
+        assert 230_000 <= paint_faces_cap_for_vram(6053) <= 240_000
+
+    def test_sem_vram_conhecida_devolve_cap_de_produto(self, monkeypatch) -> None:
+        import aigamekit_shared.paint_budget as pb
+
+        # Sonda falhada (CI sem GPU): cache = None → cap de produto.
+        monkeypatch.setattr(pb, "_VRAM_TOTAL_MIB", None)
+        assert pb.paint_faces_cap_for_vram(None) == PAINT_FACES_MAX
+        assert pb.paint_faces_cap_for_vram(0) == PAINT_FACES_MAX
+
+    def test_cap_so_reduz_nunca_aumenta(self) -> None:
+        from aigamekit_shared.paint_budget import paint_target_faces
+
+        # atlas 512 (raw 28.8k) não é afectado pelo tecto de VRAM.
+        assert paint_target_faces(512, vram_total_mib=4096) == 28_835
+        # atlas 2048 numa GPU de 6 GiB fica no tecto de VRAM, não no de produto.
+        assert paint_target_faces(2048, vram_total_mib=6144) == 240_000
+
+    def test_monotonico_na_vram(self) -> None:
+        from aigamekit_shared.paint_budget import paint_faces_cap_for_vram
+
+        caps = [paint_faces_cap_for_vram(v) for v in (3072, 4096, 5120, 6144, 7168, 8192, 12288)]
+        assert caps == sorted(caps)

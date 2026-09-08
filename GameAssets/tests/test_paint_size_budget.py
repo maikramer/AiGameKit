@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import aigamekit_shared.paint_budget as _pb
 from aigamekit_shared.paint_budget import PAINT_FACES_MAX
 from gameassets.manifest import ManifestRow
 from gameassets.omni_ctrl import OmniControls
@@ -35,7 +36,9 @@ def _profile(*, generation: str = "medium", paint3d: Paint3DProfile | None = Non
 
 
 class TestResolvePaintTextureBySize:
-    def test_bucket_vs_house_medium(self) -> None:
+    def test_bucket_vs_house_medium(self, monkeypatch) -> None:
+        # GPU grande explícita: numa 6 GiB o tecto por VRAM reduz o alvo.
+        monkeypatch.setattr(_pb, "_VRAM_TOTAL_MIB", 16384)
         profile = _profile(generation="medium")
         bucket = _row(rid="bucket", category="prop", size_m=(0.35, 0.4, 0.35))
         house = _row(rid="house", category="building", size_m=(5.0, 4.2, 6.0))

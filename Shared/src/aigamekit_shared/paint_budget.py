@@ -33,6 +33,15 @@ PAINT_FACES_MIN = 6_000
 # Hunyuan upstream remesh default = 40k; 320k (2x160k) para qualidade de paint
 # em buildings — unwrap/raster ainda tolerável (~2x tempo do cap anterior).
 PAINT_FACES_MAX = 320_000
+# Tecto por VRAM (o que sobra para inference): o pico do worker de paint =
+# UNet + raster ∝ faces. Âncoras medidas no pool (4050 6 GB): 160k nunca OOM,
+# 298k-343k OOM intermitente, 288k-318k passa na maioria → 6 GB fica abaixo
+# do cap de produto. Linear entre as âncoras, clamp ao cap de produto.
+PAINT_FACES_AT_4GB = 160_000
+PAINT_FACES_AT_8GB = 320_000
+# Cache da VRAM total (NVML, GPU 0; ``None`` = sem GPU/CI → cap de produto).
+_UNPROBED = object()
+_VRAM_TOTAL_MIB: int | None | object = _UNPROBED
 # V/F típico em malha triangular welded (antes do UV split).
 PAINT_VERTS_PER_FACE = 0.55
 
@@ -74,18 +83,61 @@ def paint_texture_for_char(char_m: float, *, quality_cap: int, ref_m: float = PA
     return int(min(ladder, cap))
 
 
-def paint_target_faces(texture_size: int) -> int:
+def _vram_total_mib() -> int | None:
+    """VRAM total da GPU 0 via NVML (cacheado; ``None`` sem GPU/erro)."""
+    global _VRAM_TOTAL_MIB
+    if _VRAM_TOTAL_MIB is _UNPROBED:
+        try:
+            from .gpu import gpu_total_mib
+
+            _VRAM_TOTAL_MIB = gpu_total_mib(0)
+        except Exception:
+            _VRAM_TOTAL_MIB = None
+    return _VRAM_TOTAL_MIB if isinstance(_VRAM_TOTAL_MIB, int) else None
+
+
+def paint_faces_cap_for_vram(vram_total_mib: int | None = None) -> int:
+    """Tecto de faces do ``_to_paint`` consoante a VRAM disponível para inference.
+
+    O pico do worker de paint = UNet (~constante) + raster/unwrap ∝ faces.
+    Sem VRAM conhecida (CI / import sem NVML) devolve o cap de produto.
+
+    Args:
+        vram_total_mib: VRAM total em MiB (default: auto-deteta GPU 0).
+
+    Returns:
+        Cap efectivo em ``[PAINT_FACES_MIN, PAINT_FACES_MAX]`` — linear entre
+        as âncoras medidas (4 GiB → 160k, 8 GiB → 320k).
+    """
+    total = _vram_total_mib() if vram_total_mib is None else int(vram_total_mib)
+    if not total or total <= 0:
+        return PAINT_FACES_MAX
+    lo_mib, lo_cap = 4096, PAINT_FACES_AT_4GB
+    hi_mib, hi_cap = 8192, PAINT_FACES_AT_8GB
+    if total <= lo_mib:
+        cap = float(lo_cap)
+    elif total >= hi_mib:
+        cap = float(hi_cap)
+    else:
+        frac = (total - lo_mib) / (hi_mib - lo_mib)
+        cap = lo_cap + frac * (hi_cap - lo_cap)
+    return int(max(PAINT_FACES_MIN, min(PAINT_FACES_MAX, cap)))
+
+
+def paint_target_faces(texture_size: int, vram_total_mib: int | None = None) -> int:
     """Faces óptimas para paint dado o tamanho do atlas.
 
     Args:
         texture_size: Lado do atlas (ex. 1024, 2048, 4096).
+        vram_total_mib: VRAM total em MiB — o tecto por VRAM só reduz,
+            nunca aumenta além do orçamento de produto (default: auto-deteta).
 
     Returns:
-        Inteiro em ``[PAINT_FACES_MIN, PAINT_FACES_MAX]``.
+        Inteiro em ``[PAINT_FACES_MIN, min(PAINT_FACES_MAX, cap por VRAM)]``.
     """
     t = max(256, int(texture_size))
     raw = int((t * t * PAINT_UV_PACKING) / PAINT_TEXELS_PER_FACE)
-    return max(PAINT_FACES_MIN, min(PAINT_FACES_MAX, raw))
+    return max(PAINT_FACES_MIN, min(PAINT_FACES_MAX, raw, paint_faces_cap_for_vram(vram_total_mib)))
 
 
 def paint_target_vertices(texture_size: int) -> int:
