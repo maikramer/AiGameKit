@@ -151,3 +151,22 @@ backends:
       output: "/tmp/vramd-calibrate-motion3d.glb"
     calibrate_load_kwargs:
       sdnq_preset: sdnq-int4
+
+  # Decomposição intrínseca (compphoto/Intrinsic, licença ACADEMIA-ONLY +
+  # patente pendente — ver Intrinsic/README.md). Módulo intrinsic_worker para
+  # não colidir com o módulo `intrinsic` do upstream.
+  - name: intrinsic
+    adapter: aigamekit_shared.worker_serve_adapter_base
+    vram_mib: 3200
+    priority: 25
+    tool: intrinsic
+    runtime:
+      command:
+        - "${monorepo:intrinsic}"
+        - "-m"
+        - "intrinsic_worker"
+        - "serve"
+        - "--ums-worker"
+    calibrate_request:
+      image_path: "test-image.png"
+      output_dir: "/tmp/vramd-calibrate-intrinsic"

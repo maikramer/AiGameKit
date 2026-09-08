@@ -84,7 +84,8 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Animator3D/` | Python | `animator3d` | Animation (bpy 5.2 LTS, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
 | `Motion3D/` | Python | `motion3d` | Text-to-motion (HY-Motion-1.0 Lite/Full) → NPZ @30fps; `apply-rigged` → SkinTokens via Animator3D `hml22`; vramd |
 | `AiGameKitLab/` | Python | `aigamekit-lab` | Debug 3D, benches, profiling |
-| `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
+| `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute; 3.0: guided filter, HBAO, make-seamless, `--intrinsic`) |
+| `Intrinsic/` | Python | `intrinsic-worker` | Decomposição intrínseca albedo/shading/especular (compphoto/Intrinsic; **licença académica**; backend vramd `intrinsic` para `materialize --intrinsic`) |
 | `Viber/` | Rust | `viber` | Native Bevy engine (declarative world XML, Bevy naming; Phases: 0 ✅ XML+spawn, 1 terreno ✅ (Terrain/Pad/Lake/River/Road/RoadNetwork), 2 Luau scripts ✅ (API `viber.*` — `Viber/docs/LUA_API.md`), 3 physics ✅ (Rapier); simple-rpg port done in 10 loops) |
 | `Terrain3D/` | Python | `terrain3d` | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
 | `Rocks3D/` | Python | `rocks3d` | Procedural 3D rock generation (no PyTorch) |

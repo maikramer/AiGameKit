@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intrinsic-worker"
+version = "0.1.0"
+description = "Decomposição intrínseca (albedo/shading/especular) via compphoto/Intrinsic — backend vramd para o materialize"
+readme = "README.md"
+authors = [{ name = "AiGameKit" }]
+requires-python = ">=3.13,<3.14"
+license = "MIT"
+dependencies = [
+    "torch>=2.0.1",
+    "torchvision>=0.15.2",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+    "imageio>=2.31.0",
+    "click>=8.1.0",
+    # compphoto/Intrinsic (Careaga & Aksoy, SIGGRAPH Asia 2023/TOG 2024).
+    # LICENÇA: uso académico apenas + patente pendente — ver README.md.
+    # Instala o módulo `intrinsic` (pipeline) + deps git (chrislib, MiDaS fork).
+    "intrinsic @ git+https://github.com/compphoto/Intrinsic@v2.1",
+    "aigamekit-shared[gpu,image] @ file:../Shared",
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Topic :: Multimedia :: Graphics",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.0.0",
+]
+
+[project.scripts]
+intrinsic-decompose = "intrinsic_worker.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

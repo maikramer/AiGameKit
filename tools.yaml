@@ -202,6 +202,17 @@ tools:
     cargo_bin_name: materialize-cli
     description: "PBR maps (normal, AO, metallic, smoothness) via GPU/wgpu"
 
+  intrinsic:
+    name: "Intrinsic"
+    kind: python
+    folder: Intrinsic
+    cli_name: intrinsic-decompose
+    python_module: intrinsic_worker
+    description: "Decomposição intrínseca albedo/shading/especular (compphoto/Intrinsic; LICENÇA académica) — backend vramd do materialize"
+    min_python: [3, 13]
+    needs_pytorch: true
+    post_install: aigamekit_shared.installer.clified_hooks:pip_check_post_install
+
   vibegame:
     name: "VibeGame"
     kind: bun

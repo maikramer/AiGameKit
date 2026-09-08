@@ -102,6 +102,14 @@ test-rocks3d: ## pytest only in Rocks3D/
 test-materialize: ## cargo test in Materialize/
 	cd Materialize && cargo test
 
+test-intrinsic: ## pytest Intrinsic/ (CPU-first; usa o venv da package se existir, senão Shared)
+	@if [ -x Intrinsic/.venv/bin/python ]; then \
+		cd Intrinsic && .venv/bin/python -m pytest tests/ -q; \
+	else \
+		echo "Intrinsic/.venv ausente — a usar o venv do Text2Icon (só testes CPU; ./install.sh intrinsic para o venv próprio)"; \
+		cd Intrinsic && PYTHONPATH=src ../Text2Icon/.venv/bin/python -m pytest tests/ -q; \
+	fi
+
 test-rust: test-materialize ## alias for test-materialize
 
 test-viber: ## cargo test in Viber/
