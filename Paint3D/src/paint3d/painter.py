@@ -40,6 +40,26 @@ from aigamekit_shared.logging import Logger  # noqa: E402
 from aigamekit_shared.sdnq import is_available as _sdnq_available  # noqa: E402
 
 from . import defaults as _defaults  # noqa: E402
+
+
+def _clamp_mem_eff_envelope(config: Any, logger: Any, verbose: bool) -> None:
+    """Envelope de OURO do modo mem-eff (GPU ≤8 GiB): render 1024 / tex 2048.
+
+    Um override explícito (ex. ``--render-size 2048 --texture-size 3072``)
+    excede o pico medido na 6 GiB e termina em OOM-spin do worker / bake
+    corrompido. O tier de hardware define o tecto real da máquina.
+    """
+    cap_r = _defaults.MEMORY_EFFICIENT_RENDER_SIZE
+    cap_t = _defaults.MEMORY_EFFICIENT_TEXTURE_SIZE
+    if verbose and (config.render_size > cap_r or config.texture_size > cap_t):
+        logger.warn(
+            f"Envelope mem-eff: render/tex pedidos {config.render_size}/{config.texture_size} "
+            f"reduzidos ao tecto {cap_r}/{cap_t} (GPU ≤8 GiB)"
+        )
+    config.render_size = min(config.render_size, cap_r)
+    config.texture_size = min(config.texture_size, cap_t)
+
+
 from .hy3d21_paths import (  # noqa: E402
     default_cfg_yaml,
     ensure_hy3dpaint_on_path,
@@ -886,6 +906,8 @@ def apply_hunyuan_paint(
             if not torch.cuda.is_available():
                 config.render_size = min(config.render_size, 1024)
                 config.texture_size = min(config.texture_size, 2048)
+            elif memory_efficient:
+                _clamp_mem_eff_envelope(config, _logger, verbose)
 
             config.bake_exp = bake_exp
 
@@ -903,7 +925,6 @@ def apply_hunyuan_paint(
             from .paint_prep import (
                 apply_top_view_weight,
                 check_reference_image,
-                install_bake_supersampling,
                 install_depth_bias,
                 install_restricted_inpaint,
             )
@@ -917,21 +938,29 @@ def apply_hunyuan_paint(
             # do back_sample rejeita como auto-oclusão (bake salpicado).
             install_depth_bias(pipe.render, logger=_logger)
             # Bake supersampled: subdiv SIMPLE só no bake para precisão por-texel.
-            install_bake_supersampling(pipe.render, logger=_logger)
 
         with profile_span("paint_optimize_pipeline"):
-            try:
-                if memory_efficient and _sdnq_available() and pipe.unet is not None:
-                    from aigamekit_shared.sdnq import quantize_model
+            if memory_efficient and _sdnq_available() and pipe.unet is not None:
+                from aigamekit_shared.sdnq import quantize_model
 
-                    if verbose:
-                        _logger.info("Modo memory-efficient: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
+                if verbose:
+                    _logger.info("Modo memory-efficient: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
+                try:
                     pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
-                elif verbose:
-                    if memory_efficient:
-                        _logger.warn("Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
-                    else:
-                        _logger.info("Modo alta VRAM — UNet em FP16 (sem quantização)")
+                except Exception as e:
+                    # A quantização troca camadas in-place: falhar a meio deixa
+                    # o UNet parcialmente quantizado → imagens multiview lixo →
+                    # bake "embaralhado" reportado como OK. Abortar com erro
+                    # claro (o batch degrade/retry) em vez de pintar corrompido.
+                    raise RuntimeError(
+                        f"Quantização SDNQ do UNet falhou ({e}) — a abortar para não pintar com modelo meio-quantizado."
+                    ) from e
+            elif verbose:
+                if memory_efficient:
+                    _logger.warn("Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
+                else:
+                    _logger.info("Modo alta VRAM — UNet em FP16 (sem quantização)")
+            try:
                 if pipe.vae is not None:
                     enable_vae_optimizations(
                         pipe.vae,
@@ -1213,6 +1242,8 @@ class PaintBatchProcessor:
             if not torch.cuda.is_available():
                 config.render_size = min(config.render_size, 1024)
                 config.texture_size = min(config.texture_size, 2048)
+            elif self._memory_efficient:
+                _clamp_mem_eff_envelope(config, _logger, self._verbose)
 
             config.bake_exp = self._bake_exp
 
@@ -1228,7 +1259,6 @@ class PaintBatchProcessor:
             pipe = Hunyuan3DPaintPipeline(config)
             from .paint_prep import (
                 apply_top_view_weight,
-                install_bake_supersampling,
                 install_depth_bias,
                 install_restricted_inpaint,
             )
@@ -1239,7 +1269,6 @@ class PaintBatchProcessor:
             # Bake depth bias: recupera os texels visíveis que a tolerância fixa
             # do back_sample rejeita como auto-oclusão (bake salpicado).
             install_depth_bias(pipe.render, logger=_logger)
-            install_bake_supersampling(pipe.render, logger=_logger)
 
         with profile_span("paint_optimize_pipeline"):
             try:

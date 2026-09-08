@@ -6,27 +6,9 @@ import numpy as np
 import pytest
 
 from paint3d import defaults
-from paint3d.paint_prep import compute_bake_subdiv_levels
 from paint3d.procedural_noise import fbm3, normalize_to_unit_cube
 from paint3d.quick_bake import parse_hex_rgb
 from paint3d.vramd_payload import build_texture_request
-
-
-@pytest.mark.parametrize(
-    "faces,expect_min",
-    [
-        (100, 0),
-        (500, 1),
-        (5000, 2),
-        (50000, 2),
-        (0, 0),
-        (1, 1),
-    ],
-)
-def test_compute_bake_subdiv_levels(faces: int, expect_min: int) -> None:
-    lv = compute_bake_subdiv_levels(faces)
-    assert lv >= expect_min
-    assert lv <= 8
 
 
 def test_fbm3_seed_0() -> None:

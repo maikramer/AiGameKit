@@ -117,8 +117,12 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
             texture_size=3072,
         )
 
-    # < 8.0 GiB: SDNQ uint8 + CFG chunking + ref-UNet offload permitem 6v@512
-    # (medido na RTX 4050 6GB: pico 4.45 GiB de 6 GiB com render 1536/tex 3072).
+    # < 8.0 GiB: SDNQ uint8 + CFG chunking + ref-UNet offload permitem 6v@512.
+    # Envelope de OURO do modo mem-eff: render 1024 / tex 2048. O pico de
+    # 4.45 GiB foi medido com mesh pequena; malhas 280-320k faces levam o
+    # raster/bake a ~5.7 GiB e tex 3072 + render 1536 estouravam (OOM-spin
+    # do worker, texturas embaralhadas). render/tex acima do envelope só
+    # em GPUs de tier superior.
     return Paint3DHardwareProfile(
         name=name,
         device="cuda",
@@ -127,8 +131,8 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
         total_vram_gib=round(total_gib, 1),
         max_views=6,
         view_resolution=512,
-        render_size=1536,
-        texture_size=3072,
+        render_size=1024,
+        texture_size=2048,
     )
 
 
