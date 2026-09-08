@@ -217,6 +217,63 @@ def test_from_dict_texture2d_materialize() -> None:
     assert p.texture2d.width == 512
     assert p.texture2d.materialize is True
     assert p.texture2d.materialize_maps_subdir == "maps"
+    # Defaults Materialize 3.0: auto preset, make-seamless fast, sem intrinsic.
+    assert p.texture2d.materialize_preset is None
+    assert p.texture2d.materialize_make_seamless == "fast"
+    assert p.texture2d.materialize_ao_quality is None
+    assert p.texture2d.materialize_intrinsic is False
+
+
+def test_from_dict_texture2d_materialize_3_overrides() -> None:
+    p = GameProfile.from_dict(
+        {
+            "title": "A",
+            "genre": "B",
+            "tone": "C",
+            "style_preset": "lowpoly",
+            "image_source": "texture2d",
+            "texture2d": {
+                "materialize": True,
+                "materialize_preset": "stone",
+                "materialize_make_seamless": "high",
+                "materialize_ao_quality": "high",
+                "materialize_intrinsic": True,
+            },
+        }
+    )
+    assert p.texture2d is not None
+    assert p.texture2d.materialize_preset == "stone"
+    assert p.texture2d.materialize_make_seamless == "high"
+    assert p.texture2d.materialize_ao_quality == "high"
+    assert p.texture2d.materialize_intrinsic is True
+
+
+def test_from_dict_texture2d_materialize_make_seamless_invalid() -> None:
+    with pytest.raises(ValueError, match="materialize_make_seamless"):
+        GameProfile.from_dict(
+            {
+                "title": "A",
+                "genre": "B",
+                "tone": "C",
+                "style_preset": "lowpoly",
+                "image_source": "texture2d",
+                "texture2d": {"materialize_make_seamless": "extreme"},
+            }
+        )
+
+
+def test_from_dict_texture2d_materialize_ao_quality_invalid() -> None:
+    with pytest.raises(ValueError, match="materialize_ao_quality"):
+        GameProfile.from_dict(
+            {
+                "title": "A",
+                "genre": "B",
+                "tone": "C",
+                "style_preset": "lowpoly",
+                "image_source": "texture2d",
+                "texture2d": {"materialize_ao_quality": "ultra"},
+            }
+        )
 
 
 def test_from_dict_image_source_invalid() -> None:

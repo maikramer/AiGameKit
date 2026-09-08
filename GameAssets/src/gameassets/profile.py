@@ -128,6 +128,13 @@ class Texture2DProfile:
     materialize_quality: int = 95
     materialize_verbose: bool = False
     materialize_maps_subdir: str = "pbr_maps"
+    # Materialize 3.0: preset (None = auto), make-seamless (off|fast|high),
+    # AO tier (fast|medium|high; None = preset default) e decomposição
+    # intrínseca via vramd (requer backend `intrinsic`; licença académica).
+    materialize_preset: str | None = None
+    materialize_make_seamless: str = "fast"
+    materialize_ao_quality: str | None = None
+    materialize_intrinsic: bool = False
 
 
 @dataclass
@@ -379,6 +386,15 @@ class GameProfile:
             mq_final = mq_i if mq_i is not None else 95
             if not 0 <= mq_final <= 100:
                 raise ValueError("texture2d.materialize_quality deve estar entre 0 e 100")
+            mat_preset = raw_tex2.get("materialize_preset")
+            mat_preset_s = str(mat_preset).strip() if mat_preset not in (None, "") else None
+            mat_ms = str(raw_tex2.get("materialize_make_seamless", "fast")).strip().lower()
+            if mat_ms not in ("off", "fast", "high"):
+                raise ValueError("texture2d.materialize_make_seamless deve ser off, fast ou high")
+            mat_ao = raw_tex2.get("materialize_ao_quality")
+            mat_ao_s = str(mat_ao).strip().lower() if mat_ao not in (None, "") else None
+            if mat_ao_s is not None and mat_ao_s not in ("fast", "medium", "high"):
+                raise ValueError("texture2d.materialize_ao_quality deve ser fast, medium ou high")
             tex2 = Texture2DProfile(
                 width=wi_t,
                 height=he_t,
@@ -394,6 +410,10 @@ class GameProfile:
                 materialize_quality=mq_final,
                 materialize_verbose=bool(raw_tex2.get("materialize_verbose", False)),
                 materialize_maps_subdir=msd_s,
+                materialize_preset=mat_preset_s,
+                materialize_make_seamless=mat_ms,
+                materialize_ao_quality=mat_ao_s,
+                materialize_intrinsic=bool(raw_tex2.get("materialize_intrinsic", False)),
             )
         sky2: Skymap2DProfile | None = None
         raw_sky2 = data.get("skymap2d")

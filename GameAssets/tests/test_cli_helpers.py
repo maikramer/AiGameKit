@@ -634,3 +634,121 @@ class TestBuildContextManifestOverrides:
         manifest_path = self._manifest_yaml(tmp_path, path_layout="nested")
         with pytest.raises(ValueError, match="path_layout"):
             _build_context(profile_path, manifest_path, None)
+
+
+class TestMaterializeDiffuseArgv:
+    """Materialize 3.0 — argv do GameAssets (preset auto, roughness, seamless)."""
+
+    def _argv(self, **kwargs) -> list[str]:
+        from gameassets.helpers import _materialize_diffuse_argv
+        from gameassets.profile import Texture2DProfile
+
+        tt = Texture2DProfile(materialize=True, **kwargs)
+        return _materialize_diffuse_argv("materialize", tt, Path("/tex/d.png"), Path("/tex/maps"))
+
+    def test_default_uses_preset_auto_and_roughness(self) -> None:
+        argv = self._argv()
+        assert argv[0] == "materialize"
+        assert argv[1] == "/tex/d.png"
+        assert "-o" in argv
+        # Preset auto: classificação por imagem (comportamento 3.0).
+        i = argv.index("-p")
+        assert argv[i + 1] == "auto"
+        # Roughness exportado já invertido (o handoff prefere este ficheiro).
+        assert "--roughness" in argv
+
+    def test_default_make_seamless_fast(self) -> None:
+        argv = self._argv()
+        i = argv.index("--make-seamless")
+        assert argv[i + 1] == "fast"
+
+    def test_make_seamless_off_omits_flag(self) -> None:
+        argv = self._argv(materialize_make_seamless="off")
+        assert "--make-seamless" not in argv
+
+    def test_make_seamless_high(self) -> None:
+        argv = self._argv(materialize_make_seamless="high")
+        i = argv.index("--make-seamless")
+        assert argv[i + 1] == "high"
+
+    def test_explicit_preset_wins(self) -> None:
+        argv = self._argv(materialize_preset="stone")
+        i = argv.index("-p")
+        assert argv[i + 1] == "stone"
+
+    def test_ao_quality_flag(self) -> None:
+        argv = self._argv(materialize_ao_quality="high")
+        i = argv.index("--ao-quality")
+        assert argv[i + 1] == "high"
+
+    def test_ao_quality_default_omitted(self) -> None:
+        argv = self._argv()
+        assert "--ao-quality" not in argv
+
+    def test_intrinsic_flag(self) -> None:
+        argv = self._argv(materialize_intrinsic=True)
+        assert "--intrinsic" in argv
+
+    def test_intrinsic_default_off(self) -> None:
+        argv = self._argv()
+        assert "--intrinsic" not in argv
+
+    def test_format_and_quality_preserved(self) -> None:
+        argv = self._argv(materialize_format="jpg", materialize_quality=80)
+        i = argv.index("-f")
+        assert argv[i + 1] == "jpg"
+        i = argv.index("-q")
+        assert argv[i + 1] == "80"
+
+    def test_verbose_flag(self) -> None:
+        argv = self._argv(materialize_verbose=True)
+        assert "-v" in argv
+
+
+class TestHandoffPbrRoughnessPreference:
+    """Handoff prefere roughness (3.0, já invertido) ao smoothness legado."""
+
+    def test_roughness_file_preferred_and_deduped(self, tmp_path, monkeypatch) -> None:
+
+        from gameassets import cli as ga_cli
+        from gameassets import handoff_export as he
+        from gameassets.manifest import ManifestRow
+        from gameassets.profile import GameProfile, Texture2DProfile
+
+        maps = tmp_path / "pbr_maps"
+        maps.mkdir(parents=True)
+        for n in ("normal", "metallic", "ao", "roughness", "smoothness"):
+            (maps / f"{n}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        monkeypatch.setattr(
+            ga_cli,
+            "_texture2d_material_maps_path_manifest",
+            lambda profile, manifest_dir, row: maps,
+        )
+
+        profile = GameProfile(
+            title="T",
+            genre="G",
+            tone="t",
+            style_preset="lowpoly",
+            texture2d=Texture2DProfile(materialize=True),
+        )
+        row = ManifestRow(id="hero", idea="p", kind="prop", category="prop", generate_3d=False)
+        public = tmp_path / "public"
+        out = he.run_handoff(
+            profile,
+            [row],
+            tmp_path,
+            public,
+            copy=True,
+            prefer_animated=True,
+            prefer_rigged=True,
+            with_textures=True,
+            dry_run=False,
+        )
+        pbr = out["rows"][0].get("pbr_textures", [])
+        assert "/assets/pbr/hero/roughness.png" in pbr
+        # Uma só ocorrência (não cai também no fallback smoothness).
+        assert pbr.count("/assets/pbr/hero/roughness.png") == 1
+        assert "/assets/pbr/hero/normal.png" in pbr
+        assert "/assets/pbr/hero/ao.png" in pbr

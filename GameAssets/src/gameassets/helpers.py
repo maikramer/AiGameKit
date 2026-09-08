@@ -359,8 +359,22 @@ def _materialize_diffuse_argv(
     diffuse_path: Path,
     output_dir: Path,
 ) -> list[str]:
-    """Invocação materialize <difuso> -o <dir> (mapas PBR a partir de imagem)."""
+    """Invocação materialize <difuso> -o <dir> (mapas PBR a partir de imagem).
+
+    Materialize 3.0: preset auto (classificação por imagem), roughness já
+    invertido (o handoff prefere o ficheiro `roughness`), make-seamless para
+    texturas tiling e tiers de AO configuráveis.
+    """
     args = [materialize_bin, str(diffuse_path), "-o", str(output_dir)]
+    args.extend(["-p", tt.materialize_preset or "auto"])
+    args.append("--roughness")
+    make_seamless = (tt.materialize_make_seamless or "off").lower()
+    if make_seamless in ("fast", "high"):
+        args.extend(["--make-seamless", make_seamless])
+    if tt.materialize_ao_quality:
+        args.extend(["--ao-quality", tt.materialize_ao_quality])
+    if tt.materialize_intrinsic:
+        args.append("--intrinsic")
     fmt = tt.materialize_format or "png"
     args.extend(["-f", fmt])
     args.extend(["-q", str(tt.materialize_quality)])

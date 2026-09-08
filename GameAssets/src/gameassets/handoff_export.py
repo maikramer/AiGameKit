@@ -291,27 +291,34 @@ def run_handoff(
                 if not dry_run:
                     _install_file(img_path, dst_t, copy=copy)
 
-        # PBR maps (Materialize): normal, metallic, smoothness→roughness, ao
+        # PBR maps (Materialize): normal, metallic, roughness (ou
+        # smoothness→roughness legado, SEM inversão — Materialize 3.0 exporta
+        # `roughness` já invertido via --roughness), ao
         tt = _texture2d_profile_effective(profile)
         if tt.materialize:
             maps_src = _texture2d_material_maps_path_manifest(profile, manifest_dir, row)
             if maps_src.is_dir():
                 pbr_dir = assets_root / "pbr" / pid
                 pbr_urls: list[str] = []
-                for map_name in ("normal", "metallic", "smoothness", "ao"):
-                    fmt = tt.materialize_format or "png"
-                    src_file = maps_src / f"{map_name}.{fmt}"
-                    if not src_file.is_file():
-                        src_file = maps_src / f"{map_name}.png"
-                    if not src_file.is_file():
-                        continue
-                    dst_name = "roughness" if map_name == "smoothness" else map_name
-                    ext = src_file.suffix.lstrip(".")
-                    dst_file = pbr_dir / f"{dst_name}.{ext}"
-                    rel_pbr = f"/assets/pbr/{pid}/{dst_name}.{ext}"
-                    if not dry_run:
-                        _install_file(src_file, dst_file, copy=copy)
-                    pbr_urls.append(rel_pbr)
+                for map_name in ("normal", "metallic", "roughness", "ao"):
+                    # roughness: prefere o ficheiro já invertido (3.0),
+                    # fallback ao smoothness legado renomeado.
+                    candidates = ["roughness", "smoothness"] if map_name == "roughness" else [map_name]
+                    for candidate in candidates:
+                        fmt = tt.materialize_format or "png"
+                        src_file = maps_src / f"{candidate}.{fmt}"
+                        if not src_file.is_file():
+                            src_file = maps_src / f"{candidate}.png"
+                        if not src_file.is_file():
+                            continue
+                        dst_name = "roughness" if candidate == "smoothness" else candidate
+                        ext = src_file.suffix.lstrip(".")
+                        dst_file = pbr_dir / f"{dst_name}.{ext}"
+                        rel_pbr = f"/assets/pbr/{pid}/{dst_name}.{ext}"
+                        if not dry_run:
+                            _install_file(src_file, dst_file, copy=copy)
+                        pbr_urls.append(rel_pbr)
+                        break
                 if pbr_urls:
                     entry["pbr_textures"] = pbr_urls
 
