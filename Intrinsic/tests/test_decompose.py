@@ -30,22 +30,23 @@ def tmp_rgb(tmp_path):
 
 
 class TestInvert:
-    def test_invert_ones(self):
-        out = invert(np.ones((2, 2, 3), dtype=np.float32))
+    def test_invert_zero_is_one(self):
+        out = invert(np.zeros((2, 2, 3), dtype=np.float32))
         assert np.allclose(out, 1.0)
 
-    def test_invert_half(self):
-        out = invert(np.full((2, 2, 3), 0.5, dtype=np.float32))
-        assert np.allclose(out, 2.0)
+    def test_invert_one_is_half(self):
+        out = invert(np.ones((2, 2, 3), dtype=np.float32))
+        assert np.allclose(out, 0.5)
 
-    def test_invert_zero_clamped(self):
-        out = invert(np.zeros((2, 2, 3), dtype=np.float32))
-        assert np.all(out <= 1.0 / 1e-4)
+    def test_invert_three_is_quarter(self):
+        out = invert(np.full((2, 2, 3), 3.0, dtype=np.float32))
+        assert np.allclose(out, 0.25)
 
-    def test_display_shading_roundtrip_shape(self):
+    def test_display_shading_formula(self):
+        # Display oficial: 1 - invert(dif) = dif/(dif+1) in [0, 1).
         shd_inv = np.full((4, 4, 3), 2.0, dtype=np.float32)
         display = 1.0 - invert(shd_inv)
-        assert np.allclose(display, 0.5)
+        assert np.allclose(display, 2.0 / 3.0)
 
 
 class TestQuantize:
@@ -121,7 +122,7 @@ class TestRunDecompose:
 
         h, w = shape
 
-        def fake_run(models, img, device="cuda"):
+        def fake_run(models, img, device="cuda", **kw):
             return {
                 "hr_alb": np.full((h // 2, w // 2, 3), 0.4, dtype=np.float32),
                 "dif_shd": np.full((h // 2, w // 2, 3), 2.0, dtype=np.float32),
@@ -154,13 +155,13 @@ class TestRunDecompose:
                 assert im.size == (16, 16)
 
     def test_shading_is_display_referred(self, tmp_path, monkeypatch, tmp_rgb):
-        # dif_shd = 2.0 constante → display = 1 - 1/2 = 0.5 → ~128.
+        # dif_shd = 2.0 constante → display = 1 - 1/3 = 2/3 → ~170.
         self._fake_pipeline(monkeypatch)
         src, _ = tmp_rgb
         paths = run_decompose({"models": {}}, src, tmp_path)
         with Image.open(paths.shading) as im:
             arr = np.asarray(im)
-        assert abs(int(arr.mean()) - 128) <= 1
+        assert abs(int(arr.mean()) - 170) <= 1
 
     def test_albedo_matches_model_output(self, tmp_path, monkeypatch, tmp_rgb):
         self._fake_pipeline(monkeypatch)

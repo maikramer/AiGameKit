@@ -56,6 +56,22 @@ Standalone (sem vramd, para debug):
 cd Intrinsic && .venv/bin/intrinsic-decompose decompose photo.png -o out/
 ```
 
+## Bugs upstream conhecidos (contornados no wrapper)
+
+- **v2.1: assets com nomes errados.** O `load_models('v2.1')` do upstream pede
+  `v2.1/stage_N.pt` mas a release publica `stage_N_v21.pt` (HTTP 404). O nosso
+  `weights.load_models_compat` tenta o caminho canónico e, em falha,
+  descarrega os `_v21` (cache torch.hub) e passa a lista de ficheiros com
+  `alb_residual=True` (que o ramo v2.1 ativa internamente). Release `v2` não
+  tem o problema.
+- **chrislib: optimal-resize rebenta em imagens pequenas** (UnboundLocalError
+  em `calculateprocessingres`). Contornado com `resize_conf=None` — mantém a
+  resolução original (o que queremos para texturas).
+- **torch.hub pede confiança interativa** para o repo
+  `rwightman/gen-efficientnet-pytorch` (backbone do MiDaS alterado) no
+  primeiro load. Pré-confiar de forma não-interativa:
+  `echo rwightman_gen-efficientnet-pytorch >> ~/.cache/torch/hub/trusted_list`
+
 ## Notas operacionais
 
 - Depois de editar código do worker: `vramd respawn intrinsic`.

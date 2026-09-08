@@ -22,13 +22,13 @@ class DecomposeOutputs:
     specular: Path
 
 
-def invert(x: np.ndarray, eps: float = 1e-4) -> np.ndarray:
-    """Inversão de brilho do chrislib (1/x) com guarda numérica.
+def invert(x: np.ndarray) -> np.ndarray:
+    """Inversão do chrislib: 1/(x+1) (domínio de shading inverso).
 
-    O shading colorido do pipeline v2 vive em espaço inverso; a versão
-    display é ``1 - invert(dif_shd)``.
+    O shading colorido do pipeline v2 já vem em espaço inverso; a versão
+    display oficial é ``1 - invert(dif_shd) = dif_shd/(dif_shd+1)``.
     """
-    return 1.0 / np.clip(x, eps, None)
+    return 1.0 / (x + 1.0)
 
 
 def load_image_rgb(path: str | Path) -> np.ndarray:
@@ -97,7 +97,10 @@ def run_decompose(models: Any, image_path: str | Path, output_dir: str | Path) -
     from intrinsic.pipeline import run_pipeline
 
     img = load_image_rgb(image_path)
-    results = run_pipeline(models, img, device="cuda")
+    # resize_conf=None mantém a resolução original (rounded a múltiplos de 32
+    # pelo MiDaS). Também evita o optimal-resize do chrislib, que rebenta com
+    # UnboundLocalError em imagens pequenas (bug upstream).
+    results = run_pipeline(models, img, device="cuda", resize_conf=None)
 
     h, w = img.shape[:2]
 

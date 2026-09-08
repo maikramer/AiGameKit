@@ -21,7 +21,7 @@ class _FakeModels(dict):
 
 class FakePipeline:
     @staticmethod
-    def run_pipeline(models, img, device="cuda"):
+    def run_pipeline(models, img, device="cuda", **kw):
         import numpy as np
 
         return {

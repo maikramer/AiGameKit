@@ -35,11 +35,10 @@ def serve(ums_worker: bool) -> None:
 def decompose(image_path: str, output_dir: str, release: str, device: str) -> None:
     """Decomposição standalone (sem vramd) — carrega o modelo, corre, salva."""
     from intrinsic_worker.decompose import run_decompose
+    from intrinsic_worker.weights import load_models_compat
 
     click.echo(f"A carregar modelo {release} em {device} (pesos ~1.8GB no 1º load)…")
-    from intrinsic.pipeline import load_models
-
-    models = load_models(release, device=device)
+    models = load_models_compat(release, device=device)
     click.echo("Modelo carregado; a decompor…")
     paths = run_decompose(models, image_path, output_dir)
     click.echo(f"albedo:    {paths.albedo}")

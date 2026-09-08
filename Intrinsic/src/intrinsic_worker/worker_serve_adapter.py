@@ -19,11 +19,11 @@ class Adapter(WorkerAdapter):
     name = "intrinsic"
 
     def load(self, **kwargs: Any) -> Any:
-        from intrinsic.pipeline import load_models
+        from intrinsic_worker.weights import load_models_compat
 
         release = str(kwargs.get("release", "v2.1"))
         device = str(kwargs.get("device", "cuda"))
-        models = load_models(release, device=device)
+        models = load_models_compat(release, device=device)
         return {"models": models, "device": device, "release": release}
 
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
