@@ -23,15 +23,17 @@ SAFETY: each output is verified (every image is KTX2, supercompression reads
 back as Zstandard) before it replaces the input, so a failure mid-run leaves
 the pool consistent.
 
-    python3 Viber/scripts/ktx2_compress_pool.py --assets Viber/examples/simple-rpg/assets
+    python3 Viber/scripts/ktx2_compress_pool.py --assets Viber/examples/shared-assets/public/assets
     python3 Viber/scripts/ktx2_compress_pool.py --assets ... --dry-run
+
+Assets partilhados vivem SÓ no pool (Viber/docs/ASSETS.md) — não correr isto
+contra cópias por exemplo.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
 import struct
 import subprocess
@@ -122,7 +124,7 @@ def verify_ktx2_zstd(path: Path) -> tuple[bool, str]:
         # A compressed texture with a single level gets no mipmaps at all:
         # `patch_image` in `src/textures.rs` only builds a mip chain for plain
         # RGBA8, so a 2048² BC7 without levels shimmers and thrashes the
-        # texture cache. Anything above 1×1 must ship its chain.
+        # texture cache. Anything above 1x1 must ship its chain.
         levels = struct.unpack_from("<I", blob, KTX2_LEVEL_COUNT_OFFSET)[0]
         width, height = struct.unpack_from("<II", blob, 12 + 2 * 4)
         if levels <= 1 and max(width, height) > 1:
@@ -135,11 +137,19 @@ def compress(path: Path, level: int, rdo_lambda: float, zstd: int) -> tuple[bool
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / path.name
         command = [
-            "npx", "--no-install", "@gltf-transform/cli", "uastc",
-            str(path), str(out),
-            "--level", str(level),
-            "--rdo", "--rdo-lambda", str(rdo_lambda),
-            "--zstd", str(zstd),
+            "npx",
+            "--no-install",
+            "@gltf-transform/cli",
+            "uastc",
+            str(path),
+            str(out),
+            "--level",
+            str(level),
+            "--rdo",
+            "--rdo-lambda",
+            str(rdo_lambda),
+            "--zstd",
+            str(zstd),
         ]
         result = subprocess.run(command, capture_output=True, text=True)
         if result.returncode != 0:
@@ -219,12 +229,17 @@ def convert_loose(path: Path) -> tuple[bool, str]:
             with Image.open(path) as image:
                 image.convert("RGBA").save(source)
         command = [
-            "ktx", "create",
-            "--format", "R8G8B8A8_UNORM" if linear else "R8G8B8A8_SRGB",
-            "--assign-tf", "linear" if linear else "srgb",
-            "--encode", "uastc",
+            "ktx",
+            "create",
+            "--format",
+            "R8G8B8A8_UNORM" if linear else "R8G8B8A8_SRGB",
+            "--assign-tf",
+            "linear" if linear else "srgb",
+            "--encode",
+            "uastc",
             "--generate-mipmap",
-            str(source), str(out),
+            str(source),
+            str(out),
         ]
         result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
@@ -260,8 +275,7 @@ def run_loose(root: Path, dry_run: bool) -> int:
         out = path.with_suffix(".ktx2")
         size = out.stat().st_size / 1048576 if ok else 0.0
         print(
-            f"[{index}/{len(pending)}] {'ok ' if ok else 'FAIL'} {path.name} -> "
-            f"{out.name} ({size:.1f} MiB, {why})",
+            f"[{index}/{len(pending)}] {'ok ' if ok else 'FAIL'} {path.name} -> {out.name} ({size:.1f} MiB, {why})",
             flush=True,
         )
         if not ok:
@@ -304,8 +318,7 @@ def main() -> int:
     pending = sorted(
         p
         for p in args.assets.rglob("*.glb")
-        if needs_compression(p)
-        and (args.include_intermediate or not is_pipeline_intermediate(p))
+        if needs_compression(p) and (args.include_intermediate or not is_pipeline_intermediate(p))
     )
     if args.limit:
         pending = pending[: args.limit]
@@ -325,8 +338,7 @@ def main() -> int:
         status = "ok " if ok else "FAIL"
         print(
             f"[{index}/{len(pending)}] {status} {path.name} "
-            f"({before / 1048576:.1f} -> {after / 1048576:.1f} MiB on disk)"
-            + ("" if ok else f" — {why}"),
+            f"({before / 1048576:.1f} -> {after / 1048576:.1f} MiB on disk)" + ("" if ok else f" — {why}"),
             flush=True,
         )
         if not ok:
