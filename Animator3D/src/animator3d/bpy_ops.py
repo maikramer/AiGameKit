@@ -3218,5 +3218,7 @@ def project_texture_to_parts(
         export_skins=True,
         export_materials="EXPORT",
         export_image_format="JPEG",
+        # Data maps PBR (metallicRoughness/normal) saem com banding no q75.
+        export_jpeg_quality=92,
         export_keep_originals=False,
     )
