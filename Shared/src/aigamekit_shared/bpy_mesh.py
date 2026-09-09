@@ -520,6 +520,11 @@ def save_glb(objects: Any, path: str | Path, **kwargs: Any) -> None:
         props = bpy.ops.export_scene.gltf.get_rna_type().properties
         if "export_optimize_disable_viewport" in props:
             export_kwargs["export_optimize_disable_viewport"] = True
+        # JPEG q92 em vez do default 75: data maps PBR (metallicRoughness/
+        # normal) que passam por re-exports intermediários (rig, lod) saem
+        # com banding visível em q75; q92 mantém os dados limpos até o KTX2.
+        if "export_jpeg_quality" in props:
+            export_kwargs.setdefault("export_jpeg_quality", 92)
 
     meshopt = bool(kwargs.pop("meshopt", False))
     meshopt_ext = str(kwargs.pop("meshopt_extension", "EXT_meshopt_compression"))
