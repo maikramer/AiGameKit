@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<!--
+  Viber composition demo — objetos inteiros definidos por primitivas em XML.
+
+  Mostra o contrato completo (Viber/docs/COMPOSITION.md):
+    • <Composition> — um objeto = 1 corpo (default fixed) + colisores exatos
+      por primitiva (default collider="auto"), luzes/partículas como filhos.
+    • <Prototype>/<Use> — definir uma vez, instanciar N vezes com
+      transform/overrides; rotação em radianos (rotation="0 0.5 0") também
+      funciona, como no VibeGame.
+    • opacity — paredes invisíveis de colisor puro e material translúcido.
+    • place/seat — colocação explícita no terreno ou objeto flutuante.
+    • dedup — as partes repetidas partilham mesh/material automaticamente.
+
+  Analisar:  viber analyze worlds/composition.xml
+  Correr:    viber run worlds/composition.xml
+-->
+<world clear-color="#87ceeb">
+  <AmbientLight brightness="300" />
+
+  <!-- ═══════════ Protótipos: objetos definidos UMA vez ═══════════ -->
+
+  <!-- Um poste de lanterna: corpo em primitivas + luz pendurada. -->
+  <Prototype id="lantern-post">
+    <Composition name="lantern-post">
+      <Cylinder translation="0 1.4 0" radius="0.07" half-height="1.4"
+                base-color="#4a4038" roughness="0.7" metallic="0.4" />
+      <Cylinder translation="0 2.85 0" radius="0.16" half-height="0.08"
+                base-color="#3a3028" roughness="0.6" metallic="0.5" />
+      <Sphere translation="0 2.6 0" radius="0.14" base-color="#ffd9a0"
+              roughness="0.2" opacity="0.9" collider="none" />
+      <PointLight translation="0 2.6 0" color="#ffd9a0" intensity="900" />
+    </Composition>
+  </Prototype>
+
+  <!-- Uma casa pequena: shell + telhado, colisores por parede. -->
+  <Prototype id="cottage">
+    <Composition name="cottage">
+      <Box translation="0 0.1 0" half-size="2.6 0.1 2.1" base-color="#9a8f80" roughness="0.9" />
+      <!-- paredes (0.15 m): o vão da porta a −Z fica ATRAVESSÁVEL porque o
+           colisor segue a geometria, não um AABB do objeto inteiro -->
+      <Box translation="0 1.05 -2.0" half-size="2.45 0.95 0.075" base-color="#c8b8a0" roughness="0.85" />
+      <Box translation="-1.65 1.05 0" half-size="0.075 0.95 2.0" base-color="#c8b8a0" roughness="0.85" />
+      <Box translation="1.65 1.05 0" half-size="0.075 0.95 2.0" base-color="#c8b8a0" roughness="0.85" />
+      <Box translation="0 1.05 2.0" half-size="2.45 0.95 0.075" base-color="#c8b8a0" roughness="0.85" />
+      <!-- ombreira da porta: dois tocos a −Z, o vão no meio -->
+      <Box translation="-0.7 0.5 -1.95" half-size="0.5 0.5 0.1" base-color="#c8b8a0" roughness="0.85" />
+      <Box translation="0.7 0.5 -1.95" half-size="0.5 0.5 0.1" base-color="#c8b8a0" roughness="0.85" />
+      <!-- telhado em duas águas (rotação em GRAUS, convenção Viber) -->
+      <Box translation="-1.2 1.85 0" half-size="1.45 0.07 2.2" euler="0 0 32" base-color="#8a4030" roughness="0.8" />
+      <Box translation="1.2 1.85 0" half-size="1.45 0.07 2.2" euler="0 0 -32" base-color="#8a4030" roughness="0.8" />
+      <!-- chaminé -->
+      <Cylinder translation="1.4 2.1 0.7" radius="0.16" half-height="0.45"
+                base-color="#6a5a50" roughness="0.9" />
+      <PointLight translation="0 1.4 0" color="#ffd9a0" intensity="500" />
+    </Composition>
+  </Prototype>
+
+  <!-- ═══════════ Mundo: chão + instâncias ═══════════ -->
+
+  <Entity name="ground">
+    <Plane half-size="16 16" base-color="#4a7d3a" roughness="0.9" />
+  </Entity>
+
+  <!-- Instâncias do protótipo: transform próprio por instância. -->
+  <Use prototype="cottage" pos="-4 0 -3" name="casa.oeste" />
+  <Use prototype="cottage" pos="4 0 2" euler="0 140 0" name="casa.este" />
+  <Use prototype="cottage" pos="0 0 -8" euler="0 12 0" scale="0.8 0.8 0.8" name="casa.mini" />
+
+  <!-- Lanternas: a rotação em RADIANOS do VibeGame também funciona
+       (rotation="0 0.6 0" ≈ 34° em Y). -->
+  <Use prototype="lantern-post" pos="-1.4 0 -0.2" name="lanterna.portao" />
+  <Use prototype="lantern-post" pos="1.4 0 -0.2" rotation="0 0.6 0" name="lanterna.portao.b" />
+  <Use prototype="lantern-post" pos="6 0 6" name="lanterna.norte" />
+
+  <!-- Objeto em linha, sem protótipo: mesa de pedra com banco,
+       seat="none" — mantém a cota autoral (aqui, o chão em y=0). -->
+  <Composition name="mesa-de-pedra" translation="0 0 4" seat="none">
+    <Box translation="0 0.45 0" half-size="1.1 0.08 0.7" base-color="#7d7d78" roughness="0.95" />
+    <Box translation="0 0.2 0" half-size="0.18 0.42 0.55" base-color="#6d6d68" roughness="0.95" />
+    <Box translation="0 0.22 1.1" half-size="1.0 0.09 0.22" base-color="#8a7d60" roughness="0.9" />
+    <Sphere translation="0 0.56 0" radius="0.1" base-color="#ff6622" emissive="#ff4411" collider="none" />
+  </Composition>
+
+  <!-- Colocação explícita no terreno: `place` amostra o solo em at (e
+       opcionalmente alinha à normal). Sem <Terrain> no mundo a colocação
+       não resolve e mantém a transform autoral — por isso a translation
+       aqui já está no sítio certo (neste demo chato; ver worlds/terrain.xml
+       para o place em relevo real). -->
+  <Composition name="marcador" translation="0 0 9" place="at: 0 9; align-to-terrain: 1">
+    <Cylinder translation="0 0.5 0" radius="0.3" half-height="0.5" base-color="#3a6ea5" roughness="0.6" />
+    <Sphere translation="0 1.2 0" radius="0.22" base-color="#a0c8ff" roughness="0.2" collider="none" />
+  </Composition>
+
+  <!-- Parede invisível de colisor puro (opacity=0): bloqueia, não se vê. -->
+  <Composition name="parede-invisivel" translation="0 1 10" body="fixed">
+    <Box half-size="3 1 0.15" opacity="0" />
+  </Composition>
+
+  <PointLight translation="6 10 8" intensity="3000" color="#fff4e0" shadows="true" />
+  <OrbitCamera target="ground" distance="14" pitch="24" />
+</world>
