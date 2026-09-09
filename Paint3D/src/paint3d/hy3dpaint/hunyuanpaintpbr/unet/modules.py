@@ -91,6 +91,47 @@ def _module_device(module: nn.Module) -> torch.device | None:
     return None
 
 
+class ConditionEmbedRef:
+    """Holder opaco para o ``condition_embed_dict`` partilhado entre streams.
+
+    Os hooks de group offload (diffusers/accelerate) processam kwargs com
+    ``send_to_device``, que **recria** qualquer dict/list nos kwargs — a escrita
+    do stream "w" (``unet_dual``) iria para uma cópia e o stream "r" (``unet``)
+    leria um dict vazio (``KeyError`` no forward). Objectos opacos (não
+    tensor/list/Mapping) atravessam ``send_to_device`` **por identidade**.
+    """
+
+    __slots__ = ("embeds",)
+
+    def __init__(self, embeds: dict) -> None:
+        self.embeds = embeds
+
+
+def unwrap_condition_embeds(value):
+    """Devolve o dict de condition embeds, seja dict plain ou :class:`ConditionEmbedRef`."""
+    if isinstance(value, ConditionEmbedRef):
+        return value.embeds
+    return value
+
+
+def _group_offload_managed(module: nn.Module) -> bool:
+    """True se algum (sub)módulo tem hooks de group offload do diffusers.
+
+    Com group offload activo, a colocação dos pesos é gerida pelos hooks
+    (onload/offload por grupo): chamar ``.to(device)`` no módulo inteiro
+    materializaria uma cópia GPU completa (derrota o streaming) e o
+    ``.device`` reportado é o CPU (pesos estacionários).
+    """
+    try:
+        for m in module.modules():
+            registry = getattr(m, "_diffusers_hook", None)
+            if registry is not None and registry.get_hook("group_offloading") is not None:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def _chunked_feed_forward(ff: nn.Module, hidden_states: torch.Tensor, chunk_dim: int, chunk_size: int):
     # "feed_forward_chunk_size" can be used to save memory
 
@@ -520,7 +561,9 @@ class Basic2p5DTransformerBlock(torch.nn.Module):
         mode = cross_attention_kwargs.pop("mode", None)
         mva_scale = cross_attention_kwargs.pop("mva_scale", 1.0)
         ref_scale = cross_attention_kwargs.pop("ref_scale", 1.0)
-        condition_embed_dict = cross_attention_kwargs.pop("condition_embed_dict", None)
+        condition_embed_dict = unwrap_condition_embeds(
+            cross_attention_kwargs.pop("condition_embed_dict", None)
+        )
         dino_hidden_states = cross_attention_kwargs.pop("dino_hidden_states", None)
         position_voxel_indices = cross_attention_kwargs.pop("position_voxel_indices", None)
         N_pbr = len(self.pbr_setting) if self.pbr_setting is not None else 1
@@ -1046,7 +1089,11 @@ class UNet2p5DConditionModel(torch.nn.Module):
                 noisy_ref_latents = ref_latents
                 timestep_ref = 0
                 unet_ref = self.unet_dual if self.use_dual_stream else self.unet
-                if self.use_dual_stream:
+                # Com group offload activo os hooks gerem a colocação dos pesos
+                # (onload/offload por grupo) e movem os inputs no pre_forward;
+                # ``.to(device)`` aqui materializaria uma cópia GPU completa.
+                dual_managed = _group_offload_managed(self.unet_dual) if self.use_dual_stream else False
+                if self.use_dual_stream and not dual_managed:
                     ref_device = _module_device(self.unet_dual)
                     if ref_device is not None and ref_device != noisy_ref_latents.device:
                         self.unet_dual.to(noisy_ref_latents.device)
@@ -1061,11 +1108,13 @@ class UNet2p5DConditionModel(torch.nn.Module):
                     cross_attention_kwargs={
                         "mode": "w",
                         "num_in_batch": N_ref,
-                        "condition_embed_dict": condition_embed_dict,
+                        # Holder opaco: preserva a identidade do dict através dos
+                        # hooks de group offload (send_to_device recria dicts).
+                        "condition_embed_dict": ConditionEmbedRef(condition_embed_dict),
                     },
                 )
                 cached_condition["cache"]["condition_embed_dict"] = condition_embed_dict
-                if self.use_dual_stream and self.offload_ref_unet:
+                if self.use_dual_stream and self.offload_ref_unet and not dual_managed:
                     self.unet_dual.to("cpu")
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
@@ -1100,7 +1149,7 @@ class UNet2p5DConditionModel(torch.nn.Module):
                 "mode": "r",
                 "num_in_batch": N_gen,
                 "dino_hidden_states": dino_hidden_states,
-                "condition_embed_dict": condition_embed_dict,
+                "condition_embed_dict": ConditionEmbedRef(condition_embed_dict),
                 "mva_scale": mva_scale,
                 "ref_scale": ref_scale,
                 "position_voxel_indices": position_voxel_indices,

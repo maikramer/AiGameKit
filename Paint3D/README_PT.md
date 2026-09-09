@@ -2,7 +2,7 @@
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
-Texturização 3D: **Hunyuan3D-Paint 2.1** (multivista PBR no GLB exportado) + **suavização bilateral** da textura (edge-preserving, ativo por defeito) + **Upscale IA** opcional (Real-ESRGAN).
+Texturização 3D: **Hunyuan3D-Paint 2.1** (multivista PBR no GLB exportado — baseColor + metallicRoughness do modelo, **normal + oclusão derivadas do albedo via [Materialize](../Materialize)**, ON por defeito) + **suavização bilateral** da textura (edge-preserving, ativo por defeito) + **Upscale IA** opcional (Real-ESRGAN). Emissive não é gerado — não é derivável do albedo. Opt-out: `--no-pbr-enrich` / env `PAINT3D_PBR_ENRICH=0`.
 
 O código **`hy3dpaint`** está incluído no Paint3D em `Paint3D/src/paint3d/hy3dpaint/`; os pesos PBR são descarregados sob demanda do Hugging Face (`tencent/Hunyuan3D-2.1`, pasta `hunyuan3d-paintpbr-v2-1`). Ver [docs/PAINT_SETUP.md](docs/PAINT_SETUP.md).
 
@@ -52,6 +52,11 @@ paint3d texture mesh.glb -i ref.png --no-smooth
 
 # Resolução mais alta (GPUs com >8 GB VRAM)
 paint3d texture mesh.glb -i ref.png --render-size 2048 --texture-size 4096
+
+# Máxima qualidade em GPUs pequenas (~6 GB): pesos fp16 em streaming via CUDA
+# streams (group offload) — dispensa a quantização SDNQ em troca de mais tempo
+# de geração. Convive com o dual-stream do UNet2p5D (reference attention).
+paint3d texture mesh.glb -i ref.png --group-offload
 
 # Upscale IA (opcional, requer: pip install spandrel)
 paint3d texture mesh.glb -i ref.png --upscale

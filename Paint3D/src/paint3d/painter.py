@@ -212,6 +212,9 @@ def _park_ref_unet_on_cpu(pipe: Any, *, verbose: bool = False) -> bool:
     *após* o 1º step de denoise — tarde demais para MeshRender (cudaMalloc
     ~50-200 MiB no load_mesh). Com dual estacionado, ~1.7 GiB ficam livres.
     O forward já faz ``unet_dual.to(device)`` sob demanda.
+
+    Com group offload activo os hooks já gerem a colocação (pesos em CPU);
+    estacionar não é preciso nem deve tocar no flag ``offload_ref_unet``.
     """
     mv = getattr(pipe, "models", {}).get("multiview_model") if pipe is not None else None
     p = getattr(mv, "pipeline", None) if mv is not None else None
@@ -221,6 +224,10 @@ def _park_ref_unet_on_cpu(pipe: Any, *, verbose: bool = False) -> bool:
     dual = getattr(unet, "unet_dual", None)
     if dual is None:
         return False
+    if _paint_group_offload_active(unet):
+        if verbose:
+            _logger.info("runtime budget: unet_dual já em CPU via group offload hooks")
+        return True
     try:
         unet.offload_ref_unet = True
         dual.to("cpu")
@@ -232,6 +239,25 @@ def _park_ref_unet_on_cpu(pipe: Any, *, verbose: bool = False) -> bool:
     except Exception as exc:
         if verbose:
             _logger.warn(f"runtime budget: park unet_dual falhou: {exc}")
+        return False
+
+
+def _paint_group_offload_active(unet_wrapper: Any) -> bool:
+    """True se os UNets internos têm hooks de group offload do diffusers.
+
+    Reutiliza o detector do vendor (``_group_offload_managed``): com hooks
+    activos a colocação dos pesos é dos hooks — o offload_ref_unet/park
+    custom ficam desligados para não lutarem contra o streaming.
+    """
+    try:
+        from .hy3dpaint.hunyuanpaintpbr.unet.modules import _group_offload_managed
+
+        return any(
+            _group_offload_managed(m)
+            for m in (getattr(unet_wrapper, "unet", None), getattr(unet_wrapper, "unet_dual", None))
+            if m is not None
+        )
+    except Exception:
         return False
 
 
@@ -293,9 +319,17 @@ def apply_runtime_vram_budget(
     force_dino = os.environ.get("PAINT3D_DINO_DEVICE", "").strip() or None
     parked = False
 
+    # Group offload activo: os hooks dos UNets internos já gerem a colocação
+    # dos pesos — o offload_ref_unet/park custom ficam fora (senão lutam
+    # contra o streaming com .to() inteiros).
+    mv_probe = getattr(pipe, "models", {}).get("multiview_model") if pipe is not None else None
+    p_probe = getattr(mv_probe, "pipeline", None) if mv_probe is not None else None
+    wrapper_probe = getattr(p_probe, "unet", None) if p_probe is not None else None
+    go_active = _paint_group_offload_active(wrapper_probe) if wrapper_probe is not None else False
+
     # Park dual cedo em low-VRAM: senão free_vram_bytes() vê placa cheia e
     # corta views a 2 sem libertar o que MeshRender precisa.
-    if memory_efficient or _env_flag("PAINT3D_OFFLOAD_REF_UNET", False):
+    if not go_active and (memory_efficient or _env_flag("PAINT3D_OFFLOAD_REF_UNET", False)):
         _park_ref_unet_on_cpu(pipe, verbose=verbose)
         parked = True
 
@@ -326,7 +360,7 @@ def apply_runtime_vram_budget(
 
     config.max_selected_view_num = budget.max_views
     config.cfg_batch_chunking = budget.cfg_batch_chunking
-    config.offload_ref_unet = budget.offload_ref_unet
+    config.offload_ref_unet = budget.offload_ref_unet and not go_active
     config.realesrgan_tile = budget.esrgan_tile
     config.dino_device = budget.dino_device
 
@@ -337,7 +371,7 @@ def apply_runtime_vram_budget(
             p.cfg_batch_chunking = budget.cfg_batch_chunking
             unet = getattr(p, "unet", None)
             if unet is not None and hasattr(unet, "offload_ref_unet"):
-                unet.offload_ref_unet = bool(budget.offload_ref_unet)
+                unet.offload_ref_unet = bool(budget.offload_ref_unet) and not go_active
         dino = getattr(mv, "dino_v2", None)
         if dino is not None:
             try:
@@ -510,11 +544,14 @@ def _apply_paint_kernel_opts(
         if mode != torch_compile_mode and verbose:
             _logger.info(f"torch.compile mode={torch_compile_mode} → {mode} (offload={offload})")
 
-        # SDNQ QConv2d (mem-eff) rebenta em torch.compile (`Couldn't swap QConv2d.weight`).
-        # Compilar só VAE nesse caso; UNet FP16 (sem mem-eff) ainda tenta compile.
-        if memory_efficient:
+        # SDNQ QConv2d (mem-eff) rebenta em torch.compile (`Couldn't swap QConv2d.weight`)
+        # e hooks de group offload + compile também são frágeis — nesses casos
+        # compila-se só o VAE.
+        if memory_efficient or allow_group_offload:
             if verbose:
-                _logger.info("torch.compile nos UNets skip (SDNQ QConv2d incompatível); tenta só VAE")
+                _logger.info(
+                    "torch.compile nos UNets skip (SDNQ/group offload incompatível); tenta só VAE"
+                )
             unet_targets: list[tuple[Any, str]] = []
         else:
             unet_targets = []
@@ -556,7 +593,7 @@ def _apply_paint_kernel_opts(
                     _logger.warn(f"torch.compile unet.{attr} skip: {exc}")
 
 
-def _try_paint_group_offload(pipe: Any, *, verbose: bool = False) -> bool:
+def _try_paint_group_offload(pipe: Any, *, allow: bool = False, verbose: bool = False) -> bool:
     """Aplica group offload com CUDA streams ao pipeline Hunyuan-Paint (best-effort).
 
     O pipeline Hunyuan-Paint é custom (não diffusers ModelMixin standard): os módulos
@@ -565,19 +602,24 @@ def _try_paint_group_offload(pipe: Any, *, verbose: bool = False) -> bool:
     ``modules=`` custom. Resolve o setup (leaf_level vs block_level) via fórmula
     ``plan_group_offload`` baseada na VRAM livre.
 
-    **Desactivado por defeito**: o fluxo dual-stream do wrapper UNet2p5DConditionModel
-    (reference attention: ``unet`` popula ``condition_embed_dict`` que ``unet_dual``
-    consome) conflitua com o group offload — os hooks do diffusers interferem com essa
-    partilha de estado, causando ``KeyError`` no forward. Para activar experimentalmente:
-    ``PAINT3D_GROUP_OFFLOAD=1``. O pipeline já tem SDNQ uint8 + offload_ref_unet +
-    VAE tiling como mecanismos de poupança de VRAM.
+    **Convivência com o dual-stream do UNet2p5D** (reference attention: ``unet``
+    popula ``condition_embed_dict`` que ``unet_dual`` consome — e vice-versa),
+    resolvida em duas camadas:
 
-    Best-effort: se falhar (attrs inesperados, diffusers sem suporte, conflito com
-    o offload_ref_unet custom), retorna False silenciosamente — o pipeline segue com
-    a colocação já feita pelo constructor (pipeline.to(device)).
+    - o vendor troca o dict partilhado por um holder opaco
+      (``ConditionEmbedRef``) que atravessa ``send_to_device`` dos hooks **por
+      identidade** (dicts são recriados — era a causa do ``KeyError`` no forward);
+    - aqui passamos ``exclude_kwargs=["cross_attention_kwargs"]`` ao
+      ``enable_group_offload``, preservando também os caches internos (RoPE)
+      que o processor escreve nesse dict.
+
+    Quando aplica, o SDNQ é dispensado (pesos fp16 em streaming — qualidade
+    máxima em troca de tempo de geração) e o ``offload_ref_unet`` custom fica
+    desligado (os hooks são donos da colocação; ver ``_paint_group_offload_active``).
+
+    Opt-in: ``--group-offload`` (CLI) ou ``PAINT3D_GROUP_OFFLOAD=1``. Best-effort:
+    se falhar, retorna False — o pipeline segue com a colocação do constructor.
     """
-    # OPT-IN: o group offload conflitua com o fluxo dual-stream do UNet2p5D (reference
-    # attention). Só activar se PAINT3D_GROUP_OFFLOAD=1 explicitamente.
     import os
 
     from aigamekit_shared.group_offload import (
@@ -587,7 +629,8 @@ def _try_paint_group_offload(pipe: Any, *, verbose: bool = False) -> bool:
     from aigamekit_shared.hardware import cuda_gpu_specs
     from aigamekit_shared.lowvram import GIB, get_footprint
 
-    if os.environ.get("PAINT3D_GROUP_OFFLOAD", "0").strip().lower() not in ("1", "true", "yes", "on"):
+    env_on = os.environ.get("PAINT3D_GROUP_OFFLOAD", "0").strip().lower() in ("1", "true", "yes", "on")
+    if not (allow or env_on):
         return False
 
     # Aceder ao inner diffusers pipeline (HunyuanPaintPipeline).
@@ -606,10 +649,12 @@ def _try_paint_group_offload(pipe: Any, *, verbose: bool = False) -> bool:
     if cfg is None:
         return False  # modelo cabe na GPU — sem offload
 
-    # Aplicar aos inner modules do pipeline Hunyuan-Paint.
-    # NOTA: o wrapper UNet2p5DConditionModel tem forward dual-stream com offload_ref_unet
-    # custom; aplicamos group offload aos inner UNets (ModelMixin) e VAE, evitando o
-    # wrapper para não interferir com essa lógica.
+    # Aplicar aos inner UNets do pipeline Hunyuan-Paint.
+    # NOTA: o wrapper UNet2p5DConditionModel tem forward dual-stream; aplicamos
+    # group offload aos inner UNets (ModelMixin) — o wrapper fica sem hooks e a
+    # coordenação dos dois streams (cache de condicionamento) é dele.
+    # ``exclude_kwargs`` preserva o dict ``cross_attention_kwargs`` por
+    # identidade nos pre_forward hooks (send_to_device recria dicts).
     applied_unet = False
     inner_unet = getattr(diff_pipe, "unet", None)
     if inner_unet is not None:
@@ -626,6 +671,7 @@ def _try_paint_group_offload(pipe: Any, *, verbose: bool = False) -> bool:
                         num_blocks_per_group=cfg.num_blocks_per_group,
                         record_stream=cfg.record_stream,
                         non_blocking=cfg.non_blocking,
+                        exclude_kwargs=["cross_attention_kwargs"],
                     )
                     applied_unet = True
                     if verbose:
@@ -634,18 +680,25 @@ def _try_paint_group_offload(pipe: Any, *, verbose: bool = False) -> bool:
                     if verbose:
                         _logger.warn(f"Group offload falhou em unet.{attr}: {e}")
 
-    # VAE + text_encoder via try_group_offloading (modules= custom no diff_pipe).
+    # text_encoder via try_group_offloading; VAE fica de fora (conflita com
+    # VAE tiling/slicing no decode — mesmo raciocínio do helper partilhado).
     applied_rest = try_group_offloading(
         diff_pipe,
         config=cfg,
-        modules=("vae", "text_encoder"),
+        modules=("text_encoder",),
         log=verbose,
         log_fn=_logger.info,
     )
 
     if applied_unet or applied_rest:
+        # Hooks são donos da colocação: o offload_ref_unet custom (park + .to)
+        # lutaria contra o streaming por grupo.
+        if hasattr(inner_unet, "offload_ref_unet"):
+            inner_unet.offload_ref_unet = False
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         if verbose:
-            _logger.info(f"Paint3D group offload ativo ({cfg.summary()})")
+            _logger.info(f"Paint3D group offload ativo ({cfg.summary()}) — SDNQ dispensado (fp16 em streaming)")
         return True
     return False
 
@@ -989,7 +1042,12 @@ def apply_hunyuan_paint(
             # Bake supersampled: subdiv SIMPLE só no bake para precisão por-texel.
 
         with profile_span("paint_optimize_pipeline"):
-            if memory_efficient and _sdnq_available() and pipe.unet is not None:
+            # Group offload primeiro: se aplicar, os pesos fp16 ficam em
+            # streaming (CUDA streams) e o SDNQ é dispensado — mais qualidade
+            # em troca de mais tempo de geração.
+            group_offload_applied = _try_paint_group_offload(pipe, allow=allow_group_offload, verbose=verbose)
+
+            if memory_efficient and not group_offload_applied and _sdnq_available() and pipe.unet is not None:
                 from aigamekit_shared.sdnq import quantize_model
 
                 if verbose:
@@ -1046,23 +1104,18 @@ def apply_hunyuan_paint(
                 if verbose:
                     _logger.warn(f"Aviso: otimizações opcionais falharam: {e}")
 
-        # --- Kernel opts (channels_last / compile) antes do group offload ---
+        # --- Kernel opts (channels_last / compile) ---
+        # Com group offload activo os UNets não compilam (hooks de offload +
+        # torch.compile é frágil); VAE pode compilar em mode=default.
         _apply_paint_kernel_opts(
             pipe,
             torch_compile=torch_compile,
             torch_compile_mode=torch_compile_mode,
             channels_last=channels_last,
-            allow_group_offload=allow_group_offload,
+            allow_group_offload=allow_group_offload or group_offload_applied,
             memory_efficient=memory_efficient,
             verbose=verbose,
         )
-
-        # --- Group offload com CUDA streams (memory_efficient + GPUs pequenas) ---
-        # Aplicado após SDNQ/VAE opts e antes da inferência. O pipeline Hunyuan-Paint
-        # é custom (não diffusers ModelMixin standard), pelo que usamos try_group_offloading
-        # com modules= custom. Best-effort: se falhar, segue com a colocação atual.
-        if memory_efficient:
-            _try_paint_group_offload(pipe, verbose=verbose)
 
         apply_runtime_vram_budget(
             config,
@@ -1320,8 +1373,13 @@ class PaintBatchProcessor:
             install_depth_bias(pipe.render, logger=_logger)
 
         with profile_span("paint_optimize_pipeline"):
+            # Group offload primeiro: se aplicar, pesos fp16 em streaming e o
+            # SDNQ é dispensado (qualidade > tempo).
+            group_offload_applied = _try_paint_group_offload(
+                pipe, allow=self._allow_group_offload, verbose=self._verbose
+            )
             try:
-                if self._memory_efficient and _sdnq_available() and pipe.unet is not None:
+                if self._memory_efficient and not group_offload_applied and _sdnq_available() and pipe.unet is not None:
                     from aigamekit_shared.sdnq import quantize_model
 
                     if self._verbose:
@@ -1362,12 +1420,10 @@ class PaintBatchProcessor:
             torch_compile=self._torch_compile,
             torch_compile_mode=self._torch_compile_mode,
             channels_last=self._channels_last,
-            allow_group_offload=self._allow_group_offload,
+            allow_group_offload=self._allow_group_offload or group_offload_applied,
             memory_efficient=self._memory_efficient,
             verbose=self._verbose,
         )
-        if self._memory_efficient:
-            _try_paint_group_offload(pipe, verbose=self._verbose)
 
         apply_runtime_vram_budget(
             config,

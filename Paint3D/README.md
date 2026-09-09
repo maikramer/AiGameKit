@@ -2,7 +2,9 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-AI-powered 3D texturing with **Hunyuan3D-Paint 2.1** — generates multiview PBR materials (baseColor, normal, ORM) directly embedded in the output GLB. Includes edge-preserving **bilateral texture smoothing** to remove bake seam artifacts, and optional **AI upscaling** via Real-ESRGAN.
+AI-powered 3D texturing with **Hunyuan3D-Paint 2.1** — generates multiview PBR materials (baseColor + metallicRoughness from the model, plus **normal + occlusion derived from the albedo via [Materialize](../Materialize)**) directly embedded in the output GLB as glTF ORM (R=AO, G=roughness, B=metallic, shared by `metallicRoughnessTexture` and `occlusionTexture`). Includes edge-preserving **bilateral texture smoothing** to remove bake seam artifacts, and optional **AI upscaling** via Real-ESRGAN. Emissive is not generated — it is a creative property that cannot be inferred from the albedo.
+
+> **PBR enrichment is ON by default** (`--no-pbr-enrich` to disable; env `PAINT3D_PBR_ENRICH=0`). Preset via `--pbr-preset` / env `PAINT3D_PBR_PRESET` (default/default). If the `materialize` binary or a wgpu GPU adapter is unavailable, the paint still succeeds — the asset just ships without normal/AO (logged warning).
 
 > Optimized for GPUs with 6 GB VRAM (RTX 4050 Laptop). SDNQ uint8 quantization and VAE tiling are applied automatically when needed.
 
@@ -12,7 +14,8 @@ Paint3D is part of the [AiGameKit](../README.md) monorepo and sits in the asset 
 
 **Key features:**
 
-- Multiview PBR texturing (baseColor, normal, ORM) baked into GLB
+- Multiview PBR texturing (baseColor + metallicRoughness) baked into GLB
+- Normal + occlusion (ORM) derived from the albedo via [Materialize](../Materialize) — ON by default
 - Bilateral texture smoothing (edge-preserving, removes seam artifacts)
 - AI upscaling via Real-ESRGAN (optional, `spandrel`)
 - Fast non-AI texturing: solid color or Perlin noise vertex colors

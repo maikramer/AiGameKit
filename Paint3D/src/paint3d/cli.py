@@ -170,6 +170,22 @@ def cli(ctx, verbose):
     type=int,
     help="Número de passadas do filtro bilateral (mais = mais suave).",
 )
+@click.option(
+    "--pbr-enrich/--no-pbr-enrich",
+    "pbr_enrich",
+    default=None,
+    help="Normal + AO via Materialize sobre o albedo (default ON; env PAINT3D_PBR_ENRICH=0).",
+)
+@click.option(
+    "--pbr-preset",
+    "pbr_preset",
+    default=None,
+    type=click.Choice(
+        ["default", "skin", "floor", "metal", "fabric", "wood", "stone", "auto"],
+        case_sensitive=False,
+    ),
+    help="Preset do Materialize para o enriquecimento (env PAINT3D_PBR_PRESET).",
+)
 @click.option("-v", "--verbose", "texture_verbose", is_flag=True, help="Logs detalhados.")
 @click.option(
     "--preserve-origin/--no-preserve-origin",
@@ -252,8 +268,8 @@ def cli(ctx, verbose):
     default=False,
     show_default=True,
     help=(
-        "Experimental: group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1). "
-        "Pode conflitar com dual-stream reference UNet."
+        "Group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1): pesos fp16 em"
+        " streaming — mais qualidade (SDNQ dispensado), mais tempo de geração."
     ),
 )
 @add_vramd_options
@@ -272,6 +288,8 @@ def texture(
     bake_exp,
     smooth,
     smooth_passes,
+    pbr_enrich,
+    pbr_preset,
     texture_verbose,
     preserve_origin,
     allow_shared_gpu,
@@ -295,6 +313,14 @@ def texture(
 
     verbose = bool(ctx.obj.get("VERBOSE")) or texture_verbose
     sage_attention = _enable_sage_attention(sage_attention)
+
+    # Enriquecimento PBR: flags explicitam o env que o export lê (default ON).
+    if pbr_enrich is False:
+        os.environ["PAINT3D_PBR_ENRICH"] = "0"
+    elif pbr_enrich is True:
+        os.environ.pop("PAINT3D_PBR_ENRICH", None)
+    if pbr_preset:
+        os.environ["PAINT3D_PBR_PRESET"] = pbr_preset
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -573,8 +599,8 @@ def texture(
     default=False,
     show_default=True,
     help=(
-        "Experimental: group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1). "
-        "Pode conflitar com dual-stream reference UNet."
+        "Group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1): pesos fp16 em"
+        " streaming — mais qualidade (SDNQ dispensado), mais tempo de geração."
     ),
 )
 @click.option(
@@ -590,6 +616,22 @@ def texture(
     default=None,
     help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
 )
+@click.option(
+    "--pbr-enrich/--no-pbr-enrich",
+    "pbr_enrich",
+    default=None,
+    help="Normal + AO via Materialize sobre o albedo (default ON; env PAINT3D_PBR_ENRICH=0).",
+)
+@click.option(
+    "--pbr-preset",
+    "pbr_preset",
+    default=None,
+    type=click.Choice(
+        ["default", "skin", "floor", "metal", "fabric", "wood", "stone", "auto"],
+        case_sensitive=False,
+    ),
+    help="Preset do Materialize para o enriquecimento (env PAINT3D_PBR_PRESET).",
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
 @add_vramd_options
 @click.pass_context
@@ -604,6 +646,8 @@ def texture_batch(
     bake_exp,
     smooth,
     smooth_passes,
+    pbr_enrich,
+    pbr_preset,
     preserve_origin,
     allow_shared_gpu,
     gpu_kill_others,
@@ -628,6 +672,13 @@ def texture_batch(
     Só carrega ``PaintBatchProcessor`` in-process se o vramd estiver indisponível
     (``--no-vramd`` ou supervisor down). ``VRAM_INSUFFICIENT`` não faz fallback.
     """
+    # Enriquecimento PBR: flags explicitam o env que o export lê (default ON).
+    if pbr_enrich is False:
+        os.environ["PAINT3D_PBR_ENRICH"] = "0"
+    elif pbr_enrich is True:
+        os.environ.pop("PAINT3D_PBR_ENRICH", None)
+    if pbr_preset:
+        os.environ["PAINT3D_PBR_PRESET"] = pbr_preset
     from .painter import PaintBatchProcessor, _fit_glb_aabb_to_reference
     from .texture_smooth import smooth_trimesh_texture
     from .utils.mesh_io import load_mesh_trimesh, save_glb

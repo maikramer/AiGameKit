@@ -273,6 +273,93 @@ def _weld_seam_vertices(vtx_pos, pos_idx, tolerance=1e-4):
     return moved
 
 
+def _write_pbr_map_png(arr_rgb: np.ndarray, vtx_uv: np.ndarray, uv_idx: np.ndarray) -> str:
+    """Grava um mapa de dados PBR [0-1] como PNG dilatado nas seams (sem perda).
+
+    Args:
+        arr_rgb: ``(H, W, 3)`` RGB float [0,1] (ou 4 canais — extra ``A`` ignorada).
+        vtx_uv: UVs por vértice.
+        uv_idx: Índices UV por face.
+
+    Returns:
+        Caminho do PNG temporário (cleanup pelo chamador).
+    """
+    import tempfile
+
+    uint = (np.clip(arr_rgb[..., :3], 0.0, 1.0) * 255).astype(np.uint8)
+    uint = _dilate_texture_at_seams(uint, vtx_uv, uv_idx, dilation_pixels=4)
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png")
+    os.close(tmp_fd)
+    cv2.imwrite(tmp_path, uint[..., ::-1])  # RGB→BGR para cv2
+    return tmp_path
+
+
+def _wire_pbr_maps(
+    mat: Any,
+    bsdf: Any,
+    *,
+    metallic: np.ndarray | None,
+    roughness: np.ndarray | None,
+    normal: np.ndarray | None,
+    ao: np.ndarray | None,
+    vtx_uv: np.ndarray,
+    uv_idx: np.ndarray,
+) -> list[str]:
+    """Liga os mapas PBR baked ao Principled BSDF no contrato glTF.
+
+    O Hunyuan-Paint 2.1 devolve branch ``mr`` (canal 0 = metallic, canal 1 =
+    roughness); o glTF combina metallic+roughness (+AO do enriquecimento) numa
+    só textura ORM — **R=AO, G=roughness, B=metallic** — via o grafo
+    Image Texture (non-color) → Separate Color (Blue→Metallic, Green→Roughness)
+    que o exportador do Blender reconhece. O slot ``occlusionTexture`` é
+    escrito por patch JSON pós-export (``aigamekit_shared.gltf_occlusion``) —
+    o exporter bpy não o emite a partir do grafo. Sem esta ligação o GLB sai
+    só com Base Color, ou seja, albedo sem PBR.
+
+    Returns:
+        Caminhos temporários criados — o exportador lê os ficheiros no embed,
+        por isso o cleanup é responsabilidade do chamador, **depois** do export.
+    """
+    node_tree = mat.node_tree
+    tmp_paths: list[str] = []
+
+    def _load_non_color(tmp_path: str) -> Any:
+        img = bpy.data.images.load(tmp_path)
+        img.colorspace_settings.name = "Non-Color"
+        return img
+
+    if metallic is not None or roughness is not None or ao is not None:
+        ref = metallic if metallic is not None else (roughness if roughness is not None else ao)
+        met = np.zeros_like(ref[..., :1]) if metallic is None else metallic[..., :1]
+        rgh = np.zeros_like(ref[..., :1]) if roughness is None else roughness[..., :1]
+        # RGB (o helper converte para BGR do cv2): R=AO (occlusion), G=roughness,
+        # B=metallic — convenção ORM glTF; sem AO, R fica a 1 (neutro).
+        ao_ch = np.ones_like(ref[..., :1]) if ao is None else ao[..., :1]
+        orm_rgb = np.concatenate([ao_ch, rgh, met], axis=2)
+        tmp_mr = _write_pbr_map_png(orm_rgb, vtx_uv, uv_idx)
+        tmp_paths.append(tmp_mr)
+        mr_tex = node_tree.nodes.new("ShaderNodeTexImage")
+        mr_tex.image = _load_non_color(tmp_mr)
+        sep = node_tree.nodes.new("ShaderNodeSeparateColor")
+        node_tree.links.new(mr_tex.outputs["Color"], sep.inputs["Color"])
+        node_tree.links.new(sep.outputs["Blue"], bsdf.inputs["Metallic"])
+        node_tree.links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
+        bsdf.inputs["Metallic"].default_value = 1.0
+        bsdf.inputs["Roughness"].default_value = 1.0
+
+    if normal is not None:
+        tmp_n = _write_pbr_map_png(normal, vtx_uv, uv_idx)
+        tmp_paths.append(tmp_n)
+        n_tex = node_tree.nodes.new("ShaderNodeTexImage")
+        n_tex.image = _load_non_color(tmp_n)
+        n_map = node_tree.nodes.new("ShaderNodeNormalMap")
+        n_map.inputs["Strength"].default_value = 1.0
+        node_tree.links.new(n_tex.outputs["Color"], n_map.inputs["Color"])
+        node_tree.links.new(n_map.outputs["Normal"], bsdf.inputs["Normal"])
+
+    return tmp_paths
+
+
 def _save_glb_mesh_bpy(
     mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=None, roughness=None, normal=None
 ):
@@ -289,13 +376,14 @@ def _save_glb_mesh_bpy(
     _log = logging.getLogger("paint3d.save_glb")
     _t0 = _time.time()
 
-    # 1. Save texture to temp PNG
+    # 1. Save texture to temp JPG (albedo — foto; os data maps PBR vão em PNG)
     texture_uint8 = (texture * 255).astype(np.uint8)
     texture_uint8 = _dilate_texture_at_seams(texture_uint8, vtx_uv, uv_idx, dilation_pixels=4)
-    tmp_fd, tmp_tex_path = tempfile.mkstemp(suffix=".png")
+    tmp_fd, tmp_tex_path = tempfile.mkstemp(suffix=".jpg")
     os.close(tmp_fd)
+    tmp_pbr_paths: list[str] = []
     try:
-        cv2.imwrite(tmp_tex_path, texture_uint8[..., ::-1])
+        cv2.imwrite(tmp_tex_path, texture_uint8[..., ::-1], [int(cv2.IMWRITE_JPEG_QUALITY), 95])
         _log.info("texture: %dx%d (%.1fs)", texture_uint8.shape[1], texture_uint8.shape[0], _time.time() - _t0)
 
         # 2. Clear current scene objects (no scene switching, no factory settings)
@@ -330,6 +418,34 @@ def _save_glb_mesh_bpy(
         if metallic is not None:
             bsdf.inputs["Metallic"].default_value = 1.0
             bsdf.inputs["Roughness"].default_value = 1.0
+        # Enriquecimento PBR (PAINT3D_PBR_ENRICH=0 desliga): normal + AO
+        # derivados do albedo via Materialize — o mr do modelo fica. Falha do
+        # binário/GPU vira warning e segue sem os mapas (pbr_enrich).
+        ao_map = None
+        if metallic is not None:
+            from paint3d.pbr_enrich import enrich_maps_from_albedo, pbr_enrich_enabled
+
+            if pbr_enrich_enabled():
+                enrich = enrich_maps_from_albedo(texture_uint8, logger=_log)
+                if enrich is not None:
+                    # pbr_enrich devolve uint8 0-255; o wiring espera float 0-1
+                    # (mesma convenção dos arrays metallic/roughness do render).
+                    enrich_normal, ao_map = enrich
+                    enrich_normal = enrich_normal.astype(np.float64) / 255.0
+                    ao_map = ao_map.astype(np.float64) / 255.0
+                    if normal is None:
+                        normal = enrich_normal
+
+        tmp_pbr_paths = _wire_pbr_maps(
+            mat,
+            bsdf,
+            metallic=metallic,
+            roughness=roughness,
+            normal=normal,
+            ao=ao_map,
+            vtx_uv=vtx_uv,
+            uv_idx=uv_idx,
+        )
         mesh.materials.append(mat)
 
         # 6. Link + export canónico do monorepo (igual Text3D/Rigging):
@@ -351,9 +467,20 @@ def _save_glb_mesh_bpy(
             mesh_path,
             export_normals=True,
             export_tangents=True,
-            export_image_format="JPEG",
+            # AUTO: mantém cada imagem no seu formato — albedo JPEG (q95) e
+            # metallicRoughness/normal PNG (dados, sem perda). JPEG global
+            # convertia os data maps e introduzia banding na roughness.
+            export_image_format="AUTO",
+            export_jpeg_quality=95,
         )
         _log.info("done (%.1fs) — %d bytes", _time.time() - _t0, os.path.getsize(mesh_path))
+
+        # Slot occlusionTexture via patch JSON (o exporter bpy não o emite do
+        # grafo); round-trips bpy/gltf-transform a partir daqui. Idempotente.
+        if ao_map is not None:
+            from aigamekit_shared.gltf_occlusion import ensure_occlusion_texture
+
+            ensure_occlusion_texture(mesh_path, logger=_log)
 
         # 7. Cleanup scene
         for obj in list(bpy.context.scene.objects):
@@ -361,6 +488,9 @@ def _save_glb_mesh_bpy(
     finally:
         with contextlib.suppress(OSError):
             os.remove(tmp_tex_path)
+        for tmp_path in tmp_pbr_paths:
+            with contextlib.suppress(OSError):
+                os.remove(tmp_path)
 
 
 def save_glb_mesh(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=None, roughness=None, normal=None):
