@@ -41,6 +41,52 @@ from aigamekit_shared.sdnq import is_available as _sdnq_available  # noqa: E402
 
 from . import defaults as _defaults  # noqa: E402
 
+_PAINT_MAX_EXTENT_M_DEFAULT = 3.0
+
+
+def _paint_max_extent_m() -> float:
+    """Envelope de extensão máxima (m) da mesh no paint; 0 desliga."""
+    env = os.environ.get("PAINT3D_PAINT_MAX_EXTENT_M", "").strip()
+    if env:
+        try:
+            return float(env)
+        except ValueError:
+            pass
+    return _PAINT_MAX_EXTENT_M_DEFAULT
+
+
+def _scale_mesh_for_paint(objects: Any, *, logger: Any = None, verbose: bool = False) -> float:
+    """Reduz a mesh para caber no envelope de paint; devolve o factor aplicado.
+
+    Bboxes grandes têm demasiada área de superfície por vista para o
+    raster/bake caberem em GPUs pequenas — o village_house (6 m) OOM-spinnava
+    a QUALQUER resolução de atlas/views/faces; a meia escala (3 m) pinta
+    limpo (validado 2026-09-08). O tamanho original é restaurado no fim pelo
+    caller (``_fit_glb_aabb_to_reference``/``_preserve_placement`` usam os
+    bounds/ficheiro ANTES da escala).
+    """
+    limit = _paint_max_extent_m()
+    if limit <= 0:
+        return 1.0
+    try:
+        bmin, bmax = _get_combined_bounds(objects)
+        extent = float(np.max(bmax - bmin))
+    except Exception:
+        return 1.0
+    if extent <= limit or extent <= 0:
+        return 1.0
+    factor = limit / extent
+    for obj in objects:
+        sc = getattr(obj, "scale", None)
+        if sc is not None:
+            obj.scale = (sc[0] * factor, sc[1] * factor, sc[2] * factor)
+    if logger is not None:
+        logger.info(
+            f"Paint resize-in: extensão {extent:.2f} m > envelope {limit:.2f} m "
+            f"→ escala x{factor:.3f} (tamanho original restaurado no fim)"
+        )
+    return factor
+
 
 def _clamp_mem_eff_envelope(config: Any, logger: Any, verbose: bool) -> None:
     """Envelope de OURO do modo mem-eff (GPU ≤8 GiB): render 1024 / tex 2048.
@@ -868,6 +914,9 @@ def apply_hunyuan_paint(
                 _logger.info(
                     f"input AABB (antes do pipeline): min={bounds_min_before.tolist()} max={bounds_max_before.tolist()}"
                 )
+            # Resize-in para o envelope de paint (bounds capturados ANTES —
+            # o _preserve_placement no fim restaura o tamanho original).
+            _scale_mesh_for_paint(mesh, logger=_logger, verbose=verbose)
             # Cascas internas: topology-fix (shape→clean) antes do paint.
             save_glb(mesh, mesh_in, verify_stage="to_paint")
 
@@ -1391,6 +1440,9 @@ class PaintBatchProcessor:
 
             with profile_span("paint_batch_prepare_io"):
                 bounds_min_before, bounds_max_before = _get_combined_bounds(mesh)
+                # Resize-in para o envelope de paint (bounds ANTES — o
+                # _preserve_placement no fim restaura o tamanho original).
+                _scale_mesh_for_paint(mesh, logger=_logger, verbose=self._verbose)
                 save_glb(mesh, mesh_in, verify_stage="to_paint")
                 if isinstance(image, (str, Path)):
                     shutil.copy2(image, ref_path)

@@ -28,7 +28,7 @@ _MAX_SCALE = 3.0
 _MIN_SCALE = 0.75
 # Octree: calcular → se <128 → 128; senão degraus de 32 até 512.
 _OCTREE_FLOOR = 128
-_OCTREE_CEILING = 512
+_OCTREE_CEILING = 576
 _OCTREE_STEP = 32
 # Soft-floor não-linear: sobe o piso efectivo nos assets **pequenos**
 # (anti-pinholes leve) e decai a ~0 nos grandes. ``floor_eff = 128 + MAX * e^(-char/τ)``.
@@ -62,6 +62,13 @@ _CATEGORY_FACE_KAPPA: dict[str, float] = {
 }
 # Categories onde buracos MC / detalhe fino pediam +32 manual sobre o auto.
 _HOLE_PRONE_CATEGORIES = frozenset({"terrain", "rock", "environment"})
+# Piso de octree para edifícios: a fórmula percetual dá ~320 a char 4.6-7.9 m,
+# mas os grandes do pool (village_forge/barn/house) saíam pouco sólidos a 320
+# — paredes finas/ocrimbas não sobrevivem ao voxel. Validado pelo utilizador:
+# precisam de pelo menos +64 acima do tecto antigo de 480 (→544). O tecto de
+# faces da categoria continua a mandar acima disto quando o orçamento aperta.
+_BUILDING_OCTREE_FLOOR = 544
+_BUILDING_LIKE = frozenset({"building"})
 # Panqueca/stick (max/min > 2): ``char_m`` volumétrico subestima o eixo fino.
 # O grid MC e cubico no eixo maior, portanto um anel 1.5x0.5 m @160 so leva
 # ~53 células em Y → casca perfurada. Empírico fogueira: +64 (160→224) fecha.
@@ -247,10 +254,11 @@ _OCTREE_LADDER = tuple(range(_OCTREE_FLOOR, _OCTREE_CEILING + 1, _OCTREE_STEP))
 #
 # 448 → 480: com 448 os edifícios de 6-11 m (shepherd_cottage, village_barn,
 # village_longhouse) ficavam presos no tecto e saíam com paredes perfuradas; a
-# 480 passam, validado à mão asset a asset. Subir mais exige medição — usar
-# ``bench-decode`` em vez de adivinhar, porque acima do detalhe real do latent
-# só se paga tempo e ruído interior.
-LATENT_DETAIL_CEILING = 480
+# 480 passam, validado à mão asset a asset.
+# 480 → 544 (2026-09-08): a 480 os grandes do pool (village_forge/barn/house)
+# ainda saíam pouco sólidos — o utilizador pediu pelo menos +64. O piso
+# ``_BUILDING_OCTREE_FLOOR`` alinha-se; a validar empiricamente no redo.
+LATENT_DETAIL_CEILING = 544
 _LATENT_CEILING_ENV = "TEXT3D_LATENT_OCTREE_CEILING"
 
 
@@ -413,9 +421,9 @@ def max_octree_for_vram(
         # OOM na 4050 6 GB (validado asset a asset em shepherd_cottage,
         # village_barn e village_longhouse).
         if total_vram_gib >= 10.0:
-            return 512
+            return 576
         if total_vram_gib >= 6.0:
-            return 480
+            return 544
         if total_vram_gib >= 5.0:
             return 384
         return 320
@@ -612,6 +620,13 @@ def tune_hunyuan_for_bbox(
         face_cap = octree_face_budget_cap(float(char_m), category)
         if face_cap is not None:
             desired = min(desired, int(face_cap))
+    # Piso de edifícios: o face-cap percetual (~320 em char 5-8 m) deixa
+    # paredes finas perfuradas nos grandes do pool (forge/barn/house) — o
+    # utilizador validou que precisam de pelo menos +64. Corre DEPOIS do
+    # face-cap (que existe para props pequenos, não para edifícios).
+    preset_is_building = (bbox_preset or "").strip().lower() in ("building", "chapel")
+    if cat_key in _BUILDING_LIKE or preset_is_building:
+        desired = max(desired, _BUILDING_OCTREE_FLOOR)
     # Panqueca/stick: volume-eq + face-cap deixam o eixo fino sem células.
     # Corre **depois** do tecto — senão 180 capava a fogueira outra vez a 160.
     aniso_floor = anisotropy_octree_floor(size_m, category)

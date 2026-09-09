@@ -359,3 +359,41 @@ class TestCheckReferenceImage:
         log = self._Log()
         assert check_reference_image("/nao/existe.png", logger=log) == -1.0
         assert log.warnings
+
+
+class TestScaleMeshForPaint:
+    """Resize-in: bbox grande (muita área de superfície) não cabe no raster —
+    escala para o envelope; o caller restaura o tamanho original no fim."""
+
+    class _Obj:
+        def __init__(self) -> None:
+            self.scale = (1.0, 1.0, 1.0)
+
+    def test_big_extent_scales_down(self, monkeypatch) -> None:
+        import numpy as np
+
+        from paint3d import painter
+
+        monkeypatch.setenv("PAINT3D_PAINT_MAX_EXTENT_M", "3.0")
+        monkeypatch.setattr(painter, "_get_combined_bounds", lambda objs: (np.zeros(3), np.full(3, 6.0)))
+        objs = [self._Obj()]
+        f = painter._scale_mesh_for_paint(objs)
+        assert abs(f - 0.5) < 1e-6
+        assert abs(objs[0].scale[0] - 0.5) < 1e-6
+
+    def test_within_envelope_noop(self, monkeypatch) -> None:
+        import numpy as np
+
+        from paint3d import painter
+
+        monkeypatch.setenv("PAINT3D_PAINT_MAX_EXTENT_M", "3.0")
+        monkeypatch.setattr(painter, "_get_combined_bounds", lambda objs: (np.zeros(3), np.full(3, 2.5)))
+        objs = [self._Obj()]
+        assert painter._scale_mesh_for_paint(objs) == 1.0
+        assert objs[0].scale == (1.0, 1.0, 1.0)
+
+    def test_env_zero_disables(self, monkeypatch) -> None:
+        from paint3d import painter
+
+        monkeypatch.setenv("PAINT3D_PAINT_MAX_EXTENT_M", "0")
+        assert painter._scale_mesh_for_paint([]) == 1.0

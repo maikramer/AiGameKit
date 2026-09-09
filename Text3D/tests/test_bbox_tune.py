@@ -25,7 +25,8 @@ class TestSnapOctree:
         assert _snap_octree(177) == 192
         assert _snap_octree(256) == 256
         assert _snap_octree(500) == 512
-        assert _snap_octree(999) == 512
+        # Tecto 512 → 576 (buildings a 544, ver _BUILDING_OCTREE_FLOOR).
+        assert _snap_octree(999) == 576
 
     def test_ladder_is_floor_step_ceiling(self) -> None:
         from text3d.bbox_tune import _OCTREE_LADDER
@@ -318,3 +319,40 @@ class TestBuildingOctreeTargets:
                 quality="medium",
             )
             assert 0.10 / r.voxel_m >= 5.0, f"voxel {r.voxel_m:.4f} grosso demais para parede de 10 cm"
+
+
+class TestBuildingOctreeFloor:
+    """Piso de octree para edifícios: 480 saía pouco sólido nos grandes do
+    pool (village_forge/barn/house) — o utilizador validou que precisam de
+    pelo menos +64 (→544)."""
+
+    def test_buildings_get_544_on_6gb_with_offload(self) -> None:
+        from text3d.bbox_tune import tune_hunyuan_for_bbox
+
+        for size in ([5.5, 5.0, 5.5], [7.5, 6.0, 11.0], [5.2, 3.2, 6.0]):
+            r = tune_hunyuan_for_bbox(
+                base_steps=30, base_octree=256, base_chunks=1,
+                size_m=size, category="building", quality="medium",
+                total_vram_gib=6.0, group_offload=True,
+            )
+            assert r.octree == 544
+
+    def test_small_props_unaffected(self) -> None:
+        from text3d.bbox_tune import tune_hunyuan_for_bbox
+
+        r = tune_hunyuan_for_bbox(
+            base_steps=30, base_octree=256, base_chunks=1,
+            size_m=[0.4, 0.4, 0.4], category="prop", quality="medium",
+            total_vram_gib=6.0, group_offload=True,
+        )
+        assert r.octree < 384  # o piso é só para edifícios
+
+    def test_preset_building_also_gets_floor(self) -> None:
+        from text3d.bbox_tune import tune_hunyuan_for_bbox
+
+        r = tune_hunyuan_for_bbox(
+            base_steps=30, base_octree=256, base_chunks=1,
+            size_m=[6.0, 5.5, 10.0], bbox_preset="building", quality="medium",
+            total_vram_gib=6.0, group_offload=True,
+        )
+        assert r.octree == 544
