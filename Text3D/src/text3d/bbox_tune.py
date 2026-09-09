@@ -412,8 +412,9 @@ def max_octree_for_vram(
     if total_vram_gib is None:
         # A pipeline não propaga VRAM (``hardware.total_vram_gib`` vem ``null``
         # nos sidecars), portanto este ramo é o que manda na prática — tem de
-        # espelhar o tier ≥6 GiB, senão mexer lá em cima não muda nada.
-        return 480 if group_offload else 384
+        # espelhar o tier ≥5.5 GiB, senão mexer lá em cima não muda nada.
+        # (480→544: edifícios grandes pouco sólidos a 480, +64 do utilizador.)
+        return 544 if group_offload else 384
     if group_offload:
         # Stream pesos → VRAM ≈ ativação + MC. Sacrifica tempo, enche a GPU.
         # 6 GB + sdnq-int4 + group_offload: 448 → 480. Os edifícios de 6-11 m
@@ -422,7 +423,8 @@ def max_octree_for_vram(
         # village_barn e village_longhouse).
         if total_vram_gib >= 10.0:
             return 576
-        if total_vram_gib >= 6.0:
+        if total_vram_gib >= 5.5:
+            # 5.5 e não 6.0: uma "6 GB" reporta ~5.77 GiB utilizáveis.
             return 544
         if total_vram_gib >= 5.0:
             return 384
