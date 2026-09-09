@@ -15,15 +15,19 @@
 //! `shaders/terrain_chunk.wgsl` before the renderer loads it (the Bevy 0.19
 //! slot-1 storage promotion never re-uploads custom material uniforms).
 //!
-//! Lighting é SIMPLES DE PROPÓSITO: o fragment devolve
-//! `albedo × (0.45 + 0.55·sol)` — o terreno NÃO recebe sombras projetadas
-//! nem luzes pontuais da cena (aceite: o valor do material é o ground
-//! blend). A direção do sol e o day/night tint vêm do uniform
-//! (`terrain_daynight_tint` publica o `AtmosphereState.sun_dir` no mesmo
-//! passo quantizado) e a fog da câmara é aplicada no shader
-//! (`apply_fog` sob `DISTANCE_FOG`) — sem ela o horizonte lia-se a 100%
-//! de contraste. `base-color` autoral NÃO é lido neste caminho (as vertex
-//! colors transportam dados de parede/região, não tint).
+//! Lighting é o pipeline PBR REAL da engine (2026-09-07, passe "Luz &
+//! Atmosfera"): o fragment constrói um `PbrInput` à mão (sem importar
+//! `pbr_fragment`, que conflituaria com a tabela bindless) e chama
+//! `apply_pbr_lighting` + `main_pass_post_lighting_processing` — o terreno
+//! recebe as sombras em cascata do sol, as luzes pontuais clusterizadas, a
+//! luz ambiente e o SSAO, com specular pelas `roughs` por layer e o relevo
+//! dos `normal.ktx2` do pool (um por layer, blend ponderado pelos pesos do
+//! splat). A fog da câmara é aplicada pelo
+//! `main_pass_post_lighting_processing` (define `DISTANCE_FOG` do view key).
+//! O antigo `day_tint`/`sun_dir` do caminho fake continuam no uniform por
+//! compatibilidade de layout mas já não são lidos. `base-color` autoral NÃO
+//! é lido neste caminho (as vertex colors transportam dados de
+//! parede/região, não tint).
 
 use bevy::asset::Asset;
 use bevy::math::Vec4;
@@ -68,7 +72,7 @@ const CONFIG_END: &str = "// === END WORLD CONFIG ===";
 /// senão volta o SIGSEGV, e ele não vem com mensagem nenhuma.
 #[derive(Debug, Clone, Asset, TypePath, AsBindGroup)]
 #[data(0, TerrainChunkParams, binding_array(10))]
-#[bindless(index_table(range(0..21)))]
+#[bindless(index_table(range(0..69)))]
 pub struct TerrainChunkMaterial {
     #[texture(1)]
     #[sampler(2)]
@@ -100,6 +104,92 @@ pub struct TerrainChunkMaterial {
     #[texture(19)]
     #[sampler(20)]
     pub splat2: Handle<Image>,
+    /// Tangent-space normal maps do pool (`normal.ktx2`), um por layer —
+    /// o relevo real do chão para o PBR (T1). Slots sem normal carregam a
+    /// imagem plana partilhada (`flat_normal_image`) — o WGSL devolve a
+    /// normal geométrica e o blend fica intacto. A ORDEM dos campos é a da
+    /// tabela de índices bindless (21–36) e tem de bater certo com
+    /// `TerrainChunkBindings` no WGSL.
+    #[texture(21)]
+    #[sampler(22)]
+    pub layer0_normal: Handle<Image>,
+    #[texture(23)]
+    #[sampler(24)]
+    pub layer1_normal: Handle<Image>,
+    #[texture(25)]
+    #[sampler(26)]
+    pub layer2_normal: Handle<Image>,
+    #[texture(27)]
+    #[sampler(28)]
+    pub layer3_normal: Handle<Image>,
+    #[texture(29)]
+    #[sampler(30)]
+    pub layer4_normal: Handle<Image>,
+    #[texture(31)]
+    #[sampler(32)]
+    pub layer5_normal: Handle<Image>,
+    #[texture(33)]
+    #[sampler(34)]
+    pub layer6_normal: Handle<Image>,
+    #[texture(35)]
+    #[sampler(36)]
+    pub layer7_normal: Handle<Image>,
+    /// Height maps escalares do pool (`height.ktx2`), um por layer — o
+    /// height-blend entre as duas layers dominantes (a rocha sai por cima da
+    /// relva na fronteira). Slots sem o ficheiro carregam a plana partilhada
+    /// (`flat_height_image`, 0.5) e o blend devolve os pesos originais.
+    #[texture(37)]
+    #[sampler(38)]
+    pub layer0_height: Handle<Image>,
+    #[texture(39)]
+    #[sampler(40)]
+    pub layer1_height: Handle<Image>,
+    #[texture(41)]
+    #[sampler(42)]
+    pub layer2_height: Handle<Image>,
+    #[texture(43)]
+    #[sampler(44)]
+    pub layer3_height: Handle<Image>,
+    #[texture(45)]
+    #[sampler(46)]
+    pub layer4_height: Handle<Image>,
+    #[texture(47)]
+    #[sampler(48)]
+    pub layer5_height: Handle<Image>,
+    #[texture(49)]
+    #[sampler(50)]
+    pub layer6_height: Handle<Image>,
+    #[texture(51)]
+    #[sampler(52)]
+    pub layer7_height: Handle<Image>,
+    /// AO maps escalares do pool (`ao.ktx2`), um por layer — escurece o
+    /// albedo por texel (contacto entre pedras, juntas de cascalho). Slots
+    /// sem o ficheiro carregam a plana partilhada (`flat_ao_image`, 1.0) =
+    /// oclusão nenhuma.
+    #[texture(53)]
+    #[sampler(54)]
+    pub layer0_ao: Handle<Image>,
+    #[texture(55)]
+    #[sampler(56)]
+    pub layer1_ao: Handle<Image>,
+    #[texture(57)]
+    #[sampler(58)]
+    pub layer2_ao: Handle<Image>,
+    #[texture(59)]
+    #[sampler(60)]
+    pub layer3_ao: Handle<Image>,
+    #[texture(61)]
+    #[sampler(62)]
+    pub layer4_ao: Handle<Image>,
+    #[texture(63)]
+    #[sampler(64)]
+    pub layer5_ao: Handle<Image>,
+    #[texture(65)]
+    #[sampler(66)]
+    pub layer6_ao: Handle<Image>,
+    #[texture(67)]
+    #[sampler(68)]
+    pub layer7_ao: Handle<Image>,
     /// Tabela do chunk. Sem `#[uniform]`/`#[storage]` de campo: o
     /// `#[data(...)]` da struct manda-a para a binding array partilhada dos
     /// materiais bindless (índice 0 da tabela de índices).
@@ -128,6 +218,51 @@ impl TerrainChunkMaterial {
             5 => &mut self.layer5,
             6 => &mut self.layer6,
             _ => &mut self.layer7,
+        }
+    }
+
+    /// Mutable normal-map handle of layer `i` (0..8); the failed-normal
+    /// repointing walks this.
+    pub fn normal_mut(&mut self, i: usize) -> &mut Handle<Image> {
+        match i {
+            0 => &mut self.layer0_normal,
+            1 => &mut self.layer1_normal,
+            2 => &mut self.layer2_normal,
+            3 => &mut self.layer3_normal,
+            4 => &mut self.layer4_normal,
+            5 => &mut self.layer5_normal,
+            6 => &mut self.layer6_normal,
+            _ => &mut self.layer7_normal,
+        }
+    }
+
+    /// Mutable height-map handle of layer `i` (0..8); the failed-height
+    /// repointing walks this.
+    pub fn height_mut(&mut self, i: usize) -> &mut Handle<Image> {
+        match i {
+            0 => &mut self.layer0_height,
+            1 => &mut self.layer1_height,
+            2 => &mut self.layer2_height,
+            3 => &mut self.layer3_height,
+            4 => &mut self.layer4_height,
+            5 => &mut self.layer5_height,
+            6 => &mut self.layer6_height,
+            _ => &mut self.layer7_height,
+        }
+    }
+
+    /// Mutable AO-map handle of layer `i` (0..8); the failed-AO repointing
+    /// walks this.
+    pub fn ao_mut(&mut self, i: usize) -> &mut Handle<Image> {
+        match i {
+            0 => &mut self.layer0_ao,
+            1 => &mut self.layer1_ao,
+            2 => &mut self.layer2_ao,
+            3 => &mut self.layer3_ao,
+            4 => &mut self.layer4_ao,
+            5 => &mut self.layer5_ao,
+            6 => &mut self.layer6_ao,
+            _ => &mut self.layer7_ao,
         }
     }
 }
@@ -166,7 +301,10 @@ pub struct TerrainChunkParams {
     pub flats: [Vec4; 8],
     pub roughs: [Vec4; 8],
     pub chunk: Vec4,
-    /// `rgb` = dia/noite tint do terreno (day factor 1 = branco).
+    /// `rgb` = tint do HORIZONTE da atmosfera (aerial perspective r2;
+    /// publicado pelo `terrain_daynight_tint` a partir do `AtmosphereState`,
+    /// com `w = 1` — o default `w = 0` mantém o caminho desligado até ao
+    /// primeiro publish). Era o tint dia/noite do caminho fake de luz.
     pub day_tint: Vec4,
     /// `xyz` = direção de VIAGEM da luz do sol (para onde viaja; o mesmo
     /// sol que as sombras seguem, publicado no passo quantizado do day
@@ -215,7 +353,10 @@ impl TerrainChunkParams {
             }),
             roughs: pick(|s| s.rough),
             chunk: Vec4::new(origin[0], origin[1], edge, rock),
-            day_tint: Vec4::ONE,
+            // w = 0: a aerial perspective só liga quando o publicador da
+            // atmosfera escreve o tint do horizonte (mundos sem DayCycle
+            // ficam com o albedo puro, sem mix para branco).
+            day_tint: Vec4::new(1.0, 1.0, 1.0, 0.0),
             // Default até o primeiro publish do `terrain_daynight_tint` —
             // o mesmo vetor que o shader hardcoded usava antes do uniform.
             sun_dir: Vec4::new(0.35, -0.8, -0.45, 0.0),
@@ -442,7 +583,7 @@ pub fn terrain_daynight_tint(
         .map(|a| -a.sun_dir.normalize_or_zero())
         .unwrap_or(Vec3::ZERO);
 
-    let Some(chunks) = chunks else { return };
+        let Some(chunks) = chunks else { return };
     if let Some(layers) = &chunks.layer {
         // Tocar no material marca-o Modified e re-escreve a sua entrada na
         // binding array. A 60 Hz × 4000 chunks isso é uma inundação da fila
@@ -451,7 +592,19 @@ pub fn terrain_daynight_tint(
         let step = (day * DAY_TINT_STEPS).round() / DAY_TINT_STEPS;
         if last_step.is_none_or(|prev| (step - prev).abs() > 1e-4) {
             *last_step = Some(step);
-            let tinted4 = Vec4::new(tint[0], tint[1], tint[2], 1.0);
+            // r2 — AERIAL PERSPECTIVE: o campo `day_tint` passa a transportar
+            // o TINT DO HORIZONTE (não o antigo multiplicador de dia/noite —
+            // a luz real da r1 já trata o escurecer). O shader mistura o
+            // chão distante para esta cor: as montanhas ao fundo leem-se
+            // azuis/da cor do céu, não cinzentas. `w = 1` liga o caminho;
+            // sem publicador (sem DayCycle/atmosphere) fica 0 = desligado.
+            // O horizonte vem em valores de radiância (HDR, pico ~400) —
+            // normalizado ao canal máximo para um TINT visível ≤ 1.
+            let sky = atmosphere.as_deref().map(|a| a.horizon);
+            let sky4 = sky.map(|h| {
+                let peak = h[0].max(h[1]).max(h[2]).max(1.0);
+                Vec4::new(h[0] / peak, h[1] / peak, h[2] / peak, 0.85)
+            });
             let sun4 = if sun_travel != Vec3::ZERO {
                 Vec4::new(sun_travel.x, sun_travel.y, sun_travel.z, 1.0)
             } else {
@@ -459,7 +612,7 @@ pub fn terrain_daynight_tint(
             };
             for handle in layers.materials.values() {
                 if let Some(mut material) = chunk_materials.get_mut(handle) {
-                    material.params.day_tint = tinted4;
+                    material.params.day_tint = sky4.unwrap_or(material.params.day_tint);
                     if sun4.w > 0.0 {
                         material.params.sun_dir = sun4;
                     }
@@ -472,6 +625,43 @@ pub fn terrain_daynight_tint(
         && material.base_color != tinted
     {
         material.base_color = tinted;
+    }
+}
+
+/// Publica a chuva do `<Weather>` no canal LIVRE `walls_b.w` dos params de
+/// chunk — o `chunk.wgsl` lê-o como `wet` e molha o chão (albedo escurecido
+/// + roughness de poça). Sistema próprio (throttle 0.5 s) porque o passo do
+/// day-tint quantiza por FASE do dia e a chuva muda dentro da fase.
+pub fn terrain_rain_wetness(
+    time: Res<Time>,
+    weather: Option<Res<crate::worldsys::WeatherState>>,
+    chunks: Option<Res<super::runtime::TerrainChunkMaterials>>,
+    mut chunk_materials: ResMut<Assets<TerrainChunkMaterial>>,
+    mut throttle: Local<f32>,
+    mut current: Local<f32>,
+) {
+    *throttle -= time.delta_secs();
+    if *throttle > 0.0 {
+        return;
+    }
+    *throttle = 0.5;
+    let target = weather
+        .as_deref()
+        .map(|w| w.rain.clamp(0.0, 1.0))
+        .unwrap_or(0.0);
+    // Suavização por passada (0.5 s): a chuva empapa e seca gradualmente.
+    *current += (target - *current).clamp(-0.2, 0.2);
+    if (*current - target).abs() < 1e-3 {
+        return;
+    }
+    let Some(chunks) = chunks else { return };
+    let Some(layers) = &chunks.layer else {
+        return;
+    };
+    for handle in layers.materials.values() {
+        if let Some(mut material) = chunk_materials.get_mut(handle) {
+            material.params.walls_b.w = *current;
+        }
     }
 }
 
@@ -531,8 +721,8 @@ mod tests {
     fn test_chunk_material_stays_bindless() {
         let source = include_str!("layer_material.rs");
         assert!(
-            source.contains("#[bindless(index_table(range(0..21)))]"),
-            "TerrainChunkMaterial tem de continuar bindless (21 entradas: data + 10 pares)"
+            source.contains("#[bindless(index_table(range(0..69)))]"),
+            "TerrainChunkMaterial tem de continuar bindless (69 entradas: data + 34 pares)"
         );
         assert!(
             source.contains("#[data(0, TerrainChunkParams, binding_array(10))]"),

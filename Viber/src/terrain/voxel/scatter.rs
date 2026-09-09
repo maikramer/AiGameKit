@@ -291,13 +291,16 @@ impl RockFeaturesSpec {
             };
             let bridge = self.bridge_at(site, a, b, out.bridges.len());
             // The abutments stand ON the banks — they, not the span above
-            // the channel, must be dry and clear.
-            let mut bad = None;
-            for p in [a, b] {
-                if let Some(reason) = self.reject_reason(p, bridge.width * 0.5, guards) {
-                    bad = Some(reason);
-                    break;
-                }
+            // the channel, must be dry and clear. The span itself may cross
+            // water and roads (that is what a crossing is), but never stand
+            // over another feature or inside a wall.
+            let mut bad = [a, b]
+                .iter()
+                .find_map(|p| self.reject_reason(*p, bridge.width * 0.5, guards));
+            if bad.is_none() {
+                bad = resample(&[a, site.at, b], CAVE_PATH_STEP).into_iter().find_map(
+                    |p| self.reject_solid(p, bridge.width * 0.5, guards),
+                );
             }
             if let Some(reason) = bad {
                 stats.bump(reason);
@@ -323,12 +326,16 @@ impl RockFeaturesSpec {
                 continue;
             }
             let arch = self.arch_at(site, out.arches.len());
-            let mut bad = None;
-            for p in arch.path.iter().copied().chain(std::iter::once(site.at)) {
-                if let Some(reason) = self.reject_reason(p, arch.thickness, guards) {
-                    bad = Some(reason);
-                    break;
-                }
+            let mut bad = arch
+                .path
+                .iter()
+                .copied()
+                .chain(std::iter::once(site.at))
+                .find_map(|p| self.reject_reason(p, arch.thickness, guards));
+            if bad.is_none() {
+                bad = resample(&arch.path, CAVE_PATH_STEP)
+                    .into_iter()
+                    .find_map(|p| self.reject_solid(p, arch.thickness, guards));
             }
             if let Some(reason) = bad {
                 stats.bump(reason);
@@ -387,6 +394,14 @@ impl RockFeaturesSpec {
         {
             return Some(Reject::Road);
         }
+        self.reject_solid(p, margin, guards)
+    }
+
+    /// The solid-only half of [`Self::reject_reason`]: cliff walls, pads and
+    /// features already in the world. Spans of bridges and arches are checked
+    /// with THIS alone — a crossing exists to pass over water and roads, but
+    /// no span may stand over another feature or inside a wall.
+    fn reject_solid(&self, p: Vec2, margin: f32, guards: &ScatterGuards) -> Option<Reject> {
         if guards.cliffs.is_some_and(|m| m.is_cliff_within(p, margin)) {
             return Some(Reject::Cliff);
         }

@@ -864,6 +864,48 @@ pub fn sharpen_terrain(
     grid.commit_stroke()
 }
 
+/// Marcador: as cores deste mesh de caixa voxel já levaram o bake da máscara
+/// de cliff (canal R = wall space, A = fator de região).
+#[derive(Debug, bevy::prelude::Component)]
+pub struct CliffBaked;
+
+/// Assa a máscara regional nas vertex colors de UM mesh de caixa voxel:
+/// R = wall space ([`CliffMask::wall_at`], 0 = brow → 1 = pé, 0.5 neutro) e
+/// A = fator de região ([`CliffMask::factor`], borda suave da camada
+/// dilatada) — o contrato que o `chunk.wgsl` lê para o gate do triplanar, a
+/// meteorização brow→pé, o AO de contacto e a distribuição de
+/// escorrimentos/musgo. Só o material de LAYERS usa estes canais: no caminho
+/// do tint as cores SÃO o tint e valores de wall-space escureceriam cada
+/// voxel (o chamador filtra pelo tipo de material).
+///
+/// `origin` é o XZ de MUNDO do canto mínimo da caixa (as posições do mesh
+/// são relativas à caixa; o `Transform` da entidade carrega o offset).
+/// Devolve quantos vértices foram escritos.
+pub fn bake_cliff_colors(mask: &CliffMask, origin: Vec2, mesh: &mut bevy::render::mesh::Mesh) -> usize {
+    use bevy::render::mesh::VertexAttributeValues;
+    // Primeiro lê as posições (borrow imutável) e coleta o XZ de mundo — só
+    // depois se pode pedir o attribute MUTÁVEL das cores.
+    let mut xz: Vec<Vec2> = Vec::new();
+    if let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(bevy::render::mesh::Mesh::ATTRIBUTE_POSITION) {
+        xz.reserve(pos.len());
+        for p in pos.iter() {
+            xz.push(Vec2::new(origin.x + p[0], origin.y + p[2]));
+        }
+    } else {
+        return 0;
+    }
+    let Some(VertexAttributeValues::Float32x4(colors)) = mesh.attribute_mut(bevy::render::mesh::Mesh::ATTRIBUTE_COLOR) else {
+        return 0;
+    };
+    let mut baked = 0;
+    for (vertex, p) in colors.iter_mut().zip(xz.iter()) {
+        vertex[0] = mask.wall_at(*p);
+        vertex[3] = mask.factor(*p);
+        baked += 1;
+    }
+    baked
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1094,5 +1136,69 @@ mod tests {
         let pre_mask = CliffMask::build(&grid, &spec);
         let changed = sharpen_terrain(&mut grid, &spec, &water, &pre_mask);
         assert_eq!(changed, 0, "every steep texel is underwater here");
+    }
+
+    /// O bake escreve wall space no R e fator de região no A, e só onde a
+    /// máscara tem região — fora dela fica neutro (0.5) / zero.
+    #[test]
+    fn test_bake_cliff_colors_writes_wall_and_region() {
+        let mut grid =
+            BrushGrid::new(vec![0u16; 128 * 128], 128, 128, 128.0, 50.0, 1.0).expect("grid");
+        grid.begin_stroke("field");
+        for z in 0..128 {
+            for x in 0..128 {
+                let cx = grid.cell_center(x, z).x;
+                let h = if cx > 30.0 && cx <= 50.0 {
+                    30.0 - (cx - 30.0) * 1.43 // ~55° face
+                } else {
+                    10.0 + cx.clamp(0.0, 40.0) * (12.0 / 40.0)
+                };
+                grid.set_cell_height(x, z, h);
+            }
+        }
+        grid.commit_stroke();
+        let mask = CliffMask::build_with(&grid, 50.0, 120.0, 4.0, 8.0);
+
+        let mut mesh = bevy::render::mesh::Mesh::new(
+            bevy::render::mesh::PrimitiveTopology::TriangleList,
+            bevy::asset::RenderAssetUsages::MAIN_WORLD,
+        );
+        // Posições = mundo (origin ZERO): um vértice na face do cliff, um em
+        // campo aberto.
+        mesh.insert_attribute(
+            bevy::render::mesh::Mesh::ATTRIBUTE_POSITION,
+            vec![[40.0, 15.0, 0.0], [-30.0, 15.0, 0.0]],
+        );
+        mesh.insert_attribute(
+            bevy::render::mesh::Mesh::ATTRIBUTE_COLOR,
+            vec![[0.5, 0.0, 0.0, 1.0]; 2],
+        );
+
+        let baked = bake_cliff_colors(&mask, Vec2::ZERO, &mut mesh);
+        assert_eq!(baked, 2, "both vertices written");
+        let bevy::render::mesh::VertexAttributeValues::Float32x4(colors) = mesh
+            .attribute(bevy::render::mesh::Mesh::ATTRIBUTE_COLOR)
+            .expect("colors present")
+        else {
+            panic!("colors must be Float32x4");
+        };
+        let colors = colors.clone();
+        // Dentro da face: fator de região forte e wall space = o da máscara.
+        assert!(
+            colors[0][3] > 0.5,
+            "inside the face: region factor {:.2}",
+            colors[0][3]
+        );
+        assert!(
+            (colors[0][0] - mask.wall_at(Vec2::new(40.0, 0.0))).abs() < 1e-6,
+            "R carries the mask wall space"
+        );
+        // Campo aberto: sem região; o R leva o wall space da MÁSCARA
+        // (qualquer que seja fora da região — o shader só o lê × region).
+        assert!(colors[1][3] <= 1e-4, "open ground: no region");
+        assert!(
+            (colors[1][0] - mask.wall_at(Vec2::new(-30.0, 0.0))).abs() < 1e-6,
+            "R carries the mask wall space"
+        );
     }
 }

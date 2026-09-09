@@ -35,7 +35,7 @@ use super::sampler::ResolvedPad;
 use super::spec::TerrainSpec;
 use super::splat::{
     SLOT_GRAVEL, SLOT_RIVERBED, SplatParams, chunk_splat2_image, chunk_splat_image,
-    generate_chunk_splats, pool_albedo,
+    flat_ao_image, flat_height_image, flat_normal_image, generate_chunk_splats,
     solid_white_image,
 };
 use super::voxel::{Span, VoxelField};
@@ -61,6 +61,28 @@ pub enum WatchedTexture {
         slot: usize,
         texture: Handle<Image>,
         repoint: Handle<Image>,
+    },
+    /// Normal map (tangent space) do slot `slot` (0..8) de um material de
+    /// chunk. Falha de carga reponta para a normal PLANA partilhada — um
+    /// handle nunca-residente no material esconde o chunk inteiro.
+    LayerNormal {
+        material: Handle<TerrainChunkMaterial>,
+        slot: usize,
+        texture: Handle<Image>,
+    },
+    /// Height map escalar do slot `slot` (0..8). Falha de carga reponta para
+    /// a height PLANA (0.5) — o height-blend devolve os pesos originais.
+    LayerHeight {
+        material: Handle<TerrainChunkMaterial>,
+        slot: usize,
+        texture: Handle<Image>,
+    },
+    /// AO map escalar do slot `slot` (0..8). Falha de carga reponta para o
+    /// AO neutro (1.0) — oclusão nenhuma.
+    LayerAo {
+        material: Handle<TerrainChunkMaterial>,
+        slot: usize,
+        texture: Handle<Image>,
     },
 }
 
@@ -97,6 +119,15 @@ pub fn drop_failed_terrain_textures(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut chunk_materials: Option<ResMut<Assets<TerrainChunkMaterial>>>,
     mut images: ResMut<Assets<Image>>,
+    // A falha de um normal do pool repete-se em CENTOS de materiais (um por
+    // chunk que carregue o slot) — avisar uma vez por TEXTURA, não por chunk,
+    // e partilhar UM handle de normal plana em vez de um por material.
+    mut normal_warned: Local<std::collections::HashSet<bevy::asset::AssetId<Image>>>,
+    mut flat_handle: Local<Option<Handle<Image>>>,
+    mut height_warned: Local<std::collections::HashSet<bevy::asset::AssetId<Image>>>,
+    mut flat_height_handle: Local<Option<Handle<Image>>>,
+    mut ao_warned: Local<std::collections::HashSet<bevy::asset::AssetId<Image>>>,
+    mut flat_ao_handle: Local<Option<Handle<Image>>>,
 ) {
     if pending.watched.is_empty() {
         return;
@@ -142,6 +173,84 @@ pub fn drop_failed_terrain_textures(
                             images.add(solid_white_image())
                         };
                         *layer.texture_mut(*slot) = fallback;
+                    }
+                }
+                false
+            }
+            Some(bevy::asset::LoadState::Loaded) => false,
+            _ => true,
+        },
+        WatchedTexture::LayerNormal {
+            material,
+            slot,
+            texture,
+        } => match server.get_load_state(texture) {
+            Some(bevy::asset::LoadState::Failed(error)) => {
+                // Normal ausente no asset root (o espelho do exemplo não leva
+                // todos os aliases): reponta para a PLANA — relevo zero nesse
+                // slot em vez de chunk invisível.
+                if normal_warned.insert(texture.id()) {
+                    warn!(
+                        "terrain chunk normal {slot} failed to load ({error}); falling \
+                         back to the flat normal (sincroniza normal.ktx2 do pool)"
+                    );
+                }
+                if let Some(chunk_materials) = chunk_materials.as_mut() {
+                    if let Some(mut layer) = chunk_materials.get_mut(material) {
+                        let flat = flat_handle
+                            .get_or_insert_with(|| images.add(flat_normal_image()))
+                            .clone();
+                        *layer.normal_mut(*slot) = flat;
+                    }
+                }
+                false
+            }
+            Some(bevy::asset::LoadState::Loaded) => false,
+            _ => true,
+        },
+        WatchedTexture::LayerHeight {
+            material,
+            slot,
+            texture,
+        } => match server.get_load_state(texture) {
+            Some(bevy::asset::LoadState::Failed(error)) => {
+                if height_warned.insert(texture.id()) {
+                    warn!(
+                        "terrain chunk height {slot} failed to load ({error}); falling \
+                         back to the flat height (height-blend devolve os pesos)"
+                    );
+                }
+                if let Some(chunk_materials) = chunk_materials.as_mut() {
+                    if let Some(mut layer) = chunk_materials.get_mut(material) {
+                        let flat = flat_height_handle
+                            .get_or_insert_with(|| images.add(flat_height_image()))
+                            .clone();
+                        *layer.height_mut(*slot) = flat;
+                    }
+                }
+                false
+            }
+            Some(bevy::asset::LoadState::Loaded) => false,
+            _ => true,
+        },
+        WatchedTexture::LayerAo {
+            material,
+            slot,
+            texture,
+        } => match server.get_load_state(texture) {
+            Some(bevy::asset::LoadState::Failed(error)) => {
+                if ao_warned.insert(texture.id()) {
+                    warn!(
+                        "terrain chunk ao {slot} failed to load ({error}); falling \
+                         back to the neutral AO (oclusão nenhuma)"
+                    );
+                }
+                if let Some(chunk_materials) = chunk_materials.as_mut() {
+                    if let Some(mut layer) = chunk_materials.get_mut(material) {
+                        let flat = flat_ao_handle
+                            .get_or_insert_with(|| images.add(flat_ao_image()))
+                            .clone();
+                        *layer.ao_mut(*slot) = flat;
                     }
                 }
                 false
@@ -430,10 +539,15 @@ pub fn bootstrap(world: &mut World) {
         return;
     };
 
-    // 1. Height grid.
+    // 1. Height grid. As roots extra vêm do config.yaml do jogo (apps mínimas
+    // de teste correm sem ele — a pasta do mundo continua a ser a base).
+    let asset_roots = match world.get_resource::<crate::config::GameConfig>() {
+        Some(config) => config.asset_roots(pending.base_dir.as_deref().unwrap_or(Path::new("."))),
+        None => Vec::new(),
+    };
     let mut spec = spec.clone();
     let map = match &spec.heightmap {
-        Some(path) => match load_heightmap(pending.base_dir.as_deref(), path) {
+        Some(path) => match load_heightmap(pending.base_dir.as_deref(), &asset_roots, path) {
             Ok(loaded) => {
                 // The heightmap file describes its own coverage, but the world
                 // XML wins when it states one: pads, lakes, rivers, roads and
@@ -1001,7 +1115,9 @@ fn spawn_chunk_materials(
     // `spec.layers` vem CANÓNICA do parse (`canonicalize_layers`: posição =
     // slot, buracos = ""). Colocar por slot e não por ordem escrita — sem
     // isto um subconjunto autoral lia a posição como índice de slot e pintava
-    // texturas trocadas.
+    // texturas trocadas. As texturas do pool resolvem contra o
+    // `terrain_textures_dir` do config.yaml do jogo (docs/ASSETS.md).
+    let game_config = world.resource::<crate::config::GameConfig>().clone();
     let mut loaded: Vec<(usize, Handle<Image>)> = Vec::new();
     let mut first = None::<Handle<Image>>;
     for (slot, entry) in spec
@@ -1013,7 +1129,9 @@ fn spawn_chunk_materials(
         if entry.is_empty() {
             continue;
         }
-        let path = pool_albedo(entry).unwrap_or_else(|| entry.clone());
+        let path = game_config
+            .terrain_albedo(entry)
+            .unwrap_or_else(|| entry.clone());
         let handle = load_world_texture(server, world, &path);
         first.get_or_insert_with(|| handle.clone());
         loaded.push((slot, handle));
@@ -1028,8 +1146,55 @@ fn spawn_chunk_materials(
     // O leito é pintado pelo splat independentemente da lista autoral —
     // um mundo que não lista `pebbles` continua com fundo de seixo.
     if layer_textures[SLOT_RIVERBED] == fallback {
-        let path = pool_albedo("pebbles").expect("pebbles is a DEFAULT_LAYERS alias");
+        let path = game_config
+            .terrain_albedo("pebbles")
+            .expect("pebbles is a DEFAULT_LAYERS alias");
         layer_textures[SLOT_RIVERBED] = load_world_texture(server, world, &path);
+    }
+
+    // Normal maps do pool, por SLOT (um handle partilhado por todos os
+    // chunks). Alias sem ficheiro no asset root → a carga falha e o watch
+    // reponta para a normal plana (o material só desenha com TODAS as
+    // texturas residentes, portanto a falha não pode ficar pendente);
+    // alias vazio/fora do pool → normal plana logo, sem watch.
+    let flat_normal = images.add(flat_normal_image());
+    let mut layer_normals = vec![flat_normal.clone(); super::splat::LAYER_COUNT];
+    for (slot, entry) in spec.layers.iter().enumerate().take(super::splat::LAYER_COUNT) {
+        if entry.is_empty() {
+            continue;
+        }
+        let Some(path) = game_config.terrain_normal(entry) else {
+            continue;
+        };
+        layer_normals[slot] = load_world_texture(server, world, &path);
+    }
+
+    // Height + AO do pool, por SLOT — a MESMA disciplina das normais: alias
+    // sem ficheiro no asset root → o watch reponta para a plana/neutra;
+    // alias vazio/fora do pool → plana logo. A plana (0.5) faz o
+    // height-blend devolver os pesos originais e o AO neutro (1.0) não
+    // escurece nada: mundos sem os mapas degradam sem costura.
+    let flat_height = images.add(flat_height_image());
+    let mut layer_heights = vec![flat_height.clone(); super::splat::LAYER_COUNT];
+    for (slot, entry) in spec.layers.iter().enumerate().take(super::splat::LAYER_COUNT) {
+        if entry.is_empty() {
+            continue;
+        }
+        let Some(path) = game_config.terrain_height(entry) else {
+            continue;
+        };
+        layer_heights[slot] = load_world_texture(server, world, &path);
+    }
+    let flat_ao = images.add(flat_ao_image());
+    let mut layer_aos = vec![flat_ao.clone(); super::splat::LAYER_COUNT];
+    for (slot, entry) in spec.layers.iter().enumerate().take(super::splat::LAYER_COUNT) {
+        if entry.is_empty() {
+            continue;
+        }
+        let Some(path) = game_config.terrain_ao(entry) else {
+            continue;
+        };
+        layer_aos[slot] = load_world_texture(server, world, &path);
     }
 
     let params = SplatParams {
@@ -1076,6 +1241,30 @@ fn spawn_chunk_materials(
             layer7: layer_textures[slots[7]].clone(),
             splat: splat_handle,
             splat2: splat2_handle,
+            layer0_normal: layer_normals[slots[0]].clone(),
+            layer1_normal: layer_normals[slots[1]].clone(),
+            layer2_normal: layer_normals[slots[2]].clone(),
+            layer3_normal: layer_normals[slots[3]].clone(),
+            layer4_normal: layer_normals[slots[4]].clone(),
+            layer5_normal: layer_normals[slots[5]].clone(),
+            layer6_normal: layer_normals[slots[6]].clone(),
+            layer7_normal: layer_normals[slots[7]].clone(),
+            layer0_height: layer_heights[slots[0]].clone(),
+            layer1_height: layer_heights[slots[1]].clone(),
+            layer2_height: layer_heights[slots[2]].clone(),
+            layer3_height: layer_heights[slots[3]].clone(),
+            layer4_height: layer_heights[slots[4]].clone(),
+            layer5_height: layer_heights[slots[5]].clone(),
+            layer6_height: layer_heights[slots[6]].clone(),
+            layer7_height: layer_heights[slots[7]].clone(),
+            layer0_ao: layer_aos[slots[0]].clone(),
+            layer1_ao: layer_aos[slots[1]].clone(),
+            layer2_ao: layer_aos[slots[2]].clone(),
+            layer3_ao: layer_aos[slots[3]].clone(),
+            layer4_ao: layer_aos[slots[4]].clone(),
+            layer5_ao: layer_aos[slots[5]].clone(),
+            layer6_ao: layer_aos[slots[6]].clone(),
+            layer7_ao: layer_aos[slots[7]].clone(),
             params,
         });
         // Watch EVERY layer of the material: a texture that never lands is
@@ -1105,6 +1294,33 @@ fn spawn_chunk_materials(
                 texture,
                 repoint,
             });
+            // Vigiar também o normal do slot (só quando não é a plana — essa
+            // já é o fallback dela própria).
+            let normal = layer_normals[pool_slot].clone();
+            if normal != flat_normal {
+                watched.push(WatchedTexture::LayerNormal {
+                    material: material.clone(),
+                    slot: slot_index,
+                    texture: normal,
+                });
+            }
+            // Idem para height e AO: planos são o fallback deles próprios.
+            let height = layer_heights[pool_slot].clone();
+            if height != flat_height {
+                watched.push(WatchedTexture::LayerHeight {
+                    material: material.clone(),
+                    slot: slot_index,
+                    texture: height,
+                });
+            }
+            let ao = layer_aos[pool_slot].clone();
+            if ao != flat_ao {
+                watched.push(WatchedTexture::LayerAo {
+                    material: material.clone(),
+                    slot: slot_index,
+                    texture: ao,
+                });
+            }
         }
         materials.insert((cx, cz), material);
     }
@@ -1219,13 +1435,15 @@ fn spawn_water(
     }
     // A cor/alpha do corpo (e o fade de margem) chegam pelas VERTEX COLORS;
     // o shader da extensão (`shaders/water.wgsl`) acrescenta ondas, fresnel e
-    // glint por cima deste PBR base.
+    // glint por cima deste PBR base. `reflectance 1.0` = F0 0.04, o F0 real
+    // da água: com o IBL do probe o espelho rasante reflete o CÉU de verdade
+    // (o tint analítico do shader ficou residual para mundos sem IBL).
     let water_material = materials.add(WaterMaterial {
         base: StandardMaterial {
             base_color: Color::WHITE,
             metallic: 0.0,
             perceptual_roughness: 0.08,
-            reflectance: 0.5,
+            reflectance: 1.0,
             alpha_mode: bevy::material::AlphaMode::Blend,
             cull_mode: None,
             ..StandardMaterial::default()
@@ -1587,21 +1805,28 @@ pub struct LoadedHeightmap {
 /// mundo declarável e o `to_luma16` duplica a memória do decode.
 const MAX_HM_IMAGE_EDGE: usize = 16384;
 
-fn load_heightmap(base_dir: Option<&Path>, path: &str) -> anyhow::Result<LoadedHeightmap> {
+fn load_heightmap(
+    base_dir: Option<&Path>,
+    asset_roots: &[PathBuf],
+    path: &str,
+) -> anyhow::Result<LoadedHeightmap> {
     // `/assets/…`-style paths are site-root relative: resolve against the
-    // world dir (the folder that contains `assets/`).
+    // world dir (the folder that contains `assets/`), then the extra roots
+    // do config.yaml do jogo (docs/ASSETS.md), then the literal path (CWD).
     let rel = path.trim_start_matches('/');
-    let resolved = match base_dir {
-        Some(dir) => {
-            let candidate = dir.join(rel);
-            if candidate.exists() {
-                candidate
-            } else {
-                PathBuf::from(path)
-            }
+    let mut resolved = PathBuf::from(path);
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(dir) = base_dir {
+        candidates.push(dir.to_path_buf());
+    }
+    candidates.extend(asset_roots.iter().cloned());
+    for root in candidates {
+        let candidate = root.join(rel);
+        if candidate.exists() {
+            resolved = candidate;
+            break;
         }
-        None => PathBuf::from(path),
-    };
+    }
     let bytes =
         std::fs::read(&resolved).map_err(|e| anyhow::anyhow!("{}: {e}", resolved.display()))?;
     if path.to_ascii_lowercase().ends_with(".ahgt") {

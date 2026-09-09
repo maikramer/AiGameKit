@@ -108,9 +108,48 @@ impl bevy::app::Plugin for TerrainPlugin {
             (
                 timed(Group::Terrain, adopt_chunks),
                 timed(Group::Terrain, update_voxel_columns),
+                timed(Group::Terrain, bake_cliff_colors),
             )
                 .in_set(TerrainSet::Columns),
         );
+    }
+}
+
+/// Assa a máscara de cliff nas vertex colors das caixas voxel NOVAS
+/// (R = wall space, A = fator de região) — o contrato que o `chunk.wgsl` lê
+/// para o gate do triplanar, a meteorização brow→pé, o AO de contacto e a
+/// distribuição de escorrimentos/musgo (antes do bake tudo nascia com
+/// WALL_NEUTRAL constante e a pele das paredes ficava inerte). Uma caixa
+/// nova (spawn ou troca de LOD) entra sem o marcador [`CliffBaked`] e é
+/// apanhada na frame seguinte; a ordem contra `update_voxel_columns` não
+/// importa por isso mesmo. Caixas do caminho StandardMaterial (tint) ficam
+/// de fora — as cores delas SÃO o tint, não dados de parede.
+fn bake_cliff_colors(
+    mask: Option<Res<super::cliffs::CliffMask>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    boxes: Query<
+        (
+            Entity,
+            &Mesh3d,
+            &super::voxel::VoxelChunk,
+            &MeshMaterial3d<super::layer_material::TerrainChunkMaterial>,
+        ),
+        Without<super::cliffs::CliffBaked>,
+    >,
+    mut commands: Commands,
+) {
+    let Some(mask) = mask else {
+        return;
+    };
+    for (entity, mesh3d, chunk, _material) in &boxes {
+        let Some(mut mesh) = meshes.get_mut(&mesh3d.0) else {
+            continue;
+        };
+        // As posições do mesh são relativas à caixa; a máscara lê MUNDO.
+        let origin = Vec2::new(chunk.origin.x, chunk.origin.z);
+        if super::cliffs::bake_cliff_colors(&mask, origin, &mut *mesh) > 0 {
+            commands.entity(entity).insert(super::cliffs::CliffBaked);
+        }
     }
 }
 

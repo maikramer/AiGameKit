@@ -65,11 +65,46 @@ pub const DEFAULT_LAYERS: [&str; LAYER_COUNT] = [
 /// exactly this many).
 pub const LAYER_COUNT: usize = 13;
 
-/// Pool alias → runtime albedo texture path. `None` when `alias` is not a
-/// pool name (callers then treat it as a raw texture path).
+/// Pool alias → albedo texture path RELATIVE ao `terrain_textures_dir` do
+/// config.yaml do jogo. `None` when `alias` is not a pool name (callers then
+/// treat it as a raw texture path).
 pub fn pool_albedo(alias: &str) -> Option<String> {
     if DEFAULT_LAYERS.contains(&alias) {
-        Some(format!("/assets/textures/{alias}/albedo.ktx2"))
+        Some(format!("{alias}/albedo.ktx2"))
+    } else {
+        None
+    }
+}
+
+/// Pool alias → tangent-space normal map path (UASTC linear) RELATIVE ao
+/// `terrain_textures_dir`. `None` quando `alias` não é um nome do pool. O
+/// ficheiro pode não existir em nenhuma root — quem chama tem de vigiar a
+/// carga e repontar para a normal plana.
+pub fn pool_normal(alias: &str) -> Option<String> {
+    if DEFAULT_LAYERS.contains(&alias) {
+        Some(format!("{alias}/normal.ktx2"))
+    } else {
+        None
+    }
+}
+
+/// Pool alias → height map path (escalar, LINEAR) RELATIVE ao
+/// `terrain_textures_dir`. Alimenta o height-blend entre as duas layers
+/// dominantes do fragmento (a rocha "sai por cima" da relva na fronteira).
+pub fn pool_height(alias: &str) -> Option<String> {
+    if DEFAULT_LAYERS.contains(&alias) {
+        Some(format!("{alias}/height.ktx2"))
+    } else {
+        None
+    }
+}
+
+/// Pool alias → ambient-occlusion map path (escalar, LINEAR) RELATIVE ao
+/// `terrain_textures_dir`. Escurece o albedo por texel (contacto entre
+/// pedras, juntas de cascalho).
+pub fn pool_ao(alias: &str) -> Option<String> {
+    if DEFAULT_LAYERS.contains(&alias) {
+        Some(format!("{alias}/ao.ktx2"))
     } else {
         None
     }
@@ -915,6 +950,56 @@ pub fn solid_white_image() -> Image {
     )
 }
 
+/// Normal tangente PLANA (0.5, 0.5, 1) em formato LINEAR — o fallback dos
+/// slots sem `normal.ktx2` no asset root (e o repoint de cargas falhadas).
+/// O shader faz `*2−1` e obtém (0, 0, 1): a normal geométrica, blend intacto.
+pub fn flat_normal_image() -> Image {
+    Image::new(
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        vec![128, 128, 255, 255],
+        TextureFormat::Rgba8Unorm,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
+/// Height PLANA (0.5) — o fallback dos slots sem `height.ktx2` no asset
+/// root. Com alturas iguais o height-blend devolve 0.5 e os pesos originais
+/// ficam intactos: mundos sem o mapa degradam para o blend de sempre.
+pub fn flat_height_image() -> Image {
+    Image::new(
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        vec![128, 128, 128, 255],
+        TextureFormat::Rgba8Unorm,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
+/// AO neutro (1.0) — o fallback dos slots sem `ao.ktx2`: oclusão nenhuma,
+/// albedo intacto.
+pub fn flat_ao_image() -> Image {
+    Image::new(
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        vec![255, 255, 255, 255],
+        TextureFormat::Rgba8Unorm,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
 /// Converts the baked planes into four Bevy images (RGBA8 data channels,
 /// mip chain + anisotropy via the shared texture patcher). Splat UVs live in
 /// 0..1 world coverage, so ClampToEdge is correct here.
@@ -952,7 +1037,12 @@ pub fn splat_images(map: &SplatMap) -> [Image; 4] {
 
 /// Splat texels per chunk edge (32² → 2 m/texel com o chunk default de 64 m,
 /// a densidade do plano global 2048² de um mundo de 4 km).
-pub const CHUNK_SPLAT_TEXELS: u32 = 32;
+/// Splat texels por borda de chunk (64² = 1 m/texel num chunk de 64 m — o
+/// MESMO passo do LOD0 do terreno; 32² esbatia margens de lago/estradas a
+/// 2 m). O bake corre para TODO o mundo no bootstrap: ×4 texels por chunk é
+/// o custo do detalhe (4 k texels × ~4 k chunks), aceite em troca de
+/// fronteiras de material nítidas.
+pub const CHUNK_SPLAT_TEXELS: u32 = 64;
 
 /// Baked splat of ONE chunk: the eight pool slots it renders with plus the
 /// TWO RGBA8 weight planes (`size²` texels each, row-major; plane 0 =
@@ -1552,9 +1642,12 @@ mod tests {
 
     #[test]
     fn test_pool_aliases_resolve_to_pool_paths() {
+        // RELATIVO ao `terrain_textures_dir` do config do jogo — o prefixo
+        // vem de `config::GameConfig::terrain_albedo`.
+        assert_eq!(pool_albedo("grass").as_deref(), Some("grass/albedo.ktx2"));
         assert_eq!(
-            pool_albedo("grass").as_deref(),
-            Some("/assets/textures/grass/albedo.ktx2")
+            pool_normal("snow_peak").as_deref(),
+            Some("snow_peak/normal.ktx2")
         );
         assert!(pool_albedo("not_a_texture").is_none());
         assert_eq!(DEFAULT_LAYERS.len(), LAYER_COUNT);

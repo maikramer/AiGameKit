@@ -13,9 +13,11 @@ máscaras (CliffMask, splat, biomas).
 1. **Bootstrap one-shot** (`runtime.rs`): carrega/gera a heightmap → carve
    pads → água → estradas (pelo brush engine, com journal) → bandas de cliff
    3D + `CliffMask` → sharpen opt-in → **`<RockFeatures>` resolve** (semeia
-   arcos/grutas/pontes contra o chão já carvado, e passa a specs normais) →
-   mods do campo voxel → spawna as COLUNAS voxel dentro do raio de render,
-   água e ribbons.
+   arcos/grutas/pontes contra o chão já carvado com o guard set COMPLETO —
+   água, estradas, máscara, pads e discos das features autorais/irmãs;
+   caves só no pé de encostas, com o path inteiro validado — e passa a specs
+   normais) → mods do campo voxel → spawna as COLUNAS voxel dentro do raio
+   de render, água e ribbons.
 2. **Runtime** (`plugin.rs`): ladder de LOD por coluna (célula 1→2→4 m,
    histerese + gate anti-thrash), construção staged sob budget de caixas por
    frame, cull por `render-distance`, respawn à aproximação.
