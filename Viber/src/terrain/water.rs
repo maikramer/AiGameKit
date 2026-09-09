@@ -103,6 +103,94 @@ fn river_phase(path: &[Vec2]) -> f32 {
     (s.sin() * 43_758.55).fract() * std::f32::consts::TAU
 }
 
+// ── Espelho CPU do campo de ondas (buoyancy estilo bevy_water) ─────────────
+//
+// O pacote bevy_water expõe `get_wave_point` — a MESMA função de onda da GPU
+// em CPU, para flutuação de corpos. O Viber segue o mesmo contrato: estas
+// funções replicam linha a linha o `wave_height`/`fbm`/`value_noise`/
+// `hash21` do `water.wgsl` (os parâmetros são os do `WaterSurfaceConfig`),
+// para a engine saber onde está a lâmina REAL. Qualquer mudança nas ondas do
+// shader TEM de se espelhar aqui — os testes de propriedade abaixo e o
+// comentário "espelho linha a linha" são a única guarda (sem harness GPU).
+
+/// Hash inteiro do `water.wgsl` — aritmética u32 wrapping; `q` é a célula
+/// da grelha (floor em i32, bitcast dois-complementos).
+fn wave_hash21(q: [i32; 2]) -> f32 {
+    let mut h = (q[0] as u32).wrapping_mul(0x27d4_eb2d) ^ (q[1] as u32).wrapping_mul(0x1656_67b1);
+    h = (h ^ (h >> 15)).wrapping_mul(0x2c1b_3c6d);
+    h = (h ^ (h >> 13)).wrapping_mul(0x297a_2d39);
+    h ^= h >> 16;
+    (h & 0x00ff_ffff) as f32 * (1.0 / 16_777_216.0)
+}
+
+fn wave_value_noise(p: Vec2) -> f32 {
+    let i = Vec2::new(p.x.floor(), p.y.floor());
+    let f = p - i;
+    // Quintic (smootherstep) — igual ao shader.
+    let u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    let a = wave_hash21([i.x as i32, i.y as i32]);
+    let b = wave_hash21([i.x as i32 + 1, i.y as i32]);
+    let c = wave_hash21([i.x as i32, i.y as i32 + 1]);
+    let d = wave_hash21([i.x as i32 + 1, i.y as i32 + 1]);
+    let ab = a + (b - a) * u.x;
+    let cd = c + (d - c) * u.x;
+    ab + (cd - ab) * u.y
+}
+
+fn wave_fbm(p: Vec2, drift: Vec2) -> f32 {
+    let mut q = p;
+    let mut amp = 0.5f32;
+    let mut sum = 0.0;
+    let mut norm = 0.0;
+    for i in 0..4 {
+        sum += (wave_value_noise(q + drift * (1.0 + i as f32 * 0.35)) - 0.5) * amp;
+        norm += amp;
+        // rot = mat2x2(0.80, 0.60, -0.60, 0.80) (colunas), ×2.03 + offset.
+        let x = 0.80 * q.x - 0.60 * q.y;
+        let y = 0.60 * q.x + 0.80 * q.y;
+        q = Vec2::new(x, y) * 2.03 + Vec2::new(11.7, 5.3);
+        amp *= 0.5;
+    }
+    sum / norm
+}
+
+/// Altura da onda num ponto do mundo — o `get_wave_point` do bevy_water,
+/// espelho CPU do `wave_height` do shader. `wind`/`wind_strength`/`wave_amp`
+/// são os valores do `WaterSurfaceConfig` (que também especializam as consts
+/// CFG_* do WGSL). Não considera o desvanecimento de margem (mask) — quem
+/// flutua está dentro do corpo.
+pub fn wave_height_at(p: Vec2, t: f32, wind: [f32; 2], wind_strength: f32, wave_amp: f32) -> f32 {
+    let wdir = (Vec2::new(wind[0], wind[1]) + Vec2::new(1e-4, 0.0)).normalize();
+    let strength = wind_strength.clamp(0.05, 3.0);
+    let speed = 0.55 + 0.45 * strength;
+
+    // Direções giradas em relação ao vento (graus): 0, +34, −51, +73.
+    let d0 = wdir;
+    let d1 = Vec2::new(
+        wdir.x * 0.829 - wdir.y * 0.559,
+        wdir.x * 0.559 + wdir.y * 0.829,
+    );
+    let d2 = Vec2::new(
+        wdir.x * 0.629 + wdir.y * 0.777,
+        -wdir.x * 0.777 + wdir.y * 0.629,
+    );
+    let d3 = Vec2::new(
+        wdir.x * 0.292 - wdir.y * 0.956,
+        wdir.x * 0.956 + wdir.y * 0.292,
+    );
+
+    let (k0, k1, k2, k3) = (0.897f32, 1.366, 2.094, 3.396);
+    let mut h = 0.0;
+    h += (p.dot(d0) * k0 - t * k0.sqrt() * 1.35 * speed).sin() * 0.30;
+    h += (p.dot(d1) * k1 + t * k1.sqrt() * 1.10 * speed).sin() * 0.20;
+    h += (p.dot(d2) * k2 - t * k2.sqrt() * 0.95 * speed).sin() * 0.12;
+    h += (p.dot(d3) * k3 + t * k3.sqrt() * 0.80 * speed).sin() * 0.07;
+
+    let drift = wdir * t * 0.35 * speed;
+    h += wave_fbm(p * 0.9 + drift, drift * 0.4) * 0.55 * (0.6 + 0.4 * strength.min(2.0));
+    h * wave_amp
+}
+
 /// Estilo de margem (`bank="soft|beach|cliff|terraced|gorge|overhang"` no
 /// `<Lake>`/`<River>`) — o mesmo vocabulário de perfis do cliff system
 /// aplicado à borda da água. `Gorge`/`Overhang` são os estilos VOXEL: a
@@ -1440,11 +1528,14 @@ pub fn lake_water_mesh(spec: &LakeSpec, water_y: f32) -> ChunkMeshData {
         a
     };
     // Center vertex.
-    push(&mut mesh, spec.at, 0.5, 1.0 * island_mask(spec.at));
-    // Two rings: inner unmasked, outer faded to the shore.
-    let ring_count = 2;
-    for ring in 0..ring_count {
-        let radial = (ring + 1) as f32 / ring_count as f32; // 0.5, 1.0
+    push(&mut mesh, spec.at, 0.0, 1.0 * island_mask(spec.at));
+    // Anéis concêntricos: o inner fica sem máscara, o outer desvanece para a
+    // margem. OITO anéis (era 2) — densidade que o deslocamento de VÉRTICE
+    // do shader precisa para as ondas não lerem como losangos; 577 vértices
+    // por lago é irrelevante.
+    const RING_COUNT: usize = 8;
+    for ring in 0..RING_COUNT {
+        let radial = (ring + 1) as f32 / RING_COUNT as f32; // 1/8..1
         for i in 0..LAKE_FAN_SEGMENTS {
             let theta = i as f32 / LAKE_FAN_SEGMENTS as f32 * std::f32::consts::TAU;
             let r = shape.contour(spec.radius, theta) * reach * radial;
@@ -1454,7 +1545,7 @@ pub fn lake_water_mesh(spec: &LakeSpec, water_y: f32) -> ChunkMeshData {
             push(&mut mesh, p, radial, mask);
         }
     }
-    // Center fan.
+    // Center fan (ring 0).
     let seg = LAKE_FAN_SEGMENTS as u32;
     let inner0 = 1u32;
     for i in 0..LAKE_FAN_SEGMENTS as u32 {
@@ -1462,14 +1553,17 @@ pub fn lake_water_mesh(spec: &LakeSpec, water_y: f32) -> ChunkMeshData {
         let b = inner0 + (i + 1) % seg;
         mesh.indices.extend_from_slice(&[0, b, a]);
     }
-    // Ring band: inner ring [1..73), outer ring [73..145).
-    let outer0 = 1 + LAKE_FAN_SEGMENTS as u32;
-    for i in 0..LAKE_FAN_SEGMENTS as u32 {
-        let a = inner0 + i;
-        let b = inner0 + (i + 1) % seg;
-        let c = outer0 + i;
-        let d = outer0 + (i + 1) % seg;
-        mesh.indices.extend_from_slice(&[a, b, c, b, d, c]);
+    // Bandas entre anéis consecutivos.
+    for ring in 0..(RING_COUNT as u32 - 1) {
+        let a0 = inner0 + ring * seg;
+        let b0 = inner0 + (ring + 1) * seg;
+        for i in 0..seg {
+            let a = a0 + i;
+            let b = a0 + (i + 1) % seg;
+            let c = b0 + i;
+            let d = b0 + (i + 1) % seg;
+            mesh.indices.extend_from_slice(&[a, b, c, b, d, c]);
+        }
     }
     mesh
 }
@@ -1931,9 +2025,9 @@ mod tests {
         };
         let body = carve_lake(&mut grid, &spec, 0).expect("lake");
         let mesh = lake_water_mesh(&spec, body.water_y);
-        let expected = 1 + LAKE_FAN_SEGMENTS * 2;
-        assert_eq!(mesh.positions.len(), expected, "center + two rings");
-        assert_eq!(mesh.indices.len(), LAKE_FAN_SEGMENTS * 9, "fan + band");
+        let expected = 1 + LAKE_FAN_SEGMENTS * 8;
+        assert_eq!(mesh.positions.len(), expected, "center + eight rings");
+        assert_eq!(mesh.indices.len(), LAKE_FAN_SEGMENTS * 45, "fan + 7 bands");
         let center = mesh.positions[0];
         assert!(
             (center[0] - 40.0).abs() < 1e-4 && (center[2] - 40.0).abs() < 1e-4,
@@ -1943,8 +2037,8 @@ mod tests {
             (center[1] - body.water_y).abs() < 1e-3,
             "mirror at the rim offset"
         );
-        // Outer ring follows the contour radius and fades out.
-        let outer0 = 1 + LAKE_FAN_SEGMENTS;
+        // Anel exterior (o 8.º) segue o raio do contorno e desvanece.
+        let outer0 = 1 + LAKE_FAN_SEGMENTS * 7;
         let mut min = f32::INFINITY;
         let mut max = f32::NEG_INFINITY;
         for p in &mesh.positions[outer0..] {
@@ -2893,6 +2987,61 @@ mod tests {
             body.distance_to_waterline(nominal) > 0.0,
             "nominal contour is dry land now: {}",
             body.distance_to_waterline(nominal)
+        );
+    }
+
+    /// O espelho CPU das ondas (buoyancy) é determinístico, limitado, depende
+    /// da posição/tempo/vento e anula-se sem amplitude — propriedades que
+    /// seguram o `wave_height_at` contra deriva silenciosa do shader.
+    #[test]
+    fn test_wave_height_at_properties() {
+        let wind = [0.7, 0.25];
+        let strength = 1.5;
+        let amp = 1.0;
+
+        // Determinístico e limitado (|trens| ≤ 0.69 + fbm ≤ ~1.2).
+        for t in [0.0f32, 1.7, 42.0] {
+            for (x, z) in [(0.0f32, 0.0f32), (13.3, -7.1), (-50.0, 50.0)] {
+                let h = wave_height_at(Vec2::new(x, z), t, wind, strength, amp);
+                assert!(h.is_finite() && h.abs() < 1.3, "bounded: {h} at {t}");
+                assert_eq!(
+                    h,
+                    wave_height_at(Vec2::new(x, z), t, wind, strength, amp),
+                    "deterministic"
+                );
+            }
+        }
+        // Depende da posição, do tempo e do vento.
+        let base = wave_height_at(Vec2::new(3.0, 4.0), 0.0, wind, strength, amp);
+        assert!(
+            (base - wave_height_at(Vec2::new(3.5, 4.0), 0.0, wind, strength, amp)).abs() > 1e-4,
+            "varies with position"
+        );
+        assert!(
+            (base - wave_height_at(Vec2::new(3.0, 4.0), 0.5, wind, strength, amp)).abs() > 1e-4,
+            "varies with time"
+        );
+        assert!(
+            (base - wave_height_at(Vec2::new(3.0, 4.0), 0.0, [0.7, -0.9], strength, amp)).abs()
+                > 1e-4,
+            "varies with wind"
+        );
+        // Amplitude zero → lâmina parada; escala linear da amplitude.
+        assert_eq!(
+            wave_height_at(Vec2::new(3.0, 4.0), 1.0, wind, strength, 0.0),
+            0.0
+        );
+        assert!(
+            (wave_height_at(Vec2::new(3.0, 4.0), 1.0, wind, strength, 2.0)
+                - 2.0 * wave_height_at(Vec2::new(3.0, 4.0), 1.0, wind, strength, 1.0))
+                .abs()
+                < 1e-5,
+            "amplitude scales linearly"
+        );
+        // Vento zero é autoral válido: não pode dar NaN (guard 1e-4 do shader).
+        assert!(
+            wave_height_at(Vec2::new(3.0, 4.0), 1.0, [0.0, 0.0], strength, amp).is_finite(),
+            "zero wind stays finite"
         );
     }
 }

@@ -39,6 +39,13 @@ pub type WaterMaterial = ExtendedMaterial<StandardMaterial, WaterExtension>;
 pub struct WaterExtension {}
 
 impl MaterialExtension for WaterExtension {
+    fn vertex_shader() -> ShaderRef {
+        // O Bevy 0.19 usa o vertex da extensão NO LUGAR do base
+        // (extended_material.rs) — o water.wgsl replica o mesh.wgsl inteiro
+        // e acrescenta o deslocamento de onda (estilo bevy_water).
+        "shaders/water.wgsl".into()
+    }
+
     fn fragment_shader() -> ShaderRef {
         "shaders/water.wgsl".into()
     }
@@ -243,6 +250,14 @@ mod tests {
         }
         // O caminho normal termina no PBR, não num write directo de cor.
         assert!(WATER_WGSL.contains("out.color = main_pass_post_lighting_processing"));
+        // O vertex com deslocamento de onda (estilo bevy_water) TEM de
+        // existir — sem ele a extensão devolvia o vertex base e as cristas
+        // perdiam o parallax em silêncio.
+        assert!(
+            WATER_WGSL.contains("fn vertex(vertex_no_morph: Vertex) -> VertexOutput")
+                && WATER_WGSL.contains("VERTEX_WAVE_GAIN"),
+            "vertex shader da água com deslocamento de onda ausente"
+        );
     }
 
     /// `from_world` lê `<DayCycle>` e `<Weather>` (incl. filhos).

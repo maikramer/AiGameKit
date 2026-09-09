@@ -62,9 +62,11 @@
   <Arch name="aqueduto" path="66 18  114 26" spans="4" height="11"
         thickness="2" depth="3" />
 
-  <!-- Dispersão procedural no quadrante norte: mesma seed, mesmas rochas,
-       sempre. Nada cai dentro de água nem em cima da ribeira. -->
-  <RockFeatures name="rochedos" region="-120 -124  -20 -20" seed="9"
+  <!-- Dispersão procedural na faixa norte: mesma seed, mesmas rochas, sempre.
+       As caves só nascem no pé de encostas (`min-rise`) e o path INTEIRO de
+       cada um é validado contra água, estradas, paredes, pads e o que já
+       existe no mundo — as rejeições saem no log de arranque. -->
+  <RockFeatures name="rochedos" region="-124 -124  124 -24" seed="9"
                 arches="3" caves="2" bridges="1"
                 min-slope="18" max-slope="75" min-drop="5" spacing="34" />
 
