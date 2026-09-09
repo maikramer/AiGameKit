@@ -621,6 +621,8 @@ def _smooth_shade_glb_or_warn(glb_path: Path) -> None:
             export_texcoords=True,
             export_materials="EXPORT",
             export_image_format="JPEG",
+            # Data maps PBR (metallicRoughness/normal) saem com banding no q75.
+            export_jpeg_quality=92,
         )
     except Exception as exc:  # noqa: BLE001
         console.print(f"[yellow]⚠ smooth-shade pós-rig falhou (não fatal): {exc}[/yellow]")

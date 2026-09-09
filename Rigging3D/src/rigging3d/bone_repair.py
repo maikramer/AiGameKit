@@ -121,6 +121,8 @@ def fix_bone_orientation(
         export_texcoords=True,
         export_materials="EXPORT",
         export_image_format="JPEG",
+        # Data maps PBR (metallicRoughness/normal) saem com banding no q75.
+        export_jpeg_quality=92,
     )
 
     return BoneRepairResult(input_path=input_glb, output_path=output_glb, bones_total=bones_total, bones_fixed=fixed)
