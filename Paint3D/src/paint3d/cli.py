@@ -277,11 +277,12 @@ def cli(ctx, verbose):
 @click.option(
     "--group-offload/--no-group-offload",
     "allow_group_offload",
-    default=False,
+    default=True,
     show_default=True,
     help=(
-        "Group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1): pesos SDNQ em"
-        " streaming — ~2 GiB de VRAM libertados, mais tempo de geração."
+        "Group offload + CUDA streams: pesos SDNQ em streaming — ~2 GiB de VRAM"
+        " libertados em GPUs pequenas, mais tempo de geração (saltado quando o"
+        " modelo já cabe na GPU)."
     ),
 )
 @add_vramd_options
@@ -617,11 +618,12 @@ def texture(
 @click.option(
     "--group-offload/--no-group-offload",
     "allow_group_offload",
-    default=False,
+    default=True,
     show_default=True,
     help=(
-        "Group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1): pesos SDNQ em"
-        " streaming — ~2 GiB de VRAM libertados, mais tempo de geração."
+        "Group offload + CUDA streams: pesos SDNQ em streaming — ~2 GiB de VRAM"
+        " libertados em GPUs pequenas, mais tempo de geração (saltado quando o"
+        " modelo já cabe na GPU)."
     ),
 )
 @click.option(

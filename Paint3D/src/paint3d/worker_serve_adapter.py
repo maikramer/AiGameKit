@@ -40,7 +40,7 @@ class Adapter(WorkerAdapter):
         # allocator com o churn de onloads do group offload: reserved medido
         # 1.9→5.4 GB em 2 s). Só eficaz antes da primeira alocação CUDA.
         if not torch.cuda.is_initialized():
-            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = cuda_alloc_conf_for(bool(kwargs.get("allow_group_offload")))
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = cuda_alloc_conf_for(bool(kwargs.get("allow_group_offload", True)))
 
         # vramd-only / peak-planning keys — PaintBatchProcessor não os aceita.
         quant = kwargs.pop("sdnq_preset", None) or kwargs.pop("quant_mode", None)
@@ -80,7 +80,7 @@ class Adapter(WorkerAdapter):
             torch_compile=bool(kwargs.get("torch_compile", False)),
             torch_compile_mode=str(kwargs.get("torch_compile_mode", "default")),
             channels_last=bool(kwargs.get("channels_last", False)),
-            allow_group_offload=bool(kwargs.get("allow_group_offload", False)),
+            allow_group_offload=bool(kwargs.get("allow_group_offload", True)),
         )
         return proc.__enter__()
 

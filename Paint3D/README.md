@@ -82,7 +82,8 @@ paint3d texture mesh.glb -i ref.png --render-size 2048 --texture-size 4096
 # uint8 weights of both UNets stream through the GPU (frees ~2 GiB VRAM for
 # activations/raster). Coexists with the UNet2p5D dual-stream; longer
 # generation in exchange for VRAM headroom.
-paint3d texture mesh.glb -i ref.png --group-offload
+# (default since 2026-09-09; --no-group-offload disables it)
+paint3d texture mesh.glb -i ref.png
 
 # AI upscale (optional, requires: pip install spandrel)
 paint3d texture mesh.glb -i ref.png --upscale --upscale-factor 2

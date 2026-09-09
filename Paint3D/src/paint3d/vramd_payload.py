@@ -28,7 +28,7 @@ def build_texture_request(
     torch_compile: bool = False,
     torch_compile_mode: str | None = None,
     channels_last: bool = False,
-    allow_group_offload: bool = False,
+    allow_group_offload: bool = True,
     memory_efficient: bool = False,
     sdnq_preset: str | None = None,
     extra: dict[str, Any] | None = None,

@@ -181,11 +181,31 @@ ALLOC_CONF_GROUP_OFFLOAD = "expandable_segments:True"
 def cuda_alloc_conf_for(group_offload: bool) -> str:
     """``PYTORCH_CUDA_ALLOC_CONF`` adequado ao modo (GO streaming vs clássico).
 
-    O CLI usa com ``setdefault`` (override do utilizador respeitado); o worker
-    vramd substitui o env herdado do supervisor (pode estar stale com
+    Conf GO apenas quando o offload vai **engajar** (modelo não cabe na GPU —
+    GPUs grandes ficam no perfil clássico com pesos residentes). O CLI usa com
+    ``setdefault`` (override do utilizador respeitado); o worker vramd
+    substitui o env herdado do supervisor (pode estar stale com
     ``max_split_size_mb``) — só eficaz antes da primeira alocação CUDA.
     """
-    return ALLOC_CONF_GROUP_OFFLOAD if _group_offload_intent(group_offload) else ALLOC_CONF_DEFAULT
+    if _group_offload_intent(group_offload) and _group_offload_will_engage():
+        return ALLOC_CONF_GROUP_OFFLOAD
+    return ALLOC_CONF_DEFAULT
+
+
+def _group_offload_will_engage() -> bool:
+    """Replica o gate de VRAM do ``plan_group_offload`` sem torch (puro)."""
+    try:
+        from aigamekit_shared.group_offload import plan_group_offload
+        from aigamekit_shared.hardware import cuda_gpu_specs
+        from aigamekit_shared.lowvram import GIB, get_footprint
+
+        specs = cuda_gpu_specs()
+        if not specs:
+            return False
+        usable_gib = (max(m for _, m in specs) / GIB) * 0.9
+        return plan_group_offload(usable_gib, get_footprint("hunyuan-paint"), quant_mode="none") is not None
+    except Exception:
+        return False
 
 
 def _auto_dino_device(memory_efficient: bool, gpu_ids: list[int] | None) -> str:
@@ -556,14 +576,15 @@ def _apply_paint_kernel_opts(
     torch_compile: bool = False,
     torch_compile_mode: str = "default",
     channels_last: bool = False,
-    allow_group_offload: bool = False,
+    group_offload_applied: bool = False,
     memory_efficient: bool = False,
     verbose: bool = False,
 ) -> None:
-    """Aplica channels_last / torch.compile / group-offload opt-in ao pipeline Paint.
+    """Aplica channels_last / torch.compile ao pipeline Paint (pós-offload).
 
     Compile no UNet wrapper 2.5D é frágil — compila VAE + inner ``unet``/``unet_dual``.
-    Com group offload activo, força ``mode=default`` (sem CUDA graphs).
+    Com group offload **engajado** (hooks activos), força ``mode=default``
+    (sem CUDA graphs) e skipa o compile dos UNets — hooks + compile é frágil.
     """
     import os
 
@@ -572,11 +593,6 @@ def _apply_paint_kernel_opts(
         apply_torch_compile,
         resolve_torch_compile_mode,
     )
-
-    if allow_group_offload:
-        os.environ["PAINT3D_GROUP_OFFLOAD"] = "1"
-        if verbose:
-            _logger.info("Group offload experimental ligado (PAINT3D_GROUP_OFFLOAD=1)")
 
     if channels_last:
         if pipe.vae is not None:
@@ -595,12 +611,11 @@ def _apply_paint_kernel_opts(
 
     if torch_compile:
         os.environ.pop("TORCHDYNAMO_DISABLE", None)
-        # Paint com SDNQ mantém pesos na GPU; só group_offload activa streams.
-        offload = "group_stream" if allow_group_offload else "none"
+        offload = "group_stream" if group_offload_applied else "none"
         mode = resolve_torch_compile_mode(
             torch_compile_mode,
             offload=offload,
-            group_offload_active=allow_group_offload,
+            group_offload_active=group_offload_applied,
         )
         if mode != torch_compile_mode and verbose:
             _logger.info(f"torch.compile mode={torch_compile_mode} → {mode} (offload={offload})")
@@ -608,7 +623,7 @@ def _apply_paint_kernel_opts(
         # SDNQ QConv2d (mem-eff) rebenta em torch.compile (`Couldn't swap QConv2d.weight`)
         # e hooks de group offload + compile também são frágeis — nesses casos
         # compila-se só o VAE.
-        if memory_efficient or allow_group_offload:
+        if memory_efficient or group_offload_applied:
             if verbose:
                 _logger.info("torch.compile nos UNets skip (SDNQ/group offload incompatível); tenta só VAE")
             unet_targets: list[tuple[Any, str]] = []
@@ -624,7 +639,7 @@ def _apply_paint_kernel_opts(
         if pipe.vae is not None:
             try:
                 compiled = apply_torch_compile(
-                    pipe.vae, mode=mode, offload=offload, group_offload_active=allow_group_offload
+                    pipe.vae, mode=mode, offload=offload, group_offload_active=group_offload_applied
                 )
                 mv = pipe.multiview_pipeline
                 if mv is not None and compiled is not pipe.vae:
@@ -641,7 +656,7 @@ def _apply_paint_kernel_opts(
                 continue
             try:
                 compiled = apply_torch_compile(
-                    sub, mode=mode, offload=offload, group_offload_active=allow_group_offload
+                    sub, mode=mode, offload=offload, group_offload_active=group_offload_applied
                 )
                 if compiled is not sub:
                     setattr(parent, attr, compiled)
@@ -1009,7 +1024,7 @@ def apply_hunyuan_paint(
     torch_compile: bool = False,
     torch_compile_mode: str = "default",
     channels_last: bool = False,
-    allow_group_offload: bool = False,
+    allow_group_offload: bool = True,
 ) -> Any:
     """
     Aplica Hunyuan3D-Paint 2.1: mesh + imagem de referência → mesh com UV e textura/PBR (GLB).
@@ -1211,7 +1226,7 @@ def apply_hunyuan_paint(
             torch_compile=torch_compile,
             torch_compile_mode=torch_compile_mode,
             channels_last=channels_last,
-            allow_group_offload=allow_group_offload or group_offload_applied,
+            group_offload_applied=group_offload_applied,
             memory_efficient=memory_efficient,
             verbose=verbose,
         )
@@ -1276,7 +1291,7 @@ def paint_file_to_file(
     torch_compile: bool = False,
     torch_compile_mode: str = "default",
     channels_last: bool = False,
-    allow_group_offload: bool = False,
+    allow_group_offload: bool = True,
 ) -> Path:
     """Atalho: carrega mesh, pinta com Hunyuan3D-Paint 2.1 (PBR baked), exporta GLB."""
     repo = model_repo or _defaults.DEFAULT_PAINT_HF_REPO
@@ -1365,7 +1380,7 @@ class PaintBatchProcessor:
         torch_compile: bool = False,
         torch_compile_mode: str = "default",
         channels_last: bool = False,
-        allow_group_offload: bool = False,
+        allow_group_offload: bool = True,
     ):
         self._model_repo = model_repo
         self._subfolder = subfolder
@@ -1524,7 +1539,7 @@ class PaintBatchProcessor:
             torch_compile=self._torch_compile,
             torch_compile_mode=self._torch_compile_mode,
             channels_last=self._channels_last,
-            allow_group_offload=self._allow_group_offload or group_offload_applied,
+            group_offload_applied=group_offload_applied,
             memory_efficient=self._memory_efficient,
             verbose=self._verbose,
         )

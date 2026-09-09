@@ -58,7 +58,8 @@ paint3d texture mesh.glb -i ref.png --render-size 2048 --texture-size 4096
 # as ativações/raster). Convive com o dual-stream do UNet2p5D; mais tempo de
 # geração em troca de folga de VRAM (views/resoluções mais altas ficam ao
 # alcance sem OOM).
-paint3d texture mesh.glb -i ref.png --group-offload
+# (default desde 2026-09-09; --no-group-offload desliga)
+paint3d texture mesh.glb -i ref.png
 
 # Upscale IA (opcional, requer: pip install spandrel)
 paint3d texture mesh.glb -i ref.png --upscale
