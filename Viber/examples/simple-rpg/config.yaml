@@ -1,0 +1,18 @@
+# config.yaml — contrato de paths do jogo com a engine (docs/ASSETS.md).
+# Relativos a ESTA pasta. Obrigatório: o run/analyze não arranca sem ele.
+title: Simple RPG
+
+assets:
+  # Roots extra, por ordem, DEPOIS da pasta do jogo (que é sempre a 1.ª —
+  # overrides por-mundo e shaders/ especializados vivem lá).
+  roots:
+    - ../shared-assets/public          # o pool partilhado do monorepo
+  bgm_dir: assets/audio/bgm              # <MusicLayer layer="x"> → {bgm_dir}/x.ogg
+  sfx_dir: assets/audio/sfx              # clips da engine → {sfx_dir}/…
+  terrain_textures_dir: assets/textures  # layers de terreno → {dir}/{alias}/…
+
+game:
+  scripts_dir: scripts                   # script="x.lua" + hot-reload
+
+save:
+  dir: ~/.local/share/viber              # {dir}/{mundo}.save.json (~ ok)

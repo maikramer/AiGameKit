@@ -25,8 +25,13 @@ pip-wheel-metadata/
 # Rust — artefactos de build do crate Viber (o Materialize usa o seu .gitignore local)
 Viber/target/
 Viber/Cargo.lock
-# Espelho de assets do simple-rpg (regenerável: Viber/scripts/sync_assets.py)
-Viber/examples/simple-rpg/assets/
+# Viber simple-rpg — assets POR-JOGO versionados (ícones HUD próprios); o
+# resto é derivado/scratch (meshes_enriched do passe de materiais). Assets
+# PARTILHADOS vivem só no pool shared-assets (Viber/docs/ASSETS.md; guarda:
+# Viber/tests/asset_pool_dedup.rs) — nunca cópias por exemplo.
+Viber/examples/simple-rpg/assets/*
+!Viber/examples/simple-rpg/assets/icons/
+!Viber/examples/simple-rpg/assets/icons/**
 
 # Test & quality
 .pytest_cache/

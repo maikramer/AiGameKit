@@ -1,0 +1,17 @@
+# config.yaml — contrato de paths com a engine (docs/ASSETS.md) para os
+# worlds de QA desta pasta (todos partilham o pool; nenhum tem assets
+# próprios). Relativo a ESTA pasta. Obrigatório no run/analyze.
+title: # vazio — título = nome do world.xml
+
+assets:
+  roots:
+    - ../examples/shared-assets/public   # o pool partilhado do monorepo
+  bgm_dir: assets/audio/bgm
+  sfx_dir: assets/audio/sfx
+  terrain_textures_dir: assets/textures
+
+game:
+  scripts_dir: scripts
+
+save:
+  dir: ~/.local/share/viber

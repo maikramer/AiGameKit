@@ -1,0 +1,10 @@
+# config.yaml do fixture de testes (contrato obrigatório — docs/ASSETS.md).
+assets:
+  roots: []
+  bgm_dir: assets/audio/bgm
+  sfx_dir: assets/audio/sfx
+  terrain_textures_dir: assets/textures
+game:
+  scripts_dir: scripts
+save:
+  dir: /tmp
