@@ -141,7 +141,7 @@ class TestRebakeRoute:
         src = inspect.getsource(mrt._rebake_textured_lod)
         assert "_bpy_remesh" not in src
         assert "_uv_unwrap" in src
-        assert "_transfer_texture_direct" in src
+        assert "_transfer_textures_direct" in src
 
     def test_rebake_welds_before_decimate(self) -> None:
         """Costuras partidas pelo glTF fazem o COLLAPSE rasgar ilhas soltas."""
@@ -300,6 +300,192 @@ class TestClosestPointNumerics:
 
         from text3d.utils import mesh_remesh_textured as mrt
 
-        src = inspect.getsource(mrt._transfer_texture_direct)
+        src = inspect.getsource(mrt._transfer_textures_direct)
         assert "s_bary_sum" in src
         assert "s_bary_u /=" in src
+
+
+class TestRebakeKeepsMetallicRoughness:
+    """O rebake (atlas refeito) tem de levar a MR do paint, não só o albedo.
+
+    O paint (Pós-fix PBR) sai com baseColor + metallicRoughness no grafo glTF
+    (Image non-color → Separate Color → Metallic/Roughness). Quando o LOD cai
+    na rota de rebake (piso de costuras), o material é reconstruído — sem isto
+    o LOD rebakeado voltava a fatores planos, perendo o PBR do paint.
+    """
+
+    @staticmethod
+    def _build_painted_glb(path, *, size: int = 16) -> None:
+        """GLB tipo _painted enriquecido: albedo + ORM + normal + occlusion.
+
+        ORM (R=AO 0.5, G=roughness 0.75, B=metallic 0.25) partilhada por
+        metallicRoughnessTexture e occlusionTexture; normal plana via Normal
+        Map node — o mesmo contrato que o paint enriquecido (Materialize) sai.
+        """
+        import bpy
+        import numpy as np
+
+        mesh = bpy.data.meshes.new("P")
+        verts = [(-0.5, -0.5, 0.0), (0.5, -0.5, 0.0), (0.5, 0.5, 0.0), (-0.5, 0.5, 0.0)]
+        mesh.vertices.add(4)
+        mesh.vertices.foreach_set("co", np.array(verts, dtype=np.float64).ravel())
+        mesh.loops.add(6)
+        mesh.loops.foreach_set("vertex_index", np.array([0, 1, 2, 0, 2, 3], dtype=np.int32))
+        mesh.polygons.add(2)
+        mesh.polygons.foreach_set("loop_start", np.array([0, 3], dtype=np.int32))
+        mesh.polygons.foreach_set("loop_total", np.array([3, 3], dtype=np.int32))
+        uv = mesh.uv_layers.new(name="UVMap")
+        uv.data.foreach_set("uv", np.array([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1], dtype=np.float32))
+        mesh.update()
+
+        mat = bpy.data.materials.new("M")
+        mat.use_nodes = True
+        nt = mat.node_tree
+        bsdf = nt.nodes.get("Principled BSDF")
+        albedo = np.full((size, size, 3), 0.8, dtype=np.float64)
+        orm = np.zeros((size, size, 3), dtype=np.float64)
+        orm[..., 0] = 0.5  # R = AO
+        orm[..., 1] = 0.75  # G = roughness
+        orm[..., 2] = 0.25  # B = metallic
+        normal = np.zeros((size, size, 3), dtype=np.float64)
+        normal[..., 0] = 0.5
+        normal[..., 1] = 0.5
+        normal[..., 2] = 1.0
+
+        import os
+        import tempfile
+
+        fd, tex_path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        fd, orm_path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        fd, normal_path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        from PIL import Image as PILImage
+
+        PILImage.fromarray((albedo * 255).astype("uint8"), mode="RGB").save(tex_path)
+        PILImage.fromarray((orm * 255).astype("uint8"), mode="RGB").save(orm_path)
+        PILImage.fromarray((normal * 255).astype("uint8"), mode="RGB").save(normal_path)
+        tex_img = bpy.data.images.load(tex_path)
+        orm_img = bpy.data.images.load(orm_path)
+        orm_img.colorspace_settings.name = "Non-Color"
+        normal_img = bpy.data.images.load(normal_path)
+        normal_img.colorspace_settings.name = "Non-Color"
+        t1 = nt.nodes.new("ShaderNodeTexImage")
+        t1.image = tex_img
+        nt.links.new(t1.outputs["Color"], bsdf.inputs["Base Color"])
+        t2 = nt.nodes.new("ShaderNodeTexImage")
+        t2.image = orm_img
+        sep = nt.nodes.new("ShaderNodeSeparateColor")
+        nt.links.new(t2.outputs["Color"], sep.inputs["Color"])
+        nt.links.new(sep.outputs["Blue"], bsdf.inputs["Metallic"])
+        nt.links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
+        t3 = nt.nodes.new("ShaderNodeTexImage")
+        t3.image = normal_img
+        nmap = nt.nodes.new("ShaderNodeNormalMap")
+        nmap.inputs["Strength"].default_value = 1.0
+        nt.links.new(t3.outputs["Color"], nmap.inputs["Color"])
+        nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
+        mesh.materials.append(mat)
+
+        obj = bpy.data.objects.new("P", mesh)
+        bpy.context.scene.collection.objects.link(obj)
+        from aigamekit_shared.bpy_mesh import save_glb
+        from aigamekit_shared.gltf_occlusion import ensure_occlusion_texture
+
+        save_glb([obj], path)
+        # O exporter bpy não emite occlusionTexture do grafo — patch na origem,
+        # igual ao que o export do paint faz.
+        ensure_occlusion_texture(path)
+        os.unlink(tex_path)
+        os.unlink(orm_path)
+        os.unlink(normal_path)
+
+    def test_extract_source_data_finds_mr_and_normal(self, tmp_path) -> None:
+        import bpy
+        import numpy as np
+        import pytest
+
+        pytest.importorskip("bpy")
+        from aigamekit_shared.bpy_mesh import clear_scene, import_gltf
+        from text3d.utils.mesh_remesh_textured import _extract_source_data
+
+        glb = tmp_path / "painted.glb"
+        self._build_painted_glb(glb)
+        clear_scene()
+        import_gltf(glb)
+        obj = next(o for o in bpy.context.scene.objects if o.type == "MESH")
+        source = _extract_source_data(obj)
+        assert source.texture_image is not None
+        assert source.mr_image is not None
+        assert source.normal_image is not None
+        h, w = source.mr_image.shape[:2]
+        px = source.mr_image[h // 2, w // 2].astype(np.float64) / 255.0
+        assert px[0] == pytest.approx(0.5, abs=2 / 255.0)  # R = AO (ORM)
+        assert px[1] == pytest.approx(0.75, abs=2 / 255.0)  # G = roughness
+        assert px[2] == pytest.approx(0.25, abs=2 / 255.0)  # B = metallic
+        npx = source.normal_image[h // 2, w // 2].astype(np.float64) / 255.0
+        assert npx[2] == pytest.approx(1.0, abs=2 / 255.0)  # normal plana +Z
+
+    def test_rebake_output_keeps_mr_texture(self, tmp_path) -> None:
+        import bpy
+        import numpy as np
+        import pytest
+
+        pytest.importorskip("bpy")
+        cv2 = pytest.importorskip("cv2")
+        from aigamekit_shared.bpy_mesh import clear_scene, import_gltf, save_glb
+        from text3d.utils.mesh_remesh_textured import _extract_source_data, _rebake_textured_lod
+
+        glb = tmp_path / "painted.glb"
+        self._build_painted_glb(glb)
+        clear_scene()
+        import_gltf(glb)
+        obj = next(o for o in bpy.context.scene.objects if o.type == "MESH")
+        source = _extract_source_data(obj)
+
+        new_obj, temps = _rebake_textured_lod(obj, source, target_faces=2, texture_size=32)
+        out = tmp_path / "rebaked.glb"
+        save_glb([new_obj], out)
+        # O pipeline repõe occlusionTexture no export da sessão
+        # (remesh_textured_glb → _remesh_textured_session); o teste compõe os
+        # passos à mão, por isso replica o patch aqui.
+        from aigamekit_shared.gltf_occlusion import ensure_occlusion_texture
+
+        ensure_occlusion_texture(out)
+        for t in temps:
+            Path(t).unlink(missing_ok=True)
+
+        with open(out, "rb") as f:
+            f.read(12)
+            jlen, _ = struct.unpack("<II", f.read(8))
+            js = json.loads(f.read(jlen))
+        mat = js["materials"][0]
+        pbr = mat["pbrMetallicRoughness"]
+        assert "baseColorTexture" in pbr
+        assert "metallicRoughnessTexture" in pbr
+        assert "normalTexture" in mat
+        assert "occlusionTexture" in mat
+        assert mat["occlusionTexture"]["index"] == pbr["metallicRoughnessTexture"]["index"]
+
+        # Pixel do MR embutido: roughness/metálico sobrevivem ao rebake.
+        def image_bytes(index: int) -> bytes:
+            img = js["images"][index]
+            view = js["bufferViews"][img["bufferView"]]
+            with open(out, "rb") as fh:
+                fh.read(12)
+                jl, _ = struct.unpack("<II", fh.read(8))
+                fh.read(jl)
+                bl, _ = struct.unpack("<II", fh.read(8))
+                data = fh.read(bl)
+            off = view.get("byteOffset", 0)
+            return data[off : off + view["byteLength"]]
+
+        mr_index = pbr["metallicRoughnessTexture"]["index"]
+        src = js["textures"][mr_index]["source"]
+        bgr = cv2.imdecode(np.frombuffer(image_bytes(src), dtype=np.uint8), cv2.IMREAD_COLOR)
+        h, w = bgr.shape[:2]
+        center = bgr[h // 2, w // 2].astype(np.float64) / 255.0
+        assert center[1] == pytest.approx(0.75, abs=6 / 255.0)  # G = roughness
+        assert center[0] == pytest.approx(0.25, abs=6 / 255.0)  # B = metallic (cv2=BGR)
+        assert center[2] == pytest.approx(0.5, abs=6 / 255.0)  # R = AO (ORM)

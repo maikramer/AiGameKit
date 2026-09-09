@@ -171,6 +171,9 @@ def _export_textured_glb(
         export_materials="EXPORT",
         # JPEG: AUTO + downscale PNG fazia lod1 (1024 PNG) > lod0 (2048 JPEG).
         export_image_format="JPEG",
+        # q92: metallicRoughness/normal vindos do paint são data maps — banding
+        # visível no default q75; q92 chega limpo ao KTX2 do finish.
+        export_jpeg_quality=92,
     )
     with contextlib.suppress(Exception):
         from aigamekit_shared.glb_verify import post_save_verify
@@ -179,6 +182,12 @@ def _export_textured_glb(
             output_path,
             require_normals=export_normals if export_normals else False,
         )
+    # Repõe occlusionTexture (ORM do paint enriquecido) se o re-export bpy a
+    # deixou cair. Idempotente; no-op em assets sem PBR.
+    with contextlib.suppress(Exception):
+        from aigamekit_shared.gltf_occlusion import ensure_occlusion_texture
+
+        ensure_occlusion_texture(output_path, logger=log)
 
 
 _export_glb = _export_textured_glb

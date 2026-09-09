@@ -50,18 +50,21 @@ def test_finish_defaults_enable_ktx2_and_meshopt() -> None:
     assert params["apply_meshopt"].default is True
 
 
-def test_finish_uses_hybrid_ktx2_by_slot() -> None:
-    """Albedo → ETC1S; normais → UASTC (UASTC-all ~2x disco no albedo)."""
+def test_finish_uses_uastc_zstd_all_slots() -> None:
+    """KTX2 é UASTC+Zstd em TODOS os mapas — Bevy 0.19 não descodifica BasisLZ.
+
+    O híbrido antigo (albedo → ETC1S) foi removido no d7e8f29b: a
+    supercompressão BasisLZ do ETC1S ficava ilegível no engine nativo.
+    """
     import inspect
 
     from text3d.utils import gltf_finish
 
     src = inspect.getsource(gltf_finish.gltf_transform_finish)
     assert "_KTX2_UASTC_SLOTS" in src
-    assert "_KTX2_ETC1S_SLOTS" in src
-    assert '"etc1s"' in src or "'etc1s'" in src
-    assert gltf_finish._KTX2_UASTC_SLOTS == "*normal*"
-    assert "baseColorTexture" in gltf_finish._KTX2_ETC1S_SLOTS
+    assert "--zstd" in src
+    assert '"etc1s"' not in src and "'etc1s'" not in src
+    assert gltf_finish._KTX2_UASTC_SLOTS == "*"
 
 
 def test_finish_bpy_exports_jpeg_not_auto() -> None:

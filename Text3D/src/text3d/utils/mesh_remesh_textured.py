@@ -16,6 +16,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -88,6 +89,11 @@ class MeshData:
     faces: np.ndarray  # (F, 3) int32
     uvs: np.ndarray | None = None  # per-vertex (N, 2) float64
     texture_image: np.ndarray | None = None  # (H, W, 3) uint8
+    # metallicRoughness no layout do ficheiro glTF (G=roughness, B=metallic),
+    # como o import do Blender mantém — mesmo espaço UV do albedo.
+    mr_image: np.ndarray | None = None  # (H, W, 3) uint8
+    # Normal map tangent-space (OpenGL/+Y) do paint enriquecido (Materialize).
+    normal_image: np.ndarray | None = None  # (H, W, 3) uint8
 
 
 # ---------------------------------------------------------------------------
@@ -134,11 +140,48 @@ def _bpy_obj_to_arrays(obj) -> tuple[np.ndarray, np.ndarray]:
     return verts, faces
 
 
+def _bpy_image_to_rgb_array(bpy_img) -> np.ndarray | None:
+    """Converte uma imagem bpy em ``(H, W, 3)`` uint8 top-down, ou ``None``."""
+    if bpy_img is None:
+        return None
+    w, h = bpy_img.size
+    if w <= 0 or h <= 0:
+        return None
+    # bpy.pixels = bottom-up (OpenGL); transfer/sample usam top-down (V flip
+    # em _sample_texture_at_uvs / PIL).
+    pixels = np.array(bpy_img.pixels[:]).reshape(h, w, 4)
+    return np.flipud((pixels[:, :, :3] * 255).astype(np.uint8))
+
+
+def _image_upstream_of_socket(socket) -> Any:
+    """Sobe o grafo de nós (através de Separate Color / Normal Map) ao Image.
+
+    O grafo glTF metallicRoughness chega do import como
+    ``Image Texture → Separate Color → Metallic/Roughness`` e a normal como
+    ``Image Texture → Normal Map → Normal``; é exactamente o que esta função
+    percorre para reencontrar as maps PBR do paint.
+    """
+    seen = 0
+    while socket is not None and socket.is_linked and seen < 8:
+        node = socket.links[0].from_node
+        if node.type == "TEX_IMAGE":
+            return node.image
+        if node.type in ("SEPARATE_COLOR", "NORMAL_MAP"):
+            socket = node.inputs.get("Color")
+        else:
+            return None
+        seen += 1
+    return None
+
+
 def _extract_source_data(obj) -> MeshData:
     """Extract vertices, faces, UVs, and texture from a bpy mesh object.
 
     Splits vertices at UV seams to produce per-vertex UVs (same convention as
-    the old trimesh-based pipeline).
+    the old trimesh-based pipeline). O albedo é resolvido a partir do socket
+    *Base Color* do Principled BSDF (fallback: primeiro TEX_IMAGE) e a
+    metallicRoughness a partir dos sockets *Metallic/Roughness* — assim o
+    rebake dos LODs carrega PBR e não volta a sair só com albedo.
     """
 
     verts, faces = _bpy_obj_to_arrays(obj)
@@ -149,6 +192,8 @@ def _extract_source_data(obj) -> MeshData:
 
     uvs = None
     texture_image = None
+    mr_image = None
+    normal_image = None
 
     # --- UVs (from loop_triangles for correctly triangulated data) ---
     uv_layer = mesh.uv_layers.active
@@ -173,24 +218,40 @@ def _extract_source_data(obj) -> MeshData:
         faces = inverse.reshape(n_tris, 3).astype(np.int32)
         uvs = unique_combined[:, 1:3]
 
-    # --- Texture image from material ---
+    # --- Texture images from material (albedo via Base Color; MR via
+    # Metallic/Roughness e normal via Normal — grafos glTF do paint) ---
     for mat_slot in obj.material_slots:
         mat = mat_slot.material
-        if mat and mat.use_nodes:
-            for node in mat.node_tree.nodes:
-                if node.type == "TEX_IMAGE" and node.image:
-                    bpy_img = node.image
-                    w, h = bpy_img.size
-                    if w > 0 and h > 0:
-                        # bpy.pixels = bottom-up (OpenGL); transfer/sample usam
-                        # top-down (V flip em _sample_texture_at_uvs / PIL).
-                        pixels = np.array(bpy_img.pixels[:]).reshape(h, w, 4)
-                        texture_image = np.flipud((pixels[:, :, :3] * 255).astype(np.uint8))
-                    break
+        if not (mat and mat.use_nodes):
+            continue
+        bsdf = next((n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+        base_img = mr_img = normal_img = None
+        if bsdf is not None:
+            base_img = _image_upstream_of_socket(bsdf.inputs.get("Base Color"))
+            met_img = _image_upstream_of_socket(bsdf.inputs.get("Metallic"))
+            rgh_img = _image_upstream_of_socket(bsdf.inputs.get("Roughness"))
+            mr_img = met_img if met_img is not None else rgh_img
+            normal_img = _image_upstream_of_socket(bsdf.inputs.get("Normal"))
+        if base_img is None:
+            # Fallback legado: primeiro TEX_IMAGE com pixéis (materials sem
+            # BSDF explícito no grafo).
+            base_img = next((n.image for n in mat.node_tree.nodes if n.type == "TEX_IMAGE" and n.image), None)
+        texture_image = _bpy_image_to_rgb_array(base_img)
+        if mr_img is not None and mr_img is not base_img:
+            mr_image = _bpy_image_to_rgb_array(mr_img)
+        if normal_img is not None and normal_img is not base_img and normal_img is not mr_img:
+            normal_image = _bpy_image_to_rgb_array(normal_img)
         if texture_image is not None:
             break
 
-    return MeshData(vertices=verts, faces=faces, uvs=uvs, texture_image=texture_image)
+    return MeshData(
+        vertices=verts,
+        faces=faces,
+        uvs=uvs,
+        texture_image=texture_image,
+        mr_image=mr_image,
+        normal_image=normal_image,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -488,14 +549,45 @@ def _transfer_texture_direct(
 ) -> np.ndarray:
     """Transferência directa pixel-a-pixel da textura fonte para o novo atlas UV.
 
+    Wrapper de textura única para :func:`_transfer_textures_direct`.
+    """
+    return _transfer_textures_direct(
+        source_verts=source_verts,
+        source_faces=source_faces,
+        source_texes=[source_tex],
+        source_uvs=source_uvs,
+        remeshed_verts=remeshed_verts,
+        remeshed_faces=remeshed_faces,
+        new_uvs=new_uvs,
+        texture_size=texture_size,
+        padding=padding,
+    )[0]
+
+
+def _transfer_textures_direct(
+    *,
+    source_verts: np.ndarray,
+    source_faces: np.ndarray,
+    source_texes: list[np.ndarray],
+    source_uvs: np.ndarray,
+    remeshed_verts: np.ndarray,
+    remeshed_faces: np.ndarray,
+    new_uvs: np.ndarray,
+    texture_size: int,
+    padding: int = 16,
+) -> list[np.ndarray]:
+    """Transferência directa pixel-a-pixel de N texturas para o novo atlas UV.
+
     Para cada pixel no novo atlas: rasteriza o triângulo UV correspondente,
     calcula a posição 3D na mesh remeshed, encontra o ponto mais próximo na
-    mesh fonte, e amostra a textura fonte via UV interpoladas com bilinear.
+    mesh fonte, e amostra as texturas fonte via UV interpoladas com bilinear.
+    O trabalho caro (rasterização + closest-point) é partilhado — amostar o
+    metallicRoughness junto do albedo custa só a leitura bilinear extra.
 
     Args:
         source_verts: Vértices da mesh fonte (Nx3 float64).
         source_faces: Faces da mesh fonte (Fx3 int).
-        source_tex: Textura fonte HxWx3 uint8.
+        source_texes: Texturas fonte HxWx3 uint8 (albedo, MR, …), mesmo UV space.
         source_uvs: UVs da mesh fonte (Nx2 float64).
         remeshed_verts: Vértices da mesh remeshed (Mx3 float64).
         remeshed_faces: Faces da mesh remeshed (Fx3 int).
@@ -504,10 +596,10 @@ def _transfer_texture_direct(
         padding: Pixels de dilatação nas fronteiras das ilhas UV.
 
     Returns:
-        Textura texture_size x texture_size x 3 uint8.
+        Lista de texturas texture_size x texture_size x 3 uint8 (mesma ordem).
     """
     h, w = texture_size, texture_size
-    tex = np.zeros((h, w, 3), dtype=np.uint8)
+    texes = [np.zeros((h, w, 3), dtype=np.uint8) for _ in source_texes]
     filled = np.zeros((h, w), dtype=bool)
 
     # Converter UVs para coordenadas pixel
@@ -579,7 +671,7 @@ def _transfer_texture_direct(
 
     if not all_px:
         log.warning("Nenhum pixel rasterizado; textura de saída ficará vazia.")
-        return tex
+        return texes
 
     pixel_x = np.concatenate(all_px)
     pixel_y = np.concatenate(all_py)
@@ -660,13 +752,16 @@ def _transfer_texture_direct(
         + s_bary_w[:, np.newaxis] * src_uv_tri[:, 2]
     )
 
-    # Phase 5: Bilinear sample da textura fonte
-    colors = _sample_texture_at_uvs(source_tex, interp_uv)
+    # Phase 5: Bilinear sample das texturas fonte (albedo + extras no mesmo
+    # UV space — ex. metallicRoughness; a interpolação é partilhada).
+    colors = _sample_texture_at_uvs(source_texes[0], interp_uv)
 
     # Escrever na textura de saída (último write ganha para overlapping pixels)
     pixel_y_clamped = np.clip(pixel_y, 0, h - 1)
     pixel_x_clamped = np.clip(pixel_x, 0, w - 1)
-    tex[pixel_y_clamped, pixel_x_clamped] = colors
+    texes[0][pixel_y_clamped, pixel_x_clamped] = colors
+    for extra_idx in range(1, len(source_texes)):
+        texes[extra_idx][pixel_y_clamped, pixel_x_clamped] = _sample_texture_at_uvs(source_texes[extra_idx], interp_uv)
     filled[pixel_y_clamped, pixel_x_clamped] = True
 
     log.info("Amostragem completa. Pixels preenchidos: %d / %d.", filled.sum(), h * w)
@@ -674,9 +769,9 @@ def _transfer_texture_direct(
     # Phase 6: Dilatação para preencher fronteiras de ilhas UV
     if padding > 0:
         log.info("Dilatando fronteiras UV (%d pixels)...", padding)
-        tex = _dilate_texture(tex, filled, padding)
+        texes = [_dilate_texture(t, filled, padding) for t in texes]
 
-    return tex
+    return texes
 
 
 # ---------------------------------------------------------------------------
@@ -709,15 +804,24 @@ def _build_textured_bpy_mesh(
     uvs: np.ndarray,
     baked_tex: np.ndarray,
     surface_params: dict[str, float] | None = None,
-) -> tuple[object, str]:
+    *,
+    baked_mr: np.ndarray | None = None,
+    baked_normal: np.ndarray | None = None,
+) -> tuple[object, list[str]]:
     """Create a bpy mesh with vertices, faces, UVs, and a baked texture material.
 
     ``surface_params`` reaplica roughness/metallic do material original: sem
     isso o BSDF default do Blender devolve um specular alto que lava a cor do
     LOD reconstruído face ao painted.
 
-    Returns (bpy_object, temp_image_path) — caller should unlink/delete temp file
-    after saving.
+    ``baked_mr`` (quando o paint tinha metallicRoughness) é ligado no contrato
+    glTF — Image (non-color) → Separate Color (Blue→Metallic, Green→Roughness),
+    fatores 1.0 — para o LOD rebakeado manter PBR em vez de voltar a fatores
+    planos. ``baked_normal`` (paint enriquecido via Materialize) entra como
+    Image (non-color) → Normal Map node.
+
+    Returns (bpy_object, temp_image_paths) — caller should unlink/delete temp
+    files after saving (o exporter lê os ficheiros só no embed).
     """
     import os
 
@@ -763,6 +867,7 @@ def _build_textured_bpy_mesh(
     os.close(temp_fd)
     baked_img = PILImage.fromarray(baked_tex, mode="RGB")
     baked_img.save(temp_path)
+    temp_paths = [temp_path]
 
     mat = bpy.data.materials.new(name="BakedMaterial")
     mat.use_nodes = True
@@ -787,13 +892,46 @@ def _build_textured_bpy_mesh(
         if socket is not None:
             socket.default_value = value
 
+    if baked_mr is not None:
+        # baked_mr já está no layout do ficheiro glTF (G=roughness, B=metallic;
+        # R=AO quando o paint veio enriquecido — viaja na imagem, o slot
+        # occlusionTexture é reposto por ensure_occlusion_texture no export).
+        temp_fd, temp_mr = tempfile.mkstemp(suffix=".png", prefix="baked_mr_")
+        os.close(temp_fd)
+        PILImage.fromarray(baked_mr, mode="RGB").save(temp_mr)
+        temp_paths.append(temp_mr)
+        mr_img = bpy.data.images.load(temp_mr)
+        mr_img.colorspace_settings.name = "Non-Color"
+        mr_tex = nodes.new("ShaderNodeTexImage")
+        mr_tex.image = mr_img
+        sep = nodes.new("ShaderNodeSeparateColor")
+        links.new(mr_tex.outputs["Color"], sep.inputs["Color"])
+        links.new(sep.outputs["Blue"], bsdf.inputs["Metallic"])
+        links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
+        bsdf.inputs["Metallic"].default_value = 1.0
+        bsdf.inputs["Roughness"].default_value = 1.0
+
+    if baked_normal is not None:
+        temp_fd, temp_n = tempfile.mkstemp(suffix=".png", prefix="baked_normal_")
+        os.close(temp_fd)
+        PILImage.fromarray(baked_normal, mode="RGB").save(temp_n)
+        temp_paths.append(temp_n)
+        n_img = bpy.data.images.load(temp_n)
+        n_img.colorspace_settings.name = "Non-Color"
+        n_tex = nodes.new("ShaderNodeTexImage")
+        n_tex.image = n_img
+        n_map = nodes.new("ShaderNodeNormalMap")
+        n_map.inputs["Strength"].default_value = 1.0
+        links.new(n_tex.outputs["Color"], n_map.inputs["Color"])
+        links.new(n_map.outputs["Normal"], bsdf.inputs["Normal"])
+
     mesh.materials.append(mat)
 
     from aigamekit_shared.bpy_mesh import apply_smooth_by_angle
 
     apply_smooth_by_angle(obj)
 
-    return obj, temp_path
+    return obj, temp_paths
 
 
 # ---------------------------------------------------------------------------
@@ -898,10 +1036,15 @@ def remesh_with_texture_reprojection(
 
     # Step 2: Direct per-pixel texture transfer
     log.info("Transferência directa pixel-a-pixel (%dx%d)...", effective_size, effective_size)
-    baked_tex = _transfer_texture_direct(
+    source_texes = [source_tex]
+    if source_data.mr_image is not None:
+        source_texes.append(source_data.mr_image)
+    if source_data.normal_image is not None:
+        source_texes.append(source_data.normal_image)
+    baked_texes = _transfer_textures_direct(
         source_verts=source_verts,
         source_faces=source_faces,
-        source_tex=source_tex,
+        source_texes=source_texes,
         source_uvs=source_uvs,
         remeshed_verts=remapped_verts,
         remeshed_faces=remapped_faces,
@@ -916,7 +1059,9 @@ def remesh_with_texture_reprojection(
         vertices=remapped_verts,
         faces=remapped_faces,
         uvs=uvs,
-        texture_image=baked_tex,
+        texture_image=baked_texes[0],
+        mr_image=baked_texes[1] if len(baked_texes) > 1 else None,
+        normal_image=baked_texes[2] if len(baked_texes) > 2 else None,
     )
 
 
@@ -988,7 +1133,8 @@ def _rebake_textured_lod(
     objecto original no reconstruído (rotação Hunyuan→OpenGL do import).
 
     Returns:
-        ``(novo_obj, temp_png_path)`` — caller apaga o PNG após exportar.
+        ``(novo_obj, temp_image_paths)`` — caller apaga os PNGs após exportar
+        (o exporter glTF lê os ficheiros só no embed).
     """
     from aigamekit_shared.mesh_repair import remove_doubles
     from aigamekit_shared.mesh_simplify import decimate_mesh_object
@@ -1003,10 +1149,15 @@ def _rebake_textured_lod(
     new_verts, new_faces = _bpy_obj_to_arrays(obj)
     vmapping, indices, uvs = _uv_unwrap(new_verts, new_faces)
     remapped_verts = new_verts[vmapping]
-    baked = _transfer_texture_direct(
+    source_texes = [source.texture_image]
+    if source.mr_image is not None:
+        source_texes.append(source.mr_image)
+    if source.normal_image is not None:
+        source_texes.append(source.normal_image)
+    baked_texes = _transfer_textures_direct(
         source_verts=source.vertices,
         source_faces=source.faces,
-        source_tex=source.texture_image,
+        source_texes=source_texes,
         source_uvs=np.asarray(source.uvs, dtype=np.float64),
         remeshed_verts=remapped_verts,
         remeshed_faces=indices,
@@ -1014,7 +1165,15 @@ def _rebake_textured_lod(
         texture_size=texture_size,
         padding=8,
     )
-    new_obj, temp_png = _build_textured_bpy_mesh(remapped_verts, indices, uvs, baked, surface_params)
+    new_obj, temp_paths = _build_textured_bpy_mesh(
+        remapped_verts,
+        indices,
+        uvs,
+        baked_texes[0],
+        surface_params,
+        baked_mr=baked_texes[1] if len(baked_texes) > 1 else None,
+        baked_normal=baked_texes[2] if len(baked_texes) > 2 else None,
+    )
     new_obj.matrix_world = matrix
     log.info(
         "Rebake texturado: %d faces (alvo %d), atlas %dx%d refeito",
@@ -1023,7 +1182,7 @@ def _rebake_textured_lod(
         texture_size,
         texture_size,
     )
-    return new_obj, temp_png
+    return new_obj, temp_paths
 
 
 def remesh_textured_glb(
@@ -1169,7 +1328,7 @@ def _remesh_textured_session(
 
     effective_target = _clamp_decimate_target(n, target_faces)
     has_arm = any(o.type == "ARMATURE" for o in bpy.context.scene.objects)
-    temp_png: str | None = None
+    temp_pngs: list[str] = []
 
     # ``pre_decimate_uv`` antes do COLLAPSE trava o rácio em meshes texturados
     # (crate ~22k piso → lod1==lod2) — só corre sem textura (remove leques).
@@ -1186,7 +1345,7 @@ def _remesh_textured_session(
     if force_rebake and not has_arm:
         source = _extract_source_data(obj)
         if source.uvs is not None and source.texture_image is not None:
-            obj, temp_png = _rebake_textured_lod(obj, source, effective_target, texture_size or 2048)
+            obj, temp_pngs = _rebake_textured_lod(obj, source, effective_target, texture_size or 2048)
             rebaked = True
         else:
             log.warning("Alvo abaixo do piso de costuras mas sem UVs/textura para rebake — COLLAPSE cru")
@@ -1238,7 +1397,7 @@ def _remesh_textured_session(
                     n_after,
                     effective_target,
                 )
-                obj, temp_png = _rebake_textured_lod(obj, source, effective_target, texture_size or 2048)
+                obj, temp_pngs = _rebake_textured_lod(obj, source, effective_target, texture_size or 2048)
             else:
                 log.warning(
                     "COLLAPSE estagnou em %d faces (alvo %d); sem UVs/textura para rebake",
@@ -1289,8 +1448,8 @@ def _remesh_textured_session(
             mesh.calc_tangents()
 
     if n_final < 4:
-        if temp_png:
-            Path(temp_png).unlink(missing_ok=True)
+        for temp_path in temp_pngs:
+            Path(temp_path).unlink(missing_ok=True)
         clear_scene()
         raise RuntimeError(f"remesh_textured: mesh inválida antes do export ({n_final} faces) → {path_out.name}")
 
@@ -1315,10 +1474,12 @@ def _remesh_textured_session(
         export_materials="EXPORT",
         # JPEG até finish KTX2; AUTO+PNG no downscale fazia lod1 > lod0.
         export_image_format="JPEG",
+        # q92: metallicRoughness é data map — banding visível no default q75.
+        export_jpeg_quality=92,
     )
 
-    if temp_png:
-        Path(temp_png).unlink(missing_ok=True)
+    for temp_path in temp_pngs:
+        Path(temp_path).unlink(missing_ok=True)
     clear_scene()
 
     if not tmp_out.is_file() or tmp_out.stat().st_size < 64:
@@ -1328,5 +1489,10 @@ def _remesh_textured_session(
             f"remesh_textured: export GLB falhou (ausente/vazio) → {path_out} (faces_pre_export={n_final})"
         )
     tmp_out.replace(path_out)
+    # Repõe occlusionTexture (ORM) no rebake: o material é reconstruído do
+    # zero, o slot não sobrevive sem patch. Idempotente.
+    from aigamekit_shared.gltf_occlusion import ensure_occlusion_texture
+
+    ensure_occlusion_texture(path_out, logger=log)
     log.info("Resultado: %s (%d faces, %d bytes)", path_out, n_final, path_out.stat().st_size)
     return path_out
